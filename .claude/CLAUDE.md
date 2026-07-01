@@ -89,9 +89,14 @@ The header shows two mini progress bars — **5h** and **Week** — the same acc
 rate-limit utilization Claude Code's `/usage` reports. Unlike everything else in the app,
 these are **not on disk**: `lib/usage.ts` fetches them live from Anthropic.
 
-- **Endpoint:** `GET {ANTHROPIC_BASE_URL|CLAUDE_CODE_API_BASE_URL|https://api.anthropic.com}/api/oauth/usage`,
-  headers `Authorization: Bearer <token>`, `anthropic-beta: oauth-2025-04-20`,
+- **Endpoint:** `GET https://api.anthropic.com/api/oauth/usage`, headers
+  `Authorization: Bearer <token>`, `anthropic-beta: oauth-2025-04-20`,
   `anthropic-version: 2023-06-01`. **Private/undocumented** — may change between CLI versions.
+  **Always hits api.anthropic.com** — first-party account API; must NOT follow
+  `ANTHROPIC_BASE_URL`/`CLAUDE_CODE_API_BASE_URL` (those aim model inference at a
+  proxy/gateway — Bedrock/Vertex/Ollama/LiteLLM — with no such route; that misroute returned
+  `null` bars in practice). `CLAUDE_USAGE_BASE_URL` overrides for tests only; request is
+  protocol-aware (http vs https).
 - **Response shape:** windows are **top-level** (`{ five_hour:{utilization,resets_at}, seven_day:{…}, … }`),
   *not* wrapped in `rate_limits`. `mapUsage()` accepts both shapes defensively and is the one
   pure/unit-tested piece (`test/usage.test.ts`).

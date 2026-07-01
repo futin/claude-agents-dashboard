@@ -18,6 +18,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
 import https from 'node:https';
 
 import type { UsageLimits, RateLimit } from '../../shared/types.js';
@@ -27,13 +28,15 @@ const KEYCHAIN_SERVICE = 'Claude Code-credentials';
 const CACHE_TTL_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 5_000;
 
-/** Base URL, overridable to match the CLI's own env knobs. */
+/**
+ * Base URL for the usage endpoint. This is an Anthropic first-party API keyed to
+ * the account's OAuth token, so it must always hit api.anthropic.com — NOT
+ * `ANTHROPIC_BASE_URL`/`CLAUDE_CODE_API_BASE_URL`, which point model inference at
+ * a proxy/gateway (Bedrock, Vertex, Ollama, LiteLLM) that has no /api/oauth/usage.
+ * `CLAUDE_USAGE_BASE_URL` is a narrow escape hatch for tests only.
+ */
 function baseUrl(): string {
-  return (
-    process.env.CLAUDE_CODE_API_BASE_URL ||
-    process.env.ANTHROPIC_BASE_URL ||
-    'https://api.anthropic.com'
-  );
+  return process.env.CLAUDE_USAGE_BASE_URL || 'https://api.anthropic.com';
 }
 
 /**
@@ -127,7 +130,9 @@ export function fetchUsage(token: string): Promise<UsageLimits | null> {
     };
 
     const url = new URL(USAGE_PATH, baseUrl());
-    const req = https.request(
+    // Base URL may be http (e.g. a local proxy/gateway via ANTHROPIC_BASE_URL).
+    const client = url.protocol === 'http:' ? http : https;
+    const req = client.request(
       url,
       {
         method: 'GET',
