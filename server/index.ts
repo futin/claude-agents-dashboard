@@ -18,6 +18,7 @@ import { spawn } from 'node:child_process';
 
 import { loadConfig } from './lib/config.js';
 import { serveSessions } from './api.js';
+import { openSession } from './openSession.js';
 
 const config = loadConfig();
 const isProd = process.env.NODE_ENV === 'production';
@@ -55,6 +56,9 @@ function serveStatic(urlPath: string, res: http.ServerResponse): void {
 }
 
 const server = http.createServer((req, res) => {
+  if (req.url && req.url.startsWith('/api/open-session') && req.method === 'POST') {
+    return openSession(config, req, res);
+  }
   if (req.url && req.url.startsWith('/api/sessions')) {
     return serveSessions(config, res);
   }
