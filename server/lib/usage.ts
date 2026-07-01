@@ -48,7 +48,7 @@ function baseUrl(): string {
 /**
  * Read the OAuth access token. Tries the macOS keychain first (where the CLI
  * stores it on macOS), then the `~/.claude/.credentials.json` fallback file.
- * Returns null on any failure. NOTE: the first keychain read by this process
+ * `missing` on any failure. NOTE: the first keychain read by this process
  * triggers a macOS access prompt ("… wants to use your confidential
  * information") — approve once with "Always Allow".
  */
