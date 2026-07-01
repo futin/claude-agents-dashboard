@@ -24,6 +24,8 @@ interface ScanOptions {
   now?: number;
   root?: string;
   skipProcScan?: boolean;
+  /** Override the live-cwd set (tests). null disables gating; undefined probes. */
+  liveCwds?: Set<string> | null;
 }
 
 /** Default transcripts root. */
@@ -86,6 +88,40 @@ export function countClaudeProcesses(): number | null {
   }
 }
 
+/** Strip a trailing slash so cwd strings compare consistently. */
+function normCwd(p: string): string {
+  return p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p;
+}
+
+/**
+ * Working directories of every running `claude` CLI process, via `lsof`.
+ * The transcript records a session's `cwd`; if no live process shares it, the
+ * session is dead (closed/cleaned) and cannot be actively working.
+ *
+ * Returns `null` when the probe can't run (no lsof, timeout, error) — callers
+ * fail open and skip liveness gating rather than mislabel every session dead.
+ *
+ * `-c claude` is case-sensitive, so it matches only the lowercase CLI binary,
+ * not the capital-`C` `Claude.app` desktop shell. Granularity is per-cwd: two
+ * sessions in the same directory can't be told apart, so a dead session sharing
+ * a directory with a live one still reads live.
+ */
+export function liveCwds(): Set<string> | null {
+  try {
+    const out = execFileSync('lsof', ['-c', 'claude', '-a', '-d', 'cwd', '-Fn'], {
+      encoding: 'utf8',
+      timeout: 2000
+    });
+    const set = new Set<string>();
+    for (const line of out.split('\n')) {
+      if (line.startsWith('n') && line.length > 1) set.add(normCwd(line.slice(1)));
+    }
+    return set;
+  } catch {
+    return null;
+  }
+}
+
 /** Build the ranked session snapshot. */
 export function scanSessions(config: Partial<Config>, options: ScanOptions = {}): SessionsResponse {
   const cfg = config || {};
@@ -104,6 +140,13 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     .sort((a, b) => b.mtimeMs - a.mtimeMs)
     .slice(0, maxSessions);
 
+  // Set of cwds with a live `claude` process. null = probe skipped/unavailable
+  // → fail open (no gating). A session whose cwd is absent has no live process,
+  // so it can't be working/pending — force it to idle regardless of transcript.
+  const live = options.liveCwds !== undefined
+    ? options.liveCwds
+    : options.skipProcScan ? null : liveCwds();
+
   const sessions: Session[] = [];
   for (const c of candidates) {
     const parsed = readTranscript(c.file);
@@ -118,7 +161,12 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     const activityMs = Number.isFinite(lastMsgMs) ? lastMsgMs : c.mtimeMs;
     const recent = now - activityMs <= activeMs;
     let status: Session['status'];
-    if (parsed.waitingOnQuestion) status = 'question';                 // blue — needs an answer, beats all
+    // Dead process (cwd not in the live set) → nothing is running and nothing
+    // will resume on its own, so the session is idle no matter what the last
+    // transcript record implies (interrupted mid-turn, unanswered question…).
+    const dead = live !== null && projectPath !== null && !live.has(normCwd(projectPath));
+    if (dead) status = 'idle';                                         // gray — no live process
+    else if (parsed.waitingOnQuestion) status = 'question';            // blue — needs an answer, beats all
     else if (recent && !parsed.turnComplete) status = 'working';       // green — machine actively churning
     else if (parsed.turnComplete && !recent) status = 'idle';          // gray — finished and dormant
     else status = 'incomplete';                                        // yellow — your turn (recent+done) OR stalled (stale+pending)

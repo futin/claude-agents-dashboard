@@ -56,6 +56,17 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
   stale + unfinished (stalled mid-task).
 - **idle** (gray) — stale AND the last turn finished cleanly.
 
+**Process-liveness gate (overrides the 2×2):** a cleaned/interrupted session's last
+record often has no `end_turn`, so on disk it looks recent + pending = `working` forever
+even though nothing runs. So `scan.ts` `liveCwds()` shells out to `lsof -c claude -a -d cwd
+-Fn` for the set of cwds with a live `claude` CLI process; a session whose `projectPath`
+isn't in that set is forced to `idle`, no matter the transcript. `-c claude` is
+case-sensitive → CLI only, not the capital-`C` `Claude.app` shell. **Granularity is per-cwd**
+(claude doesn't hold the `.jsonl` open and exposes no session id in argv/env), so two
+sessions in the same directory can't be told apart — a dead one there still reads live.
+Probe is fail-open: `null` (no lsof / timeout / error) skips the gate. Injectable via
+`ScanOptions.liveCwds` for tests; `skipProcScan` also disables it.
+
 Signals come from the **newest message record** (newest tail record with `message.role` of
 `user`/`assistant`): `transcript.ts` exposes `turnComplete` (default true; false unless that
 record is an assistant with `end_turn`), `waitingOnQuestion`, and `lastMessageTs` (that

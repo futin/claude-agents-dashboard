@@ -216,6 +216,40 @@ export function run(): number {
     assert.strictEqual(out.totals.active, 1);
   })) p++; else f++;
 
+  if (test('liveness: dead process (cwd not live) forces idle despite recent + pending', () => {
+    // Reported bug: a cleaned/interrupted session's last record has no end_turn,
+    // so it reads recent+pending = working forever. With no live process at its
+    // cwd it must drop to idle.
+    const now = 1_700_000_000_000;
+    const freshTs = new Date(now - 30 * 1000).toISOString();
+    const root = makeRoot([
+      { dirName: '-a-dead', id: 'dead', mtimeMs: now - 30 * 1000, records: [metaRec('/a/dead', 'main'), at(assistantPending(), freshTs)] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: new Set(['/a/other']) });
+    assert.strictEqual(out.sessions[0].status, 'idle');
+    assert.strictEqual(out.totals.active, 0);
+  })) p++; else f++;
+
+  if (test('liveness: dead process forces idle even over an unanswered question', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-dq', id: 'dq', mtimeMs: now - 60 * 1000, records: [metaRec('/a/dq', 'main'), assistantQuestion()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: new Set() });
+    assert.strictEqual(out.sessions[0].status, 'idle');
+  })) p++; else f++;
+
+  if (test('liveness: live cwd keeps working; null set fails open (no gating)', () => {
+    const now = 1_700_000_000_000;
+    const freshTs = new Date(now - 30 * 1000).toISOString();
+    const specs = [{ dirName: '-a-lv', id: 'lv', mtimeMs: now - 30 * 1000, records: [metaRec('/a/lv', 'main'), at(assistantPending(), freshTs)] }];
+    const live = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root: makeRoot(specs), now, liveCwds: new Set(['/a/lv']) });
+    assert.strictEqual(live.sessions[0].status, 'working');
+    // null → probe disabled, existing behavior unchanged
+    const nogate = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root: makeRoot(specs), now, liveCwds: null });
+    assert.strictEqual(nogate.sessions[0].status, 'working');
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }
