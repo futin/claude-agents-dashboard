@@ -31,6 +31,30 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `npm test` — runs `test/run-all.ts` via tsx (14 cases).
 - `npm run typecheck` — `tsc --noEmit`.
 
+## Session status (the left dot)
+
+`Session.status` (4 states), computed in `scan.ts` from `transcript.ts` signals + file mtime.
+`question` (blue) overrides everything; otherwise it's a 2×2 of `recent` × `turnComplete`:
+
+|                          | recent (< `activeWindowMin`) | stale               |
+|--------------------------|------------------------------|---------------------|
+| **pending** (no end_turn)| 🟢 `working`                 | 🟡 `incomplete`     |
+| **finished** (end_turn)  | 🟡 `incomplete`              | ⚪ `idle`           |
+
+- **question** (blue) — newest assistant action is an unanswered `AskUserQuestion`. Beats all.
+  `ExitPlanMode` is NOT treated as a question.
+- **working** (green, pulsing) — recent AND the turn is unfinished = machine actively churning.
+  **Only this state** counts toward `totals.active`. A finished turn (end_turn) is NOT working
+  even if recent — the ball is in the human's court.
+- **incomplete** (yellow, "pending") — either recent + finished (your turn to reply) or
+  stale + unfinished (stalled mid-task).
+- **idle** (gray) — stale AND the last turn finished cleanly.
+
+Signals come from the **newest message record** (newest tail record with `message.role` of
+`user`/`assistant`): `transcript.ts` exposes `turnComplete` (default true; false unless that
+record is an assistant with `end_turn`) and `waitingOnQuestion`. Records without a role
+(usage-only, meta, last-prompt, queue-operation) are ignored for state.
+
 ## Conventions / gotchas
 
 - **ESM everywhere** (`"type": "module"`). Server imports use `.js` suffix (resolves to `.ts`

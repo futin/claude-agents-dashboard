@@ -1,11 +1,18 @@
 import type { Session } from '../../../shared/types';
 import { fmtTok, formatAgo } from '../lib/format';
 
+const STATUS_LABEL: Record<Session['status'], string> = {
+  working: 'working',
+  idle: 'idle',
+  question: 'waiting',
+  incomplete: 'pending'
+};
+
 /** One dashboard row: status dot, project/branch/model, tokens+%, context bar, activity. */
 export function SessionRow({ s }: { s: Session }) {
   const pct = s.contextPct || 0;
   const warn = pct >= 70;
-  const statusTxt = s.status === 'working' ? 'working' : 'idle';
+  const statusTxt = STATUS_LABEL[s.status];
 
   return (
     <div className={`row ${s.status}`}>

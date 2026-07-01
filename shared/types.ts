@@ -22,7 +22,7 @@ export interface Session {
   contextWindow: number;
   contextWindowLabel: string;
   contextPct: number;
-  status: 'working' | 'idle';
+  status: 'working' | 'idle' | 'question' | 'incomplete';
   activity: Activity | null;
   lastTimestamp: string | null;
   updatedMs: number;

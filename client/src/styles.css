@@ -1,7 +1,7 @@
 :root{
   --bg:#0a0c11;--surface:#12151d;--surface2:#171b25;--border:#232838;--border2:#2e3446;
   --text:#e2e5ec;--text2:#8b92a7;--text3:#565d73;
-  --green:#4acb8a;--accent:#6c8cff;--orange:#eca85a;--red:#e86060;--pink:#e26a9e;
+  --green:#4acb8a;--accent:#6c8cff;--orange:#eca85a;--red:#e86060;--pink:#e26a9e;--yellow:#e6c84a;--blue:#6c8cff;
   --mono:'SF Mono','JetBrains Mono','Fira Code',monospace;
   --font:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;
 }
@@ -17,9 +17,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .rows{display:flex;flex-direction:column;gap:8px}
 .row{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s}
 .row.working{border-color:rgba(74,203,138,0.35)}
+.row.question{border-color:rgba(108,140,255,0.35)}
+.row.incomplete{border-color:rgba(230,200,74,0.35)}
 .row .r1{display:flex;align-items:center;gap:10px}
 .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;background:var(--text3)}
 .working .dot{background:var(--green);box-shadow:0 0 0 0 rgba(74,203,138,.5);animation:pulse 1.8s infinite}
+.question .dot{background:var(--blue)}
+.incomplete .dot{background:var(--yellow)}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(74,203,138,.5)}70%{box-shadow:0 0 0 7px rgba(74,203,138,0)}100%{box-shadow:0 0 0 0 rgba(74,203,138,0)}}
 .proj{font-size:14px;font-weight:600;letter-spacing:-.01em}
 .branch{font-size:10.5px;color:var(--text2);font-family:var(--mono);background:var(--surface2);padding:1px 7px;border-radius:4px}
@@ -36,6 +40,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .r2 .act .tool.task{color:var(--pink)}
 .r2 .status{font-weight:600}
 .working .r2 .status{color:var(--green)}
+.question .r2 .status{color:var(--blue)}
+.incomplete .r2 .status{color:var(--yellow)}
 .idle .r2 .status{color:var(--text3)}
 .r2 .ago{margin-left:auto;color:var(--text3);font-variant-numeric:tabular-nums;flex-shrink:0}
 .empty{text-align:center;padding:60px 20px;color:var(--text3)}

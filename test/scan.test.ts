@@ -43,6 +43,15 @@ function toolRec(name: string, input: unknown) {
 function metaRec(cwd: string, branch: string) {
   return { cwd, gitBranch: branch, version: '2.1.0', timestamp: '2026-07-01T09:00:00Z', type: 'user' };
 }
+function assistantDone() {
+  return { message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }], usage: { input_tokens: 1000 } } };
+}
+function assistantPending() {
+  return { message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'Bash', input: { command: 'x' } }], usage: { input_tokens: 1000 } } };
+}
+function assistantQuestion() {
+  return { message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'AskUserQuestion', input: { questions: [] } }], usage: { input_tokens: 1000 } } };
+}
 
 export function run(): number {
   console.log('\n=== config.ts ===\n');
@@ -89,11 +98,11 @@ export function run(): number {
     assert.strictEqual(out.maxSessions, 2);
   })) p++; else f++;
 
-  if (test('working vs idle by activeWindowMin', () => {
+  if (test('working (recent + unfinished) vs idle (stale + finished)', () => {
     const now = 1_700_000_000_000;
     const root = makeRoot([
-      { dirName: '-a-hot', id: 'hot', mtimeMs: now - 60 * 1000, records: [metaRec('/a/hot', 'main'), usageRec(1000)] },
-      { dirName: '-a-cold', id: 'cold', mtimeMs: now - 30 * 60 * 1000, records: [metaRec('/a/cold', 'main'), usageRec(1000)] }
+      { dirName: '-a-hot', id: 'hot', mtimeMs: now - 60 * 1000, records: [metaRec('/a/hot', 'main'), assistantPending()] },
+      { dirName: '-a-cold', id: 'cold', mtimeMs: now - 30 * 60 * 1000, records: [metaRec('/a/cold', 'main'), assistantDone()] }
     ]);
     const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
     const hot = out.sessions.find(s => s.project === 'hot')!;
@@ -120,6 +129,53 @@ export function run(): number {
     const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
     assert.strictEqual(out.sessions[0].activity!.tool, 'Task');
     assert.strictEqual(out.sessions[0].activity!.detail, 'Explore: map');
+  })) p++; else f++;
+
+  if (test('status: unanswered question is blue even when recent (beats green)', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-q', id: 'q', mtimeMs: now - 60 * 1000, records: [metaRec('/a/q', 'main'), assistantQuestion()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
+    assert.strictEqual(out.sessions[0].status, 'question');
+    assert.strictEqual(out.totals.active, 0); // 'question' is not counted as working
+  })) p++; else f++;
+
+  if (test('status: recent + pending tool = working (green)', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-w', id: 'w', mtimeMs: now - 60 * 1000, records: [metaRec('/a/w', 'main'), assistantPending()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
+    assert.strictEqual(out.sessions[0].status, 'working');
+  })) p++; else f++;
+
+  if (test('status: recent + finished turn = incomplete (your turn, not green)', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-yt', id: 'yt', mtimeMs: now - 60 * 1000, records: [metaRec('/a/yt', 'main'), assistantDone()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
+    assert.strictEqual(out.sessions[0].status, 'incomplete');
+    assert.strictEqual(out.totals.active, 0);
+  })) p++; else f++;
+
+  if (test('status: stale + unfinished turn = incomplete (yellow)', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-i', id: 'i', mtimeMs: now - 30 * 60 * 1000, records: [metaRec('/a/i', 'main'), assistantPending()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
+    assert.strictEqual(out.sessions[0].status, 'incomplete');
+  })) p++; else f++;
+
+  if (test('status: stale + end_turn = idle (gray)', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-d', id: 'd', mtimeMs: now - 30 * 60 * 1000, records: [metaRec('/a/d', 'main'), assistantDone()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
+    assert.strictEqual(out.sessions[0].status, 'idle');
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

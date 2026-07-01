@@ -110,7 +110,12 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     if (!parsed) continue;
     const projectPath = parsed.cwd || null;
     const project = projectPath ? (projectPath.split('/').filter(Boolean).pop() || projectPath) : decodeProjectName(c.dirName);
-    const status: Session['status'] = now - c.mtimeMs <= activeMs ? 'working' : 'idle';
+    const recent = now - c.mtimeMs <= activeMs;
+    let status: Session['status'];
+    if (parsed.waitingOnQuestion) status = 'question';                 // blue — needs an answer, beats all
+    else if (recent && !parsed.turnComplete) status = 'working';       // green — machine actively churning
+    else if (parsed.turnComplete && !recent) status = 'idle';          // gray — finished and dormant
+    else status = 'incomplete';                                        // yellow — your turn (recent+done) OR stalled (stale+pending)
     sessions.push({
       id: c.id,
       project,

@@ -23,6 +23,10 @@ export interface ParsedTranscript {
   gitBranch: string | null;
   version: string | null;
   lastTimestamp: string | null;
+  /** Newest assistant turn ended cleanly (stop_reason "end_turn"). */
+  turnComplete: boolean;
+  /** Newest assistant action is an unanswered AskUserQuestion. */
+  waitingOnQuestion: boolean;
 }
 
 interface TailResult {
@@ -122,6 +126,11 @@ export function readTranscript(
   let activity: Activity | null = null;
   let cwd: string | null = null, gitBranch: string | null = null, version: string | null = null, lastTs: string | null = null;
 
+  // Session-state signals, taken from the newest message record only.
+  let newestMessageSeen = false;
+  let turnComplete = true;
+  let waitingOnQuestion = false;
+
   // Single newest-first scan gathers everything we need.
   for (let i = lines.length - 1; i >= first; i--) {
     const line = lines[i].trim();
@@ -155,7 +164,20 @@ export function readTranscript(
       }
     }
 
-    if (tokens && activity && cwd && lastTs && version) break;
+    // First (newest) record carrying a real conversational role decides turn state.
+    const role = rec.message && rec.message.role;
+    if (!newestMessageSeen && (role === 'user' || role === 'assistant')) {
+      newestMessageSeen = true;
+      const m = rec.message;
+      turnComplete = role === 'assistant' && m.stop_reason === 'end_turn';
+      if (role === 'assistant' && Array.isArray(m.content)) {
+        waitingOnQuestion = m.content.some(
+          (b: any) => b && b.type === 'tool_use' && b.name === 'AskUserQuestion'
+        );
+      }
+    }
+
+    if (tokens && activity && cwd && lastTs && version && newestMessageSeen) break;
   }
 
   const win = resolveWindow(tokens, model);
@@ -171,6 +193,8 @@ export function readTranscript(
     cwd,
     gitBranch,
     version,
-    lastTimestamp: lastTs
+    lastTimestamp: lastTs,
+    turnComplete,
+    waitingOnQuestion
   };
 }

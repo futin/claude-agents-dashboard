@@ -68,6 +68,33 @@ export function run(): number {
     assert.strictEqual(tr.readTranscript('/no/such.jsonl'), null);
   })) p++; else f++;
 
+  if (test('turnComplete/waitingOnQuestion from newest message record', () => {
+    const done = tr.readTranscript(fixture([
+      { message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] } }
+    ]))!;
+    assert.strictEqual(done.turnComplete, true);
+    assert.strictEqual(done.waitingOnQuestion, false);
+
+    const pending = tr.readTranscript(fixture([
+      { message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'Bash', input: { command: 'ls' } }] } }
+    ]))!;
+    assert.strictEqual(pending.turnComplete, false);
+    assert.strictEqual(pending.waitingOnQuestion, false);
+
+    const asking = tr.readTranscript(fixture([
+      { message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'AskUserQuestion', input: { questions: [] } }] } }
+    ]))!;
+    assert.strictEqual(asking.waitingOnQuestion, true);
+
+    // Newest record is the user's tool_result → question answered, turn still open.
+    const answered = tr.readTranscript(fixture([
+      { message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'AskUserQuestion', input: {} }] } },
+      { message: { role: 'user', content: [{ type: 'tool_result', content: 'ok' }] } }
+    ]))!;
+    assert.strictEqual(answered.waitingOnQuestion, false);
+    assert.strictEqual(answered.turnComplete, false);
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }
