@@ -30,6 +30,13 @@ export interface ParsedTranscript {
    * so it's the reliable signal for recency.
    */
   lastMessageTs: string | null;
+  /**
+   * At least one conversational (user/assistant) message record was found.
+   * False for a freshly-created transcript that only holds queue-operation/
+   * attachment/meta records — e.g. a session just started or just `/clear`ed,
+   * which has no content worth showing.
+   */
+  hasMessages: boolean;
   /** Newest assistant turn ended cleanly (stop_reason "end_turn"). */
   turnComplete: boolean;
   /** Newest assistant action is an unanswered AskUserQuestion. */
@@ -204,6 +211,7 @@ export function readTranscript(
     version,
     lastTimestamp: lastTs,
     lastMessageTs,
+    hasMessages: newestMessageSeen,
     turnComplete,
     waitingOnQuestion
   };

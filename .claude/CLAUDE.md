@@ -67,6 +67,15 @@ sessions in the same directory can't be told apart — a dead one there still re
 Probe is fail-open: `null` (no lsof / timeout / error) skips the gate. Injectable via
 `ScanOptions.liveCwds` for tests; `skipProcScan` also disables it.
 
+**Empty-session filter:** `/clear` (and opening a new session) starts a fresh UUID
+transcript holding only `queue-operation`/`attachment`/meta records with no user/assistant
+message yet. Its fresh mtime would read recent + `turnComplete`(default) = `incomplete`,
+showing a phantom "pending" row beside the real session `/clear` abandoned — and there's no
+on-disk link from the new session back to the cleared one to dedupe by. So `scan.ts` drops
+any transcript whose `hasMessages` is false (`transcript.ts` = `newestMessageSeen`, true
+once a `message.role` user/assistant record appears in the tail). Nothing to show → not
+shown. The old session ages to `idle` on its own once stale.
+
 Signals come from the **newest message record** (newest tail record with `message.role` of
 `user`/`assistant`): `transcript.ts` exposes `turnComplete` (default true; false unless that
 record is an assistant with `end_turn`), `waitingOnQuestion`, and `lastMessageTs` (that
