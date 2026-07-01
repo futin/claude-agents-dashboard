@@ -6,6 +6,7 @@
 import type { ServerResponse } from 'node:http';
 
 import { scanSessions } from './lib/scan.js';
+import { getCachedUsage } from './lib/usage.js';
 import type { Config } from './lib/config.js';
 import type { SessionsResponse } from '../shared/types.js';
 
@@ -25,6 +26,9 @@ export function serveSessions(config: Config, res: ServerResponse): void {
       totals: { shown: 0, active: 0 }
     };
   }
+  // Account usage (5h + weekly). Synchronous cache read; refresh happens in the
+  // background. Fails open to null so it never blocks or breaks the response.
+  if (config.showUsage) data.usage = getCachedUsage();
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(data));
 }

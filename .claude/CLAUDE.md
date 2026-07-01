@@ -17,6 +17,7 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/config.ts   .env loader — precedence process.env > .env > defaults
   lib/transcript.ts  tail-reads last 256KB of a transcript → tokens/model/window/activity
   lib/scan.ts     enumerates + ranks sessions across ~/.claude/projects
+  lib/usage.ts    fetches account 5h/weekly limits from Anthropic (see "Usage limits")
 client/           Vite + React + TypeScript frontend
   src/App.tsx, components/{Header,SessionList,SessionRow}, hooks/useSessions, lib/format
 vite.config.ts    dev proxy /api → backend; reuses server loadConfig() for the port
@@ -28,7 +29,7 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — runs `test/run-all.ts` via tsx (14 cases).
+- `pnpm test` — runs `test/run-all.ts` via tsx (29 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
 
 ## Session status (the left dot)
@@ -72,6 +73,34 @@ Signals come from the **newest message record** (newest tail record with `messag
 record is an assistant with `end_turn`), `waitingOnQuestion`, and `lastMessageTs` (that
 record's timestamp — the recency signal). Records without a role (usage-only, meta,
 last-prompt, queue-operation) are ignored for state.
+
+## Usage limits (header bars)
+
+The header shows two mini progress bars — **5h** and **Week** — the same account
+rate-limit utilization Claude Code's `/usage` reports. Unlike everything else in the app,
+these are **not on disk**: `lib/usage.ts` fetches them live from Anthropic.
+
+- **Endpoint:** `GET {ANTHROPIC_BASE_URL|CLAUDE_CODE_API_BASE_URL|https://api.anthropic.com}/api/oauth/usage`,
+  headers `Authorization: Bearer <token>`, `anthropic-beta: oauth-2025-04-20`,
+  `anthropic-version: 2023-06-01`. **Private/undocumented** — may change between CLI versions.
+- **Response shape:** windows are **top-level** (`{ five_hour:{utilization,resets_at}, seven_day:{…}, … }`),
+  *not* wrapped in `rate_limits`. `mapUsage()` accepts both shapes defensively and is the one
+  pure/unit-tested piece (`test/usage.test.ts`).
+- **Token:** read from the macOS keychain (`security find-generic-password -s "Claude Code-credentials"`),
+  falling back to `~/.claude/.credentials.json` → `claudeAiOauth.accessToken`. Expired tokens
+  are skipped; **we never refresh** (that would mutate creds). ⚠️ The first keychain read by
+  the dashboard process triggers a macOS GUI prompt — approve once with "Always Allow".
+- **Caching:** `getCachedUsage()` is **synchronous** — it returns the last value and fires a
+  **non-blocking** background refresh when older than 60s. So the 3s `/api/sessions` poll never
+  blocks on the network, and Anthropic is hit at most ~once/min. First load shows no bars until
+  the first fetch lands (next poll picks it up).
+- **Fail-open everywhere:** no token / expired / network error / non-2xx / unparseable →
+  `usage: null` → header omits the bars. Never throws into `scanSessions` (which stays pure).
+- **Wiring:** `SessionsResponse.usage?: UsageLimits | null` (in `shared/types.ts`); attached in
+  `api.ts` (both success and error branches) only when `config.showUsage`. Still **zero npm deps**
+  — `https` + `child_process` are Node built-ins.
+- **Toggle:** `SHOW_USAGE=false` disables the feature entirely (no fetch, no keychain read).
+  Default on.
 
 ## Conventions / gotchas
 

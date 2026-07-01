@@ -11,13 +11,15 @@ export interface Config {
   maxSessions: number;
   activeWindowMin: number;
   lookbackHours: number;
+  showUsage: boolean;
 }
 
 export const DEFAULTS = {
   PORT: 4173,
   MAX_SESSIONS: 5,
   ACTIVE_WINDOW_MIN: 5,
-  LOOKBACK_HOURS: 24
+  LOOKBACK_HOURS: 24,
+  SHOW_USAGE: true
 } as const;
 
 /** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
@@ -45,6 +47,15 @@ export function toPosInt(value: unknown, fallback: number): number {
   return Number.isInteger(n) && n > 0 ? n : fallback;
 }
 
+/** Coerce to a boolean. Accepts false/0/no/off (case-insensitive); else fallback. */
+export function toBool(value: unknown, fallback: boolean): boolean {
+  if (value === undefined || value === null) return fallback;
+  const s = String(value).trim().toLowerCase();
+  if (s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
+  if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+  return fallback;
+}
+
 /**
  * Load config from an optional .env file (defaults to <cwd>/.env), overlaid by
  * process.env, over hard defaults.
@@ -65,6 +76,7 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     port: toPosInt(src('PORT'), DEFAULTS.PORT),
     maxSessions: toPosInt(src('MAX_SESSIONS'), DEFAULTS.MAX_SESSIONS),
     activeWindowMin: toPosInt(src('ACTIVE_WINDOW_MIN'), DEFAULTS.ACTIVE_WINDOW_MIN),
-    lookbackHours: toPosInt(src('LOOKBACK_HOURS'), DEFAULTS.LOOKBACK_HOURS)
+    lookbackHours: toPosInt(src('LOOKBACK_HOURS'), DEFAULTS.LOOKBACK_HOURS),
+    showUsage: toBool(src('SHOW_USAGE'), DEFAULTS.SHOW_USAGE)
   };
 }

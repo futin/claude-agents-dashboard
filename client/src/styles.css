@@ -14,6 +14,15 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .sub{font-size:11px;color:var(--text3);margin-bottom:18px}
 .sub b{color:var(--green);font-weight:600}
 
+.usage{display:flex;gap:18px;margin:-6px 0 18px}
+.usage .u{display:flex;align-items:center;gap:8px;min-width:0;flex:1;max-width:280px}
+.usage .u-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;width:34px}
+.usage .u-bar{flex:1;height:5px;border-radius:3px;background:var(--surface2);overflow:hidden}
+.usage .u-fill{height:100%;border-radius:3px;background:var(--green);transition:width .5s ease}
+.usage .u-fill.mid{background:var(--orange)}
+.usage .u-fill.high{background:var(--red)}
+.usage .u-pct{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text2);min-width:34px;text-align:right}
+
 .rows{display:flex;flex-direction:column;gap:8px}
 .row{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s}
 .row.working{border-color:rgba(74,203,138,0.35)}
