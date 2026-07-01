@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Session } from '../../../shared/types';
 import { fmtTok, formatAgo } from '../lib/format';
 
@@ -14,6 +15,26 @@ export function SessionRow({ s }: { s: Session }) {
   const warn = pct >= 70;
   const statusTxt = STATUS_LABEL[s.status];
 
+  const [resumeErr, setResumeErr] = useState<string | null>(null);
+
+  async function resume() {
+    setResumeErr(null);
+    try {
+      const res = await fetch('/api/open-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: s.id })
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
+    } catch (e) {
+      setResumeErr(e instanceof Error ? e.message : 'failed');
+      setTimeout(() => setResumeErr(null), 4000);
+    }
+  }
+
   return (
     <div className={`row ${s.status}`}>
       <div className="r1">
@@ -21,6 +42,13 @@ export function SessionRow({ s }: { s: Session }) {
         <span className="proj">{s.project}</span>
         {s.gitBranch && <span className="branch">{s.gitBranch}</span>}
         <span className="model">{s.model}</span>
+        <button
+          className={`resume${resumeErr ? ' err' : ''}`}
+          title={resumeErr ? `Couldn't open: ${resumeErr}` : 'Resume in Claude Code (iTerm)'}
+          onClick={resume}
+        >
+          {resumeErr ? '⚠' : '↗'}
+        </button>
         <span className="spacer" />
         <span className="tok">{fmtTok(s.tokens)} / {s.contextWindowLabel}</span>
         <span className="pct" style={{ color: warn ? 'var(--orange)' : 'var(--text)' }}>{pct}%</span>
