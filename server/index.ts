@@ -3,8 +3,10 @@
  * index.ts — HTTP entry for the Claude Agents Dashboard.
  *
  * Routes:
- *   GET /api/sessions  → JSON session snapshot (see api.ts)
- *   everything else    → static files from client/dist (production build)
+ *   GET  /api/sessions       → JSON session snapshot (see api.ts)
+ *   GET  /api/sessions/:id   → one session's subagent activity
+ *   POST /api/usage/refresh  → spawn claude to renew the OAuth token
+ *   everything else          → static files from client/dist (production build)
  *
  * In development you visit the Vite dev server (default :5173), which proxies
  * /api here; this server only needs to answer the API. In production, run
