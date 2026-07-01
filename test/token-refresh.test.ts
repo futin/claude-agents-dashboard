@@ -77,6 +77,56 @@ export async function run(): Promise<number> {
     assert.deepStrictEqual(await first, { ok: true });
   })) p++; else f++;
 
+  const { serveUsageRefresh } = await import('../server/api.js');
+
+  interface FakeRes { code: number; body: string }
+  function fakeRes(): FakeRes & { res: unknown } {
+    const state = { code: 0, body: '' } as FakeRes & { res: unknown };
+    state.res = {
+      writeHead(code: number) { state.code = code; },
+      end(body: string) { state.body = body; }
+    };
+    return state;
+  }
+  const cfg = (showUsage: boolean) => ({ showUsage }) as import('../server/lib/config.js').Config;
+
+  if (await test('serveUsageRefresh: SHOW_USAGE off → 404', async () => {
+    const r = fakeRes();
+    await serveUsageRefresh(cfg(false), r.res as never, {});
+    assert.strictEqual(r.code, 404);
+    assert.strictEqual(JSON.parse(r.body).ok, false);
+  })) p++; else f++;
+
+  if (await test('serveUsageRefresh: spawn ok → 200 with fresh usage snapshot', async () => {
+    const r = fakeRes();
+    await serveUsageRefresh(cfg(true), r.res as never, {
+      spawner: () => Promise.resolve({ code: 0 }),
+      cwd: tmpCwd(),
+      refreshUsage: () => Promise.resolve({
+        usage: { fiveHour: { utilization: 12, resetsAt: null }, sevenDay: { utilization: 30, resetsAt: null } },
+        status: 'ok' as const
+      })
+    });
+    assert.strictEqual(r.code, 200);
+    const body = JSON.parse(r.body);
+    assert.strictEqual(body.ok, true);
+    assert.strictEqual(body.usageStatus, 'ok');
+    assert.strictEqual(body.usage.fiveHour.utilization, 12);
+  })) p++; else f++;
+
+  if (await test('serveUsageRefresh: spawn fails → 502, no usage fetch', async () => {
+    const r = fakeRes();
+    let fetched = false;
+    await serveUsageRefresh(cfg(true), r.res as never, {
+      spawner: () => Promise.resolve({ code: null, error: 'claude CLI not found on PATH' }),
+      cwd: tmpCwd(),
+      refreshUsage: () => { fetched = true; return Promise.resolve({ usage: null, status: 'unavailable' as const }); }
+    });
+    assert.strictEqual(r.code, 502);
+    assert.match(JSON.parse(r.body).error, /not found/);
+    assert.strictEqual(fetched, false);
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }
