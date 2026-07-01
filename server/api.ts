@@ -8,7 +8,7 @@ import type { ServerResponse } from 'node:http';
 
 import { scanSessions, listTranscripts, projectsRoot } from './lib/scan.js';
 import { readAgentsCached } from './lib/agents-cache.js';
-import { getCachedUsage } from './lib/usage.js';
+import { getCachedUsageState } from './lib/usage.js';
 import type { Config } from './lib/config.js';
 import type { SessionsResponse, SessionDetail } from '../shared/types.js';
 
@@ -33,7 +33,11 @@ export function serveSessions(config: Config, res: ServerResponse): void {
   }
   // Account usage (5h + weekly). Synchronous cache read; refresh happens in the
   // background. Fails open to null so it never blocks or breaks the response.
-  if (config.showUsage) data.usage = getCachedUsage();
+  if (config.showUsage) {
+    const u = getCachedUsageState();
+    data.usage = u.usage;
+    data.usageStatus = u.status;
+  }
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(data));
 }

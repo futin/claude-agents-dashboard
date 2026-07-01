@@ -21,7 +21,13 @@ import path from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
 
-import type { UsageLimits, RateLimit } from '../../shared/types.js';
+import type { UsageLimits, RateLimit, UsageStatus } from '../../shared/types.js';
+
+/** Outcome of looking for a stored OAuth token. */
+export type TokenState =
+  | { state: 'ok'; token: string }
+  | { state: 'expired' }
+  | { state: 'missing' };
 
 const USAGE_PATH = '/api/oauth/usage';
 const KEYCHAIN_SERVICE = 'Claude Code-credentials';
@@ -46,7 +52,9 @@ function baseUrl(): string {
  * triggers a macOS access prompt ("… wants to use your confidential
  * information") — approve once with "Always Allow".
  */
-export function readToken(): string | null {
+export function readToken(): TokenState {
+  let sawExpired = false;
+
   // 1. macOS keychain.
   try {
     const out = execFileSync(
@@ -54,8 +62,9 @@ export function readToken(): string | null {
       ['find-generic-password', '-a', os.userInfo().username, '-w', '-s', KEYCHAIN_SERVICE],
       { encoding: 'utf8', timeout: REQUEST_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'ignore'] }
     ).trim();
-    const token = tokenFromCredsBlob(out);
-    if (token) return token;
+    const t = tokenFromCredsBlob(out);
+    if (t.state === 'ok') return t;
+    if (t.state === 'expired') sawExpired = true;
   } catch {
     /* no keychain item / not macOS / access denied — try the file */
   }
@@ -63,34 +72,35 @@ export function readToken(): string | null {
   // 2. ~/.claude/.credentials.json fallback.
   try {
     const raw = fs.readFileSync(path.join(os.homedir(), '.claude', '.credentials.json'), 'utf8');
-    const token = tokenFromCredsBlob(raw);
-    if (token) return token;
+    const t = tokenFromCredsBlob(raw);
+    if (t.state === 'ok') return t;
+    if (t.state === 'expired') sawExpired = true;
   } catch {
     /* no file — give up */
   }
 
-  return null;
+  return { state: sawExpired ? 'expired' : 'missing' };
 }
 
 /**
  * The keychain/file payload is JSON `{ claudeAiOauth: { accessToken, expiresAt, ... } }`.
- * Returns the access token, or null if absent or already expired.
+ * Distinguishes a usable token from an expired one so the client can offer
+ * recovery (see token-refresh.ts). We still never refresh creds ourselves.
  */
-function tokenFromCredsBlob(blob: string): string | null {
+export function tokenFromCredsBlob(blob: string, now = Date.now()): TokenState {
   let parsed: unknown;
   try {
     parsed = JSON.parse(blob);
   } catch {
-    return null;
+    return { state: 'missing' };
   }
   const oauth = (parsed as { claudeAiOauth?: unknown })?.claudeAiOauth as
     | { accessToken?: unknown; expiresAt?: unknown }
     | undefined;
   const token = oauth && typeof oauth.accessToken === 'string' ? oauth.accessToken : null;
-  if (!token) return null;
-  // Skip clearly-expired tokens; we don't refresh (would mutate creds).
-  if (typeof oauth!.expiresAt === 'number' && oauth!.expiresAt <= Date.now()) return null;
-  return token;
+  if (!token) return { state: 'missing' };
+  if (typeof oauth!.expiresAt === 'number' && oauth!.expiresAt <= now) return { state: 'expired' };
+  return { state: 'ok', token };
 }
 
 /** One window from the raw `rate_limits` payload → our RateLimit shape. */
@@ -174,33 +184,54 @@ export function fetchUsage(token: string): Promise<UsageLimits | null> {
 
 // ── Cache: serve a synchronous snapshot; refresh in the background on TTL ──
 let cached: UsageLimits | null = null;
+let cachedStatus: UsageStatus = 'unavailable';
 let cachedAt = 0;
-let refreshing = false;
+let refreshing: Promise<void> | null = null;
 
-/** Kick off a background refresh if the cache is stale and none is in flight. */
-function maybeRefresh(): void {
-  if (refreshing) return;
-  if (Date.now() - cachedAt <= CACHE_TTL_MS && cachedAt !== 0) return;
-  refreshing = true;
-  const token = readToken();
-  const settle = (v: UsageLimits | null) => {
-    cached = v;
-    cachedAt = Date.now();
-    refreshing = false;
-  };
-  if (!token) {
-    settle(null);
-    return;
-  }
-  fetchUsage(token).then(settle, () => settle(null));
+export interface UsageState {
+  usage: UsageLimits | null;
+  status: UsageStatus;
+}
+
+/** One fetch cycle: token → endpoint → cache. Single-flight via `refreshing`. */
+function refreshNow(): Promise<void> {
+  if (refreshing) return refreshing;
+  refreshing = (async () => {
+    try {
+      const t = readToken();
+      if (t.state !== 'ok') {
+        cached = null;
+        cachedStatus = t.state === 'expired' ? 'token-expired' : 'unavailable';
+        return;
+      }
+      const limits = await fetchUsage(t.token);
+      cached = limits;
+      cachedStatus = limits ? 'ok' : 'unavailable';
+    } finally {
+      cachedAt = Date.now();
+      refreshing = null;
+    }
+  })();
+  return refreshing;
 }
 
 /**
- * Current usage snapshot (synchronous). Returns the last fetched value and
- * triggers a non-blocking background refresh when stale. The very first call
- * returns null until the first fetch lands (picked up by the next poll).
+ * Current usage snapshot + status (synchronous). Returns the last fetched value
+ * and triggers a non-blocking background refresh when stale. The very first
+ * call returns `unavailable` until the first fetch lands (next poll picks it up).
  */
-export function getCachedUsage(): UsageLimits | null {
-  maybeRefresh();
-  return cached;
+export function getCachedUsageState(): UsageState {
+  if (!refreshing && (cachedAt === 0 || Date.now() - cachedAt > CACHE_TTL_MS)) void refreshNow();
+  return { usage: cached, status: cachedStatus };
+}
+
+/**
+ * Bypass the TTL and fetch now — used after a token refresh so the new token is
+ * picked up immediately. Awaits any in-flight cycle first (it may have started
+ * with the old token), then runs a fresh one.
+ */
+export async function forceUsageRefresh(): Promise<UsageState> {
+  if (refreshing) await refreshing;
+  await refreshNow();
+  return { usage: cached, status: cachedStatus };
 }
