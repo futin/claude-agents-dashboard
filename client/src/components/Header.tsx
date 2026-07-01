@@ -1,4 +1,5 @@
 import type { SessionsResponse, RateLimit, UsageLimits } from '../../../shared/types';
+import { formatResetTime } from '../lib/format';
 
 /** Title bar + summary line (generated time, active count, running claude procs). */
 export function Header({ data }: { data: SessionsResponse | null }) {
@@ -48,11 +49,16 @@ function UsageBar({ label, rl }: { label: string; rl: RateLimit }) {
   const title = rl.resetsAt ? `Resets ${new Date(rl.resetsAt).toLocaleString()}` : undefined;
   return (
     <div className="u" title={title}>
-      <span className="u-label">{label}</span>
-      <div className="u-bar">
-        <div className={`u-fill ${level}`.trim()} style={{ width: `${pct}%` }} />
+      <div className="u-top">
+        <span className="u-label">{label}</span>
+        {rl.resetsAt && <span className="u-reset">resets {formatResetTime(rl.resetsAt)}</span>}
       </div>
-      <span className="u-pct">{pct}%</span>
+      <div className="u-row">
+        <div className="u-bar">
+          <div className={`u-fill ${level}`.trim()} style={{ width: `${pct}%` }} />
+        </div>
+        <span className="u-pct">{pct}%</span>
+      </div>
     </div>
   );
 }

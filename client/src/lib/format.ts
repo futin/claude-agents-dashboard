@@ -29,3 +29,13 @@ export function formatAgo(ms: number): string {
   if (h < 24) return h + 'h';
   return Math.round(h / 24) + 'd';
 }
+
+/** Reset clock time for a usage window: 2:14pm (today), or Thu 2:14pm (later). */
+export function formatResetTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(' ', '');
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return time;
+  return d.toLocaleDateString([], { weekday: 'short' }) + ' ' + time;
+}
