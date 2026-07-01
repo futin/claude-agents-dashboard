@@ -1,4 +1,6 @@
-import type { SessionsResponse, RateLimit, UsageLimits } from '../../../shared/types';
+import { useState } from 'react';
+
+import type { SessionsResponse, RateLimit, UsageLimits, UsageRefreshResponse } from '../../../shared/types';
 import { formatResetTime } from '../lib/format';
 
 /** Title bar + summary line (generated time, active count, running claude procs). */
@@ -20,8 +22,45 @@ export function Header({ data }: { data: SessionsResponse | null }) {
         <span className="meta">{meta}</span>
       </div>
       <div className="sub">{sub}</div>
-      <UsageBars usage={data ? data.usage : null} />
+      {data?.usageStatus === 'token-expired'
+        ? <UsageExpired />
+        : <UsageBars usage={data ? data.usage : null} />}
     </>
+  );
+}
+
+/**
+ * Shown instead of the bars when the stored OAuth token is expired. The Sync
+ * button asks the server to spawn a headless `claude -p` turn (the CLI renews
+ * its own token); the next 3s poll flips usageStatus back to 'ok' and the bars
+ * return. Costs one haiku subscription turn per click.
+ */
+function UsageExpired() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function sync() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/usage/refresh', { method: 'POST' });
+      const body: UsageRefreshResponse = await res.json();
+      if (!body.ok) setError(body.error || 'refresh failed');
+    } catch {
+      setError('request failed');
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="usage">
+      <span className="u-label">Usage</span>
+      <span className="u-msg">token expired</span>
+      <button className="u-sync" onClick={sync} disabled={busy}>
+        {busy ? 'refreshing…' : 'Sync'}
+      </button>
+      {error && <span className="u-err">{error}</span>}
+    </div>
   );
 }
 
