@@ -15,7 +15,7 @@ export interface Config {
 
 export const DEFAULTS = {
   PORT: 4173,
-  MAX_SESSIONS: 5,
+  MAX_SESSIONS: 10,
   ACTIVE_WINDOW_MIN: 5,
   LOOKBACK_HOURS: 24
 } as const;

@@ -1,13 +1,7 @@
 import { useState } from 'react';
 import type { Session } from '../../../shared/types';
 import { fmtTok, formatAgo } from '../lib/format';
-
-const STATUS_LABEL: Record<Session['status'], string> = {
-  working: 'working',
-  idle: 'idle',
-  question: 'waiting',
-  incomplete: 'pending'
-};
+import { STATUS_LABEL } from '../lib/filterSort';
 
 /** One dashboard row: status dot, project/branch/model, tokens+%, context bar, activity. */
 export function SessionRow({ s }: { s: Session }) {
