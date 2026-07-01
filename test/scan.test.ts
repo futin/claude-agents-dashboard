@@ -53,6 +53,11 @@ function assistantQuestion() {
   return { message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'AskUserQuestion', input: { questions: [] } }], usage: { input_tokens: 1000 } } };
 }
 
+/** Stamp a top-level timestamp on a record (real transcripts carry rec.timestamp). */
+function at(rec: any, iso: string) {
+  return { ...rec, timestamp: iso };
+}
+
 export function run(): number {
   console.log('\n=== config.ts ===\n');
   let p = 0, f = 0;
@@ -176,6 +181,39 @@ export function run(): number {
     ]);
     const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
     assert.strictEqual(out.sessions[0].status, 'idle');
+  })) p++; else f++;
+
+  if (test('selection bump: fresh mtime + stale message ts is NOT working', () => {
+    // Reproduces the reported bug: selecting a session in Claude Code appends
+    // timestamp-less mode/last-prompt records that bump file mtime. An unfinished
+    // turn whose last real message is old must stay stalled, not flip to green.
+    const now = 1_700_000_000_000;
+    const staleTs = new Date(now - 30 * 60 * 1000).toISOString(); // last message 30m ago
+    const root = makeRoot([
+      {
+        dirName: '-a-sel', id: 'sel',
+        mtimeMs: now - 2 * 1000,           // just "selected" → mtime fresh
+        records: [metaRec('/a/sel', 'main'), at(assistantPending(), staleTs), { type: 'mode' }, { type: 'last-prompt' }]
+      }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
+    assert.strictEqual(out.sessions[0].status, 'incomplete'); // stale + unfinished, NOT working
+    assert.strictEqual(out.totals.active, 0);
+  })) p++; else f++;
+
+  if (test('recency tracks message ts, not mtime: recent message + stale mtime = working', () => {
+    const now = 1_700_000_000_000;
+    const freshTs = new Date(now - 30 * 1000).toISOString(); // message 30s ago
+    const root = makeRoot([
+      {
+        dirName: '-a-live', id: 'live',
+        mtimeMs: now - 30 * 60 * 1000,     // mtime stale, but the message is fresh
+        records: [metaRec('/a/live', 'main'), at(assistantPending(), freshTs)]
+      }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
+    assert.strictEqual(out.sessions[0].status, 'working');
+    assert.strictEqual(out.totals.active, 1);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

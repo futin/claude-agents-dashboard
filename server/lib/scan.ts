@@ -110,7 +110,13 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     if (!parsed) continue;
     const projectPath = parsed.cwd || null;
     const project = projectPath ? (projectPath.split('/').filter(Boolean).pop() || projectPath) : decodeProjectName(c.dirName);
-    const recent = now - c.mtimeMs <= activeMs;
+    // Recency tracks real agent activity, not file touches: selecting a session
+    // in Claude Code appends timestamp-less mode/last-prompt/custom-title records
+    // that bump the file mtime without any turn happening. Use the newest
+    // conversational message's timestamp; fall back to mtime only if absent.
+    const lastMsgMs = parsed.lastMessageTs ? Date.parse(parsed.lastMessageTs) : NaN;
+    const activityMs = Number.isFinite(lastMsgMs) ? lastMsgMs : c.mtimeMs;
+    const recent = now - activityMs <= activeMs;
     let status: Session['status'];
     if (parsed.waitingOnQuestion) status = 'question';                 // blue — needs an answer, beats all
     else if (recent && !parsed.turnComplete) status = 'working';       // green — machine actively churning

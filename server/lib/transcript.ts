@@ -23,6 +23,13 @@ export interface ParsedTranscript {
   gitBranch: string | null;
   version: string | null;
   lastTimestamp: string | null;
+  /**
+   * Timestamp of the newest conversational message (user/assistant) record —
+   * i.e. real agent activity. Unlike file mtime this ignores selection-only
+   * writes (mode/last-prompt/custom-title records, which carry no timestamp),
+   * so it's the reliable signal for recency.
+   */
+  lastMessageTs: string | null;
   /** Newest assistant turn ended cleanly (stop_reason "end_turn"). */
   turnComplete: boolean;
   /** Newest assistant action is an unanswered AskUserQuestion. */
@@ -130,6 +137,7 @@ export function readTranscript(
   let newestMessageSeen = false;
   let turnComplete = true;
   let waitingOnQuestion = false;
+  let lastMessageTs: string | null = null;
 
   // Single newest-first scan gathers everything we need.
   for (let i = lines.length - 1; i >= first; i--) {
@@ -169,6 +177,7 @@ export function readTranscript(
     if (!newestMessageSeen && (role === 'user' || role === 'assistant')) {
       newestMessageSeen = true;
       const m = rec.message;
+      if (typeof rec.timestamp === 'string') lastMessageTs = rec.timestamp;
       turnComplete = role === 'assistant' && m.stop_reason === 'end_turn';
       if (role === 'assistant' && Array.isArray(m.content)) {
         waitingOnQuestion = m.content.some(
@@ -194,6 +203,7 @@ export function readTranscript(
     gitBranch,
     version,
     lastTimestamp: lastTs,
+    lastMessageTs,
     turnComplete,
     waitingOnQuestion
   };

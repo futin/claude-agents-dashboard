@@ -25,16 +25,22 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 
 ## Commands
 
-- `npm run dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
-- `npm run build` — bundles client → `client/dist`.
-- `npm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `npm test` — runs `test/run-all.ts` via tsx (14 cases).
-- `npm run typecheck` — `tsc --noEmit`.
+- `pnpm dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
+- `pnpm build` — bundles client → `client/dist`.
+- `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
+- `pnpm test` — runs `test/run-all.ts` via tsx (14 cases).
+- `pnpm typecheck` — `tsc --noEmit`.
 
 ## Session status (the left dot)
 
-`Session.status` (4 states), computed in `scan.ts` from `transcript.ts` signals + file mtime.
+`Session.status` (4 states), computed in `scan.ts` from `transcript.ts` signals.
 `question` (blue) overrides everything; otherwise it's a 2×2 of `recent` × `turnComplete`:
+
+`recent` = last **conversational message** (`transcript.ts` `lastMessageTs`) is newer than
+`activeWindowMin`. **Not file mtime** — selecting a session in Claude Code appends
+timestamp-less `mode`/`last-prompt`/`custom-title` records that bump mtime with no turn
+happening, which used to flip idle sessions to `working`. mtime is only a fallback when no
+message timestamp exists (and still the coarse `lookbackHours` enumeration filter in `scan.ts`).
 
 |                          | recent (< `activeWindowMin`) | stale               |
 |--------------------------|------------------------------|---------------------|
@@ -52,8 +58,9 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 
 Signals come from the **newest message record** (newest tail record with `message.role` of
 `user`/`assistant`): `transcript.ts` exposes `turnComplete` (default true; false unless that
-record is an assistant with `end_turn`) and `waitingOnQuestion`. Records without a role
-(usage-only, meta, last-prompt, queue-operation) are ignored for state.
+record is an assistant with `end_turn`), `waitingOnQuestion`, and `lastMessageTs` (that
+record's timestamp — the recency signal). Records without a role (usage-only, meta,
+last-prompt, queue-operation) are ignored for state.
 
 ## Conventions / gotchas
 
