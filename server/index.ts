@@ -58,7 +58,9 @@ function serveStatic(urlPath: string, res: http.ServerResponse): void {
 
 const server = http.createServer((req, res) => {
   if (req.method === 'POST' && req.url && req.url.split('?')[0] === '/api/usage/refresh') {
-    return void serveUsageRefresh(config, res);
+    // Handler is un-rejectable today; .catch guards future edits from turning
+    // a pre-send throw into a process-killing unhandled rejection.
+    return void serveUsageRefresh(config, res).catch(() => res.destroy());
   }
   // Detail route must be matched before the generic prefix below, which would
   // otherwise swallow `/api/sessions/:id`.

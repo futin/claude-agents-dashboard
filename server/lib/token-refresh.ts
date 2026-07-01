@@ -45,7 +45,7 @@ const defaultSpawner: Spawner = (cmd, args, opts) =>
     delete env.ANTHROPIC_AUTH_TOKEN;
     delete env.ANTHROPIC_BASE_URL;
     delete env.CLAUDE_CODE_API_BASE_URL;
-    execFile(cmd, args, { cwd: opts.cwd, timeout: opts.timeout, env }, (err) => {
+    const child = execFile(cmd, args, { cwd: opts.cwd, timeout: opts.timeout, env }, (err) => {
       if (!err) return resolve({ code: 0 });
       const e = err as NodeJS.ErrnoException & { killed?: boolean };
       if (e.code === 'ENOENT') return resolve({ code: null, error: 'claude CLI not found on PATH' });
@@ -55,6 +55,9 @@ const defaultSpawner: Spawner = (cmd, args, opts) =>
         error: typeof e.code === 'number' ? `claude exited with code ${e.code}` : e.message
       });
     });
+    // Close stdin so a prompt-less turn can never sit waiting on the pipe
+    // until the 60s timeout.
+    child.stdin?.end();
   });
 
 export type RefreshOutcome =

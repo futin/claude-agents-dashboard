@@ -116,15 +116,15 @@ export interface SessionsResponse {
   sessions: Session[];
   /**
    * Account rate-limit usage (5-hour + weekly), fetched live from Anthropic.
-   * `null` when unavailable (no token, network error, or feature disabled);
-   * absent on the error snapshot.
+   * `null` when unavailable (no token, network error); absent when SHOW_USAGE
+   * is off. Attached on both the success and error snapshots.
    */
   usage?: UsageLimits | null;
   /**
    * Why `usage` is or isn't populated: 'ok' → bars render; 'token-expired' →
    * stored OAuth token is past expiresAt (recoverable via POST /api/usage/refresh);
    * 'unavailable' → any other fail-open cause (no token, network, bad payload).
-   * Absent when SHOW_USAGE is off and on the error snapshot.
+   * Absent when SHOW_USAGE is off; attached on both success and error snapshots.
    */
   usageStatus?: UsageStatus;
   /** Set only when the scan failed and an empty snapshot is returned. */

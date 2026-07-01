@@ -42,14 +42,18 @@ function UsageExpired() {
   async function sync() {
     setBusy(true);
     setError(null);
+    let failed = true;
     try {
       const res = await fetch('/api/usage/refresh', { method: 'POST' });
       const body: UsageRefreshResponse = await res.json();
       if (!body.ok) setError(body.error || 'refresh failed');
+      else failed = false;
     } catch {
       setError('request failed');
     }
-    setBusy(false);
+    // Stay disabled on success: the next 3s poll swaps this component for the
+    // bars, and re-enabling early would let a double-click burn a second turn.
+    if (failed) setBusy(false);
   }
 
   return (

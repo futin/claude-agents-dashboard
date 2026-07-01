@@ -108,7 +108,7 @@ these are **not on disk**: `lib/usage.ts` fetches them live from Anthropic.
   falling back to `~/.claude/.credentials.json` → `claudeAiOauth.accessToken`. Expired tokens
   are skipped; **we never refresh** (that would mutate creds). ⚠️ The first keychain read by
   the dashboard process triggers a macOS GUI prompt — approve once with "Always Allow".
-- **Caching:** `getCachedUsage()` is **synchronous** — it returns the last value and fires a
+- **Caching:** `getCachedUsageState()` is **synchronous** — it returns the last value and fires a
   **non-blocking** background refresh when older than 60s. So the 3s `/api/sessions` poll never
   blocks on the network, and Anthropic is hit at most ~once/min. First load shows no bars until
   the first fetch lands (next poll picks it up).
