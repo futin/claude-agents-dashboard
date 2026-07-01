@@ -18,7 +18,6 @@ import { spawn } from 'node:child_process';
 
 import { loadConfig } from './lib/config.js';
 import { serveSessions, serveSessionDetail } from './api.js';
-import { openSession } from './openSession.js';
 
 const config = loadConfig();
 const isProd = process.env.NODE_ENV === 'production';
@@ -56,9 +55,6 @@ function serveStatic(urlPath: string, res: http.ServerResponse): void {
 }
 
 const server = http.createServer((req, res) => {
-  if (req.url && req.url.startsWith('/api/open-session') && req.method === 'POST') {
-    return openSession(config, req, res);
-  }
   // Detail route must be matched before the generic prefix below, which would
   // otherwise swallow `/api/sessions/:id`.
   const detail = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)/);
