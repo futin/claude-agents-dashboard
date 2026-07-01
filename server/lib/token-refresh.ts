@@ -36,7 +36,16 @@ export type Spawner = (
 
 const defaultSpawner: Spawner = (cmd, args, opts) =>
   new Promise((resolve) => {
-    execFile(cmd, args, { cwd: opts.cwd, timeout: opts.timeout }, (err) => {
+    // Strip API-key/proxy vars: with them the spawned turn could bill an API
+    // key or route to a gateway and exit 0 WITHOUT touching the OAuth creds
+    // this refresh exists to renew (same misroute class as the usage endpoint
+    // vs ANTHROPIC_BASE_URL — see CLAUDE.md "Usage limits").
+    const env = { ...process.env };
+    delete env.ANTHROPIC_API_KEY;
+    delete env.ANTHROPIC_AUTH_TOKEN;
+    delete env.ANTHROPIC_BASE_URL;
+    delete env.CLAUDE_CODE_API_BASE_URL;
+    execFile(cmd, args, { cwd: opts.cwd, timeout: opts.timeout, env }, (err) => {
       if (!err) return resolve({ code: 0 });
       const e = err as NodeJS.ErrnoException & { killed?: boolean };
       if (e.code === 'ENOENT') return resolve({ code: null, error: 'claude CLI not found on PATH' });
