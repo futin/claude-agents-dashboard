@@ -53,6 +53,19 @@ export interface UsageLimits {
   sevenDay: RateLimit;
 }
 
+/** Why the header usage section is (or isn't) populated. */
+export type UsageStatus = 'ok' | 'token-expired' | 'unavailable';
+
+/** Payload of `POST /api/usage/refresh`. */
+export interface UsageRefreshResponse {
+  ok: boolean;
+  /** Set on failure (409 refresh already running, 502 spawn failed, 404 disabled). */
+  error?: string;
+  /** Fresh snapshot after a successful refresh. */
+  usage?: UsageLimits | null;
+  usageStatus?: UsageStatus;
+}
+
 /** One subagent launched via the `Task` tool, paired from the parent transcript. */
 export interface AgentJob {
   /** The Task tool_use id (pairs with the later tool_result.tool_use_id). */
@@ -107,6 +120,13 @@ export interface SessionsResponse {
    * absent on the error snapshot.
    */
   usage?: UsageLimits | null;
+  /**
+   * Why `usage` is or isn't populated: 'ok' → bars render; 'token-expired' →
+   * stored OAuth token is past expiresAt (recoverable via POST /api/usage/refresh);
+   * 'unavailable' → any other fail-open cause (no token, network, bad payload).
+   * Absent when SHOW_USAGE is off and on the error snapshot.
+   */
+  usageStatus?: UsageStatus;
   /** Set only when the scan failed and an empty snapshot is returned. */
   error?: boolean;
 }
