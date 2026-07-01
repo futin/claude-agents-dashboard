@@ -52,6 +52,7 @@ export function SessionRow({ s, selected, onToggle }: Props) {
       aria-expanded={selected}
     >
       <div className="r1">
+        <span className={`caret${selected ? ' open' : ''}`} aria-hidden="true">▸</span>
         <span className="dot" />
         <span className="proj">{s.project}</span>
         {s.gitBranch && <span className="branch">{s.gitBranch}</span>}
