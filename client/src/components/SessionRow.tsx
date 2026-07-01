@@ -1,13 +1,7 @@
 import type { Session } from '../../../shared/types';
 import { fmtTok, formatAgo } from '../lib/format';
 import { SessionDetail } from './SessionDetail';
-
-const STATUS_LABEL: Record<Session['status'], string> = {
-  working: 'working',
-  idle: 'idle',
-  question: 'waiting',
-  incomplete: 'pending'
-};
+import { STATUS_LABEL } from '../lib/filterSort';
 
 interface Props {
   s: Session;

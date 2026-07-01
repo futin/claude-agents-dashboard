@@ -80,7 +80,7 @@ export function run(): number {
   if (test('loadConfig applies defaults when no .env', () => {
     const c = loadConfig({ envPath: '/no/such/.env' });
     assert.strictEqual(c.port, 4173);
-    assert.strictEqual(c.maxSessions, 5);
+    assert.strictEqual(c.maxSessions, 10);
   })) p++; else f++;
 
   console.log('\n=== scan.ts ===\n');
