@@ -1,5 +1,6 @@
 import type { Session } from '../../../shared/types';
 import { fmtTok, formatAgo } from '../lib/format';
+import { SessionDetail } from './SessionDetail';
 
 const STATUS_LABEL: Record<Session['status'], string> = {
   working: 'working',
@@ -8,14 +9,26 @@ const STATUS_LABEL: Record<Session['status'], string> = {
   incomplete: 'pending'
 };
 
-/** One dashboard row: status dot, project/branch/model, tokens+%, context bar, activity. */
-export function SessionRow({ s }: { s: Session }) {
+interface Props {
+  s: Session;
+  selected: boolean;
+  onToggle: () => void;
+}
+
+/** One dashboard row: status dot, project/branch/model, tokens+%, context bar, activity.
+ *  Click to expand a subagent-activity panel. */
+export function SessionRow({ s, selected, onToggle }: Props) {
   const pct = s.contextPct || 0;
   const warn = pct >= 70;
   const statusTxt = STATUS_LABEL[s.status];
 
   return (
-    <div className={`row ${s.status}`}>
+    <div
+      className={`row ${s.status}${selected ? ' selected' : ''}`}
+      onClick={onToggle}
+      role="button"
+      aria-expanded={selected}
+    >
       <div className="r1">
         <span className="dot" />
         <span className="proj">{s.project}</span>
@@ -43,6 +56,7 @@ export function SessionRow({ s }: { s: Session }) {
         </span>
         <span className="ago">{formatAgo(s.updatedMs)} ago</span>
       </div>
+      {selected && <SessionDetail id={s.id} />}
     </div>
   );
 }
