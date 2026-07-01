@@ -1,14 +1,19 @@
 /**
- * api.ts — the `/api/sessions` endpoint. Scans sessions and writes JSON,
- * with a safe empty-snapshot fallback if the scan throws.
+ * api.ts — the `/api/sessions` endpoints. `serveSessions` writes the ranked
+ * snapshot; `serveSessionDetail` writes one session's subagent activity. Both
+ * fall back to a safe empty payload if the scan throws.
  */
 
 import type { ServerResponse } from 'node:http';
 
-import { scanSessions } from './lib/scan.js';
+import { scanSessions, listTranscripts, projectsRoot } from './lib/scan.js';
+import { readAgents } from './lib/agents.js';
 import { getCachedUsage } from './lib/usage.js';
 import type { Config } from './lib/config.js';
-import type { SessionsResponse } from '../shared/types.js';
+import type { SessionsResponse, SessionDetail } from '../shared/types.js';
+
+/** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
+const ID_RE = /^[A-Za-z0-9._-]+$/;
 
 export function serveSessions(config: Config, res: ServerResponse): void {
   let data: SessionsResponse;
@@ -31,4 +36,39 @@ export function serveSessions(config: Config, res: ServerResponse): void {
   if (config.showUsage) data.usage = getCachedUsage();
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(data));
+}
+
+/**
+ * `GET /api/sessions/:id` — the subagents a session launched. Reads the full
+ * transcript (heavier than the poll's tail read), so it runs only on selection.
+ * The id is resolved against the enumerated transcript list, never joined into a
+ * path directly, so a hostile id can't escape the projects root.
+ */
+export function serveSessionDetail(id: string, res: ServerResponse): void {
+  const fail = (code: number): void => {
+    const body: SessionDetail = { id, agents: [], running: 0, finished: 0, error: true };
+    res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(body));
+  };
+
+  if (!ID_RE.test(id)) return fail(400);
+
+  let detail: SessionDetail;
+  try {
+    const ref = listTranscripts(projectsRoot()).find(t => t.id === id);
+    if (!ref) return fail(404);
+    const agents = readAgents(ref.file);
+    if (!agents) return fail(404);
+    detail = {
+      id,
+      agents,
+      running: agents.filter(a => a.status === 'running').length,
+      finished: agents.filter(a => a.status === 'done').length
+    };
+  } catch (e) {
+    console.error('[dashboard] session detail failed:', (e as Error).message);
+    return fail(500);
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(detail));
 }
