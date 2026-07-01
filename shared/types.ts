@@ -66,8 +66,20 @@ export interface AgentJob {
   startedAt: string | null;
   /** Timestamp of the matching tool_result record (null while running). */
   endedAt: string | null;
-  /** endedAt - startedAt in ms, when both are known. */
+  /**
+   * Run time in ms. The transcript's exact value when reported (sync:
+   * toolUseResult.totalDurationMs; async: <duration_ms> in the notification),
+   * else endedAt - startedAt. Null while running or when neither is known.
+   */
   durationMs: number | null;
+  /**
+   * Total tokens the subagent consumed (sync: toolUseResult.totalTokens;
+   * async: <subagent_tokens> in the notification). Null while running or on
+   * old transcripts that lack the field.
+   */
+  tokens: number | null;
+  /** Tool calls the subagent made (totalToolUseCount / <tool_uses>). Same nullability. */
+  toolUses: number | null;
 }
 
 /** Payload of `GET /api/sessions/:id` — a session's subagent activity. */

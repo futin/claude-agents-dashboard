@@ -24,24 +24,30 @@ function taskRec(id: string, type: string, description: string, iso: string, too
     message: { role: 'assistant', content: [{ type: 'tool_use', id, name: toolName, input: { subagent_type: type, description } }] }
   };
 }
-function resultRec(toolUseId: string, iso: string) {
+function resultRec(toolUseId: string, iso: string, toolUseResult?: unknown) {
   return {
     timestamp: iso,
+    ...(toolUseResult !== undefined ? { toolUseResult } : {}),
     message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: 'ok' }] }
   };
 }
 /** The launch-ack tool_result a background Agent gets immediately (not completion). */
-function ackRec(toolUseId: string, agentId: string, iso: string) {
+function ackRec(toolUseId: string, agentId: string, iso: string, opts: { structured?: boolean; text?: string } = {}) {
+  const text = opts.text ?? `Async agent launched successfully.\nagentId: ${agentId} (internal)`;
   return {
     timestamp: iso,
-    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: `Async agent launched successfully.\nagentId: ${agentId} (internal)` }] }
+    ...(opts.structured ? { toolUseResult: { isAsync: true, status: 'async_launched', agentId } } : {}),
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: text }] }
   };
 }
 /** The later task-notification that reports a background agent finished. */
-function notifyRec(agentId: string, status: string, iso: string) {
+function notifyRec(agentId: string, status: string, iso: string, usage?: { tokens: number; toolUses: number; durationMs: number }) {
+  const usageXml = usage
+    ? `\n<usage><subagent_tokens>${usage.tokens}</subagent_tokens><tool_uses>${usage.toolUses}</tool_uses><duration_ms>${usage.durationMs}</duration_ms></usage>`
+    : '';
   return {
     timestamp: iso,
-    message: { role: 'user', content: [{ type: 'text', text: `<task-notification>\n<task-id>${agentId}</task-id>\n<status>${status}</status>\n</task-notification>` }] }
+    message: { role: 'user', content: [{ type: 'text', text: `<task-notification>\n<task-id>${agentId}</task-id>\n<status>${status}</status>${usageXml}\n</task-notification>` }] }
   };
 }
 
@@ -147,6 +153,63 @@ export function run(): number {
 
   if (test('missing file → null', () => {
     assert.strictEqual(readAgents('/no/such/transcript.jsonl'), null);
+  })) p++; else f++;
+
+  if (test('sync toolUseResult metrics: tokens, toolUses, exact duration beats timestamps', () => {
+    const file = fixture([
+      taskRec('t1', 'Explore', 'map', '2026-07-01T10:00:00Z'),
+      resultRec('t1', '2026-07-01T10:00:30Z', {
+        status: 'completed', totalDurationMs: 52631, totalTokens: 37885, totalToolUseCount: 14,
+        usage: { input_tokens: 5, output_tokens: 3146 }
+      })
+    ]);
+    const a = readAgents(file)![0];
+    assert.strictEqual(a.status, 'done');
+    assert.strictEqual(a.tokens, 37885);
+    assert.strictEqual(a.toolUses, 14);
+    assert.strictEqual(a.durationMs, 52631); // exact value, not the 30s timestamp diff
+  })) p++; else f++;
+
+  if (test('async ack via structured toolUseResult alone (no ack text) → running', () => {
+    const file = fixture([
+      taskRec('toolu_9', 'Explore', 'scan', '2026-07-01T10:00:00Z'),
+      ackRec('toolu_9', 'hex42', '2026-07-01T10:00:00.030Z', { structured: true, text: 'launch ok' })
+    ]);
+    const a = readAgents(file)![0];
+    assert.strictEqual(a.status, 'running');
+    assert.strictEqual(a.endedAt, null);
+  })) p++; else f++;
+
+  if (test('async completion carries usage block → tokens, toolUses, exact duration', () => {
+    const file = fixture([
+      taskRec('toolu_9', 'Explore', 'scan', '2026-07-01T10:00:00Z'),
+      ackRec('toolu_9', 'hex42', '2026-07-01T10:00:00.030Z', { structured: true, text: 'launch ok' }),
+      notifyRec('hex42', 'completed', '2026-07-01T10:01:00Z', { tokens: 29252, toolUses: 17, durationMs: 40576 })
+    ]);
+    const a = readAgents(file)![0];
+    assert.strictEqual(a.status, 'done');
+    assert.strictEqual(a.tokens, 29252);
+    assert.strictEqual(a.toolUses, 17);
+    assert.strictEqual(a.durationMs, 40576); // exact, not the 60s timestamp diff
+  })) p++; else f++;
+
+  if (test('old-style records without metrics → null tokens/toolUses, timestamp-diff duration', () => {
+    const file = fixture([
+      taskRec('t1', 'Explore', 'map', '2026-07-01T10:00:00Z'),
+      resultRec('t1', '2026-07-01T10:00:30Z')
+    ]);
+    const a = readAgents(file)![0];
+    assert.strictEqual(a.tokens, null);
+    assert.strictEqual(a.toolUses, null);
+    assert.strictEqual(a.durationMs, 30000);
+  })) p++; else f++;
+
+  if (test('running agent → all metric fields null', () => {
+    const file = fixture([taskRec('t1', 'Plan', 'design', '2026-07-01T10:00:00Z')]);
+    const a = readAgents(file)![0];
+    assert.strictEqual(a.tokens, null);
+    assert.strictEqual(a.toolUses, null);
+    assert.strictEqual(a.durationMs, null);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

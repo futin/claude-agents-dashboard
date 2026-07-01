@@ -3,6 +3,7 @@ import { run as runTranscript } from './transcript.test.js';
 import { run as runScan } from './scan.test.js';
 import { run as runUsage } from './usage.test.js';
 import { run as runAgents } from './agents.test.js';
+import { run as runAgentsCache } from './agents-cache.test.js';
 import { run as runFilterSort } from './filter-sort.test.js';
 
 let failed = 0;
@@ -10,6 +11,7 @@ failed += runTranscript();
 failed += runScan();
 failed += runUsage();
 failed += runAgents();
+failed += runAgentsCache();
 failed += runFilterSort();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');

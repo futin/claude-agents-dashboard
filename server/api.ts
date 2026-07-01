@@ -7,7 +7,7 @@
 import type { ServerResponse } from 'node:http';
 
 import { scanSessions, listTranscripts, projectsRoot } from './lib/scan.js';
-import { readAgents } from './lib/agents.js';
+import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsage } from './lib/usage.js';
 import type { Config } from './lib/config.js';
 import type { SessionsResponse, SessionDetail } from '../shared/types.js';
@@ -39,8 +39,10 @@ export function serveSessions(config: Config, res: ServerResponse): void {
 }
 
 /**
- * `GET /api/sessions/:id` — the subagents a session launched. Reads the full
- * transcript (heavier than the poll's tail read), so it runs only on selection.
+ * `GET /api/sessions/:id` — the subagents a session launched. First selection
+ * reads the full transcript; while the session stays selected, the 3s detail
+ * poll goes through the incremental cache and costs O(new bytes) (see
+ * agents-cache.ts). Still runs only on selection — never in the list poll.
  * The id is resolved against the enumerated transcript list, never joined into a
  * path directly, so a hostile id can't escape the projects root.
  */
@@ -57,7 +59,7 @@ export function serveSessionDetail(id: string, res: ServerResponse): void {
   try {
     const ref = listTranscripts(projectsRoot()).find(t => t.id === id);
     if (!ref) return fail(404);
-    const agents = readAgents(ref.file);
+    const agents = readAgentsCached(ref.file);
     if (!agents) return fail(404);
     detail = {
       id,

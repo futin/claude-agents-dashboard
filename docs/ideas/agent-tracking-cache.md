@@ -1,6 +1,15 @@
 # Idea: incremental cache for subagent tracking
 
-**Status:** proposal / not implemented.
+**Status:** implemented (detail-endpoint-only scope) — see
+`server/lib/agents-cache.ts`. The design below mostly survived, with one
+simplification: because the reducer's open-launch maps (`byToolUseId` /
+`byAgentId` in `ScanState`) persist across calls, there is **no low-water-mark
+checkpoint at all** — an out-of-order completion resolves against the
+still-registered launch, settled jobs never re-parse, and the offset simply
+advances to EOF. `readAgents` remains the whole-file oracle
+(`test/agents-cache.test.ts` asserts byte-for-byte equivalence under chunked
+appends). Per the recommendation at the bottom, the cache serves only
+`GET /api/sessions/:id`; the 3s list poll is untouched.
 **Context:** see `docs/learning/session-and-agent-tracking.md` for how subagent
 tracking works today.
 

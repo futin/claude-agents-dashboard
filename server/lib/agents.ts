@@ -6,16 +6,22 @@
  *
  *  - Synchronous: the assistant `tool_use` (id `toolu_…`) is answered by a user
  *    `tool_result` with the matching `tool_use_id` — that result IS the agent's
- *    output. use→result timestamps give the real duration.
+ *    output. The record also carries a top-level `toolUseResult` with the exact
+ *    `totalDurationMs` / `totalTokens` / `totalToolUseCount`.
  *
  *  - Background (async): the immediate `tool_result` is only a launch ack
- *    ("Async agent launched successfully. agentId: <hex>"). The real completion
- *    arrives later as a `<task-notification>` user message keyed by that `<hex>`
- *    agentId (not the tool_use_id), carrying `<status>completed</status>`.
+ *    (`toolUseResult.isAsync` / "Async agent launched … agentId: <hex>"). The
+ *    real completion arrives later as a `<task-notification>` user message keyed
+ *    by that `<hex>` agentId (not the tool_use_id), carrying
+ *    `<status>completed</status>` plus a `<usage>` block with the same metrics.
  *
- * Both are derived from the PARENT transcript alone. Unlike transcript.ts (256KB
- * tail, newest tool only) this walks the WHOLE file, so it runs on demand (only
- * for a selected session), never in the 3s poll loop.
+ * Both are derived from the PARENT transcript alone. The interpretation is split
+ * into a pure per-record event parser (`parseRecordEvents`) and a reducer over
+ * `ScanState` (`applyEvent`), so the whole-file `readAgents` (the oracle) and
+ * the incremental cache (agents-cache.ts) share the exact same logic. Unlike
+ * transcript.ts (256KB tail, newest tool only) `readAgents` walks the WHOLE
+ * file, so it runs on demand (only for a selected session), never in the 3s
+ * poll loop.
  */
 
 import fs from 'node:fs';
@@ -57,23 +63,194 @@ function toolResultText(b: any): string {
 const AGENT_ID_RE = /agentId:\s*([A-Za-z0-9]+)/;
 const TASK_ID_RE = /<task-id>\s*([A-Za-z0-9]+)\s*<\/task-id>/;
 const STATUS_RE = /<status>\s*([a-z_]+)\s*<\/status>/i;
+const SUBAGENT_TOKENS_RE = /<subagent_tokens>\s*(\d+)\s*<\/subagent_tokens>/;
+const TOOL_USES_RE = /<tool_uses>\s*(\d+)\s*<\/tool_uses>/;
+const DURATION_MS_RE = /<duration_ms>\s*(\d+)\s*<\/duration_ms>/;
+
+/** One agent-relevant fact extracted from a transcript record. */
+export type AgentEvent =
+  | { kind: 'launch'; id: string; type: string; description: string; ts: string | null }
+  | { kind: 'result'; toolUseId: string; ts: string | null;
+      isAsyncAck: boolean; agentId: string | null;
+      tokens: number | null; toolUses: number | null; exactDurationMs: number | null }
+  | { kind: 'notify'; agentId: string; completed: boolean; ts: string | null;
+      tokens: number | null; toolUses: number | null; exactDurationMs: number | null };
+
+function finiteOrNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+function intFromMatch(text: string, re: RegExp): number | null {
+  const m = text.match(re);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/**
+ * Extract agent events from one parsed JSONL record. Pure; shared by
+ * `readAgents` and the incremental cache.
+ */
+export function parseRecordEvents(rec: any): AgentEvent[] {
+  const msg = rec && rec.message;
+  if (!msg) return [];
+  const content = msg.content;
+  const ts = typeof rec.timestamp === 'string' ? rec.timestamp : null;
+  const events: AgentEvent[] = [];
+
+  // Background completion: a task-notification user message keyed by agentId.
+  const flat = contentText(content);
+  if (flat.includes('<task-notification>')) {
+    const idM = flat.match(TASK_ID_RE);
+    const stM = flat.match(STATUS_RE);
+    if (idM && stM) {
+      events.push({
+        kind: 'notify',
+        agentId: idM[1],
+        completed: stM[1].toLowerCase() === 'completed',
+        ts,
+        tokens: intFromMatch(flat, SUBAGENT_TOKENS_RE),
+        toolUses: intFromMatch(flat, TOOL_USES_RE),
+        exactDurationMs: intFromMatch(flat, DURATION_MS_RE)
+      });
+    }
+  }
+
+  if (!Array.isArray(content)) return events;
+  // The record-level toolUseResult describes the record's tool_result (records
+  // carry at most one in practice; apply it to the first).
+  let tur: any = rec.toolUseResult;
+  for (const b of content) {
+    if (!b || typeof b !== 'object') continue;
+    if (isAgentLaunch(b) && typeof b.id === 'string') {
+      const input = b.input || {};
+      events.push({
+        kind: 'launch',
+        id: b.id,
+        type: typeof input.subagent_type === 'string' ? input.subagent_type : '',
+        description: typeof input.description === 'string' ? input.description : '',
+        ts
+      });
+    } else if (b.type === 'tool_result' && typeof b.tool_use_id === 'string') {
+      const text = toolResultText(b);
+      const t = tur && typeof tur === 'object' ? tur : null;
+      tur = undefined; // first tool_result consumes it
+      const isAsyncAck =
+        (t && (t.isAsync === true || t.status === 'async_launched')) ||
+        /Async agent launched/i.test(text);
+      let agentId: string | null = null;
+      if (isAsyncAck) {
+        if (t && typeof t.agentId === 'string') agentId = t.agentId;
+        else {
+          const m = text.match(AGENT_ID_RE);
+          agentId = m ? m[1] : null;
+        }
+      }
+      events.push({
+        kind: 'result',
+        toolUseId: b.tool_use_id,
+        ts,
+        isAsyncAck: !!isAsyncAck,
+        agentId,
+        tokens: isAsyncAck ? null : finiteOrNull(t?.totalTokens),
+        toolUses: isAsyncAck ? null : finiteOrNull(t?.totalToolUseCount),
+        exactDurationMs: isAsyncAck ? null : finiteOrNull(t?.totalDurationMs)
+      });
+    }
+  }
+  return events;
+}
 
 interface Launch {
   id: string;                 // tool_use id (toolu_…)
   type: string;
   description: string;
   startedAt: string | null;
-  /** The immediate tool_result was a background launch ack (not completion). */
-  background: boolean;
-  /** agentId from the ack, used to pair the later task-notification (null if unparsable). */
-  agentId: string | null;
-  /** Timestamp of a synchronous tool_result (null for background / unanswered). */
-  syncEndedAt: string | null;
+  endedAt: string | null;     // sync tool_result ts, or task-notification ts
+  exactDurationMs: number | null;
+  tokens: number | null;
+  toolUses: number | null;
+}
+
+/**
+ * Reducer state. `byToolUseId` holds launches awaiting their immediate
+ * tool_result; `byAgentId` holds background launches awaiting their
+ * task-notification. Keeping these maps alive across incremental reads is what
+ * lets an out-of-order completion (a notification landing long after younger
+ * launches settled) still resolve — no re-scan needed.
+ */
+export interface ScanState {
+  launches: Launch[];                  // file order (oldest first)
+  byToolUseId: Map<string, Launch>;
+  byAgentId: Map<string, Launch>;
+}
+
+export function createScanState(): ScanState {
+  return { launches: [], byToolUseId: new Map(), byAgentId: new Map() };
+}
+
+/** Fold one event into the state. First result / first notification wins. */
+export function applyEvent(state: ScanState, ev: AgentEvent): void {
+  if (ev.kind === 'launch') {
+    const l: Launch = {
+      id: ev.id, type: ev.type, description: ev.description,
+      startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null
+    };
+    state.launches.push(l);
+    if (!state.byToolUseId.has(ev.id)) state.byToolUseId.set(ev.id, l);
+    return;
+  }
+  if (ev.kind === 'result') {
+    const l = state.byToolUseId.get(ev.toolUseId);
+    if (!l) return;
+    state.byToolUseId.delete(ev.toolUseId);
+    if (ev.isAsyncAck) {
+      // Launch ack, not completion; completion (if any) is a later
+      // task-notification keyed by agentId. Unparsable id → stays running.
+      if (ev.agentId && !state.byAgentId.has(ev.agentId)) state.byAgentId.set(ev.agentId, l);
+    } else {
+      l.endedAt = ev.ts;
+      l.tokens = ev.tokens;
+      l.toolUses = ev.toolUses;
+      l.exactDurationMs = ev.exactDurationMs;
+    }
+    return;
+  }
+  // notify — only a timestamped completion resolves the launch.
+  if (!ev.completed || !ev.ts) return;
+  const l = state.byAgentId.get(ev.agentId);
+  if (!l) return;
+  state.byAgentId.delete(ev.agentId);
+  l.endedAt = ev.ts;
+  l.tokens = ev.tokens;
+  l.toolUses = ev.toolUses;
+  l.exactDurationMs = ev.exactDurationMs;
+}
+
+/** Materialize AgentJob[] (newest-first) from state. Non-destructive. */
+export function toAgentJobs(state: ScanState): AgentJob[] {
+  const agents: AgentJob[] = state.launches.map(l => {
+    const startMs = l.startedAt ? Date.parse(l.startedAt) : NaN;
+    const endMs = l.endedAt ? Date.parse(l.endedAt) : NaN;
+    const diff = Number.isFinite(startMs) && Number.isFinite(endMs) ? endMs - startMs : null;
+    return {
+      id: l.id,
+      type: l.type,
+      description: l.description,
+      status: l.endedAt ? 'done' : 'running',
+      startedAt: l.startedAt,
+      endedAt: l.endedAt,
+      durationMs: l.exactDurationMs ?? diff,
+      tokens: l.tokens,
+      toolUses: l.toolUses
+    };
+  });
+  agents.reverse(); // file order is oldest→newest; return newest-first
+  return agents;
 }
 
 /**
  * Read a transcript and return its subagents, newest-first.
- * Returns null if the file can't be read.
+ * Returns null if the file can't be read. Whole-file pure pass — the
+ * cold-start / fallback / test oracle for the incremental cache.
  */
 export function readAgents(filePath: string): AgentJob[] | null {
   let text: string;
@@ -83,85 +260,13 @@ export function readAgents(filePath: string): AgentJob[] | null {
     return null;
   }
 
-  const launches: Launch[] = [];
-  const resultById = new Map<string, { ts: string | null; text: string }>(); // tool_use_id → first result
-  const completedByAgentId = new Map<string, string>();                       // agentId → completion ts
-
+  const state = createScanState();
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     let rec: any;
     try { rec = JSON.parse(trimmed); } catch { continue; }
-
-    const msg = rec.message;
-    if (!msg) continue;
-    const content = msg.content;
-    const ts = typeof rec.timestamp === 'string' ? rec.timestamp : null;
-
-    // Background completion: a task-notification user message keyed by agentId.
-    const flat = contentText(content);
-    if (flat.includes('<task-notification>')) {
-      const idM = flat.match(TASK_ID_RE);
-      const stM = flat.match(STATUS_RE);
-      if (idM && stM && stM[1].toLowerCase() === 'completed' && !completedByAgentId.has(idM[1])) {
-        if (ts) completedByAgentId.set(idM[1], ts);
-      }
-    }
-
-    if (!Array.isArray(content)) continue;
-    for (const b of content) {
-      if (!b || typeof b !== 'object') continue;
-      if (isAgentLaunch(b) && typeof b.id === 'string') {
-        const input = b.input || {};
-        launches.push({
-          id: b.id,
-          type: typeof input.subagent_type === 'string' ? input.subagent_type : '',
-          description: typeof input.description === 'string' ? input.description : '',
-          startedAt: ts,
-          background: false,
-          agentId: null,
-          syncEndedAt: null
-        });
-      } else if (b.type === 'tool_result' && typeof b.tool_use_id === 'string') {
-        if (!resultById.has(b.tool_use_id)) {
-          resultById.set(b.tool_use_id, { ts, text: toolResultText(b) });
-        }
-      }
-    }
+    for (const ev of parseRecordEvents(rec)) applyEvent(state, ev);
   }
-
-  // Link each launch to its immediate tool_result: sync completion vs async ack.
-  for (const l of launches) {
-    const res = resultById.get(l.id);
-    if (!res) continue;
-    if (/Async agent launched/i.test(res.text)) {
-      // Background: the ack is NOT completion. Completion (if any) is a later
-      // task-notification keyed by agentId; unparsable id → stays running.
-      l.background = true;
-      const m = res.text.match(AGENT_ID_RE);
-      l.agentId = m ? m[1] : null;
-    } else {
-      l.syncEndedAt = res.ts;    // synchronous: the result is the completion
-    }
-  }
-
-  const agents: AgentJob[] = launches.map(l => {
-    const asyncEnd = l.background && l.agentId ? completedByAgentId.get(l.agentId) || null : null;
-    const endedAt = asyncEnd || l.syncEndedAt;
-    const startMs = l.startedAt ? Date.parse(l.startedAt) : NaN;
-    const endMs = endedAt ? Date.parse(endedAt) : NaN;
-    const durationMs = Number.isFinite(startMs) && Number.isFinite(endMs) ? endMs - startMs : null;
-    return {
-      id: l.id,
-      type: l.type,
-      description: l.description,
-      status: endedAt ? 'done' : 'running',
-      startedAt: l.startedAt,
-      endedAt,
-      durationMs
-    };
-  });
-
-  agents.reverse(); // file order is oldest→newest; return newest-first
-  return agents;
+  return toAgentJobs(state);
 }

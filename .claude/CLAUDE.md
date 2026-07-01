@@ -17,6 +17,10 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/config.ts   .env loader — precedence process.env > .env > defaults
   lib/transcript.ts  tail-reads last 256KB of a transcript → tokens/model/window/activity
   lib/scan.ts     enumerates + ranks sessions across ~/.claude/projects
+  lib/agents.ts   whole-file subagent parser: pure event parser + reducer → AgentJob[]
+                  (tokens/toolUses/duration from toolUseResult + notification <usage> blocks)
+  lib/agents-cache.ts  incremental byte-offset cache over agents.ts, used only by the
+                  on-demand GET /api/sessions/:id (see docs/ideas/agent-tracking-cache.md)
   lib/usage.ts    fetches account 5h/weekly limits from Anthropic (see "Usage limits")
 client/           Vite + React + TypeScript frontend
   src/App.tsx, components/{Header,SessionList,SessionRow}, hooks/useSessions, lib/format
@@ -29,7 +33,7 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — runs `test/run-all.ts` via tsx (29 cases).
+- `pnpm test` — runs `test/run-all.ts` via tsx (62 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
 
 ## Session status (the left dot)

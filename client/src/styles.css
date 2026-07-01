@@ -81,6 +81,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .ag-type{flex-shrink:0;font-family:var(--mono);color:var(--pink);font-weight:600}
 .ag-desc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ag-dur{margin-left:auto;flex-shrink:0;color:var(--text3);font-variant-numeric:tabular-nums;font-family:var(--mono)}
+/* Per-agent timeline: start→finish bar on the session's shared time axis */
+.agent-block{display:flex;flex-direction:column;gap:3px}
+.tl-track{position:relative;height:6px;border-radius:3px;background:var(--surface2)}
+.tl-bar{position:absolute;top:0;height:100%;border-radius:3px;min-width:3px;background:linear-gradient(90deg,var(--green),var(--accent))}
+.tl-bar.running{background:var(--green);animation:tlpulse 1.8s ease-in-out infinite}
+@keyframes tlpulse{0%,100%{opacity:.85}50%{opacity:.5}}
+.tl-axis{display:flex;justify-content:space-between;font-size:9.5px;color:var(--text3);font-variant-numeric:tabular-nums;font-family:var(--mono);margin-top:4px}
 .empty{text-align:center;padding:60px 20px;color:var(--text3)}
 .empty .e{font-size:34px;margin-bottom:10px;opacity:.3}
 .foot{margin-top:18px;font-size:10px;color:var(--text3);text-align:center}
