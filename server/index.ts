@@ -3,8 +3,10 @@
  * index.ts — HTTP entry for the Claude Agents Dashboard.
  *
  * Routes:
- *   GET /api/sessions  → JSON session snapshot (see api.ts)
- *   everything else    → static files from client/dist (production build)
+ *   GET  /api/sessions       → JSON session snapshot (see api.ts)
+ *   GET  /api/sessions/:id   → one session's subagent activity
+ *   POST /api/usage/refresh  → spawn claude to renew the OAuth token
+ *   everything else          → static files from client/dist (production build)
  *
  * In development you visit the Vite dev server (default :5173), which proxies
  * /api here; this server only needs to answer the API. In production, run
@@ -17,7 +19,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 import { loadConfig } from './lib/config.js';
-import { serveSessions, serveSessionDetail } from './api.js';
+import { serveSessions, serveSessionDetail, serveUsageRefresh } from './api.js';
 
 const config = loadConfig();
 const isProd = process.env.NODE_ENV === 'production';
@@ -55,6 +57,11 @@ function serveStatic(urlPath: string, res: http.ServerResponse): void {
 }
 
 const server = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url && req.url.split('?')[0] === '/api/usage/refresh') {
+    // Handler is un-rejectable today; .catch guards future edits from turning
+    // a pre-send throw into a process-killing unhandled rejection.
+    return void serveUsageRefresh(config, res).catch(() => res.destroy());
+  }
   // Detail route must be matched before the generic prefix below, which would
   // otherwise swallow `/api/sessions/:id`.
   const detail = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)/);

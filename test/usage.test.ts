@@ -45,6 +45,29 @@ export function run(): number {
     assert.strictEqual(u.sevenDay.utilization, null);
   })) p++; else f++;
 
+  const NOW = 1_700_000_000_000;
+
+  if (test('tokenFromCredsBlob: valid token → ok', () => {
+    const blob = JSON.stringify({ claudeAiOauth: { accessToken: 'tok-1', expiresAt: NOW + 60_000 } });
+    assert.deepStrictEqual(usage.tokenFromCredsBlob(blob, NOW), { state: 'ok', token: 'tok-1' });
+  })) p++; else f++;
+
+  if (test('tokenFromCredsBlob: past expiresAt → expired', () => {
+    const blob = JSON.stringify({ claudeAiOauth: { accessToken: 'tok-1', expiresAt: NOW - 1 } });
+    assert.deepStrictEqual(usage.tokenFromCredsBlob(blob, NOW), { state: 'expired' });
+  })) p++; else f++;
+
+  if (test('tokenFromCredsBlob: no expiresAt → ok (never skipped)', () => {
+    const blob = JSON.stringify({ claudeAiOauth: { accessToken: 'tok-1' } });
+    assert.deepStrictEqual(usage.tokenFromCredsBlob(blob, NOW), { state: 'ok', token: 'tok-1' });
+  })) p++; else f++;
+
+  if (test('tokenFromCredsBlob: garbage / missing token → missing', () => {
+    assert.deepStrictEqual(usage.tokenFromCredsBlob('not json', NOW), { state: 'missing' });
+    assert.deepStrictEqual(usage.tokenFromCredsBlob('{}', NOW), { state: 'missing' });
+    assert.deepStrictEqual(usage.tokenFromCredsBlob(JSON.stringify({ claudeAiOauth: {} }), NOW), { state: 'missing' });
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }

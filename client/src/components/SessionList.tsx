@@ -3,9 +3,17 @@ import { useState } from 'react';
 import type { Session } from '../../../shared/types';
 import { SessionRow } from './SessionRow';
 
-/** The rows container, with loading / empty states. Owns which row is expanded. */
+/** The rows container, with loading / empty states. Owns which rows are expanded. */
 export function SessionList({ sessions }: { sessions: Session[] | null }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggle(id: string) {
+    setExpandedIds(cur => {
+      const next = new Set(cur);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   if (sessions === null) {
     return (
@@ -27,8 +35,8 @@ export function SessionList({ sessions }: { sessions: Session[] | null }) {
         <SessionRow
           key={s.id}
           s={s}
-          selected={s.id === selectedId}
-          onToggle={() => setSelectedId(cur => (cur === s.id ? null : s.id))}
+          selected={expandedIds.has(s.id)}
+          onToggle={() => toggle(s.id)}
         />
       ))}
     </div>
