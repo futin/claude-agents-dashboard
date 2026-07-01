@@ -207,6 +207,11 @@ function refreshNow(): Promise<void> {
       const limits = await fetchUsage(t.token);
       cached = limits;
       cachedStatus = limits ? 'ok' : 'unavailable';
+    } catch {
+      // Fail open: this promise is often fire-and-forget (`void refreshNow()`),
+      // so a rejection here would be unhandled and kill the process.
+      cached = null;
+      cachedStatus = 'unavailable';
     } finally {
       cachedAt = Date.now();
       refreshing = null;
