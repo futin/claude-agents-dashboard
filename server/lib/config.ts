@@ -1,23 +1,28 @@
-'use strict';
-
 /**
- * config.js — zero-dependency config loader.
+ * config.ts — zero-dependency config loader.
  * Precedence: process.env > .env file > defaults.
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
 
-const DEFAULTS = {
+export interface Config {
+  port: number;
+  maxSessions: number;
+  activeWindowMin: number;
+  lookbackHours: number;
+}
+
+export const DEFAULTS = {
   PORT: 4173,
   MAX_SESSIONS: 5,
   ACTIVE_WINDOW_MIN: 5,
   LOOKBACK_HOURS: 24
-};
+} as const;
 
 /** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
-function parseEnv(text) {
-  const out = {};
+export function parseEnv(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
   if (typeof text !== 'string') return out;
   for (const rawLine of text.split('\n')) {
     const line = rawLine.trim();
@@ -35,8 +40,8 @@ function parseEnv(text) {
 }
 
 /** Coerce to a positive integer, or fall back. */
-function toPosInt(value, fallback) {
-  const n = Number.parseInt(value, 10);
+export function toPosInt(value: unknown, fallback: number): number {
+  const n = Number.parseInt(value as string, 10);
   return Number.isInteger(n) && n > 0 ? n : fallback;
 }
 
@@ -44,16 +49,17 @@ function toPosInt(value, fallback) {
  * Load config from an optional .env file (defaults to <cwd>/.env), overlaid by
  * process.env, over hard defaults.
  */
-function loadConfig(options = {}) {
+export function loadConfig(options: { envPath?: string } = {}): Config {
   const envPath = options.envPath || path.join(process.cwd(), '.env');
-  let fileEnv = {};
+  let fileEnv: Record<string, string> = {};
   try {
     fileEnv = parseEnv(fs.readFileSync(envPath, 'utf8'));
   } catch {
     /* no .env — fine */
   }
 
-  const src = key => (process.env[key] !== undefined ? process.env[key] : fileEnv[key]);
+  const src = (key: string): string | undefined =>
+    (process.env[key] !== undefined ? process.env[key] : fileEnv[key]);
 
   return {
     port: toPosInt(src('PORT'), DEFAULTS.PORT),
@@ -62,5 +68,3 @@ function loadConfig(options = {}) {
     lookbackHours: toPosInt(src('LOOKBACK_HOURS'), DEFAULTS.LOOKBACK_HOURS)
   };
 }
-
-module.exports = { DEFAULTS, parseEnv, toPosInt, loadConfig };

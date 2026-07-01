@@ -1,19 +1,33 @@
-'use strict';
-
 /**
- * scan.js — enumerate Claude Code session transcripts under ~/.claude/projects,
+ * scan.ts — enumerate Claude Code session transcripts under ~/.claude/projects,
  * parse the most-recent ones, and build the ranked session list.
  */
 
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { execFileSync } = require('child_process');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
-const { readTranscript } = require('./transcript');
+import { readTranscript } from './transcript.js';
+import type { Config } from './config.js';
+import type { Session, SessionsResponse } from '../../shared/types.js';
+
+interface TranscriptRef {
+  file: string;
+  dirName: string;
+  id: string;
+  mtimeMs: number;
+}
+
+interface ScanOptions {
+  homeDir?: string;
+  now?: number;
+  root?: string;
+  skipProcScan?: boolean;
+}
 
 /** Default transcripts root. */
-function projectsRoot(homeDir) {
+export function projectsRoot(homeDir?: string): string {
   return path.join(homeDir || os.homedir(), '.claude', 'projects');
 }
 
@@ -22,16 +36,16 @@ function projectsRoot(homeDir) {
  * Claude Code directory name (`-a-b-c` → `a/b/c`) and take the basename.
  * Lossy (can't distinguish `/` from original `-`), so only a fallback.
  */
-function decodeProjectName(dirName) {
+export function decodeProjectName(dirName: string): string {
   const decoded = String(dirName).replace(/^-/, '').replace(/-/g, '/');
   const base = decoded.split('/').filter(Boolean).pop();
   return base || dirName;
 }
 
 /** List every `.jsonl` transcript with its mtime, across all project dirs. */
-function listTranscripts(root) {
-  const results = [];
-  let dirs;
+export function listTranscripts(root: string): TranscriptRef[] {
+  const results: TranscriptRef[] = [];
+  let dirs: fs.Dirent[];
   try {
     dirs = fs.readdirSync(root, { withFileTypes: true });
   } catch {
@@ -40,7 +54,7 @@ function listTranscripts(root) {
   for (const d of dirs) {
     if (!d.isDirectory()) continue;
     const dir = path.join(root, d.name);
-    let files;
+    let files: string[];
     try {
       files = fs.readdirSync(dir);
     } catch {
@@ -49,7 +63,7 @@ function listTranscripts(root) {
     for (const name of files) {
       if (!name.endsWith('.jsonl')) continue;
       const full = path.join(dir, name);
-      let stat;
+      let stat: fs.Stats;
       try {
         stat = fs.statSync(full);
       } catch {
@@ -63,7 +77,7 @@ function listTranscripts(root) {
 }
 
 /** Count running `claude` processes (informational cross-check). */
-function countClaudeProcesses() {
+export function countClaudeProcesses(): number | null {
   try {
     const out = execFileSync('ps', ['-Ao', 'comm='], { encoding: 'utf8', timeout: 2000 });
     return out.split('\n').filter(l => /(^|\/)claude$/.test(l.trim())).length;
@@ -72,18 +86,14 @@ function countClaudeProcesses() {
   }
 }
 
-/**
- * Build the ranked session snapshot.
- * @param {object} config - { maxSessions, activeWindowMin, lookbackHours }
- * @param {object} [options] - { homeDir, now (ms), root }
- */
-function scanSessions(config, options = {}) {
+/** Build the ranked session snapshot. */
+export function scanSessions(config: Partial<Config>, options: ScanOptions = {}): SessionsResponse {
   const cfg = config || {};
-  const maxSessions = cfg.maxSessions > 0 ? cfg.maxSessions : 5;
-  const activeWindowMin = cfg.activeWindowMin > 0 ? cfg.activeWindowMin : 5;
-  const lookbackHours = cfg.lookbackHours > 0 ? cfg.lookbackHours : 24;
+  const maxSessions = (cfg.maxSessions ?? 0) > 0 ? (cfg.maxSessions as number) : 5;
+  const activeWindowMin = (cfg.activeWindowMin ?? 0) > 0 ? (cfg.activeWindowMin as number) : 5;
+  const lookbackHours = (cfg.lookbackHours ?? 0) > 0 ? (cfg.lookbackHours as number) : 24;
 
-  const now = Number.isFinite(options.now) ? options.now : Date.now();
+  const now = Number.isFinite(options.now) ? (options.now as number) : Date.now();
   const root = options.root || projectsRoot(options.homeDir);
 
   const lookbackMs = lookbackHours * 60 * 60 * 1000;
@@ -94,13 +104,13 @@ function scanSessions(config, options = {}) {
     .sort((a, b) => b.mtimeMs - a.mtimeMs)
     .slice(0, maxSessions);
 
-  const sessions = [];
+  const sessions: Session[] = [];
   for (const c of candidates) {
     const parsed = readTranscript(c.file);
     if (!parsed) continue;
     const projectPath = parsed.cwd || null;
     const project = projectPath ? (projectPath.split('/').filter(Boolean).pop() || projectPath) : decodeProjectName(c.dirName);
-    const status = now - c.mtimeMs <= activeMs ? 'working' : 'idle';
+    const status: Session['status'] = now - c.mtimeMs <= activeMs ? 'working' : 'idle';
     sessions.push({
       id: c.id,
       project,
@@ -131,11 +141,3 @@ function scanSessions(config, options = {}) {
     sessions
   };
 }
-
-module.exports = {
-  projectsRoot,
-  decodeProjectName,
-  listTranscripts,
-  countClaudeProcesses,
-  scanSessions
-};

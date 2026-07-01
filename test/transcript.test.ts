@@ -1,26 +1,24 @@
-'use strict';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-const assert = require('assert');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+import * as tr from '../server/lib/transcript.js';
 
-const tr = require('../lib/transcript');
-
-function test(name, fn) {
+function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
-  catch (e) { console.log('  ✗ ' + name); console.log('    ' + e.message); return false; }
+  catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
 }
 
-function fixture(records) {
+function fixture(records: unknown[]): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-tr-'));
   const file = path.join(dir, 's.jsonl');
   fs.writeFileSync(file, records.map(r => (typeof r === 'string' ? r : JSON.stringify(r))).join('\n'));
   return file;
 }
 
-function run() {
-  console.log('\n=== transcript.js ===\n');
+export function run(): number {
+  console.log('\n=== transcript.ts ===\n');
   let p = 0, f = 0;
 
   if (test('usageTokens sums input + cache read + cache create', () => {
@@ -54,13 +52,13 @@ function run() {
       { message: { model: 'claude-opus-4-8', usage: { input_tokens: 100, cache_read_input_tokens: 900 } } },
       { message: { model: 'claude-opus-4-8', content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/a/b.js' } }] } }
     ]);
-    const s = tr.readTranscript(file);
+    const s = tr.readTranscript(file)!;
     assert.strictEqual(s.tokens, 1000);
     assert.strictEqual(s.model, 'claude-opus-4-8');
     assert.strictEqual(s.contextWindow, 200000);
     assert.strictEqual(s.contextPct, 0.5);
-    assert.strictEqual(s.activity.tool, 'Edit');
-    assert.strictEqual(s.activity.detail, '/a/b.js');
+    assert.strictEqual(s.activity!.tool, 'Edit');
+    assert.strictEqual(s.activity!.detail, '/a/b.js');
     assert.strictEqual(s.cwd, '/Users/me/proj');
     assert.strictEqual(s.gitBranch, 'main');
     assert.strictEqual(s.version, '2.1.0');
@@ -74,5 +72,4 @@ function run() {
   return f;
 }
 
-if (require.main === module) process.exit(run() > 0 ? 1 : 0);
-module.exports = { run };
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(run() > 0 ? 1 : 0);

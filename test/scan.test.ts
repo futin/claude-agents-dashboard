@@ -1,20 +1,25 @@
-'use strict';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-const assert = require('assert');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+import * as scan from '../server/lib/scan.js';
+import { parseEnv, toPosInt, loadConfig } from '../server/lib/config.js';
 
-const scan = require('../lib/scan');
-const { parseEnv, toPosInt, loadConfig } = require('../lib/config');
-
-function test(name, fn) {
+function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
-  catch (e) { console.log('  ✗ ' + name); console.log('    ' + e.message); return false; }
+  catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
+}
+
+interface Spec {
+  dirName: string;
+  id: string;
+  records: unknown[];
+  mtimeMs?: number;
 }
 
 // Build a fake ~/.claude/projects root with project dirs + transcripts.
-function makeRoot(specs) {
+function makeRoot(specs: Spec[]): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-root-'));
   specs.forEach(spec => {
     const dir = path.join(root, spec.dirName);
@@ -29,18 +34,18 @@ function makeRoot(specs) {
   return root;
 }
 
-function usageRec(tokens) {
+function usageRec(tokens: number) {
   return { message: { model: 'claude-opus-4-8', usage: { input_tokens: tokens } } };
 }
-function toolRec(name, input) {
+function toolRec(name: string, input: unknown) {
   return { message: { model: 'claude-opus-4-8', content: [{ type: 'tool_use', name, input }] } };
 }
-function metaRec(cwd, branch) {
+function metaRec(cwd: string, branch: string) {
   return { cwd, gitBranch: branch, version: '2.1.0', timestamp: '2026-07-01T09:00:00Z', type: 'user' };
 }
 
-function run() {
-  console.log('\n=== config.js ===\n');
+export function run(): number {
+  console.log('\n=== config.ts ===\n');
   let p = 0, f = 0;
 
   if (test('parseEnv handles comments, quotes, blanks', () => {
@@ -64,7 +69,7 @@ function run() {
     assert.strictEqual(c.maxSessions, 5);
   })) p++; else f++;
 
-  console.log('\n=== scan.js ===\n');
+  console.log('\n=== scan.ts ===\n');
 
   if (test('decodeProjectName fallback basename', () => {
     assert.strictEqual(scan.decodeProjectName('-Users-me-Documents-ECC'), 'ECC');
@@ -91,8 +96,8 @@ function run() {
       { dirName: '-a-cold', id: 'cold', mtimeMs: now - 30 * 60 * 1000, records: [metaRec('/a/cold', 'main'), usageRec(1000)] }
     ]);
     const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
-    const hot = out.sessions.find(s => s.project === 'hot');
-    const cold = out.sessions.find(s => s.project === 'cold');
+    const hot = out.sessions.find(s => s.project === 'hot')!;
+    const cold = out.sessions.find(s => s.project === 'cold')!;
     assert.strictEqual(hot.status, 'working');
     assert.strictEqual(cold.status, 'idle');
     assert.strictEqual(out.totals.active, 1);
@@ -113,13 +118,12 @@ function run() {
       { dirName: '-a-act', id: 'act', mtimeMs: now - 60 * 1000, records: [metaRec('/a/act', 'main'), usageRec(1000), toolRec('Task', { subagent_type: 'Explore', description: 'map' })] }
     ]);
     const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
-    assert.strictEqual(out.sessions[0].activity.tool, 'Task');
-    assert.strictEqual(out.sessions[0].activity.detail, 'Explore: map');
+    assert.strictEqual(out.sessions[0].activity!.tool, 'Task');
+    assert.strictEqual(out.sessions[0].activity!.detail, 'Explore: map');
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }
 
-if (require.main === module) process.exit(run() > 0 ? 1 : 0);
-module.exports = { run };
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(run() > 0 ? 1 : 0);
