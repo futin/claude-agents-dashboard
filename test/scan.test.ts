@@ -35,10 +35,10 @@ function makeRoot(specs: Spec[]): string {
 }
 
 function usageRec(tokens: number) {
-  return { message: { model: 'claude-opus-4-8', usage: { input_tokens: tokens } } };
+  return { message: { role: 'assistant', model: 'claude-opus-4-8', usage: { input_tokens: tokens } } };
 }
 function toolRec(name: string, input: unknown) {
-  return { message: { model: 'claude-opus-4-8', content: [{ type: 'tool_use', name, input }] } };
+  return { message: { role: 'assistant', model: 'claude-opus-4-8', content: [{ type: 'tool_use', name, input }] } };
 }
 function metaRec(cwd: string, branch: string) {
   return { cwd, gitBranch: branch, version: '2.1.0', timestamp: '2026-07-01T09:00:00Z', type: 'user' };
@@ -248,6 +248,22 @@ export function run(): number {
     // null → probe disabled, existing behavior unchanged
     const nogate = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root: makeRoot(specs), now, liveCwds: null });
     assert.strictEqual(nogate.sessions[0].status, 'working');
+  })) p++; else f++;
+
+  if (test('empty session (no conversational message, e.g. post-/clear) is excluded', () => {
+    // /clear starts a fresh UUID transcript with only queue-operation/attachment/
+    // meta records and no user/assistant message yet. Its mtime is fresh, so it
+    // used to read recent + turnComplete(default) = incomplete ("pending") and
+    // show up as a phantom row next to the real session. It has nothing to show.
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-cleared', id: 'cleared', mtimeMs: now - 5 * 1000, records: [{ type: 'queue-operation', timestamp: new Date(now - 5 * 1000).toISOString() }, metaRec('/a/cleared', 'main')] },
+      { dirName: '-a-real', id: 'real', mtimeMs: now - 60 * 1000, records: [metaRec('/a/real', 'main'), at(assistantPending(), new Date(now - 60 * 1000).toISOString())] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null });
+    assert.strictEqual(out.sessions.length, 1);
+    assert.strictEqual(out.sessions[0].project, 'real');
+    assert.strictEqual(out.totals.shown, 1);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

@@ -151,6 +151,12 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   for (const c of candidates) {
     const parsed = readTranscript(c.file);
     if (!parsed) continue;
+    // Skip transcripts with no conversational message: a session just started or
+    // just `/clear`ed writes a fresh UUID file holding only queue-operation/
+    // attachment/meta records. Its fresh mtime would read recent + turnComplete
+    // = "incomplete", showing a phantom "pending" row beside the real session
+    // (which `/clear` abandoned). Nothing to display → drop it.
+    if (!parsed.hasMessages) continue;
     const projectPath = parsed.cwd || null;
     const project = projectPath ? (projectPath.split('/').filter(Boolean).pop() || projectPath) : decodeProjectName(c.dirName);
     // Recency tracks real agent activity, not file touches: selecting a session
