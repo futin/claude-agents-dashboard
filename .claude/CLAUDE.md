@@ -119,6 +119,17 @@ these are **not on disk**: `lib/usage.ts` fetches them live from Anthropic.
   — `https` + `child_process` are Node built-ins.
 - **Toggle:** `SHOW_USAGE=false` disables the feature entirely (no fetch, no keychain read).
   Default on.
+- **Status:** `SessionsResponse.usageStatus` says why bars are/aren't shown: `ok`,
+  `token-expired` (stored token past expiresAt), `unavailable` (any other fail-open cause,
+  incl. the endpoint's own 429 rate limit). Client renders bars only on `ok`;
+  `token-expired` shows a hint + **Sync** button instead.
+- **Token recovery:** `POST /api/usage/refresh` (lib/token-refresh.ts) spawns one headless
+  `claude -p "ok" --model haiku` in `~/.claude/dashboard-refresh/` — the CLI renews its own
+  creds; we still never write them. Spawn env strips `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL`
+  etc. so the turn exercises the OAuth path, not an API key/proxy. Single-flight (409 on
+  concurrent), 60s timeout, 502 on spawn failure, gated by SHOW_USAGE. The spawned turn's
+  transcript is filtered out of the session list by scan.ts (cwd match on refreshCwd()).
+  Costs one haiku subscription turn per click.
 
 ## Conventions / gotchas
 
