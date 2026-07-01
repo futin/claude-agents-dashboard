@@ -8,7 +8,7 @@ Reads everything straight from `~/.claude/projects/*/*.jsonl` on disk. **No daem
 no config in Claude Code required.** Zero runtime dependencies on the backend (Node built-ins
 only).
 
-![one row per session: status dot, project + branch, context bar, current activity](docs/screenshot.png)
+![dashboard: header with 5h/week usage bars, filter + sort toolbar, and one row per session showing status dot, project + branch, model, context bar, activity, and expandable subagent detail](docs/screenshot.png)
 
 A **monolith split into three domains**: a Node backend (`server/`), a Vite + React +
 TypeScript frontend (`client/`), and the shared API contract (`shared/`). One repo, one
