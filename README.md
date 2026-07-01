@@ -15,8 +15,8 @@ thing crossing the FE/BE boundary is the typed `GET /api/sessions` JSON payload.
 ## Develop
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Runs the API server and the Vite dev server together. Open **`http://localhost:5173`**
@@ -25,11 +25,11 @@ Runs the API server and the Vite dev server together. Open **`http://localhost:5
 ## Run (production)
 
 ```bash
-npm run build   # bundles client/ → client/dist
-npm start       # serves the built app + API on http://localhost:4173
+pnpm build   # bundles client/ → client/dist
+pnpm start       # serves the built app + API on http://localhost:4173
 ```
 
-`npm start` auto-launches your browser. Keep the tab open on a second monitor while you run
+`pnpm start` auto-launches your browser. Keep the tab open on a second monitor while you run
 sessions in parallel.
 
 Requires Node.js >= 18.
@@ -67,8 +67,8 @@ transcript (input + cache-read + cache-creation tokens).
 ## Tests / typecheck
 
 ```bash
-npm test        # node-assert tests over the backend domain logic
-npm run typecheck
+pnpm test        # node-assert tests over the backend domain logic
+pnpm typecheck
 ```
 
 ## Layout

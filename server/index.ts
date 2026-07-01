@@ -8,7 +8,7 @@
  *
  * In development you visit the Vite dev server (default :5173), which proxies
  * /api here; this server only needs to answer the API. In production, run
- * `npm run build` then `npm start` — this server serves the built client too.
+ * `pnpm build` then `pnpm start` — this server serves the built client too.
  */
 
 import http from 'node:http';
@@ -46,7 +46,7 @@ function serveStatic(urlPath: string, res: http.ServerResponse): void {
   fs.readFile(filePath, (err, buf) => {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('Not found. Run `npm run build` first, or use `npm run dev`.');
+      res.end('Not found. Run `pnpm build` first, or use `pnpm dev`.');
       return;
     }
     res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
