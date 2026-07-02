@@ -36,6 +36,13 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm test` — runs `test/run-all.ts` via tsx (62 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
 
+**Phone access on the same wifi:** the Vite dev server binds all interfaces
+(`server.host: true` in `vite.config.ts`), so no tunnel is needed — just open
+the `Network:` URL Vite prints (e.g. `http://192.168.x.x:5173`) on a phone
+connected to the same wifi as the host machine. The backend (`server/index.ts`)
+already binds all interfaces by default, so `pnpm start` (prod, port 4173) is
+LAN-reachable the same way with no extra config.
+
 ## Session status (the left dot)
 
 `Session.status` (4 states), computed in `scan.ts` from `transcript.ts` signals.
