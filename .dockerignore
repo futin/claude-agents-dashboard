@@ -1,0 +1,7 @@
+node_modules
+client/dist
+.git
+.idea
+.env
+*.log
+.DS_Store

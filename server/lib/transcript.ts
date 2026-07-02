@@ -10,6 +10,15 @@ import type { Activity } from '../../shared/types.js';
 export const STANDARD_WINDOW = 200000;
 export const LARGE_WINDOW = 1000000;
 const LARGE_MARKER = '[1m]';
+
+/**
+ * Real transcripts never carry the `[1m]` marker (it's a beta-header artifact
+ * that doesn't show up in `message.model`) — model ids look like
+ * "claude-sonnet-5" / "claude-opus-4-8" / "claude-haiku-4-5-20251001". So the
+ * marker check below is effectively dead for live sessions; this map is the
+ * real source of truth for which model families ship a 1M window.
+ */
+const LARGE_WINDOW_MODEL_PATTERNS = [/sonnet/i, /opus/i, /fable/i];
 export const DEFAULT_TAIL_BYTES = 256 * 1024;
 
 export interface ParsedTranscript {
@@ -86,6 +95,7 @@ export function resolveWindow(tokens: number, model: string, env?: NodeJS.Proces
   const override = Number.parseInt(e.CLAUDE_CODE_AUTO_COMPACT_WINDOW || e.CLAUDE_OBS_CONTEXT_WINDOW || '', 10);
   if (Number.isInteger(override) && override > 0) return override;
   if (typeof model === 'string' && model.includes(LARGE_MARKER)) return LARGE_WINDOW;
+  if (typeof model === 'string' && LARGE_WINDOW_MODEL_PATTERNS.some((p) => p.test(model))) return LARGE_WINDOW;
   if (Number.isFinite(tokens) && tokens > STANDARD_WINDOW) return LARGE_WINDOW;
   return STANDARD_WINDOW;
 }

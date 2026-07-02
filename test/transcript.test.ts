@@ -27,8 +27,10 @@ export function run(): number {
     assert.strictEqual(tr.usageTokens({}), 0);
   })) p++; else f++;
 
-  if (test('resolveWindow: default 200k, [1m] marker, env override, overflow', () => {
-    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-4-8', {}), 200000);
+  if (test('resolveWindow: default 200k, sonnet/opus 1M, [1m] marker, env override, overflow', () => {
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-haiku-4-5-20251001', {}), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-4-8', {}), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-sonnet-5', {}), 1000000);
     assert.strictEqual(tr.resolveWindow(1000, 'claude-sonnet-5[1m]', {}), 1000000);
     assert.strictEqual(tr.resolveWindow(1000, 'x', { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '400000' }), 400000);
     assert.strictEqual(tr.resolveWindow(250000, 'x', {}), 1000000);
@@ -55,8 +57,8 @@ export function run(): number {
     const s = tr.readTranscript(file)!;
     assert.strictEqual(s.tokens, 1000);
     assert.strictEqual(s.model, 'claude-opus-4-8');
-    assert.strictEqual(s.contextWindow, 200000);
-    assert.strictEqual(s.contextPct, 0.5);
+    assert.strictEqual(s.contextWindow, 1000000);
+    assert.strictEqual(s.contextPct, 0.1);
     assert.strictEqual(s.activity!.tool, 'Edit');
     assert.strictEqual(s.activity!.detail, '/a/b.js');
     assert.strictEqual(s.cwd, '/Users/me/proj');

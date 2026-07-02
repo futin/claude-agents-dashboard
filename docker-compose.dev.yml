@@ -1,0 +1,16 @@
+services:
+  dashboard-dev:
+    build:
+      context: .
+      target: dev
+    ports:
+      - "5173:5173" # Vite (open this one — HMR + proxies /api)
+      - "4173:4173" # API, direct (optional)
+    environment:
+      - PORT=4173
+      - HOST_LAN_IP=${HOST_LAN_IP} # host's real LAN IP, for the phone-access log line (see scripts/lan-ip.sh)
+      - CLAUDE_CREDENTIALS_JSON=${CLAUDE_CREDENTIALS_JSON} # OAuth creds blob for usage bars — container can't reach host Keychain (see scripts/host-credentials.sh)
+    volumes:
+      - .:/app
+      - /app/node_modules # keep container's linux node_modules, don't let the bind mount shadow it
+      - ${HOME}/.claude:/root/.claude:ro
