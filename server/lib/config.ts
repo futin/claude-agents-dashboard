@@ -12,6 +12,7 @@ export interface Config {
   activeWindowMin: number;
   lookbackHours: number;
   showUsage: boolean;
+  skipProcScan: boolean;
 }
 
 export const DEFAULTS = {
@@ -57,6 +58,23 @@ export function toBool(value: unknown, fallback: boolean): boolean {
 }
 
 /**
+ * True inside a Docker container (standard `/.dockerenv` marker file). The
+ * process-liveness gate (`scan.ts` `liveCwds`) shells out to `lsof`/`ps` to
+ * find running `claude` processes — but a containerized dashboard only sees
+ * its own container's process namespace, never the host's. Since the whole
+ * point of that gate is watching for the host session's CLI process, it can
+ * never see anything there and would force every session to `idle`. So
+ * containerized runs default the gate off (same as "probe unavailable").
+ */
+export function isDockerContainer(): boolean {
+  try {
+    return fs.existsSync('/.dockerenv');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Load config from an optional .env file (defaults to <cwd>/.env), overlaid by
  * process.env, over hard defaults.
  */
@@ -77,6 +95,7 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     maxSessions: toPosInt(src('MAX_SESSIONS'), DEFAULTS.MAX_SESSIONS),
     activeWindowMin: toPosInt(src('ACTIVE_WINDOW_MIN'), DEFAULTS.ACTIVE_WINDOW_MIN),
     lookbackHours: toPosInt(src('LOOKBACK_HOURS'), DEFAULTS.LOOKBACK_HOURS),
-    showUsage: toBool(src('SHOW_USAGE'), DEFAULTS.SHOW_USAGE)
+    showUsage: toBool(src('SHOW_USAGE'), DEFAULTS.SHOW_USAGE),
+    skipProcScan: toBool(src('SKIP_PROC_SCAN'), isDockerContainer())
   };
 }

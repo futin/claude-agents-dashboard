@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,green \"tsx watch server/index.ts\" \"vite\"",
+    "dev:docker": "HOST_LAN_IP=$(scripts/lan-ip.sh) CLAUDE_CREDENTIALS_JSON=$(scripts/host-credentials.sh) docker compose -f docker-compose.dev.yml up --build",
     "build": "vite build",
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
     "test": "tsx test/run-all.ts",

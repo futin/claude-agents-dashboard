@@ -21,7 +21,7 @@ const ID_RE = /^[A-Za-z0-9._-]+$/;
 export function serveSessions(config: Config, res: ServerResponse): void {
   let data: SessionsResponse;
   try {
-    data = scanSessions(config);
+    data = scanSessions(config, { skipProcScan: config.skipProcScan });
   } catch (e) {
     console.error('[dashboard] scan failed:', (e as Error).message);
     data = {

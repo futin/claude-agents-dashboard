@@ -46,14 +46,25 @@ function baseUrl(): string {
 }
 
 /**
- * Read the OAuth access token. Tries the macOS keychain first (where the CLI
- * stores it on macOS), then the `~/.claude/.credentials.json` fallback file.
- * `missing` on any failure. NOTE: the first keychain read by this process
- * triggers a macOS access prompt ("… wants to use your confidential
- * information") — approve once with "Always Allow".
+ * Read the OAuth access token. Tries `CLAUDE_CREDENTIALS_JSON` first (the
+ * container path — a Linux container has no `security` binary to reach the
+ * host Keychain, so the host reads it and passes the blob in via env; see
+ * scripts/host-credentials.sh), then the macOS keychain, then the
+ * `~/.claude/.credentials.json` fallback file. `missing` on any failure.
+ * NOTE: the first keychain read by this process triggers a macOS access
+ * prompt ("… wants to use your confidential information") — approve once
+ * with "Always Allow".
  */
 export function readToken(): TokenState {
   let sawExpired = false;
+
+  // 0. Env var — the container-passthrough path (host Keychain isn't reachable
+  // from inside a Linux container). Empty/unset is normal and falls through.
+  if (process.env.CLAUDE_CREDENTIALS_JSON) {
+    const t = tokenFromCredsBlob(process.env.CLAUDE_CREDENTIALS_JSON);
+    if (t.state === 'ok') return t;
+    if (t.state === 'expired') sawExpired = true;
+  }
 
   // 1. macOS keychain.
   try {

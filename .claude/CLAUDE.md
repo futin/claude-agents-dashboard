@@ -79,6 +79,12 @@ sessions in the same directory can't be told apart — a dead one there still re
 Probe is fail-open: `null` (no lsof / timeout / error) skips the gate. Injectable via
 `ScanOptions.liveCwds` for tests; `skipProcScan` also disables it.
 
+**Docker:** the dashboard container only has its own process namespace — `lsof -c claude`
+inside it can never see the host's real `claude` CLI process, so the gate would force every
+session to `idle` even while genuinely working. `config.ts` `isDockerContainer()` detects
+`/.dockerenv` and defaults `skipProcScan: true` in that case (override with `SKIP_PROC_SCAN`
+env either way); `api.ts` passes `config.skipProcScan` into `scanSessions`.
+
 **Empty-session filter:** `/clear` (and opening a new session) starts a fresh UUID
 transcript holding only `queue-operation`/`attachment`/meta records with no user/assistant
 message yet. Its fresh mtime would read recent + `turnComplete`(default) = `incomplete`,

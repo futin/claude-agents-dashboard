@@ -84,6 +84,20 @@ export function run(): number {
     assert.strictEqual(c.maxSessions, 10);
   })) p++; else f++;
 
+  if (test('loadConfig: skipProcScan defaults to Docker detection, SKIP_PROC_SCAN overrides', () => {
+    const wasEnv = process.env.SKIP_PROC_SCAN;
+    delete process.env.SKIP_PROC_SCAN;
+    try {
+      // /.dockerenv doesn't exist on this host/CI runner → default false outside a container.
+      assert.strictEqual(loadConfig({ envPath: '/no/such/.env' }).skipProcScan, false);
+      process.env.SKIP_PROC_SCAN = 'true';
+      assert.strictEqual(loadConfig({ envPath: '/no/such/.env' }).skipProcScan, true);
+    } finally {
+      if (wasEnv === undefined) delete process.env.SKIP_PROC_SCAN;
+      else process.env.SKIP_PROC_SCAN = wasEnv;
+    }
+  })) p++; else f++;
+
   console.log('\n=== scan.ts ===\n');
 
   if (test('decodeProjectName fallback basename', () => {

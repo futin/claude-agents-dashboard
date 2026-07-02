@@ -1,0 +1,17 @@
+services:
+  dashboard:
+    build: .
+    ports:
+      - "4173:4173"
+    environment:
+      - PORT=4173
+      - MAX_SESSIONS=10
+      # - ACTIVE_WINDOW_MIN=5
+      # - LOOKBACK_HOURS=24
+      # - SHOW_USAGE=false
+      # OAuth creds blob for usage bars — container can't reach host Keychain.
+      # Export before `docker compose up`: CLAUDE_CREDENTIALS_JSON=$(scripts/host-credentials.sh)
+      - CLAUDE_CREDENTIALS_JSON=${CLAUDE_CREDENTIALS_JSON}
+    volumes:
+      # read-only mount of the host's ~/.claude — this is what the dashboard scans
+      - ${HOME}/.claude:/root/.claude:ro

@@ -84,9 +84,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (isProd) {
       try {
         const p = process.platform;
-        if (p === 'darwin') spawn('open', [url], { stdio: 'ignore' });
-        else if (p === 'win32') spawn('cmd', ['/c', 'start', url], { stdio: 'ignore' });
-        else spawn('xdg-open', [url], { stdio: 'ignore' });
+        const child =
+          p === 'darwin' ? spawn('open', [url], { stdio: 'ignore' })
+          : p === 'win32' ? spawn('cmd', ['/c', 'start', url], { stdio: 'ignore' })
+          : spawn('xdg-open', [url], { stdio: 'ignore' });
+        child.on('error', () => { /* no browser to open (e.g. headless/container) — best-effort */ });
       } catch { /* best-effort */ }
     }
   });
