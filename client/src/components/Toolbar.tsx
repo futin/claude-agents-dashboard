@@ -6,6 +6,7 @@ import {
   type SortKey,
   type View
 } from '../lib/filterSort';
+import { MultiSelect } from './MultiSelect';
 
 const STATUSES: Session['status'][] = ['working', 'question', 'incomplete', 'idle'];
 
@@ -16,7 +17,7 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: 'status', label: 'Status' }
 ];
 
-/** Filter + sort control bar. Single-select facets; state lives in the parent. */
+/** Filter + sort control bar. Multi-select project/status facets; state lives in the parent. */
 export function Toolbar({
   sessions,
   view,
@@ -31,15 +32,19 @@ export function Toolbar({
 
   return (
     <div className="toolbar">
-      <select value={view.project} onChange={e => set({ project: e.target.value })} title="Project">
-        <option value="all">All projects</option>
-        {projects.map(p => <option key={p} value={p}>{p}</option>)}
-      </select>
+      <MultiSelect
+        label="projects"
+        options={projects.map(p => ({ value: p, label: p }))}
+        selected={view.projects}
+        onChange={projects => set({ projects })}
+      />
 
-      <select value={view.status} onChange={e => set({ status: e.target.value })} title="Status">
-        <option value="all">All statuses</option>
-        {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-      </select>
+      <MultiSelect
+        label="statuses"
+        options={STATUSES.map(s => ({ value: s, label: STATUS_LABEL[s] }))}
+        selected={view.statuses}
+        onChange={statuses => set({ statuses })}
+      />
 
       <select value={view.window} onChange={e => set({ window: e.target.value })} title="Activity">
         {ACTIVITY_WINDOWS.map(w => <option key={w.key} value={w.key}>{w.label}</option>)}

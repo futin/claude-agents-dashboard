@@ -60,17 +60,34 @@ export function run(): number {
     const out = applyView([
       sess({ project: 'a', status: 'working' }),
       sess({ project: 'b', status: 'idle' })
-    ], view({ status: 'working' }), NOW);
+    ], view({ statuses: ['working'] }), NOW);
     assert.strictEqual(out.length, 1);
     assert.strictEqual(out[0].project, 'a');
+  })) p++; else f++;
+
+  if (test('status filter: multiple values keep any matching', () => {
+    const out = applyView([
+      sess({ project: 'w', status: 'working' }),
+      sess({ project: 'i', status: 'idle' }),
+      sess({ project: 'q', status: 'question' })
+    ], view({ statuses: ['working', 'idle'] }), NOW);
+    assert.deepStrictEqual(out.map(s => s.project).sort(), ['i', 'w']);
   })) p++; else f++;
 
   if (test('project filter: keeps only matching', () => {
     const out = applyView([
       sess({ project: 'a' }), sess({ project: 'b' })
-    ], view({ project: 'b' }), NOW);
+    ], view({ projects: ['b'] }), NOW);
     assert.strictEqual(out.length, 1);
     assert.strictEqual(out[0].project, 'b');
+  })) p++; else f++;
+
+  if (test('empty facet arrays = no filter (show all)', () => {
+    const out = applyView([
+      sess({ project: 'a', status: 'working' }),
+      sess({ project: 'b', status: 'idle' })
+    ], view({ projects: [], statuses: [] }), NOW);
+    assert.strictEqual(out.length, 2);
   })) p++; else f++;
 
   if (test('activity window: boundary (inclusive) keeps, older drops', () => {
@@ -110,7 +127,7 @@ export function run(): number {
       sess({ project: 'a', status: 'working', updatedMs: NOW - 1000 }),
       sess({ project: 'a', status: 'idle', updatedMs: NOW - 1000 }),
       sess({ project: 'b', status: 'working', updatedMs: NOW - 1000 })
-    ], view({ project: 'a', status: 'working' }), NOW);
+    ], view({ projects: ['a'], statuses: ['working'] }), NOW);
     assert.strictEqual(out.length, 1);
     assert.strictEqual(out[0].project, 'a');
     assert.strictEqual(out[0].status, 'working');

@@ -40,10 +40,10 @@ export type SortKey = 'recency' | 'tokens' | 'name' | 'status';
 export type SortDir = 'asc' | 'desc';
 
 export interface View {
-  /** Project name, or 'all'. */
-  project: string;
-  /** Status value, or 'all'. */
-  status: string;
+  /** Selected project names; empty = all projects. */
+  projects: string[];
+  /** Selected status values; empty = all statuses. */
+  statuses: string[];
   /** ActivityWindow key. */
   window: string;
   sortKey: SortKey;
@@ -52,8 +52,8 @@ export interface View {
 
 /** Default view = current behavior (recency, newest first, no filters). */
 export const DEFAULT_VIEW: View = {
-  project: 'all',
-  status: 'all',
+  projects: [],
+  statuses: [],
   window: 'all',
   sortKey: 'recency',
   sortDir: 'desc'
@@ -79,8 +79,8 @@ function compare(a: Session, b: Session, key: SortKey): number {
 export function applyView(sessions: Session[], view: View, nowMs: number): Session[] {
   const win = ACTIVITY_WINDOWS.find(w => w.key === view.window);
   const filtered = sessions.filter(s => {
-    if (view.project !== 'all' && s.project !== view.project) return false;
-    if (view.status !== 'all' && s.status !== view.status) return false;
+    if (view.projects.length && !view.projects.includes(s.project)) return false;
+    if (view.statuses.length && !view.statuses.includes(s.status)) return false;
     if (win && win.ms !== undefined && nowMs - s.updatedMs > win.ms) return false;
     return true;
   });
