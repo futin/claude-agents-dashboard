@@ -24,6 +24,7 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/usage.ts    fetches account 5h/weekly limits from Anthropic (see "Usage limits")
 client/           Vite + React + TypeScript frontend
   src/App.tsx, components/{Header,SessionList,SessionRow}, hooks/useSessions, lib/format
+  hooks/usePersistedState.ts  localStorage-backed useState (see "View persistence")
 vite.config.ts    dev proxy /api → backend; reuses server loadConfig() for the port
 test/             node-assert tests over backend domain logic, tmpdir JSONL fixtures
 ```
@@ -144,6 +145,22 @@ these are **not on disk**: `lib/usage.ts` fetches them live from Anthropic.
   `docs/plans/2026-07-06-usage-token-refresh-removal.md` for the removed design + a
   platform-independent Docker approach to revisit **if** a future feature genuinely needs the
   dashboard to make its own authenticated Anthropic API call.
+
+## View persistence (Toolbar filters/sort)
+
+The Toolbar's `view` object (`projects`, `statuses`, `window`, `sortKey`, `sortDir` — the
+`View` interface in `client/src/lib/filterSort.ts`) is persisted to **localStorage** under key
+`dashboard.view` so filters/sort survive a page refresh and tab-close. Wired in `App.tsx` via
+`usePersistedState<View>('dashboard.view', DEFAULT_VIEW)` instead of plain `useState`.
+
+- `hooks/usePersistedState.ts` — generic `useState` replacement: lazy init reads+parses the
+  stored JSON once; an effect writes on every change. **Fail-open** — missing/bad JSON or a
+  throwing `localStorage` (private mode / quota) falls back to the passed default, never crashes
+  render. Object values are shallow-merged over the default (`{ ...fallback, ...parsed }`) so a
+  value stored by an older release still gains any newly-added `View` field's default.
+- **Client-only, zero deps** — no backend, no URL params (not shareable/bookmarkable by design).
+- **Not persisted:** row-expansion state (`SessionList.tsx` `expandedIds`) stays ephemeral —
+  session IDs churn, so restored expansions would mostly be stale.
 
 ## Conventions / gotchas
 
