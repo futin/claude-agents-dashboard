@@ -95,8 +95,9 @@ export function readToken(): TokenState {
 
 /**
  * The keychain/file payload is JSON `{ claudeAiOauth: { accessToken, expiresAt, ... } }`.
- * Distinguishes a usable token from an expired one so the client can offer
- * recovery (see token-refresh.ts). We still never refresh creds ourselves.
+ * Distinguishes a usable token from an expired one so the header can label why
+ * the bars are absent (`usageStatus`). We never refresh creds ourselves — an
+ * expired token simply hides the bars until the CLI renews it on its own use.
  */
 export function tokenFromCredsBlob(blob: string, now = Date.now()): TokenState {
   let parsed: unknown;
@@ -238,16 +239,5 @@ function refreshNow(): Promise<void> {
  */
 export function getCachedUsageState(): UsageState {
   if (!refreshing && (cachedAt === 0 || Date.now() - cachedAt > CACHE_TTL_MS)) void refreshNow();
-  return { usage: cached, status: cachedStatus };
-}
-
-/**
- * Bypass the TTL and fetch now — used after a token refresh so the new token is
- * picked up immediately. Awaits any in-flight cycle first (it may have started
- * with the old token), then runs a fresh one.
- */
-export async function forceUsageRefresh(): Promise<UsageState> {
-  if (refreshing) await refreshing;
-  await refreshNow();
   return { usage: cached, status: cachedStatus };
 }

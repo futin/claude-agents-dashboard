@@ -5,7 +5,6 @@ import path from 'node:path';
 
 import * as scan from '../server/lib/scan.js';
 import { parseEnv, toPosInt, loadConfig } from '../server/lib/config.js';
-import { refreshCwd } from '../server/lib/token-refresh.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -279,22 +278,6 @@ export function run(): number {
     assert.strictEqual(out.sessions.length, 1);
     assert.strictEqual(out.sessions[0].project, 'real');
     assert.strictEqual(out.totals.shown, 1);
-  })) p++; else f++;
-
-  if (test('token-refresh transcript (cwd = refreshCwd) is excluded', () => {
-    // The dashboard's own POST /api/usage/refresh spawns `claude -p` in a
-    // dedicated cwd; that turn writes a real transcript which must not show up
-    // as a session row.
-    const now = 1_700_000_000_000;
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-home-'));
-    const freshTs = new Date(now - 30 * 1000).toISOString();
-    const root = makeRoot([
-      { dirName: '-refresh', id: 'phantom', mtimeMs: now - 10 * 1000, records: [metaRec(refreshCwd(home), 'main'), at(assistantDone(), freshTs)] },
-      { dirName: '-a-real2', id: 'real2', mtimeMs: now - 60 * 1000, records: [metaRec('/a/real2', 'main'), at(assistantPending(), freshTs)] }
-    ]);
-    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, homeDir: home, liveCwds: null });
-    assert.strictEqual(out.sessions.length, 1);
-    assert.strictEqual(out.sessions[0].project, 'real2');
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

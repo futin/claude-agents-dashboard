@@ -8,12 +8,9 @@ import type { ServerResponse } from 'node:http';
 
 import { scanSessions, listTranscripts, projectsRoot } from './lib/scan.js';
 import { readAgentsCached } from './lib/agents-cache.js';
-import { getCachedUsageState, forceUsageRefresh } from './lib/usage.js';
-import { runTokenRefresh, refreshCwd } from './lib/token-refresh.js';
-import type { Spawner } from './lib/token-refresh.js';
-import type { UsageState } from './lib/usage.js';
+import { getCachedUsageState } from './lib/usage.js';
 import type { Config } from './lib/config.js';
-import type { SessionsResponse, SessionDetail, UsageRefreshResponse } from '../shared/types.js';
+import type { SessionsResponse, SessionDetail } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
 const ID_RE = /^[A-Za-z0-9._-]+$/;
@@ -80,27 +77,4 @@ export function serveSessionDetail(id: string, res: ServerResponse): void {
   }
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(detail));
-}
-
-/**
- * `POST /api/usage/refresh` — recover from an expired OAuth token. Spawns one
- * headless `claude -p` turn (the CLI refreshes its own creds), then bypasses
- * the usage-cache TTL so the fresh token is used immediately. Single-flight:
- * concurrent requests get 409. Gated by SHOW_USAGE like the bars themselves.
- * `deps` is a test seam (fake spawner / usage fetcher / cwd).
- */
-export async function serveUsageRefresh(
-  config: Config,
-  res: ServerResponse,
-  deps: { spawner?: Spawner; cwd?: string; refreshUsage?: () => Promise<UsageState> } = {}
-): Promise<void> {
-  const send = (code: number, body: UsageRefreshResponse): void => {
-    res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify(body));
-  };
-  if (!config.showUsage) return send(404, { ok: false, error: 'usage disabled' });
-  const outcome = await runTokenRefresh(deps.spawner, deps.cwd ?? refreshCwd());
-  if (!outcome.ok) return send(outcome.httpStatus, { ok: false, error: outcome.error });
-  const state = await (deps.refreshUsage ?? forceUsageRefresh)();
-  send(200, { ok: true, usage: state.usage, usageStatus: state.status });
 }

@@ -135,14 +135,15 @@ these are **not on disk**: `lib/usage.ts` fetches them live from Anthropic.
 - **Status:** `SessionsResponse.usageStatus` says why bars are/aren't shown: `ok`,
   `token-expired` (stored token past expiresAt), `unavailable` (any other fail-open cause,
   incl. the endpoint's own 429 rate limit). Client renders bars only on `ok`;
-  `token-expired` shows a hint + **Sync** button instead.
-- **Token recovery:** `POST /api/usage/refresh` (lib/token-refresh.ts) spawns one headless
-  `claude -p "ok" --model haiku` in `~/.claude/dashboard-refresh/` — the CLI renews its own
-  creds; we still never write them. Spawn env strips `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL`
-  etc. so the turn exercises the OAuth path, not an API key/proxy. Single-flight (409 on
-  concurrent), 60s timeout, 502 on spawn failure, gated by SHOW_USAGE. The spawned turn's
-  transcript is filtered out of the session list by scan.ts (cwd match on refreshCwd()).
-  Costs one haiku subscription turn per click.
+  `token-expired` shows a plain "token expired" hint (no bars, no action).
+- **No in-app token recovery.** An expired token just hides the bars; the CLI renews its own
+  token the next time it runs (on host use), and the next poll flips `usageStatus` back to
+  `ok`. A "Sync" button that spawned `claude -p` to force-refresh was removed — it was too much
+  machinery (CLI-spawn + Docker/PATH resolution) for a cosmetic header feature, and could never
+  work in Docker (no CLI in the container, `~/.claude` mounted read-only). See
+  `docs/plans/2026-07-06-usage-token-refresh-removal.md` for the removed design + a
+  platform-independent Docker approach to revisit **if** a future feature genuinely needs the
+  dashboard to make its own authenticated Anthropic API call.
 
 ## Conventions / gotchas
 

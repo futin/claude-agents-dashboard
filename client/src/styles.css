@@ -34,10 +34,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .usage .u-pct{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text2);min-width:34px;text-align:right}
 .usage .u-reset{font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0}
 .usage .u-msg{font-size:11px;color:var(--text3)}
-.usage .u-sync{font-size:11px;padding:2px 10px;border-radius:4px;border:1px solid var(--surface2);background:var(--surface2);color:var(--text2);cursor:pointer}
-.usage .u-sync:hover:not(:disabled){color:var(--text)}
-.usage .u-sync:disabled{opacity:.6;cursor:default}
-.usage .u-err{font-size:11px;color:var(--red)}
 
 .rows{display:flex;flex-direction:column;gap:8px}
 .row{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s;cursor:pointer}

@@ -9,7 +9,6 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { readTranscript } from './transcript.js';
-import { refreshCwd } from './token-refresh.js';
 import type { Config } from './config.js';
 import type { Session, SessionsResponse } from '../../shared/types.js';
 
@@ -159,9 +158,6 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     // (which `/clear` abandoned). Nothing to display → drop it.
     if (!parsed.hasMessages) continue;
     const projectPath = parsed.cwd || null;
-    // The dashboard's own token-refresh turns (POST /api/usage/refresh) run in
-    // a dedicated cwd; their transcripts are plumbing, not a session to display.
-    if (projectPath && normCwd(projectPath) === normCwd(refreshCwd(options.homeDir))) continue;
     const project = projectPath ? (projectPath.split('/').filter(Boolean).pop() || projectPath) : decodeProjectName(c.dirName);
     // Recency tracks real agent activity, not file touches: selecting a session
     // in Claude Code appends timestamp-less mode/last-prompt/custom-title records
