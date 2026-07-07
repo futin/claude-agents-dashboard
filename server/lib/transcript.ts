@@ -31,6 +31,8 @@ export interface ParsedTranscript {
   cwd: string | null;
   gitBranch: string | null;
   version: string | null;
+  /** User-set custom title (newest custom-title record); null when unnamed or placeholder. */
+  sessionName: string | null;
   lastTimestamp: string | null;
   /**
    * Timestamp of the newest conversational message (user/assistant) record —
@@ -149,6 +151,7 @@ export function readTranscript(
   let model = '';
   let activity: Activity | null = null;
   let cwd: string | null = null, gitBranch: string | null = null, version: string | null = null, lastTs: string | null = null;
+  let sessionName: string | null = null;
 
   // Session-state signals, taken from the newest message record only.
   let newestMessageSeen = false;
@@ -167,6 +170,13 @@ export function readTranscript(
     if (!gitBranch && typeof rec.gitBranch === 'string') gitBranch = rec.gitBranch;
     if (!version && typeof rec.version === 'string') version = rec.version;
     if (!lastTs && typeof rec.timestamp === 'string') lastTs = rec.timestamp;
+
+    // custom-title records are the file's newest records, so newest-first
+    // scanning hits them right away — before the early break below.
+    if (!sessionName && rec.type === 'custom-title' && typeof rec.customTitle === 'string') {
+      const t = rec.customTitle.trim();
+      if (t && t !== 'New session') sessionName = t;
+    }
 
     if (!tokens) {
       const t = usageTokens(rec);
@@ -219,6 +229,7 @@ export function readTranscript(
     cwd,
     gitBranch,
     version,
+    sessionName,
     lastTimestamp: lastTs,
     lastMessageTs,
     hasMessages: newestMessageSeen,

@@ -180,6 +180,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       id: c.id,
       project,
       projectPath,
+      sessionName: parsed.sessionName || null,
       gitBranch: parsed.gitBranch || null,
       model: parsed.model || '',
       tokens: parsed.tokens,

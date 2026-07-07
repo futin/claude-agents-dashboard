@@ -16,6 +16,8 @@ export interface Session {
   id: string;
   project: string;
   projectPath: string | null;
+  /** User-set custom title from Claude Code (custom-title record); null when unnamed. */
+  sessionName: string | null;
   gitBranch: string | null;
   model: string;
   tokens: number;

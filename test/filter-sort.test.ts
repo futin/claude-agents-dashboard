@@ -16,6 +16,7 @@ function sess(p: Partial<Session>): Session {
     id: p.id ?? p.project ?? 'id',
     project: p.project ?? 'proj',
     projectPath: null,
+    sessionName: p.sessionName ?? null,
     gitBranch: null,
     model: 'claude-opus-4-8',
     tokens: p.tokens ?? 0,

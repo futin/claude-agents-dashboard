@@ -64,6 +64,23 @@ export function run(): number {
     assert.strictEqual(s.cwd, '/Users/me/proj');
     assert.strictEqual(s.gitBranch, 'main');
     assert.strictEqual(s.version, '2.1.0');
+    assert.strictEqual(s.sessionName, null);
+  })) p++; else f++;
+
+  if (test('readTranscript extracts custom-title as sessionName', () => {
+    const s = tr.readTranscript(fixture([
+      { message: { role: 'user', content: 'hi' }, timestamp: '2026-07-01T09:00:00Z' },
+      { type: 'custom-title', customTitle: 'My work', sessionId: 'x' }
+    ]))!;
+    assert.strictEqual(s.sessionName, 'My work');
+  })) p++; else f++;
+
+  if (test('readTranscript treats "New session" placeholder as unnamed', () => {
+    const s = tr.readTranscript(fixture([
+      { message: { role: 'user', content: 'hi' }, timestamp: '2026-07-01T09:00:00Z' },
+      { type: 'custom-title', customTitle: 'New session', sessionId: 'x' }
+    ]))!;
+    assert.strictEqual(s.sessionName, null);
   })) p++; else f++;
 
   if (test('readTranscript returns null for missing file', () => {
