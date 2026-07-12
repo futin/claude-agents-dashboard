@@ -1,15 +1,13 @@
 {
   "name": "claude-agents-dashboard",
-  "description": "Live monitor for parallel Claude Code sessions \u2014 reads ~/.claude transcripts, shows what each running session is doing.",
+  "description": "A live, always-open monitor for parallel Claude Code sessions, showing per-session project, git branch, model, context usage, and current tool activity by tail-reading ~/.claude/projects transcripts off disk every 3s (no daemon, no hooks). Includes a read-only Management config browser and an Analytics tab of session post-mortems.",
   "languages": [
-    "config",
     "css",
     "dockerfile",
     "html",
     "json",
     "markdown",
     "typescript",
-    "unknown",
     "yaml"
   ],
   "frameworks": [
@@ -22,7 +20,37 @@
     {
       "path": ".claude/CLAUDE.md",
       "language": "markdown",
-      "sizeLines": 221,
+      "sizeLines": 101,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/rules/analytics.md",
+      "language": "markdown",
+      "sizeLines": 28,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/rules/management.md",
+      "language": "markdown",
+      "sizeLines": 29,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/rules/session-status.md",
+      "language": "markdown",
+      "sizeLines": 56,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/rules/usage-limits.md",
+      "language": "markdown",
+      "sizeLines": 44,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/rules/view-persistence.md",
+      "language": "markdown",
+      "sizeLines": 15,
       "fileCategory": "docs"
     },
     {
@@ -34,7 +62,7 @@
     {
       "path": ".env.example",
       "language": "config",
-      "sizeLines": 23,
+      "sizeLines": 28,
       "fileCategory": "config"
     },
     {
@@ -44,27 +72,33 @@
       "fileCategory": "code"
     },
     {
+      "path": ".ua/config.json",
+      "language": "json",
+      "sizeLines": 1,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".ua/fingerprints.json",
+      "language": "json",
+      "sizeLines": 2669,
+      "fileCategory": "config"
+    },
+    {
       "path": ".ua/intermediate/scan-result.json",
       "language": "json",
-      "sizeLines": 1060,
+      "sizeLines": 545,
       "fileCategory": "config"
     },
     {
-      "path": ".ua/tmp/ua-import-map-input.json",
+      "path": ".ua/knowledge-graph.json",
       "language": "json",
-      "sizeLines": 669,
+      "sizeLines": 6035,
       "fileCategory": "config"
     },
     {
-      "path": ".ua/tmp/ua-import-map-output.json",
+      "path": ".ua/meta.json",
       "language": "json",
-      "sizeLines": 246,
-      "fileCategory": "config"
-    },
-    {
-      "path": ".ua/tmp/ua-scan-files.json",
-      "language": "json",
-      "sizeLines": 827,
+      "sizeLines": 6,
       "fileCategory": "config"
     },
     {
@@ -76,7 +110,13 @@
     {
       "path": "client/src/App.tsx",
       "language": "typescript",
-      "sizeLines": 26,
+      "sizeLines": 33,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/analytics/AnalyticsView.tsx",
+      "language": "typescript",
+      "sizeLines": 118,
       "fileCategory": "code"
     },
     {
@@ -136,7 +176,7 @@
     {
       "path": "client/src/components/SectionTabs.tsx",
       "language": "typescript",
-      "sizeLines": 26,
+      "sizeLines": 32,
       "fileCategory": "code"
     },
     {
@@ -154,7 +194,7 @@
     {
       "path": "client/src/components/SessionRow.tsx",
       "language": "typescript",
-      "sizeLines": 64,
+      "sizeLines": 79,
       "fileCategory": "code"
     },
     {
@@ -167,6 +207,12 @@
       "path": "client/src/components/Toolbar.tsx",
       "language": "typescript",
       "sizeLines": 72,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/hooks/useAnalytics.ts",
+      "language": "typescript",
+      "sizeLines": 37,
       "fileCategory": "code"
     },
     {
@@ -220,7 +266,7 @@
     {
       "path": "client/src/styles.css",
       "language": "css",
-      "sizeLines": 174,
+      "sizeLines": 211,
       "fileCategory": "markup"
     },
     {
@@ -280,19 +326,19 @@
     {
       "path": "README.md",
       "language": "markdown",
-      "sizeLines": 224,
+      "sizeLines": 254,
       "fileCategory": "docs"
     },
     {
       "path": "server/api.ts",
       "language": "typescript",
-      "sizeLines": 151,
+      "sizeLines": 174,
       "fileCategory": "code"
     },
     {
       "path": "server/index.ts",
       "language": "typescript",
-      "sizeLines": 107,
+      "sizeLines": 111,
       "fileCategory": "code"
     },
     {
@@ -308,6 +354,12 @@
       "fileCategory": "code"
     },
     {
+      "path": "server/lib/analytics.ts",
+      "language": "typescript",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
       "path": "server/lib/analyze.ts",
       "language": "typescript",
       "sizeLines": 221,
@@ -316,7 +368,7 @@
     {
       "path": "server/lib/config.ts",
       "language": "typescript",
-      "sizeLines": 101,
+      "sizeLines": 109,
       "fileCategory": "code"
     },
     {
@@ -328,7 +380,13 @@
     {
       "path": "server/lib/scan.ts",
       "language": "typescript",
-      "sizeLines": 209,
+      "sizeLines": 221,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/lib/sessionAnalyticsLog.ts",
+      "language": "typescript",
+      "sizeLines": 92,
       "fileCategory": "code"
     },
     {
@@ -352,7 +410,7 @@
     {
       "path": "shared/types.ts",
       "language": "typescript",
-      "sizeLines": 331,
+      "sizeLines": 366,
       "fileCategory": "code"
     },
     {
@@ -374,23 +432,34 @@
       "fileCategory": "code"
     }
   ],
-  "totalFiles": 59,
-  "filteredByIgnore": 92,
+  "totalFiles": 69,
+  "filteredByIgnore": 96,
   "estimatedComplexity": "moderate",
   "importMap": {
     ".claude/CLAUDE.md": [],
+    ".claude/rules/analytics.md": [],
+    ".claude/rules/management.md": [],
+    ".claude/rules/session-status.md": [],
+    ".claude/rules/usage-limits.md": [],
+    ".claude/rules/view-persistence.md": [],
     ".dockerignore": [],
     ".env.example": [],
     ".ua/.understandignore": [],
+    ".ua/config.json": [],
+    ".ua/fingerprints.json": [],
     ".ua/intermediate/scan-result.json": [],
-    ".ua/tmp/ua-import-map-input.json": [],
-    ".ua/tmp/ua-import-map-output.json": [],
-    ".ua/tmp/ua-scan-files.json": [],
+    ".ua/knowledge-graph.json": [],
+    ".ua/meta.json": [],
     "client/index.html": [],
     "client/src/App.tsx": [
       "client/src/components/SectionTabs.tsx",
       "client/src/components/SessionsView.tsx",
       "client/src/hooks/usePersistedState.ts"
+    ],
+    "client/src/components/analytics/AnalyticsView.tsx": [
+      "client/src/hooks/useAnalytics.ts",
+      "client/src/lib/format.ts",
+      "shared/types.ts"
     ],
     "client/src/components/Header.tsx": [
       "client/src/lib/format.ts",
@@ -460,6 +529,9 @@
       "client/src/lib/filterSort.ts",
       "shared/types.ts"
     ],
+    "client/src/hooks/useAnalytics.ts": [
+      "shared/types.ts"
+    ],
     "client/src/hooks/useManagement.ts": [
       "shared/types.ts"
     ],
@@ -494,6 +566,7 @@
     "README.md": [],
     "server/api.ts": [
       "server/lib/agents-cache.ts",
+      "server/lib/analytics.ts",
       "server/lib/config.ts",
       "server/lib/management.ts",
       "server/lib/scan.ts",
@@ -511,6 +584,13 @@
     "server/lib/agents.ts": [
       "shared/types.ts"
     ],
+    "server/lib/analytics.ts": [
+      "server/lib/analyze.ts",
+      "server/lib/management.ts",
+      "server/lib/scan.ts",
+      "server/lib/sessionAnalyticsLog.ts",
+      "shared/types.ts"
+    ],
     "server/lib/analyze.ts": [
       "server/lib/agents.ts",
       "shared/types.ts"
@@ -525,8 +605,12 @@
     ],
     "server/lib/scan.ts": [
       "server/lib/config.ts",
+      "server/lib/sessionAnalyticsLog.ts",
       "server/lib/transcript.ts",
       "shared/types.ts"
+    ],
+    "server/lib/sessionAnalyticsLog.ts": [
+      "server/lib/management.ts"
     ],
     "server/lib/transcript.ts": [
       "shared/types.ts"
