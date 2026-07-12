@@ -22,14 +22,14 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   (tokens/toolUses/duration from toolUseResult + notification <usage> blocks)
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts, used only by the
                   on-demand GET /api/sessions/:id (see docs/ideas/agent-tracking-cache.md)
-  lib/usage.ts    fetches account 5h/weekly limits from Anthropic (see "Usage limits")
+  lib/usage.ts    fetches account 5h/weekly limits from Anthropic (see .claude/rules/usage-limits.md)
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser (key:value + >/| scalars, fail-open)
   lib/management.ts   config scanner: global/project ScopeConfig, plugins, recent projects,
-                  servable-path security set (see "Management section")
-  lib/analyze.ts  whole-file session post-mortem → SessionAnalysis (the /doctor analyzer; pure)
+                  servable-path security set (see .claude/rules/management.md)
+  lib/analyze.ts  whole-file session post-mortem → SessionAnalysis (the /kaizen analyzer; pure)
   lib/doctorLog.ts  parses ~/.claude/doctor-log.md → lesson per session (fail-open)
   lib/analytics.ts  read-only reader: last N /doctor-logged sessions, each re-analyzed live
-                  (see "Analytics section")
+                  (see .claude/rules/analytics.md)
 client/           Vite + React + TypeScript frontend
   src/App.tsx     section tabs (Sessions | Management | Analytics), lazy-loads Management/Analytics views
   components/SessionsView.tsx  the original live monitor (owns the 3s poll)
@@ -37,7 +37,7 @@ client/           Vite + React + TypeScript frontend
   components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane, FileViewer)
   components/analytics/AnalyticsView.tsx  the report-card list (own lazy chunk; read-only)
   hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
-  hooks/usePersistedState.ts  localStorage-backed useState (see "View persistence")
+  hooks/usePersistedState.ts  localStorage-backed useState (see .claude/rules/view-persistence.md)
 vite.config.ts    dev proxy /api → backend; reuses server loadConfig() for the port
 test/             node-assert tests over backend domain logic, tmpdir JSONL fixtures
 ```
@@ -57,182 +57,23 @@ connected to the same wifi as the host machine. The backend (`server/index.ts`)
 already binds all interfaces by default, so `pnpm start` (prod, port 4173) is
 LAN-reachable the same way with no extra config.
 
-## Session status (the left dot)
+## Deep-dive rules
 
-`Session.status` (4 states), computed in `scan.ts` from `transcript.ts` signals.
-`question` (blue) overrides everything; otherwise it's a 2×2 of `recent` × `turnComplete`:
+Detailed per-domain docs live in `.claude/rules/` and are **NOT auto-loaded** — read the
+relevant one when a task touches that area:
 
-`recent` = last **conversational message** (`transcript.ts` `lastMessageTs`) is newer than
-`activeWindowMin`. **Not file mtime** — selecting a session in Claude Code appends
-timestamp-less `mode`/`last-prompt`/`custom-title` records that bump mtime with no turn
-happening, which used to flip idle sessions to `working`. mtime is only a fallback when no
-message timestamp exists (and still the coarse `lookbackHours` enumeration filter in `scan.ts`).
-
-|                          | recent (< `activeWindowMin`) | stale               |
-|--------------------------|------------------------------|---------------------|
-| **pending** (no end_turn)| 🟢 `working`                 | 🟡 `incomplete`     |
-| **finished** (end_turn)  | 🟡 `incomplete`              | ⚪ `idle`           |
-
-- **question** (blue) — newest assistant action is an unanswered `AskUserQuestion`. Beats all.
-  `ExitPlanMode` is NOT treated as a question.
-- **working** (green, pulsing) — recent AND the turn is unfinished = machine actively churning.
-  **Only this state** counts toward `totals.active`. A finished turn (end_turn) is NOT working
-  even if recent — the ball is in the human's court.
-- **incomplete** (yellow, "pending") — either recent + finished (your turn to reply) or
-  stale + unfinished (stalled mid-task).
-- **idle** (gray) — stale AND the last turn finished cleanly.
-
-**Process-liveness gate (overrides the 2×2):** a cleaned/interrupted session's last
-record often has no `end_turn`, so on disk it looks recent + pending = `working` forever
-even though nothing runs. So `scan.ts` `liveCwds()` shells out to `lsof -c claude -a -d cwd
--Fn` for the set of cwds with a live `claude` CLI process; a session whose `projectPath`
-isn't in that set is forced to `idle`, no matter the transcript. `-c claude` is
-case-sensitive → CLI only, not the capital-`C` `Claude.app` shell. **Granularity is per-cwd**
-(claude doesn't hold the `.jsonl` open and exposes no session id in argv/env), so two
-sessions in the same directory can't be told apart — a dead one there still reads live.
-Probe is fail-open: `null` (no lsof / timeout / error) skips the gate. Injectable via
-`ScanOptions.liveCwds` for tests; `skipProcScan` also disables it.
-
-**Docker:** the dashboard container only has its own process namespace — `lsof -c claude`
-inside it can never see the host's real `claude` CLI process, so the gate would force every
-session to `idle` even while genuinely working. `config.ts` `isDockerContainer()` detects
-`/.dockerenv` and defaults `skipProcScan: true` in that case (override with `SKIP_PROC_SCAN`
-env either way); `api.ts` passes `config.skipProcScan` into `scanSessions`.
-
-**Empty-session filter:** `/clear` (and opening a new session) starts a fresh UUID
-transcript holding only `queue-operation`/`attachment`/meta records with no user/assistant
-message yet. Its fresh mtime would read recent + `turnComplete`(default) = `incomplete`,
-showing a phantom "pending" row beside the real session `/clear` abandoned — and there's no
-on-disk link from the new session back to the cleared one to dedupe by. So `scan.ts` drops
-any transcript whose `hasMessages` is false (`transcript.ts` = `newestMessageSeen`, true
-once a `message.role` user/assistant record appears in the tail). Nothing to show → not
-shown. The old session ages to `idle` on its own once stale.
-
-Signals come from the **newest message record** (newest tail record with `message.role` of
-`user`/`assistant`): `transcript.ts` exposes `turnComplete` (default true; false unless that
-record is an assistant with `end_turn`), `waitingOnQuestion`, and `lastMessageTs` (that
-record's timestamp — the recency signal). Records without a role (usage-only, meta,
-last-prompt, queue-operation) are ignored for state.
-
-## Usage limits (header bars)
-
-The header shows two mini progress bars — **5h** and **Week** — the same account
-rate-limit utilization Claude Code's `/usage` reports. Unlike everything else in the app,
-these are **not on disk**: `lib/usage.ts` fetches them live from Anthropic.
-
-- **Endpoint:** `GET https://api.anthropic.com/api/oauth/usage`, headers
-  `Authorization: Bearer <token>`, `anthropic-beta: oauth-2025-04-20`,
-  `anthropic-version: 2023-06-01`. **Private/undocumented** — may change between CLI versions.
-  **Always hits api.anthropic.com** — first-party account API; must NOT follow
-  `ANTHROPIC_BASE_URL`/`CLAUDE_CODE_API_BASE_URL` (those aim model inference at a
-  proxy/gateway — Bedrock/Vertex/Ollama/LiteLLM — with no such route; that misroute returned
-  `null` bars in practice). `CLAUDE_USAGE_BASE_URL` overrides for tests only; request is
-  protocol-aware (http vs https).
-- **Response shape:** windows are **top-level** (`{ five_hour:{utilization,resets_at}, seven_day:{…}, … }`),
-  *not* wrapped in `rate_limits`. `mapUsage()` accepts both shapes defensively and is the one
-  pure/unit-tested piece (`test/usage.test.ts`).
-- **Token:** read from the macOS keychain (`security find-generic-password -s "Claude Code-credentials"`),
-  falling back to `~/.claude/.credentials.json` → `claudeAiOauth.accessToken`. Expired tokens
-  are skipped; **we never refresh** (that would mutate creds). ⚠️ The first keychain read by
-  the dashboard process triggers a macOS GUI prompt — approve once with "Always Allow".
-- **Caching:** `getCachedUsageState()` is **synchronous** — it returns the last value and fires a
-  **non-blocking** background refresh when older than 60s. So the 3s `/api/sessions` poll never
-  blocks on the network, and Anthropic is hit at most ~once/min. First load shows no bars until
-  the first fetch lands (next poll picks it up).
-- **Fail-open everywhere:** no token / expired / network error / non-2xx / unparseable →
-  `usage: null` → header omits the bars. Never throws into `scanSessions` (which stays pure).
-- **Wiring:** `SessionsResponse.usage?: UsageLimits | null` (in `shared/types.ts`); attached in
-  `api.ts` (both success and error branches) only when `config.showUsage`. Still **zero npm deps**
-  — `https` + `child_process` are Node built-ins.
-- **Toggle:** `SHOW_USAGE=false` disables the feature entirely (no fetch, no keychain read).
-  Default on.
-- **Status:** `SessionsResponse.usageStatus` says why bars are/aren't shown: `ok`,
-  `token-expired` (stored token past expiresAt), `unavailable` (any other fail-open cause,
-  incl. the endpoint's own 429 rate limit). Client renders bars only on `ok`;
-  `token-expired` shows a plain "token expired" hint (no bars, no action).
-- **No in-app token recovery.** An expired token just hides the bars; the CLI renews its own
-  token the next time it runs (on host use), and the next poll flips `usageStatus` back to
-  `ok`. A "Sync" button that spawned `claude -p` to force-refresh was removed — it was too much
-  machinery (CLI-spawn + Docker/PATH resolution) for a cosmetic header feature, and could never
-  work in Docker (no CLI in the container, `~/.claude` mounted read-only). See
-  `docs/plans/2026-07-06-usage-token-refresh-removal.md` for the removed design + a
-  platform-independent Docker approach to revisit **if** a future feature genuinely needs the
-  dashboard to make its own authenticated Anthropic API call.
-
-## Management section (read-only config browser)
-
-A **Management** tab (top-level `SectionTabs` in `App.tsx`, persisted as `dashboard.section`)
-shows all Claude config on the machine in a three-pane layout: scope menu (Global +
-recently-active projects) | filterable item list grouped by type | detail pane with the
-selected item's file content. Read-only v1 — nothing is ever written.
-
-- **Endpoints:** `GET /api/management` (ManagementIndex: global ScopeConfig + recent
-  ProjectRefs), `GET /api/management/project?dir=<dirName>` (one project's ScopeConfig),
-  `GET /api/management/file?path=<abs>` (FileContent). Handlers in `api.ts`, scanner in
-  `lib/management.ts`, frontmatter metadata via `lib/frontmatter.ts`.
-- **Scopes:** global = `~/.claude/{skills,agents,commands,rules,hooks,CLAUDE.md,settings*}`
-  **plus every installed plugin's subtree** (`plugins/installed_plugins.json` →
-  installPath → skills/agents/commands/rules/hooks.json), items tagged `plugin:<name>`.
-  Project = `<cwd>/.claude/*` + root CLAUDE.md, items tagged `project`. Recent projects
-  come from transcript cwds (same lookback as sessions), deduped by cwd, newest-first.
-- **⚠️ File-endpoint security (the invariant to keep):** the endpoint serves ONLY paths
-  present in `collectServablePaths()` — the exact set the scanner itself enumerated.
-  **Never replace this with prefix/subtree checks**: `~/.claude` also holds
-  `.credentials.json`/`history.jsonl`/`session-data/`, and project roots hold `.env`.
-  `dirName` is resolved against the enumerated recent-project list, never joined into a
-  path (same philosophy as `serveSessionDetail`). Content capped at 256 KB (`truncated`
-  flag). `~/.claude.json` (huge, private) is never read.
-- **No polling:** config changes over days. Index fetched on section mount / manual ↻;
-  project scopes + file bodies fetched lazily on click and cached in ref-held Maps.
-  Switching to Management unmounts SessionsView → the 3s poll stops.
-- **Client:** ManagementView is a `React.lazy` default export (own chunk; sessions bundle
-  unchanged). Entry normalization is pure (`lib/managementEntries.ts`, unit-tested).
-  Stale persisted scope / dead selection resolve during render — no effects.
-
-## Analytics section (session post-mortems)
-
-An **Analytics** tab (third `SectionTabs` entry, persisted `dashboard.section`) shows the last
-N (default 5) sessions the **`/doctor` skill has logged**. `~/.claude/doctor-log.md` (one line
-per `/doctor` run) is the **sole trigger** — a session appears here only because `/doctor`
-logged it. For each logged session the server pairs the log line's **lesson** ("research &
-suggestions") with a **live re-run** of the deterministic analyzer (`server/lib/analyze.ts`
-`analyzeSession()` → `SessionAnalysis`: billable/context tokens, per-tool cost, subagent
-breakdown, error signals). The server does **no** LLM calls and no heuristic advice — the
-qualitative judgment is entirely `/doctor`'s.
-
-- **Read-only — no write path.** The dashboard never writes; `/doctor` is the only producer.
-  (An earlier design had an Inspect button + a `POST /api/analytics/inspect` that generated and
-  persisted report JSON; that was removed in favor of letting `/doctor` own report creation, so
-  the app keeps its read-only invariant.)
-- **Endpoint:** `GET /api/analytics` only (AnalyticsResponse: last N reports, newest-first).
-  Handler `serveAnalytics` in `api.ts`; reader in `lib/analytics.ts` (`listReports`);
-  doctor-log parser in `lib/doctorLog.ts` (`parseDoctorLog` / `recentLessons`). Both unit-tested.
-- **How the reader works (`lib/analytics.ts`):** `readDoctorLog` → `recentLessons(limit)` (dedupe
-  by id-prefix, newest-first) → for each, resolve the transcript by **prefix-matching** the logged
-  short id against `listTranscripts(projectsRoot())` (never joined into a path — same philosophy as
-  `serveSessionDetail`; validated with `ID_RE`) → `analyzeSession(ref.file, ref.id)` live.
-  `analysis` is `null` when the transcript is gone (card falls back to lesson-only); `project`
-  then falls back to the doctor-log project tag.
-- **No polling:** the list changes only when `/doctor` runs. `AnalyticsView` is a `React.lazy`
-  default export (own chunk); `useAnalytics` fetches on mount + manual ↻. `useAnalytics` is
-  client-only.
-- **Toggle:** `SHOW_ANALYTICS=false`, display cap `ANALYTICS_KEEP=<n>` (config.ts, default 5).
-
-## View persistence (Toolbar filters/sort)
-
-The Toolbar's `view` object (`projects`, `statuses`, `window`, `sortKey`, `sortDir` — the
-`View` interface in `client/src/lib/filterSort.ts`) is persisted to **localStorage** under key
-`dashboard.view` so filters/sort survive a page refresh and tab-close. Wired in `App.tsx` via
-`usePersistedState<View>('dashboard.view', DEFAULT_VIEW)` instead of plain `useState`.
-
-- `hooks/usePersistedState.ts` — generic `useState` replacement: lazy init reads+parses the
-  stored JSON once; an effect writes on every change. **Fail-open** — missing/bad JSON or a
-  throwing `localStorage` (private mode / quota) falls back to the passed default, never crashes
-  render. Object values are shallow-merged over the default (`{ ...fallback, ...parsed }`) so a
-  value stored by an older release still gains any newly-added `View` field's default.
-- **Client-only, zero deps** — no backend, no URL params (not shareable/bookmarkable by design).
-- **Not persisted:** row-expansion state (`SessionList.tsx` `expandedIds`) stays ephemeral —
-  session IDs churn, so restored expansions would mostly be stale.
+- `.claude/rules/session-status.md` — the left-dot status machine (`scan.ts`/`transcript.ts`:
+  the `recent`×`turnComplete` 2×2, `question` override, `lsof` process-liveness gate, Docker
+  `skipProcScan`, empty-session filter).
+- `.claude/rules/usage-limits.md` — header 5h/Week bars (`lib/usage.ts`: OAuth `/usage`
+  endpoint, keychain token, sync cache + background refresh, fail-open, `SHOW_USAGE`,
+  `usageStatus`).
+- `.claude/rules/management.md` — Management tab config browser (`lib/management.ts`: global +
+  plugin + project scopes, the ⚠️ file-endpoint security invariant).
+- `.claude/rules/analytics.md` — Analytics tab session post-mortems (`lib/analytics.ts` +
+  `lib/doctorLog.ts`; `/kaizen` is the sole producer; read-only invariant).
+- `.claude/rules/view-persistence.md` — Toolbar filter/sort localStorage persistence
+  (`hooks/usePersistedState.ts`, fail-open shallow-merge).
 
 ## Conventions / gotchas
 
@@ -252,5 +93,5 @@ The Toolbar's `view` object (`projects`, `statuses`, `window`, `sortKey`, `sortD
   not narrative reports. Verbose subagent output replays through the parent context every
   turn (dominates cacheRead), so terseness is the cheapest big token win. For pure
   locate-code work prefer the `caveman:cavecrew-investigator` agent (output is already
-  ~60% smaller than vanilla `Explore`). Surfaced by the global `/doctor` skill — see
+  ~60% smaller than vanilla `Explore`). Surfaced by the global `/kaizen` skill — see
   `~/.claude/doctor-log.md`.
