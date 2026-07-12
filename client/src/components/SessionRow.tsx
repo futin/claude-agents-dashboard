@@ -36,6 +36,11 @@ export function SessionRow({ s, selected, onToggle }: Props) {
         )}
         {s.gitBranch && <span className="branch">{s.gitBranch}</span>}
         <span className="model">{s.model}</span>
+        {s.kaizenLesson && (
+          <span className="ag-pill kaizen" title={s.kaizenLesson}>kaizen</span>
+        )}
+        {/* the pill has no own handler: clicking it toggles the row like the rest
+            of .r1, expanding the panel below where the full lesson is shown. */}
         <span className="spacer" />
         <span className="tok">{fmtTok(s.tokens)} / {s.contextWindowLabel}</span>
         <span className="pct" style={{ color: warn ? 'var(--orange)' : 'var(--text)' }}>{pct}%</span>
@@ -58,7 +63,17 @@ export function SessionRow({ s, selected, onToggle }: Props) {
         </span>
         <span className="ago">{formatAgo(s.updatedMs)} ago</span>
       </div>
-      {selected && <SessionDetail id={s.id} />}
+      {selected && (
+        <>
+          {s.kaizenLesson && (
+            <div className="kaizen-lesson">
+              <span className="ag-pill kaizen">kaizen</span>
+              <span>{s.kaizenLesson}</span>
+            </div>
+          )}
+          <SessionDetail id={s.id} />
+        </>
+      )}
     </div>
   );
 }

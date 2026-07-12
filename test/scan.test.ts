@@ -280,6 +280,33 @@ export function run(): number {
     assert.strictEqual(out.totals.shown, 1);
   })) p++; else f++;
 
+  if (test('kaizen: injected lesson tags the matching session by id-prefix', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-k', id: 'abc123def', mtimeMs: now - 60 * 1000, records: [metaRec('/a/k', 'main'), assistantDone()] },
+      { dirName: '-a-n', id: 'zzz999', mtimeMs: now - 90 * 1000, records: [metaRec('/a/n', 'main'), assistantDone()] }
+    ]);
+    const lessons = [{ date: '2026-07-12', project: 'k', idPrefix: 'abc123', lesson: 'return terse findings.' }];
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true, lessons });
+    const k = out.sessions.find(s => s.project === 'k')!;
+    const n = out.sessions.find(s => s.project === 'n')!;
+    assert.strictEqual(k.kaizenLesson, 'return terse findings.'); // prefix match
+    assert.strictEqual(n.kaizenLesson, null);                     // no matching entry
+  })) p++; else f++;
+
+  if (test('kaizen: null lessons (analytics off / not injected) leaves every session null', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-off', id: 'abc123def', mtimeMs: now - 60 * 1000, records: [metaRec('/a/off', 'main'), assistantDone()] }
+    ]);
+    // explicit null inject skips the log read entirely
+    const injected = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true, lessons: null });
+    assert.strictEqual(injected.sessions[0].kaizenLesson, null);
+    // showAnalytics:false takes the same branch (no inject) without touching disk
+    const gated = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24, showAnalytics: false }, { root, now, skipProcScan: true });
+    assert.strictEqual(gated.sessions[0].kaizenLesson, null);
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }

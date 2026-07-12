@@ -95,5 +95,7 @@ relevant one when a task touches that area:
   not narrative reports. Verbose subagent output replays through the parent context every
   turn (dominates cacheRead), so terseness is the cheapest big token win. For pure
   locate-code work prefer the `caveman:cavecrew-investigator` agent (output is already
-  ~60% smaller than vanilla `Explore`). Surfaced by the global `/kaizen` skill — see
-  `~/.claude/session-analytics-log.md`.
+  ~60% smaller than vanilla `Explore`). Also cap subagent output at **~15 lines and forbid a
+  closing recap/summary section** — the terse `file:line` table *is* the answer, so a restated
+  summary just doubles the payload replayed into parent context. Surfaced by the global
+  `/kaizen` skill — see `~/.claude/session-analytics-log.md`.

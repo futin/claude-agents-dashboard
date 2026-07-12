@@ -29,6 +29,8 @@ export interface Session {
   lastTimestamp: string | null;
   updatedMs: number;
   version: string | null;
+  /** The `/kaizen` lesson logged for this session, or null if never inspected. */
+  kaizenLesson: string | null;
 }
 
 export interface Totals {

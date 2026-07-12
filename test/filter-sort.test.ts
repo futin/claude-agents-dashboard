@@ -27,7 +27,8 @@ function sess(p: Partial<Session>): Session {
     activity: null,
     lastTimestamp: null,
     updatedMs: p.updatedMs ?? NOW,
-    version: null
+    version: null,
+    kaizenLesson: p.kaizenLesson ?? null
   };
 }
 
