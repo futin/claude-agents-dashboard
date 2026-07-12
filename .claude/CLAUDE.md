@@ -27,8 +27,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/management.ts   config scanner: global/project ScopeConfig, plugins, recent projects,
                   servable-path security set (see .claude/rules/management.md)
   lib/analyze.ts  whole-file session post-mortem → SessionAnalysis (the /kaizen analyzer; pure)
-  lib/doctorLog.ts  parses ~/.claude/doctor-log.md → lesson per session (fail-open)
-  lib/analytics.ts  read-only reader: last N /doctor-logged sessions, each re-analyzed live
+  lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md → lesson per session (fail-open)
+  lib/analytics.ts  read-only reader: last N /kaizen-logged sessions, each re-analyzed live
                   (see .claude/rules/analytics.md)
 client/           Vite + React + TypeScript frontend
   src/App.tsx     section tabs (Sessions | Management | Analytics), lazy-loads Management/Analytics views
@@ -71,7 +71,7 @@ relevant one when a task touches that area:
 - `.claude/rules/management.md` — Management tab config browser (`lib/management.ts`: global +
   plugin + project scopes, the ⚠️ file-endpoint security invariant).
 - `.claude/rules/analytics.md` — Analytics tab session post-mortems (`lib/analytics.ts` +
-  `lib/doctorLog.ts`; `/kaizen` is the sole producer; read-only invariant).
+  `lib/sessionAnalyticsLog.ts`; `/kaizen` is the sole producer; read-only invariant).
 - `.claude/rules/view-persistence.md` — Toolbar filter/sort localStorage persistence
   (`hooks/usePersistedState.ts`, fail-open shallow-merge).
 
@@ -94,4 +94,4 @@ relevant one when a task touches that area:
   turn (dominates cacheRead), so terseness is the cheapest big token win. For pure
   locate-code work prefer the `caveman:cavecrew-investigator` agent (output is already
   ~60% smaller than vanilla `Explore`). Surfaced by the global `/kaizen` skill — see
-  `~/.claude/doctor-log.md`.
+  `~/.claude/session-analytics-log.md`.

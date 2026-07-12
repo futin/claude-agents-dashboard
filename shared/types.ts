@@ -99,8 +99,8 @@ export interface SessionDetail {
 }
 
 /**
- * Whole-session token accounting — the doctor post-mortem (`analyze.ts`,
- * `scripts/doctor.ts`, the `/doctor` skill). Unlike {@link Session}.tokens (the
+ * Whole-session token accounting — the kaizen post-mortem (`analyze.ts`,
+ * `scripts/session-analytics.ts`, the `/kaizen` skill). Unlike {@link Session}.tokens (the
  * latest context-window occupancy), these are summed across every main-agent
  * turn in the transcript.
  */
@@ -170,7 +170,7 @@ export interface ErrorSignals {
   userCorrections: number;
 }
 
-/** Payload of the doctor analyzer — whole-session facts, no judgment. */
+/** Payload of the session-analytics analyzer — whole-session facts, no judgment. */
 export interface SessionAnalysis {
   /** Transcript filename id (UUID) analyzed. */
   id: string;
@@ -201,24 +201,24 @@ export interface SessionAnalysis {
 
 /**
  * Analytics section (`GET /api/analytics`) — a read-only view of the sessions
- * the `/doctor` skill has logged. `~/.claude/doctor-log.md` (one line per
- * `/doctor` run) is the sole trigger: for each of the last N logged sessions the
+ * the `/kaizen` skill has logged. `~/.claude/session-analytics-log.md` (one line per
+ * `/kaizen` run) is the sole trigger: for each of the last N logged sessions the
  * server pairs the human/Claude-authored `lesson` with a live re-run of
  * {@link SessionAnalysis} (the deterministic analyzer). Nothing is written — a
- * session appears here only because `/doctor` logged it.
+ * session appears here only because `/kaizen` logged it.
  */
 export interface AnalyticsReport {
   sessionId: string;
-  /** basename of the session cwd, else the project tag from the doctor-log line. */
+  /** basename of the session cwd, else the project tag from the session-analytics-log line. */
   project: string;
   cwd: string | null;
   /** Models seen across the session (from the analysis), else []. */
   models: string[];
-  /** Date the `/doctor` run was logged (YYYY-MM-DD from the doctor-log line). */
+  /** Date the `/kaizen` run was logged (YYYY-MM-DD from the session-analytics-log line). */
   loggedAt: string;
   /** Deterministic post-mortem facts, re-run live; null if the transcript is gone. */
   analysis: SessionAnalysis | null;
-  /** The doctor-log lesson text (always present — it's what puts the session here). */
+  /** The session-analytics-log lesson text (always present — it's what puts the session here). */
   lesson: string;
 }
 

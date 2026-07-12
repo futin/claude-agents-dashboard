@@ -10,16 +10,16 @@ function test(name: string, fn: () => void): boolean {
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
 }
 
-/** Build a tmp fake home with a doctor-log + N transcripts. */
-function fakeHome(opts: { doctorLog?: string; transcripts?: Record<string, unknown[]> } = {}) {
+/** Build a tmp fake home with a session-analytics-log + N transcripts. */
+function fakeHome(opts: { sessionAnalyticsLog?: string; transcripts?: Record<string, unknown[]> } = {}) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-analytics-'));
   const projDir = path.join(home, '.claude', 'projects', '-tmp-demo');
   fs.mkdirSync(projDir, { recursive: true });
   for (const [id, records] of Object.entries(opts.transcripts ?? {})) {
     fs.writeFileSync(path.join(projDir, `${id}.jsonl`), records.map(r => JSON.stringify(r)).join('\n'));
   }
-  if (opts.doctorLog !== undefined) {
-    fs.writeFileSync(path.join(home, '.claude', 'doctor-log.md'), opts.doctorLog);
+  if (opts.sessionAnalyticsLog !== undefined) {
+    fs.writeFileSync(path.join(home, '.claude', 'session-analytics-log.md'), opts.sessionAnalyticsLog);
   }
   return home;
 }
@@ -48,7 +48,7 @@ export function run(): number {
 
   t('logged session → enriched report (lesson + live analysis)', () => {
     const home = fakeHome({
-      doctorLog: logLine('2026-07-12', 'demo', 'abc12345', 'keep it tight.'),
+      sessionAnalyticsLog: logLine('2026-07-12', 'demo', 'abc12345', 'keep it tight.'),
       transcripts: { 'abc12345-0000-1111-2222-333344445555': [turn('/tmp/demo', '2026-07-12T10:00:00.000Z')] }
     });
     const reports = listReports(5, { homeDir: home });
@@ -63,7 +63,7 @@ export function run(): number {
   });
 
   t('missing transcript → lesson kept, analysis null, project from log', () => {
-    const home = fakeHome({ doctorLog: logLine('2026-07-12', 'ghostproj', 'deadbeef', 'still logged.') });
+    const home = fakeHome({ sessionAnalyticsLog: logLine('2026-07-12', 'ghostproj', 'deadbeef', 'still logged.') });
     const reports = listReports(5, { homeDir: home });
     assert.equal(reports.length, 1);
     assert.equal(reports[0].analysis, null);
@@ -74,7 +74,7 @@ export function run(): number {
 
   t('newest-first, deduped by session, capped by limit', () => {
     const home = fakeHome({
-      doctorLog: [
+      sessionAnalyticsLog: [
         logLine('2026-07-10', 'demo', 'aaaa1111', 'old lesson for a.'),
         logLine('2026-07-11', 'demo', 'bbbb2222', 'lesson b.'),
         logLine('2026-07-12', 'demo', 'cccc3333', 'lesson c.'),
@@ -88,7 +88,7 @@ export function run(): number {
     assert.deepEqual(capped.map(r => r.sessionId), ['aaaa1111', 'cccc3333']);
   });
 
-  t('no doctor-log → []', () => {
+  t('no session-analytics-log → []', () => {
     const home = fakeHome({});
     assert.deepEqual(listReports(5, { homeDir: home }), []);
   });

@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { parseDoctorLog, lessonForSession } from '../server/lib/doctorLog.js';
+import { parseSessionAnalyticsLog, lessonForSession } from '../server/lib/sessionAnalyticsLog.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -8,7 +8,7 @@ function test(name: string, fn: () => void): boolean {
 }
 
 const SAMPLE = [
-  '# Doctor log',
+  '# Session analytics log',
   '',
   '- 2026-07-10 [proj-a] aaaa1111: 500k billable (2M ctx), top cost Read. Lesson: read less.',
   'garbage line that should be skipped',
@@ -18,12 +18,12 @@ const SAMPLE = [
 ].join('\n');
 
 export function run(): number {
-  console.log('doctorLog.test.ts');
+  console.log('sessionAnalyticsLog.test.ts');
   let ok = 0, n = 0;
   const t = (name: string, fn: () => void) => { n++; if (test(name, fn)) ok++; };
 
   t('parses well-formed lines, skips junk', () => {
-    const parsed = parseDoctorLog(SAMPLE);
+    const parsed = parseSessionAnalyticsLog(SAMPLE);
     assert.equal(parsed.length, 3);
     assert.deepEqual(parsed[0], { date: '2026-07-10', project: 'proj-a', idPrefix: 'aaaa1111', lesson: 'read less.' });
     assert.equal(parsed[1].idPrefix, 'd04e9b52');
@@ -31,25 +31,25 @@ export function run(): number {
   });
 
   t('empty / non-string input → []', () => {
-    assert.deepEqual(parseDoctorLog(''), []);
+    assert.deepEqual(parseSessionAnalyticsLog(''), []);
     // @ts-expect-error deliberately wrong type
-    assert.deepEqual(parseDoctorLog(null), []);
+    assert.deepEqual(parseSessionAnalyticsLog(null), []);
   });
 
   t('lessonForSession matches by id prefix', () => {
-    const parsed = parseDoctorLog(SAMPLE);
+    const parsed = parseSessionAnalyticsLog(SAMPLE);
     const l = lessonForSession(parsed, 'd04e9b52-1234-5678-9abc-def012345678');
     assert.equal(l, 'subagents should return terse findings.');
   });
 
   t('lessonForSession newest match wins', () => {
-    const parsed = parseDoctorLog(SAMPLE);
+    const parsed = parseSessionAnalyticsLog(SAMPLE);
     const l = lessonForSession(parsed, 'aaaa1111-0000-0000-0000-000000000000');
     assert.equal(l, 'newer lesson for aaaa.');
   });
 
   t('lessonForSession no match → null', () => {
-    const parsed = parseDoctorLog(SAMPLE);
+    const parsed = parseSessionAnalyticsLog(SAMPLE);
     assert.equal(lessonForSession(parsed, 'ffffffff-0000'), null);
     assert.equal(lessonForSession(parsed, ''), null);
   });

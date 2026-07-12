@@ -1,7 +1,7 @@
 # Analytics section (session post-mortems)
 
 An **Analytics** tab (third `SectionTabs` entry, persisted `dashboard.section`) shows the last
-N (default 5) sessions the **`/kaizen` skill has logged**. `~/.claude/doctor-log.md` (one line
+N (default 5) sessions the **`/kaizen` skill has logged**. `~/.claude/session-analytics-log.md` (one line
 per `/kaizen` run) is the **sole trigger** — a session appears here only because `/kaizen`
 logged it. For each logged session the server pairs the log line's **lesson** ("research &
 suggestions") with a **live re-run** of the deterministic analyzer (`server/lib/analyze.ts`
@@ -15,13 +15,13 @@ qualitative judgment is entirely `/kaizen`'s.
   the app keeps its read-only invariant.)
 - **Endpoint:** `GET /api/analytics` only (AnalyticsResponse: last N reports, newest-first).
   Handler `serveAnalytics` in `api.ts`; reader in `lib/analytics.ts` (`listReports`);
-  doctor-log parser in `lib/doctorLog.ts` (`parseDoctorLog` / `recentLessons`). Both unit-tested.
-- **How the reader works (`lib/analytics.ts`):** `readDoctorLog` → `recentLessons(limit)` (dedupe
+  session-analytics-log parser in `lib/sessionAnalyticsLog.ts` (`parseSessionAnalyticsLog` / `recentLessons`). Both unit-tested.
+- **How the reader works (`lib/analytics.ts`):** `readSessionAnalyticsLog` → `recentLessons(limit)` (dedupe
   by id-prefix, newest-first) → for each, resolve the transcript by **prefix-matching** the logged
   short id against `listTranscripts(projectsRoot())` (never joined into a path — same philosophy as
   `serveSessionDetail`; validated with `ID_RE`) → `analyzeSession(ref.file, ref.id)` live.
   `analysis` is `null` when the transcript is gone (card falls back to lesson-only); `project`
-  then falls back to the doctor-log project tag.
+  then falls back to the session-analytics-log project tag.
 - **No polling:** the list changes only when `/kaizen` runs. `AnalyticsView` is a `React.lazy`
   default export (own chunk); `useAnalytics` fetches on mount + manual ↻. `useAnalytics` is
   client-only.
