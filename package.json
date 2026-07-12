@@ -9,7 +9,8 @@
     "build": "vite build",
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
     "test": "tsx test/run-all.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "doctor": "tsx scripts/doctor.ts"
   },
   "engines": {
     "node": ">=18"

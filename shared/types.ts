@@ -99,6 +99,107 @@ export interface SessionDetail {
 }
 
 /**
+ * Whole-session token accounting — the doctor post-mortem (`analyze.ts`,
+ * `scripts/doctor.ts`, the `/doctor` skill). Unlike {@link Session}.tokens (the
+ * latest context-window occupancy), these are summed across every main-agent
+ * turn in the transcript.
+ */
+export interface TokenTotals {
+  input: number;
+  output: number;
+  cacheCreation: number;
+  cacheRead: number;
+  /**
+   * Raw sum of all four fields. A context-pressure signal, NOT a cost figure:
+   * cacheRead (replayed cached prompt) dominates it and is billed at ~10%.
+   */
+  combined: number;
+  /**
+   * input + output + cacheCreation — excludes the cheap replayed cacheRead, so
+   * it tracks real cost far better than `combined`. Lead with this.
+   */
+  billableApprox: number;
+}
+
+/** Distribution of tokens/errors across main-agent turns. */
+export interface PerTurn {
+  /** Assistant turns carrying a usage block (sidechain turns excluded). */
+  count: number;
+  /** Mean `combined` tokens per turn. */
+  avgCombined: number;
+  /** Largest single-turn `combined`. */
+  maxCombined: number;
+  /** 0-based index (in assistant-turn order) of the `maxCombined` turn, or -1. */
+  maxTurnIndex: number;
+}
+
+/** Per-tool usage in the main agent. Counts/errors are exact; tokens are approximate. */
+export interface ToolStat {
+  /** Tool name (Bash, Read, Edit, Task, …). */
+  tool: string;
+  /** Invocation count (exact). */
+  count: number;
+  /** Summed wall time (tool_use ts → matching tool_result ts) in ms. Includes model latency. */
+  durationMs: number;
+  /** tool_results flagged `is_error` / `<tool_use_error>` for this tool (exact). */
+  errors: number;
+  /**
+   * Rough token attribution: each turn's `output_tokens` split evenly across
+   * that turn's tool_use blocks, summed per tool. APPROXIMATE — the transcript
+   * carries no per-tool token field. Never includes input/cache tokens.
+   */
+  approxOutputTokens: number;
+}
+
+/** Aggregate over the subagents ({@link AgentJob}) a session launched. */
+export interface SubagentTotals {
+  count: number;
+  /** Sum of known `tokens` — exact, and separate from the main-agent totals. */
+  tokens: number;
+  /** Subagents whose token total is unknown (still running / old transcript). */
+  unknownTokenCount: number;
+}
+
+/** Deterministic accuracy-adjacent signals. All are heuristics — the skill judges. */
+export interface ErrorSignals {
+  /** tool_result blocks with `is_error` or `<tool_use_error>` (exact). */
+  toolErrors: number;
+  /** A tool re-invoked after it errored — a rough rework signal. */
+  retries: number;
+  /** Human turns matching a correction keyword. Noisy lower bound, not a score. */
+  userCorrections: number;
+}
+
+/** Payload of the doctor analyzer — whole-session facts, no judgment. */
+export interface SessionAnalysis {
+  /** Transcript filename id (UUID) analyzed. */
+  id: string;
+  /** Absolute transcript path. */
+  file: string;
+  /** Session cwd from the transcript, else null. */
+  cwd: string | null;
+  /** Models seen across the session (usually one). */
+  models: string[];
+  /** First / last record timestamps and elapsed span (null when unknown). */
+  startedAt: string | null;
+  endedAt: string | null;
+  durationMs: number | null;
+  /** Main-agent token totals (sidechain/subagent turns excluded to avoid double-count). */
+  totals: TokenTotals;
+  perTurn: PerTurn;
+  /** Per-tool main-agent usage, priciest (approxOutputTokens) first. */
+  byTool: ToolStat[];
+  /** Subagents launched (from `readAgents`), newest-first. */
+  bySubagent: AgentJob[];
+  subagentTotals: SubagentTotals;
+  /** server_tool_use counts (Anthropic-side web search / fetch). */
+  serverTools: { webSearch: number; webFetch: number };
+  errorSignals: ErrorSignals;
+  /** Fixed interpretation caveats (cacheRead framing, approx tokens, …). */
+  notes: string[];
+}
+
+/**
  * Management section (`GET /api/management*`) — read-only view over Claude
  * config on disk: skills, agents, commands, rules, hooks, memory, settings,
  * and installed plugins, per scope (global `~/.claude` or one project).

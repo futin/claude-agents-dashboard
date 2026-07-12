@@ -212,3 +212,10 @@ The Toolbar's `view` object (`projects`, `statuses`, `window`, `sortKey`, `sortD
   is verbatim; keep class names stable so styling holds. React auto-escapes (no `esc()`).
 - Backend is zero-runtime-dep by design (only Node built-ins). Keep new deps out of `server/`.
 - `client/dist/` and `.env` are gitignored.
+- **Subagents return terse findings, not prose.** When spawning Explore/Plan/Task
+  subagents, instruct them to answer with compact `file:line` tables + short conclusions —
+  not narrative reports. Verbose subagent output replays through the parent context every
+  turn (dominates cacheRead), so terseness is the cheapest big token win. For pure
+  locate-code work prefer the `caveman:cavecrew-investigator` agent (output is already
+  ~60% smaller than vanilla `Explore`). Surfaced by the global `/doctor` skill — see
+  `~/.claude/doctor-log.md`.
