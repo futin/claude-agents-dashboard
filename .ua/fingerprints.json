@@ -1,0 +1,2670 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "f69d21ac43b6b5c930c14641ca0267764182ab42",
+  "generatedAt": "2026-07-12T15:29:35.197Z",
+  "files": {
+    ".claude/CLAUDE.md": {
+      "filePath": ".claude/CLAUDE.md",
+      "contentHash": "b2d6903756894a416fab4684a8eabbbbd89eb684fe17ca503c3a9feb399fb8f3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 258,
+      "hasStructuralAnalysis": true
+    },
+    ".dockerignore": {
+      "filePath": ".dockerignore",
+      "contentHash": "5e21819973be33b40d734ec60a2562d0fcd3f13ea5852e619e6e886447025164",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": false
+    },
+    ".env.example": {
+      "filePath": ".env.example",
+      "contentHash": "1f9fe0fb0bedd5e87920d63d60e7ed35fe6386321c7236cb89618bf201c39ee2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 24,
+      "hasStructuralAnalysis": true
+    },
+    ".ua/.understandignore": {
+      "filePath": ".ua/.understandignore",
+      "contentHash": "3e65a0a83a5d8747bd43e0a4657cd285f597c711a8e14a12f50f2a2967034f53",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 54,
+      "hasStructuralAnalysis": false
+    },
+    ".ua/intermediate/scan-result.json": {
+      "filePath": ".ua/intermediate/scan-result.json",
+      "contentHash": "aed0e79c7cd2b17708e8275e94f4b6b3586adaf4902228959351b57738c2eb8f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 546,
+      "hasStructuralAnalysis": true
+    },
+    ".ua/tmp/ua-import-map-input.json": {
+      "filePath": ".ua/tmp/ua-import-map-input.json",
+      "contentHash": "0b9d560616454fcebd855f422bbfa9fb12536a851d3581d2300192e8ee5139e8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 300,
+      "hasStructuralAnalysis": true
+    },
+    ".ua/tmp/ua-import-map-output.json": {
+      "filePath": ".ua/tmp/ua-import-map-output.json",
+      "contentHash": "07a19f485a22d3e68ea841d819b8ad263943d731e030a578842b43c48fabb8a4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 173,
+      "hasStructuralAnalysis": true
+    },
+    ".ua/tmp/ua-scan-files.json": {
+      "filePath": ".ua/tmp/ua-scan-files.json",
+      "contentHash": "e1e9411c5d5b1357e190e2364c139018dd1f622c85d9bcc3da19634d54019492",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 383,
+      "hasStructuralAnalysis": true
+    },
+    "client/index.html": {
+      "filePath": "client/index.html",
+      "contentHash": "28fe51c22c625a565b1d62541498551fe749c521b2a36612bd866551dd8ce91e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": false
+    },
+    "client/src/App.tsx": {
+      "filePath": "client/src/App.tsx",
+      "contentHash": "a879da653e98ab758b1a293520f027df81031cf1879147a66fcf39265d90527f",
+      "functions": [
+        {
+          "name": "App",
+          "params": [],
+          "exported": true,
+          "lineCount": 31
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "lazy",
+            "Suspense",
+            "useCallback"
+          ]
+        },
+        {
+          "source": "./components/SectionTabs",
+          "specifiers": [
+            "SectionTabs",
+            "Section"
+          ]
+        },
+        {
+          "source": "./components/SessionsView",
+          "specifiers": [
+            "SessionsView"
+          ]
+        },
+        {
+          "source": "./hooks/usePersistedState",
+          "specifiers": [
+            "usePersistedState"
+          ]
+        }
+      ],
+      "exports": [
+        "App"
+      ],
+      "totalLines": 43,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/Header.tsx": {
+      "filePath": "client/src/components/Header.tsx",
+      "contentHash": "3904d3127a49494504d4686e7194f049e07e376b956d5bbd8d8571d14a317dbb",
+      "functions": [
+        {
+          "name": "Header",
+          "params": [
+            "{ data }"
+          ],
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "UsageExpired",
+          "params": [],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "UsageBars",
+          "params": [
+            "{ usage }"
+          ],
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "UsageBar",
+          "params": [
+            "{ label, rl }"
+          ],
+          "exported": false,
+          "lineCount": 19
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../../../shared/types",
+          "specifiers": [
+            "SessionsResponse",
+            "RateLimit",
+            "UsageLimits"
+          ]
+        },
+        {
+          "source": "../lib/format",
+          "specifiers": [
+            "formatResetTime"
+          ]
+        }
+      ],
+      "exports": [
+        "Header"
+      ],
+      "totalLines": 81,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/management/DetailPane.tsx": {
+      "filePath": "client/src/components/management/DetailPane.tsx",
+      "contentHash": "3bfe68f7859817d8f063b0c53df0eb85ec21fec9c7c4fea513e1520614bd2d33",
+      "functions": [
+        {
+          "name": "typeLabel",
+          "params": [
+            "title"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "DetailPane",
+          "params": [
+            "{ entry, groupTitle }"
+          ],
+          "exported": true,
+          "lineCount": 35
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./FileViewer",
+          "specifiers": [
+            "FileViewer"
+          ]
+        },
+        {
+          "source": "./HookDetail",
+          "specifiers": [
+            "HookDetail"
+          ]
+        },
+        {
+          "source": "./MarkdownViewer",
+          "specifiers": [
+            "MarkdownViewer"
+          ]
+        },
+        {
+          "source": "../../lib/managementEntries",
+          "specifiers": [
+            "Entry"
+          ]
+        }
+      ],
+      "exports": [
+        "DetailPane"
+      ],
+      "totalLines": 54,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/management/FileViewer.tsx": {
+      "filePath": "client/src/components/management/FileViewer.tsx",
+      "contentHash": "dcdb5541c7edbd7444d8f809974fe415852f26b40ac9e2000bee2a5f193a9f51",
+      "functions": [
+        {
+          "name": "prettyJson",
+          "params": [
+            "content"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "FileViewer",
+          "params": [
+            "{ path, pretty = false }"
+          ],
+          "exported": true,
+          "lineCount": 18
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../../hooks/useManagement",
+          "specifiers": [
+            "useFileContent"
+          ]
+        },
+        {
+          "source": "../../lib/format",
+          "specifiers": [
+            "fmtTok"
+          ]
+        }
+      ],
+      "exports": [
+        "FileViewer"
+      ],
+      "totalLines": 37,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/management/HookDetail.tsx": {
+      "filePath": "client/src/components/management/HookDetail.tsx",
+      "contentHash": "3a30974a691d866738f11ccaa348f0d5dec699caa07c2297d8d4699f040cc108",
+      "functions": [
+        {
+          "name": "HookDetail",
+          "params": [
+            "{ hook }"
+          ],
+          "exported": true,
+          "lineCount": 30
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useState"
+          ]
+        },
+        {
+          "source": "./FileViewer",
+          "specifiers": [
+            "FileViewer"
+          ]
+        },
+        {
+          "source": "../../../../shared/types",
+          "specifiers": [
+            "HookInfo"
+          ]
+        }
+      ],
+      "exports": [
+        "HookDetail"
+      ],
+      "totalLines": 46,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/management/ItemList.tsx": {
+      "filePath": "client/src/components/management/ItemList.tsx",
+      "contentHash": "d35573ff66eed571bb12915b6affecc1d9f49d4422fa2aeccc2fbac9a84d752f",
+      "functions": [
+        {
+          "name": "collapsedByDefault",
+          "params": [
+            "groupTitle",
+            "subgroup"
+          ],
+          "returnType": "boolean",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "badgeText",
+          "params": [
+            "badge"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "ItemList",
+          "params": [
+            "{ groups, allGroups, filter, onFilter, selectedKey, onSelect }"
+          ],
+          "exported": true,
+          "lineCount": 79
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useMemo",
+            "ReactNode"
+          ]
+        },
+        {
+          "source": "../../hooks/usePersistedState",
+          "specifiers": [
+            "usePersistedState"
+          ]
+        },
+        {
+          "source": "../../lib/managementEntries",
+          "specifiers": [
+            "Entry",
+            "EntryGroup"
+          ]
+        }
+      ],
+      "exports": [
+        "ItemList"
+      ],
+      "totalLines": 112,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/management/ManagementView.tsx": {
+      "filePath": "client/src/components/management/ManagementView.tsx",
+      "contentHash": "aa65ae2b9e3d0675bc4ef86074c1abbaed2f41e94ef5f234316ac4497b6a3e75",
+      "functions": [
+        {
+          "name": "ManagementView",
+          "params": [],
+          "exported": true,
+          "lineCount": 63
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useMemo",
+            "useState"
+          ]
+        },
+        {
+          "source": "./DetailPane",
+          "specifiers": [
+            "DetailPane"
+          ]
+        },
+        {
+          "source": "./ItemList",
+          "specifiers": [
+            "ItemList"
+          ]
+        },
+        {
+          "source": "./ScopeMenu",
+          "specifiers": [
+            "ScopeMenu"
+          ]
+        },
+        {
+          "source": "../../hooks/useManagement",
+          "specifiers": [
+            "useManagementIndex",
+            "useProjectScope"
+          ]
+        },
+        {
+          "source": "../../hooks/usePersistedState",
+          "specifiers": [
+            "usePersistedState"
+          ]
+        },
+        {
+          "source": "../../lib/managementEntries",
+          "specifiers": [
+            "buildEntries",
+            "filterEntries"
+          ]
+        }
+      ],
+      "exports": [
+        "ManagementView"
+      ],
+      "totalLines": 79,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/management/MarkdownViewer.tsx": {
+      "filePath": "client/src/components/management/MarkdownViewer.tsx",
+      "contentHash": "d6b16e626b8ad45845e028b98b87437ea0d83baca36dd8878994bb05289578b9",
+      "functions": [
+        {
+          "name": "MarkdownViewer",
+          "params": [
+            "{ path }"
+          ],
+          "exported": true,
+          "lineCount": 30
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "Fragment"
+          ]
+        },
+        {
+          "source": "../../../../shared/frontmatter",
+          "specifiers": [
+            "parseFrontmatter"
+          ]
+        },
+        {
+          "source": "../../hooks/useManagement",
+          "specifiers": [
+            "useFileContent"
+          ]
+        },
+        {
+          "source": "../../lib/format",
+          "specifiers": [
+            "fmtTok"
+          ]
+        }
+      ],
+      "exports": [
+        "MarkdownViewer"
+      ],
+      "totalLines": 45,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/management/ScopeMenu.tsx": {
+      "filePath": "client/src/components/management/ScopeMenu.tsx",
+      "contentHash": "999848a40e4155f2de314f4e63c316e780be29ebba67034680a0e1817c4e542d",
+      "functions": [
+        {
+          "name": "ScopeMenu",
+          "params": [
+            "{ projects, selected, onSelect }"
+          ],
+          "exported": true,
+          "lineCount": 23
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../../../../shared/types",
+          "specifiers": [
+            "ProjectRef"
+          ]
+        }
+      ],
+      "exports": [
+        "ScopeMenu"
+      ],
+      "totalLines": 33,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/MultiSelect.tsx": {
+      "filePath": "client/src/components/MultiSelect.tsx",
+      "contentHash": "689a81eddbb59fcae802f95983196dba0dfdc314e03ab6fecbbd8a84dba4ef44",
+      "functions": [
+        {
+          "name": "MultiSelect",
+          "params": [
+            "{\n  label,\n  options,\n  selected,\n  onChange\n}"
+          ],
+          "exported": true,
+          "lineCount": 76
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useEffect",
+            "useRef",
+            "useState"
+          ]
+        }
+      ],
+      "exports": [
+        "MultiSelect"
+      ],
+      "totalLines": 89,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/SectionTabs.tsx": {
+      "filePath": "client/src/components/SectionTabs.tsx",
+      "contentHash": "5c77574f42a6ede584cdfe067a824ec2a74c78a265d02d481a32e67656ae5658",
+      "functions": [
+        {
+          "name": "SectionTabs",
+          "params": [
+            "{ section, onChange }"
+          ],
+          "exported": true,
+          "lineCount": 24
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "SectionTabs"
+      ],
+      "totalLines": 33,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/SessionDetail.tsx": {
+      "filePath": "client/src/components/SessionDetail.tsx",
+      "contentHash": "419c203a030deb61509d6061821a3debc42217a488890ef352d641696e58815d",
+      "functions": [
+        {
+          "name": "timeRange",
+          "params": [
+            "agents",
+            "now"
+          ],
+          "returnType": "{ min: number; span: number } | null",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "agentMeta",
+          "params": [
+            "a",
+            "now"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "SessionDetail",
+          "params": [
+            "{ id }"
+          ],
+          "exported": true,
+          "lineCount": 67
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../hooks/useSessionDetail",
+          "specifiers": [
+            "useSessionDetail"
+          ]
+        },
+        {
+          "source": "../lib/format",
+          "specifiers": [
+            "fmtDuration",
+            "fmtTok"
+          ]
+        },
+        {
+          "source": "../../../shared/types",
+          "specifiers": [
+            "AgentJob"
+          ]
+        }
+      ],
+      "exports": [
+        "SessionDetail"
+      ],
+      "totalLines": 108,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/SessionList.tsx": {
+      "filePath": "client/src/components/SessionList.tsx",
+      "contentHash": "07e50bcdf4347a9d02aeb42b31c997bad106b055345a198bd03b72855dfaa367",
+      "functions": [
+        {
+          "name": "SessionList",
+          "params": [
+            "{ sessions, onInspect }"
+          ],
+          "exported": true,
+          "lineCount": 39
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useState"
+          ]
+        },
+        {
+          "source": "../../../shared/types",
+          "specifiers": [
+            "Session"
+          ]
+        },
+        {
+          "source": "./SessionRow",
+          "specifiers": [
+            "SessionRow"
+          ]
+        }
+      ],
+      "exports": [
+        "SessionList"
+      ],
+      "totalLines": 51,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/SessionRow.tsx": {
+      "filePath": "client/src/components/SessionRow.tsx",
+      "contentHash": "e04b5e01b848bea72fdc29d44f2cf4f3bf1320807d78bdd0b028796ad4aa4cb2",
+      "functions": [
+        {
+          "name": "SessionRow",
+          "params": [
+            "{ s, selected, onToggle, onInspect }"
+          ],
+          "exported": true,
+          "lineCount": 58
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../../../shared/types",
+          "specifiers": [
+            "Session"
+          ]
+        },
+        {
+          "source": "../lib/format",
+          "specifiers": [
+            "fmtTok",
+            "formatAgo"
+          ]
+        },
+        {
+          "source": "./SessionDetail",
+          "specifiers": [
+            "SessionDetail"
+          ]
+        },
+        {
+          "source": "../lib/filterSort",
+          "specifiers": [
+            "STATUS_LABEL"
+          ]
+        }
+      ],
+      "exports": [
+        "SessionRow"
+      ],
+      "totalLines": 73,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/SessionsView.tsx": {
+      "filePath": "client/src/components/SessionsView.tsx",
+      "contentHash": "e94b5330a89692f5e258aa5cf5167dc86fd3217beac7f2b07c73bd0873548979",
+      "functions": [
+        {
+          "name": "SessionsView",
+          "params": [
+            "{ onInspect }"
+          ],
+          "exported": true,
+          "lineCount": 22
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useMemo"
+          ]
+        },
+        {
+          "source": "./Header",
+          "specifiers": [
+            "Header"
+          ]
+        },
+        {
+          "source": "./SessionList",
+          "specifiers": [
+            "SessionList"
+          ]
+        },
+        {
+          "source": "./Toolbar",
+          "specifiers": [
+            "Toolbar"
+          ]
+        },
+        {
+          "source": "../hooks/usePersistedState",
+          "specifiers": [
+            "usePersistedState"
+          ]
+        },
+        {
+          "source": "../hooks/useSessions",
+          "specifiers": [
+            "useSessions"
+          ]
+        },
+        {
+          "source": "../lib/filterSort",
+          "specifiers": [
+            "applyView",
+            "DEFAULT_VIEW",
+            "View"
+          ]
+        }
+      ],
+      "exports": [
+        "SessionsView"
+      ],
+      "totalLines": 37,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/Toolbar.tsx": {
+      "filePath": "client/src/components/Toolbar.tsx",
+      "contentHash": "2600993d2625ba7c324142af9a2b72516ed36154a2ba3b71544009f4cf212654",
+      "functions": [
+        {
+          "name": "Toolbar",
+          "params": [
+            "{\n  sessions,\n  view,\n  onChange\n}"
+          ],
+          "exported": true,
+          "lineCount": 52
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../../../shared/types",
+          "specifiers": [
+            "Session"
+          ]
+        },
+        {
+          "source": "../lib/filterSort",
+          "specifiers": [
+            "ACTIVITY_WINDOWS",
+            "STATUS_LABEL",
+            "distinctProjects",
+            "SortKey",
+            "View"
+          ]
+        },
+        {
+          "source": "./MultiSelect",
+          "specifiers": [
+            "MultiSelect"
+          ]
+        }
+      ],
+      "exports": [
+        "Toolbar"
+      ],
+      "totalLines": 73,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/hooks/useManagement.ts": {
+      "filePath": "client/src/hooks/useManagement.ts",
+      "contentHash": "7be44ef43593a4c1eabcd54218111e0c4d75299df5a8c21339d299c325b50159",
+      "functions": [
+        {
+          "name": "useManagementIndex",
+          "params": [
+            "refreshKey"
+          ],
+          "returnType": "IndexState",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "useProjectScope",
+          "params": [
+            "dirName",
+            "refreshKey"
+          ],
+          "returnType": "ScopeConfig | null",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "useFileContent",
+          "params": [
+            "path"
+          ],
+          "returnType": "FileState",
+          "exported": true,
+          "lineCount": 35
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useEffect",
+            "useRef",
+            "useState"
+          ]
+        },
+        {
+          "source": "../../../shared/types",
+          "specifiers": [
+            "FileContent",
+            "ManagementIndex",
+            "ScopeConfig"
+          ]
+        }
+      ],
+      "exports": [
+        "useManagementIndex",
+        "useProjectScope",
+        "useFileContent"
+      ],
+      "totalLines": 102,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/hooks/usePersistedState.ts": {
+      "filePath": "client/src/hooks/usePersistedState.ts",
+      "contentHash": "43d985405ab21240d1f86d2e4a8bf8df8e8c2714085619e2551994d642b5c932",
+      "functions": [
+        {
+          "name": "usePersistedState",
+          "params": [
+            "key",
+            "fallback"
+          ],
+          "returnType": "[T, (v: T) => void]",
+          "exported": true,
+          "lineCount": 24
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useEffect",
+            "useState"
+          ]
+        }
+      ],
+      "exports": [
+        "usePersistedState"
+      ],
+      "totalLines": 34,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/hooks/useSessionDetail.ts": {
+      "filePath": "client/src/hooks/useSessionDetail.ts",
+      "contentHash": "b60d0c7627dc9b5bedf10019ef3b3d9d45f36522949ec25f6d13b36c54a2fe7d",
+      "functions": [
+        {
+          "name": "useSessionDetail",
+          "params": [
+            "id"
+          ],
+          "returnType": "SessionDetail | null",
+          "exported": true,
+          "lineCount": 31
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useEffect",
+            "useState"
+          ]
+        },
+        {
+          "source": "../../../shared/types",
+          "specifiers": [
+            "SessionDetail"
+          ]
+        }
+      ],
+      "exports": [
+        "useSessionDetail"
+      ],
+      "totalLines": 43,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/hooks/useSessions.ts": {
+      "filePath": "client/src/hooks/useSessions.ts",
+      "contentHash": "b1a3be8f36ec845e9061807dec59a57557fde1cce0266e8ffd5ab885d451d769",
+      "functions": [
+        {
+          "name": "useSessions",
+          "params": [],
+          "returnType": "SessionsState",
+          "exported": true,
+          "lineCount": 27
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useEffect",
+            "useRef",
+            "useState"
+          ]
+        },
+        {
+          "source": "../../../shared/types",
+          "specifiers": [
+            "SessionsResponse"
+          ]
+        }
+      ],
+      "exports": [
+        "useSessions"
+      ],
+      "totalLines": 41,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/lib/filterSort.ts": {
+      "filePath": "client/src/lib/filterSort.ts",
+      "contentHash": "6c62a8fb9bbcc47fe0a350a10a7569da787d58b39cc35234a802cc59bc1723c3",
+      "functions": [
+        {
+          "name": "distinctProjects",
+          "params": [
+            "sessions"
+          ],
+          "returnType": "string[]",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "compare",
+          "params": [
+            "a",
+            "b",
+            "key"
+          ],
+          "returnType": "number",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "applyView",
+          "params": [
+            "sessions",
+            "view",
+            "nowMs"
+          ],
+          "returnType": "Session[]",
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../../../shared/types",
+          "specifiers": [
+            "Session"
+          ]
+        }
+      ],
+      "exports": [
+        "STATUS_LABEL",
+        "STATUS_ORDER",
+        "ACTIVITY_WINDOWS",
+        "DEFAULT_VIEW",
+        "distinctProjects",
+        "applyView"
+      ],
+      "totalLines": 90,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/lib/format.ts": {
+      "filePath": "client/src/lib/format.ts",
+      "contentHash": "8d9b743c5299cf7b5dd2bd24a2e0afd27a5b45d636189bf39b275fa72d400d55",
+      "functions": [
+        {
+          "name": "fmtTok",
+          "params": [
+            "n"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "fmtDuration",
+          "params": [
+            "ms"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "formatAgo",
+          "params": [
+            "ms"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "formatResetTime",
+          "params": [
+            "iso"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "fmtTok",
+        "fmtDuration",
+        "formatAgo",
+        "formatResetTime"
+      ],
+      "totalLines": 42,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/lib/managementEntries.ts": {
+      "filePath": "client/src/lib/managementEntries.ts",
+      "contentHash": "8aa17a7994ec445a0689437594264523685d769cf9ba901eab6ddbad59187732",
+      "functions": [
+        {
+          "name": "fileKind",
+          "params": [
+            "path"
+          ],
+          "returnType": "FileKind",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "itemSubgroup",
+          "params": [
+            "source"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "bySubgroupThenLabel",
+          "params": [
+            "a",
+            "b"
+          ],
+          "returnType": "number",
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "fromItems",
+          "params": [
+            "items",
+            "subgrouped"
+          ],
+          "returnType": "Entry[]",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "fromHooks",
+          "params": [
+            "hooks"
+          ],
+          "returnType": "Entry[]",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "buildEntries",
+          "params": [
+            "scope"
+          ],
+          "returnType": "EntryGroup[]",
+          "exported": true,
+          "lineCount": 43
+        },
+        {
+          "name": "filterEntries",
+          "params": [
+            "groups",
+            "query"
+          ],
+          "returnType": "EntryGroup[]",
+          "exported": true,
+          "lineCount": 12
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../../../shared/types",
+          "specifiers": [
+            "ConfigItem",
+            "HookInfo",
+            "ScopeConfig"
+          ]
+        }
+      ],
+      "exports": [
+        "buildEntries",
+        "filterEntries"
+      ],
+      "totalLines": 144,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/main.tsx": {
+      "filePath": "client/src/main.tsx",
+      "contentHash": "58a0ec251c031cd55a2962614a529e4bea8cdac853d07d345bd39c50db8a66cd",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "StrictMode"
+          ]
+        },
+        {
+          "source": "react-dom/client",
+          "specifiers": [
+            "createRoot"
+          ]
+        },
+        {
+          "source": "./App",
+          "specifiers": [
+            "App"
+          ]
+        },
+        {
+          "source": "./styles.css",
+          "specifiers": []
+        }
+      ],
+      "exports": [],
+      "totalLines": 12,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/styles.css": {
+      "filePath": "client/src/styles.css",
+      "contentHash": "4e0e35a0e640cfaa278ef6ad06611f75be4ac5c4fa2a69bf5a1d86cbc0f94d43",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 216,
+      "hasStructuralAnalysis": false
+    },
+    "docker-compose.dev.yml": {
+      "filePath": "docker-compose.dev.yml",
+      "contentHash": "bbd76d49cd60cb08707ef2804694d2ed13dd8c5b6c7dd045eb6c87c1eb3d88fb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "docker-compose.yml": {
+      "filePath": "docker-compose.yml",
+      "contentHash": "de18204efd153de6ac1b5235aa2a3f358f9151e89404c806bd6c784807b254c2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "Dockerfile": {
+      "filePath": "Dockerfile",
+      "contentHash": "f96bf1e0c79aac852cf5fa8c9d1640b73cbabdcbddda12b3892ab1d961eabd5c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 35,
+      "hasStructuralAnalysis": true
+    },
+    "docs/ideas/agent-tracking-cache.md": {
+      "filePath": "docs/ideas/agent-tracking-cache.md",
+      "contentHash": "5f323564b26d93db97339df0158a27bb4f1b73f1dc5a911f0c041571d7d62c43",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 120,
+      "hasStructuralAnalysis": true
+    },
+    "docs/learning/session-and-agent-tracking.md": {
+      "filePath": "docs/learning/session-and-agent-tracking.md",
+      "contentHash": "cb68ac3cb8e3e4cec7ae717b2fc5d562039d56081b6b566036f2c704edd99dda",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 165,
+      "hasStructuralAnalysis": true
+    },
+    "docs/plans/2026-07-06-usage-token-refresh-removal.md": {
+      "filePath": "docs/plans/2026-07-06-usage-token-refresh-removal.md",
+      "contentHash": "51523d0323ef54e01d5c5cc1488c09f32b74d67a4c0400d0420996dc78da1516",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 76,
+      "hasStructuralAnalysis": true
+    },
+    "docs/superpowers/plans/2026-07-01-usage-token-refresh.md": {
+      "filePath": "docs/superpowers/plans/2026-07-01-usage-token-refresh.md",
+      "contentHash": "f2f6bbc65f77708a3081106f4036a3707fab198e27761473656c3af770ffc682",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 898,
+      "hasStructuralAnalysis": true
+    },
+    "docs/superpowers/specs/2026-07-01-usage-token-refresh-design.md": {
+      "filePath": "docs/superpowers/specs/2026-07-01-usage-token-refresh-design.md",
+      "contentHash": "24899dfb815fb5c9f53b45313a7fc0c3e36e1a4698f6b336ba4eec219124aa1c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 120,
+      "hasStructuralAnalysis": true
+    },
+    "package.json": {
+      "filePath": "package.json",
+      "contentHash": "6dca627996aa9470dd2376ca2b130c0d1830d5747619d4bf7515e2dd0683af1e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 42,
+      "hasStructuralAnalysis": true
+    },
+    "README.md": {
+      "filePath": "README.md",
+      "contentHash": "8432a8c782dad8000d49c7bc40be2de4749feef9c5a749cc7b689b73b1ef38ed",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 225,
+      "hasStructuralAnalysis": true
+    },
+    "server/api.ts": {
+      "filePath": "server/api.ts",
+      "contentHash": "42582225c4fa535fded593fa0417a385d3b0541d6a070700cd3f8f58af388747",
+      "functions": [
+        {
+          "name": "serveSessions",
+          "params": [
+            "config",
+            "res"
+          ],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "serveSessionDetail",
+          "params": [
+            "id",
+            "res"
+          ],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "sendJson",
+          "params": [
+            "res",
+            "code",
+            "body"
+          ],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "emptyScope",
+          "params": [
+            "scope",
+            "root"
+          ],
+          "returnType": "ScopeConfig",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "serveManagementIndex",
+          "params": [
+            "config",
+            "res"
+          ],
+          "returnType": "Promise<void>",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "serveManagementProject",
+          "params": [
+            "config",
+            "dirName",
+            "res"
+          ],
+          "returnType": "Promise<void>",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "serveManagementFile",
+          "params": [
+            "config",
+            "rawPath",
+            "res"
+          ],
+          "returnType": "Promise<void>",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "serveAnalytics",
+          "params": [
+            "config",
+            "res"
+          ],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "serveAnalyticsInspect",
+          "params": [
+            "id",
+            "res"
+          ],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 12
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:http",
+          "specifiers": [
+            "ServerResponse"
+          ]
+        },
+        {
+          "source": "./lib/scan.js",
+          "specifiers": [
+            "scanSessions",
+            "listTranscripts",
+            "projectsRoot"
+          ]
+        },
+        {
+          "source": "./lib/agents-cache.js",
+          "specifiers": [
+            "readAgentsCached"
+          ]
+        },
+        {
+          "source": "./lib/usage.js",
+          "specifiers": [
+            "getCachedUsageState"
+          ]
+        },
+        {
+          "source": "./lib/management.js",
+          "specifiers": [
+            "claudeHome",
+            "collectServablePaths",
+            "listRecentProjects",
+            "readGlobalScope",
+            "readProjectScope",
+            "readServableFile",
+            "resolveProject"
+          ]
+        },
+        {
+          "source": "./lib/analytics-store.js",
+          "specifiers": [
+            "generateReport",
+            "listReports"
+          ]
+        },
+        {
+          "source": "./lib/config.js",
+          "specifiers": [
+            "Config"
+          ]
+        },
+        {
+          "source": "../shared/types.js",
+          "specifiers": [
+            "AnalyticsReport",
+            "AnalyticsResponse",
+            "ManagementIndex",
+            "ScopeConfig",
+            "SessionsResponse",
+            "SessionDetail"
+          ]
+        }
+      ],
+      "exports": [
+        "serveSessions",
+        "serveSessionDetail",
+        "serveManagementIndex",
+        "serveManagementProject",
+        "serveManagementFile",
+        "serveAnalytics",
+        "serveAnalyticsInspect"
+      ],
+      "totalLines": 192,
+      "hasStructuralAnalysis": true
+    },
+    "server/index.ts": {
+      "filePath": "server/index.ts",
+      "contentHash": "2150671c7491d577d3cc060bba3c3aabd07e3b355ae620c95054d11d22685e91",
+      "functions": [
+        {
+          "name": "serveStatic",
+          "params": [
+            "urlPath",
+            "res"
+          ],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 18
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:http",
+          "specifiers": [
+            "http"
+          ]
+        },
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "node:child_process",
+          "specifiers": [
+            "spawn"
+          ]
+        },
+        {
+          "source": "./lib/config.js",
+          "specifiers": [
+            "loadConfig"
+          ]
+        },
+        {
+          "source": "./api.js",
+          "specifiers": [
+            "serveSessions",
+            "serveSessionDetail",
+            "serveManagementIndex",
+            "serveManagementProject",
+            "serveManagementFile",
+            "serveAnalytics",
+            "serveAnalyticsInspect"
+          ]
+        }
+      ],
+      "exports": [
+        "server",
+        "config"
+      ],
+      "totalLines": 115,
+      "hasStructuralAnalysis": true
+    },
+    "server/lib/agents-cache.ts": {
+      "filePath": "server/lib/agents-cache.ts",
+      "contentHash": "0fab01b5dcb156ca6ffdf495e48b2798a3724536ecc538f36b9fd6cedaf20324",
+      "functions": [
+        {
+          "name": "freshEntry",
+          "params": [],
+          "returnType": "CacheEntry",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "consumeLine",
+          "params": [
+            "state",
+            "lineBuf"
+          ],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "evictIfNeeded",
+          "params": [],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "readAgentsCached",
+          "params": [
+            "filePath"
+          ],
+          "returnType": "AgentJob[] | null",
+          "exported": true,
+          "lineCount": 74
+        },
+        {
+          "name": "_resetAgentsCache",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_agentsCacheSize",
+          "params": [],
+          "returnType": "number",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "../../shared/types.js",
+          "specifiers": [
+            "AgentJob"
+          ]
+        },
+        {
+          "source": "./agents.js",
+          "specifiers": [
+            "createScanState",
+            "parseRecordEvents",
+            "applyEvent",
+            "toAgentJobs",
+            "readAgents",
+            "ScanState"
+          ]
+        }
+      ],
+      "exports": [
+        "readAgentsCached",
+        "_resetAgentsCache",
+        "_agentsCacheSize"
+      ],
+      "totalLines": 152,
+      "hasStructuralAnalysis": true
+    },
+    "server/lib/agents.ts": {
+      "filePath": "server/lib/agents.ts",
+      "contentHash": "36be1b09dc396eefce5a2adfc15b3883a550dc3a8c41495e1812473efc799fec",
+      "functions": [
+        {
+          "name": "isAgentLaunch",
+          "params": [
+            "b"
+          ],
+          "returnType": "boolean",
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "contentText",
+          "params": [
+            "content"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "toolResultText",
+          "params": [
+            "b"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "finiteOrNull",
+          "params": [
+            "v"
+          ],
+          "returnType": "number | null",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "intFromMatch",
+          "params": [
+            "text",
+            "re"
+          ],
+          "returnType": "number | null",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "parseRecordEvents",
+          "params": [
+            "rec"
+          ],
+          "returnType": "AgentEvent[]",
+          "exported": true,
+          "lineCount": 69
+        },
+        {
+          "name": "createScanState",
+          "params": [],
+          "returnType": "ScanState",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "applyEvent",
+          "params": [
+            "state",
+            "ev"
+          ],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "toAgentJobs",
+          "params": [
+            "state"
+          ],
+          "returnType": "AgentJob[]",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "readAgents",
+          "params": [
+            "filePath"
+          ],
+          "returnType": "AgentJob[] | null",
+          "exported": true,
+          "lineCount": 18
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "../../shared/types.js",
+          "specifiers": [
+            "AgentJob"
+          ]
+        }
+      ],
+      "exports": [
+        "parseRecordEvents",
+        "createScanState",
+        "applyEvent",
+        "toAgentJobs",
+        "readAgents"
+      ],
+      "totalLines": 273,
+      "hasStructuralAnalysis": true
+    },
+    "server/lib/analyze.ts": {
+      "filePath": "server/lib/analyze.ts",
+      "contentHash": "bf66fd8d7a483a2806825d5371080393ddd7f203b14d5e1f2ca660312ab6c19e",
+      "functions": [
+        {
+          "name": "num",
+          "params": [
+            "v"
+          ],
+          "returnType": "number",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "toolResultText",
+          "params": [
+            "b"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "isErrorResult",
+          "params": [
+            "b"
+          ],
+          "returnType": "boolean",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "userText",
+          "params": [
+            "msg"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "analyzeSession",
+          "params": [
+            "filePath",
+            "id"
+          ],
+          "returnType": "SessionAnalysis | null",
+          "exported": true,
+          "lineCount": 156
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "./agents.js",
+          "specifiers": [
+            "readAgents"
+          ]
+        },
+        {
+          "source": "../../shared/types.js",
+          "specifiers": [
+            "ErrorSignals",
+            "SessionAnalysis",
+            "SubagentTotals",
+            "ToolStat"
+          ]
+        }
+      ],
+      "exports": [
+        "analyzeSession"
+      ],
+      "totalLines": 222,
+      "hasStructuralAnalysis": true
+    },
+    "server/lib/config.ts": {
+      "filePath": "server/lib/config.ts",
+      "contentHash": "787cbc5ba32706876aaf458e6ff3c0fd6f4bbc84a985459e386cabd9c7ba49a8",
+      "functions": [
+        {
+          "name": "parseEnv",
+          "params": [
+            "text"
+          ],
+          "returnType": "Record<string, string>",
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "toPosInt",
+          "params": [
+            "value",
+            "fallback"
+          ],
+          "returnType": "number",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "toBool",
+          "params": [
+            "value",
+            "fallback"
+          ],
+          "returnType": "boolean",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "isDockerContainer",
+          "params": [],
+          "returnType": "boolean",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "loadConfig",
+          "params": [
+            "options"
+          ],
+          "returnType": "Config",
+          "exported": true,
+          "lineCount": 23
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "path"
+          ]
+        }
+      ],
+      "exports": [
+        "DEFAULTS",
+        "parseEnv",
+        "toPosInt",
+        "toBool",
+        "isDockerContainer",
+        "loadConfig"
+      ],
+      "totalLines": 110,
+      "hasStructuralAnalysis": true
+    },
+    "server/lib/management.ts": {
+      "filePath": "server/lib/management.ts",
+      "contentHash": "396061303618acf50a48574a6cdc8078b0dbd9222df0740a3b8d1fdc4aaa1a05",
+      "functions": [
+        {
+          "name": "claudeHome",
+          "params": [
+            "homeDir"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "readTextIfFile",
+          "params": [
+            "p"
+          ],
+          "returnType": "Promise<string | null>",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "readJsonIfFile",
+          "params": [
+            "p"
+          ],
+          "returnType": "Promise<unknown | null>",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "readSkillsDir",
+          "params": [
+            "dir",
+            "source"
+          ],
+          "returnType": "Promise<ConfigItem[]>",
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "readMdDir",
+          "params": [
+            "dir",
+            "source",
+            "depth"
+          ],
+          "returnType": "Promise<ConfigItem[]>",
+          "exported": true,
+          "lineCount": 30
+        },
+        {
+          "name": "resolveScriptPath",
+          "params": [
+            "command",
+            "allowedRoots"
+          ],
+          "returnType": "string | null",
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "readHooksConfig",
+          "params": [
+            "hooksObj",
+            "source",
+            "declaredIn",
+            "scriptRoots",
+            "pluginRoot"
+          ],
+          "returnType": "HookInfo[]",
+          "exported": true,
+          "lineCount": 32
+        },
+        {
+          "name": "readPlugin",
+          "params": [
+            "key",
+            "installPath",
+            "version",
+            "enabled"
+          ],
+          "returnType": "Promise<PluginScan>",
+          "exported": false,
+          "lineCount": 36
+        },
+        {
+          "name": "readPlugins",
+          "params": [
+            "home",
+            "enabledMap"
+          ],
+          "returnType": "Promise<PluginScan[]>",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "settingsInfo",
+          "params": [
+            "dir",
+            "existing"
+          ],
+          "returnType": "SettingsFileInfo[]",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "memoryItems",
+          "params": [
+            "paths",
+            "source"
+          ],
+          "returnType": "Promise<ConfigItem[]>",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "settingsHooks",
+          "params": [
+            "dir",
+            "source",
+            "scriptRoots"
+          ],
+          "returnType": "Promise<{ hooks: HookInfo[]; existing: Set<string> }>",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "readGlobalScope",
+          "params": [
+            "homeDir"
+          ],
+          "returnType": "Promise<ScopeConfig>",
+          "exported": true,
+          "lineCount": 31
+        },
+        {
+          "name": "readProjectScope",
+          "params": [
+            "projectPath",
+            "dirName",
+            "homeDir"
+          ],
+          "returnType": "Promise<ScopeConfig>",
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "listRecentProjects",
+          "params": [
+            "config",
+            "options"
+          ],
+          "returnType": "ProjectRef[]",
+          "exported": true,
+          "lineCount": 31
+        },
+        {
+          "name": "resolveProject",
+          "params": [
+            "config",
+            "dirName",
+            "options"
+          ],
+          "returnType": "ProjectRef | null",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "collectServablePaths",
+          "params": [
+            "config",
+            "options"
+          ],
+          "returnType": "Promise<Set<string>>",
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "readServableFile",
+          "params": [
+            "p",
+            "allowed",
+            "cap"
+          ],
+          "returnType": "Promise<FileContent | null>",
+          "exported": true,
+          "lineCount": 21
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "node:fs/promises",
+          "specifiers": [
+            "fsp"
+          ]
+        },
+        {
+          "source": "node:os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "../../shared/frontmatter.js",
+          "specifiers": [
+            "parseFrontmatter"
+          ]
+        },
+        {
+          "source": "./scan.js",
+          "specifiers": [
+            "listTranscripts"
+          ]
+        },
+        {
+          "source": "./transcript.js",
+          "specifiers": [
+            "readTranscript"
+          ]
+        },
+        {
+          "source": "./config.js",
+          "specifiers": [
+            "Config"
+          ]
+        },
+        {
+          "source": "../../shared/types.js",
+          "specifiers": [
+            "ConfigItem",
+            "FileContent",
+            "HookInfo",
+            "PluginInfo",
+            "ProjectRef",
+            "ScopeConfig",
+            "SettingsFileInfo"
+          ]
+        }
+      ],
+      "exports": [
+        "FILE_CONTENT_CAP",
+        "claudeHome",
+        "readSkillsDir",
+        "readMdDir",
+        "readHooksConfig",
+        "readGlobalScope",
+        "readProjectScope",
+        "listRecentProjects",
+        "resolveProject",
+        "collectServablePaths",
+        "readServableFile"
+      ],
+      "totalLines": 442,
+      "hasStructuralAnalysis": true
+    },
+    "server/lib/scan.ts": {
+      "filePath": "server/lib/scan.ts",
+      "contentHash": "49b3d29816cadb1c5e092badb9ba2563da8514e059f0b553cc2c6a4aad405cac",
+      "functions": [
+        {
+          "name": "projectsRoot",
+          "params": [
+            "homeDir"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "decodeProjectName",
+          "params": [
+            "dirName"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "listTranscripts",
+          "params": [
+            "root"
+          ],
+          "returnType": "TranscriptRef[]",
+          "exported": true,
+          "lineCount": 32
+        },
+        {
+          "name": "countClaudeProcesses",
+          "params": [],
+          "returnType": "number | null",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "normCwd",
+          "params": [
+            "p"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "liveCwds",
+          "params": [],
+          "returnType": "Set<string> | null",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "scanSessions",
+          "params": [
+            "config",
+            "options"
+          ],
+          "returnType": "SessionsResponse",
+          "exported": true,
+          "lineCount": 84
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "node:os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "node:child_process",
+          "specifiers": [
+            "execFileSync"
+          ]
+        },
+        {
+          "source": "./transcript.js",
+          "specifiers": [
+            "readTranscript"
+          ]
+        },
+        {
+          "source": "./config.js",
+          "specifiers": [
+            "Config"
+          ]
+        },
+        {
+          "source": "../../shared/types.js",
+          "specifiers": [
+            "Session",
+            "SessionsResponse"
+          ]
+        }
+      ],
+      "exports": [
+        "projectsRoot",
+        "decodeProjectName",
+        "listTranscripts",
+        "countClaudeProcesses",
+        "liveCwds",
+        "scanSessions"
+      ],
+      "totalLines": 210,
+      "hasStructuralAnalysis": true
+    },
+    "server/lib/transcript.ts": {
+      "filePath": "server/lib/transcript.ts",
+      "contentHash": "d73d6a03d34e5dae0f9543b6ff8cd03678d869dc8753c5cf152ed9a28e84d47a",
+      "functions": [
+        {
+          "name": "readTail",
+          "params": [
+            "filePath",
+            "tailBytes"
+          ],
+          "returnType": "TailResult | null",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "usageTokens",
+          "params": [
+            "record"
+          ],
+          "returnType": "number",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "resolveWindow",
+          "params": [
+            "tokens",
+            "model",
+            "env"
+          ],
+          "returnType": "number",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "windowLabel",
+          "params": [
+            "win"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "describeTool",
+          "params": [
+            "block"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "readTranscript",
+          "params": [
+            "filePath",
+            "options"
+          ],
+          "returnType": "ParsedTranscript | null",
+          "exported": true,
+          "lineCount": 103
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "../../shared/types.js",
+          "specifiers": [
+            "Activity"
+          ]
+        }
+      ],
+      "exports": [
+        "STANDARD_WINDOW",
+        "LARGE_WINDOW",
+        "DEFAULT_TAIL_BYTES",
+        "readTail",
+        "usageTokens",
+        "resolveWindow",
+        "windowLabel",
+        "describeTool",
+        "readTranscript"
+      ],
+      "totalLines": 240,
+      "hasStructuralAnalysis": true
+    },
+    "server/lib/usage.ts": {
+      "filePath": "server/lib/usage.ts",
+      "contentHash": "440af83cd3beb10fca0c911d9eeac34b585b2e48a481987a6e5b36be984a395b",
+      "functions": [
+        {
+          "name": "baseUrl",
+          "params": [],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "readToken",
+          "params": [],
+          "returnType": "TokenState",
+          "exported": true,
+          "lineCount": 37
+        },
+        {
+          "name": "tokenFromCredsBlob",
+          "params": [
+            "blob",
+            "now"
+          ],
+          "returnType": "TokenState",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "toRateLimit",
+          "params": [
+            "win"
+          ],
+          "returnType": "RateLimit",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "mapUsage",
+          "params": [
+            "payload"
+          ],
+          "returnType": "UsageLimits | null",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "fetchUsage",
+          "params": [
+            "token"
+          ],
+          "returnType": "Promise<UsageLimits | null>",
+          "exported": true,
+          "lineCount": 52
+        },
+        {
+          "name": "refreshNow",
+          "params": [],
+          "returnType": "Promise<void>",
+          "exported": false,
+          "lineCount": 25
+        },
+        {
+          "name": "getCachedUsageState",
+          "params": [],
+          "returnType": "UsageState",
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:child_process",
+          "specifiers": [
+            "execFileSync"
+          ]
+        },
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "node:os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "node:http",
+          "specifiers": [
+            "http"
+          ]
+        },
+        {
+          "source": "node:https",
+          "specifiers": [
+            "https"
+          ]
+        },
+        {
+          "source": "../../shared/types.js",
+          "specifiers": [
+            "UsageLimits",
+            "RateLimit",
+            "UsageStatus"
+          ]
+        }
+      ],
+      "exports": [
+        "readToken",
+        "tokenFromCredsBlob",
+        "mapUsage",
+        "fetchUsage",
+        "getCachedUsageState"
+      ],
+      "totalLines": 244,
+      "hasStructuralAnalysis": true
+    },
+    "shared/frontmatter.ts": {
+      "filePath": "shared/frontmatter.ts",
+      "contentHash": "287e5e265fefe3ed499c8f86a0106b029954db6fbd1ab0b083fbd3f4bc822e98",
+      "functions": [
+        {
+          "name": "unquote",
+          "params": [
+            "v"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "parseFrontmatter",
+          "params": [
+            "text"
+          ],
+          "returnType": "Frontmatter",
+          "exported": true,
+          "lineCount": 40
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "parseFrontmatter"
+      ],
+      "totalLines": 65,
+      "hasStructuralAnalysis": true
+    },
+    "shared/types.ts": {
+      "filePath": "shared/types.ts",
+      "contentHash": "00c66ffe235ed21d2f916b30903912cfc9b7a86bc6dbe91d450cad10fd6f75a4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 366,
+      "hasStructuralAnalysis": true
+    },
+    "skills-lock.json": {
+      "filePath": "skills-lock.json",
+      "contentHash": "5fda6238a8372495f28fe6c0a42cf7f02bbe1973493c604896bef71a110d7a9b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "tsconfig.json": {
+      "filePath": "tsconfig.json",
+      "contentHash": "ead77dd3fa1c5b6619c74a15c52d11c0fee406c5d91672be675319d296fe2b83",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "vite.config.ts": {
+      "filePath": "vite.config.ts",
+      "contentHash": "c65f61ad11ac49c6bc51e18e9667cc59de129a00213ca7efa21b668ac334b225",
+      "functions": [
+        {
+          "name": "logHostLanIp",
+          "params": [],
+          "exported": false,
+          "lineCount": 13
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "vite",
+          "specifiers": [
+            "defineConfig"
+          ]
+        },
+        {
+          "source": "@vitejs/plugin-react",
+          "specifiers": [
+            "react"
+          ]
+        },
+        {
+          "source": "./server/lib/config",
+          "specifiers": [
+            "loadConfig"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 48,
+      "hasStructuralAnalysis": true
+    }
+  }
+}

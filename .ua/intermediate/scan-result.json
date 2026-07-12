@@ -1,0 +1,545 @@
+{
+  "name": "claude-agents-dashboard",
+  "description": "Live monitor for parallel Claude Code sessions \u2014 reads ~/.claude transcripts, shows what each running session is doing.",
+  "languages": [
+    "config",
+    "css",
+    "dockerfile",
+    "html",
+    "json",
+    "markdown",
+    "typescript",
+    "unknown",
+    "yaml"
+  ],
+  "frameworks": [
+    "React",
+    "Vite",
+    "Docker",
+    "Docker Compose"
+  ],
+  "files": [
+    {
+      "path": ".claude/CLAUDE.md",
+      "language": "markdown",
+      "sizeLines": 221,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".dockerignore",
+      "language": "unknown",
+      "sizeLines": 7,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".env.example",
+      "language": "config",
+      "sizeLines": 23,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".ua/.understandignore",
+      "language": "unknown",
+      "sizeLines": 53,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".ua/intermediate/scan-result.json",
+      "language": "json",
+      "sizeLines": 1060,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".ua/tmp/ua-import-map-input.json",
+      "language": "json",
+      "sizeLines": 669,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".ua/tmp/ua-import-map-output.json",
+      "language": "json",
+      "sizeLines": 246,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".ua/tmp/ua-scan-files.json",
+      "language": "json",
+      "sizeLines": 827,
+      "fileCategory": "config"
+    },
+    {
+      "path": "client/index.html",
+      "language": "html",
+      "sizeLines": 12,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "client/src/App.tsx",
+      "language": "typescript",
+      "sizeLines": 26,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/Header.tsx",
+      "language": "typescript",
+      "sizeLines": 80,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/management/DetailPane.tsx",
+      "language": "typescript",
+      "sizeLines": 53,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/management/FileViewer.tsx",
+      "language": "typescript",
+      "sizeLines": 36,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/management/HookDetail.tsx",
+      "language": "typescript",
+      "sizeLines": 45,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/management/ItemList.tsx",
+      "language": "typescript",
+      "sizeLines": 111,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/management/ManagementView.tsx",
+      "language": "typescript",
+      "sizeLines": 78,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/management/MarkdownViewer.tsx",
+      "language": "typescript",
+      "sizeLines": 44,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/management/ScopeMenu.tsx",
+      "language": "typescript",
+      "sizeLines": 32,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/MultiSelect.tsx",
+      "language": "typescript",
+      "sizeLines": 88,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/SectionTabs.tsx",
+      "language": "typescript",
+      "sizeLines": 26,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/SessionDetail.tsx",
+      "language": "typescript",
+      "sizeLines": 107,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/SessionList.tsx",
+      "language": "typescript",
+      "sizeLines": 44,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/SessionRow.tsx",
+      "language": "typescript",
+      "sizeLines": 64,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/SessionsView.tsx",
+      "language": "typescript",
+      "sizeLines": 36,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/components/Toolbar.tsx",
+      "language": "typescript",
+      "sizeLines": 72,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/hooks/useManagement.ts",
+      "language": "typescript",
+      "sizeLines": 101,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/hooks/usePersistedState.ts",
+      "language": "typescript",
+      "sizeLines": 33,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/hooks/useSessionDetail.ts",
+      "language": "typescript",
+      "sizeLines": 42,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/hooks/useSessions.ts",
+      "language": "typescript",
+      "sizeLines": 40,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/lib/filterSort.ts",
+      "language": "typescript",
+      "sizeLines": 89,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/lib/format.ts",
+      "language": "typescript",
+      "sizeLines": 41,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/lib/managementEntries.ts",
+      "language": "typescript",
+      "sizeLines": 143,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/main.tsx",
+      "language": "typescript",
+      "sizeLines": 11,
+      "fileCategory": "code"
+    },
+    {
+      "path": "client/src/styles.css",
+      "language": "css",
+      "sizeLines": 174,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "docker-compose.dev.yml",
+      "language": "yaml",
+      "sizeLines": 16,
+      "fileCategory": "infra"
+    },
+    {
+      "path": "docker-compose.yml",
+      "language": "yaml",
+      "sizeLines": 17,
+      "fileCategory": "infra"
+    },
+    {
+      "path": "Dockerfile",
+      "language": "dockerfile",
+      "sizeLines": 34,
+      "fileCategory": "infra"
+    },
+    {
+      "path": "docs/ideas/agent-tracking-cache.md",
+      "language": "markdown",
+      "sizeLines": 119,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/learning/session-and-agent-tracking.md",
+      "language": "markdown",
+      "sizeLines": 164,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/2026-07-06-usage-token-refresh-removal.md",
+      "language": "markdown",
+      "sizeLines": 75,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-01-usage-token-refresh.md",
+      "language": "markdown",
+      "sizeLines": 897,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-01-usage-token-refresh-design.md",
+      "language": "markdown",
+      "sizeLines": 119,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "package.json",
+      "language": "json",
+      "sizeLines": 41,
+      "fileCategory": "config"
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "sizeLines": 224,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "server/api.ts",
+      "language": "typescript",
+      "sizeLines": 151,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/index.ts",
+      "language": "typescript",
+      "sizeLines": 107,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/lib/agents-cache.ts",
+      "language": "typescript",
+      "sizeLines": 151,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/lib/agents.ts",
+      "language": "typescript",
+      "sizeLines": 272,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/lib/analyze.ts",
+      "language": "typescript",
+      "sizeLines": 221,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/lib/config.ts",
+      "language": "typescript",
+      "sizeLines": 101,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/lib/management.ts",
+      "language": "typescript",
+      "sizeLines": 441,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/lib/scan.ts",
+      "language": "typescript",
+      "sizeLines": 209,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/lib/transcript.ts",
+      "language": "typescript",
+      "sizeLines": 239,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/lib/usage.ts",
+      "language": "typescript",
+      "sizeLines": 243,
+      "fileCategory": "code"
+    },
+    {
+      "path": "shared/frontmatter.ts",
+      "language": "typescript",
+      "sizeLines": 64,
+      "fileCategory": "code"
+    },
+    {
+      "path": "shared/types.ts",
+      "language": "typescript",
+      "sizeLines": 331,
+      "fileCategory": "code"
+    },
+    {
+      "path": "skills-lock.json",
+      "language": "json",
+      "sizeLines": 17,
+      "fileCategory": "config"
+    },
+    {
+      "path": "tsconfig.json",
+      "language": "json",
+      "sizeLines": 19,
+      "fileCategory": "config"
+    },
+    {
+      "path": "vite.config.ts",
+      "language": "typescript",
+      "sizeLines": 47,
+      "fileCategory": "code"
+    }
+  ],
+  "totalFiles": 59,
+  "filteredByIgnore": 92,
+  "estimatedComplexity": "moderate",
+  "importMap": {
+    ".claude/CLAUDE.md": [],
+    ".dockerignore": [],
+    ".env.example": [],
+    ".ua/.understandignore": [],
+    ".ua/intermediate/scan-result.json": [],
+    ".ua/tmp/ua-import-map-input.json": [],
+    ".ua/tmp/ua-import-map-output.json": [],
+    ".ua/tmp/ua-scan-files.json": [],
+    "client/index.html": [],
+    "client/src/App.tsx": [
+      "client/src/components/SectionTabs.tsx",
+      "client/src/components/SessionsView.tsx",
+      "client/src/hooks/usePersistedState.ts"
+    ],
+    "client/src/components/Header.tsx": [
+      "client/src/lib/format.ts",
+      "shared/types.ts"
+    ],
+    "client/src/components/management/DetailPane.tsx": [
+      "client/src/components/management/FileViewer.tsx",
+      "client/src/components/management/HookDetail.tsx",
+      "client/src/components/management/MarkdownViewer.tsx",
+      "client/src/lib/managementEntries.ts"
+    ],
+    "client/src/components/management/FileViewer.tsx": [
+      "client/src/hooks/useManagement.ts",
+      "client/src/lib/format.ts"
+    ],
+    "client/src/components/management/HookDetail.tsx": [
+      "client/src/components/management/FileViewer.tsx",
+      "shared/types.ts"
+    ],
+    "client/src/components/management/ItemList.tsx": [
+      "client/src/hooks/usePersistedState.ts",
+      "client/src/lib/managementEntries.ts"
+    ],
+    "client/src/components/management/ManagementView.tsx": [
+      "client/src/components/management/DetailPane.tsx",
+      "client/src/components/management/ItemList.tsx",
+      "client/src/components/management/ScopeMenu.tsx",
+      "client/src/hooks/useManagement.ts",
+      "client/src/hooks/usePersistedState.ts",
+      "client/src/lib/managementEntries.ts"
+    ],
+    "client/src/components/management/MarkdownViewer.tsx": [
+      "client/src/hooks/useManagement.ts",
+      "client/src/lib/format.ts",
+      "shared/frontmatter.ts"
+    ],
+    "client/src/components/management/ScopeMenu.tsx": [
+      "shared/types.ts"
+    ],
+    "client/src/components/MultiSelect.tsx": [],
+    "client/src/components/SectionTabs.tsx": [],
+    "client/src/components/SessionDetail.tsx": [
+      "client/src/hooks/useSessionDetail.ts",
+      "client/src/lib/format.ts",
+      "shared/types.ts"
+    ],
+    "client/src/components/SessionList.tsx": [
+      "client/src/components/SessionRow.tsx",
+      "shared/types.ts"
+    ],
+    "client/src/components/SessionRow.tsx": [
+      "client/src/components/SessionDetail.tsx",
+      "client/src/lib/filterSort.ts",
+      "client/src/lib/format.ts",
+      "shared/types.ts"
+    ],
+    "client/src/components/SessionsView.tsx": [
+      "client/src/components/Header.tsx",
+      "client/src/components/SessionList.tsx",
+      "client/src/components/Toolbar.tsx",
+      "client/src/hooks/usePersistedState.ts",
+      "client/src/hooks/useSessions.ts",
+      "client/src/lib/filterSort.ts"
+    ],
+    "client/src/components/Toolbar.tsx": [
+      "client/src/components/MultiSelect.tsx",
+      "client/src/lib/filterSort.ts",
+      "shared/types.ts"
+    ],
+    "client/src/hooks/useManagement.ts": [
+      "shared/types.ts"
+    ],
+    "client/src/hooks/usePersistedState.ts": [],
+    "client/src/hooks/useSessionDetail.ts": [
+      "shared/types.ts"
+    ],
+    "client/src/hooks/useSessions.ts": [
+      "shared/types.ts"
+    ],
+    "client/src/lib/filterSort.ts": [
+      "shared/types.ts"
+    ],
+    "client/src/lib/format.ts": [],
+    "client/src/lib/managementEntries.ts": [
+      "shared/types.ts"
+    ],
+    "client/src/main.tsx": [
+      "client/src/App.tsx",
+      "client/src/styles.css"
+    ],
+    "client/src/styles.css": [],
+    "docker-compose.dev.yml": [],
+    "docker-compose.yml": [],
+    "Dockerfile": [],
+    "docs/ideas/agent-tracking-cache.md": [],
+    "docs/learning/session-and-agent-tracking.md": [],
+    "docs/plans/2026-07-06-usage-token-refresh-removal.md": [],
+    "docs/superpowers/plans/2026-07-01-usage-token-refresh.md": [],
+    "docs/superpowers/specs/2026-07-01-usage-token-refresh-design.md": [],
+    "package.json": [],
+    "README.md": [],
+    "server/api.ts": [
+      "server/lib/agents-cache.ts",
+      "server/lib/config.ts",
+      "server/lib/management.ts",
+      "server/lib/scan.ts",
+      "server/lib/usage.ts",
+      "shared/types.ts"
+    ],
+    "server/index.ts": [
+      "server/api.ts",
+      "server/lib/config.ts"
+    ],
+    "server/lib/agents-cache.ts": [
+      "server/lib/agents.ts",
+      "shared/types.ts"
+    ],
+    "server/lib/agents.ts": [
+      "shared/types.ts"
+    ],
+    "server/lib/analyze.ts": [
+      "server/lib/agents.ts",
+      "shared/types.ts"
+    ],
+    "server/lib/config.ts": [],
+    "server/lib/management.ts": [
+      "server/lib/config.ts",
+      "server/lib/scan.ts",
+      "server/lib/transcript.ts",
+      "shared/frontmatter.ts",
+      "shared/types.ts"
+    ],
+    "server/lib/scan.ts": [
+      "server/lib/config.ts",
+      "server/lib/transcript.ts",
+      "shared/types.ts"
+    ],
+    "server/lib/transcript.ts": [
+      "shared/types.ts"
+    ],
+    "server/lib/usage.ts": [
+      "shared/types.ts"
+    ],
+    "shared/frontmatter.ts": [],
+    "shared/types.ts": [],
+    "skills-lock.json": [],
+    "tsconfig.json": [],
+    "vite.config.ts": [
+      "server/lib/config.ts"
+    ]
+  }
+}
