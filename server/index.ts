@@ -18,7 +18,10 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 import { loadConfig } from './lib/config.js';
-import { serveSessions, serveSessionDetail } from './api.js';
+import {
+  serveSessions, serveSessionDetail,
+  serveManagementIndex, serveManagementProject, serveManagementFile
+} from './api.js';
 
 const config = loadConfig();
 const isProd = process.env.NODE_ENV === 'production';
@@ -56,6 +59,19 @@ function serveStatic(urlPath: string, res: http.ServerResponse): void {
 }
 
 const server = http.createServer((req, res) => {
+  // Management routes take query params — parse once. Handlers are async but
+  // self-contained (they always end the response), so `void` keeps the
+  // callback signature.
+  const u = new URL(req.url || '/', 'http://local');
+  if (u.pathname === '/api/management/file') {
+    return void serveManagementFile(config, u.searchParams.get('path') || '', res);
+  }
+  if (u.pathname === '/api/management/project') {
+    return void serveManagementProject(config, u.searchParams.get('dir') || '', res);
+  }
+  if (u.pathname === '/api/management') {
+    return void serveManagementIndex(config, res);
+  }
   // Detail route must be matched before the generic prefix below, which would
   // otherwise swallow `/api/sessions/:id`.
   const detail = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)/);
