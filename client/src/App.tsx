@@ -1,31 +1,26 @@
-import { useMemo } from 'react';
+import { lazy, Suspense } from 'react';
 
-import { Header } from './components/Header';
-import { SessionList } from './components/SessionList';
-import { Toolbar } from './components/Toolbar';
+import { SectionTabs, type Section } from './components/SectionTabs';
+import { SessionsView } from './components/SessionsView';
 import { usePersistedState } from './hooks/usePersistedState';
-import { useSessions } from './hooks/useSessions';
-import { applyView, DEFAULT_VIEW, type View } from './lib/filterSort';
+
+// Lazy: the management chunk loads only when the section is opened, so the
+// sessions view's bundle is unaffected.
+const ManagementView = lazy(() => import('./components/management/ManagementView'));
 
 export function App() {
-  const { data, connected } = useSessions();
-  const [view, setView] = usePersistedState<View>('dashboard.view', DEFAULT_VIEW);
-
-  const shown = useMemo(
-    () => (data ? applyView(data.sessions, view, Date.now()) : null),
-    [data, view]
-  );
+  const [section, setSection] = usePersistedState<Section>('dashboard.section', 'sessions');
 
   return (
-    <div className="wrap">
-      <Header data={data} />
-      <Toolbar sessions={data ? data.sessions : []} view={view} onChange={setView} />
-      <SessionList sessions={shown} />
-      <div className="foot">
-        {connected
-          ? 'live · refreshing every 3s'
-          : <span className="off">disconnected — server stopped?</span>}
-      </div>
+    <div className={section === 'management' ? 'wrap wide' : 'wrap'}>
+      <SectionTabs section={section} onChange={setSection} />
+      {section === 'sessions' ? (
+        <SessionsView />
+      ) : (
+        <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
+          <ManagementView />
+        </Suspense>
+      )}
     </div>
   );
 }
