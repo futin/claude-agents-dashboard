@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { parseFrontmatter } from '../server/lib/frontmatter.js';
+import { parseFrontmatter } from '../shared/frontmatter.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }

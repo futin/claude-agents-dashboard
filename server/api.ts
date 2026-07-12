@@ -123,7 +123,7 @@ export async function serveManagementProject(config: Config, dirName: string, re
   try {
     const ref = resolveProject(config, dirName);
     if (!ref) return sendJson(res, 404, { ...emptyScope('project'), error: true });
-    sendJson(res, 200, await readProjectScope(ref.path));
+    sendJson(res, 200, await readProjectScope(ref.path, ref.dirName));
   } catch (e) {
     console.error('[dashboard] management project failed:', (e as Error).message);
     sendJson(res, 500, { ...emptyScope('project'), error: true });

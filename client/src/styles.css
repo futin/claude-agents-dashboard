@@ -7,7 +7,7 @@
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;line-height:1.4;padding:24px}
-.wrap{max-width:820px;margin:0 auto}
+.wrap{max-width:820px;margin:0}
 .wrap.wide{max-width:1280px}
 
 .tabs{display:flex;gap:6px;margin-bottom:16px}
@@ -133,8 +133,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .mgmt-filter:focus{outline:none;border-color:var(--accent)}
 .mgmt-filter::placeholder{color:var(--text3)}
 .mgroup{display:flex;flex-direction:column;gap:4px}
-.mgroup-h{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;padding:2px 2px 0}
-.mitem{padding:6px 9px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;transition:border-color .15s;min-width:0}
+.mgroup-h{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;padding:7px 6px;border-radius:6px;cursor:pointer;user-select:none;transition:background .12s,color .12s}
+.mgroup-h:hover{color:var(--text2);background:var(--surface)}
+.mitem{padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;transition:border-color .15s;min-width:0}
 .mitem:hover{border-color:var(--border2)}
 .mitem.on{border-color:var(--accent);background:var(--surface2)}
 .mitem-top{display:flex;align-items:center;gap:8px;min-width:0}
@@ -150,3 +151,24 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .mgmt-file{font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:70vh;overflow:auto;white-space:pre-wrap;word-break:break-word}
 .mgmt-trunc{font-size:10px;color:var(--orange)}
 .mgmt-empty{font-size:11px;color:var(--text3);padding:4px 2px}
+/* Sub-group headers (plugin name / hook event) inside a type group */
+.msub-h{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text2);padding:8px 8px;margin-top:2px;border-radius:6px;background:var(--surface);cursor:pointer;user-select:none;transition:background .12s,color .12s}
+.msub-h:hover{color:var(--text);background:var(--surface2)}
+.msub-caret{display:inline-block;font-size:10px;color:var(--text3);transition:transform .12s}
+.msub-caret.open{transform:rotate(90deg)}
+/* Detail pane: frontmatter table, section labels, type chip */
+.mgmt-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)}
+.mgmt-kv-key{color:var(--text3);font-family:var(--mono);font-size:10px}
+.mgmt-kv-val{color:var(--text2);word-break:break-word}
+.mdetail-label{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px}
+.mdetail-label .tb-dir{font-size:10px;line-height:1;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:3px 7px;cursor:pointer;text-transform:none;letter-spacing:0}
+.mdetail-label .tb-dir:hover{color:var(--text);border-color:var(--border2)}
+.mdetail-type{font-size:9px;font-weight:600;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+/* Desktop: management is an app shell — page never scrolls, each pane does */
+@media (min-width:1001px){
+  .wrap.wide{display:flex;flex-direction:column;height:calc(100vh - 48px)}
+  .wrap.wide .mgmt{flex:1;min-height:0;align-items:stretch}
+  .mgmt-menu,.mgmt-list,.mdetail{overflow-y:auto;min-height:0}
+  .mgmt-list .mgmt-filter{position:sticky;top:0;z-index:1;flex-shrink:0;box-shadow:0 0 0 5px var(--bg)}
+  .mdetail .mgmt-file{max-height:none;overflow:visible} /* the pane is the scroller */
+}

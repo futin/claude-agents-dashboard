@@ -18,7 +18,7 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { parseFrontmatter } from './frontmatter.js';
+import { parseFrontmatter } from '../../shared/frontmatter.js';
 import { listTranscripts } from './scan.js';
 import { readTranscript } from './transcript.js';
 import type { Config } from './config.js';
@@ -308,20 +308,27 @@ export async function readGlobalScope(homeDir?: string): Promise<ScopeConfig> {
   };
 }
 
-export async function readProjectScope(projectPath: string): Promise<ScopeConfig> {
+export async function readProjectScope(projectPath: string, dirName?: string, homeDir?: string): Promise<ScopeConfig> {
   const dir = path.join(projectPath, '.claude');
-  const [skills, agents, commands, rules, memory, { hooks, existing }] = await Promise.all([
+  // The file-based memory store lives outside the project tree, under the
+  // transcript dir: ~/.claude/projects/<dirName>/memory/*.md. Scan it when the
+  // encoded dirName is known (both callers pass it; the security path set and
+  // the served scope stay in sync because both go through here).
+  const memoryDir = dirName ? path.join(claudeHome(homeDir), 'projects', dirName, 'memory') : null;
+  const [skills, agents, commands, rules, claudeMd, memoryStore, { hooks, existing }] = await Promise.all([
     readSkillsDir(path.join(dir, 'skills'), 'project'),
     readMdDir(path.join(dir, 'agents'), 'project', 1),
     readMdDir(path.join(dir, 'commands'), 'project'),
     readMdDir(path.join(dir, 'rules'), 'project', 1),
     memoryItems([path.join(projectPath, 'CLAUDE.md'), path.join(dir, 'CLAUDE.md')], 'project'),
+    memoryDir ? readMdDir(memoryDir, 'project', 1) : Promise.resolve([]),
     settingsHooks(dir, 'project', [dir])
   ]);
   return {
     scope: 'project',
     root: projectPath,
-    skills, agents, commands, rules, hooks, memory,
+    skills, agents, commands, rules, hooks,
+    memory: claudeMd.concat(memoryStore),
     settings: settingsInfo(dir, existing),
     plugins: []
   };
@@ -384,7 +391,7 @@ export async function collectServablePaths(config: Partial<Config>, options: Pro
   const projects = listRecentProjects(config, options);
   const scopes = await Promise.all([
     readGlobalScope(options.homeDir),
-    ...projects.map(p => readProjectScope(p.path))
+    ...projects.map(p => readProjectScope(p.path, p.dirName, options.homeDir))
   ]);
 
   const allowed = new Set<string>();

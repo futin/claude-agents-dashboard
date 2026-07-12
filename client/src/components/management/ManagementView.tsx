@@ -39,7 +39,7 @@ export default function ManagementView() {
     if (selectedKey === null) return null;
     for (const g of allGroups) {
       const hit = g.entries.find(e => e.key === selectedKey);
-      if (hit !== undefined) return hit;
+      if (hit !== undefined) return { entry: hit, groupTitle: g.title };
     }
     return null;
   }, [allGroups, selectedKey]);
@@ -64,11 +64,14 @@ export default function ManagementView() {
             allGroups={allGroups}
             filter={filter}
             onFilter={setFilter}
-            selectedKey={selected !== null ? selected.key : null}
+            selectedKey={selected !== null ? selected.entry.key : null}
             onSelect={e => setSelectedKey(e.key)}
           />
         )}
-        <DetailPane entry={selected} />
+        <DetailPane
+          entry={selected !== null ? selected.entry : null}
+          groupTitle={selected !== null ? selected.groupTitle : null}
+        />
       </div>
     </>
   );
