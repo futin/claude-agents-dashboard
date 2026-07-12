@@ -7,6 +7,7 @@ import { run as runAgentsCache } from './agents-cache.test.js';
 import { run as runFilterSort } from './filter-sort.test.js';
 import { run as runFrontmatter } from './frontmatter.test.js';
 import { run as runManagement } from './management.test.js';
+import { run as runManagementEntries } from './management-entries.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -17,6 +18,7 @@ failed += runAgentsCache();
 failed += runFilterSort();
 failed += runFrontmatter();
 failed += await runManagement();
+failed += runManagementEntries();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);
