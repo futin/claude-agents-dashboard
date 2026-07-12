@@ -9,6 +9,8 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { readTranscript } from './transcript.js';
+import { readSessionAnalyticsLog, lessonForSession } from './sessionAnalyticsLog.js';
+import type { SessionAnalyticsLesson } from './sessionAnalyticsLog.js';
 import type { Config } from './config.js';
 import type { Session, SessionsResponse } from '../../shared/types.js';
 
@@ -26,6 +28,8 @@ interface ScanOptions {
   skipProcScan?: boolean;
   /** Override the live-cwd set (tests). null disables gating; undefined probes. */
   liveCwds?: Set<string> | null;
+  /** Override kaizen lessons (tests). null skips tagging; undefined reads the log. */
+  lessons?: SessionAnalyticsLesson[] | null;
 }
 
 /** Default transcripts root. */
@@ -147,6 +151,13 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     ? options.liveCwds
     : options.skipProcScan ? null : liveCwds();
 
+  // `/kaizen` lessons keyed to each session by UUID-prefix match. Read once per
+  // scan (tiny, fail-open file). Skipped when analytics is disabled or injected
+  // (tests). null ⇒ no tagging → every session's kaizenLesson stays null.
+  const lessons = options.lessons !== undefined
+    ? options.lessons
+    : cfg.showAnalytics === false ? null : readSessionAnalyticsLog();
+
   const sessions: Session[] = [];
   for (const c of candidates) {
     const parsed = readTranscript(c.file);
@@ -191,7 +202,8 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       activity: parsed.activity,
       lastTimestamp: parsed.lastTimestamp,
       updatedMs: c.mtimeMs,
-      version: parsed.version || null
+      version: parsed.version || null,
+      kaizenLesson: lessons ? lessonForSession(lessons, c.id) : null
     });
   }
 

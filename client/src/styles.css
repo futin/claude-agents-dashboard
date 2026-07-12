@@ -99,6 +99,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .ag-pill{flex-shrink:0;font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;font-family:var(--mono);padding:1px 6px;border-radius:4px}
 .ag-pill.running{color:var(--green);background:rgba(74,203,138,.14)}
 .ag-pill.done{color:var(--text3);background:var(--surface2)}
+.ag-pill.kaizen{color:var(--pink);background:rgba(226,106,158,.14)}
+.kaizen-lesson{display:flex;align-items:flex-start;gap:8px;margin-top:11px;padding-top:11px;border-top:1px solid var(--border);font-size:11.5px;line-height:1.5;color:var(--text2)}
+.kaizen-lesson .ag-pill{margin-top:1px}
 .ag-type{flex-shrink:0;font-family:var(--mono);color:var(--pink);font-weight:600}
 .ag-desc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ag-dur{margin-left:auto;flex-shrink:0;color:var(--text3);font-variant-numeric:tabular-nums;font-family:var(--mono)}
