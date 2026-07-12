@@ -98,6 +98,112 @@ export interface SessionDetail {
   error?: boolean;
 }
 
+/**
+ * Management section (`GET /api/management*`) — read-only view over Claude
+ * config on disk: skills, agents, commands, rules, hooks, memory, settings,
+ * and installed plugins, per scope (global `~/.claude` or one project).
+ */
+
+/** Where a config item comes from: 'user', 'project', or 'plugin:<name>'. */
+export type ItemSource = string;
+
+/** One skill / agent / command / rule / memory file (metadata only, no body). */
+export interface ConfigItem {
+  /** Frontmatter name, else dir/file basename. */
+  name: string;
+  /** Frontmatter description (folded `>` supported), else null. */
+  description: string | null;
+  /** Absolute path to the .md/.toml file. */
+  path: string;
+  source: ItemSource;
+}
+
+/** One hook entry, flattened from settings.json / plugin hooks.json. */
+export interface HookInfo {
+  /** Lifecycle event: PreToolUse | Notification | Stop | SessionStart | … */
+  event: string;
+  matcher: string | null;
+  command: string;
+  source: ItemSource;
+  /** Absolute path of the settings.json / hooks.json that declared it. */
+  declaredIn: string;
+  /** Referenced script when resolvable inside an allowed root, else null. */
+  scriptPath: string | null;
+}
+
+export interface SettingsFileInfo {
+  /** 'settings.json' | 'settings.local.json' */
+  label: string;
+  path: string;
+  exists: boolean;
+}
+
+/** One installed plugin (from installed_plugins.json). */
+export interface PluginInfo {
+  /** 'superpowers@claude-plugins-official' */
+  key: string;
+  /** plugin.json name, else the key's name half. */
+  name: string;
+  marketplace: string;
+  version: string | null;
+  description: string | null;
+  installPath: string;
+  /** From settings.json enabledPlugins. */
+  enabled: boolean;
+  /** .claude-plugin/plugin.json when present. */
+  manifestPath: string | null;
+  counts: { skills: number; agents: number; commands: number; rules: number; hooks: number };
+}
+
+/** All config for one scope (global or one project). Metadata only, no file bodies. */
+export interface ScopeConfig {
+  scope: 'global' | 'project';
+  /** ~/.claude for global, the project cwd for project. */
+  root: string;
+  skills: ConfigItem[];
+  agents: ConfigItem[];
+  commands: ConfigItem[];
+  rules: ConfigItem[];
+  hooks: HookInfo[];
+  /** CLAUDE.md files (root + .claude/CLAUDE.md). */
+  memory: ConfigItem[];
+  settings: SettingsFileInfo[];
+  /** Populated for global only; [] for projects. */
+  plugins: PluginInfo[];
+  error?: boolean;
+}
+
+/** A recently-active project (management side-menu entry). */
+export interface ProjectRef {
+  /** Encoded ~/.claude/projects dir name — the key for /api/management/project. */
+  dirName: string;
+  /** Basename of path. */
+  name: string;
+  /** Real cwd from the transcript. */
+  path: string;
+  lastActiveMs: number;
+}
+
+/** Payload of `GET /api/management`. */
+export interface ManagementIndex {
+  generatedAt: string;
+  global: ScopeConfig;
+  /** Newest-first. */
+  projects: ProjectRef[];
+  error?: boolean;
+}
+
+/** Payload of `GET /api/management/file`. */
+export interface FileContent {
+  path: string;
+  content: string;
+  /** Real byte size on disk. */
+  size: number;
+  /** True when size exceeded the cap and content was cut. */
+  truncated: boolean;
+  error?: boolean;
+}
+
 /** Full payload of `GET /api/sessions`. */
 export interface SessionsResponse {
   generatedAt: string;
