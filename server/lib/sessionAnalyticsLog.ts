@@ -1,8 +1,8 @@
 /**
- * doctorLog.ts — parse `~/.claude/doctor-log.md`, the append-only learning log
- * the `/doctor` skill writes (one line per analyzed session, across all projects).
+ * sessionAnalyticsLog.ts — parse `~/.claude/session-analytics-log.md`, the append-only learning log
+ * the `/kaizen` skill writes (one line per analyzed session, across all projects).
  *
- * Line shape (see the doctor skill):
+ * Line shape (see the kaizen skill):
  *   - <date> [<project>] <session-id>: <billable> billable (<ctx>), top cost <x>. Lesson: <text>.
  *
  * The `<session-id>` is a short prefix of the full transcript UUID (e.g.
@@ -18,8 +18,8 @@ import path from 'node:path';
 
 import { claudeHome } from './management.js';
 
-/** One parsed doctor-log entry. */
-export interface DoctorLesson {
+/** One parsed session-analytics-log entry. */
+export interface SessionAnalyticsLesson {
   /** YYYY-MM-DD as written in the log. */
   date: string;
   /** Project tag (`[project]`). */
@@ -30,18 +30,18 @@ export interface DoctorLesson {
   lesson: string;
 }
 
-/** Absolute path to the global doctor log. */
-export function doctorLogPath(homeDir?: string): string {
-  return path.join(claudeHome(homeDir), 'doctor-log.md');
+/** Absolute path to the global session-analytics log. */
+export function sessionAnalyticsLogPath(homeDir?: string): string {
+  return path.join(claudeHome(homeDir), 'session-analytics-log.md');
 }
 
 // - <date> [<project>] <id>: …prose… Lesson: <text>
 const LINE_RE = /^-\s+(\d{4}-\d{2}-\d{2})\s+\[([^\]]+)\]\s+(\S+?):\s+.*?\bLesson:\s*(.+)$/;
 
 /** Parse the log body into entries (file order = chronological, oldest-first). */
-export function parseDoctorLog(text: string): DoctorLesson[] {
+export function parseSessionAnalyticsLog(text: string): SessionAnalyticsLesson[] {
   if (typeof text !== 'string') return [];
-  const out: DoctorLesson[] = [];
+  const out: SessionAnalyticsLesson[] = [];
   for (const raw of text.split('\n')) {
     const m = LINE_RE.exec(raw.trim());
     if (!m) continue;
@@ -51,14 +51,14 @@ export function parseDoctorLog(text: string): DoctorLesson[] {
 }
 
 /** Read + parse the log at `logPath` (default: global). `[]` if unreadable. */
-export function readDoctorLog(logPath = doctorLogPath()): DoctorLesson[] {
+export function readSessionAnalyticsLog(logPath = sessionAnalyticsLogPath()): SessionAnalyticsLesson[] {
   let text: string;
   try {
     text = fs.readFileSync(logPath, 'utf8');
   } catch {
     return [];
   }
-  return parseDoctorLog(text);
+  return parseSessionAnalyticsLog(text);
 }
 
 /**
@@ -66,7 +66,7 @@ export function readDoctorLog(logPath = doctorLogPath()): DoctorLesson[] {
  * prefix of the full session UUID; newest match wins (entries are oldest-first,
  * so scan in reverse).
  */
-export function lessonForSession(lessons: DoctorLesson[], sessionId: string): string | null {
+export function lessonForSession(lessons: SessionAnalyticsLesson[], sessionId: string): string | null {
   if (!sessionId) return null;
   for (let i = lessons.length - 1; i >= 0; i--) {
     if (sessionId.startsWith(lessons[i].idPrefix)) return lessons[i].lesson;
@@ -79,9 +79,9 @@ export function lessonForSession(lessons: DoctorLesson[], sessionId: string): st
  * more than once keeps only its newest entry (entries are oldest-first, so scan
  * in reverse and dedupe by `idPrefix`).
  */
-export function recentLessons(lessons: DoctorLesson[], limit: number): DoctorLesson[] {
+export function recentLessons(lessons: SessionAnalyticsLesson[], limit: number): SessionAnalyticsLesson[] {
   const seen = new Set<string>();
-  const out: DoctorLesson[] = [];
+  const out: SessionAnalyticsLesson[] = [];
   for (let i = lessons.length - 1; i >= 0 && out.length < limit; i--) {
     const l = lessons[i];
     if (seen.has(l.idPrefix)) continue;

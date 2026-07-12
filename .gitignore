@@ -5,3 +5,4 @@ node_modules/
 client/dist/
 .idea/
 .claude/launch.json
+.ua/.trash-*/

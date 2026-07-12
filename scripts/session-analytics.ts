@@ -1,11 +1,11 @@
 /**
- * doctor.ts — server-less CLI for the whole-session token/tool post-mortem.
- * Prints a SessionAnalysis as JSON to stdout so the `/doctor` skill can read
+ * session-analytics.ts — server-less CLI for the whole-session token/tool post-mortem.
+ * Prints a SessionAnalysis as JSON to stdout so the `/kaizen` skill can read
  * exact numbers without assuming the dashboard server is running.
  *
- *   tsx scripts/doctor.ts <session-id>            resolve id under ~/.claude/projects
- *   tsx scripts/doctor.ts /abs/path/to/x.jsonl    analyze a transcript directly
- *   tsx scripts/doctor.ts --latest                newest transcript for the current cwd
+ *   tsx scripts/session-analytics.ts <session-id>            resolve id under ~/.claude/projects
+ *   tsx scripts/session-analytics.ts /abs/path/to/x.jsonl    analyze a transcript directly
+ *   tsx scripts/session-analytics.ts --latest                newest transcript for the current cwd
  *
  * Id resolution mirrors serveSessionDetail (api.ts): the id is matched against
  * the enumerated transcript list, never joined into a path — so a hostile id
@@ -30,7 +30,7 @@ function normCwd(p: string): string {
 function main(): void {
   const arg = process.argv[2];
   if (!arg) {
-    die('usage: tsx scripts/doctor.ts <session-id | /abs/path.jsonl | --latest>');
+    die('usage: tsx scripts/session-analytics.ts <session-id | /abs/path.jsonl | --latest>');
   }
 
   let file: string;
@@ -47,7 +47,7 @@ function main(): void {
     if (!match) die(`no transcript found for cwd ${here}`);
     file = match.file;
     id = match.id;
-    console.error(`[doctor] --latest resolved to session ${id}`);
+    console.error(`[session-analytics] --latest resolved to session ${id}`);
   } else if (arg.startsWith('/')) {
     if (arg.includes('..') || !arg.endsWith('.jsonl')) die('path must be an absolute .jsonl file');
     file = arg;

@@ -1,5 +1,5 @@
 /**
- * analyze.ts — whole-session token/tool post-mortem (the doctor). Pure, zero
+ * analyze.ts — whole-session token/tool post-mortem (the kaizen skill). Pure, zero
  * runtime deps. Unlike transcript.ts (256KB tail, latest usage only) this walks
  * the WHOLE file and SUMS every main-agent turn, so it answers "how many tokens
  * did this session actually spend" — not "what's in the context window now".

@@ -4,7 +4,7 @@ import type { AnalyticsResponse } from '../../../shared/types';
 
 /**
  * Analytics data hook. Like the management hooks, it does NOT poll — the list is
- * driven by `/doctor` (which changes rarely), so it's fetched on mount and on
+ * driven by `/kaizen` (which changes rarely), so it's fetched on mount and on
  * manual refresh only.
  */
 export interface AnalyticsState {

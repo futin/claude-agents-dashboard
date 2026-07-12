@@ -157,8 +157,8 @@ export async function serveManagementFile(config: Config, rawPath: string, res: 
 /* -------------------------------------------------- analytics endpoint */
 
 /**
- * `GET /api/analytics` — the last N sessions `/doctor` has logged, newest-first,
- * each enriched with a live re-run of the analyzer. Read-only; `/doctor` is the
+ * `GET /api/analytics` — the last N sessions `/kaizen` has logged, newest-first,
+ * each enriched with a live re-run of the analyzer. Read-only; `/kaizen` is the
  * sole producer. Not polled; fetched on section mount and manual refresh. Fails
  * open to an empty list.
  */

@@ -10,7 +10,7 @@
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
     "test": "tsx test/run-all.ts",
     "typecheck": "tsc --noEmit",
-    "doctor": "tsx scripts/doctor.ts"
+    "session-analytics": "tsx scripts/session-analytics.ts"
   },
   "engines": {
     "node": ">=18"

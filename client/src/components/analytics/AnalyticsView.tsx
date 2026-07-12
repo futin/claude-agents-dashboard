@@ -3,10 +3,10 @@ import { fmtTok, fmtDuration } from '../../lib/format';
 import { useAnalytics } from '../../hooks/useAnalytics';
 
 /**
- * Analytics section — the last N sessions the `/doctor` skill has logged, each
+ * Analytics section — the last N sessions the `/kaizen` skill has logged, each
  * pairing its lesson with a live re-run of the deterministic analyzer. Read-only:
- * `/doctor` is the sole producer (a session appears here only after `/doctor`
- * logs it to ~/.claude/doctor-log.md). Default export → lazy chunk, so the
+ * `/kaizen` is the sole producer (a session appears here only after `/kaizen`
+ * logs it to ~/.claude/session-analytics-log.md). Default export → lazy chunk, so the
  * sessions bundle is unaffected.
  */
 export default function AnalyticsView() {
@@ -17,7 +17,7 @@ export default function AnalyticsView() {
     <div className="analytics">
       <div className="an-bar">
         <div className="an-title">Session analytics</div>
-        <span className="an-hint">last {data?.keep ?? 5} sessions logged by <code>/doctor</code></span>
+        <span className="an-hint">last {data?.keep ?? 5} sessions logged by <code>/kaizen</code></span>
         <span className="spacer" />
         <button className="an-refresh" onClick={refresh} title="Reload">↻</button>
       </div>
@@ -28,7 +28,7 @@ export default function AnalyticsView() {
         <div className="an-empty">Could not load reports.</div>
       ) : !reports.length ? (
         <div className="an-empty">
-          No sessions logged yet. Run <code>/doctor</code> on a session to record one.
+          No sessions logged yet. Run <code>/kaizen</code> on a session to record one.
         </div>
       ) : (
         <div className="an-list">

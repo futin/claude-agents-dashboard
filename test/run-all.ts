@@ -9,7 +9,7 @@ import { run as runFilterSort } from './filter-sort.test.js';
 import { run as runFrontmatter } from './frontmatter.test.js';
 import { run as runManagement } from './management.test.js';
 import { run as runManagementEntries } from './management-entries.test.js';
-import { run as runDoctorLog } from './doctorLog.test.js';
+import { run as runSessionAnalyticsLog } from './sessionAnalyticsLog.test.js';
 import { run as runAnalytics } from './analytics.test.js';
 
 let failed = 0;
@@ -23,7 +23,7 @@ failed += runFilterSort();
 failed += runFrontmatter();
 failed += await runManagement();
 failed += runManagementEntries();
-failed += runDoctorLog();
+failed += runSessionAnalyticsLog();
 failed += runAnalytics();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
