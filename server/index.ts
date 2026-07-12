@@ -20,7 +20,8 @@ import { spawn } from 'node:child_process';
 import { loadConfig } from './lib/config.js';
 import {
   serveSessions, serveSessionDetail,
-  serveManagementIndex, serveManagementProject, serveManagementFile
+  serveManagementIndex, serveManagementProject, serveManagementFile,
+  serveAnalytics
 } from './api.js';
 
 const config = loadConfig();
@@ -71,6 +72,9 @@ const server = http.createServer((req, res) => {
   }
   if (u.pathname === '/api/management') {
     return void serveManagementIndex(config, res);
+  }
+  if (u.pathname === '/api/analytics') {
+    return void serveAnalytics(config, res);
   }
   // Detail route must be matched before the generic prefix below, which would
   // otherwise swallow `/api/sessions/:id`.

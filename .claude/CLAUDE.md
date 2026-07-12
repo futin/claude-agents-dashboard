@@ -10,10 +10,11 @@ Monolith split into three domains. The **only** thing crossing the FE/BE boundar
 typed JSON payloads in `shared/types.ts` (`GET /api/sessions*`, `GET /api/management*`).
 
 ```
-shared/types.ts   API contract (SessionsResponse, Session, ManagementIndex, ScopeConfig…).
+shared/types.ts   API contract (SessionsResponse, Session, ManagementIndex, ScopeConfig,
+                  SessionAnalysis, AnalyticsReport…).
 server/           Node backend, TypeScript, run via tsx (no compile step)
-  index.ts        HTTP entry: routes /api/sessions + /api/management; static-serves client/dist in prod
-  api.ts          the /api/sessions + /api/management handlers (+ error fallbacks)
+  index.ts        HTTP entry: routes /api/sessions + /api/management + /api/analytics; static-serves client/dist in prod
+  api.ts          the /api/sessions + /api/management + /api/analytics handlers (+ error fallbacks)
   lib/config.ts   .env loader — precedence process.env > .env > defaults
   lib/transcript.ts  tail-reads last 256KB of a transcript → tokens/model/window/activity
   lib/scan.ts     enumerates + ranks sessions across ~/.claude/projects
@@ -25,12 +26,17 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser (key:value + >/| scalars, fail-open)
   lib/management.ts   config scanner: global/project ScopeConfig, plugins, recent projects,
                   servable-path security set (see "Management section")
+  lib/analyze.ts  whole-file session post-mortem → SessionAnalysis (the /doctor analyzer; pure)
+  lib/doctorLog.ts  parses ~/.claude/doctor-log.md → lesson per session (fail-open)
+  lib/analytics.ts  read-only reader: last N /doctor-logged sessions, each re-analyzed live
+                  (see "Analytics section")
 client/           Vite + React + TypeScript frontend
-  src/App.tsx     section tabs (Sessions | Management), lazy-loads ManagementView
+  src/App.tsx     section tabs (Sessions | Management | Analytics), lazy-loads Management/Analytics views
   components/SessionsView.tsx  the original live monitor (owns the 3s poll)
   components/{Header,SessionList,SessionRow,Toolbar,SectionTabs}
   components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane, FileViewer)
-  hooks/useSessions, hooks/useManagement, lib/format, lib/managementEntries
+  components/analytics/AnalyticsView.tsx  the report-card list (own lazy chunk; read-only)
+  hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
   hooks/usePersistedState.ts  localStorage-backed useState (see "View persistence")
 vite.config.ts    dev proxy /api → backend; reuses server loadConfig() for the port
 test/             node-assert tests over backend domain logic, tmpdir JSONL fixtures
@@ -41,7 +47,7 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — runs `test/run-all.ts` via tsx (105 cases).
+- `pnpm test` — runs `test/run-all.ts` via tsx (114 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
 
 **Phone access on the same wifi:** the Vite dev server binds all interfaces
@@ -182,6 +188,35 @@ selected item's file content. Read-only v1 — nothing is ever written.
 - **Client:** ManagementView is a `React.lazy` default export (own chunk; sessions bundle
   unchanged). Entry normalization is pure (`lib/managementEntries.ts`, unit-tested).
   Stale persisted scope / dead selection resolve during render — no effects.
+
+## Analytics section (session post-mortems)
+
+An **Analytics** tab (third `SectionTabs` entry, persisted `dashboard.section`) shows the last
+N (default 5) sessions the **`/doctor` skill has logged**. `~/.claude/doctor-log.md` (one line
+per `/doctor` run) is the **sole trigger** — a session appears here only because `/doctor`
+logged it. For each logged session the server pairs the log line's **lesson** ("research &
+suggestions") with a **live re-run** of the deterministic analyzer (`server/lib/analyze.ts`
+`analyzeSession()` → `SessionAnalysis`: billable/context tokens, per-tool cost, subagent
+breakdown, error signals). The server does **no** LLM calls and no heuristic advice — the
+qualitative judgment is entirely `/doctor`'s.
+
+- **Read-only — no write path.** The dashboard never writes; `/doctor` is the only producer.
+  (An earlier design had an Inspect button + a `POST /api/analytics/inspect` that generated and
+  persisted report JSON; that was removed in favor of letting `/doctor` own report creation, so
+  the app keeps its read-only invariant.)
+- **Endpoint:** `GET /api/analytics` only (AnalyticsResponse: last N reports, newest-first).
+  Handler `serveAnalytics` in `api.ts`; reader in `lib/analytics.ts` (`listReports`);
+  doctor-log parser in `lib/doctorLog.ts` (`parseDoctorLog` / `recentLessons`). Both unit-tested.
+- **How the reader works (`lib/analytics.ts`):** `readDoctorLog` → `recentLessons(limit)` (dedupe
+  by id-prefix, newest-first) → for each, resolve the transcript by **prefix-matching** the logged
+  short id against `listTranscripts(projectsRoot())` (never joined into a path — same philosophy as
+  `serveSessionDetail`; validated with `ID_RE`) → `analyzeSession(ref.file, ref.id)` live.
+  `analysis` is `null` when the transcript is gone (card falls back to lesson-only); `project`
+  then falls back to the doctor-log project tag.
+- **No polling:** the list changes only when `/doctor` runs. `AnalyticsView` is a `React.lazy`
+  default export (own chunk); `useAnalytics` fetches on mount + manual ↻. `useAnalytics` is
+  client-only.
+- **Toggle:** `SHOW_ANALYTICS=false`, display cap `ANALYTICS_KEEP=<n>` (config.ts, default 5).
 
 ## View persistence (Toolbar filters/sort)
 

@@ -1,11 +1,11 @@
-export type Section = 'sessions' | 'management';
+export type Section = 'sessions' | 'management' | 'analytics';
 
 interface Props {
   section: Section;
   onChange: (s: Section) => void;
 }
 
-/** Top-level section switch: live sessions monitor vs. config management. */
+/** Top-level section switch: live sessions monitor · config management · analytics. */
 export function SectionTabs({ section, onChange }: Props) {
   return (
     <div className="tabs">
@@ -20,6 +20,12 @@ export function SectionTabs({ section, onChange }: Props) {
         onClick={() => onChange('management')}
       >
         Management
+      </button>
+      <button
+        className={section === 'analytics' ? 'tab on' : 'tab'}
+        onClick={() => onChange('analytics')}
+      >
+        Analytics
       </button>
     </div>
   );

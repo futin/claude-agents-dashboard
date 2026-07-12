@@ -13,6 +13,10 @@ export interface Config {
   lookbackHours: number;
   showUsage: boolean;
   skipProcScan: boolean;
+  /** How many generated analytics reports the Analytics tab shows (newest-first). */
+  analyticsKeep: number;
+  /** Feature toggle for the Analytics section. */
+  showAnalytics: boolean;
 }
 
 export const DEFAULTS = {
@@ -20,7 +24,9 @@ export const DEFAULTS = {
   MAX_SESSIONS: 10,
   ACTIVE_WINDOW_MIN: 5,
   LOOKBACK_HOURS: 24,
-  SHOW_USAGE: true
+  SHOW_USAGE: true,
+  ANALYTICS_KEEP: 5,
+  SHOW_ANALYTICS: true
 } as const;
 
 /** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
@@ -96,6 +102,8 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     activeWindowMin: toPosInt(src('ACTIVE_WINDOW_MIN'), DEFAULTS.ACTIVE_WINDOW_MIN),
     lookbackHours: toPosInt(src('LOOKBACK_HOURS'), DEFAULTS.LOOKBACK_HOURS),
     showUsage: toBool(src('SHOW_USAGE'), DEFAULTS.SHOW_USAGE),
-    skipProcScan: toBool(src('SKIP_PROC_SCAN'), isDockerContainer())
+    skipProcScan: toBool(src('SKIP_PROC_SCAN'), isDockerContainer()),
+    analyticsKeep: toPosInt(src('ANALYTICS_KEEP'), DEFAULTS.ANALYTICS_KEEP),
+    showAnalytics: toBool(src('SHOW_ANALYTICS'), DEFAULTS.SHOW_ANALYTICS)
   };
 }
