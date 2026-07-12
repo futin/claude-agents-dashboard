@@ -200,6 +200,39 @@ export interface SessionAnalysis {
 }
 
 /**
+ * Analytics section (`GET /api/analytics`) — a read-only view of the sessions
+ * the `/doctor` skill has logged. `~/.claude/doctor-log.md` (one line per
+ * `/doctor` run) is the sole trigger: for each of the last N logged sessions the
+ * server pairs the human/Claude-authored `lesson` with a live re-run of
+ * {@link SessionAnalysis} (the deterministic analyzer). Nothing is written — a
+ * session appears here only because `/doctor` logged it.
+ */
+export interface AnalyticsReport {
+  sessionId: string;
+  /** basename of the session cwd, else the project tag from the doctor-log line. */
+  project: string;
+  cwd: string | null;
+  /** Models seen across the session (from the analysis), else []. */
+  models: string[];
+  /** Date the `/doctor` run was logged (YYYY-MM-DD from the doctor-log line). */
+  loggedAt: string;
+  /** Deterministic post-mortem facts, re-run live; null if the transcript is gone. */
+  analysis: SessionAnalysis | null;
+  /** The doctor-log lesson text (always present — it's what puts the session here). */
+  lesson: string;
+}
+
+/** Payload of `GET /api/analytics` — the last N logged sessions, newest-first. */
+export interface AnalyticsResponse {
+  generatedAt: string;
+  /** Display cap (default 5). `reports.length <= keep`. */
+  keep: number;
+  reports: AnalyticsReport[];
+  /** Set only when listing failed. */
+  error?: boolean;
+}
+
+/**
  * Management section (`GET /api/management*`) — read-only view over Claude
  * config on disk: skills, agents, commands, rules, hooks, memory, settings,
  * and installed plugins, per scope (global `~/.claude` or one project).

@@ -33,6 +33,29 @@ scanner itself enumerated (exact set membership, no prefix checks), so secrets t
 under the same roots — `~/.claude/.credentials.json`, `history.jsonl`, project `.env` —
 are unservable by construction. Contents are capped at 256 KB per file.
 
+## Analytics section
+
+An **Analytics** tab shows a post-mortem card for each of the last few sessions you've run
+the [`/doctor`](https://docs.claude.com/en/docs/claude-code) skill on. `/doctor` is the only
+trigger: a session shows up here because `/doctor` logged a line for it to
+`~/.claude/doctor-log.md`. Nothing appears until you run it — and the dashboard itself never
+writes anything (it just reads that log).
+
+Each card pairs two things:
+
+- **The numbers** — recomputed live from the transcript every time you open the tab: billable
+  tokens (the real cost signal), total context tokens, subagent count + tokens, turn count,
+  and tool-error/retry counts. Below that, the priciest tools (approx tokens) and the priciest
+  subagents.
+- **Research & suggestions** — the one-line lesson `/doctor` wrote for that session. This is
+  the qualitative part (what went well/badly, what to change) — the dashboard does no LLM calls
+  and invents no advice; it surfaces exactly what `/doctor` recorded.
+
+**Workflow:** run `/doctor` in a Claude Code session → it appends a lesson to
+`~/.claude/doctor-log.md` → the session appears in the Analytics tab (hit ↻ to pull it in).
+If a session's transcript has since been deleted, the card still shows the logged lesson,
+just without the live numbers.
+
 ## How to start
 
 Requires **Node.js >= 18** and **pnpm**.
@@ -182,6 +205,8 @@ environment variables override `.env`, which overrides the defaults.
 | `ACTIVE_WINDOW_MIN` | `5` | A recent session is one whose last message is within this many minutes |
 | `LOOKBACK_HOURS` | `24` | Only consider sessions modified within this many hours |
 | `SHOW_USAGE` | `true` | Show the header usage bars (fetches from Anthropic + reads keychain). Set `false` to disable |
+| `SHOW_ANALYTICS` | `true` | Show the Analytics tab (last N `/doctor`-logged sessions). Set `false` to disable |
+| `ANALYTICS_KEEP` | `5` | How many logged sessions the Analytics tab shows, newest-first |
 | `SKIP_PROC_SCAN` | _(auto)_ | Skip the `lsof` process-liveness gate. Defaults to `true` inside a Docker container, `false` otherwise |
 | `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | _(auto)_ | Force the context-window size (tokens) for the `%` bar |
 | `CLAUDE_CREDENTIALS_JSON` | _(unset)_ | OAuth creds blob for the usage bars when the host Keychain isn't reachable (Docker). See [Run in Docker](#run-in-docker) |
@@ -192,18 +217,23 @@ environment variables override `.env`, which overrides the defaults.
 shared/types.ts          the GET /api/sessions contract — imported by both sides
 
 server/                  backend (Node + TypeScript, run via tsx — no compile step)
-  index.ts               HTTP entry: routes /api/sessions(/:id), serves client/dist in prod
-  api.ts                 the /api/sessions handler (scan + usage + error fallback)
+  index.ts               HTTP entry: routes /api/sessions(/:id) + /api/management + /api/analytics, serves client/dist in prod
+  api.ts                 the /api/sessions + /api/management + /api/analytics handlers (scan + usage + error fallback)
   lib/config.ts          zero-dep .env loader
   lib/transcript.ts      tail-reads a transcript: tokens, model, context window, activity
   lib/scan.ts            enumerates + ranks sessions; process-liveness gate
   lib/usage.ts           fetches account 5h/weekly limits from Anthropic
+  lib/analyze.ts         whole-session post-mortem → SessionAnalysis (also powers /doctor)
+  lib/doctorLog.ts       parses ~/.claude/doctor-log.md into per-session lessons
+  lib/analytics.ts       read-only reader: last N /doctor-logged sessions, re-analyzed live
 
 client/                  frontend (Vite + React + TypeScript)
   index.html
   src/main.tsx / App.tsx
   src/components/         Header, Toolbar, SessionList, SessionRow, SessionDetail
+  src/components/analytics/AnalyticsView.tsx   the post-mortem card list (read-only)
   src/hooks/useSessions.ts   polls /api/sessions every 3s
+  src/hooks/useAnalytics.ts  fetches /api/analytics on mount + manual refresh (no poll)
   src/lib/filterSort.ts  client-side filter + sort logic
   src/lib/format.ts      token / relative-time formatters
   src/styles.css
@@ -220,5 +250,5 @@ scripts/lan-ip.sh        host LAN IP, passed in so the dev container can print i
 
 ## Not included (yet)
 
-- Cumulative token totals / estimated USD cost per session.
-- Global & per-project hooks / settings / skills view.
+- Estimated USD cost per session. (Whole-session token totals now live in the
+  **Analytics** tab — run `/doctor` on a session and it appears there.)

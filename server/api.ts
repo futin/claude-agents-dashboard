@@ -13,8 +13,12 @@ import {
   claudeHome, collectServablePaths, listRecentProjects, readGlobalScope,
   readProjectScope, readServableFile, resolveProject
 } from './lib/management.js';
+import { listReports } from './lib/analytics.js';
 import type { Config } from './lib/config.js';
-import type { ManagementIndex, ScopeConfig, SessionsResponse, SessionDetail } from '../shared/types.js';
+import type {
+  AnalyticsResponse, ManagementIndex, ScopeConfig,
+  SessionsResponse, SessionDetail
+} from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
 const ID_RE = /^[A-Za-z0-9._-]+$/;
@@ -148,4 +152,23 @@ export async function serveManagementFile(config: Config, rawPath: string, res: 
     console.error('[dashboard] management file failed:', (e as Error).message);
     fail(500);
   }
+}
+
+/* -------------------------------------------------- analytics endpoint */
+
+/**
+ * `GET /api/analytics` — the last N sessions `/doctor` has logged, newest-first,
+ * each enriched with a live re-run of the analyzer. Read-only; `/doctor` is the
+ * sole producer. Not polled; fetched on section mount and manual refresh. Fails
+ * open to an empty list.
+ */
+export function serveAnalytics(config: Config, res: ServerResponse): void {
+  const body: AnalyticsResponse = { generatedAt: new Date().toISOString(), keep: config.analyticsKeep, reports: [] };
+  try {
+    body.reports = listReports(config.analyticsKeep);
+  } catch (e) {
+    console.error('[dashboard] analytics list failed:', (e as Error).message);
+    body.error = true;
+  }
+  sendJson(res, 200, body);
 }
