@@ -7,13 +7,13 @@ model, context usage, and current tool activity. Polls every 3s.
 ## Architecture
 
 Monolith split into three domains. The **only** thing crossing the FE/BE boundary is the
-typed `GET /api/sessions` JSON payload.
+typed JSON payloads in `shared/types.ts` (`GET /api/sessions*`, `GET /api/management*`).
 
 ```
-shared/types.ts   API contract (SessionsResponse, Session, Activity). Imported by both sides.
+shared/types.ts   API contract (SessionsResponse, Session, ManagementIndex, ScopeConfig…).
 server/           Node backend, TypeScript, run via tsx (no compile step)
-  index.ts        HTTP entry: routes /api/sessions; static-serves client/dist in prod
-  api.ts          the /api/sessions handler (scanSessions + error fallback)
+  index.ts        HTTP entry: routes /api/sessions + /api/management; static-serves client/dist in prod
+  api.ts          the /api/sessions + /api/management handlers (+ error fallbacks)
   lib/config.ts   .env loader — precedence process.env > .env > defaults
   lib/transcript.ts  tail-reads last 256KB of a transcript → tokens/model/window/activity
   lib/scan.ts     enumerates + ranks sessions across ~/.claude/projects
@@ -22,8 +22,15 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts, used only by the
                   on-demand GET /api/sessions/:id (see docs/ideas/agent-tracking-cache.md)
   lib/usage.ts    fetches account 5h/weekly limits from Anthropic (see "Usage limits")
+  lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser (key:value + >/| scalars, fail-open)
+  lib/management.ts   config scanner: global/project ScopeConfig, plugins, recent projects,
+                  servable-path security set (see "Management section")
 client/           Vite + React + TypeScript frontend
-  src/App.tsx, components/{Header,SessionList,SessionRow}, hooks/useSessions, lib/format
+  src/App.tsx     section tabs (Sessions | Management), lazy-loads ManagementView
+  components/SessionsView.tsx  the original live monitor (owns the 3s poll)
+  components/{Header,SessionList,SessionRow,Toolbar,SectionTabs}
+  components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane, FileViewer)
+  hooks/useSessions, hooks/useManagement, lib/format, lib/managementEntries
   hooks/usePersistedState.ts  localStorage-backed useState (see "View persistence")
 vite.config.ts    dev proxy /api → backend; reuses server loadConfig() for the port
 test/             node-assert tests over backend domain logic, tmpdir JSONL fixtures
@@ -34,7 +41,7 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — runs `test/run-all.ts` via tsx (62 cases).
+- `pnpm test` — runs `test/run-all.ts` via tsx (105 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
 
 **Phone access on the same wifi:** the Vite dev server binds all interfaces
@@ -145,6 +152,36 @@ these are **not on disk**: `lib/usage.ts` fetches them live from Anthropic.
   `docs/plans/2026-07-06-usage-token-refresh-removal.md` for the removed design + a
   platform-independent Docker approach to revisit **if** a future feature genuinely needs the
   dashboard to make its own authenticated Anthropic API call.
+
+## Management section (read-only config browser)
+
+A **Management** tab (top-level `SectionTabs` in `App.tsx`, persisted as `dashboard.section`)
+shows all Claude config on the machine in a three-pane layout: scope menu (Global +
+recently-active projects) | filterable item list grouped by type | detail pane with the
+selected item's file content. Read-only v1 — nothing is ever written.
+
+- **Endpoints:** `GET /api/management` (ManagementIndex: global ScopeConfig + recent
+  ProjectRefs), `GET /api/management/project?dir=<dirName>` (one project's ScopeConfig),
+  `GET /api/management/file?path=<abs>` (FileContent). Handlers in `api.ts`, scanner in
+  `lib/management.ts`, frontmatter metadata via `lib/frontmatter.ts`.
+- **Scopes:** global = `~/.claude/{skills,agents,commands,rules,hooks,CLAUDE.md,settings*}`
+  **plus every installed plugin's subtree** (`plugins/installed_plugins.json` →
+  installPath → skills/agents/commands/rules/hooks.json), items tagged `plugin:<name>`.
+  Project = `<cwd>/.claude/*` + root CLAUDE.md, items tagged `project`. Recent projects
+  come from transcript cwds (same lookback as sessions), deduped by cwd, newest-first.
+- **⚠️ File-endpoint security (the invariant to keep):** the endpoint serves ONLY paths
+  present in `collectServablePaths()` — the exact set the scanner itself enumerated.
+  **Never replace this with prefix/subtree checks**: `~/.claude` also holds
+  `.credentials.json`/`history.jsonl`/`session-data/`, and project roots hold `.env`.
+  `dirName` is resolved against the enumerated recent-project list, never joined into a
+  path (same philosophy as `serveSessionDetail`). Content capped at 256 KB (`truncated`
+  flag). `~/.claude.json` (huge, private) is never read.
+- **No polling:** config changes over days. Index fetched on section mount / manual ↻;
+  project scopes + file bodies fetched lazily on click and cached in ref-held Maps.
+  Switching to Management unmounts SessionsView → the 3s poll stops.
+- **Client:** ManagementView is a `React.lazy` default export (own chunk; sessions bundle
+  unchanged). Entry normalization is pure (`lib/managementEntries.ts`, unit-tested).
+  Stale persisted scope / dead selection resolve during render — no effects.
 
 ## View persistence (Toolbar filters/sort)
 

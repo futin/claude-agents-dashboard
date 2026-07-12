@@ -12,8 +12,26 @@ only).
 
 A **monolith split into three domains**: a Node backend (`server/`), a Vite + React +
 TypeScript frontend (`client/`), and the shared API contract (`shared/`). One repo, one
-deploy; the only thing crossing the FE/BE boundary is the typed `GET /api/sessions` JSON
-payload.
+deploy; the only thing crossing the FE/BE boundary is the typed JSON payloads defined in
+`shared/types.ts`.
+
+## Management section
+
+Next to the live sessions monitor, a **Management** tab gives a read-only, three-pane
+overview of all Claude configuration on the machine:
+
+- **Left — scope menu:** Global (`~/.claude`) plus every recently-active project.
+- **Middle — item list:** skills, agents, commands, rules, hooks, memory (CLAUDE.md),
+  settings, and installed plugins for the selected scope, grouped by type and filterable.
+  Every item is tagged with its source: `user`, `project`, or `plugin:<name>` — installed
+  plugins are fully expanded, so plugin-provided skills/hooks/agents/rules show up too.
+- **Right — detail pane:** the selected item's metadata and file content (SKILL.md, hook
+  script, settings.json, …).
+
+Read-only by design; nothing is ever written. The file endpoint only serves paths the
+scanner itself enumerated (exact set membership, no prefix checks), so secrets that live
+under the same roots — `~/.claude/.credentials.json`, `history.jsonl`, project `.env` —
+are unservable by construction. Contents are capped at 256 KB per file.
 
 ## How to start
 
