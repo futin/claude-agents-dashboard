@@ -71,7 +71,9 @@ relevant one when a task touches that area:
 - `.claude/rules/management.md` — Management tab config browser (`lib/management.ts`: global +
   plugin + project scopes, the ⚠️ file-endpoint security invariant).
 - `.claude/rules/analytics.md` — Analytics tab session post-mortems (`lib/analytics.ts` +
-  `lib/sessionAnalyticsLog.ts`; `/kaizen` is the sole producer; read-only invariant).
+  `lib/sessionAnalyticsLog.ts`; `/kaizen` is the sole producer; read-only invariant). The
+  `/kaizen` skill is **vendored** at `.claude/skills/kaizen/` so collaborators can populate
+  the tab (each user's own global log); keep it in lockstep with the log format above.
 - `.claude/rules/view-persistence.md` — Toolbar filter/sort localStorage persistence
   (`hooks/usePersistedState.ts`, fail-open shallow-merge).
 
