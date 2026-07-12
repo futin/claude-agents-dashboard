@@ -1,16 +1,66 @@
 {
   "version": "1.0.0",
-  "gitCommitHash": "f69d21ac43b6b5c930c14641ca0267764182ab42",
-  "generatedAt": "2026-07-12T15:29:35.197Z",
+  "gitCommitHash": "e136b8d953e998ac0aa74660d5b849689443857d",
+  "generatedAt": "2026-07-12T21:24:09.936Z",
   "files": {
     ".claude/CLAUDE.md": {
       "filePath": ".claude/CLAUDE.md",
-      "contentHash": "b2d6903756894a416fab4684a8eabbbbd89eb684fe17ca503c3a9feb399fb8f3",
+      "contentHash": "3d31c94c8d4106a66eeca0189882518c7168437da00c10e6b0c05f22f579a602",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 258,
+      "totalLines": 102,
+      "hasStructuralAnalysis": true
+    },
+    ".claude/rules/analytics.md": {
+      "filePath": ".claude/rules/analytics.md",
+      "contentHash": "c16a2a47c4ad6244cf1ca977b76a2c71aa1cc6305c30a7fc7212940316326c66",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 29,
+      "hasStructuralAnalysis": true
+    },
+    ".claude/rules/management.md": {
+      "filePath": ".claude/rules/management.md",
+      "contentHash": "daf9952fb2247791fb6be4782bf265a5d9a6529ba8d4c20026fe332d4a3f9775",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 30,
+      "hasStructuralAnalysis": true
+    },
+    ".claude/rules/session-status.md": {
+      "filePath": ".claude/rules/session-status.md",
+      "contentHash": "42f5f4869ba7eeab3e40764873e0cab96925f14fdf5be1c8e050d75862253344",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 57,
+      "hasStructuralAnalysis": true
+    },
+    ".claude/rules/usage-limits.md": {
+      "filePath": ".claude/rules/usage-limits.md",
+      "contentHash": "4fd38e3e8c667823495970b77025f7e1053e26e1623ba005a5d9020a1fdf4315",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 45,
+      "hasStructuralAnalysis": true
+    },
+    ".claude/rules/view-persistence.md": {
+      "filePath": ".claude/rules/view-persistence.md",
+      "contentHash": "857140e4b60f973b905292ad81d23ee3f22ddeb123ceea0d18b98702364385f0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
       "hasStructuralAnalysis": true
     },
     ".dockerignore": {
@@ -25,12 +75,12 @@
     },
     ".env.example": {
       "filePath": ".env.example",
-      "contentHash": "1f9fe0fb0bedd5e87920d63d60e7ed35fe6386321c7236cb89618bf201c39ee2",
+      "contentHash": "701d2cccc5426f519489dbcc3a93c9a98eceb5ec5e741a4e052fb172f971c99c",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 24,
+      "totalLines": 29,
       "hasStructuralAnalysis": true
     },
     ".ua/.understandignore": {
@@ -43,44 +93,54 @@
       "totalLines": 54,
       "hasStructuralAnalysis": false
     },
+    ".ua/config.json": {
+      "filePath": ".ua/config.json",
+      "contentHash": "4b66f98f8a815dfeb2d3a29eeb73418e07c40ed020a1498c07e908b2254f0c8c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    ".ua/fingerprints.json": {
+      "filePath": ".ua/fingerprints.json",
+      "contentHash": "9fad94faba0a99256c4b52d53abf77a374575cc4dec52e9cf503b47efad93bad",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2670,
+      "hasStructuralAnalysis": true
+    },
     ".ua/intermediate/scan-result.json": {
       "filePath": ".ua/intermediate/scan-result.json",
-      "contentHash": "aed0e79c7cd2b17708e8275e94f4b6b3586adaf4902228959351b57738c2eb8f",
+      "contentHash": "70c91fbf85ed1a39787af012b578a2b1a493ae14bffcc492d74eadb1988adb2a",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 546,
+      "totalLines": 630,
       "hasStructuralAnalysis": true
     },
-    ".ua/tmp/ua-import-map-input.json": {
-      "filePath": ".ua/tmp/ua-import-map-input.json",
-      "contentHash": "0b9d560616454fcebd855f422bbfa9fb12536a851d3581d2300192e8ee5139e8",
+    ".ua/knowledge-graph.json": {
+      "filePath": ".ua/knowledge-graph.json",
+      "contentHash": "c45771432720360a8f3990c49298afde5708f40008ec10cfc69083a116465d6e",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 300,
+      "totalLines": 6588,
       "hasStructuralAnalysis": true
     },
-    ".ua/tmp/ua-import-map-output.json": {
-      "filePath": ".ua/tmp/ua-import-map-output.json",
-      "contentHash": "07a19f485a22d3e68ea841d819b8ad263943d731e030a578842b43c48fabb8a4",
+    ".ua/meta.json": {
+      "filePath": ".ua/meta.json",
+      "contentHash": "9c05c1955aa0b25808973c213b79a20597fff978e6a8dcbc559cb6acaf408d79",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 173,
-      "hasStructuralAnalysis": true
-    },
-    ".ua/tmp/ua-scan-files.json": {
-      "filePath": ".ua/tmp/ua-scan-files.json",
-      "contentHash": "e1e9411c5d5b1357e190e2364c139018dd1f622c85d9bcc3da19634d54019492",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 383,
+      "totalLines": 7,
       "hasStructuralAnalysis": true
     },
     "client/index.html": {
@@ -95,13 +155,13 @@
     },
     "client/src/App.tsx": {
       "filePath": "client/src/App.tsx",
-      "contentHash": "a879da653e98ab758b1a293520f027df81031cf1879147a66fcf39265d90527f",
+      "contentHash": "f57da40578fd15b80ddc972b1cb8d62559458251ea17234f0c9b9e1055b5234b",
       "functions": [
         {
           "name": "App",
           "params": [],
           "exported": true,
-          "lineCount": 31
+          "lineCount": 22
         }
       ],
       "classes": [],
@@ -110,8 +170,7 @@
           "source": "react",
           "specifiers": [
             "lazy",
-            "Suspense",
-            "useCallback"
+            "Suspense"
           ]
         },
         {
@@ -137,7 +196,62 @@
       "exports": [
         "App"
       ],
-      "totalLines": 43,
+      "totalLines": 34,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/components/analytics/AnalyticsView.tsx": {
+      "filePath": "client/src/components/analytics/AnalyticsView.tsx",
+      "contentHash": "4b2ffdc9f31d04f88ddfebf9d8adfbc9ea69fefe5a6d701f5b2f3581c14004e6",
+      "functions": [
+        {
+          "name": "AnalyticsView",
+          "params": [],
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "ReportCard",
+          "params": [
+            "{ r }"
+          ],
+          "exported": false,
+          "lineCount": 68
+        },
+        {
+          "name": "Metric",
+          "params": [
+            "{ label, value, lead, warn }"
+          ],
+          "exported": false,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../../../../shared/types",
+          "specifiers": [
+            "AnalyticsReport"
+          ]
+        },
+        {
+          "source": "../../lib/format",
+          "specifiers": [
+            "fmtTok",
+            "fmtDuration"
+          ]
+        },
+        {
+          "source": "../../hooks/useAnalytics",
+          "specifiers": [
+            "useAnalytics"
+          ]
+        }
+      ],
+      "exports": [
+        "AnalyticsView"
+      ],
+      "totalLines": 119,
       "hasStructuralAnalysis": true
     },
     "client/src/components/Header.tsx": {
@@ -650,15 +764,15 @@
     },
     "client/src/components/SessionList.tsx": {
       "filePath": "client/src/components/SessionList.tsx",
-      "contentHash": "07e50bcdf4347a9d02aeb42b31c997bad106b055345a198bd03b72855dfaa367",
+      "contentHash": "b752608a973cc05e7a1bcb036a2af36d6c08547a2c508e06b40fa94eb57af5d1",
       "functions": [
         {
           "name": "SessionList",
           "params": [
-            "{ sessions, onInspect }"
+            "{ sessions }"
           ],
           "exported": true,
-          "lineCount": 39
+          "lineCount": 38
         }
       ],
       "classes": [],
@@ -685,20 +799,20 @@
       "exports": [
         "SessionList"
       ],
-      "totalLines": 51,
+      "totalLines": 45,
       "hasStructuralAnalysis": true
     },
     "client/src/components/SessionRow.tsx": {
       "filePath": "client/src/components/SessionRow.tsx",
-      "contentHash": "e04b5e01b848bea72fdc29d44f2cf4f3bf1320807d78bdd0b028796ad4aa4cb2",
+      "contentHash": "12a3dbeb9dd9e7ab51eab13cdac027bba107dc48fb4d1a7a130a2043390f308c",
       "functions": [
         {
           "name": "SessionRow",
           "params": [
-            "{ s, selected, onToggle, onInspect }"
+            "{ s, selected, onToggle }"
           ],
           "exported": true,
-          "lineCount": 58
+          "lineCount": 66
         }
       ],
       "classes": [],
@@ -732,18 +846,16 @@
       "exports": [
         "SessionRow"
       ],
-      "totalLines": 73,
+      "totalLines": 80,
       "hasStructuralAnalysis": true
     },
     "client/src/components/SessionsView.tsx": {
       "filePath": "client/src/components/SessionsView.tsx",
-      "contentHash": "e94b5330a89692f5e258aa5cf5167dc86fd3217beac7f2b07c73bd0873548979",
+      "contentHash": "f0bfddf93e60327c46ce6972b0098da66b1f37162ebd5f0a790b3db0ea5c1302",
       "functions": [
         {
           "name": "SessionsView",
-          "params": [
-            "{ onInspect }"
-          ],
+          "params": [],
           "exported": true,
           "lineCount": 22
         }
@@ -843,6 +955,40 @@
         "Toolbar"
       ],
       "totalLines": 73,
+      "hasStructuralAnalysis": true
+    },
+    "client/src/hooks/useAnalytics.ts": {
+      "filePath": "client/src/hooks/useAnalytics.ts",
+      "contentHash": "36ac1b5fa7ba87d250746b34af8d19dd86a6a93821ed23cc41486b3b200767a5",
+      "functions": [
+        {
+          "name": "useAnalytics",
+          "params": [],
+          "exported": true,
+          "lineCount": 22
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useCallback",
+            "useEffect",
+            "useState"
+          ]
+        },
+        {
+          "source": "../../../shared/types",
+          "specifiers": [
+            "AnalyticsResponse"
+          ]
+        }
+      ],
+      "exports": [
+        "useAnalytics"
+      ],
+      "totalLines": 38,
       "hasStructuralAnalysis": true
     },
     "client/src/hooks/useManagement.ts": {
@@ -1239,12 +1385,12 @@
     },
     "client/src/styles.css": {
       "filePath": "client/src/styles.css",
-      "contentHash": "4e0e35a0e640cfaa278ef6ad06611f75be4ac5c4fa2a69bf5a1d86cbc0f94d43",
+      "contentHash": "c2fa69fa50c4578d56f2b432b1606caff9c88dbb8b8479be500f8e84026e3b68",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 216,
+      "totalLines": 212,
       "hasStructuralAnalysis": false
     },
     "docker-compose.dev.yml": {
@@ -1329,7 +1475,7 @@
     },
     "package.json": {
       "filePath": "package.json",
-      "contentHash": "6dca627996aa9470dd2376ca2b130c0d1830d5747619d4bf7515e2dd0683af1e",
+      "contentHash": "d0cbd643ef8efe7b9acdd96f2f4e4e7b9f7d2dcbdbaed728a04a894428fda18e",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -1339,17 +1485,17 @@
     },
     "README.md": {
       "filePath": "README.md",
-      "contentHash": "8432a8c782dad8000d49c7bc40be2de4749feef9c5a749cc7b689b73b1ef38ed",
+      "contentHash": "287ac01ff8960148cc0bccac689636482ab302d564678ac24c4532a1b99b4f69",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 225,
+      "totalLines": 255,
       "hasStructuralAnalysis": true
     },
     "server/api.ts": {
       "filePath": "server/api.ts",
-      "contentHash": "42582225c4fa535fded593fa0417a385d3b0541d6a070700cd3f8f58af388747",
+      "contentHash": "cd6150f4bf6e04ef963cb7817a61d2cf379e72ae50ba5ff984c77949d4a8d78d",
       "functions": [
         {
           "name": "serveSessions",
@@ -1433,16 +1579,6 @@
           "returnType": "void",
           "exported": true,
           "lineCount": 10
-        },
-        {
-          "name": "serveAnalyticsInspect",
-          "params": [
-            "id",
-            "res"
-          ],
-          "returnType": "void",
-          "exported": true,
-          "lineCount": 12
         }
       ],
       "classes": [],
@@ -1486,9 +1622,8 @@
           ]
         },
         {
-          "source": "./lib/analytics-store.js",
+          "source": "./lib/analytics.js",
           "specifiers": [
-            "generateReport",
             "listReports"
           ]
         },
@@ -1501,7 +1636,6 @@
         {
           "source": "../shared/types.js",
           "specifiers": [
-            "AnalyticsReport",
             "AnalyticsResponse",
             "ManagementIndex",
             "ScopeConfig",
@@ -1516,15 +1650,14 @@
         "serveManagementIndex",
         "serveManagementProject",
         "serveManagementFile",
-        "serveAnalytics",
-        "serveAnalyticsInspect"
+        "serveAnalytics"
       ],
-      "totalLines": 192,
+      "totalLines": 175,
       "hasStructuralAnalysis": true
     },
     "server/index.ts": {
       "filePath": "server/index.ts",
-      "contentHash": "2150671c7491d577d3cc060bba3c3aabd07e3b355ae620c95054d11d22685e91",
+      "contentHash": "943b13f1073dc276152349050d1ed680e200d43bd2e1ee442d62c32ef6c0f241",
       "functions": [
         {
           "name": "serveStatic",
@@ -1577,8 +1710,7 @@
             "serveManagementIndex",
             "serveManagementProject",
             "serveManagementFile",
-            "serveAnalytics",
-            "serveAnalyticsInspect"
+            "serveAnalytics"
           ]
         }
       ],
@@ -1586,7 +1718,7 @@
         "server",
         "config"
       ],
-      "totalLines": 115,
+      "totalLines": 112,
       "hasStructuralAnalysis": true
     },
     "server/lib/agents-cache.ts": {
@@ -1795,9 +1927,81 @@
       "totalLines": 273,
       "hasStructuralAnalysis": true
     },
+    "server/lib/analytics.ts": {
+      "filePath": "server/lib/analytics.ts",
+      "contentHash": "43f36d6cc74fd4c6f84b3823602815c8a1d724681f0ed95eaacb388f33e7f537",
+      "functions": [
+        {
+          "name": "projectName",
+          "params": [
+            "cwd",
+            "fallback"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "listReports",
+          "params": [
+            "limit",
+            "opts"
+          ],
+          "returnType": "AnalyticsReport[]",
+          "exported": true,
+          "lineCount": 23
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "./analyze.js",
+          "specifiers": [
+            "analyzeSession"
+          ]
+        },
+        {
+          "source": "./scan.js",
+          "specifiers": [
+            "listTranscripts",
+            "projectsRoot"
+          ]
+        },
+        {
+          "source": "./management.js",
+          "specifiers": [
+            "claudeHome"
+          ]
+        },
+        {
+          "source": "./sessionAnalyticsLog.js",
+          "specifiers": [
+            "readSessionAnalyticsLog",
+            "recentLessons"
+          ]
+        },
+        {
+          "source": "../../shared/types.js",
+          "specifiers": [
+            "AnalyticsReport"
+          ]
+        }
+      ],
+      "exports": [
+        "listReports"
+      ],
+      "totalLines": 60,
+      "hasStructuralAnalysis": true
+    },
     "server/lib/analyze.ts": {
       "filePath": "server/lib/analyze.ts",
-      "contentHash": "bf66fd8d7a483a2806825d5371080393ddd7f203b14d5e1f2ca660312ab6c19e",
+      "contentHash": "7023005d00f573ab3ab48f8474f9a0f38259e52eda9c1f1565af2c181060c981",
       "functions": [
         {
           "name": "num",
@@ -2224,7 +2428,7 @@
     },
     "server/lib/scan.ts": {
       "filePath": "server/lib/scan.ts",
-      "contentHash": "49b3d29816cadb1c5e092badb9ba2563da8514e059f0b553cc2c6a4aad405cac",
+      "contentHash": "f7665e4def4f506f112773ddfc738cfc3f1ae36ea62a4388c5e7bd9e07fbb5f3",
       "functions": [
         {
           "name": "projectsRoot",
@@ -2284,7 +2488,7 @@
           ],
           "returnType": "SessionsResponse",
           "exported": true,
-          "lineCount": 84
+          "lineCount": 92
         }
       ],
       "classes": [],
@@ -2320,6 +2524,19 @@
           ]
         },
         {
+          "source": "./sessionAnalyticsLog.js",
+          "specifiers": [
+            "readSessionAnalyticsLog",
+            "lessonForSession"
+          ]
+        },
+        {
+          "source": "./sessionAnalyticsLog.js",
+          "specifiers": [
+            "SessionAnalyticsLesson"
+          ]
+        },
+        {
           "source": "./config.js",
           "specifiers": [
             "Config"
@@ -2341,7 +2558,90 @@
         "liveCwds",
         "scanSessions"
       ],
-      "totalLines": 210,
+      "totalLines": 222,
+      "hasStructuralAnalysis": true
+    },
+    "server/lib/sessionAnalyticsLog.ts": {
+      "filePath": "server/lib/sessionAnalyticsLog.ts",
+      "contentHash": "8618be0565e283c03a7aa874dc3e2009b083d744798c0e6da36de70eb19a0027",
+      "functions": [
+        {
+          "name": "sessionAnalyticsLogPath",
+          "params": [
+            "homeDir"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "parseSessionAnalyticsLog",
+          "params": [
+            "text"
+          ],
+          "returnType": "SessionAnalyticsLesson[]",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "readSessionAnalyticsLog",
+          "params": [
+            "logPath"
+          ],
+          "returnType": "SessionAnalyticsLesson[]",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "lessonForSession",
+          "params": [
+            "lessons",
+            "sessionId"
+          ],
+          "returnType": "string | null",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "recentLessons",
+          "params": [
+            "lessons",
+            "limit"
+          ],
+          "returnType": "SessionAnalyticsLesson[]",
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "./management.js",
+          "specifiers": [
+            "claudeHome"
+          ]
+        }
+      ],
+      "exports": [
+        "sessionAnalyticsLogPath",
+        "parseSessionAnalyticsLog",
+        "readSessionAnalyticsLog",
+        "lessonForSession",
+        "recentLessons"
+      ],
+      "totalLines": 93,
       "hasStructuralAnalysis": true
     },
     "server/lib/transcript.ts": {
@@ -2596,12 +2896,12 @@
     },
     "shared/types.ts": {
       "filePath": "shared/types.ts",
-      "contentHash": "00c66ffe235ed21d2f916b30903912cfc9b7a86bc6dbe91d450cad10fd6f75a4",
+      "contentHash": "ef54fdb8e2b9657b169c3d00190e80ba32c9b2099b85b82cd603e994e1a6425c",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 366,
+      "totalLines": 367,
       "hasStructuralAnalysis": true
     },
     "skills-lock.json": {
