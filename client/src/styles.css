@@ -187,8 +187,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .an-refresh:hover{color:var(--text);border-color:var(--border2)}
 .an-empty{font-size:11px;color:var(--text3);padding:20px 2px;text-align:center}
 .an-list{display:flex;flex-direction:column;gap:12px}
-.an-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
-.an-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.an-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;transition:border-color .15s}
+.an-card:hover{border-color:var(--border2)}
+.an-card.selected{border-color:var(--accent);background:var(--surface2)}
+.an-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer}
+.an-head .caret{flex-shrink:0}
+.an-tok{font-size:10.5px;color:var(--text2);font-family:var(--mono);font-variant-numeric:tabular-nums}
 .an-proj{font-size:13px;font-weight:600;color:var(--text)}
 .an-model{font-size:9.5px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.03em}
 .an-id{font-size:10px;color:var(--text3);font-family:var(--mono)}
