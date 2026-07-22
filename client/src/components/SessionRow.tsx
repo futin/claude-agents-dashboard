@@ -27,13 +27,11 @@ export function SessionRow({ s, selected, onToggle }: Props) {
         <span className={`caret${selected ? ' open' : ''}`} aria-hidden="true">▸</span>
         <span className="dot" />
         {s.sessionName ? (
-          <>
-            <span className="session-name">{s.sessionName}</span>
-            <span className="proj secondary">{s.project}</span>
-          </>
+          <span className="session-name">{s.sessionName}</span>
         ) : (
           <span className="proj">{s.project}</span>
         )}
+        {s.sessionName && <span className="proj-pill">{s.project}</span>}
         {s.gitBranch && <span className="branch">{s.gitBranch}</span>}
         <span className="model">{s.model}</span>
         {s.kaizenLesson && (
