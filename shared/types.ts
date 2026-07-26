@@ -100,6 +100,45 @@ export interface SessionDetail {
   error?: boolean;
 }
 
+/** One tool call rendered as a compact line under an assistant message. */
+export interface ChatToolCall {
+  name: string;
+  /** Short human label (`describeTool` in transcript.ts) — file path, pattern, command… */
+  detail: string;
+}
+
+/** One conversational turn in the chat tail. Noise records are dropped upstream. */
+export interface ChatMessage {
+  uuid: string;
+  role: 'user' | 'assistant';
+  ts: string | null;
+  /** Concatenated text blocks, `<system-reminder>` spans stripped, capped. */
+  text: string;
+  textTruncated: boolean;
+  tools: ChatToolCall[];
+}
+
+/**
+ * Payload of `GET /api/sessions/:id/chat` — a page of the session's chat history.
+ * Byte offsets are the paging currency: `cursor` walks forward (live tail),
+ * `headOffset` walks backward (older pages). See `.claude/rules/chat-tail.md`.
+ */
+export interface SessionChat {
+  id: string;
+  /** Oldest-first. */
+  messages: ChatMessage[];
+  /** Bytes of the transcript consumed; pass back as `?after=` for the live tail. */
+  cursor: number;
+  /** Byte offset of `messages[0]`'s line; pass as `?before=` to load older. */
+  headOffset: number;
+  /** `headOffset > 0` — there is history above the first message. */
+  hasMore: boolean;
+  /** The file shrank/rotated: the client's cursor is meaningless, refetch the tail. */
+  reset?: boolean;
+  /** Set only when the read failed or the id is unknown. */
+  error?: boolean;
+}
+
 /**
  * Whole-session token accounting — the kaizen post-mortem (`analyze.ts`,
  * `scripts/session-analytics.ts`, the `/kaizen` skill). Unlike {@link Session}.tokens (the

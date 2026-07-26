@@ -14,10 +14,11 @@ import {
   readProjectScope, readServableFile, resolveProject
 } from './lib/management.js';
 import { listReports } from './lib/analytics.js';
+import { readChatAfter, readChatBefore, readChatTail } from './lib/chat.js';
 import type { Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, ScopeConfig,
-  SessionsResponse, SessionDetail
+  SessionsResponse, SessionChat, SessionDetail
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -85,6 +86,50 @@ export function serveSessionDetail(id: string, res: ServerResponse): void {
   }
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(detail));
+}
+
+/**
+ * `GET /api/sessions/:id/chat` — a page of the session's chat history.
+ * No query → the newest page (tail); `?after=<cursor>` → only what was appended
+ * since (the 3s live tail); `?before=<headOffset>` → the page above. Offsets are
+ * byte offsets into the transcript (see lib/chat.ts). The id is resolved against
+ * the enumerated transcript list, never joined into a path.
+ */
+export function serveSessionChat(id: string, params: URLSearchParams, res: ServerResponse): void {
+  const fail = (code: number): void => {
+    const body: SessionChat = { id, messages: [], cursor: 0, headOffset: 0, hasMore: false, error: true };
+    res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(body));
+  };
+
+  if (!ID_RE.test(id)) return fail(400);
+
+  const offset = (name: string): number | null | undefined => {
+    const raw = params.get(name);
+    if (raw === null) return undefined;
+    const n = Number(raw);
+    return Number.isInteger(n) && n >= 0 ? n : null;
+  };
+  const after = offset('after');
+  const before = offset('before');
+  if (after === null || before === null) return fail(400);
+
+  let body: SessionChat;
+  try {
+    const ref = listTranscripts(projectsRoot()).find(t => t.id === id);
+    if (!ref) return fail(404);
+    const chat =
+      after !== undefined ? readChatAfter(ref.file, after)
+      : before !== undefined ? readChatBefore(ref.file, before)
+      : readChatTail(ref.file);
+    if (!chat) return fail(404);
+    body = { id, ...chat };
+  } catch (e) {
+    console.error('[dashboard] session chat failed:', (e as Error).message);
+    return fail(500);
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(body));
 }
 
 /* -------------------------------------------------- management endpoints */

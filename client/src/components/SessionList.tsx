@@ -3,8 +3,14 @@ import { useState } from 'react';
 import type { Session } from '../../../shared/types';
 import { SessionRow } from './SessionRow';
 
+interface Props {
+  sessions: Session[] | null;
+  /** Open the chat-history drawer for a session (state lives in SessionsView). */
+  onOpenChat: (id: string) => void;
+}
+
 /** The rows container, with loading / empty states. Owns which rows are expanded. */
-export function SessionList({ sessions }: { sessions: Session[] | null }) {
+export function SessionList({ sessions, onOpenChat }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   function toggle(id: string) {
@@ -37,6 +43,7 @@ export function SessionList({ sessions }: { sessions: Session[] | null }) {
           s={s}
           selected={expandedIds.has(s.id)}
           onToggle={() => toggle(s.id)}
+          onOpenChat={() => onOpenChat(s.id)}
         />
       ))}
     </div>

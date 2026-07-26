@@ -13,7 +13,7 @@ typed JSON payloads in `shared/types.ts` (`GET /api/sessions*`, `GET /api/manage
 shared/types.ts   API contract (SessionsResponse, Session, ManagementIndex, ScopeConfig,
                   SessionAnalysis, AnalyticsReport…).
 server/           Node backend, TypeScript, run via tsx (no compile step)
-  index.ts        HTTP entry: routes /api/sessions + /api/management + /api/analytics; static-serves client/dist in prod
+  index.ts        HTTP entry: routes /api/sessions(+/:id/chat) + /api/management + /api/analytics; static-serves client/dist in prod
   api.ts          the /api/sessions + /api/management + /api/analytics handlers (+ error fallbacks)
   lib/config.ts   .env loader — precedence process.env > .env > defaults
   lib/transcript.ts  tail-reads last 256KB of a transcript → tokens/model/window/activity
@@ -22,6 +22,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   (tokens/toolUses/duration from toolUseResult + notification <usage> blocks)
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts, used only by the
                   on-demand GET /api/sessions/:id (see docs/ideas/agent-tracking-cache.md)
+  lib/chat.ts     byte-offset paged chat history for GET /api/sessions/:id/chat — tail /
+                  ?after= (live) / ?before= (older) (see .claude/rules/chat-tail.md)
   lib/usage.ts    fetches account 5h/weekly limits from Anthropic (see .claude/rules/usage-limits.md)
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser (key:value + >/| scalars, fail-open)
   lib/management.ts   config scanner: global/project ScopeConfig, plugins, recent projects,
@@ -32,8 +34,10 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   (see .claude/rules/analytics.md)
 client/           Vite + React + TypeScript frontend
   src/App.tsx     section tabs (Sessions | Management | Analytics), lazy-loads Management/Analytics views
-  components/SessionsView.tsx  the original live monitor (owns the 3s poll)
+  components/SessionsView.tsx  the original live monitor (owns the 3s poll + chat drawer state)
   components/{Header,SessionList,SessionRow,Toolbar,SectionTabs}
+  components/ChatDrawer.tsx    full-height chat-history drawer (own lazy chunk;
+                  hooks/useSessionChat — see .claude/rules/chat-tail.md)
   components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane, FileViewer)
   components/analytics/AnalyticsView.tsx  the report-card list (own lazy chunk; read-only)
   hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
@@ -47,7 +51,7 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — runs `test/run-all.ts` via tsx (114 cases).
+- `pnpm test` — runs `test/run-all.ts` via tsx (160 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
 
 **Phone access on the same wifi:** the Vite dev server binds all interfaces
@@ -76,6 +80,8 @@ relevant one when a task touches that area:
   the tab (each user's own global log); keep it in lockstep with the log format above.
 - `.claude/rules/view-persistence.md` — Toolbar filter/sort localStorage persistence
   (`hooks/usePersistedState.ts`, fail-open shallow-merge).
+- `.claude/rules/chat-tail.md` — the chat-history drawer (`lib/chat.ts` byte-offset paging,
+  what's filtered out of a transcript, the `/api/sessions/:id/chat` route-order gotcha).
 
 ## Conventions / gotchas
 

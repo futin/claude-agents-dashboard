@@ -7,11 +7,12 @@ interface Props {
   s: Session;
   selected: boolean;
   onToggle: () => void;
+  onOpenChat: () => void;
 }
 
 /** One dashboard row: status dot, project/branch/model, tokens+%, context bar, activity.
- *  Click to expand a subagent-activity panel. */
-export function SessionRow({ s, selected, onToggle }: Props) {
+ *  Click to expand a subagent-activity panel; the `chat` pill opens the history drawer. */
+export function SessionRow({ s, selected, onToggle, onOpenChat }: Props) {
   const pct = s.contextPct || 0;
   const warn = pct >= 70;
   const statusTxt = STATUS_LABEL[s.status];
@@ -39,6 +40,15 @@ export function SessionRow({ s, selected, onToggle }: Props) {
         )}
         {/* the pill has no own handler: clicking it toggles the row like the rest
             of .r1, expanding the panel below where the full lesson is shown. */}
+        {/* the chat pill DOES stop propagation — it opens the drawer instead of
+            toggling the agents panel. */}
+        <button
+          className="chat-pill"
+          onClick={e => { e.stopPropagation(); onOpenChat(); }}
+          title="Open chat history"
+        >
+          chat
+        </button>
         <span className="spacer" />
         <span className="tok">{fmtTok(s.tokens)} / {s.contextWindowLabel}</span>
         <span className="pct" style={{ color: warn ? 'var(--orange)' : 'var(--text)' }}>{pct}%</span>

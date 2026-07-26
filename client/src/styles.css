@@ -213,3 +213,38 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .an-lesson-body{font-size:12px;line-height:1.5;color:var(--text2)}
 .an-lesson-body code{font-family:var(--mono);font-size:11px;color:var(--accent)}
 @media (max-width:700px){.an-cols{grid-template-columns:1fr}}
+
+/* ---------------------------------------------- chat-history drawer */
+.chat-pill{flex-shrink:0;font-family:var(--mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;cursor:pointer;transition:color .15s,border-color .15s}
+.chat-pill:hover{color:var(--accent);border-color:var(--accent)}
+.chat-back{position:fixed;inset:0;background:rgba(4,6,10,.62);display:flex;justify-content:flex-end;z-index:50}
+.chat{display:flex;flex-direction:column;width:min(720px,100%);height:100%;background:var(--surface);border-left:1px solid var(--border2);animation:chat-in .16s ease-out}
+@keyframes chat-in{from{transform:translateX(16px);opacity:.4}to{transform:none;opacity:1}}
+.chat-head{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--border);flex-shrink:0;overflow:hidden}
+/* the title absorbs the free space so the pills, model and ✕ stay pinned right
+   and reachable at any width (the mobile drawer has no backdrop to tap) */
+.chat-title{flex:1;min-width:0;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-head .proj-pill,.chat-head .branch{flex-shrink:0;white-space:nowrap}
+.chat-model{font-size:10.5px;color:var(--text3);font-family:var(--mono);flex-shrink:0}
+.chat-x{font-size:12px;line-height:1;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;flex-shrink:0;transition:color .15s,border-color .15s}
+.chat-x:hover{color:var(--text);border-color:var(--border2)}
+.chat-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:14px 16px;display:flex;flex-direction:column;gap:13px}
+.chat-older{align-self:center;font-family:var(--font);font-size:10.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;cursor:pointer;transition:color .15s,border-color .15s}
+.chat-older:hover:not(:disabled){color:var(--text);border-color:var(--border2)}
+.chat-older:disabled{cursor:default;color:var(--text3)}
+.chat-empty{font-size:11.5px;color:var(--text3);padding:6px 0}
+.cmsg{border-left:2px solid var(--border2);padding-left:11px}
+.cmsg.user{border-left-color:var(--accent)}
+.cmsg-head{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+.cmsg-role{font-family:var(--mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text3)}
+.cmsg.user .cmsg-role{color:var(--accent)}
+.cmsg-ts{font-size:9.5px;color:var(--text3);font-variant-numeric:tabular-nums}
+.cmsg-text{font-family:var(--mono);font-size:11.5px;line-height:1.55;color:var(--text2);white-space:pre-wrap;overflow-wrap:anywhere}
+.cmsg.user .cmsg-text{color:var(--text)}
+.cmsg-cut{color:var(--text3);font-style:italic}
+.cmsg-tool{font-size:11px;color:var(--text3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmsg-tool .tool{font-family:var(--mono);color:var(--accent);font-weight:600}
+.cmsg-tool .tool.task{color:var(--pink)}
+.chat-foot{display:flex;align-items:baseline;gap:10px;padding:9px 16px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text3);flex-shrink:0}
+.chat-count{margin-left:auto;font-variant-numeric:tabular-nums}
+@media (max-width:700px){.chat{width:100%;border-left:none}.chat-body{padding:12px}.chat-head{padding:11px 12px}.chat-head .proj-pill,.chat-model{display:none}}

@@ -3,9 +3,10 @@
  * index.ts — HTTP entry for the Claude Agents Dashboard.
  *
  * Routes:
- *   GET  /api/sessions       → JSON session snapshot (see api.ts)
- *   GET  /api/sessions/:id   → one session's subagent activity
- *   everything else          → static files from client/dist (production build)
+ *   GET  /api/sessions          → JSON session snapshot (see api.ts)
+ *   GET  /api/sessions/:id      → one session's subagent activity
+ *   GET  /api/sessions/:id/chat → a page of that session's chat history
+ *   everything else             → static files from client/dist (production build)
  *
  * In development you visit the Vite dev server (default :5173), which proxies
  * /api here; this server only needs to answer the API. In production, run
@@ -19,7 +20,7 @@ import { spawn } from 'node:child_process';
 
 import { loadConfig } from './lib/config.js';
 import {
-  serveSessions, serveSessionDetail,
+  serveSessions, serveSessionDetail, serveSessionChat,
   serveManagementIndex, serveManagementProject, serveManagementFile,
   serveAnalytics
 } from './api.js';
@@ -76,6 +77,10 @@ const server = http.createServer((req, res) => {
   if (u.pathname === '/api/analytics') {
     return void serveAnalytics(config, res);
   }
+  // Chat route must be matched before the detail regex below, whose `[^/?]+`
+  // would otherwise swallow `/api/sessions/:id/chat` and answer with agents.
+  const chat = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)\/chat(?:[?#]|$)/);
+  if (chat) return serveSessionChat(decodeURIComponent(chat[1]), u.searchParams, res);
   // Detail route must be matched before the generic prefix below, which would
   // otherwise swallow `/api/sessions/:id`.
   const detail = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)/);
