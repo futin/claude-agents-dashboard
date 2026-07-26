@@ -39,6 +39,28 @@ through the whole transcript. Read-only, like everything else in the app.
 - **⚠️ Route order:** the detail regex `/^\/api\/sessions\/([^/?]+)/` in `index.ts` also
   matches `/api/sessions/:id/chat` and would answer it with agents — the chat match **must**
   stay above it.
+- **Filter (`lib/chatFilter.ts`, pure + unit-tested):** a row of three buttons under the drawer
+  header — `all` / `text` / `you`. A transcript is mostly tool traffic (dozens of near-identical
+  `Edit <path>` lines), so `text` drops messages with no text at all (tool-only turns) and `you`
+  keeps only user prompts. **Client-side on purpose:** switching is instant and keeps every page
+  already loaded — a server-side `?text=` param would mean refetching and losing the loaded
+  history. Consequence to accept: a filtered page is sparse (a 47-message page can show 4), so
+  the footer reports `4 of 47 shown` and "load older" stays the way to see more. Persisted as
+  `dashboard.chatFilter` and re-validated with `isChatFilter` on read. Switching filters
+  re-anchors to the live tail rather than being mistaken for a prepend (the layout effect
+  compares a `prevMode` ref before the first-uuid check).
+- **Markdown:** message text *is* markdown, so `lib/markdown.ts` (pure, unit-tested, zero deps)
+  parses the subset transcripts actually use — headings, `**bold**`, `*italic*`, inline code,
+  fenced code, GFM tables, bullet/numbered lists, blockquotes, rules, links — into a
+  block/inline tree that `components/Markdown.tsx` turns into elements. **No
+  `dangerouslySetInnerHTML` anywhere**, so transcript content can't inject markup; only
+  `http(s)`/`mailto`/`#` become `<a>`, and any other target (repo-relative paths like
+  `[api.ts](server/api.ts)`) renders as the label with the path on hover. Unrecognised syntax
+  stays literal text, so the worst case is the raw text we showed before. Deliberately omitted:
+  `_underscore_` emphasis (would fire inside `snake_case` / `__init__`), nested blockquotes,
+  reference links, inline HTML. Emphasis honours CommonMark flanking, so `2 * 3 * 4` stays
+  literal. Paragraphs keep hard line breaks via `white-space:pre-wrap` on `.md-p`; wide tables
+  and code blocks scroll inside their own box so the drawer never scrolls sideways.
 - **Client:** `ChatDrawer` is a `React.lazy` default export (own chunk; the sessions bundle is
   unchanged), keyed by session id in `SessionsView` so switching sessions remounts the tail.
   `useSessionChat` keeps `cursor`/`headOffset` in refs (the 3s poll always sees the latest

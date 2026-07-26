@@ -1,6 +1,9 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
+import { Markdown } from './Markdown';
 import { useSessionChat } from '../hooks/useSessionChat';
+import { usePersistedState } from '../hooks/usePersistedState';
+import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
 import type { ChatMessage, Session } from '../../../shared/types';
 
 /** Distance from the bottom (px) still counted as "following the tail". */
@@ -21,8 +24,8 @@ function Message({ m }: { m: ChatMessage }) {
       </div>
       {m.text && (
         <div className="cmsg-text">
-          {m.text}
-          {m.textTruncated && <span className="cmsg-cut"> … truncated</span>}
+          <Markdown text={m.text} />
+          {m.textTruncated && <span className="cmsg-cut">… truncated</span>}
         </div>
       )}
       {m.tools.map((t, i) => (
@@ -45,6 +48,9 @@ function Message({ m }: { m: ChatMessage }) {
  */
 export default function ChatDrawer({ session, onClose }: { session: Session; onClose: () => void }) {
   const { messages, hasMore, loading, loadingOlder, error, loadOlder } = useSessionChat(session.id);
+  const [filter, setFilter] = usePersistedState<ChatFilter>('dashboard.chatFilter', 'all');
+  const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
+  const shown = useMemo(() => filterMessages(messages, mode), [messages, mode]);
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -52,6 +58,8 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
   const preHeight = useRef(0);
   /** First message's uuid last render — a change means a prepend landed. */
   const firstId = useRef<string | null>(null);
+  /** Filter at last render — a change re-anchors instead of looking like a prepend. */
+  const prevMode = useRef(mode);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -64,12 +72,20 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
   useLayoutEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
-    const first = messages.length ? messages[0].uuid : null;
+    const first = shown.length ? shown[0].uuid : null;
+    if (prevMode.current !== mode) {
+      // Switching filters changes the whole list — jump back to the live tail.
+      prevMode.current = mode;
+      firstId.current = first;
+      atBottom.current = true;
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
     const prepended = firstId.current !== null && first !== firstId.current;
     firstId.current = first;
     if (prepended) el.scrollTop += el.scrollHeight - preHeight.current;
     else if (atBottom.current) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, [shown, mode]);
 
   function onScroll() {
     const el = bodyRef.current;
@@ -94,6 +110,20 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
           <button className="chat-x" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
+        <div className="chat-filter" role="group" aria-label="Message filter">
+          {CHAT_FILTERS.map(f => (
+            <button
+              key={f.key}
+              className={`cf-btn${mode === f.key ? ' on' : ''}`}
+              title={f.title}
+              aria-pressed={mode === f.key}
+              onClick={() => setFilter(f.key)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
         <div className="chat-body" ref={bodyRef} onScroll={onScroll}>
           {hasMore && (
             <button className="chat-older" onClick={onOlder} disabled={loadingOlder}>
@@ -106,14 +136,21 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
             <div className="chat-empty">Couldn’t read this session’s transcript.</div>
           ) : messages.length === 0 ? (
             <div className="chat-empty">No messages in this transcript yet.</div>
+          ) : shown.length === 0 ? (
+            <div className="chat-empty">
+              Nothing matches this filter in the {messages.length} messages loaded
+              {hasMore ? ' — load older, or switch back to “all”.' : '.'}
+            </div>
           ) : (
-            messages.map(m => <Message key={m.uuid} m={m} />)
+            shown.map(m => <Message key={m.uuid} m={m} />)
           )}
         </div>
 
         <div className="chat-foot">
           <span>live · refreshing every 3s</span>
-          <span className="chat-count">{messages.length} shown</span>
+          <span className="chat-count">
+            {mode === 'all' ? `${messages.length} shown` : `${shown.length} of ${messages.length} shown`}
+          </span>
         </div>
       </aside>
     </div>

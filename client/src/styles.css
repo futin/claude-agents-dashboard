@@ -228,6 +228,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .chat-model{font-size:10.5px;color:var(--text3);font-family:var(--mono);flex-shrink:0}
 .chat-x{font-size:12px;line-height:1;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;flex-shrink:0;transition:color .15s,border-color .15s}
 .chat-x:hover{color:var(--text);border-color:var(--border2)}
+.chat-filter{display:flex;gap:5px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.cf-btn{font-family:var(--mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:3px 10px;cursor:pointer;transition:color .15s,border-color .15s}
+.cf-btn:hover{color:var(--text2);border-color:var(--border2)}
+.cf-btn.on{color:var(--text);border-color:var(--accent)}
 .chat-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:14px 16px;display:flex;flex-direction:column;gap:13px}
 .chat-older{align-self:center;font-family:var(--font);font-size:10.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;cursor:pointer;transition:color .15s,border-color .15s}
 .chat-older:hover:not(:disabled){color:var(--text);border-color:var(--border2)}
@@ -239,12 +243,35 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .cmsg-role{font-family:var(--mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text3)}
 .cmsg.user .cmsg-role{color:var(--accent)}
 .cmsg-ts{font-size:9.5px;color:var(--text3);font-variant-numeric:tabular-nums}
-.cmsg-text{font-family:var(--mono);font-size:11.5px;line-height:1.55;color:var(--text2);white-space:pre-wrap;overflow-wrap:anywhere}
+.cmsg-text{font-size:12px;line-height:1.55;color:var(--text2);overflow-wrap:anywhere;min-width:0}
 .cmsg.user .cmsg-text{color:var(--text)}
-.cmsg-cut{color:var(--text3);font-style:italic}
+.cmsg-cut{display:block;margin-top:3px;font-size:10.5px;color:var(--text3);font-style:italic}
+
+/* rendered markdown inside a message (see client/src/lib/markdown.ts) */
+.md{display:flex;flex-direction:column;gap:7px}
+.md>:first-child{margin-top:0}
+/* pre-wrap keeps the hard line breaks inside a paragraph — transcripts use them */
+.md-p,.md-quote,.md-list li{white-space:pre-wrap}
+.md-h{font-weight:600;color:var(--text);letter-spacing:-.01em;margin-top:3px}
+.md-h1{font-size:13.5px}.md-h2{font-size:12.5px}.md-h3,.md-h4{font-size:12px;color:var(--text2)}
+.md-code{font-family:var(--mono);font-size:10.5px;color:var(--accent);background:var(--surface2);border-radius:3px;padding:1px 4px}
+.md-pre{font-family:var(--mono);font-size:10.5px;line-height:1.5;color:var(--text2);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 11px;overflow-x:auto}
+.md-link{color:var(--accent);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--accent) 40%,transparent)}
+.md-link:hover{border-bottom-color:var(--accent)}
+/* repo-relative link target: label only, full path on hover (nothing to navigate to) */
+.md-path{font-family:var(--mono);font-size:10.5px;color:var(--text2);border-bottom:1px dotted var(--border2);cursor:help}
+.md-list{padding-left:17px;display:flex;flex-direction:column;gap:3px}
+.md-list li::marker{color:var(--text3)}
+.md-quote{border-left:2px solid var(--border2);padding-left:9px;color:var(--text3)}
+.md-hr{border-top:1px solid var(--border);margin:2px 0}
+.md-table-wrap{overflow-x:auto;max-width:100%}
+.md-table{border-collapse:collapse;font-size:11px}
+.md-table th,.md-table td{border:1px solid var(--border);padding:4px 8px;vertical-align:top}
+.md-table th{color:var(--text);font-weight:600;background:var(--surface2);white-space:nowrap}
+.md-table td{color:var(--text2)}
 .cmsg-tool{font-size:11px;color:var(--text3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cmsg-tool .tool{font-family:var(--mono);color:var(--accent);font-weight:600}
 .cmsg-tool .tool.task{color:var(--pink)}
 .chat-foot{display:flex;align-items:baseline;gap:10px;padding:9px 16px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text3);flex-shrink:0}
 .chat-count{margin-left:auto;font-variant-numeric:tabular-nums}
-@media (max-width:700px){.chat{width:100%;border-left:none}.chat-body{padding:12px}.chat-head{padding:11px 12px}.chat-head .proj-pill,.chat-model{display:none}}
+@media (max-width:700px){.chat{width:100%;border-left:none}.chat-body{padding:12px}.chat-head{padding:11px 12px}.chat-filter{padding:7px 12px}.chat-head .proj-pill,.chat-model{display:none}}

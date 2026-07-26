@@ -38,6 +38,9 @@ client/           Vite + React + TypeScript frontend
   components/{Header,SessionList,SessionRow,Toolbar,SectionTabs}
   components/ChatDrawer.tsx    full-height chat-history drawer (own lazy chunk;
                   hooks/useSessionChat — see .claude/rules/chat-tail.md)
+  components/Markdown.tsx + lib/markdown.ts  zero-dep markdown-subset parser + renderer
+                  for message text (no dangerouslySetInnerHTML; pure, unit-tested)
+  lib/chatFilter.ts            drawer all/text/you message filter (pure; persisted)
   components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane, FileViewer)
   components/analytics/AnalyticsView.tsx  the report-card list (own lazy chunk; read-only)
   hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
@@ -51,7 +54,7 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — runs `test/run-all.ts` via tsx (160 cases).
+- `pnpm test` — runs `test/run-all.ts` via tsx (182 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
 
 **Phone access on the same wifi:** the Vite dev server binds all interfaces
@@ -81,7 +84,8 @@ relevant one when a task touches that area:
 - `.claude/rules/view-persistence.md` — Toolbar filter/sort localStorage persistence
   (`hooks/usePersistedState.ts`, fail-open shallow-merge).
 - `.claude/rules/chat-tail.md` — the chat-history drawer (`lib/chat.ts` byte-offset paging,
-  what's filtered out of a transcript, the `/api/sessions/:id/chat` route-order gotcha).
+  what's filtered out of a transcript, the all/text/you view filter, the markdown subset
+  renderer, the `/api/sessions/:id/chat` route-order gotcha).
 
 ## Conventions / gotchas
 

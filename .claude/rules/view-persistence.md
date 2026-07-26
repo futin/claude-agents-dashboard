@@ -10,6 +10,9 @@ The Toolbar's `view` object (`projects`, `statuses`, `window`, `sortKey`, `sortD
   throwing `localStorage` (private mode / quota) falls back to the passed default, never crashes
   render. Object values are shallow-merged over the default (`{ ...fallback, ...parsed }`) so a
   value stored by an older release still gains any newly-added `View` field's default.
+- **Other persisted keys:** `dashboard.section` (Sessions | Management | Analytics tab) and
+  `dashboard.chatFilter` (the chat drawer's all/text/you filter — see `chat-tail.md`; validated
+  with `isChatFilter` on read, so a stale value falls back to `all`).
 - **Client-only, zero deps** — no backend, no URL params (not shareable/bookmarkable by design).
 - **Not persisted:** row-expansion state (`SessionList.tsx` `expandedIds`) stays ephemeral —
   session IDs churn, so restored expansions would mostly be stale.
