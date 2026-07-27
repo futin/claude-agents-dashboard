@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  CHAT_WINDOW_BYTES, TEXT_CAP,
+  CHAT_WINDOW_BYTES, TEXT_CAP, TOOL_BODY_CAP,
   parseChatRecord, readChatAfter, readChatBefore, readChatTail
 } from '../server/lib/chat.js';
 import type { ChatMessage } from '../shared/types.js';
@@ -111,6 +111,53 @@ export function run(): number {
     const m = parseChatRecord(asstRec('a1', [{ type: 'tool_use', id: 't1', name: 'Bash', input: { description: 'run tests' } }]))!;
     assert.strictEqual(m.text, '');
     assert.deepStrictEqual(m.tools, [{ name: 'Bash', detail: 'run tests' }]);
+  })) p++; else f++;
+
+  if (test('ExitPlanMode carries the full plan as body', () => {
+    const plan = '# Plan\n\n- step one\n- step two';
+    const m = parseChatRecord(asstRec('a1', [{ type: 'tool_use', id: 't1', name: 'ExitPlanMode', input: { plan } }]))!;
+    assert.deepStrictEqual(m.tools, [{ name: 'ExitPlanMode', detail: plan.slice(0, 80), body: plan }]);
+  })) p++; else f++;
+
+  if (test('over-cap plan body truncated with flag', () => {
+    const m = parseChatRecord(asstRec('a1', [
+      { type: 'tool_use', id: 't1', name: 'ExitPlanMode', input: { plan: 'p'.repeat(TOOL_BODY_CAP + 5) } }
+    ]))!;
+    assert.strictEqual(m.tools[0].body!.length, TOOL_BODY_CAP);
+    assert.strictEqual(m.tools[0].bodyTruncated, true);
+  })) p++; else f++;
+
+  if (test('ExitPlanMode without a usable plan falls back to a plain tool line', () => {
+    for (const input of [undefined, {}, { plan: 42 }, { plan: '   ' }]) {
+      const m = parseChatRecord(asstRec('a1', [{ type: 'tool_use', id: 't1', name: 'ExitPlanMode', input }]))!;
+      assert.strictEqual('body' in m.tools[0], false, JSON.stringify(input));
+    }
+  })) p++; else f++;
+
+  if (test('AskUserQuestion composes questions + options as body', () => {
+    const m = parseChatRecord(asstRec('a1', [{
+      type: 'tool_use', id: 't1', name: 'AskUserQuestion', input: {
+        questions: [
+          {
+            question: 'Which auth method?', header: 'Auth', multiSelect: false,
+            options: [{ label: 'OAuth', description: 'redirect flow' }, { label: 'JWT' }]
+          },
+          { question: 'Deploy now?' }
+        ]
+      }
+    }]))!;
+    assert.strictEqual(m.tools[0].name, 'AskUserQuestion');
+    assert.strictEqual(
+      m.tools[0].body,
+      '**Auth** — Which auth method?\n- **OAuth** — redirect flow\n- **JWT**\n\nDeploy now?'
+    );
+  })) p++; else f++;
+
+  if (test('AskUserQuestion with malformed questions falls back to a plain tool line', () => {
+    for (const input of [{}, { questions: 'x' }, { questions: [] }, { questions: [{ header: 'H' }] }]) {
+      const m = parseChatRecord(asstRec('a1', [{ type: 'tool_use', id: 't1', name: 'AskUserQuestion', input }]))!;
+      assert.strictEqual('body' in m.tools[0], false, JSON.stringify(input));
+    }
   })) p++; else f++;
 
   if (test('missing uuid falls back to a unique offset key', () => {

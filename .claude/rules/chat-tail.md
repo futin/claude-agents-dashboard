@@ -27,7 +27,12 @@ through the whole transcript. Read-only, like everything else in the app.
   page ≈ 10 KB, idle poll ≈ 110 bytes.
 - **What's shown (`parseChatRecord`, pure + unit-tested):** user text and assistant text, plus
   one compact line per `tool_use` (`{ name, detail }`, detail from the **reused**
-  `describeTool` in `transcript.ts`). Dropped: records with no user/assistant `message.role`
+  `describeTool` in `transcript.ts`). Exception: for `ExitPlanMode` and `AskUserQuestion` the
+  input *is* conversational content, so the full body (the plan markdown / questions+options
+  composed as markdown) rides along as `ChatToolCall.body` — capped at `TOOL_BODY_CAP` (20 KB,
+  `bodyTruncated` flag) — and renders in the drawer as a collapsible `<details open>` block
+  (`.cmsg-plan`) instead of the one-liner; the `text` filter keeps body-bearing messages.
+  Dropped: records with no user/assistant `message.role`
   (`last-prompt`, `custom-title`, `queue-operation`, `attachment`, `system`), `isSidechain`
   records (subagent traffic — `SessionDetail`'s agent timeline already covers it), `isMeta`
   records, `thinking` blocks, `tool_result` bodies (they're most of a transcript's bytes and

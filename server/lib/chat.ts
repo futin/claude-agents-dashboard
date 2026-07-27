@@ -34,12 +34,42 @@ export const CHAT_PAGE_MESSAGES = 100;
 export const CHAT_WINDOW_BYTES = 512 * 1024;
 /** Per-message text cap; the drawer is a monitor, not a full transcript viewer. */
 export const TEXT_CAP = 2000;
+/** Cap for a tool body (a proposed plan runs 2–10 KB; this bounds pathological ones). */
+export const TOOL_BODY_CAP = 20_000;
 
 /** Injected context the CLI appends to user turns — noise in a chat view. */
 const SYSTEM_REMINDER_RE = /<system-reminder>[\s\S]*?<\/system-reminder>/g;
 
 /** A page, minus the `id` the API handler owns. */
 export type ChatPage = Omit<SessionChat, 'id'>;
+
+/**
+ * Markdown body for the two tools whose input IS conversational content —
+ * ExitPlanMode (the proposed plan) and AskUserQuestion (the questions asked).
+ * Everything else (and any shape mismatch) → null, i.e. the plain tool line.
+ */
+function toolBody(b: any): string | null {
+  const input = b.input;
+  if (!input || typeof input !== 'object') return null;
+  if (b.name === 'ExitPlanMode') {
+    return typeof input.plan === 'string' && input.plan.trim() ? input.plan : null;
+  }
+  if (b.name === 'AskUserQuestion' && Array.isArray(input.questions)) {
+    const parts: string[] = [];
+    for (const q of input.questions) {
+      if (!q || typeof q !== 'object' || typeof q.question !== 'string' || !q.question) continue;
+      const head = typeof q.header === 'string' && q.header ? `**${q.header}** — ${q.question}` : q.question;
+      const opts = Array.isArray(q.options)
+        ? q.options
+            .filter((o: any) => o && typeof o === 'object' && typeof o.label === 'string' && o.label)
+            .map((o: any) => `- **${o.label}**${typeof o.description === 'string' && o.description ? ` — ${o.description}` : ''}`)
+        : [];
+      parts.push([head, ...opts].join('\n'));
+    }
+    return parts.length ? parts.join('\n\n') : null;
+  }
+  return null;
+}
 
 /**
  * One JSONL record → a chat message, or null when there's nothing to show.
@@ -71,7 +101,14 @@ export function parseChatRecord(rec: any): ChatMessage | null {
       if (b.type === 'text' && typeof b.text === 'string') {
         text += (text ? '\n' : '') + b.text;
       } else if (b.type === 'tool_use' && typeof b.name === 'string') {
-        tools.push({ name: b.name, detail: describeTool(b) });
+        const tool: ChatToolCall = { name: b.name, detail: describeTool(b) };
+        // body/bodyTruncated attach conditionally — most tools never carry them.
+        const body = toolBody(b);
+        if (body) {
+          tool.body = body.slice(0, TOOL_BODY_CAP);
+          if (body.length > TOOL_BODY_CAP) tool.bodyTruncated = true;
+        }
+        tools.push(tool);
       }
       // thinking + tool_result blocks are intentionally dropped
     }

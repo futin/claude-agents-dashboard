@@ -25,5 +25,6 @@ export function isChatFilter(f: unknown): f is ChatFilter {
 export function filterMessages(messages: ChatMessage[], f: ChatFilter): ChatMessage[] {
   if (f === 'all') return messages;
   if (f === 'prompts') return messages.filter(m => m.role === 'user');
-  return messages.filter(m => !!m.text);
+  // A tool body (proposed plan / asked question) "says something" — keep it.
+  return messages.filter(m => !!m.text || m.tools.some(t => !!t.body));
 }

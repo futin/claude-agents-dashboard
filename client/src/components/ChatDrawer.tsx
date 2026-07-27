@@ -9,6 +9,12 @@ import type { ChatMessage, Session } from '../../../shared/types';
 /** Distance from the bottom (px) still counted as "following the tail". */
 const FOLLOW_SLACK = 40;
 
+/** Summary hint for tools whose full body renders as a block (`ChatToolCall.body`). */
+const TOOL_HINT: Record<string, string> = {
+  ExitPlanMode: 'proposed a plan',
+  AskUserQuestion: 'asked a question'
+};
+
 function timeOf(ts: string | null): string {
   if (!ts) return '';
   const d = new Date(ts);
@@ -28,12 +34,25 @@ function Message({ m }: { m: ChatMessage }) {
           {m.textTruncated && <span className="cmsg-cut">… truncated</span>}
         </div>
       )}
-      {m.tools.map((t, i) => (
-        <div className="cmsg-tool" key={i}>
-          <span className={`tool${t.name === 'Task' ? ' task' : ''}`}>{t.name}</span>
-          {t.detail ? ' ' + t.detail : ''}
-        </div>
-      ))}
+      {m.tools.map((t, i) =>
+        t.body ? (
+          <details open className="cmsg-plan" key={i}>
+            <summary>
+              <span className="tool">{t.name}</span>
+              {' ' + (TOOL_HINT[t.name] ?? '')}
+            </summary>
+            <div className="cmsg-text">
+              <Markdown text={t.body} />
+              {t.bodyTruncated && <span className="cmsg-cut">… truncated</span>}
+            </div>
+          </details>
+        ) : (
+          <div className="cmsg-tool" key={i}>
+            <span className={`tool${t.name === 'Task' ? ' task' : ''}`}>{t.name}</span>
+            {t.detail ? ' ' + t.detail : ''}
+          </div>
+        )
+      )}
     </div>
   );
 }

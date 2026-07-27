@@ -272,6 +272,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .cmsg-tool{font-size:11px;color:var(--text3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cmsg-tool .tool{font-family:var(--mono);color:var(--accent);font-weight:600}
 .cmsg-tool .tool.task{color:var(--pink)}
+/* full tool body (proposed plan / asked question) — like .cmsg-tool but a real block */
+.cmsg-plan{margin-top:6px;min-width:0}
+.cmsg-plan>summary{font-size:11px;color:var(--text3);cursor:pointer;user-select:none}
+.cmsg-plan>summary .tool{font-family:var(--mono);color:var(--accent);font-weight:600}
+.cmsg-plan>.cmsg-text{margin-top:5px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px}
 .chat-foot{display:flex;align-items:baseline;gap:10px;padding:9px 16px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text3);flex-shrink:0}
 .chat-count{margin-left:auto;font-variant-numeric:tabular-nums}
 @media (max-width:700px){.chat{width:100%;border-left:none}.chat-body{padding:12px}.chat-head{padding:11px 12px}.chat-filter{padding:7px 12px}.chat-head .proj-pill,.chat-model{display:none}}

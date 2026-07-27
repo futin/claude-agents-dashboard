@@ -20,6 +20,9 @@ const PAGE: ChatMessage[] = [
   msg('a3', 'assistant', '', ['Edit']),
   msg('a4', 'assistant', '', ['Bash']),
   msg('a5', 'assistant', 'Done — tests pass.', ['Bash']),
+  // text-less turn whose tool carries a body (a proposed plan) — must survive `text`
+  { uuid: 'a6', role: 'assistant', ts: null, text: '', textTruncated: false,
+    tools: [{ name: 'ExitPlanMode', detail: '# The plan', body: '# The plan\n\n- step one' }] },
   msg('u2', 'user', '', ['nothing'])
 ];
 
@@ -31,8 +34,8 @@ export function run(): number {
     assert.strictEqual(filterMessages(PAGE, 'all'), PAGE);
   })) p++; else f++;
 
-  if (test('text → drops tool-only turns, keeps text+tool turns', () => {
-    assert.deepStrictEqual(filterMessages(PAGE, 'text').map(m => m.uuid), ['u1', 'a1', 'a5']);
+  if (test('text → drops tool-only turns, keeps text+tool and body-bearing turns', () => {
+    assert.deepStrictEqual(filterMessages(PAGE, 'text').map(m => m.uuid), ['u1', 'a1', 'a5', 'a6']);
   })) p++; else f++;
 
   if (test('prompts → user turns only, even tool-only ones', () => {

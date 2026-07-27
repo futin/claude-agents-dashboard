@@ -105,6 +105,12 @@ export interface ChatToolCall {
   name: string;
   /** Short human label (`describeTool` in transcript.ts) — file path, pattern, command… */
   detail: string;
+  /**
+   * Full markdown body for tools whose input IS conversational content
+   * (ExitPlanMode's plan, AskUserQuestion's questions). Capped at TOOL_BODY_CAP.
+   */
+  body?: string;
+  bodyTruncated?: boolean;
 }
 
 /** One conversational turn in the chat tail. Noise records are dropped upstream. */
