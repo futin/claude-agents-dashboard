@@ -28,7 +28,10 @@ app's read-only charter — and even here nothing is written to disk: the store 
   cwd-relative) — needed because `tsx watch` restarts on every edit and a switch flipped before
   walking away must survive that. Deliberately **not** under `~/.claude` (read-only in Docker).
   Fails open: an unwritable path keeps the in-memory value and reports `persisted: false`, which
-  the pill shows as `*`. A malformed/absent file falls back to the env default.
+  the pill shows as `*`. A malformed/absent file falls back to the env default. The file is read
+  **once per process** (`cached`), so hand-editing it while the server runs does nothing until a
+  restart — flip it through the pill or `POST /api/remote-answer`, which updates both. It is
+  cwd-relative, so a server started from another directory keeps its own state file.
 - **Why deny-with-reason.** No hook (and nothing else outside the CLI) can *supply* an answer
   to `AskUserQuestion` — `updatedInput` is documented for Bash/Edit/Write only. The one
   supported injection is a `PreToolUse` hook returning
