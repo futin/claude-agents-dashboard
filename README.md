@@ -189,13 +189,73 @@ When a session calls `AskUserQuestion`, the chat drawer can show its options as 
 tap one on your phone and the answer goes into the **live session**. This is the only part of
 the dashboard that writes anything, and the only part that needs a hook.
 
-**How it works.** A `PreToolUse` hook fires on `AskUserQuestion` and offers the question to
+#### Setup
+
+Four steps, ~2 minutes. Needs `curl` and `jq` on the PATH — **without `jq` the hook exits
+silently**, which looks exactly like "not installed", so check that first if nothing happens.
+
+**1. Run the dashboard.** `pnpm dev` (or `pnpm build && pnpm start`). No `.env` needed —
+remote answers are on by default. To answer from a phone, open the `Network:` URL Vite prints
+(e.g. `http://192.168.x.x:5173`) on a device on the same wifi.
+
+**2. Link the hook**, from the repo root. A symlink rather than a copy, so `git pull` keeps it
+current:
+
+```bash
+mkdir -p ~/.claude/hooks && ln -s "$PWD/scripts/ask-remote-hook.sh" ~/.claude/hooks/ask-remote.sh
+```
+
+**3. Register it** in `~/.claude/settings.json`. Create the `AskUserQuestion` matcher if you
+don't have one; keep any existing entry, since hooks under one matcher run in parallel (a
+notification hook and this one coexist happily):
+
+```json
+{ "matcher": "AskUserQuestion", "hooks": [
+  { "type": "command", "command": "bash \"$HOME/.claude/hooks/ask-remote.sh\"", "timeout": 630 }
+]}
+```
+
+> ⚠️ That `timeout` **must** exceed the wait window (`CLAUDE_DASHBOARD_ANSWER_TIMEOUT`, default
+> 600s), or the CLI kills the hook first and the window silently shrinks. Keep
+> `timeout ≥ window + 30`.
+
+**4. Verify the chain** without waiting for a real question:
+
+```bash
+curl -s localhost:4173/api/health
+```
+
+`{"ok":true,...,"remoteAnswer":true}` means the hook will engage — if `remoteAnswer` is false,
+check the **phone answers** pill in the toolbar and `REMOTE_ANSWER` in your config. Then drive
+the hook itself (`IDLE_SECS=0` forces the away branch, 20s window):
+
+```bash
+echo '{"session_id":"SID","tool_input":{"questions":[{"question":"Works?","header":"Test","options":[{"label":"Yes"},{"label":"No"}]}]}}' | CLAUDECODE=1 CLAUDE_DASHBOARD_IDLE_SECS=0 CLAUDE_DASHBOARD_ANSWER_TIMEOUT=20 bash ~/.claude/hooks/ask-remote.sh
+```
+
+Swap `SID` for a real id from `GET /api/sessions`. Open that session's chat drawer, tap an
+option, and the command prints the `permissionDecision: "deny"` JSON that carries your answer
+into a session. Silence after 20s means a gate stopped it.
+
+> ⚠️ **macOS only, in practice.** Gate 3 (below) reads keyboard idle from `IOHIDSystem`.
+> Elsewhere that read fails, which counts as "at the desk", so remote answering never engages.
+> On Linux/WSL set `CLAUDE_DASHBOARD_IDLE_SECS=0` to skip the check — every question then waits
+> for the dashboard until answered or timed out, and the panel's **answer in the terminal**
+> button is your way back.
+
+Steps 2 and 3 live in `~/.claude/`, outside this repo, so they're per-machine and can't be
+shared through git. Only step 1 travels with a clone.
+
+#### How it works
+
+A `PreToolUse` hook fires on `AskUserQuestion` and offers the question to
 the dashboard, holding the tool call while it waits. You answer in the drawer; the hook then
 denies the tool call with a reason naming your choice, which the model reads and acts on
 (there is no supported way for a hook to *fill in* an answer — deny-with-reason is the
 mechanism). Everything else — dashboard down, nobody answers in time, you hit **answer in the
 terminal** — falls through to the normal terminal dialog, so the feature can only ever add an
-option, never take one away.
+option, never take one away. If the dashboard isn't running, the probe gives up in under a
+second, so a question costs no measurable extra latency.
 
 **A question can't be both places at once.** The terminal dialog only renders once the hook
 exits, so while the hook waits for your phone the dialog isn't there yet. Three gates decide
@@ -209,59 +269,12 @@ who gets the question, and the third is the one that matters day to day:
 
 So with everything on, sitting at your keyboard behaves exactly as it did before the hook
 existed — the dialog appears immediately, no delay, no hidden question. Remote answering only
-engages once you've actually stepped away. Idle comes from macOS `IOHIDSystem` (~40ms to read);
-if it can't be read (non-macOS), you're assumed to be **at the desk**, so the dialog is never
-hidden on a guess. Set `CLAUDE_DASHBOARD_IDLE_SECS=0` to skip the check and always wait.
+engages once you've actually stepped away. Idle costs ~40ms to read, and an unreadable value
+counts as at-the-desk: the dialog is never hidden on a guess.
 
 > ⚠️ The gates are checked when the question is *asked*. Walk away 10 seconds after a question
 > lands and it's already the terminal's — the phone won't offer it. The reverse is safe: the
 > panel's **answer in the terminal** button hands a waiting question back within a second.
-
-**Install the hook** (from the repo root — symlinked, so `git pull` updates it):
-
-```bash
-mkdir -p ~/.claude/hooks && ln -s "$PWD/scripts/ask-remote-hook.sh" ~/.claude/hooks/ask-remote.sh
-```
-
-then add an entry under the `AskUserQuestion` matcher in `~/.claude/settings.json` — create the
-matcher if you don't have one, and keep any existing entry, since hooks under one matcher run in
-parallel (a notification hook and this one coexist happily):
-
-```json
-{ "matcher": "AskUserQuestion", "hooks": [
-  { "type": "command", "command": "bash \"$HOME/.claude/hooks/ask-remote.sh\"", "timeout": 630 }
-]}
-```
-
-> ⚠️ The `timeout` **must** exceed the wait window (`CLAUDE_DASHBOARD_ANSWER_TIMEOUT`, default
-> 600s), or the CLI kills the hook first and the window silently shrinks. Keep
-> `timeout ≥ window + 30`.
-
-Requires `curl` and `jq` — **without `jq` the hook exits silently** and you just get the normal
-terminal dialog with no hint why. If the dashboard isn't running, the probe gives up in under a
-second, so a question costs no measurable extra latency.
-
-> ⚠️ **macOS only, in practice.** Gate 3 reads keyboard idle from `IOHIDSystem`. Elsewhere that
-> read fails, which counts as "at the desk", so remote answering never engages. On Linux/WSL set
-> `CLAUDE_DASHBOARD_IDLE_SECS=0` to skip the check — every question then waits for the dashboard
-> until answered or timed out, and the panel's **answer in the terminal** button is your way back.
-
-**Check it works** — with the dashboard running:
-
-```bash
-curl -s localhost:4173/api/health
-```
-
-`{"ok":true,...,"remoteAnswer":true}` means the hook will engage. Then exercise the hook itself
-without waiting for a real question (`IDLE_SECS=0` forces the away branch, 20s window):
-
-```bash
-echo '{"session_id":"SID","tool_input":{"questions":[{"question":"Works?","header":"Test","options":[{"label":"Yes"},{"label":"No"}]}]}}' | CLAUDECODE=1 CLAUDE_DASHBOARD_IDLE_SECS=0 CLAUDE_DASHBOARD_ANSWER_TIMEOUT=20 bash ~/.claude/hooks/ask-remote.sh
-```
-
-Swap `SID` for a real id from `GET /api/sessions`. Open that session's chat drawer, tap an
-option, and the command prints the `permissionDecision: "deny"` JSON that carries your answer
-into a session. No output after 20s means a gate stopped it — check `remoteAnswer` above.
 
 **Security.** These POSTs let anyone on your LAN steer a live session — including free text
 ("Other…") that reaches the model. On a shared network set `ANSWER_TOKEN` and put the same
