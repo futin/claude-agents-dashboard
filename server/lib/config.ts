@@ -17,6 +17,13 @@ export interface Config {
   analyticsKeep: number;
   /** Feature toggle for the Analytics section. */
   showAnalytics: boolean;
+  /** Feature toggle for remote answers (the only write path). Off → the wait endpoint 404s. */
+  remoteAnswer: boolean;
+  /**
+   * Shared secret for the two remote-answer POSTs. Empty (default) leaves them
+   * open, like the rest of the dashboard; set it on a LAN you share.
+   */
+  answerToken: string;
 }
 
 export const DEFAULTS = {
@@ -26,7 +33,9 @@ export const DEFAULTS = {
   LOOKBACK_HOURS: 24,
   SHOW_USAGE: true,
   ANALYTICS_KEEP: 5,
-  SHOW_ANALYTICS: true
+  SHOW_ANALYTICS: true,
+  REMOTE_ANSWER: true,
+  ANSWER_TOKEN: ''
 } as const;
 
 /** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
@@ -104,6 +113,8 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     showUsage: toBool(src('SHOW_USAGE'), DEFAULTS.SHOW_USAGE),
     skipProcScan: toBool(src('SKIP_PROC_SCAN'), isDockerContainer()),
     analyticsKeep: toPosInt(src('ANALYTICS_KEEP'), DEFAULTS.ANALYTICS_KEEP),
-    showAnalytics: toBool(src('SHOW_ANALYTICS'), DEFAULTS.SHOW_ANALYTICS)
+    showAnalytics: toBool(src('SHOW_ANALYTICS'), DEFAULTS.SHOW_ANALYTICS),
+    remoteAnswer: toBool(src('REMOTE_ANSWER'), DEFAULTS.REMOTE_ANSWER),
+    answerToken: (src('ANSWER_TOKEN') || DEFAULTS.ANSWER_TOKEN).trim()
   };
 }

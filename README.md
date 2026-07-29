@@ -4,9 +4,10 @@ A live, always-open monitor for **parallel Claude Code sessions**. For the top N
 most-recently-active sessions it shows what each one is doing right now — project, git
 branch, model, context usage, and current tool activity — refreshing every 3 seconds.
 
-Reads everything straight from `~/.claude/projects/*/*.jsonl` on disk. **No daemon, no hooks,
-no config in Claude Code required.** Zero runtime dependencies on the backend (Node built-ins
-only).
+Reads everything straight from `~/.claude/projects/*/*.jsonl` on disk. **Monitoring needs no
+daemon, no hooks, and no config in Claude Code** — only the optional
+[Remote answers](#remote-answers-optional) feature installs a hook. Zero runtime dependencies
+on the backend (Node built-ins only).
 
 ![dashboard: header with 5h/week usage bars, filter + sort toolbar, and one row per session showing status dot, project + branch, model, context bar, activity, and expandable subagent detail](docs/screenshot.png)
 
@@ -32,6 +33,10 @@ Read-only by design; nothing is ever written. The file endpoint only serves path
 scanner itself enumerated (exact set membership, no prefix checks), so secrets that live
 under the same roots — `~/.claude/.credentials.json`, `history.jsonl`, project `.env` —
 are unservable by construction. Contents are capped at 256 KB per file.
+
+The one deliberate exception to "read-only" is [Remote answers](#remote-answers-optional):
+two `POST` endpoints hand an answer back to a session that asked a question. Even there
+nothing is written to disk — the pending-question store lives in memory only.
 
 ## Analytics section
 
@@ -178,6 +183,73 @@ A control bar above the list filters and sorts the sessions client-side:
 - **Activity window** — restrict to sessions active within a time window.
 - **Sort by** — recency, tokens, name, or status, with an ascending/descending toggle.
 
+### Remote answers (optional)
+
+When a session calls `AskUserQuestion`, the chat drawer can show its options as buttons —
+tap one on your phone and the answer goes into the **live session**. This is the only part of
+the dashboard that writes anything, and the only part that needs a hook.
+
+**How it works.** A `PreToolUse` hook fires on `AskUserQuestion` and offers the question to
+the dashboard, holding the tool call while it waits. You answer in the drawer; the hook then
+denies the tool call with a reason naming your choice, which the model reads and acts on
+(there is no supported way for a hook to *fill in* an answer — deny-with-reason is the
+mechanism). Everything else — dashboard down, nobody answers in time, you hit **answer in the
+terminal** — falls through to the normal terminal dialog, so the feature can only ever add an
+option, never take one away.
+
+**A question can't be both places at once.** The terminal dialog only renders once the hook
+exits, so while the hook waits for your phone the dialog isn't there yet. Three gates decide
+who gets the question, and the third is the one that matters day to day:
+
+| Gate | Where | Question goes to |
+|---|---|---|
+| `REMOTE_ANSWER` | server config | `false` → terminal, always. Hard kill switch |
+| **phone answers** toggle | dashboard toolbar | off → terminal, always. Off also releases anything already waiting |
+| keyboard idle | the hook | **at your desk → terminal, instantly.** Away ≥ `CLAUDE_DASHBOARD_IDLE_SECS` (60s) → waits for your phone |
+
+So with everything on, sitting at your keyboard behaves exactly as it did before the hook
+existed — the dialog appears immediately, no delay, no hidden question. Remote answering only
+engages once you've actually stepped away. Idle comes from macOS `IOHIDSystem` (~40ms to read);
+if it can't be read (non-macOS), you're assumed to be **at the desk**, so the dialog is never
+hidden on a guess. Set `CLAUDE_DASHBOARD_IDLE_SECS=0` to skip the check and always wait.
+
+> ⚠️ The gates are checked when the question is *asked*. Walk away 10 seconds after a question
+> lands and it's already the terminal's — the phone won't offer it. The reverse is safe: the
+> panel's **answer in the terminal** button hands a waiting question back within a second.
+
+**Install the hook:**
+
+```bash
+ln -s "$PWD/scripts/ask-remote-hook.sh" ~/.claude/hooks/ask-remote.sh
+```
+
+then add a second entry under the `AskUserQuestion` matcher in `~/.claude/settings.json`
+(keep any existing entry — hooks under one matcher run in parallel):
+
+```json
+{ "matcher": "AskUserQuestion", "hooks": [
+  { "type": "command", "command": "bash \"$HOME/.claude/hooks/ask-remote.sh\"", "timeout": 630 }
+]}
+```
+
+> ⚠️ The `timeout` **must** exceed the wait window (`CLAUDE_DASHBOARD_ANSWER_TIMEOUT`, default
+> 600s), or the CLI kills the hook first and the window silently shrinks. Keep
+> `timeout ≥ window + 30`.
+
+Requires `curl` and `jq`. If the dashboard isn't running, the hook's probe gives up in under a
+second, so a question costs no measurable extra latency.
+
+**Security.** These POSTs let anyone on your LAN steer a live session — including free text
+("Other…") that reaches the model. On a shared network set `ANSWER_TOKEN` and put the same
+value in `~/.claude/hooks/dashboard-token` (`chmod 600`); the browser asks for it once. Plain
+HTTP with a static bearer token is a tripwire, not real auth. `REMOTE_ANSWER=false` turns the
+whole feature off server-side.
+
+**One file on disk.** The toggle is persisted to a gitignored `.remote-answer.json` in the repo
+root, because `tsx watch` restarts the server on every edit and a switch you flipped before
+walking away has to survive that. It's the only thing this app writes, and it fails open — an
+unwritable path keeps the toggle working for the current run and the pill shows a `*`.
+
 ### Account usage bars (header)
 
 The header shows two mini progress bars — **5h** and **Week** — the same account rate-limit
@@ -207,6 +279,11 @@ environment variables override `.env`, which overrides the defaults.
 | `SHOW_USAGE` | `true` | Show the header usage bars (fetches from Anthropic + reads keychain). Set `false` to disable |
 | `SHOW_ANALYTICS` | `true` | Show the Analytics tab (last N `/kaizen`-logged sessions). Set `false` to disable |
 | `ANALYTICS_KEEP` | `5` | How many logged sessions the Analytics tab shows, newest-first |
+| `REMOTE_ANSWER` | `true` | Whether [remote answers](#remote-answers-optional) are available at all (the only write path). `false` → the toolbar pill reads "disabled" and questions always go to the terminal |
+| `CLAUDE_DASHBOARD_IDLE_SECS` | `60` | Seconds of keyboard idle before you count as away (read by the hook). Below it, a question goes straight to the terminal dialog. `0` skips the check and always waits |
+| `ANSWER_TOKEN` | _(empty)_ | Shared secret required by the two remote-answer POSTs. Empty = open, like every read endpoint. The hook reads the same value from `~/.claude/hooks/dashboard-token` |
+| `CLAUDE_DASHBOARD_ANSWER_TIMEOUT` | `600` | Seconds the hook waits for a remote answer (read by the hook, not the server). Keep the hook's `timeout` above it |
+| `CLAUDE_DASHBOARD_URL` | `http://127.0.0.1:4173` | Where the hook looks for the dashboard |
 | `SKIP_PROC_SCAN` | _(auto)_ | Skip the `lsof` process-liveness gate. Defaults to `true` inside a Docker container, `false` otherwise |
 | `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | _(auto)_ | Force the context-window size (tokens) for the `%` bar |
 | `CLAUDE_CREDENTIALS_JSON` | _(unset)_ | OAuth creds blob for the usage bars when the host Keychain isn't reachable (Docker). See [Run in Docker](#run-in-docker) |
@@ -226,14 +303,20 @@ server/                  backend (Node + TypeScript, run via tsx — no compile 
   lib/analyze.ts         whole-session post-mortem → SessionAnalysis (also powers /kaizen)
   lib/sessionAnalyticsLog.ts       parses ~/.claude/session-analytics-log.md into per-session lessons
   lib/analytics.ts       read-only reader: last N /kaizen-logged sessions, re-analyzed live
+  lib/pending.ts         in-memory pending-question store behind remote answers
+  lib/remoteState.ts     the remote-answer on/off switch (env gate + persisted UI toggle)
 
 client/                  frontend (Vite + React + TypeScript)
   index.html
   src/main.tsx / App.tsx
   src/components/         Header, Toolbar, SessionList, SessionRow, SessionDetail
   src/components/analytics/AnalyticsView.tsx   the post-mortem card list (read-only)
+  src/components/QuestionPanel.tsx             the answer-a-question action bar in the chat drawer
+  src/components/RemoteAnswerToggle.tsx        toolbar pill for the remote-answer switch
   src/hooks/useSessions.ts   polls /api/sessions every 3s
   src/hooks/useAnalytics.ts  fetches /api/analytics on mount + manual refresh (no poll)
+  src/hooks/usePendingQuestion.ts  polls /api/sessions/:id/question; posts the answer back
+  src/hooks/useRemoteAnswer.ts     reads /api/health, flips POST /api/remote-answer
   src/lib/filterSort.ts  client-side filter + sort logic
   src/lib/format.ts      token / relative-time formatters
   src/styles.css
@@ -246,6 +329,7 @@ docker-compose.yml       production container; read-only mount of host ~/.claude
 docker-compose.dev.yml   dev container (Vite hot-reload, source bind-mounted)
 scripts/host-credentials.sh   reads host Keychain creds → CLAUDE_CREDENTIALS_JSON
 scripts/lan-ip.sh        host LAN IP, passed in so the dev container can print it
+scripts/ask-remote-hook.sh    the PreToolUse[AskUserQuestion] hook; symlink into ~/.claude/hooks/
 ```
 
 ## Not included (yet)

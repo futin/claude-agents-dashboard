@@ -7,6 +7,7 @@ import {
   type View
 } from '../lib/filterSort';
 import { MultiSelect } from './MultiSelect';
+import { RemoteAnswerToggle } from './RemoteAnswerToggle';
 
 const STATUSES: Session['status'][] = ['working', 'question', 'incomplete', 'idle'];
 
@@ -51,6 +52,8 @@ export function Toolbar({
       </select>
 
       <span className="tb-spacer" />
+
+      <RemoteAnswerToggle />
 
       <select
         value={view.sortKey}

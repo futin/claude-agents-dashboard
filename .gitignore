@@ -6,3 +6,4 @@ client/dist/
 .idea/
 .claude/launch.json
 .ua/.trash-*/
+.remote-answer.json

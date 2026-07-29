@@ -32,6 +32,10 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md → lesson per session (fail-open)
   lib/analytics.ts  read-only reader: last N /kaizen-logged sessions, each re-analyzed live
                   (see .claude/rules/analytics.md)
+  lib/pending.ts  in-memory pending-AskUserQuestion store + state machine — the ONLY write
+                  path in the app (see .claude/rules/remote-answer.md)
+  lib/remoteState.ts  remote-answer switch: REMOTE_ANSWER env gate + UI toggle persisted to
+                  gitignored .remote-answer.json (the app's only disk write; fails open)
 client/           Vite + React + TypeScript frontend
   src/App.tsx     section tabs (Sessions | Management | Analytics), lazy-loads Management/Analytics views
   components/SessionsView.tsx  the original live monitor (owns the 3s poll + chat drawer state)
@@ -41,6 +45,10 @@ client/           Vite + React + TypeScript frontend
   components/Markdown.tsx + lib/markdown.ts  zero-dep markdown-subset parser + renderer
                   for message text (no dangerouslySetInnerHTML; pure, unit-tested)
   lib/chatFilter.ts            drawer all/text/you message filter (pure; persisted)
+  components/QuestionPanel.tsx pinned action bar to answer a session's AskUserQuestion
+                  (hooks/usePendingQuestion — see .claude/rules/remote-answer.md)
+  components/RemoteAnswerToggle.tsx  toolbar pill for the remote-answer switch
+                  (hooks/useRemoteAnswer)
   components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane, FileViewer)
   components/analytics/AnalyticsView.tsx  the report-card list (own lazy chunk; read-only)
   hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
@@ -54,7 +62,7 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — runs `test/run-all.ts` via tsx (187 cases).
+- `pnpm test` — runs `test/run-all.ts` via tsx (220 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
 
 **Phone access on the same wifi:** the Vite dev server binds all interfaces
@@ -86,6 +94,11 @@ relevant one when a task touches that area:
 - `.claude/rules/chat-tail.md` — the chat-history drawer (`lib/chat.ts` byte-offset paging,
   what's filtered out of a transcript, the all/text/you view filter, the markdown subset
   renderer, the `/api/sessions/:id/chat` route-order gotcha).
+- `.claude/rules/remote-answer.md` — answering a session's `AskUserQuestion` from the drawer
+  (`lib/pending.ts` state machine, the held-request protocol, why deny-with-reason is the only
+  injection mechanism, the **three gates** env/toggle/keyboard-idle that decide terminal vs
+  phone, the ⚠️ route-order / hook-timeout / token traps, and the two deliberate charter
+  exceptions: the write endpoints and `.remote-answer.json`).
 
 ## Conventions / gotchas
 

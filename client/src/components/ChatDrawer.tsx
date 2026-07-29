@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
 import { Markdown } from './Markdown';
+import QuestionPanel from './QuestionPanel';
 import { useSessionChat } from '../hooks/useSessionChat';
+import { usePendingQuestion } from '../hooks/usePendingQuestion';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
 import type { ChatMessage, Session } from '../../../shared/types';
@@ -67,6 +69,7 @@ function Message({ m }: { m: ChatMessage }) {
  */
 export default function ChatDrawer({ session, onClose }: { session: Session; onClose: () => void }) {
   const { messages, hasMore, loading, loadingOlder, error, loadOlder } = useSessionChat(session.id);
+  const question = usePendingQuestion(session.id);
   const [filter, setFilter] = usePersistedState<ChatFilter>('dashboard.chatFilter', 'all');
   const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
   const shown = useMemo(() => filterMessages(messages, mode), [messages, mode]);
@@ -164,6 +167,10 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
             shown.map(m => <Message key={m.uuid} m={m} />)
           )}
         </div>
+
+        {/* An action bar, not a message: the question itself already renders in
+            the transcript above. Pinned so it stays reachable while scrolling. */}
+        <QuestionPanel state={question} />
 
         <div className="chat-foot">
           <span>live · refreshing every 3s</span>

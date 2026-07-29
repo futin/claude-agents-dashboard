@@ -22,7 +22,8 @@ import { loadConfig } from './lib/config.js';
 import {
   serveSessions, serveSessionDetail, serveSessionChat,
   serveManagementIndex, serveManagementProject, serveManagementFile,
-  serveAnalytics
+  serveAnalytics, serveHealth, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
+  serveRemoteAnswerToggle
 } from './api.js';
 
 const config = loadConfig();
@@ -60,6 +61,12 @@ function serveStatic(urlPath: string, res: http.ServerResponse): void {
   });
 }
 
+/** The write endpoints are POST-only; everything else here is method-agnostic. */
+function methodNotAllowed(res: http.ServerResponse): void {
+  res.writeHead(405, { 'Content-Type': 'application/json', 'Allow': 'POST', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify({ error: 'method not allowed' }));
+}
+
 const server = http.createServer((req, res) => {
   // Management routes take query params — parse once. Handlers are async but
   // self-contained (they always end the response), so `void` keeps the
@@ -76,6 +83,28 @@ const server = http.createServer((req, res) => {
   }
   if (u.pathname === '/api/analytics') {
     return void serveAnalytics(config, res);
+  }
+  if (u.pathname === '/api/health') {
+    return void serveHealth(config, res);
+  }
+  // The only write endpoints in the app (see .claude/rules/remote-answer.md).
+  // `wait` holds its response open for minutes — that is by design.
+  if (u.pathname === '/api/questions/wait') {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void serveQuestionWait(config, req, res);
+  }
+  if (u.pathname === '/api/remote-answer') {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void serveRemoteAnswerToggle(config, req, res);
+  }
+  // Like the chat route below, these must be matched before the detail regex,
+  // whose `[^/?]+` would otherwise swallow `/api/sessions/:id/<anything>`.
+  const question = u.pathname.match(/^\/api\/sessions\/([^/]+)\/question$/);
+  if (question) return void serveSessionQuestion(decodeURIComponent(question[1]), res);
+  const answer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/answer$/);
+  if (answer) {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void serveSessionAnswer(config, decodeURIComponent(answer[1]), req, res);
   }
   // Chat route must be matched before the detail regex below, whose `[^/?]+`
   // would otherwise swallow `/api/sessions/:id/chat` and answer with agents.

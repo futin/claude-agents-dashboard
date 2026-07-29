@@ -15,6 +15,8 @@ import { run as runManagement } from './management.test.js';
 import { run as runManagementEntries } from './management-entries.test.js';
 import { run as runSessionAnalyticsLog } from './sessionAnalyticsLog.test.js';
 import { run as runAnalytics } from './analytics.test.js';
+import { run as runPending } from './pending.test.js';
+import { run as runRemoteState } from './remoteState.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -33,6 +35,8 @@ failed += await runManagement();
 failed += runManagementEntries();
 failed += runSessionAnalyticsLog();
 failed += runAnalytics();
+failed += await runPending();
+failed += runRemoteState();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

@@ -146,6 +146,88 @@ export interface SessionChat {
 }
 
 /**
+ * Remote answers — the one write path in the dashboard (see
+ * `.claude/rules/remote-answer.md`). A session's `AskUserQuestion` PreToolUse
+ * hook offers the question here and blocks; the browser answers it; the hook
+ * feeds the choice back to the model. Everything below lives in memory only.
+ */
+
+/**
+ * The remote-answer switch (`GET /api/health`, `POST /api/remote-answer`).
+ * `available` is the `REMOTE_ANSWER` env gate; `enabled` is the UI toggle;
+ * `remoteAnswer` is the conjunction and the only field the hook reads.
+ */
+export interface RemoteAnswerState {
+  available: boolean;
+  enabled: boolean;
+  remoteAnswer: boolean;
+  /** False when the toggle couldn't be written to disk (won't survive a restart). */
+  persisted: boolean;
+}
+
+/** One selectable choice, straight from the tool call's `options[]`. */
+export interface PendingOption {
+  label: string;
+  description?: string;
+}
+
+/** One question of an `AskUserQuestion` call, sanitized for the panel. */
+export interface PendingQuestionItem {
+  /** Short chip label; '' when the call omitted it. */
+  header: string;
+  question: string;
+  multiSelect: boolean;
+  options: PendingOption[];
+}
+
+/** A question waiting for an answer, as the browser sees it. */
+export interface PendingQuestion {
+  /** Server nonce. An answer must echo it, so a stale tab can't answer the next question. */
+  questionId: string;
+  askedAt: string;
+  questions: PendingQuestionItem[];
+}
+
+/** Payload of `GET /api/sessions/:id/question`. */
+export interface SessionQuestion {
+  id: string;
+  pending: PendingQuestion | null;
+  error?: boolean;
+}
+
+/** One question's answer. Index-keyed — `header` is model-authored and not unique. */
+export interface QuestionAnswer {
+  index: number;
+  /** Chosen labels, or a single free-text string for "Other". */
+  selected: string[];
+}
+
+/** Body of `POST /api/sessions/:id/answer`. `dismiss` releases the hook instead. */
+export interface AnswerRequest {
+  questionId: string;
+  /** "Answer in the terminal instead" — resolves the wait without an answer. */
+  dismiss?: boolean;
+  answers?: QuestionAnswer[];
+}
+
+/**
+ * Body of the held `POST /api/questions/wait` response — how a wait ended.
+ * Only `answered` makes the hook inject anything; every other status means the
+ * terminal dialog takes over.
+ */
+export interface WaitResult {
+  status: 'answered' | 'timeout' | 'superseded' | 'dismissed';
+  /**
+   * Prose the hook hands to the model verbatim (`permissionDecisionReason`).
+   * Composed server-side so the injection mechanism can change without touching
+   * the hook script. Set only when `status === 'answered'`.
+   */
+  reason?: string;
+  /** The structured picks behind `reason` — for a future native answer path. */
+  answers?: QuestionAnswer[];
+}
+
+/**
  * Whole-session token accounting — the kaizen post-mortem (`analyze.ts`,
  * `scripts/session-analytics.ts`, the `/kaizen` skill). Unlike {@link Session}.tokens (the
  * latest context-window occupancy), these are summed across every main-agent
