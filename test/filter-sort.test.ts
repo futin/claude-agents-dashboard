@@ -24,6 +24,7 @@ function sess(p: Partial<Session>): Session {
     contextWindowLabel: '200k',
     contextPct: 0,
     status: p.status ?? 'idle',
+    remoteQuestion: p.remoteQuestion ?? false,
     activity: null,
     lastTimestamp: null,
     updatedMs: p.updatedMs ?? NOW,

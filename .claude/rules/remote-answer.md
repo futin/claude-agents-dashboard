@@ -110,6 +110,15 @@ app's read-only charter — and even here nothing is written to disk: the store 
   `idle → submitting → submitted | gone`, tracked against the current `questionId` so a new
   question resets the panel and a stale banner never leaks across questions. 404/409 → `gone`
   ("answered in the terminal, or it expired"), 403 → the token prompt.
+- **Visible without the drawer.** `QuestionPanel` only exists inside `ChatDrawer`, so a held
+  question used to be invisible unless you already had that exact session's drawer open, and the
+  transcript-derived blue dot can't cover it (the wait is registered during `PreToolUse`, before
+  the `tool_use` record is written). So `serveSessions` passes `pendingSessionIds()` into
+  `scanSessions` as `pendingIds`: a flagged session gets `status: 'question'` plus
+  `Session.remoteQuestion`, and `SessionRow` renders a pulsing `answer` pill that opens the
+  drawer. The store is still RAM-only and still read-only here — the scan only reads the key set,
+  and gets a copied `Set`, never the store's own. `scan.ts` does not import `pending.ts`
+  (injection keeps it pure and testable).
 - **`QuestionPanel` is an action bar, not a message** — pinned between `.chat-body` and
   `.chat-foot`, since the question text already renders in the transcript as the existing
   `<details open>` `AskUserQuestion` body. It is fed **only** by the pending store's structured

@@ -206,6 +206,16 @@ export function getPending(sessionId: string): PendingQuestion | null {
 }
 
 /**
+ * Every session with a wait held right now. Read by the session scan so a held
+ * question shows on the row itself — the transcript can't tell us (the hook
+ * registers during PreToolUse, before the tool_use record is written).
+ * A fresh Set: callers never get a handle on the store's keys.
+ */
+export function pendingSessionIds(): Set<string> {
+  return new Set(entries.keys());
+}
+
+/**
  * Answer (or dismiss) a session's pending question. Synchronous by design:
  * Node is single-threaded, so two tabs submitting at once means the first wins
  * outright and the second sees `not-found`, with no locking.

@@ -30,6 +30,12 @@ interface ScanOptions {
   liveCwds?: Set<string> | null;
   /** Override kaizen lessons (tests). null skips tagging; undefined reads the log. */
   lessons?: SessionAnalyticsLesson[] | null;
+  /**
+   * Sessions with a remote-answer wait held right now (`pending.ts`
+   * `pendingSessionIds()`), injected by the handler so this module stays pure and
+   * free of the store. Omitted/null ⇒ no session is flagged.
+   */
+  pendingIds?: ReadonlySet<string> | null;
 }
 
 /** Default transcripts root. */
@@ -182,7 +188,13 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     // will resume on its own, so the session is idle no matter what the last
     // transcript record implies (interrupted mid-turn, unanswered question…).
     const dead = live !== null && projectPath !== null && !live.has(normCwd(projectPath));
-    if (dead) status = 'idle';                                         // gray — no live process
+    // A held wait outranks even the liveness gate: the hook is holding a socket
+    // open right now, which is stronger evidence of a live session than lsof's
+    // per-cwd view. It also beats the transcript, which won't show the question
+    // until the tool call resolves.
+    const remoteQuestion = options.pendingIds ? options.pendingIds.has(c.id) : false;
+    if (remoteQuestion) status = 'question';                           // blue — a wait is held for it
+    else if (dead) status = 'idle';                                    // gray — no live process
     else if (parsed.waitingOnQuestion) status = 'question';            // blue — needs an answer, beats all
     else if (recent && !parsed.turnComplete) status = 'working';       // green — machine actively churning
     else if (parsed.turnComplete && !recent) status = 'idle';          // gray — finished and dormant
@@ -199,6 +211,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       contextWindowLabel: parsed.contextWindowLabel,
       contextPct: parsed.contextPct,
       status,
+      remoteQuestion,
       activity: parsed.activity,
       lastTimestamp: parsed.lastTimestamp,
       updatedMs: c.mtimeMs,

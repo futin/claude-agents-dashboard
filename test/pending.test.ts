@@ -2,8 +2,8 @@ import assert from 'node:assert';
 
 import {
   DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, MIN_TIMEOUT_MS, SELECTED_CAP,
-  answer, cancel, clampTimeout, composeReason, getPending, register,
-  resetStore, sanitizeQuestions, validateAnswer
+  answer, cancel, clampTimeout, composeReason, getPending, pendingSessionIds,
+  register, resetStore, sanitizeQuestions, validateAnswer
 } from '../server/lib/pending.js';
 import type { PendingQuestionItem, WaitResult } from '../shared/types.js';
 
@@ -185,6 +185,24 @@ export async function run(): Promise<number> {
     assert.strictEqual(w.results.length, 0, 'must still be waiting');
     assert.strictEqual(getPending('other-session'), null);
     resetStore();
+  })) p++; else f++;
+
+  if (test('pendingSessionIds lists every held wait and drops resolved ones', () => {
+    resetStore();
+    assert.deepStrictEqual([...pendingSessionIds()], []);
+    const w1 = waiter(), w2 = waiter();
+    const id1 = register('s1', [AUTH], 20_000, w1.resolve);
+    register('s2', [LANGS], 20_000, w2.resolve);
+    assert.deepStrictEqual([...pendingSessionIds()].sort(), ['s1', 's2']);
+    // Answering s1 clears it; s2 is still held.
+    assert.strictEqual(answer('s1', { questionId: id1, answers: [{ index: 0, selected: ['OAuth'] }] }), 'ok');
+    assert.deepStrictEqual([...pendingSessionIds()], ['s2']);
+    // The returned Set is a copy — mutating it must not touch the store.
+    const snapshot = pendingSessionIds();
+    snapshot.delete('s2');
+    assert.deepStrictEqual([...pendingSessionIds()], ['s2']);
+    resetStore();
+    assert.deepStrictEqual([...pendingSessionIds()], []);
   })) p++; else f++;
 
   if (test('answering resolves once, composes the reason, and clears the entry', () => {

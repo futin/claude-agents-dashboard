@@ -16,6 +16,14 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
 
 - **question** (blue) — newest assistant action is an unanswered `AskUserQuestion`. Beats all.
   `ExitPlanMode` is NOT treated as a question.
+- **question** also comes from a **held remote wait** — `ScanOptions.pendingIds` (the ids from
+  `pending.ts` `pendingSessionIds()`, injected by `api.ts`; `scan.ts` never imports the store, so
+  it stays pure). This is the **first** rung of the ladder, above the liveness gate: the hook is
+  holding a socket open right now, which beats `lsof`'s per-cwd guess, and it beats the
+  transcript too — the wait is registered during `PreToolUse`, so the `tool_use` record isn't on
+  disk yet and `waitingOnQuestion` would lag the entire wait. Also sets `Session.remoteQuestion`,
+  which is what the row's `answer` pill renders from (see `remote-answer.md`). Omitted/null
+  `pendingIds` ⇒ nothing flagged, statuses byte-for-byte as before.
 - **working** (green, pulsing) — recent AND the turn is unfinished = machine actively churning.
   **Only this state** counts toward `totals.active`. A finished turn (end_turn) is NOT working
   even if recent — the ball is in the human's court.

@@ -17,7 +17,7 @@ import { listReports } from './lib/analytics.js';
 import { readChatAfter, readChatBefore, readChatTail } from './lib/chat.js';
 import {
   answer as answerPending, cancel as cancelPending, clampTimeout,
-  dismissAll, getPending, register, sanitizeQuestions
+  dismissAll, getPending, pendingSessionIds, register, sanitizeQuestions
 } from './lib/pending.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import type { Config } from './lib/config.js';
@@ -32,7 +32,13 @@ const ID_RE = /^[A-Za-z0-9._-]+$/;
 export function serveSessions(config: Config, res: ServerResponse): void {
   let data: SessionsResponse;
   try {
-    data = scanSessions(config, { skipProcScan: config.skipProcScan });
+    // pendingIds comes from the RAM store, not disk: a question held by the
+    // AskUserQuestion hook is flagged on its row before the transcript knows
+    // about it, so it's visible without opening the chat drawer.
+    data = scanSessions(config, {
+      skipProcScan: config.skipProcScan,
+      pendingIds: pendingSessionIds()
+    });
   } catch (e) {
     console.error('[dashboard] scan failed:', (e as Error).message);
     data = {

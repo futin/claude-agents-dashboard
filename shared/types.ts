@@ -25,6 +25,14 @@ export interface Session {
   contextWindowLabel: string;
   contextPct: number;
   status: 'working' | 'idle' | 'question' | 'incomplete';
+  /**
+   * True while a remote `AskUserQuestion` wait is held for this session (the
+   * in-memory pending store, not the transcript). The hook registers the wait
+   * during PreToolUse — *before* the tool_use record reaches disk — so this leads
+   * transcript-derived `waitingOnQuestion` by the whole length of the wait, and
+   * is what makes a held question visible without opening the chat drawer.
+   */
+  remoteQuestion: boolean;
   activity: Activity | null;
   lastTimestamp: string | null;
   updatedMs: number;

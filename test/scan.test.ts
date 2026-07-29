@@ -264,6 +264,54 @@ export function run(): number {
     assert.strictEqual(nogate.sessions[0].status, 'working');
   })) p++; else f++;
 
+  if (test('pendingIds: a held remote wait flags the row and turns it blue', () => {
+    // The hook registers the wait during PreToolUse, so the transcript still ends
+    // on a finished turn — only the store knows a question is open.
+    const now = 1_700_000_000_000;
+    const staleTs = new Date(now - 60 * 60 * 1000).toISOString();
+    const root = makeRoot([
+      { dirName: '-a-pq', id: 'pq', mtimeMs: now - 60 * 60 * 1000, records: [metaRec('/a/pq', 'main'), at(assistantDone(), staleTs)] }
+    ]);
+    const flagged = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null, pendingIds: new Set(['pq']) });
+    assert.strictEqual(flagged.sessions[0].status, 'question');   // would be idle on the transcript alone
+    assert.strictEqual(flagged.sessions[0].remoteQuestion, true);
+    assert.strictEqual(flagged.totals.active, 0);                 // question never counts as working
+    // Omitted / null → nothing flagged, statuses exactly as before.
+    const bare = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null });
+    assert.strictEqual(bare.sessions[0].status, 'idle');
+    assert.strictEqual(bare.sessions[0].remoteQuestion, false);
+    const nulled = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null, pendingIds: null });
+    assert.strictEqual(nulled.sessions[0].remoteQuestion, false);
+  })) p++; else f++;
+
+  if (test('pendingIds: a held wait outranks the dead-process gate', () => {
+    // lsof is per-cwd and can read "dead" for a session that is very much alive;
+    // a socket held open by its hook is the stronger signal.
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-pd', id: 'pd', mtimeMs: now - 60 * 1000, records: [metaRec('/a/pd', 'main'), assistantDone()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: new Set(), pendingIds: new Set(['pd']) });
+    assert.strictEqual(out.sessions[0].status, 'question');
+    assert.strictEqual(out.sessions[0].remoteQuestion, true);
+  })) p++; else f++;
+
+  if (test('pendingIds: only the matching session id is flagged (no prefix match)', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-p1', id: 'sess-one', mtimeMs: now - 60 * 60 * 1000, records: [metaRec('/a/p1', 'main'), assistantDone()] },
+      { dirName: '-a-p2', id: 'sess-two', mtimeMs: now - 90 * 60 * 1000, records: [metaRec('/a/p2', 'main'), assistantDone()] }
+    ]);
+    // 'sess-' is a prefix of both ids and must match neither: the store is keyed
+    // by the full session id the hook reported.
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null, pendingIds: new Set(['sess-two', 'sess-']) });
+    const byId = new Map(out.sessions.map(s => [s.id, s]));
+    assert.strictEqual(byId.get('sess-one')!.remoteQuestion, false);
+    assert.strictEqual(byId.get('sess-one')!.status, 'idle');
+    assert.strictEqual(byId.get('sess-two')!.remoteQuestion, true);
+    assert.strictEqual(byId.get('sess-two')!.status, 'question');
+  })) p++; else f++;
+
   if (test('empty session (no conversational message, e.g. post-/clear) is excluded', () => {
     // /clear starts a fresh UUID transcript with only queue-operation/attachment/
     // meta records and no user/assistant message yet. Its mtime is fresh, so it

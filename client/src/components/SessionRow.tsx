@@ -38,6 +38,18 @@ export function SessionRow({ s, selected, onToggle, onOpenChat }: Props) {
         {s.kaizenLesson && (
           <span className="ag-pill kaizen" title={s.kaizenLesson}>kaizen</span>
         )}
+        {/* A remote wait is held for this session. The panel that answers it lives
+            in the chat drawer, so the pill is the way in — otherwise the question
+            would be invisible until you happened to open that drawer. */}
+        {s.remoteQuestion && (
+          <button
+            className="ag-pill answer"
+            onClick={e => { e.stopPropagation(); onOpenChat(); }}
+            title="A question is waiting on you — answer it in the chat drawer"
+          >
+            answer
+          </button>
+        )}
         {/* the pill has no own handler: clicking it toggles the row like the rest
             of .r1, expanding the panel below where the full lesson is shown. */}
         {/* the chat pill DOES stop propagation — it opens the drawer instead of
