@@ -56,6 +56,13 @@ Each card pairs two things:
   the qualitative part (what went well/badly, what to change) — the dashboard does no LLM calls
   and invents no advice; it surfaces exactly what `/kaizen` recorded.
 
+Each card also carries a **status badge** — `actioned`, `promoted`, `dropped`, or `open` —
+answering "did I ever act on this lesson?". `/kaizen` records that by appending a `status` line
+to the same log once you've decided; a lesson with no such line is still open. And when no
+`/kaizen review` sweep has happened in the last 7 days, the section bar shows a **review due**
+chip: a nudge to sweep the accumulated lessons, promote the recurring ones, and prune rules that
+stopped earning their keep.
+
 **Workflow:** run `/kaizen` in a Claude Code session → it appends a lesson to
 `~/.claude/session-analytics-log.md` → the session appears in the Analytics tab (hit ↻ to pull it in).
 If a session's transcript has since been deleted, the card still shows the logged lesson,
@@ -338,7 +345,8 @@ server/                  backend (Node + TypeScript, run via tsx — no compile 
   lib/scan.ts            enumerates + ranks sessions; process-liveness gate
   lib/usage.ts           fetches account 5h/weekly limits from Anthropic
   lib/analyze.ts         whole-session post-mortem → SessionAnalysis (also powers /kaizen)
-  lib/sessionAnalyticsLog.ts       parses ~/.claude/session-analytics-log.md into per-session lessons
+  lib/sessionAnalyticsLog.ts       parses ~/.claude/session-analytics-log.md → per-session lessons,
+                         lesson-status lines, review markers (append-only log)
   lib/analytics.ts       read-only reader: last N /kaizen-logged sessions, re-analyzed live
   lib/pending.ts         in-memory pending-question store behind remote answers
   lib/remoteState.ts     the remote-answer on/off switch (env gate + persisted UI toggle)

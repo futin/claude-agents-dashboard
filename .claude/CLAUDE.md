@@ -29,7 +29,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/management.ts   config scanner: global/project ScopeConfig, plugins, recent projects,
                   servable-path security set (see .claude/rules/management.md)
   lib/analyze.ts  whole-file session post-mortem → SessionAnalysis (the /kaizen analyzer; pure)
-  lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md → lesson per session (fail-open)
+  lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md → lesson / status /
+                  review-marker lines per session (append-only grammar; fail-open)
   lib/analytics.ts  read-only reader: last N /kaizen-logged sessions, each re-analyzed live
                   (see .claude/rules/analytics.md)
   lib/pending.ts  in-memory pending-AskUserQuestion store + state machine — the ONLY write

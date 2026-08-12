@@ -337,6 +337,20 @@ export interface SessionAnalysis {
 }
 
 /**
+ * What became of a logged lesson, from the log's own `status` lines:
+ * `actioned` (written into a CLAUDE.md / memory), `promoted` (raised to global
+ * config after recurring across projects), `dropped` (considered and rejected).
+ * Lessons with no status line are still open.
+ */
+export interface LessonStatus {
+  status: 'actioned' | 'promoted' | 'dropped';
+  /** YYYY-MM-DD of the status line. */
+  date: string;
+  /** Free-text note after the em dash, e.g. "added to project CLAUDE.md". */
+  note?: string;
+}
+
+/**
  * Analytics section (`GET /api/analytics`) — a read-only view of the sessions
  * the `/kaizen` skill has logged. `~/.claude/session-analytics-log.md` (one line per
  * `/kaizen` run) is the sole trigger: for each of the last N logged sessions the
@@ -357,6 +371,8 @@ export interface AnalyticsReport {
   analysis: SessionAnalysis | null;
   /** The session-analytics-log lesson text (always present — it's what puts the session here). */
   lesson: string;
+  /** Newest `status` line for this session, or null while the lesson is still open. */
+  lessonStatus?: LessonStatus | null;
 }
 
 /** Payload of `GET /api/analytics` — the last N logged sessions, newest-first. */
@@ -365,6 +381,10 @@ export interface AnalyticsResponse {
   /** Display cap (default 5). `reports.length <= keep`. */
   keep: number;
   reports: AnalyticsReport[];
+  /** Date of the newest `review:` marker in the log (YYYY-MM-DD), else null. */
+  lastReviewAt?: string | null;
+  /** True when lessons exist and no review marker landed in the last 7 days. */
+  reviewDue?: boolean;
   /** Set only when listing failed. */
   error?: boolean;
 }

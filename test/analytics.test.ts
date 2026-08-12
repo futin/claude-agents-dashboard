@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { listReports } from '../server/lib/analytics.js';
+import { listReports, reviewStatus } from '../server/lib/analytics.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -91,6 +91,57 @@ export function run(): number {
   t('no session-analytics-log → []', () => {
     const home = fakeHome({});
     assert.deepEqual(listReports(5, { homeDir: home }), []);
+  });
+
+  // --- lesson lifecycle + review sweep ------------------------------------
+
+  t('status line rides along on the report; unstatused lesson stays open', () => {
+    const home = fakeHome({
+      sessionAnalyticsLog: [
+        logLine('2026-07-12', 'demo', 'abc12345', 'keep it tight.'),
+        logLine('2026-07-13', 'demo', 'dddd4444', 'no status for this one.'),
+        '- 2026-08-01 [demo] abc12345: status actioned — added to project CLAUDE.md'
+      ].join('\n'),
+      transcripts: { 'abc12345-0000-1111-2222-333344445555': [turn('/tmp/demo', '2026-07-12T10:00:00.000Z')] }
+    });
+    const byId = Object.fromEntries(listReports(5, { homeDir: home }).map(r => [r.sessionId.slice(0, 8), r]));
+    // Matched against the RESOLVED full session id, not just the logged prefix.
+    assert.deepEqual(byId['abc12345'].lessonStatus, {
+      status: 'actioned', date: '2026-08-01', note: 'added to project CLAUDE.md'
+    });
+    assert.equal(byId['dddd4444'].lessonStatus, null);
+  });
+
+  t('a status line alone never creates a report', () => {
+    const home = fakeHome({ sessionAnalyticsLog: '- 2026-08-01 [demo] abc12345: status actioned — no lesson logged' });
+    assert.deepEqual(listReports(5, { homeDir: home }), []);
+  });
+
+  t('reviewStatus: empty log is never due', () => {
+    const home = fakeHome({});
+    assert.deepEqual(reviewStatus({ homeDir: home, now: new Date('2026-08-09T00:00:00Z') }), {
+      lastReviewAt: null, reviewDue: false
+    });
+  });
+
+  t('reviewStatus: lessons but no marker → due', () => {
+    const home = fakeHome({ sessionAnalyticsLog: logLine('2026-07-12', 'demo', 'abc12345', 'x.') });
+    const s = reviewStatus({ homeDir: home, now: new Date('2026-08-09T00:00:00Z') });
+    assert.equal(s.lastReviewAt, null);
+    assert.equal(s.reviewDue, true);
+  });
+
+  t('reviewStatus: 7-day boundary', () => {
+    const home = fakeHome({
+      sessionAnalyticsLog: [
+        logLine('2026-07-12', 'demo', 'abc12345', 'x.'),
+        '- 2026-08-01 review: swept 3 lessons'
+      ].join('\n')
+    });
+    const at = (iso: string) => reviewStatus({ homeDir: home, now: new Date(iso) });
+    assert.equal(at('2026-08-08T00:00:00Z').reviewDue, false); // exactly 7 days — still fresh
+    assert.equal(at('2026-08-08T12:00:00Z').reviewDue, true);  // past 7 days
+    assert.equal(at('2026-08-08T12:00:00Z').lastReviewAt, '2026-08-01');
   });
 
   console.log(`  ${ok}/${n}`);

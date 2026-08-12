@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import type { AnalyticsReport } from '../../../../shared/types';
+import type { AnalyticsReport, LessonStatus } from '../../../../shared/types';
 import { fmtTok, fmtDuration } from '../../lib/format';
 import { useAnalytics } from '../../hooks/useAnalytics';
 import { usePersistedState } from '../../hooks/usePersistedState';
@@ -46,6 +46,18 @@ export default function AnalyticsView() {
         <div className="an-title">Session analytics</div>
         <span className="an-hint">last {data?.keep ?? 5} sessions logged by <code>/kaizen</code></span>
         <span className="spacer" />
+        {data?.reviewDue && (
+          <span
+            className="an-review"
+            title={
+              data.lastReviewAt
+                ? `Last swept ${data.lastReviewAt} — lessons have accumulated since.`
+                : 'The log has never been swept.'
+            }
+          >
+            review due — run <code>/kaizen review</code>
+          </span>
+        )}
         <button className="an-refresh" onClick={refresh} title="Reload">↻</button>
       </div>
 
@@ -106,6 +118,7 @@ function ReportCard({
         <span className="an-proj">{r.project}</span>
         {r.models.map(m => <span key={m} className="an-model">{m}</span>)}
         <span className="an-id">{r.sessionId.slice(0, 8)}</span>
+        <StatusBadge s={r.lessonStatus} />
         <span className="spacer" />
         {a && <span className="an-tok">{fmtTok(a.totals.billableApprox)}</span>}
         <span className="an-when">logged {r.loggedAt}</span>
@@ -155,6 +168,7 @@ function ReportCard({
             <div className="an-lesson">
               <div className="an-col-h">Research &amp; suggestions</div>
               <p className="an-lesson-body">{r.lesson}</p>
+              <LessonOutcome s={r.lessonStatus} />
             </div>
           </>
         ) : (
@@ -163,11 +177,42 @@ function ReportCard({
             <div className="an-lesson">
               <div className="an-col-h">Research &amp; suggestions</div>
               <p className="an-lesson-body">{r.lesson}</p>
+              <LessonOutcome s={r.lessonStatus} />
             </div>
           </>
         )
       )}
     </div>
+  );
+}
+
+const STATUS_MARK: Record<LessonStatus['status'], string> = {
+  actioned: '✓',
+  promoted: '↑',
+  dropped: '·'
+};
+
+/**
+ * What became of this session's lesson, from the log's `status` lines. A lesson
+ * with no status line is still open — shown as such, since "which lessons have I
+ * actually acted on" is the question the badge exists to answer.
+ */
+function StatusBadge({ s }: { s?: LessonStatus | null }) {
+  if (!s) return <span className="an-status open" title="No status line yet — still open.">○ open</span>;
+  return (
+    <span className={`an-status ${s.status}`} title={`${s.note ? `${s.note} — ` : ''}${s.date}`}>
+      {STATUS_MARK[s.status]} {s.status}
+    </span>
+  );
+}
+
+/** The status line's note, spelled out under the lesson when the card is open. */
+function LessonOutcome({ s }: { s?: LessonStatus | null }) {
+  if (!s) return null;
+  return (
+    <p className="an-lesson-body muted">
+      {s.status} {s.date}{s.note ? ` — ${s.note}` : ''}
+    </p>
   );
 }
 

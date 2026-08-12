@@ -13,7 +13,7 @@ import {
   claudeHome, collectServablePaths, listRecentProjects, readGlobalScope,
   readProjectScope, readServableFile, resolveProject
 } from './lib/management.js';
-import { listReports } from './lib/analytics.js';
+import { listReports, reviewStatus } from './lib/analytics.js';
 import { readChatAfter, readChatBefore, readChatTail } from './lib/chat.js';
 import {
   answer as answerPending, cancel as cancelPending, clampTimeout,
@@ -370,6 +370,9 @@ export function serveAnalytics(config: Config, res: ServerResponse): void {
   const body: AnalyticsResponse = { generatedAt: new Date().toISOString(), keep: config.analyticsKeep, reports: [] };
   try {
     body.reports = listReports(config.analyticsKeep);
+    const review = reviewStatus();
+    body.lastReviewAt = review.lastReviewAt;
+    body.reviewDue = review.reviewDue;
   } catch (e) {
     console.error('[dashboard] analytics list failed:', (e as Error).message);
     body.error = true;
