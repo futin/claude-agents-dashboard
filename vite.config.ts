@@ -5,8 +5,10 @@ import react from '@vitejs/plugin-react';
 import { loadConfig } from './server/lib/config';
 
 // Reuse the backend config loader so the dev proxy targets the same PORT the
-// API server actually listens on (.env / process.env / default 4173).
-const { port } = loadConfig();
+// API server actually listens on (.env / process.env / default 4173), and the
+// dev UI itself honours WEB_PORT (default 5173 — set it when another Vite
+// project already sits there).
+const { port, webPort } = loadConfig();
 
 // No browser to open inside a container — skip, avoids a noisy spawn ENOENT.
 const inContainer = fs.existsSync('/.dockerenv');
@@ -22,7 +24,7 @@ function logHostLanIp() {
       const ip = process.env.HOST_LAN_IP;
       if (!inContainer || !ip) return;
       server.httpServer?.once('listening', () => {
-        const port = (server.config.server.port as number) ?? 5173;
+        const port = (server.config.server.port as number) ?? webPort;
         server.config.logger.info(`  ➜  Phone (LAN): http://${ip}:${port}/`);
       });
     }
@@ -33,7 +35,7 @@ export default defineConfig({
   root: 'client',
   plugins: [react(), logHostLanIp()],
   server: {
-    port: 5173,
+    port: webPort,
     host: true,
     open: !inContainer,
     proxy: {

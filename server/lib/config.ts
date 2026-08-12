@@ -8,6 +8,8 @@ import path from 'node:path';
 
 export interface Config {
   port: number;
+  /** Vite dev-server port (the `pnpm dev` UI). Only vite.config.ts reads it. */
+  webPort: number;
   maxSessions: number;
   activeWindowMin: number;
   lookbackHours: number;
@@ -28,6 +30,7 @@ export interface Config {
 
 export const DEFAULTS = {
   PORT: 4173,
+  WEB_PORT: 5173,
   MAX_SESSIONS: 10,
   ACTIVE_WINDOW_MIN: 5,
   LOOKBACK_HOURS: 24,
@@ -107,6 +110,7 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
 
   return {
     port: toPosInt(src('PORT'), DEFAULTS.PORT),
+    webPort: toPosInt(src('WEB_PORT'), DEFAULTS.WEB_PORT),
     maxSessions: toPosInt(src('MAX_SESSIONS'), DEFAULTS.MAX_SESSIONS),
     activeWindowMin: toPosInt(src('ACTIVE_WINDOW_MIN'), DEFAULTS.ACTIVE_WINDOW_MIN),
     lookbackHours: toPosInt(src('LOOKBACK_HOURS'), DEFAULTS.LOOKBACK_HOURS),
