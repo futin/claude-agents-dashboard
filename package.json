@@ -8,7 +8,7 @@
     "dev:docker": "HOST_LAN_IP=$(scripts/lan-ip.sh) CLAUDE_CREDENTIALS_JSON=$(scripts/host-credentials.sh) docker compose -f docker-compose.dev.yml up --build",
     "build": "vite build",
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
-    "tunnel": "tailscale serve --bg 4173",
+    "tunnel": "tailscale serve --bg 5174",
     "test": "tsx test/run-all.ts",
     "typecheck": "tsc --noEmit",
     "session-analytics": "tsx scripts/session-analytics.ts"
