@@ -1,18 +1,18 @@
 :root{
   color-scheme:dark; /* dark UA scrollbars + form controls on the olive board */
-  /* ATC strip board — materials */
-  --board:#141410;            /* page bg: painted-steel bay, olive cast */
-  --steel:#1c1b14;            /* recessed wells: inputs, tracks, inactive controls */
-  --strip:#252317;            /* strip paper — every card surface */
-  --strip-hi:#2b2919;         /* raised/tinted paper (user msgs, active tab) */
+  /* ATC strip board — midnight radar: deep navy scope-room */
+  --board:#0c1220;            /* page bg: dark scope-room navy */
+  --steel:#131a2b;            /* recessed wells: inputs, tracks, inactive controls */
+  --strip:#182238;            /* strip paper — every card surface */
+  --strip-hi:#1e2a44;         /* raised/tinted paper (user msgs, active tab) */
   --edge:rgba(255,255,255,.05);/* 1px paper catch-light */
-  --hairline:#3b3728;         /* printed rule on paper */
-  --hairline2:#4c472f;        /* hover/strong rule */
-  --ink:#eae4cf;--ink2:#a8a189;--ink3:#7d7660;
-  --green:#54c168;            /* working */
-  --amber:#ffa51e;            /* attention: a human must act */
-  --mustard:#c9b34a;          /* incomplete/pending */
-  --cyan:#53c7cf;             /* the one interactive accent */
+  --hairline:#2a3752;         /* printed rule on paper */
+  --hairline2:#354463;        /* hover/strong rule */
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;            /* working — phosphor */
+  --amber:#ffb03a;            /* attention: a human must act */
+  --mustard:#d1ba52;          /* incomplete/pending */
+  --cyan:#55d0dd;             /* the one interactive accent */
   --red:#e0533f;              /* danger thresholds */
   --magenta:#cf6f9e;          /* Task subagent / kaizen */
   --mono:'IBM Plex Mono','SF Mono','JetBrains Mono',monospace;
@@ -108,10 +108,10 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .caret.open{transform:rotate(90deg);color:var(--ink2)}
 .row:hover .caret{color:var(--ink2)}
 .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;background:var(--ink3)}
-.working .dot{background:var(--green);box-shadow:0 0 0 0 rgba(84,193,104,.5);animation:pulse 1.8s infinite}
+.working .dot{background:var(--green);box-shadow:0 0 0 0 rgba(70,212,140,.5);animation:pulse 1.8s infinite}
 .question .dot{background:var(--amber)}
 .incomplete .dot{background:var(--mustard)}
-@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(84,193,104,.5)}70%{box-shadow:0 0 0 7px rgba(84,193,104,0)}100%{box-shadow:0 0 0 0 rgba(84,193,104,0)}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(70,212,140,.5)}70%{box-shadow:0 0 0 7px rgba(70,212,140,0)}100%{box-shadow:0 0 0 0 rgba(70,212,140,0)}}
 .proj{font-size:14px;font-weight:600;letter-spacing:-.01em}
 .session-name{font-size:14px;font-weight:600;letter-spacing:-.01em}
 /* printed form boxes: hairline border, no fill, teleprinter mono */
@@ -146,7 +146,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .agents{display:flex;flex-direction:column;gap:5px}
 .agent{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--ink2)}
 .ag-pill{flex-shrink:0;font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-family:var(--display);padding:1px 6px;border-radius:2px}
-.ag-pill.running{color:var(--green);background:rgba(84,193,104,.13)}
+.ag-pill.running{color:var(--green);background:rgba(70,212,140,.13)}
 .ag-pill.done{color:var(--ink3);background:var(--steel)}
 .ag-pill.kaizen{color:var(--magenta);background:rgba(207,111,158,.13)}
 /* held remote question — the ANSWER stamp: amber, pulsing, opens the drawer */
@@ -279,7 +279,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 /* ---------------------------------------------- chat-history drawer */
 .chat-pill{flex-shrink:0;font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2);background:none;border:1px solid var(--hairline);border-radius:2px;padding:1px 7px;cursor:pointer;transition:color .15s,border-color .15s}
 .chat-pill:hover{color:var(--cyan);border-color:var(--cyan)}
-.chat-back{position:fixed;inset:0;background:rgba(8,8,4,.66);display:flex;justify-content:flex-end;z-index:50}
+.chat-back{position:fixed;inset:0;background:rgba(4,8,16,.66);display:flex;justify-content:flex-end;z-index:50}
 .chat{display:flex;flex-direction:column;width:min(720px,100%);height:100%;background:var(--board);border-left:1px solid var(--hairline2);animation:chat-in .16s ease-out}
 @keyframes chat-in{from{transform:translateX(16px);opacity:.4}to{transform:none;opacity:1}}
 .chat-head{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--hairline);flex-shrink:0;overflow:hidden;background:var(--strip);box-shadow:inset 0 1px 0 var(--edge)}
@@ -364,7 +364,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .qp-other:focus{outline:none;border-color:var(--amber)}
 .qp-token{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
 .qp-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.qp-send{font-family:var(--display);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#141410;background:var(--amber);border:1px solid var(--amber);border-radius:2px;padding:7px 15px;cursor:pointer;transition:opacity .15s}
+.qp-send{font-family:var(--display);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#0c1220;background:var(--amber);border:1px solid var(--amber);border-radius:2px;padding:7px 15px;cursor:pointer;transition:opacity .15s}
 .qp-send:disabled{cursor:default;opacity:.4}
 .qp-term{font-family:var(--font);font-size:11px;color:var(--ink3);background:none;border:1px solid var(--hairline);border-radius:2px;padding:7px 12px;cursor:pointer;transition:color .15s,border-color .15s}
 .qp-term:hover:not(:disabled){color:var(--ink2);border-color:var(--hairline2)}

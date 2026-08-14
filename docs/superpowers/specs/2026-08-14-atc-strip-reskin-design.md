@@ -13,25 +13,27 @@ when one needs the controller's action. Every visual decision below derives from
 artifact. The metaphor stops at materials — no section renames, no regrouping, no
 behavior changes.
 
-**Tone:** dark board, paper strips — the room stays dark (warm painted-steel charcoal,
-not void-black); each session strip reads as a lit physical object.
+**Tone:** dark board, paper strips — the room stays dark; each session strip reads as a
+lit physical object. **Palette revision 2026-08-14:** the original warm olive board was
+replaced by **midnight radar** (deep navy scope-room) after review — same anatomy, cooler
+materials.
 
 ## 1. Tokens
 
-### Palette
+### Palette (midnight radar)
 
 | Token | Hex | Role |
 |---|---|---|
-| `--board` | `#141410` | page background — painted-steel bay, olive cast |
-| `--steel` | `#1c1b14` | recessed wells: inputs, bar tracks, inactive controls, code bg |
-| `--strip` | `#252317` | strip paper — every card/row surface; 1px top edge-light (`rgba(255,255,255,.05)`) so it reads physical |
-| `--ink` | `#eae4cf` | primary text |
-| `--ink2` | `#a8a189` | secondary text |
-| `--ink3` | `#7d7660` | captions/faint (bumped from a darker candidate for contrast) |
-| `--green` | `#54c168` | working: holder edge, stamp, pulse |
-| `--amber` | `#ffa51e` | **attention only**: question holder, cocked strip, ANSWER stamp, QuestionPanel, review-due chip |
-| `--mustard` | `#c9b34a` | incomplete/pending holder + stamp |
-| `--cyan` | `#53c7cf` | the single interactive accent: selection, links, focus rings, active tab, user messages. Replaces today's blue everywhere |
+| `--board` | `#0c1220` | page background — dark scope-room navy |
+| `--steel` | `#131a2b` | recessed wells: inputs, bar tracks, inactive controls, code bg |
+| `--strip` | `#182238` | strip paper — every card/row surface; 1px top edge-light (`rgba(255,255,255,.05)`) so it reads physical |
+| `--ink` | `#dde6f4` | primary text |
+| `--ink2` | `#9fadc6` | secondary text |
+| `--ink3` | `#66738c` | captions/faint |
+| `--green` | `#46d48c` | working: holder edge, stamp, pulse — phosphor |
+| `--amber` | `#ffb03a` | **attention only**: question holder, cocked strip, ANSWER stamp, QuestionPanel, review-due chip |
+| `--mustard` | `#d1ba52` | incomplete/pending holder + stamp |
+| `--cyan` | `#55d0dd` | the single interactive accent: selection, links, focus rings, active tab, user messages. Replaces today's blue everywhere |
 | `--red` | `#e0533f` | danger thresholds (context %, usage bars) |
 | `--magenta` | `#cf6f9e` | Task/subagent + kaizen markers (kept from current pink, muted to sit on paper) |
 
