@@ -1,0 +1,587 @@
+# ATC Flight-Strip Reskin Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Reskin the whole dashboard as an ATC flight-strip board (dark board, paper strips, cocked-strip signature) per `docs/superpowers/specs/2026-08-14-atc-strip-reskin-design.md`.
+
+**Architecture:** Value-level rewrite of `client/src/styles.css` (class names preserved — project convention), new self-hosted fonts via `@fontsource`, one emoji removed from `Header.tsx`. Zero server changes, zero behavior changes, zero new client logic.
+
+**Tech Stack:** Vite + React + plain CSS custom properties. Fonts: Barlow, Barlow Condensed, IBM Plex Mono (`@fontsource`, bundled by Vite — no CDN).
+
+## Global Constraints
+
+- Class names in `styles.css` MUST stay stable (project convention: "keep class names stable so styling holds").
+- Server stays zero-runtime-dep; font packages go in the **root** `package.json` (there is no `client/package.json`) but are imported only from client code, so the boundary holds.
+- Legacy CSS var names (`--bg --surface --surface2 --border --border2 --text --text2 --text3 --green --accent --orange --red --pink --yellow --blue --mono --font`) MUST keep resolving — `SessionRow.tsx` uses `var(--orange)` / `var(--text)` / `var(--text3)` inline. Keep them as aliases of the new tokens.
+- Amber (`#ffa51e`) only ever marks "a human must act": question status, cocked strip, ANSWER stamp, QuestionPanel, review-due, warn thresholds. Cyan (`#53c7cf`) is the only interactive accent.
+- No IA / label / logic changes. UI copy unchanged except deleting the `⚡` emoji from the header title.
+- Verification cycle per task: `pnpm typecheck && pnpm test` stays green (220 cases; CSS can't break them — they guard the TSX touches) + visual check in the running dev preview (launch.json config `dev-alt-port`, http://localhost:5600).
+- Commit after every task.
+
+---
+
+### Task 1: Fonts + token foundation
+
+**Files:**
+- Modify: `package.json` (root — add 3 `@fontsource` deps)
+- Modify: `client/src/main.tsx` (font imports)
+- Modify: `client/src/styles.css:1-11` (the `:root` block + base styles; append focus/reduced-motion at file end)
+
+**Interfaces:**
+- Produces: the full token set every later task's CSS references: `--board --steel --strip --strip-hi --edge --hairline --hairline2 --ink --ink2 --ink3 --green --amber --mustard --cyan --red --magenta --display` plus legacy aliases listed in Global Constraints.
+
+- [ ] **Step 1: Install fonts**
+
+```bash
+pnpm add @fontsource/barlow @fontsource/barlow-condensed @fontsource/ibm-plex-mono
+```
+
+- [ ] **Step 2: Import weights in `client/src/main.tsx`** (above the `./styles.css` import)
+
+```ts
+import '@fontsource/barlow/400.css';
+import '@fontsource/barlow/600.css';
+import '@fontsource/barlow-condensed/600.css';
+import '@fontsource/barlow-condensed/700.css';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/600.css';
+```
+
+- [ ] **Step 3: Replace `styles.css` lines 1–11** (`:root` through `.wrap.wide`) with:
+
+```css
+:root{
+  /* ATC strip board — materials */
+  --board:#141410;            /* page bg: painted-steel bay, olive cast */
+  --steel:#1c1b14;            /* recessed wells: inputs, tracks, inactive controls */
+  --strip:#252317;            /* strip paper — every card surface */
+  --strip-hi:#2b2919;         /* raised/tinted paper (user msgs, active tab) */
+  --edge:rgba(255,255,255,.05);/* 1px paper catch-light */
+  --hairline:#3b3728;         /* printed rule on paper */
+  --hairline2:#4c472f;        /* hover/strong rule */
+  --ink:#eae4cf;--ink2:#a8a189;--ink3:#7d7660;
+  --green:#54c168;            /* working */
+  --amber:#ffa51e;            /* attention: a human must act */
+  --mustard:#c9b34a;          /* incomplete/pending */
+  --cyan:#53c7cf;             /* the one interactive accent */
+  --red:#e0533f;              /* danger thresholds */
+  --magenta:#cf6f9e;          /* Task subagent / kaizen */
+  --mono:'IBM Plex Mono','SF Mono','JetBrains Mono',monospace;
+  --font:'Barlow',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --display:'Barlow Condensed','Barlow',sans-serif;
+  /* legacy aliases — TSX inline styles + unmigrated rules keep resolving */
+  --bg:var(--board);--surface:var(--strip);--surface2:var(--steel);
+  --border:var(--hairline);--border2:var(--hairline2);
+  --text:var(--ink);--text2:var(--ink2);--text3:var(--ink3);
+  --accent:var(--cyan);--blue:var(--amber);--orange:var(--amber);
+  --yellow:var(--mustard);--pink:var(--magenta);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--board);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;line-height:1.4;padding:24px}
+.wrap{max-width:820px;margin:0}
+.wrap.wide{max-width:1280px}
+```
+
+- [ ] **Step 4: Append at end of `styles.css`** (quality floor, applies to all later tasks):
+
+```css
+/* ---------------------------------------------- quality floor */
+:where(button,select,input,textarea,summary,[role=button]):focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+@media (prefers-reduced-motion:reduce){
+  .working .dot,.ag-pill.answer,.tl-bar.running,.row,.chat{animation:none}
+}
+```
+
+- [ ] **Step 5: Verify**
+
+Run: `pnpm typecheck && pnpm test` — expect green.
+Browser (tab on :5600): screenshot; page renders, Barlow visible. Confirm via javascript_tool: `getComputedStyle(document.body).fontFamily` starts with `Barlow`.
+Interim mixed look is expected (old rules on new tokens) — only check nothing is broken/illegible.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add package.json pnpm-lock.yaml client/src/main.tsx client/src/styles.css
+git commit -m "feat(reskin): strip-board tokens + self-hosted Barlow/Plex fonts"
+```
+
+---
+
+### Task 2: The strip (session rows)
+
+**Files:**
+- Modify: `client/src/styles.css` — the blocks for `.rows .row .caret .dot .proj .session-name .proj-pill .branch .model .tok .pct .bar .r2 .detail .agents .ag-pill .ag-type .kaizen-lesson .tl-track .tl-bar .tl-axis .empty .foot` (currently lines ~68–137)
+
+**Interfaces:**
+- Consumes: Task 1 tokens.
+- Produces: `.chat-pill`/`.ag-pill.answer` stamp styling reused visually by Task 4.
+
+- [ ] **Step 1: Replace the row section** (from `.rows{` through `.foot`/`.off`) with:
+
+```css
+.rows{display:flex;flex-direction:column;gap:7px}
+/* a session is a flight strip: square paper card in a colored holder edge */
+.row{background:var(--strip);border:1px solid var(--hairline);border-left:7px solid var(--hairline2);border-radius:2px;padding:11px 14px;cursor:pointer;
+  box-shadow:inset 0 1px 0 var(--edge),0 1px 2px rgba(0,0,0,.4);
+  transition:border-color .15s,transform .15s,box-shadow .15s;
+  animation:slot-in .18s ease-out}
+@keyframes slot-in{from{transform:translateY(-3px);opacity:.5}to{transform:none;opacity:1}}
+.row:hover{border-color:var(--hairline2);transform:translateY(-1px);box-shadow:inset 0 1px 0 var(--edge),0 2px 6px rgba(0,0,0,.45)}
+.row.selected{box-shadow:0 0 0 1px var(--cyan),inset 0 1px 0 var(--edge)}
+.row.working{border-left-color:var(--green)}
+.row.incomplete{border-left-color:var(--mustard)}
+/* the cocked strip — tilted in the rack: this one needs the controller */
+.row.question{border-left-color:var(--amber);transform:rotate(-.55deg) translateX(6px);
+  box-shadow:inset 0 1px 0 var(--edge),0 3px 8px rgba(0,0,0,.5)}
+.row.question:hover{transform:rotate(-.55deg) translateX(6px)}
+.row .r1{display:flex;align-items:center;gap:10px}
+.caret{flex-shrink:0;color:var(--ink3);font-size:10px;width:10px;text-align:center;transition:transform .15s,color .15s}
+.caret.open{transform:rotate(90deg);color:var(--ink2)}
+.row:hover .caret{color:var(--ink2)}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;background:var(--ink3)}
+.working .dot{background:var(--green);box-shadow:0 0 0 0 rgba(84,193,104,.5);animation:pulse 1.8s infinite}
+.question .dot{background:var(--amber)}
+.incomplete .dot{background:var(--mustard)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(84,193,104,.5)}70%{box-shadow:0 0 0 7px rgba(84,193,104,0)}100%{box-shadow:0 0 0 0 rgba(84,193,104,0)}}
+.proj{font-size:14px;font-weight:600;letter-spacing:-.01em}
+.session-name{font-size:14px;font-weight:600;letter-spacing:-.01em}
+/* printed form boxes: hairline border, no fill, teleprinter mono */
+.proj-pill{font-size:10px;font-weight:600;color:var(--ink2);font-family:var(--mono);border:1px solid var(--hairline2);padding:1px 6px;border-radius:2px}
+.branch{font-size:10px;color:var(--ink2);font-family:var(--mono);border:1px solid var(--hairline);padding:1px 6px;border-radius:2px}
+.model{font-size:9.5px;color:var(--ink3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.03em}
+.spacer{flex:1}
+.tok{font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums;font-family:var(--mono)}
+.pct{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;min-width:44px;text-align:right;font-family:var(--mono)}
+/* printed gauge: flat threshold fill on a ticked track — no gradients */
+.bar{height:4px;background:repeating-linear-gradient(90deg,transparent 0 23px,var(--edge) 23px 24px),var(--steel);overflow:hidden;margin:9px 0 8px}
+.bar .fill{height:100%;background:var(--green);transition:width .5s ease}
+.bar .fill.warn{background:var(--amber)}
+.r2{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink2)}
+.r2 .act{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r2 .act .tool{font-family:var(--mono);color:var(--cyan);font-weight:600}
+.r2 .act .tool.task{color:var(--magenta)}
+/* status word as a stamped label */
+.r2 .status{font-family:var(--display);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;border:1px solid currentColor;border-radius:2px;padding:0 6px 1px}
+.working .r2 .status{color:var(--green)}
+.question .r2 .status{color:var(--amber)}
+.incomplete .r2 .status{color:var(--mustard)}
+.idle .r2 .status{color:var(--ink3)}
+.r2 .ago{margin-left:auto;color:var(--ink3);font-variant-numeric:tabular-nums;font-family:var(--mono);flex-shrink:0}
+/* Expanded subagent panel */
+.detail{margin-top:11px;padding-top:11px;border-top:1px solid var(--hairline)}
+.detail-sum{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink2);font-variant-numeric:tabular-nums;margin-bottom:9px}
+.detail-sum .ds-run{color:var(--green);font-weight:600}
+.detail-sum .ds-done{color:var(--ink2);font-weight:600}
+.detail-sum .ds-total{margin-left:auto;color:var(--ink3)}
+.detail-empty{font-size:11.5px;color:var(--ink3);padding:2px 0}
+.agents{display:flex;flex-direction:column;gap:5px}
+.agent{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--ink2)}
+.ag-pill{flex-shrink:0;font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-family:var(--display);padding:1px 6px;border-radius:2px}
+.ag-pill.running{color:var(--green);background:rgba(84,193,104,.13)}
+.ag-pill.done{color:var(--ink3);background:var(--steel)}
+.ag-pill.kaizen{color:var(--magenta);background:rgba(207,111,158,.13)}
+/* held remote question — the ANSWER stamp: amber, pulsing, opens the drawer */
+.ag-pill.answer{border:1px solid var(--amber);color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--strip));cursor:pointer;animation:qpulse 1.6s ease-in-out infinite}
+.ag-pill.answer:hover{color:var(--ink);background:color-mix(in srgb,var(--amber) 28%,var(--strip))}
+@keyframes qpulse{0%,100%{opacity:1}50%{opacity:.55}}
+.kaizen-lesson{display:flex;align-items:flex-start;gap:8px;margin-top:11px;padding-top:11px;border-top:1px solid var(--hairline);font-size:11.5px;line-height:1.5;color:var(--ink2)}
+.kaizen-lesson .ag-pill{margin-top:1px}
+.ag-type{flex-shrink:0;font-family:var(--mono);color:var(--magenta);font-weight:600}
+.ag-desc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ag-dur{margin-left:auto;flex-shrink:0;color:var(--ink3);font-variant-numeric:tabular-nums;font-family:var(--mono)}
+/* Per-agent timeline on the session's shared time axis */
+.agent-block{display:flex;flex-direction:column;gap:3px}
+.tl-track{position:relative;height:5px;background:var(--steel)}
+.tl-bar{position:absolute;top:0;height:100%;min-width:3px;background:var(--ink3)}
+.tl-bar.running{background:var(--green);animation:tlpulse 1.8s ease-in-out infinite}
+@keyframes tlpulse{0%,100%{opacity:.85}50%{opacity:.5}}
+.tl-axis{display:flex;justify-content:space-between;font-size:9.5px;color:var(--ink3);font-variant-numeric:tabular-nums;font-family:var(--mono);margin-top:4px}
+.empty{text-align:center;padding:60px 20px;color:var(--ink3)}
+.empty .e{font-size:34px;margin-bottom:10px;opacity:.3}
+.foot{margin-top:18px;font-size:10px;color:var(--ink3);text-align:center;font-family:var(--mono)}
+.off{color:var(--red)}
+```
+
+Note: `.chat-pill` is restyled in Task 4 with the drawer; leave its current block alone here.
+
+- [ ] **Step 2: Verify**
+
+`pnpm typecheck && pnpm test` green. Browser: screenshot Sessions tab. Check: holder edges colored by status; square corners; mono data; stamp status words; expanded panel readable. If a `question` session exists, confirm the cock; otherwise verify via javascript_tool by adding the class to a row (`document.querySelector('.row').classList.add('question')`), screenshot, then reload to discard.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add client/src/styles.css
+git commit -m "feat(reskin): session rows as flight strips with cocked-question signature"
+```
+
+---
+
+### Task 3: Chrome — facility plate, gauges, rack tabs, toolbar
+
+**Files:**
+- Modify: `client/src/components/Header.tsx:19` (drop `⚡ `)
+- Modify: `client/src/styles.css` — blocks `.tabs .tab .head .sub .toolbar .tb-* .ra-pill .usage` (currently lines ~13–66)
+
+**Interfaces:**
+- Consumes: Task 1 tokens.
+
+- [ ] **Step 1: In `Header.tsx` change** `<h1>⚡ Claude Sessions</h1>` → `<h1>Claude Sessions</h1>`
+
+- [ ] **Step 2: Replace the chrome section** (`.tabs` through `.usage .u-msg`) with:
+
+```css
+/* rack selector */
+.tabs{display:flex;gap:6px;margin-bottom:16px}
+.tab{font-family:var(--display);font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:6px 14px 5px;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
+.tab:hover{color:var(--ink2);border-color:var(--hairline2)}
+.tab.on{color:var(--ink);background:var(--strip-hi);border-color:var(--hairline2);box-shadow:inset 0 -2px 0 var(--cyan),inset 0 1px 0 var(--edge)}
+/* facility plate */
+.head{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+.head h1{font-family:var(--display);font-size:20px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--ink)}
+.head .meta{font-size:11.5px;color:var(--ink2);margin-left:auto;font-variant-numeric:tabular-nums;font-family:var(--mono);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:3px 8px}
+.sub{font-size:10px;color:var(--ink3);margin-bottom:18px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em}
+.sub b{color:var(--green);font-weight:600}
+
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.toolbar .tb-spacer{flex:1;min-width:0}
+.toolbar select{font-family:var(--mono);font-size:10.5px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 8px;cursor:pointer;transition:border-color .15s,color .15s}
+.toolbar select:hover{color:var(--ink);border-color:var(--hairline2)}
+.toolbar select:focus{outline:none;border-color:var(--cyan)}
+.tb-multi-wrap{position:relative}
+.tb-multi{font-family:var(--mono);font-size:10.5px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 8px;cursor:pointer;transition:border-color .15s,color .15s;white-space:nowrap}
+.tb-multi:hover{color:var(--ink);border-color:var(--hairline2)}
+.tb-multi:focus{outline:none;border-color:var(--cyan)}
+.tb-pop{position:absolute;top:calc(100% + 4px);left:0;z-index:20;min-width:100%;max-height:260px;overflow-y:auto;background:var(--strip);border:1px solid var(--hairline2);border-radius:2px;padding:4px;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+.tb-pop-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink2);padding:4px 6px;border-radius:2px;cursor:pointer;white-space:nowrap}
+.tb-pop-row:hover{color:var(--ink);background:var(--strip-hi)}
+.tb-pop-row input{cursor:pointer;margin:0}
+.tb-pop-empty{font-size:11px;color:var(--ink2);padding:4px 6px}
+/* remote-answer switch: on = allowed while you're away, not instead of the terminal */
+.ra-pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--ink3);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 10px;cursor:pointer;transition:color .15s,border-color .15s}
+.ra-pill:hover:not(:disabled){color:var(--ink2);border-color:var(--hairline2)}
+.ra-pill:disabled{cursor:default}
+.ra-pill.on{color:var(--ink);border-color:var(--cyan)}
+.ra-pill .ra-dot{width:6px;height:6px;border-radius:50%;background:var(--hairline2);flex-shrink:0}
+.ra-pill.on .ra-dot{background:var(--cyan)}
+.ra-pill.off{cursor:default}
+.ra-warn{color:var(--amber);font-size:10px}
+/* connection origin: how this browser reached the dashboard. Display-only. */
+.ra-pill.origin{cursor:default}
+.ra-pill.origin.o-tailnet .ra-dot{background:var(--cyan)}
+.ra-pill.origin.o-lan .ra-dot{background:var(--green)}
+.ra-pill.origin.o-unknown{color:var(--amber);border-color:var(--amber)}
+.ra-pill.origin.o-unknown .ra-dot{background:var(--amber)}
+.toolbar .tb-dir{font-size:12px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 9px;cursor:pointer;transition:border-color .15s,color .15s;font-variant-numeric:tabular-nums}
+.toolbar .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
+
+/* twin gauges: 5H / WEEK */
+.usage{display:flex;gap:18px;margin:-6px 0 18px}
+.usage .u{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1;max-width:280px}
+.usage .u-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.usage .u-label{font-family:var(--display);font-size:10px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.09em;flex-shrink:0}
+.usage .u-row{display:flex;align-items:center;gap:8px}
+.usage .u-bar{flex:1;height:4px;background:repeating-linear-gradient(90deg,transparent 0 23px,var(--edge) 23px 24px),var(--steel);overflow:hidden}
+.usage .u-fill{height:100%;background:var(--green);transition:width .5s ease}
+.usage .u-fill.mid{background:var(--amber)}
+.usage .u-fill.high{background:var(--red)}
+.usage .u-pct{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink2);min-width:34px;text-align:right;font-family:var(--mono)}
+.usage .u-reset{font-size:10px;color:var(--ink3);white-space:nowrap;flex-shrink:0;font-family:var(--mono)}
+.usage .u-msg{font-size:11px;color:var(--ink3)}
+```
+
+- [ ] **Step 3: Verify**
+
+`pnpm typecheck && pnpm test` green. Browser screenshot: plate title in condensed caps, boxed mono clock, gauge bars flat + ticked, tabs square with cyan bar on active, toolbar wells recessed, origin/phone pills square.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add client/src/styles.css client/src/components/Header.tsx
+git commit -m "feat(reskin): facility-plate chrome — header, gauges, rack tabs, toolbar wells"
+```
+
+---
+
+### Task 4: Chat drawer + question panel + markdown
+
+**Files:**
+- Modify: `client/src/styles.css` — everything from `/* chat-history drawer */` to end of the mobile `@media` block (currently lines ~242–340), plus the `.md-*` block inside it.
+
+**Interfaces:**
+- Consumes: Task 1 tokens; `.ag-pill.answer` amber styling from Task 2 (visual consistency with `.qp-badge`).
+
+- [ ] **Step 1: Replace the drawer section** with:
+
+```css
+/* ---------------------------------------------- chat-history drawer */
+.chat-pill{flex-shrink:0;font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2);background:none;border:1px solid var(--hairline);border-radius:2px;padding:1px 7px;cursor:pointer;transition:color .15s,border-color .15s}
+.chat-pill:hover{color:var(--cyan);border-color:var(--cyan)}
+.chat-back{position:fixed;inset:0;background:rgba(8,8,4,.66);display:flex;justify-content:flex-end;z-index:50}
+.chat{display:flex;flex-direction:column;width:min(720px,100%);height:100%;background:var(--board);border-left:1px solid var(--hairline2);animation:chat-in .16s ease-out}
+@keyframes chat-in{from{transform:translateX(16px);opacity:.4}to{transform:none;opacity:1}}
+.chat-head{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--hairline);flex-shrink:0;overflow:hidden;background:var(--strip);box-shadow:inset 0 1px 0 var(--edge)}
+.chat-title{flex:1;min-width:0;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-head .proj-pill,.chat-head .branch{flex-shrink:0;white-space:nowrap}
+.chat-model{font-size:10.5px;color:var(--ink3);font-family:var(--mono);flex-shrink:0}
+.chat-x{font-size:12px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:4px 8px;cursor:pointer;flex-shrink:0;transition:color .15s,border-color .15s}
+.chat-x:hover{color:var(--ink);border-color:var(--hairline2)}
+.chat-filter{display:flex;gap:5px;padding:8px 16px;border-bottom:1px solid var(--hairline);flex-shrink:0}
+.cf-btn{font-family:var(--display);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:3px 10px;cursor:pointer;transition:color .15s,border-color .15s}
+.cf-btn:hover{color:var(--ink2);border-color:var(--hairline2)}
+.cf-btn.on{color:var(--ink);border-color:var(--cyan);box-shadow:inset 0 -2px 0 var(--cyan)}
+.chat-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:14px 16px;display:flex;flex-direction:column;gap:13px}
+.chat-older{align-self:center;font-family:var(--mono);font-size:10.5px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:4px 12px;cursor:pointer;transition:color .15s,border-color .15s}
+.chat-older:hover:not(:disabled){color:var(--ink);border-color:var(--hairline2)}
+.chat-older:disabled{cursor:default;color:var(--ink3)}
+.chat-empty{font-size:11.5px;color:var(--ink3);padding:6px 0}
+.cmsg{border-left:2px solid var(--hairline2);padding-left:11px}
+.cmsg.user{border-left-color:var(--cyan);background:var(--strip);border-radius:0 2px 2px 0;padding:7px 10px 7px 11px;box-shadow:inset 0 1px 0 var(--edge)}
+.cmsg-head{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+.cmsg-role{font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3)}
+.cmsg.user .cmsg-role{color:var(--cyan)}
+.cmsg-ts{font-size:9.5px;color:var(--ink3);font-variant-numeric:tabular-nums;font-family:var(--mono)}
+.cmsg-text{font-size:12px;line-height:1.55;color:var(--ink2);overflow-wrap:anywhere;min-width:0}
+.cmsg.user .cmsg-text{color:var(--ink)}
+.cmsg-cut{display:block;margin-top:3px;font-size:10.5px;color:var(--ink3);font-style:italic}
+
+/* rendered markdown inside a message (see client/src/lib/markdown.ts) */
+.md{display:flex;flex-direction:column;gap:7px}
+.md>:first-child{margin-top:0}
+.md-p,.md-quote,.md-list li{white-space:pre-wrap}
+.md-h{font-weight:600;color:var(--ink);letter-spacing:-.01em;margin-top:3px}
+.md-h1{font-size:13.5px}.md-h2{font-size:12.5px}.md-h3,.md-h4{font-size:12px;color:var(--ink2)}
+.md-code{font-family:var(--mono);font-size:10.5px;color:var(--cyan);background:var(--steel);border-radius:2px;padding:1px 4px}
+.md-pre{font-family:var(--mono);font-size:10.5px;line-height:1.5;color:var(--ink2);background:var(--board);border:1px solid var(--hairline);border-radius:2px;padding:9px 11px;overflow-x:auto}
+.md-link{color:var(--cyan);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--cyan) 40%,transparent)}
+.md-link:hover{border-bottom-color:var(--cyan)}
+.md-path{font-family:var(--mono);font-size:10.5px;color:var(--ink2);border-bottom:1px dotted var(--hairline2);cursor:help}
+.md-list{padding-left:17px;display:flex;flex-direction:column;gap:3px}
+.md-list li::marker{color:var(--ink3)}
+.md-quote{border-left:2px solid var(--hairline2);padding-left:9px;color:var(--ink3)}
+.md-hr{border-top:1px solid var(--hairline);margin:2px 0}
+.md-table-wrap{overflow-x:auto;max-width:100%}
+.md-table{border-collapse:collapse;font-size:11px}
+.md-table th,.md-table td{border:1px solid var(--hairline);padding:4px 8px;vertical-align:top}
+.md-table th{color:var(--ink);font-weight:600;background:var(--steel);white-space:nowrap}
+.md-table td{color:var(--ink2)}
+.cmsg-tool{font-size:11px;color:var(--ink3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmsg-tool .tool{font-family:var(--mono);color:var(--cyan);font-weight:600}
+.cmsg-tool .tool.task{color:var(--magenta)}
+.cmsg-plan{margin-top:6px;min-width:0}
+.cmsg-plan>summary{font-size:11px;color:var(--ink3);cursor:pointer;user-select:none}
+.cmsg-plan>summary .tool{font-family:var(--mono);color:var(--cyan);font-weight:600}
+.cmsg-plan>.cmsg-text{margin-top:5px;padding:8px 10px;background:var(--steel);border:1px solid var(--hairline);border-radius:2px}
+/* pending-question action bar — amber: where the cocked strip gets answered */
+.qpanel{flex-shrink:0;border-top:1px solid color-mix(in srgb,var(--amber) 45%,transparent);background:color-mix(in srgb,var(--amber) 6%,var(--board));padding:10px 16px;display:flex;flex-direction:column;gap:9px;max-height:56vh;overflow-y:auto}
+.qpanel.sent,.qpanel.gone{padding:8px 16px}
+.qp-head{display:flex;align-items:baseline;gap:8px}
+.qp-badge{font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--amber);border:1px solid var(--amber);border-radius:2px;padding:0 6px 1px}
+.qp-hint,.qp-note{font-size:10.5px;color:var(--ink3)}
+.qp-q{display:flex;flex-direction:column;gap:6px}
+.qp-qtext{font-size:12px;line-height:1.45;color:var(--ink)}
+.qp-chip{font-family:var(--mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--amber);margin-right:6px}
+.qp-multi{font-size:10px;color:var(--ink3);margin-left:6px}
+.qp-opts{display:flex;flex-wrap:wrap;gap:6px}
+.qp-opt{display:flex;align-items:baseline;gap:6px;text-align:left;font-family:var(--font);font-size:11.5px;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline);border-radius:2px;padding:7px 11px;cursor:pointer;transition:color .15s,border-color .15s,background .15s;box-shadow:inset 0 1px 0 var(--edge)}
+.qp-opt:hover:not(:disabled){color:var(--ink);border-color:var(--hairline2)}
+.qp-opt.on{color:var(--ink);border-color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--strip))}
+.qp-opt:disabled{cursor:default;opacity:.55}
+.qp-opt.other{font-style:italic}
+.qp-box{font-size:11px;color:var(--amber)}
+.qp-label{font-weight:600}
+.qp-desc{font-size:10.5px;color:var(--ink3);max-width:34ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qp-other{font-family:var(--font);font-size:11.5px;color:var(--ink);background:var(--board);border:1px solid var(--hairline);border-radius:2px;padding:7px 10px;width:100%;max-width:420px}
+.qp-other:focus{outline:none;border-color:var(--amber)}
+.qp-token{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.qp-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.qp-send{font-family:var(--display);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#141410;background:var(--amber);border:1px solid var(--amber);border-radius:2px;padding:7px 15px;cursor:pointer;transition:opacity .15s}
+.qp-send:disabled{cursor:default;opacity:.4}
+.qp-term{font-family:var(--font);font-size:11px;color:var(--ink3);background:none;border:1px solid var(--hairline);border-radius:2px;padding:7px 12px;cursor:pointer;transition:color .15s,border-color .15s}
+.qp-term:hover:not(:disabled){color:var(--ink2);border-color:var(--hairline2)}
+.chat-foot{display:flex;align-items:baseline;gap:10px;padding:9px 16px;border-top:1px solid var(--hairline);font-size:10.5px;color:var(--ink3);flex-shrink:0;font-family:var(--mono)}
+.chat-count{margin-left:auto;font-variant-numeric:tabular-nums}
+@media (max-width:700px){.chat{width:100%;border-left:none}.chat-body{padding:12px}.chat-head{padding:11px 12px}.chat-filter{padding:7px 12px}.chat-head .proj-pill,.chat-model{display:none}
+  .qpanel{padding:10px 12px;max-height:62vh}.qp-opts{flex-direction:column}
+  .qp-opt{width:100%;padding:12px;min-height:42px;align-items:center}.qp-desc{display:none}
+  .qp-send,.qp-term{flex:1;padding:12px;min-height:42px}}
+```
+
+- [ ] **Step 2: Verify**
+
+`pnpm typecheck && pnpm test` green. Browser: open a chat drawer, screenshot. Check: board-bg panel, paper header, user messages cyan-ruled paper blocks, ALL/TEXT/YOU stamps, markdown/code readable. QuestionPanel amber styling verified via a live pending question if one exists; otherwise confirm the CSS visually later in Task 6's full pass (the panel's classes are exercised by the amber tokens above — no logic to test).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add client/src/styles.css
+git commit -m "feat(reskin): drawer as flight-data panel, amber question console"
+```
+
+---
+
+### Task 5: Management + Analytics
+
+**Files:**
+- Modify: `client/src/styles.css` — the `/* Management section */` and `/* Analytics section */` blocks (currently lines ~139–240)
+
+**Interfaces:**
+- Consumes: Task 1 tokens.
+
+- [ ] **Step 1: Replace both sections** with:
+
+```css
+/* Management section (three-pane) */
+.mgmt-bar{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.mgmt-bar .mgmt-title{font-family:var(--display);font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:.07em}
+.mgmt-bar .tb-dir{margin-left:auto;font-size:11px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 9px;cursor:pointer;transition:border-color .15s,color .15s}
+.mgmt-bar .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
+.mgmt{display:grid;grid-template-columns:200px 300px minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:1000px){.mgmt{grid-template-columns:200px minmax(0,1fr)}.mdetail{grid-column:1/-1}}
+@media (max-width:700px){.mgmt{grid-template-columns:1fr}.mdetail{grid-column:auto}}
+.mgmt-menu{display:flex;flex-direction:column;gap:4px}
+.mgmt-menu-item{display:flex;flex-direction:column;gap:1px;padding:7px 10px;border:1px solid var(--hairline);border-radius:2px;background:var(--strip);cursor:pointer;transition:border-color .15s;min-width:0;box-shadow:inset 0 1px 0 var(--edge)}
+.mgmt-menu-item:hover{border-color:var(--hairline2)}
+.mgmt-menu-item.on{box-shadow:0 0 0 1px var(--cyan),inset 0 1px 0 var(--edge)}
+.mgmt-menu-name{font-size:12px;font-weight:600}
+.mgmt-menu-path{font-size:9.5px;color:var(--ink3);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mgmt-list{display:flex;flex-direction:column;gap:10px;min-width:0}
+.mgmt-filter{font-family:var(--font);font-size:11px;color:var(--ink);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:6px 9px;width:100%}
+.mgmt-filter:focus{outline:none;border-color:var(--cyan)}
+.mgmt-filter::placeholder{color:var(--ink3)}
+.mgroup{display:flex;flex-direction:column;gap:4px}
+.mgroup-h{display:flex;align-items:center;gap:7px;font-family:var(--display);font-size:10.5px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.09em;padding:7px 6px;border-radius:2px;cursor:pointer;user-select:none;transition:background .12s,color .12s}
+.mgroup-h:hover{color:var(--ink2);background:var(--strip)}
+.mitem{padding:10px 12px;border:1px solid var(--hairline);border-radius:2px;background:var(--strip);cursor:pointer;transition:border-color .15s;min-width:0;box-shadow:inset 0 1px 0 var(--edge)}
+.mitem:hover{border-color:var(--hairline2)}
+.mitem.on{box-shadow:0 0 0 1px var(--cyan),inset 0 1px 0 var(--edge)}
+.mitem-top{display:flex;align-items:center;gap:8px;min-width:0}
+.mitem-name{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msrc{margin-left:auto;flex-shrink:0;font-size:9px;font-weight:600;font-family:var(--mono);color:var(--ink3);border:1px solid var(--hairline);padding:1px 6px;border-radius:2px}
+.msrc.plugin{color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
+.mitem-desc{font-size:10.5px;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.mdetail{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hairline);border-radius:2px;background:var(--strip);min-width:0;box-shadow:inset 0 1px 0 var(--edge)}
+.mdetail-head{display:flex;align-items:center;gap:8px}
+.mdetail-head .mitem-name{font-size:13px}
+.mdetail .mitem-desc{white-space:normal}
+.mdetail-path{font-size:9.5px;color:var(--ink3);font-family:var(--mono);word-break:break-all}
+.mgmt-file{font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--ink2);background:var(--board);border:1px solid var(--hairline);border-radius:2px;padding:10px;max-height:70vh;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.mgmt-trunc{font-size:10px;color:var(--amber)}
+.mgmt-empty{font-size:11px;color:var(--ink3);padding:4px 2px}
+.msub-h{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink2);padding:8px 8px;margin-top:2px;border-radius:2px;background:var(--strip);cursor:pointer;user-select:none;transition:background .12s,color .12s}
+.msub-h:hover{color:var(--ink);background:var(--strip-hi)}
+.msub-caret{display:inline-block;font-size:10px;color:var(--ink3);transition:transform .12s}
+.msub-caret.open{transform:rotate(90deg)}
+.mgmt-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px;padding:8px 10px;border:1px solid var(--hairline);border-radius:2px;background:var(--steel)}
+.mgmt-kv-key{color:var(--ink3);font-family:var(--mono);font-size:10px}
+.mgmt-kv-val{color:var(--ink2);word-break:break-word}
+.mdetail-label{display:flex;align-items:center;gap:8px;font-family:var(--display);font-size:10.5px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.09em;margin-top:4px}
+.mdetail-label .tb-dir{font-size:10px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:3px 7px;cursor:pointer;text-transform:none;letter-spacing:0;font-family:var(--font)}
+.mdetail-label .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
+.mdetail-type{font-size:9px;font-weight:600;font-family:var(--mono);color:var(--ink3);text-transform:uppercase;letter-spacing:.06em}
+/* Desktop: management is an app shell — page never scrolls, each pane does */
+@media (min-width:1001px){
+  .wrap.wide{display:flex;flex-direction:column;height:calc(100vh - 48px)}
+  .wrap.wide .mgmt{flex:1;min-height:0;align-items:stretch}
+  .mgmt-menu,.mgmt-list,.mdetail{overflow-y:auto;min-height:0}
+  .mgmt-list .mgmt-filter{position:sticky;top:0;z-index:1;flex-shrink:0;box-shadow:0 0 0 5px var(--board)}
+  .mdetail .mgmt-file{max-height:none;overflow:visible}
+  .wrap.wide .analytics{flex:1;min-height:0;overflow-y:auto}
+}
+
+/* Analytics section — the logbook */
+.analytics{display:flex;flex-direction:column;gap:12px}
+.an-bar{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.an-title{font-family:var(--display);font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--ink)}
+.an-hint{font-size:11px;color:var(--ink3)}
+.an-hint code,.an-empty code{font-family:var(--mono);font-size:10.5px;color:var(--cyan)}
+.an-refresh{font-family:var(--font);font-size:13px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:4px 9px;cursor:pointer;align-self:center}
+.an-refresh:hover{color:var(--ink);border-color:var(--hairline2)}
+.an-empty{font-size:11px;color:var(--ink3);padding:20px 2px;text-align:center}
+.an-list{display:flex;flex-direction:column;gap:12px}
+.an-card{background:var(--strip);border:1px solid var(--hairline);border-radius:2px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;transition:border-color .15s;box-shadow:inset 0 1px 0 var(--edge)}
+.an-card:hover{border-color:var(--hairline2)}
+.an-card.selected{box-shadow:0 0 0 1px var(--cyan),inset 0 1px 0 var(--edge)}
+.an-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer}
+.an-head .caret{flex-shrink:0}
+.an-tok{font-size:10.5px;color:var(--ink2);font-family:var(--mono);font-variant-numeric:tabular-nums}
+.an-proj{font-size:13px;font-weight:600;color:var(--ink)}
+.an-model{font-size:9.5px;color:var(--ink3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.03em}
+.an-id{font-size:10px;color:var(--ink3);font-family:var(--mono)}
+.an-when{font-size:10.5px;color:var(--ink3);font-variant-numeric:tabular-nums;font-family:var(--mono)}
+.an-metrics{display:flex;gap:20px;flex-wrap:wrap;padding:4px 0;border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline)}
+.an-metric{display:flex;flex-direction:column;gap:2px;padding:6px 0}
+.an-metric-v{font-size:16px;font-weight:600;color:var(--ink2);font-family:var(--mono);font-variant-numeric:tabular-nums}
+.an-metric.lead .an-metric-v{color:var(--green)}
+.an-metric-v.warn{color:var(--amber)}
+.an-metric-l{font-family:var(--display);font-size:9.5px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.09em}
+.an-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.an-col-h{font-family:var(--display);font-size:10.5px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.09em;margin-bottom:6px;display:flex;align-items:baseline;gap:6px}
+.an-approx{font-size:8.5px;color:var(--ink3);text-transform:none;letter-spacing:0;font-style:italic;font-family:var(--font);font-weight:400}
+.an-line{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:11.5px;padding:2px 0}
+.an-line-name{color:var(--ink2);font-family:var(--mono)}
+.an-line-meta{color:var(--ink3);font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:10.5px;flex-shrink:0}
+.an-line.muted,.an-lesson-body.muted{color:var(--ink3)}
+.an-lesson-body{font-size:12px;line-height:1.5;color:var(--ink2)}
+.an-lesson-body code{font-family:var(--mono);font-size:11px;color:var(--cyan)}
+/* lesson fate: stamped like strip annotations */
+.an-status{flex-shrink:0;font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;border:1px solid var(--hairline);border-radius:2px;padding:0 7px 1px;color:var(--ink3)}
+.an-status.actioned{color:var(--green);border-color:var(--green)}
+.an-status.promoted{color:var(--cyan);border-color:var(--cyan)}
+.an-status.open{color:var(--ink3)}
+.an-review{font-family:var(--display);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--amber);border:1px solid var(--amber);border-radius:2px;padding:0 7px 1px;align-self:center}
+.an-review code{font-family:var(--mono);text-transform:none;letter-spacing:0;color:inherit}
+@media (max-width:700px){.an-cols{grid-template-columns:1fr}}
+```
+
+- [ ] **Step 2: Verify**
+
+`pnpm typecheck && pnpm test` green. Browser: screenshot Management (three panes, strip items, cyan selection ring, condensed group labels) and Analytics (logbook cards, mono metric numerals, status stamps).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add client/src/styles.css
+git commit -m "feat(reskin): management + analytics inherit strip-board materials"
+```
+
+---
+
+### Task 6: Final sweep — responsive, a11y, full verification
+
+**Files:**
+- Modify: `client/src/styles.css` (only if issues found)
+
+- [ ] **Step 1: Full-suite check**
+
+Run: `pnpm typecheck && pnpm test` — expect all green.
+
+- [ ] **Step 2: Desktop pass**
+
+Browser at desktop preset: screenshot all three tabs + an open drawer + an expanded row. Look for: contrast failures, misaligned stamps, leftover blue/old-orange tints, any element still rounded 6–10px. Fix in `styles.css` if found.
+
+- [ ] **Step 3: Mobile pass**
+
+`resize_window` mobile preset, reload. Screenshot Sessions + drawer (+ question panel if present). Check: cocked strip doesn't clip horizontally (6px shift fits the viewport padding), thumb targets ≥42px in qpanel, tables/code scroll inside their boxes. Fix if needed. Reset to desktop after.
+
+- [ ] **Step 4: Reduced-motion + focus spot-check**
+
+Via javascript_tool or DevTools emulation confirm `@media (prefers-reduced-motion:reduce)` kills pulse/slot-in/chat-in animations. Tab through toolbar → rows → drawer: every stop shows the 2px cyan outline.
+
+- [ ] **Step 5: Commit any fixes**
+
+```bash
+git add client/src/styles.css
+git commit -m "fix(reskin): responsive + a11y sweep"
+```
+
+Skip the commit if Step 2–4 found nothing.
+
+---
+
+## Self-review notes
+
+- Spec coverage: tokens→T1, strip+cock+slot-in→T2, chrome/plate/gauges/tabs→T3, drawer+amber qpanel+markdown→T4, mgmt+analytics→T5, floor/motion/responsive→T1+T6. Fonts self-hosted→T1. Emoji drop→T3. All spec sections covered.
+- The `question`-row `.row.selected` combination: selected ring (box-shadow) over the cocked transform composes fine — both are independent properties.
+- `slot-in` animates every row on first paint of the list (mount) — acceptable: it reads as the rack loading; reorders don't remount (stable keys), so no churn.
+- Legacy aliases keep `SessionRow.tsx` inline `var(--orange)`/`var(--text)`/`var(--text3)` working; `--orange→--amber` is semantically right (context ≥70% = act soon).
