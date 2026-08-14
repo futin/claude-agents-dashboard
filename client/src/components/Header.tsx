@@ -16,7 +16,7 @@ export function Header({ data }: { data: SessionsResponse | null }) {
   return (
     <>
       <div className="head">
-        <h1>⚡ Claude Sessions</h1>
+        <h1>Claude Sessions</h1>
         <span className="meta">{meta}</span>
       </div>
       <div className="sub">{sub}</div>
