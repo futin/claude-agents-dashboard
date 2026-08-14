@@ -273,97 +273,98 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 @media (max-width:700px){.an-cols{grid-template-columns:1fr}}
 
 /* ---------------------------------------------- chat-history drawer */
-.chat-pill{flex-shrink:0;font-family:var(--mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;cursor:pointer;transition:color .15s,border-color .15s}
-.chat-pill:hover{color:var(--accent);border-color:var(--accent)}
-.chat-back{position:fixed;inset:0;background:rgba(4,6,10,.62);display:flex;justify-content:flex-end;z-index:50}
-.chat{display:flex;flex-direction:column;width:min(720px,100%);height:100%;background:var(--surface);border-left:1px solid var(--border2);animation:chat-in .16s ease-out}
+.chat-pill{flex-shrink:0;font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2);background:none;border:1px solid var(--hairline);border-radius:2px;padding:1px 7px;cursor:pointer;transition:color .15s,border-color .15s}
+.chat-pill:hover{color:var(--cyan);border-color:var(--cyan)}
+.chat-back{position:fixed;inset:0;background:rgba(8,8,4,.66);display:flex;justify-content:flex-end;z-index:50}
+.chat{display:flex;flex-direction:column;width:min(720px,100%);height:100%;background:var(--board);border-left:1px solid var(--hairline2);animation:chat-in .16s ease-out}
 @keyframes chat-in{from{transform:translateX(16px);opacity:.4}to{transform:none;opacity:1}}
-.chat-head{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--border);flex-shrink:0;overflow:hidden}
+.chat-head{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--hairline);flex-shrink:0;overflow:hidden;background:var(--strip);box-shadow:inset 0 1px 0 var(--edge)}
 /* the title absorbs the free space so the pills, model and ✕ stay pinned right
    and reachable at any width (the mobile drawer has no backdrop to tap) */
 .chat-title{flex:1;min-width:0;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chat-head .proj-pill,.chat-head .branch{flex-shrink:0;white-space:nowrap}
-.chat-model{font-size:10.5px;color:var(--text3);font-family:var(--mono);flex-shrink:0}
-.chat-x{font-size:12px;line-height:1;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;flex-shrink:0;transition:color .15s,border-color .15s}
-.chat-x:hover{color:var(--text);border-color:var(--border2)}
-.chat-filter{display:flex;gap:5px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
-.cf-btn{font-family:var(--mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:3px 10px;cursor:pointer;transition:color .15s,border-color .15s}
-.cf-btn:hover{color:var(--text2);border-color:var(--border2)}
-.cf-btn.on{color:var(--text);border-color:var(--accent)}
+.chat-model{font-size:10.5px;color:var(--ink3);font-family:var(--mono);flex-shrink:0}
+.chat-x{font-size:12px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:4px 8px;cursor:pointer;flex-shrink:0;transition:color .15s,border-color .15s}
+.chat-x:hover{color:var(--ink);border-color:var(--hairline2)}
+.chat-filter{display:flex;gap:5px;padding:8px 16px;border-bottom:1px solid var(--hairline);flex-shrink:0}
+.cf-btn{font-family:var(--display);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:3px 10px;cursor:pointer;transition:color .15s,border-color .15s}
+.cf-btn:hover{color:var(--ink2);border-color:var(--hairline2)}
+.cf-btn.on{color:var(--ink);border-color:var(--cyan);box-shadow:inset 0 -2px 0 var(--cyan)}
 .chat-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:14px 16px;display:flex;flex-direction:column;gap:13px}
-.chat-older{align-self:center;font-family:var(--font);font-size:10.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;cursor:pointer;transition:color .15s,border-color .15s}
-.chat-older:hover:not(:disabled){color:var(--text);border-color:var(--border2)}
-.chat-older:disabled{cursor:default;color:var(--text3)}
-.chat-empty{font-size:11.5px;color:var(--text3);padding:6px 0}
-.cmsg{border-left:2px solid var(--border2);padding-left:11px}
-.cmsg.user{border-left-color:var(--accent)}
+.chat-older{align-self:center;font-family:var(--mono);font-size:10.5px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:4px 12px;cursor:pointer;transition:color .15s,border-color .15s}
+.chat-older:hover:not(:disabled){color:var(--ink);border-color:var(--hairline2)}
+.chat-older:disabled{cursor:default;color:var(--ink3)}
+.chat-empty{font-size:11.5px;color:var(--ink3);padding:6px 0}
+.cmsg{border-left:2px solid var(--hairline2);padding-left:11px}
+/* a user turn is a strip: paper block, cyan rule */
+.cmsg.user{border-left-color:var(--cyan);background:var(--strip);border-radius:0 2px 2px 0;padding:7px 10px 7px 11px;box-shadow:inset 0 1px 0 var(--edge)}
 .cmsg-head{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
-.cmsg-role{font-family:var(--mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text3)}
-.cmsg.user .cmsg-role{color:var(--accent)}
-.cmsg-ts{font-size:9.5px;color:var(--text3);font-variant-numeric:tabular-nums}
-.cmsg-text{font-size:12px;line-height:1.55;color:var(--text2);overflow-wrap:anywhere;min-width:0}
-.cmsg.user .cmsg-text{color:var(--text)}
-.cmsg-cut{display:block;margin-top:3px;font-size:10.5px;color:var(--text3);font-style:italic}
+.cmsg-role{font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3)}
+.cmsg.user .cmsg-role{color:var(--cyan)}
+.cmsg-ts{font-size:9.5px;color:var(--ink3);font-variant-numeric:tabular-nums;font-family:var(--mono)}
+.cmsg-text{font-size:12px;line-height:1.55;color:var(--ink2);overflow-wrap:anywhere;min-width:0}
+.cmsg.user .cmsg-text{color:var(--ink)}
+.cmsg-cut{display:block;margin-top:3px;font-size:10.5px;color:var(--ink3);font-style:italic}
 
 /* rendered markdown inside a message (see client/src/lib/markdown.ts) */
 .md{display:flex;flex-direction:column;gap:7px}
 .md>:first-child{margin-top:0}
 /* pre-wrap keeps the hard line breaks inside a paragraph — transcripts use them */
 .md-p,.md-quote,.md-list li{white-space:pre-wrap}
-.md-h{font-weight:600;color:var(--text);letter-spacing:-.01em;margin-top:3px}
-.md-h1{font-size:13.5px}.md-h2{font-size:12.5px}.md-h3,.md-h4{font-size:12px;color:var(--text2)}
-.md-code{font-family:var(--mono);font-size:10.5px;color:var(--accent);background:var(--surface2);border-radius:3px;padding:1px 4px}
-.md-pre{font-family:var(--mono);font-size:10.5px;line-height:1.5;color:var(--text2);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 11px;overflow-x:auto}
-.md-link{color:var(--accent);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--accent) 40%,transparent)}
-.md-link:hover{border-bottom-color:var(--accent)}
+.md-h{font-weight:600;color:var(--ink);letter-spacing:-.01em;margin-top:3px}
+.md-h1{font-size:13.5px}.md-h2{font-size:12.5px}.md-h3,.md-h4{font-size:12px;color:var(--ink2)}
+.md-code{font-family:var(--mono);font-size:10.5px;color:var(--cyan);background:var(--steel);border-radius:2px;padding:1px 4px}
+.md-pre{font-family:var(--mono);font-size:10.5px;line-height:1.5;color:var(--ink2);background:var(--board);border:1px solid var(--hairline);border-radius:2px;padding:9px 11px;overflow-x:auto}
+.md-link{color:var(--cyan);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--cyan) 40%,transparent)}
+.md-link:hover{border-bottom-color:var(--cyan)}
 /* repo-relative link target: label only, full path on hover (nothing to navigate to) */
-.md-path{font-family:var(--mono);font-size:10.5px;color:var(--text2);border-bottom:1px dotted var(--border2);cursor:help}
+.md-path{font-family:var(--mono);font-size:10.5px;color:var(--ink2);border-bottom:1px dotted var(--hairline2);cursor:help}
 .md-list{padding-left:17px;display:flex;flex-direction:column;gap:3px}
-.md-list li::marker{color:var(--text3)}
-.md-quote{border-left:2px solid var(--border2);padding-left:9px;color:var(--text3)}
-.md-hr{border-top:1px solid var(--border);margin:2px 0}
+.md-list li::marker{color:var(--ink3)}
+.md-quote{border-left:2px solid var(--hairline2);padding-left:9px;color:var(--ink3)}
+.md-hr{border-top:1px solid var(--hairline);margin:2px 0}
 .md-table-wrap{overflow-x:auto;max-width:100%}
 .md-table{border-collapse:collapse;font-size:11px}
-.md-table th,.md-table td{border:1px solid var(--border);padding:4px 8px;vertical-align:top}
-.md-table th{color:var(--text);font-weight:600;background:var(--surface2);white-space:nowrap}
-.md-table td{color:var(--text2)}
-.cmsg-tool{font-size:11px;color:var(--text3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cmsg-tool .tool{font-family:var(--mono);color:var(--accent);font-weight:600}
-.cmsg-tool .tool.task{color:var(--pink)}
+.md-table th,.md-table td{border:1px solid var(--hairline);padding:4px 8px;vertical-align:top}
+.md-table th{color:var(--ink);font-weight:600;background:var(--steel);white-space:nowrap}
+.md-table td{color:var(--ink2)}
+.cmsg-tool{font-size:11px;color:var(--ink3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmsg-tool .tool{font-family:var(--mono);color:var(--cyan);font-weight:600}
+.cmsg-tool .tool.task{color:var(--magenta)}
 /* full tool body (proposed plan / asked question) — like .cmsg-tool but a real block */
 .cmsg-plan{margin-top:6px;min-width:0}
-.cmsg-plan>summary{font-size:11px;color:var(--text3);cursor:pointer;user-select:none}
-.cmsg-plan>summary .tool{font-family:var(--mono);color:var(--accent);font-weight:600}
-.cmsg-plan>.cmsg-text{margin-top:5px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px}
-/* pending-question action bar (remote answers) — blue like the `question` status
-   dot, pinned above the footer so it stays reachable while scrolling history */
-.qpanel{flex-shrink:0;border-top:1px solid rgba(108,140,255,.35);background:color-mix(in srgb,var(--blue) 7%,var(--surface));padding:10px 16px;display:flex;flex-direction:column;gap:9px;max-height:56vh;overflow-y:auto}
+.cmsg-plan>summary{font-size:11px;color:var(--ink3);cursor:pointer;user-select:none}
+.cmsg-plan>summary .tool{font-family:var(--mono);color:var(--cyan);font-weight:600}
+.cmsg-plan>.cmsg-text{margin-top:5px;padding:8px 10px;background:var(--steel);border:1px solid var(--hairline);border-radius:2px}
+/* pending-question action bar — amber: where the cocked strip gets answered.
+   Pinned above the footer so it stays reachable while scrolling history */
+.qpanel{flex-shrink:0;border-top:1px solid color-mix(in srgb,var(--amber) 45%,transparent);background:color-mix(in srgb,var(--amber) 6%,var(--board));padding:10px 16px;display:flex;flex-direction:column;gap:9px;max-height:56vh;overflow-y:auto}
 .qpanel.sent,.qpanel.gone{padding:8px 16px}
 .qp-head{display:flex;align-items:baseline;gap:8px}
-.qp-badge{font-family:var(--mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--blue)}
-.qp-hint,.qp-note{font-size:10.5px;color:var(--text3)}
+.qp-badge{font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--amber);border:1px solid var(--amber);border-radius:2px;padding:0 6px 1px}
+.qp-hint,.qp-note{font-size:10.5px;color:var(--ink3)}
 .qp-q{display:flex;flex-direction:column;gap:6px}
-.qp-qtext{font-size:12px;line-height:1.45;color:var(--text)}
-.qp-chip{font-family:var(--mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--blue);margin-right:6px}
-.qp-multi{font-size:10px;color:var(--text3);margin-left:6px}
+.qp-qtext{font-size:12px;line-height:1.45;color:var(--ink)}
+.qp-chip{font-family:var(--mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--amber);margin-right:6px}
+.qp-multi{font-size:10px;color:var(--ink3);margin-left:6px}
 .qp-opts{display:flex;flex-wrap:wrap;gap:6px}
-.qp-opt{display:flex;align-items:baseline;gap:6px;text-align:left;font-family:var(--font);font-size:11.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 11px;cursor:pointer;transition:color .15s,border-color .15s,background .15s}
-.qp-opt:hover:not(:disabled){color:var(--text);border-color:var(--border2)}
-.qp-opt.on{color:var(--text);border-color:var(--blue);background:color-mix(in srgb,var(--blue) 14%,var(--surface2))}
+.qp-opt{display:flex;align-items:baseline;gap:6px;text-align:left;font-family:var(--font);font-size:11.5px;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline);border-radius:2px;padding:7px 11px;cursor:pointer;transition:color .15s,border-color .15s,background .15s;box-shadow:inset 0 1px 0 var(--edge)}
+.qp-opt:hover:not(:disabled){color:var(--ink);border-color:var(--hairline2)}
+.qp-opt.on{color:var(--ink);border-color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--strip))}
 .qp-opt:disabled{cursor:default;opacity:.55}
 .qp-opt.other{font-style:italic}
-.qp-box{font-size:11px;color:var(--blue)}
+.qp-box{font-size:11px;color:var(--amber)}
 .qp-label{font-weight:600}
-.qp-desc{font-size:10.5px;color:var(--text3);max-width:34ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.qp-other{font-family:var(--font);font-size:11.5px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 10px;width:100%;max-width:420px}
-.qp-other:focus{outline:none;border-color:var(--blue)}
+.qp-desc{font-size:10.5px;color:var(--ink3);max-width:34ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qp-other{font-family:var(--font);font-size:11.5px;color:var(--ink);background:var(--board);border:1px solid var(--hairline);border-radius:2px;padding:7px 10px;width:100%;max-width:420px}
+.qp-other:focus{outline:none;border-color:var(--amber)}
 .qp-token{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
 .qp-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.qp-send{font-family:var(--font);font-size:11.5px;font-weight:600;color:#0b0d12;background:var(--blue);border:1px solid var(--blue);border-radius:6px;padding:7px 15px;cursor:pointer;transition:opacity .15s}
+.qp-send{font-family:var(--display);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#141410;background:var(--amber);border:1px solid var(--amber);border-radius:2px;padding:7px 15px;cursor:pointer;transition:opacity .15s}
 .qp-send:disabled{cursor:default;opacity:.4}
-.qp-term{font-family:var(--font);font-size:11px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:6px;padding:7px 12px;cursor:pointer;transition:color .15s,border-color .15s}
-.qp-term:hover:not(:disabled){color:var(--text2);border-color:var(--border2)}
-.chat-foot{display:flex;align-items:baseline;gap:10px;padding:9px 16px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text3);flex-shrink:0}
+.qp-term{font-family:var(--font);font-size:11px;color:var(--ink3);background:none;border:1px solid var(--hairline);border-radius:2px;padding:7px 12px;cursor:pointer;transition:color .15s,border-color .15s}
+.qp-term:hover:not(:disabled){color:var(--ink2);border-color:var(--hairline2)}
+.chat-foot{display:flex;align-items:baseline;gap:10px;padding:9px 16px;border-top:1px solid var(--hairline);font-size:10.5px;color:var(--ink3);flex-shrink:0;font-family:var(--mono)}
 .chat-count{margin-left:auto;font-variant-numeric:tabular-nums}
 @media (max-width:700px){.chat{width:100%;border-left:none}.chat-body{padding:12px}.chat-head{padding:11px 12px}.chat-filter{padding:7px 12px}.chat-head .proj-pill,.chat-model{display:none}
   /* phone: full-width taps, and drop the option blurb that would wrap badly */
