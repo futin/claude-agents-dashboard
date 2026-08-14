@@ -78,11 +78,13 @@ dev hot-reloads and needs neither.
 
 ### Optional HTTPS (`pnpm tunnel`)
 
-`pnpm tunnel` runs `tailscale serve --bg 4173`: Tailscale fronts the prod server on port 443
+`pnpm tunnel` runs `tailscale serve --bg 5174`: Tailscale fronts that local port on 443
 with a real TLS certificate, so the phone bookmark is just `https://<host>.<tailnet>.ts.net`
-— no port, no cert warnings. Requires **HTTPS certificates enabled once** in the tailnet
+— no port, no cert warnings. ⚠️ The script's port is fixed while what it should front
+depends on `.env` — prod `PORT` (default 4173) or a dev `WEB_PORT` override (`5174` today);
+keep them in sync. Requires **HTTPS certificates enabled once** in the tailnet
 admin console (DNS page). `--bg` persists across reboots; `tailscale serve reset` stops it.
-Purely optional — the plain `:4173` URL works with no serve step at all.
+Purely optional — the plain port URL works with no serve step at all.
 
 ### Phone usage
 
@@ -95,11 +97,12 @@ Purely optional — the plain `:4173` URL works with no serve step at all.
 
 ## Gotchas
 
-- **`pnpm tunnel` fronts prod (4173), not Vite.** So a tunnel session shows the *built*
-  client and the server process you started — neither picks up a code change until
-  `pnpm build` + a `pnpm start` restart. A stale pair is the usual reason the origin badge is
-  missing entirely through the tunnel while dev shows it fine (`client/dist` is gitignored, so
-  pulling never refreshes it). Point Tailscale at `:5173` while developing instead.
+- **`pnpm tunnel` fronts one fixed port — check it matches what you run.** Today that's
+  `5174` (a dev `WEB_PORT`); it used to be prod `4173`. When it fronts prod, remember prod
+  serves the *built* client: no code change appears until `pnpm build` + a `pnpm start`
+  restart — the usual reason the origin badge is missing through the tunnel while dev shows
+  it fine (`client/dist` is gitignored, so pulling never refreshes it). Fronting the dev
+  port avoids that while iterating.
 - **The host must be awake.** Tailscale doesn't wake a sleeping machine; disable sleep (or
   use `caffeinate`) if you rely on away-from-home access.
 - **Docker runs are unaffected** — Tailscale runs on the host and forwards to the published

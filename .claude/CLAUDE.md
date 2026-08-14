@@ -69,16 +69,17 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
 - `pnpm test` — runs `test/run-all.ts` via tsx (220 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
-- `pnpm tunnel` — optional: `tailscale serve --bg 4173`, fronts prod over HTTPS on the
-  tailnet (see `.claude/rules/remote-access.md`). Not needed for plain tailnet access.
+- `pnpm tunnel` — optional: `tailscale serve --bg 5174`, fronts that fixed port over HTTPS
+  on the tailnet — keep it matching the port you actually serve (prod `PORT` or a dev
+  `WEB_PORT`; see `.claude/rules/remote-access.md`). Not needed for plain tailnet access.
 
 **Phone access:** both servers bind all interfaces (`server.host: true` in `vite.config.ts`;
 `server/index.ts` likewise), so **every route works with zero app config** and none is
 required — localhost, LAN (the `Network:` URL Vite prints), **Tailscale** (recommended for
 away-from-home: a stable MagicDNS hostname `http://<host>.<tailnet>.ts.net:4173`, device
 identity as the auth, nothing public), or any other tunnel (ngrok/Cloudflare/`ssh -L` — but
-a public URL exposes every read endpoint). Optional `pnpm tunnel` fronts prod over HTTPS on
-443. The toolbar's origin badge says which route the current browser came in on. See
+a public URL exposes every read endpoint). Optional `pnpm tunnel` fronts one fixed port
+(currently `5174`) over HTTPS on 443. The toolbar's origin badge says which route the current browser came in on. See
 `.claude/rules/remote-access.md`.
 
 ## Deep-dive rules
