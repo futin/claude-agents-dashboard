@@ -137,7 +137,8 @@ Two things a container can't reach on its own, handled by the `scripts/`:
   fail open (everything else still works).
 - **Phone access:** Vite inside a container only sees its own bridge IP, not the host's LAN
   IP. `pnpm dev:docker` runs `scripts/lan-ip.sh` to pass `HOST_LAN_IP` in, so the dev server
-  prints the address a phone on the same wifi should actually open.
+  prints the address a phone on the same wifi should actually open. Tailscale access is
+  unaffected — it runs on the host and forwards to the published port either way.
 
 The **process-liveness gate is auto-disabled in a container** (it can't see the host's
 `claude` processes) — see [Session status](#session-status-the-left-dot) below.
@@ -344,6 +345,7 @@ environment variables override `.env`, which overrides the defaults.
 | Var | Default | Meaning |
 |-----|---------|---------|
 | `PORT` | `4173` | Port to serve on (production) |
+| `WEB_PORT` | `5173` | Port the Vite dev UI serves on (`pnpm dev` only; prod ignores it) |
 | `MAX_SESSIONS` | `10` | How many sessions to show, most-recent first |
 | `ACTIVE_WINDOW_MIN` | `5` | A recent session is one whose last message is within this many minutes |
 | `LOOKBACK_HOURS` | `24` | Only consider sessions modified within this many hours |
@@ -402,6 +404,9 @@ docker-compose.dev.yml   dev container (Vite hot-reload, source bind-mounted)
 scripts/host-credentials.sh   reads host Keychain creds → CLAUDE_CREDENTIALS_JSON
 scripts/lan-ip.sh        host LAN IP, passed in so the dev container can print it
 scripts/ask-remote-hook.sh    the PreToolUse[AskUserQuestion] hook; symlink into ~/.claude/hooks/
+
+.claude/rules/           per-domain deep-dive docs (not auto-loaded; read when working in one)
+  remote-access.md       phone access from anywhere via Tailscale — see Phone access above
 ```
 
 ## Not included (yet)

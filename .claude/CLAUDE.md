@@ -65,6 +65,8 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
 - `pnpm test` — runs `test/run-all.ts` via tsx (220 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
+- `pnpm tunnel` — optional: `tailscale serve --bg 4173`, fronts prod over HTTPS on the
+  tailnet (see `.claude/rules/remote-access.md`). Not needed for plain tailnet access.
 
 **Phone access:** on the same wifi, no tunnel is needed — the Vite dev server binds all
 interfaces (`server.host: true` in `vite.config.ts`), so just open the `Network:` URL Vite
