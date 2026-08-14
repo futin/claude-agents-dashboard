@@ -9,7 +9,7 @@ of them being present.
 |---|---|---|
 | **localhost** | `http://localhost:5173` (dev) / `:4173` (prod) | the default; nothing to set up |
 | **LAN** | `http://<lan-ip>:5173` / `:4173` | the `Network:` URL Vite prints. Free, but the IP moves when the network does |
-| **Tailscale** | `http://<host>.<tailnet>.ts.net:4173` | recommended for away-from-home — stable hostname, private, no auth gate needed |
+| **Tailscale** | `http://<host>.<tailnet>.ts.net:4173` (prod) / `:5173` (dev) | recommended for away-from-home — stable hostname, private, no auth gate needed. Dev needs `allowedHosts` (below) |
 | **any other tunnel** | ngrok / Cloudflare / `ssh -L` … | works too, but read the warning below first |
 
 ## Why Tailscale is the recommended away-from-home option
@@ -65,7 +65,16 @@ browser* reached the dashboard. `public` is tinted orange, since it's the one wo
    the admin console — it looks like `<host-name>.<tailnet>.ts.net`.
 
 Dev works over the tailnet too (`:5173` — Vite proxies `/api` locally), unlike a single-port
-public tunnel.
+public tunnel. **This is the mode to use while iterating**: prod (`:4173`) static-serves the
+built `client/dist`, so every change needs a `pnpm build` *and* a `pnpm start` restart, while
+dev hot-reloads and needs neither.
+
+> ⚠️ **`allowedHosts: ['.ts.net']` in `vite.config.ts` is what makes dev-over-tailnet work.**
+> Vite ≥5.4.12 rejects any `Host` header that isn't localhost or a bare IP (a DNS-rebinding
+> guard), so a MagicDNS name 403s with *"Blocked request. This host is not allowed."* — LAN
+> access never hit this because a LAN URL is an IP. The leading dot allows subdomains and
+> scopes the exemption to tailnet hostnames instead of disabling the check (`allowedHosts:
+> true`). Delete that line and phone-over-tailnet dev breaks with a 403, not a hang.
 
 ### Optional HTTPS (`pnpm tunnel`)
 
@@ -86,6 +95,11 @@ Purely optional — the plain `:4173` URL works with no serve step at all.
 
 ## Gotchas
 
+- **`pnpm tunnel` fronts prod (4173), not Vite.** So a tunnel session shows the *built*
+  client and the server process you started — neither picks up a code change until
+  `pnpm build` + a `pnpm start` restart. A stale pair is the usual reason the origin badge is
+  missing entirely through the tunnel while dev shows it fine (`client/dist` is gitignored, so
+  pulling never refreshes it). Point Tailscale at `:5173` while developing instead.
 - **The host must be awake.** Tailscale doesn't wake a sleeping machine; disable sleep (or
   use `caffeinate`) if you rely on away-from-home access.
 - **Docker runs are unaffected** — Tailscale runs on the host and forwards to the published

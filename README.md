@@ -111,7 +111,10 @@ http://<host-name>.<tailnet>.ts.net:4173   # prod  (pnpm start)
 http://<host-name>.<tailnet>.ts.net:5173   # dev   (pnpm dev — Vite proxies /api locally)
 ```
 
-Find it with `tailscale status`. Only devices signed into *your* tailnet can connect, which
+Find it with `tailscale status`. Use the **dev** port while you're changing code: prod
+static-serves the built `client/dist`, so it needs `pnpm build` + a `pnpm start` restart to
+show a change, whereas dev hot-reloads. (Dev-over-tailnet relies on `allowedHosts: ['.ts.net']`
+in `vite.config.ts` — Vite otherwise 403s any non-IP hostname.) Only devices signed into *your* tailnet can connect, which
 is why no login or auth gate exists in the app. Optionally `pnpm tunnel`
 (`tailscale serve --bg 4173`) fronts prod over HTTPS at `https://<host-name>.<tailnet>.ts.net`
 (no port, real certificate; enable HTTPS certificates once in the tailnet admin console;
