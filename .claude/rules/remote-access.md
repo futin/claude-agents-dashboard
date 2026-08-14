@@ -1,3 +1,12 @@
+---
+docs-sync:
+  sources:
+    - server/lib/origin.ts
+    - client/src/components/OriginBadge.tsx
+    - vite.config.ts
+    - package.json
+---
+
 # Remote access (reaching the dashboard)
 
 Both servers already bind all interfaces — `server/index.ts` `server.listen(config.port)` and

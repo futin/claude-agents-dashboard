@@ -1,3 +1,13 @@
+---
+docs-sync:
+  sources:
+    - server/lib/management.ts
+    - server/lib/frontmatter.ts
+    - server/api.ts
+    - client/src/components/management/
+    - client/src/lib/managementEntries.ts
+---
+
 # Management section (read-only config browser)
 
 A **Management** tab (top-level `SectionTabs` in `App.tsx`, persisted as `dashboard.section`)

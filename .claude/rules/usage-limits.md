@@ -1,3 +1,10 @@
+---
+docs-sync:
+  sources:
+    - server/lib/usage.ts
+    - server/api.ts
+---
+
 # Usage limits (header bars)
 
 The header shows two mini progress bars — **5h** and **Week** — the same account

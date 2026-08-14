@@ -1,3 +1,13 @@
+---
+docs-sync:
+  sources:
+    - server/lib/analytics.ts
+    - server/lib/analyze.ts
+    - server/lib/sessionAnalyticsLog.ts
+    - client/src/components/analytics/
+    - .claude/skills/kaizen/
+---
+
 # Analytics section (session post-mortems)
 
 An **Analytics** tab (third `SectionTabs` entry, persisted `dashboard.section`) shows the last

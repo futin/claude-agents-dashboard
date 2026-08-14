@@ -1,3 +1,12 @@
+---
+docs-sync:
+  sources:
+    - server/
+    - client/src/
+    - shared/types.ts
+    - package.json
+---
+
 # Claude Agents Dashboard
 
 Live monitor for parallel Claude Code sessions. Reads `~/.claude/projects/*/*.jsonl`

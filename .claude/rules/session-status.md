@@ -1,3 +1,11 @@
+---
+docs-sync:
+  sources:
+    - server/lib/scan.ts
+    - server/lib/transcript.ts
+    - server/lib/config.ts
+---
+
 # Session status (the left dot)
 
 `Session.status` (4 states), computed in `scan.ts` from `transcript.ts` signals.

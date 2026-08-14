@@ -1,3 +1,16 @@
+---
+docs-sync:
+  sources:
+    - server/lib/pending.ts
+    - server/lib/remoteState.ts
+    - server/api.ts
+    - scripts/ask-remote-hook.sh
+    - client/src/components/QuestionPanel.tsx
+    - client/src/components/RemoteAnswerToggle.tsx
+    - client/src/hooks/usePendingQuestion.ts
+    - client/src/hooks/useRemoteAnswer.ts
+---
+
 # Remote answers (the only write path)
 
 When a session calls `AskUserQuestion`, the chat drawer can render its options as buttons and

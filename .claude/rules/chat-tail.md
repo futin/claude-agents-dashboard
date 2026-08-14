@@ -1,3 +1,15 @@
+---
+docs-sync:
+  sources:
+    - server/lib/chat.ts
+    - server/api.ts
+    - client/src/components/ChatDrawer.tsx
+    - client/src/components/Markdown.tsx
+    - client/src/hooks/useSessionChat.ts
+    - client/src/lib/chatFilter.ts
+    - client/src/lib/markdown.ts
+---
+
 # Chat history tail (the drawer)
 
 The `chat` pill on a session row opens a **full-height drawer** with that session's

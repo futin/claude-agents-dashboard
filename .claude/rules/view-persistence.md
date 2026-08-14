@@ -1,3 +1,11 @@
+---
+docs-sync:
+  sources:
+    - client/src/hooks/usePersistedState.ts
+    - client/src/App.tsx
+    - client/src/lib/filterSort.ts
+---
+
 # View persistence (Toolbar filters/sort)
 
 The Toolbar's `view` object (`projects`, `statuses`, `window`, `sortKey`, `sortDir` — the
