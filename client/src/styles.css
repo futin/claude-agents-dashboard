@@ -1,4 +1,5 @@
 :root{
+  color-scheme:dark; /* dark UA scrollbars + form controls on the olive board */
   /* ATC strip board — materials */
   --board:#141410;            /* page bg: painted-steel bay, olive cast */
   --steel:#1c1b14;            /* recessed wells: inputs, tracks, inactive controls */
@@ -167,7 +168,9 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .empty{text-align:center;padding:60px 20px;color:var(--ink3)}
 .empty .e{font-size:34px;margin-bottom:10px;opacity:.3}
 .foot{margin-top:18px;font-size:10px;color:var(--ink3);text-align:center;font-family:var(--mono)}
-.off{color:var(--red)}
+/* scoped to the footer note — a bare .off also matches the origin badge's
+   `ra-pill off` and used to tint it red */
+.foot .off{color:var(--red)}
 
 /* Management section (three-pane) */
 .mgmt-bar{display:flex;align-items:center;gap:10px;margin-bottom:14px}
@@ -378,4 +381,11 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 :where(button,select,input,textarea,summary,[role=button]):focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
 @media (prefers-reduced-motion:reduce){
   .working .dot,.ag-pill.answer,.tl-bar.running,.row,.chat{animation:none}
+}
+/* phone: strip fields wrap instead of clipping; model rides in the drawer anyway
+   (same call as hiding .chat-model there) */
+@media (max-width:700px){
+  .row .r1{flex-wrap:wrap;row-gap:6px}
+  .row .model{display:none}
+  .tok{margin-left:auto}
 }
