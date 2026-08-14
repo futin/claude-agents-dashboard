@@ -92,6 +92,30 @@ pnpm start   # serves the built app + API on http://localhost:4173
 `pnpm start` (`NODE_ENV=production`) static-serves the built client and auto-opens your
 browser. Keep the tab open on a second monitor while you run sessions in parallel.
 
+### Phone access (same wifi, or anywhere via Tailscale)
+
+**Same wifi:** both servers bind all interfaces, so no tunnel is needed — open the
+`Network:` URL Vite prints (e.g. `http://192.168.x.x:5173`), or `http://<lan-ip>:4173`
+for prod.
+
+**From anywhere** (cellular, other wifi — and immune to the LAN IP changing): install
+[Tailscale](https://tailscale.com/download) on the host machine and your phone, sign both
+into the same account (free personal plan), and the dashboard is reachable at a **stable**
+MagicDNS hostname:
+
+```
+http://<mac-name>.<tailnet>.ts.net:4173   # prod   (pnpm start)
+http://<mac-name>.<tailnet>.ts.net:5173   # dev    (pnpm dev — Vite proxies /api locally)
+```
+
+Find the hostname with `tailscale status`. Nothing is exposed to the public internet —
+only devices signed into *your* tailnet can connect, which is why no extra login or auth
+gate exists in the app. Optionally, `pnpm tunnel` (`tailscale serve --bg 4173`) fronts prod
+over HTTPS at `https://<mac-name>.<tailnet>.ts.net` (no port, real certificate; enable
+HTTPS certificates once in the tailnet admin console; `tailscale serve reset` stops it).
+Gotcha: the host must be awake — Tailscale doesn't wake a sleeping machine. Details in
+`.claude/rules/remote-access.md`.
+
 ### Run in Docker
 
 The dashboard ships with a Dockerfile and two compose files. The container gets a
@@ -203,7 +227,8 @@ silently**, which looks exactly like "not installed", so check that first if not
 
 **1. Run the dashboard.** `pnpm dev` (or `pnpm build && pnpm start`). No `.env` needed —
 remote answers are on by default. To answer from a phone, open the `Network:` URL Vite prints
-(e.g. `http://192.168.x.x:5173`) on a device on the same wifi.
+(e.g. `http://192.168.x.x:5173`) on a device on the same wifi — or from anywhere via the
+stable Tailscale hostname (see [Phone access](#phone-access-same-wifi-or-anywhere-via-tailscale)).
 
 **2. Link the hook**, from the repo root. A symlink rather than a copy, so `git pull` keeps it
 current:
@@ -287,7 +312,9 @@ counts as at-the-desk: the dialog is never hidden on a guess.
 ("Other…") that reaches the model. On a shared network set `ANSWER_TOKEN` and put the same
 value in `~/.claude/hooks/dashboard-token` (`chmod 600`); the browser asks for it once. Plain
 HTTP with a static bearer token is a tripwire, not real auth. `REMOTE_ANSWER=false` turns the
-whole feature off server-side.
+whole feature off server-side. Over Tailscale the tailnet itself is the perimeter — device
+identity beats any password, so `ANSWER_TOKEN` can stay empty unless you share the tailnet
+with other people (see `.claude/rules/remote-access.md`).
 
 **One file on disk.** The toggle is persisted to a gitignored `.remote-answer.json` in the repo
 root, because `tsx watch` restarts the server on every edit and a switch you flipped before
