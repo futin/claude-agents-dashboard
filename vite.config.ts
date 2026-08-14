@@ -39,7 +39,10 @@ export default defineConfig({
     host: true,
     open: !inContainer,
     proxy: {
-      '/api': `http://localhost:${port}`
+      // xfwd adds X-Forwarded-For. The dev proxy reaches the API over loopback,
+      // so without it every dev client — including a phone on the LAN — would
+      // be classified `local` by server/lib/origin.ts.
+      '/api': { target: `http://localhost:${port}`, xfwd: true }
     }
   },
   build: {

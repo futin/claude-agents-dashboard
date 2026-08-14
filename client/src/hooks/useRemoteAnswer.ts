@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { usePersistedState } from './usePersistedState';
-import type { RemoteAnswerState } from '../../../shared/types';
+import type { HealthResponse, RemoteAnswerState } from '../../../shared/types';
 
 /** Slow poll: the switch only changes when someone flips it. */
 const POLL_MS = 15_000;
 
 export interface RemoteAnswerControl {
-  state: RemoteAnswerState | null;
+  state: HealthResponse | null;
   busy: boolean;
   /** Set when the server refused the token. */
   needsToken: boolean;
@@ -22,7 +22,7 @@ export interface RemoteAnswerControl {
  * phone turning it on should show up on the laptop without a reload.
  */
 export function useRemoteAnswer(): RemoteAnswerControl {
-  const [state, setState] = useState<RemoteAnswerState | null>(null);
+  const [state, setState] = useState<HealthResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [needsToken, setNeedsToken] = useState(false);
   const [token] = usePersistedState<string>('dashboard.answerToken', '');
@@ -32,7 +32,7 @@ export function useRemoteAnswer(): RemoteAnswerControl {
     async function read(): Promise<void> {
       try {
         const res = await fetch('/api/health');
-        const body = (await res.json()) as RemoteAnswerState & { ok?: boolean };
+        const body = (await res.json()) as HealthResponse;
         if (live && typeof body?.remoteAnswer === 'boolean') setState(body);
       } catch {
         /* keep the last snapshot; the next tick retries */
@@ -56,7 +56,10 @@ export function useRemoteAnswer(): RemoteAnswerControl {
         setNeedsToken(true);
       } else if (res.ok) {
         setNeedsToken(false);
-        setState((await res.json()) as RemoteAnswerState);
+        // This endpoint answers with the switch state alone — merge, or the
+        // health-only fields (origin) would blank out until the next poll.
+        const body = (await res.json()) as RemoteAnswerState;
+        setState(prev => ({ ...(prev ?? { ok: true as const }), ...body }));
       }
     } catch {
       /* leave the pill as it was; the poll will re-sync */

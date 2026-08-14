@@ -43,6 +43,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .ra-pill.on .ra-dot{background:var(--blue)}
 .ra-pill.off{cursor:default}
 .ra-warn{color:var(--orange);font-size:10px}
+/* connection origin: how this browser reached the dashboard. Display-only. */
+.ra-pill.origin{cursor:default}
+.ra-pill.origin.o-tailnet .ra-dot{background:var(--blue)}
+.ra-pill.origin.o-lan .ra-dot{background:var(--green)}
+.ra-pill.origin.o-unknown{color:var(--orange);border-color:var(--orange)}
+.ra-pill.origin.o-unknown .ra-dot{background:var(--orange)}
 .toolbar .tb-dir{font-size:12px;line-height:1;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 9px;cursor:pointer;transition:border-color .15s,color .15s;font-variant-numeric:tabular-nums}
 .toolbar .tb-dir:hover{color:var(--text);border-color:var(--border2)}
 

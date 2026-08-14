@@ -17,6 +17,7 @@ import { run as runSessionAnalyticsLog } from './sessionAnalyticsLog.test.js';
 import { run as runAnalytics } from './analytics.test.js';
 import { run as runPending } from './pending.test.js';
 import { run as runRemoteState } from './remoteState.test.js';
+import { run as runOrigin } from './origin.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -37,6 +38,7 @@ failed += runSessionAnalyticsLog();
 failed += runAnalytics();
 failed += await runPending();
 failed += runRemoteState();
+failed += runOrigin();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

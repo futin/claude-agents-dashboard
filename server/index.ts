@@ -85,7 +85,7 @@ const server = http.createServer((req, res) => {
     return void serveAnalytics(config, res);
   }
   if (u.pathname === '/api/health') {
-    return void serveHealth(config, res);
+    return void serveHealth(config, res, req);
   }
   // The only write endpoints in the app (see .claude/rules/remote-answer.md).
   // `wait` holds its response open for minutes — that is by design.

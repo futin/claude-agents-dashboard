@@ -20,6 +20,7 @@ import {
   dismissAll, getPending, pendingSessionIds, register, sanitizeQuestions
 } from './lib/pending.js';
 import { getState, setEnabled } from './lib/remoteState.js';
+import { classifyOrigin } from './lib/origin.js';
 import type { Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, ScopeConfig, SessionQuestion,
@@ -198,8 +199,12 @@ function sessionExists(id: string): boolean {
  * remote-answer switch. `remoteAnswer` is the single field the hook acts on; the
  * rest lets the UI explain *why* it's off.
  */
-export function serveHealth(config: Config, res: ServerResponse): void {
-  sendJson(res, 200, { ok: true, ...getState(config) });
+export function serveHealth(config: Config, res: ServerResponse, req?: IncomingMessage): void {
+  sendJson(res, 200, {
+    ok: true,
+    ...getState(config),
+    origin: classifyOrigin(req?.socket?.remoteAddress, req?.headers)
+  });
 }
 
 /**
