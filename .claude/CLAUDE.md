@@ -65,13 +65,18 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
 - `pnpm test` — runs `test/run-all.ts` via tsx (220 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
+- `pnpm tunnel` — optional: `tailscale serve --bg 4173`, fronts prod over HTTPS on the
+  tailnet (see `.claude/rules/remote-access.md`). Not needed for plain tailnet access.
 
-**Phone access on the same wifi:** the Vite dev server binds all interfaces
-(`server.host: true` in `vite.config.ts`), so no tunnel is needed — just open
-the `Network:` URL Vite prints (e.g. `http://192.168.x.x:5173`) on a phone
-connected to the same wifi as the host machine. The backend (`server/index.ts`)
-already binds all interfaces by default, so `pnpm start` (prod, port 4173) is
-LAN-reachable the same way with no extra config.
+**Phone access:** on the same wifi, no tunnel is needed — the Vite dev server binds all
+interfaces (`server.host: true` in `vite.config.ts`), so just open the `Network:` URL Vite
+prints (e.g. `http://192.168.x.x:5173`). The backend (`server/index.ts`) also binds all
+interfaces, so `pnpm start` (prod, port 4173) is LAN-reachable the same way. **From
+anywhere** (cellular, other wifi, and immune to the LAN IP changing), the chosen path is
+**Tailscale**: both devices join a private tailnet and the dashboard gets a stable MagicDNS
+hostname (`http://<mac>.<tailnet>.ts.net:4173`) — device identity is the auth, nothing is
+public, zero app-code changes. Optional `pnpm tunnel` fronts prod over HTTPS on 443. See
+`.claude/rules/remote-access.md`.
 
 ## Deep-dive rules
 
@@ -100,6 +105,9 @@ relevant one when a task touches that area:
   injection mechanism, the **three gates** env/toggle/keyboard-idle that decide terminal vs
   phone, the ⚠️ route-order / hook-timeout / token traps, and the two deliberate charter
   exceptions: the write endpoints and `.remote-answer.json`).
+- `.claude/rules/remote-access.md` — phone access from anywhere via Tailscale (device
+  identity as the perimeter, why no app auth gate was added, `pnpm tunnel` HTTPS serve,
+  the `ANSWER_TOKEN`-only-if-shared-tailnet posture, the Mac-must-be-awake gotcha).
 
 ## Conventions / gotchas
 
