@@ -6,7 +6,9 @@ import {
   type SortKey,
   type View
 } from '../lib/filterSort';
+import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
 import { MultiSelect } from './MultiSelect';
+import { OriginBadge } from './OriginBadge';
 import { RemoteAnswerToggle } from './RemoteAnswerToggle';
 
 const STATUSES: Session['status'][] = ['working', 'question', 'incomplete', 'idle'];
@@ -30,6 +32,8 @@ export function Toolbar({
 }) {
   const projects = distinctProjects(sessions);
   const set = (patch: Partial<View>) => onChange({ ...view, ...patch });
+  // One `/api/health` poll, two consumers: the badge and the switch.
+  const remoteAnswer = useRemoteAnswer();
 
   return (
     <div className="toolbar">
@@ -53,7 +57,9 @@ export function Toolbar({
 
       <span className="tb-spacer" />
 
-      <RemoteAnswerToggle />
+      <OriginBadge origin={remoteAnswer.state?.origin} />
+
+      <RemoteAnswerToggle control={remoteAnswer} />
 
       <select
         value={view.sortKey}

@@ -1,4 +1,4 @@
-import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
+import type { RemoteAnswerControl } from '../hooks/useRemoteAnswer';
 
 /**
  * Toolbar pill for the remote-answer switch.
@@ -6,9 +6,12 @@ import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
  * On, it only *allows* remote answers — the hook still hands a question straight
  * to the terminal while you're at the keyboard, so this reads "when I'm away"
  * rather than "instead of the terminal". Off releases anything already waiting.
+ *
+ * The hook is owned by the Toolbar and passed in, so the sibling OriginBadge can
+ * read the same `/api/health` snapshot instead of starting a second poll.
  */
-export function RemoteAnswerToggle() {
-  const { state, busy, needsToken, toggle } = useRemoteAnswer();
+export function RemoteAnswerToggle({ control }: { control: RemoteAnswerControl }) {
+  const { state, busy, needsToken, toggle } = control;
   if (!state) return null;
 
   if (!state.available) {

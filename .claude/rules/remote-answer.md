@@ -57,7 +57,7 @@ app's read-only charter — and even here nothing is written to disk: the store 
 
   | Method | Path | Codes |
   |---|---|---|
-  | `GET` | `/api/health` | 200 `{ok, ...RemoteAnswerState}` — the hook's probe and the pill's read |
+  | `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?}` — the hook's probe, the pill's read, and the origin badge's source |
   | `POST` | `/api/remote-answer` | `{enabled}` → 200 `{...state, released}`; 400 non-boolean; 403 bad token; 409 `REMOTE_ANSWER=false`; 405 non-POST |
   | `POST` | `/api/questions/wait` | held → 200 `WaitResult`; 400 malformed / no usable questions; 403 bad token; 404 unknown session or feature off; 405 non-POST |
   | `GET` | `/api/sessions/:id/question` | 200 `SessionQuestion` (`pending: null` when idle); 400 bad id |
@@ -99,8 +99,10 @@ app's read-only charter — and even here nothing is written to disk: the store 
   token from `~/.claude/hooks/dashboard-token` (user-created — a server-generated file would
   fight the read-only Docker mount); the browser persists it as `dashboard.answerToken`.
   HTTP + a static token is a tripwire, not real auth.
-- **The pill** (`RemoteAnswerToggle` + `useRemoteAnswer`) sits after `.tb-spacer` in the
-  Toolbar. Polled every 15s, not fetched once, because the *other* surface can flip it — turning
+- **The pill** (`RemoteAnswerToggle`) sits after `.tb-spacer` in the Toolbar, next to the
+  connection-origin badge. The Toolbar owns the `useRemoteAnswer` call and passes the control
+  in as a prop, so the two pills share one `/api/health` poll instead of starting two (see
+  `remote-access.md`). Polled every 15s, not fetched once, because the *other* surface can flip it — turning
   it on from your phone should show up on the laptop without a reload. Renders as an inert
   `<span>` (not a disabled button) when `available` is false, so a config kill switch can't look
   like a stuck control. Its wording is "phone answers", never "instead of the terminal": on only

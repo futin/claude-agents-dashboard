@@ -92,29 +92,40 @@ pnpm start   # serves the built app + API on http://localhost:4173
 `pnpm start` (`NODE_ENV=production`) static-serves the built client and auto-opens your
 browser. Keep the tab open on a second monitor while you run sessions in parallel.
 
-### Phone access (same wifi, or anywhere via Tailscale)
+### Phone access (LAN, Tailscale, or any tunnel)
 
-**Same wifi:** both servers bind all interfaces, so no tunnel is needed — open the
-`Network:` URL Vite prints (e.g. `http://192.168.x.x:5173`), or `http://<lan-ip>:4173`
-for prod.
+Both servers bind all interfaces, so **every option below works with no app config**. None
+is required — pick what suits you.
 
-**From anywhere** (cellular, other wifi — and immune to the LAN IP changing): install
-[Tailscale](https://tailscale.com/download) on the host machine and your phone, sign both
-into the same account (free personal plan), and the dashboard is reachable at a **stable**
-MagicDNS hostname:
+**Same wifi (nothing to install):** open the `Network:` URL Vite prints
+(e.g. `http://192.168.x.x:5173`), or `http://<lan-ip>:4173` for prod. Free, but the address
+moves when the network does.
+
+**From anywhere — Tailscale (recommended):** a private network between your own devices, so
+nothing is exposed publicly. Install [Tailscale](https://tailscale.com/download) on the host
+and your phone, sign both into the same account (free personal plan), and the dashboard gets
+a **stable** MagicDNS hostname that survives LAN IP changes and works over cellular:
 
 ```
-http://<mac-name>.<tailnet>.ts.net:4173   # prod   (pnpm start)
-http://<mac-name>.<tailnet>.ts.net:5173   # dev    (pnpm dev — Vite proxies /api locally)
+http://<host-name>.<tailnet>.ts.net:4173   # prod  (pnpm start)
+http://<host-name>.<tailnet>.ts.net:5173   # dev   (pnpm dev — Vite proxies /api locally)
 ```
 
-Find the hostname with `tailscale status`. Nothing is exposed to the public internet —
-only devices signed into *your* tailnet can connect, which is why no extra login or auth
-gate exists in the app. Optionally, `pnpm tunnel` (`tailscale serve --bg 4173`) fronts prod
-over HTTPS at `https://<mac-name>.<tailnet>.ts.net` (no port, real certificate; enable
-HTTPS certificates once in the tailnet admin console; `tailscale serve reset` stops it).
-Gotcha: the host must be awake — Tailscale doesn't wake a sleeping machine. Details in
-`.claude/rules/remote-access.md`.
+Find it with `tailscale status`. Only devices signed into *your* tailnet can connect, which
+is why no login or auth gate exists in the app. Optionally `pnpm tunnel`
+(`tailscale serve --bg 4173`) fronts prod over HTTPS at `https://<host-name>.<tailnet>.ts.net`
+(no port, real certificate; enable HTTPS certificates once in the tailnet admin console;
+`tailscale serve reset` stops it). Gotcha: the host must be awake — Tailscale doesn't wake a
+sleeping machine. Trade-off: connecting devices need the Tailscale app.
+
+**Any other tunnel** (ngrok, Cloudflare, `ssh -L`) works too — but a public URL exposes
+*every* read endpoint, including full transcripts and `/api/management/file`. Set
+`ANSWER_TOKEN` and put auth at the edge if you go that way.
+
+**Which one am I on?** The toolbar shows a small pill — `local` / `LAN` / `tailnet` /
+`public` — telling you how the browser you're looking at reached the dashboard. It's
+informational only; nothing gates on it. `public` is tinted orange as a reminder that reads
+are open. Details in `.claude/rules/remote-access.md`.
 
 ### Run in Docker
 
@@ -229,7 +240,7 @@ silently**, which looks exactly like "not installed", so check that first if not
 **1. Run the dashboard.** `pnpm dev` (or `pnpm build && pnpm start`). No `.env` needed —
 remote answers are on by default. To answer from a phone, open the `Network:` URL Vite prints
 (e.g. `http://192.168.x.x:5173`) on a device on the same wifi — or from anywhere via the
-stable Tailscale hostname (see [Phone access](#phone-access-same-wifi-or-anywhere-via-tailscale)).
+stable Tailscale hostname (see [Phone access](#phone-access-lan-tailscale-or-any-tunnel)).
 
 **2. Link the hook**, from the repo root. A symlink rather than a copy, so `git pull` keeps it
 current:
@@ -313,9 +324,10 @@ counts as at-the-desk: the dialog is never hidden on a guess.
 ("Other…") that reaches the model. On a shared network set `ANSWER_TOKEN` and put the same
 value in `~/.claude/hooks/dashboard-token` (`chmod 600`); the browser asks for it once. Plain
 HTTP with a static bearer token is a tripwire, not real auth. `REMOTE_ANSWER=false` turns the
-whole feature off server-side. Over Tailscale the tailnet itself is the perimeter — device
+whole feature off server-side. Over a tailnet the network itself is the perimeter — device
 identity beats any password, so `ANSWER_TOKEN` can stay empty unless you share the tailnet
-with other people (see `.claude/rules/remote-access.md`).
+with other people. Behind a *public* tunnel it is the minimum (see
+`.claude/rules/remote-access.md`).
 
 **One file on disk.** The toggle is persisted to a gitignored `.remote-answer.json` in the repo
 root, because `tsx watch` restarts the server on every edit and a switch you flipped before
@@ -379,6 +391,7 @@ server/                  backend (Node + TypeScript, run via tsx — no compile 
   lib/analytics.ts       read-only reader: last N /kaizen-logged sessions, re-analyzed live
   lib/pending.ts         in-memory pending-question store behind remote answers
   lib/remoteState.ts     the remote-answer on/off switch (env gate + persisted UI toggle)
+  lib/origin.ts          classifies how a client connected: local / LAN / tailnet / public
 
 client/                  frontend (Vite + React + TypeScript)
   index.html
@@ -387,6 +400,7 @@ client/                  frontend (Vite + React + TypeScript)
   src/components/analytics/AnalyticsView.tsx   the post-mortem card list (read-only)
   src/components/QuestionPanel.tsx             the answer-a-question action bar in the chat drawer
   src/components/RemoteAnswerToggle.tsx        toolbar pill for the remote-answer switch
+  src/components/OriginBadge.tsx               toolbar pill: how this browser connected
   src/hooks/useSessions.ts   polls /api/sessions every 3s
   src/hooks/useAnalytics.ts  fetches /api/analytics on mount + manual refresh (no poll)
   src/hooks/usePendingQuestion.ts  polls /api/sessions/:id/question; posts the answer back
@@ -406,7 +420,7 @@ scripts/lan-ip.sh        host LAN IP, passed in so the dev container can print i
 scripts/ask-remote-hook.sh    the PreToolUse[AskUserQuestion] hook; symlink into ~/.claude/hooks/
 
 .claude/rules/           per-domain deep-dive docs (not auto-loaded; read when working in one)
-  remote-access.md       phone access from anywhere via Tailscale — see Phone access above
+  remote-access.md       the routes in (localhost/LAN/Tailscale/tunnel) + the origin badge
 ```
 
 ## Not included (yet)

@@ -37,6 +37,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   path in the app (see .claude/rules/remote-answer.md)
   lib/remoteState.ts  remote-answer switch: REMOTE_ANSWER env gate + UI toggle persisted to
                   gitignored .remote-answer.json (the app's only disk write; fails open)
+  lib/origin.ts   pure connection classifier → local | lan | tailnet | unknown, on
+                  /api/health for the toolbar badge (see .claude/rules/remote-access.md)
 client/           Vite + React + TypeScript frontend
   src/App.tsx     section tabs (Sessions | Management | Analytics), lazy-loads Management/Analytics views
   components/SessionsView.tsx  the original live monitor (owns the 3s poll + chat drawer state)
@@ -49,7 +51,9 @@ client/           Vite + React + TypeScript frontend
   components/QuestionPanel.tsx pinned action bar to answer a session's AskUserQuestion
                   (hooks/usePendingQuestion — see .claude/rules/remote-answer.md)
   components/RemoteAnswerToggle.tsx  toolbar pill for the remote-answer switch
-                  (hooks/useRemoteAnswer)
+                  (fed by hooks/useRemoteAnswer, which the Toolbar owns)
+  components/OriginBadge.tsx   toolbar pill: how this browser reached the dashboard
+                  (reads `origin` off the same /api/health poll; display-only)
   components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane, FileViewer)
   components/analytics/AnalyticsView.tsx  the report-card list (own lazy chunk; read-only)
   hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
@@ -68,14 +72,13 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm tunnel` — optional: `tailscale serve --bg 4173`, fronts prod over HTTPS on the
   tailnet (see `.claude/rules/remote-access.md`). Not needed for plain tailnet access.
 
-**Phone access:** on the same wifi, no tunnel is needed — the Vite dev server binds all
-interfaces (`server.host: true` in `vite.config.ts`), so just open the `Network:` URL Vite
-prints (e.g. `http://192.168.x.x:5173`). The backend (`server/index.ts`) also binds all
-interfaces, so `pnpm start` (prod, port 4173) is LAN-reachable the same way. **From
-anywhere** (cellular, other wifi, and immune to the LAN IP changing), the chosen path is
-**Tailscale**: both devices join a private tailnet and the dashboard gets a stable MagicDNS
-hostname (`http://<mac>.<tailnet>.ts.net:4173`) — device identity is the auth, nothing is
-public, zero app-code changes. Optional `pnpm tunnel` fronts prod over HTTPS on 443. See
+**Phone access:** both servers bind all interfaces (`server.host: true` in `vite.config.ts`;
+`server/index.ts` likewise), so **every route works with zero app config** and none is
+required — localhost, LAN (the `Network:` URL Vite prints), **Tailscale** (recommended for
+away-from-home: a stable MagicDNS hostname `http://<host>.<tailnet>.ts.net:4173`, device
+identity as the auth, nothing public), or any other tunnel (ngrok/Cloudflare/`ssh -L` — but
+a public URL exposes every read endpoint). Optional `pnpm tunnel` fronts prod over HTTPS on
+443. The toolbar's origin badge says which route the current browser came in on. See
 `.claude/rules/remote-access.md`.
 
 ## Deep-dive rules
@@ -105,9 +108,10 @@ relevant one when a task touches that area:
   injection mechanism, the **three gates** env/toggle/keyboard-idle that decide terminal vs
   phone, the ⚠️ route-order / hook-timeout / token traps, and the two deliberate charter
   exceptions: the write endpoints and `.remote-answer.json`).
-- `.claude/rules/remote-access.md` — phone access from anywhere via Tailscale (device
-  identity as the perimeter, why no app auth gate was added, `pnpm tunnel` HTTPS serve,
-  the `ANSWER_TOKEN`-only-if-shared-tailnet posture, the Mac-must-be-awake gotcha).
+- `.claude/rules/remote-access.md` — the ways in (localhost / LAN / Tailscale / other
+  tunnels, all optional, all zero-config) and the **origin badge** (`lib/origin.ts`: the
+  ⚠️ tailnet-before-ULA ordering, the XFF-only-from-loopback rule that makes `pnpm tunnel`
+  work, the `xfwd: true` dev-proxy dependency, display-only invariant).
 
 ## Conventions / gotchas
 

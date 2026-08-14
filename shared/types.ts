@@ -173,6 +173,23 @@ export interface RemoteAnswerState {
   persisted: boolean;
 }
 
+/**
+ * How a client reached the dashboard (`server/lib/origin.ts`). `unknown` means
+ * off-network — a public tunnel, or an address we can't place. Display-only:
+ * nothing in the app makes an access decision from it.
+ */
+export type ConnectionOrigin = 'local' | 'lan' | 'tailnet' | 'unknown';
+
+/**
+ * `GET /api/health`. The remote-answer switch plus the caller's own connection
+ * origin. `origin` is optional so an older server (or a test double) that omits
+ * it simply hides the badge.
+ */
+export interface HealthResponse extends RemoteAnswerState {
+  ok: true;
+  origin?: ConnectionOrigin;
+}
+
 /** One selectable choice, straight from the tool call's `options[]`. */
 export interface PendingOption {
   label: string;
