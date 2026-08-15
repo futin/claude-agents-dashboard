@@ -106,7 +106,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
    --font-scale because body{zoom} (line 92) makes 100vh resolve against the
    unzoomed viewport: at text scale 110% a plain 100vh rail overhangs by 10%. */
 .shell{display:flex}
-.rail{flex:0 0 200px;display:flex;flex-direction:column;gap:2px;align-self:flex-start;position:sticky;top:0;height:calc(100vh / var(--font-scale,1));overflow-y:auto;padding:20px 12px;background:var(--strip);border-right:1px solid var(--hairline)}
+.rail{flex:0 0 200px;display:flex;flex-direction:column;gap:2px;align-self:flex-start;position:sticky;top:0;height:calc(100vh / var(--font-scale,1));overflow-y:auto;padding:var(--body-pad) 12px;background:var(--strip);border-right:1px solid var(--hairline)}
 /* the app's wordmark, in the rail rather than the page — a kicker over the name */
 .rail-brand{font-family:var(--display);font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;line-height:1.15;color:var(--ink);padding:0 10px;margin-bottom:18px}
 .rail-kicker{font-family:var(--mono);font-size:9.5px;font-weight:400;letter-spacing:.14em;color:var(--ink3)}
@@ -120,9 +120,9 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
    accent bar goes back to the bottom edge where a row wants it */
 @media (max-width:700px){
   .shell{flex-direction:column}
-  .rail{flex:none;width:auto;height:auto;align-self:stretch;position:static;flex-direction:row;gap:4px;padding:8px 10px;overflow-x:auto;border-right:none;border-bottom:1px solid var(--hairline)}
+  .rail{flex:none;width:auto;height:auto;align-self:stretch;position:static;flex-direction:row;gap:4px;padding:8px 10px;overflow-x:auto;overflow-y:visible;border-right:none;border-bottom:1px solid var(--hairline)}
   .rail-brand{display:none}
-  .rail-link{flex:none;white-space:nowrap}
+  .rail-link{flex:none;white-space:nowrap;min-height:38px;display:flex;align-items:center}
   .rail-link.on{box-shadow:inset 0 -2px 0 var(--cyan),inset 0 1px 0 var(--edge)}
 }
 /* facility plate */
@@ -272,7 +272,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .mgmt-bar .tb-dir{margin-left:auto;font-size:11px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 9px;cursor:pointer;transition:border-color .15s,color .15s}
 .mgmt-bar .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
 .mgmt{display:grid;grid-template-columns:200px 300px minmax(0,1fr);gap:14px;align-items:start}
-@media (max-width:1000px){.mgmt{grid-template-columns:200px minmax(0,1fr)}.mdetail{grid-column:1/-1}}
+@media (max-width:1200px){.mgmt{grid-template-columns:200px minmax(0,1fr)}.mdetail{grid-column:1/-1}}
 @media (max-width:700px){.mgmt{grid-template-columns:1fr}.mdetail{grid-column:auto}}
 .mgmt-menu{display:flex;flex-direction:column;gap:4px}
 .mgmt-menu-item{display:flex;flex-direction:column;gap:1px;padding:7px 10px;border:1px solid var(--hairline);border-radius:2px;background:var(--strip);cursor:pointer;transition:border-color .15s;min-width:0;box-shadow:inset 0 1px 0 var(--edge)}
@@ -317,7 +317,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .mdetail-label .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
 .mdetail-type{font-size:9px;font-weight:600;font-family:var(--mono);color:var(--ink3);text-transform:uppercase;letter-spacing:.06em}
 /* Desktop: management is an app shell — page never scrolls, each pane does */
-@media (min-width:1001px){
+@media (min-width:1201px){
   .wrap.wide{display:flex;flex-direction:column;height:calc(100vh - 48px)}
   .wrap.wide .mgmt{flex:1;min-height:0;align-items:stretch}
   .mgmt-menu,.mgmt-list,.mdetail{overflow-y:auto;min-height:0}
