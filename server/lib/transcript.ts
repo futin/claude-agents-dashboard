@@ -23,6 +23,17 @@ const LARGE_MARKER = '[1m]';
 const LARGE_WINDOW_MODEL_PATTERNS = [/sonnet/i, /opus/i, /fable/i];
 export const DEFAULT_TAIL_BYTES = 256 * 1024;
 
+/**
+ * Tools whose trailing `tool_use` means the session is parked on a human, not
+ * churning: both draw an approval surface (the question dialog, the plan card)
+ * and neither writes anything more to the transcript until you respond — so the
+ * unanswered call IS the wait, readable straight off disk with no hook.
+ *
+ * This is why they differ from a permission dialog, which the TUI draws without
+ * recording anything (see `docs/subsystems/permission-notify.md`).
+ */
+export const WAIT_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
+
 export interface ParsedTranscript {
   tokens: number;
   model: string;
@@ -52,7 +63,7 @@ export interface ParsedTranscript {
   hasMessages: boolean;
   /** Newest assistant turn ended cleanly (stop_reason "end_turn"). */
   turnComplete: boolean;
-  /** Newest assistant action is an unanswered AskUserQuestion. */
+  /** Newest assistant action is an unanswered {@link WAIT_TOOLS} call. */
   waitingOnQuestion: boolean;
 }
 
@@ -237,7 +248,7 @@ export function readTranscript(
       turnComplete = role === 'assistant' && m.stop_reason === 'end_turn';
       if (role === 'assistant' && Array.isArray(m.content)) {
         waitingOnQuestion = m.content.some(
-          (b: any) => b && b.type === 'tool_use' && b.name === 'AskUserQuestion'
+          (b: any) => b && b.type === 'tool_use' && WAIT_TOOLS.has(b.name)
         );
       }
     }

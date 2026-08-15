@@ -19,13 +19,17 @@ import {
   answer as answerPending, cancel as cancelPending, clampTimeout,
   dismissAll, getPending, pendingSessionIds, register, sanitizeQuestions
 } from './lib/pending.js';
+import {
+  answer as answerPlan, cancel as cancelPlan, dismissAll as dismissAllPlans,
+  getPendingPlan, planSessionIds, register as registerPlan, sanitizePlan
+} from './lib/plans.js';
 import { notifyPermission, permissionWaits } from './lib/permissions.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { classifyOrigin } from './lib/origin.js';
 import type { Config } from './lib/config.js';
 import type {
-  AnalyticsResponse, ManagementIndex, ScopeConfig, SessionQuestion,
-  SessionsResponse, SessionChat, SessionDetail, WaitResult
+  AnalyticsResponse, ManagementIndex, PlanWaitResult, ScopeConfig, SessionPlan,
+  SessionQuestion, SessionsResponse, SessionChat, SessionDetail, WaitResult
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -36,13 +40,15 @@ export function serveSessions(config: Config, res: ServerResponse): void {
   try {
     // pendingIds comes from the RAM store, not disk: a question held by the
     // AskUserQuestion hook is flagged on its row before the transcript knows
-    // about it, so it's visible without opening the chat drawer.
+    // about it, so it's visible without opening the chat drawer. planIds is the
+    // same thing for a held ExitPlanMode call.
     // permissionWaits likewise: a terminal permission dialog is TUI-only and
     // never reaches the transcript, so the Notification hook is the only way the
     // scan can know a session is parked on one.
     data = scanSessions(config, {
       skipProcScan: config.skipProcScan,
       pendingIds: pendingSessionIds(),
+      planIds: planSessionIds(),
       permissionWaits: permissionWaits()
     });
   } catch (e) {
@@ -226,8 +232,9 @@ export async function serveRemoteAnswerToggle(
   const state = setEnabled(config, body.enabled);
   if (!state) return sendJson(res, 409, { error: 'disabled by REMOTE_ANSWER=false' });
   // Switching off releases the waits we already hold — their terminal dialogs
-  // appear within a second instead of sitting out the full window.
-  const released = body.enabled ? 0 : dismissAll();
+  // appear within a second instead of sitting out the full window. One switch,
+  // both stores: a held plan is as remote as a held question.
+  const released = body.enabled ? 0 : dismissAll() + dismissAllPlans();
   sendJson(res, 200, { ...state, released });
 }
 
@@ -302,8 +309,73 @@ export async function serveSessionAnswer(
 }
 
 /**
- * `POST /api/permissions/notify` — the Notification hook reporting that a
- * session is showing an interactive permission dialog. Body
+ * `POST /api/plans/wait` — a session's `PermissionRequest[ExitPlanMode]` hook
+ * offers its proposed plan and waits here. Held exactly like the question wait,
+ * and every rejection below likewise degrades to the plan card rather than
+ * blocking the session.
+ */
+export async function servePlanWait(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+
+  const body = await readJsonBody(req) as { sessionId?: unknown; toolInput?: unknown; timeoutMs?: unknown } | null;
+  if (!body || typeof body !== 'object') return sendJson(res, 400, { error: 'bad body' });
+
+  const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
+  if (!sessionId || !ID_RE.test(sessionId)) return sendJson(res, 400, { error: 'bad sessionId' });
+  if (!sessionExists(sessionId)) return sendJson(res, 404, { error: 'unknown session' });
+
+  const plan = sanitizePlan(body.toolInput);
+  if (!plan) return sendJson(res, 400, { error: 'no usable plan' });
+
+  let planId = '';
+  res.on('close', () => { if (planId) cancelPlan(sessionId, planId); });
+  planId = registerPlan(sessionId, plan, clampTimeout(body.timeoutMs), (result: PlanWaitResult) => {
+    if (res.writableEnded) return;
+    sendJson(res, 200, result);
+  });
+  if (res.destroyed) cancelPlan(sessionId, planId);
+}
+
+/** `GET /api/sessions/:id/plan` — the plan this session is waiting on, if any. */
+export function serveSessionPlan(id: string, res: ServerResponse): void {
+  if (!ID_RE.test(id)) {
+    const body: SessionPlan = { id, pending: null, error: true };
+    return sendJson(res, 400, body);
+  }
+  sendJson(res, 200, { id, pending: getPendingPlan(id) } satisfies SessionPlan);
+}
+
+/**
+ * `POST /api/sessions/:id/plan-answer` — send a plan back for revision
+ * (`{verdict: 'reject', feedback}`) or hand it to its card (`'dismiss'`).
+ *
+ * ⚠️ No accept verdict, and adding one would not work: the CLI discards a hook
+ * `allow` for tools that declare `requiresUserInteraction()`. See
+ * {@link PlanAnswerRequest}.
+ */
+export async function serveSessionPlanAnswer(
+  config: Config, id: string, req: IncomingMessage, res: ServerResponse
+): Promise<void> {
+  if (!config.remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
+
+  const body = await readJsonBody(req);
+  if (!body) return sendJson(res, 400, { error: 'bad body' });
+
+  switch (answerPlan(id, body)) {
+    case 'ok': return sendJson(res, 200, { ok: true });
+    case 'not-found': return sendJson(res, 404, { error: 'no plan is waiting' });
+    case 'mismatch': return sendJson(res, 409, { error: 'that plan is no longer the one waiting' });
+    default: return sendJson(res, 400, { error: 'bad verdict' });
+  }
+}
+
+/**
+ * `POST /api/permissions/notify` — the PermissionRequest hook (or the older
+ * Notification one) reporting that a session is showing an interactive
+ * permission dialog. Body
  * `{sessionId, message?}`; the store keeps only the id and the arrival time.
  *
  * Write-shaped but not a control path: the flag decorates a row, and nothing

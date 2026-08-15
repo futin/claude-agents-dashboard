@@ -18,37 +18,57 @@ the chat drawer naming the command. **Display-only**: you still answer in that t
 
 ## Why it needs a hook at all
 
-The dialog is drawn by the TUI and **never written to the transcript**. The `tool_use` record
+The dialog is drawn by the UI and **never written to the transcript**. The `tool_use` record
 that triggered it *is* on disk (which is why `Session.activity` can name the command), but a
 session parked on the dialog is byte-for-byte identical to a session whose tool is genuinely
 running: `stop_reason: 'tool_use'` ⇒ `turnComplete: false` ⇒ recent + pending ⇒ green
 `working`. Nothing on disk distinguishes "churning" from "blocked on you".
 
-So the **`Notification` hook** is the signal: it fires exactly when the dialog appears.
+## Two signals, and which one to install
+
+| Event | When it fires | Use it? |
+|---|---|---|
+| `PermissionRequest` | on the ask path, immediately before the prompt is drawn; carries `tool_name` + `tool_input` | **Yes** — this is the one |
+| `Notification` (`notification_type: permission_prompt`) | ~6s after the dialog opens, cancelled if you answer first | legacy fallback |
+
+`PermissionRequest` (matcher = tool name) fires only when a decision is genuinely needed, so
+the event itself is the signal — no filtering, no delay, and it works in the desktop app.
+
+`Notification` is scheduled on a timer and is emitted by fewer engines than you'd expect:
+
+```js
+let t = setTimeout((r) => { BV(…, {message: `Claude needs your permission to use ${r}`,
+  notificationType: "permission_prompt"}) }, Xwn /* = 6000 */, e)
+```
+
+That call sits on the SDK/control-protocol path only from **CLI 2.1.233**. Older engines emit
+it from the TUI dialog component instead, so a desktop-app session — which draws its own card
+over the control protocol — fires nothing at all. Confirmed empirically: with only the
+`Notification` hook installed, desktop sessions never once invoked it. `PermissionRequest`
+exists on 2.1.229 and fixes exactly this.
 
 ## ⚠️ Why there is no answer button (and must not be one)
 
-Unlike `AskUserQuestion` (see `remote-answer.md`), there is **no supported way for anything
-outside the TUI to answer a permission dialog**. The CLI's only injection point is a
-`PreToolUse` hook returning `permissionDecision`, and that doesn't work here:
+`PermissionRequest` *can* return a decision (`{decision:{behavior:"allow"|"deny"}}`), so unlike
+before, the mechanism now exists. It stays unused deliberately:
 
-- The hook fires on **every** tool call and cannot tell which ones would have prompted, so
-  holding one open to offer it remotely would stall auto-allowed tools too.
-- `permissionDecision: "allow"` **bypasses the permission system entirely**. Wiring that to a
-  LAN HTTP POST would turn the dashboard into a remote permission bypass — the exact thing the
-  dialog exists to prevent.
-- `deny`-with-reason (the mechanism `remote-answer.md` uses) can only *remove* an option. For a
-  question that's a legitimate answer; for a permission prompt it's just a rejection.
+- `behavior: "allow"` **bypasses the permission system entirely**. Wiring that to a LAN HTTP
+  POST would turn the dashboard into a remote permission bypass — the exact thing the dialog
+  exists to prevent. The transport here is HTTP plus an optional static token; that is a
+  tripwire, not an authorization system.
+- `deny`-with-reason can only *remove* an option. For a question that's a legitimate answer
+  (see `remote-answer.md`); for a permission prompt it's just a rejection you could have made
+  by ignoring it.
 
-Hence `PermissionBanner` is a **sign, not a control** — no buttons, deliberately. If a native
-"approve this call" path ever lands in the CLI, that is the moment to revisit; until then, an
-approve button here would be a lie or a hole.
+Hence `PermissionBanner` is a **sign, not a control** — no buttons, deliberately. Compare
+[remote-plan](remote-plan.md), where the deny half *is* worth having because "send this plan
+back with feedback" is a real instruction, not merely a refusal.
 
 ## The pieces
 
 | Piece | What it does |
 |---|---|
-| `scripts/permission-notify-hook.sh` | `Notification` hook. Filters to permission prompts, POSTs `{sessionId, message}`, exits 0 always |
+| `scripts/permission-notify-hook.sh` | Serves **both** events, keyed on `hook_event_name`. POSTs `{sessionId, message}`, prints nothing, exits 0 always — for `PermissionRequest`, empty stdout means "no decision", so the prompt renders untouched |
 | `POST /api/permissions/notify` | `servePermissionNotify` in `api.ts` — `tokenOk` 403, `ID_RE` 400, unknown session 404, else `notifyPermission()` |
 | `server/lib/permissions.ts` | RAM-only `Map<sessionId, {notifiedAt, message, timer}>`. No held socket, no resolve — a notify is a fact, not a wait |
 | `scan.ts` `ScanOptions.permissionWaits` | injected `sessionId → notifiedAt`; sets `Session.permissionWait` and forces `status: 'question'` |
@@ -90,12 +110,16 @@ has both keeps the actionable `answer` pill rather than the informational one.
 ln -s "$PWD/scripts/permission-notify-hook.sh" ~/.claude/hooks/permission-notify.sh
 ```
 
-then **append** to the existing `Notification` hooks array in `~/.claude/settings.json` —
-alongside whatever is already there (an osascript banner, ntfy, …), never replacing it:
+then **append** to the `PermissionRequest` hooks array in `~/.claude/settings.json` — and, if
+you also run older/terminal engines, to `Notification` alongside whatever is already there (an
+osascript banner, ntfy, …), never replacing it:
 
 ```json
 { "type": "command", "command": "bash \"$HOME/.claude/hooks/permission-notify.sh\"", "timeout": 5 }
 ```
+
+Registering both is safe: one entry per session, so whichever arrives first shows the pill and
+the second just re-arms it.
 
 ## Gotchas
 
@@ -106,6 +130,9 @@ alongside whatever is already there (an osascript banner, ntfy, …), never repl
 - **The hook targets the API port (4173), not Vite's 5173.** In dev the page is on 5173 but
   `/api` lives on the Node server; the hook talks to it directly. Override with
   `CLAUDE_DASHBOARD_URL`.
+- **⚠️ `PermissionRequest` runs INLINE**, before the prompt is drawn — a slow hook delays the
+  dialog you are about to look at. That is why the curl keeps its hard 1s cap and why this hook
+  must never grow a wait (contrast `plan-remote-hook.sh`, which waits *on purpose*).
 - **Fire-and-forget both ways.** Notification hook output is ignored by the CLI, and the curl
   is capped at 1s with `|| true`, so a down/unreachable dashboard cannot delay the dialog you
   are looking at. Every failure degrades to exactly the pre-hook behaviour.

@@ -102,7 +102,7 @@ export function run(): number {
     assert.strictEqual(tr.readTranscript('/no/such.jsonl'), null);
   })) p++; else f++;
 
-  if (test('turnComplete/waitingOnQuestion from newest message record', () => {
+  if (test('turnComplete/waitingOnQuestion (question + plan) from newest message record', () => {
     const done = tr.readTranscript(fixture([
       { message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] } }
     ]))!;
@@ -119,6 +119,19 @@ export function run(): number {
       { message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'AskUserQuestion', input: { questions: [] } }] } }
     ]))!;
     assert.strictEqual(asking.waitingOnQuestion, true);
+
+    // A proposed plan is the same shape of wait: the card is unanswered until a
+    // tool_result lands, so the trailing ExitPlanMode is the signal.
+    const planning = tr.readTranscript(fixture([
+      { message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'ExitPlanMode', input: { plan: '## Steps\n1. do it' } }] } }
+    ]))!;
+    assert.strictEqual(planning.waitingOnQuestion, true);
+
+    const planAccepted = tr.readTranscript(fixture([
+      { message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'ExitPlanMode', input: { plan: 'x' } }] } },
+      { message: { role: 'user', content: [{ type: 'tool_result', content: 'User has approved your plan.' }] } }
+    ]))!;
+    assert.strictEqual(planAccepted.waitingOnQuestion, false);
 
     // Newest record is the user's tool_result → question answered, turn still open.
     const answered = tr.readTranscript(fixture([

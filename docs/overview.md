@@ -63,6 +63,10 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/sessions/:id/question` | pending remote question, if any |
 | `POST /api/sessions/:id/answer` | deliver a remote answer (write path) |
 | `POST /api/questions/wait` | the hook's held-open wait (write path) |
+| `GET /api/sessions/:id/plan` | pending proposed plan, if any |
+| `POST /api/sessions/:id/plan-answer` | send a plan back for revision (write path) |
+| `POST /api/plans/wait` | the plan hook's held-open wait (write path) |
+| `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) |
 | `POST /api/remote-answer` | flip the remote-answer toggle (write path) |
 | `GET /api/health` | liveness + remote-answer state + connection origin |
 | `GET /api/management`, `/project`, `/file` | config browser index / scope / file body |
@@ -104,18 +108,20 @@ server/
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
   lib/analytics.ts  reader for the Analytics tab
   lib/pending.ts  in-memory pending-question store (the only write path)
+  lib/plans.ts    in-memory pending-plan store (same machine, reject-only verdicts)
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)
   lib/origin.ts   connection classifier → local | lan | tailnet | public
 client/src/
   App.tsx         section tabs (Sessions | Management | Analytics), lazy views
-  components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel,
+  components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/
   hooks/          useSessions (3s poll), useSessionChat, useManagement, useAnalytics,
-                  usePendingQuestion, useRemoteAnswer, usePersistedState
+                  usePendingQuestion, usePendingPlan, useRemoteAnswer, usePersistedState
   lib/            filterSort, chatFilter, markdown, managementEntries, format
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
-scripts/          ask-remote-hook.sh, permission-notify-hook.sh, host-credentials.sh, lan-ip.sh
+scripts/          ask-remote-hook.sh, plan-remote-hook.sh, permission-notify-hook.sh,
+                  remote-decision-hook.sh, host-credentials.sh, lan-ip.sh
 ```
 
 ## Map
@@ -126,6 +132,7 @@ that area:
 - [sessions](subsystems/sessions.md) — session rows, the status machine, subagent detail
 - [chat](subsystems/chat.md) — the chat drawer + byte-offset transcript tail
 - [remote-answer](subsystems/remote-answer.md) — answering `AskUserQuestion` remotely (the only write path)
+- [remote-plan](subsystems/remote-plan.md) — sending an `ExitPlanMode` plan back for revision (reject-only, by upstream design)
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems

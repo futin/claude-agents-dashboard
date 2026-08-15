@@ -23,7 +23,8 @@ import {
   serveSessions, serveSessionDetail, serveSessionChat,
   serveManagementIndex, serveManagementProject, serveManagementFile,
   serveAnalytics, serveHealth, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
-  serveRemoteAnswerToggle, servePermissionNotify
+  serveRemoteAnswerToggle, servePermissionNotify,
+  servePlanWait, serveSessionPlan, serveSessionPlanAnswer
 } from './api.js';
 
 const config = loadConfig();
@@ -93,11 +94,15 @@ const server = http.createServer((req, res) => {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return void serveQuestionWait(config, req, res);
   }
+  if (u.pathname === '/api/plans/wait') {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void servePlanWait(config, req, res);
+  }
   if (u.pathname === '/api/remote-answer') {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return void serveRemoteAnswerToggle(config, req, res);
   }
-  // Fire-and-forget flag from the Notification hook: a session is showing a
+  // Fire-and-forget flag from the PermissionRequest hook: a session is showing a
   // permission dialog (see docs/subsystems/permission-notify.md). Display-only.
   if (u.pathname === '/api/permissions/notify') {
     if (req.method !== 'POST') return methodNotAllowed(res);
@@ -111,6 +116,13 @@ const server = http.createServer((req, res) => {
   if (answer) {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return void serveSessionAnswer(config, decodeURIComponent(answer[1]), req, res);
+  }
+  const plan = u.pathname.match(/^\/api\/sessions\/([^/]+)\/plan$/);
+  if (plan) return void serveSessionPlan(decodeURIComponent(plan[1]), res);
+  const planAnswer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/plan-answer$/);
+  if (planAnswer) {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void serveSessionPlanAnswer(config, decodeURIComponent(planAnswer[1]), req, res);
   }
   // Chat route must be matched before the detail regex below, whose `[^/?]+`
   // would otherwise swallow `/api/sessions/:id/chat` and answer with agents.

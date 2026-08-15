@@ -3,8 +3,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Markdown } from './Markdown';
 import { PermissionBanner } from './PermissionBanner';
 import QuestionPanel from './QuestionPanel';
+import PlanPanel from './PlanPanel';
 import { useSessionChat } from '../hooks/useSessionChat';
 import { usePendingQuestion } from '../hooks/usePendingQuestion';
+import { usePendingPlan } from '../hooks/usePendingPlan';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
 import type { ChatMessage, Session } from '../../../shared/types';
@@ -71,6 +73,7 @@ function Message({ m }: { m: ChatMessage }) {
 export default function ChatDrawer({ session, onClose }: { session: Session; onClose: () => void }) {
   const { messages, hasMore, loading, loadingOlder, error, loadOlder } = useSessionChat(session.id);
   const question = usePendingQuestion(session.id);
+  const plan = usePendingPlan(session.id);
   const [filter, setFilter] = usePersistedState<ChatFilter>('dashboard.chatFilter', 'all');
   const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
   const shown = useMemo(() => filterMessages(messages, mode), [messages, mode]);
@@ -177,6 +180,11 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
         {/* An action bar, not a message: the question itself already renders in
             the transcript above. Pinned so it stays reachable while scrolling. */}
         <QuestionPanel state={question} />
+
+        {/* Same deal for a proposed plan. The two stores are one-entry-per-
+            session and a session can only be parked on one thing at a time, so
+            in practice only one of these ever renders. */}
+        <PlanPanel state={plan} />
 
         <div className="chat-foot">
           <span>live · refreshing every 3s</span>

@@ -34,9 +34,18 @@ export interface Session {
    */
   remoteQuestion: boolean;
   /**
+   * True while a remote `ExitPlanMode` wait is held for this session — the model
+   * proposed a plan and the hook is holding the call open for a verdict. Same
+   * mechanism and same lead over the transcript as {@link remoteQuestion}; the
+   * separate flag exists so the row can say `plan?` rather than `answer?`.
+   * Remotely you can only send it back for revision — see {@link PlanAnswerRequest}.
+   */
+  remotePlan: boolean;
+  /**
    * True while the CLI is believed to be showing an interactive permission
-   * dialog ("allow Bash: pnpm dev?"). Fed by the Notification hook into an
-   * in-memory store — the dialog is TUI-only and never reaches the transcript,
+   * dialog ("allow Bash: pnpm dev?"). Fed by the PermissionRequest hook (or the
+   * older Notification one) into an in-memory store — the dialog is drawn by the
+   * UI and never reaches the transcript,
    * so without the hook a parked session is indistinguishable from a running
    * tool. Cleared once the transcript advances past the notify (you answered).
    * Display-only: nothing can answer that dialog remotely.
@@ -259,6 +268,55 @@ export interface WaitResult {
   reason?: string;
   /** The structured picks behind `reason` — for a future native answer path. */
   answers?: QuestionAnswer[];
+}
+
+/** A proposed plan waiting on a verdict, as the browser sees it. */
+export interface PendingPlan {
+  /** Server nonce. A verdict must echo it, so a stale tab can't answer the next plan. */
+  planId: string;
+  askedAt: string;
+  /** The plan markdown, straight from the `ExitPlanMode` tool input (capped). */
+  plan: string;
+}
+
+/** Payload of `GET /api/sessions/:id/plan`. */
+export interface SessionPlan {
+  id: string;
+  pending: PendingPlan | null;
+  error?: boolean;
+}
+
+/**
+ * Body of `POST /api/sessions/:id/plan-answer`.
+ *
+ * `reject` sends the model back to planning carrying `feedback`; `dismiss` hands
+ * the plan back to its card in the terminal.
+ *
+ * ⚠️ There is deliberately no `accept`. The CLI discards a hook `allow` for any
+ * tool declaring `requiresUserInteraction()`, and `ExitPlanMode` is one — its
+ * approval card *is* the interaction surface, by design. Approving remotely is
+ * not a missing feature here; it is a refused one upstream.
+ */
+export interface PlanAnswerRequest {
+  planId: string;
+  verdict: 'reject' | 'dismiss';
+  /** What to change. Reaches the model verbatim; required for `reject`. */
+  feedback?: string;
+}
+
+/**
+ * Body of the held `POST /api/plans/wait` response — how a plan wait ended.
+ * Only `rejected` makes the hook inject anything; every other status means the
+ * plan card takes over.
+ */
+export interface PlanWaitResult {
+  status: 'rejected' | 'timeout' | 'superseded' | 'dismissed';
+  /**
+   * Prose the hook hands the model as the deny `message`. Composed server-side
+   * so the injection mechanism can change without touching the hook script.
+   * Set only when `status === 'rejected'`.
+   */
+  reason?: string;
 }
 
 /**

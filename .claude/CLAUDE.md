@@ -48,8 +48,11 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   (see docs/subsystems/analytics.md)
   lib/pending.ts  in-memory pending-AskUserQuestion store + state machine — the ONLY write
                   path in the app (see docs/subsystems/remote-answer.md)
+  lib/plans.ts    in-memory pending-ExitPlanMode store — same state machine, reject-only
+                  verdicts (accept is refused upstream; see docs/subsystems/remote-plan.md)
   lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags, fed by
-                  the Notification hook; display-only (see docs/subsystems/permission-notify.md)
+                  the PermissionRequest hook (Notification is the legacy fallback);
+                  display-only (see docs/subsystems/permission-notify.md)
   lib/remoteState.ts  remote-answer switch: REMOTE_ANSWER env gate + UI toggle persisted to
                   gitignored .remote-answer.json (the app's only disk write; fails open)
   lib/origin.ts   pure connection classifier → local | lan | tailnet | unknown, on
@@ -65,6 +68,8 @@ client/           Vite + React + TypeScript frontend
   lib/chatFilter.ts            drawer all/text/you message filter (pure; persisted)
   components/QuestionPanel.tsx pinned action bar to answer a session's AskUserQuestion
                   (hooks/usePendingQuestion — see docs/subsystems/remote-answer.md)
+  components/PlanPanel.tsx     pinned action bar to send a proposed plan back for revision
+                  (hooks/usePendingPlan — see docs/subsystems/remote-plan.md)
   components/PermissionBanner.tsx  pinned drawer strip naming the tool call a terminal
                   permission dialog is asking about (display-only; no controls by design)
   components/RemoteAnswerToggle.tsx  toolbar pill for the remote-answer switch

@@ -50,10 +50,22 @@ export function SessionRow({ s, selected, onToggle, onOpenChat }: Props) {
             answer
           </button>
         )}
+        {/* A plan is held for a verdict. Same route in as `answer`, different
+            word because the panel offers different verbs: you can send it back
+            from here, but approving only happens on the card. */}
+        {s.remotePlan && !s.remoteQuestion && (
+          <button
+            className="ag-pill answer"
+            onClick={e => { e.stopPropagation(); onOpenChat(); }}
+            title="A plan is waiting — revise it from the chat drawer, or approve it in that terminal"
+          >
+            plan?
+          </button>
+        )}
         {/* A permission dialog is open in that session's terminal. Only a pointer:
             the dialog can't be answered from here, so the pill says where to go
             and the drawer banner names the command it's asking about. */}
-        {s.permissionWait && !s.remoteQuestion && (
+        {s.permissionWait && !s.remoteQuestion && !s.remotePlan && (
           <button
             className="ag-pill permission"
             onClick={e => { e.stopPropagation(); onOpenChat(); }}
