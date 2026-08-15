@@ -107,6 +107,9 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
    unzoomed viewport: at text scale 110% a plain 100vh rail overhangs by 10%. */
 .shell{display:flex}
 .rail{flex:0 0 200px;display:flex;flex-direction:column;gap:2px;align-self:flex-start;position:sticky;top:0;height:calc(100vh / var(--font-scale,1));overflow-y:auto;padding:20px 12px;background:var(--strip);border-right:1px solid var(--hairline)}
+/* the app's wordmark, in the rail rather than the page — a kicker over the name */
+.rail-brand{font-family:var(--display);font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;line-height:1.15;color:var(--ink);padding:0 10px;margin-bottom:18px}
+.rail-kicker{font-family:var(--mono);font-size:9.5px;font-weight:400;letter-spacing:.14em;color:var(--ink3)}
 .rail-link{font-family:var(--display);font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;text-align:left;color:var(--ink3);background:none;border:0;border-radius:2px;padding:8px 10px;cursor:pointer;transition:color .15s,background .15s}
 .rail-link:hover{color:var(--ink2);background:var(--strip-hi)}
 /* the accent bar sits on the LEFT edge here — a bottom bar marks position in a
@@ -118,6 +121,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 @media (max-width:700px){
   .shell{flex-direction:column}
   .rail{flex:none;width:auto;height:auto;align-self:stretch;position:static;flex-direction:row;gap:4px;padding:8px 10px;overflow-x:auto;border-right:none;border-bottom:1px solid var(--hairline)}
+  .rail-brand{display:none}
   .rail-link{flex:none;white-space:nowrap}
   .rail-link.on{box-shadow:inset 0 -2px 0 var(--cyan),inset 0 1px 0 var(--edge)}
 }
