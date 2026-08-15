@@ -41,7 +41,7 @@ export default defineConfig({
     // Vite ≥5.4.12 rejects any Host header that isn't localhost or a bare IP
     // (DNS-rebinding guard), so a tailnet MagicDNS name 403s without this. The
     // leading dot allows subdomains, scoping the exemption to tailnet hosts
-    // rather than disabling the check — see .claude/rules/remote-access.md.
+    // rather than disabling the check — see docs/subsystems/remote-access.md.
     allowedHosts: ['.ts.net'],
     proxy: {
       // xfwd adds X-Forwarded-For. The dev proxy reaches the API over loopback,

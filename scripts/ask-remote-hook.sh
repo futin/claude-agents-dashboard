@@ -21,7 +21,7 @@
 #     "timeout": 630 }
 # The timeout MUST exceed the wait window below, or the CLI kills the hook first.
 #
-# Requires: curl, jq. See .claude/rules/remote-answer.md in the dashboard repo.
+# Requires: curl, jq. See docs/subsystems/remote-answer.md in the dashboard repo.
 
 INPUT=$(cat)
 

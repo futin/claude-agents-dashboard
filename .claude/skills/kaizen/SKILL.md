@@ -7,7 +7,7 @@ description: Continuous-improvement loop over finished Claude Code sessions — 
 > (`~/.claude/skills/kaizen/`), vendored into this repo so collaborators can populate the
 > dashboard's Analytics tab. The log path + line grammar below
 > (`~/.claude/session-analytics-log.md`) are a contract with the Analytics consumer — keep them
-> in lockstep with `.claude/rules/analytics.md` and `server/lib/sessionAnalyticsLog.ts`. Never
+> in lockstep with `docs/subsystems/analytics.md` and `server/lib/sessionAnalyticsLog.ts`. Never
 > rename the log or add a line shape on one side only. **Edits here don't take effect for the
 > user until they're copied to `~/.claude/skills/kaizen/SKILL.md`** — the global copy is the one
 > that actually runs.

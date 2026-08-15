@@ -35,35 +35,35 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts, used only by the
                   on-demand GET /api/sessions/:id (see docs/ideas/agent-tracking-cache.md)
   lib/chat.ts     byte-offset paged chat history for GET /api/sessions/:id/chat — tail /
-                  ?after= (live) / ?before= (older) (see .claude/rules/chat-tail.md)
-  lib/usage.ts    fetches account 5h/weekly limits from Anthropic (see .claude/rules/usage-limits.md)
+                  ?after= (live) / ?before= (older) (see docs/subsystems/chat.md)
+  lib/usage.ts    fetches account 5h/weekly limits from Anthropic (see docs/subsystems/usage-limits.md)
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser (key:value + >/| scalars, fail-open)
   lib/management.ts   config scanner: global/project ScopeConfig, plugins, recent projects,
-                  servable-path security set (see .claude/rules/management.md)
+                  servable-path security set (see docs/subsystems/management.md)
   lib/analyze.ts  whole-file session post-mortem → SessionAnalysis (the /kaizen analyzer; pure)
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md → lesson / status /
                   review-marker lines per session (append-only grammar; fail-open)
   lib/analytics.ts  read-only reader: last N /kaizen-logged sessions, each re-analyzed live
-                  (see .claude/rules/analytics.md)
+                  (see docs/subsystems/analytics.md)
   lib/pending.ts  in-memory pending-AskUserQuestion store + state machine — the ONLY write
-                  path in the app (see .claude/rules/remote-answer.md)
+                  path in the app (see docs/subsystems/remote-answer.md)
   lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags, fed by
                   the Notification hook; display-only (see docs/subsystems/permission-notify.md)
   lib/remoteState.ts  remote-answer switch: REMOTE_ANSWER env gate + UI toggle persisted to
                   gitignored .remote-answer.json (the app's only disk write; fails open)
   lib/origin.ts   pure connection classifier → local | lan | tailnet | unknown, on
-                  /api/health for the toolbar badge (see .claude/rules/remote-access.md)
+                  /api/health for the toolbar badge (see docs/subsystems/remote-access.md)
 client/           Vite + React + TypeScript frontend
   src/App.tsx     section tabs (Sessions | Management | Analytics), lazy-loads Management/Analytics views
   components/SessionsView.tsx  the original live monitor (owns the 3s poll + chat drawer state)
   components/{Header,SessionList,SessionRow,Toolbar,SectionTabs}
   components/ChatDrawer.tsx    full-height chat-history drawer (own lazy chunk;
-                  hooks/useSessionChat — see .claude/rules/chat-tail.md)
+                  hooks/useSessionChat — see docs/subsystems/chat.md)
   components/Markdown.tsx + lib/markdown.ts  zero-dep markdown-subset parser + renderer
                   for message text (no dangerouslySetInnerHTML; pure, unit-tested)
   lib/chatFilter.ts            drawer all/text/you message filter (pure; persisted)
   components/QuestionPanel.tsx pinned action bar to answer a session's AskUserQuestion
-                  (hooks/usePendingQuestion — see .claude/rules/remote-answer.md)
+                  (hooks/usePendingQuestion — see docs/subsystems/remote-answer.md)
   components/PermissionBanner.tsx  pinned drawer strip naming the tool call a terminal
                   permission dialog is asking about (display-only; no controls by design)
   components/RemoteAnswerToggle.tsx  toolbar pill for the remote-answer switch
@@ -87,7 +87,7 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm typecheck` — `tsc --noEmit`.
 - `pnpm tunnel` — optional: `tailscale serve --bg 5174`, fronts that fixed port over HTTPS
   on the tailnet — keep it matching the port you actually serve (prod `PORT` or a dev
-  `WEB_PORT`; see `.claude/rules/remote-access.md`). Not needed for plain tailnet access.
+  `WEB_PORT`; see `docs/subsystems/remote-access.md`). Not needed for plain tailnet access.
 
 **Phone access:** both servers bind all interfaces (`server.host: true` in `vite.config.ts`;
 `server/index.ts` likewise), so **every route works with zero app config** and none is
@@ -96,42 +96,14 @@ away-from-home: a stable MagicDNS hostname `http://<host>.<tailnet>.ts.net:4173`
 identity as the auth, nothing public), or any other tunnel (ngrok/Cloudflare/`ssh -L` — but
 a public URL exposes every read endpoint). Optional `pnpm tunnel` fronts one fixed port
 (currently `5174`) over HTTPS on 443. The toolbar's origin badge says which route the current browser came in on. See
-`.claude/rules/remote-access.md`.
+`docs/subsystems/remote-access.md`.
 
-## Deep-dive rules
+## Deep-dive docs
 
-Detailed per-domain docs live in `.claude/rules/` and are **NOT auto-loaded** — read the
-relevant one when a task touches that area:
-
-- `.claude/rules/session-status.md` — the left-dot status machine (`scan.ts`/`transcript.ts`:
-  the `recent`×`turnComplete` 2×2, `question` override, `lsof` process-liveness gate, Docker
-  `skipProcScan`, empty-session filter).
-- `.claude/rules/usage-limits.md` — header 5h/Week bars (`lib/usage.ts`: OAuth `/usage`
-  endpoint, keychain token, sync cache + background refresh, fail-open, `SHOW_USAGE`,
-  `usageStatus`).
-- `.claude/rules/management.md` — Management tab config browser (`lib/management.ts`: global +
-  plugin + project scopes, the ⚠️ file-endpoint security invariant).
-- `.claude/rules/analytics.md` — Analytics tab session post-mortems (`lib/analytics.ts` +
-  `lib/sessionAnalyticsLog.ts`; `/kaizen` is the sole producer; read-only invariant). The
-  `/kaizen` skill is **vendored** at `.claude/skills/kaizen/` so collaborators can populate
-  the tab (each user's own global log); keep it in lockstep with the log format above.
-- `docs/subsystems/view-persistence.md` — Toolbar filter/sort localStorage persistence
-  (`hooks/usePersistedState.ts`, fail-open shallow-merge).
-- `.claude/rules/chat-tail.md` — the chat-history drawer (`lib/chat.ts` byte-offset paging,
-  what's filtered out of a transcript, the all/text/you view filter, the markdown subset
-  renderer, the `/api/sessions/:id/chat` route-order gotcha).
-- `.claude/rules/remote-answer.md` — answering a session's `AskUserQuestion` from the drawer
-  (`lib/pending.ts` state machine, the held-request protocol, why deny-with-reason is the only
-  injection mechanism, the **three gates** env/toggle/keyboard-idle that decide terminal vs
-  phone, the ⚠️ route-order / hook-timeout / token traps, and the two deliberate charter
-  exceptions: the write endpoints and `.remote-answer.json`).
-- `docs/subsystems/permission-notify.md` — the `allow?` pill for terminal permission dialogs
-  (`lib/permissions.ts` + the `Notification` hook; the ⚠️ why-no-answer-button rationale, the
-  notifiedAt-vs-lastMessageTs self-clear, TTL as backstop only, ladder placement).
-- `.claude/rules/remote-access.md` — the ways in (localhost / LAN / Tailscale / other
-  tunnels, all optional, all zero-config) and the **origin badge** (`lib/origin.ts`: the
-  ⚠️ tailnet-before-ULA ordering, the XFF-only-from-loopback rule that makes `pnpm tunnel`
-  work, the `xfwd: true` dev-proxy dependency, display-only invariant).
+Per-domain docs are **NOT auto-loaded**. The map of every subsystem and workflow doc
+lives in `docs/overview.md` — read the relevant `docs/subsystems/*.md` before changing
+that area, and keep the vendored `/kaizen` skill (`.claude/skills/kaizen/`) in lockstep
+with the log format above (contract details: `docs/subsystems/analytics.md`).
 
 ## Conventions / gotchas
 

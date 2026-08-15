@@ -232,7 +232,7 @@ the 7-day boundary is unit-tested rather than waited out.
 
 ## 5. The key design decision: re-analyze live vs store the report
 
-There was a *removed* alternative (`.claude/rules/analytics.md`): an earlier version
+There was a *removed* alternative (`docs/subsystems/analytics.md`): an earlier version
 had `/kaizen` **POST the full report JSON** and the dashboard persist it. It was
 scrapped. The trade-off:
 
@@ -305,4 +305,4 @@ figures.
 - `server/api.ts` — `serveAnalytics` (`GET /api/analytics`), fail-open.
 - `shared/types.ts` — `SessionAnalysis` / `AnalyticsReport` / `AnalyticsResponse`, the FE/BE contract.
 - `server/lib/config.ts` — `ANALYTICS_KEEP`, `SHOW_ANALYTICS` toggles.
-- `.claude/rules/analytics.md` — the read-only invariant and the removed POST-report design.
+- `docs/subsystems/analytics.md` — the read-only invariant and the removed POST-report design.

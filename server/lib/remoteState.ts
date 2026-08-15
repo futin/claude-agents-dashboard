@@ -16,7 +16,7 @@
  * thing this app writes to disk, and it fails open: an unwritable path keeps the
  * in-memory value and reports `persisted: false` so the UI can say so.
  *
- * See `.claude/rules/remote-answer.md`.
+ * See `docs/subsystems/remote-answer.md`.
  */
 
 import fs from 'node:fs';

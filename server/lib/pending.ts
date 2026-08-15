@@ -20,7 +20,7 @@
  *    once. The expiry timer is the guaranteed reaper: an answer arriving after
  *    it finds nothing and 404s, which is the stale-answer guard.
  *
- * See `.claude/rules/remote-answer.md`.
+ * See `docs/subsystems/remote-answer.md`.
  */
 
 import { randomUUID } from 'node:crypto';

@@ -117,14 +117,20 @@ test/             node-assert tests over backend + client domain logic
 scripts/          ask-remote-hook.sh, host-credentials.sh, lan-ip.sh
 ```
 
-## Contributor deep dives
+## Map
 
-Per-domain invariants and gotchas live in `.claude/rules/` — read the relevant one before
-changing that area: [session-status](../../.claude/rules/session-status.md),
-[chat-tail](../../.claude/rules/chat-tail.md),
-[management](../../.claude/rules/management.md),
-[analytics](../../.claude/rules/analytics.md),
-[remote-answer](../../.claude/rules/remote-answer.md),
-[remote-access](../../.claude/rules/remote-access.md),
-[usage-limits](../../.claude/rules/usage-limits.md),
-[view-persistence](../../.claude/rules/view-persistence.md).
+Every subsystem and workflow doc, one line each — read the relevant one before changing
+that area:
+
+- [sessions](subsystems/sessions.md) — session rows, the status machine, subagent detail
+- [chat](subsystems/chat.md) — the chat drawer + byte-offset transcript tail
+- [remote-answer](subsystems/remote-answer.md) — answering `AskUserQuestion` remotely (the only write path)
+- [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
+- [management](subsystems/management.md) — read-only config browser
+- [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
+- [usage-limits](subsystems/usage-limits.md) — header account usage bars
+- [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
+- [permission-notify](subsystems/permission-notify.md) — the `allow?` pill for terminal permission dialogs
+- [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
+- [docker](workflows/docker.md) — running in containers, dev + prod
+- [remote-answer-setup](workflows/remote-answer-setup.md) — per-machine hook install

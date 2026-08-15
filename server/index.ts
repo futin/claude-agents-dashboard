@@ -87,7 +87,7 @@ const server = http.createServer((req, res) => {
   if (u.pathname === '/api/health') {
     return void serveHealth(config, res, req);
   }
-  // The only write endpoints in the app (see .claude/rules/remote-answer.md).
+  // The only write endpoints in the app (see docs/subsystems/remote-answer.md).
   // `wait` holds its response open for minutes — that is by design.
   if (u.pathname === '/api/questions/wait') {
     if (req.method !== 'POST') return methodNotAllowed(res);

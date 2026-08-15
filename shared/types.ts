@@ -144,7 +144,7 @@ export interface ChatMessage {
 /**
  * Payload of `GET /api/sessions/:id/chat` — a page of the session's chat history.
  * Byte offsets are the paging currency: `cursor` walks forward (live tail),
- * `headOffset` walks backward (older pages). See `.claude/rules/chat-tail.md`.
+ * `headOffset` walks backward (older pages). See `docs/subsystems/chat.md`.
  */
 export interface SessionChat {
   id: string;
@@ -164,7 +164,7 @@ export interface SessionChat {
 
 /**
  * Remote answers — the one write path in the dashboard (see
- * `.claude/rules/remote-answer.md`). A session's `AskUserQuestion` PreToolUse
+ * `docs/subsystems/remote-answer.md`). A session's `AskUserQuestion` PreToolUse
  * hook offers the question here and blocks; the browser answers it; the hook
  * feeds the choice back to the model. Everything below lives in memory only.
  */

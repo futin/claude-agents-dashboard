@@ -20,7 +20,7 @@
  *    document never parses), otherwise `consumed` stops before it and the next
  *    poll re-reads it.
  *
- * See `.claude/rules/chat-tail.md`.
+ * See `docs/subsystems/chat.md`.
  */
 
 import fs from 'node:fs';
