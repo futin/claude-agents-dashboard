@@ -22,7 +22,7 @@ then the server producer, then the client consumer.
 Everything the dashboard shows is read straight off disk from
 `~/.claude/projects/*/*.jsonl` (the transcripts Claude Code already writes). Monitoring
 needs no daemon, no hooks, and no config in Claude Code — only the optional
-[remote answers](../features/remote-answers.md) feature installs a hook.
+[remote answers](subsystems/remote-answer.md) feature installs a hook.
 
 ## Data flow
 
@@ -40,7 +40,7 @@ via `tsx`, dev and prod alike).
 
 - **Read-only charter.** The app never writes to `~/.claude` or the transcripts. The two
   deliberate exceptions are documented in
-  [remote answers](../features/remote-answers.md): the answer POST endpoints (RAM-only
+  [remote answers](subsystems/remote-answer.md): the answer POST endpoints (RAM-only
   store) and the gitignored `.remote-answer.json` toggle file.
 - **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only. Keep
   new npm deps out of it.
@@ -80,7 +80,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
   answers the API on `PORT`, auto-opening the browser.
 
 Both servers bind all interfaces, so LAN/tailnet access works with zero app config — see
-[remote access](../features/remote-access.md).
+[remote access](subsystems/remote-access.md).
 
 ## Repo layout
 
@@ -114,7 +114,7 @@ client/src/
   lib/            filterSort, chatFilter, markdown, managementEntries, format
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
-scripts/          ask-remote-hook.sh, host-credentials.sh, lan-ip.sh
+scripts/          ask-remote-hook.sh, permission-notify-hook.sh, host-credentials.sh, lan-ip.sh
 ```
 
 ## Map

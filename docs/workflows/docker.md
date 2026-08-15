@@ -48,7 +48,7 @@ Two things a container can't reach on its own:
   `isDockerContainer()` detects `/.dockerenv`): the container only sees its own process
   namespace, so `lsof` could never find the host's `claude` processes and would force
   every session to idle. Override either way with `SKIP_PROC_SCAN`. See
-  [session status](../features/sessions.md#session-status-the-left-dot).
+  [session status](../subsystems/sessions.md#the-status-machine-the-left-dot).
 - The dev compose bind-mounts the source but keeps the container's own Linux
   `node_modules` (an anonymous volume shadows the host's).
 - `~/.claude` is mounted read-only, which is also why the remote-answer toggle persists

@@ -24,10 +24,10 @@ environment variables override `.env`, which overrides the defaults
 | `MAX_SESSIONS` | `10` | How many sessions to show, most-recent first |
 | `ACTIVE_WINDOW_MIN` | `5` | A "recent" session is one whose last message is within this many minutes |
 | `LOOKBACK_HOURS` | `24` | Only consider sessions modified within this many hours |
-| `SHOW_USAGE` | `true` | Show the header [usage bars](../features/usage-bars.md). `false` disables the fetch and the keychain read entirely |
-| `SHOW_ANALYTICS` | `true` | Show the [Analytics tab](../features/analytics.md) |
+| `SHOW_USAGE` | `true` | Show the header [usage bars](../subsystems/usage-limits.md). `false` disables the fetch and the keychain read entirely |
+| `SHOW_ANALYTICS` | `true` | Show the [Analytics tab](../subsystems/analytics.md) |
 | `ANALYTICS_KEEP` | `5` | How many `/kaizen`-logged sessions the Analytics tab shows |
-| `REMOTE_ANSWER` | `true` | Whether [remote answers](../features/remote-answers.md) are available at all — the hard kill switch for the app's only write path |
+| `REMOTE_ANSWER` | `true` | Whether [remote answers](../subsystems/remote-answer.md) are available at all — the hard kill switch for the app's only write path |
 | `ANSWER_TOKEN` | _(empty)_ | Shared secret required by the remote-answer POSTs. Empty = open, matching the app's LAN-trust posture |
 | `SKIP_PROC_SCAN` | _(auto)_ | Skip the `lsof` process-liveness gate. Defaults to `true` inside a Docker container, `false` otherwise |
 
@@ -54,4 +54,4 @@ dashboard's `.env`:
 | `CLAUDE_DASHBOARD_IDLE_SECS` | `60` | Seconds of keyboard idle before you count as "away". Below it a question goes straight to the terminal. `0` skips the check and always waits |
 
 The hook also reads `~/.claude/hooks/dashboard-token` for the `ANSWER_TOKEN` value, if
-you set one. Full setup in [remote-answers.md](../features/remote-answers.md).
+you set one. Full setup in [remote-answers.md](../subsystems/remote-answer.md).
