@@ -9,6 +9,7 @@ docs-sync:
     - client/src/lib/chatFilter.ts
     - client/src/lib/markdown.ts
   kind: subsystem
+  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
 ---
 
 # Chat — history tail and the drawer
