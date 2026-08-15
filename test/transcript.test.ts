@@ -75,6 +75,21 @@ export function run(): number {
     assert.strictEqual(s.sessionName, 'My work');
   })) p++; else f++;
 
+  if (test('readTranscript finds custom-title buried under later records', () => {
+    // Claude Code re-appends custom-title on session select, then work piles on
+    // top of it. The newest-first scan must not stop before reaching it just
+    // because tokens/activity/cwd/version/message are already satisfied.
+    const s = tr.readTranscript(fixture([
+      { message: { role: 'user', content: 'hi' }, timestamp: '2026-07-01T09:00:00Z' },
+      { type: 'custom-title', customTitle: 'My work', sessionId: 'x' },
+      { cwd: '/Users/me/proj', gitBranch: 'main', version: '2.1.0', timestamp: '2026-07-01T09:01:00Z', message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', usage: { input_tokens: 100 }, content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/a/b.js' } }] } },
+      { cwd: '/Users/me/proj', gitBranch: 'main', version: '2.1.0', timestamp: '2026-07-01T09:02:00Z', message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', usage: { input_tokens: 200 }, content: [{ type: 'tool_use', name: 'Bash', input: { description: 'ls' } }] } }
+    ]))!;
+    assert.strictEqual(s.sessionName, 'My work');
+    assert.strictEqual(s.tokens, 200);           // still the newest usage, not the older one
+    assert.strictEqual(s.activity!.tool, 'Bash'); // still the newest activity
+  })) p++; else f++;
+
   if (test('readTranscript treats "New session" placeholder as unnamed', () => {
     const s = tr.readTranscript(fixture([
       { message: { role: 'user', content: 'hi' }, timestamp: '2026-07-01T09:00:00Z' },

@@ -5,6 +5,8 @@
 
 import fs from 'node:fs';
 
+import { TITLE_MARKER, resolveSessionTitle, titleFromRecord } from './title-cache.js';
+
 import type { Activity } from '../../shared/types.js';
 
 export const STANDARD_WINDOW = 200000;
@@ -57,6 +59,10 @@ export interface ParsedTranscript {
 interface TailResult {
   text: string;
   truncated: boolean;
+  /** Byte offset the window starts at (0 when the whole file was read). */
+  start: number;
+  /** Total file size, so callers can reason about what lies below the window. */
+  size: number;
 }
 
 /** Read the trailing `tailBytes` of a file as UTF-8, tolerant of big files. */
@@ -67,10 +73,10 @@ export function readTail(filePath: string, tailBytes: number): TailResult | null
     const { size } = fs.fstatSync(fd);
     const start = size > tailBytes ? size - tailBytes : 0;
     const length = size - start;
-    if (length <= 0) return { text: '', truncated: false };
+    if (length <= 0) return { text: '', truncated: false, start: 0, size };
     const buf = Buffer.alloc(length);
     fs.readSync(fd, buf, 0, length, start);
-    return { text: buf.toString('utf8'), truncated: start > 0 };
+    return { text: buf.toString('utf8'), truncated: start > 0, start, size };
   } catch {
     return null;
   } finally {
@@ -133,6 +139,34 @@ export function describeTool(block: any): string {
   }
 }
 
+/**
+ * Newest usable custom-title in the tail window, scanned newest-first.
+ *
+ * Separate from the main scan on purpose: that loop breaks as soon as its six
+ * fields are filled — usually within a couple of records — while the title sits
+ * deeper. Claude Code appends a custom-title record when the session is named
+ * or selected, then normal work piles on top of it, so the title is the newest
+ * record only right after a select. Folding sessionName into that break
+ * condition would instead force a full-window scan for every *unnamed* session
+ * on every 3s poll. Here only lines textually holding the marker are parsed, so
+ * this stays a string scan over text already in memory.
+ *
+ * A placeholder ("New session") does not stop the search — an older real title
+ * still wins. A miss here is not the end: `resolveSessionTitle` hunts below the
+ * window and remembers what it finds (see `title-cache.ts`).
+ */
+function findSessionName(lines: string[], first: number): string | null {
+  for (let i = lines.length - 1; i >= first; i--) {
+    const line = lines[i];
+    if (!line || line.indexOf(TITLE_MARKER) === -1) continue;
+    try {
+      const t = titleFromRecord(JSON.parse(line.trim()));
+      if (t) return t;
+    } catch { continue; }
+  }
+  return null;
+}
+
 /** Read a transcript and return usage, metadata, and current activity. */
 export function readTranscript(
   filePath: string,
@@ -151,7 +185,9 @@ export function readTranscript(
   let model = '';
   let activity: Activity | null = null;
   let cwd: string | null = null, gitBranch: string | null = null, version: string | null = null, lastTs: string | null = null;
-  let sessionName: string | null = null;
+  const sessionName = resolveSessionTitle(
+    filePath, findSessionName(lines, first), tail.start, tail.size
+  );
 
   // Session-state signals, taken from the newest message record only.
   let newestMessageSeen = false;
@@ -170,13 +206,6 @@ export function readTranscript(
     if (!gitBranch && typeof rec.gitBranch === 'string') gitBranch = rec.gitBranch;
     if (!version && typeof rec.version === 'string') version = rec.version;
     if (!lastTs && typeof rec.timestamp === 'string') lastTs = rec.timestamp;
-
-    // custom-title records are the file's newest records, so newest-first
-    // scanning hits them right away — before the early break below.
-    if (!sessionName && rec.type === 'custom-title' && typeof rec.customTitle === 'string') {
-      const t = rec.customTitle.trim();
-      if (t && t !== 'New session') sessionName = t;
-    }
 
     if (!tokens) {
       const t = usageTokens(rec);

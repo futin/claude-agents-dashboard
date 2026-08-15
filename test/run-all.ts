@@ -1,5 +1,6 @@
 /** Run every test module and exit nonzero if any fail. */
 import { run as runTranscript } from './transcript.test.js';
+import { run as runTitleCache } from './title-cache.test.js';
 import { run as runScan } from './scan.test.js';
 import { run as runUsage } from './usage.test.js';
 import { run as runAgents } from './agents.test.js';
@@ -21,6 +22,7 @@ import { run as runOrigin } from './origin.test.js';
 
 let failed = 0;
 failed += runTranscript();
+failed += runTitleCache();
 failed += runScan();
 failed += runUsage();
 failed += runAgents();

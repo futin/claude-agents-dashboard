@@ -26,6 +26,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   api.ts          the /api/sessions + /api/management + /api/analytics handlers (+ error fallbacks)
   lib/config.ts   .env loader — precedence process.env > .env > defaults
   lib/transcript.ts  tail-reads last 256KB of a transcript → tokens/model/window/activity
+  lib/title-cache.ts  remembers a session's custom-title once it sinks below that 256KB
+                  window (chunked backward hunt, then a searched-byte-range cache)
   lib/scan.ts     enumerates + ranks sessions across ~/.claude/projects
   lib/agents.ts   whole-file subagent parser: pure event parser + reducer → AgentJob[]
                   (tokens/toolUses/duration from toolUseResult + notification <usage> blocks)
@@ -76,7 +78,7 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — runs `test/run-all.ts` via tsx (220 cases).
+- `pnpm test` — runs `test/run-all.ts` via tsx (263 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
 - `pnpm tunnel` — optional: `tailscale serve --bg 5174`, fronts that fixed port over HTTPS
   on the tailnet — keep it matching the port you actually serve (prod `PORT` or a dev
