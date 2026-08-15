@@ -12,19 +12,24 @@ interface Props {
   onChange: (s: Section) => void;
 }
 
-/** Top-level section switch: live sessions monitor · config management · analytics · settings. */
-export function SectionTabs({ section, onChange }: Props) {
+/**
+ * Top-level section switch: live sessions monitor · config management ·
+ * analytics · settings. A rail down the left edge on desktop, a horizontal
+ * scroll strip below 700px — see docs/superpowers/specs/2026-08-15-side-rail-nav-design.md.
+ */
+export function SideRail({ section, onChange }: Props) {
   return (
-    <div className="tabs">
+    <nav className="rail" aria-label="Sections">
       {TABS.map(t => (
         <button
           key={t.id}
-          className={section === t.id ? 'tab on' : 'tab'}
+          className={section === t.id ? 'rail-link on' : 'rail-link'}
+          aria-current={section === t.id ? 'page' : undefined}
           onClick={() => onChange(t.id)}
         >
           {t.label}
         </button>
       ))}
-    </div>
+    </nav>
   );
 }

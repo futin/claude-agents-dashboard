@@ -18,7 +18,7 @@
  * See `docs/subsystems/settings.md`.
  */
 
-import type { Section } from '../components/SectionTabs';
+import type { Section } from '../components/SideRail';
 
 export const THEMES = [
   { id: 'midnight', label: 'Midnight Radar', hint: 'the original — deep navy scope room' },

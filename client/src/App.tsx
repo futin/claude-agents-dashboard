@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 
-import { SectionTabs, type Section } from './components/SectionTabs';
+import { SideRail, type Section } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
 import { usePersistedState } from './hooks/usePersistedState';
 import { SettingsProvider, useSettings } from './hooks/useSettings';
@@ -43,23 +43,27 @@ function AppShell() {
   const wide = section === 'management' || section === 'analytics';
 
   return (
-    <div className={wide ? 'wrap wide' : 'wrap'}>
-      <SectionTabs section={section} onChange={change} />
-      {section === 'sessions' ? (
-        <SessionsView />
-      ) : section === 'management' ? (
-        <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
-          <ManagementView />
-        </Suspense>
-      ) : section === 'analytics' ? (
-        <Suspense fallback={<div className="an-empty">loading…</div>}>
-          <AnalyticsView />
-        </Suspense>
-      ) : (
-        <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
-          <SettingsView />
-        </Suspense>
-      )}
+    <div className="shell">
+      <SideRail section={section} onChange={change} />
+      <main className="main">
+        <div className={wide ? 'wrap wide' : 'wrap'}>
+          {section === 'sessions' ? (
+            <SessionsView />
+          ) : section === 'management' ? (
+            <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
+              <ManagementView />
+            </Suspense>
+          ) : section === 'analytics' ? (
+            <Suspense fallback={<div className="an-empty">loading…</div>}>
+              <AnalyticsView />
+            </Suspense>
+          ) : (
+            <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
+              <SettingsView />
+            </Suspense>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
