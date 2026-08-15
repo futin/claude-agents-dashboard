@@ -23,7 +23,7 @@ import {
   serveSessions, serveSessionDetail, serveSessionChat,
   serveManagementIndex, serveManagementProject, serveManagementFile,
   serveAnalytics, serveHealth, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
-  serveRemoteAnswerToggle
+  serveRemoteAnswerToggle, servePermissionNotify
 } from './api.js';
 
 const config = loadConfig();
@@ -96,6 +96,12 @@ const server = http.createServer((req, res) => {
   if (u.pathname === '/api/remote-answer') {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return void serveRemoteAnswerToggle(config, req, res);
+  }
+  // Fire-and-forget flag from the Notification hook: a session is showing a
+  // permission dialog (see .claude/rules/permission-notify.md). Display-only.
+  if (u.pathname === '/api/permissions/notify') {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void servePermissionNotify(config, req, res);
   }
   // Like the chat route below, these must be matched before the detail regex,
   // whose `[^/?]+` would otherwise swallow `/api/sessions/:id/<anything>`.

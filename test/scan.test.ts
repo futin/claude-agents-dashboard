@@ -312,6 +312,78 @@ export function run(): number {
     assert.strictEqual(byId.get('sess-two')!.status, 'question');
   })) p++; else f++;
 
+  if (test('permissionWaits: a notified session goes blue and carries the flag', () => {
+    // The permission dialog is TUI-only: the transcript still ends on the
+    // tool_use that triggered it, which alone reads as plain "working".
+    const now = 1_700_000_000_000;
+    const toolTs = new Date(now - 30 * 1000).toISOString();
+    const root = makeRoot([
+      { dirName: '-a-pw', id: 'pw', mtimeMs: now - 30 * 1000, records: [metaRec('/a/pw', 'main'), at(assistantPending(), toolTs)] }
+    ]);
+    const opts = { root, now, liveCwds: null as Set<string> | null };
+    // notified AFTER the tool_use landed = the dialog is still up
+    const flagged = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 },
+      { ...opts, permissionWaits: new Map([['pw', now - 20 * 1000]]) });
+    assert.strictEqual(flagged.sessions[0].status, 'question');
+    assert.strictEqual(flagged.sessions[0].permissionWait, true);
+    assert.strictEqual(flagged.totals.active, 0);       // blue never counts as working
+    // Omitted / null → untouched: green, flag false.
+    const bare = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, opts);
+    assert.strictEqual(bare.sessions[0].status, 'working');
+    assert.strictEqual(bare.sessions[0].permissionWait, false);
+    const nulled = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { ...opts, permissionWaits: null });
+    assert.strictEqual(nulled.sessions[0].permissionWait, false);
+    assert.strictEqual(nulled.sessions[0].status, 'working');
+  })) p++; else f++;
+
+  if (test('permissionWaits: a message newer than the notify clears it (you answered)', () => {
+    // Answering the dialog — allow or deny — appends a record, so the newest
+    // message timestamp overtaking notifiedAt IS the "dialog closed" signal.
+    const now = 1_700_000_000_000;
+    const answeredTs = new Date(now - 10 * 1000).toISOString();
+    const root = makeRoot([
+      { dirName: '-a-pa', id: 'pa', mtimeMs: now - 10 * 1000, records: [metaRec('/a/pa', 'main'), at(assistantPending(), answeredTs)] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 },
+      { root, now, liveCwds: null, permissionWaits: new Map([['pa', now - 30 * 1000]]) });
+    assert.strictEqual(out.sessions[0].permissionWait, false);
+    assert.strictEqual(out.sessions[0].status, 'working');   // back to the plain 2×2
+  })) p++; else f++;
+
+  if (test('permissionWaits: the dead-process gate and a held wait both outrank it', () => {
+    const now = 1_700_000_000_000;
+    const toolTs = new Date(now - 30 * 1000).toISOString();
+    const specs = [{ dirName: '-a-pd2', id: 'pd2', mtimeMs: now - 30 * 1000, records: [metaRec('/a/pd2', 'main'), at(assistantPending(), toolTs)] }];
+    const waits = new Map([['pd2', now - 20 * 1000]]);
+    // A notify is fire-and-forget — no evidence the session is still alive, so
+    // lsof wins and the pill is suppressed with it.
+    const dead = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 },
+      { root: makeRoot(specs), now, liveCwds: new Set(), permissionWaits: waits });
+    assert.strictEqual(dead.sessions[0].status, 'idle');
+    assert.strictEqual(dead.sessions[0].permissionWait, false);
+    // A held remote wait is the stronger claim on the row: it stays `answer`, not `allow?`.
+    const held = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 },
+      { root: makeRoot(specs), now, liveCwds: null, permissionWaits: waits, pendingIds: new Set(['pd2']) });
+    assert.strictEqual(held.sessions[0].status, 'question');
+    assert.strictEqual(held.sessions[0].remoteQuestion, true);
+    assert.strictEqual(held.sessions[0].permissionWait, false);
+  })) p++; else f++;
+
+  if (test('permissionWaits: only the exact id matches, and a stale session is unaffected', () => {
+    const now = 1_700_000_000_000;
+    const toolTs = new Date(now - 30 * 1000).toISOString();
+    const root = makeRoot([
+      { dirName: '-a-px', id: 'perm-one', mtimeMs: now - 30 * 1000, records: [metaRec('/a/px', 'main'), at(assistantPending(), toolTs)] },
+      { dirName: '-a-py', id: 'perm-two', mtimeMs: now - 90 * 60 * 1000, records: [metaRec('/a/py', 'main'), at(assistantDone(), new Date(now - 90 * 60 * 1000).toISOString())] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 },
+      { root, now, liveCwds: null, permissionWaits: new Map([['perm-one', now - 20 * 1000], ['perm-', now]]) });
+    const byId = new Map(out.sessions.map(s => [s.id, s]));
+    assert.strictEqual(byId.get('perm-one')!.permissionWait, true);
+    assert.strictEqual(byId.get('perm-two')!.permissionWait, false);  // prefix must not match
+    assert.strictEqual(byId.get('perm-two')!.status, 'idle');
+  })) p++; else f++;
+
   if (test('empty session (no conversational message, e.g. post-/clear) is excluded', () => {
     // /clear starts a fresh UUID transcript with only queue-operation/attachment/
     // meta records and no user/assistant message yet. Its mtime is fresh, so it

@@ -46,6 +46,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   (see .claude/rules/analytics.md)
   lib/pending.ts  in-memory pending-AskUserQuestion store + state machine — the ONLY write
                   path in the app (see .claude/rules/remote-answer.md)
+  lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags, fed by
+                  the Notification hook; display-only (see .claude/rules/permission-notify.md)
   lib/remoteState.ts  remote-answer switch: REMOTE_ANSWER env gate + UI toggle persisted to
                   gitignored .remote-answer.json (the app's only disk write; fails open)
   lib/origin.ts   pure connection classifier → local | lan | tailnet | unknown, on
@@ -61,6 +63,8 @@ client/           Vite + React + TypeScript frontend
   lib/chatFilter.ts            drawer all/text/you message filter (pure; persisted)
   components/QuestionPanel.tsx pinned action bar to answer a session's AskUserQuestion
                   (hooks/usePendingQuestion — see .claude/rules/remote-answer.md)
+  components/PermissionBanner.tsx  pinned drawer strip naming the tool call a terminal
+                  permission dialog is asking about (display-only; no controls by design)
   components/RemoteAnswerToggle.tsx  toolbar pill for the remote-answer switch
                   (fed by hooks/useRemoteAnswer, which the Toolbar owns)
   components/OriginBadge.tsx   toolbar pill: how this browser reached the dashboard
@@ -78,7 +82,7 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — runs `test/run-all.ts` via tsx (263 cases).
+- `pnpm test` — runs `test/run-all.ts` via tsx (277 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
 - `pnpm tunnel` — optional: `tailscale serve --bg 5174`, fronts that fixed port over HTTPS
   on the tailnet — keep it matching the port you actually serve (prod `PORT` or a dev
@@ -120,6 +124,9 @@ relevant one when a task touches that area:
   injection mechanism, the **three gates** env/toggle/keyboard-idle that decide terminal vs
   phone, the ⚠️ route-order / hook-timeout / token traps, and the two deliberate charter
   exceptions: the write endpoints and `.remote-answer.json`).
+- `.claude/rules/permission-notify.md` — the `allow?` pill for terminal permission dialogs
+  (`lib/permissions.ts` + the `Notification` hook; the ⚠️ why-no-answer-button rationale, the
+  notifiedAt-vs-lastMessageTs self-clear, TTL as backstop only, ladder placement).
 - `.claude/rules/remote-access.md` — the ways in (localhost / LAN / Tailscale / other
   tunnels, all optional, all zero-config) and the **origin badge** (`lib/origin.ts`: the
   ⚠️ tailnet-before-ULA ordering, the XFF-only-from-loopback rule that makes `pnpm tunnel`

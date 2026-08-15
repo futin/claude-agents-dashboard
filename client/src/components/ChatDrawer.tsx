@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
 import { Markdown } from './Markdown';
+import { PermissionBanner } from './PermissionBanner';
 import QuestionPanel from './QuestionPanel';
 import { useSessionChat } from '../hooks/useSessionChat';
 import { usePendingQuestion } from '../hooks/usePendingQuestion';
@@ -167,6 +168,11 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
             shown.map(m => <Message key={m.uuid} m={m} />)
           )}
         </div>
+
+        {/* Terminal permission dialog — a sign, not a control (it can only be
+            answered there). Sits above the question panel; the two can't both
+            be live, since a permission prompt blocks the session. */}
+        {session.permissionWait && <PermissionBanner session={session} />}
 
         {/* An action bar, not a message: the question itself already renders in
             the transcript above. Pinned so it stays reachable while scrolling. */}

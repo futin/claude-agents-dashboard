@@ -153,6 +153,10 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .ag-pill.answer{border:1px solid var(--amber);color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--strip));cursor:pointer;animation:qpulse 1.6s ease-in-out infinite}
 .ag-pill.answer:hover{color:var(--ink);background:color-mix(in srgb,var(--amber) 28%,var(--strip))}
 @keyframes qpulse{0%,100%{opacity:1}50%{opacity:.55}}
+/* permission dialog open in the terminal — mustard, not amber: it needs a human
+   like the answer pill, but it can only be answered over there */
+.ag-pill.permission{border:1px solid var(--mustard);color:var(--mustard);background:color-mix(in srgb,var(--mustard) 12%,var(--strip));cursor:pointer;animation:qpulse 1.6s ease-in-out infinite}
+.ag-pill.permission:hover{color:var(--ink);background:color-mix(in srgb,var(--mustard) 28%,var(--strip))}
 .kaizen-lesson{display:flex;align-items:flex-start;gap:8px;margin-top:11px;padding-top:11px;border-top:1px solid var(--hairline);font-size:11.5px;line-height:1.5;color:var(--ink2)}
 .kaizen-lesson .ag-pill{margin-top:1px}
 .ag-type{flex-shrink:0;font-family:var(--mono);color:var(--magenta);font-weight:600}
@@ -368,6 +372,12 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .qp-send:disabled{cursor:default;opacity:.4}
 .qp-term{font-family:var(--font);font-size:11px;color:var(--ink3);background:none;border:1px solid var(--hairline);border-radius:2px;padding:7px 12px;cursor:pointer;transition:color .15s,border-color .15s}
 .qp-term:hover:not(:disabled){color:var(--ink2);border-color:var(--hairline2)}
+/* permission banner — a sign, not a control: mustard, no buttons, one line.
+   Pinned like .qpanel so it survives scrolling the history */
+.pbanner{flex-shrink:0;display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;border-top:1px solid color-mix(in srgb,var(--mustard) 45%,transparent);background:color-mix(in srgb,var(--mustard) 6%,var(--board));padding:9px 16px;font-size:11.5px;color:var(--ink2)}
+.pb-badge{font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mustard);border:1px solid var(--mustard);border-radius:2px;padding:0 6px 1px}
+.pb-text .tool{font-family:var(--mono);color:var(--cyan);font-weight:600}
+.pb-note{font-size:10.5px;color:var(--ink3);margin-left:auto}
 .chat-foot{display:flex;align-items:baseline;gap:10px;padding:9px 16px;border-top:1px solid var(--hairline);font-size:10.5px;color:var(--ink3);flex-shrink:0;font-family:var(--mono)}
 .chat-count{margin-left:auto;font-variant-numeric:tabular-nums}
 @media (max-width:700px){.chat{width:100%;border-left:none}.chat-body{padding:12px}.chat-head{padding:11px 12px}.chat-filter{padding:7px 12px}.chat-head .proj-pill,.chat-model{display:none}
@@ -380,7 +390,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 /* ---------------------------------------------- quality floor */
 :where(button,select,input,textarea,summary,[role=button]):focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
 @media (prefers-reduced-motion:reduce){
-  .working .dot,.ag-pill.answer,.tl-bar.running,.row,.chat{animation:none}
+  .working .dot,.ag-pill.answer,.ag-pill.permission,.tl-bar.running,.row,.chat{animation:none}
 }
 /* phone: strip fields wrap instead of clipping; model rides in the drawer anyway
    (same call as hiding .chat-model there) */

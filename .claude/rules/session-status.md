@@ -32,6 +32,14 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
   disk yet and `waitingOnQuestion` would lag the entire wait. Also sets `Session.remoteQuestion`,
   which is what the row's `answer` pill renders from (see `remote-answer.md`). Omitted/null
   `pendingIds` ⇒ nothing flagged, statuses byte-for-byte as before.
+- **question** also comes from an open **terminal permission dialog** ("allow Bash: `pnpm
+  dev`?") — `ScanOptions.permissionWaits` (`sessionId → notifiedAt`, from `permissions.ts`,
+  injected by `api.ts`). The dialog never reaches the transcript, so without the Notification
+  hook a parked session reads recent + pending = `working`. This rung sits **below** the
+  liveness gate (a fire-and-forget notify proves nothing about liveness, unlike a held socket)
+  and below `pendingIds`. It self-clears: a message newer than `notifiedAt` means the dialog
+  was answered. Also sets `Session.permissionWait`, which renders the row's `allow?` pill —
+  display-only, see `permission-notify.md`.
 - **working** (green, pulsing) — recent AND the turn is unfinished = machine actively churning.
   **Only this state** counts toward `totals.active`. A finished turn (end_turn) is NOT working
   even if recent — the ball is in the human's court.

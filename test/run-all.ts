@@ -17,6 +17,7 @@ import { run as runManagementEntries } from './management-entries.test.js';
 import { run as runSessionAnalyticsLog } from './sessionAnalyticsLog.test.js';
 import { run as runAnalytics } from './analytics.test.js';
 import { run as runPending } from './pending.test.js';
+import { run as runPermissions } from './permissions.test.js';
 import { run as runRemoteState } from './remoteState.test.js';
 import { run as runOrigin } from './origin.test.js';
 
@@ -39,6 +40,7 @@ failed += runManagementEntries();
 failed += runSessionAnalyticsLog();
 failed += runAnalytics();
 failed += await runPending();
+failed += await runPermissions();
 failed += runRemoteState();
 failed += runOrigin();
 

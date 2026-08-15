@@ -19,6 +19,7 @@ import {
   answer as answerPending, cancel as cancelPending, clampTimeout,
   dismissAll, getPending, pendingSessionIds, register, sanitizeQuestions
 } from './lib/pending.js';
+import { notifyPermission, permissionWaits } from './lib/permissions.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { classifyOrigin } from './lib/origin.js';
 import type { Config } from './lib/config.js';
@@ -36,9 +37,13 @@ export function serveSessions(config: Config, res: ServerResponse): void {
     // pendingIds comes from the RAM store, not disk: a question held by the
     // AskUserQuestion hook is flagged on its row before the transcript knows
     // about it, so it's visible without opening the chat drawer.
+    // permissionWaits likewise: a terminal permission dialog is TUI-only and
+    // never reaches the transcript, so the Notification hook is the only way the
+    // scan can know a session is parked on one.
     data = scanSessions(config, {
       skipProcScan: config.skipProcScan,
-      pendingIds: pendingSessionIds()
+      pendingIds: pendingSessionIds(),
+      permissionWaits: permissionWaits()
     });
   } catch (e) {
     console.error('[dashboard] scan failed:', (e as Error).message);
@@ -294,6 +299,32 @@ export async function serveSessionAnswer(
     case 'mismatch': return sendJson(res, 409, { error: 'that question is no longer the one waiting' });
     default: return sendJson(res, 400, { error: 'bad answer' });
   }
+}
+
+/**
+ * `POST /api/permissions/notify` — the Notification hook reporting that a
+ * session is showing an interactive permission dialog. Body
+ * `{sessionId, message?}`; the store keeps only the id and the arrival time.
+ *
+ * Write-shaped but not a control path: the flag decorates a row, and nothing
+ * can answer the dialog remotely. Still token-gated like the other POSTs, since
+ * it can otherwise be used to light up rows from anywhere on the LAN. The hook
+ * ignores the response entirely — every failure here is invisible to the CLI.
+ */
+export async function servePermissionNotify(
+  config: Config, req: IncomingMessage, res: ServerResponse
+): Promise<void> {
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+
+  const body = await readJsonBody(req) as { sessionId?: unknown; message?: unknown } | null;
+  if (!body || typeof body !== 'object') return sendJson(res, 400, { error: 'bad body' });
+
+  const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
+  if (!sessionId || !ID_RE.test(sessionId)) return sendJson(res, 400, { error: 'bad sessionId' });
+  if (!sessionExists(sessionId)) return sendJson(res, 404, { error: 'unknown session' });
+
+  notifyPermission(sessionId, body.message);
+  sendJson(res, 200, { ok: true });
 }
 
 /* -------------------------------------------------- management endpoints */

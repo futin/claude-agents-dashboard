@@ -33,6 +33,15 @@ export interface Session {
    * is what makes a held question visible without opening the chat drawer.
    */
   remoteQuestion: boolean;
+  /**
+   * True while the CLI is believed to be showing an interactive permission
+   * dialog ("allow Bash: pnpm dev?"). Fed by the Notification hook into an
+   * in-memory store — the dialog is TUI-only and never reaches the transcript,
+   * so without the hook a parked session is indistinguishable from a running
+   * tool. Cleared once the transcript advances past the notify (you answered).
+   * Display-only: nothing can answer that dialog remotely.
+   */
+  permissionWait: boolean;
   activity: Activity | null;
   lastTimestamp: string | null;
   updatedMs: number;

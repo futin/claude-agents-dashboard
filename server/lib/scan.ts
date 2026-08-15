@@ -36,6 +36,14 @@ interface ScanOptions {
    * free of the store. Omitted/null ⇒ no session is flagged.
    */
   pendingIds?: ReadonlySet<string> | null;
+  /**
+   * Sessions the Notification hook reported as showing a permission dialog
+   * (`permissions.ts` `permissionWaits()`), as `sessionId → notifiedAt` epoch ms,
+   * injected by the handler so this module stays free of the store. A flag is
+   * ignored once the transcript has advanced past `notifiedAt` — answering the
+   * dialog, either way, appends a record. Omitted/null ⇒ no session is flagged.
+   */
+  permissionWaits?: ReadonlyMap<string, number> | null;
 }
 
 /** Default transcripts root. */
@@ -193,8 +201,18 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     // per-cwd view. It also beats the transcript, which won't show the question
     // until the tool call resolves.
     const remoteQuestion = options.pendingIds ? options.pendingIds.has(c.id) : false;
+    // A permission dialog is open in the terminal. It never reaches the
+    // transcript, so the flag comes from the Notification hook — and it is
+    // believed only until the transcript moves on: answering the dialog (allow
+    // OR deny) appends a record, so a message newer than the notification means
+    // the dialog is gone. Unlike a held remote wait this carries no liveness
+    // evidence (the hook fired and exited), so it sits BELOW the dead gate.
+    const notifiedAt = options.permissionWaits?.get(c.id);
+    const permissionWait = !remoteQuestion && !dead && notifiedAt !== undefined
+      && !(Number.isFinite(lastMsgMs) && lastMsgMs > notifiedAt);
     if (remoteQuestion) status = 'question';                           // blue — a wait is held for it
     else if (dead) status = 'idle';                                    // gray — no live process
+    else if (permissionWait) status = 'question';                      // blue — dialog open in the terminal
     else if (parsed.waitingOnQuestion) status = 'question';            // blue — needs an answer, beats all
     else if (recent && !parsed.turnComplete) status = 'working';       // green — machine actively churning
     else if (parsed.turnComplete && !recent) status = 'idle';          // gray — finished and dormant
@@ -212,6 +230,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       contextPct: parsed.contextPct,
       status,
       remoteQuestion,
+      permissionWait,
       activity: parsed.activity,
       lastTimestamp: parsed.lastTimestamp,
       updatedMs: c.mtimeMs,

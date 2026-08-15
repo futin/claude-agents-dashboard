@@ -50,6 +50,18 @@ export function SessionRow({ s, selected, onToggle, onOpenChat }: Props) {
             answer
           </button>
         )}
+        {/* A permission dialog is open in that session's terminal. Only a pointer:
+            the dialog can't be answered from here, so the pill says where to go
+            and the drawer banner names the command it's asking about. */}
+        {s.permissionWait && !s.remoteQuestion && (
+          <button
+            className="ag-pill permission"
+            onClick={e => { e.stopPropagation(); onOpenChat(); }}
+            title="Claude is waiting for permission — answer it in that terminal"
+          >
+            allow?
+          </button>
+        )}
         {/* the pill has no own handler: clicking it toggles the row like the rest
             of .r1, expanding the panel below where the full lesson is shown. */}
         {/* the chat pill DOES stop propagation — it opens the drawer instead of
