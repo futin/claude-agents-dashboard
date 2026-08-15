@@ -21,11 +21,11 @@ export function SideRail({ section, onChange }: Props) {
   return (
     <nav className="rail" aria-label="Sections">
       {/* the app's only wordmark — Header.tsx deliberately has no <h1> */}
-      <p className="rail-brand">
+      <h1 className="rail-brand">
         <span className="rail-kicker">Claude</span>
         <br />
         Sessions Dashboard
-      </p>
+      </h1>
       {TABS.map(t => (
         <button
           key={t.id}
