@@ -76,6 +76,23 @@ the rail overflows by the scale factor. Mitigation:
 `--font-scale` is already set on `<html>` by `hooks/useSettings.tsx:60`. This must be
 verified visually at 90 / 100 / 110%, not assumed.
 
+### Inner breakpoints shift by the rail's width
+
+`.main` is now 200px narrower than the viewport on desktop — the rail's `flex:0 0 200px`
+comes out of the space content used to have to itself, not out of `.wrap`'s. Every existing
+`min-width`/`max-width` breakpoint that governs content living inside `.main` was written
+and tuned against the viewport, back when the tab row sat inside the page instead of beside
+it, so each one now engages 200px later than the content width it was actually measured
+against. The Management view's three-column grid (`styles.css:275`, `:320`) is the case that
+surfaced it: its `1000px`/`1001px` pair assumed `.mgmt` could see the full viewport, so at a
+1001px viewport post-rail the grid actually had only ~801px of content width to lay out in,
+and its third track fell from ~425px to ~225px — nothing overflowed, but the detail pane
+became too narrow to read comfortably. Both thresholds move to `1200px`/`1201px` so `.mgmt`
+sees the same ~1001px of content width the original pair targeted. Any future breakpoint
+added for `.main`-nested content must be expressed against the content width the rule
+actually needs, then have the rail's 200px added to arrive at the viewport number to write
+in the media query — not picked by testing against the full viewport directly.
+
 ## 2. Rail styling
 
 Inherits `.tab`'s type treatment verbatim — `var(--display)` (Barlow Condensed), 11.5px,
