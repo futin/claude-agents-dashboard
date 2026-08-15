@@ -4,6 +4,7 @@ docs-sync:
     - client/src/hooks/usePersistedState.ts
     - client/src/App.tsx
     - client/src/lib/filterSort.ts
+  kind: subsystem
 ---
 
 # View persistence (Toolbar filters/sort)

@@ -19,7 +19,7 @@
  * means the wait is over. The TTL below is only a backstop for the paths that
  * never append — a killed session, a dismissed dialog, a lost notify.
  *
- * See `.claude/rules/permission-notify.md`.
+ * See `docs/subsystems/permission-notify.md`.
  */
 
 /** Backstop reaper. Long, because the primary clear is the transcript check. */

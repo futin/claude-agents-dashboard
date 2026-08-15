@@ -1,3 +1,13 @@
+---
+docs-sync:
+  sources:
+    - server/
+    - client/
+    - scripts/
+    - package.json
+  kind: readme
+---
+
 # Claude Agents Dashboard
 
 A live, always-open monitor for **parallel Claude Code sessions**. For the top N
@@ -67,16 +77,16 @@ That's the whole basic setup. Everything below is optional.
 - **Remote answers hook** — 4 steps, ~2 minutes:
   [setup](docs/features/remote-answers.md#setup).
 - **Docker** — production and dev images, read-only `~/.claude` mount:
-  [docker](docs/architecture/docker.md).
+  [docker](docs/workflows/docker.md).
 - **Configuration** — everything is optional, defaults work out of the box; the full
-  `.env` reference is in [configuration](docs/architecture/configuration.md).
+  `.env` reference is in [configuration](docs/workflows/configuration.md).
 
 ## Documentation
 
 - [`docs/architecture/`](docs/architecture/) — how the thing is built:
-  [overview](docs/architecture/overview.md) (domains, data flow, HTTP surface, layout),
-  [configuration](docs/architecture/configuration.md),
-  [docker](docs/architecture/docker.md).
+  [overview](docs/overview.md) (domains, data flow, HTTP surface, layout),
+  [configuration](docs/workflows/configuration.md),
+  [docker](docs/workflows/docker.md).
 - [`docs/features/`](docs/features/) — what each part does and how to use it (linked
   above).
 - [`.claude/rules/`](.claude/rules/) — contributor deep dives: per-domain invariants and

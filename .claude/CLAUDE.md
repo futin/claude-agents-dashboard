@@ -5,6 +5,7 @@ docs-sync:
     - client/src/
     - shared/types.ts
     - package.json
+  kind: index
 ---
 
 # Claude Agents Dashboard
@@ -47,7 +48,7 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/pending.ts  in-memory pending-AskUserQuestion store + state machine — the ONLY write
                   path in the app (see .claude/rules/remote-answer.md)
   lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags, fed by
-                  the Notification hook; display-only (see .claude/rules/permission-notify.md)
+                  the Notification hook; display-only (see docs/subsystems/permission-notify.md)
   lib/remoteState.ts  remote-answer switch: REMOTE_ANSWER env gate + UI toggle persisted to
                   gitignored .remote-answer.json (the app's only disk write; fails open)
   lib/origin.ts   pure connection classifier → local | lan | tailnet | unknown, on
@@ -72,7 +73,7 @@ client/           Vite + React + TypeScript frontend
   components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane, FileViewer)
   components/analytics/AnalyticsView.tsx  the report-card list (own lazy chunk; read-only)
   hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
-  hooks/usePersistedState.ts  localStorage-backed useState (see .claude/rules/view-persistence.md)
+  hooks/usePersistedState.ts  localStorage-backed useState (see docs/subsystems/view-persistence.md)
 vite.config.ts    dev proxy /api → backend; reuses server loadConfig() for the port
 test/             node-assert tests over backend domain logic, tmpdir JSONL fixtures
 ```
@@ -114,7 +115,7 @@ relevant one when a task touches that area:
   `lib/sessionAnalyticsLog.ts`; `/kaizen` is the sole producer; read-only invariant). The
   `/kaizen` skill is **vendored** at `.claude/skills/kaizen/` so collaborators can populate
   the tab (each user's own global log); keep it in lockstep with the log format above.
-- `.claude/rules/view-persistence.md` — Toolbar filter/sort localStorage persistence
+- `docs/subsystems/view-persistence.md` — Toolbar filter/sort localStorage persistence
   (`hooks/usePersistedState.ts`, fail-open shallow-merge).
 - `.claude/rules/chat-tail.md` — the chat-history drawer (`lib/chat.ts` byte-offset paging,
   what's filtered out of a transcript, the all/text/you view filter, the markdown subset
@@ -124,7 +125,7 @@ relevant one when a task touches that area:
   injection mechanism, the **three gates** env/toggle/keyboard-idle that decide terminal vs
   phone, the ⚠️ route-order / hook-timeout / token traps, and the two deliberate charter
   exceptions: the write endpoints and `.remote-answer.json`).
-- `.claude/rules/permission-notify.md` — the `allow?` pill for terminal permission dialogs
+- `docs/subsystems/permission-notify.md` — the `allow?` pill for terminal permission dialogs
   (`lib/permissions.ts` + the `Notification` hook; the ⚠️ why-no-answer-button rationale, the
   notifiedAt-vs-lastMessageTs self-clear, TTL as backstop only, ladder placement).
 - `.claude/rules/remote-access.md` — the ways in (localhost / LAN / Tailscale / other

@@ -6,6 +6,7 @@ docs-sync:
     - server/lib/usage.ts
     - scripts/ask-remote-hook.sh
     - .env.example
+  kind: workflow
 ---
 
 # Configuration

@@ -8,6 +8,7 @@ docs-sync:
     - client/src/
     - vite.config.ts
     - package.json
+  kind: overview
 ---
 
 # Architecture overview

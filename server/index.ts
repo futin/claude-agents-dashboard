@@ -98,7 +98,7 @@ const server = http.createServer((req, res) => {
     return void serveRemoteAnswerToggle(config, req, res);
   }
   // Fire-and-forget flag from the Notification hook: a session is showing a
-  // permission dialog (see .claude/rules/permission-notify.md). Display-only.
+  // permission dialog (see docs/subsystems/permission-notify.md). Display-only.
   if (u.pathname === '/api/permissions/notify') {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return void servePermissionNotify(config, req, res);

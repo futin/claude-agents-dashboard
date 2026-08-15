@@ -25,7 +25,7 @@
 #   { "type": "command", "command": "bash \"$HOME/.claude/hooks/permission-notify.sh\"",
 #     "timeout": 5 }
 #
-# Requires: curl, jq. See .claude/rules/permission-notify.md in the dashboard repo.
+# Requires: curl, jq. See docs/subsystems/permission-notify.md in the dashboard repo.
 
 INPUT=$(cat)
 

@@ -7,6 +7,7 @@ docs-sync:
     - scripts/host-credentials.sh
     - scripts/lan-ip.sh
     - server/lib/config.ts
+  kind: workflow
 ---
 
 # Running in Docker

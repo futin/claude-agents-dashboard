@@ -19,7 +19,7 @@ export function SessionsView() {
   const { data, connected } = useSessions();
   const [view, setView] = usePersistedState<View>('dashboard.view', DEFAULT_VIEW);
   // Not persisted: session ids churn, so a restored selection would be stale
-  // (same reasoning as row expansion — see .claude/rules/view-persistence.md).
+  // (same reasoning as row expansion — see docs/subsystems/view-persistence.md).
   const [chatId, setChatId] = useState<string | null>(null);
 
   const shown = useMemo(

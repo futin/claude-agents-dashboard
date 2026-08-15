@@ -1,3 +1,14 @@
+---
+docs-sync:
+  sources:
+    - server/lib/permissions.ts
+    - server/index.ts
+    - server/lib/scan.ts
+    - scripts/permission-notify-hook.sh
+    - client/src/components/PermissionBanner.tsx
+  kind: subsystem
+---
+
 # Permission prompts (the `allow?` pill)
 
 When the CLI shows its interactive permission dialog — *"Do you want to allow Bash:
