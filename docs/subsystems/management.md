@@ -12,7 +12,7 @@ docs-sync:
 
 # Management — read-only config browser
 
-A **Management** tab (top-level `SectionTabs` in `App.tsx`, persisted as
+A **Management** section (top-level `SideRail` in `App.tsx`, persisted as
 `dashboard.section`) shows all Claude config on the machine in a three-pane layout.
 Read-only v1 — nothing is ever written.
 

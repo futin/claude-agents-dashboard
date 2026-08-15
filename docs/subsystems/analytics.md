@@ -14,7 +14,7 @@ docs-sync:
 
 # Analytics — kaizen-fed session post-mortems
 
-An **Analytics** tab (third `SectionTabs` entry, persisted `dashboard.section`) shows the
+An **Analytics** section (third `SideRail` entry, persisted `dashboard.section`) shows the
 last N (default 5) sessions the **`/kaizen` skill has logged**.
 `~/.claude/session-analytics-log.md` (one line per `/kaizen` run) is the **sole trigger** —
 a session appears here only because `/kaizen` logged it. The dashboard never writes that
