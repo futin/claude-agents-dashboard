@@ -1,0 +1,58 @@
+# docs/.docs-sync.yml — layout contract. Written by /docs-sync bootstrap after
+# user sign-off; every later run reads and obeys it. Edit only via bootstrap.
+docs-sync-plan: 1
+layout: standard-1
+docs:
+  - path: docs/overview.md
+    kind: overview
+  - path: docs/subsystems/analytics.md
+    kind: subsystem
+    note: Analytics tab — kaizen-fed session post-mortems
+  - path: docs/subsystems/chat.md
+    kind: subsystem
+    note: chat drawer + transcript tail endpoint
+  - path: docs/subsystems/management.md
+    kind: subsystem
+    note: read-only config browser
+  - path: docs/subsystems/remote-access.md
+    kind: subsystem
+    note: origin classification and the ways in
+  - path: docs/subsystems/remote-answer.md
+    kind: subsystem
+    note: the only write path — answering AskUserQuestion remotely
+  - path: docs/subsystems/sessions.md
+    kind: subsystem
+    note: session rows, status machine, subagent detail
+  - path: docs/subsystems/usage-limits.md
+    kind: subsystem
+    note: header 5h/week usage bars
+  - path: docs/subsystems/view-persistence.md
+    kind: subsystem
+    note: toolbar filter/sort localStorage persistence
+  - path: docs/subsystems/permission-notify.md
+    kind: subsystem
+    note: the allow? pill for terminal permission dialogs
+  - path: docs/workflows/configuration.md
+    kind: workflow
+    note: env and hook-side variable reference
+  - path: docs/workflows/docker.md
+    kind: workflow
+    note: running in containers, dev and prod
+  - path: docs/workflows/remote-answer-setup.md
+    kind: workflow
+    note: per-machine hook setup for remote answers
+  - path: README.md
+    kind: readme
+  - path: .claude/CLAUDE.md
+    kind: index
+out-of-scope:
+  - path: docs/ideas/
+    reason: idea notes — records of a moment
+  - path: docs/plans/
+    reason: records of a moment
+  - path: docs/superpowers/
+    reason: plans and specs — records of a moment
+  - path: docs/learning/
+    reason: study-session artifacts; regenerate rather than maintain
+  - path: .claude/skills/
+    reason: vendored skills, maintained upstream
