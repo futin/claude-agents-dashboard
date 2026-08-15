@@ -115,7 +115,7 @@ server/
   lib/settings.ts persisted idle threshold + env-override detection
   lib/origin.ts   connection classifier → local | lan | tailnet | public
 client/src/
-  App.tsx         section tabs (Sessions | Management | Analytics | Settings), lazy views
+  App.tsx         shell: side rail (Sessions | Management | Analytics | Settings) + lazy views
   components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
                   settings/
