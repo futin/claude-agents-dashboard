@@ -6,11 +6,16 @@ docs-sync:
     - server/lib/config.ts
     - server/lib/agents.ts
     - server/lib/agents-cache.ts
+    - server/lib/title-cache.ts
     - client/src/components/SessionsView.tsx
+    - client/src/components/SessionList.tsx
     - client/src/components/SessionRow.tsx
+    - client/src/components/SessionDetail.tsx
+    - client/src/hooks/useSessions.ts
+    - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
+  verified: 3a908676f65ffc008196ec4a1db0b2d0a919a3ef
 ---
 
 # Sessions — live monitor, status machine, subagent detail
@@ -21,7 +26,9 @@ most-recent-first. Everything is derived from the transcript files on disk.
 ## Per-session rows
 
 - **Status dot** — one of four states (below).
-- **Project + git branch** — real path from the transcript's `cwd`, plus its `gitBranch`.
+- **Name + git branch** — a named session leads with its custom title and demotes the
+  project to a pill; an unnamed one leads with the project itself (real path from the
+  transcript's `cwd`). Either way the row also carries its `gitBranch`.
 - **Model + CLI version** — what the session is running.
 - **Context bar + %** — current context tokens vs. the model's window (1M for
   Sonnet/Opus/Fable, 200k for Haiku and unknowns; override with
@@ -29,6 +36,49 @@ most-recent-first. Everything is derived from the transcript files on disk.
 - **Activity line** — the most recent tool call (e.g. `Edit server.ts`,
   `Task Explore: map the codebase`).
 - **Relative time** — since the last conversational message.
+
+## Custom session titles
+
+Claude Code writes a session's name as a `custom-title` record in the transcript, and
+finding it is harder than it looks: a named session used to show its title for a while and
+then silently revert to the project name, for two independent reasons.
+
+**It isn't the newest record.** The record is appended when a session is named *or
+selected*, and ordinary work piles on top of it — so it's the newest record only right
+after a select. `transcript.ts`'s newest-first scan breaks as soon as its handful of hot
+fields are filled, usually within two records, while the title sits deeper.
+`findSessionName` moves the lookup out of that loop and only `JSON.parse`s lines that
+textually hold the `"custom-title"` marker, so the break stays and an *unnamed* session
+never pays a full-window parse on every 3s poll.
+
+**It sinks below the tail window.** `readTranscript` reads only the last 256KB; on a busy
+session the record ends up far below that (observed 764KB below EOF on a 1.2MB
+transcript), where no scan order helps. Widening the window is not the fix — transcripts
+here run to several megabytes and the scan re-reads every session every 3 seconds. So
+`title-cache.ts` searches the tail first (free — those bytes are already decoded) and only
+on a miss hunts backward through the rest of the file a chunk at a time, newest hit wins.
+
+**What gets remembered is the searched byte range, not just the answer** —
+`resolveSessionTitle` stores `{ title, scannedFrom, size }` per file. A later poll can then
+prove its own tail window joins up with the range already covered and skip the disk
+entirely. A miss is cached too; otherwise every poll re-scans every untitled session.
+
+Invariants:
+
+- **Coverage never expires** — transcripts are append-only, so "already searched" stays
+  true forever. A file that *shrank* was rotated or truncated and drops its entry.
+- **A tail hit wins outright** over anything remembered: the tail is the newest bytes, so
+  a rename takes effect on the next poll.
+- **Chunks overlap by a whole record**, not by the marker's length. The first boundary is
+  the tail window's own start, whose straddling record the caller already dropped as a
+  partial line — so a record can begin just below the window and carry its marker just
+  above it, and a marker-sized overlap would miss it.
+- **The backward marker scan decodes latin1**, one char per byte, so string indices stay
+  byte-exact no matter what UTF-8 sits around them. Decoding utf8 there would desync every
+  offset.
+- **`"New session"` is a placeholder, not a title** — an older real title still wins. Nor
+  is the marker appearing inside message text: the recovered line fails to parse as a
+  `custom-title` record, which is the right answer for a decoy.
 
 ## The status machine (the left dot)
 
@@ -112,8 +162,22 @@ true; false unless that record is an assistant with `end_turn`), `waitingOnQuest
 
 Click a row to expand it: the dashboard fetches `GET /api/sessions/:id` and lists the
 subagents that session launched via the `Task` tool — type, description, running/done,
-duration, tokens. Served by an incremental byte-offset cache (`agents.ts` /
-`agents-cache.ts`) so repeat opens stay cheap.
+duration, tokens, tool-use count — under a `N running · N finished · N agents` summary.
+Served by an incremental byte-offset cache (`agents.ts` / `agents-cache.ts`) so repeat
+opens stay cheap.
+
+`useSessionDetail` keeps polling that endpoint **every 3s for as long as the row stays
+open** — not once on expand — because the panel is watching live work. It clears its state
+when the selected id changes, so switching rows never flashes the previous session's
+agents, and it keeps the last snapshot when a fetch fails rather than blanking the panel.
+
+**The timeline.** Each agent gets a start→finish bar on **one shared time axis**: the
+range runs from the earliest launch to the latest end, with `now` standing in for agents
+still running (`timeRange` in `SessionDetail.tsx`). The sharing is the whole point —
+overlapping bars are agents that ran in **parallel**, which is what you want to know about
+a fan-out and what you cannot see if each bar is scaled to its own duration. `now` is read
+per render, so the 3s poll makes running bars grow on their own. An agent with no parsable
+start timestamp still gets a row, just no bar.
 
 ## Filter + sort toolbar
 

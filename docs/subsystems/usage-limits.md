@@ -3,8 +3,9 @@ docs-sync:
   sources:
     - server/lib/usage.ts
     - server/api.ts
+    - client/src/components/Header.tsx
   kind: subsystem
-  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
+  verified: 3a908676f65ffc008196ec4a1db0b2d0a919a3ef
 ---
 
 # Usage limits (header bars)

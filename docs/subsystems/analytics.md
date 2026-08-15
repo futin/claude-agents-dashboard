@@ -6,9 +6,10 @@ docs-sync:
     - server/lib/sessionAnalyticsLog.ts
     - server/api.ts
     - client/src/components/analytics/
+    - client/src/lib/analyticsFilterSort.ts
     - .claude/skills/kaizen/
   kind: subsystem
-  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
+  verified: 3a908676f65ffc008196ec4a1db0b2d0a919a3ef
 ---
 
 # Analytics — kaizen-fed session post-mortems
@@ -65,6 +66,31 @@ project tag.
   is client-only.
 - **Toggles:** `SHOW_ANALYTICS=false` hides the tab, display cap `ANALYTICS_KEEP=<n>`
   (config.ts, default 5) — see [configuration](../workflows/configuration.md).
+
+## Filter + sort
+
+The tab mirrors the Sessions toolbar rather than inventing its own — `AnalyticsToolbar`
+reuses the same `MultiSelect` widget and `.toolbar` CSS. Facets are **project**, **model**
+(a report matches if *any* of its models is selected), a **logged-at window**, and a sort
+key (recency / tokens / project) with a direction toggle. An empty facet array means "no
+filter", not "match nothing".
+
+`applyAnalyticsView` in `lib/analyticsFilterSort.ts` is pure — filter, then sort, no
+mutation — and unit-tested in `test/analytics-filter-sort.test.ts`. Two deliberate
+tolerances: a report whose transcript is gone (`analysis: null`) sorts as **0 tokens**
+rather than dropping out of a token sort, and an unparseable `loggedAt` **fails open**
+(kept) rather than being silently filtered away.
+
+Windows are **day-granular** (`Any time` / 7 / 30 / 90 days) because `loggedAt` is a
+`YYYY-MM-DD` date with no time-of-day — the Sessions view's "15 min / 1 hour" windows have
+nothing to bite on here.
+
+Cards are **collapsed by default** and expand on click. The toolbar selection persists to
+`localStorage` under `dashboard.analyticsView` (see
+[view-persistence](view-persistence.md)); which cards are expanded is deliberately
+ephemeral, matching Sessions row-expansion. All of it is client-side over the payload
+`GET /api/analytics` already returned — no backend change, so the read-only invariant
+above still holds.
 
 ## Invariants
 
