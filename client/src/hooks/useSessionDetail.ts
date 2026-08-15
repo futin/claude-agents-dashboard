@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 
+import { useSettings } from './useSettings';
 import type { SessionDetail } from '../../../shared/types';
-
-const POLL_MS = 3000;
 
 /**
  * Fetch `/api/sessions/:id` (a session's subagent activity) while that session
- * is selected, polling every 3s. Returns null when `id` is null or before the
- * first response. Full-file read on the server, so it only runs on selection.
+ * is selected, polling on the Settings page's interval (3s by default). Returns
+ * null when `id` is null or before the first response. Full-file read on the
+ * server, so it only runs on selection.
  */
 export function useSessionDetail(id: string | null): SessionDetail | null {
   const [detail, setDetail] = useState<SessionDetail | null>(null);
+  const { settings: { refreshMs } } = useSettings();
 
   useEffect(() => {
     if (!id) {
@@ -31,12 +32,12 @@ export function useSessionDetail(id: string | null): SessionDetail | null {
     }
 
     poll();
-    const timer = setInterval(poll, POLL_MS);
+    const timer = setInterval(poll, refreshMs);
     return () => {
       alive = false;
       clearInterval(timer);
     };
-  }, [id]);
+  }, [id, refreshMs]);
 
   return detail;
 }

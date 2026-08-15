@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { usePersistedState } from './usePersistedState';
+import { useSettings } from './useSettings';
 import type { PendingPlan, PlanAnswerRequest, SessionPlan } from '../../../shared/types';
-
-const POLL_MS = 3000;
 
 /**
  * idle       — nothing sent for the current plan
@@ -40,17 +39,23 @@ export function usePendingPlan(id: string): PendingPlanState {
   const [needsToken, setNeedsToken] = useState(false);
   // Shared with the question panel — one dashboard, one token.
   const [token, setToken] = usePersistedState<string>('dashboard.answerToken', '');
+  const { settings: { refreshMs } } = useSettings();
 
   /** planId the current phase refers to — a new plan resets the panel. */
   const phaseFor = useRef<string | null>(null);
   const tokenRef = useRef(token);
   tokenRef.current = token;
 
+  // Kept separate from the poll below: retuning the refresh rate restarts the
+  // interval, and it must not wipe the panel of a plan already on screen.
   useEffect(() => {
-    let live = true;
     setPending(null);
     setPhase('idle');
     phaseFor.current = null;
+  }, [id]);
+
+  useEffect(() => {
+    let live = true;
 
     async function poll(): Promise<void> {
       let body: SessionPlan | null = null;
@@ -77,12 +82,12 @@ export function usePendingPlan(id: string): PendingPlanState {
     }
 
     void poll();
-    const timer = setInterval(() => void poll(), POLL_MS);
+    const timer = setInterval(() => void poll(), refreshMs);
     return () => {
       live = false;
       clearInterval(timer);
     };
-  }, [id]);
+  }, [id, refreshMs]);
 
   const post = useCallback(async (body: PlanAnswerRequest): Promise<'ok' | 'gone' | 'token' | 'error'> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

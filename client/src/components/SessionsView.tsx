@@ -4,8 +4,11 @@ import { Header } from './Header';
 import { SessionList } from './SessionList';
 import { Toolbar } from './Toolbar';
 import { usePersistedState } from '../hooks/usePersistedState';
+import { useSessionAlerts } from '../hooks/useSessionAlerts';
 import { useSessions } from '../hooks/useSessions';
+import { useSettings } from '../hooks/useSettings';
 import { applyView, DEFAULT_VIEW, type View } from '../lib/filterSort';
+import { formatInterval } from '../lib/settings';
 
 /** Own chunk — the drawer only loads the first time a chat is opened. */
 const ChatDrawer = lazy(() => import('./ChatDrawer'));
@@ -17,6 +20,10 @@ const ChatDrawer = lazy(() => import('./ChatDrawer'));
  */
 export function SessionsView() {
   const { data, connected } = useSessions();
+  const { settings } = useSettings();
+  // Fed the unfiltered list on purpose: a session you filtered out of view still
+  // needs you, and a filter is about what you're reading, not what you're told.
+  useSessionAlerts(data?.sessions);
   const [view, setView] = usePersistedState<View>('dashboard.view', DEFAULT_VIEW);
   // Not persisted: session ids churn, so a restored selection would be stale
   // (same reasoning as row expansion — see docs/subsystems/view-persistence.md).
@@ -36,7 +43,7 @@ export function SessionsView() {
       <SessionList sessions={shown} onOpenChat={setChatId} />
       <div className="foot">
         {connected
-          ? 'live · refreshing every 3s'
+          ? `live · refreshing every ${formatInterval(settings.refreshMs)}`
           : <span className="off">disconnected — server stopped?</span>}
       </div>
       {chatSession && (

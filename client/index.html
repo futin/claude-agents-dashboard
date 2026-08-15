@@ -4,6 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Claude Sessions</title>
+<script>
+// Stamp the saved theme before first paint. Without this every load renders in
+// the default palette until React mounts, which reads as a flash — worst on the
+// light theme. Kept inline and tiny on purpose: it must run before the stylesheet
+// paints, so it cannot be a module. Mirrors hooks/useSettings.tsx; fails silently
+// (private mode, no storage) straight back to the defaults.
+try {
+  var s = JSON.parse(localStorage.getItem('dashboard.settings') || '{}');
+  var r = document.documentElement;
+  if (s.theme) r.dataset.theme = s.theme;
+  if (s.density) r.dataset.density = s.density;
+  if (s.fontScale) r.style.setProperty('--font-scale', String(s.fontScale / 100));
+} catch (e) {}
+</script>
 </head>
 <body>
 <div id="root"></div>

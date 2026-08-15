@@ -6,6 +6,7 @@
  *   GET  /api/sessions          → JSON session snapshot (see api.ts)
  *   GET  /api/sessions/:id      → one session's subagent activity
  *   GET  /api/sessions/:id/chat → a page of that session's chat history
+ *   GET/POST /api/settings      → the non-per-device settings (see lib/settings.ts)
  *   everything else             → static files from client/dist (production build)
  *
  * In development you visit the Vite dev server (default :5173), which proxies
@@ -24,7 +25,8 @@ import {
   serveManagementIndex, serveManagementProject, serveManagementFile,
   serveAnalytics, serveHealth, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
   serveRemoteAnswerToggle, servePermissionNotify,
-  servePlanWait, serveSessionPlan, serveSessionPlanAnswer
+  servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
+  serveSettingsRead, serveSettingsWrite
 } from './api.js';
 
 const config = loadConfig();
@@ -88,6 +90,13 @@ const server = http.createServer((req, res) => {
   if (u.pathname === '/api/health') {
     return void serveHealth(config, res, req);
   }
+  // Read on GET, write on POST — the write is guarded like the others below.
+  // Only holds settings a separate process must agree on (see lib/settings.ts);
+  // the rest of the Settings page is per-device localStorage.
+  if (u.pathname === '/api/settings') {
+    if (req.method === 'POST') return void serveSettingsWrite(config, req, res);
+    return void serveSettingsRead(res);
+  }
   // The only write endpoints in the app (see docs/subsystems/remote-answer.md).
   // `wait` holds its response open for minutes — that is by design.
   if (u.pathname === '/api/questions/wait') {
@@ -133,7 +142,10 @@ const server = http.createServer((req, res) => {
   const detail = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)/);
   if (detail) return serveSessionDetail(decodeURIComponent(detail[1]), res);
   if (req.url && req.url.startsWith('/api/sessions')) {
-    return serveSessions(config, res);
+    // Query params carry the Settings page's per-device scan knobs (limit /
+    // lookback / active). The detail regex above needs a slash, so a bare
+    // `/api/sessions?limit=20` still lands here.
+    return serveSessions(config, res, u.searchParams);
   }
   return serveStatic(req.url || '/', res);
 });

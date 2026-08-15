@@ -25,8 +25,9 @@ import {
 } from './lib/plans.js';
 import { notifyPermission, permissionWaits } from './lib/permissions.js';
 import { getState, setEnabled } from './lib/remoteState.js';
+import { getSettings, setSettings } from './lib/settings.js';
 import { classifyOrigin } from './lib/origin.js';
-import type { Config } from './lib/config.js';
+import { toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, PlanWaitResult, ScopeConfig, SessionPlan,
   SessionQuestion, SessionsResponse, SessionChat, SessionDetail, WaitResult
@@ -35,7 +36,37 @@ import type {
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
 const ID_RE = /^[A-Za-z0-9._-]+$/;
 
-export function serveSessions(config: Config, res: ServerResponse): void {
+/**
+ * Hard ceilings for the per-request scan overrides below. `limit` is the one
+ * that matters: unclamped, a single typo'd query string would make the server
+ * tail-read thousands of transcripts on every 3-second poll.
+ */
+const SCAN_CAPS = { limit: 50, lookback: 168, active: 120 } as const;
+
+/**
+ * Apply the Settings page's scan knobs, which ride along as query params on the
+ * poll the client already makes (`?limit=&lookback=&active=`). They are per
+ * device, so they stay stateless request input rather than server state —
+ * nothing here is persisted, and an absent or unusable value falls back to the
+ * configured default. Pure; unit-tested in `test/scan-params.test.ts`.
+ */
+export function scanOverrides(config: Config, params?: URLSearchParams): Config {
+  if (!params) return config;
+  const pick = (key: string, fallback: number, cap: number): number => {
+    const raw = params.get(key);
+    if (raw === null) return fallback;
+    return Math.min(cap, toPosInt(raw, fallback));
+  };
+  return {
+    ...config,
+    maxSessions: pick('limit', config.maxSessions, SCAN_CAPS.limit),
+    lookbackHours: pick('lookback', config.lookbackHours, SCAN_CAPS.lookback),
+    activeWindowMin: pick('active', config.activeWindowMin, SCAN_CAPS.active)
+  };
+}
+
+export function serveSessions(baseConfig: Config, res: ServerResponse, params?: URLSearchParams): void {
+  const config = scanOverrides(baseConfig, params);
   let data: SessionsResponse;
   try {
     // pendingIds comes from the RAM store, not disk: a question held by the
@@ -209,13 +240,38 @@ function sessionExists(id: string): boolean {
  * `GET /api/health` — the hook's reachability probe, and the client's read of the
  * remote-answer switch. `remoteAnswer` is the single field the hook acts on; the
  * rest lets the UI explain *why* it's off.
+ *
+ * `idleSecs` rides along because the hooks check it immediately after this probe
+ * (`ask-remote-hook.sh`), and a second round trip to fetch one integer would add
+ * latency to every question they intercept.
  */
 export function serveHealth(config: Config, res: ServerResponse, req?: IncomingMessage): void {
   sendJson(res, 200, {
     ok: true,
     ...getState(config),
+    idleSecs: getSettings().idleSecs,
     origin: classifyOrigin(req?.socket?.remoteAddress, req?.headers)
   });
+}
+
+/** `GET /api/settings` — the settings that aren't per-device (see lib/settings.ts). */
+export function serveSettingsRead(res: ServerResponse): void {
+  sendJson(res, 200, getSettings());
+}
+
+/**
+ * `POST /api/settings` — change them from the Settings page. Token-guarded like
+ * the other write endpoints; 400 rather than a silent no-op when the body
+ * carries nothing usable, so the UI never shows a value the server refused.
+ */
+export async function serveSettingsWrite(
+  config: Config, req: IncomingMessage, res: ServerResponse
+): Promise<void> {
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  const body = await readJsonBody(req);
+  const next = setSettings(body);
+  if (!next) return sendJson(res, 400, { error: 'expected {idleSecs: number}' });
+  sendJson(res, 200, next);
 }
 
 /**

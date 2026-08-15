@@ -28,6 +28,10 @@ keeps it current:
 mkdir -p ~/.claude/hooks && ln -s "$PWD/scripts/ask-remote-hook.sh" ~/.claude/hooks/ask-remote.sh
 ```
 
+> The symlink matters more than it used to: the hook now reads its idle threshold off
+> `/api/health` so the [Settings tab](../subsystems/settings.md) can drive it. A hook you
+> *copied* instead keeps the old hardcoded default until you re-copy it.
+
 **3. Register it** in `~/.claude/settings.json`. Create the `AskUserQuestion` matcher if
 you don't have one; keep any existing entry — hooks under one matcher run in parallel:
 
@@ -70,10 +74,14 @@ without waiting for a real question.
 - **Nothing happens at all** — `jq` missing: **without `jq` the hook exits silently**,
   which looks exactly like "not installed". Check `jq --version` first.
 - **Remote answering never engages** — you're not on macOS: gate 3 reads keyboard idle
-  from `IOHIDSystem`; elsewhere that read fails, which counts as "at the desk". On
-  Linux/WSL set `CLAUDE_DASHBOARD_IDLE_SECS=0` to skip the check — every question then
+  from `IOHIDSystem`; elsewhere that read fails, which counts as "at the desk". Set the
+  threshold to `0` (Settings → Away after) to skip the check — every question then
   waits for the dashboard until answered or timed out, and the panel's **answer in the
   terminal** button is your way back.
+- **Changing "Away after" in Settings does nothing** — an exported
+  `CLAUDE_DASHBOARD_IDLE_SECS` beats it, most often from the `env` block of
+  `~/.claude/settings.json`. The Settings page detects this and names the file; remove it
+  there. (Or you copied the hook instead of symlinking it — see step 2.)
 - **The window feels shorter than configured** — the `settings.json` `timeout` is below
   the wait window; the CLI kills the hook first (see the warning in step 3).
 - **403 from the POSTs** — `ANSWER_TOKEN` is set server-side but missing/wrong in

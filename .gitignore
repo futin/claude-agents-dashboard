@@ -7,3 +7,4 @@ client/dist/
 .claude/launch.json
 .ua/.trash-*/
 .remote-answer.json
+.dashboard-settings.json

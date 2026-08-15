@@ -199,13 +199,46 @@ export interface RemoteAnswerState {
 export type ConnectionOrigin = 'local' | 'lan' | 'tailnet' | 'unknown';
 
 /**
- * `GET /api/health`. The remote-answer switch plus the caller's own connection
- * origin. `origin` is optional so an older server (or a test double) that omits
- * it simply hides the badge.
+ * `GET /api/settings`, `POST /api/settings` — the settings the browser may
+ * change that are *not* per-device. Only facts a separate process has to agree
+ * on land here; everything a single browser owns (theme, refresh rate, row
+ * count) lives in localStorage instead. See `docs/subsystems/settings.md`.
+ */
+export interface ServerSettings {
+  /**
+   * Seconds of keyboard/mouse idle before the remote-answer hooks count you as
+   * away from the desk. `0` skips the check (always offer the question here).
+   */
+  idleSecs: number;
+  /** False when the value couldn't be written to disk (won't survive a restart). */
+  persisted: boolean;
+  /**
+   * Set when an exported `CLAUDE_DASHBOARD_IDLE_SECS` will beat `idleSecs` in the
+   * hooks, which would make this setting silently do nothing. Detected, not
+   * fixed — the app doesn't edit `~/.claude/settings.json` — so the UI can say
+   * which file to clear. `null` when nothing overrides it.
+   */
+  idleOverride: IdleOverride | null;
+}
+
+/** Where an overriding `CLAUDE_DASHBOARD_IDLE_SECS` was found. */
+export interface IdleOverride {
+  value: string;
+  /** `settings.json` → the `env` block in ~/.claude; `environment` → the server's own shell. */
+  source: 'settings.json' | 'environment';
+}
+
+/**
+ * `GET /api/health`. The remote-answer switch, the caller's own connection
+ * origin, and the idle threshold the hooks read. `origin` and `idleSecs` are
+ * optional so an older server (or a test double) that omits them simply hides
+ * the badge / falls back to the hook's own default.
  */
 export interface HealthResponse extends RemoteAnswerState {
   ok: true;
   origin?: ConnectionOrigin;
+  /** Mirrors `ServerSettings.idleSecs`. Carried here because the hooks already probe health. */
+  idleSecs?: number;
 }
 
 /** One selectable choice, straight from the tool call's `options[]`. */

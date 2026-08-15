@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { usePersistedState } from './usePersistedState';
+import { useSettings } from './useSettings';
 import type { AnswerRequest, PendingQuestion, QuestionAnswer, SessionQuestion } from '../../../shared/types';
-
-const POLL_MS = 3000;
 
 /**
  * idle       — nothing submitted for the current question
@@ -42,18 +41,24 @@ export function usePendingQuestion(id: string): PendingQuestionState {
   const [needsToken, setNeedsToken] = useState(false);
   // Only used when the server runs with ANSWER_TOKEN set.
   const [token, setToken] = usePersistedState<string>('dashboard.answerToken', '');
+  const { settings: { refreshMs } } = useSettings();
 
   /** questionId the current phase refers to — a new question resets the panel. */
   const phaseFor = useRef<string | null>(null);
   const tokenRef = useRef(token);
   tokenRef.current = token;
 
+  // Kept separate from the poll below: retuning the refresh rate restarts the
+  // interval, and it must not wipe the panel of a question already on screen.
   useEffect(() => {
-    let live = true;
     setPending(null);
     setPhase('idle');
     setSentLabels([]);
     phaseFor.current = null;
+  }, [id]);
+
+  useEffect(() => {
+    let live = true;
 
     async function poll(): Promise<void> {
       let body: SessionQuestion | null = null;
@@ -83,12 +88,12 @@ export function usePendingQuestion(id: string): PendingQuestionState {
     }
 
     void poll();
-    const timer = setInterval(() => void poll(), POLL_MS);
+    const timer = setInterval(() => void poll(), refreshMs);
     return () => {
       live = false;
       clearInterval(timer);
     };
-  }, [id]);
+  }, [id, refreshMs]);
 
   const post = useCallback(async (body: AnswerRequest): Promise<'ok' | 'gone' | 'token' | 'error'> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

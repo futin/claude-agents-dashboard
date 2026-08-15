@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useSettings } from './useSettings';
 import type { ChatMessage, SessionChat } from '../../../shared/types';
-
-const POLL_MS = 3000;
 
 export interface ChatState {
   /** Oldest-first, growing at the bottom (live tail) and top (load older). */
@@ -35,6 +34,7 @@ export function useSessionChat(id: string): ChatState {
   const ready = useRef(false);
   /** An older-page request is in flight. */
   const busy = useRef(false);
+  const { settings: { refreshMs } } = useSettings();
 
   const get = useCallback(async (query: string): Promise<SessionChat | null> => {
     try {
@@ -88,12 +88,14 @@ export function useSessionChat(id: string): ChatState {
     }
 
     void tail();
-    const timer = setInterval(() => void poll(), POLL_MS);
+    const timer = setInterval(() => void poll(), refreshMs);
     return () => {
       live = false;
       clearInterval(timer);
     };
-  }, [get]);
+    // Retuning the rate re-tails the drawer. Harmless — a live tail belongs at
+    // the bottom anyway, which is exactly where a fresh tail lands you.
+  }, [get, refreshMs]);
 
   const loadOlder = useCallback(async () => {
     if (busy.current || head.current <= 0) return;

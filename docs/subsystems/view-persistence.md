@@ -24,7 +24,10 @@ The Toolbar's `view` object (`projects`, `statuses`, `window`, `sortKey`, `sortD
   render. Object values are shallow-merged over the default (`{ ...fallback, ...parsed }`) so a
   value stored by an older release still gains any newly-added `View` field's default.
 - **Other persisted keys** — each owned by its own subsystem; indexed here, documented there:
-  `dashboard.section` (Sessions | Management | Analytics tab, `App.tsx`);
+  `dashboard.settings` (theme, density, text scale, refresh rate, scan knobs, landing tab,
+  alerts — see [settings](settings.md); re-clamped on every read by `clampSettings`, and the
+  one key an inline script in `index.html` also reads, pre-paint, to avoid a theme flash);
+  `dashboard.section` (Sessions | Management | Analytics | Settings tab, `App.tsx`);
   `dashboard.chatFilter` (the chat drawer's all/text/you filter — see [chat](chat.md); validated
   with `isChatFilter` on read, so a stale value falls back to `all`);
   `dashboard.analyticsView` (the Analytics tab's own facets — see [analytics](analytics.md));
@@ -33,3 +36,6 @@ The Toolbar's `view` object (`projects`, `statuses`, `window`, `sortKey`, `sortD
 - **Client-only, zero deps** — no backend, no URL params (not shareable/bookmarkable by design).
 - **Not persisted:** row-expansion state (`SessionList.tsx` `expandedIds`) stays ephemeral —
   session IDs churn, so restored expansions would mostly be stale.
+- **Clearing them all** — Settings → Reset this device removes every key listed above
+  (`OWNED_KEYS` in `hooks/useSettings.tsx`) and restores the defaults. It touches nothing on the
+  server and nothing in `~/.claude`. Add a key here and it belongs in that list too.

@@ -21,6 +21,8 @@ import { run as runPlans } from './plans.test.js';
 import { run as runPermissions } from './permissions.test.js';
 import { run as runRemoteState } from './remoteState.test.js';
 import { run as runOrigin } from './origin.test.js';
+import { run as runSettings } from './settings.test.js';
+import { run as runClientSettings } from './client-settings.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -45,6 +47,8 @@ failed += await runPlans();
 failed += await runPermissions();
 failed += runRemoteState();
 failed += runOrigin();
+failed += runSettings();
+failed += runClientSettings();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

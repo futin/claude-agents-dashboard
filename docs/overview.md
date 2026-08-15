@@ -27,7 +27,8 @@ needs no daemon, no hooks, and no config in Claude Code — only the optional
 
 ## Data flow
 
-1. The client polls `GET /api/sessions` every 3 seconds.
+1. The client polls `GET /api/sessions` every 3 seconds (the Settings tab retunes this, and
+   attaches the row count and time windows as query params).
 2. `server/lib/scan.ts` enumerates transcripts across `~/.claude/projects`, ranks them by
    recency, and calls `server/lib/transcript.ts` to tail-read the last 256 KB of each —
    enough to derive tokens, model, context window, current activity, and status.
@@ -40,9 +41,9 @@ via `tsx`, dev and prod alike).
 ## Principles
 
 - **Read-only charter.** The app never writes to `~/.claude` or the transcripts. The two
-  deliberate exceptions are documented in
-  [remote answers](subsystems/remote-answer.md): the answer POST endpoints (RAM-only
-  store) and the gitignored `.remote-answer.json` toggle file.
+  deliberate exceptions are the answer POST endpoints (RAM-only store) and two gitignored,
+  repo-local files: `.remote-answer.json` (see [remote answers](subsystems/remote-answer.md))
+  and `.dashboard-settings.json` (see [settings](subsystems/settings.md)).
 - **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only. Keep
   new npm deps out of it.
 - **Fail-open everywhere.** A missing token, an unreadable file, a failed probe — every
@@ -57,7 +58,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 
 | Route | Purpose |
 |---|---|
-| `GET /api/sessions` | the 3s snapshot: sessions + totals + usage bars |
+| `GET /api/sessions` | the 3s snapshot: sessions + totals + usage bars (`?limit=&lookback=&active=` override the scan) |
 | `GET /api/sessions/:id` | one session's subagent timeline |
 | `GET /api/sessions/:id/chat` | paged chat history (byte-offset cursors) |
 | `GET /api/sessions/:id/question` | pending remote question, if any |
@@ -68,7 +69,8 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `POST /api/plans/wait` | the plan hook's held-open wait (write path) |
 | `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) |
 | `POST /api/remote-answer` | flip the remote-answer toggle (write path) |
-| `GET /api/health` | liveness + remote-answer state + connection origin |
+| `GET /api/health` | liveness + remote-answer state + connection origin + idle threshold |
+| `GET /api/settings`, `POST /api/settings` | the non-per-device settings (idle threshold; write path) |
 | `GET /api/management`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | anything else | static files from `client/dist` (production only) |
@@ -110,14 +112,18 @@ server/
   lib/pending.ts  in-memory pending-question store (the only write path)
   lib/plans.ts    in-memory pending-plan store (same machine, reject-only verdicts)
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)
+  lib/settings.ts persisted idle threshold + env-override detection
   lib/origin.ts   connection classifier → local | lan | tailnet | public
 client/src/
-  App.tsx         section tabs (Sessions | Management | Analytics), lazy views
+  App.tsx         section tabs (Sessions | Management | Analytics | Settings), lazy views
   components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
-                  RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/
+                  RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
+                  settings/
   hooks/          useSessions (3s poll), useSessionChat, useManagement, useAnalytics,
-                  usePendingQuestion, usePendingPlan, useRemoteAnswer, usePersistedState
-  lib/            filterSort, chatFilter, markdown, managementEntries, format
+                  usePendingQuestion, usePendingPlan, useRemoteAnswer, usePersistedState,
+                  useSettings, useServerSettings, useSessionAlerts
+  lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
+                  alerts
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          ask-remote-hook.sh, plan-remote-hook.sh, permission-notify-hook.sh,
@@ -137,6 +143,7 @@ that area:
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
 - [usage-limits](subsystems/usage-limits.md) — header account usage bars
+- [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, alerts, idle threshold
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `allow?` pill for terminal permission dialogs
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference

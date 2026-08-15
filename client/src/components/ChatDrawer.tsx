@@ -8,7 +8,9 @@ import { useSessionChat } from '../hooks/useSessionChat';
 import { usePendingQuestion } from '../hooks/usePendingQuestion';
 import { usePendingPlan } from '../hooks/usePendingPlan';
 import { usePersistedState } from '../hooks/usePersistedState';
+import { useSettings } from '../hooks/useSettings';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
+import { formatInterval } from '../lib/settings';
 import type { ChatMessage, Session } from '../../../shared/types';
 
 /** Distance from the bottom (px) still counted as "following the tail". */
@@ -75,6 +77,7 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
   const question = usePendingQuestion(session.id);
   const plan = usePendingPlan(session.id);
   const [filter, setFilter] = usePersistedState<ChatFilter>('dashboard.chatFilter', 'all');
+  const { settings: { refreshMs } } = useSettings();
   const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
   const shown = useMemo(() => filterMessages(messages, mode), [messages, mode]);
 
@@ -187,7 +190,7 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
         <PlanPanel state={plan} />
 
         <div className="chat-foot">
-          <span>live · refreshing every 3s</span>
+          <span>live · refreshing every {formatInterval(refreshMs)}</span>
           <span className="chat-count">
             {mode === 'all' ? `${messages.length} shown` : `${shown.length} of ${messages.length} shown`}
           </span>

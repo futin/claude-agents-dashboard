@@ -37,20 +37,25 @@ take one away. If the dashboard isn't running, the probe gives up in under a sec
   1. `REMOTE_ANSWER` env (`config.remoteAnswer` → `state.available`) — is the feature
      there at all? A hard kill switch; the toggle endpoint 409s while it's false.
   2. The **toggle** (`lib/remoteState.ts` → `state.enabled`) — accepting remote answers
-     right now? Flipped from the toolbar pill. Switching it off also calls
+     right now? Flipped from the toolbar pill or the [Settings tab](settings.md) (both read
+     the same `/api/health` poll, so they never disagree). Switching it off also calls
      `dismissAll()`, so waits already held are handed back instead of parked until their
      deadlines (~25ms measured).
   3. **Keyboard idle** — actually away? macOS `ioreg -c IOHIDSystem` `HIDIdleTime`,
-     ~40ms. Below `CLAUDE_DASHBOARD_IDLE_SECS` (60s) the hook exits 0 immediately, so
-     at-the-desk behaviour is byte-for-byte the pre-hook behaviour. **Unreadable idle
-     counts as at-desk** — never hide the dialog on a guess, which also means non-macOS
-     effectively opts out unless `CLAUDE_DASHBOARD_IDLE_SECS=0` (skip the check, always
-     wait).
+     ~40ms. Below the threshold the hook exits 0 immediately, so at-the-desk behaviour is
+     byte-for-byte the pre-hook behaviour. **Unreadable idle counts as at-desk** — never
+     hide the dialog on a guess, which also means non-macOS effectively opts out unless the
+     threshold is `0` (skip the check, always wait).
 
-  `state.remoteAnswer` (= `available && enabled`) is the only field the hook reads from
-  `/api/health`; the rest exists so the pill can explain *why* it's off. With everything
-  on, sitting at your keyboard behaves exactly as before the hook existed — remote
-  answering only engages once you've actually stepped away.
+     The threshold resolves as `${CLAUDE_DASHBOARD_IDLE_SECS:-<idleSecs from /api/health>}`,
+     falling back to 60 — so Settings → Away after drives it, an explicitly exported env var
+     still wins, and an unreachable or older server behaves exactly as before. See
+     [settings](settings.md) for the override trap that comes with that ordering.
+
+  `state.remoteAnswer` (= `available && enabled`) is the only field the hook *acts* on from
+  `/api/health`; the rest exists so the pill can explain *why* it's off, and `idleSecs` rides
+  along for gate 3. With everything on, sitting at your keyboard behaves exactly as before the
+  hook existed — remote answering only engages once you've actually stepped away.
 - **⚠️ The gates are evaluated when the question is asked, not continuously.** Walking
   away after a question landed doesn't move it to the phone, and coming back doesn't move
   it to the terminal (the panel's dismiss button is the manual hand-back). Anything else

@@ -24,7 +24,7 @@ typed JSON payloads in `shared/types.ts` (`GET /api/sessions*`, `GET /api/manage
 shared/types.ts   API contract (SessionsResponse, Session, ManagementIndex, ScopeConfig,
                   SessionAnalysis, AnalyticsReport…).
 server/           Node backend, TypeScript, run via tsx (no compile step)
-  index.ts        HTTP entry: routes /api/sessions(+/:id/chat) + /api/management + /api/analytics; static-serves client/dist in prod
+  index.ts        HTTP entry: routes /api/sessions(+/:id/chat) + /api/management + /api/analytics + /api/settings; static-serves client/dist in prod
   api.ts          the /api/sessions + /api/management + /api/analytics handlers (+ error fallbacks)
   lib/config.ts   .env loader — precedence process.env > .env > defaults
   lib/transcript.ts  tail-reads last 256KB of a transcript → tokens/model/window/activity
@@ -54,11 +54,14 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   the PermissionRequest hook (Notification is the legacy fallback);
                   display-only (see docs/subsystems/permission-notify.md)
   lib/remoteState.ts  remote-answer switch: REMOTE_ANSWER env gate + UI toggle persisted to
-                  gitignored .remote-answer.json (the app's only disk write; fails open)
+                  gitignored .remote-answer.json (fails open)
+  lib/settings.ts persisted idle threshold for the remote-answer hooks (served on
+                  /api/health, since they can't read our env) + detection of an
+                  overriding CLAUDE_DASHBOARD_IDLE_SECS (see docs/subsystems/settings.md)
   lib/origin.ts   pure connection classifier → local | lan | tailnet | unknown, on
                   /api/health for the toolbar badge (see docs/subsystems/remote-access.md)
 client/           Vite + React + TypeScript frontend
-  src/App.tsx     section tabs (Sessions | Management | Analytics), lazy-loads Management/Analytics views
+  src/App.tsx     section tabs (Sessions | Management | Analytics | Settings), lazy-loads all but Sessions
   components/SessionsView.tsx  the original live monitor (owns the 3s poll + chat drawer state)
   components/{Header,SessionList,SessionRow,Toolbar,SectionTabs}
   components/ChatDrawer.tsx    full-height chat-history drawer (own lazy chunk;
@@ -79,6 +82,12 @@ client/           Vite + React + TypeScript frontend
   components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane, FileViewer)
   components/analytics/AnalyticsView.tsx  the report-card list (own lazy chunk; read-only)
   hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
+  components/settings/         the Settings tab (own lazy chunk) — themes, density/text scale,
+                  refresh rate, scan knobs, alerts, idle threshold (see docs/subsystems/settings.md)
+  hooks/useSettings.tsx        per-device settings context (localStorage) — the source of
+                  refreshMs for every poll and of the data-theme/data-density attributes
+  hooks/useSessionAlerts.ts + lib/alerts.ts  notify when a session starts needing you
+                  (pure diff over consecutive snapshots; notification + beep + tab-title count)
   hooks/usePersistedState.ts  localStorage-backed useState (see docs/subsystems/view-persistence.md)
 vite.config.ts    dev proxy /api → backend; reuses server loadConfig() for the port
 test/             node-assert tests over backend domain logic, tmpdir JSONL fixtures
@@ -89,7 +98,7 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — runs `test/run-all.ts` via tsx (277 cases).
+- `pnpm test` — runs `test/run-all.ts` via tsx (322 cases).
 - `pnpm typecheck` — `tsc --noEmit`.
 - `pnpm tunnel` — optional: `tailscale serve --bg 5174`, fronts that fixed port over HTTPS
   on the tailnet — keep it matching the port you actually serve (prod `PORT` or a dev
@@ -122,6 +131,8 @@ with the log format above (contract details: `docs/subsystems/analytics.md`).
   consumer — the type is the single source of truth for the contract.
 - **UI is a faithful port of the original inline `renderPage()`.** CSS in `client/src/styles.css`
   is verbatim; keep class names stable so styling holds. React auto-escapes (no `esc()`).
+- **Never hardcode a color or a shadow in `styles.css`** below the theme-token block at the top —
+  the 5 themes are pure `[data-theme]` token overrides, and one literal breaks the light one.
 - Backend is zero-runtime-dep by design (only Node built-ins). Keep new deps out of `server/`.
 - `client/dist/` and `.env` are gitignored.
 - **Subagents return terse findings, not prose.** When spawning Explore/Plan/Task

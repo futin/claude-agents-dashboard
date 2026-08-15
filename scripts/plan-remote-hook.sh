@@ -34,9 +34,6 @@ INPUT=$(cat)
 
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
 TIMEOUT_S="${CLAUDE_DASHBOARD_ANSWER_TIMEOUT:-600}"
-# Seconds without keyboard/mouse input before you count as away. 0 disables the
-# check (always wait — the pre-idle-arbiter behaviour).
-IDLE_MIN_S="${CLAUDE_DASHBOARD_IDLE_SECS:-60}"
 TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"
 
 command -v jq > /dev/null 2>&1 || exit 0
@@ -50,6 +47,14 @@ TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
 #    toggle switched off → fall straight through, no added latency.
 HEALTH=$(curl -sf -m 1 "$DASH/api/health" 2>/dev/null) || exit 0
 [ "$(printf '%s' "$HEALTH" | jq -r '.remoteAnswer // false')" = "true" ] || exit 0
+
+# Seconds without keyboard/mouse input before you count as away. 0 disables the
+# check (always wait — the pre-idle-arbiter behaviour). An explicitly exported
+# env var wins; otherwise the dashboard's Settings page owns it, carried on the
+# probe above so no extra round trip is needed. Anything non-numeric (old server,
+# odd payload) falls back to 60 rather than being trusted blind.
+IDLE_MIN_S="${CLAUDE_DASHBOARD_IDLE_SECS:-$(printf '%s' "$HEALTH" | jq -r '.idleSecs // 60')}"
+case "$IDLE_MIN_S" in ''|*[!0-9]*) IDLE_MIN_S=60 ;; esac
 
 # 2. Are you at the keyboard? If so the plan card wins. Unreadable idle counts as
 #    at-desk: never hide the card on a guess.
