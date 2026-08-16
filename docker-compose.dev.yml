@@ -10,6 +10,13 @@ services:
       - PORT=4173
       - HOST_LAN_IP=${HOST_LAN_IP} # host's real LAN IP, for the phone-access log line (see scripts/lan-ip.sh)
       - CLAUDE_CREDENTIALS_JSON=${CLAUDE_CREDENTIALS_JSON} # OAuth creds blob for usage bars — container can't reach host Keychain (see scripts/host-credentials.sh)
+      # Push notifications. Dev bind-mounts the repo, so loadConfig() can already
+      # read `.env` directly here — these are for parity with the prod compose and
+      # to let an exported var win. Bare, without `=${...}`, so an unset var is
+      # omitted rather than injected as an empty string that would shadow the file.
+      - NTFY_TOPIC
+      - NTFY_SERVER
+      - DASHBOARD_PUBLIC_URL
     volumes:
       - .:/app
       - /app/node_modules # keep container's linux node_modules, don't let the bind mount shadow it

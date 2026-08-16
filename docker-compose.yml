@@ -12,6 +12,18 @@ services:
       # OAuth creds blob for usage bars — container can't reach host Keychain.
       # Export before `docker compose up`: CLAUDE_CREDENTIALS_JSON=$(scripts/host-credentials.sh)
       - CLAUDE_CREDENTIALS_JSON=${CLAUDE_CREDENTIALS_JSON}
+      # Push notifications (see docs/workflows/push-notify-setup.md). Without these
+      # three lines the feature is simply dead in this image: `.env` is in
+      # .dockerignore and the runtime stage copies only server/shared/dist, so
+      # loadConfig() finds no file and every ntfy value falls back to its default.
+      # Compose resolves the bare form from the host shell *or* the project's .env,
+      # so a topic in .env still reaches the container — as values, not as the file.
+      # Bare, without `=${...}`, so an unset var is omitted rather than injected as
+      # an empty string (config.ts treats "" as set, since it tests !== undefined).
+      # DASHBOARD_PUBLIC_URL is not optional here: localhost means the container.
+      - NTFY_TOPIC
+      - NTFY_SERVER
+      - DASHBOARD_PUBLIC_URL
     volumes:
       # read-only mount of the host's ~/.claude — this is what the dashboard scans
       - ${HOME}/.claude:/root/.claude:ro
