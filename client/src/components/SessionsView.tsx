@@ -3,6 +3,7 @@ import { lazy, Suspense, useMemo, useState } from 'react';
 import { Header } from './Header';
 import { SessionList } from './SessionList';
 import { Toolbar } from './Toolbar';
+import { deepLinkSession } from '../lib/deepLink';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useSessionAlerts } from '../hooks/useSessionAlerts';
 import { useSessions } from '../hooks/useSessions';
@@ -27,7 +28,8 @@ export function SessionsView() {
   const [view, setView] = usePersistedState<View>('dashboard.view', DEFAULT_VIEW);
   // Not persisted: session ids churn, so a restored selection would be stale
   // (same reasoning as row expansion — see docs/subsystems/view-persistence.md).
-  const [chatId, setChatId] = useState<string | null>(null);
+  // Seeded from a `?session=` deep link, which is consumed once and stripped.
+  const [chatId, setChatId] = useState<string | null>(() => deepLinkSession());
 
   const shown = useMemo(
     () => (data ? applyView(data.sessions, view, Date.now()) : null),

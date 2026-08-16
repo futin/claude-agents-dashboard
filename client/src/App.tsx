@@ -2,7 +2,9 @@ import { lazy, Suspense, useState } from 'react';
 
 import { SideRail, type Section } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
+import { deepLinkSession } from './lib/deepLink';
 import { usePersistedState } from './hooks/usePersistedState';
+import { useAlertStream } from './hooks/useSessionAlerts';
 import { SettingsProvider, useSettings } from './hooks/useSettings';
 
 // Lazy: these chunks load only when their section is opened, so the sessions
@@ -25,12 +27,18 @@ export function App() {
  */
 function AppShell() {
   const { settings } = useSettings();
+  // Deliberately here and not in SessionsView: the push stream has to outlive
+  // section switches, since being on Management with the tab hidden is exactly
+  // when the local poll cannot notice anything.
+  useAlertStream();
   const [stored, setStored] = usePersistedState<Section>('dashboard.section', 'sessions');
   // A `landing` other than 'last' pins the opening tab. Resolved once, in the
   // initializer, so there's no flash of the previously-open section; after that
   // navigation is normal and the last section is still remembered for next time.
-  const [section, setSection] = useState<Section>(
-    settings.landing === 'last' ? stored : settings.landing
+  // A `?session=` deep link — a tapped push notification — beats both: it exists
+  // only to put you on that session's chat.
+  const [section, setSection] = useState<Section>(() =>
+    deepLinkSession() ? 'sessions' : settings.landing === 'last' ? stored : settings.landing
   );
 
   const change = (s: Section): void => {
