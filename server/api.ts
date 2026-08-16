@@ -260,11 +260,16 @@ export function readBinaryBody(req: IncomingMessage, cap = AUDIO_CAP): Promise<B
     req.on('data', (chunk: Buffer) => {
       size += chunk.length;
       if (size > cap) {
-        // Resolve but do NOT req.destroy() here: req and res share one socket,
-        // and destroying the request kills that socket before the caller's
-        // response (413) can go out — the client would see a bare connection
-        // reset instead of a JSON body. Dropping further chunks (no push)
-        // keeps memory bounded; the stream drains on its own.
+        // Resolve but do NOT req.destroy() here: req and res share one
+        // socket, and destroying the request kills that socket before the
+        // caller's response (413) can go out — the client would see a bare
+        // connection reset instead of a JSON body. Drop what's already
+        // buffered rather than let it sit at ~cap bytes until GC, and skip
+        // further pushes so memory stays bounded from here on. The stream
+        // still drains because our 'data' listener stays attached and keeps
+        // it flowing — removing that listener as a later "optimization"
+        // would stall the socket instead of draining it.
+        chunks.length = 0;
         finish({ ok: false, reason: 'overflow' });
         return;
       }
@@ -277,11 +282,30 @@ export function readBinaryBody(req: IncomingMessage, cap = AUDIO_CAP): Promise<B
 }
 
 /**
+ * Send the 413 and close the connection afterwards. `readBinaryBody` can't
+ * sequence this itself — it never sees `res` — so the other half of "don't
+ * leave an over-cap client sitting on an open socket" lives here. Waits for
+ * `finish` (the response fully handed to the socket) before destroying, so
+ * the 413 body itself is never truncated. Without this, a rejected upload
+ * could otherwise hold its connection for up to Node's default requestTimeout
+ * on the one endpoint whose whole job is spawning CPU-saturating subprocesses.
+ */
+function send413(res: ServerResponse, body: unknown): void {
+  res.setHeader('Connection', 'close');
+  res.on('finish', () => res.socket?.destroy());
+  sendJson(res, 413, body);
+}
+
+/**
  * `POST /api/transcribe` — a recorded clip in, one line of text out.
  *
  * Gated like the three write paths even though it writes no session state: it
  * spawns processes and writes files on this machine, which is firmly the write
- * side of the line this codebase draws. See docs/subsystems/dictation.md.
+ * side of the line this codebase draws. Token comes before the engine probe so
+ * an unauthenticated caller gets no further than 403 on a path that spawns
+ * processes — not to hide the capability itself: `GET /api/health` already
+ * publishes `transcribe` with no auth at all, by design. See
+ * docs/subsystems/dictation.md.
  */
 export async function serveTranscribe(
   config: Config, req: IncomingMessage, res: ServerResponse
@@ -294,10 +318,19 @@ export async function serveTranscribe(
   const ext = extForMime(mime);
   if (!ext) return sendJson(res, 400, { error: `unsupported audio type: ${mime}` });
 
+  // An honest Content-Length already over the cap needs no bytes read to
+  // reject — skip straight to the same 413 an overflow would reach after
+  // buffering the whole thing. Chunked transfers and clients that lie about
+  // this header still fall through to the byte-counted check below.
+  const declaredLength = Number(req.headers['content-length']);
+  if (Number.isFinite(declaredLength) && declaredLength > AUDIO_CAP) {
+    return send413(res, { error: 'clip too large' });
+  }
+
   const body = await readBinaryBody(req, AUDIO_CAP);
   if (!body.ok) {
     return body.reason === 'overflow'
-      ? sendJson(res, 413, { error: 'clip too large' })
+      ? send413(res, { error: 'clip too large' })
       : sendJson(res, 400, { error: 'upload aborted' });
   }
   if (body.bytes.length === 0) return sendJson(res, 400, { error: 'empty body' });

@@ -8,6 +8,7 @@ import { loadConfig } from '../server/lib/config.js';
 import {
   buildFfmpegArgs, buildWhisperArgs, extForMime, parseOutput, probeTranscribe, resetProbe, transcribe
 } from '../server/lib/transcribe.js';
+import { resetState } from '../server/lib/remoteState.js';
 import { readBinaryBody, serveTranscribe } from '../server/api.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -37,23 +38,66 @@ async function testAsync(name: string, fn: () => Promise<void>): Promise<boolean
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
 }
 
-/** POST a body to a one-shot server wrapping `serveTranscribe`, return the reply. */
-function post(cfg: ReturnType<typeof loadConfig>, contentType: string, body: Buffer, token?: string):
-  Promise<{ status: number; json: any }> {
-  return new Promise(resolve => {
+/**
+ * Run an endpoint test in isolation: tmpdir cwd + a fresh remote-state cache,
+ * so `getState()` can't see (or write) the repo's real gitignored
+ * .remote-answer.json, and a stale in-process `cached` left by an earlier
+ * test/suite can't leak in either. Mirrors `test/notify.test.ts`'s `inTmpCwd`.
+ */
+async function inTmpCwd(fn: () => Promise<void>): Promise<void> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-ep-cwd-'));
+  const prev = process.cwd();
+  try {
+    process.chdir(dir);
+    resetState();
+    await fn();
+  } finally {
+    process.chdir(prev);
+    resetState();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * POST a body to a one-shot server wrapping `serveTranscribe`, return the
+ * reply. `contentLength`, when given, overrides the header Node would
+ * otherwise compute from `body` — how the Content-Length-pre-check test sends
+ * a declared size the actual body doesn't match.
+ *
+ * `settle` guarantees `srv.close()` runs exactly once on every path (success,
+ * a request/response/server error) and that the promise itself only ever
+ * settles once — a bare `http.request` has no default `'error'` listener, so
+ * without this a socket-level failure becomes an unhandled throw that kills
+ * the whole `pnpm test` process instead of failing just this one case.
+ */
+function post(
+  cfg: ReturnType<typeof loadConfig>, contentType: string, body: Buffer, token?: string, contentLength?: number
+): Promise<{ status: number; json: any }> {
+  return new Promise((resolve, reject) => {
     const srv = http.createServer((req, res) => void serveTranscribe(cfg, req, res));
+    let done = false;
+    const settle = (fn: () => void): void => {
+      if (done) return;
+      done = true;
+      srv.close();
+      fn();
+    };
+    srv.on('error', e => settle(() => reject(e)));
     srv.listen(0, () => {
       const port = (srv.address() as { port: number }).port;
       const headers: Record<string, string> = { 'Content-Type': contentType };
       if (token) headers.Authorization = `Bearer ${token}`;
+      if (contentLength !== undefined) headers['Content-Length'] = String(contentLength);
       const req = http.request({ port, method: 'POST', path: '/api/transcribe', headers }, res => {
         let raw = '';
         res.on('data', c => { raw += c; });
         res.on('end', () => {
-          srv.close();
-          resolve({ status: res.statusCode || 0, json: (() => { try { return JSON.parse(raw); } catch { return null; } })() });
+          const json = (() => { try { return JSON.parse(raw); } catch { return null; } })();
+          settle(() => resolve({ status: res.statusCode || 0, json }));
         });
+        res.on('error', e => settle(() => reject(e)));
       });
+      req.on('error', e => settle(() => reject(e)));
       req.end(body);
     });
   });
@@ -264,57 +308,105 @@ export async function run(): Promise<number> {
 
   check(await testAsync('404 when no engine is configured', async () => {
     resetProbe();
-    await new Promise<void>(done => {
-      withEnvFile('', cfg => {
-        void post(cfg, 'audio/mp4', Buffer.from('x')).then(r => {
-          assert.equal(r.status, 404); done();
+    let err: unknown;
+    await inTmpCwd(async () => {
+      await new Promise<void>(done => {
+        withEnvFile('', cfg => {
+          void post(cfg, 'audio/mp4', Buffer.from('x'))
+            .then(r => { assert.equal(r.status, 404); })
+            .catch(e => { err = e; })
+            .finally(done);
         });
       });
     });
+    if (err) throw err;
   }));
 
   check(await testAsync('403 when the token is wrong', async () => {
     resetProbe();
-    await new Promise<void>(done => {
-      withEnvFile('ANSWER_TOKEN=secret\n', cfg => {
-        void post(cfg, 'audio/mp4', Buffer.from('x'), 'wrong').then(r => {
-          assert.equal(r.status, 403); done();
+    let err: unknown;
+    await inTmpCwd(async () => {
+      await new Promise<void>(done => {
+        withEnvFile('ANSWER_TOKEN=secret\n', cfg => {
+          void post(cfg, 'audio/mp4', Buffer.from('x'), 'wrong')
+            .then(r => { assert.equal(r.status, 403); })
+            .catch(e => { err = e; })
+            .finally(done);
         });
       });
     });
+    if (err) throw err;
   }));
 
-  // ⚠️ `getState()` overlays the gitignored .remote-answer.json in the CWD on
-  // top of the env gate. If this test proves flaky against a repo where that
-  // file exists, wrap it in a tmpdir chdir the way test/messages.test.ts does
-  // with its `inTmpCwd` helper — do not weaken the assertion.
+  // `getState()` overlays the gitignored .remote-answer.json in the CWD on top
+  // of the env gate, and caches the result for the process — `inTmpCwd` gives
+  // this test (and its three siblings above/below) a cwd with no such file and
+  // a freshly reset cache, so none of them depend on what the repo's real
+  // toggle currently reads or on what an earlier suite left `cached` as.
   check(await testAsync('404 when remote answers are disabled', async () => {
     resetProbe();
-    await new Promise<void>(done => {
-      withEnvFile('REMOTE_ANSWER=false\n', cfg => {
-        void post(cfg, 'audio/mp4', Buffer.from('x')).then(r => {
-          assert.equal(r.status, 404); done();
+    let err: unknown;
+    await inTmpCwd(async () => {
+      await new Promise<void>(done => {
+        withEnvFile('REMOTE_ANSWER=false\n', cfg => {
+          void post(cfg, 'audio/mp4', Buffer.from('x'))
+            .then(r => { assert.equal(r.status, 404); })
+            .catch(e => { err = e; })
+            .finally(done);
         });
       });
     });
+    if (err) throw err;
   }));
 
   check(await testAsync('400 names the unsupported content type', async () => {
     resetProbe();
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-ep-'));
+    let err: unknown;
     try {
       const model = path.join(dir, 'ggml.bin');
       fs.writeFileSync(model, 'x');
       const bin = stubBin(dir, 'wh-stub');
-      await new Promise<void>(done => {
-        withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${bin}\n`, cfg => {
-          void post(cfg, 'video/mp4', Buffer.from('x')).then(r => {
-            assert.equal(r.status, 400);
-            assert.match(String(r.json?.error), /video\/mp4/);
-            done();
+      await inTmpCwd(async () => {
+        await new Promise<void>(done => {
+          withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${bin}\n`, cfg => {
+            void post(cfg, 'video/mp4', Buffer.from('x'))
+              .then(r => {
+                assert.equal(r.status, 400);
+                assert.match(String(r.json?.error), /video\/mp4/);
+              })
+              .catch(e => { err = e; })
+              .finally(done);
           });
         });
       });
+      if (err) throw err;
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  check(await testAsync('a declared Content-Length over the cap is refused without reading the body', async () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-ep2-'));
+    let err: unknown;
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const bin = stubBin(dir, 'wh-stub');
+      await inTmpCwd(async () => {
+        await new Promise<void>(done => {
+          withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${bin}\n`, cfg => {
+            // Declares far more than the 8MB AUDIO_CAP while the actual body
+            // is one byte. If the pre-check didn't fire, the server would wait
+            // on bytes that never arrive (or report 'aborted' once the client
+            // closes) — 413 here proves it rejected on the header alone.
+            void post(cfg, 'audio/mp4', Buffer.from('x'), undefined, 8 * 1024 * 1024 + 1)
+              .then(r => { assert.equal(r.status, 413); })
+              .catch(e => { err = e; })
+              .finally(done);
+          });
+        });
+      });
+      if (err) throw err;
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   }));
 
