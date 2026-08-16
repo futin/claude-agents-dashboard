@@ -320,6 +320,14 @@ state. No `~/.claude/settings.json` edits, nothing to keep in sync, no warnings 
 clobbering sibling array entries — the failure mode it spent most of its length guarding
 against stops existing.
 
+> **Outcome (2026-08-16): the command was deleted instead.** Rewriting it worked, but it
+> left the one piece of this system living outside git — a real file in
+> `~/.claude/commands/`, while every hook is a symlink into `scripts/`. Being *global* also
+> made it misleading: it offered a switch in every project that only functions when this
+> dashboard is running. Settings → Push notifications does the same job with more control
+> and no second source of truth, so `~/.claude/commands/notify-remote-toggle.md` was
+> removed. Nothing in the app references it.
+
 ## 10. Testing
 
 `test/notify.test.ts`, registered in `test/run-all.ts`:
