@@ -26,6 +26,7 @@ import {
   serveAnalytics, serveHealth, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
+  serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
   serveSettingsRead, serveSettingsWrite, serveNotifyEvent, serveNotifyTest
 } from './api.js';
 
@@ -107,6 +108,10 @@ const server = http.createServer((req, res) => {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return void servePlanWait(config, req, res);
   }
+  if (u.pathname === '/api/messages/wait') {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void serveMessageWait(config, req, res);
+  }
   if (u.pathname === '/api/remote-answer') {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return void serveRemoteAnswerToggle(config, req, res);
@@ -142,6 +147,13 @@ const server = http.createServer((req, res) => {
   if (planAnswer) {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return void serveSessionPlanAnswer(config, decodeURIComponent(planAnswer[1]), req, res);
+  }
+  const message = u.pathname.match(/^\/api\/sessions\/([^/]+)\/message$/);
+  if (message) return void serveSessionMessage(decodeURIComponent(message[1]), res);
+  const messageAnswer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/message-answer$/);
+  if (messageAnswer) {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void serveSessionMessageAnswer(config, decodeURIComponent(messageAnswer[1]), req, res);
   }
   // Chat route must be matched before the detail regex below, whose `[^/?]+`
   // would otherwise swallow `/api/sessions/:id/chat` and answer with agents.

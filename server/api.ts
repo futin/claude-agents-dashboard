@@ -25,6 +25,10 @@ import {
   answer as answerPlan, cancel as cancelPlan, dismissAll as dismissAllPlans,
   getPendingPlan, planSessionIds, register as registerPlan, sanitizePlan
 } from './lib/plans.js';
+import {
+  answer as answerMessage, cancel as cancelMessage, dismissAll as dismissAllMessages,
+  getPendingMessage, messageSessionIds, register as registerMessage
+} from './lib/messages.js';
 import { notifyPermission, permissionWaits } from './lib/permissions.js';
 import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
@@ -32,8 +36,8 @@ import { getSettings, setSettings } from './lib/settings.js';
 import { classifyOrigin } from './lib/origin.js';
 import { toPosInt, type Config } from './lib/config.js';
 import type {
-  AnalyticsResponse, ManagementIndex, PlanWaitResult, ScopeConfig, SessionPlan,
-  SessionQuestion, SessionsResponse, SessionChat, SessionDetail, WaitResult
+  AnalyticsResponse, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig, SessionMessage,
+  SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, WaitResult
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -74,8 +78,9 @@ export function serveSessions(baseConfig: Config, res: ServerResponse, params?: 
   try {
     // pendingIds comes from the RAM store, not disk: a question held by the
     // AskUserQuestion hook is flagged on its row before the transcript knows
-    // about it, so it's visible without opening the chat drawer. planIds is the
-    // same thing for a held ExitPlanMode call.
+    // about it, so it's visible without opening the chat drawer. planIds and
+    // messageIds are the same thing, for a held ExitPlanMode call and a held
+    // Stop-hook reply window respectively.
     // permissionWaits likewise: a terminal permission dialog is TUI-only and
     // never reaches the transcript, so the Notification hook is the only way the
     // scan can know a session is parked on one.
@@ -83,6 +88,7 @@ export function serveSessions(baseConfig: Config, res: ServerResponse, params?: 
       skipProcScan: config.skipProcScan,
       pendingIds: pendingSessionIds(),
       planIds: planSessionIds(),
+      messageIds: messageSessionIds(),
       permissionWaits: permissionWaits()
     });
   } catch (e) {
@@ -308,7 +314,7 @@ export async function serveRemoteAnswerToggle(
   // Switching off releases the waits we already hold — their terminal dialogs
   // appear within a second instead of sitting out the full window. One switch,
   // both stores: a held plan is as remote as a held question.
-  const released = body.enabled ? 0 : dismissAll() + dismissAllPlans();
+  const released = body.enabled ? 0 : dismissAll() + dismissAllPlans() + dismissAllMessages();
   sendJson(res, 200, { ...state, released });
 }
 
@@ -457,6 +463,80 @@ export async function serveSessionPlanAnswer(
     case 'not-found': return sendJson(res, 404, { error: 'no plan is waiting' });
     case 'mismatch': return sendJson(res, 409, { error: 'that plan is no longer the one waiting' });
     default: return sendJson(res, 400, { error: 'bad verdict' });
+  }
+}
+
+/**
+ * `POST /api/messages/wait` — a session's Stop hook reports a finished turn and
+ * holds here for a follow-up. Held exactly like the question wait; any non-200
+ * (and any non-`answered` result) makes the hook exit 0, so the session stops
+ * exactly as it did before the feature existed.
+ *
+ * Deliberately NO `sessionExists` check, unlike the question/plan waits: a Stop
+ * hook fires as the turn ends, which is exactly when the transcript may not yet
+ * be flushed for the scan to see (same reasoning as `serveNotifyEvent`). The id
+ * is still shape-checked and never joined into a path — the store is RAM-keyed.
+ */
+export async function serveMessageWait(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+
+  const body = await readJsonBody(req) as
+    { sessionId?: unknown; timeoutMs?: unknown; permissionMode?: unknown; stopHookActive?: unknown } | null;
+  if (!body || typeof body !== 'object') return sendJson(res, 400, { error: 'bad body' });
+
+  const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
+  if (!sessionId || !ID_RE.test(sessionId)) return sendJson(res, 400, { error: 'bad sessionId' });
+
+  let messageId = '';
+  res.on('close', () => { if (messageId) cancelMessage(sessionId, messageId); });
+  messageId = registerMessage(sessionId, clampTimeout(body.timeoutMs), (result: MessageWaitResult) => {
+    if (res.writableEnded) return;
+    sendJson(res, 200, result);
+  });
+  if (res.destroyed) cancelMessage(sessionId, messageId);
+
+  // Mid-conversation stops (stop_hook_active) don't re-push — you are already
+  // in the drawer typing. First stops do, with a phrase that says the window is
+  // open; the user's per-event `stop` switch keeps governing both.
+  if (body.stopHookActive !== true) {
+    maybeSend(config, 'stop', {
+      sessionId,
+      permissionMode: typeof body.permissionMode === 'string' ? body.permissionMode : undefined,
+      phrase: 'finished — reply window open'
+    });
+  }
+}
+
+/** `GET /api/sessions/:id/message` — the reply window this session holds, if any. */
+export function serveSessionMessage(id: string, res: ServerResponse): void {
+  if (!ID_RE.test(id)) {
+    const body: SessionMessage = { id, pending: null, error: true };
+    return sendJson(res, 400, body);
+  }
+  sendJson(res, 200, { id, pending: getPendingMessage(id) } satisfies SessionMessage);
+}
+
+/**
+ * `POST /api/sessions/:id/message-answer` — deliver the follow-up
+ * (`{messageId, text}`) or release the hold (`{messageId, dismiss: true}`).
+ * 404 means the window is already over: expired, released, or the hook is gone.
+ */
+export async function serveSessionMessageAnswer(
+  config: Config, id: string, req: IncomingMessage, res: ServerResponse
+): Promise<void> {
+  if (!config.remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
+
+  const body = await readJsonBody(req);
+  if (!body) return sendJson(res, 400, { error: 'bad body' });
+
+  switch (answerMessage(id, body)) {
+    case 'ok': return sendJson(res, 200, { ok: true });
+    case 'not-found': return sendJson(res, 404, { error: 'no reply window is open' });
+    case 'mismatch': return sendJson(res, 409, { error: 'that window is no longer the one open' });
+    default: return sendJson(res, 400, { error: 'bad message' });
   }
 }
 
