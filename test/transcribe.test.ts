@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { loadConfig } from '../server/lib/config.js';
 import {
-  buildFfmpegArgs, buildWhisperArgs, extForMime, parseOutput, probeTranscribe, resetProbe
+  buildFfmpegArgs, buildWhisperArgs, extForMime, parseOutput, probeTranscribe, resetProbe, transcribe
 } from '../server/lib/transcribe.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -30,7 +30,12 @@ function stubBin(dir: string, name: string, body = '#!/bin/bash\nexit 0\n'): str
   return p;
 }
 
-export function run(): number {
+async function testAsync(name: string, fn: () => Promise<void>): Promise<boolean> {
+  try { await fn(); console.log('  ✓ ' + name); return true; }
+  catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
+}
+
+export async function run(): Promise<number> {
   console.log('\n=== transcribe.ts ===\n');
   let ok = 0, total = 0;
   const check = (r: boolean): void => { total++; if (r) ok++; };
@@ -136,6 +141,89 @@ export function run(): number {
         assert.equal(probeTranscribe(cfg), false));
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
     resetProbe();
+  }));
+
+  check(await testAsync('transcribe returns parsed text from the stubbed engine', async () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-run-'));
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      // ffmpeg stub: create the output file (always the last argument).
+      const ff = stubBin(dir, 'ff-stub', '#!/bin/bash\nout="${@: -1}"\n: > "$out"\nexit 0\n');
+      const wh = stubBin(dir, 'wh-stub',
+        '#!/bin/bash\necho "[00:00:00.000 --> 00:00:01.500]   spoken words"\nexit 0\n');
+      await new Promise<void>(done => {
+        withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${wh}\nFFMPEG_BIN=${ff}\n`, cfg => {
+          void transcribe(cfg, Buffer.from('fake-audio'), 'm4a').then(out => {
+            assert.deepEqual(out, { ok: true, text: 'spoken words' });
+            done();
+          });
+        });
+      });
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  check(await testAsync('a failing ffmpeg reports transcode, not engine', async () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-run2-'));
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const ff = stubBin(dir, 'ff-bad', '#!/bin/bash\nexit 1\n');
+      const wh = stubBin(dir, 'wh-stub', '#!/bin/bash\necho hi\n');
+      await new Promise<void>(done => {
+        withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${wh}\nFFMPEG_BIN=${ff}\n`, cfg => {
+          void transcribe(cfg, Buffer.from('fake'), 'm4a').then(out => {
+            assert.deepEqual(out, { ok: false, reason: 'transcode' });
+            done();
+          });
+        });
+      });
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  check(await testAsync('a second concurrent call is refused as busy', async () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-run3-'));
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const ff = stubBin(dir, 'ff-slow', '#!/bin/bash\nsleep 0.4\nout="${@: -1}"\n: > "$out"\n');
+      const wh = stubBin(dir, 'wh-stub', '#!/bin/bash\necho "first"\n');
+      await new Promise<void>(done => {
+        withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${wh}\nFFMPEG_BIN=${ff}\n`, cfg => {
+          const a = transcribe(cfg, Buffer.from('fake'), 'm4a');
+          const b = transcribe(cfg, Buffer.from('fake'), 'm4a');
+          void Promise.all([a, b]).then(([first, second]) => {
+            assert.deepEqual(second, { ok: false, reason: 'busy' });
+            assert.equal(first.ok, true);
+            done();
+          });
+        });
+      });
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  check(await testAsync('the temp directory is removed afterwards', async () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-run4-'));
+    const before = fs.readdirSync(os.tmpdir()).filter(n => n.startsWith('cad-dictate-')).length;
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const ff = stubBin(dir, 'ff-stub', '#!/bin/bash\nout="${@: -1}"\n: > "$out"\n');
+      const wh = stubBin(dir, 'wh-stub', '#!/bin/bash\necho "words"\n');
+      await new Promise<void>(done => {
+        withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${wh}\nFFMPEG_BIN=${ff}\n`, cfg => {
+          void transcribe(cfg, Buffer.from('fake'), 'm4a').then(() => {
+            const after = fs.readdirSync(os.tmpdir()).filter(n => n.startsWith('cad-dictate-')).length;
+            assert.equal(after, before);
+            done();
+          });
+        });
+      });
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   }));
 
   console.log(`\n  ${ok}/${total} passed`);

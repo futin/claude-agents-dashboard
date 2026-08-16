@@ -7,8 +7,10 @@
  * spawns a real engine — see docs/subsystems/dictation.md.
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import type { Config } from './config.js';
 
@@ -89,4 +91,75 @@ function computeProbe(config: Config): boolean {
 export function probeTranscribe(config: Config): boolean {
   if (probed === null) probed = computeProbe(config);
   return probed;
+}
+
+/** Per-spawn wall-clock ceiling. A 120s clip transcribes in seconds. */
+const SPAWN_TIMEOUT_MS = 30_000;
+
+export type TranscribeFail = 'transcode' | 'engine' | 'timeout' | 'busy';
+export type TranscribeOutcome =
+  | { ok: true; text: string }
+  | { ok: false; reason: TranscribeFail };
+
+interface SpawnOutcome { code: number | null; stdout: string; timedOut: boolean }
+
+/** Run a binary to completion, capturing stdout. Never rejects. */
+function run(bin: string, args: string[]): Promise<SpawnOutcome> {
+  return new Promise(resolve => {
+    let stdout = '';
+    let timedOut = false;
+    let child;
+    try {
+      child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch {
+      return resolve({ code: null, stdout: '', timedOut: false });
+    }
+    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, SPAWN_TIMEOUT_MS);
+    child.stdout.on('data', (c: Buffer) => { stdout += c.toString('utf8'); });
+    child.on('error', () => { clearTimeout(timer); resolve({ code: null, stdout: '', timedOut }); });
+    child.on('close', code => { clearTimeout(timer); resolve({ code, stdout, timedOut }); });
+  });
+}
+
+/**
+ * One transcription at a time. Whisper saturates cores, and this endpoint is
+ * reachable by anything holding the token — unbounded fan-out would turn it
+ * into a CPU amplifier. A single-user app needs no cleverer limiter than this.
+ */
+let inFlight = false;
+
+/**
+ * Browser audio → text. Writes the clip to a private temp directory, normalises
+ * it with ffmpeg, transcribes the WAV, and removes the directory on every path.
+ * Failures are typed, never raw stderr: that would leak absolute paths.
+ */
+export async function transcribe(
+  config: Config, bytes: Buffer, ext: string
+): Promise<TranscribeOutcome> {
+  if (inFlight) return { ok: false, reason: 'busy' };
+  inFlight = true;
+  let dir = '';
+  try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-dictate-'));
+    const inPath = path.join(dir, `clip.${ext}`);
+    const wavPath = path.join(dir, 'clip.wav');
+    fs.writeFileSync(inPath, bytes);
+
+    const ff = await run(config.ffmpegBin, buildFfmpegArgs(inPath, wavPath));
+    if (ff.timedOut) return { ok: false, reason: 'timeout' };
+    if (ff.code !== 0) return { ok: false, reason: 'transcode' };
+
+    const wh = await run(config.whisperBin, buildWhisperArgs(config.whisperModel, wavPath));
+    if (wh.timedOut) return { ok: false, reason: 'timeout' };
+    if (wh.code !== 0) return { ok: false, reason: 'engine' };
+
+    // '' is a legitimate result: you tapped the mic and said nothing. The
+    // caller answers 200 with empty text; only a broken engine is an error.
+    return { ok: true, text: parseOutput(wh.stdout) };
+  } catch {
+    return { ok: false, reason: 'engine' };
+  } finally {
+    if (dir) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort */ } }
+    inFlight = false;
+  }
 }

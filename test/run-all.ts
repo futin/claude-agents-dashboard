@@ -56,7 +56,7 @@ failed += runSettings();
 failed += runClientSettings();
 failed += await runNotify();
 failed += runDeepLink();
-failed += runTranscribe();
+failed += await runTranscribe();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);
