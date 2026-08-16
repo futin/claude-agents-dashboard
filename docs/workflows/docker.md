@@ -54,3 +54,13 @@ Two things a container can't reach on its own:
   `node_modules` (an anonymous volume shadows the host's).
 - `~/.claude` is mounted read-only, which is also why the remote-answer toggle persists
   to a repo-root file instead of anywhere under `~/.claude`.
+- **Push notifications need their three variables passed in explicitly.** `.env` is in
+  `.dockerignore` and the runtime stage copies only `server/`, `shared/` and the built
+  client, so `loadConfig()` finds no file in the production image. Both compose files
+  therefore list `NTFY_TOPIC`, `NTFY_SERVER` and `DASHBOARD_PUBLIC_URL` bare under
+  `environment:`, which Compose resolves from your shell **or** the project's `.env` on the
+  host — the values reach the container even though the file does not. Bare rather than
+  `VAR=${VAR}` because Compose drops an unset variable in that form, while the `=` form
+  injects an empty string that `config.ts` counts as set. ⚠️ `DASHBOARD_PUBLIC_URL` is
+  mandatory here: its `localhost` default resolves inside the container's own network
+  namespace. See [push-notify-setup](push-notify-setup.md#docker).

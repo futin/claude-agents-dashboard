@@ -158,3 +158,4 @@ that area:
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [docker](workflows/docker.md) — running in containers, dev + prod
 - [remote-answer-setup](workflows/remote-answer-setup.md) — per-machine hook install
+- [push-notify-setup](workflows/push-notify-setup.md) — ntfy topic, phone subscription, Stop hook

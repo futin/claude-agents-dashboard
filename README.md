@@ -93,9 +93,9 @@ That's the whole basic setup. Everything below is optional.
   [remote access](docs/subsystems/remote-access.md) for LAN, Tailscale, and tunnel options.
 - **Remote answers hook** — 4 steps, ~2 minutes:
   [setup](docs/workflows/remote-answer-setup.md).
-- **Push notifications** — set `NTFY_TOPIC` (and `DASHBOARD_PUBLIC_URL`, so taps open the
-  dashboard) in `.env`, install `scripts/stop-notify-hook.sh` for the finished-turn event,
-  then pick the policy in Settings: [push notifications](docs/subsystems/push-notify.md).
+- **Push notifications to your phone** — 6 steps, ~5 minutes: pick a secret ntfy topic,
+  subscribe the phone, set two `.env` values, enable it in Settings:
+  [setup](docs/workflows/push-notify-setup.md).
 - **Docker** — production and dev images, read-only `~/.claude` mount:
   [docker](docs/workflows/docker.md).
 - **Configuration** — everything is optional, defaults work out of the box; the full
@@ -106,7 +106,7 @@ That's the whole basic setup. Everything below is optional.
 [`docs/overview.md`](docs/overview.md) is the entry point — domains, data flow, HTTP
 surface, repo layout, and the map of every doc. Per-subsystem deep dives (mechanism +
 invariants) live in [`docs/subsystems/`](docs/subsystems/); runnable procedures
-(configuration, Docker, the remote-answers hook) in
+(configuration, Docker, the remote-answers hook, push-notification setup) in
 [`docs/workflows/`](docs/workflows/).
 
 ## Not included (yet)

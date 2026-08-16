@@ -17,7 +17,9 @@ docs-sync:
 
 The dashboard publishes a push to an [ntfy](https://ntfy.sh) topic when a session starts
 needing you. Tapping it opens that session's chat. Off by default; every switch lives in
-Settings → **Push notifications · every device**.
+Settings → **Push notifications · every device**. Per-machine setup — choosing a topic,
+subscribing the phone, the Stop hook — lives in
+[push-notify-setup](../workflows/push-notify-setup.md).
 
 ## Why this exists, and why it replaced the browser alerts
 

@@ -1,0 +1,162 @@
+---
+docs-sync:
+  sources:
+    - server/lib/config.ts
+    - server/lib/notify.ts
+    - scripts/stop-notify-hook.sh
+    - client/src/components/settings/SettingsView.tsx
+    - .env.example
+    - docker-compose.yml
+  kind: workflow
+---
+
+# Push notifications — setup
+
+Wires [push notifications](../subsystems/push-notify.md) to your phone through
+[ntfy](https://ntfy.sh). Six steps, ~5 minutes. Needs a phone and, for the *task finished*
+event only, `curl` and `jq` on the machine running Claude Code.
+
+This is the only channel that reaches you with the dashboard closed. Why it is ntfy rather
+than a browser notification, and what the policy switches do, is in
+[push-notify](../subsystems/push-notify.md); this page is just the procedure.
+
+## Steps
+
+**1. Choose a topic — and treat it as a password.**
+
+```bash
+openssl rand -hex 16
+```
+
+⚠️ ntfy topics are **unauthenticated**. The string is both the address and the credential:
+anyone who learns it can read every notification you receive *and* publish to your phone.
+A guessable topic like `claude-dashboard` is a topic other people are already subscribed
+to. Use the random string, and see [Rotating the topic](#rotating-the-topic) below if it
+ever leaks.
+
+**2. Subscribe your phone.** Install ntfy (iOS App Store, Google Play, or F-Droid; there is
+also a browser client at [ntfy.sh/app](https://ntfy.sh/app)), then add a subscription and
+paste the topic from step 1. Nothing arrives yet — that is expected.
+
+**3. Point the dashboard at it.** In `.env` at the repo root:
+
+```bash
+NTFY_TOPIC=<the string from step 1>
+DASHBOARD_PUBLIC_URL=http://<host>.<tailnet>.ts.net:4173
+```
+
+`DASHBOARD_PUBLIC_URL` is how your *phone* reaches this dashboard, used for the
+tap-through link. It **cannot be inferred** — a push is not triggered by a browser request,
+so there is no `Host` header to read. It defaults to `http://localhost:$PORT`, which is
+correct at the desk and useless on a phone; the tailnet hostname is what belongs there (see
+[remote-access](../subsystems/remote-access.md)). Self-hosting ntfy? Set `NTFY_SERVER` too.
+
+**Restart the server** — these are read once at startup, unlike the Settings page.
+
+**4. Turn it on.** Settings → **Push notifications · every device** → *Send push
+notifications* On, then pick which events you want. If the group is greyed out under a
+warning naming `NTFY_TOPIC`, the server did not see step 3: check you restarted it, and
+that you edited `.env` rather than `.env.example`.
+
+**5. Install the Stop hook — only if you want *task finished*.** The other three events
+arrive on hooks you may already have; this one has nothing to ride on, because a finished
+turn registers nothing with the dashboard.
+
+```bash
+ln -s "$PWD/scripts/stop-notify-hook.sh" ~/.claude/hooks/stop-notify.sh
+```
+
+then add to `~/.claude/settings.json` under `Stop`:
+
+```json
+{ "type": "command", "command": "bash \"$HOME/.claude/hooks/stop-notify.sh\"" }
+```
+
+No `timeout` needed: unlike the remote-answer hooks this one never waits — it POSTs with a
+1s cap and exits.
+
+**6. Verify.** Settings → **Test push**. It fires one push *ignoring every switch above*
+and reports what actually happened, because an off switch, a missing topic and a dropped
+packet are indistinguishable from the page. Then **tap the notification** — that is the
+only way to prove `DASHBOARD_PUBLIC_URL` is right, and it should land you in that session's
+chat.
+
+## Which events need which hook
+
+An event you enable in Settings still needs something to tell the dashboard it happened.
+Three of the four ride on hooks documented elsewhere — enabling the checkbox without the
+hook installed produces silence, not an error.
+
+| Event | Needs | Installed per |
+|---|---|---|
+| *A question is waiting* | `ask-remote-hook.sh` | [remote-answer-setup](remote-answer-setup.md) |
+| *A plan is waiting* | `plan-remote-hook.sh` | [remote-plan](../subsystems/remote-plan.md#install) |
+| *A permission dialog opened* | `permission-notify-hook.sh` | [permission-notify](../subsystems/permission-notify.md#install-manual-user-consented) |
+| *A task finished* | `stop-notify-hook.sh` | step 5 above |
+
+⚠️ **The question and plan events carry their own away-check**, independent of the
+*Only when I'm away* switch. Both hooks run an idle check before the POST that would reach
+the notifier, so at the keyboard they hand the question to the terminal dialog and the
+dashboard never learns there was anything to push about. Turning that switch off makes
+*permission* and *task finished* unconditional, but not those two. The Settings page says
+so in a callout; the full layering is in
+[push-notify](../subsystems/push-notify.md#the-predicate-is-not-the-only-afk-gate).
+
+## Docker
+
+`.env` never reaches the production image — it is in `.dockerignore`, and the runtime stage
+copies only `server/`, `shared/` and the built client. The compose files therefore pass the
+three variables through explicitly, resolved from your shell **or** from the project's
+`.env` on the host:
+
+```yaml
+environment:
+  - NTFY_TOPIC
+  - NTFY_SERVER
+  - DASHBOARD_PUBLIC_URL
+```
+
+Listed bare, without `=${...}`: Compose omits an unset variable in that form, whereas
+`VAR=${VAR}` injects an empty string, and `loadConfig` tests `!== undefined`, so an empty
+string counts as set.
+
+⚠️ `DASHBOARD_PUBLIC_URL` is **not optional in a container** — the default resolves to
+`localhost` inside the container's own network namespace, which is nothing a phone can
+open.
+
+## Failure modes
+
+Read the Test push result first; it distinguishes most of these.
+
+- **"no NTFY_TOPIC set in .env — nothing to send to"** — the server never saw step 3.
+  Restart it; confirm you edited `.env`, not `.env.example`. In Docker, confirm the
+  passthrough above.
+- **"couldn't reach `<server>`…"** — DNS, TLS, offline, or a 2s timeout. The dashboard is
+  the only thing here that talks to the internet; a proxy or egress rule can block it.
+- **"`<server>` refused it (HTTP …)"** — ntfy rejected the publish; the message carries its
+  first line of explanation. Usually a malformed topic name or a rate limit.
+- **Reports sent, phone shows nothing** — the phone is subscribed to a *different* string
+  (retype it), notifications are muted for the ntfy app at the OS level, or the device is
+  in a battery-saver mode that defers them.
+- **Push arrives, tapping opens nothing** — `DASHBOARD_PUBLIC_URL` is unset or wrong. Note
+  the success message reports the URL taps will use; if it says `localhost`, that is the
+  default rather than something you set.
+- **Works on home wifi, not on cellular** — `DASHBOARD_PUBLIC_URL` is a LAN address. Use
+  the tailnet hostname, which is reachable from anywhere on the tailnet.
+- **Nothing for questions or plans, but *task finished* works** — either the matching hook
+  is not installed (see the table above), or you were at the keyboard and that hook's own
+  idle check sent the question to the terminal instead.
+- **Pushes for sessions you did not expect** — the policy is global, not per project. The
+  three AND-layers (remote-answer on, away, auto-mode only) are the way to narrow it.
+
+## Rotating the topic
+
+There is no revocation: a topic is public the moment it is known. To rotate, generate a new
+one, change `NTFY_TOPIC`, restart the server, and re-subscribe the phone. The old topic
+keeps existing on the ntfy server and anyone holding it keeps being able to publish to it —
+so the only thing that matters is that you stop listening to it.
+
+Pushes carry no transcript content by design — the body is a session label and a short
+phrase (see [what a push contains](../subsystems/push-notify.md#what-a-push-contains)) —
+but the label is your project name, and the tap-through link is your dashboard's address.
+Assume a leaked topic reveals both.

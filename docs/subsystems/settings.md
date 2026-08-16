@@ -77,6 +77,14 @@ unusable rejects the whole patch rather than half-applying it, since a half-appl
 one outcome the UI cannot report honestly. A file written before `answerSecs` existed still loads:
 each key falls back independently.
 
+⚠️ **Save feedback must be keyed to the row, because every control shares one `save`.** That is
+why `useServerSettings` exposes `isSaving(key)` rather than a `saving` boolean: a single flag is
+true for whichever row is saving *and* for every other row that renders a `saving…` span, so
+flipping a push toggle lit up the indicator next to `Away after` and `Answer window` — two rows
+the user never touched — while the row actually saving showed nothing. A new row wired to a
+shared flag reintroduces exactly that. The in-flight keys are held as a multiset so two
+overlapping saves can't have the first response clear the second's indicator.
+
 Hooks installed by **symlink** (the documented install) pick the new script up automatically.
 A copied hook must be re-copied.
 
