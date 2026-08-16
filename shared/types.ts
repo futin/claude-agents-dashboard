@@ -222,6 +222,14 @@ export interface NotifyPolicy {
 }
 
 /**
+ * What `POST /api/settings` accepts for `notify`. Every key is optional, `events`
+ * included — the server merges the patch over the stored policy, so the UI sends
+ * only the checkbox that changed rather than round-tripping the whole thing.
+ */
+export type NotifyPatch =
+  Partial<Omit<NotifyPolicy, 'events'>> & { events?: Partial<Record<NotifyEvent, boolean>> };
+
+/**
  * `POST /api/notify/event` — the `stop` hook's path into the notifier. The other
  * three events notify from the endpoint they were already POSTing to.
  */
