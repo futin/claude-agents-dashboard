@@ -84,7 +84,13 @@ case "$EVENT" in
   *) exit 0 ;;                                                 # some other event — not ours
 esac
 
-BODY=$(jq -cn --arg sid "$SESSION_ID" --arg m "$MSG" '{sessionId: $sid, message: $m}') || exit 0
+# PermissionRequest payloads carry the mode; the legacy Notification fallback may
+# not. Sent when present — an absent mode simply never satisfies requireAutoMode
+# in the notifier (server/lib/notify.ts).
+PERM_MODE=$(printf '%s' "$INPUT" | jq -r '.permission_mode // empty' 2>/dev/null)
+
+BODY=$(jq -cn --arg sid "$SESSION_ID" --arg m "$MSG" --arg pm "$PERM_MODE" \
+  '{sessionId: $sid, message: $m, permissionMode: $pm}') || exit 0
 
 AUTH=()
 if [ -f "$TOKEN_FILE" ]; then

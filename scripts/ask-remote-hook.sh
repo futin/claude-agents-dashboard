@@ -19,7 +19,9 @@
 # then add to ~/.claude/settings.json under PreToolUse matcher AskUserQuestion:
 #   { "type": "command", "command": "bash \"$HOME/.claude/hooks/ask-remote.sh\"",
 #     "timeout": 630 }
-# The timeout MUST exceed the wait window below, or the CLI kills the hook first.
+# The timeout MUST exceed the wait window, or the CLI kills the hook first. The
+# window is Settings → "Answer window" (max 600s there for exactly this reason);
+# raising it past ~615s means raising this number too.
 #
 # Requires: curl, jq. See docs/subsystems/remote-answer.md in the dashboard repo.
 
@@ -29,7 +31,6 @@ INPUT=$(cat)
 [ "$CLAUDECODE" = "1" ] || exit 0
 
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
-TIMEOUT_S="${CLAUDE_DASHBOARD_ANSWER_TIMEOUT:-600}"
 TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"
 
 command -v jq > /dev/null 2>&1 || exit 0
@@ -46,6 +47,14 @@ HEALTH=$(curl -sf -m 1 "$DASH/api/health" 2>/dev/null) || exit 0
 # odd payload) falls back to 60 rather than being trusted blind.
 IDLE_MIN_S="${CLAUDE_DASHBOARD_IDLE_SECS:-$(printf '%s' "$HEALTH" | jq -r '.idleSecs // 60')}"
 case "$IDLE_MIN_S" in ''|*[!0-9]*) IDLE_MIN_S=60 ;; esac
+
+# How long the question then stays answerable in the dashboard before we give up
+# and let the terminal dialog appear. Resolved exactly like the idle threshold —
+# env var, then the dashboard's Settings page (same probe), then 600. Keep the
+# hook's own `timeout` in ~/.claude/settings.json above this + 15, or the CLI
+# kills the hook mid-wait (which just degrades to the terminal dialog).
+TIMEOUT_S="${CLAUDE_DASHBOARD_ANSWER_TIMEOUT:-$(printf '%s' "$HEALTH" | jq -r '.answerSecs // 600')}"
+case "$TIMEOUT_S" in ''|*[!0-9]*) TIMEOUT_S=600 ;; esac
 
 # 2. Are you at the keyboard? If so the terminal dialog wins — remote answering
 #    only kicks in once you've stepped away. macOS reports idle nanoseconds via
@@ -66,11 +75,16 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 TOOL_INPUT=$(printf '%s' "$INPUT" | jq -c '.tool_input // empty')
 [ -n "$TOOL_INPUT" ] || exit 0
 
+# Carried for the notifier's auto-mode layer (server/lib/notify.ts). Absent on
+# older CLIs, which simply never satisfy that layer.
+PERM_MODE=$(printf '%s' "$INPUT" | jq -r '.permission_mode // empty')
+
 BODY=$(jq -cn \
   --arg sid "$SESSION_ID" \
+  --arg pm "$PERM_MODE" \
   --argjson ti "$TOOL_INPUT" \
   --argjson t "$((TIMEOUT_S * 1000))" \
-  '{sessionId: $sid, toolInput: $ti, timeoutMs: $t}') || exit 0
+  '{sessionId: $sid, toolInput: $ti, timeoutMs: $t, permissionMode: $pm}') || exit 0
 
 AUTH=()
 if [ -f "$TOKEN_FILE" ]; then
