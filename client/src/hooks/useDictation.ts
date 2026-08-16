@@ -66,13 +66,24 @@ export function useDictation(onText: (text: string) => void): DictationState {
   }, [stopTracks]);
 
   const upload = useCallback(async (blob: Blob) => {
+    // `rec.onstop` can still call this after the panel that started the
+    // recording is gone: ending a stream's tracks (the unmount cleanup above)
+    // makes the stream inactive, which per the MediaStream Recording spec
+    // stops the recorder and fires `stop` on its way out. The mic is already
+    // released at that point — uploading anyway would just spend the
+    // single-flight slot on a transcript nobody is left to receive.
+    if (!liveRef.current) return;
     setPhase('transcribing');
     const headers: Record<string, string> = { 'Content-Type': blob.type || 'audio/mp4' };
     if (token) headers.Authorization = `Bearer ${token}`;
     try {
       const res = await fetch('/api/transcribe', { method: 'POST', headers, body: blob });
       if (!res.ok) {
-        setError(res.status === 429 ? 'another clip is transcribing' : 'transcription failed');
+        setError(
+          res.status === 429 ? 'another clip is transcribing'
+          : res.status === 403 ? 'token needed — tap send to enter it'
+          : 'transcription failed'
+        );
         return;
       }
       const body = (await res.json()) as TranscribeResponse;

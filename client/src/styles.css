@@ -520,6 +520,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
   /* thumb-sized rows: ~42px tall, full width */
   .qp-opt{width:100%;padding:12px;min-height:42px;align-items:center}.qp-desc{display:none}
   .qp-send,.qp-term{flex:1;padding:12px;min-height:42px}
+  .qp-mic{min-height:42px}
   .qp-plan{max-height:40vh}}
 
 /* ---------------------------------------------- Settings section
