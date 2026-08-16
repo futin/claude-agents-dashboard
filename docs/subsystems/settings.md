@@ -27,10 +27,10 @@ three seconds. Sharing these would make one device wrong.
 
 **Shared — `.dashboard-settings.json`** (repo-local, gitignored, never inside `~/.claude`).
 Only settings a *separate process* has to agree on: `idleSecs` (how long until you count as
-away) and `answerSecs` (how long the question then waits here), both read by the
-remote-answer hooks, plus the `notify` policy, which the **server itself** acts on when it
-decides whether to send a push. This is the app's second and last write to disk, after
-[the remote-answer toggle](remote-answer.md).
+away) and `answerSecs` (how long a question, plan, or [reply window](remote-message.md)
+then waits here), read by the remote-answer hooks — now three of them — plus the `notify`
+policy, which the **server itself** acts on when it decides whether to send a push. This is
+the app's second and last write to disk, after [the remote-answer toggle](remote-answer.md).
 
 The three scan knobs are the interesting case: they change what the **server** computes, but
 they are still per-device, so they travel as query params on the poll the client already makes —
@@ -50,12 +50,12 @@ theme change re-tail the drawer too.
 ## The two hook numbers, and why they needed a contract change
 
 `CLAUDE_DASHBOARD_IDLE_SECS` and `CLAUDE_DASHBOARD_ANSWER_TIMEOUT` are read by
-`scripts/ask-remote-hook.sh` and `scripts/plan-remote-hook.sh`, which run inside **Claude Code's**
-process. A web app cannot set an environment variable in another process, so the values have to
-be *pulled*.
+`scripts/ask-remote-hook.sh`, `scripts/plan-remote-hook.sh`, and — on its hold path —
+`scripts/stop-notify-hook.sh`, which run inside **Claude Code's** process. A web app cannot
+set an environment variable in another process, so the values have to be *pulled*.
 
-Both hooks already `curl /api/health` as their reachability probe, immediately before the idle
-check. So both numbers ride along on that one response and the hooks resolve:
+All three hooks already `curl /api/health` as their reachability probe, immediately before
+the idle check. So both numbers ride along on that one response and the hooks resolve:
 
 ```bash
 IDLE_MIN_S="${CLAUDE_DASHBOARD_IDLE_SECS:-$(printf '%s' "$HEALTH" | jq -r '.idleSecs // 60')}"
@@ -69,6 +69,13 @@ dashboard's value, then the hook's own default — so an old server, a stopped s
 payload all behave exactly as they did before this existed. `TIMEOUT_S` is resolved *after* the
 probe for that reason, not at the top of the script with `DASH`.
 
+`idleSecs` has a second consumer that isn't a hook at all: while a reply window is held,
+`server/lib/messages.ts` polls `getSettings().idleSecs` directly, server-side, every 5s to
+decide whether to auto-release it (see [remote-message](remote-message.md)). No round trip,
+no env-var fallback chain — it reads the same shared file the hooks pull from, just from
+inside the process that owns it. **Away after** therefore now drives both a hook-side gate
+and this sweep, from the one number.
+
 ⚠️ **The env var winning is a real trap**, because `~/.claude/settings.json` commonly sets these
 in its `env` block — and then changing the number here does nothing, silently. `detectEnvOverride`
 reads that file (and the server's own environment) on every `getSettings()` and reports what it
@@ -76,11 +83,12 @@ finds as `idleOverride` / `answerOverride`; the page shows a warning naming the 
 Detection only — the app never edits `~/.claude`.
 
 ⚠️ **A second trap is specific to the window:** the CLI kills a hook at the `timeout` on its
-`settings.json` entry (installed as `630`). A window above ~615s means the hook dies mid-wait, so
-the question silently falls back to the terminal dialog early. The UI therefore offers **5–600s**
-and warns above 600; the server still clamps to 5–1800 (`MIN/MAX_ANSWER_SECS`, mirroring
-`MIN/MAX_TIMEOUT_MS` in `pending.ts`) so an env var or a hand-edited file with a matching hook
-timeout is not blocked.
+`settings.json` entry (installed as `630`). A window above ~615s means the hook dies mid-wait,
+so the question or plan silently falls back to the terminal dialog early — and a reply window's
+session just stops early instead, with nothing left to fall back to. The UI therefore offers
+**5–600s** and warns above 600; the server still clamps to 5–1800 (`MIN/MAX_ANSWER_SECS`,
+mirroring `MIN/MAX_TIMEOUT_MS` in `pending.ts`) so an env var or a hand-edited file with a
+matching hook timeout is not blocked.
 
 `setSettings` takes a **partial** patch — one row saves one key — but a key that is present and
 unusable rejects the whole patch rather than half-applying it, since a half-applied save is the
@@ -192,5 +200,6 @@ a value the rows never reflect.
 
 - [view-persistence](view-persistence.md) — the other localStorage keys, and the Reset button's blast radius
 - [remote-answer](remote-answer.md) — the three gates, of which `idleSecs` is the third, and the wait `answerSecs` sizes
+- [remote-message](remote-message.md) — a third wait `answerSecs` now sizes, plus the auto-release sweep that reads `idleSecs` directly
 - [push-notify](push-notify.md) — where the `notify` policy is actually acted on
 - [configuration](../workflows/configuration.md) — the `.env` defaults these settings override

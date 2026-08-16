@@ -58,13 +58,22 @@ with exactly the granularity the user picks events at:
 | `question` | `POST /api/questions/wait` | `serveQuestionWait`, after the wait registers |
 | `plan` | `POST /api/plans/wait` | `servePlanWait`, after the wait registers |
 | `permission` | `POST /api/permissions/notify` | `servePermissionNotify` |
-| `stop` | `POST /api/notify/event` | `scripts/stop-notify-hook.sh` |
+| `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on |
 
 Only `stop` needed a new route, because a finished turn registers nothing. So the whole
 policy lives in one testable module instead of being re-implemented in four shell scripts —
 which is what this replaced. The previous design kept a `CLAUDE_NTFY=1` prefix on one hook
 command and an inline `curl` in another, and a slash command whose job was keeping those two
 in sync by hand.
+
+`stop` now enters at *two* routes because the hook itself branches (see
+[remote-message](remote-message.md)): `serveMessageWait` calls `maybeSend(config, 'stop', …)`
+with a phrase override, `finished — reply window open`, so the two routes read differently
+even though both fire the same `stop` event and the same per-event switch. That call is
+skipped outright when the hook reports `stopHookActive` — a re-fire mid phone-conversation,
+where you are already in the drawer and do not need telling the turn finished again. This is
+a suppression the *route* applies before the predicate below ever runs, not a new clause in
+`shouldNotify` itself.
 
 ## The predicate
 
@@ -96,15 +105,20 @@ if [ "$IDLE_MIN_S" != "0" ]; then
 ```
 
 At the desk the hook exits, the POST never happens, and the server never learns a question
-exists — so the predicate is never evaluated at all. `permission` and `stop` have no idle
-check in their hooks, so those two really do become unconditional.
+exists — so the predicate is never evaluated at all. `permission` has no idle check in its
+hook, so it really does become unconditional. `stop` is the mixed case: `stop-notify-hook.sh`
+now runs the same idle check `ask-remote.sh` does, but only in front of the *hold* route —
+at the desk it falls through to the plain `notify_fallback` POST instead of exiting, so a
+push attempt reaches the predicate either way. The hook's check gates which route fires
+(and so which phrase and suppression rule apply), not whether `stop` pushes at all — see
+[remote-message](remote-message.md).
 
 | Event | Idle gate in its hook | `requireAfk` off ⇒ always pushes? |
 |---|---|---|
 | `question` | yes — `ask-remote.sh:63` | **no**, still needs `idleSecs` of idle |
 | `plan` | yes — `plan-remote.sh:70` | **no**, still needs `idleSecs` of idle |
 | `permission` | none | yes |
-| `stop` | none | yes |
+| `stop` | only gates hold vs. fallback routing, not push eligibility | yes, from either route |
 
 Not a bug in the layering: remote answering *is* an away-feature, and a question answered at
 the terminal has no remote counterpart to notify about. But the Settings switch reads as
@@ -161,7 +175,11 @@ visible payload stays clean.
 | `question` | `<label> — question waiting` |
 | `plan` | `<label> — plan waiting for review` |
 | `permission` | `<label> — permission dialog open` |
-| `stop` | `<label> — task finished` |
+| `stop` | `<label> — task finished`, or `<label> — finished — reply window open` on the [reply-window](remote-message.md) hold route |
+
+`ctx.phrase` is the one per-send override this table's default `PHRASE[event]` lookup
+allows — `maybeSend` uses it when given, so the same `stop` event reads differently
+depending on which route produced it, without becoming a fifth event type.
 
 The label comes from `scanSessions` (`sessionName || project`), resolved *after* the
 predicate passes so the scan is never paid for a push that will not be sent. An id the scan

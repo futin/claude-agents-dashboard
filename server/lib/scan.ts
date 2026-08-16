@@ -43,6 +43,11 @@ interface ScanOptions {
    */
   planIds?: ReadonlySet<string> | null;
   /**
+   * Sessions holding a turn-end reply window, same injected-Set pattern as
+   * {@link pendingIds}. Omitted/null ⇒ no session is flagged.
+   */
+  messageIds?: ReadonlySet<string> | null;
+  /**
    * Sessions the PermissionRequest hook reported as showing a permission dialog
    * (`permissions.ts` `permissionWaits()`), as `sessionId → notifiedAt` epoch ms,
    * injected by the handler so this module stays free of the store. A flag is
@@ -210,6 +215,10 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     // A held plan is the same kind of evidence as a held question — an open
     // socket right now — so it sits beside it, above the liveness gate.
     const remotePlan = !remoteQuestion && (options.planIds ? options.planIds.has(c.id) : false);
+    // A held reply window is the same kind of evidence again — the Stop hook is
+    // holding a socket open right now — so it joins the chain above the gates.
+    const remoteReply = !remoteQuestion && !remotePlan
+      && (options.messageIds ? options.messageIds.has(c.id) : false);
     // A permission dialog is open in the terminal. It never reaches the
     // transcript, so the flag comes from the Notification hook — and it is
     // believed only until the transcript moves on: answering the dialog (allow
@@ -217,10 +226,11 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     // the dialog is gone. Unlike a held remote wait this carries no liveness
     // evidence (the hook fired and exited), so it sits BELOW the dead gate.
     const notifiedAt = options.permissionWaits?.get(c.id);
-    const permissionWait = !remoteQuestion && !remotePlan && !dead && notifiedAt !== undefined
+    const permissionWait = !remoteQuestion && !remotePlan && !remoteReply && !dead && notifiedAt !== undefined
       && !(Number.isFinite(lastMsgMs) && lastMsgMs > notifiedAt);
     if (remoteQuestion) status = 'question';                           // blue — a wait is held for it
     else if (remotePlan) status = 'question';                          // blue — a plan is held for a verdict
+    else if (remoteReply) status = 'question';                         // blue — a reply window is open
     else if (dead) status = 'idle';                                    // gray — no live process
     else if (permissionWait) status = 'question';                      // blue — dialog open in the terminal
     else if (parsed.waitingOnQuestion) status = 'question';            // blue — needs an answer, beats all
@@ -241,6 +251,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       status,
       remoteQuestion,
       remotePlan,
+      remoteReply,
       permissionWait,
       activity: parsed.activity,
       lastTimestamp: parsed.lastTimestamp,

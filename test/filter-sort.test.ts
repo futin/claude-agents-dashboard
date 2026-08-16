@@ -26,6 +26,7 @@ function sess(p: Partial<Session>): Session {
     status: p.status ?? 'idle',
     remoteQuestion: p.remoteQuestion ?? false,
     remotePlan: p.remotePlan ?? false,
+    remoteReply: p.remoteReply ?? false,
     permissionWait: p.permissionWait ?? false,
     activity: null,
     lastTimestamp: null,

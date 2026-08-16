@@ -18,8 +18,10 @@ docs-sync:
 When a session calls `AskUserQuestion`, the [chat drawer](chat.md) can render its options
 as buttons and deliver the pick **into the live session** — tap one on your phone and the
 answer reaches the model. This is the single deliberate exception to the app's read-only
-charter — and even here nothing is written to disk: the store is RAM only. Per-machine
-hook installation lives in [remote-answer-setup](../workflows/remote-answer-setup.md).
+charter — and even here nothing is written to disk: the store is RAM only. The same
+mechanism also holds a *finished* turn open for a free-text follow-up, the third write
+path — see [remote-message](remote-message.md). Per-machine hook installation lives in
+[remote-answer-setup](../workflows/remote-answer-setup.md).
 
 ## How it works
 

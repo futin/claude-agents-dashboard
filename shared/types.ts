@@ -42,6 +42,13 @@ export interface Session {
    */
   remotePlan: boolean;
   /**
+   * True while a turn-end reply window is held for this session — the Stop hook
+   * is holding the turn open for a follow-up. Same mechanism and same lead over
+   * the transcript as {@link remoteQuestion}; the separate flag lets the row say
+   * `reply?`. See {@link MessageAnswerRequest}.
+   */
+  remoteReply: boolean;
+  /**
    * True while the CLI is believed to be showing an interactive permission
    * dialog ("allow Bash: pnpm dev?"). Fed by the PermissionRequest hook (or the
    * older Notification one) into an in-memory store — the dialog is drawn by the
@@ -413,6 +420,46 @@ export interface PlanWaitResult {
    * so the injection mechanism can change without touching the hook script.
    * Set only when `status === 'rejected'`.
    */
+  reason?: string;
+}
+
+/** A turn-end reply window a session is holding open, as the browser sees it. */
+export interface PendingMessage {
+  /** Server nonce. A send must echo it, so a stale tab can't answer the next window. */
+  messageId: string;
+  askedAt: string;
+  /** When the window closes on its own — feeds the panel's countdown. */
+  expiresAt: string;
+}
+
+/** Payload of `GET /api/sessions/:id/message`. */
+export interface SessionMessage {
+  id: string;
+  pending: PendingMessage | null;
+  error?: boolean;
+}
+
+/**
+ * Body of `POST /api/sessions/:id/message-answer`.
+ * `text` continues the model with your message; `dismiss` releases the hold so
+ * the session stops now instead of sitting out the window.
+ */
+export interface MessageAnswerRequest {
+  messageId: string;
+  /** The follow-up, sent to the model verbatim inside a composed reason. */
+  text?: string;
+  dismiss?: boolean;
+}
+
+/**
+ * Body of the held `POST /api/messages/wait` response — how a reply window
+ * ended. Only `answered` makes the hook block the stop; every other status
+ * exits 0 and the session stops normally. `released` is the auto-release: you
+ * came back to the keyboard, so every hold let go.
+ */
+export interface MessageWaitResult {
+  status: 'answered' | 'timeout' | 'superseded' | 'dismissed' | 'released';
+  /** Prose the hook prints as the Stop block's `reason`. Composed server-side. */
   reason?: string;
 }
 
