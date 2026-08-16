@@ -44,6 +44,9 @@ docs:
   - path: docs/subsystems/remote-message.md
     kind: subsystem
     note: Remote messages (the `reply?` pill)
+  - path: docs/subsystems/dictation.md
+    kind: subsystem
+    note: Dictation in the reply composer (local whisper)
   - path: docs/workflows/configuration.md
     kind: workflow
     note: env and hook-side variable reference
@@ -56,6 +59,9 @@ docs:
   - path: docs/workflows/push-notify-setup.md
     kind: workflow
     note: ntfy topic, phone subscription and the Stop hook
+  - path: docs/workflows/dictation-setup.md
+    kind: workflow
+    note: Dictation — setup
   - path: README.md
     kind: readme
   - path: .claude/CLAUDE.md

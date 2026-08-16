@@ -7,7 +7,7 @@ docs-sync:
     - scripts/ask-remote-hook.sh
     - .env.example
   kind: workflow
-  verified: 39633d9069c91c327ed0883179dce64d24465b08
+  verified: 3e1d51fd26c72d6c21bd9d6b8921ee3bb498518b
 ---
 
 # Configuration
@@ -40,6 +40,9 @@ environment variables override `.env`, which overrides the defaults
 | `NTFY_TOPIC` | _(empty)_ | ntfy topic for [push notifications](../subsystems/push-notify.md). Empty disables pushes outright. **Treat it as a secret** — the string is both the address and the credential, so anyone who learns it can publish to your phone as well as read it. Never returned by any endpoint. Step-by-step: [push-notify-setup](push-notify-setup.md) |
 | `NTFY_SERVER` | `https://ntfy.sh` | Base URL of the ntfy server. Override for a self-hosted instance |
 | `DASHBOARD_PUBLIC_URL` | _(empty)_ | How your **phone** reaches the dashboard, used for the notification's tap-through link. Cannot be inferred (a push has no `Host` header to read) — set it to your tailnet hostname. Unset, pushes still arrive but carry no `Click` header, so tapping one opens nothing; the Test push button says so rather than reporting a guess |
+| `WHISPER_MODEL` | _(empty)_ | Path to a GGML whisper model. **Empty disables [dictation](../subsystems/dictation.md) outright** — the same "unset means off" rule `NTFY_TOPIC` uses for pushes. Setting it arms `POST /api/transcribe`, an endpoint that spawns processes on this machine, gated only by the same `ANSWER_TOKEN` above (empty there means this is open too — see [dictation's security posture](../subsystems/dictation.md#security-posture) before setting this where other devices can reach it). Step-by-step: [dictation-setup](dictation-setup.md) |
+| `WHISPER_BIN` | `whisper-cli` | The whisper.cpp CLI, resolved from `PATH`. Override with an absolute path for a non-`PATH` install |
+| `FFMPEG_BIN` | `ffmpeg` | Transcodes the browser's recording (AAC or Opus) to the 16kHz mono WAV whisper.cpp requires. Resolved from `PATH`; override with an absolute path for a non-`PATH` install |
 
 ## Process-environment only (not read from `.env`)
 

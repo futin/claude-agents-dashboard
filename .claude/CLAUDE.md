@@ -6,7 +6,7 @@ docs-sync:
     - shared/types.ts
     - package.json
   kind: index
-  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
+  verified: 3e1d51fd26c72d6c21bd9d6b8921ee3bb498518b
 ---
 
 # Claude Agents Dashboard
@@ -68,6 +68,9 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   notify policy lib/notify.ts acts on (see docs/subsystems/settings.md)
   lib/origin.ts   pure connection classifier → local | lan | tailnet | unknown, on
                   /api/health for the toolbar badge (see docs/subsystems/remote-access.md)
+  lib/transcribe.ts  ffmpeg → whisper-cli pipeline for POST /api/transcribe: mime
+                  allowlist, cached engine probe, single-flight guard, typed failures,
+                  never a raw stderr dump to the client (see docs/subsystems/dictation.md)
 client/           Vite + React + TypeScript frontend
   src/App.tsx     shell: side rail (Sessions | Management | Analytics | Settings), lazy-loads all but Sessions
   components/SessionsView.tsx  the original live monitor (owns the 3s poll + chat drawer state)
@@ -86,6 +89,11 @@ client/           Vite + React + TypeScript frontend
                   (hooks/usePendingPlan — see docs/subsystems/remote-plan.md)
   components/MessagePanel.tsx  pinned composer for a turn-end reply window: send free text
                   back, or let the session stop (hooks/usePendingMessage — see docs/subsystems/remote-message.md)
+  components/MicButton.tsx + lib/dictation.ts  tap-to-record mic in that composer's action
+                  row, plus its pure mime-pick/elapsed-fmt/transcript-append helpers
+                  (hooks/useDictation + hooks/useTranscribeAvailable — see
+                  docs/subsystems/dictation.md); hidden with no engine, disabled-with-reason
+                  with no HTTPS
   components/PermissionBanner.tsx  pinned drawer strip naming the tool call a terminal
                   permission dialog is asking about (display-only; no controls by design)
   components/RemoteAnswerToggle.tsx  toolbar pill for the remote-answer switch
