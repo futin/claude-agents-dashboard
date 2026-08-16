@@ -24,6 +24,8 @@ import {
   getPendingPlan, planSessionIds, register as registerPlan, sanitizePlan
 } from './lib/plans.js';
 import { notifyPermission, permissionWaits } from './lib/permissions.js';
+import { maybeSend, sendTest } from './lib/notify.js';
+import { addSubscriber } from './lib/alertStream.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getSettings, setSettings } from './lib/settings.js';
 import { classifyOrigin } from './lib/origin.js';
@@ -103,6 +105,44 @@ export function serveSessions(baseConfig: Config, res: ServerResponse, params?: 
   }
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(data));
+}
+
+/**
+ * `GET /api/alerts/stream` — SSE push of needs-you transitions.
+ *
+ * The one endpoint that outlives its request on purpose (alongside the two
+ * `wait` routes). It exists because the client's poll is a timer and the
+ * browser throttles a hidden tab's timers below the lifetime of the statuses
+ * worth alerting on — see `lib/alertStream.ts` for the full reasoning.
+ *
+ * Scans with the server's own configured knobs, not the caller's `?limit=`: the
+ * per-device row count is about what you are *reading*, and a session you
+ * trimmed off the list still needs you. Same doctrine as the client feeding its
+ * alert diff the unfiltered list.
+ *
+ * `X-Accel-Buffering: no` matters — a buffering reverse proxy in front of the
+ * dashboard would otherwise hold events until the response closed, which for
+ * this route is never.
+ */
+export function serveAlertStream(config: Config, req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  // A first comment frame flushes headers immediately, so EventSource fires
+  // `onopen` now rather than on the first real event minutes later.
+  res.write(': connected\n\n');
+
+  const detach = addSubscriber(res, () => scanSessions(config, {
+    skipProcScan: config.skipProcScan,
+    pendingIds: pendingSessionIds(),
+    planIds: planSessionIds(),
+    permissionWaits: permissionWaits()
+  }));
+  req.on('close', detach);
+  req.on('error', detach);
 }
 
 /**
@@ -241,22 +281,30 @@ function sessionExists(id: string): boolean {
  * remote-answer switch. `remoteAnswer` is the single field the hook acts on; the
  * rest lets the UI explain *why* it's off.
  *
- * `idleSecs` rides along because the hooks check it immediately after this probe
- * (`ask-remote-hook.sh`), and a second round trip to fetch one integer would add
- * latency to every question they intercept.
+ * `idleSecs` and `answerSecs` ride along because the hooks need both immediately
+ * after this probe (`ask-remote-hook.sh`), and a second round trip to fetch two
+ * integers would add latency to every question they intercept.
  */
 export function serveHealth(config: Config, res: ServerResponse, req?: IncomingMessage): void {
+  const settings = getSettings();
   sendJson(res, 200, {
     ok: true,
     ...getState(config),
-    idleSecs: getSettings().idleSecs,
+    idleSecs: settings.idleSecs,
+    answerSecs: settings.answerSecs,
     origin: classifyOrigin(req?.socket?.remoteAddress, req?.headers)
   });
 }
 
-/** `GET /api/settings` — the settings that aren't per-device (see lib/settings.ts). */
-export function serveSettingsRead(res: ServerResponse): void {
-  sendJson(res, 200, getSettings());
+/**
+ * `GET /api/settings` — the settings that aren't per-device (see lib/settings.ts).
+ *
+ * `notifyAvailable` is filled here rather than in the store: it is the one field
+ * derived from `Config`, and `lib/settings.ts` deliberately never reads config.
+ * The topic itself is never returned — it is both the address and the credential.
+ */
+export function serveSettingsRead(config: Config, res: ServerResponse): void {
+  sendJson(res, 200, { ...getSettings(), notifyAvailable: config.ntfyTopic !== '' });
 }
 
 /**
@@ -270,8 +318,10 @@ export async function serveSettingsWrite(
   if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
   const body = await readJsonBody(req);
   const next = setSettings(body);
-  if (!next) return sendJson(res, 400, { error: 'expected {idleSecs: number}' });
-  sendJson(res, 200, next);
+  if (!next) {
+    return sendJson(res, 400, { error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy}' });
+  }
+  sendJson(res, 200, { ...next, notifyAvailable: config.ntfyTopic !== '' });
 }
 
 /**
@@ -309,7 +359,8 @@ export async function serveQuestionWait(config: Config, req: IncomingMessage, re
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
   if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
 
-  const body = await readJsonBody(req) as { sessionId?: unknown; toolInput?: unknown; timeoutMs?: unknown } | null;
+  const body = await readJsonBody(req) as
+    { sessionId?: unknown; toolInput?: unknown; timeoutMs?: unknown; permissionMode?: unknown } | null;
   if (!body || typeof body !== 'object') return sendJson(res, 400, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
@@ -330,6 +381,13 @@ export async function serveQuestionWait(config: Config, req: IncomingMessage, re
     sendJson(res, 200, result);
   });
   if (res.destroyed) cancelPending(sessionId, questionId);
+
+  // Last, so a refused registration never pushes. Returns immediately — the
+  // response above stays held either way.
+  maybeSend(config, 'question', {
+    sessionId,
+    permissionMode: typeof body.permissionMode === 'string' ? body.permissionMode : undefined
+  });
 }
 
 /** `GET /api/sessions/:id/question` — what this session is waiting on, if anything. */
@@ -374,7 +432,8 @@ export async function servePlanWait(config: Config, req: IncomingMessage, res: S
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
   if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
 
-  const body = await readJsonBody(req) as { sessionId?: unknown; toolInput?: unknown; timeoutMs?: unknown } | null;
+  const body = await readJsonBody(req) as
+    { sessionId?: unknown; toolInput?: unknown; timeoutMs?: unknown; permissionMode?: unknown } | null;
   if (!body || typeof body !== 'object') return sendJson(res, 400, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
@@ -391,6 +450,11 @@ export async function servePlanWait(config: Config, req: IncomingMessage, res: S
     sendJson(res, 200, result);
   });
   if (res.destroyed) cancelPlan(sessionId, planId);
+
+  maybeSend(config, 'plan', {
+    sessionId,
+    permissionMode: typeof body.permissionMode === 'string' ? body.permissionMode : undefined
+  });
 }
 
 /** `GET /api/sessions/:id/plan` — the plan this session is waiting on, if any. */
@@ -444,7 +508,8 @@ export async function servePermissionNotify(
 ): Promise<void> {
   if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
 
-  const body = await readJsonBody(req) as { sessionId?: unknown; message?: unknown } | null;
+  const body = await readJsonBody(req) as
+    { sessionId?: unknown; message?: unknown; permissionMode?: unknown } | null;
   if (!body || typeof body !== 'object') return sendJson(res, 400, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
@@ -452,7 +517,56 @@ export async function servePermissionNotify(
   if (!sessionExists(sessionId)) return sendJson(res, 404, { error: 'unknown session' });
 
   notifyPermission(sessionId, body.message);
+  maybeSend(config, 'permission', {
+    sessionId,
+    permissionMode: typeof body.permissionMode === 'string' ? body.permissionMode : undefined
+  });
   sendJson(res, 200, { ok: true });
+}
+
+/**
+ * `POST /api/notify/event` — the `stop` hook's path in. Fire-and-forget like
+ * `/api/permissions/notify`: the hook does not care what happens next, and a
+ * push must never delay the end of a turn.
+ *
+ * The three other events do not use this route — they are already registering
+ * something here, so they notify inline.
+ *
+ * Unlike the wait endpoints this does NOT call `sessionExists`: a `stop` hook
+ * fires as the turn ends, which is exactly when the transcript may not yet be
+ * on disk for the scan to see, and rejecting there would drop the most common
+ * push. The id is still shape-checked and never joined into a path.
+ */
+export async function serveNotifyEvent(
+  config: Config, req: IncomingMessage, res: ServerResponse
+): Promise<void> {
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+
+  const body = await readJsonBody(req) as
+    { sessionId?: unknown; event?: unknown; permissionMode?: unknown } | null;
+  if (!body || typeof body !== 'object') return sendJson(res, 400, { error: 'bad body' });
+
+  const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
+  if (!sessionId || !ID_RE.test(sessionId)) return sendJson(res, 400, { error: 'bad sessionId' });
+
+  const event = body.event;
+  if (event !== 'question' && event !== 'stop' && event !== 'permission' && event !== 'plan') {
+    return sendJson(res, 400, { error: 'bad event' });
+  }
+
+  maybeSend(config, event, {
+    sessionId,
+    permissionMode: typeof body.permissionMode === 'string' ? body.permissionMode : undefined
+  });
+  sendJson(res, 200, { ok: true });
+}
+
+/** `POST /api/notify/test` — fire one push regardless of policy and report the outcome. */
+export async function serveNotifyTest(
+  config: Config, req: IncomingMessage, res: ServerResponse
+): Promise<void> {
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  sendJson(res, 200, { outcome: await sendTest(config) });
 }
 
 /* -------------------------------------------------- management endpoints */

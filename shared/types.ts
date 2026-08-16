@@ -222,6 +222,22 @@ export interface NotifyPolicy {
 }
 
 /**
+ * `POST /api/notify/event` — the `stop` hook's path into the notifier. The other
+ * three events notify from the endpoint they were already POSTing to.
+ */
+export interface NotifyEventRequest {
+  sessionId: string;
+  event: NotifyEvent;
+  /** From the hook payload; omitted where the event does not carry it. */
+  permissionMode?: string;
+}
+
+/** `POST /api/notify/test` — what the Settings button reports back. */
+export interface NotifyTestResponse {
+  outcome: string;
+}
+
+/**
  * `GET /api/settings`, `POST /api/settings` — the settings the browser may
  * change that are *not* per-device. Only facts a separate process has to agree
  * on land here; everything a single browser owns (theme, refresh rate, row
