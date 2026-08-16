@@ -26,6 +26,7 @@ import { run as runSettings } from './settings.test.js';
 import { run as runClientSettings } from './client-settings.test.js';
 import { run as runNotify } from './notify.test.js';
 import { run as runDeepLink } from './deep-link.test.js';
+import { run as runDictation } from './dictation.test.js';
 import { run as runTranscribe } from './transcribe.test.js';
 
 let failed = 0;
@@ -56,6 +57,7 @@ failed += runSettings();
 failed += runClientSettings();
 failed += await runNotify();
 failed += runDeepLink();
+failed += runDictation();
 failed += await runTranscribe();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
