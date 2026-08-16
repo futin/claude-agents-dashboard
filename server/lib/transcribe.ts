@@ -7,6 +7,11 @@
  * spawns a real engine — see docs/subsystems/dictation.md.
  */
 
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+
+import type { Config } from './config.js';
+
 /** Recorder mime → temp-file extension. The allowlist bounds what we accept. */
 const MIME_EXT: Record<string, string> = {
   'audio/mp4': 'm4a',
@@ -49,4 +54,39 @@ export function parseOutput(stdout: string): string {
     .filter(line => line !== '' && !BLANK_RE.test(line))
     .join(' ')
     .trim();
+}
+
+/** Probe result for this process. `null` = not probed yet. */
+let probed: boolean | null = null;
+
+/** Drop the cached probe. Tests only — a running server never changes engines. */
+export function resetProbe(): void {
+  probed = null;
+}
+
+function computeProbe(config: Config): boolean {
+  if (!config.whisperModel) return false;
+  try {
+    if (!fs.statSync(config.whisperModel).isFile()) return false;
+  } catch {
+    return false;
+  }
+  // `!error` rather than `status === 0`: this asks "is the binary there and
+  // executable", not "does this build agree about -h". Version-proof, and
+  // ENOENT/timeout both land in `error`.
+  try {
+    return !spawnSync(config.whisperBin, ['-h'], { timeout: 2_000, stdio: 'ignore' }).error;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Is dictation available? Cached for the process lifetime: one spawn per server
+ * run, never one per request, and the health endpoint is polled every few
+ * seconds by every open tab.
+ */
+export function probeTranscribe(config: Config): boolean {
+  if (probed === null) probed = computeProbe(config);
+  return probed;
 }

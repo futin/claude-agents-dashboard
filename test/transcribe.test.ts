@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { loadConfig } from '../server/lib/config.js';
 import {
-  buildFfmpegArgs, buildWhisperArgs, extForMime, parseOutput
+  buildFfmpegArgs, buildWhisperArgs, extForMime, parseOutput, probeTranscribe, resetProbe
 } from '../server/lib/transcribe.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -20,6 +20,14 @@ function withEnvFile(body: string, fn: (cfg: ReturnType<typeof loadConfig>) => v
   fs.writeFileSync(envPath, body);
   try { fn(loadConfig({ envPath })); }
   finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+/** A throwaway executable that exits 0 and prints nothing. */
+function stubBin(dir: string, name: string, body = '#!/bin/bash\nexit 0\n'): string {
+  const p = path.join(dir, name);
+  fs.writeFileSync(p, body);
+  fs.chmodSync(p, 0o755);
+  return p;
 }
 
 export function run(): number {
@@ -79,6 +87,55 @@ export function run(): number {
     assert.equal(parseOutput('[BLANK_AUDIO]\n'), '');
     assert.equal(parseOutput('  \n\n'), '');
     assert.equal(parseOutput('(silence)'), '');
+  }));
+
+  check(test('probe is false with no model configured', () => {
+    resetProbe();
+    withEnvFile('', cfg => assert.equal(probeTranscribe(cfg), false));
+  }));
+
+  check(test('probe is false when the model file is missing', () => {
+    resetProbe();
+    withEnvFile('WHISPER_MODEL=/nope/missing.bin\n', cfg =>
+      assert.equal(probeTranscribe(cfg), false));
+  }));
+
+  check(test('probe is true with a real model file and a runnable binary', () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-probe-'));
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const bin = stubBin(dir, 'whisper-stub');
+      withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${bin}\n`, cfg =>
+        assert.equal(probeTranscribe(cfg), true));
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  check(test('probe is false when the binary does not exist', () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-probe2-'));
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${path.join(dir, 'nothing-here')}\n`, cfg =>
+        assert.equal(probeTranscribe(cfg), false));
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  check(test('probe caches — a later config change is not re-read', () => {
+    resetProbe();
+    withEnvFile('', cfg => assert.equal(probeTranscribe(cfg), false));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-probe3-'));
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const bin = stubBin(dir, 'whisper-stub');
+      // Same process, no resetProbe(): the cached `false` must win.
+      withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${bin}\n`, cfg =>
+        assert.equal(probeTranscribe(cfg), false));
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+    resetProbe();
   }));
 
   console.log(`\n  ${ok}/${total} passed`);
