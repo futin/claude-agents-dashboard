@@ -236,7 +236,7 @@ export default function SettingsView() {
                 unit="sec"
                 onCommit={idleSecs => void server.save({ idleSecs })}
               />
-              {server.saving && <span className="set-saving">saving…</span>}
+              {server.isSaving('idleSecs') && <span className="set-saving">saving…</span>}
             </SettingsRow>
             {server.state.idleOverride && (
               <div className="set-warn">
@@ -261,7 +261,7 @@ export default function SettingsView() {
                 unit="sec"
                 onCommit={answerSecs => void server.save({ answerSecs })}
               />
-              {server.saving && <span className="set-saving">saving…</span>}
+              {server.isSaving('answerSecs') && <span className="set-saving">saving…</span>}
             </SettingsRow>
             {server.state.answerOverride && (
               <div className="set-warn">
