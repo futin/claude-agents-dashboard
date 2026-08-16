@@ -19,6 +19,8 @@
 
 import { randomUUID } from 'node:crypto';
 
+import { readIdleSecs } from './notify.js';
+import { getSettings } from './settings.js';
 import type { MessageAnswerRequest, MessageWaitResult, PendingMessage } from '../../shared/types.js';
 
 /** Cap on the follow-up that reaches the model verbatim. */
@@ -87,6 +89,7 @@ export function register(
     resolve
   };
   entries.set(sessionId, entry);
+  ensureReaper();
   return messageId;
 }
 
@@ -158,4 +161,47 @@ export function dismissAll(): number {
 export function resetStore(): void {
   for (const entry of entries.values()) clearTimeout(entry.timer);
   entries.clear();
+  if (reaper) { clearInterval(reaper); reaper = null; }
+}
+
+/* ------------------------------------------------- idle auto-release */
+
+let idleReader: (() => number | null) | null = null;
+let reaper: NodeJS.Timeout | null = null;
+
+/** Test seam: swap the idle source so no test spawns `ioreg`. `null` restores it. */
+export function setIdleReader(fn: (() => number | null) | null): void {
+  idleReader = fn;
+}
+
+/**
+ * Release every hold if the user is back at the keyboard. Returns how many.
+ *
+ * Fail directions: unreadable idle (Docker, non-macOS) → never release — the
+ * deadline timer is the reaper of last resort. `idleSecs === 0` means the idle
+ * gate is disabled everywhere else, so it disables auto-release too.
+ */
+export function sweepIdle(): number {
+  if (entries.size === 0) return 0;
+  const thresholdSecs = getSettings().idleSecs;
+  if (thresholdSecs === 0) return 0;
+  const idle = (idleReader ?? readIdleSecs)();
+  if (idle === null || idle >= thresholdSecs) return 0;
+  const waiting = [...entries.values()];
+  for (const entry of waiting) settle(entry, { status: 'released' });
+  return waiting.length;
+}
+
+/**
+ * The 5s reaper behind {@link sweepIdle}. Runs only while holds exist — an
+ * idle server never spawns `ioreg`. `unref()` so it cannot hold the process
+ * open.
+ */
+function ensureReaper(): void {
+  if (reaper) return;
+  reaper = setInterval(() => {
+    sweepIdle();
+    if (entries.size === 0 && reaper) { clearInterval(reaper); reaper = null; }
+  }, 5_000);
+  reaper.unref();
 }

@@ -140,6 +140,62 @@ export async function run(): Promise<number> {
     assert.strictEqual(answer('s1', { messageId, text: 'too late' }), 'not-found');
   })) p++; else f++;
 
+  /* ----------------------------------------------------- idle auto-release */
+
+  const { setIdleReader, sweepIdle } = await import('../server/lib/messages.js');
+  const { setSettings, resetSettings: resetSettingsModule } = await import('../server/lib/settings.js');
+
+  if (test('sweepIdle releases every hold when you are back at the keyboard', () => {
+    resetStore();
+    const orig = setSettings({ idleSecs: 60 });
+    const w = waiter();
+    register('s1', 60_000, w.resolve);
+    setIdleReader(() => 3); // 3s idle < 60s threshold
+    assert.strictEqual(sweepIdle(), 1);
+    assert.deepStrictEqual(w.results, [{ status: 'released' }]);
+    setIdleReader(null);
+    if (orig) setSettings(orig);
+    resetSettingsModule();
+  })) p++; else f++;
+
+  if (test('sweepIdle does nothing while still away', () => {
+    resetStore();
+    const orig = setSettings({ idleSecs: 60 });
+    const w = waiter();
+    register('s1', 60_000, w.resolve);
+    setIdleReader(() => 9999); // 9999s idle >= 60s threshold
+    assert.strictEqual(sweepIdle(), 0);
+    assert.strictEqual(w.results.length, 0);
+    setIdleReader(null);
+    if (orig) setSettings(orig);
+    resetSettingsModule();
+  })) p++; else f++;
+
+  if (test('unreadable idle never auto-releases (Docker/non-macOS)', () => {
+    resetStore();
+    const orig = setSettings({ idleSecs: 60 });
+    const w = waiter();
+    register('s1', 60_000, w.resolve);
+    setIdleReader(() => null); // unreadable idle
+    assert.strictEqual(sweepIdle(), 0);
+    setIdleReader(null);
+    if (orig) setSettings(orig);
+    resetSettingsModule();
+  })) p++; else f++;
+
+  if (test('sweepIdle returns 0 when idleSecs is 0 (idle check disabled)', () => {
+    resetStore();
+    const orig = setSettings({ idleSecs: 0 });
+    const w = waiter();
+    register('s1', 60_000, w.resolve);
+    setIdleReader(() => 3);
+    assert.strictEqual(sweepIdle(), 0);
+    assert.strictEqual(w.results.length, 0);
+    setIdleReader(null);
+    if (orig) setSettings(orig);
+    resetSettingsModule();
+  })) p++; else f++;
+
   resetStore();
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
