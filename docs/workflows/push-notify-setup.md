@@ -74,10 +74,10 @@ then add to `~/.claude/settings.json` under `Stop`:
 { "type": "command", "command": "bash \"$HOME/.claude/hooks/stop-notify.sh\"", "timeout": 630 }
 ```
 
-`"timeout": 630` is now required, unlike before this script also backed
-[remote messages](../subsystems/remote-message.md): away from the keyboard with remote
-answers on, this same hook holds a finished turn open for a reply from the dashboard, exactly
-as the ask/plan hooks hold a question or plan. The CLI kills a hook at its configured
+`"timeout": 630` is now required: this same hook also backs
+[remote messages](../subsystems/remote-message.md), and away from the keyboard with remote
+answers on it holds a finished turn open for a reply from the dashboard, exactly as the
+ask/plan hooks hold a question or plan. The CLI kills a hook at its configured
 `timeout`, so a missing or too-low value kills the hold mid-wait — the session just stops
 early (there is no dialog to fall back to, unlike a killed ask/plan hook), and a reply typed
 after that lands on a 404. At the desk, or with the feature off, the hook still just POSTs and
