@@ -41,6 +41,9 @@ docs:
   - path: docs/subsystems/push-notify.md
     kind: subsystem
     note: server-sent ntfy pushes and the layered send policy
+  - path: docs/subsystems/remote-message.md
+    kind: subsystem
+    note: Remote messages (the `reply?` pill)
   - path: docs/workflows/configuration.md
     kind: workflow
     note: env and hook-side variable reference
