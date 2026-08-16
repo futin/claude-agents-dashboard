@@ -28,6 +28,7 @@ import { run as runNotify } from './notify.test.js';
 import { run as runDeepLink } from './deep-link.test.js';
 import { run as runDictation } from './dictation.test.js';
 import { run as runTranscribe } from './transcribe.test.js';
+import { run as runApiBody } from './api-body.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -59,6 +60,7 @@ failed += await runNotify();
 failed += runDeepLink();
 failed += runDictation();
 failed += await runTranscribe();
+failed += await runApiBody();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);
