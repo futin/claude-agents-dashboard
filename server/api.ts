@@ -34,6 +34,7 @@ import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getSettings, setSettings } from './lib/settings.js';
 import { classifyOrigin } from './lib/origin.js';
+import { extForMime, probeTranscribe, transcribe } from './lib/transcribe.js';
 import { toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig, SessionMessage,
@@ -234,6 +235,79 @@ export function readJsonBody(req: IncomingMessage, cap = BODY_CAP): Promise<unkn
   });
 }
 
+/** Audio-body cap. A 120s AAC clip is ~2MB; 8MB leaves room for verbose codecs. */
+const AUDIO_CAP = 8 * 1024 * 1024;
+
+export type BinaryBody =
+  | { ok: true; bytes: Buffer }
+  | { ok: false; reason: 'overflow' | 'aborted' };
+
+/**
+ * Buffer a raw request body. Sibling to `readJsonBody`, but it keeps overflow
+ * and abort apart — `readJsonBody` collapses both to null, and this caller has
+ * to answer 413 for one and 400 for the other.
+ */
+export function readBinaryBody(req: IncomingMessage, cap = AUDIO_CAP): Promise<BinaryBody> {
+  return new Promise(resolve => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let done = false;
+    const finish = (value: BinaryBody): void => {
+      if (done) return;
+      done = true;
+      resolve(value);
+    };
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > cap) {
+        // Resolve but do NOT req.destroy() here: req and res share one socket,
+        // and destroying the request kills that socket before the caller's
+        // response (413) can go out — the client would see a bare connection
+        // reset instead of a JSON body. Dropping further chunks (no push)
+        // keeps memory bounded; the stream drains on its own.
+        finish({ ok: false, reason: 'overflow' });
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => finish({ ok: true, bytes: Buffer.concat(chunks) }));
+    req.on('error', () => finish({ ok: false, reason: 'aborted' }));
+    req.on('aborted', () => finish({ ok: false, reason: 'aborted' }));
+  });
+}
+
+/**
+ * `POST /api/transcribe` — a recorded clip in, one line of text out.
+ *
+ * Gated like the three write paths even though it writes no session state: it
+ * spawns processes and writes files on this machine, which is firmly the write
+ * side of the line this codebase draws. See docs/subsystems/dictation.md.
+ */
+export async function serveTranscribe(
+  config: Config, req: IncomingMessage, res: ServerResponse
+): Promise<void> {
+  if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (!probeTranscribe(config)) return sendJson(res, 404, { error: 'no transcription engine' });
+
+  const mime = String(req.headers['content-type'] || '');
+  const ext = extForMime(mime);
+  if (!ext) return sendJson(res, 400, { error: `unsupported audio type: ${mime}` });
+
+  const body = await readBinaryBody(req, AUDIO_CAP);
+  if (!body.ok) {
+    return body.reason === 'overflow'
+      ? sendJson(res, 413, { error: 'clip too large' })
+      : sendJson(res, 400, { error: 'upload aborted' });
+  }
+  if (body.bytes.length === 0) return sendJson(res, 400, { error: 'empty body' });
+
+  const out = await transcribe(config, body.bytes, ext);
+  if (out.ok) return sendJson(res, 200, { text: out.text });
+  const code = out.reason === 'busy' ? 429 : out.reason === 'timeout' ? 504 : 500;
+  return sendJson(res, code, { error: out.reason });
+}
+
 /**
  * Bearer check for the two write endpoints. An unset ANSWER_TOKEN leaves them
  * open — the same posture as every read endpoint here.
@@ -266,7 +340,8 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
     ...getState(config),
     idleSecs: settings.idleSecs,
     answerSecs: settings.answerSecs,
-    origin: classifyOrigin(req?.socket?.remoteAddress, req?.headers)
+    origin: classifyOrigin(req?.socket?.remoteAddress, req?.headers),
+    transcribe: probeTranscribe(config)
   });
 }
 

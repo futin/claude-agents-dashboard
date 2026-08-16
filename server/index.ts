@@ -27,7 +27,8 @@ import {
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
-  serveSettingsRead, serveSettingsWrite, serveNotifyEvent, serveNotifyTest
+  serveSettingsRead, serveSettingsWrite, serveNotifyEvent, serveNotifyTest,
+  serveTranscribe
 } from './api.js';
 
 const config = loadConfig();
@@ -131,6 +132,11 @@ const server = http.createServer((req, res) => {
   if (u.pathname === '/api/notify/test') {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return void serveNotifyTest(config, req, res);
+  }
+  // Dictation: a recorded clip in, text out (see docs/subsystems/dictation.md).
+  if (u.pathname === '/api/transcribe') {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void serveTranscribe(config, req, res);
   }
   // Like the chat route below, these must be matched before the detail regex,
   // whose `[^/?]+` would otherwise swallow `/api/sessions/:id/<anything>`.

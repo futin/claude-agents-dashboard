@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -7,6 +8,7 @@ import { loadConfig } from '../server/lib/config.js';
 import {
   buildFfmpegArgs, buildWhisperArgs, extForMime, parseOutput, probeTranscribe, resetProbe, transcribe
 } from '../server/lib/transcribe.js';
+import { readBinaryBody, serveTranscribe } from '../server/api.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -33,6 +35,28 @@ function stubBin(dir: string, name: string, body = '#!/bin/bash\nexit 0\n'): str
 async function testAsync(name: string, fn: () => Promise<void>): Promise<boolean> {
   try { await fn(); console.log('  ✓ ' + name); return true; }
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
+}
+
+/** POST a body to a one-shot server wrapping `serveTranscribe`, return the reply. */
+function post(cfg: ReturnType<typeof loadConfig>, contentType: string, body: Buffer, token?: string):
+  Promise<{ status: number; json: any }> {
+  return new Promise(resolve => {
+    const srv = http.createServer((req, res) => void serveTranscribe(cfg, req, res));
+    srv.listen(0, () => {
+      const port = (srv.address() as { port: number }).port;
+      const headers: Record<string, string> = { 'Content-Type': contentType };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const req = http.request({ port, method: 'POST', path: '/api/transcribe', headers }, res => {
+        let raw = '';
+        res.on('data', c => { raw += c; });
+        res.on('end', () => {
+          srv.close();
+          resolve({ status: res.statusCode || 0, json: (() => { try { return JSON.parse(raw); } catch { return null; } })() });
+        });
+      });
+      req.end(body);
+    });
+  });
 }
 
 export async function run(): Promise<number> {
@@ -236,6 +260,86 @@ export async function run(): Promise<number> {
       });
       if (err) throw err;
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  check(await testAsync('404 when no engine is configured', async () => {
+    resetProbe();
+    await new Promise<void>(done => {
+      withEnvFile('', cfg => {
+        void post(cfg, 'audio/mp4', Buffer.from('x')).then(r => {
+          assert.equal(r.status, 404); done();
+        });
+      });
+    });
+  }));
+
+  check(await testAsync('403 when the token is wrong', async () => {
+    resetProbe();
+    await new Promise<void>(done => {
+      withEnvFile('ANSWER_TOKEN=secret\n', cfg => {
+        void post(cfg, 'audio/mp4', Buffer.from('x'), 'wrong').then(r => {
+          assert.equal(r.status, 403); done();
+        });
+      });
+    });
+  }));
+
+  // ⚠️ `getState()` overlays the gitignored .remote-answer.json in the CWD on
+  // top of the env gate. If this test proves flaky against a repo where that
+  // file exists, wrap it in a tmpdir chdir the way test/messages.test.ts does
+  // with its `inTmpCwd` helper — do not weaken the assertion.
+  check(await testAsync('404 when remote answers are disabled', async () => {
+    resetProbe();
+    await new Promise<void>(done => {
+      withEnvFile('REMOTE_ANSWER=false\n', cfg => {
+        void post(cfg, 'audio/mp4', Buffer.from('x')).then(r => {
+          assert.equal(r.status, 404); done();
+        });
+      });
+    });
+  }));
+
+  check(await testAsync('400 names the unsupported content type', async () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-ep-'));
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const bin = stubBin(dir, 'wh-stub');
+      await new Promise<void>(done => {
+        withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${bin}\n`, cfg => {
+          void post(cfg, 'video/mp4', Buffer.from('x')).then(r => {
+            assert.equal(r.status, 400);
+            assert.match(String(r.json?.error), /video\/mp4/);
+            done();
+          });
+        });
+      });
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  check(await testAsync('readBinaryBody reports overflow distinctly from abort', async () => {
+    const srv = http.createServer((req, res) => {
+      void readBinaryBody(req, 8).then(out => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(out.ok ? { ok: true, n: out.bytes.length } : out));
+      });
+    });
+    await new Promise<void>(done => {
+      srv.listen(0, () => {
+        const port = (srv.address() as { port: number }).port;
+        const req = http.request({ port, method: 'POST', path: '/' }, res => {
+          let raw = '';
+          res.on('data', c => { raw += c; });
+          res.on('end', () => {
+            srv.close();
+            assert.deepEqual(JSON.parse(raw), { ok: false, reason: 'overflow' });
+            done();
+          });
+        });
+        req.end(Buffer.alloc(64, 1));
+      });
+    });
   }));
 
   console.log(`\n  ${ok}/${total} passed`);
