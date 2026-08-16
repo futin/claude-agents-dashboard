@@ -82,6 +82,23 @@ worked around.
 | `server/lib/messages.ts` | RAM-only store; same state machine as `pending.ts`/`plans.ts` with an injected `resolve`, plus the idle-release reaper below |
 | `scan.ts` `ScanOptions.messageIds` | sets `Session.remoteReply` and forces `status: 'question'` (blue) |
 | `SessionRow` pill + `MessagePanel` | the `reply?` pill (same `ag-pill answer` class as `answer`/`plan?`, just different text) and the pinned drawer composer |
+| `chat.ts` `REMOTE_MESSAGE_RE` | unwraps the delivered follow-up back out of `composeReason` so it shows in the drawer as an ordinary user message — see below |
+
+## Seeing what you sent
+
+The reply reaches the model as a Stop **block**, not a user turn, and the CLI records that
+as an `isMeta` user record: `Stop hook feedback:` followed by the whole `composeReason`
+string. `chat.ts` drops `isMeta` records, so before this was handled the message you had
+just typed on your phone never appeared in the drawer you typed it into — you saw the reply
+to a prompt that wasn't there.
+
+So `chat.ts` carries an anchored pattern for that one shape, strips the preamble and the
+away-mode postamble, and emits your text alone as a normal user message. No marker: a
+message you sent is a message you sent, however it got there. The pattern is duplicated
+there rather than imported — the chat read path should not pull in this store — and
+`chat.test.ts` imports the real `composeReason` so a drift in the prose below breaks a test
+rather than the drawer. Anchored at both ends, so drift **fails closed**: the record goes
+back to being dropped, never shown half-unwrapped. See [chat](chat.md).
 
 ## Why a third parallel store
 

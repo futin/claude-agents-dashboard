@@ -46,6 +46,11 @@ const entries = new Map<string, Entry>();
  * text, and carry the away-mode instructions — `UserPromptSubmit` hooks (the
  * remote-decision injection) do NOT fire on hook-continued turns, so this is
  * the only place the reminder can ride.
+ *
+ * ⚠️ `chat.ts` `REMOTE_MESSAGE_RE` mirrors this exact prose to unwrap the record
+ * back into a plain drawer message. Editing the wording here without editing it
+ * there breaks `chat.test.ts` — which is the point; it fails closed, and the
+ * follow-up just stops showing in the drawer.
  */
 export function composeReason(text: string): string {
   const trimmed = text.trim();

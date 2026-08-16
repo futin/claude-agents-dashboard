@@ -59,6 +59,36 @@ export const NO_CAPS: ChatCaps = { text: Infinity, toolBody: Infinity };
 /** Injected context the CLI appends to user turns — noise in a chat view. */
 const SYSTEM_REMINDER_RE = /<system-reminder>[\s\S]*?<\/system-reminder>/g;
 
+/**
+ * The one meta record worth showing: a remote follow-up sent from the drawer.
+ * `messages.ts` `composeReason` wraps what you typed in away-mode instructions,
+ * and the CLI records that Stop block as an `isMeta` user record under a
+ * `Stop hook feedback:` line — so without unwrapping, the message you sent from
+ * your phone never appears in the history it was sent from.
+ *
+ * The pattern is duplicated rather than imported so the read path never pulls in
+ * the reply-window store; `chat.test.ts` imports `composeReason` and pins the
+ * two together. Both ends are anchored, so any drift in that prose fails closed
+ * — the record is dropped as before, never shown half-unwrapped.
+ */
+const REMOTE_MESSAGE_RE = new RegExp(
+  '^(?:Stop hook feedback:\\n)?'
+  + 'The user is away from the terminal and sent this follow-up from the dashboard; '
+  + 'treat it as their next message:\\n'
+  + '([\\s\\S]*)'
+  + '\\n\\nContinue working on it now\\. The user is still away: put any decision through the '
+  + 'AskUserQuestion tool, never end the turn on a prose question, and prefer '
+  + 'already-permitted tools — a permission dialog would park the session until they return\\.'
+  + '\\s*$'
+);
+
+/** The text the user actually typed, or null if this isn't a remote follow-up. */
+function unwrapRemoteMessage(content: unknown): string | null {
+  if (typeof content !== 'string') return null;
+  const text = REMOTE_MESSAGE_RE.exec(content)?.[1].trim();
+  return text ? text : null;
+}
+
 /** A page, minus the `id` the API handler owns. */
 export type ChatPage = Omit<SessionChat, 'id'>;
 
@@ -102,16 +132,20 @@ function toolBody(b: any): string | null {
  */
 export function parseChatRecord(rec: any, caps: ChatCaps = DEFAULT_CAPS): ChatMessage | null {
   if (!rec || typeof rec !== 'object') return null;
-  if (rec.isSidechain === true || rec.isMeta === true) return null;
+  if (rec.isSidechain === true) return null;
 
   const m = rec.message;
   if (!m || typeof m !== 'object') return null;
   const role = m.role;
   if (role !== 'user' && role !== 'assistant') return null;
 
+  // Meta records are noise with exactly one exception — see REMOTE_MESSAGE_RE.
+  const remote = rec.isMeta === true ? unwrapRemoteMessage(m.content) : null;
+  if (rec.isMeta === true && remote === null) return null;
+
   let text = '';
   const tools: ChatToolCall[] = [];
-  const content = m.content;
+  const content = remote ?? m.content;
   if (typeof content === 'string') {
     text = content;
   } else if (Array.isArray(content)) {

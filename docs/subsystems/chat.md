@@ -40,6 +40,19 @@ Dropped: records with no user/assistant `message.role` (`last-prompt`, `custom-t
 `<system-reminder>` spans, and anything empty after that filtering. Text is capped at
 `TEXT_CAP` (2000 chars) with a `textTruncated` flag.
 
+**One `isMeta` exception: a [remote message](remote-message.md) sent from this drawer.**
+A follow-up typed into `MessagePanel` comes back as a Stop-hook block, which the CLI
+records as an `isMeta` user record whose content is `messages.ts` `composeReason` output
+under a `Stop hook feedback:` line — so the plain meta filter made the message you just
+sent invisible in the history you sent it from. `REMOTE_MESSAGE_RE` unwraps that one shape
+and the record becomes an ordinary user message carrying only your typed text; the caps,
+`<system-reminder>` strip and `text`/`you` filters then apply to it like any other. It is
+**not** marked as remote — a message you sent is a message you sent. The pattern is
+duplicated in `chat.ts` rather than imported, so the read path never pulls in the
+reply-window store; `chat.test.ts` imports the real `composeReason` to pin the two
+together. Both ends are anchored, so drift in that prose **fails closed** — back to a
+dropped record, never a half-unwrapped one.
+
 **Both caps are a request parameter, not a constant.** `parseChatRecord` takes a `ChatCaps`
 (`{ text, toolBody }`) that defaults to `DEFAULT_CAPS`; `?full=1` swaps in `NO_CAPS`
 (`Infinity` for both, so the compare/slice arithmetic is unchanged). It has to work this way

@@ -7,6 +7,9 @@ import {
   CHAT_WINDOW_BYTES, NO_CAPS, TEXT_CAP, TOOL_BODY_CAP,
   parseChatRecord, readChatAfter, readChatBefore, readChatTail
 } from '../server/lib/chat.js';
+// The real producer of the remote-message wrapper: importing it here is what
+// makes the unwrap tests fail if `composeReason`'s prose ever drifts.
+import { composeReason } from '../server/lib/messages.js';
 import type { ChatMessage } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -80,6 +83,30 @@ export function run(): number {
   if (test('sidechain and meta records dropped', () => {
     assert.strictEqual(parseChatRecord(userRec('u1', 'sub', { isSidechain: true })), null);
     assert.strictEqual(parseChatRecord(userRec('u2', 'meta', { isMeta: true })), null);
+  })) p++; else f++;
+
+  if (test('remote follow-up unwrapped to plain user text', () => {
+    const rec = userRec('u1', 'Stop hook feedback:\n' + composeReason('Hello from the browser'), { isMeta: true });
+    const m = parseChatRecord(rec)!;
+    assert.strictEqual(m.role, 'user');
+    assert.strictEqual(m.text, 'Hello from the browser');
+    assert.deepStrictEqual(m.tools, []);
+  })) p++; else f++;
+
+  if (test('remote follow-up keeps its own line breaks', () => {
+    const typed = 'first line\n\nthird line';
+    const rec = userRec('u1', 'Stop hook feedback:\n' + composeReason(typed), { isMeta: true });
+    assert.strictEqual(parseChatRecord(rec)!.text, typed);
+  })) p++; else f++;
+
+  if (test('meta records that are not remote follow-ups stay dropped', () => {
+    for (const content of [
+      'Stop hook feedback:\nsome other hook blocked the stop',
+      'The user is away from the terminal and sent this follow-up from the dashboard; treat it as their next message:\ntruncated',
+      composeReason('trailing text was appended') + '\nextra'
+    ]) {
+      assert.strictEqual(parseChatRecord(userRec('u1', content, { isMeta: true })), null, content.slice(0, 40));
+    }
   })) p++; else f++;
 
   if (test('non-conversational records dropped', () => {
