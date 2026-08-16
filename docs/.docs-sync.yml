@@ -32,6 +32,15 @@ docs:
   - path: docs/subsystems/permission-notify.md
     kind: subsystem
     note: the allow? pill for terminal permission dialogs
+  - path: docs/subsystems/remote-plan.md
+    kind: subsystem
+    note: sending an ExitPlanMode plan back for revision — reject-only
+  - path: docs/subsystems/settings.md
+    kind: subsystem
+    note: the Settings tab — per-device vs server-backed settings
+  - path: docs/subsystems/push-notify.md
+    kind: subsystem
+    note: server-sent ntfy pushes and the layered send policy
   - path: docs/workflows/configuration.md
     kind: workflow
     note: env and hook-side variable reference
