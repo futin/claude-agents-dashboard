@@ -65,6 +65,27 @@ export default function SettingsView() {
   const pushUnconfigured = !!server.state && !server.state.notifyAvailable;
 
   /**
+   * Turning "Only when I'm away" off does **not** make `question` and `plan`
+   * unconditional, and nothing else on this page would tell you that.
+   *
+   * Both are published from the endpoint the remote-answer hook POSTs to, and the
+   * hook applies its own idle check *before* that POST (`ask-remote.sh`,
+   * `plan-remote.sh`). At the desk it exits and lets the terminal dialog take the
+   * question, so the server never learns there is anything to push about and the
+   * policy below is never consulted. `permission` and `stop` have no such gate in
+   * their hooks, so those two really do become unconditional.
+   *
+   * Shown only in the state where that surprises you: pushes on, the switch off,
+   * the threshold live, and at least one of the two affected events on.
+   */
+  const afkStillGatesRemote =
+    !pushUnconfigured &&
+    !!notify?.enabled &&
+    !notify.requireAfk &&
+    (notify.events.question || notify.events.plan) &&
+    (server.state?.idleSecs ?? 0) > 0;
+
+  /**
    * An off switch, a missing topic and a dropped packet all look identical from
    * here, so the server reports what it actually did rather than the button
    * pretending. The one honest answer to "is this working?" is to fire one.
@@ -206,7 +227,7 @@ export default function SettingsView() {
           <>
             <SettingsRow
               name="Away after"
-              hint="Keyboard and mouse idle before you count as away from the desk. Below it a question goes straight to the terminal dialog. 0 skips the check entirely."
+              hint="Keyboard and mouse idle before you count as away from the desk. Below it a question goes straight to the terminal dialog — and no question or plan push is sent, whatever the push switches say. 0 skips the check entirely."
             >
               <NumberField
                 value={server.state.idleSecs}
@@ -365,6 +386,21 @@ export default function SettingsView() {
             onChange={v => void server.saveNotify({ requireAfk: v === 'on' })}
           />
         </SettingsRow>
+
+        {afkStillGatesRemote && (
+          <div className="set-warn">
+            <span>⚠</span>
+            <span>
+              Off here, but <b>Question waiting</b> and <b>Plan waiting for review</b> still only
+              push once you are away. Those two are sent when the remote-answer hook hands the
+              question to the dashboard, and that hook stops at the desk on its own: under{' '}
+              <b>{server.state?.idleSecs ?? 60}s</b> of idle it gives the question to the terminal
+              dialog instead, so there is nothing here to push about. Set <b>Away after</b> to 0 to
+              drop that gate too. <b>Permission dialog open</b> and <b>Task finished</b> have no
+              such gate and push whenever they fire.
+            </span>
+          </div>
+        )}
 
         <SettingsRow
           name="Only in auto permission modes"

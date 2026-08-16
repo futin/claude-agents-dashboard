@@ -10,7 +10,7 @@ docs-sync:
     - client/src/lib/deepLink.ts
     - client/src/components/settings/SettingsView.tsx
   kind: subsystem
-  verified: 03d7bbde0f76e700968e144af27cd6ddafd6e623
+  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
 ---
 
 # Push notifications (ntfy)
@@ -79,6 +79,37 @@ All AND, each layer independently optional. **Clause order is load-bearing**: `r
 is evaluated last and behind a thunk, so a policy that does not use it never pays the ~40ms
 `ioreg` spawn. `test/notify.test.ts` asserts that directly.
 
+### The predicate is not the only AFK gate
+
+`requireAfk` off does **not** make every event unconditional, and the difference is invisible
+from this module. `question` and `plan` reach `maybeSend` only because a hook POSTed to
+`/api/questions/wait` or `/api/plans/wait` — and `ask-remote.sh` / `plan-remote.sh` each run
+their *own* idle check before that POST:
+
+```
+ask-remote.sh:63-70
+if [ "$IDLE_MIN_S" != "0" ]; then
+  IDLE_S=$(ioreg -c IOHIDSystem …)
+  *) [ "$IDLE_S" -lt "$IDLE_MIN_S" ] && exit 0 ;;   # at the desk → terminal dialog
+```
+
+At the desk the hook exits, the POST never happens, and the server never learns a question
+exists — so the predicate is never evaluated at all. `permission` and `stop` have no idle
+check in their hooks, so those two really do become unconditional.
+
+| Event | Idle gate in its hook | `requireAfk` off ⇒ always pushes? |
+|---|---|---|
+| `question` | yes — `ask-remote.sh:63` | **no**, still needs `idleSecs` of idle |
+| `plan` | yes — `plan-remote.sh:70` | **no**, still needs `idleSecs` of idle |
+| `permission` | none | yes |
+| `stop` | none | yes |
+
+Not a bug in the layering: remote answering *is* an away-feature, and a question answered at
+the terminal has no remote counterpart to notify about. But the Settings switch reads as
+"always push" and cannot mean that for two of the four events, so `SettingsView` renders a
+callout in exactly that state, and `Away after` says so in its hint. Setting `idleSecs` to 0
+removes the hook gate too — at the cost of the terminal dialog, which then never appears.
+
 `AUTO_MODES` is `auto`, `bypassPermissions`, `dontAsk` — deliberately duplicated from
 `MODES` in `scripts/remote-decision-hook.sh` rather than shared: one is TypeScript and the
 other is bash. Change one, change the other.
@@ -91,7 +122,7 @@ Silence is the bug this feature exists to fix, so every failure gets an explicit
 |---|---|---|
 | `ioreg` unreadable (Docker, non-macOS) | **push anyway** | Failing silent reintroduces the missed notification. Note this is the *opposite* of `ask-remote-hook.sh`, which treats unreadable idle as at-the-desk — there a wrong guess hides a dialog, here it costs one extra push |
 | `permissionMode` absent | **not auto-ish** | An unknown mode is not a known-auto mode |
-| ntfy request fails or times out | **swallow — except in the test** | 2s cap, never awaited, never fails the caller. `sendTest` is the one send that *does* await the answer and reports a refusal (`HTTP 404: topic not found`) or an unreachable server, because a button whose job is proving delivery must be able to fail |
+| ntfy request fails or times out | **swallow — except in the test** | 2s cap, never awaited, never fails the caller — `maybeSend` `void`s the promise and catches it, since an un-awaited rejection would escape the surrounding `try` and take the process down. `sendTest` is the one send that *does* await the answer, distinguishing a refusal (`<server> refused it (HTTP 404): …  — check NTFY_TOPIC`, the first line of ntfy's own body) from an unreachable server (`couldn't reach <server>: …`), because a button whose job is proving delivery must be able to fail |
 | session scan fails | **push with a short id** | A poor label beats no push |
 | settings file unreadable | **all switches off** | Same fail-open read as the rest of `settings.ts` |
 
