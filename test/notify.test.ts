@@ -266,6 +266,15 @@ export async function run(): Promise<number> {
     assert.match(await sendTest(conf()), /^sent to/);
   }))) p++; else f++;
 
+  // A delivered push whose tap opens nothing is the failure this button exists
+  // to expose, so "sent" alone is not an honest answer without a public URL.
+  if (await testAsync('sendTest says so when there is no public URL to tap through to', () =>
+    inTmpCwd(async () => {
+      const outcome = await sendTest(conf({ publicUrl: '' }));
+      assert.match(outcome, /^sent to/);
+      assert.match(outcome, /DASHBOARD_PUBLIC_URL/);
+    }))) p++; else f++;
+
   if (await testAsync('a rejecting sender never escapes maybeSend', () => inTmpCwd(async () => {
     setSettings({ notify: { enabled: true, events: { stop: true } } });
     setSender(() => Promise.reject(new Error('socket hang up')));

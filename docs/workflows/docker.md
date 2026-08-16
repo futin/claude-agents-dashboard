@@ -61,6 +61,7 @@ Two things a container can't reach on its own:
   `environment:`, which Compose resolves from your shell **or** the project's `.env` on the
   host — the values reach the container even though the file does not. Bare rather than
   `VAR=${VAR}` because Compose drops an unset variable in that form, while the `=` form
-  injects an empty string that `config.ts` counts as set. ⚠️ `DASHBOARD_PUBLIC_URL` is
-  mandatory here: its `localhost` default resolves inside the container's own network
-  namespace. See [push-notify-setup](push-notify-setup.md#docker).
+  injects an empty string that `config.ts` counts as set. ⚠️ `DASHBOARD_PUBLIC_URL` has no
+  default, and a `localhost` value would resolve inside the container's own network
+  namespace — so the tailnet hostname is the only useful one here. See
+  [push-notify-setup](push-notify-setup.md#docker).

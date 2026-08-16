@@ -38,8 +38,15 @@ export interface Config {
   /**
    * How a phone reaches this dashboard, used for the notification's tap-through
    * link. Cannot be inferred: a push is not triggered by a browser request, so
-   * there is no Host header to read. The localhost default works at the desk and
-   * is useless on a phone — set it to the tailnet hostname.
+   * there is no Host header to read. Set it to the tailnet hostname.
+   *
+   * Empty when unset, and deliberately so. This used to fall back to
+   * `http://localhost:<port>` "so the link at least works at the desk", but a
+   * push exists to reach the device you are *not* sitting at, and the fallback
+   * made two guards unreachable: `clickUrl` could never omit the Click header,
+   * and `sendTest` could never warn that taps would go nowhere — it reported the
+   * synthesized localhost URL as though someone had configured it. An absent
+   * value must stay distinguishable from a chosen one.
    */
   publicUrl: string;
 }
@@ -141,9 +148,8 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     answerToken: (src('ANSWER_TOKEN') || DEFAULTS.ANSWER_TOKEN).trim(),
     ntfyTopic: (src('NTFY_TOPIC') || DEFAULTS.NTFY_TOPIC).trim(),
     ntfyServer: (src('NTFY_SERVER') || DEFAULTS.NTFY_SERVER).trim().replace(/\/+$/, ''),
-    // Falls back to the resolved port so the link at least works at the desk.
-    publicUrl: (src('DASHBOARD_PUBLIC_URL') || `http://localhost:${toPosInt(src('PORT'), DEFAULTS.PORT)}`)
-      .trim()
-      .replace(/\/+$/, '')
+    // Empty when unset — deliberately NOT defaulted to localhost. See the field's
+    // doc comment: a synthesized default is indistinguishable from a real one.
+    publicUrl: (src('DASHBOARD_PUBLIC_URL') || DEFAULTS.DASHBOARD_PUBLIC_URL).trim().replace(/\/+$/, '')
   };
 }

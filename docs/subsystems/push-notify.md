@@ -180,9 +180,16 @@ would otherwise reopen a drawer for a session that no longer exists. Same reason
 keeps `chatId` out of persisted state (`view-persistence.md`).
 
 **`DASHBOARD_PUBLIC_URL` cannot be inferred.** A push is not triggered by a browser request,
-so there is no `Host` header to read. It defaults to `http://localhost:<port>`, which works
-at the desk and is useless on a phone — the tailnet hostname is what belongs there. Unset,
-the push still sends, just without a `Click` header.
+so there is no `Host` header to read — the tailnet hostname is what belongs there. Unset, it
+stays **empty** and the push still sends, just without a `Click` header.
+
+It briefly defaulted to `http://localhost:<port>` instead, "so the link at least works at the
+desk". That silently disabled the two places that handle an absent value: `clickUrl` could
+never return `''`, so every push carried a link only the server's own machine could open, and
+`sendTest`'s "you never set this" warning became unreachable — the test button reported the
+synthesized localhost URL exactly as it reports a configured one. A push exists to reach the
+device you are *not* sitting at, so an absent value has to stay distinguishable from a chosen
+one rather than be guessed.
 
 **This is the one relaxation of the no-content rule.** The session id and the dashboard's
 address leave the machine, inside the link. Neither is work content, but together they point

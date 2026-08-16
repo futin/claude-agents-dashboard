@@ -20,7 +20,8 @@ services:
       # so a topic in .env still reaches the container — as values, not as the file.
       # Bare, without `=${...}`, so an unset var is omitted rather than injected as
       # an empty string (config.ts treats "" as set, since it tests !== undefined).
-      # DASHBOARD_PUBLIC_URL is not optional here: localhost means the container.
+      # DASHBOARD_PUBLIC_URL has no default; without it pushes carry no tap-through
+      # link, and a localhost value would mean the container. Use the tailnet host.
       - NTFY_TOPIC
       - NTFY_SERVER
       - DASHBOARD_PUBLIC_URL

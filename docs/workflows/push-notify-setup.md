@@ -48,8 +48,9 @@ DASHBOARD_PUBLIC_URL=http://<host>.<tailnet>.ts.net:4173
 
 `DASHBOARD_PUBLIC_URL` is how your *phone* reaches this dashboard, used for the
 tap-through link. It **cannot be inferred** — a push is not triggered by a browser request,
-so there is no `Host` header to read. It defaults to `http://localhost:$PORT`, which is
-correct at the desk and useless on a phone; the tailnet hostname is what belongs there (see
+so there is no `Host` header to read — and it has no default, because a guessed address is
+indistinguishable from one you chose. Leave it out and pushes still arrive, carrying no
+tap-through link. The tailnet hostname is what belongs there (see
 [remote-access](../subsystems/remote-access.md)). Self-hosting ntfy? Set `NTFY_SERVER` too.
 
 **Restart the server** — these are read once at startup, unlike the Settings page.
@@ -121,9 +122,9 @@ Listed bare, without `=${...}`: Compose omits an unset variable in that form, wh
 `VAR=${VAR}` injects an empty string, and `loadConfig` tests `!== undefined`, so an empty
 string counts as set.
 
-⚠️ `DASHBOARD_PUBLIC_URL` is **not optional in a container** — the default resolves to
-`localhost` inside the container's own network namespace, which is nothing a phone can
-open.
+⚠️ `DASHBOARD_PUBLIC_URL` matters most here. It has no default anywhere, and inside a
+container even a hand-written `localhost` would resolve to the container's own network
+namespace — so the tailnet hostname is the only useful value.
 
 ## Failure modes
 
@@ -139,9 +140,9 @@ Read the Test push result first; it distinguishes most of these.
 - **Reports sent, phone shows nothing** — the phone is subscribed to a *different* string
   (retype it), notifications are muted for the ntfy app at the OS level, or the device is
   in a battery-saver mode that defers them.
-- **Push arrives, tapping opens nothing** — `DASHBOARD_PUBLIC_URL` is unset or wrong. Note
-  the success message reports the URL taps will use; if it says `localhost`, that is the
-  default rather than something you set.
+- **Push arrives, tapping opens nothing** — `DASHBOARD_PUBLIC_URL` is unset or wrong. The
+  Test push result names the URL taps will use, or says outright that there isn't one, so
+  read it rather than guessing.
 - **Works on home wifi, not on cellular** — `DASHBOARD_PUBLIC_URL` is a LAN address. Use
   the tailnet hostname, which is reachable from anywhere on the tailnet.
 - **Nothing for questions or plans, but *task finished* works** — either the matching hook

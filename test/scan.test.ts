@@ -97,6 +97,36 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  // An unset DASHBOARD_PUBLIC_URL must stay empty, not become a localhost guess.
+  // It used to default to `http://localhost:<port>`, which made `clickUrl`'s
+  // "no URL → no Click header" guard and `sendTest`'s "you never set this"
+  // warning both unreachable: a push carried a link only the server's own
+  // machine could open, and the test button called that configured.
+  if (test('loadConfig: publicUrl is empty unless DASHBOARD_PUBLIC_URL is set', () => {
+    const was = process.env.DASHBOARD_PUBLIC_URL;
+    delete process.env.DASHBOARD_PUBLIC_URL;
+    try {
+      assert.strictEqual(loadConfig({ envPath: '/no/such/.env' }).publicUrl, '');
+    } finally {
+      if (was === undefined) delete process.env.DASHBOARD_PUBLIC_URL;
+      else process.env.DASHBOARD_PUBLIC_URL = was;
+    }
+  })) p++; else f++;
+
+  if (test('loadConfig: DASHBOARD_PUBLIC_URL is trimmed and loses trailing slashes', () => {
+    const was = process.env.DASHBOARD_PUBLIC_URL;
+    process.env.DASHBOARD_PUBLIC_URL = '  https://dash.example:4173//  ';
+    try {
+      assert.strictEqual(
+        loadConfig({ envPath: '/no/such/.env' }).publicUrl,
+        'https://dash.example:4173'
+      );
+    } finally {
+      if (was === undefined) delete process.env.DASHBOARD_PUBLIC_URL;
+      else process.env.DASHBOARD_PUBLIC_URL = was;
+    }
+  })) p++; else f++;
+
   console.log('\n=== scan.ts ===\n');
 
   if (test('decodeProjectName fallback basename', () => {
