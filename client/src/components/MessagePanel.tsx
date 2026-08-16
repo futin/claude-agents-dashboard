@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import MicButton from './MicButton';
+import { appendTranscript } from '../lib/dictation';
 import type { PendingMessageState } from '../hooks/usePendingMessage';
 
 /** Seconds left in the window, clamped at 0. */
@@ -99,6 +101,7 @@ export default function MessagePanel({ state }: { state: PendingMessageState }) 
       />
 
       <div className="qp-actions">
+        <MicButton disabled={busy} onText={t => setText(cur => appendTranscript(cur, t))} />
         <button
           type="button"
           className="qp-send"
