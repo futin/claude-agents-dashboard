@@ -251,7 +251,7 @@ function deliver(payload: NotifyPayload, config: Config): void | Promise<SendRes
 export function maybeSend(
   config: Config,
   event: NotifyEvent,
-  ctx: { sessionId: string; permissionMode?: string }
+  ctx: { sessionId: string; permissionMode?: string; phrase?: string }
 ): void {
   try {
     if (!config.ntfyTopic) return;
@@ -267,7 +267,7 @@ export function maybeSend(
     const result = deliver(
       {
         title: 'Claude Code',
-        body: `${resolveLabel(config, ctx.sessionId)} — ${PHRASE[event]}`,
+        body: `${resolveLabel(config, ctx.sessionId)} — ${ctx.phrase ?? PHRASE[event]}`,
         tags: TAGS[event],
         click: clickUrl(config, ctx.sessionId)
       },

@@ -218,6 +218,13 @@ export async function run(): Promise<number> {
     assert.strictEqual(sent[0].body, 'demo-project — task finished');
   }))) p++; else f++;
 
+  if (await testAsync('a phrase override replaces the stock event phrase', () => inTmpCwd(sent => {
+    setSettings({ notify: { enabled: true, events: { stop: true } } });
+    maybeSend(conf(), 'stop', { sessionId: SID, phrase: 'finished — reply window open' });
+    assert.strictEqual(sent.length, 1);
+    assert.strictEqual(sent[0].body, 'demo-project — finished — reply window open');
+  }))) p++; else f++;
+
   // The one case that exercises the real lookup, so the fallback is covered
   // rather than stubbed. Runs one scan; no id this shaped can ever match.
   if (test('an unknown session falls back to a short id', () => {
