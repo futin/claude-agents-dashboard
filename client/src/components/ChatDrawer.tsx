@@ -4,9 +4,11 @@ import { Markdown } from './Markdown';
 import { PermissionBanner } from './PermissionBanner';
 import QuestionPanel from './QuestionPanel';
 import PlanPanel from './PlanPanel';
+import MessagePanel from './MessagePanel';
 import { useSessionChat } from '../hooks/useSessionChat';
 import { usePendingQuestion } from '../hooks/usePendingQuestion';
 import { usePendingPlan } from '../hooks/usePendingPlan';
+import { usePendingMessage } from '../hooks/usePendingMessage';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useSettings } from '../hooks/useSettings';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
@@ -76,6 +78,7 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
   const { messages, hasMore, loading, loadingOlder, error, loadOlder } = useSessionChat(session.id);
   const question = usePendingQuestion(session.id);
   const plan = usePendingPlan(session.id);
+  const message = usePendingMessage(session.id);
   const [filter, setFilter] = usePersistedState<ChatFilter>('dashboard.chatFilter', 'all');
   const { settings: { refreshMs } } = useSettings();
   const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
@@ -188,6 +191,11 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
             session and a session can only be parked on one thing at a time, so
             in practice only one of these ever renders. */}
         <PlanPanel state={plan} />
+
+        {/* And for a turn-end reply window. One-entry-per-session per store and
+            a session parks on one thing at a time, so at most one of the three
+            panels renders. */}
+        <MessagePanel state={message} />
 
         <div className="chat-foot">
           <span>live · refreshing every {formatInterval(refreshMs)}</span>
