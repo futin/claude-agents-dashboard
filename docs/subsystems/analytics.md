@@ -9,7 +9,7 @@ docs-sync:
     - client/src/lib/analyticsFilterSort.ts
     - .claude/skills/kaizen/
   kind: subsystem
-  verified: fa1fa5b9daeb162acccef66d0e4d9a210ede95da
+  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
 ---
 
 # Analytics — kaizen-fed session post-mortems

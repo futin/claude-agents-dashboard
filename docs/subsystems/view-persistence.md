@@ -7,7 +7,7 @@ docs-sync:
     - client/src/components/Toolbar.tsx
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: fa1fa5b9daeb162acccef66d0e4d9a210ede95da
+  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
 ---
 
 # View persistence (Toolbar filters/sort)
@@ -32,15 +32,23 @@ override it (see `dashboard.section` below).
   `dashboard.section` (Sessions | Management | Analytics | Settings, `App.tsx`) — always
   *written* on navigation, but only *read* on open when Settings → landing is `last`; any
   other value pins the opening section, resolved in the `useState` initializer so there's no
-  flash of the previously-open one;
+  flash of the previously-open one. A `?session=` deep link outranks both and forces
+  `sessions` (see the URL-param note below);
   `dashboard.chatFilter` (the chat drawer's all/text/you filter — see [chat](chat.md); validated
   with `isChatFilter` on read, so a stale value falls back to `all`);
   `dashboard.analyticsView` (the Analytics tab's own facets — see [analytics](analytics.md));
   `dashboard.answerToken` (see [remote-answer](remote-answer.md)); `management.scope` and
   `management.collapsed` (see [management](management.md)).
-- **Client-only, zero deps** — no backend, no URL params (not shareable/bookmarkable by design).
-- **Not persisted:** row-expansion state (`SessionList.tsx` `expandedIds`) stays ephemeral —
-  session IDs churn, so restored expansions would mostly be stale.
+- **Client-only, zero deps** — no backend, and nothing here is shareable/bookmarkable by
+  design. The one URL param in the app is the opposite of persistence: `?session=<id>`, the
+  deep link a tapped push notification opens (`lib/deepLink.ts`, put in ntfy's `Click` header
+  by `server/lib/notify.ts` — see [push-notify](push-notify.md)). `deepLinkSession()` reads it
+  once, memoises the answer for its two callers (`AppShell` picking the section,
+  `SessionsView` opening the drawer), and strips it from the URL via `history.replaceState`,
+  precisely so a refresh or a bookmark does *not* replay it.
+- **Not persisted:** row-expansion state (`SessionList.tsx` `expandedIds`) and the open chat
+  drawer (`SessionsView.tsx` `chatId`, seeded from the deep link above) stay ephemeral —
+  session IDs churn, so restored expansions and drawers would mostly be stale.
 - **Clearing them all** — Settings → Reset this device removes every key listed above
   (`OWNED_KEYS` in `hooks/useSettings.tsx`) and restores the defaults. It touches nothing on the
   server and nothing in `~/.claude`. Add a key here and it belongs in that list too.

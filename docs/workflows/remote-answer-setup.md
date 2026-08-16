@@ -4,7 +4,7 @@ docs-sync:
     - scripts/ask-remote-hook.sh
     - server/api.ts
   kind: workflow
-  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
+  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
 ---
 
 # Remote answers — per-machine hook setup
@@ -28,9 +28,10 @@ keeps it current:
 mkdir -p ~/.claude/hooks && ln -s "$PWD/scripts/ask-remote-hook.sh" ~/.claude/hooks/ask-remote.sh
 ```
 
-> The symlink matters more than it used to: the hook now reads its idle threshold off
-> `/api/health` so the [Settings tab](../subsystems/settings.md) can drive it. A hook you
-> *copied* instead keeps the old hardcoded default until you re-copy it.
+> The symlink matters more than it used to: the hook now reads **both** its idle threshold
+> and its wait window off `/api/health` (`idleSecs` and `answerSecs`, on the probe it was
+> already making) so the [Settings tab](../subsystems/settings.md) can drive them. A hook
+> you *copied* instead keeps the old hardcoded defaults until you re-copy it.
 
 **3. Register it** in `~/.claude/settings.json`. Create the `AskUserQuestion` matcher if
 you don't have one; keep any existing entry — hooks under one matcher run in parallel:
@@ -43,8 +44,9 @@ you don't have one; keep any existing entry — hooks under one matcher run in p
 
 > ⚠️ That `timeout` **must** exceed the wait window (Settings → **Answer window**, or
 > `CLAUDE_DASHBOARD_ANSWER_TIMEOUT`; default 600s), or the CLI kills the hook first and the
-> window silently shrinks. Keep `timeout ≥ window + 30` — which is why the Settings field
-> stops at 600s and warns above it.
+> window silently shrinks. The hooks and the Settings warning both state the floor as
+> `window + 15`; `630` is that floor for the 600s default with room to spare, which is why
+> the Settings field stops at 600s and warns above it.
 
 **4. Verify the chain** without waiting for a real question:
 

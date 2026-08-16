@@ -10,7 +10,7 @@ docs-sync:
     - client/src/hooks/usePendingQuestion.ts
     - client/src/hooks/useRemoteAnswer.ts
   kind: subsystem
-  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
+  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
 ---
 
 # Remote answers (the only write path)
@@ -90,6 +90,11 @@ take one away. If the dashboard isn't running, the probe gives up in under a sec
   **Every** other outcome exits 0, which lets the terminal dialog appear: dashboard down,
   `REMOTE_ANSWER=false`, malformed anything, 403, no usable questions, timeout,
   dismissed, superseded, server restarted mid-wait.
+- **The push rides on the same POST.** `serveQuestionWait` ends with
+  `maybeSend(config, 'question', …)` — placed *after* registration on purpose, so a request
+  that was refused (bad token, unknown session, no usable questions) never sends a push. It
+  returns immediately; the held response above is unaffected either way. See
+  [push-notify](push-notify.md).
 - **One long-held request, not register-then-poll.** The held socket closing *is* the
   liveness signal (`res.on('close')` → `cancel`), so a killed hook or an interrupted
   session reaps its entry immediately; polling could not tell "between polls" from "dead"
@@ -103,7 +108,7 @@ Handlers `serveHealth` / `serveQuestionWait` / `serveSessionQuestion` /
 
 | Method | Path | Codes |
 |---|---|---|
-| `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?}` — the hook's probe, the pill's read, and the origin badge's source |
+| `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?, idleSecs?, answerSecs?}` — the hook's probe (all three gates *and* the wait window off one round trip), the pill's read, and the origin badge's source |
 | `POST` | `/api/remote-answer` | `{enabled}` → 200 `{...state, released}`; 400 non-boolean; 403 bad token; 409 `REMOTE_ANSWER=false`; 405 non-POST |
 | `POST` | `/api/questions/wait` | held → 200 `WaitResult`; 400 malformed / no usable questions; 403 bad token; 404 unknown session or feature off; 405 non-POST |
 | `GET` | `/api/sessions/:id/question` | 200 `SessionQuestion` (`pending: null` when idle); 400 bad id |
@@ -182,8 +187,12 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
   when `available` is false, so a config kill switch can't look like a stuck control. Its
   wording is "phone answers", never "instead of the terminal": on only *allows* remote
   answers, gate 3 still sends desk-time questions to the terminal.
-- **`usePendingQuestion`** polls the question endpoint every 3s (same cadence as
-  `useSessionChat`; the response is a ~50-byte in-memory lookup). Phase is
+- **`usePendingQuestion`** polls the question endpoint at the configured refresh rate
+  (`useSettings().settings.refreshMs`, same cadence as `useSessionChat`; the response is a
+  ~50-byte in-memory lookup). The reset-on-new-question effect is deliberately kept in its
+  own `useEffect` keyed on `id` alone, while the poll's effect also depends on `refreshMs` —
+  retuning the rate restarts the interval, and that must not wipe the panel of a question
+  already on screen. Phase is
   `idle → submitting → submitted | gone`, tracked against the current `questionId` so a
   new question resets the panel and a stale banner never leaks across questions.
   404/409 → `gone` ("answered in the terminal, or it expired"), 403 → the token prompt.

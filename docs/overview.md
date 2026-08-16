@@ -9,7 +9,7 @@ docs-sync:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: fa1fa5b9daeb162acccef66d0e4d9a210ede95da
+  verified: 9910962bd0d5d767482b3ba22fe11b8f7ba7a452
 ---
 
 # Architecture overview
@@ -22,8 +22,11 @@ then the server producer, then the client consumer.
 
 Everything the dashboard shows is read straight off disk from
 `~/.claude/projects/*/*.jsonl` (the transcripts Claude Code already writes). Monitoring
-needs no daemon, no hooks, and no config in Claude Code — only the optional
-[remote answers](subsystems/remote-answer.md) feature installs a hook.
+needs no daemon, no hooks, and no config in Claude Code — hooks are installed only by the
+opt-in features that need one ([remote answers](subsystems/remote-answer.md),
+[remote plan verdicts](subsystems/remote-plan.md), the
+[`allow?` pill](subsystems/permission-notify.md), and the finished-turn
+[push](subsystems/push-notify.md)).
 
 ## Data flow
 
@@ -68,9 +71,11 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `POST /api/sessions/:id/plan-answer` | send a plan back for revision (write path) |
 | `POST /api/plans/wait` | the plan hook's held-open wait (write path) |
 | `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) |
+| `POST /api/notify/event` | the Stop hook's push trigger — the other three events notify from the endpoint they already POST to |
+| `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said |
 | `POST /api/remote-answer` | flip the remote-answer toggle (write path) |
-| `GET /api/health` | liveness + remote-answer state + connection origin + idle threshold |
-| `GET /api/settings`, `POST /api/settings` | the non-per-device settings (idle threshold; write path) |
+| `GET /api/health` | liveness + remote-answer state + connection origin + the two hook numbers (idle threshold, answer window) |
+| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, plus `notifyAvailable` (never the ntfy topic itself); write path |
 | `GET /api/management`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | anything else | static files from `client/dist` (production only) |
@@ -115,7 +120,7 @@ server/
   lib/settings.ts persisted idle threshold, answer window + push policy
   lib/notify.ts   server-sent ntfy pushes — the layered policy and the one
                   outbound call the backend makes
-  lib/origin.ts   connection classifier → local | lan | tailnet | public
+  lib/origin.ts   connection classifier → local | lan | tailnet | unknown
 client/src/
   App.tsx         shell: side rail (Sessions | Management | Analytics | Settings) + lazy views
   components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
@@ -146,7 +151,7 @@ that area:
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
 - [usage-limits](subsystems/usage-limits.md) — header account usage bars
-- [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold
+- [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold, answer window, push policy
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `allow?` pill for terminal permission dialogs
 - [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and why they replaced browser alerts outright

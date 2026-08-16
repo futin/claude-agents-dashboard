@@ -6,7 +6,7 @@ docs-sync:
     - shared/types.ts
     - package.json
   kind: index
-  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
+  verified: 9910962bd0d5d767482b3ba22fe11b8f7ba7a452
 ---
 
 # Claude Agents Dashboard
@@ -62,8 +62,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   gitignored .remote-answer.json (fails open)
   lib/settings.ts persisted idle threshold + answer window for the remote-answer hooks
                   (served on /api/health, since they can't read our env) + detection of
-                  overriding CLAUDE_DASHBOARD_{IDLE_SECS,ANSWER_TIMEOUT}
-                  (see docs/subsystems/settings.md)
+                  overriding CLAUDE_DASHBOARD_{IDLE_SECS,ANSWER_TIMEOUT}, plus the
+                  notify policy lib/notify.ts acts on (see docs/subsystems/settings.md)
   lib/origin.ts   pure connection classifier → local | lan | tailnet | unknown, on
                   /api/health for the toolbar badge (see docs/subsystems/remote-access.md)
 client/           Vite + React + TypeScript frontend
@@ -75,6 +75,9 @@ client/           Vite + React + TypeScript frontend
   components/Markdown.tsx + lib/markdown.ts  zero-dep markdown-subset parser + renderer
                   for message text (no dangerouslySetInnerHTML; pure, unit-tested)
   lib/chatFilter.ts            drawer all/text/you message filter (pure; persisted)
+  lib/deepLink.ts              the ?session=<id> entry point a tapped push opens —
+                  read once, memoised for its two callers, then stripped from the URL
+                  (see docs/subsystems/push-notify.md)
   components/QuestionPanel.tsx pinned action bar to answer a session's AskUserQuestion
                   (hooks/usePendingQuestion — see docs/subsystems/remote-answer.md)
   components/PlanPanel.tsx     pinned action bar to send a proposed plan back for revision
@@ -102,7 +105,7 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm dev` — API + Vite together. Open http://localhost:5173 (HMR, proxies /api).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — runs `test/run-all.ts` via tsx (322 cases).
+- `pnpm test` — runs `test/run-all.ts` via tsx; it prints the case count.
 - `pnpm typecheck` — `tsc --noEmit`.
 - `pnpm tunnel` — optional: `tailscale serve --bg 5174`, fronts that fixed port over HTTPS
   on the tailnet — keep it matching the port you actually serve (prod `PORT` or a dev

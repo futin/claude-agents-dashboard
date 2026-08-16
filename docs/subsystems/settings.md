@@ -8,6 +8,7 @@ docs-sync:
     - server/lib/settings.ts
     - client/index.html
   kind: subsystem
+  verified: 9910962bd0d5d767482b3ba22fe11b8f7ba7a452
 ---
 
 # Settings
@@ -133,8 +134,16 @@ only-in-auto-modes), and a test button. The server sends them, so nothing here d
 tab being open. Full mechanism, fail directions and the topic's secrecy rules:
 [push-notify](push-notify.md).
 
-Two things worth knowing from this page's side:
+Worth knowing from this page's side:
 
+- **⚠️ "Only when I'm away" off does not mean "always push"** for `question` and `plan`.
+  Their hooks run their own idle check *before* the POST that would reach the notifier, so
+  at the desk the server never learns there is anything to push about and the predicate is
+  never evaluated. Only `permission` and `stop` become unconditional. The page renders a
+  callout in exactly that state (pushes on, the switch off, `idleSecs > 0`, and one of those
+  two events enabled), and **Away after** says so in its hint — because the threshold gates
+  those pushes whether or not the push-side switch is on. Full layering:
+  [push-notify](push-notify.md).
 - **`notify` patches merge.** The UI sends the one checkbox that changed, not the whole
   policy. A key that is present but unusable rejects the *entire* patch (400) rather than
   half-applying — the one outcome the page could not report honestly.

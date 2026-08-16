@@ -6,7 +6,7 @@ docs-sync:
     - scripts/
     - package.json
   kind: readme
-  verified: fa1fa5b9daeb162acccef66d0e4d9a210ede95da
+  verified: 9910962bd0d5d767482b3ba22fe11b8f7ba7a452
 ---
 
 # Claude Agents Dashboard
@@ -17,9 +17,12 @@ branch, model, context usage, and current tool activity — refreshing every 3 s
 default, retunable in the Settings tab.
 
 Reads everything straight from `~/.claude/projects/*/*.jsonl` on disk. **Monitoring needs
-no daemon, no hooks, and no config in Claude Code** — only the optional
-[remote answers](docs/subsystems/remote-answer.md) feature installs a hook. Zero runtime
-dependencies on the backend (Node built-ins only).
+no daemon, no hooks, and no config in Claude Code** — hooks are installed only by the
+opt-in features that need one ([remote answers](docs/subsystems/remote-answer.md),
+[remote plan verdicts](docs/subsystems/remote-plan.md), the
+[`allow?` pill](docs/subsystems/permission-notify.md), and the finished-turn
+[push](docs/subsystems/push-notify.md)). Zero runtime dependencies on the backend (Node
+built-ins only), and exactly one outbound call — the ntfy push.
 
 ![dashboard: header with 5h/week usage bars, filter + sort toolbar, and one row per session showing status dot, project + branch, model, context bar, activity, and expandable subagent detail](docs/screenshot.png)
 
@@ -60,8 +63,8 @@ That's the whole basic setup. Everything below is optional.
   live-tailed, pageable back through the whole transcript, with an all/text/you filter
   and markdown rendering.
 - **[Remote answers](docs/subsystems/remote-answer.md)** — answer a session's
-  `AskUserQuestion` from your phone; the pick is delivered into the live session. The
-  one opt-in feature that needs a hook.
+  `AskUserQuestion` from your phone; the pick is delivered into the live session. The only
+  write path in the app, and the reason the hook install exists.
 - **[Remote plan verdicts](docs/subsystems/remote-plan.md)** — send a proposed
   `ExitPlanMode` plan back for revision with feedback, from the same drawer. Reject-only:
   the CLI discards a hook `allow` for plans, so accepting stays a terminal action.
@@ -72,9 +75,15 @@ That's the whole basic setup. Everything below is optional.
   (tokens, priciest tools/subagents) paired with the lesson the `/kaizen` skill logged.
 - **[Usage bars](docs/subsystems/usage-limits.md)** — the header's 5h / Week account
   rate-limit bars, same numbers as `/usage` in the CLI.
+- **[Push notifications](docs/subsystems/push-notify.md)** — the server publishes to an
+  [ntfy](https://ntfy.sh) topic when a session needs you (question, plan, permission
+  dialog, finished turn); tapping the push opens that session's chat. Off by default, and
+  the only channel that reaches you with the browser closed — which is why the old
+  in-browser alert layer was deleted rather than kept: WebKit has no `Notification` API in
+  a tab, so it could never fire on an iPhone.
 - **[Settings tab](docs/subsystems/settings.md)** — themes, density and text scale, refresh
-  rate, the scan knobs, desktop alerts, and the remote-answer idle threshold — all editable
-  in the app, no `.env` edit or rebuild.
+  rate, the scan knobs, the push-notification policy, and the remote-answer idle threshold
+  and answer window — all editable in the app, no `.env` edit or rebuild.
 - **[Phone access & origin badge](docs/subsystems/remote-access.md)** — reach the
   dashboard over LAN, Tailscale, or a tunnel; a toolbar pill shows which route you're on.
 
@@ -84,6 +93,9 @@ That's the whole basic setup. Everything below is optional.
   [remote access](docs/subsystems/remote-access.md) for LAN, Tailscale, and tunnel options.
 - **Remote answers hook** — 4 steps, ~2 minutes:
   [setup](docs/workflows/remote-answer-setup.md).
+- **Push notifications** — set `NTFY_TOPIC` (and `DASHBOARD_PUBLIC_URL`, so taps open the
+  dashboard) in `.env`, install `scripts/stop-notify-hook.sh` for the finished-turn event,
+  then pick the policy in Settings: [push notifications](docs/subsystems/push-notify.md).
 - **Docker** — production and dev images, read-only `~/.claude` mount:
   [docker](docs/workflows/docker.md).
 - **Configuration** — everything is optional, defaults work out of the box; the full

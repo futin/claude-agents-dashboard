@@ -7,7 +7,7 @@ docs-sync:
     - scripts/permission-notify-hook.sh
     - client/src/components/PermissionBanner.tsx
   kind: subsystem
-  verified: fa1fa5b9daeb162acccef66d0e4d9a210ede95da
+  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
 ---
 
 # Permission prompts (the `allow?` pill)
@@ -69,7 +69,7 @@ back with feedback" is a real instruction, not merely a refusal.
 | Piece | What it does |
 |---|---|
 | `scripts/permission-notify-hook.sh` | Serves **both** events, keyed on `hook_event_name`. POSTs `{sessionId, message, permissionMode}` — the mode is read by the [push notifier](push-notify.md)'s auto-mode layer and is present on `PermissionRequest` but not always on the legacy `Notification` payload. Prints nothing, exits 0 always — for `PermissionRequest`, empty stdout means "no decision", so the prompt renders untouched |
-| `POST /api/permissions/notify` | `servePermissionNotify` in `api.ts` — `tokenOk` 403, `ID_RE` 400, unknown session 404, else `notifyPermission()` |
+| `POST /api/permissions/notify` | `servePermissionNotify` in `api.ts` — `tokenOk` 403, `ID_RE` 400, unknown session 404, else `notifyPermission()` followed by `maybeSend(config, 'permission', …)`. The route notifies inline rather than through `/api/notify/event`, because the hook is already POSTing here (see [push-notify](push-notify.md)) |
 | `server/lib/permissions.ts` | RAM-only `Map<sessionId, {notifiedAt, message, timer}>`. No held socket, no resolve — a notify is a fact, not a wait |
 | `scan.ts` `ScanOptions.permissionWaits` | injected `sessionId → notifiedAt`; sets `Session.permissionWait` and forces `status: 'question'` |
 | `SessionRow` pill + `PermissionBanner` | mustard `allow?` pill (suppressed when `remoteQuestion` or `remotePlan` already owns the row) and the pinned drawer strip |

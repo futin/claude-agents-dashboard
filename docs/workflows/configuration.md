@@ -7,15 +7,16 @@ docs-sync:
     - scripts/ask-remote-hook.sh
     - .env.example
   kind: workflow
-  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
+  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
 ---
 
 # Configuration
 
 **Most of this is now optional twice over.** The [Settings tab](../subsystems/settings.md) edits
-the row count, time windows, refresh rate, theme and idle threshold from the browser, with no
+the row count, time windows, refresh rate, theme, idle threshold, answer window and
+[push-notification policy](../subsystems/push-notify.md) from the browser, with no
 restart — what follows are the *defaults* those settings start from, plus the things only a
-config file can set (ports, feature kill switches, the shared token).
+config file can set (ports, feature kill switches, the shared token, the ntfy topic).
 
 Copy `.env.example` to `.env` and edit. Everything is optional. Precedence: real
 environment variables override `.env`, which overrides the defaults
@@ -52,9 +53,10 @@ that starts the server:
 
 ## Hook-side (remote answers)
 
-The `AskUserQuestion` hook runs inside **Claude Code's** process, not the dashboard's —
-it reads its own environment (e.g. exported in your shell profile), **not** the
-dashboard's `.env`:
+The remote-decision hooks run inside **Claude Code's** process, not the dashboard's — so
+they read their own environment (e.g. exported in your shell profile), **not** the
+dashboard's `.env`. Both `ask-remote-hook.sh` (`AskUserQuestion`) and `plan-remote-hook.sh`
+(`ExitPlanMode`) resolve all three of these identically:
 
 | Var | Default | Meaning |
 |-----|---------|---------|
@@ -62,9 +64,11 @@ dashboard's `.env`:
 | `CLAUDE_DASHBOARD_ANSWER_TIMEOUT` | _(dashboard, else `600`)_ | Seconds the hook waits for a remote answer. Keep the hook's `timeout` in `settings.json` above it. **Normally leave this unset** and use Settings → Answer window, which the hooks read off `/api/health`; setting it here wins and makes that control inert |
 | `CLAUDE_DASHBOARD_IDLE_SECS` | _(dashboard, else `60`)_ | Seconds of keyboard idle before you count as "away". Below it a question goes straight to the terminal. `0` skips the check and always waits. **Normally leave this unset** and use Settings → Away after, which the hooks read off `/api/health`; setting it here wins and makes that control inert |
 
-⚠️ If you set `CLAUDE_DASHBOARD_IDLE_SECS` in the `env` block of `~/.claude/settings.json`, the
-Settings page detects it and says so, but cannot change it — the app never edits `~/.claude`.
-Remove it there to drive the threshold from the dashboard.
+⚠️ If you set `CLAUDE_DASHBOARD_IDLE_SECS` or `CLAUDE_DASHBOARD_ANSWER_TIMEOUT` in the `env`
+block of `~/.claude/settings.json`, the Settings page detects each one and says so, but cannot
+change it — the app never edits `~/.claude`. Remove it there to drive that number from the
+dashboard. (`detectEnvOverride` in `server/lib/settings.ts` also checks the server's own
+environment, and reports which of the two places it found.)
 
 The hook also reads `~/.claude/hooks/dashboard-token` for the `ANSWER_TOKEN` value, if
 you set one. Full setup in [remote-answers.md](../subsystems/remote-answer.md).

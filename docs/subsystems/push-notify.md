@@ -10,7 +10,7 @@ docs-sync:
     - client/src/lib/deepLink.ts
     - client/src/components/settings/SettingsView.tsx
   kind: subsystem
-  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
+  verified: 9910962bd0d5d767482b3ba22fe11b8f7ba7a452
 ---
 
 # Push notifications (ntfy)
