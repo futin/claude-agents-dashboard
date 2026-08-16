@@ -33,7 +33,7 @@ unchanged: same Barlow Condensed uppercase labels, same tokens, no new colors.
 ```html
 <div class="shell">
   <nav class="rail" aria-label="Sections">
-    <p class="rail-brand"><span class="rail-kicker">Claude</span><br />Sessions Dashboard</p>
+    <p class="rail-brand"><span class="rail-kicker">Claude</span><br />Dashboard</p>
     <button class="rail-link on" aria-current="page">Sessions</button>
     <button class="rail-link">Management</button>
     <button class="rail-link">Analytics</button>
@@ -114,7 +114,7 @@ horizontal row; in a vertical list it reads as a divider, not a selection. The l
 also what the reference uses.
 
 `.rail-brand` sits above the links: the word "Claude" in `--ink3` caption type over
-"Sessions Dashboard" in `--ink` display type, separated from the links by margin.
+"Dashboard" in `--ink` display type, separated from the links by margin.
 
 **Zero new colors or shadows.** Every value above is an existing token, so all five themes
 (`midnight`, `graphite`, `amber`, `nightshift`, `daylight`) follow with no per-theme work —

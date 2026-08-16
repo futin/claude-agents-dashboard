@@ -24,7 +24,7 @@ export function SideRail({ section, onChange }: Props) {
       <h1 className="rail-brand">
         <span className="rail-kicker">Claude</span>
         <br />
-        Sessions Dashboard
+        Dashboard
       </h1>
       {TABS.map(t => (
         <button

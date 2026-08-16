@@ -374,7 +374,7 @@ In `client/src/components/SideRail.tsx`, insert the brand as the first child of 
       <p className="rail-brand">
         <span className="rail-kicker">Claude</span>
         <br />
-        Sessions Dashboard
+        Dashboard
       </p>
       {TABS.map(t => (
 ```

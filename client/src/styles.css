@@ -110,7 +110,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
    --font-scale because .shell{zoom} (line 96) makes 100vh resolve against the
    unzoomed viewport: at text scale 110% a plain 100vh rail overhangs by 10%. */
 .shell{display:flex}
-.rail{flex:0 0 200px;display:flex;flex-direction:column;gap:2px;align-self:flex-start;position:sticky;top:0;z-index:5;height:calc(100vh / var(--font-scale,1));overflow-y:auto;padding:var(--body-pad) 12px;background:var(--strip);border-right:1px solid var(--hairline)}
+.rail{flex:0 0 150px;display:flex;flex-direction:column;gap:2px;align-self:flex-start;position:sticky;top:0;z-index:5;height:calc(100vh / var(--font-scale,1));overflow-y:auto;padding:var(--body-pad) 10px;background:var(--strip);border-right:1px solid var(--hairline)}
 /* the app's wordmark, in the rail rather than the page — a kicker over the name */
 .rail-brand{font-family:var(--display);font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;line-height:1.15;color:var(--ink);padding:0 10px;margin-bottom:18px}
 .rail-kicker{font-family:var(--mono);font-size:9.5px;font-weight:400;letter-spacing:.14em;color:var(--ink3)}
