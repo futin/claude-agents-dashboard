@@ -49,6 +49,16 @@ export interface Config {
    * value must stay distinguishable from a chosen one.
    */
   publicUrl: string;
+  /**
+   * Path to a GGML whisper model. Empty (the default) disables dictation
+   * outright, the same way an empty `NTFY_TOPIC` disables pushes — one
+   * "unset means off" rule rather than a separate boolean.
+   */
+  whisperModel: string;
+  /** whisper.cpp CLI. Override for a non-PATH install. */
+  whisperBin: string;
+  /** ffmpeg, used to make whisper-readable 16kHz mono WAV from browser audio. */
+  ffmpegBin: string;
 }
 
 export const DEFAULTS = {
@@ -64,7 +74,10 @@ export const DEFAULTS = {
   ANSWER_TOKEN: '',
   NTFY_TOPIC: '',
   NTFY_SERVER: 'https://ntfy.sh',
-  DASHBOARD_PUBLIC_URL: ''
+  DASHBOARD_PUBLIC_URL: '',
+  WHISPER_MODEL: '',
+  WHISPER_BIN: 'whisper-cli',
+  FFMPEG_BIN: 'ffmpeg'
 } as const;
 
 /** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
@@ -150,6 +163,9 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     ntfyServer: (src('NTFY_SERVER') || DEFAULTS.NTFY_SERVER).trim().replace(/\/+$/, ''),
     // Empty when unset — deliberately NOT defaulted to localhost. See the field's
     // doc comment: a synthesized default is indistinguishable from a real one.
-    publicUrl: (src('DASHBOARD_PUBLIC_URL') || DEFAULTS.DASHBOARD_PUBLIC_URL).trim().replace(/\/+$/, '')
+    publicUrl: (src('DASHBOARD_PUBLIC_URL') || DEFAULTS.DASHBOARD_PUBLIC_URL).trim().replace(/\/+$/, ''),
+    whisperModel: (src('WHISPER_MODEL') || DEFAULTS.WHISPER_MODEL).trim(),
+    whisperBin: (src('WHISPER_BIN') || DEFAULTS.WHISPER_BIN).trim(),
+    ffmpegBin: (src('FFMPEG_BIN') || DEFAULTS.FFMPEG_BIN).trim()
   };
 }

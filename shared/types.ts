@@ -310,6 +310,18 @@ export interface HealthResponse extends RemoteAnswerState {
   idleSecs?: number;
   /** Mirrors `ServerSettings.answerSecs`, read off the same probe. */
   answerSecs?: number;
+  /**
+   * True when a whisper model and CLI are both present. Engine availability
+   * only — it deliberately does not fold in `remoteAnswer`, even though the
+   * endpoint 404s on both, because a MessagePanel cannot be on screen with
+   * remote answers off. One flag, one meaning.
+   */
+  transcribe?: boolean;
+}
+
+/** `POST /api/transcribe` — text may be '' when the clip held no speech. */
+export interface TranscribeResponse {
+  text: string;
 }
 
 /** One selectable choice, straight from the tool call's `options[]`. */
