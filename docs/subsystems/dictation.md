@@ -8,6 +8,7 @@ docs-sync:
     - client/src/hooks/useTranscribeAvailable.ts
     - client/src/components/MicButton.tsx
     - client/src/lib/dictation.ts
+    - client/src/components/MessagePanel.tsx
   kind: subsystem
   verified: 3e1d51fd26c72d6c21bd9d6b8921ee3bb498518b
 ---
@@ -170,7 +171,8 @@ that can reach the dashboard on any interface it's bound to can cause `ffmpeg` a
 `whisper-cli` to run on this machine.** That is real, and it is bounded by exactly four
 things: the single-flight guard above (one clip at a time, 429 otherwise), a 30-second
 timeout on each spawn, the 8MB body cap, and the mime allowlist. The feature is off
-entirely — no route match succeeds, nothing ever spawns — when `WHISPER_MODEL` is unset.
+entirely when `WHISPER_MODEL` is unset — the route still matches, but `probeTranscribe`
+fails and the handler answers 404 before anything spawns.
 
 This was a deliberate choice, not an oversight: singling this one route out for mandatory
 auth would break the common case of a desk-only setup with no token configured, and it

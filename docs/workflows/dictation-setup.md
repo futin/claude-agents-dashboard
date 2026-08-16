@@ -3,6 +3,7 @@ docs-sync:
   sources:
     - server/lib/config.ts
     - server/lib/transcribe.ts
+    - server/api.ts
   kind: workflow
   verified: 3e1d51fd26c72d6c21bd9d6b8921ee3bb498518b
 ---
@@ -87,7 +88,7 @@ server restart.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| No mic button at all | `GET /api/health` reports `transcribe: false` | Check `WHISPER_MODEL` points at a file that exists, and that the binary named by `WHISPER_BIN` (default `whisper-cli`) actually runs. Restart the server after fixing `.env` — the probe only ever runs once, at startup |
+| No mic button at all | `GET /api/health` reports `transcribe: false` | Check `WHISPER_MODEL` points at a file that exists, and that the binary named by `WHISPER_BIN` (default `whisper-cli`) actually runs. Restart the server after fixing `.env` — `probeTranscribe` memoizes on its first call and never re-checks, so a running server won't notice the fix |
 | Mic button renders but disabled, labelled `https only` | The page loaded over plain HTTP — a LAN IP, or the plain-port tailnet URL | Run `pnpm tunnel` (step 5) and load the `https://` hostname it fronts instead |
 | Recording works, then "another clip is transcribing" (`429`) | Only one transcription runs at a time, by design | Wait a few seconds and try again — expected under back-to-back taps, not a bug |
 | "nothing heard" after a take | The clip's transcript parsed to `''` | Not an error — speak louder or closer to the mic, or check the phone didn't mute mid-take |
