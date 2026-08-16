@@ -417,6 +417,7 @@ export async function run(): Promise<number> {
         res.end(JSON.stringify(out.ok ? { ok: true, n: out.bytes.length } : out));
       });
     });
+    let err: unknown;
     await new Promise<void>(done => {
       srv.listen(0, () => {
         const port = (srv.address() as { port: number }).port;
@@ -425,13 +426,18 @@ export async function run(): Promise<number> {
           res.on('data', c => { raw += c; });
           res.on('end', () => {
             srv.close();
-            assert.deepEqual(JSON.parse(raw), { ok: false, reason: 'overflow' });
-            done();
+            // try/finally, not .then/.catch: this leg has no promise chain of
+            // its own, but the same rule applies — a failed assert here must
+            // still resolve `done` (or the suite hangs), not swallow it.
+            try { assert.deepEqual(JSON.parse(raw), { ok: false, reason: 'overflow' }); }
+            catch (e) { err = e; }
+            finally { done(); }
           });
         });
         req.end(Buffer.alloc(64, 1));
       });
     });
+    if (err) throw err;
   }));
 
   console.log(`\n  ${ok}/${total} passed`);
