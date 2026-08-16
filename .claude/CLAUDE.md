@@ -157,3 +157,22 @@ with the log format above (contract details: `docs/subsystems/analytics.md`).
   closing recap/summary section** — the terse `file:line` table *is* the answer, so a restated
   summary just doubles the payload replayed into parent context. Surfaced by the global
   `/kaizen` skill — see `~/.claude/session-analytics-log.md`.
+- **Review subagents file their report; they return only the verdict.** The review
+  templates say "your final message IS the report", which is right for the reviewer and
+  wrong for the controller: a ~1500-word report replays through every later turn. Tell
+  review agents to write the full report to a file and return the verdict plus the
+  Critical/Important findings only — the same contract implementers already get. The rule
+  above was read as covering implementers alone, which is why this recurred; reviewers are
+  the larger half of the spend in a subagent-driven run.
+- **Implementation plans specify behaviour and exact test *cases* — not literal code.**
+  A plan that hands over complete code blocks gets transcribed verbatim (that is what
+  "use the brief's code" means to an implementer), so a bug in the plan becomes a bug in
+  the branch with nobody positioned to catch it. Test scaffolding is the worst offender:
+  it looks like boilerplate, so it is read least closely. Give the signatures, the exact
+  expected values, and the edge cases; let the implementer write the code and disagree
+  with you.
+- **Per-task review agents are for logic-heavy tasks.** A task that is pure transcription
+  of a fully-specified brief gets self-review plus the final whole-branch review instead —
+  dispatching a full review agent for one reliably finds nothing. Reserve the review seat
+  for concurrency, subprocess handling, security surfaces, and anything with real design
+  judgement in it.
