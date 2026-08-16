@@ -2,7 +2,7 @@ import assert from 'node:assert';
 
 import {
   DEFAULT_SETTINGS, LIMITS, THEMES,
-  clampSettings, formatInterval, scanQuery
+  chatQuery, clampSettings, formatInterval, scanQuery
 } from '../client/src/lib/settings.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -55,6 +55,21 @@ export function run(): number {
       scanQuery(clampSettings({ maxSessions: 3, lookbackHours: 48, activeWindowMin: 15 })),
       '?limit=3&lookback=48&active=15'
     );
+  })) p++; else f++;
+
+  if (test('full chat text is off by default and coerces to a boolean', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.chatFullText, false, 'today\'s behaviour stays the default');
+    assert.strictEqual(clampSettings({ chatFullText: true }).chatFullText, true);
+    assert.strictEqual(clampSettings({ chatFullText: 'yes' }).chatFullText, false, 'a non-boolean falls back');
+  })) p++; else f++;
+
+  if (test('chatQuery adds full=1 only when the toggle is on', () => {
+    const off = clampSettings({});
+    const on = clampSettings({ chatFullText: true });
+    assert.strictEqual(chatQuery(off), '');
+    assert.strictEqual(chatQuery(off, 'after=42'), '?after=42');
+    assert.strictEqual(chatQuery(on), '?full=1');
+    assert.strictEqual(chatQuery(on, 'before=42'), '?before=42&full=1');
   })) p++; else f++;
 
   if (test('intervals read as humans write them', () => {

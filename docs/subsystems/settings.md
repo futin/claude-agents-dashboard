@@ -21,9 +21,9 @@ shell export for is editable here and takes effect on the next tick.
 There are two backends, and the page's group headings say which is which.
 
 **Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, landing tab,
-refresh rate, row count, lookback, active window. A phone propped on the desk wants
-five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and three
-seconds. Sharing these would make one device wrong.
+chat truncation, refresh rate, row count, lookback, active window. A phone propped on the desk
+wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and
+three seconds. Sharing these would make one device wrong.
 
 **Shared — `.dashboard-settings.json`** (repo-local, gitignored, never inside `~/.claude`).
 Only settings a *separate process* has to agree on: `idleSecs` (how long until you count as
@@ -36,6 +36,16 @@ The three scan knobs are the interesting case: they change what the **server** c
 they are still per-device, so they travel as query params on the poll the client already makes —
 `GET /api/sessions?limit=20&lookback=48&active=5`. Request input, not stored state. Nothing new
 is persisted and no device can change what another device sees.
+
+**Chat messages** (`chatFullText`, default off = truncated) is the same shape, one endpoint over:
+`?full=1` on `GET /api/sessions/:id/chat`. It has to reach the server because the caps are
+applied there, before the JSON is written — the drawer cannot re-inflate text it was never sent
+(see [chat](chat.md)). So flipping it **re-tails an open drawer**: `chatQuery` re-keys the
+fetch callback, which re-arms the effect that owns the poll. That is the intended behaviour, not
+a side effect — the page has to be refetched to gain the text the last page was cut down to —
+and a fresh tail lands at the bottom, where a live tail belongs anyway. The callback narrows to
+`Pick<Settings, 'chatFullText'>` on purpose: depending on the whole settings object would make a
+theme change re-tail the drawer too.
 
 ## The two hook numbers, and why they needed a contract change
 

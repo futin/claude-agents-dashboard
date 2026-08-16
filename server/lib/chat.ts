@@ -37,6 +37,25 @@ export const TEXT_CAP = 2000;
 /** Cap for a tool body (a proposed plan runs 2–10 KB; this bounds pathological ones). */
 export const TOOL_BODY_CAP = 20_000;
 
+/**
+ * How hard to cut a record. Truncation happens here, server-side, so the client
+ * can't undo it after the fact — the bytes were never sent. That's why the
+ * "show me the whole message" setting rides in as `?full=1` (see `api.ts`)
+ * instead of being a rendering choice in the drawer.
+ *
+ * A `full` page is still bounded: a page never reads more than
+ * `CHAT_WINDOW_BYTES`, so lifting the per-message caps raises the worst case
+ * from ~200 KB to the window size, not to the transcript size.
+ */
+export interface ChatCaps {
+  text: number;
+  toolBody: number;
+}
+
+export const DEFAULT_CAPS: ChatCaps = { text: TEXT_CAP, toolBody: TOOL_BODY_CAP };
+/** Cut nothing. `Infinity` keeps the compare/slice arithmetic identical. */
+export const NO_CAPS: ChatCaps = { text: Infinity, toolBody: Infinity };
+
 /** Injected context the CLI appends to user turns — noise in a chat view. */
 const SYSTEM_REMINDER_RE = /<system-reminder>[\s\S]*?<\/system-reminder>/g;
 
@@ -81,7 +100,7 @@ function toolBody(b: any): string | null {
  * anything left empty after filtering (a user record holding only tool_results,
  * an assistant record holding only thinking).
  */
-export function parseChatRecord(rec: any): ChatMessage | null {
+export function parseChatRecord(rec: any, caps: ChatCaps = DEFAULT_CAPS): ChatMessage | null {
   if (!rec || typeof rec !== 'object') return null;
   if (rec.isSidechain === true || rec.isMeta === true) return null;
 
@@ -105,8 +124,8 @@ export function parseChatRecord(rec: any): ChatMessage | null {
         // body/bodyTruncated attach conditionally — most tools never carry them.
         const body = toolBody(b);
         if (body) {
-          tool.body = body.slice(0, TOOL_BODY_CAP);
-          if (body.length > TOOL_BODY_CAP) tool.bodyTruncated = true;
+          tool.body = body.slice(0, caps.toolBody);
+          if (body.length > caps.toolBody) tool.bodyTruncated = true;
         }
         tools.push(tool);
       }
@@ -117,8 +136,8 @@ export function parseChatRecord(rec: any): ChatMessage | null {
   text = text.replace(SYSTEM_REMINDER_RE, '').trim();
   if (!text && tools.length === 0) return null;
 
-  const textTruncated = text.length > TEXT_CAP;
-  if (textTruncated) text = text.slice(0, TEXT_CAP);
+  const textTruncated = text.length > caps.text;
+  if (textTruncated) text = text.slice(0, caps.text);
 
   return {
     uuid: typeof rec.uuid === 'string' ? rec.uuid : '',
@@ -142,7 +161,9 @@ export interface WindowParse {
  * `windowStart` is the window's absolute offset; pass `dropFirstPartial` when
  * the window began mid-line (i.e. `windowStart > 0`).
  */
-export function parseChatWindow(buf: Buffer, windowStart: number, dropFirstPartial: boolean): WindowParse {
+export function parseChatWindow(
+  buf: Buffer, windowStart: number, dropFirstPartial: boolean, caps: ChatCaps = DEFAULT_CAPS
+): WindowParse {
   const items: WindowParse['items'] = [];
   let start = 0;
 
@@ -162,7 +183,7 @@ export function parseChatWindow(buf: Buffer, windowStart: number, dropFirstParti
       let parsed = true;
       try { rec = JSON.parse(line); } catch { parsed = false; }
       if (parsed) {
-        const msg = parseChatRecord(rec);
+        const msg = parseChatRecord(rec, caps);
         if (msg) {
           // Older records predate `uuid`; keep keys unique for the client.
           if (!msg.uuid) msg.uuid = 'off:' + (windowStart + start);
@@ -220,13 +241,15 @@ function page(parse: WindowParse, windowStart: number, limit: number, cursor: nu
 }
 
 /** The first page: the newest `limit` messages in the last window of the file. */
-export function readChatTail(file: string, limit = CHAT_PAGE_MESSAGES): ChatPage | null {
+export function readChatTail(
+  file: string, limit = CHAT_PAGE_MESSAGES, caps: ChatCaps = DEFAULT_CAPS
+): ChatPage | null {
   const size = statSize(file);
   if (size === null) return null;
   const start = Math.max(0, size - CHAT_WINDOW_BYTES);
   const buf = readRange(file, start, size);
   if (!buf) return null;
-  const parse = parseChatWindow(buf, start, start > 0);
+  const parse = parseChatWindow(buf, start, start > 0, caps);
   return page(parse, start, limit, parse.consumed);
 }
 
@@ -235,7 +258,9 @@ export function readChatTail(file: string, limit = CHAT_PAGE_MESSAGES): ChatPage
  * (a `headOffset` from a previous page, so always a line start). `cursor` is 0
  * — backward pages never move the client's live-tail cursor.
  */
-export function readChatBefore(file: string, before: number, limit = CHAT_PAGE_MESSAGES): ChatPage | null {
+export function readChatBefore(
+  file: string, before: number, limit = CHAT_PAGE_MESSAGES, caps: ChatCaps = DEFAULT_CAPS
+): ChatPage | null {
   const size = statSize(file);
   if (size === null) return null;
   const end = Math.min(before, size);
@@ -243,7 +268,7 @@ export function readChatBefore(file: string, before: number, limit = CHAT_PAGE_M
   const start = Math.max(0, end - CHAT_WINDOW_BYTES);
   const buf = readRange(file, start, end);
   if (!buf) return null;
-  return page(parseChatWindow(buf, start, start > 0), start, limit, 0);
+  return page(parseChatWindow(buf, start, start > 0, caps), start, limit, 0);
 }
 
 /**
@@ -251,14 +276,14 @@ export function readChatBefore(file: string, before: number, limit = CHAT_PAGE_M
  * span is one poll interval of appends. `after > size` means the file was
  * truncated/rotated, so the cursor is meaningless → `reset`.
  */
-export function readChatAfter(file: string, after: number): ChatPage | null {
+export function readChatAfter(file: string, after: number, caps: ChatCaps = DEFAULT_CAPS): ChatPage | null {
   const size = statSize(file);
   if (size === null) return null;
   if (after > size) return { messages: [], cursor: 0, headOffset: 0, hasMore: false, reset: true };
   if (after === size) return { messages: [], cursor: after, headOffset: after, hasMore: after > 0 };
   const buf = readRange(file, after, size);
   if (!buf) return null;
-  const parse = parseChatWindow(buf, after, false);
+  const parse = parseChatWindow(buf, after, false, caps);
   return {
     messages: parse.items.map(i => i.msg),
     cursor: parse.consumed,

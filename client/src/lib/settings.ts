@@ -44,6 +44,13 @@ export interface Settings {
   lookbackHours: number;
   activeWindowMin: number;
   landing: Landing;
+  /**
+   * Ask the server for whole messages instead of the capped ones. Off by
+   * default — the drawer is a monitor. Truncation is server-side, so this has
+   * to travel as `?full=1` on the chat request; the drawer can't undo a cut
+   * that happened before the JSON was written.
+   */
+  chatFullText: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -54,7 +61,8 @@ export const DEFAULT_SETTINGS: Settings = {
   maxSessions: 10,
   lookbackHours: 24,
   activeWindowMin: 5,
-  landing: 'last'
+  landing: 'last',
+  chatFullText: false
 };
 
 /**
@@ -83,6 +91,11 @@ function pickOne<T extends string>(value: unknown, allowed: readonly T[], fallba
   return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
+/** Strict: a stored `"true"` from a hand-edit is not a boolean, so it falls back. */
+function pickBool(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
 const THEME_IDS = THEMES.map(t => t.id);
 const LANDINGS: Landing[] = ['last', 'sessions', 'management', 'analytics', 'settings'];
 
@@ -101,13 +114,28 @@ export function clampSettings(raw: unknown): Settings {
     maxSessions: clampNumber(s.maxSessions, DEFAULT_SETTINGS.maxSessions, LIMITS.maxSessions.min, LIMITS.maxSessions.max),
     lookbackHours: clampNumber(s.lookbackHours, DEFAULT_SETTINGS.lookbackHours, LIMITS.lookbackHours.min, LIMITS.lookbackHours.max),
     activeWindowMin: clampNumber(s.activeWindowMin, DEFAULT_SETTINGS.activeWindowMin, LIMITS.activeWindowMin.min, LIMITS.activeWindowMin.max),
-    landing: pickOne(s.landing, LANDINGS, DEFAULT_SETTINGS.landing)
+    landing: pickOne(s.landing, LANDINGS, DEFAULT_SETTINGS.landing),
+    chatFullText: pickBool(s.chatFullText, DEFAULT_SETTINGS.chatFullText)
   };
 }
 
 /** The scan knobs as the query string `GET /api/sessions` takes. */
 export function scanQuery(s: Settings): string {
   return `?limit=${s.maxSessions}&lookback=${s.lookbackHours}&active=${s.activeWindowMin}`;
+}
+
+/**
+ * The query string `GET /api/sessions/:id/chat` takes. `cursor` is the paging
+ * param the caller already has (`after=…` / `before=…`, empty for the tail);
+ * this only adds the truncation flag on top, so every one of the drawer's three
+ * request shapes stays consistent.
+ *
+ * Narrowed to the one field it reads, so the drawer's fetch callback depends on
+ * that boolean alone — a theme change must not re-tail an open chat.
+ */
+export function chatQuery(s: Pick<Settings, 'chatFullText'>, cursor = ''): string {
+  const parts = [cursor, s.chatFullText ? 'full=1' : ''].filter(Boolean);
+  return parts.length ? '?' + parts.join('&') : '';
 }
 
 /** "3s" / "500ms" — for the footer's live-refresh note. */

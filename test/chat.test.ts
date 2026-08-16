@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  CHAT_WINDOW_BYTES, TEXT_CAP, TOOL_BODY_CAP,
+  CHAT_WINDOW_BYTES, NO_CAPS, TEXT_CAP, TOOL_BODY_CAP,
   parseChatRecord, readChatAfter, readChatBefore, readChatTail
 } from '../server/lib/chat.js';
 import type { ChatMessage } from '../shared/types.js';
@@ -107,6 +107,22 @@ export function run(): number {
     assert.strictEqual(m.textTruncated, true);
   })) p++; else f++;
 
+  if (test('NO_CAPS keeps the whole message text', () => {
+    const long = 'x'.repeat(TEXT_CAP + 500);
+    const m = parseChatRecord(userRec('u1', long), NO_CAPS)!;
+    assert.strictEqual(m.text, long);
+    assert.strictEqual(m.textTruncated, false);
+  })) p++; else f++;
+
+  if (test('NO_CAPS keeps the whole tool body', () => {
+    const plan = 'p'.repeat(TOOL_BODY_CAP + 5);
+    const m = parseChatRecord(asstRec('a1', [
+      { type: 'tool_use', id: 't1', name: 'ExitPlanMode', input: { plan } }
+    ]), NO_CAPS)!;
+    assert.strictEqual(m.tools[0].body, plan);
+    assert.strictEqual('bodyTruncated' in m.tools[0], false);
+  })) p++; else f++;
+
   if (test('tool-only assistant record kept (no text)', () => {
     const m = parseChatRecord(asstRec('a1', [{ type: 'tool_use', id: 't1', name: 'Bash', input: { description: 'run tests' } }]))!;
     assert.strictEqual(m.text, '');
@@ -164,6 +180,25 @@ export function run(): number {
     const file = writeJsonl([{ type: 'user', message: { role: 'user', content: 'a' } }, { type: 'user', message: { role: 'user', content: 'b' } }]);
     const ids = readChatTail(file)!.messages.map(m => m.uuid);
     assert.deepStrictEqual(ids, ['off:0', 'off:' + (JSON.stringify({ type: 'user', message: { role: 'user', content: 'a' } }).length + 1)]);
+  })) p++; else f++;
+
+  if (test('every reader threads the caps through to the records', () => {
+    const long = 'y'.repeat(TEXT_CAP + 500);
+    const file = writeJsonl([userRec('u0', 'short'), userRec('u1', long)]);
+
+    for (const [what, page] of [
+      ['tail', readChatTail(file, 100, NO_CAPS)!],
+      ['after', readChatAfter(file, 0, NO_CAPS)!],
+      ['before', readChatBefore(file, fs.statSync(file).size, 100, NO_CAPS)!]
+    ] as const) {
+      const m = page.messages.find(x => x.uuid === 'u1')!;
+      assert.strictEqual(m.text, long, what);
+      assert.strictEqual(m.textTruncated, false, what);
+    }
+    // Default (no caps argument) still truncates — the toggle is opt-in.
+    const capped = readChatTail(file)!.messages.find(x => x.uuid === 'u1')!;
+    assert.strictEqual(capped.text.length, TEXT_CAP);
+    assert.strictEqual(capped.textTruncated, true);
   })) p++; else f++;
 
   /* ---------------------------------------------- paging / offset math */

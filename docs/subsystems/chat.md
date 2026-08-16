@@ -29,8 +29,8 @@ ever renders.
 compact line per `tool_use` (`{ name, detail }`, detail from the **reused** `describeTool`
 in `transcript.ts`). Exception: for `ExitPlanMode` and `AskUserQuestion` the input *is*
 conversational content, so the full body (the plan markdown / questions+options composed
-as markdown) rides along as `ChatToolCall.body` — capped at `TOOL_BODY_CAP` (20 KB,
-`bodyTruncated` flag) — and renders as a collapsible `<details open>` block
+as markdown) rides along as `ChatToolCall.body` — capped at `TOOL_BODY_CAP` (20 KB by
+default, `bodyTruncated` flag) — and renders as a collapsible `<details open>` block
 (`.cmsg-plan`) instead of the one-liner; the `text` filter keeps body-bearing messages.
 
 Dropped: records with no user/assistant `message.role` (`last-prompt`, `custom-title`,
@@ -40,6 +40,15 @@ Dropped: records with no user/assistant `message.role` (`last-prompt`, `custom-t
 `<system-reminder>` spans, and anything empty after that filtering. Text is capped at
 `TEXT_CAP` (2000 chars) with a `textTruncated` flag.
 
+**Both caps are a request parameter, not a constant.** `parseChatRecord` takes a `ChatCaps`
+(`{ text, toolBody }`) that defaults to `DEFAULT_CAPS`; `?full=1` swaps in `NO_CAPS`
+(`Infinity` for both, so the compare/slice arithmetic is unchanged). It has to work this way
+round: truncation happens here, server-side, so a "show me the whole message" toggle in the
+drawer could not undo it after the fact — the bytes were never sent. See
+[settings](settings.md) for the switch that sets it. The uncapped page is still bounded: a
+page never reads more than one `CHAT_WINDOW_BYTES` window, so lifting the caps raises the
+worst case to the window size, not to the transcript size.
+
 ## Mechanism
 
 - **Endpoint:** `GET /api/sessions/:id/chat` (`SessionChat`). Three modes, one handler
@@ -48,6 +57,10 @@ Dropped: records with no user/assistant `message.role` (`last-prompt`, `custom-t
     `CHAT_WINDOW_BYTES` (512 KB) of the file,
   - `?after=<cursor>` → **live tail**: only the bytes appended since (`O(new bytes)`),
   - `?before=<headOffset>` → **older page**: the 512 KB window ending at that offset.
+
+  `?full=1` composes with all three (`chatQuery` in `client/src/lib/settings.ts` builds the
+  string, so the tail, the poll and "load older" can never disagree about it) and lifts the
+  per-message caps. Any other value, or its absence, is the capped default.
 - **Paging currency is byte offsets** (transcripts are append-only): `cursor` walks
   forward, `headOffset` (the byte offset of `messages[0]`'s line) walks backward,
   `hasMore` is just `headOffset > 0`. Backward pages return `cursor: 0` — they must never

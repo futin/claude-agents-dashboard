@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useSettings } from './useSettings';
+import { chatQuery } from '../lib/settings';
 import type { ChatMessage, SessionChat } from '../../../shared/types';
 
 export interface ChatState {
@@ -34,16 +35,18 @@ export function useSessionChat(id: string): ChatState {
   const ready = useRef(false);
   /** An older-page request is in flight. */
   const busy = useRef(false);
-  const { settings: { refreshMs } } = useSettings();
+  const { settings: { refreshMs, chatFullText } } = useSettings();
 
-  const get = useCallback(async (query: string): Promise<SessionChat | null> => {
+  /** `cursor` is the paging param; `chatQuery` bolts the truncation flag on. */
+  const get = useCallback(async (cursor: string): Promise<SessionChat | null> => {
     try {
+      const query = chatQuery({ chatFullText }, cursor);
       const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/chat${query}`);
       return (await res.json()) as SessionChat;
     } catch {
       return null; // keep the last snapshot; the next poll retries
     }
-  }, [id]);
+  }, [id, chatFullText]);
 
   useEffect(() => {
     let live = true;
@@ -75,7 +78,7 @@ export function useSessionChat(id: string): ChatState {
 
     async function poll(): Promise<void> {
       if (!ready.current) return;
-      const page = await get('?after=' + cursor.current);
+      const page = await get('after=' + cursor.current);
       if (!live || !page || page.error) return;
       if (page.reset) {
         // Transcript truncated/rotated — our cursor means nothing now.
@@ -93,8 +96,9 @@ export function useSessionChat(id: string): ChatState {
       live = false;
       clearInterval(timer);
     };
-    // Retuning the rate re-tails the drawer. Harmless — a live tail belongs at
-    // the bottom anyway, which is exactly where a fresh tail lands you.
+    // Retuning the rate — or flipping the truncation toggle, which re-keys
+    // `get` — re-tails the drawer. Harmless, and it's what you want after
+    // toggling: the page has to be refetched to gain the text the server cut.
   }, [get, refreshMs]);
 
   const loadOlder = useCallback(async () => {
@@ -102,7 +106,7 @@ export function useSessionChat(id: string): ChatState {
     busy.current = true;
     setLoadingOlder(true);
     try {
-      const page = await get('?before=' + head.current);
+      const page = await get('before=' + head.current);
       if (!page || page.error) return;
       head.current = page.headOffset;
       setHasMore(page.hasMore);

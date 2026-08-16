@@ -14,7 +14,9 @@ import {
   readProjectScope, readServableFile, resolveProject
 } from './lib/management.js';
 import { listReports, reviewStatus } from './lib/analytics.js';
-import { readChatAfter, readChatBefore, readChatTail } from './lib/chat.js';
+import {
+  CHAT_PAGE_MESSAGES, DEFAULT_CAPS, NO_CAPS, readChatAfter, readChatBefore, readChatTail
+} from './lib/chat.js';
 import {
   answer as answerPending, cancel as cancelPending, clampTimeout,
   dismissAll, getPending, pendingSessionIds, register, sanitizeQuestions
@@ -149,6 +151,10 @@ export function serveSessionDetail(id: string, res: ServerResponse): void {
  * since (the 3s live tail); `?before=<headOffset>` → the page above. Offsets are
  * byte offsets into the transcript (see lib/chat.ts). The id is resolved against
  * the enumerated transcript list, never joined into a path.
+ *
+ * `?full=1` lifts the per-message caps — request input, not stored state, the
+ * same way the scan knobs ride the sessions poll. The page is still bounded by
+ * one `CHAT_WINDOW_BYTES` window either way.
  */
 export function serveSessionChat(id: string, params: URLSearchParams, res: ServerResponse): void {
   const fail = (code: number): void => {
@@ -168,15 +174,16 @@ export function serveSessionChat(id: string, params: URLSearchParams, res: Serve
   const after = offset('after');
   const before = offset('before');
   if (after === null || before === null) return fail(400);
+  const caps = params.get('full') === '1' ? NO_CAPS : DEFAULT_CAPS;
 
   let body: SessionChat;
   try {
     const ref = listTranscripts(projectsRoot()).find(t => t.id === id);
     if (!ref) return fail(404);
     const chat =
-      after !== undefined ? readChatAfter(ref.file, after)
-      : before !== undefined ? readChatBefore(ref.file, before)
-      : readChatTail(ref.file);
+      after !== undefined ? readChatAfter(ref.file, after, caps)
+      : before !== undefined ? readChatBefore(ref.file, before, CHAT_PAGE_MESSAGES, caps)
+      : readChatTail(ref.file, CHAT_PAGE_MESSAGES, caps);
     if (!chat) return fail(404);
     body = { id, ...chat };
   } catch (e) {

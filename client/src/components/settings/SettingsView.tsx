@@ -151,6 +151,17 @@ export default function SettingsView() {
             {LANDINGS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
           </select>
         </SettingsRow>
+
+        <SettingsRow
+          name="Chat messages"
+          hint="Truncated cuts a message at 2 000 characters and a tool body at 20 000 — enough to see what a session is doing. Full sends the whole thing (a page still reads at most one 512 KB window). Changing this re-tails an open drawer."
+        >
+          <Segmented
+            value={settings.chatFullText ? 'full' : 'cut'}
+            options={[{ value: 'cut' as const, label: 'Truncated' }, { value: 'full' as const, label: 'Full' }]}
+            onChange={v => update({ chatFullText: v === 'full' })}
+          />
+        </SettingsRow>
       </SettingsGroup>
 
       <SettingsGroup title="Live data · this device">
