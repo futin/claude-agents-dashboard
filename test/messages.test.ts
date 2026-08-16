@@ -1,10 +1,14 @@
 import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import {
   TEXT_CAP,
   answer, cancel, composeReason, dismissAll, getPendingMessage, messageSessionIds,
-  register, resetStore
+  register, resetStore, setIdleReader, sweepIdle
 } from '../server/lib/messages.js';
+import { setSettings, resetSettings, SETTINGS_FILE } from '../server/lib/settings.js';
 import type { MessageWaitResult } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -21,6 +25,20 @@ async function testAsync(name: string, fn: () => Promise<void>): Promise<boolean
 function waiter(): { results: MessageWaitResult[]; resolve: (r: MessageWaitResult) => void } {
   const results: MessageWaitResult[] = [];
   return { results, resolve: r => { results.push(r); } };
+}
+
+/** Run a test in isolation: tmpdir cwd so settings file is unshared with the real one. */
+function inTmpCwd(fn: () => void): void {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-msg-'));
+  const prev = process.cwd();
+  try {
+    process.chdir(dir);
+    resetSettings();
+    fn();
+  } finally {
+    process.chdir(prev);
+    resetSettings();
+  }
 }
 
 export async function run(): Promise<number> {
@@ -142,58 +160,55 @@ export async function run(): Promise<number> {
 
   /* ----------------------------------------------------- idle auto-release */
 
-  const { setIdleReader, sweepIdle } = await import('../server/lib/messages.js');
-  const { setSettings, resetSettings: resetSettingsModule } = await import('../server/lib/settings.js');
-
   if (test('sweepIdle releases every hold when you are back at the keyboard', () => {
-    resetStore();
-    const orig = setSettings({ idleSecs: 60 });
-    const w = waiter();
-    register('s1', 60_000, w.resolve);
-    setIdleReader(() => 3); // 3s idle < 60s threshold
-    assert.strictEqual(sweepIdle(), 1);
-    assert.deepStrictEqual(w.results, [{ status: 'released' }]);
-    setIdleReader(null);
-    if (orig) setSettings(orig);
-    resetSettingsModule();
+    inTmpCwd(() => {
+      resetStore();
+      setSettings({ idleSecs: 60 });
+      const w = waiter();
+      register('s1', 60_000, w.resolve);
+      setIdleReader(() => 3); // 3s idle < 60s threshold
+      assert.strictEqual(sweepIdle(), 1);
+      assert.deepStrictEqual(w.results, [{ status: 'released' }]);
+      setIdleReader(null);
+    });
   })) p++; else f++;
 
   if (test('sweepIdle does nothing while still away', () => {
-    resetStore();
-    const orig = setSettings({ idleSecs: 60 });
-    const w = waiter();
-    register('s1', 60_000, w.resolve);
-    setIdleReader(() => 9999); // 9999s idle >= 60s threshold
-    assert.strictEqual(sweepIdle(), 0);
-    assert.strictEqual(w.results.length, 0);
-    setIdleReader(null);
-    if (orig) setSettings(orig);
-    resetSettingsModule();
+    inTmpCwd(() => {
+      resetStore();
+      setSettings({ idleSecs: 60 });
+      const w = waiter();
+      register('s1', 60_000, w.resolve);
+      setIdleReader(() => 9999); // 9999s idle >= 60s threshold
+      assert.strictEqual(sweepIdle(), 0);
+      assert.strictEqual(w.results.length, 0);
+      setIdleReader(null);
+    });
   })) p++; else f++;
 
   if (test('unreadable idle never auto-releases (Docker/non-macOS)', () => {
-    resetStore();
-    const orig = setSettings({ idleSecs: 60 });
-    const w = waiter();
-    register('s1', 60_000, w.resolve);
-    setIdleReader(() => null); // unreadable idle
-    assert.strictEqual(sweepIdle(), 0);
-    setIdleReader(null);
-    if (orig) setSettings(orig);
-    resetSettingsModule();
+    inTmpCwd(() => {
+      resetStore();
+      setSettings({ idleSecs: 60 });
+      const w = waiter();
+      register('s1', 60_000, w.resolve);
+      setIdleReader(() => null); // unreadable idle
+      assert.strictEqual(sweepIdle(), 0);
+      setIdleReader(null);
+    });
   })) p++; else f++;
 
   if (test('sweepIdle returns 0 when idleSecs is 0 (idle check disabled)', () => {
-    resetStore();
-    const orig = setSettings({ idleSecs: 0 });
-    const w = waiter();
-    register('s1', 60_000, w.resolve);
-    setIdleReader(() => 3);
-    assert.strictEqual(sweepIdle(), 0);
-    assert.strictEqual(w.results.length, 0);
-    setIdleReader(null);
-    if (orig) setSettings(orig);
-    resetSettingsModule();
+    inTmpCwd(() => {
+      resetStore();
+      setSettings({ idleSecs: 0 });
+      const w = waiter();
+      register('s1', 60_000, w.resolve);
+      setIdleReader(() => 3);
+      assert.strictEqual(sweepIdle(), 0);
+      assert.strictEqual(w.results.length, 0);
+      setIdleReader(null);
+    });
   })) p++; else f++;
 
   resetStore();
