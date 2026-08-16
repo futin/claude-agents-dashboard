@@ -81,7 +81,7 @@ worked around.
 | `POST /api/sessions/:id/message-answer` | `serveSessionMessageAnswer` — `{messageId, text}` or `{messageId, dismiss: true}`. Token-gated |
 | `server/lib/messages.ts` | RAM-only store; same state machine as `pending.ts`/`plans.ts` with an injected `resolve`, plus the idle-release reaper below |
 | `scan.ts` `ScanOptions.messageIds` | sets `Session.remoteReply` and forces `status: 'question'` (blue) |
-| `SessionRow` pill + `MessagePanel` | the `reply?` pill (same `ag-pill answer` class as `answer`/`plan?`, just different text) and the pinned drawer composer |
+| `SessionRow` tab + `MessagePanel` | the `reply?` label on the row's right-edge tab (same `row-chat answer` tone as `answer`/`plan?`, just different text) and the pinned drawer composer |
 | `chat.ts` `REMOTE_MESSAGE_RE` | unwraps the delivered follow-up back out of `composeReason` so it shows in the drawer as an ordinary user message — see below |
 
 ## Seeing what you sent

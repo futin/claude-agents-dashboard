@@ -14,7 +14,7 @@ docs-sync:
 
 # Chat — history tail and the drawer
 
-The `chat` pill on a session row opens a **full-height drawer** with that session's
+The `chat` tab down the right edge of a session row opens a **full-height drawer** with that session's
 conversation: newest page on open, live-tailed at the configured refresh rate, "load older"
 walking backwards through the whole transcript. Read-only, like everything else in the app.
 This drawer is also where [remote answers](remote-answer.md) surface: a pending question
@@ -117,8 +117,10 @@ worst case to the window size, not to the transcript size.
   time, prepend detected by a changed first-message uuid). `chatId` is **not** persisted —
   session ids churn (same reasoning as row expansion in
   [view-persistence](view-persistence.md)).
-- The `chat` pill stops click propagation; the row's own click still toggles the agents
-  panel.
+- The `chat` tab (`.row-chat`) is a **sibling** of the clickable card face (`.row-main`),
+  not a child of it — so opening the drawer never has to out-shout the row's own toggle.
+  It also carries the row's held states: `answer` / `plan?` / `reply?` / `allow?` are the
+  same one control with a different label and tone, since all four open this drawer.
 
 ## Invariants
 

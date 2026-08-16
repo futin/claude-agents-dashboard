@@ -185,11 +185,15 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .usage .u-msg{font-size:11px;color:var(--ink3)}
 
 .rows{display:flex;flex-direction:column;gap:var(--rows-gap)}
-/* a session is a flight strip: square paper card in a colored holder edge */
-.row{background:var(--strip);border:1px solid var(--hairline);border-left:7px solid var(--hairline2);border-radius:2px;padding:var(--row-pad);cursor:pointer;
+/* a session is a flight strip: square paper card in a colored holder edge.
+   The card splits in two: the printed face (.row-main) and the tear-off tab
+   down the right edge (.row-chat). Padding lives on the face, so the tab
+   reaches the card's own edges. */
+.row{background:var(--strip);border:1px solid var(--hairline);border-left:7px solid var(--hairline2);border-radius:2px;display:flex;align-items:stretch;
   box-shadow:inset 0 1px 0 var(--edge),0 1px 2px var(--shadow);
   transition:border-color .15s,transform .15s,box-shadow .15s;
   animation:slot-in .18s ease-out}
+.row-main{flex:1;min-width:0;padding:var(--row-pad);cursor:pointer}
 @keyframes slot-in{from{transform:translateY(-3px);opacity:.5}to{transform:none;opacity:1}}
 .row:hover{border-color:var(--hairline2);transform:translateY(-1px);box-shadow:inset 0 1px 0 var(--edge),0 2px 6px var(--shadow2)}
 .row.selected{box-shadow:0 0 0 1px var(--cyan),inset 0 1px 0 var(--edge)}
@@ -199,6 +203,33 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .row.question{border-left-color:var(--amber);transform:rotate(-.55deg) translateX(6px);
   box-shadow:inset 0 1px 0 var(--edge),0 3px 8px var(--shadow2)}
 .row.question:hover{transform:rotate(-.55deg) translateX(6px)}
+/* the tab: full card height down the right edge, the one way into this
+   session's chat — and the one place a session says it needs a human. All four
+   holds (question / plan / reply / permission) open that same drawer, so they
+   are this one slab rather than four 9.5px pills lost among the printed fields.
+   Colored, it reads down a whole rack; a pill did not. */
+/* vertical padding rides the density token so the label lines up with `.r1`;
+   the sides are cut back to 7px — at the token's 14px, `answer` fills the
+   content box to the pixel and clips on the next text scale up */
+.row-chat{flex:0 0 58px;display:flex;justify-content:center;align-items:flex-start;padding:var(--row-pad);padding-inline:7px;
+  background:var(--steel);color:var(--ink3);border:0;border-left:1px solid var(--hairline);border-radius:0 1px 1px 0;
+  cursor:pointer;transition:color .15s,background .15s,border-color .15s}
+.row-chat:hover{color:var(--cyan);background:var(--strip-hi);border-left-color:var(--cyan)}
+/* an expanded card runs hundreds of px tall — the label rides the top of the
+   viewport instead of drifting off with the subagent panel */
+.rc-in{position:sticky;top:10px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.rc-label{font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+.rc-mark{font-size:9px;line-height:1;color:var(--ink3);transition:color .15s}
+.row-chat:hover .rc-mark{color:var(--cyan)}
+/* held: amber, the same stamp language as the cocked strip it belongs to */
+.row-chat.answer{color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--strip));border-left-color:var(--amber);animation:qpulse 1.6s ease-in-out infinite}
+.row-chat.answer:hover{color:var(--ink);background:color-mix(in srgb,var(--amber) 28%,var(--strip))}
+/* permission dialog open in the terminal — mustard, not amber: it needs a human
+   like the answer tab, but it can only be answered over there */
+.row-chat.permission{color:var(--mustard);background:color-mix(in srgb,var(--mustard) 12%,var(--strip));border-left-color:var(--mustard);animation:qpulse 1.6s ease-in-out infinite}
+.row-chat.permission:hover{color:var(--ink);background:color-mix(in srgb,var(--mustard) 28%,var(--strip))}
+.row-chat.answer .rc-mark,.row-chat.permission .rc-mark{color:inherit}
+@keyframes qpulse{0%,100%{opacity:1}50%{opacity:.55}}
 .row .r1{display:flex;align-items:center;gap:10px}
 .caret{flex-shrink:0;color:var(--ink3);font-size:10px;width:10px;text-align:center;transition:transform .15s,color .15s}
 .caret.open{transform:rotate(90deg);color:var(--ink2)}
@@ -245,14 +276,6 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .ag-pill.running{color:var(--green);background:color-mix(in srgb,var(--green) 13%,transparent)}
 .ag-pill.done{color:var(--ink3);background:var(--steel)}
 .ag-pill.kaizen{color:var(--magenta);background:color-mix(in srgb,var(--magenta) 13%,transparent)}
-/* held remote question — the ANSWER stamp: amber, pulsing, opens the drawer */
-.ag-pill.answer{border:1px solid var(--amber);color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--strip));cursor:pointer;animation:qpulse 1.6s ease-in-out infinite}
-.ag-pill.answer:hover{color:var(--ink);background:color-mix(in srgb,var(--amber) 28%,var(--strip))}
-@keyframes qpulse{0%,100%{opacity:1}50%{opacity:.55}}
-/* permission dialog open in the terminal — mustard, not amber: it needs a human
-   like the answer pill, but it can only be answered over there */
-.ag-pill.permission{border:1px solid var(--mustard);color:var(--mustard);background:color-mix(in srgb,var(--mustard) 12%,var(--strip));cursor:pointer;animation:qpulse 1.6s ease-in-out infinite}
-.ag-pill.permission:hover{color:var(--ink);background:color-mix(in srgb,var(--mustard) 28%,var(--strip))}
 .kaizen-lesson{display:flex;align-items:flex-start;gap:8px;margin-top:11px;padding-top:11px;border-top:1px solid var(--hairline);font-size:11.5px;line-height:1.5;color:var(--ink2)}
 .kaizen-lesson .ag-pill{margin-top:1px}
 .ag-type{flex-shrink:0;font-family:var(--mono);color:var(--magenta);font-weight:600}
@@ -380,9 +403,8 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .an-review code{font-family:var(--mono);text-transform:none;letter-spacing:0;color:inherit}
 @media (max-width:700px){.an-cols{grid-template-columns:1fr}}
 
-/* ---------------------------------------------- chat-history drawer */
-.chat-pill{flex-shrink:0;font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2);background:none;border:1px solid var(--hairline);border-radius:2px;padding:1px 7px;cursor:pointer;transition:color .15s,border-color .15s}
-.chat-pill:hover{color:var(--cyan);border-color:var(--cyan)}
+/* ---------------------------------------------- chat-history drawer
+   (the way in is `.row-chat`, up in the strip block) */
 .chat-back{position:fixed;inset:0;background:var(--scrim);display:flex;justify-content:flex-end;z-index:50}
 .chat{display:flex;flex-direction:column;width:min(720px,100%);height:100%;background:var(--board);border-left:1px solid var(--hairline2);animation:chat-in .16s ease-out}
 @keyframes chat-in{from{transform:translateX(16px);opacity:.4}to{transform:none;opacity:1}}
@@ -547,7 +569,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 /* ---------------------------------------------- quality floor */
 :where(button,select,input,textarea,summary,[role=button]):focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
 @media (prefers-reduced-motion:reduce){
-  .working .dot,.ag-pill.answer,.ag-pill.permission,.tl-bar.running,.row,.chat{animation:none}
+  .working .dot,.row-chat.answer,.row-chat.permission,.tl-bar.running,.row,.chat{animation:none}
 }
 /* phone: strip fields wrap instead of clipping; model rides in the drawer anyway
    (same call as hiding .chat-model there) */
@@ -555,4 +577,6 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
   .row .r1{flex-wrap:wrap;row-gap:6px}
   .row .model{display:none}
   .tok{margin-left:auto}
+  /* the tab is the row's thumb target — narrower than desktop, still full height */
+  .row-chat{flex:0 0 52px}
 }
