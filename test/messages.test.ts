@@ -8,7 +8,7 @@ import {
   answer, cancel, composeReason, dismissAll, getPendingMessage, messageSessionIds,
   register, resetStore, setIdleReader, sweepIdle
 } from '../server/lib/messages.js';
-import { setSettings, resetSettings, SETTINGS_FILE } from '../server/lib/settings.js';
+import { setSettings, resetSettings } from '../server/lib/settings.js';
 import type { MessageWaitResult } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -167,9 +167,12 @@ export async function run(): Promise<number> {
       const w = waiter();
       register('s1', 60_000, w.resolve);
       setIdleReader(() => 3); // 3s idle < 60s threshold
-      assert.strictEqual(sweepIdle(), 1);
-      assert.deepStrictEqual(w.results, [{ status: 'released' }]);
-      setIdleReader(null);
+      try {
+        assert.strictEqual(sweepIdle(), 1);
+        assert.deepStrictEqual(w.results, [{ status: 'released' }]);
+      } finally {
+        setIdleReader(null);
+      }
     });
   })) p++; else f++;
 
@@ -180,9 +183,12 @@ export async function run(): Promise<number> {
       const w = waiter();
       register('s1', 60_000, w.resolve);
       setIdleReader(() => 9999); // 9999s idle >= 60s threshold
-      assert.strictEqual(sweepIdle(), 0);
-      assert.strictEqual(w.results.length, 0);
-      setIdleReader(null);
+      try {
+        assert.strictEqual(sweepIdle(), 0);
+        assert.strictEqual(w.results.length, 0);
+      } finally {
+        setIdleReader(null);
+      }
     });
   })) p++; else f++;
 
@@ -193,8 +199,11 @@ export async function run(): Promise<number> {
       const w = waiter();
       register('s1', 60_000, w.resolve);
       setIdleReader(() => null); // unreadable idle
-      assert.strictEqual(sweepIdle(), 0);
-      setIdleReader(null);
+      try {
+        assert.strictEqual(sweepIdle(), 0);
+      } finally {
+        setIdleReader(null);
+      }
     });
   })) p++; else f++;
 
@@ -205,9 +214,12 @@ export async function run(): Promise<number> {
       const w = waiter();
       register('s1', 60_000, w.resolve);
       setIdleReader(() => 3);
-      assert.strictEqual(sweepIdle(), 0);
-      assert.strictEqual(w.results.length, 0);
-      setIdleReader(null);
+      try {
+        assert.strictEqual(sweepIdle(), 0);
+        assert.strictEqual(w.results.length, 0);
+      } finally {
+        setIdleReader(null);
+      }
     });
   })) p++; else f++;
 

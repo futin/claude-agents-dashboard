@@ -75,7 +75,7 @@ worked around.
 
 | Piece | What it does |
 |---|---|
-| `scripts/stop-notify-hook.sh` | Extended in place, not duplicated — a second hook would race the notify POST and double-push. Away + remote answers on → holds; otherwise the pre-feature `notify_fallback` path (`POST /api/notify/event`), byte-for-byte unchanged |
+| `scripts/stop-notify-hook.sh` | Extended in place, not duplicated — a second hook would race the notify POST and double-push. Away + remote answers on → holds; otherwise the pre-feature `notify_fallback` path (`POST /api/notify/event`), byte-for-byte unchanged. Failed wait POST (non-2xx) also falls back to plain notify POST |
 | `POST /api/messages/wait` | `serveMessageWait` — held open until an answer, a dismiss, the deadline, an idle release, or a supersede |
 | `GET /api/sessions/:id/message` | `serveSessionMessage` — what the browser polls, at the configured refresh rate (`usePendingMessage` reads `refreshMs` from `useSettings`, exactly as `usePendingPlan`/`usePendingQuestion` do) |
 | `POST /api/sessions/:id/message-answer` | `serveSessionMessageAnswer` — `{messageId, text}` or `{messageId, dismiss: true}`. Token-gated |
