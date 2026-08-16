@@ -219,8 +219,18 @@ export function readJsonBody(req: IncomingMessage, cap = BODY_CAP): Promise<unkn
     req.on('data', (chunk: Buffer) => {
       size += chunk.length;
       if (size > cap) {
+        // Resolve but do NOT req.destroy() here: req and res share one socket,
+        // and destroying the request kills that socket before the caller's 400
+        // can go out — the client would see a bare connection reset instead of
+        // a JSON body. Closing is the caller's job, once its response has
+        // flushed (see `sendBadBody`). Drop what's already buffered rather than
+        // let it sit at ~cap bytes until GC; `size` never shrinks, so every
+        // later chunk lands here too and memory stays bounded from now on. The
+        // stream still drains because this 'data' listener stays attached and
+        // keeps it flowing — removing it as a later "optimization" would stall
+        // the socket instead of draining it.
+        chunks.length = 0;
         finish(null);
-        req.destroy();
         return;
       }
       chunks.push(chunk);
@@ -232,6 +242,25 @@ export function readJsonBody(req: IncomingMessage, cap = BODY_CAP): Promise<unkn
     req.on('error', () => finish(null));
     req.on('aborted', () => finish(null));
   });
+}
+
+/**
+ * Answer 400 to a body we refused, then close the connection.
+ *
+ * `readJsonBody` cannot sequence this itself — it never sees `res` — so the
+ * other half of "an over-cap client must not keep uploading a body we already
+ * rejected" lives here. Waiting for `finish` (the response fully handed to the
+ * socket) before destroying is what makes the reply arrive at all: tearing the
+ * shared socket down any earlier truncates the 400 into a connection reset.
+ *
+ * Used for every bad-body 400, not just overflow — the reader collapses
+ * overflow and malformed JSON into the same `null`, and closing after a
+ * malformed body costs nothing, since that request has already ended.
+ */
+function sendBadBody(res: ServerResponse, body: unknown): void {
+  res.setHeader('Connection', 'close');
+  res.on('finish', () => res.socket?.destroy());
+  sendJson(res, 400, body);
 }
 
 /**
@@ -293,7 +322,7 @@ export async function serveSettingsWrite(
   const body = await readJsonBody(req);
   const next = setSettings(body);
   if (!next) {
-    return sendJson(res, 400, { error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy}' });
+    return sendBadBody(res, { error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy}' });
   }
   sendJson(res, 200, { ...next, notifyAvailable: config.ntfyTopic !== '' });
 }
@@ -308,7 +337,7 @@ export async function serveRemoteAnswerToggle(
 ): Promise<void> {
   if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
   const body = await readJsonBody(req) as { enabled?: unknown } | null;
-  if (!body || typeof body.enabled !== 'boolean') return sendJson(res, 400, { error: 'expected {enabled: boolean}' });
+  if (!body || typeof body.enabled !== 'boolean') return sendBadBody(res, { error: 'expected {enabled: boolean}' });
   const state = setEnabled(config, body.enabled);
   if (!state) return sendJson(res, 409, { error: 'disabled by REMOTE_ANSWER=false' });
   // Switching off releases the waits we already hold — their terminal dialogs
@@ -335,7 +364,7 @@ export async function serveQuestionWait(config: Config, req: IncomingMessage, re
 
   const body = await readJsonBody(req) as
     { sessionId?: unknown; toolInput?: unknown; timeoutMs?: unknown; permissionMode?: unknown } | null;
-  if (!body || typeof body !== 'object') return sendJson(res, 400, { error: 'bad body' });
+  if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
   if (!sessionId || !ID_RE.test(sessionId)) return sendJson(res, 400, { error: 'bad sessionId' });
@@ -386,7 +415,7 @@ export async function serveSessionAnswer(
   if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
 
   const body = await readJsonBody(req);
-  if (!body) return sendJson(res, 400, { error: 'bad body' });
+  if (!body) return sendBadBody(res, { error: 'bad body' });
 
   switch (answerPending(id, body)) {
     case 'ok': return sendJson(res, 200, { ok: true });
@@ -408,7 +437,7 @@ export async function servePlanWait(config: Config, req: IncomingMessage, res: S
 
   const body = await readJsonBody(req) as
     { sessionId?: unknown; toolInput?: unknown; timeoutMs?: unknown; permissionMode?: unknown } | null;
-  if (!body || typeof body !== 'object') return sendJson(res, 400, { error: 'bad body' });
+  if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
   if (!sessionId || !ID_RE.test(sessionId)) return sendJson(res, 400, { error: 'bad sessionId' });
@@ -456,7 +485,7 @@ export async function serveSessionPlanAnswer(
   if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
 
   const body = await readJsonBody(req);
-  if (!body) return sendJson(res, 400, { error: 'bad body' });
+  if (!body) return sendBadBody(res, { error: 'bad body' });
 
   switch (answerPlan(id, body)) {
     case 'ok': return sendJson(res, 200, { ok: true });
@@ -483,7 +512,7 @@ export async function serveMessageWait(config: Config, req: IncomingMessage, res
 
   const body = await readJsonBody(req) as
     { sessionId?: unknown; timeoutMs?: unknown; permissionMode?: unknown; stopHookActive?: unknown } | null;
-  if (!body || typeof body !== 'object') return sendJson(res, 400, { error: 'bad body' });
+  if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
   if (!sessionId || !ID_RE.test(sessionId)) return sendJson(res, 400, { error: 'bad sessionId' });
@@ -530,7 +559,7 @@ export async function serveSessionMessageAnswer(
   if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
 
   const body = await readJsonBody(req);
-  if (!body) return sendJson(res, 400, { error: 'bad body' });
+  if (!body) return sendBadBody(res, { error: 'bad body' });
 
   switch (answerMessage(id, body)) {
     case 'ok': return sendJson(res, 200, { ok: true });
@@ -558,7 +587,7 @@ export async function servePermissionNotify(
 
   const body = await readJsonBody(req) as
     { sessionId?: unknown; message?: unknown; permissionMode?: unknown } | null;
-  if (!body || typeof body !== 'object') return sendJson(res, 400, { error: 'bad body' });
+  if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
   if (!sessionId || !ID_RE.test(sessionId)) return sendJson(res, 400, { error: 'bad sessionId' });
@@ -592,7 +621,7 @@ export async function serveNotifyEvent(
 
   const body = await readJsonBody(req) as
     { sessionId?: unknown; event?: unknown; permissionMode?: unknown } | null;
-  if (!body || typeof body !== 'object') return sendJson(res, 400, { error: 'bad body' });
+  if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
   if (!sessionId || !ID_RE.test(sessionId)) return sendJson(res, 400, { error: 'bad sessionId' });
