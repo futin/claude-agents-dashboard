@@ -31,6 +31,10 @@ export function useDictation(onText: (text: string) => void): DictationState {
   const [token] = usePersistedState<string>('dashboard.answerToken', '');
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  // Same liveness idiom as useRemoteAnswer.ts's `let live`, adapted to a ref:
+  // `start` is a memoized callback that outlives any one effect run, so the
+  // flag has to survive in something a later effect can still flip off.
+  const liveRef = useRef(true);
 
   const stopTracks = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop());
@@ -50,8 +54,16 @@ export function useDictation(onText: (text: string) => void): DictationState {
     return () => clearInterval(timer);
   }, [phase]);
 
-  // A drawer that closes mid-take must not leave the mic open.
-  useEffect(() => stopTracks, [stopTracks]);
+  // A drawer that closes mid-take must not leave the mic open. Also flips
+  // `liveRef`: this covers a stream already captured in `streamRef`; the flag
+  // covers one still resolving (see `start`'s check right after the await).
+  useEffect(() => {
+    liveRef.current = true;
+    return () => {
+      liveRef.current = false;
+      stopTracks();
+    };
+  }, [stopTracks]);
 
   const upload = useCallback(async (blob: Blob) => {
     setPhase('transcribing');
@@ -78,6 +90,14 @@ export function useDictation(onText: (text: string) => void): DictationState {
     setPhase('requesting');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!liveRef.current) {
+        // The panel closed while the permission prompt was still open (the
+        // idle sweep tears it down mid-prompt on its own) — the mount that
+        // asked for this stream is gone, so arm nothing and release it now;
+        // nothing will ever call stopTracks() for it again otherwise.
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
       streamRef.current = stream;
       const mimeType = pickMimeType(t => MediaRecorder.isTypeSupported(t));
       const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
