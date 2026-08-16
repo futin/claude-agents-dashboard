@@ -47,7 +47,7 @@ dictate at all.
 | Condition | Renders as |
 |---|---|
 | No engine (`transcribe: false` from `/api/health`) | **Nothing.** An explanation would be noise on every panel that will never have a mic. |
-| Engine present, `window.isSecureContext` is false | **A disabled button**, labelled `🎙 https only`, titled `needs HTTPS — run \`pnpm tunnel\`` |
+| Engine present, `window.isSecureContext` is false | **A disabled button**, labelled `🎙 https only`, titled "needs HTTPS — run `pnpm tunnel`" |
 | Engine present, secure context | The working mic: idle → recording (pulsing dot + elapsed timer) → transcribing |
 
 The middle row is the one worth defending. A button that just isn't there would be less
