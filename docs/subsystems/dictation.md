@@ -126,10 +126,13 @@ route-ordering traps apply here.
 
 `probeTranscribe` runs once — after confirming `WHISPER_MODEL` points at a real file, a
 single `spawnSync(whisperBin, ['-h'], {timeout: 2000, stdio: 'ignore'})` — and caches the
-boolean for the process's lifetime. `/api/health` is polled every few seconds by every open
-tab (`useTranscribeAvailable` fetches it once per page load and memoizes the promise,
-since a *completed* answer cannot change without a server restart); re-running the probe on
-every poll would spawn a process for no new information.
+boolean for the process's lifetime. `/api/health` itself is polled every 15s by
+`useRemoteAnswer` (`POLL_MS` in `useRemoteAnswer.ts`) for the remote-answer toggle;
+`useTranscribeAvailable`, the hook that actually reads this field, does not poll at all — it
+fetches `/api/health` once per page load and memoizes the promise, since a *completed*
+answer cannot change without a server restart. Either way, re-running the probe on every
+request would spawn a process for no new information, which is exactly what the cache above
+prevents.
 
 **`transcribe` reports engine availability only — it does not fold in `remoteAnswer`**,
 even though the endpoint 404s on both. That's deliberate, not a missed AND: a
@@ -148,19 +151,34 @@ would just break the mic for exactly the people who bothered to set `ANSWER_TOKE
 render the button at all. The bit sits beside three other booleans that already leak
 nothing more sensitive than "a feature is turned on"; it doesn't leak anything new in kind.
 
-What the token *does* gate is the endpoint that actually spawns processes. `serveTranscribe`
-checks `remoteAnswer` → `tokenOk` → `probeTranscribe` → mime → body, in that order, so an
-unauthenticated caller is refused at 403 before reaching anything that reads a byte of
-audio or touches the filesystem. That ordering is about keeping the auth boundary exactly
-where the other write paths keep it — not about hiding whether the capability exists.
+What the token *does* gate is a spawn per request. `serveTranscribe` checks `remoteAnswer` →
+`tokenOk` → `probeTranscribe` → mime → body, in that order, so an unauthenticated caller is
+refused at 403 before any audio is read or any per-request process spawns. That is not the
+same as "no spawn is reachable without a token": the capability probe itself (previous
+section) is cached for the process's lifetime and also runs behind the unauthenticated
+`GET /api/health`, so it alone can be triggered with no token at all — a one-time
+`whisper-cli -h`, never `ffmpeg` or a per-clip `whisper-cli` run. That ordering is about
+keeping the auth boundary exactly where the other write paths keep it — not about hiding
+whether the capability exists.
 
-## The in-flight guard: a CPU-amplification defence
+## The in-flight guard: a CPU- and memory-amplification defence
 
 **One transcription at a time.** A module-level flag; a second concurrent request gets a
 429 rather than queuing. Whisper saturates CPU cores, and this endpoint is reachable by
 anything that can authenticate to it — an unbounded fan-out would turn one request into a
-CPU amplifier against the host machine. The guard is cheap, and the app is single-user, so
-a flag is all this needs; see [accepted limits](#accepted-limits) for where it can wedge.
+CPU amplifier against the host machine.
+
+The check runs twice, for two different reasons. `serveTranscribe` calls the exported
+`isTranscribing()` first, **before `readBinaryBody`** — so a caller arriving while another
+clip is transcribing is turned back before it uploads a byte, which is what keeps concurrent
+upload memory bounded instead of scaling with however many callers show up at once.
+`transcribe()`'s own `inFlight` check is still the one that counts: two requests that both
+read `isTranscribing() === false` in the same tick will both buffer their bodies, and the
+loser gets the same 429 once it calls `transcribe()` and loses that race. The early check is
+an optimisation on top of that check, not a replacement for it.
+
+The guard is cheap, and the app is single-user, so this is all it needs; see [accepted
+limits](#accepted-limits) for where it can wedge.
 
 ## Security posture
 
