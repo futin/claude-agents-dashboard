@@ -17,7 +17,7 @@
 - **Cross-boundary imports use `import type`** — no runtime coupling between `client/` and `server/`.
 - **`shared/types.ts` is edited first** when adding an API field, then the producer, then the consumer.
 - **The ntfy topic is a secret.** No endpoint returns it. ntfy topics are unauthenticated: anyone who learns the string can read and publish.
-- **Push bodies carry no work content** — session label and event phrase only. Never question text, plan markdown, tool names, or transcript content.
+- **Push bodies carry no work content** — session label and event phrase only. Never question text, plan markdown, tool names, or transcript content. The one identifier that does leave is the session id, and only inside the `Click` deep link (Task 3 / Task 7).
 - **Never hardcode a color or shadow in `styles.css`** below the theme-token block.
 - **Every new setting defaults to `false`/off.** This feature is opt-in.
 - **Auto-ish permission modes:** exactly `auto`, `bypassPermissions`, `dontAsk`.
@@ -248,7 +248,7 @@ and widen the body type on the line above:
 Finally, `getSettings` returns the new field. `notifyAvailable` is filled by the caller in Task 3 — for now hardcode `false` and leave a comment, so the type is satisfied without inventing a config read this task does not own:
 
 ```ts
-    // Overwritten by the API layer, which is where Config is available (Task 3).
+    // Overwritten by the API layer, which is where Config is available (Task 4).
     notifyAvailable: false
 ```
 
@@ -541,7 +541,7 @@ Turns the predicate into something that actually sends. Ends with `maybeSend` fu
 
 **Interfaces:**
 - Consumes: `shouldNotify`, `PredicateContext` (Task 2); `getSettings` (Task 1); `getState` from `remoteState.js`; `scanSessions` from `scan.js`.
-- Produces: `Config.ntfyTopic`, `Config.ntfyServer`, `Sender`, `NotifyPayload`, `maybeSend(config, event, ctx)`, `sendTest(config)`, `resolveLabel(config, sessionId)`, `readIdleSecs()`, and the test seams `setSender(fn)`, `setLabelResolver(fn)`, `resetNotify()`.
+- Produces: `Config.ntfyTopic`, `Config.ntfyServer`, `Config.publicUrl`, `Sender`, `NotifyPayload`, `maybeSend(config, event, ctx)`, `sendTest(config)`, `resolveLabel(config, sessionId)`, `clickUrl(config, sessionId)`, `readIdleSecs()`, and the test seams `setSender(fn)`, `setLabelResolver(fn)`, `resetNotify()`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -564,7 +564,13 @@ and these helpers below the existing ones:
 ```ts
 /** Only the fields notify reads. */
 function conf(over: Partial<Config> = {}): Config {
-  return { remoteAnswer: true, ntfyTopic: 'test-topic', ntfyServer: 'https://ntfy.example', ...over } as Config;
+  return {
+    remoteAnswer: true,
+    ntfyTopic: 'test-topic',
+    ntfyServer: 'https://ntfy.example',
+    publicUrl: 'https://dash.example',
+    ...over
+  } as Config;
 }
 
 /**
@@ -629,14 +635,28 @@ Then these cases inside `run()`:
     assert.strictEqual(sent.length, 0);
   }))) p++; else f++;
 
-  if (await testAsync('the body carries no work content', () => inTmpCwd(sent => {
+  if (await testAsync('the visible payload carries no work content', () => inTmpCwd(sent => {
     setSettings({ notify: { enabled: true, events: { question: true } } });
     maybeSend(conf(), 'question', { sessionId: SID, permissionMode: 'bypassPermissions' });
     assert.strictEqual(sent.length, 1);
-    const serialized = JSON.stringify(sent[0]);
+    // The click URL legitimately holds the id; nothing the user reads may.
+    const visible = `${sent[0].title} ${sent[0].body} ${sent[0].tags}`;
     for (const leak of ['bypassPermissions', SID]) {
-      assert.ok(!serialized.includes(leak), `payload must not contain ${leak}`);
+      assert.ok(!visible.includes(leak), `visible payload must not contain ${leak}`);
     }
+  }))) p++; else f++;
+
+  if (await testAsync('the click URL deep-links to the session', () => inTmpCwd(sent => {
+    setSettings({ notify: { enabled: true, events: { question: true } } });
+    maybeSend(conf(), 'question', { sessionId: SID });
+    assert.strictEqual(sent[0].click, `https://dash.example/?session=${SID}`);
+  }))) p++; else f++;
+
+  if (await testAsync('no public URL means no click header', () => inTmpCwd(sent => {
+    setSettings({ notify: { enabled: true, events: { question: true } } });
+    maybeSend(conf({ publicUrl: '' }), 'question', { sessionId: SID });
+    assert.strictEqual(sent.length, 1, 'the push still goes out');
+    assert.strictEqual(sent[0].click, '');
   }))) p++; else f++;
 
   if (await testAsync('the label reaches the body', () => inTmpCwd(sent => {
@@ -693,20 +713,32 @@ In `server/lib/config.ts`, add to `Config` after `answerToken`:
   ntfyTopic: string;
   /** Base URL of the ntfy server. Override for a self-hosted instance. */
   ntfyServer: string;
+  /**
+   * How a phone reaches this dashboard, used for the notification's tap-through
+   * link. Cannot be inferred: a push is not triggered by a browser request, so
+   * there is no Host header to read. The localhost default works at the desk and
+   * is useless on a phone — set it to the tailnet hostname.
+   */
+  publicUrl: string;
 ```
 
 to `DEFAULTS`:
 
 ```ts
   NTFY_TOPIC: '',
-  NTFY_SERVER: 'https://ntfy.sh'
+  NTFY_SERVER: 'https://ntfy.sh',
+  DASHBOARD_PUBLIC_URL: ''
 ```
 
-and to the object `loadConfig` returns:
+and to the object `loadConfig` returns — note `publicUrl` falls back to the resolved
+port, so it must be computed after it:
 
 ```ts
     ntfyTopic: (src('NTFY_TOPIC') || DEFAULTS.NTFY_TOPIC).trim(),
-    ntfyServer: (src('NTFY_SERVER') || DEFAULTS.NTFY_SERVER).trim().replace(/\/+$/, '')
+    ntfyServer: (src('NTFY_SERVER') || DEFAULTS.NTFY_SERVER).trim().replace(/\/+$/, ''),
+    publicUrl: (src('DASHBOARD_PUBLIC_URL') || `http://localhost:${toPosInt(src('PORT'), DEFAULTS.PORT)}`)
+      .trim()
+      .replace(/\/+$/, '')
 ```
 
 - [ ] **Step 4: Implement delivery**
@@ -722,11 +754,17 @@ import { scanSessions } from './scan.js';
 import { getSettings } from './settings.js';
 import type { Config } from './config.js';
 
-/** What reaches ntfy. Deliberately has no field that could carry work content. */
+/**
+ * What reaches ntfy. Deliberately has no field that could carry work content —
+ * `click` is the single exception, and carries only an id and this dashboard's
+ * own address so the notification can be tapped through to the right chat.
+ */
 export interface NotifyPayload {
   title: string;
   body: string;
   tags: string;
+  /** Tap-through URL, or '' when no public URL is configured. */
+  click: string;
 }
 
 export type Sender = (payload: NotifyPayload, config: Config) => void;
@@ -803,17 +841,35 @@ export function resolveLabel(config: Config, sessionId: string): string {
   return sessionId.slice(0, 8);
 }
 
+/**
+ * Where tapping the notification lands: this session's chat drawer, which is
+ * where every action surface already lives (`QuestionPanel`, `PlanPanel`,
+ * `PermissionBanner`). Consumed by `AppShell` on load — see Task 7.
+ *
+ * Empty when no public URL is configured, which drops the header rather than
+ * shipping a localhost link a phone cannot follow.
+ */
+export function clickUrl(config: Config, sessionId: string): string {
+  if (!config.publicUrl) return '';
+  return `${config.publicUrl}/?session=${encodeURIComponent(sessionId)}`;
+}
+
 /** The default transport. Fire-and-forget: nothing awaits it, nothing throws out of it. */
 function httpsSend(payload: NotifyPayload, config: Config): void {
   try {
     const url = new URL(`${config.ntfyServer}/${config.ntfyTopic}`);
+    const headers: Record<string, string> = {
+      Title: payload.title,
+      Tags: payload.tags,
+      'Content-Type': 'text/plain'
+    };
+    // ntfy opens this when the notification is tapped. Omitted rather than sent
+    // empty: an empty Click is a malformed header, not a no-op.
+    if (payload.click) headers.Click = payload.click;
+
     const req = https.request(
       url,
-      {
-        method: 'POST',
-        timeout: 2000,
-        headers: { Title: payload.title, Tags: payload.tags, 'Content-Type': 'text/plain' }
-      },
+      { method: 'POST', timeout: 2000, headers },
       res => res.resume() // drain, ignore
     );
     req.on('error', () => { /* offline, DNS, TLS — never surfaces */ });
@@ -853,7 +909,8 @@ export function maybeSend(
       {
         title: 'Claude Code',
         body: `${resolveLabel(config, ctx.sessionId)} — ${PHRASE[event]}`,
-        tags: TAGS[event]
+        tags: TAGS[event],
+        click: clickUrl(config, ctx.sessionId)
       },
       config
     );
@@ -873,8 +930,13 @@ export function maybeSend(
 export async function sendTest(config: Config): Promise<string> {
   if (!config.ntfyTopic) return 'no NTFY_TOPIC set in .env — nothing to send to';
   try {
-    deliver({ title: 'Claude Code', body: 'Test push — notifications are working', tags: 'robot' }, config);
-    return `sent to ${config.ntfyServer}`;
+    deliver(
+      { title: 'Claude Code', body: 'Test push — notifications are working', tags: 'robot', click: config.publicUrl },
+      config
+    );
+    return config.publicUrl
+      ? `sent to ${config.ntfyServer} · taps open ${config.publicUrl}`
+      : `sent to ${config.ntfyServer} · no DASHBOARD_PUBLIC_URL, so taps won't open the dashboard`;
   } catch (err) {
     return `send failed: ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -1475,7 +1537,215 @@ git commit -m "feat(notify): add the push-notification settings group"
 
 ---
 
-### Task 7: Rewrite the `notify-remote-toggle` skill
+### Task 7: Tapping the notification opens that session's chat
+
+The client half of the deep link. Without this the `Click` header lands on the dashboard's front page and you still hunt for the row.
+
+**Files:**
+- Create: `client/src/lib/deepLink.ts`
+- Create: `test/deep-link.test.ts`
+- Modify: `test/run-all.ts`
+- Modify: `client/src/App.tsx:37` (the `section` initializer)
+- Modify: `client/src/components/SessionsView.tsx:30` (the `chatId` initializer)
+
+**Interfaces:**
+- Consumes: the `?session=<id>` URL produced by `clickUrl` (Task 3).
+- Produces: `readSessionParam(search)`, `deepLinkSession()`.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `test/deep-link.test.ts`:
+
+```ts
+import assert from 'node:assert';
+
+import { readSessionParam } from '../client/src/lib/deepLink.js';
+
+function test(name: string, fn: () => void): boolean {
+  try { fn(); console.log('  ✓ ' + name); return true; }
+  catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
+}
+
+export function run(): number {
+  console.log('\n=== deepLink.ts ===\n');
+  let p = 0, f = 0;
+
+  if (test('reads a session id', () => {
+    assert.strictEqual(
+      readSessionParam('?session=abc12345-0000-0000-0000-000000000000'),
+      'abc12345-0000-0000-0000-000000000000'
+    );
+  })) p++; else f++;
+
+  if (test('reads it alongside other params', () => {
+    assert.strictEqual(readSessionParam('?x=1&session=abc12345&y=2'), 'abc12345');
+  })) p++; else f++;
+
+  if (test('no param yields null', () => {
+    assert.strictEqual(readSessionParam(''), null);
+    assert.strictEqual(readSessionParam('?other=1'), null);
+    assert.strictEqual(readSessionParam('?session='), null);
+  })) p++; else f++;
+
+  if (test('rejects anything not shaped like a session id', () => {
+    // The value reaches a find() over the poll's list, never a path — but a
+    // shape check keeps junk out of the drawer key and out of any future use.
+    assert.strictEqual(readSessionParam('?session=../../etc/passwd'), null);
+    assert.strictEqual(readSessionParam('?session=<script>'), null);
+    assert.strictEqual(readSessionParam('?session=' + 'a'.repeat(200)), null);
+  })) p++; else f++;
+
+  if (test('survives a malformed query string', () => {
+    assert.strictEqual(readSessionParam('?%'), null);
+  })) p++; else f++;
+
+  console.log(`\n  ${p} passed, ${f} failed`);
+  return f;
+}
+```
+
+Register it in `test/run-all.ts` beside the others:
+
+```ts
+import { run as runDeepLink } from './deep-link.test.js';
+```
+
+```ts
+failed += runDeepLink();
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+```bash
+pnpm test 2>&1 | tail -10
+```
+
+Expected: FAIL — `Cannot find module '../client/src/lib/deepLink.js'`.
+
+- [ ] **Step 3: Write the module**
+
+Create `client/src/lib/deepLink.ts`:
+
+```ts
+/**
+ * deepLink.ts — the `?session=<id>` entry point.
+ *
+ * A push notification's whole value is landing you on the thing that needs a
+ * decision, not on the dashboard's front page. `server/lib/notify.ts` puts this
+ * URL in ntfy's `Click` header; this module is what the page does with it.
+ *
+ * The id is consumed once and stripped from the URL: session ids churn, so a
+ * bookmarked or refreshed deep link would reopen a drawer for a session that no
+ * longer exists — the same reasoning that keeps `chatId` out of persisted state
+ * (see `docs/subsystems/view-persistence.md`).
+ */
+
+/** A session id is a UUID; anything else is junk and is ignored. Pure — tested. */
+export function readSessionParam(search: string): string | null {
+  try {
+    const id = new URLSearchParams(search).get('session');
+    if (!id || id.length > 64) return null;
+    return /^[0-9a-fA-F-]{8,64}$/.test(id) ? id : null;
+  } catch {
+    return null; // malformed query string
+  }
+}
+
+let consumed = false;
+let value: string | null = null;
+
+/**
+ * The id this page was opened with, or null.
+ *
+ * Memoised, and the URL is stripped on the first call, so the two callers
+ * (`AppShell` picking the section, `SessionsView` opening the drawer) see the
+ * same answer no matter which renders first.
+ */
+export function deepLinkSession(): string | null {
+  if (consumed) return value;
+  consumed = true;
+  value = readSessionParam(window.location.search);
+  if (value) {
+    try {
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch {
+      /* older engines / file:// — the param staying put is harmless */
+    }
+  }
+  return value;
+}
+```
+
+- [ ] **Step 4: Force the Sessions section on a deep link**
+
+In `client/src/App.tsx`, add the import:
+
+```ts
+import { deepLinkSession } from './lib/deepLink';
+```
+
+and change the `section` initializer at line 37:
+
+```tsx
+  // A `landing` other than 'last' pins the opening tab. Resolved once, in the
+  // initializer, so there's no flash of the previously-open section; after that
+  // navigation is normal and the last section is still remembered for next time.
+  // A `?session=` deep link (a tapped push notification) beats both: it exists
+  // only to put you on that session's chat.
+  const [section, setSection] = useState<Section>(() =>
+    deepLinkSession() ? 'sessions' : settings.landing === 'last' ? stored : settings.landing
+  );
+```
+
+- [ ] **Step 5: Open the drawer for that session**
+
+In `client/src/components/SessionsView.tsx`, add the import:
+
+```ts
+import { deepLinkSession } from '../lib/deepLink';
+```
+
+and change the `chatId` initializer at line 30:
+
+```tsx
+  // Not persisted: session ids churn, so a restored selection would be stale
+  // (same reasoning as row expansion — see docs/subsystems/view-persistence.md).
+  // Seeded from a `?session=` deep link, which is consumed once and stripped.
+  const [chatId, setChatId] = useState<string | null>(() => deepLinkSession());
+```
+
+No further change is needed: line 37 already resolves `chatSession` from the poll's list, so the drawer opens as soon as the first snapshot arrives, and an id no longer in the scan window simply never opens one.
+
+- [ ] **Step 6: Verify in the browser**
+
+```bash
+pnpm dev
+```
+
+Take a real session id from the list:
+
+```bash
+curl -s http://127.0.0.1:4173/api/sessions | jq -r '.sessions[0].id'
+```
+
+Open `http://localhost:5173/?session=<that-id>`. Confirm:
+- The Sessions section opens even if you were last on Settings.
+- That session's chat drawer is open.
+- The address bar shows `http://localhost:5173/` — the parameter is gone.
+- Reloading does **not** reopen the drawer.
+- `http://localhost:5173/?session=nonexistent-id` opens Sessions with no drawer and no error in the console.
+
+- [ ] **Step 7: Test, typecheck, commit**
+
+```bash
+pnpm test && pnpm typecheck
+git add client/src/lib/deepLink.ts client/src/App.tsx client/src/components/SessionsView.tsx test/deep-link.test.ts test/run-all.ts
+git commit -m "feat(notify): open the session's chat from a tapped push"
+```
+
+---
+
+### Task 8: Rewrite the `notify-remote-toggle` skill
 
 **Files:**
 - Modify: the `notify-remote-toggle` skill markdown (locate with `find ~/.claude -ipath '*notify-remote-toggle*' -name '*.md'`)
@@ -1529,7 +1799,7 @@ git add -A && git commit -m "feat(notify): point the toggle skill at the dashboa
 
 ---
 
-### Task 8: Documentation
+### Task 9: Documentation
 
 **Files:**
 - Create: `docs/subsystems/push-notify.md`
@@ -1538,7 +1808,9 @@ git add -A && git commit -m "feat(notify): point the toggle skill at the dashboa
 
 - [ ] **Step 1: Write the subsystem doc**
 
-Create `docs/subsystems/push-notify.md` following the house pattern of the existing subsystem docs (read `docs/subsystems/permission-notify.md` first for the register). Cover, in this order: why it exists (WebKit has no `Notification` API in a tab, so the browser alert path cannot reach an iPhone); the four events and where each enters; the predicate and its clause order; the fail-direction table from spec §1; why the topic is in `.env` and never returned; why push bodies carry no work content; and the deferred cooldown.
+Create `docs/subsystems/push-notify.md` following the house pattern of the existing subsystem docs (read `docs/subsystems/permission-notify.md` first for the register). Cover, in this order: why it exists (WebKit has no `Notification` API in a tab, so the browser alert path cannot reach an iPhone); the four events and where each enters; the predicate and its clause order; the fail-direction table from spec §1; why the topic is in `.env` and never returned; why push bodies carry no work content, and the one identifier that is the exception; the `Click` deep link and why `DASHBOARD_PUBLIC_URL` cannot be inferred; and the deferred cooldown.
+
+Also document the two new `.env` keys wherever the existing ones are listed (`docs/workflows/configuration.md`), including that `DASHBOARD_PUBLIC_URL` must be the address the phone uses, not `localhost`.
 
 - [ ] **Step 2: Update `docs/subsystems/settings.md`**
 
@@ -1580,18 +1852,21 @@ git commit -m "docs: describe the push-notification subsystem"
 
 ## Verification
 
-After Task 8, from a clean tree:
+After Task 9, from a clean tree:
 
 ```bash
 pnpm test && pnpm typecheck
 ```
 
-Expected: `ALL PASS` with 23 new `notify` cases (14 predicate + 9 delivery) plus 6 new `settings` cases, and no typecheck output.
+Expected: `ALL PASS` with 25 new `notify` cases (14 predicate + 11 delivery), 5 new `deepLink` cases, and 6 new `settings` cases, plus no typecheck output.
 
-End-to-end, with `NTFY_TOPIC` set and the ntfy app subscribed:
+End-to-end, with `NTFY_TOPIC` and `DASHBOARD_PUBLIC_URL` set and the ntfy app subscribed on the phone:
 
 1. Settings → Push notifications → On, **Question waiting** → On, every layer Off.
 2. Trigger an `AskUserQuestion` in any session.
 3. Expect one push: `Claude Code / <session> — question waiting`.
-4. Turn **Only when I'm away** On, repeat at the keyboard — expect no push.
-5. Wait past `idleSecs`, repeat — expect the push.
+4. **Tap it.** The dashboard opens on the Sessions section with that session's chat drawer up and its `QuestionPanel` visible — answerable without another tap.
+5. Turn **Only when I'm away** On, repeat at the keyboard — expect no push.
+6. Wait past `idleSecs`, repeat — expect the push.
+
+`DASHBOARD_PUBLIC_URL` must be the address the *phone* uses (the `.ts.net` hostname), not `localhost`. With it unset the push still arrives; tapping it just does nothing useful, and the Settings test button says so.

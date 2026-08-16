@@ -160,10 +160,10 @@ that has already moved past it — the label falls back to the first 8 character
 
 ## 3. Configuration — the topic is a secret
 
-`NTFY_TOPIC` and optional `NTFY_SERVER` (default `https://ntfy.sh`) join
-`server/lib/config.ts`, resolved by the existing `process.env > .env > default`
-precedence. `notifyAvailable` is `topic !== ''`, exactly mirroring how `remoteAnswer`
-gates on `REMOTE_ANSWER`.
+`NTFY_TOPIC`, optional `NTFY_SERVER` (default `https://ntfy.sh`) and optional
+`DASHBOARD_PUBLIC_URL` (default `http://localhost:<port>`) join `server/lib/config.ts`,
+resolved by the existing `process.env > .env > default` precedence. `notifyAvailable` is
+`topic !== ''`, exactly mirroring how `remoteAnswer` gates on `REMOTE_ANSWER`.
 
 **No endpoint ever returns the topic.** ntfy topics are unauthenticated: anyone who
 learns the string can both read the notifications and publish to them. `GET
@@ -186,6 +186,34 @@ has no field that could carry it.
 | `plan` | `<label> — plan waiting for review` |
 | `permission` | `<label> — permission dialog open` |
 | `stop` | `<label> — task finished` |
+
+### Tapping the notification opens that session's chat
+
+A push that only says "something needs you" still leaves you hunting for which row.
+ntfy's `Click` header makes the notification itself the shortcut: tapping it opens
+
+```
+<DASHBOARD_PUBLIC_URL>/?session=<sessionId>
+```
+
+which the dashboard consumes on load — force the Sessions section, open that session's
+chat drawer, then strip the parameter so a later refresh does not reopen it. The drawer
+is where every action surface already lives (`QuestionPanel`, `PlanPanel`,
+`PermissionBanner`), so one tap lands exactly on the thing that needs a decision.
+
+**`DASHBOARD_PUBLIC_URL` is required for this to be useful, and cannot be inferred.** A
+push is not triggered by a browser request, so there is no `Host` header to read; the
+server genuinely does not know how you reach it. It defaults to
+`http://localhost:<port>`, which works at the desk and is useless on a phone — the
+tailnet hostname is what belongs there. When it is unset, the push is still sent, just
+without a `Click` header.
+
+**This relaxes the no-content rule, deliberately.** The session id and the dashboard's
+address now leave the machine. Neither is work content, but together they are a pointer:
+anyone who learns the topic learns where the dashboard lives. On a tailnet-only
+deployment that pointer is unusable without tailnet access — which is the deployment this
+was built for. Expose the dashboard publicly and the calculus changes, so the Settings
+hint for the topic says as much.
 
 ## 4. Settings store
 
