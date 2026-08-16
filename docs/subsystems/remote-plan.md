@@ -63,7 +63,7 @@ Getting this wrong fails silently: the hook's output is ignored and the card jus
 
 | Piece | What it does |
 |---|---|
-| `scripts/plan-remote-hook.sh` | `PermissionRequest[ExitPlanMode]` hook. Same three gates as `ask-remote-hook.sh`, plus its own `tool_name` re-check (a matcher is config; never trust it alone) |
+| `scripts/plan-remote-hook.sh` | `PermissionRequest[ExitPlanMode]` hook. Same three gates as `ask-remote-hook.sh`, plus its own `tool_name` re-check (a matcher is config; never trust it alone). Its POST body also carries `permissionMode`, unused here and read only by the [push notifier](push-notify.md)'s auto-mode layer |
 | `POST /api/plans/wait` | `servePlanWait` — held open until a verdict, deadline, or supersede |
 | `GET /api/sessions/:id/plan` | `serveSessionPlan` — what the browser polls every 3s |
 | `POST /api/sessions/:id/plan-answer` | `serveSessionPlanAnswer` — `{verdict: 'reject', feedback}` or `'dismiss'`. Token-gated |
@@ -136,6 +136,7 @@ then add to `~/.claude/settings.json` under a `PermissionRequest` matcher `ExitP
 { "type": "command", "command": "bash \"$HOME/.claude/hooks/plan-remote.sh\"", "timeout": 630 }
 ```
 
-The `timeout` must exceed the wait window (`CLAUDE_DASHBOARD_ANSWER_TIMEOUT`, default
-600s) or the CLI kills the hook first — same rule, and same failure mode, as
+The `timeout` must exceed the wait window (Settings → **Answer window**, or
+`CLAUDE_DASHBOARD_ANSWER_TIMEOUT`; default 600s) or the CLI kills the hook first — same rule,
+same failure mode, and the same one setting as
 [remote-answer-setup](../workflows/remote-answer-setup.md).

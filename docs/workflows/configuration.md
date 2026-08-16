@@ -36,6 +36,9 @@ environment variables override `.env`, which overrides the defaults
 | `REMOTE_ANSWER` | `true` | Whether [remote answers](../subsystems/remote-answer.md) are available at all — the hard kill switch for the app's only write path |
 | `ANSWER_TOKEN` | _(empty)_ | Shared secret required by the remote-answer POSTs. Empty = open, matching the app's LAN-trust posture |
 | `SKIP_PROC_SCAN` | _(auto)_ | Skip the `lsof` process-liveness gate. Defaults to `true` inside a Docker container, `false` otherwise |
+| `NTFY_TOPIC` | _(empty)_ | ntfy topic for [push notifications](../subsystems/push-notify.md). Empty disables pushes outright. **Treat it as a secret** — the string is both the address and the credential, so anyone who learns it can publish to your phone as well as read it. Never returned by any endpoint |
+| `NTFY_SERVER` | `https://ntfy.sh` | Base URL of the ntfy server. Override for a self-hosted instance |
+| `DASHBOARD_PUBLIC_URL` | `http://localhost:$PORT` | How your **phone** reaches the dashboard, used for the notification's tap-through link. Cannot be inferred (a push has no `Host` header to read), and the localhost default is useless on a phone — set it to your tailnet hostname. Unset, pushes still arrive but tapping them opens nothing |
 
 ## Process-environment only (not read from `.env`)
 
@@ -56,7 +59,7 @@ dashboard's `.env`:
 | Var | Default | Meaning |
 |-----|---------|---------|
 | `CLAUDE_DASHBOARD_URL` | `http://127.0.0.1:4173` | Where the hook looks for the dashboard |
-| `CLAUDE_DASHBOARD_ANSWER_TIMEOUT` | `600` | Seconds the hook waits for a remote answer. Keep the hook's `timeout` in `settings.json` above it |
+| `CLAUDE_DASHBOARD_ANSWER_TIMEOUT` | _(dashboard, else `600`)_ | Seconds the hook waits for a remote answer. Keep the hook's `timeout` in `settings.json` above it. **Normally leave this unset** and use Settings → Answer window, which the hooks read off `/api/health`; setting it here wins and makes that control inert |
 | `CLAUDE_DASHBOARD_IDLE_SECS` | _(dashboard, else `60`)_ | Seconds of keyboard idle before you count as "away". Below it a question goes straight to the terminal. `0` skips the check and always waits. **Normally leave this unset** and use Settings → Away after, which the hooks read off `/api/health`; setting it here wins and makes that control inert |
 
 ⚠️ If you set `CLAUDE_DASHBOARD_IDLE_SECS` in the `env` block of `~/.claude/settings.json`, the

@@ -7,7 +7,7 @@ docs-sync:
     - scripts/permission-notify-hook.sh
     - client/src/components/PermissionBanner.tsx
   kind: subsystem
-  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
+  verified: fa1fa5b9daeb162acccef66d0e4d9a210ede95da
 ---
 
 # Permission prompts (the `allow?` pill)
@@ -68,11 +68,11 @@ back with feedback" is a real instruction, not merely a refusal.
 
 | Piece | What it does |
 |---|---|
-| `scripts/permission-notify-hook.sh` | Serves **both** events, keyed on `hook_event_name`. POSTs `{sessionId, message}`, prints nothing, exits 0 always — for `PermissionRequest`, empty stdout means "no decision", so the prompt renders untouched |
+| `scripts/permission-notify-hook.sh` | Serves **both** events, keyed on `hook_event_name`. POSTs `{sessionId, message, permissionMode}` — the mode is read by the [push notifier](push-notify.md)'s auto-mode layer and is present on `PermissionRequest` but not always on the legacy `Notification` payload. Prints nothing, exits 0 always — for `PermissionRequest`, empty stdout means "no decision", so the prompt renders untouched |
 | `POST /api/permissions/notify` | `servePermissionNotify` in `api.ts` — `tokenOk` 403, `ID_RE` 400, unknown session 404, else `notifyPermission()` |
 | `server/lib/permissions.ts` | RAM-only `Map<sessionId, {notifiedAt, message, timer}>`. No held socket, no resolve — a notify is a fact, not a wait |
 | `scan.ts` `ScanOptions.permissionWaits` | injected `sessionId → notifiedAt`; sets `Session.permissionWait` and forces `status: 'question'` |
-| `SessionRow` pill + `PermissionBanner` | mustard `allow?` pill (suppressed when `remoteQuestion` already owns the row) and the pinned drawer strip |
+| `SessionRow` pill + `PermissionBanner` | mustard `allow?` pill (suppressed when `remoteQuestion` or `remotePlan` already owns the row) and the pinned drawer strip |
 
 ## ⚠️ Clearing is the scan's job, not the store's
 
@@ -95,14 +95,15 @@ mechanism — a genuine "should I run this migration?" prompt can legitimately s
 
 ## Status ladder placement
 
-`remoteQuestion` → **dead** → `permissionWait` → `waitingOnQuestion` → the 2×2
-(see `session-status.md`).
+`remoteQuestion` → `remotePlan` → **dead** → `permissionWait` → `waitingOnQuestion` → the
+2×2 (see [sessions](sessions.md)).
 
 Below the liveness gate **on purpose**: a fire-and-forget notify is a fact about the past and
 carries no evidence the session is still alive, unlike `pending.ts`'s held socket (which
 outranks `lsof` precisely because the socket is open *now*). A session killed at its prompt
-reads `idle`, not a permanent blue dot. Below `remoteQuestion` too, so a session that somehow
-has both keeps the actionable `answer` pill rather than the informational one.
+reads `idle`, not a permanent blue dot. Below `remoteQuestion` and `remotePlan` too, so a
+session that somehow has both keeps the actionable `answer` / `plan?` pill rather than the
+informational one.
 
 ## Install (manual, user-consented)
 

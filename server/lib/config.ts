@@ -26,6 +26,22 @@ export interface Config {
    * open, like the rest of the dashboard; set it on a LAN you share.
    */
   answerToken: string;
+  /**
+   * ntfy topic for push notifications. Empty (default) disables pushes outright,
+   * the same way `REMOTE_ANSWER=false` disables remote answers. Kept in `.env`
+   * and never returned by an endpoint: ntfy topics are unauthenticated, so the
+   * string is both the address and the credential.
+   */
+  ntfyTopic: string;
+  /** Base URL of the ntfy server. Override for a self-hosted instance. */
+  ntfyServer: string;
+  /**
+   * How a phone reaches this dashboard, used for the notification's tap-through
+   * link. Cannot be inferred: a push is not triggered by a browser request, so
+   * there is no Host header to read. The localhost default works at the desk and
+   * is useless on a phone — set it to the tailnet hostname.
+   */
+  publicUrl: string;
 }
 
 export const DEFAULTS = {
@@ -38,7 +54,10 @@ export const DEFAULTS = {
   ANALYTICS_KEEP: 5,
   SHOW_ANALYTICS: true,
   REMOTE_ANSWER: true,
-  ANSWER_TOKEN: ''
+  ANSWER_TOKEN: '',
+  NTFY_TOPIC: '',
+  NTFY_SERVER: 'https://ntfy.sh',
+  DASHBOARD_PUBLIC_URL: ''
 } as const;
 
 /** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
@@ -119,6 +138,12 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     analyticsKeep: toPosInt(src('ANALYTICS_KEEP'), DEFAULTS.ANALYTICS_KEEP),
     showAnalytics: toBool(src('SHOW_ANALYTICS'), DEFAULTS.SHOW_ANALYTICS),
     remoteAnswer: toBool(src('REMOTE_ANSWER'), DEFAULTS.REMOTE_ANSWER),
-    answerToken: (src('ANSWER_TOKEN') || DEFAULTS.ANSWER_TOKEN).trim()
+    answerToken: (src('ANSWER_TOKEN') || DEFAULTS.ANSWER_TOKEN).trim(),
+    ntfyTopic: (src('NTFY_TOPIC') || DEFAULTS.NTFY_TOPIC).trim(),
+    ntfyServer: (src('NTFY_SERVER') || DEFAULTS.NTFY_SERVER).trim().replace(/\/+$/, ''),
+    // Falls back to the resolved port so the link at least works at the desk.
+    publicUrl: (src('DASHBOARD_PUBLIC_URL') || `http://localhost:${toPosInt(src('PORT'), DEFAULTS.PORT)}`)
+      .trim()
+      .replace(/\/+$/, '')
   };
 }

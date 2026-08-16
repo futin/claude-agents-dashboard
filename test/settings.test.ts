@@ -4,8 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  DEFAULT_IDLE_SECS, MAX_IDLE_SECS, SETTINGS_FILE,
-  clampIdleSecs, detectIdleOverride, getSettings, resetSettings, setSettings
+  DEFAULT_ANSWER_SECS, DEFAULT_IDLE_SECS, DEFAULT_NOTIFY, MAX_ANSWER_SECS, MAX_IDLE_SECS,
+  MIN_ANSWER_SECS, SETTINGS_FILE,
+  clampAnswerSecs, clampIdleSecs, detectAnswerOverride, detectIdleOverride,
+  getSettings, resetSettings, setSettings
 } from '../server/lib/settings.js';
 import { scanOverrides } from '../server/api.js';
 import type { Config } from '../server/lib/config.js';
@@ -20,17 +22,21 @@ function inTmpCwd(fn: (dir: string) => void): void {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-set-'));
   const prev = process.cwd();
   const prevEnv = process.env.CLAUDE_DASHBOARD_IDLE_SECS;
+  const prevAnswerEnv = process.env.CLAUDE_DASHBOARD_ANSWER_TIMEOUT;
   try {
     process.chdir(dir);
-    // The override probe reads this; a developer with it exported would
+    // The override probe reads these; a developer with one exported would
     // otherwise see every override assertion flip.
     delete process.env.CLAUDE_DASHBOARD_IDLE_SECS;
+    delete process.env.CLAUDE_DASHBOARD_ANSWER_TIMEOUT;
     resetSettings();
     fn(dir);
   } finally {
     process.chdir(prev);
     if (prevEnv === undefined) delete process.env.CLAUDE_DASHBOARD_IDLE_SECS;
     else process.env.CLAUDE_DASHBOARD_IDLE_SECS = prevEnv;
+    if (prevAnswerEnv === undefined) delete process.env.CLAUDE_DASHBOARD_ANSWER_TIMEOUT;
+    else process.env.CLAUDE_DASHBOARD_ANSWER_TIMEOUT = prevAnswerEnv;
     resetSettings();
   }
 }
@@ -48,6 +54,7 @@ export function run(): number {
     inTmpCwd(() => {
       const s = getSettings();
       assert.strictEqual(s.idleSecs, DEFAULT_IDLE_SECS);
+      assert.strictEqual(s.answerSecs, DEFAULT_ANSWER_SECS);
       assert.strictEqual(s.persisted, true);
     });
   })) p++; else f++;
@@ -76,6 +83,42 @@ export function run(): number {
     assert.strictEqual(clampIdleSecs('45'), 45, 'a JSON string still parses');
   })) p++; else f++;
 
+  if (test('the answer window clamps to the same range pending.ts enforces', () => {
+    assert.strictEqual(clampAnswerSecs(0), MIN_ANSWER_SECS, 'there is no zero-length wait');
+    assert.strictEqual(clampAnswerSecs(-5), MIN_ANSWER_SECS);
+    assert.strictEqual(clampAnswerSecs(99_999), MAX_ANSWER_SECS);
+    assert.strictEqual(clampAnswerSecs(120.4), 120, 'seconds are whole');
+    assert.strictEqual(clampAnswerSecs('300'), 300, 'a JSON string still parses');
+    assert.strictEqual(clampAnswerSecs('soon'), null);
+    assert.strictEqual(clampAnswerSecs(undefined), null);
+  })) p++; else f++;
+
+  if (test('either key can be saved on its own, leaving the other alone', () => {
+    inTmpCwd(() => {
+      const a = setSettings({ answerSecs: 120 })!;
+      assert.strictEqual(a.answerSecs, 120);
+      assert.strictEqual(a.idleSecs, DEFAULT_IDLE_SECS, 'an absent key keeps its stored value');
+
+      const b = setSettings({ idleSecs: 30 })!;
+      assert.strictEqual(b.idleSecs, 30);
+      assert.strictEqual(b.answerSecs, 120, 'and the earlier save is not clobbered');
+
+      resetSettings(); // simulate the server restarting
+      const after = getSettings();
+      assert.strictEqual(after.idleSecs, 30);
+      assert.strictEqual(after.answerSecs, 120);
+    });
+  })) p++; else f++;
+
+  if (test('a present-but-unusable key rejects the whole patch', () => {
+    inTmpCwd(() => {
+      setSettings({ idleSecs: 30, answerSecs: 120 });
+      assert.strictEqual(setSettings({ idleSecs: 10, answerSecs: 'soon' }), null);
+      resetSettings();
+      assert.strictEqual(getSettings().idleSecs, 30, 'no half-applied save');
+    });
+  })) p++; else f++;
+
   if (test('an unusable body is refused rather than silently ignored', () => {
     inTmpCwd(dir => {
       for (const body of [null, undefined, 'nope', {}, { idleSecs: 'soon' }, { other: 1 }]) {
@@ -90,9 +133,22 @@ export function run(): number {
       inTmpCwd(dir => {
         fs.writeFileSync(path.join(dir, SETTINGS_FILE), body);
         resetSettings();
-        assert.strictEqual(getSettings().idleSecs, DEFAULT_IDLE_SECS, JSON.stringify(body));
+        const s = getSettings();
+        assert.strictEqual(s.idleSecs, DEFAULT_IDLE_SECS, JSON.stringify(body));
+        assert.strictEqual(s.answerSecs, DEFAULT_ANSWER_SECS, JSON.stringify(body));
       });
     }
+  })) p++; else f++;
+
+  if (test('each key falls back independently, so an older file still loads', () => {
+    inTmpCwd(dir => {
+      // Written by a build that only knew about idleSecs.
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ idleSecs: 45 }));
+      resetSettings();
+      const s = getSettings();
+      assert.strictEqual(s.idleSecs, 45);
+      assert.strictEqual(s.answerSecs, DEFAULT_ANSWER_SECS);
+    });
   })) p++; else f++;
 
   if (test('an unwritable path keeps working and reports persisted:false', () => {
@@ -125,6 +181,19 @@ export function run(): number {
 
       write('{ not json');
       assert.strictEqual(detectIdleOverride(home), null, 'unreadable config must not crash the health probe');
+    });
+  })) p++; else f++;
+
+  if (test('the answer window has its own override probe, on its own var', () => {
+    inTmpCwd(dir => {
+      const home = path.join(dir, 'home');
+      fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+      fs.writeFileSync(
+        path.join(home, '.claude', 'settings.json'),
+        JSON.stringify({ env: { CLAUDE_DASHBOARD_ANSWER_TIMEOUT: '300' } })
+      );
+      assert.deepStrictEqual(detectAnswerOverride(home), { value: '300', source: 'settings.json' });
+      assert.strictEqual(detectIdleOverride(home), null, 'the two vars must not cross-warn');
     });
   })) p++; else f++;
 
@@ -173,6 +242,59 @@ export function run(): number {
     const base = cfg();
     scanOverrides(base, new URLSearchParams('limit=3'));
     assert.strictEqual(base.maxSessions, 10, 'the shared config must survive a request');
+  })) p++; else f++;
+
+  if (test('notify defaults to every switch off', () => {
+    inTmpCwd(() => {
+      const s = getSettings();
+      assert.deepStrictEqual(s.notify, DEFAULT_NOTIFY);
+      assert.strictEqual(s.notify.enabled, false);
+      assert.strictEqual(s.notify.events.question, false);
+    });
+  })) p++; else f++;
+
+  if (test('a notify patch merges instead of replacing', () => {
+    inTmpCwd(() => {
+      setSettings({ notify: { enabled: true } });
+      setSettings({ notify: { events: { question: true } } });
+      const s = getSettings();
+      assert.strictEqual(s.notify.enabled, true, 'enabled survived the second patch');
+      assert.strictEqual(s.notify.events.question, true);
+      assert.strictEqual(s.notify.events.stop, false, 'untouched events stay off');
+    });
+  })) p++; else f++;
+
+  if (test('a stored notify policy survives a restart', () => {
+    inTmpCwd(() => {
+      setSettings({ notify: { enabled: true, requireAfk: true } });
+      resetSettings(); // simulate the server restarting
+      const s = getSettings();
+      assert.strictEqual(s.notify.enabled, true);
+      assert.strictEqual(s.notify.requireAfk, true);
+    });
+  })) p++; else f++;
+
+  if (test('a bad notify value rejects the whole patch', () => {
+    inTmpCwd(() => {
+      setSettings({ notify: { enabled: true } });
+      assert.strictEqual(setSettings({ notify: { enabled: 'yes' } }), null);
+      assert.strictEqual(getSettings().notify.enabled, true, 'previous value untouched');
+    });
+  })) p++; else f++;
+
+  if (test('a bad or unknown event key rejects the whole patch', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ notify: { events: { question: 1 } } }), null);
+      assert.strictEqual(setSettings({ notify: { events: { nope: true } } }), null);
+    });
+  })) p++; else f++;
+
+  if (test('an unreadable settings file yields notify defaults', () => {
+    inTmpCwd(dir => {
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), '{not json', 'utf8');
+      resetSettings();
+      assert.deepStrictEqual(getSettings().notify, DEFAULT_NOTIFY);
+    });
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

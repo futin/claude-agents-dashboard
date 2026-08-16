@@ -198,6 +198,53 @@ export interface RemoteAnswerState {
  */
 export type ConnectionOrigin = 'local' | 'lan' | 'tailnet' | 'unknown';
 
+/** The four session events a push notification can announce. */
+export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan';
+
+/**
+ * When to send a push. Every clause is AND-ed, and every layer is independently
+ * optional — adding one later means adding one clause. All fields default false:
+ * this feature is opt-in, like `alertsEnabled` on the client.
+ *
+ * See `docs/subsystems/push-notify.md`.
+ */
+export interface NotifyPolicy {
+  /** Master switch. Off → nothing is ever sent. */
+  enabled: boolean;
+  /** Per-event opt-in. An event absent from the user's picks is never sent. */
+  events: Record<NotifyEvent, boolean>;
+  /** Only push while the remote-answer toggle is on. */
+  requireRemoteAnswer: boolean;
+  /** Only push once you have been away from the keyboard for `idleSecs`. */
+  requireAfk: boolean;
+  /** Only push from sessions in an auto-ish permission mode. */
+  requireAutoMode: boolean;
+}
+
+/**
+ * What `POST /api/settings` accepts for `notify`. Every key is optional, `events`
+ * included — the server merges the patch over the stored policy, so the UI sends
+ * only the checkbox that changed rather than round-tripping the whole thing.
+ */
+export type NotifyPatch =
+  Partial<Omit<NotifyPolicy, 'events'>> & { events?: Partial<Record<NotifyEvent, boolean>> };
+
+/**
+ * `POST /api/notify/event` — the `stop` hook's path into the notifier. The other
+ * three events notify from the endpoint they were already POSTing to.
+ */
+export interface NotifyEventRequest {
+  sessionId: string;
+  event: NotifyEvent;
+  /** From the hook payload; omitted where the event does not carry it. */
+  permissionMode?: string;
+}
+
+/** `POST /api/notify/test` — what the Settings button reports back. */
+export interface NotifyTestResponse {
+  outcome: string;
+}
+
 /**
  * `GET /api/settings`, `POST /api/settings` — the settings the browser may
  * change that are *not* per-device. Only facts a separate process has to agree
@@ -210,6 +257,11 @@ export interface ServerSettings {
    * away from the desk. `0` skips the check (always offer the question here).
    */
   idleSecs: number;
+  /**
+   * Seconds a question (or plan) stays answerable in the dashboard before the
+   * hook gives up and lets the terminal dialog appear. The hooks' wait window.
+   */
+  answerSecs: number;
   /** False when the value couldn't be written to disk (won't survive a restart). */
   persisted: boolean;
   /**
@@ -218,11 +270,21 @@ export interface ServerSettings {
    * fixed — the app doesn't edit `~/.claude/settings.json` — so the UI can say
    * which file to clear. `null` when nothing overrides it.
    */
-  idleOverride: IdleOverride | null;
+  idleOverride: EnvOverride | null;
+  /** Same trap, same detection, for `CLAUDE_DASHBOARD_ANSWER_TIMEOUT` vs `answerSecs`. */
+  answerOverride: EnvOverride | null;
+  /** When to send ntfy pushes. See {@link NotifyPolicy}. */
+  notify: NotifyPolicy;
+  /**
+   * Whether `NTFY_TOPIC` is configured. The topic itself is never returned:
+   * ntfy topics are unauthenticated, so anyone who can read this payload could
+   * both read and publish to the channel.
+   */
+  notifyAvailable: boolean;
 }
 
-/** Where an overriding `CLAUDE_DASHBOARD_IDLE_SECS` was found. */
-export interface IdleOverride {
+/** Where an overriding `CLAUDE_DASHBOARD_*` variable was found. */
+export interface EnvOverride {
   value: string;
   /** `settings.json` → the `env` block in ~/.claude; `environment` → the server's own shell. */
   source: 'settings.json' | 'environment';
@@ -230,15 +292,17 @@ export interface IdleOverride {
 
 /**
  * `GET /api/health`. The remote-answer switch, the caller's own connection
- * origin, and the idle threshold the hooks read. `origin` and `idleSecs` are
- * optional so an older server (or a test double) that omits them simply hides
- * the badge / falls back to the hook's own default.
+ * origin, and the two numbers the hooks read. `origin`, `idleSecs` and
+ * `answerSecs` are optional so an older server (or a test double) that omits
+ * them simply hides the badge / falls back to the hook's own defaults.
  */
 export interface HealthResponse extends RemoteAnswerState {
   ok: true;
   origin?: ConnectionOrigin;
   /** Mirrors `ServerSettings.idleSecs`. Carried here because the hooks already probe health. */
   idleSecs?: number;
+  /** Mirrors `ServerSettings.answerSecs`, read off the same probe. */
+  answerSecs?: number;
 }
 
 /** One selectable choice, straight from the tool call's `options[]`. */
@@ -635,4 +699,28 @@ export interface SessionsResponse {
   usageStatus?: UsageStatus;
   /** Set only when the scan failed and an empty snapshot is returned. */
   error?: boolean;
+}
+
+/**
+ * One "this session just started needing you" push, sent as an SSE `data:` line
+ * on `GET /api/alerts/stream`.
+ *
+ * The client cannot detect these reliably on its own: its poll is a timer, and
+ * a hidden tab's timers are throttled to roughly one tick a minute and may be
+ * frozen outright — while the statuses worth alerting on are transient, since
+ * `incomplete` decays to `idle` once the session leaves the active window. The
+ * server's own interval is never throttled, so detection happens here and the
+ * bytes wait on the socket for a tab that is not currently running JavaScript.
+ *
+ * See `docs/subsystems/settings.md` § Alerts.
+ */
+export interface AlertEvent {
+  /** Session id, so the client can `tag` the notification and collapse repeats. */
+  id: string;
+  /** Custom session name, else the project directory name. */
+  label: string;
+  /** Always one of the needs-you statuses — `question` or `incomplete`. */
+  status: Extract<Session['status'], 'question' | 'incomplete'>;
+  /** ISO timestamp of the tick that observed the transition. */
+  at: string;
 }

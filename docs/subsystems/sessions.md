@@ -15,13 +15,15 @@ docs-sync:
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 3a908676f65ffc008196ec4a1db0b2d0a919a3ef
+  verified: fa1fa5b9daeb162acccef66d0e4d9a210ede95da
 ---
 
 # Sessions — live monitor, status machine, subagent detail
 
-The default tab: one row per Claude Code session, refreshed every 3 seconds, sorted
-most-recent-first. Everything is derived from the transcript files on disk.
+The default section: one row per Claude Code session, refreshed on the interval the Settings
+page sets (3s by default), sorted most-recent-first. Everything is derived from the
+transcript files on disk. `useSessions` also carries the per-device scan knobs as query
+params, so a changed row count or window takes effect on the next tick.
 
 ## Per-session rows
 
@@ -49,12 +51,12 @@ after a select. `transcript.ts`'s newest-first scan breaks as soon as its handfu
 fields are filled, usually within two records, while the title sits deeper.
 `findSessionName` moves the lookup out of that loop and only `JSON.parse`s lines that
 textually hold the `"custom-title"` marker, so the break stays and an *unnamed* session
-never pays a full-window parse on every 3s poll.
+never pays a full-window parse on every poll.
 
 **It sinks below the tail window.** `readTranscript` reads only the last 256KB; on a busy
 session the record ends up far below that (observed 764KB below EOF on a 1.2MB
 transcript), where no scan order helps. Widening the window is not the fix — transcripts
-here run to several megabytes and the scan re-reads every session every 3 seconds. So
+here run to several megabytes and the scan re-reads every session on every poll. So
 `title-cache.ts` searches the tail first (free — those bytes are already decoded) and only
 on a miss hunts backward through the rest of the file a chunk at a time, newest hit wins.
 
@@ -97,8 +99,11 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
 | **pending** (no end_turn)| 🟢 `working`                 | 🟡 `incomplete`     |
 | **finished** (end_turn)  | 🟡 `incomplete`              | ⚪ `idle`           |
 
-- **question** (blue) — newest assistant action is an unanswered `AskUserQuestion`. Beats
-  all. `ExitPlanMode` is NOT treated as a question.
+- **question** (blue) — newest assistant action is an unanswered call to one of
+  `transcript.ts`'s `WAIT_TOOLS`: `AskUserQuestion` **or** `ExitPlanMode`. Beats all. Both
+  draw an approval surface and neither writes anything further to the transcript until you
+  respond, so the unanswered `tool_use` record *is* the wait — readable off disk with no
+  hook, unlike a permission dialog.
 - **question** also comes from a **held remote wait** — `ScanOptions.pendingIds` (the ids
   from `pending.ts` `pendingSessionIds()`, injected by `api.ts`; `scan.ts` never imports
   the store, so it stays pure). This is the **first** rung of the ladder, above the
@@ -108,12 +113,18 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
   lag the entire wait. Also sets `Session.remoteQuestion`, which is what the row's
   `answer` pill renders from (see [remote-answer](remote-answer.md)). Omitted/null
   `pendingIds` ⇒ nothing flagged, statuses byte-for-byte as before.
+- **question** also comes from a **held remote plan wait** — `ScanOptions.planIds` (from
+  `plans.ts` `planSessionIds()`, injected the same way). Same kind of evidence as
+  `pendingIds` — an open socket right now — so it sits immediately below it and still above
+  the liveness gate, and sets `Session.remotePlan` (the row's `plan?` pill, see
+  [remote-plan](remote-plan.md)). Suppressed when `remoteQuestion` already owns the row, so
+  a session can only be flagged for one of the two.
 - **question** also comes from an open **terminal permission dialog** ("allow Bash:
   `pnpm dev`?") — `ScanOptions.permissionWaits` (`sessionId → notifiedAt`, from
   `permissions.ts`, injected by `api.ts`). The dialog never reaches the transcript, so
-  without the Notification hook a parked session reads recent + pending = `working`. This
-  rung sits **below** the liveness gate (a fire-and-forget notify proves nothing about
-  liveness, unlike a held socket) and below `pendingIds`. It self-clears: a message newer
+  without the PermissionRequest hook a parked session reads recent + pending = `working`.
+  This rung sits **below** the liveness gate (a fire-and-forget notify proves nothing about
+  liveness, unlike a held socket) and below both `pendingIds` and `planIds`. It self-clears: a message newer
   than `notifiedAt` means the dialog was answered. Also sets `Session.permissionWait`,
   which renders the row's `allow?` pill — display-only, see
   [permission-notify](permission-notify.md).

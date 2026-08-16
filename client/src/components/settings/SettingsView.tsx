@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { NumberField, Segmented, SettingsGroup, SettingsRow } from './SettingsRow';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import { useRemoteAnswer } from '../../hooks/useRemoteAnswer';
-import { alertPermission, requestAlertPermission } from '../../hooks/useSessionAlerts';
+import { alertPermission, fireTestAlert, requestAlertPermission, unlockAudio } from '../../hooks/useSessionAlerts';
 import { useServerSettings } from '../../hooks/useServerSettings';
 import { useSettings } from '../../hooks/useSettings';
 import {
@@ -24,6 +24,16 @@ const SWATCHES: Record<ThemeId, [string, string, string]> = {
   nightshift: ['#07120d', '#12251b', '#4fe09a'],
   daylight: ['#e8e3d7', '#fbf8f1', '#136d78']
 };
+
+/** The four push events, ordered by how much they matter when you are away. */
+const NOTIFY_EVENT_ROWS = [
+  { key: 'question' as const, name: 'Question waiting', hint: 'A session is asking something you can answer from the dashboard.' },
+  { key: 'permission' as const, name: 'Permission dialog open', hint: 'A terminal permission dialog is blocking a session until you return.' },
+  { key: 'plan' as const, name: 'Plan waiting for review', hint: 'A proposed plan is held for a remote send-back.' },
+  { key: 'stop' as const, name: 'Task finished', hint: 'A session finished its turn. Suppressed while background agents are still running.' }
+];
+
+const ON_OFF = [{ value: 'off' as const, label: 'Off' }, { value: 'on' as const, label: 'On' }];
 
 const LANDINGS: { value: Landing; label: string }[] = [
   { value: 'last', label: 'Last used' },
@@ -46,11 +56,45 @@ export default function SettingsView() {
   const [token, setToken] = usePersistedState<string>('dashboard.answerToken', '');
   const [permission, setPermission] = useState(alertPermission());
   const [confirmReset, setConfirmReset] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [pushTestResult, setPushTestResult] = useState<string | null>(null);
+  const notify = server.state?.notify;
 
   /** Turning alerts on has to ask the browser first, and only a click may. */
   async function toggleAlerts(next: boolean): Promise<void> {
     if (next) setPermission(await requestAlertPermission());
     update({ alertsEnabled: next });
+  }
+
+  /** Same deal for sound: the click is the only moment audio can be unblocked. */
+  async function toggleSound(next: boolean): Promise<void> {
+    update({ alertsSound: next });
+    if (next) await unlockAudio();
+  }
+
+  async function sendTestAlert(): Promise<void> {
+    setTestResult('sending…');
+    const result = await fireTestAlert();
+    setPermission(alertPermission());
+    setTestResult(result);
+  }
+
+  /**
+   * Same honesty as the browser-alert test above: an off switch, a missing topic
+   * and a dropped packet all look identical from here, so the server reports
+   * what it actually did rather than the button pretending.
+   */
+  async function sendTestPush(): Promise<void> {
+    setPushTestResult('sending…');
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    try {
+      const res = await fetch('/api/notify/test', { method: 'POST', headers });
+      const body = (await res.json()) as { outcome?: string; error?: string };
+      setPushTestResult(body.outcome ?? body.error ?? 'no response');
+    } catch {
+      setPushTestResult('the dashboard did not answer');
+    }
   }
 
   return (
@@ -200,6 +244,41 @@ export default function SettingsView() {
                 </span>
               </div>
             )}
+            <SettingsRow
+              name="Answer window"
+              hint="How long a question or plan stays answerable here before it gives up and the terminal dialog appears instead. Applies from the moment it is asked."
+            >
+              <NumberField
+                value={server.state.answerSecs}
+                min={5}
+                max={600}
+                unit="sec"
+                onCommit={answerSecs => void server.save({ answerSecs })}
+              />
+              {server.saving && <span className="set-saving">saving…</span>}
+            </SettingsRow>
+            {server.state.answerOverride && (
+              <div className="set-warn">
+                <span>⚠</span>
+                <span>
+                  This is being overridden. <code>CLAUDE_DASHBOARD_ANSWER_TIMEOUT={server.state.answerOverride.value}</code>{' '}
+                  {server.state.answerOverride.source === 'settings.json'
+                    ? <>is set in the <code>env</code> block of <code>~/.claude/settings.json</code>, and the hooks read that first.</>
+                    : <>is exported in the shell, and the hooks read that first.</>}
+                  {' '}Remove it for the value above to take effect. The dashboard won’t edit that file for you.
+                </span>
+              </div>
+            )}
+            {server.state.answerSecs > 600 && (
+              <div className="set-warn">
+                <span>⚠</span>
+                <span>
+                  Above 600s the CLI kills the hook before the window closes, unless you also raise{' '}
+                  <code>timeout</code> on the hook entry in <code>~/.claude/settings.json</code> to at least{' '}
+                  <code>{server.state.answerSecs + 15}</code>. Until then it falls back to the terminal dialog early.
+                </span>
+              </div>
+            )}
             {!server.state.persisted && (
               <div className="set-warn">
                 <span>⚠</span>
@@ -238,7 +317,9 @@ export default function SettingsView() {
               ? 'This browser has no notification API — the tab title will still show a count. On iPhone, add the dashboard to your home screen to get real notifications.'
               : permission === 'denied'
                 ? 'Notifications are blocked for this site in your browser settings. The tab title will still show a count.'
-                : 'Fires when a session starts waiting on you — a question, a plan, a permission dialog, or a finished turn. Never re-fires for one already waiting.'
+                : permission === 'default'
+                  ? 'Permission not granted yet — switch this On to let the browser ask. Until then only the tab title changes.'
+                  : 'Fires when a session starts waiting on you — a question, a plan, a permission dialog, or a finished turn. Never re-fires for one already waiting.'
           }
         >
           <Segmented
@@ -248,12 +329,98 @@ export default function SettingsView() {
           />
         </SettingsRow>
 
-        <SettingsRow name="Sound" hint="A two-tone chime alongside the notification.">
+        <SettingsRow name="Sound" hint="A two-tone chime alongside the notification. Switching it On here is also what unblocks audio — browsers only allow that from a click.">
           <Segmented
             value={settings.alertsSound ? 'on' : 'off'}
             options={[{ value: 'off' as const, label: 'Off' }, { value: 'on' as const, label: 'On' }]}
-            onChange={v => update({ alertsSound: v === 'on' })}
+            onChange={v => void toggleSound(v === 'on')}
           />
+        </SettingsRow>
+
+        {/* Every failure here is silent from the page's side, so the only honest
+            way to answer "is this working?" is to fire one and report back. */}
+        <SettingsRow
+          name="Test alert"
+          hint={testResult ?? 'Fires a real notification and chime right now, and says which parts got through.'}
+        >
+          <button onClick={() => void sendTestAlert()}>Send test alert</button>
+        </SettingsRow>
+
+        <SettingsRow
+          name="Background tabs"
+          hint="Covered: the server detects transitions on its own timer and pushes them to this tab, so a hidden tab — whose own poll the browser throttles to about once a minute — still gets told. A fully closed tab or a quit browser is not covered."
+        >
+          <span className="set-unit">—</span>
+        </SettingsRow>
+      </SettingsGroup>
+
+      {/* Server-backed, hence "every device" — unlike the Alerts group above,
+          which is this browser's localStorage. These reach a phone with the
+          browser closed, which is the one thing browser alerts cannot do. */}
+      <SettingsGroup title="Push notifications · every device">
+        <SettingsRow
+          name="Send push notifications"
+          hint={
+            server.state && !server.state.notifyAvailable
+              ? 'Set NTFY_TOPIC in .env and restart the server to enable. The topic is a secret — anyone who knows it can read and send your notifications.'
+              : 'Pushes to your phone through ntfy, so alerts arrive with the browser closed. Tapping one opens that session’s chat.'
+          }
+        >
+          <Segmented
+            value={notify?.enabled ? 'on' : 'off'}
+            options={ON_OFF}
+            onChange={v => void server.saveNotify({ enabled: v === 'on' })}
+          />
+        </SettingsRow>
+
+        {NOTIFY_EVENT_ROWS.map(row => (
+          <SettingsRow key={row.key} name={row.name} hint={row.hint}>
+            <Segmented
+              value={notify?.events[row.key] ? 'on' : 'off'}
+              options={ON_OFF}
+              onChange={v => void server.saveNotify({ events: { [row.key]: v === 'on' } })}
+            />
+          </SettingsRow>
+        ))}
+
+        <SettingsRow
+          name="Only while accepting remote answers"
+          hint="Ties pushes to the Remote answers switch above, so one toggle covers both."
+        >
+          <Segmented
+            value={notify?.requireRemoteAnswer ? 'on' : 'off'}
+            options={ON_OFF}
+            onChange={v => void server.saveNotify({ requireRemoteAnswer: v === 'on' })}
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          name="Only when I'm away"
+          hint={`No push until you've been away from the keyboard for ${server.state?.idleSecs ?? 60}s — the same threshold the remote-answer hooks use.`}
+        >
+          <Segmented
+            value={notify?.requireAfk ? 'on' : 'off'}
+            options={ON_OFF}
+            onChange={v => void server.saveNotify({ requireAfk: v === 'on' })}
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          name="Only in auto permission modes"
+          hint="Limits pushes to sessions running as auto, bypassPermissions or dontAsk. Older CLIs don't report the mode, so permission-dialog pushes stop too."
+        >
+          <Segmented
+            value={notify?.requireAutoMode ? 'on' : 'off'}
+            options={ON_OFF}
+            onChange={v => void server.saveNotify({ requireAutoMode: v === 'on' })}
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          name="Test push"
+          hint={pushTestResult ?? 'Sends one push right now, ignoring every switch above, and says what happened.'}
+        >
+          <button onClick={() => void sendTestPush()}>Send test push</button>
         </SettingsRow>
       </SettingsGroup>
 

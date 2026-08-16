@@ -5,7 +5,7 @@ docs-sync:
     - server/api.ts
     - client/src/components/Header.tsx
   kind: subsystem
-  verified: 3a908676f65ffc008196ec4a1db0b2d0a919a3ef
+  verified: fa1fa5b9daeb162acccef66d0e4d9a210ede95da
 ---
 
 # Usage limits (header bars)

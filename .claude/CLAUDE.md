@@ -53,17 +53,27 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags, fed by
                   the PermissionRequest hook (Notification is the legacy fallback);
                   display-only (see docs/subsystems/permission-notify.md)
+  lib/alertStream.ts  SSE push of needs-you transitions on GET /api/alerts/stream — scans on
+                  a Node interval (never throttled) only while a client listens, because a
+                  hidden tab's own poll misses the transient status entirely
+                  (see docs/subsystems/settings.md § Alerts)
+  lib/notify.ts   server-sent ntfy push: layered policy (4 events × remote-answer × AFK ×
+                  auto-mode), pure `shouldNotify` + fire-and-forget `node:https` send.
+                  Topic lives in .env and is NEVER returned by an endpoint; the push's
+                  Click header deep-links to /?session=<id>
+                  (see docs/subsystems/push-notify.md)
   lib/remoteState.ts  remote-answer switch: REMOTE_ANSWER env gate + UI toggle persisted to
                   gitignored .remote-answer.json (fails open)
-  lib/settings.ts persisted idle threshold for the remote-answer hooks (served on
-                  /api/health, since they can't read our env) + detection of an
-                  overriding CLAUDE_DASHBOARD_IDLE_SECS (see docs/subsystems/settings.md)
+  lib/settings.ts persisted idle threshold + answer window for the remote-answer hooks
+                  (served on /api/health, since they can't read our env) + detection of
+                  overriding CLAUDE_DASHBOARD_{IDLE_SECS,ANSWER_TIMEOUT}
+                  (see docs/subsystems/settings.md)
   lib/origin.ts   pure connection classifier → local | lan | tailnet | unknown, on
                   /api/health for the toolbar badge (see docs/subsystems/remote-access.md)
 client/           Vite + React + TypeScript frontend
-  src/App.tsx     section tabs (Sessions | Management | Analytics | Settings), lazy-loads all but Sessions
+  src/App.tsx     shell: side rail (Sessions | Management | Analytics | Settings), lazy-loads all but Sessions
   components/SessionsView.tsx  the original live monitor (owns the 3s poll + chat drawer state)
-  components/{Header,SessionList,SessionRow,Toolbar,SectionTabs}
+  components/{Header,SessionList,SessionRow,Toolbar,SideRail}
   components/ChatDrawer.tsx    full-height chat-history drawer (own lazy chunk;
                   hooks/useSessionChat — see docs/subsystems/chat.md)
   components/Markdown.tsx + lib/markdown.ts  zero-dep markdown-subset parser + renderer
@@ -87,7 +97,10 @@ client/           Vite + React + TypeScript frontend
   hooks/useSettings.tsx        per-device settings context (localStorage) — the source of
                   refreshMs for every poll and of the data-theme/data-density attributes
   hooks/useSessionAlerts.ts + lib/alerts.ts  notify when a session starts needing you
-                  (pure diff over consecutive snapshots; notification + beep + tab-title count)
+                  (pure diff over consecutive snapshots; notification + beep + tab-title count).
+                  Two producers into one deduped announce(): the poll diff, mounted in
+                  SessionsView, and useAlertStream() — mounted on AppShell so the server's
+                  SSE push keeps working when the tab is hidden or on another section
   hooks/usePersistedState.ts  localStorage-backed useState (see docs/subsystems/view-persistence.md)
 vite.config.ts    dev proxy /api → backend; reuses server loadConfig() for the port
 test/             node-assert tests over backend domain logic, tmpdir JSONL fixtures
@@ -134,6 +147,8 @@ with the log format above (contract details: `docs/subsystems/analytics.md`).
 - **Never hardcode a color or a shadow in `styles.css`** below the theme-token block at the top —
   the 5 themes are pure `[data-theme]` token overrides, and one literal breaks the light one.
 - Backend is zero-runtime-dep by design (only Node built-ins). Keep new deps out of `server/`.
+  It reads from disk and makes exactly **one** kind of outbound call: the ntfy push in
+  `lib/notify.ts`. Adding a second needs a reason.
 - `client/dist/` and `.env` are gitignored.
 - **Subagents return terse findings, not prose.** When spawning Explore/Plan/Task
   subagents, instruct them to answer with compact `file:line` tables + short conclusions —

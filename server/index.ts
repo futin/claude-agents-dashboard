@@ -7,6 +7,7 @@
  *   GET  /api/sessions/:id      → one session's subagent activity
  *   GET  /api/sessions/:id/chat → a page of that session's chat history
  *   GET/POST /api/settings      → the non-per-device settings (see lib/settings.ts)
+ *   GET  /api/alerts/stream     → SSE push of needs-you transitions (lib/alertStream.ts)
  *   everything else             → static files from client/dist (production build)
  *
  * In development you visit the Vite dev server (default :5173), which proxies
@@ -26,7 +27,7 @@ import {
   serveAnalytics, serveHealth, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
-  serveSettingsRead, serveSettingsWrite
+  serveSettingsRead, serveSettingsWrite, serveAlertStream, serveNotifyEvent, serveNotifyTest
 } from './api.js';
 
 const config = loadConfig();
@@ -90,12 +91,16 @@ const server = http.createServer((req, res) => {
   if (u.pathname === '/api/health') {
     return void serveHealth(config, res, req);
   }
+  // Long-lived SSE stream — held open for the life of the tab, by design.
+  if (u.pathname === '/api/alerts/stream') {
+    return void serveAlertStream(config, req, res);
+  }
   // Read on GET, write on POST — the write is guarded like the others below.
   // Only holds settings a separate process must agree on (see lib/settings.ts);
   // the rest of the Settings page is per-device localStorage.
   if (u.pathname === '/api/settings') {
     if (req.method === 'POST') return void serveSettingsWrite(config, req, res);
-    return void serveSettingsRead(res);
+    return void serveSettingsRead(config, res);
   }
   // The only write endpoints in the app (see docs/subsystems/remote-answer.md).
   // `wait` holds its response open for minutes — that is by design.
@@ -116,6 +121,16 @@ const server = http.createServer((req, res) => {
   if (u.pathname === '/api/permissions/notify') {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return void servePermissionNotify(config, req, res);
+  }
+  // Push trigger for the Stop hook — the other three events notify from the
+  // endpoint they were already POSTing to (see docs/subsystems/push-notify.md).
+  if (u.pathname === '/api/notify/event') {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void serveNotifyEvent(config, req, res);
+  }
+  if (u.pathname === '/api/notify/test') {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void serveNotifyTest(config, req, res);
   }
   // Like the chat route below, these must be matched before the detail regex,
   // whose `[^/?]+` would otherwise swallow `/api/sessions/:id/<anything>`.

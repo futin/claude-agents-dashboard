@@ -9,7 +9,7 @@ docs-sync:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
+  verified: fa1fa5b9daeb162acccef66d0e4d9a210ede95da
 ---
 
 # Architecture overview
@@ -58,7 +58,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 
 | Route | Purpose |
 |---|---|
-| `GET /api/sessions` | the 3s snapshot: sessions + totals + usage bars (`?limit=&lookback=&active=` override the scan) |
+| `GET /api/sessions` | the poll snapshot: sessions + totals + usage bars (`?limit=&lookback=&active=` override the scan) |
 | `GET /api/sessions/:id` | one session's subagent timeline |
 | `GET /api/sessions/:id/chat` | paged chat history (byte-offset cursors) |
 | `GET /api/sessions/:id/question` | pending remote question, if any |
@@ -112,22 +112,25 @@ server/
   lib/pending.ts  in-memory pending-question store (the only write path)
   lib/plans.ts    in-memory pending-plan store (same machine, reject-only verdicts)
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)
-  lib/settings.ts persisted idle threshold + env-override detection
+  lib/settings.ts persisted idle threshold, answer window + push policy
+  lib/notify.ts   server-sent ntfy pushes — the layered policy and the one
+                  outbound call the backend makes
   lib/origin.ts   connection classifier → local | lan | tailnet | public
 client/src/
   App.tsx         shell: side rail (Sessions | Management | Analytics | Settings) + lazy views
   components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
                   settings/
-  hooks/          useSessions (3s poll), useSessionChat, useManagement, useAnalytics,
+  hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
                   usePendingQuestion, usePendingPlan, useRemoteAnswer, usePersistedState,
                   useSettings, useServerSettings, useSessionAlerts
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
-                  alerts
+                  alerts, deepLink
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          ask-remote-hook.sh, plan-remote-hook.sh, permission-notify-hook.sh,
-                  remote-decision-hook.sh, host-credentials.sh, lan-ip.sh
+                  remote-decision-hook.sh, stop-notify-hook.sh, host-credentials.sh,
+                  lan-ip.sh
 ```
 
 ## Map
@@ -146,6 +149,7 @@ that area:
 - [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, alerts, idle threshold
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `allow?` pill for terminal permission dialogs
+- [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and why browser alerts can't reach an iPhone
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [docker](workflows/docker.md) — running in containers, dev + prod
 - [remote-answer-setup](workflows/remote-answer-setup.md) — per-machine hook install

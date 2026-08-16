@@ -9,16 +9,19 @@ docs-sync:
     - client/src/lib/chatFilter.ts
     - client/src/lib/markdown.ts
   kind: subsystem
-  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
+  verified: fa1fa5b9daeb162acccef66d0e4d9a210ede95da
 ---
 
 # Chat — history tail and the drawer
 
 The `chat` pill on a session row opens a **full-height drawer** with that session's
-conversation: newest page on open, live-tailed every 3s, "load older" walking backwards
-through the whole transcript. Read-only, like everything else in the app. This drawer is
-also where [remote answers](remote-answer.md) surface: a pending question renders as an
-action bar pinned above the footer.
+conversation: newest page on open, live-tailed at the configured refresh rate, "load older"
+walking backwards through the whole transcript. Read-only, like everything else in the app.
+This drawer is also where [remote answers](remote-answer.md) surface: a pending question
+renders as an action bar pinned above the footer, and a proposed plan does the same through
+`PlanPanel` (see [remote-plan](remote-plan.md)). The two stores hold one entry per session
+and a session can only be parked on one thing at a time, so in practice only one of them
+ever renders.
 
 ## What's shown
 
@@ -79,7 +82,7 @@ Dropped: records with no user/assistant `message.role` (`last-prompt`, `custom-t
   box so the drawer never scrolls sideways.
 - **Client:** `ChatDrawer` is a `React.lazy` default export (own chunk; the sessions
   bundle is unchanged), keyed by session id in `SessionsView` so switching sessions
-  remounts the tail. `useSessionChat` keeps `cursor`/`headOffset` in refs (the 3s poll
+  remounts the tail. `useSessionChat` keeps `cursor`/`headOffset` in refs (the poll
   always sees the latest without re-arming) and a `ready` ref so the poll can't fire
   before the first page lands — `?after=0` would ship the whole file. Scroll: an append
   auto-scrolls only when the reader was already within 40px of the bottom; a prepend

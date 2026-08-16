@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { usePersistedState } from './usePersistedState';
-import type { ServerSettings } from '../../../shared/types';
+import type { NotifyPatch, ServerSettings } from '../../../shared/types';
 
 export interface ServerSettingsControl {
   state: ServerSettings | null;
@@ -9,12 +9,15 @@ export interface ServerSettingsControl {
   /** Set when the server refused the token. */
   needsToken: boolean;
   save: (patch: Partial<ServerSettings>) => Promise<void>;
+  /** Patch one or more notify keys. Merged server-side, so send only what changed. */
+  saveNotify: (patch: NotifyPatch) => Promise<void>;
 }
 
 /**
  * The handful of settings that can't be per-device, over `GET/POST
- * /api/settings`. Today that is the idle threshold alone — see
- * `server/lib/settings.ts` for why it can't live in localStorage with the rest.
+ * /api/settings`. Today that is the idle threshold, the answer window and the
+ * push-notification policy — see `server/lib/settings.ts` for why they can't
+ * live in localStorage with the rest.
  *
  * Fetched once when the Settings page opens rather than polled: unlike the
  * remote-answer switch, nothing else in the app flips this behind your back.
@@ -60,5 +63,12 @@ export function useServerSettings(): ServerSettingsControl {
     }
   }, [token]);
 
-  return { state, saving, needsToken, save };
+  // The server merges a partial `notify` block, so a single flipped checkbox is
+  // the whole request — no need to round-trip the rest of the policy.
+  const saveNotify = useCallback(
+    (patch: NotifyPatch) => save({ notify: patch } as unknown as Partial<ServerSettings>),
+    [save]
+  );
+
+  return { state, saving, needsToken, save, saveNotify };
 }
