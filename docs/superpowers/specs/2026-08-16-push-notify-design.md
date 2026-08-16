@@ -264,7 +264,7 @@ is called out in the Settings hint for the layer.
 
 ## 8. UI — `client/src/components/settings/SettingsView.tsx`
 
-A new group, **"Push notifications · this machine"**, placed after "Alerts · this device".
+A new group, **"Push notifications · every device"**, placed after "Alerts · this device".
 The heading distinction is load-bearing: alerts are per-browser localStorage, these are
 server-backed and shared by every browser pointed at this dashboard. Fed by
 `useServerSettings`, not `useSettings`.
