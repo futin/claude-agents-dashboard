@@ -204,7 +204,7 @@ export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan';
 /**
  * When to send a push. Every clause is AND-ed, and every layer is independently
  * optional — adding one later means adding one clause. All fields default false:
- * this feature is opt-in, like `alertsEnabled` on the client.
+ * this feature is opt-in.
  *
  * See `docs/subsystems/push-notify.md`.
  */
@@ -699,28 +699,4 @@ export interface SessionsResponse {
   usageStatus?: UsageStatus;
   /** Set only when the scan failed and an empty snapshot is returned. */
   error?: boolean;
-}
-
-/**
- * One "this session just started needing you" push, sent as an SSE `data:` line
- * on `GET /api/alerts/stream`.
- *
- * The client cannot detect these reliably on its own: its poll is a timer, and
- * a hidden tab's timers are throttled to roughly one tick a minute and may be
- * frozen outright — while the statuses worth alerting on are transient, since
- * `incomplete` decays to `idle` once the session leaves the active window. The
- * server's own interval is never throttled, so detection happens here and the
- * bytes wait on the socket for a tab that is not currently running JavaScript.
- *
- * See `docs/subsystems/settings.md` § Alerts.
- */
-export interface AlertEvent {
-  /** Session id, so the client can `tag` the notification and collapse repeats. */
-  id: string;
-  /** Custom session name, else the project directory name. */
-  label: string;
-  /** Always one of the needs-you statuses — `question` or `incomplete`. */
-  status: Extract<Session['status'], 'question' | 'incomplete'>;
-  /** ISO timestamp of the tick that observed the transition. */
-  at: string;
 }

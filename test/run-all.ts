@@ -23,7 +23,6 @@ import { run as runRemoteState } from './remoteState.test.js';
 import { run as runOrigin } from './origin.test.js';
 import { run as runSettings } from './settings.test.js';
 import { run as runClientSettings } from './client-settings.test.js';
-import { run as runAlertStream } from './alert-stream.test.js';
 import { run as runNotify } from './notify.test.js';
 import { run as runDeepLink } from './deep-link.test.js';
 
@@ -52,7 +51,6 @@ failed += runRemoteState();
 failed += runOrigin();
 failed += runSettings();
 failed += runClientSettings();
-failed += await runAlertStream();
 failed += await runNotify();
 failed += runDeepLink();
 

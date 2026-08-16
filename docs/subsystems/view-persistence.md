@@ -26,8 +26,8 @@ override it (see `dashboard.section` below).
   render. Object values are shallow-merged over the default (`{ ...fallback, ...parsed }`) so a
   value stored by an older release still gains any newly-added `View` field's default.
 - **Other persisted keys** — each owned by its own subsystem; indexed here, documented there:
-  `dashboard.settings` (theme, density, text scale, refresh rate, scan knobs, landing tab,
-  alerts — see [settings](settings.md); re-clamped on every read by `clampSettings`, and the
+  `dashboard.settings` (theme, density, text scale, refresh rate, scan knobs, landing tab
+  — see [settings](settings.md); re-clamped on every read by `clampSettings`, and the
   one key an inline script in `index.html` also reads, pre-paint, to avoid a theme flash);
   `dashboard.section` (Sessions | Management | Analytics | Settings, `App.tsx`) — always
   *written* on navigation, but only *read* on open when Settings → landing is `last`; any

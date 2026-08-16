@@ -53,10 +53,6 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags, fed by
                   the PermissionRequest hook (Notification is the legacy fallback);
                   display-only (see docs/subsystems/permission-notify.md)
-  lib/alertStream.ts  SSE push of needs-you transitions on GET /api/alerts/stream — scans on
-                  a Node interval (never throttled) only while a client listens, because a
-                  hidden tab's own poll misses the transient status entirely
-                  (see docs/subsystems/settings.md § Alerts)
   lib/notify.ts   server-sent ntfy push: layered policy (4 events × remote-answer × AFK ×
                   auto-mode), pure `shouldNotify` + fire-and-forget `node:https` send.
                   Topic lives in .env and is NEVER returned by an endpoint; the push's
@@ -93,14 +89,9 @@ client/           Vite + React + TypeScript frontend
   components/analytics/AnalyticsView.tsx  the report-card list (own lazy chunk; read-only)
   hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
   components/settings/         the Settings tab (own lazy chunk) — themes, density/text scale,
-                  refresh rate, scan knobs, alerts, idle threshold (see docs/subsystems/settings.md)
+                  refresh rate, scan knobs, push policy, idle threshold (see docs/subsystems/settings.md)
   hooks/useSettings.tsx        per-device settings context (localStorage) — the source of
                   refreshMs for every poll and of the data-theme/data-density attributes
-  hooks/useSessionAlerts.ts + lib/alerts.ts  notify when a session starts needing you
-                  (pure diff over consecutive snapshots; notification + beep + tab-title count).
-                  Two producers into one deduped announce(): the poll diff, mounted in
-                  SessionsView, and useAlertStream() — mounted on AppShell so the server's
-                  SSE push keeps working when the tab is hidden or on another section
   hooks/usePersistedState.ts  localStorage-backed useState (see docs/subsystems/view-persistence.md)
 vite.config.ts    dev proxy /api → backend; reuses server loadConfig() for the port
 test/             node-assert tests over backend domain logic, tmpdir JSONL fixtures

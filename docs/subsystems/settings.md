@@ -2,10 +2,8 @@
 docs-sync:
   sources:
     - client/src/lib/settings.ts
-    - client/src/lib/alerts.ts
     - client/src/hooks/useSettings.tsx
     - client/src/hooks/useServerSettings.ts
-    - client/src/hooks/useSessionAlerts.ts
     - client/src/components/settings/
     - server/lib/settings.ts
     - client/index.html
@@ -22,7 +20,7 @@ shell export for is editable here and takes effect on the next tick.
 There are two backends, and the page's group headings say which is which.
 
 **Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, landing tab,
-refresh rate, row count, lookback, active window, alerts. A phone propped on the desk wants
+refresh rate, row count, lookback, active window. A phone propped on the desk wants
 five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and three
 seconds. Sharing these would make one device wrong.
 
@@ -117,92 +115,35 @@ this stylesheet is px throughout, so a root font-size would do nothing, and `zoo
 one-line option that scales the whole board. Verified against the fixed-position chat drawer at
 110%: the backdrop still covers the viewport and the drawer stays flush right.
 
-## Alerts
-
-`lib/alerts.ts` is a pure diff (`diffAlerts`) over consecutive snapshots; `useSessionAlerts`
-does the effects. Fed by the same 3-second poll the rows render from, so it costs no request.
-
-- Fires only on a **transition into** `question` or `incomplete`. A session already waiting is
-  not news, and re-firing every poll while it sits there would be unusable.
-- The first snapshot after a load seeds the baseline and alerts on nothing.
-- The baseline is tracked **even while alerts are off**, so switching them on doesn't replay a
-  backlog.
-- The tab title always shows a count, permission or not. On iOS Safari — the single likeliest
-  device to be watching this — `Notification` exists only for a home-screen PWA. Returning to
-  the tab clears the count.
-- The sound is two oscillator tones, no asset and no dependency. **One** `AudioContext` is held
-  for the tab's lifetime rather than one per beep: a context built without user activation
-  starts `suspended`, and scheduling into a suspended context is a silent no-op that a
-  poll-driven beep can never recover from. `unlockAudio()` opens it from a real click (the
-  Sound toggle, the test button) and later beeps ride on it.
-- Permission is requested from the toggle's click, because every engine requires a gesture.
-- **Test alert** fires the whole path on demand and reports which halves got through
-  (`fireTestAlert`). Every failure mode here — `default` permission, a suspended context, an OS
-  that swallowed the banner — looks identical from the page: nothing. That is fine for a
-  background poll and useless for someone asking why they got nothing.
-
-Alerts are fed the **unfiltered** session list: a session you filtered out of view still needs
-you, and a filter is about what you're reading, not what you're told.
-
-### Why a poll alone cannot do this
-
-The alert-worthy statuses are **transient**. `incomplete` decays to `idle` once the session
-falls outside `activeWindowMin` (`scan.ts` — `recent`), typically five minutes. A hidden tab is
-throttled by the browser to roughly one timer tick a minute and may be frozen outright, so it
-thaws to observe `working → idle` — a pair `diffAlerts` correctly ignores. The alert is
-**lost, not delayed**. That is the failure mode reported in practice, and no amount of tuning
-the client diff fixes it, because the evidence is already gone by the time the tab runs again.
-
-So detection moved off the client timer: `server/lib/alertStream.ts` runs the scan on a Node
-interval, which nothing throttles, and pushes each transition down an open SSE connection
-(`GET /api/alerts/stream`). Delivery is event-driven, so the bytes sit on the socket waiting
-for a tab that is not currently allowed to execute JavaScript.
-
-| | poll diff (`useSessionAlerts`) | push stream (`useAlertStream`) |
-|---|---|---|
-| mounted in | `SessionsView` | `AppShell` — survives section switches |
-| detects while tab hidden | no | yes |
-| survives a frozen tab | no | yes, delivered on thaw |
-| costs | rides the existing 3s poll | one long-lived connection |
-
-Both funnel into one `announce()`, deduped on `${id}:${status}` for 60s (`dedupe` in
-`lib/alerts.ts`), so a foreground tab seeing the same transition twice still alerts once. The
-poll half is kept as the fallback for when the stream cannot connect.
-
-Server-side properties worth knowing:
-
-- **The scan runs only while someone is listening.** No subscribers, no timer — the app keeps
-  its no-daemon posture.
-- **Each connection seeds its own baseline and alerts on nothing**, so an `EventSource`
-  reconnect never replays a backlog.
-- It scans with the **server's** configured knobs, not the caller's `?limit=`. The per-device
-  row count is about what you are reading; a session you trimmed off the list still needs you.
-- `X-Accel-Buffering: no` and a `: ping` heartbeat every 20s keep the stream alive through a
-  buffering reverse proxy.
-
-Still not covered by anything in this group: a **closed** tab, a browser that isn't running,
-or an iPhone — WebKit has no `Notification` API in a tab at all, so on iOS these controls only
-ever move the tab-title count. That is what the next group exists for.
-
 ## Push notifications
 
-A second group, **Push notifications · every device**, and the heading difference is the
-point: alerts above are this browser's localStorage, these are server-backed and shared by
-every browser pointed at this dashboard. Nine rows — a master switch, one per event
-(question / permission dialog / plan / task finished), three optional AND-layers
-(only-while-accepting-remote-answers, only-when-away, only-in-auto-modes), and a test button.
+**Push notifications · every device** — the heading says the storage: server-backed and
+shared by every browser pointed at this dashboard, unlike the per-device groups above.
 
-The server sends them, so nothing here depends on a tab being open. Full mechanism, fail
-directions and the topic's secrecy rules: [push-notify](push-notify.md).
+This is the app's **only** way of telling you something needs you when you aren't looking at
+the dashboard. An in-browser layer (`Notification` banner + beep + tab-title count, fed by a
+poll diff and an SSE stream on `GET /api/alerts/stream`) used to sit above this group and was
+deleted when this shipped: it could never fire on iOS, and on a Mac it only repeated the CLI's
+own notification. The reasoning, and what that trade costs, is in
+[push-notify](push-notify.md).
+
+Nine rows — a master switch, one per event (question / permission dialog / plan / task
+finished), three optional AND-layers (only-while-accepting-remote-answers, only-when-away,
+only-in-auto-modes), and a test button. The server sends them, so nothing here depends on a
+tab being open. Full mechanism, fail directions and the topic's secrecy rules:
+[push-notify](push-notify.md).
 
 Two things worth knowing from this page's side:
 
 - **`notify` patches merge.** The UI sends the one checkbox that changed, not the whole
   policy. A key that is present but unusable rejects the *entire* patch (400) rather than
   half-applying — the one outcome the page could not report honestly.
-- **The test button reports what actually happened**, including "no `NTFY_TOPIC` set" and
-  whether taps will open the dashboard. Same reasoning as the alert test above: every failure
-  in a notification feature is invisible from the page.
+- **The test button reports what actually happened**, including "no `NTFY_TOPIC` set", a
+  refusal from ntfy, an unreachable server, and whether taps will open the dashboard. It is
+  the one send that waits for ntfy's answer. Every failure in a notification feature is
+  invisible from the page, so the button reports rather than assumes.
+- **Without a topic the group is disabled**, under one warning naming `NTFY_TOPIC` — the
+  switches would otherwise persist and read "On" while nothing could send.
 
 ## HTTP
 

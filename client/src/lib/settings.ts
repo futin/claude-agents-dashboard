@@ -44,8 +44,6 @@ export interface Settings {
   lookbackHours: number;
   activeWindowMin: number;
   landing: Landing;
-  alertsEnabled: boolean;
-  alertsSound: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -56,9 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maxSessions: 10,
   lookbackHours: 24,
   activeWindowMin: 5,
-  landing: 'last',
-  alertsEnabled: false,
-  alertsSound: false
+  landing: 'last'
 };
 
 /**
@@ -105,9 +101,7 @@ export function clampSettings(raw: unknown): Settings {
     maxSessions: clampNumber(s.maxSessions, DEFAULT_SETTINGS.maxSessions, LIMITS.maxSessions.min, LIMITS.maxSessions.max),
     lookbackHours: clampNumber(s.lookbackHours, DEFAULT_SETTINGS.lookbackHours, LIMITS.lookbackHours.min, LIMITS.lookbackHours.max),
     activeWindowMin: clampNumber(s.activeWindowMin, DEFAULT_SETTINGS.activeWindowMin, LIMITS.activeWindowMin.min, LIMITS.activeWindowMin.max),
-    landing: pickOne(s.landing, LANDINGS, DEFAULT_SETTINGS.landing),
-    alertsEnabled: typeof s.alertsEnabled === 'boolean' ? s.alertsEnabled : DEFAULT_SETTINGS.alertsEnabled,
-    alertsSound: typeof s.alertsSound === 'boolean' ? s.alertsSound : DEFAULT_SETTINGS.alertsSound
+    landing: pickOne(s.landing, LANDINGS, DEFAULT_SETTINGS.landing)
   };
 }
 

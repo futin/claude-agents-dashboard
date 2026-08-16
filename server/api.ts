@@ -25,7 +25,6 @@ import {
 } from './lib/plans.js';
 import { notifyPermission, permissionWaits } from './lib/permissions.js';
 import { maybeSend, sendTest } from './lib/notify.js';
-import { addSubscriber } from './lib/alertStream.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getSettings, setSettings } from './lib/settings.js';
 import { classifyOrigin } from './lib/origin.js';
@@ -105,44 +104,6 @@ export function serveSessions(baseConfig: Config, res: ServerResponse, params?: 
   }
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(data));
-}
-
-/**
- * `GET /api/alerts/stream` — SSE push of needs-you transitions.
- *
- * The one endpoint that outlives its request on purpose (alongside the two
- * `wait` routes). It exists because the client's poll is a timer and the
- * browser throttles a hidden tab's timers below the lifetime of the statuses
- * worth alerting on — see `lib/alertStream.ts` for the full reasoning.
- *
- * Scans with the server's own configured knobs, not the caller's `?limit=`: the
- * per-device row count is about what you are *reading*, and a session you
- * trimmed off the list still needs you. Same doctrine as the client feeding its
- * alert diff the unfiltered list.
- *
- * `X-Accel-Buffering: no` matters — a buffering reverse proxy in front of the
- * dashboard would otherwise hold events until the response closed, which for
- * this route is never.
- */
-export function serveAlertStream(config: Config, req: IncomingMessage, res: ServerResponse): void {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache, no-transform',
-    'Connection': 'keep-alive',
-    'X-Accel-Buffering': 'no'
-  });
-  // A first comment frame flushes headers immediately, so EventSource fires
-  // `onopen` now rather than on the first real event minutes later.
-  res.write(': connected\n\n');
-
-  const detach = addSubscriber(res, () => scanSessions(config, {
-    skipProcScan: config.skipProcScan,
-    pendingIds: pendingSessionIds(),
-    planIds: planSessionIds(),
-    permissionWaits: permissionWaits()
-  }));
-  req.on('close', detach);
-  req.on('error', detach);
 }
 
 /**

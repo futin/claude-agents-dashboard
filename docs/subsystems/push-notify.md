@@ -19,13 +19,14 @@ The dashboard publishes a push to an [ntfy](https://ntfy.sh) topic when a sessio
 needing you. Tapping it opens that session's chat. Off by default; every switch lives in
 Settings → **Push notifications · every device**.
 
-## Why this exists, given the alerts we already had
+## Why this exists, and why it replaced the browser alerts
 
-`useSessionAlerts` + `/api/alerts/stream` cannot reach an iPhone, and no amount of
-configuration changes that. WebKit exposes **no `Notification` API in a tab at all** —
-Safari *and* Chrome-on-iOS, which is the same engine — so `alertPermission()` returns
-`'unsupported'` and `announce()` silently degrades to a tab-title count. That is the whole
-bug: permission looks granted, the toggle looks on, and nothing ever arrives.
+The dashboard used to ship its own in-browser layer: a `Notification` banner, a beep and a
+tab-title count, fed by a poll diff and an SSE push stream. It could not reach an iPhone,
+and no amount of configuration changed that. WebKit exposes **no `Notification` API in a tab
+at all** — Safari *and* Chrome-on-iOS, which is the same engine — so permission read as
+`'unsupported'` and the whole thing degraded to a count in a title you cannot see once you
+have switched apps. That was the bug: the toggle looked on, and nothing ever arrived.
 
 Doing it properly in the browser would need a web app manifest, a service worker,
 `registration.showNotification()` (the `new Notification()` constructor does not exist on
@@ -35,6 +36,15 @@ that only true Web Push would be reliable.
 
 ntfy sidesteps all of it: a native app already holds the push connection. The dashboard
 only has to decide *when* to publish.
+
+Once it landed, the browser layer was **deleted rather than kept as a fallback** — about 530
+lines and 21 tests, including the SSE stream that existed only to feed it. On iOS it did
+nothing; on a Mac it repeated the CLI's own notification on the same screen, so it was
+duplication on the one platform where it worked at all. What survives is this, plus the row
+colors you read when you are actually looking at the dashboard. The trade to know: a Mac
+with no `NTFY_TOPIC` set now gets **no** ping from the dashboard — the CLI's own
+notifications are the desk-side channel, and they fire on the machine running the session,
+so a session in Docker or on a remote host posts nothing to your screen.
 
 ## Why the server sends, not the hooks
 
@@ -70,9 +80,8 @@ is evaluated last and behind a thunk, so a policy that does not use it never pay
 `ioreg` spawn. `test/notify.test.ts` asserts that directly.
 
 `AUTO_MODES` is `auto`, `bypassPermissions`, `dontAsk` — deliberately duplicated from
-`MODES` in `scripts/remote-decision-hook.sh` rather than shared, the same call made for
-`NEEDS_YOU` across `alertStream.ts` and `client/src/lib/alerts.ts`. Change one, change the
-other.
+`MODES` in `scripts/remote-decision-hook.sh` rather than shared: one is TypeScript and the
+other is bash. Change one, change the other.
 
 ### Fail directions
 
@@ -82,7 +91,7 @@ Silence is the bug this feature exists to fix, so every failure gets an explicit
 |---|---|---|
 | `ioreg` unreadable (Docker, non-macOS) | **push anyway** | Failing silent reintroduces the missed notification. Note this is the *opposite* of `ask-remote-hook.sh`, which treats unreadable idle as at-the-desk — there a wrong guess hides a dialog, here it costs one extra push |
 | `permissionMode` absent | **not auto-ish** | An unknown mode is not a known-auto mode |
-| ntfy request fails or times out | **swallow** | 2s cap, never awaited, never fails the caller |
+| ntfy request fails or times out | **swallow — except in the test** | 2s cap, never awaited, never fails the caller. `sendTest` is the one send that *does* await the answer and reports a refusal (`HTTP 404: topic not found`) or an unreachable server, because a button whose job is proving delivery must be able to fail |
 | session scan fails | **push with a short id** | A poor label beats no push |
 | settings file unreadable | **all switches off** | Same fail-open read as the rest of `settings.ts` |
 
@@ -97,6 +106,15 @@ address and the credential, so anyone who reads it can publish to your phone as 
 listen. `GET /api/settings` returns `notifyAvailable: boolean` and nothing else about it;
 the Settings page can say "configured" and offer a test button, but cannot display or edit
 the value. Changing it means editing `.env`.
+
+`notifyAvailable: false` **disables the whole group** — every switch and the test button —
+under one warning naming `NTFY_TOPIC`. Left live, they would flip, persist to
+`.dashboard-settings.json` and read "On" while nothing could ever be sent, which is the
+same invisible-failure this subsystem exists to remove. The rows stay visible rather than
+hidden: they are how you learn the feature is there. Note what the flag does *not* claim —
+it means a topic string exists, not that ntfy answers or that a phone is subscribed. The
+second is only knowable by sending (hence the test button), the third only by looking at
+the phone.
 
 ## What a push contains
 
@@ -144,14 +162,13 @@ calculus changes.
 Every failure here is invisible from the outside: an off switch, a missing topic and a
 dropped packet all look identical. So `POST /api/notify/test` fires one push **regardless of
 policy** and returns what actually happened, including whether taps will open anything. The
-Settings button surfaces that string verbatim — the same honesty pattern as `fireTestAlert`
-for browser alerts.
+Settings button surfaces that string verbatim.
 
 ## Deferred
 
 **Per-session cooldown.** Four event types across several concurrent sessions could get
 chatty. Not built; the predicate has an obvious place for it (a final clause over a
-`Map<sessionId, lastSentAt>` ledger, the shape `dedupe()` uses in `client/src/lib/alerts.ts`).
+`Map<sessionId, lastSentAt>` ledger).
 
 **iOS PWA / Web Push.** Still the only way to notify from the dashboard itself rather than
 via ntfy. Manifest, icons, service worker, VAPID signing, subscription storage, and a second

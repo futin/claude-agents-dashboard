@@ -48,7 +48,7 @@ export const MAX_ANSWER_SECS = 1800;
 const IDLE_ENV = 'CLAUDE_DASHBOARD_IDLE_SECS';
 const ANSWER_ENV = 'CLAUDE_DASHBOARD_ANSWER_TIMEOUT';
 
-/** Every switch off. Pushes are opt-in, like `alertsEnabled` on the client. */
+/** Every switch off. Pushes are opt-in — nothing leaves the machine unasked. */
 export const DEFAULT_NOTIFY: NotifyPolicy = {
   enabled: false,
   events: { question: false, stop: false, permission: false, plan: false },

@@ -123,9 +123,9 @@ client/src/
                   settings/
   hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
                   usePendingQuestion, usePendingPlan, useRemoteAnswer, usePersistedState,
-                  useSettings, useServerSettings, useSessionAlerts
+                  useSettings, useServerSettings
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
-                  alerts, deepLink
+                  deepLink
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          ask-remote-hook.sh, plan-remote-hook.sh, permission-notify-hook.sh,
@@ -146,10 +146,10 @@ that area:
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
 - [usage-limits](subsystems/usage-limits.md) — header account usage bars
-- [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, alerts, idle threshold
+- [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `allow?` pill for terminal permission dialogs
-- [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and why browser alerts can't reach an iPhone
+- [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and why they replaced browser alerts outright
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [docker](workflows/docker.md) — running in containers, dev + prod
 - [remote-answer-setup](workflows/remote-answer-setup.md) — per-machine hook install

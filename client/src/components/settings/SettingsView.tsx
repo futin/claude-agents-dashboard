@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { NumberField, Segmented, SettingsGroup, SettingsRow } from './SettingsRow';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import { useRemoteAnswer } from '../../hooks/useRemoteAnswer';
-import { alertPermission, fireTestAlert, requestAlertPermission, unlockAudio } from '../../hooks/useSessionAlerts';
 import { useServerSettings } from '../../hooks/useServerSettings';
 import { useSettings } from '../../hooks/useSettings';
 import {
@@ -54,9 +53,7 @@ export default function SettingsView() {
   const server = useServerSettings();
   const remote = useRemoteAnswer();
   const [token, setToken] = usePersistedState<string>('dashboard.answerToken', '');
-  const [permission, setPermission] = useState(alertPermission());
   const [confirmReset, setConfirmReset] = useState(false);
-  const [testResult, setTestResult] = useState<string | null>(null);
   const [pushTestResult, setPushTestResult] = useState<string | null>(null);
   const notify = server.state?.notify;
   /**
@@ -67,29 +64,10 @@ export default function SettingsView() {
    */
   const pushUnconfigured = !!server.state && !server.state.notifyAvailable;
 
-  /** Turning alerts on has to ask the browser first, and only a click may. */
-  async function toggleAlerts(next: boolean): Promise<void> {
-    if (next) setPermission(await requestAlertPermission());
-    update({ alertsEnabled: next });
-  }
-
-  /** Same deal for sound: the click is the only moment audio can be unblocked. */
-  async function toggleSound(next: boolean): Promise<void> {
-    update({ alertsSound: next });
-    if (next) await unlockAudio();
-  }
-
-  async function sendTestAlert(): Promise<void> {
-    setTestResult('sending…');
-    const result = await fireTestAlert();
-    setPermission(alertPermission());
-    setTestResult(result);
-  }
-
   /**
-   * Same honesty as the browser-alert test above: an off switch, a missing topic
-   * and a dropped packet all look identical from here, so the server reports
-   * what it actually did rather than the button pretending.
+   * An off switch, a missing topic and a dropped packet all look identical from
+   * here, so the server reports what it actually did rather than the button
+   * pretending. The one honest answer to "is this working?" is to fire one.
    */
   async function sendTestPush(): Promise<void> {
     setPushTestResult('sending…');
@@ -316,54 +294,10 @@ export default function SettingsView() {
         </SettingsRow>
       </SettingsGroup>
 
-      <SettingsGroup title="Alerts · this device">
-        <SettingsRow
-          name="Tell me when a session needs me"
-          hint={
-            permission === 'unsupported'
-              ? 'This browser has no notification API — the tab title will still show a count. On iPhone, add the dashboard to your home screen to get real notifications.'
-              : permission === 'denied'
-                ? 'Notifications are blocked for this site in your browser settings. The tab title will still show a count.'
-                : permission === 'default'
-                  ? 'Permission not granted yet — switch this On to let the browser ask. Until then only the tab title changes.'
-                  : 'Fires when a session starts waiting on you — a question, a plan, a permission dialog, or a finished turn. Never re-fires for one already waiting.'
-          }
-        >
-          <Segmented
-            value={settings.alertsEnabled ? 'on' : 'off'}
-            options={[{ value: 'off' as const, label: 'Off' }, { value: 'on' as const, label: 'On' }]}
-            onChange={v => void toggleAlerts(v === 'on')}
-          />
-        </SettingsRow>
-
-        <SettingsRow name="Sound" hint="A two-tone chime alongside the notification. Switching it On here is also what unblocks audio — browsers only allow that from a click.">
-          <Segmented
-            value={settings.alertsSound ? 'on' : 'off'}
-            options={[{ value: 'off' as const, label: 'Off' }, { value: 'on' as const, label: 'On' }]}
-            onChange={v => void toggleSound(v === 'on')}
-          />
-        </SettingsRow>
-
-        {/* Every failure here is silent from the page's side, so the only honest
-            way to answer "is this working?" is to fire one and report back. */}
-        <SettingsRow
-          name="Test alert"
-          hint={testResult ?? 'Fires a real notification and chime right now, and says which parts got through.'}
-        >
-          <button onClick={() => void sendTestAlert()}>Send test alert</button>
-        </SettingsRow>
-
-        <SettingsRow
-          name="Background tabs"
-          hint="Covered: the server detects transitions on its own timer and pushes them to this tab, so a hidden tab — whose own poll the browser throttles to about once a minute — still gets told. A fully closed tab or a quit browser is not covered."
-        >
-          <span className="set-unit">—</span>
-        </SettingsRow>
-      </SettingsGroup>
-
-      {/* Server-backed, hence "every device" — unlike the Alerts group above,
-          which is this browser's localStorage. These reach a phone with the
-          browser closed, which is the one thing browser alerts cannot do. */}
+      {/* Server-backed, hence "every device": the policy lives on the server and
+          the server sends, so nothing here depends on a tab being open. This is
+          the app's only way of telling you something needs you when you are not
+          looking at the dashboard. */}
       <SettingsGroup title="Push notifications · every device">
         <SettingsRow
           name="Send push notifications"
