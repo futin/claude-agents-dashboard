@@ -62,10 +62,21 @@ export function SessionRow({ s, selected, onToggle, onOpenChat }: Props) {
             plan?
           </button>
         )}
+        {/* A reply window is open — the turn finished while you were away and
+            the session is holding for a follow-up from the drawer. */}
+        {s.remoteReply && !s.remoteQuestion && !s.remotePlan && (
+          <button
+            className="ag-pill answer"
+            onClick={e => { e.stopPropagation(); onOpenChat(); }}
+            title="Turn finished — reply from the chat drawer, or let it stop"
+          >
+            reply?
+          </button>
+        )}
         {/* A permission dialog is open in that session's terminal. Only a pointer:
             the dialog can't be answered from here, so the pill says where to go
             and the drawer banner names the command it's asking about. */}
-        {s.permissionWait && !s.remoteQuestion && !s.remotePlan && (
+        {s.permissionWait && !s.remoteQuestion && !s.remotePlan && !s.remoteReply && (
           <button
             className="ag-pill permission"
             onClick={e => { e.stopPropagation(); onOpenChat(); }}
