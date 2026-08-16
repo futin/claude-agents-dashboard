@@ -241,6 +241,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       status,
       remoteQuestion,
       remotePlan,
+      remoteReply: false,
       permissionWait,
       activity: parsed.activity,
       lastTimestamp: parsed.lastTimestamp,
