@@ -50,6 +50,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   path in the app (see docs/subsystems/remote-answer.md)
   lib/plans.ts    in-memory pending-ExitPlanMode store — same state machine, reject-only
                   verdicts (accept is refused upstream; see docs/subsystems/remote-plan.md)
+  lib/messages.ts  in-memory turn-end reply-window store — same state machine, plus a 5s
+                  idle sweep that auto-releases every hold (see docs/subsystems/remote-message.md)
   lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags, fed by
                   the PermissionRequest hook (Notification is the legacy fallback);
                   display-only (see docs/subsystems/permission-notify.md)
@@ -82,6 +84,8 @@ client/           Vite + React + TypeScript frontend
                   (hooks/usePendingQuestion — see docs/subsystems/remote-answer.md)
   components/PlanPanel.tsx     pinned action bar to send a proposed plan back for revision
                   (hooks/usePendingPlan — see docs/subsystems/remote-plan.md)
+  components/MessagePanel.tsx  pinned composer for a turn-end reply window: send free text
+                  back, or let the session stop (hooks/usePendingMessage — see docs/subsystems/remote-message.md)
   components/PermissionBanner.tsx  pinned drawer strip naming the tool call a terminal
                   permission dialog is asking about (display-only; no controls by design)
   components/RemoteAnswerToggle.tsx  toolbar pill for the remote-answer switch

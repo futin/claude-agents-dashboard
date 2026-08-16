@@ -71,11 +71,17 @@ ln -s "$PWD/scripts/stop-notify-hook.sh" ~/.claude/hooks/stop-notify.sh
 then add to `~/.claude/settings.json` under `Stop`:
 
 ```json
-{ "type": "command", "command": "bash \"$HOME/.claude/hooks/stop-notify.sh\"" }
+{ "type": "command", "command": "bash \"$HOME/.claude/hooks/stop-notify.sh\"", "timeout": 630 }
 ```
 
-No `timeout` needed: unlike the remote-answer hooks this one never waits — it POSTs with a
-1s cap and exits.
+`"timeout": 630` is now required, unlike before this script also backed
+[remote messages](../subsystems/remote-message.md): away from the keyboard with remote
+answers on, this same hook holds a finished turn open for a reply from the dashboard, exactly
+as the ask/plan hooks hold a question or plan. The CLI kills a hook at its configured
+`timeout`, so a missing or too-low value kills the hold mid-wait — the session just stops
+early (there is no dialog to fall back to, unlike a killed ask/plan hook), and a reply typed
+after that lands on a 404. At the desk, or with the feature off, the hook still just POSTs and
+exits in under a second — this cost is paid only by the *away* path.
 
 **6. Verify.** Settings → **Test push**. It fires one push *ignoring every switch above*
 and reports what actually happened, because an off switch, a missing topic and a dropped

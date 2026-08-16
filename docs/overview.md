@@ -70,6 +70,9 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/sessions/:id/plan` | pending proposed plan, if any |
 | `POST /api/sessions/:id/plan-answer` | send a plan back for revision (write path) |
 | `POST /api/plans/wait` | the plan hook's held-open wait (write path) |
+| `GET /api/sessions/:id/message` | pending reply window, if any |
+| `POST /api/sessions/:id/message-answer` | send free text into a finished turn, or let it stop (write path) |
+| `POST /api/messages/wait` | the Stop hook's held-open wait, away only (write path) |
 | `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) |
 | `POST /api/notify/event` | the Stop hook's push trigger — the other three events notify from the endpoint they already POST to |
 | `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said |
@@ -147,6 +150,7 @@ that area:
 - [chat](subsystems/chat.md) — the chat drawer + byte-offset transcript tail
 - [remote-answer](subsystems/remote-answer.md) — answering `AskUserQuestion` remotely (the only write path)
 - [remote-plan](subsystems/remote-plan.md) — sending an `ExitPlanMode` plan back for revision (reject-only, by upstream design)
+- [remote-message](subsystems/remote-message.md) — replying into a finished, away-from-keyboard turn (the third write path)
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
