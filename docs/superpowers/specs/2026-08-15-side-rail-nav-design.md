@@ -66,12 +66,16 @@ positioning under a zoomed ancestor is unreliable across engines.
 ### The `100vh` / zoom interaction
 
 The rail wants full viewport height so its right border runs the length of the page. Under
-`body{zoom:1.1}` (text scale 110%), `100vh` resolves against the *unzoomed* viewport and
-the rail overflows by the scale factor. Mitigation:
+`zoom:1.1` (text scale 110%), `100vh` resolves against the *unzoomed* viewport and the rail
+overflows by the scale factor. Mitigation:
 
 ```css
-.rail{position:sticky;top:0;align-self:flex-start;height:calc(100vh / var(--font-scale,1))}
+.rail{position:sticky;top:0;z-index:5;align-self:flex-start;
+      height:calc(100vh / var(--font-scale,1))}
 ```
+
+`align-self:flex-start` is load-bearing: a stretched flex item fills its line and has
+nowhere to stick. See §4 for why the `zoom` sits on `.shell` rather than `body`.
 
 `--font-scale` is already set on `<html>` by `hooks/useSettings.tsx:60`. This must be
 verified visually at 90 / 100 / 110%, not assumed.
@@ -136,17 +140,32 @@ reference's 768px `md` is not adopted — internal consistency wins).
 ```css
 @media (max-width:700px){
   .shell{flex-direction:column}
-  .rail{flex:none;width:auto;height:auto;position:static;
-        flex-direction:row;overflow-x:auto;
+  .rail{flex:none;width:auto;height:auto;align-self:stretch;
+        flex-direction:row;overflow-x:auto;overflow-y:hidden;
         border-right:none;border-bottom:1px solid var(--hairline)}
   .rail-brand{display:none}
 }
 ```
 
-Not sticky on mobile — same call the reference makes (`md:sticky`). The chat drawer is
-`position:fixed;inset:0` (`styles.css:357`) so it covers the strip and needs no change;
-`QuestionPanel` / `PlanPanel` / `PermissionBanner` pin inside that drawer and are likewise
-unaffected.
+**Revised 2026-08-16.** The original spec dropped sticky on mobile (`position:static`, the
+same call the reference makes with `md:sticky`). That was wrong for this app: the sessions
+list is the long-scrolling screen and the phone is a first-class client, so the strip
+scrolled permanently out of reach. The base `position:sticky;top:0` is now inherited into
+the media query instead of overridden — laid down, the rail pins to the top edge rather
+than the left one. It carries `z-index:5` so it paints over the rows it now overlaps, still
+below `.tb-pop` (20) and the chat drawer (50).
+
+The chat drawer is `position:fixed;inset:0` at `z-index:50` so it still covers the strip and
+needs no change; `QuestionPanel` / `PlanPanel` / `PermissionBanner` pin inside that drawer
+and are likewise unaffected.
+
+`zoom` for the text-scale setting rides `.shell`, not `body` (`styles.css`, the density
+block): `zoom` is a legacy property whose interaction with `position:sticky` descendants is
+engine-dependent, so the rail is a direct child of the zoomed element rather than a
+grandchild of the scroll root. Reach is unchanged — the whole app renders inside `.shell`.
+The `calc(100vh / var(--font-scale,1))` correction is unaffected by the move, and the same
+correction now applies to `.wrap.wide`'s app-shell height, which previously overflowed the
+viewport at any text scale above 100%.
 
 ## 5. Files
 

@@ -88,8 +88,12 @@
 /* Density + text scale. Compact only retunes spacing — never a color, never a
    font size, so it composes with every theme. `zoom` scales the whole board
    including its px-based type, which a root font-size cannot do here (this
-   stylesheet is px throughout). */
-body{zoom:var(--font-scale,1)}
+   stylesheet is px throughout). It rides `.shell` and NOT `body`: `zoom` is a
+   legacy property whose interaction with `position:sticky` descendants is
+   engine-dependent, and the sticky rail (line ~109) is a direct child of the
+   zoomed element rather than a grandchild of the scroll root. Everything the
+   app renders lives inside `.shell`, so the scaling reach is unchanged. */
+.shell{zoom:var(--font-scale,1)}
 :root{--row-pad:11px 14px;--rows-gap:7px;--bar-margin:9px 0 8px;--body-pad:24px}
 /* Must follow the :root defaults — both selectors match <html> at the same
    specificity, so source order is what decides. */
@@ -103,10 +107,10 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 
 /* rack selector — the section rail down the left edge. Sticky and full-height
    so its right rule runs the length of the board. The height is divided by
-   --font-scale because body{zoom} (line 92) makes 100vh resolve against the
+   --font-scale because .shell{zoom} (line 96) makes 100vh resolve against the
    unzoomed viewport: at text scale 110% a plain 100vh rail overhangs by 10%. */
 .shell{display:flex}
-.rail{flex:0 0 200px;display:flex;flex-direction:column;gap:2px;align-self:flex-start;position:sticky;top:0;height:calc(100vh / var(--font-scale,1));overflow-y:auto;padding:var(--body-pad) 12px;background:var(--strip);border-right:1px solid var(--hairline)}
+.rail{flex:0 0 200px;display:flex;flex-direction:column;gap:2px;align-self:flex-start;position:sticky;top:0;z-index:5;height:calc(100vh / var(--font-scale,1));overflow-y:auto;padding:var(--body-pad) 12px;background:var(--strip);border-right:1px solid var(--hairline)}
 /* the app's wordmark, in the rail rather than the page — a kicker over the name */
 .rail-brand{font-family:var(--display);font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;line-height:1.15;color:var(--ink);padding:0 10px;margin-bottom:18px}
 .rail-kicker{font-family:var(--mono);font-size:9.5px;font-weight:400;letter-spacing:.14em;color:var(--ink3)}
@@ -117,10 +121,12 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .rail-link.on{color:var(--ink);background:var(--strip-hi);box-shadow:inset 2px 0 0 var(--cyan),inset 0 1px 0 var(--edge)}
 .main{flex:1;min-width:0;padding:var(--body-pad)}
 /* phone: the rail lies down into a scrollable strip above the content, and the
-   accent bar goes back to the bottom edge where a row wants it */
+   accent bar goes back to the bottom edge where a row wants it. It stays
+   `sticky` — laid down it is a top strip, so it pins to the top edge instead of
+   the left one, but it must not scroll out of reach on a long sessions list. */
 @media (max-width:700px){
   .shell{flex-direction:column}
-  .rail{flex:none;width:auto;height:auto;align-self:stretch;position:static;flex-direction:row;gap:4px;padding:8px 10px;overflow-x:auto;overflow-y:visible;border-right:none;border-bottom:1px solid var(--hairline)}
+  .rail{flex:none;width:auto;height:auto;align-self:stretch;flex-direction:row;gap:4px;padding:8px 10px;overflow-x:auto;overflow-y:hidden;border-right:none;border-bottom:1px solid var(--hairline)}
   .rail-brand{display:none}
   .rail-link{flex:none;white-space:nowrap;min-height:38px;display:flex;align-items:center}
   .rail-link.on{box-shadow:inset 0 -2px 0 var(--cyan),inset 0 1px 0 var(--edge)}
@@ -318,7 +324,11 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .mdetail-type{font-size:9px;font-weight:600;font-family:var(--mono);color:var(--ink3);text-transform:uppercase;letter-spacing:.06em}
 /* Desktop: management is an app shell — page never scrolls, each pane does */
 @media (min-width:1201px){
-  .wrap.wide{display:flex;flex-direction:column;height:calc(100vh - 48px)}
+  /* Same 100vh-under-zoom correction as the rail: divide by --font-scale, and
+     subtract .main's own padding from a token rather than a literal so compact
+     density lands on the viewport too. Getting this wrong scrolls the page,
+     which is exactly what the pane scrollers exist to avoid. */
+  .wrap.wide{display:flex;flex-direction:column;height:calc(100vh / var(--font-scale,1) - 2 * var(--body-pad))}
   .wrap.wide .mgmt{flex:1;min-height:0;align-items:stretch}
   .mgmt-menu,.mgmt-list,.mdetail{overflow-y:auto;min-height:0}
   .mgmt-list .mgmt-filter{position:sticky;top:0;z-index:1;flex-shrink:0;box-shadow:0 0 0 5px var(--board)}
