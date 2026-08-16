@@ -8,6 +8,7 @@ docs-sync:
     - .env.example
     - docker-compose.yml
   kind: workflow
+  verified: 65c1d88bd36702772a2b01d6704099f31d396959
 ---
 
 # Push notifications — setup
