@@ -34,7 +34,7 @@ import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getSettings, setSettings } from './lib/settings.js';
 import { classifyOrigin } from './lib/origin.js';
-import { extForMime, probeTranscribe, transcribe } from './lib/transcribe.js';
+import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import { toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig, SessionMessage,
@@ -289,6 +289,13 @@ export function readBinaryBody(req: IncomingMessage, cap = AUDIO_CAP): Promise<B
  * the 413 body itself is never truncated. Without this, a rejected upload
  * could otherwise hold its connection for up to Node's default requestTimeout
  * on the one endpoint whose whole job is spawning CPU-saturating subprocesses.
+ *
+ * The JSON body is best-effort, not guaranteed: a client still mid-upload when
+ * this fires typically sees the destroyed socket as a TCP RST, which discards
+ * whatever of the response was sitting in its receive buffer, body included.
+ * That's fine — severing the connection is the actual point, not the body
+ * reaching the client (the composer maps a network error and a 413 to the
+ * same message either way).
  */
 function send413(res: ServerResponse, body: unknown): void {
   res.setHeader('Connection', 'close');
@@ -313,6 +320,13 @@ export async function serveTranscribe(
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
   if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
   if (!probeTranscribe(config)) return sendJson(res, 404, { error: 'no transcription engine' });
+  // Cheap pre-buffer peek: refuse a second caller before its audio is ever
+  // read into memory, rather than after (see docs/subsystems/dictation.md).
+  // This is an optimisation, not the authority — the `busy` mapping below,
+  // driven by `transcribe()`'s own `inFlight` check, still has to stay: two
+  // callers can both read `isTranscribing() === false` in the same tick,
+  // before either has set the flag, and one of them has to lose that race.
+  if (isTranscribing()) return sendJson(res, 429, { error: 'busy' });
 
   const mime = String(req.headers['content-type'] || '');
   const ext = extForMime(mime);

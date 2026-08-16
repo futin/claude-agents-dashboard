@@ -85,8 +85,13 @@ function computeProbe(config: Config): boolean {
 
 /**
  * Is dictation available? Cached for the process lifetime: one spawn per server
- * run, never one per request, and the health endpoint is polled every few
- * seconds by every open tab.
+ * run, never one per request. `/api/health` — which carries this flag — is
+ * polled every 15s by `useRemoteAnswer` (`POLL_MS` in `useRemoteAnswer.ts`) for
+ * the remote-answer toggle; `useTranscribeAvailable`, the hook that actually
+ * reads this field, does not poll at all — it fetches once per page load and
+ * memoises the result. Either way, re-running the probe on every request would
+ * spawn a process for no new information, which is exactly what this cache
+ * prevents.
  */
 export function probeTranscribe(config: Config): boolean {
   if (probed === null) probed = computeProbe(config);
@@ -127,6 +132,17 @@ function run(bin: string, args: string[]): Promise<SpawnOutcome> {
  * into a CPU amplifier. A single-user app needs no cleverer limiter than this.
  */
 let inFlight = false;
+
+/**
+ * Cheap peek at the flag above, so `serveTranscribe` can refuse a second
+ * caller before it buffers any audio — not just before it spawns a process.
+ * Not authoritative: two callers can both read `false` here in the same tick,
+ * before either has set the flag, so the `inFlight` check inside `transcribe`
+ * below is still what actually enforces single-flight.
+ */
+export function isTranscribing(): boolean {
+  return inFlight;
+}
 
 /**
  * Browser audio → text. Writes the clip to a private temp directory, normalises

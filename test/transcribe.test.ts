@@ -6,7 +6,8 @@ import path from 'node:path';
 
 import { loadConfig } from '../server/lib/config.js';
 import {
-  buildFfmpegArgs, buildWhisperArgs, extForMime, parseOutput, probeTranscribe, resetProbe, transcribe
+  buildFfmpegArgs, buildWhisperArgs, extForMime, isTranscribing, parseOutput, probeTranscribe, resetProbe,
+  transcribe
 } from '../server/lib/transcribe.js';
 import { resetState } from '../server/lib/remoteState.js';
 import { readBinaryBody, serveTranscribe } from '../server/api.js';
@@ -401,6 +402,78 @@ export async function run(): Promise<number> {
             // closes) — 413 here proves it rejected on the header alone.
             void post(cfg, 'audio/mp4', Buffer.from('x'), undefined, 8 * 1024 * 1024 + 1)
               .then(r => { assert.equal(r.status, 413); })
+              .catch(e => { err = e; })
+              .finally(done);
+          });
+        });
+      });
+      if (err) throw err;
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  check(await testAsync('a full request/response round trip returns the parsed transcript', async () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-ep3-'));
+    let err: unknown;
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const ff = stubBin(dir, 'ff-stub', '#!/bin/bash\nout="${@: -1}"\n: > "$out"\nexit 0\n');
+      const wh = stubBin(dir, 'wh-stub',
+        '#!/bin/bash\necho "[00:00:00.000 --> 00:00:01.000]   hello dictation"\nexit 0\n');
+      await inTmpCwd(async () => {
+        await new Promise<void>(done => {
+          withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${wh}\nFFMPEG_BIN=${ff}\n`, cfg => {
+            void post(cfg, 'audio/mp4', Buffer.from('fake-audio'))
+              .then(r => {
+                assert.equal(r.status, 200);
+                assert.deepEqual(r.json, { text: 'hello dictation' });
+              })
+              .catch(e => { err = e; })
+              .finally(done);
+          });
+        });
+      });
+      if (err) throw err;
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  // Two things can now answer 429 (see the single-flight fix in serveTranscribe):
+  // the cheap `isTranscribing()` peek before the body is read, and the existing
+  // `busy` mapping after `transcribe()` itself loses the `inFlight` race. Driving
+  // the second deterministically over real HTTP would mean landing two requests
+  // inside the same tick, which this test can't control — so instead it proves
+  // the first: poll `isTranscribing()` until the first clip is already inside
+  // `transcribe()`, *then* fire the second, guaranteeing its early check is the
+  // one that answers.
+  check(await testAsync('a caller arriving mid-transcription gets 429 before its body is read', async () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-ep4-'));
+    let err: unknown;
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const ff = stubBin(dir, 'ff-slow', '#!/bin/bash\nsleep 0.4\nout="${@: -1}"\n: > "$out"\n');
+      const wh = stubBin(dir, 'wh-stub', '#!/bin/bash\necho "first"\n');
+      await inTmpCwd(async () => {
+        await new Promise<void>(done => {
+          withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${wh}\nFFMPEG_BIN=${ff}\n`, cfg => {
+            const first = post(cfg, 'audio/mp4', Buffer.from('first-clip'));
+            const waitUntilBusy = async (): Promise<void> => {
+              const deadline = Date.now() + 2000;
+              while (!isTranscribing()) {
+                if (Date.now() > deadline) throw new Error('never became busy');
+                await new Promise(r => setTimeout(r, 5));
+              }
+            };
+            waitUntilBusy()
+              .then(() => post(cfg, 'audio/mp4', Buffer.from('second-clip')))
+              .then(second => {
+                assert.equal(second.status, 429);
+                assert.equal(second.json?.error, 'busy');
+                return first;
+              })
+              .then(f => { assert.equal(f.status, 200); })
               .catch(e => { err = e; })
               .finally(done);
           });
