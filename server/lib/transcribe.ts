@@ -136,9 +136,11 @@ let inFlight = false;
 /**
  * Cheap peek at the flag above, so `serveTranscribe` can refuse a second
  * caller before it buffers any audio — not just before it spawns a process.
- * Not authoritative: two callers can both read `false` here in the same tick,
- * before either has set the flag, so the `inFlight` check inside `transcribe`
- * below is still what actually enforces single-flight.
+ * Not authoritative: `inFlight` only flips true once `transcribe` itself
+ * starts, well after the request's body has already been buffered, so any
+ * number of callers arriving in that window can still read `false` and each
+ * buffer before one of them sets it — the `inFlight` check inside `transcribe`
+ * below is what actually enforces single-flight.
  */
 export function isTranscribing(): boolean {
   return inFlight;

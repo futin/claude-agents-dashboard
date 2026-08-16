@@ -323,9 +323,11 @@ export async function serveTranscribe(
   // Cheap pre-buffer peek: refuse a second caller before its audio is ever
   // read into memory, rather than after (see docs/subsystems/dictation.md).
   // This is an optimisation, not the authority — the `busy` mapping below,
-  // driven by `transcribe()`'s own `inFlight` check, still has to stay: two
-  // callers can both read `isTranscribing() === false` in the same tick,
-  // before either has set the flag, and one of them has to lose that race.
+  // driven by `transcribe()`'s own `inFlight` check, still has to stay:
+  // `inFlight` only flips true once `transcribe()` starts, after the body
+  // below is already buffered, so this only catches a caller arriving while
+  // a transcription is already running — simultaneous callers can each read
+  // `isTranscribing() === false` and buffer before any of them sets the flag.
   if (isTranscribing()) return sendJson(res, 429, { error: 'busy' });
 
   const mime = String(req.headers['content-type'] || '');

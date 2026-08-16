@@ -152,8 +152,9 @@ render the button at all. The bit sits beside three other booleans that already 
 nothing more sensitive than "a feature is turned on"; it doesn't leak anything new in kind.
 
 What the token *does* gate is a spawn per request. `serveTranscribe` checks `remoteAnswer` →
-`tokenOk` → `probeTranscribe` → mime → body, in that order, so an unauthenticated caller is
-refused at 403 before any audio is read or any per-request process spawns. That is not the
+`tokenOk` → `probeTranscribe` → `isTranscribing()` → mime → body, in that order, so an
+unauthenticated caller is refused at 403 before any audio is read or any per-request
+process spawns. That is not the
 same as "no spawn is reachable without a token": the capability probe itself (previous
 section) is cached for the process's lifetime and also runs behind the unauthenticated
 `GET /api/health`, so it alone can be triggered with no token at all — a one-time
@@ -168,14 +169,18 @@ whether the capability exists.
 anything that can authenticate to it — an unbounded fan-out would turn one request into a
 CPU amplifier against the host machine.
 
-The check runs twice, for two different reasons. `serveTranscribe` calls the exported
-`isTranscribing()` first, **before `readBinaryBody`** — so a caller arriving while another
-clip is transcribing is turned back before it uploads a byte, which is what keeps concurrent
-upload memory bounded instead of scaling with however many callers show up at once.
-`transcribe()`'s own `inFlight` check is still the one that counts: two requests that both
-read `isTranscribing() === false` in the same tick will both buffer their bodies, and the
-loser gets the same 429 once it calls `transcribe()` and loses that race. The early check is
-an optimisation on top of that check, not a replacement for it.
+The check runs twice, for two different reasons — and they don't cover the same window.
+`serveTranscribe` calls the exported `isTranscribing()` first, **before `readBinaryBody`**,
+but `inFlight` only flips `true` inside `transcribe()`, which runs after `readBinaryBody`
+has already buffered the whole body — so the window in which `isTranscribing()` still reads
+`false` spans an entire upload's wall-clock duration, not a single tick, and is open to
+however many callers arrive during it, not just two. What the early check buys is the
+sequential case: a caller arriving while an earlier upload's transcription is already
+running is turned back before it uploads a byte; a burst of N genuinely simultaneous
+uploads will each still buffer up to 8MB before any of them sets the flag. `transcribe()`'s
+own `inFlight` check is still the one that counts — CPU amplification stays fully bounded
+either way, since only one whisper process ever runs — so the early check is an
+optimisation for the sequential case, not a memory bound on a simultaneous burst.
 
 The guard is cheap, and the app is single-user, so this is all it needs; see [accepted
 limits](#accepted-limits) for where it can wedge.
