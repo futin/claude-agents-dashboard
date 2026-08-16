@@ -19,29 +19,44 @@ already has the transcripts. The cost is an install step and no interim text.
 
 | Fact | Evidence |
 |---|---|
-| **No whisper binary of any kind is installed** | `command -v whisper whisper-cli whisper-cpp mlx_whisper` → all empty. The install step is part of this feature, not a precondition. |
+| **No whisper binary of any kind was installed (at design time)** | `command -v whisper whisper-cli whisper-cpp mlx_whisper` → all empty. The install step is part of this feature, not a precondition. Stale as of the "Confirmed" section below: `whisper-cli` is now installed at `/opt/homebrew/bin/whisper-cli` via `brew install whisper-cpp`, per Section A. |
 | `ffmpeg` **is** installed | `/opt/homebrew/bin/ffmpeg` (brew formula `ffmpeg`) |
 | Apple Silicon | `uname -m` → `arm64`, so whisper.cpp gets Metal acceleration |
 | `HealthResponse` is the right capability carrier | [shared/types.ts:306](../../shared/types.ts) — already optional-field-shaped, already polled by the client for `origin` |
 | A body reader exists but is JSON-only | `readJsonBody` / `BODY_CAP = 64 * 1024` in [server/api.ts:206](../../server/api.ts) — binary needs a sibling, not a parameter |
 | Token gate helper | `tokenOk` in [server/api.ts:241](../../server/api.ts) — reused verbatim |
 
-## Assumed — confirm in implementation step 1, before building on them
+## Confirmed on 2026-08-16
 
-These are read off the platform specs, **not** tested on your devices yet. Each has a
-stated fallback so a wrong assumption costs a branch, not the design:
+These were read off the platform specs; each is now measured against the installed
+engine and this machine's browser. Each still keeps its stated fallback, since a real
+phone or a different origin could yet read differently:
 
-1. **`getUserMedia` requires a secure context**, so the mic is dead on
-   `http://<host>.<tailnet>.ts.net:4173` and on LAN IPs, and alive on `localhost` and on
-   `pnpm tunnel`'s HTTPS. → Section C's disabled-with-reason state exists for this; if it
-   turns out Safari is laxer, that state simply never renders.
-2. **iOS Safari `MediaRecorder` produces `audio/mp4` (AAC)**; Android Chrome produces
-   `audio/webm;codecs=opus`. → The mime allowlist in section B covers both plus wav/ogg/mpeg;
-   an unlisted type is a 400 with the type echoed, so a surprise codec is diagnosable in one
-   round-trip rather than silent.
-3. **`whisper-cli -nt` writes plain text to stdout**, system info to stderr. → `parseOutput`
-   defensively strips `[HH:MM:SS.mmm --> …]` brackets anyway, so a build that ignores `-nt`
-   still yields clean text.
+1. **`getUserMedia`'s secure-context gate, measured true**: `window.isSecureContext` →
+   `true` on `http://localhost:5174` (this repo's own dev server — port 5173 on this
+   machine turned out to be an unrelated app, exactly the collision `WEB_PORT=5174` in
+   `.env` already works around). LAN IPs and the plain-HTTP tailnet URL were not
+   re-measured; `isSecureContext` is a spec-defined same-origin check, not app state, so
+   the fallback stands unless a phone shows otherwise. → Section C's disabled-with-reason
+   state exists for this; if it turns out Safari is laxer, that state simply never renders.
+2. **`MediaRecorder` mime support, measured on desktop Chromium**:
+   `MediaRecorder.isTypeSupported('audio/mp4')` → `true` and
+   `('audio/webm;codecs=opus')` → `true`, both measured on this machine's Electron/Chrome
+   148 browser via `localhost:5174` — not on iOS Safari or Android Chrome hardware, so the
+   mp4-vs-webm split by OS is still unconfirmed on a real phone. → The mime allowlist in
+   section B covers both plus wav/ogg/mpeg regardless; an unlisted type is a 400 with the
+   type echoed, so a surprise codec is diagnosable in one round-trip rather than silent.
+3. **`whisper-cli -nt` stdout shape and timing, measured end to end**: `say` → `ffmpeg`
+   16kHz mono wav → `whisper-cli -m ggml-base.en.bin -f s.wav -nt` on a 3.2s synthesized
+   clip. stdout (58 bytes) was a leading newline, a leading space, the sentence, and a
+   trailing period — `This is a test of local dictation in the reply composer.` — with
+   **no** trailing newline and **no** `[HH:MM:SS.mmm --> …]` timestamp brackets; all
+   model/system diagnostics went to stderr, confirming the assumed split. Wall clock
+   (zsh `time`): **1.275s total** (0.14s user, 0.17s system, 24% cpu — whisper's internal
+   `total time` was 977.78ms, the rest being process spawn and model load). →
+   `parseOutput` still defensively trims and strips timestamp brackets, since a build that
+   ignores `-nt` should still yield clean text, and the leading newline/space here shows
+   the trim is load-bearing, not just defensive.
 
 ## Non-goals
 

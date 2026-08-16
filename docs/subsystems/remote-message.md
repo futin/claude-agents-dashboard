@@ -9,7 +9,7 @@ docs-sync:
     - client/src/components/MessagePanel.tsx
     - client/src/hooks/usePendingMessage.ts
   kind: subsystem
-  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
+  verified: 3e1d51fd26c72d6c21bd9d6b8921ee3bb498518b
 ---
 
 # Remote messages (the `reply?` pill)
@@ -82,6 +82,7 @@ worked around.
 | `server/lib/messages.ts` | RAM-only store; same state machine as `pending.ts`/`plans.ts` with an injected `resolve`, plus the idle-release reaper below |
 | `scan.ts` `ScanOptions.messageIds` | sets `Session.remoteReply` and forces `status: 'question'` (blue) |
 | `SessionRow` tab + `MessagePanel` | the `reply?` label on the row's right-edge tab (same `row-chat answer` tone as `answer`/`plan?`, just different text) and the pinned drawer composer |
+| `MicButton` | optional mic in the composer's action row — records, transcribes locally, and hands text back for you to edit before you tap send; see [dictation](dictation.md) |
 | `chat.ts` `REMOTE_MESSAGE_RE` | unwraps the delivered follow-up back out of `composeReason` so it shows in the drawer as an ordinary user message — see below |
 
 ## Seeing what you sent

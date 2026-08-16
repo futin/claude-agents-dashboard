@@ -6,7 +6,7 @@ docs-sync:
     - vite.config.ts
     - package.json
   kind: subsystem
-  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
+  verified: 3e1d51fd26c72d6c21bd9d6b8921ee3bb498518b
 ---
 
 # Remote access — reaching the dashboard, and the origin badge
@@ -89,8 +89,11 @@ with a real TLS certificate, so the phone bookmark is just
 fixed while what it should front depends on `.env` — prod `PORT` (default 4173) or a dev
 `WEB_PORT` override (`5174` today); keep them in sync. Requires **HTTPS certificates
 enabled once** in the tailnet admin console (DNS page). `--bg` persists across reboots;
-`tailscale serve reset` stops it. Purely optional — the plain port URL works with no
-serve step at all.
+`tailscale serve reset` stops it. Optional for browsing — the plain port URL works with no
+serve step at all — but no longer optional for one feature: [dictation](dictation.md)'s
+`getUserMedia` call refuses to run outside a secure context, so a plain-http tailnet URL or
+LAN IP can never record. This step went from "nicer bookmark" to "the only way a phone
+dictates" without any change of its own.
 
 ### Phone usage
 
@@ -100,6 +103,8 @@ serve step at all.
 - The remote-answer flow (the pulsing `answer` pill → option buttons in the drawer — see
   [remote-answer](remote-answer.md)) works from anywhere; the hook still talks to
   `127.0.0.1` on the host and is untouched by any of this.
+- [Dictation](dictation.md)'s mic needs the HTTPS route above specifically — over a plain
+  tailnet port or a LAN IP it renders disabled and says why, rather than failing silently.
 
 ## Invariants
 

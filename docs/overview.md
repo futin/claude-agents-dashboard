@@ -9,7 +9,7 @@ docs-sync:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
+  verified: 3e1d51fd26c72d6c21bd9d6b8921ee3bb498518b
 ---
 
 # Architecture overview
@@ -74,6 +74,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/sessions/:id/message` | pending reply window, if any |
 | `POST /api/sessions/:id/message-answer` | send free text into a finished turn, or let it stop (write path) |
 | `POST /api/messages/wait` | the Stop hook's held-open wait, away only (write path) |
+| `POST /api/transcribe` | a recorded clip in, transcribed text out — feeds the reply composer's mic (write path) |
 | `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) |
 | `POST /api/notify/event` | the Stop hook's push trigger — the other three events notify from the endpoint they already POST to |
 | `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said |
@@ -128,16 +129,19 @@ server/
   lib/notify.ts   server-sent ntfy pushes — the layered policy and the one
                   outbound call the backend makes
   lib/origin.ts   connection classifier → local | lan | tailnet | unknown
+  lib/transcribe.ts  ffmpeg → whisper-cli pipeline behind POST /api/transcribe: mime
+                  allowlist, cached engine probe, single-flight guard, typed failures
 client/src/
   App.tsx         shell: side rail (Sessions | Management | Analytics | Settings) + lazy views
   components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
-                  MessagePanel, PermissionBanner, RemoteAnswerToggle, OriginBadge,
+                  MessagePanel, MicButton, PermissionBanner, RemoteAnswerToggle, OriginBadge,
                   Markdown, management/, analytics/, settings/
   hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
                   usePendingQuestion, usePendingPlan, usePendingMessage, useRemoteAnswer,
-                  usePersistedState, useSettings, useServerSettings
+                  usePersistedState, useSettings, useServerSettings, useDictation,
+                  useTranscribeAvailable
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
-                  deepLink
+                  deepLink, dictation
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          ask-remote-hook.sh, plan-remote-hook.sh, permission-notify-hook.sh,
@@ -155,6 +159,7 @@ that area:
 - [remote-answer](subsystems/remote-answer.md) — answering `AskUserQuestion` remotely (the first write path)
 - [remote-plan](subsystems/remote-plan.md) — sending an `ExitPlanMode` plan back for revision (reject-only, by upstream design)
 - [remote-message](subsystems/remote-message.md) — replying into a finished, away-from-keyboard turn (the third write path)
+- [dictation](subsystems/dictation.md) — the reply composer's mic: local whisper transcription, never auto-sent
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
@@ -167,3 +172,4 @@ that area:
 - [docker](workflows/docker.md) — running in containers, dev + prod
 - [remote-answer-setup](workflows/remote-answer-setup.md) — per-machine hook install
 - [push-notify-setup](workflows/push-notify-setup.md) — ntfy topic, phone subscription, Stop hook
+- [dictation-setup](workflows/dictation-setup.md) — installing whisper.cpp and a model, and the HTTPS tunnel phone use needs

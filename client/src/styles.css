@@ -494,6 +494,12 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .qp-send:disabled{cursor:default;opacity:.4}
 .qp-term{font-family:var(--font);font-size:11px;color:var(--ink3);background:none;border:1px solid var(--hairline);border-radius:2px;padding:7px 12px;cursor:pointer;transition:color .15s,border-color .15s}
 .qp-term:hover:not(:disabled){color:var(--ink2);border-color:var(--hairline2)}
+/* dictation mic — fixed square in the actions row. Deliberately excluded from
+   the mobile flex:1 rule below, so it never stretches to a third of the row. */
+.qp-mic{font-family:var(--font);font-size:12px;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline);border-radius:2px;padding:7px 11px;min-width:44px;cursor:pointer;transition:color .15s,border-color .15s,background .15s}
+.qp-mic:hover:not(:disabled){color:var(--ink);border-color:var(--hairline2)}
+.qp-mic:disabled{cursor:default;opacity:.45}
+.qp-mic.rec{color:var(--on-accent);background:var(--amber);border-color:var(--amber);animation:qpulse 1.4s ease-in-out infinite}
 /* plan panel — reuses .qpanel chrome; only the plan body and the feedback box
    are its own. The plan is long-form markdown, so it scrolls inside itself
    rather than pushing the actions off-screen. */
@@ -514,6 +520,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
   /* thumb-sized rows: ~42px tall, full width */
   .qp-opt{width:100%;padding:12px;min-height:42px;align-items:center}.qp-desc{display:none}
   .qp-send,.qp-term{flex:1;padding:12px;min-height:42px}
+  .qp-mic{min-height:42px}
   .qp-plan{max-height:40vh}}
 
 /* ---------------------------------------------- Settings section
