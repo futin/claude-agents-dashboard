@@ -53,9 +53,21 @@ take one away. If the dashboard isn't running, the probe gives up in under a sec
      [settings](settings.md) for the override trap that comes with that ordering.
 
   `state.remoteAnswer` (= `available && enabled`) is the only field the hook *acts* on from
-  `/api/health`; the rest exists so the pill can explain *why* it's off, and `idleSecs` rides
-  along for gate 3. With everything on, sitting at your keyboard behaves exactly as before the
-  hook existed — remote answering only engages once you've actually stepped away.
+  `/api/health`; the rest exists so the pill can explain *why* it's off, while `idleSecs` rides
+  along for gate 3 and `answerSecs` for the wait that follows it. With everything on, sitting at
+  your keyboard behaves exactly as before the hook existed — remote answering only engages once
+  you've actually stepped away.
+
+  Once the gates pass, **`answerSecs` sizes the wait** — how long the question stays answerable
+  here before the hook gives up and the terminal dialog appears. Same three-fallback resolution
+  as the threshold (`${CLAUDE_DASHBOARD_ANSWER_TIMEOUT:-<answerSecs from /api/health>}`, then
+  600), so it is Settings → **Answer window**, and it drives `curl --max-time` *and* the
+  `timeoutMs` the server arms its own deadline with. See [settings](settings.md) for the hook
+  `timeout` ceiling that caps the UI at 600s.
+- The POST body also carries **`permissionMode`**, which this feature never reads. It exists
+  for the [push notifier](push-notify.md)'s auto-mode layer — the mode is visible only inside
+  a hook payload, and a registered question is exactly where a push may be worth sending.
+  Optional, so an un-upgraded hook keeps working.
 - **⚠️ The gates are evaluated when the question is asked, not continuously.** Walking
   away after a question landed doesn't move it to the phone, and coming back doesn't move
   it to the terminal (the panel's dismiss button is the manual hand-back). Anything else
@@ -134,7 +146,8 @@ no locking.
 - **⚠️ Hook timeout:** the CLI kills a hook at its `timeout`, so `settings.json` needs
   `"timeout": 630` ≥ curl's `--max-time` (window + 15) ≥ the server clamp (600s default,
   range 5s–30min). Each layer fails inward; a mis-set timeout degrades to the terminal
-  dialog.
+  dialog. Because the window is now editable from Settings, that ceiling is enforced in the
+  UI too: the field offers 5–600s and warns above it (see [settings](settings.md)).
 - **The toggle is the app's only disk write.** `.remote-answer.json` (gitignored,
   repo-root, cwd-relative) — needed because `tsx watch` restarts on every edit and a
   switch flipped before walking away must survive that. Deliberately **not** under

@@ -41,9 +41,10 @@ you don't have one; keep any existing entry — hooks under one matcher run in p
 ]}
 ```
 
-> ⚠️ That `timeout` **must** exceed the wait window (`CLAUDE_DASHBOARD_ANSWER_TIMEOUT`,
-> default 600s), or the CLI kills the hook first and the window silently shrinks. Keep
-> `timeout ≥ window + 30`.
+> ⚠️ That `timeout` **must** exceed the wait window (Settings → **Answer window**, or
+> `CLAUDE_DASHBOARD_ANSWER_TIMEOUT`; default 600s), or the CLI kills the hook first and the
+> window silently shrinks. Keep `timeout ≥ window + 30` — which is why the Settings field
+> stops at 600s and warns above it.
 
 **4. Verify the chain** without waiting for a real question:
 
