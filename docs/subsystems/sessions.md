@@ -15,7 +15,7 @@ docs-sync:
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
+  verified: 39633d9069c91c327ed0883179dce64d24465b08
 ---
 
 # Sessions — live monitor, status machine, subagent detail

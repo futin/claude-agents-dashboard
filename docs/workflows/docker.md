@@ -8,7 +8,7 @@ docs-sync:
     - scripts/lan-ip.sh
     - server/lib/config.ts
   kind: workflow
-  verified: 65c1d88bd36702772a2b01d6704099f31d396959
+  verified: 39633d9069c91c327ed0883179dce64d24465b08
 ---
 
 # Running in Docker

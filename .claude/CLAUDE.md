@@ -6,7 +6,7 @@ docs-sync:
     - shared/types.ts
     - package.json
   kind: index
-  verified: 9910962bd0d5d767482b3ba22fe11b8f7ba7a452
+  verified: 39633d9069c91c327ed0883179dce64d24465b08
 ---
 
 # Claude Agents Dashboard
