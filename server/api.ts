@@ -206,63 +206,39 @@ export function serveSessionChat(id: string, params: URLSearchParams, res: Serve
 /** Request-body cap. A sanitized AskUserQuestion input is ~1 KB. */
 const BODY_CAP = 64 * 1024;
 
-/** Buffer and parse a JSON request body. null on overflow, bad JSON, or abort. */
-export function readJsonBody(req: IncomingMessage, cap = BODY_CAP): Promise<unknown | null> {
-  return new Promise(resolve => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    let done = false;
-    const finish = (value: unknown | null): void => {
-      if (done) return;
-      done = true;
-      resolve(value);
-    };
-    req.on('data', (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > cap) {
-        // Resolve but do NOT req.destroy() here: req and res share one socket,
-        // and destroying the request kills that socket before the caller's 400
-        // can go out — the client would see a bare connection reset instead of
-        // a JSON body. Closing is the caller's job, once its response has
-        // flushed (see `sendBadBody`). Drop what's already buffered rather than
-        // let it sit at ~cap bytes until GC; `size` never shrinks, so every
-        // later chunk lands here too and memory stays bounded from now on. The
-        // stream still drains because this 'data' listener stays attached and
-        // keeps it flowing — removing it as a later "optimization" would stall
-        // the socket instead of draining it.
-        chunks.length = 0;
-        finish(null);
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      try { finish(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
-      catch { finish(null); }
-    });
-    req.on('error', () => finish(null));
-    req.on('aborted', () => finish(null));
-  });
-}
-
 /** Audio-body cap. A 120s AAC clip is ~2MB; 8MB leaves room for verbose codecs. */
 const AUDIO_CAP = 8 * 1024 * 1024;
 
-export type BinaryBody =
+/** A fully buffered request body, or the reason it never completed. */
+export type ReadBody =
   | { ok: true; bytes: Buffer }
   | { ok: false; reason: 'overflow' | 'aborted' };
 
 /**
- * Buffer a raw request body. Sibling to `readJsonBody`, but it keeps overflow
- * and abort apart — `readJsonBody` collapses both to null, and this caller has
- * to answer 413 for one and 400 for the other.
+ * Buffer a request body up to `cap` bytes — the only request-stream plumbing in
+ * this file. `readJsonBody` and `readBinaryBody` are wrappers over it. They were
+ * two near-identical copies that differed only in how they finished, and they
+ * drifted on exactly the point below, so it is stated once, here.
+ *
+ * On overflow this resolves but deliberately does NOT `req.destroy()`: `req` and
+ * `res` share one socket, so destroying the request tears that socket down
+ * before the caller's error response can go out, and the client gets a bare
+ * connection reset instead of the JSON. Closing is the caller's job, sequenced
+ * from `res.on('finish')` once the response has flushed — see `sendBadBody` for
+ * the 400 path and `send413` for the transcribe path.
+ *
+ * Buffered chunks are dropped on overflow rather than left sitting at ~cap bytes
+ * until GC; `size` never shrinks, so every later chunk lands in the same branch
+ * and memory stays bounded from then on. The stream still drains because this
+ * 'data' listener stays attached and keeps it flowing — removing it as a later
+ * "optimization" would stall the socket instead of draining it.
  */
-export function readBinaryBody(req: IncomingMessage, cap = AUDIO_CAP): Promise<BinaryBody> {
+export function readBody(req: IncomingMessage, cap: number): Promise<ReadBody> {
   return new Promise(resolve => {
     const chunks: Buffer[] = [];
     let size = 0;
     let done = false;
-    const finish = (value: BinaryBody): void => {
+    const finish = (value: ReadBody): void => {
       if (done) return;
       done = true;
       resolve(value);
@@ -270,15 +246,6 @@ export function readBinaryBody(req: IncomingMessage, cap = AUDIO_CAP): Promise<B
     req.on('data', (chunk: Buffer) => {
       size += chunk.length;
       if (size > cap) {
-        // Resolve but do NOT req.destroy() here: req and res share one
-        // socket, and destroying the request kills that socket before the
-        // caller's response (413) can go out — the client would see a bare
-        // connection reset instead of a JSON body. Drop what's already
-        // buffered rather than let it sit at ~cap bytes until GC, and skip
-        // further pushes so memory stays bounded from here on. The stream
-        // still drains because our 'data' listener stays attached and keeps
-        // it flowing — removing that listener as a later "optimization"
-        // would stall the socket instead of draining it.
         chunks.length = 0;
         finish({ ok: false, reason: 'overflow' });
         return;
@@ -289,6 +256,27 @@ export function readBinaryBody(req: IncomingMessage, cap = AUDIO_CAP): Promise<B
     req.on('error', () => finish({ ok: false, reason: 'aborted' }));
     req.on('aborted', () => finish({ ok: false, reason: 'aborted' }));
   });
+}
+
+/**
+ * Buffer and parse a JSON request body. null on overflow, bad JSON, or abort:
+ * every caller answers 400 to all three, so `readBody`'s distinction is
+ * collapsed here rather than re-branched at ten call sites.
+ */
+export async function readJsonBody(req: IncomingMessage, cap = BODY_CAP): Promise<unknown | null> {
+  const body = await readBody(req, cap);
+  if (!body.ok) return null;
+  try { return JSON.parse(body.bytes.toString('utf8')); }
+  catch { return null; }
+}
+
+/**
+ * Buffer a raw request body. Keeps the overflow/abort distinction that
+ * `readJsonBody` throws away, because the transcribe endpoint answers 413 for
+ * one and 400 for the other.
+ */
+export function readBinaryBody(req: IncomingMessage, cap = AUDIO_CAP): Promise<ReadBody> {
+  return readBody(req, cap);
 }
 
 /**
