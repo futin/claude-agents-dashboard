@@ -54,6 +54,45 @@ export function diffAlerts(prev: StatusMap, next: readonly Session[]): AlertTarg
   return out;
 }
 
+/**
+ * Identity of one announcement: a session entering a given status.
+ *
+ * There are two producers now — the local poll diff and the server's SSE push
+ * (`/api/alerts/stream`) — and in a foreground tab both see the same
+ * transition. Keyed this way, whichever arrives first wins and the other is a
+ * no-op, while the *same* session entering a different status later is still
+ * news.
+ */
+export function alertKey(t: AlertTarget): string {
+  return `${t.id}:${t.status}`;
+}
+
+/**
+ * Drop targets already announced within `ttlMs`, and record the survivors.
+ *
+ * Mutates `seen`, which is the point: it is the ledger shared by both
+ * producers. Entries older than the window are evicted on the way through, so
+ * it cannot grow without bound over a long-lived tab.
+ */
+export function dedupe(
+  targets: readonly AlertTarget[],
+  seen: Map<string, number>,
+  now: number,
+  ttlMs: number
+): AlertTarget[] {
+  for (const [key, at] of seen) {
+    if (now - at > ttlMs) seen.delete(key);
+  }
+  const out: AlertTarget[] = [];
+  for (const t of targets) {
+    const key = alertKey(t);
+    if (seen.has(key)) continue;
+    seen.set(key, now);
+    out.push(t);
+  }
+  return out;
+}
+
 /** The line a notification shows for one session. */
 export function alertText(t: AlertTarget): string {
   return t.status === 'question'

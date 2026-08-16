@@ -4,7 +4,7 @@ import {
   DEFAULT_SETTINGS, LIMITS, THEMES,
   clampSettings, formatInterval, scanQuery
 } from '../client/src/lib/settings.js';
-import { alertText, diffAlerts, statusMap, titleWithCount } from '../client/src/lib/alerts.js';
+import { alertText, dedupe, diffAlerts, statusMap, titleWithCount } from '../client/src/lib/alerts.js';
 import type { Session } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -122,6 +122,38 @@ export function run(): number {
   if (test('the tab title carries the count, and drops it at zero', () => {
     assert.strictEqual(titleWithCount('Claude Sessions', 2), '(2) Claude Sessions');
     assert.strictEqual(titleWithCount('Claude Sessions', 0), 'Claude Sessions');
+  })) p++; else f++;
+
+  if (test('the poll and the push stream cannot both announce one transition', () => {
+    const ledger = new Map<string, number>();
+    const target = { id: 'a', label: 'dash', status: 'question' as const };
+    assert.strictEqual(dedupe([target], ledger, 1000, 60_000).length, 1, 'first producer wins');
+    assert.strictEqual(dedupe([target], ledger, 1200, 60_000).length, 0, 'second producer is a no-op');
+  })) p++; else f++;
+
+  if (test('the same session entering a different status is still news', () => {
+    const ledger = new Map<string, number>();
+    dedupe([{ id: 'a', label: 'dash', status: 'question' }], ledger, 1000, 60_000);
+    const later = dedupe([{ id: 'a', label: 'dash', status: 'incomplete' }], ledger, 1200, 60_000);
+    assert.strictEqual(later.length, 1);
+  })) p++; else f++;
+
+  if (test('the ledger evicts past the window, so a long-lived tab cannot grow it forever', () => {
+    const ledger = new Map<string, number>();
+    dedupe([{ id: 'a', label: 'dash', status: 'question' }], ledger, 1000, 60_000);
+    const again = dedupe([{ id: 'a', label: 'dash', status: 'question' }], ledger, 1000 + 60_001, 60_000);
+    assert.strictEqual(again.length, 1, 'stale entry expired');
+    assert.strictEqual(ledger.size, 1, 'and did not accumulate');
+  })) p++; else f++;
+
+  if (test('deduping a batch keeps distinct sessions and drops in-batch repeats', () => {
+    const ledger = new Map<string, number>();
+    const fired = dedupe([
+      { id: 'a', label: 'one', status: 'question' },
+      { id: 'b', label: 'two', status: 'question' },
+      { id: 'a', label: 'one', status: 'question' }
+    ], ledger, 1000, 60_000);
+    assert.deepStrictEqual(fired.map(t => t.id), ['a', 'b']);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

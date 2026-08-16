@@ -6,14 +6,15 @@ docs-sync:
     - scripts/
     - package.json
   kind: readme
-  verified: 806bf718d0d7efa721645dd30f36fe591c457d55
+  verified: fa1fa5b9daeb162acccef66d0e4d9a210ede95da
 ---
 
 # Claude Agents Dashboard
 
 A live, always-open monitor for **parallel Claude Code sessions**. For the top N
 most-recently-active sessions it shows what each one is doing right now — project, git
-branch, model, context usage, and current tool activity — refreshing every 3 seconds.
+branch, model, context usage, and current tool activity — refreshing every 3 seconds by
+default, retunable in the Settings tab.
 
 Reads everything straight from `~/.claude/projects/*/*.jsonl` on disk. **Monitoring needs
 no daemon, no hooks, and no config in Claude Code** — only the optional
@@ -61,6 +62,9 @@ That's the whole basic setup. Everything below is optional.
 - **[Remote answers](docs/subsystems/remote-answer.md)** — answer a session's
   `AskUserQuestion` from your phone; the pick is delivered into the live session. The
   one opt-in feature that needs a hook.
+- **[Remote plan verdicts](docs/subsystems/remote-plan.md)** — send a proposed
+  `ExitPlanMode` plan back for revision with feedback, from the same drawer. Reject-only:
+  the CLI discards a hook `allow` for plans, so accepting stays a terminal action.
 - **[Management tab](docs/subsystems/management.md)** — read-only browser for all Claude
   config on the machine: skills, agents, commands, rules, hooks, settings, plugins, per
   scope.
@@ -68,6 +72,9 @@ That's the whole basic setup. Everything below is optional.
   (tokens, priciest tools/subagents) paired with the lesson the `/kaizen` skill logged.
 - **[Usage bars](docs/subsystems/usage-limits.md)** — the header's 5h / Week account
   rate-limit bars, same numbers as `/usage` in the CLI.
+- **[Settings tab](docs/subsystems/settings.md)** — themes, density and text scale, refresh
+  rate, the scan knobs, desktop alerts, and the remote-answer idle threshold — all editable
+  in the app, no `.env` edit or rebuild.
 - **[Phone access & origin badge](docs/subsystems/remote-access.md)** — reach the
   dashboard over LAN, Tailscale, or a tunnel; a toolbar pill shows which route you're on.
 
