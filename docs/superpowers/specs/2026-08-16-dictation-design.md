@@ -19,7 +19,7 @@ already has the transcripts. The cost is an install step and no interim text.
 
 | Fact | Evidence |
 |---|---|
-| **No whisper binary of any kind is installed** | `command -v whisper whisper-cli whisper-cpp mlx_whisper` → all empty. The install step is part of this feature, not a precondition. |
+| **No whisper binary of any kind was installed (at design time)** | `command -v whisper whisper-cli whisper-cpp mlx_whisper` → all empty. The install step is part of this feature, not a precondition. Stale as of the "Confirmed" section below: `whisper-cli` is now installed at `/opt/homebrew/bin/whisper-cli` via `brew install whisper-cpp`, per Section A. |
 | `ffmpeg` **is** installed | `/opt/homebrew/bin/ffmpeg` (brew formula `ffmpeg`) |
 | Apple Silicon | `uname -m` → `arm64`, so whisper.cpp gets Metal acceleration |
 | `HealthResponse` is the right capability carrier | [shared/types.ts:306](../../shared/types.ts) — already optional-field-shaped, already polled by the client for `origin` |

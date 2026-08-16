@@ -6,7 +6,10 @@
  * hooks/useDictation.ts instead.
  */
 
-/** Recorder types worth asking for, best first. Order set by Task 1's probe. */
+/**
+ * Recorder types worth asking for, best first: iOS Safari records `audio/mp4`
+ * natively, while Chrome/Android favor webm/opus, so mp4 is tried first.
+ */
 const PREFERRED = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'];
 
 /**
