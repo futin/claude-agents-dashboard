@@ -6,7 +6,7 @@ docs-sync:
     - scripts/
     - package.json
   kind: readme
-  verified: 39633d9069c91c327ed0883179dce64d24465b08
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
 # Claude Agents Dashboard
@@ -20,8 +20,9 @@ Reads everything straight from `~/.claude/projects/*/*.jsonl` on disk. **Monitor
 no daemon, no hooks, and no config in Claude Code** — hooks are installed only by the
 opt-in features that need one ([remote answers](docs/subsystems/remote-answer.md),
 [remote plan verdicts](docs/subsystems/remote-plan.md), the
-[`allow?` pill](docs/subsystems/permission-notify.md), and the finished-turn
-[push](docs/subsystems/push-notify.md)). Zero runtime dependencies on the backend (Node
+[`allow?` pill](docs/subsystems/permission-notify.md), and the `Stop` hook behind both the
+finished-turn [push](docs/subsystems/push-notify.md) and
+[remote messages](docs/subsystems/remote-message.md)). Zero runtime dependencies on the backend (Node
 built-ins only), and exactly one outbound call — the ntfy push.
 
 ![dashboard: header with 5h/week usage bars, filter + sort toolbar, and one row per session showing status dot, project + branch, model, context bar, activity, and expandable subagent detail](docs/screenshot.png)
@@ -63,11 +64,15 @@ That's the whole basic setup. Everything below is optional.
   live-tailed, pageable back through the whole transcript, with an all/text/you filter
   and markdown rendering.
 - **[Remote answers](docs/subsystems/remote-answer.md)** — answer a session's
-  `AskUserQuestion` from your phone; the pick is delivered into the live session. The only
-  write path in the app, and the reason the hook install exists.
+  `AskUserQuestion` from your phone; the pick is delivered into the live session. The first
+  of the app's three write paths, and the reason the hook install exists.
 - **[Remote plan verdicts](docs/subsystems/remote-plan.md)** — send a proposed
   `ExitPlanMode` plan back for revision with feedback, from the same drawer. Reject-only:
   the CLI discards a hook `allow` for plans, so accepting stays a terminal action.
+- **[Remote messages](docs/subsystems/remote-message.md)** — when a turn finishes while
+  you're away, the `Stop` hook holds it open for a short window and you type a follow-up
+  into the drawer; the model reads it as your next instruction and carries on. No reply and
+  the session just stops, as it always did.
 - **[Management tab](docs/subsystems/management.md)** — read-only browser for all Claude
   config on the machine: skills, agents, commands, rules, hooks, settings, plugins, per
   scope.

@@ -10,7 +10,7 @@ docs-sync:
     - client/src/lib/deepLink.ts
     - client/src/components/settings/SettingsView.tsx
   kind: subsystem
-  verified: 39633d9069c91c327ed0883179dce64d24465b08
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
 # Push notifications (ntfy)
@@ -190,8 +190,9 @@ no longer covers falls back to its first 8 characters.
 ntfy's `Click` header carries `<DASHBOARD_PUBLIC_URL>/?session=<id>`.
 `client/src/lib/deepLink.ts` consumes that once on load: force the Sessions section, seed
 `chatId`, then `history.replaceState` the parameter away. You land in the chat drawer, where
-`QuestionPanel`, `PlanPanel` and `PermissionBanner` already render — one tap from buzz to
-answerable.
+`QuestionPanel`, `PlanPanel`, `MessagePanel` and `PermissionBanner` already render — one tap
+from buzz to answerable. That last one is why the reply-window `stop` push carries a link at
+all: the panel it lands you in is the composer the hold is waiting on.
 
 The parameter is stripped because session ids churn: a bookmarked or refreshed deep link
 would otherwise reopen a drawer for a session that no longer exists. Same reasoning that

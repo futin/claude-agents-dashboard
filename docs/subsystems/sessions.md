@@ -15,7 +15,7 @@ docs-sync:
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 39633d9069c91c327ed0883179dce64d24465b08
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
 # Sessions — live monitor, status machine, subagent detail
@@ -119,12 +119,19 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
   the liveness gate, and sets `Session.remotePlan` (the row's `plan?` pill, see
   [remote-plan](remote-plan.md)). Suppressed when `remoteQuestion` already owns the row, so
   a session can only be flagged for one of the two.
+- **question** also comes from a **held turn-end reply window** — `ScanOptions.messageIds`
+  (from `messages.ts` `messageSessionIds()`, injected the same way). Same kind of evidence
+  again — the `Stop` hook is holding a socket open right now — so it joins the chain
+  immediately below `planIds`, still above the liveness gate, and sets
+  `Session.remoteReply` (the row's `reply?` pill, see
+  [remote-message](remote-message.md)). Suppressed when `remoteQuestion` or `remotePlan`
+  already owns the row.
 - **question** also comes from an open **terminal permission dialog** ("allow Bash:
   `pnpm dev`?") — `ScanOptions.permissionWaits` (`sessionId → notifiedAt`, from
   `permissions.ts`, injected by `api.ts`). The dialog never reaches the transcript, so
   without the PermissionRequest hook a parked session reads recent + pending = `working`.
   This rung sits **below** the liveness gate (a fire-and-forget notify proves nothing about
-  liveness, unlike a held socket) and below both `pendingIds` and `planIds`. It self-clears: a message newer
+  liveness, unlike a held socket) and below `pendingIds`, `planIds` and `messageIds`. It self-clears: a message newer
   than `notifiedAt` means the dialog was answered. Also sets `Session.permissionWait`,
   which renders the row's `allow?` pill — display-only, see
   [permission-notify](permission-notify.md).

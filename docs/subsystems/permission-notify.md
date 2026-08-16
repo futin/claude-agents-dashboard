@@ -7,7 +7,7 @@ docs-sync:
     - scripts/permission-notify-hook.sh
     - client/src/components/PermissionBanner.tsx
   kind: subsystem
-  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
 # Permission prompts (the `allow?` pill)
@@ -72,7 +72,7 @@ back with feedback" is a real instruction, not merely a refusal.
 | `POST /api/permissions/notify` | `servePermissionNotify` in `api.ts` — `tokenOk` 403, `ID_RE` 400, unknown session 404, else `notifyPermission()` followed by `maybeSend(config, 'permission', …)`. The route notifies inline rather than through `/api/notify/event`, because the hook is already POSTing here (see [push-notify](push-notify.md)) |
 | `server/lib/permissions.ts` | RAM-only `Map<sessionId, {notifiedAt, message, timer}>`. No held socket, no resolve — a notify is a fact, not a wait |
 | `scan.ts` `ScanOptions.permissionWaits` | injected `sessionId → notifiedAt`; sets `Session.permissionWait` and forces `status: 'question'` |
-| `SessionRow` pill + `PermissionBanner` | mustard `allow?` pill (suppressed when `remoteQuestion` or `remotePlan` already owns the row) and the pinned drawer strip |
+| `SessionRow` pill + `PermissionBanner` | mustard `allow?` pill (suppressed when `remoteQuestion`, `remotePlan` or `remoteReply` already owns the row) and the pinned drawer strip |
 
 ## ⚠️ Clearing is the scan's job, not the store's
 
@@ -95,15 +95,15 @@ mechanism — a genuine "should I run this migration?" prompt can legitimately s
 
 ## Status ladder placement
 
-`remoteQuestion` → `remotePlan` → **dead** → `permissionWait` → `waitingOnQuestion` → the
-2×2 (see [sessions](sessions.md)).
+`remoteQuestion` → `remotePlan` → `remoteReply` → **dead** → `permissionWait` →
+`waitingOnQuestion` → the 2×2 (see [sessions](sessions.md)).
 
 Below the liveness gate **on purpose**: a fire-and-forget notify is a fact about the past and
 carries no evidence the session is still alive, unlike `pending.ts`'s held socket (which
 outranks `lsof` precisely because the socket is open *now*). A session killed at its prompt
-reads `idle`, not a permanent blue dot. Below `remoteQuestion` and `remotePlan` too, so a
-session that somehow has both keeps the actionable `answer` / `plan?` pill rather than the
-informational one.
+reads `idle`, not a permanent blue dot. Below `remoteQuestion`, `remotePlan` and
+`remoteReply` too, so a session that somehow has both keeps the actionable `answer` /
+`plan?` / `reply?` pill rather than the informational one.
 
 ## Install (manual, user-consented)
 

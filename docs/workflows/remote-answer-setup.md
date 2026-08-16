@@ -4,7 +4,7 @@ docs-sync:
     - scripts/ask-remote-hook.sh
     - server/api.ts
   kind: workflow
-  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
 # Remote answers — per-machine hook setup

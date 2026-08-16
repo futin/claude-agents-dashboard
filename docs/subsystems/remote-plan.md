@@ -10,7 +10,7 @@ docs-sync:
     - client/src/components/PlanPanel.tsx
     - client/src/hooks/usePendingPlan.ts
   kind: subsystem
-  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
 # Remote plan verdicts (the `plan?` pill)
@@ -77,8 +77,10 @@ Same state machine, different payload and different verdicts — a question reso
 structured picks, a plan resolves to prose or nothing. Merging them would mean a
 discriminated union threaded through every function of a module whose whole value is that
 it is small and exhaustively tested. They stay parallel instead, and the one place they
-join is the toggle: `POST /api/remote-answer` off calls **both** `dismissAll()`s, because
-a held plan is exactly as remote as a held question.
+join is the toggle: `POST /api/remote-answer` off calls **every** store's `dismissAll()` —
+`dismissAll() + dismissAllPlans() + dismissAllMessages()`, once
+[remote-message](remote-message.md) added a third — because a held plan is exactly as
+remote as a held question.
 
 ## Invariants
 

@@ -9,7 +9,7 @@ docs-sync:
     - client/src/components/MessagePanel.tsx
     - client/src/hooks/usePendingMessage.ts
   kind: subsystem
-  verified: 8ce3a8aa6bb7ce8724a9f365162a7258186a747f
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
 # Remote messages (the `reply?` pill)

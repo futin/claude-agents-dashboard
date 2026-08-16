@@ -8,7 +8,7 @@ docs-sync:
     - server/lib/settings.ts
     - client/index.html
   kind: subsystem
-  verified: 9910962bd0d5d767482b3ba22fe11b8f7ba7a452
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
 # Settings

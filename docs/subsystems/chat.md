@@ -9,7 +9,7 @@ docs-sync:
     - client/src/lib/chatFilter.ts
     - client/src/lib/markdown.ts
   kind: subsystem
-  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
 # Chat — history tail and the drawer
@@ -18,10 +18,11 @@ The `chat` pill on a session row opens a **full-height drawer** with that sessio
 conversation: newest page on open, live-tailed at the configured refresh rate, "load older"
 walking backwards through the whole transcript. Read-only, like everything else in the app.
 This drawer is also where [remote answers](remote-answer.md) surface: a pending question
-renders as an action bar pinned above the footer, and a proposed plan does the same through
-`PlanPanel` (see [remote-plan](remote-plan.md)). The two stores hold one entry per session
-and a session can only be parked on one thing at a time, so in practice only one of them
-ever renders.
+renders as an action bar pinned above the footer, a proposed plan does the same through
+`PlanPanel` (see [remote-plan](remote-plan.md)), and a turn-end reply window through
+`MessagePanel` (see [remote-message](remote-message.md)). All three stores hold one entry
+per session and a session can only be parked on one thing at a time, so in practice at most
+one of the three ever renders.
 
 ## What's shown
 

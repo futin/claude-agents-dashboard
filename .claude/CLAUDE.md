@@ -6,7 +6,7 @@ docs-sync:
     - shared/types.ts
     - package.json
   kind: index
-  verified: 39633d9069c91c327ed0883179dce64d24465b08
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
 # Claude Agents Dashboard
@@ -46,8 +46,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   review-marker lines per session (append-only grammar; fail-open)
   lib/analytics.ts  read-only reader: last N /kaizen-logged sessions, each re-analyzed live
                   (see docs/subsystems/analytics.md)
-  lib/pending.ts  in-memory pending-AskUserQuestion store + state machine — the ONLY write
-                  path in the app (see docs/subsystems/remote-answer.md)
+  lib/pending.ts  in-memory pending-AskUserQuestion store + state machine — the first of
+                  the app's three write paths (see docs/subsystems/remote-answer.md)
   lib/plans.ts    in-memory pending-ExitPlanMode store — same state machine, reject-only
                   verdicts (accept is refused upstream; see docs/subsystems/remote-plan.md)
   lib/messages.ts  in-memory turn-end reply-window store — same state machine, plus a 5s

@@ -10,10 +10,10 @@ docs-sync:
     - client/src/hooks/usePendingQuestion.ts
     - client/src/hooks/useRemoteAnswer.ts
   kind: subsystem
-  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
-# Remote answers (the only write path)
+# Remote answers (the first write path)
 
 When a session calls `AskUserQuestion`, the [chat drawer](chat.md) can render its options
 as buttons and deliver the pick **into the live session** — tap one on your phone and the
@@ -40,9 +40,10 @@ take one away. If the dashboard isn't running, the probe gives up in under a sec
      there at all? A hard kill switch; the toggle endpoint 409s while it's false.
   2. The **toggle** (`lib/remoteState.ts` → `state.enabled`) — accepting remote answers
      right now? Flipped from the toolbar pill or the [Settings tab](settings.md) (both read
-     the same `/api/health` poll, so they never disagree). Switching it off also calls
-     `dismissAll()`, so waits already held are handed back instead of parked until their
-     deadlines (~25ms measured).
+     the same `/api/health` poll, so they never disagree). Switching it off also releases
+     every hold in all three stores — `dismissAll() + dismissAllPlans() +
+     dismissAllMessages()` — so waits already held are handed back instead of parked until
+     their deadlines (~25ms measured).
   3. **Keyboard idle** — actually away? macOS `ioreg -c IOHIDSystem` `HIDIdleTime`,
      ~40ms. Below the threshold the hook exits 0 immediately, so at-the-desk behaviour is
      byte-for-byte the pre-hook behaviour. **Unreadable idle counts as at-desk** — never

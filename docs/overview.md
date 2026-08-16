@@ -9,7 +9,7 @@ docs-sync:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: 39633d9069c91c327ed0883179dce64d24465b08
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
 # Architecture overview
@@ -25,8 +25,9 @@ Everything the dashboard shows is read straight off disk from
 needs no daemon, no hooks, and no config in Claude Code — hooks are installed only by the
 opt-in features that need one ([remote answers](subsystems/remote-answer.md),
 [remote plan verdicts](subsystems/remote-plan.md), the
-[`allow?` pill](subsystems/permission-notify.md), and the finished-turn
-[push](subsystems/push-notify.md)).
+[`allow?` pill](subsystems/permission-notify.md), and the `Stop` hook that backs both the
+finished-turn [push](subsystems/push-notify.md) and
+[remote messages](subsystems/remote-message.md)).
 
 ## Data flow
 
@@ -84,7 +85,8 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | anything else | static files from `client/dist` (production only) |
 
 ⚠️ Route order in `index.ts` is load-bearing: the `:id` detail regex would swallow
-`/api/sessions/:id/chat|question|answer`, so those matches sit above it.
+`/api/sessions/:id/chat|question|answer|plan|plan-answer|message|message-answer`, so all of
+those matches sit above it.
 
 ## Dev vs prod
 
@@ -117,8 +119,10 @@ server/
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
   lib/analytics.ts  reader for the Analytics tab
-  lib/pending.ts  in-memory pending-question store (the only write path)
+  lib/pending.ts  in-memory pending-question store (the first of the three write paths)
   lib/plans.ts    in-memory pending-plan store (same machine, reject-only verdicts)
+  lib/messages.ts in-memory turn-end reply-window store (same machine, plus a 5s
+                  idle sweep that auto-releases every hold)
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)
   lib/settings.ts persisted idle threshold, answer window + push policy
   lib/notify.ts   server-sent ntfy pushes — the layered policy and the one
@@ -127,11 +131,11 @@ server/
 client/src/
   App.tsx         shell: side rail (Sessions | Management | Analytics | Settings) + lazy views
   components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
-                  RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
-                  settings/
+                  MessagePanel, PermissionBanner, RemoteAnswerToggle, OriginBadge,
+                  Markdown, management/, analytics/, settings/
   hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
-                  usePendingQuestion, usePendingPlan, useRemoteAnswer, usePersistedState,
-                  useSettings, useServerSettings
+                  usePendingQuestion, usePendingPlan, usePendingMessage, useRemoteAnswer,
+                  usePersistedState, useSettings, useServerSettings
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
                   deepLink
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
@@ -148,7 +152,7 @@ that area:
 
 - [sessions](subsystems/sessions.md) — session rows, the status machine, subagent detail
 - [chat](subsystems/chat.md) — the chat drawer + byte-offset transcript tail
-- [remote-answer](subsystems/remote-answer.md) — answering `AskUserQuestion` remotely (the only write path)
+- [remote-answer](subsystems/remote-answer.md) — answering `AskUserQuestion` remotely (the first write path)
 - [remote-plan](subsystems/remote-plan.md) — sending an `ExitPlanMode` plan back for revision (reject-only, by upstream design)
 - [remote-message](subsystems/remote-message.md) — replying into a finished, away-from-keyboard turn (the third write path)
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
