@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { pickMimeType } from '../lib/dictation';
+import { micErrorMessage, pickMimeType } from '../lib/dictation';
 import { usePersistedState } from './usePersistedState';
 import type { TranscribeResponse } from '../../../shared/types';
 
@@ -121,9 +121,9 @@ export function useDictation(onText: (text: string) => void): DictationState {
       recorderRef.current = rec;
       rec.start();
       setPhase('recording');
-    } catch {
+    } catch (e) {
       stopTracks();
-      setError('microphone unavailable');
+      setError(micErrorMessage(e));
       setPhase('idle');
     }
   }, [stopTracks, upload]);

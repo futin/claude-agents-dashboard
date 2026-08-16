@@ -21,6 +21,38 @@ export function pickMimeType(supported: (t: string) => boolean): string {
   return PREFERRED.find(t => supported(t)) ?? '';
 }
 
+/**
+ * Turn a `getUserMedia` rejection into copy that names the actual fix.
+ *
+ * One string for every failure was the original shape, and it cost a debugging
+ * session: "microphone unavailable" reads as "this machine has no mic" when the
+ * real cause is almost always a permission the browser already decided about
+ * without asking. The three named cases below are the ones a user can act on;
+ * anything else keeps the generic wording but appends the `DOMException.name`,
+ * so an unmapped failure still arrives with the one word needed to look it up.
+ */
+export function micErrorMessage(err: unknown): string {
+  const name = (err as { name?: unknown } | null)?.name;
+  switch (typeof name === 'string' ? name : '') {
+    // No prompt appeared: the permission was already denied — for the site, or
+    // for the browser app itself at the OS level.
+    case 'NotAllowedError':
+    case 'SecurityError':
+      return 'mic blocked — allow it in browser + OS settings';
+    case 'NotFoundError':
+    case 'OverconstrainedError':
+      return 'no microphone found';
+    // Held by another app, or the OS took it away mid-request.
+    case 'NotReadableError':
+    case 'AbortError':
+      return 'mic busy in another app';
+    case '':
+      return 'microphone unavailable';
+    default:
+      return `microphone unavailable (${name as string})`;
+  }
+}
+
 /** `0:07`, `1:23` — a stopwatch, not a duration. */
 export function fmtElapsed(secs: number): string {
   const s = Math.max(0, Math.floor(secs));

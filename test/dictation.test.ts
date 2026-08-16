@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { appendTranscript, fmtElapsed, pickMimeType } from '../client/src/lib/dictation.js';
+import { appendTranscript, fmtElapsed, micErrorMessage, pickMimeType } from '../client/src/lib/dictation.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -42,6 +42,30 @@ export function run(): number {
     assert.equal(pickMimeType(t => t === 'audio/mp4'), 'audio/mp4');
     assert.equal(pickMimeType(t => t === 'audio/webm;codecs=opus'), 'audio/webm;codecs=opus');
     assert.equal(pickMimeType(() => false), '');
+  }));
+
+  check(test('a denied permission names the settings fix, not a missing device', () => {
+    const msg = micErrorMessage({ name: 'NotAllowedError' });
+    assert.equal(msg, 'mic blocked — allow it in browser + OS settings');
+    assert.equal(micErrorMessage({ name: 'SecurityError' }), msg);
+  }));
+
+  check(test('separates no-device from busy-device', () => {
+    assert.equal(micErrorMessage({ name: 'NotFoundError' }), 'no microphone found');
+    assert.equal(micErrorMessage({ name: 'OverconstrainedError' }), 'no microphone found');
+    assert.equal(micErrorMessage({ name: 'NotReadableError' }), 'mic busy in another app');
+    assert.equal(micErrorMessage({ name: 'AbortError' }), 'mic busy in another app');
+  }));
+
+  check(test('an unmapped rejection still surfaces its DOMException name', () => {
+    assert.equal(micErrorMessage({ name: 'TypeError' }), 'microphone unavailable (TypeError)');
+  }));
+
+  check(test('a nameless throw falls back to the plain wording', () => {
+    assert.equal(micErrorMessage(undefined), 'microphone unavailable');
+    assert.equal(micErrorMessage(null), 'microphone unavailable');
+    assert.equal(micErrorMessage('boom'), 'microphone unavailable');
+    assert.equal(micErrorMessage({}), 'microphone unavailable');
   }));
 
   console.log(`\n  ${ok}/${total} passed`);

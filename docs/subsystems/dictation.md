@@ -56,6 +56,33 @@ code, but a phone user who never sees it has no way to learn dictation exists, o
 doesn't work *here*. A visibly dead button that names the fix is the honest failure mode —
 the alternative is a support question that starts with "the mic never showed up."
 
+### When the mic is refused after the gate
+
+A secure context only buys the right to *ask*. `getUserMedia` can still reject, and the
+rejection that matters most on a phone is the one that never prompts: when the browser
+already holds a `denied` decision — for the origin, or for the browser app itself at the OS
+level — it rejects immediately with `NotAllowedError` and shows no dialog at all. "It
+didn't ask me" is therefore a symptom, not the absence of one.
+
+`micErrorMessage` (`client/src/lib/dictation.ts`) maps the rejection to copy that names the
+fix, and `useDictation`'s `catch` is its only caller:
+
+| `DOMException.name` | Shown inline |
+|---|---|
+| `NotAllowedError`, `SecurityError` | `mic blocked — allow it in browser + OS settings` |
+| `NotFoundError`, `OverconstrainedError` | `no microphone found` |
+| `NotReadableError`, `AbortError` | `mic busy in another app` |
+| anything else | `microphone unavailable (<name>)` |
+| a throw with no `name` | `microphone unavailable` |
+
+One string for every case was the original shape, and it cost a debugging session: a bare
+"microphone unavailable" reads as *this machine has no mic* in exactly the situation where
+the real cause is a permission decided silently. The catch-all row keeps the generic
+wording but appends the name, so a failure nobody anticipated still reaches the user with
+the one word needed to look it up. Same bet as the `🎙 https only` button above — a dead
+end that names its own cause — applied to the runtime failure instead of the render-time
+one.
+
 ## The pipeline
 
 ```
