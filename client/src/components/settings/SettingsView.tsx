@@ -59,6 +59,13 @@ export default function SettingsView() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [pushTestResult, setPushTestResult] = useState<string | null>(null);
   const notify = server.state?.notify;
+  /**
+   * No `NTFY_TOPIC` on the server, so every switch below would flip, persist and
+   * send nothing. Gated rather than hidden: the rows are how you find out the
+   * feature exists. Stays false while the settings are still loading — an
+   * unanswered fetch is not evidence of a missing topic.
+   */
+  const pushUnconfigured = !!server.state && !server.state.notifyAvailable;
 
   /** Turning alerts on has to ask the browser first, and only a click may. */
   async function toggleAlerts(next: boolean): Promise<void> {
@@ -361,23 +368,41 @@ export default function SettingsView() {
         <SettingsRow
           name="Send push notifications"
           hint={
-            server.state && !server.state.notifyAvailable
-              ? 'Set NTFY_TOPIC in .env and restart the server to enable. The topic is a secret — anyone who knows it can read and send your notifications.'
+            pushUnconfigured
+              ? 'Unavailable until ntfy is configured on the server.'
               : 'Pushes to your phone through ntfy, so alerts arrive with the browser closed. Tapping one opens that session’s chat.'
           }
         >
           <Segmented
             value={notify?.enabled ? 'on' : 'off'}
             options={ON_OFF}
+            disabled={pushUnconfigured}
             onChange={v => void server.saveNotify({ enabled: v === 'on' })}
           />
         </SettingsRow>
+
+        {/* The one thing the server can check for free: whether a topic is set at
+            all. Whether a phone is actually subscribed to it is unknowable from
+            here — that is what the test push at the bottom is for. */}
+        {pushUnconfigured && (
+          <div className="set-warn">
+            <span>⚠</span>
+            <span>
+              No ntfy topic on the server, so nothing below can send. Set{' '}
+              <code>NTFY_TOPIC</code> in <code>.env</code> and restart it. Treat the topic as a
+              secret — it is both the address and the credential, so anyone who learns it can
+              read your notifications and publish to your phone. Set{' '}
+              <code>DASHBOARD_PUBLIC_URL</code> too, or tapping a push won’t open this dashboard.
+            </span>
+          </div>
+        )}
 
         {NOTIFY_EVENT_ROWS.map(row => (
           <SettingsRow key={row.key} name={row.name} hint={row.hint}>
             <Segmented
               value={notify?.events[row.key] ? 'on' : 'off'}
               options={ON_OFF}
+              disabled={pushUnconfigured}
               onChange={v => void server.saveNotify({ events: { [row.key]: v === 'on' } })}
             />
           </SettingsRow>
@@ -390,6 +415,7 @@ export default function SettingsView() {
           <Segmented
             value={notify?.requireRemoteAnswer ? 'on' : 'off'}
             options={ON_OFF}
+            disabled={pushUnconfigured}
             onChange={v => void server.saveNotify({ requireRemoteAnswer: v === 'on' })}
           />
         </SettingsRow>
@@ -401,6 +427,7 @@ export default function SettingsView() {
           <Segmented
             value={notify?.requireAfk ? 'on' : 'off'}
             options={ON_OFF}
+            disabled={pushUnconfigured}
             onChange={v => void server.saveNotify({ requireAfk: v === 'on' })}
           />
         </SettingsRow>
@@ -412,15 +439,21 @@ export default function SettingsView() {
           <Segmented
             value={notify?.requireAutoMode ? 'on' : 'off'}
             options={ON_OFF}
+            disabled={pushUnconfigured}
             onChange={v => void server.saveNotify({ requireAutoMode: v === 'on' })}
           />
         </SettingsRow>
 
         <SettingsRow
           name="Test push"
-          hint={pushTestResult ?? 'Sends one push right now, ignoring every switch above, and says what happened.'}
+          hint={
+            pushTestResult ??
+            (pushUnconfigured
+              ? 'Nothing to send to until NTFY_TOPIC is set.'
+              : 'Sends one push right now, ignoring every switch above, and waits for ntfy’s answer before saying what happened. Only your phone can confirm the last step.')
+          }
         >
-          <button onClick={() => void sendTestPush()}>Send test push</button>
+          <button disabled={pushUnconfigured} onClick={() => void sendTestPush()}>Send test push</button>
         </SettingsRow>
       </SettingsGroup>
 

@@ -31,11 +31,13 @@ export function SettingsGroup({ title, children }: { title: string; children: Re
  * scale, on/off.
  */
 export function Segmented<T extends string | number>({
-  value, options, onChange
+  value, options, onChange, disabled
 }: {
   value: T;
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
+  /** For a setting the server can't act on — the switch would flip and do nothing. */
+  disabled?: boolean;
 }) {
   return (
     <div className="set-seg" role="group">
@@ -44,6 +46,7 @@ export function Segmented<T extends string | number>({
           key={String(o.value)}
           className={o.value === value ? 'on' : undefined}
           aria-pressed={o.value === value}
+          disabled={disabled}
           onClick={() => onChange(o.value)}
         >
           {o.label}

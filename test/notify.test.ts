@@ -243,6 +243,38 @@ export async function run(): Promise<number> {
     assert.match(outcome, /NTFY_TOPIC/);
   }))) p++; else f++;
 
+  // The whole point of the test button: a refused or undelivered push must not
+  // read like a delivered one. Before the transport reported back, all three of
+  // these cases returned the same "sent to …" string.
+  if (await testAsync('sendTest reports a refusal from ntfy', () => inTmpCwd(async () => {
+    setSender(() => Promise.resolve({ ok: false, status: 404, detail: 'topic not found' }));
+    const outcome = await sendTest(conf());
+    assert.match(outcome, /404/);
+    assert.match(outcome, /topic not found/);
+    assert.doesNotMatch(outcome, /^sent/);
+  }))) p++; else f++;
+
+  if (await testAsync('sendTest reports a server it could not reach', () => inTmpCwd(async () => {
+    setSender(() => Promise.resolve({ ok: false, status: 0, detail: 'getaddrinfo ENOTFOUND' }));
+    const outcome = await sendTest(conf());
+    assert.match(outcome, /couldn't reach/);
+    assert.match(outcome, /ENOTFOUND/);
+  }))) p++; else f++;
+
+  if (await testAsync('sendTest still reports a transport that says nothing', () => inTmpCwd(async () => {
+    setSender(() => { /* the fire-and-forget contract */ });
+    assert.match(await sendTest(conf()), /^sent to/);
+  }))) p++; else f++;
+
+  if (await testAsync('a rejecting sender never escapes maybeSend', () => inTmpCwd(async () => {
+    setSettings({ notify: { enabled: true, events: { stop: true } } });
+    setSender(() => Promise.reject(new Error('socket hang up')));
+    maybeSend(conf(), 'stop', { sessionId: SID });
+    // An un-awaited rejection surfaces a tick later, so give it one before the
+    // process gets the chance to die on it.
+    await new Promise(r => setTimeout(r, 0));
+  }))) p++; else f++;
+
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }

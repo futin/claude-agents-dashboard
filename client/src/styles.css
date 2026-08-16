@@ -516,7 +516,8 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 /* segmented control — the density / scale / on-off picker */
 .set-seg{display:flex;gap:4px}
 .set-seg button{font-family:var(--display);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--ink3);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 11px;cursor:pointer;transition:color .15s,border-color .15s}
-.set-seg button:hover{color:var(--ink2);border-color:var(--hairline2)}
+.set-seg button:hover:not(:disabled){color:var(--ink2);border-color:var(--hairline2)}
+.set-seg button:disabled{cursor:default;opacity:.4}
 .set-seg button.on{color:var(--ink);border-color:var(--cyan);box-shadow:inset 0 -2px 0 var(--cyan)}
 /* theme picker: each swatch previews its own palette, so it is legible before
    you commit to it. The inline custom properties come from THEME_SWATCHES. */

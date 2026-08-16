@@ -8,10 +8,14 @@
  * policy in one testable place instead of re-implementing it in four shell
  * scripts — which is exactly what this replaces.
  *
- * Why it exists at all, given the in-browser alerts: WebKit exposes no
- * `Notification` API in a tab (Safari *and* Chrome-on-iOS), so
- * `client/src/lib/alerts.ts` can never reach an iPhone. ntfy already holds a
- * native push connection; the dashboard only has to decide when to publish.
+ * Why this and not in-browser notifications: WebKit exposes no `Notification`
+ * API in a tab at all (Safari *and* Chrome-on-iOS), so a browser alert could
+ * never reach an iPhone — the device most likely to be watching this. The
+ * dashboard used to ship one anyway, alongside a beep and a tab-title count, and
+ * it was deleted once this landed: on a Mac it merely repeated the CLI's own
+ * notification, and on iOS it did nothing. ntfy already holds a native push
+ * connection; the dashboard only has to decide when to publish. This is now the
+ * *only* channel that reaches you when you are not looking at the dashboard.
  *
  * This is the one part of the backend that talks to the internet. It stays
  * zero-dependency (`node:https`), fire-and-forget, and can never fail or delay
@@ -34,9 +38,8 @@ import type { NotifyEvent, NotifyPolicy } from '../../shared/types.js';
  *
  * Deliberately duplicated from `MODES` in `scripts/remote-decision-hook.sh`
  * rather than shared: one is TypeScript and the other is bash, and three words
- * of rule is not worth coupling a shell script to a module. The same call was
- * made for `NEEDS_YOU` across `alertStream.ts` and `client/src/lib/alerts.ts`.
- * Change one, change the other.
+ * of rule is not worth coupling a shell script to a module. Change one, change
+ * the other.
  */
 export const AUTO_MODES: ReadonlySet<string> = new Set(['auto', 'bypassPermissions', 'dontAsk']);
 
@@ -91,7 +94,25 @@ export interface NotifyPayload {
   click: string;
 }
 
-export type Sender = (payload: NotifyPayload, config: Config) => void;
+/**
+ * What a transport can report back about one delivery.
+ *
+ * Only `sendTest` reads it. `maybeSend` drops it: a notification must never
+ * delay or fail the request that triggered it, and that stays true.
+ */
+export interface SendResult {
+  ok: boolean;
+  /** HTTP status, or `0` when the request never got an answer — DNS, TLS, offline, timeout. */
+  status: number;
+  /** Why it failed, in the server's own words. Empty on success. */
+  detail: string;
+}
+
+/**
+ * A transport. Returning nothing is the fire-and-forget contract — the test
+ * button then falls back to reporting only that the send was attempted.
+ */
+export type Sender = (payload: NotifyPayload, config: Config) => void | Promise<SendResult>;
 
 /** One phrase per event. The only prose the user receives. */
 const PHRASE: Record<NotifyEvent, string> = {
@@ -178,30 +199,48 @@ export function clickUrl(config: Config, sessionId: string): string {
   return `${config.publicUrl}/?session=${encodeURIComponent(sessionId)}`;
 }
 
-/** The default transport. Fire-and-forget: nothing awaits it, nothing throws out of it. */
-function httpsSend(payload: NotifyPayload, config: Config): void {
-  try {
-    const url = new URL(`${config.ntfyServer}/${config.ntfyTopic}`);
-    const headers: Record<string, string> = {
-      Title: payload.title,
-      Tags: payload.tags,
-      'Content-Type': 'text/plain'
-    };
-    // ntfy opens this when the notification is tapped. Omitted rather than sent
-    // empty: an empty Click is a malformed header, not a no-op.
-    if (payload.click) headers.Click = payload.click;
+/**
+ * The default transport. Resolves with what ntfy actually said and **never
+ * rejects**, so fire-and-forget callers stay unable to fail while `sendTest` can
+ * still tell a dropped packet from a delivered one.
+ */
+function httpsSend(payload: NotifyPayload, config: Config): Promise<SendResult> {
+  return new Promise<SendResult>(resolve => {
+    try {
+      const url = new URL(`${config.ntfyServer}/${config.ntfyTopic}`);
+      const headers: Record<string, string> = {
+        Title: payload.title,
+        Tags: payload.tags,
+        'Content-Type': 'text/plain'
+      };
+      // ntfy opens this when the notification is tapped. Omitted rather than sent
+      // empty: an empty Click is a malformed header, not a no-op.
+      if (payload.click) headers.Click = payload.click;
 
-    const req = https.request(url, { method: 'POST', timeout: 2000, headers }, res => res.resume());
-    req.on('error', () => { /* offline, DNS, TLS — never surfaces */ });
-    req.on('timeout', () => req.destroy());
-    req.end(payload.body);
-  } catch {
-    /* malformed URL from a hand-edited .env */
-  }
+      const req = https.request(url, { method: 'POST', timeout: 2000, headers }, res => {
+        const status = res.statusCode ?? 0;
+        const ok = status >= 200 && status < 300;
+        // The body is read only to explain a refusal — ntfy puts the reason
+        // there (unknown topic, rate limit, auth). Capped: a broken server could
+        // answer with anything, and this string ends up in the UI.
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', chunk => { if (body.length < 500) body += chunk; });
+        res.on('end', () => resolve({ ok, status, detail: ok ? '' : (body.trim().split('\n')[0] || `HTTP ${status}`) }));
+        res.on('error', () => resolve({ ok, status, detail: ok ? '' : `HTTP ${status}` }));
+      });
+      req.on('error', err => resolve({ ok: false, status: 0, detail: err.message }));
+      req.on('timeout', () => { req.destroy(); resolve({ ok: false, status: 0, detail: 'timed out after 2s' }); });
+      req.end(payload.body);
+    } catch (err) {
+      /* malformed URL from a hand-edited .env */
+      resolve({ ok: false, status: 0, detail: err instanceof Error ? err.message : String(err) });
+    }
+  });
 }
 
-function deliver(payload: NotifyPayload, config: Config): void {
-  (sender ?? httpsSend)(payload, config);
+function deliver(payload: NotifyPayload, config: Config): void | Promise<SendResult> {
+  return (sender ?? httpsSend)(payload, config);
 }
 
 /**
@@ -225,7 +264,7 @@ export function maybeSend(
     });
     if (!passes) return;
 
-    deliver(
+    const result = deliver(
       {
         title: 'Claude Code',
         body: `${resolveLabel(config, ctx.sessionId)} — ${PHRASE[event]}`,
@@ -234,6 +273,9 @@ export function maybeSend(
       },
       config
     );
+    // The outcome interests only `sendTest`. Swallowed here rather than ignored:
+    // an un-awaited rejection escapes the try/catch and would crash the process.
+    void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
   } catch {
     /* a notification must never break the request that triggered it */
   }
@@ -244,16 +286,28 @@ export function maybeSend(
  *
  * Every failure in this feature is invisible from the outside — an off switch, a
  * missing topic and a dropped packet all look identical — so the only honest
- * answer to "is this working?" is to fire one and report. Mirrors
- * `fireTestAlert` in `client/src/hooks/useSessionAlerts.ts`.
+ * answer to "is this working?" is to fire one and report.
+ *
+ * This is the one send that waits for ntfy's answer. A topic that does not exist
+ * or a server that is down would otherwise read exactly like a success, which
+ * would make the one control built to prove delivery incapable of failing. It
+ * still cannot prove a phone is *subscribed* — nothing server-side can, so that
+ * last step stays the user's eyes on their own device.
  */
 export async function sendTest(config: Config): Promise<string> {
   if (!config.ntfyTopic) return 'no NTFY_TOPIC set in .env — nothing to send to';
   try {
-    deliver(
+    const result = await deliver(
       { title: 'Claude Code', body: 'Test push — notifications are working', tags: 'robot', click: config.publicUrl },
       config
     );
+    // A transport that reports nothing is the fire-and-forget contract: the send
+    // was made and there is nothing more to say about it.
+    if (result && !result.ok) {
+      return result.status === 0
+        ? `couldn't reach ${config.ntfyServer}: ${result.detail}`
+        : `${config.ntfyServer} refused it (HTTP ${result.status}): ${result.detail} — check NTFY_TOPIC`;
+    }
     return config.publicUrl
       ? `sent to ${config.ntfyServer} · taps open ${config.publicUrl}`
       : `sent to ${config.ntfyServer} · no DASHBOARD_PUBLIC_URL, so taps won't open the dashboard`;
