@@ -11,7 +11,7 @@ docs-sync:
     - client/src/hooks/useSpawn.ts
     - client/src/lib/spawnOptions.ts
   kind: subsystem
-  verified: 997d5bf1abb3d5253d43e7422a1a59e5b66cd755
+  verified: ec2199b331e84448c99723d9a17c3860bf27aeb2
 ---
 
 # Spawning a new session (the fourth write path)
@@ -199,6 +199,17 @@ than the crash reason, because there is no way to tell "you stopped it" from "it
 never here" once the entry is gone. The later `exit`/`close` event for that id finds no
 entry and no-ops through `fail`'s presence guard.
 
+**What stop does not reach: grandchildren.** The signal goes to the `claude` process
+itself (`child.kill('SIGTERM')`), not to its process group — so anything that session had
+already started keeps running. Under `auto` that is a live possibility: a `Bash` tool call
+mid-`npm install`, a test run, a dev server it launched. This is what the spec asked for
+("SIGTERM to the stored child") and it is compliant, not a bug — but if you tap stop and
+then find a process still going, that is why. `detached: true` made the child a group
+leader, so the thorough version (`process.kill(-pid, 'SIGTERM')`) is available to whoever
+decides that killing a whole tree from a phone is the behaviour they want; it was not
+specified here, and orphaned grandchildren are the spec's own Risk 3. Ending them is a
+terminal job today.
+
 ⚠️ **The pid lives only in this process's RAM.** It is never written to disk, so after
 a server restart the store's entries — and with them, every live child's pid — are
 gone, even though the real `claude` process may still be running. It was spawned
@@ -244,14 +255,19 @@ caller with launch rights can simply prompt one session into spawning more — i
 only rail against an *accident*: a retry loop, a flaky phone connection, a double-tap
 that beats React's re-render. Each launch is a real `claude` process on the account's real
 quota, and nothing else bounds the count: the store's only reaper is a client poll, and
-the client's own guard is a `pending` flag in one browser tab. What the counter spans is
-just the store's window — the ~3s until `adoptLaunched` sees the id on disk, plus
-`FAIL_TTL_MS` for entries that failed — so it bounds **rapid-fire POSTs**, not live
-sessions: ten launches a minute apart all succeed, because each has left the store before
-the next arrives. Capping live sessions would need the session registry this store
-deliberately is not. The flip side of `listLaunching()` counting `failed` entries too:
-four launches that failed back-to-back keep answering 429 until they age out — wanted
-behaviour for a rail whose whole job is damping a loop.
+the client's own guard is a `pending` flag in one browser tab.
+
+What it counts is narrow on both axes, and both are deliberate:
+
+- **`'launching'` rows only.** `listLaunching()` also returns `failed` ones — they linger
+  for `FAIL_TTL_MS` (5 minutes) purely so the UI can explain itself, and they hold no
+  process. Letting them hold a slot would lock a user out of launching for five minutes
+  after four transient failures, behind a 429 that explains nothing. The rail bounds
+  concurrent *processes*, so it counts those.
+- **The pre-adoption window only** — the ~3s until `adoptLaunched` sees the id on disk. So
+  it bounds **rapid-fire POSTs**, not live sessions: ten launches a minute apart all
+  succeed, because each has left the store before the next arrives. Capping live sessions
+  would need the session registry this store deliberately is not.
 
 `serveSpawn`'s check order: is the switch on (`getState`) → is the feature configured
 (`probeSpawn`) → who's asking (`tokenOk`) → is anything already in flight
