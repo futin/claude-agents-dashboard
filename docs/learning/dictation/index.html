@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dictation — the learning guide</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1a1a1a; --muted: #5c6370; --line: #b8bec9;
+  --panel: #f5f6f8; --accent: #2563eb; --good: #15803d; --bad: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a; --fg: #e6e8ea; --muted: #9aa2ad; --line: #4a515c;
+    --panel: #1d2027; --accent: #7aa2f7; --good: #6ccf8e; --bad: #f2777a;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); margin: 0;
+  font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+/* sidebar + prose measure: 17 + 1 + 60 = 78rem */
+.shell {
+  display: grid; grid-template-columns: 17rem minmax(0, 1fr); gap: 1rem;
+  max-width: 78rem; margin: 0 auto; padding: 1.5rem 1.25rem;
+}
+.side { position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding: .5rem 0; }
+nav.toc { font-size: .875rem; }
+nav.toc ul { list-style: none; margin: 0; padding: 0 0 0 .5rem; }
+nav.toc > ul { padding-left: 0; }
+nav.toc li { margin: .15rem 0; }
+nav.toc a { display: block; padding: .2rem .45rem; border-radius: 4px;
+            color: var(--muted); text-decoration: none; }
+nav.toc a.doc { color: var(--fg); font-weight: 600; margin-top: .6rem; }
+nav.toc a:hover { background: var(--panel); }
+nav.toc a.active { background: var(--panel); color: var(--accent); }
+.main { min-width: 0; }
+h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .5rem; }
+h2 { font-size: 1.4rem; margin: 2.5rem 0 .75rem; padding-top: .5rem;
+     border-top: 1px solid var(--line); }
+h3 { font-size: 1.12rem; margin: 1.9rem 0 .5rem; }
+h4 { font-size: 1rem; margin: 1.4rem 0 .4rem; color: var(--muted); }
+p, li { overflow-wrap: break-word; }
+a { color: var(--accent); }
+.ext { font-size: .8em; opacity: .7; }
+.lede { color: var(--muted); margin: 0 0 1.5rem; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+code { font-size: .875em; overflow-wrap: anywhere;
+       background: var(--panel); padding: .1em .3em; border-radius: 3px; }
+pre code { overflow-wrap: normal; background: none; padding: 0; font-size: .82rem; }
+.codewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line);
+            border-radius: 6px; margin: 1rem 0; }
+.codewrap pre { margin: 0; padding: .85rem 1rem; }
+blockquote { margin: 1.25rem 0; padding: .1rem 1rem; border-left: 3px solid var(--accent);
+             background: var(--panel); border-radius: 0 6px 6px 0; }
+.diagram { overflow-x: auto; margin: 1.5rem 0; }
+.diagram svg { display: block; min-width: 34rem; }
+.diagram .boxlabel { fill: var(--fg); font-size: 12px; text-anchor: middle;
+                     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                     stroke: none; }
+.caption { color: var(--muted); font-size: .875rem; margin: -.75rem 0 1.5rem; }
+.tablewrap { overflow-x: auto; margin: 1.25rem 0; }
+table { border-collapse: collapse; font-size: .9rem; }
+th, td { border: 1px solid var(--line); padding: .45rem .7rem; text-align: left;
+         vertical-align: top; }
+th { background: var(--panel); }
+hr { border: none; border-top: 1px solid var(--line); margin: 2rem 0; }
+/* the sidebar is permanently on screen, so per-document jump links are noise */
+.backlink, .totop { display: none; }
+#navtoggle, .navlabel { display: none; }
+
+@media (max-width: 63.99rem) {
+  .shell { grid-template-columns: 1fr; }
+  .side { position: sticky; top: 0; z-index: 5; background: var(--bg);
+          border-bottom: 1px solid var(--line); max-height: 70vh; }
+  .navlabel { display: inline-block; cursor: pointer; padding: .4rem .6rem;
+              border: 1px solid var(--line); border-radius: 6px; font-size: .875rem; }
+  nav.toc { display: none; padding-top: .5rem; }
+  #navtoggle:checked ~ .shell nav.toc { display: block; }
+  .backlink, .totop { display: block; font-size: .875rem; }
+}
+</style>
+</head>
+<body>
+<input type="checkbox" id="navtoggle">
+<div class="shell" id="top">
+  <div class="side">
+    <label class="navlabel" for="navtoggle">☰ contents</label>
+    <nav class="toc">
+      <ul>
+<li><a class="doc" href="#readme">Dictation — a React + Node learning walkthrough</a>
+<ul>
+<li><a href="#readme--the-whole-shape">The whole shape</a></li>
+<li><a href="#readme--chapters">Chapters</a></li>
+<li><a href="#readme--not-yet-covered">Not yet covered</a></li>
+<li><a href="#readme--faq">FAQ</a></li>
+</ul></li>
+<li><a class="doc" href="#why-local-whisper">Why local whisper at all</a>
+<ul>
+<li><a href="#why-local-whisper--the-bad-alternative">The bad alternative</a></li>
+<li><a href="#why-local-whisper--the-trade-off-stated-plainly">The trade-off, stated plainly</a></li>
+<li><a href="#why-local-whisper--what-this-is-not">What this is not</a></li>
+</ul></li>
+<li><a class="doc" href="#render-gate">The render gate: three states, and the middle one is the whole lesson</a>
+<ul>
+<li><a href="#render-gate--why-the-secure-context-check-exists">Why the secure-context check exists</a></li>
+<li><a href="#render-gate--the-bad-alternative">The bad alternative</a></li>
+<li><a href="#render-gate--the-same-bet-applied-at-runtime">The same bet, applied at runtime</a></li>
+</ul></li>
+<li><a class="doc" href="#recorder-lifecycle">The recorder lifecycle, and the two races hiding in it</a>
+<ul>
+<li><a href="#recorder-lifecycle--state-vs-refs">State vs. refs</a></li>
+<li><a href="#recorder-lifecycle--one-interval-drives-two-features">One interval drives two features</a></li>
+<li><a href="#recorder-lifecycle--race-one-the-panel-closes-while-the-permission-prompt-is-open">Race one: the panel closes while the permission prompt is open</a></li>
+<li><a href="#recorder-lifecycle--race-two-onstop-fires-because-you-cleaned-up">Race two: <code>onstop</code> fires <em>because</em> you cleaned up</a></li>
+<li><a href="#recorder-lifecycle--the-hook-does-not-know-a-textarea-exists">The hook does not know a textarea exists</a></li>
+</ul></li>
+      </ul>
+    </nav>
+  </div>
+  <div class="main">
+    <h1>Dictation — the learning guide</h1>
+    <p class="lede">Why the mic button in the reply composer is shaped the way it is.
+      Generated from the markdown in <code>docs/learning/dictation/README.md</code> and
+      <code>docs/learning/dictation/guide/</code> by
+      <code>docs/learning/dictation/tools/build.mjs</code> — edit the markdown, not this file.</p>
+<section>
+<h2 id="readme">Dictation — a React + Node learning walkthrough</h2>
+<p>This guide teaches the dictation subsystem — the mic button in the reply composer — by explaining <strong>why</strong> each piece is shaped the way it is, contrasting every mechanism with the naive alternative a first draft would have reached for. It is a <em>why</em> layer, not a reference: for the endpoint table, the status codes and the accepted limits, read <a href="../../subsystems/dictation.md"><code>docs/subsystems/dictation.md</code> <span class="ext">↗</span></a> instead.</p>
+<blockquote><p>Mental model up front: dictation is a <strong>local subprocess pipeline wearing a browser API on the front</strong>. The browser's job is to capture a blob and hand it over; the server's job is to shell out to two binaries that were never designed to be part of a web app, and to do that without leaking anything, wedging anything, or running twice at once. Almost every decision here descends from one of two constraints: <em>the audio must not leave this machine</em>, and <em>a web request must not be allowed to become a fork bomb</em>.</p></blockquote>
+<blockquote><p>Baseline: written against the dictation sources at commit <code>efea9f0</code> (2026-08-17).</p></blockquote>
+<h3 id="readme--the-whole-shape">The whole shape</h3>
+<div class="diagram"><svg viewBox="0 0 884 286" role="img" xmlns="http://www.w3.org/2000/svg">
+    <title>Tap the mic, record a blob, POST it, transcode to WAV, transcribe, parse, append to the textarea</title>
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/>
+      </marker>
+    </defs>
+    <g stroke="var(--line)" stroke-width="1.5" fill="var(--panel)">
+      <rect x="12" y="48" width="170" height="56" rx="6"/>
+      <g class="boxlabel">
+        <text x="97" y="72">MicButton</text>
+        <text x="97" y="89">render gate</text>
+      </g>
+      <rect x="242" y="48" width="170" height="56" rx="6"/>
+      <g class="boxlabel">
+        <text x="327" y="72">useDictation</text>
+        <text x="327" y="89">MediaRecorder</text>
+      </g>
+      <rect x="472" y="48" width="170" height="56" rx="6"/>
+      <g class="boxlabel">
+        <text x="557" y="72">POST</text>
+        <text x="557" y="89">/api/transcribe</text>
+      </g>
+      <rect x="702" y="48" width="170" height="56" rx="6"/>
+      <g class="boxlabel">
+        <text x="787" y="72">transcribe()</text>
+        <text x="787" y="89">mkdtemp</text>
+      </g>
+      <rect x="12" y="200" width="170" height="56" rx="6"/>
+      <g class="boxlabel">
+        <text x="97" y="224">ffmpeg</text>
+        <text x="97" y="241">16kHz mono</text>
+      </g>
+      <rect x="242" y="200" width="170" height="56" rx="6"/>
+      <g class="boxlabel">
+        <text x="327" y="224">whisper-cli</text>
+        <text x="327" y="241">-nt</text>
+      </g>
+      <rect x="472" y="200" width="170" height="56" rx="6"/>
+      <g class="boxlabel">
+        <text x="557" y="233">parseOutput</text>
+      </g>
+      <rect x="702" y="200" width="170" height="56" rx="6"/>
+      <g class="boxlabel">
+        <text x="787" y="224">textarea</text>
+        <text x="787" y="241">appendTranscript</text>
+      </g>
+    </g>
+
+    <g stroke="var(--line)" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+      <line x1="182" y1="76" x2="238" y2="76"/>
+      <line x1="412" y1="76" x2="468" y2="76"/>
+      <line x1="642" y1="76" x2="698" y2="76"/>
+      <path d="M 787 104 V 138 Q 787 152 773 152 H 111 Q 97 152 97 166 V 196"
+            stroke="var(--accent)"/>
+      <line x1="182" y1="228" x2="238" y2="228"/>
+      <line x1="412" y1="228" x2="468" y2="228"/>
+      <line x1="642" y1="228" x2="698" y2="228"/>
+    </g>
+
+    <g fill="var(--muted)" font-size="11" text-anchor="middle">
+      <text x="210" y="68">tap</text>
+      <text x="440" y="68">Blob</text>
+      <text x="670" y="68">bytes</text>
+      <text x="442" y="146">clip.m4a</text>
+      <text x="210" y="220">clip.wav</text>
+      <text x="440" y="220">stdout</text>
+      <text x="670" y="220">text</text>
+    </g>
+  </svg></div>
+<p class="caption">One request in, one string out — no queue, no job id, no progress stream.</p>
+<p>Note what that picture does <strong>not</strong> contain: a queue, a job id, a websocket, a progress stream. One request in, one string out, synchronously. That is a choice, and the chapters below show what it buys and what it costs.</p>
+<h3 id="readme--chapters">Chapters</h3>
+<ol>
+<li><a href="#why-local-whisper">Why local whisper at all</a> — the privacy constraint that is the parent of every piece of subprocess machinery in the backend.</li>
+<li><a href="#render-gate">The render gate: three states, and the middle one is the whole lesson</a> — hidden vs. disabled-and-labelled vs. live, plus the runtime error taxonomy that applies the same rule to <code>getUserMedia</code> rejections.</li>
+<li><a href="#recorder-lifecycle">The recorder lifecycle, and the two races hiding in it</a> — state vs. refs, one interval driving two features, and the two distinct windows in which a panel can die underneath a live microphone.</li>
+</ol>
+<h3 id="readme--not-yet-covered">Not yet covered</h3>
+<p>This guide was recorded part-way through the session, so four concepts from the subsystem have no chapter yet. They are listed here rather than silently omitted:</p>
+<ul>
+<li><strong>The subprocess pipeline</strong> — <code>mkdtemp</code> scratch dir with a <code>finally</code> cleanup, why <code>ffmpeg</code> normalises to 16kHz mono WAV, real files instead of pipes, the <code>run()</code> wrapper that never rejects, typed failures instead of raw stderr, and <code>parseOutput</code>'s defensive timestamp stripping.</li>
+<li><strong>Concurrency and caching</strong> — the single-flight <code>inFlight</code> guard checked in two places (and why the early check is an optimisation, not a memory bound), the process-lifetime probe cache, and the memoised-promise-with-eviction in <code>useTranscribeAvailable</code>.</li>
+<li><strong>The wire format</strong> — raw binary body with the recorder's own <code>Content-Type</code>, no multipart, no base64, and the <code>Content-Length</code> pre-check.</li>
+<li><strong>Security posture</strong> — why <code>/api/health</code> publishes <code>transcribe</code> unauthenticated, the check ordering in <code>serveTranscribe</code>, and the four mitigations that stand in for a token.</li>
+</ul>
+<p>For those, <a href="../../subsystems/dictation.md"><code>docs/subsystems/dictation.md</code> <span class="ext">↗</span></a> is the current best source — it covers the <em>what</em> thoroughly, and a fair amount of the <em>why</em>.</p>
+<h3 id="readme--faq">FAQ</h3>
+<p>Nothing here yet. This section is meant to hold the real questions raised during the learning session, and the session was recorded before any were asked. Add to it when the guide is next extended.</p>
+<hr>
+<p><strong>Relevant files</strong></p>
+<ul>
+<li><a href="../../../client/src/components/MicButton.tsx"><code>client/src/components/MicButton.tsx</code> <span class="ext">↗</span></a> — the three-way render gate; owns no logic beyond it.</li>
+<li><a href="../../../client/src/hooks/useDictation.ts"><code>client/src/hooks/useDictation.ts</code> <span class="ext">↗</span></a> — the <code>MediaRecorder</code> state machine and both liveness races.</li>
+<li><a href="../../../client/src/lib/dictation.ts"><code>client/src/lib/dictation.ts</code> <span class="ext">↗</span></a> — the pure half: mime pick, error copy, elapsed format, transcript folding.</li>
+<li><a href="../../../client/src/hooks/useTranscribeAvailable.ts"><code>client/src/hooks/useTranscribeAvailable.ts</code> <span class="ext">↗</span></a> — the read-once-then-share engine probe, with eviction on failure.</li>
+<li><a href="../../../server/lib/transcribe.ts"><code>server/lib/transcribe.ts</code> <span class="ext">↗</span></a> — ffmpeg + whisper spawns, temp-dir hygiene, typed failures, the single-flight flag.</li>
+<li><a href="../../../server/api.ts"><code>server/api.ts</code> <span class="ext">↗</span></a> — <code>serveTranscribe</code>: the check ordering and the status-code mapping.</li>
+<li><a href="../../subsystems/dictation.md"><code>docs/subsystems/dictation.md</code> <span class="ext">↗</span></a> — the reference doc this guide deliberately does not restate.</li>
+</ul>
+<p class="totop"><a href="#top">↑ back to contents</a></p>
+</section>
+<section>
+<h2 id="why-local-whisper">Why local whisper at all</h2>
+<p class="backlink"><a href="#readme">← back to contents</a></p>
+<p><strong>What it does.</strong> The server runs <code>whisper.cpp</code> — a C++ port of OpenAI's Whisper speech-to-text model — as a command-line binary on your own machine, against a ~141MB model file you downloaded yourself. Nothing about the audio touches the network.</p>
+<p><strong>Why it exists.</strong> Because the obvious alternative is disqualified by an architectural promise this app has already made everywhere else.</p>
+<h3 id="why-local-whisper--the-bad-alternative">The bad alternative</h3>
+<p><code>webkitSpeechRecognition</code> is sitting right there in every browser, free. Three lines of JavaScript, no install step, no <code>ffmpeg</code>, no model file — and it streams <em>interim results</em>, so words appear on screen as you speak them. On every axis a demo cares about it wins.</p>
+<p>It also uploads your audio to Apple or Google to do that.</p>
+<p>That is disqualifying <strong>here specifically</strong>, and the reason is structural rather than ideological. From <a href="../../../.claude/CLAUDE.md"><code>.claude/CLAUDE.md</code> <span class="ext">↗</span></a>:</p>
+<blockquote><p>Backend is zero-runtime-dep by design (only Node built-ins). Keep new deps out of <code>server/</code>. It reads from disk and makes exactly <strong>one</strong> kind of outbound call: the ntfy push in <code>lib/notify.ts</code>. Adding a second needs a reason.</p></blockquote>
+<p>The whole pitch of this dashboard is that it reads your Claude Code transcripts — your code, your prompts, your project names, your branch names — off disk and never ships them anywhere. A dictation feature that routed spoken follow-ups through a third party would instantly become the <em>loudest</em> thing the app does, on the single axis it advertises. It would not be a small exception; it would be the exception that makes the rule unstateable.</p>
+<h3 id="why-local-whisper--the-trade-off-stated-plainly">The trade-off, stated plainly</h3>
+<div class="tablewrap"><table><thead><tr><th></th><th>Browser speech API</th><th>Local whisper</th></tr></thead><tbody>
+<tr><td>Setup</td><td>none</td><td><code>brew install whisper-cpp</code> plus a ~141MB model</td></tr>
+<tr><td>Interim text while you talk</td><td>yes, live</td><td>no — whisper is batch, hence the <code>…</code> spinner</td></tr>
+<tr><td>Audio leaves the machine</td><td><strong>yes</strong></td><td>no</td></tr>
+<tr><td>Works offline</td><td>no</td><td>yes</td></tr>
+<tr><td>Backend complexity</td><td>zero</td><td>two spawned binaries, temp files, timeouts, a concurrency guard</td></tr>
+<tr><td>Accuracy on code identifiers</td><td>good</td><td><code>base.en</code> mangles them (see below)</td></tr>
+</tbody></table></div>
+<p>The right way to read that table is as a <strong>cost sheet</strong>, not a scoreboard. Local whisper loses four of six rows. It wins the one row that this app cannot lose, and everything in the backend — the scratch directory, the <code>run()</code> wrapper, the 30-second spawn timeouts, the single-flight flag — is the invoice for that single win.</p>
+<p>Two consequences worth naming, because they show up later as design pressure elsewhere in the guide:</p>
+<ul>
+<li><strong>No interim text</strong> means the UI has a <em>transcribing</em> phase with nothing to show. That is why <code>MicButton</code> renders a bare <code>…</code> rather than a partial transcript, and why the phase exists in the state machine at all (<a href="#render-gate">the render gate</a>).</li>
+<li><strong><code>base.en</code> mangles code identifiers</strong> often enough that unreviewed dictated text reaching the model is a worse outcome than typing it wrong yourself — a misheard identifier that gets <em>executed</em> costs more than one that merely gets <em>read</em>. That is the first of the two reasons the mic never touches <strong>send</strong>; the transcript is appended to the textarea as editable text and you tap send yourself. A bigger model (<code>WHISPER_MODEL</code> is a <code>.env</code> swap to <code>small.en</code> or larger) narrows the accuracy gap, and narrows nothing about the argument.</li>
+</ul>
+<h3 id="why-local-whisper--what-this-is-not">What this is not</h3>
+<p>It is not a claim that local inference is always right. It is expensive here: two external binaries neither bundled nor present on a stock Mac, an install step in the README, and a feature that silently does not exist on a machine that skipped it. On an app with no privacy story to protect, <code>webkitSpeechRecognition</code> would be the correct call and this whole chapter would be over-engineering. The lesson is that <strong>the constraint came first and the architecture followed</strong> — not that the architecture is universally better.</p>
+<hr>
+<p>Next: <a href="#render-gate">The render gate</a> — what the button does before a single byte of audio exists.</p>
+<p class="totop"><a href="#top">↑ back to contents</a></p>
+</section>
+<section>
+<h2 id="render-gate">The render gate: three states, and the middle one is the whole lesson</h2>
+<p class="backlink"><a href="#readme">← back to contents</a></p>
+<p><strong>What it does.</strong> <code>MicButton</code> can render three different ways before a single byte of audio exists — nothing at all, a dead-but-labelled button, or the working mic:</p>
+<div class="codewrap"><pre><code>// client/src/components/MicButton.tsx:18-30
+  const available = useTranscribeAvailable();
+  const { phase, elapsed, error, toggle } = useDictation(onText);
+
+  if (!available) return null;
+
+  const secure = typeof window !== 'undefined' &amp;&amp; window.isSecureContext;
+  if (!secure) {
+    return (
+      &lt;button type="button" className="qp-mic" disabled title="needs HTTPS — run `pnpm tunnel`"&gt;
+        🎙 https only
+      &lt;/button&gt;
+    );
+  }</code></pre></div>
+<div class="diagram"><svg viewBox="0 0 780 344" role="img" xmlns="http://www.w3.org/2000/svg">
+    <title>The availability probe resolves to hidden, disabled, or a live mic with three phases</title>
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/>
+      </marker>
+    </defs>
+    <g stroke="var(--line)" stroke-width="1.5" fill="var(--panel)">
+      <rect x="12" y="140" width="140" height="54" rx="6"/>
+      <g class="boxlabel">
+        <text x="82" y="172">probe</text>
+      </g>
+      <rect x="230" y="24" width="170" height="48" rx="6"/>
+      <g class="boxlabel">
+        <text x="315" y="53">render nothing</text>
+      </g>
+      <rect x="230" y="140" width="170" height="48" rx="6"/>
+      <g class="boxlabel">
+        <text x="315" y="169">disabled button</text>
+      </g>
+      <rect x="230" y="256" width="170" height="48" rx="6"/>
+      <g class="boxlabel">
+        <text x="315" y="285">live mic</text>
+      </g>
+      <rect x="470" y="190" width="150" height="44" rx="6"/>
+      <g class="boxlabel">
+        <text x="545" y="217">recording</text>
+      </g>
+      <rect x="470" y="262" width="150" height="44" rx="6"/>
+      <g class="boxlabel">
+        <text x="545" y="289">transcribing</text>
+      </g>
+    </g>
+
+    <g stroke="var(--line)" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+      <path d="M 152 158 C 190 158 190 48 224 48"/>
+      <line x1="152" y1="164" x2="224" y2="164"/>
+      <path d="M 152 176 C 190 176 190 280 224 280" stroke="var(--accent)"/>
+      <path d="M 400 268 C 436 268 436 212 464 212"/>
+      <line x1="545" y1="234" x2="545" y2="258"/>
+      <path d="M 468 290 C 440 296 434 292 406 288"/>
+    </g>
+
+    <g fill="var(--muted)" font-size="11" text-anchor="middle">
+      <text x="315" y="16">transcribe = false</text>
+      <text x="315" y="132">insecure context</text>
+      <text x="315" y="248">engine + HTTPS</text>
+      <text x="432" y="196">tap</text>
+      <text x="436" y="326">text or error</text>
+    </g>
+    <g fill="var(--muted)" font-size="11" text-anchor="start">
+      <text x="553" y="252">tap / 120s cap</text>
+    </g>
+  </svg></div>
+<p class="caption">Three outcomes before any audio exists — the middle one is the deliberate part.</p>
+<h3 id="render-gate--why-the-secure-context-check-exists">Why the secure-context check exists</h3>
+<p><code>getUserMedia</code> — the API <code>MediaRecorder</code> is built on — is gated to <a href="https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts" target="_blank" rel="noreferrer">secure contexts <span class="ext">↗</span></a>: HTTPS, or <code>localhost</code>. It does not <em>fail</em> outside one; it does not <strong>exist</strong>.</p>
+<p>Now look at who this feature is for. Someone on their phone, away from the desk, answering a session over a tailnet URL like <code>http://mac.tailnet.ts.net:4173</code>. Plain http. The exact case dictation was built for is the exact case the browser forbids — which is why <code>pnpm tunnel</code> went from a convenience (no port number in the bookmark) to the only route that lets a phone dictate at all. See <a href="../../subsystems/remote-access.md"><code>docs/subsystems/remote-access.md</code> <span class="ext">↗</span></a>.</p>
+<h3 id="render-gate--the-bad-alternative">The bad alternative</h3>
+<p>Fold it into the availability check: <code>if (!available || !secure) return null</code>. One line shorter, one render branch fewer, and the button simply is not there when it cannot work.</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>Hide it</th><th>Show it disabled, labelled with the fix</th></tr></thead><tbody>
+<tr><td>Code</td><td>one boolean</td><td>a whole extra render branch</td></tr>
+<tr><td>Desk user on localhost</td><td>identical</td><td>identical</td></tr>
+<tr><td>Phone user over plain http</td><td>never learns dictation exists</td><td>sees <code>🎙 https only</code>, tooltip names <code>pnpm tunnel</code></td></tr>
+<tr><td>Support cost</td><td>"the mic never showed up" — unfalsifiable</td><td>self-diagnosing</td></tr>
+</tbody></table></div>
+<p>A missing button is indistinguishable from a feature that does not exist, from a bug, and from a broken deploy. A <strong>dead button that names its own cause</strong> collapses all three into one glance.</p>
+<p>Note that the <em>first</em> branch goes the other way: with no engine on the server, the component renders nothing at all. There, an explanation would be permanent noise on a machine that will never have whisper installed. So the rule is not "always explain" — it is <strong>explain when the condition is fixable by the person looking at it.</strong></p>
+<h3 id="render-gate--the-same-bet-applied-at-runtime">The same bet, applied at runtime</h3>
+<p>A secure context only buys the right to <em>ask</em>. <code>getUserMedia</code> can still reject, and the rejection that matters most on a phone is the one that shows no dialog at all: when the browser already holds a <code>denied</code> decision — for the origin, or for the browser app itself at the OS level — it rejects immediately and prompts nobody. "It didn't ask me" is a symptom, not the absence of one.</p>
+<div class="codewrap"><pre><code>// client/src/lib/dictation.ts:34-54  (comments elided)
+export function micErrorMessage(err: unknown): string {
+  const name = (err as { name?: unknown } | null)?.name;
+  switch (typeof name === 'string' ? name : '') {
+    case 'NotAllowedError':
+    case 'SecurityError':
+      return 'mic blocked — allow it in browser + OS settings';
+    case 'NotFoundError':
+    case 'OverconstrainedError':
+      return 'no microphone found';
+    case 'NotReadableError':
+    case 'AbortError':
+      return 'mic busy in another app';
+    case '':
+      return 'microphone unavailable';
+    default:
+      return `microphone unavailable (${name as string})`;
+  }
+}</code></pre></div>
+<p>The naive version is <code>catch { setError('microphone unavailable') }</code> — one string for every failure. The subsystem doc records that this cost a real debugging session, and the reason is precise: "microphone unavailable" reads as <em>this machine has no mic</em>, in exactly the situation where the truth is <em>the browser decided "no" months ago and did not bother to ask again</em>. Two unrelated problems wearing one sentence.</p>
+<p>The <code>default:</code> branch is the part worth stealing. It keeps the generic wording but appends the raw <code>DOMException.name</code>, so a failure nobody anticipated still reaches the user carrying the one token they need to search for it. That is cheap insurance against your own error taxonomy being incomplete — which it always is. The alternative, an exhaustive <code>switch</code> with no default, is not more correct; it is the same gap with the evidence deleted.</p>
+<hr>
+<p>Next: <a href="#recorder-lifecycle">The recorder lifecycle</a> — what happens after the tap.</p>
+<p class="totop"><a href="#top">↑ back to contents</a></p>
+</section>
+<section>
+<h2 id="recorder-lifecycle">The recorder lifecycle, and the two races hiding in it</h2>
+<p class="backlink"><a href="#readme">← back to contents</a></p>
+<p><strong>The mental model for this file:</strong> <code>useDictation</code> is a small state machine wrapped around one browser object that has its own, <em>different</em> state machine — and the two can be torn down by a third party (the panel unmounting) at any moment. Most of what looks like extra code is there because those three clocks do not agree.</p>
+<div class="diagram"><svg viewBox="0 0 820 300" role="img" xmlns="http://www.w3.org/2000/svg">
+    <title>idle to requesting to recording to transcribing, with a rejection path and an unmount exit</title>
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/>
+      </marker>
+    </defs>
+    <circle cx="24" cy="111" r="7" fill="var(--fg)"/>
+    <circle cx="302" cy="36" r="10" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+    <circle cx="302" cy="36" r="5" fill="var(--muted)"/>
+
+    <g stroke="var(--line)" stroke-width="1.5" fill="var(--panel)">
+      <rect x="52" y="88" width="130" height="46" rx="6"/>
+      <g class="boxlabel">
+        <text x="117" y="116">idle</text>
+      </g>
+      <rect x="232" y="88" width="140" height="46" rx="6"/>
+      <g class="boxlabel">
+        <text x="302" y="116">requesting</text>
+      </g>
+      <rect x="422" y="88" width="140" height="46" rx="6"/>
+      <g class="boxlabel">
+        <text x="492" y="116">recording</text>
+      </g>
+      <rect x="612" y="88" width="150" height="46" rx="6"/>
+      <g class="boxlabel">
+        <text x="687" y="116">transcribing</text>
+      </g>
+    </g>
+
+    <g stroke="var(--line)" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+      <line x1="33" y1="111" x2="48" y2="111"/>
+      <line x1="182" y1="111" x2="228" y2="111"/>
+      <line x1="372" y1="111" x2="418" y2="111"/>
+      <line x1="562" y1="111" x2="608" y2="111"/>
+      <path d="M 290 136 C 262 182 162 182 132 138"/>
+      <path d="M 302 86 V 50" stroke="var(--accent)"/>
+      <path d="M 687 136 C 687 250 104 262 104 140"/>
+    </g>
+
+    <g fill="var(--muted)" font-size="11" text-anchor="middle">
+      <text x="205" y="102">toggle()</text>
+      <text x="395" y="102">resolved</text>
+      <text x="585" y="102">onstop</text>
+      <text x="211" y="188">rejected</text>
+      <text x="400" y="258">text or error</text>
+    </g>
+    <g fill="var(--muted)" font-size="11" text-anchor="start">
+      <text x="318" y="40">unmounted mid-prompt</text>
+    </g>
+  </svg></div>
+<p class="caption">Two of the four transitions out of <code>requesting</code> are failure paths — one of them has no user in it.</p>
+<h3 id="recorder-lifecycle--state-vs-refs">State vs. refs</h3>
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:28-37  (comment elided)
+  const [phase, setPhase] = useState&lt;DictationPhase&gt;('idle');
+  const [elapsed, setElapsed] = useState(0);
+  const [error, setError] = useState('');
+  const [token] = usePersistedState&lt;string&gt;('dashboard.answerToken', '');
+  const recorderRef = useRef&lt;MediaRecorder | null&gt;(null);
+  const streamRef = useRef&lt;MediaStream | null&gt;(null);
+  const liveRef = useRef(true);</code></pre></div>
+<p>The split is exact, and the rule behind it is worth naming: <strong>state is what the button renders; refs are what the hook has to clean up.</strong></p>
+<p><code>phase</code> and <code>elapsed</code> are state because they <em>are</em> the UI — <code>🎙</code> versus <code>0:07</code> versus <code>…</code>. <code>recorderRef</code> and <code>streamRef</code> are refs because nothing renders them; they are resources with a <code>.stop()</code> that must be callable from a cleanup function.</p>
+<p><strong>The bad alternative</strong> — <code>const [recorder, setRecorder] = useState&lt;MediaRecorder|null&gt;(null)</code> — is a common first draft and it fails twice. It re-renders the whole panel every time you obtain an object nobody displays; and worse, an unmount cleanup that closes over <code>recorder</code> sees whatever value existed <em>when that effect last ran</em>. You end up calling <code>.stop()</code> on a stale object, or on <code>null</code>, while the real recorder keeps the mic light on.</p>
+<h3 id="recorder-lifecycle--one-interval-drives-two-features">One interval drives two features</h3>
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:45-55
+  useEffect(() =&gt; {
+    if (phase !== 'recording') return;
+    setElapsed(0);
+    const started = Date.now();
+    const timer = setInterval(() =&gt; {
+      const secs = Math.floor((Date.now() - started) / 1000);
+      setElapsed(secs);
+      if (secs &gt;= MAX_SECS) recorderRef.current?.stop();
+    }, 1000);
+    return () =&gt; clearInterval(timer);
+  }, [phase]);</code></pre></div>
+<p>Two features share this one timer: the visible <code>0:07</code> counter, and the hard 120-second cap that keeps a forgotten recording from running until the tab dies.</p>
+<p><strong>The bad alternative</strong> is the obvious one — a <code>setInterval</code> for the display plus a separate <code>setTimeout(stop, 120_000)</code> for the cap. It reads cleaner, one timer per job. But now two clocks measure the same span, and they <em>will</em> disagree: <code>setInterval</code> drifts under load and is throttled hard in a backgrounded tab, <code>setTimeout</code> drifts differently. The user watches the counter reach <code>1:58</code> and the recording cuts, or it passes <code>2:04</code> and keeps going. Neither is broken exactly — but the number on screen has stopped governing the cap, so you can no longer debug one by looking at the other.</p>
+<p>Deriving both from a single <code>Date.now()</code> baseline means the cap fires <em>because</em> the displayed number hit 120. There is one clock, and it is the one you can see. Note also that <code>started</code> is captured once rather than counting ticks: throttled or dropped ticks make the counter jump, but never make it lie.</p>
+<h3 id="recorder-lifecycle--race-one-the-panel-closes-while-the-permission-prompt-is-open">Race one: the panel closes while the permission prompt is open</h3>
+<p>This hook lives inside <code>MessagePanel</code>, the turn-end reply window — and per <a href="../../subsystems/remote-message.md"><code>docs/subsystems/remote-message.md</code> <span class="ext">↗</span></a> that panel has an <strong>idle sweep that tears it down on its own</strong>, with nobody clicking anything. So: you tap the mic, iOS puts up "Allow microphone?", you hesitate, and the panel dies underneath the dialog.</p>
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:102-114  (comment elided)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!liveRef.current) {
+        stream.getTracks().forEach(t =&gt; t.stop());
+        return;
+      }
+      streamRef.current = stream;
+      const mimeType = pickMimeType(t =&gt; MediaRecorder.isTypeSupported(t));
+      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);</code></pre></div>
+<p>You then tap "Allow" — and <code>getUserMedia</code> resolves, handing a <strong>live microphone stream to a component that no longer exists</strong>. Nothing will ever clean it up, because the cleanup already ran, before this stream existed. The mic indicator stays lit until the tab dies. The check right after the <code>await</code> is the fix: not live, so stop the tracks here and arm nothing.</p>
+<h4 id="recorder-lifecycle--why-a-ref-and-not-the-usual-let-live">Why a ref, and not the usual <code>let live</code></h4>
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:34-36
+  // Same liveness idiom as useRemoteAnswer.ts's `let live`, adapted to a ref:
+  // `start` is a memoized callback that outlives any one effect run, so the
+  // flag has to survive in something a later effect can still flip off.</code></pre></div>
+<p>The standard React idiom is a plain <code>let live = true</code> inside the effect, flipped in its cleanup — and <code>useTranscribeAvailable</code> does exactly that, five files away, correctly, because its async work is <em>started by</em> the effect. But <code>start</code> is a <code>useCallback</code>: it is invoked from a click handler long after any effect ran, and it survives across renders. A closed-over <code>let</code> would be pinned to whichever effect run created it. A ref is the one box that a memoized callback and a future cleanup can both see the same cell of.</p>
+<p>A rule of thumb worth keeping: <strong><code>let live</code> when the async work begins and ends inside one effect; a ref when the async work is started by something that outlives the effect.</strong></p>
+<h3 id="recorder-lifecycle--race-two-onstop-fires-because-you-cleaned-up">Race two: <code>onstop</code> fires <em>because</em> you cleaned up</h3>
+<p>This one is genuinely surprising the first time.</p>
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:60-66
+  useEffect(() =&gt; {
+    liveRef.current = true;
+    return () =&gt; {
+      liveRef.current = false;
+      stopTracks();
+    };
+  }, [stopTracks]);</code></pre></div>
+<p>The unmount cleanup stops the stream's tracks. Reasonable. But per the MediaStream Recording spec, ending all of a stream's tracks makes the stream <strong>inactive</strong>, and an inactive stream <strong>stops the recorder</strong>, which <strong>fires its <code>stop</code> event</strong>. So the cleanup does not merely release the mic — it triggers the recorder's own stop handler on the way out:</p>
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:117-120
+      rec.onstop = () =&gt; {
+        stopTracks();
+        void upload(new Blob(chunks, { type: rec.mimeType || mimeType || 'audio/mp4' }));
+      };</code></pre></div>
+<p>Which calls <code>upload</code>. Which is why <code>upload</code> opens with the second liveness check:</p>
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:75-76
+    if (!liveRef.current) return;
+    setPhase('transcribing');</code></pre></div>
+<div class="diagram"><svg viewBox="0 0 780 344" role="img" xmlns="http://www.w3.org/2000/svg">
+    <title>Unmounting stops the tracks, which makes the stream inactive, which stops the recorder and fires stop</title>
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/>
+      </marker>
+    </defs>
+    <g stroke="var(--line)" stroke-width="1.5" fill="var(--panel)">
+      <rect x="15" y="12" width="150" height="40" rx="6"/>
+      <g class="boxlabel">
+        <text x="90" y="37">MessagePanel</text>
+      </g>
+      <rect x="205" y="12" width="150" height="40" rx="6"/>
+      <g class="boxlabel">
+        <text x="280" y="37">useDictation</text>
+      </g>
+      <rect x="395" y="12" width="150" height="40" rx="6"/>
+      <g class="boxlabel">
+        <text x="470" y="37">MediaStream</text>
+      </g>
+      <rect x="585" y="12" width="150" height="40" rx="6"/>
+      <g class="boxlabel">
+        <text x="660" y="37">MediaRecorder</text>
+      </g>
+    </g>
+
+    <g stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4">
+      <line x1="90" y1="52" x2="90" y2="322"/>
+      <line x1="280" y1="52" x2="280" y2="322"/>
+      <line x1="470" y1="52" x2="470" y2="322"/>
+      <line x1="660" y1="52" x2="660" y2="322"/>
+    </g>
+
+    <g stroke="var(--line)" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+      <line x1="90" y1="90" x2="276" y2="90"/>
+      <path d="M 280 120 H 322 V 140 H 288"/>
+      <line x1="280" y1="175" x2="466" y2="175" stroke="var(--accent)"/>
+      <path d="M 280 278 H 322 V 298 H 288"/>
+    </g>
+    <g stroke="var(--line)" stroke-width="1.5" fill="none" stroke-dasharray="5 4"
+       marker-end="url(#arrow)">
+      <line x1="470" y1="210" x2="656" y2="210"/>
+      <line x1="660" y1="245" x2="284" y2="245"/>
+    </g>
+
+    <g fill="var(--muted)" font-size="11" text-anchor="middle">
+      <text x="185" y="82">unmount, idle sweep</text>
+      <text x="375" y="167">stopTracks()</text>
+      <text x="565" y="202">stream inactive</text>
+      <text x="470" y="237">fires stop</text>
+    </g>
+    <g fill="var(--muted)" font-size="11" text-anchor="start">
+      <text x="330" y="128">liveRef = false</text>
+      <text x="330" y="286">upload() sees false, returns</text>
+    </g>
+  </svg></div>
+<p class="caption">The cleanup is what fires <code>onstop</code> — the guard exists so the correct behaviour is survivable.</p>
+<p>Without that check the app would POST a clip of up to 8MB, occupy the server's <strong>single-flight transcription slot</strong> — only one whisper run exists at a time, and everyone else gets a 429 — burn several seconds of CPU, and hand the transcript to a <code>setPhase</code> on a component nobody is looking at. You would be starving a real user's dictation to transcribe audio for a dead panel.</p>
+<p><strong>The bad alternative</strong> here is not "no check". It is the tempting-looking fix of <em>not stopping tracks in the cleanup</em>, since that is what sets the cascade off. Do not. On iOS a stream you never explicitly stop leaves the orange mic dot lit and holds the microphone against other apps. The hook comment is blunt about it: a mic indicator still lit after you stopped reads as a bug, and on iOS it is one.</p>
+<p>So the cascade is the <em>correct</em> behaviour, and the guard exists to make correct behaviour survivable. Two checks, two genuinely different windows: <code>start</code>'s covers a stream <strong>still resolving</strong>, <code>upload</code>'s covers a recording <strong>already running</strong>. Neither subsumes the other.</p>
+<h3 id="recorder-lifecycle--the-hook-does-not-know-a-textarea-exists">The hook does not know a textarea exists</h3>
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:27
+export function useDictation(onText: (text: string) =&gt; void): DictationState {</code></pre></div>
+<p>The transcript leaves through a callback. <code>useDictation</code> never imports <code>MessagePanel</code>, never touches a value or a setter, and never learns that the text becomes a Claude Code reply. <code>MessagePanel</code> folds it in with <code>appendTranscript</code>. <code>MicButton</code> is equally ignorant — it hands text to <code>onText</code> and knows nothing about what the text is for.</p>
+<p><strong>The bad alternative</strong> is passing the textarea's <code>value</code>/<code>setValue</code> pair into the hook. Fewer moving parts today. But then the hook owns the append-versus-replace policy, the 4000-character cap, and the never-auto-send rule — three decisions that belong to the composer, not to the microphone. And <code>appendTranscript</code> would stop being a pure function testable with node-assert and no DOM, which is exactly how this repo tests client code; <a href="../../../client/src/lib/dictation.ts"><code>client/src/lib/dictation.ts</code> <span class="ext">↗</span></a> says so in its own header comment.</p>
+<p>The seam pays off concretely: the mic drops into any composer, and the interesting logic — mime picking, error copy, elapsed formatting, transcript folding — sits in a 75-line pure module with zero browser API in it.</p>
+<hr>
+<p>Back to <a href="#readme">the contents</a>, or read <a href="../../subsystems/dictation.md"><code>docs/subsystems/dictation.md</code> <span class="ext">↗</span></a> for the server half.</p>
+<p class="totop"><a href="#top">↑ back to contents</a></p>
+</section>
+  </div>
+</div>
+<script>
+(function () {
+  var links = [].slice.call(document.querySelectorAll('nav.toc a'));
+  var targets = links
+    .map(function (a) { return { a: a, el: document.getElementById(a.hash.slice(1)) }; })
+    .filter(function (t) { return t.el; });
+  if (!targets.length) return;
+  var side = document.querySelector('.side');
+  var toc = document.querySelector('nav.toc');
+  var active = null;
+
+  function scroller() {
+    // desktop scrolls .side, the narrow fallback scrolls nav.toc — ask which
+    if (toc.scrollHeight > toc.clientHeight + 4) return toc;
+    if (side.scrollHeight > side.clientHeight + 4) return side;
+    return null;
+  }
+
+  function sync() {
+    var best = targets[0];
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i].el.getBoundingClientRect().top <= 120) best = targets[i];
+    }
+    if (best.a === active) return;
+    if (active) active.classList.remove('active');
+    active = best.a;
+    active.classList.add('active');
+    var box = scroller();
+    if (!box) return;
+    // offsetTop is relative to the offsetParent, not the scroll box — compare rects
+    var ar = active.getBoundingClientRect(), br = box.getBoundingClientRect();
+    if (ar.top < br.top) box.scrollTop -= br.top - ar.top + 12;
+    else if (ar.bottom > br.bottom) box.scrollTop += ar.bottom - br.bottom + 12;
+  }
+
+  var queued = false;
+  addEventListener('scroll', function () {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(function () { queued = false; sync(); });
+  }, { passive: true });
+  sync();
+})();
+</script>
+</body>
+</html>
