@@ -121,9 +121,23 @@ visible to the dashboard.
   - The **cloud session survives**. Its desktop-app sidebar row stays, still opens, and
     still answers — from its own Linux container (`cwd /home/user/<repo>`), with the
     cloud brain. Asked to read a Mac-only path, it correctly reports no such file.
-  - The **local continuation is a separate session**, with its own transcript under
-    `~/.claude/projects`. The desktop app's registry gets **no row** for it: zero rows
-    reference either teleported id, and `list_sessions` never shows one.
+  - The **local continuation is a separate session** — it materializes as an ordinary
+    transcript under `~/.claude/projects` (observed: a user-run terminal teleport left
+    `9fefb37c-….jsonl`, which the dashboard then lists like any other session). Two
+    headless probe runs produced *no* transcript, so treat "run it in a real terminal"
+    as the reliable path; a probe killed while idle proves nothing either way.
+  - The desktop app's registry gets **no row** for that local copy: zero rows reference
+    either teleported id, and `list_sessions` never shows one. This is the load-bearing
+    fact below — it is structural, not a self-report.
+
+**How to tell local from cloud — never ask the model.** A teleported session inherits
+the cloud session's entire history, so it can answer "where do you run?" from stale
+context rather than by checking, and a cloud session answers correctly that it is in a
+container. Both look identical in chat. Use ground truth instead: a session is local iff
+a transcript for it is being written under `~/.claude/projects` — which is exactly what
+this dashboard scans, so *if the dashboard lists it, it is local*. (Thanks to a second
+session for pressing on this; the first version of this file leaned on a model's
+self-report.)
 
   So after teleport you hold *two* sessions that share a history and then diverge — one
   cloud (sidebar-visible, cloud brain), one local (dashboard-visible, Mac brain).
@@ -131,7 +145,9 @@ visible to the dashboard.
   **`--teleport` also requires a clean git working directory** — it refuses with
   `Git working directory is not clean. Please commit or stash your changes before using
   --teleport.` For a repo that usually carries in-flight work, that alone makes teleport
-  unusable as an automated step.
+  unusable as an automated step. It also wants the cloud session's branch: with none
+  pushed, it continues but warns `Session resumed without branch: Failed to checkout
+  branch 'claude/<name>'`.
 - **Start on the phone → continue at the Mac:** `claude --resume <session-id>` in a
   terminal — full history, everything local. (The id is in the dashboard row / chat
   drawer URL.)
