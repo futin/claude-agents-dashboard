@@ -28,7 +28,7 @@ import {
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
   serveSettingsRead, serveSettingsWrite, serveNotifyEvent, serveNotifyTest,
-  serveTranscribe
+  serveTranscribe, serveSpawn, serveSpawnStop
 } from './api.js';
 
 const config = loadConfig();
@@ -137,6 +137,21 @@ const server = http.createServer((req, res) => {
   if (u.pathname === '/api/transcribe') {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return void serveTranscribe(config, req, res);
+  }
+  // Spawn a new headless session (see server/lib/spawn.ts). The id-scoped stop
+  // route is anchored (`$`) and checked before the exact-path `/api/spawn`
+  // check below it — the same route-order trap the chat/question/plan/message
+  // regexes further down all document, kept here even though `===` equality
+  // can't itself be prefix-swallowed, so the ordering stays defensive if that
+  // check ever changes shape.
+  const spawnStop = u.pathname.match(/^\/api\/spawn\/([^/]+)\/stop$/);
+  if (spawnStop) {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void serveSpawnStop(config, decodeURIComponent(spawnStop[1]), req, res);
+  }
+  if (u.pathname === '/api/spawn') {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void serveSpawn(config, req, res);
   }
   // Like the chat route below, these must be matched before the detail regex,
   // whose `[^/?]+` would otherwise swallow `/api/sessions/:id/<anything>`.

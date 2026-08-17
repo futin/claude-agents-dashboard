@@ -317,6 +317,12 @@ export interface HealthResponse extends RemoteAnswerState {
    * remote answers off. One flag, one meaning.
    */
   transcribe?: boolean;
+  /**
+   * True when a `claude` binary is configured and runnable — the spawn
+   * form's gate, probed the same way `transcribe` gates the mic button. See
+   * `probeSpawn` in `server/lib/spawn.ts`.
+   */
+  spawnAvailable?: boolean;
 }
 
 /** `POST /api/transcribe` — text may be '' when the clip held no speech. */
@@ -739,9 +745,9 @@ export interface FileContent {
  * Spawning a new headless session (a detached `claude -p` process). The
  * launch form picks a permission mode; the server clamps it to a configured
  * ceiling (`clampPermission` in `server/lib/spawn.ts`) so a browser can never
- * ask for more than the host allows. Built up incrementally across tasks:
- * this and the next add the types both sides must agree on; the request/
- * response shapes for the POST itself land last.
+ * ask for more than the host allows. `PermissionMode` and `LaunchingSession`
+ * are the shapes the RAM-only launch store works in; `SpawnRequest` is the
+ * `POST /api/spawn` body that starts one (see `serveSpawn` in `server/api.ts`).
  */
 
 /** The permission mode ladder, lowest to highest: plan < acceptEdits < auto < bypassPermissions. */
@@ -767,6 +773,22 @@ export interface LaunchingSession {
   error?: string;
 }
 
+/**
+ * Body of `POST /api/spawn` — the launch form's request. `project` is a
+ * {@link ProjectRef.dirName}, resolved server-side against the enumerated
+ * recent-project list — it is never treated as a filesystem path. The server
+ * clamps `permissionMode` to `config.spawnMaxPermission` before anything
+ * spawns, so this field alone can never request more than the host allows.
+ */
+export interface SpawnRequest {
+  project: string;
+  prompt: string;
+  name?: string;
+  model?: string;
+  effort?: string;
+  permissionMode?: PermissionMode;
+}
+
 /** Full payload of `GET /api/sessions`. */
 export interface SessionsResponse {
   generatedAt: string;
@@ -775,6 +797,15 @@ export interface SessionsResponse {
   runningClaudeProcs: number | null;
   totals: Totals;
   sessions: Session[];
+  /**
+   * In-flight `claude -p` launches the RAM-only store in `server/lib/spawn.ts`
+   * is still watching (see {@link LaunchingSession}). Served alongside
+   * `sessions` deliberately, on the same 3s poll, rather than a second
+   * endpoint the client would have to poll on its own. Optional so an older
+   * client simply ignores a field it doesn't know about. Attached on both the
+   * success and error snapshots — see `serveSessions`.
+   */
+  launching?: LaunchingSession[];
   /**
    * Account rate-limit usage (5-hour + weekly), fetched live from Anthropic.
    * `null` when unavailable (no token, network error); absent when SHOW_USAGE

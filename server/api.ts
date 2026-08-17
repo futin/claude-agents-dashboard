@@ -35,10 +35,12 @@ import { getState, setEnabled } from './lib/remoteState.js';
 import { getSettings, setSettings } from './lib/settings.js';
 import { classifyOrigin } from './lib/origin.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
+import { adoptLaunched, launch, listLaunching, parseSpawnRequest, probeSpawn, stopLaunch } from './lib/spawn.js';
 import { toPosInt, type Config } from './lib/config.js';
 import type {
-  AnalyticsResponse, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig, SessionMessage,
-  SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, WaitResult
+  AnalyticsResponse, ManagementIndex, MessageWaitResult, PermissionMode, PlanWaitResult, ScopeConfig,
+  SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
+  WaitResult
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -104,6 +106,12 @@ export function serveSessions(baseConfig: Config, res: ServerResponse, params?: 
       totals: { shown: 0, active: 0 }
     };
   }
+  // Adopt before listing: a launch id that just showed up in `sessions` must
+  // not also be reported as still `launching` in the same poll. Attached on
+  // the error snapshot too — a failed scan is exactly when "did my launch
+  // work?" matters most (see server/lib/spawn.ts).
+  adoptLaunched(data.sessions.map(s => s.id));
+  data.launching = listLaunching();
   // Account usage (5h + weekly). Synchronous cache read; refresh happens in the
   // background. Fails open to null so it never blocks or breaks the response.
   if (config.showUsage) {
@@ -407,7 +415,8 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
     idleSecs: settings.idleSecs,
     answerSecs: settings.answerSecs,
     origin: classifyOrigin(req?.socket?.remoteAddress, req?.headers),
-    transcribe: probeTranscribe(config)
+    transcribe: probeTranscribe(config),
+    spawnAvailable: probeSpawn(config)
   });
 }
 
@@ -756,6 +765,68 @@ export async function serveNotifyTest(
 ): Promise<void> {
   if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
   sendJson(res, 200, { outcome: await sendTest(config) });
+}
+
+/* -------------------------------------------------- spawn endpoints */
+
+/**
+ * `POST /api/spawn` — start a new headless `claude -p` session in an existing
+ * recent project. The checks below run in exactly this order because each
+ * leaks less to an unauthenticated caller than the next: whether the feature
+ * is even configured, then who's asking, then whether the project they named
+ * exists, then whether the rest of the request is usable.
+ *
+ * `body.project` never reaches the filesystem by being joined into a path —
+ * it is resolved through `resolveProject`'s membership check against the
+ * enumerated recent-project list, the same reasoning `serveManagementProject`
+ * documents for its `dirName` query param.
+ */
+export async function serveSpawn(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!probeSpawn(config)) return sendJson(res, 404, { error: 'spawn unavailable' });
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+
+  const body = await readJsonBody(req) as Partial<SpawnRequest> | null;
+  if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
+
+  const projectName = typeof body.project === 'string' ? body.project : '';
+  const ref = resolveProject(config, projectName);
+  if (!ref) return sendJson(res, 400, { error: `unknown project: ${projectName}` });
+
+  // `config.spawnMaxPermission` is a free-form string off disk/env (Config
+  // types it as `string`, not `PermissionMode`); the cast is safe because
+  // `parseSpawnRequest` forwards it into `clampPermission`, which treats any
+  // value it doesn't recognize as `'auto'` rather than trusting this type.
+  const parsed = parseSpawnRequest(body, config.spawnMaxPermission as PermissionMode);
+  if (!parsed.ok) return sendBadBody(res, { error: parsed.error });
+
+  let sessionId: string;
+  try {
+    sessionId = launch(config, ref, parsed.input);
+  } catch (e) {
+    console.error('[dashboard] spawn failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'spawn failed' });
+  }
+  sendJson(res, 200, { sessionId });
+}
+
+/**
+ * `POST /api/spawn/:id/stop` — SIGTERM a still-`launching` entry's child and
+ * drop it from the store immediately (see `stopLaunch`'s own doc comment for
+ * why a stopped launch can't be told apart from a crashed one downstream).
+ *
+ * ⚠️ The child's pid lives only in this process's RAM (the store in
+ * `server/lib/spawn.ts`), so after a server restart this always 404s — the
+ * entry is gone even though the real process may still be running. Killing it
+ * at that point is a terminal job (`kill <pid>`), not something this endpoint
+ * can reach any more.
+ */
+export async function serveSpawnStop(
+  config: Config, id: string, req: IncomingMessage, res: ServerResponse
+): Promise<void> {
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
+  if (!stopLaunch(id)) return sendJson(res, 404, { error: 'no live launch' });
+  sendJson(res, 200, { stopped: true });
 }
 
 /* -------------------------------------------------- management endpoints */
