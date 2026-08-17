@@ -49,6 +49,10 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
   // below re-reacts if `spawnMaxPermission` arrives (or changes) after mount,
   // without an effect to keep them in sync.
   const [permissionMode, setPermissionMode] = useState<PermissionMode | null>(null);
+  // Default ON: launches from this panel are phone-first, which is exactly when
+  // account visibility (drive it from the phone app) is wanted. Uncheck for a
+  // local-only run.
+  const [remoteControl, setRemoteControl] = useState(true);
   const [tokenDraft, setTokenDraft] = useState('');
 
   const selectedProject = project ?? projects[0]?.dirName ?? '';
@@ -71,7 +75,9 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
 
   async function doLaunch(): Promise<void> {
     if (!canLaunch) return;
-    const req: SpawnRequest = { project: selectedProject, prompt: prompt.trim(), permissionMode: selectedMode };
+    const req: SpawnRequest = {
+      project: selectedProject, prompt: prompt.trim(), permissionMode: selectedMode, remoteControl
+    };
     if (name.trim()) req.name = name.trim();
     if (model) req.model = model;
     if (effort) req.effort = effort;
@@ -152,6 +158,15 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
           >
             {allowedModes.map(m => <option key={m} value={m}>{PERMISSION_MODE_LABEL[m]}</option>)}
           </select>
+        </label>
+        <label className="sp-field sp-check" title="Register the session with your account so the Claude phone app can see and drive it. It still runs on this machine.">
+          <span className="sp-label">remote control</span>
+          <input
+            type="checkbox"
+            checked={remoteControl}
+            disabled={pending}
+            onChange={e => setRemoteControl(e.target.checked)}
+          />
         </label>
       </div>
 

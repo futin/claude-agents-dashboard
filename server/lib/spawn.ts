@@ -111,6 +111,8 @@ export interface SpawnInput {
   name?: string;
   model?: string;
   effort?: string;
+  /** Launch with `--remote-control`: the session registers with the account and is drivable from the phone app (docs/subsystems/spawn.md). */
+  remoteControl?: boolean;
 }
 
 /** Result of validating an untrusted POST body against {@link SpawnInput}. */
@@ -157,8 +159,11 @@ export function parseSpawnRequest(body: unknown, ceiling: PermissionMode): Parse
   const name = typeof b.name === 'string' && b.name.length <= NAME_CAP && NAME_RE.test(b.name)
     ? b.name
     : undefined;
+  // Strictly `=== true`: anything else (absent, "yes", 1) fails soft to false,
+  // the same drop-don't-reject rule the fields above follow.
+  const remoteControl = b.remoteControl === true;
 
-  return { ok: true, input: { prompt, permissionMode, name, model, effort } };
+  return { ok: true, input: { prompt, permissionMode, name, model, effort, remoteControl } };
 }
 
 /**
@@ -175,6 +180,7 @@ export function buildSpawnArgs(input: SpawnInput): string[] {
   if (input.model) args.push('--model', input.model);
   if (input.effort) args.push('--effort', input.effort);
   if (input.name) args.push('-n', input.name);
+  if (input.remoteControl) args.push('--remote-control');
   return args;
 }
 

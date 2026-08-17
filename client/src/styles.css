@@ -562,6 +562,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .sp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
 .sp-field{display:flex;flex-direction:column;gap:3px}
 .sp-label{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3)}
+.sp-check input{width:16px;height:16px;margin:5px 0 0;accent-color:var(--cyan)}
 .sp-name{width:160px}
 .sp-error{color:var(--red)}
 

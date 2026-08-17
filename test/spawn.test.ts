@@ -299,6 +299,20 @@ export function run(): number {
     if (r.ok) assert.strictEqual(r.input.permissionMode, 'auto');
   })) p++; else f++;
 
+  if (test('remoteControl: true is kept', () => {
+    const r = parseSpawnRequest({ prompt: 'x', remoteControl: true }, 'auto');
+    assert.ok(r.ok);
+    if (r.ok) assert.strictEqual(r.input.remoteControl, true);
+  })) p++; else f++;
+
+  if (test('an absent or non-boolean remoteControl normalizes to false (fail-soft)', () => {
+    for (const body of [{ prompt: 'x' }, { prompt: 'x', remoteControl: 'yes' }, { prompt: 'x', remoteControl: 1 }]) {
+      const r = parseSpawnRequest(body, 'auto');
+      assert.ok(r.ok);
+      if (r.ok) assert.strictEqual(r.input.remoteControl, false, `${JSON.stringify(body)} should normalize to false`);
+    }
+  })) p++; else f++;
+
   /* ------------------------------------------------------------ buildSpawnArgs */
 
   if (test('minimal input builds exactly the five fixed elements', () => {
@@ -327,6 +341,16 @@ export function run(): number {
     assert.deepStrictEqual(args, ['-p', '--session-id', UUID, '--permission-mode', 'auto', '-n', 'nightly build']);
     assert.strictEqual(args[args.length - 1], 'nightly build');
     assert.strictEqual(args.length, 7);
+  })) p++; else f++;
+
+  if (test('remoteControl appends --remote-control as the last flag, after every earlier option', () => {
+    const args = buildSpawnArgs({ sessionId: UUID, prompt: 'hi', permissionMode: 'auto', name: 'nightly', remoteControl: true });
+    assert.deepStrictEqual(args, ['-p', '--session-id', UUID, '--permission-mode', 'auto', '-n', 'nightly', '--remote-control']);
+  })) p++; else f++;
+
+  if (test('remoteControl: false emits no flag — argv identical to the minimal build', () => {
+    const args = buildSpawnArgs({ sessionId: UUID, prompt: 'hi', permissionMode: 'auto', remoteControl: false });
+    assert.deepStrictEqual(args, ['-p', '--session-id', UUID, '--permission-mode', 'auto']);
   })) p++; else f++;
 
   // NOTE ON THE COUNT: the brief's Step 1 table claims length 13 for "all

@@ -798,6 +798,11 @@ export interface SpawnRequest {
   model?: string;
   effort?: string;
   permissionMode?: PermissionMode;
+  /**
+   * Launch with `--remote-control`: the session registers with the account, so
+   * the phone app can see and drive it. Anything but literal `true` means off.
+   */
+  remoteControl?: boolean;
 }
 
 /**

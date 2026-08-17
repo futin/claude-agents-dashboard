@@ -91,6 +91,27 @@ than assumed from its docs:
   sentence — `launch` pipes it onto the child's stdin instead and ends the stream right
   after.
 
+## Remote Control launches (opt-out)
+
+The form's **remote control** checkbox (default on) adds `--remote-control` to the
+argv. Verified against the same CLI build as the mechanics above: the flag combines
+with `-p` cleanly, and the session then *registers with the account* while still
+running on this machine — the Claude phone app can see and drive it, other local
+sessions can reach it by its `-n` name over the messaging socket (`ListAgents` /
+`SendMessage`), and the turn-end reply window keeps working unchanged on top. What it
+does NOT do is put the session in any cloud sandbox — execution, transcript, and hooks
+stay exactly as for a plain launch.
+
+Parsing follows the fail-soft rule every optional field here obeys, with one
+tightening: only a literal `true` turns it on (`b.remoteControl === true` in
+`parseSpawnRequest`), so `"yes"`, `1`, or an absent field all mean off. The flag is
+appended last in `buildSpawnArgs`, after `-n`, per that function's append-only
+ordering contract. Nothing else changes: the ceiling still clamps the permission mode
+(registration adds a remote *driving* surface, not a wider *permission* surface), the
+launch store watches the child the same way, and an account or org that refuses the
+registration surfaces it as the CLI's own startup error through the ordinary
+`failed`-entry path.
+
 ## The permission ladder, and where the ceiling lives
 
 Four permission modes, lowest to highest:
