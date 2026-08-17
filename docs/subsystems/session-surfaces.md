@@ -80,6 +80,16 @@ the first place that reader learns the session lives only here.
   the cloud session for its whole life. It survives the teleport, but it keeps talking to
   the container, never to the local continuation. The sidebar therefore shows the cloud
   brain by construction — the exact thing the local continuation exists to avoid.
+
+  And deleting the cloud copy to resolve the ambiguity collapses the whole detour: the
+  row goes with it, leaving exactly one local session — indistinguishable from what a
+  plain dashboard spawn produces in one step, without the provisioning, the clean-tree
+  requirement, or the fork. That is the closing argument against the idea: its only
+  durable artifact is a session you could have created directly.
+
+  The missing primitive is small and specific — a way to register an existing local
+  transcript with the desktop app's session store. Until that exists (or teleport hands
+  its row over), no arrangement of the current flags gets there.
 - **The desktop app does not show remote-control sessions anywhere** (tested with one
   running and visible on the phone) — even though it *does* merge cloud sessions into
   its sidebar. The exclusion is specifically RC. Until the app grows that view,
