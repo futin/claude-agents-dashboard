@@ -1,18 +1,26 @@
 /**
- * spawn.ts — pure, security-critical core for launching a headless `claude -p`
- * session from the dashboard.
+ * spawn.ts — launching a headless `claude -p` session from the dashboard:
+ * the pure request/argv core, plus the impure half that actually runs it.
  *
- * Nothing in this module touches the filesystem or a child process — that is
- * Task 2. This file only decides three things, synchronously and without side
- * effects:
+ * Pure core — synchronous, no filesystem or process access:
  *
  *   1. `clampPermission` — the permission mode a launch actually runs under,
  *      never higher than the server-configured ceiling.
  *   2. `parseSpawnRequest` — whether an untrusted POST body is safe to act on,
  *      and the sanitized `SpawnInput` if so.
- *   3. `buildSpawnArgs` — the exact argv Task 2 hands to `child_process.spawn`.
+ *   3. `buildSpawnArgs` — the exact argv `child_process.spawn` receives.
  *
- * Two rules `buildSpawnArgs` never breaks:
+ * Impure half — the cached CLI probe, the RAM-only launch store, and `launch`
+ * itself:
+ *
+ *   4. `probeSpawn` — is a `claude` binary configured and runnable? Cached
+ *      for the process lifetime, mirroring `probeTranscribe` in `transcribe.ts`.
+ *   5. `launch` — mints a session id, registers the store entry, spawns
+ *      detached with the prompt piped to stdin, and returns immediately.
+ *   6. `listLaunching` / `adoptLaunched` / `stopLaunch` — the store's read,
+ *      adopt, and stop operations; see its own doc comment below for charter.
+ *
+ * Two rules `buildSpawnArgs` and `launch` never break between them:
  *
  *  - The prompt is never an argv element. `claude -p` parses argv the way
  *    almost every CLI does: a value starting with `-`/`--` is read as a flag,
@@ -20,17 +28,26 @@
  *    untrusted free text a user typed — `--dangerously-skip-permissions` is a
  *    perfectly ordinary-looking sentence to start a prompt with — so the only
  *    safe place for it is somewhere the CLI's flag parser never looks: stdin.
- *    Task 2 pipes `input.prompt` in over stdin; this module just makes sure
- *    nothing here ever puts it in the array by mistake.
+ *    `launch` pipes `input.prompt` in over stdin and ends the stream right
+ *    after; this module just makes sure nothing here ever puts it in argv.
  *  - `child_process.spawn` is always called in array form, never with
  *    `shell: true`. `shell: true` hands the whole command line to `/bin/sh`,
  *    which re-tokenizes it — the exact step that turns a value into code if
  *    it contains a quote, `;`, `$(...)`, or a stray space. Array-form `spawn`
  *    hands the child each argv element directly, with no shell in between to
  *    reinterpret any of them.
+ *
+ * Every test spawns a fake process: `launch` takes its spawner from
+ * `setSpawner`, which defaults to `node:child_process.spawn` only outside
+ * tests. No test ever spawns a real `claude` CLI.
  */
 
-import type { PermissionMode } from '../../shared/types.js';
+import { spawn as nodeSpawn, spawnSync } from 'node:child_process';
+import type { ChildProcess, SpawnOptions } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+
+import type { Config } from './config.js';
+import type { LaunchingSession, PermissionMode, ProjectRef } from '../../shared/types.js';
 
 /** The permission ladder, lowest to highest. Array index order IS the ordering. */
 export const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto', 'bypassPermissions'] as const;
@@ -147,4 +164,239 @@ export function buildSpawnArgs(input: SpawnInput): string[] {
   if (input.effort) args.push('--effort', input.effort);
   if (input.name) args.push('-n', input.name);
   return args;
+}
+
+/* ------------------------------------------------------------------ probe */
+
+/** Per-probe wall-clock ceiling. `claude --version` returns almost instantly; this is a safety rail, not an expected wait. */
+const PROBE_TIMEOUT_MS = 5_000;
+
+/** Probe result for this process. `null` = not probed yet. Mirrors `transcribe.ts`'s `probed`. */
+let spawnProbed: boolean | null = null;
+
+/** Drop the cached probe. Tests only — a running server never changes its CLI binary mid-flight. */
+export function resetSpawnProbe(): void {
+  spawnProbed = null;
+}
+
+function computeSpawnProbe(config: Config): boolean {
+  if (!config.claudeBin) return false;
+  try {
+    const result = spawnSync(config.claudeBin, ['--version'], { timeout: PROBE_TIMEOUT_MS, stdio: 'ignore' });
+    return result.status === 0 && !result.error;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Is spawning a new session available? Cached for the process lifetime — one
+ * spawn per server run, never one per request, the same reasoning as
+ * `probeTranscribe`. False, without ever invoking a process, when
+ * `config.claudeBin` is empty — the "unset means off" rule every optional
+ * feature in this config follows (`whisperModel`, `ntfyTopic`, …).
+ */
+export function probeSpawn(config: Config): boolean {
+  if (spawnProbed === null) spawnProbed = computeSpawnProbe(config);
+  return spawnProbed;
+}
+
+/* ------------------------------------------------------------ launch store */
+
+/**
+ * Test seam for {@link launch}, mirroring `setIdleReader` in `messages.ts`:
+ * same call shape as `node:child_process.spawn`, so a fake child (a recording
+ * stdin, an emitter standing in for stderr/exit/error, a kill spy) can stand
+ * in without any test spawning a real process.
+ */
+export type Spawner = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
+
+let spawner: Spawner | null = null;
+
+/** Test seam: swap the process spawner. `null` restores `node:child_process.spawn`. */
+export function setSpawner(fn: Spawner | null): void {
+  spawner = fn;
+}
+
+/**
+ * RAM-only store of launches still being watched. Charter: explain the first
+ * ~3 seconds of a launch, and report ones that never became a real session.
+ * This is NOT a session registry — the transcript stays the single source of
+ * truth, the same division `pending.ts`/`plans.ts`/`messages.ts` keep small. A
+ * launch that succeeds leaves no trace here once `adoptLaunched` sees its id;
+ * a restart drops every entry, live children included.
+ *
+ * No timer: the three other stores each own a reaper because something must
+ * fire without a reader, but the client already polls every 3s, so expiry is
+ * evaluated lazily inside {@link listLaunching} instead — see its doc comment.
+ */
+interface Entry {
+  sessionId: string;
+  projectName: string;
+  projectPath: string;
+  prompt: string;
+  startedAtMs: number;
+  state: 'launching' | 'failed';
+  exitCode?: number;
+  error?: string;
+  /** When `state` became `'failed'`; undefined while still `'launching'`. Kept separate from `startedAtMs` so `FAIL_TTL_MS` measures time-since-failure, not time-since-launch. */
+  failedAtMs?: number;
+  /** The live child, for `stopLaunch`. Null only in the (rare) synchronous-throw path. */
+  child: ChildProcess | null;
+}
+
+const entries = new Map<string, Entry>();
+
+/** Stderr tail kept on a failed launch, in characters. Bounds memory regardless of how much a crashing process writes. */
+export const STDERR_TAIL_CAP = 2048;
+
+/** How long a `launching` entry survives with no adoption before `listLaunching` treats it as orphaned. */
+export const LAUNCH_TTL_MS = 60_000;
+
+/** How long a `failed` entry survives after failing, so a phone that never looks does not accumulate them. */
+export const FAIL_TTL_MS = 5 * 60_000;
+
+/** Characters of the prompt kept in the store for display. The child on stdin still gets the full, untruncated prompt. */
+export const PROMPT_PREVIEW_CAP = 120;
+
+function toPublic(e: Entry): LaunchingSession {
+  const out: LaunchingSession = {
+    sessionId: e.sessionId,
+    projectName: e.projectName,
+    projectPath: e.projectPath,
+    prompt: e.prompt,
+    startedAtMs: e.startedAtMs,
+    state: e.state
+  };
+  if (e.exitCode !== undefined) out.exitCode = e.exitCode;
+  if (e.error !== undefined) out.error = e.error;
+  return out;
+}
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Mark an entry failed. A no-op if it is already gone — adopted, or already
+ * expired out of the map — so a late `exit`/`error` can never resurrect an
+ * entry `adoptLaunched` already removed.
+ */
+function fail(sessionId: string, exitCode: number | undefined, error: string): void {
+  const entry = entries.get(sessionId);
+  if (!entry) return;
+  entry.state = 'failed';
+  entry.exitCode = exitCode;
+  entry.error = error;
+  entry.failedAtMs = Date.now();
+}
+
+/**
+ * Start a new headless `claude -p` session in `ref`'s directory. Mints the
+ * session id, registers the store entry *before* spawning (so a spawner that
+ * throws synchronously still has somewhere to record the failure), spawns
+ * detached with the prompt piped to stdin, and returns the id immediately —
+ * the caller never waits on the child.
+ */
+export function launch(config: Config, ref: ProjectRef, input: Omit<SpawnInput, 'sessionId'>): string {
+  const sessionId = randomUUID();
+  const entry: Entry = {
+    sessionId,
+    projectName: ref.name,
+    projectPath: ref.path,
+    prompt: input.prompt.slice(0, PROMPT_PREVIEW_CAP),
+    startedAtMs: Date.now(),
+    state: 'launching',
+    child: null
+  };
+  entries.set(sessionId, entry);
+
+  const args = buildSpawnArgs({ ...input, sessionId });
+  const doSpawn = spawner ?? nodeSpawn;
+
+  let child: ChildProcess;
+  try {
+    child = doSpawn(config.claudeBin, args, { cwd: ref.path, detached: true, stdio: ['pipe', 'ignore', 'pipe'] });
+  } catch (err) {
+    fail(sessionId, undefined, errMessage(err));
+    return sessionId;
+  }
+  entry.child = child;
+
+  child.stdin?.write(input.prompt);
+  child.stdin?.end();
+
+  let stderrTail = '';
+  child.stderr?.on('data', (chunk: Buffer | string) => {
+    stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_CAP);
+  });
+  child.on('exit', (code, signal) => {
+    // A clean (code 0) exit is left alone: a fast run can finish before the
+    // next scan ever sees it, and the transcript — not the exit — is what
+    // matters then. Adoption or the launching-state TTL settle it from here.
+    if (code === 0) return;
+    fail(sessionId, code ?? undefined, stderrTail || (signal ? `terminated by signal ${signal}` : `exited with code ${code}`));
+  });
+  child.on('error', err => {
+    fail(sessionId, undefined, errMessage(err));
+  });
+
+  child.unref();
+  return sessionId;
+}
+
+/**
+ * Every launch the store still remembers, minus whatever just expired.
+ * Expiry is evaluated lazily here rather than on a timer: `pending.ts`/
+ * `plans.ts`/`messages.ts` each need a reaper because nothing else would ever
+ * read their entries, but the dashboard already polls every 3s, so the next
+ * `listLaunching` call is strictly simpler and cannot hold the process open.
+ *
+ * `now` is a parameter, not `Date.now()` read internally, so a test can
+ * simulate elapsed time without faking the clock.
+ */
+export function listLaunching(now: number = Date.now()): LaunchingSession[] {
+  const out: LaunchingSession[] = [];
+  for (const [id, entry] of entries) {
+    if (entry.state === 'launching' && now - entry.startedAtMs > LAUNCH_TTL_MS) {
+      entries.delete(id);
+      continue;
+    }
+    if (entry.state === 'failed' && now - (entry.failedAtMs ?? entry.startedAtMs) > FAIL_TTL_MS) {
+      entries.delete(id);
+      continue;
+    }
+    out.push(toPublic(entry));
+  }
+  return out;
+}
+
+/**
+ * The sessions handler calls this with the ids it just scanned off disk,
+ * before serializing its response — a launch that became a real session
+ * leaves no trace here. Returns how many entries were removed.
+ */
+export function adoptLaunched(ids: string[]): number {
+  let n = 0;
+  for (const id of ids) {
+    if (entries.delete(id)) n++;
+  }
+  return n;
+}
+
+/**
+ * SIGTERM the live child behind a still-`launching` entry. False for an
+ * unknown id or one that has already left the `launching` state (nothing
+ * left alive to signal).
+ */
+export function stopLaunch(id: string): boolean {
+  const entry = entries.get(id);
+  if (!entry || entry.state !== 'launching' || !entry.child) return false;
+  entry.child.kill('SIGTERM');
+  return true;
+}
+
+/** Test seam: drop every entry. No timers to clear — this store, deliberately, has none. */
+export function resetLaunches(): void {
+  entries.clear();
 }

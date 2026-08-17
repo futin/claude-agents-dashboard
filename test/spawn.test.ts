@@ -1,10 +1,18 @@
 import assert from 'node:assert';
+import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import {
-  NAME_CAP, PROMPT_CAP,
-  buildSpawnArgs, clampPermission, parseSpawnRequest
+  FAIL_TTL_MS, LAUNCH_TTL_MS, NAME_CAP, PROMPT_CAP, PROMPT_PREVIEW_CAP, STDERR_TAIL_CAP,
+  adoptLaunched, buildSpawnArgs, clampPermission, launch, listLaunching, parseSpawnRequest,
+  probeSpawn, resetLaunches, resetSpawnProbe, setSpawner, stopLaunch
 } from '../server/lib/spawn.js';
-import type { PermissionMode } from '../shared/types.js';
+import type { Config } from '../server/lib/config.js';
+import type { SpawnInput, Spawner } from '../server/lib/spawn.js';
+import type { PermissionMode, ProjectRef } from '../shared/types.js';
+import type { ChildProcess } from 'node:child_process';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -13,6 +21,71 @@ function test(name: string, fn: () => void): boolean {
 
 /** Fixed test uuid — the exact value doesn't matter, only that it's echoed verbatim. */
 const UUID = '11111111-1111-4111-8111-111111111111';
+
+/** Shape check for a real `crypto.randomUUID()` (v4) result. */
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Only the fields `probeSpawn`/`launch` read off `Config`. */
+function cfg(over: Partial<Config> = {}): Config {
+  return { claudeBin: '', spawnMaxPermission: 'auto', ...over } as Config;
+}
+
+/** A throwaway executable that appends one line to `counterFile` on every run, then exits 0. */
+function countingBin(dir: string, name: string, counterFile: string): string {
+  const p = path.join(dir, name);
+  fs.writeFileSync(p, `#!/bin/bash\necho x >> "${counterFile}"\nexit 0\n`);
+  fs.chmodSync(p, 0o755);
+  return p;
+}
+
+/** How many times `countingBin` has run, i.e. lines appended to `counterFile`. 0 if it never has. */
+function countLines(file: string): number {
+  if (!fs.existsSync(file)) return 0;
+  return fs.readFileSync(file, 'utf8').split('\n').filter(l => l.length > 0).length;
+}
+
+/** A recording stand-in for a child's stdin. */
+class FakeStdin {
+  writes: string[] = [];
+  ended = false;
+  write(chunk: string): boolean { this.writes.push(chunk); return true; }
+  end(): void { this.ended = true; }
+}
+
+/**
+ * A fake `ChildProcess`: a recording stdin, a plain emitter standing in for
+ * stderr/exit/error, and a kill spy — exactly the surface `launch` touches.
+ * Cast through `unknown` where a real `ChildProcess` is expected; no test
+ * needs the rest of that interface.
+ */
+class FakeChild extends EventEmitter {
+  stdin = new FakeStdin();
+  stderr = new EventEmitter();
+  killSignals: string[] = [];
+  unrefCalled = false;
+  kill(signal?: string): boolean { this.killSignals.push(signal ?? 'SIGTERM'); return true; }
+  unref(): this { this.unrefCalled = true; return this; }
+}
+
+interface SpawnCall { command: string; args: string[]; options: Record<string, unknown>; }
+
+/** A `Spawner` that records every call and hands back a fresh `FakeChild`. */
+function fakeSpawner(calls: SpawnCall[], children: FakeChild[]): Spawner {
+  return (command, args, options) => {
+    calls.push({ command, args: args.slice(), options: { ...options } });
+    const child = new FakeChild();
+    children.push(child);
+    return child as unknown as ChildProcess;
+  };
+}
+
+/** A recently-active project fixture — the shape `launch` reads off `ProjectRef`. */
+const REF: ProjectRef = { dirName: 'enc-demo', name: 'demo-project', path: '/tmp/demo-project', lastActiveMs: Date.now() };
+
+/** A minimal valid `launch` input, overridable per test. */
+function baseInput(over: Partial<Omit<SpawnInput, 'sessionId'>> = {}): Omit<SpawnInput, 'sessionId'> {
+  return { prompt: 'do the thing', permissionMode: 'auto', ...over };
+}
 
 export function run(): number {
   console.log('\n=== spawn.ts ===\n');
@@ -203,6 +276,277 @@ export function run(): number {
     assert.deepStrictEqual(args, ['-p', '--session-id', UUID, '--permission-mode', 'auto']);
     assert.strictEqual(args.length, 5);
   })) p++; else f++;
+
+  /* ---------------------------------------------------------------- probeSpawn */
+
+  resetSpawnProbe();
+
+  if (test('probeSpawn: /bin/echo stands in for a working CLI', () => {
+    resetSpawnProbe();
+    assert.strictEqual(probeSpawn(cfg({ claudeBin: '/bin/echo' })), true);
+  })) p++; else f++;
+
+  if (test('probeSpawn: a nonexistent binary is false', () => {
+    resetSpawnProbe();
+    assert.strictEqual(probeSpawn(cfg({ claudeBin: '/nonexistent/claude' })), false);
+  })) p++; else f++;
+
+  if (test('probeSpawn: empty claudeBin never runs a process; the cache holds across configs; reset re-invokes', () => {
+    resetSpawnProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-spawn-probe-'));
+    try {
+      const counter = path.join(dir, 'count');
+      const bin = countingBin(dir, 'claude-stub', counter);
+
+      // An unconfigured server must not shell out at all.
+      assert.strictEqual(probeSpawn(cfg({ claudeBin: '' })), false);
+      assert.strictEqual(countLines(counter), 0);
+
+      // First real probe of a working binary: true, exactly one invocation.
+      resetSpawnProbe();
+      assert.strictEqual(probeSpawn(cfg({ claudeBin: bin })), true);
+      assert.strictEqual(countLines(counter), 1);
+
+      // A different config on a later call: the cached true wins, no re-invoke.
+      assert.strictEqual(probeSpawn(cfg({ claudeBin: '/nonexistent/other-claude' })), true);
+      assert.strictEqual(countLines(counter), 1);
+
+      // resetSpawnProbe drops the cache: the next call re-invokes.
+      resetSpawnProbe();
+      assert.strictEqual(probeSpawn(cfg({ claudeBin: bin })), true);
+      assert.strictEqual(countLines(counter), 2);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      resetSpawnProbe();
+    }
+  })) p++; else f++;
+
+  /* ------------------------------------------------------------ launch store */
+
+  resetLaunches();
+
+  if (test('launch mints a v4-uuid session id and registers a launching entry', () => {
+    resetLaunches();
+    setSpawner(fakeSpawner([], []));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      assert.match(id, UUID_V4_RE);
+      const list = listLaunching();
+      assert.strictEqual(list.length, 1);
+      assert.strictEqual(list[0].sessionId, id);
+      assert.strictEqual(list[0].state, 'launching');
+      assert.strictEqual(list[0].projectName, REF.name);
+      assert.strictEqual(list[0].projectPath, REF.path);
+      assert.ok(Number.isFinite(list[0].startedAtMs) && list[0].startedAtMs > 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a 300-character prompt is stored truncated to PROMPT_PREVIEW_CAP characters', () => {
+    resetLaunches();
+    setSpawner(fakeSpawner([], []));
+    try {
+      const longPrompt = 'x'.repeat(300);
+      const id = launch(cfg(), REF, baseInput({ prompt: longPrompt }));
+      const entry = listLaunching().find(e => e.sessionId === id)!;
+      assert.strictEqual(entry.prompt.length, PROMPT_PREVIEW_CAP);
+      assert.strictEqual(entry.prompt, longPrompt.slice(0, PROMPT_PREVIEW_CAP));
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('adoptLaunched removes the entry and reports 1; an unknown id reports 0 and leaves it', () => {
+    resetLaunches();
+    setSpawner(fakeSpawner([], []));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      assert.strictEqual(adoptLaunched(['some-other-id']), 0);
+      assert.strictEqual(listLaunching().length, 1);
+      assert.strictEqual(adoptLaunched([id]), 1);
+      assert.strictEqual(listLaunching().length, 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a nonzero exit with stderr marks the entry failed, with the exit code and message', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      children[0].stderr.emit('data', Buffer.from('boom'));
+      children[0].emit('exit', 2, null);
+      const entry = listLaunching().find(e => e.sessionId === id)!;
+      assert.strictEqual(entry.state, 'failed');
+      assert.strictEqual(entry.exitCode, 2);
+      assert.ok(entry.error!.includes('boom'));
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('an exit that arrives after adoption does not resurrect the entry', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      assert.strictEqual(adoptLaunched([id]), 1);
+      children[0].stderr.emit('data', Buffer.from('boom'));
+      children[0].emit('exit', 2, null);
+      assert.strictEqual(listLaunching().length, 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('5000 characters of stderr is capped to STDERR_TAIL_CAP, keeping the tail', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      const marker = '[[END]]';
+      const long = 'a'.repeat(5000 - marker.length) + marker;
+      children[0].stderr.emit('data', Buffer.from(long));
+      children[0].emit('exit', 1, null);
+      const entry = listLaunching().find(e => e.sessionId === id)!;
+      assert.strictEqual(entry.error!.length, STDERR_TAIL_CAP);
+      assert.ok(entry.error!.endsWith(marker));
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a clean exit (code 0) before adoption leaves the entry launching', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      children[0].emit('exit', 0, null);
+      const entry = listLaunching().find(e => e.sessionId === id)!;
+      assert.strictEqual(entry.state, 'launching');
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a launching entry older than LAUNCH_TTL_MS is not returned by listLaunching(now)', () => {
+    resetLaunches();
+    setSpawner(fakeSpawner([], []));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      const startedAtMs = listLaunching().find(e => e.sessionId === id)!.startedAtMs;
+      assert.strictEqual(listLaunching(startedAtMs + LAUNCH_TTL_MS - 1000).length, 1);
+      assert.strictEqual(listLaunching(startedAtMs + LAUNCH_TTL_MS + 1000).length, 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a failed entry older than FAIL_TTL_MS is dropped by listLaunching(now)', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      children[0].emit('exit', 1, null);
+      const failedAtMs = listLaunching().find(e => e.sessionId === id)!.startedAtMs;
+      assert.strictEqual(listLaunching(failedAtMs + FAIL_TTL_MS - 1000).length, 1);
+      assert.strictEqual(listLaunching(failedAtMs + FAIL_TTL_MS + 1000).length, 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('stopLaunch: an unknown id returns false', () => {
+    resetLaunches();
+    assert.strictEqual(stopLaunch('unknown-id'), false);
+  })) p++; else f++;
+
+  if (test('stopLaunch: a live entry returns true and SIGTERMs the fake child', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      assert.strictEqual(stopLaunch(id), true);
+      assert.deepStrictEqual(children[0].killSignals, ['SIGTERM']);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  /* -------------------------------------------------------------- the spawn call */
+
+  if (test('the spawner is called with config.claudeBin as the command', () => {
+    resetLaunches();
+    const calls: SpawnCall[] = [];
+    setSpawner(fakeSpawner(calls, []));
+    try {
+      launch(cfg({ claudeBin: '/opt/bin/claude' }), REF, baseInput());
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].command, '/opt/bin/claude');
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('the argv contains the same uuid launch returned', () => {
+    resetLaunches();
+    const calls: SpawnCall[] = [];
+    setSpawner(fakeSpawner(calls, []));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      assert.ok(calls[0].args.includes(id));
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('the options are exactly cwd/detached/stdio, stdin piped and stdout ignored', () => {
+    resetLaunches();
+    const calls: SpawnCall[] = [];
+    setSpawner(fakeSpawner(calls, []));
+    try {
+      launch(cfg(), REF, baseInput());
+      const { options } = calls[0];
+      assert.deepStrictEqual(Object.keys(options).sort(), ['cwd', 'detached', 'stdio']);
+      assert.strictEqual(options.cwd, REF.path);
+      assert.strictEqual(options.detached, true);
+      const stdio = options.stdio as unknown[];
+      assert.strictEqual(stdio[0], 'pipe');
+      assert.strictEqual(stdio[1], 'ignore');
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('the prompt is written to the child stdin and the stream is ended', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const prompt = 'a prompt that must reach stdin, never argv';
+      launch(cfg(), REF, baseInput({ prompt }));
+      assert.strictEqual(children[0].stdin.writes.join(''), prompt);
+      assert.strictEqual(children[0].stdin.ended, true);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('unref is called on the child', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      launch(cfg(), REF, baseInput());
+      assert.strictEqual(children[0].unrefCalled, true);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('the full prompt reaches stdin even though the stored preview is truncated', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const prompt = 'y'.repeat(300);
+      const id = launch(cfg(), REF, baseInput({ prompt }));
+      assert.strictEqual(children[0].stdin.writes.join(''), prompt);
+      assert.strictEqual(listLaunching().find(e => e.sessionId === id)!.prompt.length, PROMPT_PREVIEW_CAP);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a spawner that throws synchronously still leaves a failed entry (registered before spawning)', () => {
+    resetLaunches();
+    setSpawner(() => { throw new Error('boom-sync'); });
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      const entry = listLaunching().find(e => e.sessionId === id)!;
+      assert.strictEqual(entry.state, 'failed');
+      assert.ok(entry.error!.includes('boom-sync'));
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  resetLaunches();
+  resetSpawnProbe();
 
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;

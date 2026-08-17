@@ -739,12 +739,33 @@ export interface FileContent {
  * Spawning a new headless session (a detached `claude -p` process). The
  * launch form picks a permission mode; the server clamps it to a configured
  * ceiling (`clampPermission` in `server/lib/spawn.ts`) so a browser can never
- * ask for more than the host allows. Only the one type both sides must agree
- * on lands here in this task — the request/response shapes follow later.
+ * ask for more than the host allows. Built up incrementally across tasks:
+ * this and the next add the types both sides must agree on; the request/
+ * response shapes for the POST itself land last.
  */
 
 /** The permission mode ladder, lowest to highest: plan < acceptEdits < auto < bypassPermissions. */
 export type PermissionMode = 'plan' | 'acceptEdits' | 'auto' | 'bypassPermissions';
+
+/**
+ * One in-flight `claude -p` launch the RAM-only store in `server/lib/spawn.ts`
+ * is still watching. Charter: explain the first ~3 seconds of a launch and
+ * report ones that never became a real session — this is deliberately NOT a
+ * session registry, and a launch that succeeds leaves no trace here.
+ */
+export interface LaunchingSession {
+  sessionId: string;
+  projectName: string;
+  projectPath: string;
+  /** First 120 characters only — a display preview, not the full request. */
+  prompt: string;
+  startedAtMs: number;
+  state: 'launching' | 'failed';
+  /** Set only when `state === 'failed'` and the child reported a numeric exit code. */
+  exitCode?: number;
+  /** Set only when `state === 'failed'` — the stderr tail (capped), or a synthesized reason. */
+  error?: string;
+}
 
 /** Full payload of `GET /api/sessions`. */
 export interface SessionsResponse {
