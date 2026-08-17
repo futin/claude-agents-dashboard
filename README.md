@@ -25,8 +25,6 @@ finished-turn [push](docs/subsystems/push-notify.md) and
 [remote messages](docs/subsystems/remote-message.md)). Zero runtime dependencies on the backend (Node
 built-ins only), and exactly one outbound call — the ntfy push.
 
-![dashboard: header with 5h/week usage bars, filter + sort toolbar, and one row per session showing status dot, project + branch, model, context bar, activity, and expandable subagent detail](docs/screenshot.png)
-
 ## Quick start
 
 Requires **Node.js >= 18** and **pnpm**.
