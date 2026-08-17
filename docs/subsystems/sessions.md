@@ -38,6 +38,29 @@ params, so a changed row count or window takes effect on the next tick.
 - **Activity line** — the most recent tool call (e.g. `Edit server.ts`,
   `Task Explore: map the codebase`).
 - **Relative time** — since the last conversational message.
+- **Chat tab** — a full-height slab down the row's right edge (`.row-chat`), the way into
+  this session's [chat drawer](chat.md). The card splits in two for it: `.row-main` carries
+  the padding and the expand-on-click, the tab is its sibling, so opening the drawer no
+  longer has to out-shout a row toggle it sits inside.
+
+### The tab is also where a session says it needs a human
+
+Every hold routes to the same place — the drawer — so they share the one control rather
+than competing as separate pills among the printed fields. `chatTab()` picks the label from
+the first match in this order, so the nearest thing to a blocked session wins:
+
+| `Session` flag | Label | Tone |
+| --- | --- | --- |
+| `remoteQuestion` | `answer` | amber, pulsing |
+| `remotePlan` | `plan?` | amber, pulsing |
+| `remoteReply` | `reply?` | amber, pulsing |
+| `permissionWait` | `allow?` | mustard, pulsing — answerable only in that terminal |
+| none | `chat` | steel |
+
+Mustard rather than amber for the last one keeps the "needs you, but not here" case visually
+apart from the three you can act on from the phone. The label is `position: sticky` inside
+the tab, so it rides the top of the viewport instead of drifting off with an expanded card's
+subagent panel.
 
 ## Custom session titles
 
@@ -111,19 +134,19 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
   per-cwd guess, and it beats the transcript too — the wait is registered during
   `PreToolUse`, so the `tool_use` record isn't on disk yet and `waitingOnQuestion` would
   lag the entire wait. Also sets `Session.remoteQuestion`, which is what the row's
-  `answer` pill renders from (see [remote-answer](remote-answer.md)). Omitted/null
+  chat tab reads `answer` from (see [remote-answer](remote-answer.md)). Omitted/null
   `pendingIds` ⇒ nothing flagged, statuses byte-for-byte as before.
 - **question** also comes from a **held remote plan wait** — `ScanOptions.planIds` (from
   `plans.ts` `planSessionIds()`, injected the same way). Same kind of evidence as
   `pendingIds` — an open socket right now — so it sits immediately below it and still above
-  the liveness gate, and sets `Session.remotePlan` (the row's `plan?` pill, see
+  the liveness gate, and sets `Session.remotePlan` (the tab's `plan?` label, see
   [remote-plan](remote-plan.md)). Suppressed when `remoteQuestion` already owns the row, so
   a session can only be flagged for one of the two.
 - **question** also comes from a **held turn-end reply window** — `ScanOptions.messageIds`
   (from `messages.ts` `messageSessionIds()`, injected the same way). Same kind of evidence
   again — the `Stop` hook is holding a socket open right now — so it joins the chain
   immediately below `planIds`, still above the liveness gate, and sets
-  `Session.remoteReply` (the row's `reply?` pill, see
+  `Session.remoteReply` (the tab's `reply?` label, see
   [remote-message](remote-message.md)). Suppressed when `remoteQuestion` or `remotePlan`
   already owns the row.
 - **question** also comes from an open **terminal permission dialog** ("allow Bash:
@@ -133,7 +156,7 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
   This rung sits **below** the liveness gate (a fire-and-forget notify proves nothing about
   liveness, unlike a held socket) and below `pendingIds`, `planIds` and `messageIds`. It self-clears: a message newer
   than `notifiedAt` means the dialog was answered. Also sets `Session.permissionWait`,
-  which renders the row's `allow?` pill — display-only, see
+  which puts the row's tab in `allow?` — display-only, see
   [permission-notify](permission-notify.md).
 - **working** (green, pulsing) — recent AND the turn is unfinished = machine actively
   churning. **Only this state** counts toward `totals.active`. A finished turn (end_turn)

@@ -9,11 +9,12 @@ docs-sync:
     - scripts/remote-decision-hook.sh
     - client/src/components/PlanPanel.tsx
     - client/src/hooks/usePendingPlan.ts
+    - client/src/components/SessionRow.tsx
   kind: subsystem
   verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
-# Remote plan verdicts (the `plan?` pill)
+# Remote plan verdicts (the `plan?` tab)
 
 When a session calls `ExitPlanMode`, the [chat drawer](chat.md) can render the proposed
 plan and let you **send it back with feedback** from your phone. The model reads the
@@ -69,7 +70,7 @@ Getting this wrong fails silently: the hook's output is ignored and the card jus
 | `POST /api/sessions/:id/plan-answer` | `serveSessionPlanAnswer` — `{verdict: 'reject', feedback}` or `'dismiss'`. Token-gated |
 | `server/lib/plans.ts` | RAM-only store; same state machine as `pending.ts` with an injected `resolve` |
 | `scan.ts` `ScanOptions.planIds` | sets `Session.remotePlan` and forces `status: 'question'` |
-| `SessionRow` pill + `PlanPanel` | the `plan?` pill and the pinned drawer panel |
+| `SessionRow` tab + `PlanPanel` | the row's chat tab labelled `plan?` and the pinned drawer panel |
 
 ## Why a separate store from `pending.ts`
 

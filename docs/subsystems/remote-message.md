@@ -8,11 +8,12 @@ docs-sync:
     - scripts/stop-notify-hook.sh
     - client/src/components/MessagePanel.tsx
     - client/src/hooks/usePendingMessage.ts
+    - client/src/components/SessionRow.tsx
   kind: subsystem
   verified: 3e1d51fd26c72d6c21bd9d6b8921ee3bb498518b
 ---
 
-# Remote messages (the `reply?` pill)
+# Remote messages (the `reply?` tab)
 
 When a session's turn ends while you are away, the [chat drawer](chat.md) can hold that
 turn open for a short window and let you send free text back from your phone — the model

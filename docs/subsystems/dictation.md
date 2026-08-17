@@ -97,8 +97,14 @@ tap → MediaRecorder → POST /api/transcribe → ffmpeg (→ 16kHz mono wav) �
   forgotten recording cannot run until the tab dies.
 - **Upload.** The raw `Blob` is POSTed as the request body with the recorder's own
   `Content-Type` — no multipart wrapper, no base64. The server reads it with
-  `readBinaryBody`, a sibling to the existing JSON body reader that exists solely because
-  that one is JSON-only.
+  `readBinaryBody` — one of two thin wrappers over `readBody`, the single piece of
+  request-stream plumbing in `api.ts`. `readJsonBody` is the other, and it collapses
+  overflow and abort into one `null` because all ten of its callers answer 400 to both;
+  this endpoint keeps the distinction, because it owes 413 for one and 400 for the other.
+  The two were near-identical copies until they drifted on whether to `req.destroy()` a
+  request that overflowed — they must not, since `req` and `res` share a socket and killing
+  it truncates the error response into a bare connection reset. `sendBadBody` and
+  `send413` now sequence that close from `res.on('finish')` instead.
 - **Transcode.** A scratch directory (`fs.mkdtemp`, removed in a `finally` on every exit
   path) holds the upload and the wav ffmpeg produces from it: `ffmpeg -hide_banner
   -loglevel error -y -i <in> -ar 16000 -ac 1 <out>`. Real files, not a pipe, because

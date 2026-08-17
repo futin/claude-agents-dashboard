@@ -54,6 +54,12 @@ Two things a container can't reach on its own:
   `node_modules` (an anonymous volume shadows the host's).
 - `~/.claude` is mounted read-only, which is also why the remote-answer toggle persists
   to a repo-root file instead of anywhere under `~/.claude`.
+- **Dictation is unavailable in these images.** `config.ts` reads `WHISPER_MODEL`,
+  `WHISPER_BIN` and `FFMPEG_BIN`, but neither compose file passes them and the
+  `node:20-alpine` stages install neither `whisper-cli` nor `ffmpeg` — so `probeTranscribe`
+  fails, `/api/health` reports `transcribe: false`, and the mic never renders (which is the
+  designed no-engine behavior, not a broken state). Running the server on the host is the
+  supported way to use it; see [dictation-setup](dictation-setup.md).
 - **Push notifications need their three variables passed in explicitly.** `.env` is in
   `.dockerignore` and the runtime stage copies only `server/`, `shared/` and the built
   client, so `loadConfig()` finds no file in the production image. Both compose files

@@ -20,7 +20,7 @@ Reads everything straight from `~/.claude/projects/*/*.jsonl` on disk. **Monitor
 no daemon, no hooks, and no config in Claude Code** — hooks are installed only by the
 opt-in features that need one ([remote answers](docs/subsystems/remote-answer.md),
 [remote plan verdicts](docs/subsystems/remote-plan.md), the
-[`allow?` pill](docs/subsystems/permission-notify.md), and the `Stop` hook behind both the
+[`allow?` tab](docs/subsystems/permission-notify.md), and the `Stop` hook behind both the
 finished-turn [push](docs/subsystems/push-notify.md) and
 [remote messages](docs/subsystems/remote-message.md)). Zero runtime dependencies on the backend (Node
 built-ins only), and exactly one outbound call — the ntfy push.
@@ -57,7 +57,9 @@ That's the whole basic setup. Everything below is optional.
 
 - **[Live session monitor](docs/subsystems/sessions.md)** — one row per session: status
   dot (working / question / incomplete / idle), project + branch, model, context bar,
-  current tool activity, expandable subagent detail, filter + sort toolbar.
+  current tool activity, expandable subagent detail, filter + sort toolbar, and a
+  full-height tab down the row's right edge that opens the chat — and names the hold
+  (`answer` / `plan?` / `reply?` / `allow?`) when a session is waiting on you.
 - **[Chat drawer](docs/subsystems/chat.md)** — read any session's conversation:
   live-tailed, pageable back through the whole transcript, with an all/text/you filter
   and markdown rendering.
@@ -121,7 +123,7 @@ That's the whole basic setup. Everything below is optional.
 [`docs/overview.md`](docs/overview.md) is the entry point — domains, data flow, HTTP
 surface, repo layout, and the map of every doc. Per-subsystem deep dives (mechanism +
 invariants) live in [`docs/subsystems/`](docs/subsystems/); runnable procedures
-(configuration, Docker, the remote-answers hook, push-notification setup) in
+(configuration, Docker, the remote-answers hook, push-notification and dictation setup) in
 [`docs/workflows/`](docs/workflows/).
 
 ## Not included (yet)

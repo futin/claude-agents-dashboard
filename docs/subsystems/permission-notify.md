@@ -6,15 +6,16 @@ docs-sync:
     - server/lib/scan.ts
     - scripts/permission-notify-hook.sh
     - client/src/components/PermissionBanner.tsx
+    - client/src/components/SessionRow.tsx
   kind: subsystem
   verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
 ---
 
-# Permission prompts (the `allow?` pill)
+# Permission prompts (the `allow?` tab)
 
 When the CLI shows its interactive permission dialog — *"Do you want to allow Bash:
-`pnpm dev`?"* — the dashboard shows a blue dot, an `allow?` pill on the row, and a banner in
-the chat drawer naming the command. **Display-only**: you still answer in that terminal.
+`pnpm dev`?"* — the dashboard shows a blue dot, the row's chat tab reading `allow?`, and a
+banner in the chat drawer naming the command. **Display-only**: you still answer in that terminal.
 
 ## Why it needs a hook at all
 
@@ -72,7 +73,7 @@ back with feedback" is a real instruction, not merely a refusal.
 | `POST /api/permissions/notify` | `servePermissionNotify` in `api.ts` — `tokenOk` 403, `ID_RE` 400, unknown session 404, else `notifyPermission()` followed by `maybeSend(config, 'permission', …)`. The route notifies inline rather than through `/api/notify/event`, because the hook is already POSTing here (see [push-notify](push-notify.md)) |
 | `server/lib/permissions.ts` | RAM-only `Map<sessionId, {notifiedAt, message, timer}>`. No held socket, no resolve — a notify is a fact, not a wait |
 | `scan.ts` `ScanOptions.permissionWaits` | injected `sessionId → notifiedAt`; sets `Session.permissionWait` and forces `status: 'question'` |
-| `SessionRow` pill + `PermissionBanner` | mustard `allow?` pill (suppressed when `remoteQuestion`, `remotePlan` or `remoteReply` already owns the row) and the pinned drawer strip |
+| `SessionRow` tab + `PermissionBanner` | the row's chat tab in mustard `allow?` — last in `chatTab()`'s precedence, so `remoteQuestion`, `remotePlan` and `remoteReply` all label it first (see [sessions](sessions.md#the-tab-is-also-where-a-session-says-it-needs-a-human)) — and the pinned drawer strip |
 
 ## ⚠️ Clearing is the scan's job, not the store's
 
@@ -103,7 +104,7 @@ carries no evidence the session is still alive, unlike `pending.ts`'s held socke
 outranks `lsof` precisely because the socket is open *now*). A session killed at its prompt
 reads `idle`, not a permanent blue dot. Below `remoteQuestion`, `remotePlan` and
 `remoteReply` too, so a session that somehow has both keeps the actionable `answer` /
-`plan?` / `reply?` pill rather than the informational one.
+`plan?` / `reply?` label rather than the informational one.
 
 ## Install (manual, user-consented)
 
@@ -119,7 +120,7 @@ osascript banner, ntfy, …), never replacing it:
 { "type": "command", "command": "bash \"$HOME/.claude/hooks/permission-notify.sh\"", "timeout": 5 }
 ```
 
-Registering both is safe: one entry per session, so whichever arrives first shows the pill and
+Registering both is safe: one entry per session, so whichever arrives first flips the tab and
 the second just re-arms it.
 
 ## Gotchas

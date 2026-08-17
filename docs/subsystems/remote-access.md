@@ -100,7 +100,7 @@ dictates" without any change of its own.
 - Keep the Tailscale VPN toggle **on** — set-and-forget, negligible battery, works over
   cellular and foreign wifi alike.
 - Bookmark the stable hostname; it never changes when the LAN IP does.
-- The remote-answer flow (the pulsing `answer` pill → option buttons in the drawer — see
+- The remote-answer flow (the pulsing `answer` tab → option buttons in the drawer — see
   [remote-answer](remote-answer.md)) works from anywhere; the hook still talks to
   `127.0.0.1` on the host and is untouched by any of this.
 - [Dictation](dictation.md)'s mic needs the HTTPS route above specifically — over a plain

@@ -25,7 +25,7 @@ Everything the dashboard shows is read straight off disk from
 needs no daemon, no hooks, and no config in Claude Code — hooks are installed only by the
 opt-in features that need one ([remote answers](subsystems/remote-answer.md),
 [remote plan verdicts](subsystems/remote-plan.md), the
-[`allow?` pill](subsystems/permission-notify.md), and the `Stop` hook that backs both the
+[`allow?` tab](subsystems/permission-notify.md), and the `Stop` hook that backs both the
 finished-turn [push](subsystems/push-notify.md) and
 [remote messages](subsystems/remote-message.md)).
 
@@ -166,7 +166,7 @@ that area:
 - [usage-limits](subsystems/usage-limits.md) — header account usage bars
 - [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold, answer window, push policy
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
-- [permission-notify](subsystems/permission-notify.md) — the `allow?` pill for terminal permission dialogs
+- [permission-notify](subsystems/permission-notify.md) — the `allow?` tab for terminal permission dialogs
 - [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and why they replaced browser alerts outright
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [docker](workflows/docker.md) — running in containers, dev + prod
