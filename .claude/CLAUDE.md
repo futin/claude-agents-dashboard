@@ -6,7 +6,7 @@ docs-sync:
     - shared/types.ts
     - package.json
   kind: index
-  verified: eeca21c754c09572be041a6806452abba4afe875
+  verified: 77e990f6b0511101b36683840048bf3870761157
 ---
 
 # Claude Agents Dashboard
@@ -47,7 +47,7 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/analytics.ts  read-only reader: last N /kaizen-logged sessions, each re-analyzed live
                   (see docs/subsystems/analytics.md)
   lib/pending.ts  in-memory pending-AskUserQuestion store + state machine — the first of
-                  the app's three write paths (see docs/subsystems/remote-answer.md)
+                  the app's four write paths (see docs/subsystems/remote-answer.md)
   lib/plans.ts    in-memory pending-ExitPlanMode store — same state machine, reject-only
                   verdicts (accept is refused upstream; see docs/subsystems/remote-plan.md)
   lib/messages.ts  in-memory turn-end reply-window store — same state machine, plus a 5s
@@ -71,6 +71,11 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/transcribe.ts  ffmpeg → whisper-cli pipeline for POST /api/transcribe: mime
                   allowlist, cached engine probe, single-flight guard, typed failures,
                   never a raw stderr dump to the client (see docs/subsystems/dictation.md)
+  lib/spawn.ts    launches a detached, headless `claude -p` session: pure argv/validation
+                  core (buildSpawnArgs, clampPermission, parseSpawnRequest) plus a RAM-only
+                  launch-tracking store with no reaper (probeSpawn, launch, listLaunching,
+                  adoptLaunched, stopLaunch) — the fourth write path, and the first the
+                  dashboard initiates (see docs/subsystems/spawn.md)
 client/           Vite + React + TypeScript frontend
   src/App.tsx     shell: side rail (Sessions | Management | Analytics | Settings), lazy-loads all but Sessions
   components/SessionsView.tsx  the original live monitor (owns the 3s poll + chat drawer state)
@@ -94,6 +99,9 @@ client/           Vite + React + TypeScript frontend
                   (hooks/useDictation + hooks/useTranscribeAvailable — see
                   docs/subsystems/dictation.md); hidden with no engine, disabled-with-reason
                   with no HTTPS
+  components/SpawnPanel.tsx + lib/spawnOptions.ts  the launch form: pick a recent project,
+                  write or dictate a prompt, tap launch — starts a detached headless
+                  `claude -p` (own lazy chunk; hooks/useSpawn — see docs/subsystems/spawn.md)
   components/PermissionBanner.tsx  pinned drawer strip naming the tool call a terminal
                   permission dialog is asking about (display-only; no controls by design)
   components/RemoteAnswerToggle.tsx  toolbar pill for the remote-answer switch

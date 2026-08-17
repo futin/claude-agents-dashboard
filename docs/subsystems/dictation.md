@@ -10,7 +10,7 @@ docs-sync:
     - client/src/lib/dictation.ts
     - client/src/components/MessagePanel.tsx
   kind: subsystem
-  verified: eeca21c754c09572be041a6806452abba4afe875
+  verified: 77e990f6b0511101b36683840048bf3870761157
 ---
 
 # Dictation in the reply composer (local whisper)
@@ -143,7 +143,7 @@ one is a reason to ever wire the mic straight to send.
 |---|---|
 | 200 | `{text: string}` — possibly `''` when nothing was heard; the client shows "nothing heard" inline, not an error |
 | 400 | empty body; upload aborted mid-read; or a `Content-Type` outside the mime allowlist (echoed back in the error message) |
-| 403 | bad or missing token — `tokenOk`, the same check as the other three write paths |
+| 403 | bad or missing token — `tokenOk`, the same check as the other four write paths |
 | 404 | feature off: `remoteAnswer` is false, or `probeTranscribe` is false (no model configured, or no working binary) |
 | 405 | non-`POST` |
 | 413 | body over `AUDIO_CAP` (8MB) — caught from an honest `Content-Length` before a byte is read, or from the running byte count otherwise |
@@ -221,7 +221,7 @@ limits](#accepted-limits) for where it can wedge.
 ## Security posture
 
 ⚠️ **Read this as an operator warning, not a reassurance.** `ANSWER_TOKEN` gates
-`/api/transcribe` exactly as it gates the three existing write paths — and it defaults to
+`/api/transcribe` exactly as it gates the four existing write paths — and it defaults to
 **empty, which means open**. With `WHISPER_MODEL` configured and no token set, **any peer
 that can reach the dashboard on any interface it's bound to can cause `ffmpeg` and
 `whisper-cli` to run on this machine.** That is real, and it is bounded by exactly four

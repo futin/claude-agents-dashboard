@@ -9,7 +9,7 @@ docs-sync:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: eeca21c754c09572be041a6806452abba4afe875
+  verified: 77e990f6b0511101b36683840048bf3870761157
 ---
 
 # Architecture overview
@@ -44,10 +44,14 @@ via `tsx`, dev and prod alike).
 
 ## Principles
 
-- **Read-only charter.** The app never writes to `~/.claude` or the transcripts. The two
-  deliberate exceptions are the answer POST endpoints (RAM-only store) and two gitignored,
-  repo-local files: `.remote-answer.json` (see [remote answers](subsystems/remote-answer.md))
-  and `.dashboard-settings.json` (see [settings](subsystems/settings.md)).
+- **Read-only charter.** The app never writes to `~/.claude` or the transcripts. The
+  deliberate exceptions are the answer POST endpoints (RAM-only stores); two gitignored,
+  repo-local files, `.remote-answer.json` (see [remote answers](subsystems/remote-answer.md))
+  and `.dashboard-settings.json` (see [settings](subsystems/settings.md)); and, going
+  further than any of those, [spawning a new `claude -p` process](subsystems/spawn.md) on
+  this machine — off by default (empty `CLAUDE_BIN`), and the one exception that reaches
+  outside the dashboard's own state, since what it writes is a whole new session's
+  transcript rather than a row in a RAM-only store.
 - **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only. Keep
   new npm deps out of it.
 - **Fail-open everywhere.** A missing token, an unreadable file, a failed probe — every
@@ -75,6 +79,8 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `POST /api/sessions/:id/message-answer` | send free text into a finished turn, or let it stop (write path) |
 | `POST /api/messages/wait` | the Stop hook's held-open wait, away only (write path) |
 | `POST /api/transcribe` | a recorded clip in, transcribed text out — feeds the reply composer's mic (write path) |
+| `POST /api/spawn` | start a new headless `claude -p` session in a recent project (write path, the one the dashboard initiates rather than answers) |
+| `POST /api/spawn/:id/stop` | SIGTERM a still-launching session's child (write path) |
 | `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) |
 | `POST /api/notify/event` | the Stop hook's push trigger — the other three events notify from the endpoint they already POST to |
 | `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said |
@@ -120,7 +126,7 @@ server/
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
   lib/analytics.ts  reader for the Analytics tab
-  lib/pending.ts  in-memory pending-question store (the first of the three write paths)
+  lib/pending.ts  in-memory pending-question store (the first of the four write paths)
   lib/plans.ts    in-memory pending-plan store (same machine, reject-only verdicts)
   lib/messages.ts in-memory turn-end reply-window store (same machine, plus a 5s
                   idle sweep that auto-releases every hold)
@@ -131,17 +137,19 @@ server/
   lib/origin.ts   connection classifier → local | lan | tailnet | unknown
   lib/transcribe.ts  ffmpeg → whisper-cli pipeline behind POST /api/transcribe: mime
                   allowlist, cached engine probe, single-flight guard, typed failures
+  lib/spawn.ts    launches a detached, headless `claude -p` session — the fourth write
+                  path, and the first the dashboard initiates (see docs/subsystems/spawn.md)
 client/src/
   App.tsx         shell: side rail (Sessions | Management | Analytics | Settings) + lazy views
   components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
-                  MessagePanel, MicButton, PermissionBanner, RemoteAnswerToggle, OriginBadge,
-                  Markdown, management/, analytics/, settings/
+                  MessagePanel, MicButton, SpawnPanel, PermissionBanner, RemoteAnswerToggle,
+                  OriginBadge, Markdown, management/, analytics/, settings/
   hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
                   usePendingQuestion, usePendingPlan, usePendingMessage, useRemoteAnswer,
-                  usePersistedState, useSettings, useServerSettings, useDictation,
+                  useSpawn, usePersistedState, useSettings, useServerSettings, useDictation,
                   useTranscribeAvailable
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
-                  deepLink, dictation
+                  deepLink, dictation, spawnOptions
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          ask-remote-hook.sh, plan-remote-hook.sh, permission-notify-hook.sh,
@@ -160,6 +168,7 @@ that area:
 - [remote-plan](subsystems/remote-plan.md) — sending an `ExitPlanMode` plan back for revision (reject-only, by upstream design)
 - [remote-message](subsystems/remote-message.md) — replying into a finished, away-from-keyboard turn (the third write path)
 - [dictation](subsystems/dictation.md) — the reply composer's mic: local whisper transcription, never auto-sent
+- [spawn](subsystems/spawn.md) — starting a new headless session from the dashboard (the fourth write path, and the first one it initiates)
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
