@@ -44,8 +44,12 @@ function countLines(file: string): number {
   return fs.readFileSync(file, 'utf8').split('\n').filter(l => l.length > 0).length;
 }
 
-/** A recording stand-in for a child's stdin. */
-class FakeStdin {
+/**
+ * A recording stand-in for a child's stdin. Extends `EventEmitter` (a real
+ * stream is one too) so a test can simulate its own `'error'` — e.g. an
+ * EPIPE — independently of the child's own `'error'` event.
+ */
+class FakeStdin extends EventEmitter {
   writes: string[] = [];
   ended = false;
   write(chunk: string): boolean { this.writes.push(chunk); return true; }
@@ -393,6 +397,109 @@ export function run(): number {
     } finally { setSpawner(null); }
   })) p++; else f++;
 
+  /* --------------------------------------------------- failure paths: streams, error, close */
+
+  if (test('a child "error" event (e.g. a typo in CLAUDE_BIN) marks the entry failed with no exit code', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      children[0].emit('error', new Error('spawn claude-nope ENOENT'));
+      const entry = listLaunching().find(e => e.sessionId === id)!;
+      assert.strictEqual(entry.state, 'failed');
+      assert.strictEqual(entry.exitCode, undefined);
+      assert.ok(entry.error!.includes('ENOENT'));
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  // Regression guard for an unhandled-stream-error crash (a real EPIPE took a
+  // Node 22 process down with no listener here): a stream is its own
+  // EventEmitter, so the child's own 'error' handler above does not cover it.
+  // Without a listener, `.emit('error', ...)` throws; with one, it's just
+  // handled — this proves the listener is attached and wired to the store.
+  if (test('an error on the child stdin (e.g. EPIPE) marks the entry failed', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      children[0].stdin.emit('error', new Error('write EPIPE'));
+      const entry = listLaunching().find(e => e.sessionId === id)!;
+      assert.strictEqual(entry.state, 'failed');
+      assert.ok(entry.error!.includes('EPIPE'));
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('an error on the child stderr stream marks the entry failed', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      children[0].stderr.emit('error', new Error('read EPIPE'));
+      const entry = listLaunching().find(e => e.sessionId === id)!;
+      assert.strictEqual(entry.state, 'failed');
+      assert.ok(entry.error!.includes('EPIPE'));
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('stderr that keeps arriving after exit is captured by a later close event', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      const child = children[0];
+      // Node documents 'exit' as able to fire before stdio has finished
+      // draining — transcribe.ts's own child runner reads on 'close' for
+      // exactly this reason. Simulate more stderr landing in that gap.
+      child.stderr.emit('data', Buffer.from('partial'));
+      child.emit('exit', 1, null);
+      child.stderr.emit('data', Buffer.from('-rest'));
+      child.emit('close', 1, null);
+      const entry = listLaunching().find(e => e.sessionId === id)!;
+      assert.strictEqual(entry.state, 'failed');
+      assert.strictEqual(entry.exitCode, 1);
+      assert.strictEqual(entry.error, 'partial-rest');
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a spawn-failure close (negative code, no prior exit) does not clobber the error-event message', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg({ claudeBin: '/nonexistent/claude' }), REF, baseInput());
+      const child = children[0];
+      // A spawn that never started fires no 'exit' at all: only 'error',
+      // then 'close' with a synthetic negative libuv code (e.g. -2 ENOENT).
+      child.emit('error', new Error('spawn /nonexistent/claude ENOENT'));
+      child.emit('close', -2, null);
+      const entry = listLaunching().find(e => e.sessionId === id)!;
+      assert.strictEqual(entry.state, 'failed');
+      assert.strictEqual(entry.exitCode, undefined);
+      assert.ok(entry.error!.includes('ENOENT'));
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a close with code 0 does not re-fail an already-clean exit', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      const child = children[0];
+      // Stray, non-fatal stderr output alongside a code-0 exit must not flip
+      // the entry to failed at 'close' either — same rule 'exit' applies.
+      child.stderr.emit('data', Buffer.from('a stray warning, not a failure'));
+      child.emit('exit', 0, null);
+      child.emit('close', 0, null);
+      const entry = listLaunching().find(e => e.sessionId === id)!;
+      assert.strictEqual(entry.state, 'launching');
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
   if (test('5000 characters of stderr is capped to STDERR_TAIL_CAP, keeping the tail', () => {
     resetLaunches();
     const children: FakeChild[] = [];
@@ -450,7 +557,7 @@ export function run(): number {
     assert.strictEqual(stopLaunch('unknown-id'), false);
   })) p++; else f++;
 
-  if (test('stopLaunch: a live entry returns true and SIGTERMs the fake child', () => {
+  if (test('stopLaunch: a live entry returns true, SIGTERMs the fake child, and removes the entry', () => {
     resetLaunches();
     const children: FakeChild[] = [];
     setSpawner(fakeSpawner([], children));
@@ -458,6 +565,23 @@ export function run(): number {
       const id = launch(cfg(), REF, baseInput());
       assert.strictEqual(stopLaunch(id), true);
       assert.deepStrictEqual(children[0].killSignals, ['SIGTERM']);
+      // A launch the user asked to stop vanishes immediately — it must not
+      // linger as a `failed` row for FAIL_TTL_MS once the real exit arrives.
+      assert.strictEqual(listLaunching().length, 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('an exit that arrives after stopLaunch does not resurrect the entry', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      assert.strictEqual(stopLaunch(id), true);
+      // The real SIGTERM'd process eventually reports in: code null, signal
+      // SIGTERM. fail()'s presence guard must no-op, same as post-adoption.
+      children[0].emit('exit', null, 'SIGTERM');
+      assert.strictEqual(listLaunching().length, 0);
     } finally { setSpawner(null); }
   })) p++; else f++;
 

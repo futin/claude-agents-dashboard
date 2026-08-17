@@ -297,6 +297,18 @@ function fail(sessionId: string, exitCode: number | undefined, error: string): v
  * throws synchronously still has somewhere to record the failure), spawns
  * detached with the prompt piped to stdin, and returns the id immediately —
  * the caller never waits on the child.
+ *
+ * Failure can reach the store from four independent places, and all four
+ * route through {@link fail}, which is safe to call more than once (or after
+ * the entry is gone): a synchronous throw from the spawner itself; the
+ * child's own `'error'` event (e.g. a typo'd `CLAUDE_BIN` — async ENOENT,
+ * which the cached probe never catches); an `'error'` on the `stdin`/`stderr`
+ * streams themselves (a stream is its own `EventEmitter` — an unhandled
+ * `'error'` there, e.g. a write-side EPIPE, throws and takes the whole
+ * process down, independently of the child's own `'error'` handler); and a
+ * nonzero/non-null `'exit'`. `'close'` only *refines* the exit-time message
+ * once stdio has actually finished draining — see its handler below for why
+ * it cannot simply replace `'exit'`.
  */
 export function launch(config: Config, ref: ProjectRef, input: Omit<SpawnInput, 'sessionId'>): string {
   const sessionId = randomUUID();
@@ -323,6 +335,15 @@ export function launch(config: Config, ref: ProjectRef, input: Omit<SpawnInput, 
   }
   entry.child = child;
 
+  // A stream is its own EventEmitter with its own 'error' event; the child's
+  // 'error' handler further down does NOT cover it. Without a listener here,
+  // an async EPIPE (the child dies, or never reads stdin, before the write
+  // finishes) throws unhandled and takes this whole process down — observed
+  // on Node 22. Attached before the write/end below on principle, though the
+  // error, being async, cannot land synchronously inside them.
+  child.stdin?.on('error', err => {
+    fail(sessionId, undefined, errMessage(err));
+  });
   child.stdin?.write(input.prompt);
   child.stdin?.end();
 
@@ -330,12 +351,33 @@ export function launch(config: Config, ref: ProjectRef, input: Omit<SpawnInput, 
   child.stderr?.on('data', (chunk: Buffer | string) => {
     stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_CAP);
   });
+  child.stderr?.on('error', err => {
+    fail(sessionId, undefined, errMessage(err));
+  });
   child.on('exit', (code, signal) => {
     // A clean (code 0) exit is left alone: a fast run can finish before the
     // next scan ever sees it, and the transcript — not the exit — is what
     // matters then. Adoption or the launching-state TTL settle it from here.
     if (code === 0) return;
     fail(sessionId, code ?? undefined, stderrTail || (signal ? `terminated by signal ${signal}` : `exited with code ${code}`));
+  });
+  child.on('close', (code, signal) => {
+    // Node documents 'exit' as able to fire before a child's stdio has
+    // actually finished draining — `transcribe.ts`'s own child runner reads
+    // on 'close' for exactly this reason — so stderrTail can still grow
+    // between the 'exit' handler above and this one. This handler only
+    // *refines* the message with whatever arrived since; it must not become
+    // the sole path, because a spawn that never started at all (bad
+    // `claudeBin`) fires no 'exit' and reaches 'close' with a synthetic
+    // negative libuv code (e.g. -2 ENOENT, -13 EACCES) — refining on that
+    // would clobber the far more useful message the 'error' handler below
+    // already set. Guard on all three: a tail actually arrived, `code` is
+    // not the signal-kill `null`, and `code` is a genuine positive exit code
+    // (0 is deliberately excluded too — the same clean-exit rule as above,
+    // since a process can write stray, non-fatal output to stderr and still
+    // exit 0).
+    if (!stderrTail || code === null || code <= 0) return;
+    fail(sessionId, code, stderrTail);
   });
   child.on('error', err => {
     fail(sessionId, undefined, errMessage(err));
@@ -385,14 +427,24 @@ export function adoptLaunched(ids: string[]): number {
 }
 
 /**
- * SIGTERM the live child behind a still-`launching` entry. False for an
- * unknown id or one that has already left the `launching` state (nothing
- * left alive to signal).
+ * SIGTERM the live child behind a still-`launching` entry, and remove the
+ * entry immediately. A launch the user asked to stop should vanish from the
+ * list right away, not linger as a `failed` row for `FAIL_TTL_MS` (5 minutes)
+ * once the real `exit` eventually arrives labelled as an error the user
+ * never actually hit — the two-state union has no way to say "you stopped
+ * this" separately from "it crashed," and widening it would drift a
+ * shared-contract type Tasks 3/4 already consume. The later `exit`/`close`
+ * for this id finds no entry and no-ops through `fail`'s presence guard, the
+ * same as any exit arriving after `adoptLaunched`.
+ *
+ * False for an unknown id or one that has already left the `launching` state
+ * (nothing left alive to signal).
  */
 export function stopLaunch(id: string): boolean {
   const entry = entries.get(id);
   if (!entry || entry.state !== 'launching' || !entry.child) return false;
   entry.child.kill('SIGTERM');
+  entries.delete(id);
   return true;
 }
 
