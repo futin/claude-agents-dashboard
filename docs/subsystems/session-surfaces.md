@@ -68,6 +68,11 @@ visible to the dashboard.
   files) and global hooks (a SessionStart hook demonstrably fired). This is the
   strongest phone→Mac chain: the session is visible on every account surface while
   cloud, then lands locally with full powers when you sit down.
+  **Teleport is a move, not a mirror** (verified twice): the thread leaves the cloud,
+  so it disappears from the app sidebar and the phone list, and from then on it is an
+  ordinary terminal session — a transcript under `~/.claude/projects` that the
+  dashboard monitors and `--resume` reopens. You hold a session on exactly one side
+  at a time.
 - **Start on the phone → continue at the Mac:** `claude --resume <session-id>` in a
   terminal — full history, everything local. (The id is in the dashboard row / chat
   drawer URL.)
