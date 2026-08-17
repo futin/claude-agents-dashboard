@@ -38,7 +38,7 @@ import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/t
 import { adoptLaunched, launch, listLaunching, parseSpawnRequest, probeSpawn, stopLaunch } from './lib/spawn.js';
 import { toPosInt, type Config } from './lib/config.js';
 import type {
-  AnalyticsResponse, ManagementIndex, MessageWaitResult, PermissionMode, PlanWaitResult, ScopeConfig,
+  AnalyticsResponse, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
   WaitResult
 } from '../shared/types.js';
@@ -789,18 +789,20 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
   if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
   const projectName = typeof body.project === 'string' ? body.project : '';
-  const ref = resolveProject(config, projectName);
-  if (!ref) return sendJson(res, 400, { error: `unknown project: ${projectName}` });
 
-  // `config.spawnMaxPermission` is a free-form string off disk/env (Config
-  // types it as `string`, not `PermissionMode`); the cast is safe because
-  // `parseSpawnRequest` forwards it into `clampPermission`, which treats any
-  // value it doesn't recognize as `'auto'` rather than trusting this type.
-  const parsed = parseSpawnRequest(body, config.spawnMaxPermission as PermissionMode);
-  if (!parsed.ok) return sendBadBody(res, { error: parsed.error });
-
+  // resolveProject reads the recent-projects list off disk (same as
+  // serveManagementProject's identical call) and launch() spawns a process —
+  // both can throw on an unexpected failure, and this handler is void-
+  // dispatched from an async function in index.ts, so an uncaught throw here
+  // would be an unhandled rejection (process death) rather than a 500.
   let sessionId: string;
   try {
+    const ref = resolveProject(config, projectName);
+    if (!ref) return sendJson(res, 400, { error: `unknown project: ${projectName}` });
+
+    const parsed = parseSpawnRequest(body, config.spawnMaxPermission);
+    if (!parsed.ok) return sendBadBody(res, { error: parsed.error });
+
     sessionId = launch(config, ref, parsed.input);
   } catch (e) {
     console.error('[dashboard] spawn failed:', (e as Error).message);

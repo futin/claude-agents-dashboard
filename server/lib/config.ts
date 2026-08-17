@@ -6,6 +6,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { PermissionMode } from '../../shared/types.js';
+
 export interface Config {
   port: number;
   /** Vite dev-server port (the `pnpm dev` UI). Only vite.config.ts reads it. */
@@ -69,9 +71,12 @@ export interface Config {
   /**
    * The permission mode ceiling every spawn request is clamped to
    * (`clampPermission` in `server/lib/spawn.ts`), no matter what the launch
-   * form asks for.
+   * form asks for. Validated by `toPermissionMode` at load time — this is
+   * the one knob that bounds the spawn feature's blast radius, so an
+   * unrecognized value is never silently accepted; it warns and falls back
+   * to `'auto'` instead.
    */
-  spawnMaxPermission: string;
+  spawnMaxPermission: PermissionMode;
 }
 
 export const DEFAULTS = {
@@ -129,6 +134,33 @@ export function toBool(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+/** The exact literal set of `PermissionMode` — mirrors `PERMISSION_MODES` in `server/lib/spawn.ts`. */
+function isPermissionMode(s: string): s is PermissionMode {
+  return s === 'plan' || s === 'acceptEdits' || s === 'auto' || s === 'bypassPermissions';
+}
+
+/**
+ * Coerce to a `PermissionMode`. Unlike `toPosInt`/`toBool`, a present but
+ * unrecognized value doesn't fail silently: this field is the ceiling that
+ * bounds the whole spawn feature's blast radius (`clampPermission` in
+ * `server/lib/spawn.ts`), so a typo that silently raises it — e.g.
+ * `SPAWN_MAX_PERMISSION=Plan` (capital P) falling open to `'auto'` — must be
+ * visible in the log rather than a silent, invisibly-widened ceiling. An
+ * absent or explicitly empty value is the normal "unset" case, though, and
+ * stays silent, the same "empty means default" rule every other optional
+ * value in this file follows.
+ */
+export function toPermissionMode(value: unknown, fallback: PermissionMode): PermissionMode {
+  const s = typeof value === 'string' ? value.trim() : '';
+  if (s === '') return fallback;
+  if (isPermissionMode(s)) return s;
+  console.warn(
+    `[dashboard] SPAWN_MAX_PERMISSION="${s}" is not a recognized permission mode ` +
+    `(plan, acceptEdits, auto, bypassPermissions) — falling back to "${fallback}".`
+  );
+  return fallback;
+}
+
 /**
  * True inside a Docker container (standard `/.dockerenv` marker file). The
  * process-liveness gate (`scan.ts` `liveCwds`) shells out to `lsof`/`ps` to
@@ -183,6 +215,6 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     whisperBin: (src('WHISPER_BIN') || DEFAULTS.WHISPER_BIN).trim(),
     ffmpegBin: (src('FFMPEG_BIN') || DEFAULTS.FFMPEG_BIN).trim(),
     claudeBin: (src('CLAUDE_BIN') || DEFAULTS.CLAUDE_BIN).trim(),
-    spawnMaxPermission: (src('SPAWN_MAX_PERMISSION') || DEFAULTS.SPAWN_MAX_PERMISSION).trim()
+    spawnMaxPermission: toPermissionMode(src('SPAWN_MAX_PERMISSION'), DEFAULTS.SPAWN_MAX_PERMISSION)
   };
 }
