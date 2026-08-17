@@ -124,8 +124,8 @@ That's the whole basic setup. Everything below is optional.
   (`which claude`), and set `SPAWN_MAX_PERMISSION` below its `auto` default if that's more
   than you want an unattended launch to have. Read the [security
   posture](docs/subsystems/spawn.md#security-posture) first — this is the widest write
-  surface in the app, `CLAUDE_BIN` is its only kill switch (the remote-answer toggle does
-  **not** cover it), and it's gated by the same `ANSWER_TOKEN` that defaults to empty.
+  surface in the app; it's gated by the same `ANSWER_TOKEN` that defaults to empty, and by
+  the remote-answer toggle, so flipping that pill off stops launching too.
 - **Docker** — production and dev images, read-only `~/.claude` mount:
   [docker](docs/workflows/docker.md).
 - **Configuration** — everything is optional, defaults work out of the box; the full

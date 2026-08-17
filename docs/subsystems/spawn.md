@@ -4,10 +4,14 @@ docs-sync:
     - server/lib/spawn.ts
     - server/api.ts
     - server/index.ts
+    - server/lib/config.ts
+    - shared/types.ts
     - client/src/components/SpawnPanel.tsx
+    - client/src/components/SessionList.tsx
     - client/src/hooks/useSpawn.ts
+    - client/src/lib/spawnOptions.ts
   kind: subsystem
-  verified: 77e990f6b0511101b36683840048bf3870761157
+  verified: 997d5bf1abb3d5253d43e7422a1a59e5b66cd755
 ---
 
 # Spawning a new session (the fourth write path)
@@ -18,6 +22,19 @@ spawns a detached, headless `claude -p` in that project's directory; the session
 appears in the list a poll or two later (usually under 3s), and from then on it's an
 ordinary row — you keep talking to it with the [reply window](remote-message.md) that
 already exists for every session.
+
+⚠️ **That last clause has a host-side prerequisite, and it is easy to miss.** The reply
+window only holds if the `Stop` entry in `~/.claude/settings.json` carries a `timeout`
+high enough to cover it — `"timeout": 630`, exactly as
+[remote-message's install step](remote-message.md#install) specifies. The CLI kills a hook
+when its `timeout` elapses, so a missing or too-low value ends the held turn mid-wait: the
+session simply stops, and a reply that lands afterwards finds nothing (404 → the panel
+says "gone"). Nothing about spawning changes that — it inherits the window as-is — but a
+launch you intended to keep talking to degrades to one-shot, which is the difference
+between this feature and half of it. **Check that entry before relying on the round
+trip**; the ask (`PreToolUse`/`AskUserQuestion`) and plan hooks having `630` does not imply
+`Stop` does. This is the design spec's Risk 4. Editing that file is a host-side step, on
+purpose outside this repo.
 
 The three earlier write paths — [remote-answer](remote-answer.md),
 [remote-plan](remote-plan.md), [remote-message](remote-message.md) — are all
@@ -40,7 +57,9 @@ Headless `-p` runs anywhere the server itself runs, writes an ordinary transcrip
 any other session, and — because it fires the same global hooks a terminal session
 does — inherits remote `AskUserQuestion` and the `Stop` reply window for free. Neither
 of those features had to be taught about spawned sessions; they just work, because a
-headless run looks like any other run to the hooks that matter.
+headless run looks like any other run to the hooks that matter. "For free" means
+*inherited*, not *guaranteed*: whatever those hooks are (or aren't) configured to do on
+this host is what a spawned session gets — see the `Stop` `timeout` warning at the top.
 
 The cost: a headless run has no TTY, so a permission prompt has nowhere to go. That's
 what forces a permission-mode *decision* on every launch (below), rather than leaving it
@@ -211,21 +230,47 @@ just costs you the ability to stop it remotely. Named and accepted, not fixed.
 
 | Method | Path | Codes |
 |---|---|---|
-| `POST` | `/api/spawn` | 200 `{sessionId}`; 400 malformed body / unknown project / empty or oversized prompt; 403 bad token; 404 feature off; 500 spawn threw |
-| `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}`; 400 bad id shape; 403 bad token; 404 no live launch for that id |
+| `POST` | `/api/spawn` | 200 `{sessionId}` (`SpawnResponse`); 400 malformed body / unknown project / empty or oversized prompt; 403 bad token; 404 remote answers off *or* feature off; 429 `MAX_LAUNCHING` launches already in flight; 500 spawn threw |
+| `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}`; 400 bad id shape; 403 bad token; 404 remote answers off *or* no live launch for that id |
 
 Both gated by the same `tokenOk` (`api.ts:389`) the other three write paths use — an
-unset `ANSWER_TOKEN` leaves them open, matching the rest of the app's LAN-trust posture.
+unset `ANSWER_TOKEN` leaves them open, matching the rest of the app's LAN-trust posture —
+and by the same remote-answer toggle (below).
 
-`serveSpawn`'s checks run in this order deliberately, each leaking less to an
-unauthenticated caller than the next: is the feature even configured (`probeSpawn`) →
-who's asking (`tokenOk`) → does the named project exist (`resolveProject`) → is the rest
-of the request usable (`parseSpawnRequest`). Only the prompt can fail the request
-outright — non-blank after trimming, and at most `PROMPT_CAP` (4000 characters, the
-same cap `messages.ts`'s `TEXT_CAP` sets for a reply). An unrecognized `model`,
-`effort`, `name`, or `permissionMode` is dropped or clamped rather than rejected, so a
-client sending a field this server version doesn't recognize — an older build, or a
-newer one — still launches with the rest of the request honored.
+**The concurrency cap.** `MAX_LAUNCHING` (4, in `server/lib/spawn.ts` beside the other
+caps) is checked before the request body is even read, the same pre-buffer refusal
+`serveTranscribe` makes with `isTranscribing()`. It is **not** a security boundary — a
+caller with launch rights can simply prompt one session into spawning more — it is the
+only rail against an *accident*: a retry loop, a flaky phone connection, a double-tap
+that beats React's re-render. Each launch is a real `claude` process on the account's real
+quota, and nothing else bounds the count: the store's only reaper is a client poll, and
+the client's own guard is a `pending` flag in one browser tab. What the counter spans is
+just the store's window — the ~3s until `adoptLaunched` sees the id on disk, plus
+`FAIL_TTL_MS` for entries that failed — so it bounds **rapid-fire POSTs**, not live
+sessions: ten launches a minute apart all succeed, because each has left the store before
+the next arrives. Capping live sessions would need the session registry this store
+deliberately is not. The flip side of `listLaunching()` counting `failed` entries too:
+four launches that failed back-to-back keep answering 429 until they age out — wanted
+behaviour for a rail whose whole job is damping a loop.
+
+`serveSpawn`'s check order: is the switch on (`getState`) → is the feature configured
+(`probeSpawn`) → who's asking (`tokenOk`) → is anything already in flight
+(`MAX_LAUNCHING`) → does the named project exist (`resolveProject`) → is the rest of the
+request usable (`parseSpawnRequest`). Note that the probe runs *before* the token check,
+which is the opposite of `serveTranscribe`'s documented order — and that divergence is
+harmless rather than principled, so **neither one should be "corrected" into matching the
+other**: `GET /api/health` already publishes `spawnAvailable` unauthenticated and already
+calls the same memoised `probeSpawn`, so probe-first here reveals nothing that route
+doesn't and spawns no extra process. Both handlers carry a comment saying so. From the
+token check onward the order does earn itself, cheapest and least-revealing first.
+
+Only the prompt can fail the request outright — non-blank after trimming, and at most
+`PROMPT_CAP` (4000 characters, the same cap `messages.ts`'s `TEXT_CAP` sets for a reply).
+An unrecognized `model`, `effort`, `name`, or `permissionMode` is dropped or clamped
+rather than rejected, so a client sending a field this server version doesn't recognize —
+an older build, or a newer one — still launches with the rest of the request honored. A
+`name` must also *start* with a letter or digit, so a name can never itself look like a
+flag (`-p` used to pass the charset and become the value of `-n`).
 
 ⚠️ **Route order.** `/api/spawn/:id/stop` is matched by an anchored regex checked
 *above* the exact-string `/api/spawn` check in `index.ts` — the same trap the
@@ -275,19 +320,24 @@ other three write paths, which can only ever act on a session that is already ru
 and already asked for something. It is the honest reading of what "spawn" means, not an
 edge case of it.
 
-⚠️ **Unlike the other three write paths and dictation, spawn ignores the `REMOTE_ANSWER`
-toggle entirely.** `serveSpawn`/`serveSpawnStop` never call `getState(config).remoteAnswer`
-— the toolbar pill and the `REMOTE_ANSWER` env var gate `pending.ts`/`plans.ts`/
-`messages.ts`/`transcribe.ts`, but not `spawn.ts`. The `+ New` button's own gate,
-`spawnAvailable` on `HealthResponse`, is `probeSpawn(config)` — a function of `CLAUDE_BIN`
-alone — computed independently of `getState()` in the very same `serveHealth` response. In
-practice: flipping "remote answers" off, whether from the toolbar pill or by setting
-`REMOTE_ANSWER=false`, does **not** disable spawn. If you want spawn off, unset `CLAUDE_BIN`
-— that is the feature's only kill switch.
+Four things bound it, and none of them is new machinery — they're the same posture the
+rest of the app already takes, aimed at a bigger target:
 
-Three things bound it otherwise, and none of them is new machinery — they're the same
-posture the rest of the app already takes, aimed at a bigger target:
-
+- **The remote-answer toggle covers it, like every other write path.** Both
+  `serveSpawn` and `serveSpawnStop` answer `404 {error: 'remote answers disabled'}` when
+  `getState(config).remoteAnswer` is false — flipping the toolbar pill off, or setting
+  `REMOTE_ANSWER=false`, turns launching off with it. That is the app's only *runtime*
+  kill switch (`CLAUDE_BIN` is restart-scoped), so a switch that excluded the widest write
+  path would have been worse than none: the user reaches for the pill when the posture
+  changes — leaving the house, joining a café network — and infers coverage. It also kept
+  the new panel internally coherent, since the `MicButton` inside `SpawnPanel` POSTs
+  `/api/transcribe`, which was already gated: with the pill off, the mic 404'd while the
+  Launch button beside it still fired. Note what this is *not*: an auth boundary.
+  `REMOTE_ANSWER` defaults to `true`, and anyone who can flip the pill off can flip it back
+  on. `HealthResponse.spawnAvailable` stays a pure capability probe (`probeSpawn`,
+  `CLAUDE_BIN` alone) and is deliberately *not* ANDed with the toggle — same split
+  `transcribe` uses on that same payload, where the mic hides on capability and 404s on
+  policy.
 - **Off by default.** `CLAUDE_BIN` is empty out of the box — the same "unset means off"
   rule `NTFY_TOPIC` and `WHISPER_MODEL` already follow. A fresh clone cannot spawn
   anything until an operator deliberately names a binary.

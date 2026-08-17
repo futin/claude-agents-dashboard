@@ -29,16 +29,21 @@ A tailnet is a private WireGuard network between your own devices, so the dashbo
 touches the public internet. **Device identity is the auth** — only devices signed into
 your Tailscale account can connect, there is no URL to guess, and traffic is end-to-end
 encrypted. That is *stronger* than the app's LAN-trust posture, so the existing security
-model carries over unchanged: reads stay open, and `ANSWER_TOKEN` (gating the three write
-POSTs) may stay empty. Set `ANSWER_TOKEN` only if you **share the tailnet** with other
-people — inside a tailnet it means exactly what it meant on a shared LAN.
+model carries over unchanged: reads stay open, and `ANSWER_TOKEN` (gating the four write
+POSTs — including [spawn](spawn.md), which starts a brand-new `claude` process on this
+machine rather than answering a session that already asked something — plus
+[dictation](dictation.md)) may stay empty. Set `ANSWER_TOKEN` only if you **share the
+tailnet** with other people — inside a tailnet it means exactly what it meant on a shared
+LAN.
 
 The trade-off: every connecting device needs the Tailscale app, so you can't hand the URL
 to someone who isn't on your tailnet.
 
 > ⚠️ **If you pick a public tunnel instead** (ngrok, Cloudflare, …), understand what it
 > exposes: *every* read endpoint is open — full transcripts, chat history, and
-> `/api/management/file` (config file bodies) — to anyone with the link. Set
+> `/api/management/file` (config file bodies) — to anyone with the link. And if you have
+> set `CLAUDE_BIN`, so is [spawn](spawn.md): with `ANSWER_TOKEN` empty, anyone with the
+> link can start a real Claude Code session on this machine. Set
 > `ANSWER_TOKEN` at minimum, and put auth at the edge (ngrok Basic Auth / Cloudflare
 > Access), or add an app-level gate. The origin badge reads **`public`** on such a
 > connection, which is the reminder. ngrok's free tier also interposes an interstitial
