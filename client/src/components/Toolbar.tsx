@@ -24,19 +24,29 @@ const SORTS: { key: SortKey; label: string }[] = [
 export function Toolbar({
   sessions,
   view,
-  onChange
+  onChange,
+  onOpenSpawn
 }: {
   sessions: Session[];
   view: View;
   onChange: (v: View) => void;
+  /** Open the launch panel (its open/closed state lives in SessionsView, next to chatId). */
+  onOpenSpawn: () => void;
 }) {
   const projects = distinctProjects(sessions);
   const set = (patch: Partial<View>) => onChange({ ...view, ...patch });
-  // One `/api/health` poll, two consumers: the badge and the switch.
+  // One `/api/health` poll, three consumers: the badge, the switch, and (when
+  // the server has a claude binary configured) the "+ New" launch button.
   const remoteAnswer = useRemoteAnswer();
 
   return (
     <div className="toolbar">
+      {remoteAnswer.state?.spawnAvailable && (
+        <button type="button" className="tb-new" onClick={onOpenSpawn}>
+          + New
+        </button>
+      )}
+
       <MultiSelect
         label="projects"
         options={projects.map(p => ({ value: p, label: p }))}

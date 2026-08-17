@@ -12,6 +12,8 @@ import { formatInterval } from '../lib/settings';
 
 /** Own chunk — the drawer only loads the first time a chat is opened. */
 const ChatDrawer = lazy(() => import('./ChatDrawer'));
+/** Own chunk, same reasoning — most sessions never spawn one of these. */
+const SpawnPanel = lazy(() => import('./SpawnPanel'));
 
 /**
  * The live sessions monitor — the app's original single view. Owns the 3s
@@ -26,6 +28,8 @@ export function SessionsView() {
   // (same reasoning as row expansion — see docs/subsystems/view-persistence.md).
   // Seeded from a `?session=` deep link, which is consumed once and stripped.
   const [chatId, setChatId] = useState<string | null>(() => deepLinkSession());
+  // Not persisted either: a one-shot form, not a view setting.
+  const [spawnOpen, setSpawnOpen] = useState(false);
 
   const shown = useMemo(
     () => (data ? applyView(data.sessions, view, Date.now()) : null),
@@ -37,8 +41,21 @@ export function SessionsView() {
   return (
     <>
       <Header data={data} />
-      <Toolbar sessions={data ? data.sessions : []} view={view} onChange={setView} />
-      <SessionList sessions={shown} onOpenChat={setChatId} />
+      <Toolbar
+        sessions={data ? data.sessions : []}
+        view={view}
+        onChange={setView}
+        onOpenSpawn={() => setSpawnOpen(true)}
+      />
+      {spawnOpen && (
+        <Suspense fallback={null}>
+          <SpawnPanel
+            onClose={() => setSpawnOpen(false)}
+            onLaunched={id => { setChatId(id); setSpawnOpen(false); }}
+          />
+        </Suspense>
+      )}
+      <SessionList sessions={shown} launching={data?.launching} onOpenChat={setChatId} />
       <div className="foot">
         {connected
           ? `live · refreshing every ${formatInterval(settings.refreshMs)}`
