@@ -35,12 +35,14 @@ import { getState, setEnabled } from './lib/remoteState.js';
 import { getSettings, setSettings } from './lib/settings.js';
 import { classifyOrigin } from './lib/origin.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
-import { adoptLaunched, launch, listLaunching, parseSpawnRequest, probeSpawn, stopLaunch } from './lib/spawn.js';
+import {
+  MAX_LAUNCHING, adoptLaunched, launch, listLaunching, parseSpawnRequest, probeSpawn, stopLaunch
+} from './lib/spawn.js';
 import { toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
-  WaitResult
+  SpawnResponse, WaitResult
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -312,12 +314,14 @@ function send413(res: ServerResponse, body: unknown): void {
 /**
  * `POST /api/transcribe` — a recorded clip in, one line of text out.
  *
- * Gated like the three write paths even though it writes no session state: it
+ * Gated like the four write paths even though it writes no session state: it
  * spawns processes and writes files on this machine, which is firmly the write
  * side of the line this codebase draws. Token comes before the engine probe so
  * an unauthenticated caller gets no further than 403 on a path that spawns
  * processes — not to hide the capability itself: `GET /api/health` already
- * publishes `transcribe` with no auth at all, by design. See
+ * publishes `transcribe` with no auth at all, by design. `serveSpawn` below
+ * runs those two the other way round; the paragraph there explains why that is
+ * harmless, so don't "fix" either one into matching the other. See
  * docs/subsystems/dictation.md.
  */
 export async function serveTranscribe(
@@ -772,10 +776,29 @@ export async function serveNotifyTest(
 
 /**
  * `POST /api/spawn` — start a new headless `claude -p` session in an existing
- * recent project. The checks below run in exactly this order because each
- * leaks less to an unauthenticated caller than the next: whether the feature
- * is even configured, then who's asking, then whether the project they named
- * exists, then whether the rest of the request is usable.
+ * recent project.
+ *
+ * Gated on the remote-answer toggle exactly like `serveTranscribe` above, and
+ * for the stronger version of its reason: spawn writes a whole new session on
+ * this machine. The pill is the app's only *runtime* kill switch (`CLAUDE_BIN`
+ * is restart-scoped), so a switch that silently excluded the widest write path
+ * would be worse than none — the user infers coverage. It is not an auth
+ * boundary: `REMOTE_ANSWER` defaults to true and whoever can flip the pill off
+ * can flip it back on. `HealthResponse.spawnAvailable` stays a pure capability
+ * probe regardless, the same split `transcribe` uses on that payload.
+ *
+ * Check order, and the one part of it that is *not* about leaking less: the
+ * probe runs before `tokenOk`, unlike `serveTranscribe` above, which documents
+ * the opposite order for itself. That divergence is harmless here rather than
+ * principled — `GET /api/health` already publishes `spawnAvailable`
+ * unauthenticated and already calls the same memoised `probeSpawn`, so
+ * probe-first through this route reveals nothing new and spawns no extra
+ * process. Cross-referenced in both directions on purpose: neither ordering
+ * should be "corrected" to match the other without reading this paragraph.
+ * From there the order does earn itself — who's asking, then how many launches
+ * are already in flight (before a body is read, the same pre-buffer refusal
+ * `serveTranscribe` does), then whether the named project exists, then whether
+ * the rest of the request is usable.
  *
  * `body.project` never reaches the filesystem by being joined into a path —
  * it is resolved through `resolveProject`'s membership check against the
@@ -783,8 +806,17 @@ export async function serveNotifyTest(
  * documents for its `dirName` query param.
  */
 export async function serveSpawn(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
   if (!probeSpawn(config)) return sendJson(res, 404, { error: 'spawn unavailable' });
   if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  // The accident rail (see MAX_LAUNCHING in server/lib/spawn.ts): N POSTs would
+  // otherwise be N live `claude` processes on the account's real quota. Counted
+  // before the body is read, like transcribe's `isTranscribing()` peek — and
+  // `listLaunching()` is also what expires stale entries, so a burst that has
+  // already aged out doesn't hold the door shut.
+  if (listLaunching().length >= MAX_LAUNCHING) {
+    return sendJson(res, 429, { error: 'too many launches in flight' });
+  }
 
   const body = await readJsonBody(req) as Partial<SpawnRequest> | null;
   if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
@@ -799,7 +831,9 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
   let sessionId: string;
   try {
     const ref = resolveProject(config, projectName);
-    if (!ref) return sendJson(res, 400, { error: `unknown project: ${projectName}` });
+    // Named, but bounded: the body cap is 64KB, and every other rejection in
+    // this file answers with a fixed string.
+    if (!ref) return sendJson(res, 400, { error: `unknown project: ${projectName.slice(0, 60)}` });
 
     const parsed = parseSpawnRequest(body, config.spawnMaxPermission);
     if (!parsed.ok) return sendBadBody(res, { error: parsed.error });
@@ -809,7 +843,7 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
     console.error('[dashboard] spawn failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'spawn failed' });
   }
-  sendJson(res, 200, { sessionId });
+  sendJson(res, 200, { sessionId } satisfies SpawnResponse);
 }
 
 /**
@@ -817,15 +851,23 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
  * drop it from the store immediately (see `stopLaunch`'s own doc comment for
  * why a stopped launch can't be told apart from a crashed one downstream).
  *
+ * Toggle-gated like `serveSpawn`, so the pill covers the whole feature rather
+ * than half of it. Deliberately **not** `async`: it awaits nothing (no body to
+ * read — the id is in the path), and this handler is `void`-dispatched from
+ * `index.ts`, so returning a promise would put it in the unhandled-rejection
+ * class for no benefit. `serveSessionQuestion`/`serveSessionPlan` are plain
+ * sync for the same reason.
+ *
  * ⚠️ The child's pid lives only in this process's RAM (the store in
  * `server/lib/spawn.ts`), so after a server restart this always 404s — the
  * entry is gone even though the real process may still be running. Killing it
  * at that point is a terminal job (`kill <pid>`), not something this endpoint
  * can reach any more.
  */
-export async function serveSpawnStop(
+export function serveSpawnStop(
   config: Config, id: string, req: IncomingMessage, res: ServerResponse
-): Promise<void> {
+): void {
+  if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
   if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
   if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
   if (!stopLaunch(id)) return sendJson(res, 404, { error: 'no live launch' });

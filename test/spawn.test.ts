@@ -5,10 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  FAIL_TTL_MS, LAUNCH_TTL_MS, NAME_CAP, PROMPT_CAP, PROMPT_PREVIEW_CAP, STDERR_TAIL_CAP,
-  adoptLaunched, buildSpawnArgs, clampPermission, launch, listLaunching, parseSpawnRequest,
-  probeSpawn, resetLaunches, resetSpawnProbe, setSpawner, stopLaunch
+  FAIL_TTL_MS, LAUNCH_TTL_MS, NAME_CAP, PERMISSION_MODES, PROMPT_CAP, PROMPT_PREVIEW_CAP,
+  STDERR_TAIL_CAP, adoptLaunched, buildSpawnArgs, clampPermission, launch, listLaunching,
+  parseSpawnRequest, probeSpawn, resetLaunches, resetSpawnProbe, setSpawner, stopLaunch
 } from '../server/lib/spawn.js';
+import { toPermissionMode } from '../server/lib/config.js';
 import type { Config } from '../server/lib/config.js';
 import type { SpawnInput, Spawner } from '../server/lib/spawn.js';
 import type { PermissionMode, ProjectRef } from '../shared/types.js';
@@ -83,6 +84,29 @@ function fakeSpawner(calls: SpawnCall[], children: FakeChild[]): Spawner {
   };
 }
 
+/** Run `fn` with `console.warn` captured, and return every line it wrote. */
+function captureWarn(fn: () => void): string[] {
+  const lines: string[] = [];
+  const original = console.warn;
+  console.warn = (...args: unknown[]): void => { lines.push(args.map(String).join(' ')); };
+  try { fn(); } finally { console.warn = original; }
+  return lines;
+}
+
+/**
+ * Busy-wait until `Date.now()` has advanced by at least `ms`.
+ *
+ * `fail()` reads `Date.now()` itself and `failedAtMs` is deliberately absent
+ * from the public `LaunchingSession` shape, so the only way to prove expiry is
+ * measured from the *failure* rather than from the launch is to make the two
+ * clocks genuinely differ — and this suite's runner is synchronous, so there is
+ * nowhere to await. A few milliseconds, once.
+ */
+function spinMs(ms: number): void {
+  const until = Date.now() + ms;
+  while (Date.now() < until) { /* deliberate */ }
+}
+
 /** A recently-active project fixture — the shape `launch` reads off `ProjectRef`. */
 const REF: ProjectRef = { dirName: 'enc-demo', name: 'demo-project', path: '/tmp/demo-project', lastActiveMs: Date.now() };
 
@@ -126,6 +150,53 @@ export function run(): number {
       assert.strictEqual(clampPermission(requested, ceiling), expected);
     })) p++; else f++;
   }
+
+  /* ------------------------------------------------ toPermissionMode (config.ts)
+
+     One layer above clampPermission: the ceiling knob itself, validated at
+     config load. It bounds the whole feature's blast radius, and it was added
+     *because* a bare cast let `SPAWN_MAX_PERMISSION=Plan` silently raise an
+     intended `plan` ceiling two rungs to `auto`. `isPermissionMode` is private
+     to config.ts and hand-writes a second literal copy of the mode set, so the
+     first case below is what catches it drifting from `PERMISSION_MODES`. */
+
+  if (test('toPermissionMode keeps every PERMISSION_MODES value verbatim, silently (drift guard)', () => {
+    for (const mode of PERMISSION_MODES) {
+      const warnings = captureWarn(() => {
+        assert.strictEqual(toPermissionMode(mode, 'plan'), mode, `${mode} should survive unchanged`);
+      });
+      assert.deepStrictEqual(warnings, [], `${mode} is valid — nothing to warn about`);
+    }
+  })) p++; else f++;
+
+  if (test('toPermissionMode: absent, empty, blank and non-string all mean "unset" — fallback, no warning', () => {
+    for (const value of [undefined, null, '', '   ', 42, {}]) {
+      const warnings = captureWarn(() => {
+        assert.strictEqual(toPermissionMode(value, 'acceptEdits'), 'acceptEdits');
+      });
+      assert.deepStrictEqual(warnings, [], `${JSON.stringify(value)} is the ordinary unset case`);
+    }
+  })) p++; else f++;
+
+  if (test('toPermissionMode: "Plan" (the capitalization typo) falls back AND warns, naming value and fallback', () => {
+    const warnings = captureWarn(() => {
+      // The regression: this used to reach a bare cast, so the ceiling rose
+      // from the intended `plan` to `auto` — two rungs, permissive direction,
+      // nothing printed anywhere.
+      assert.strictEqual(toPermissionMode('Plan', 'auto'), 'auto');
+    });
+    assert.strictEqual(warnings.length, 1);
+    assert.match(warnings[0], /Plan/);
+    assert.match(warnings[0], /auto/);
+  })) p++; else f++;
+
+  if (test('toPermissionMode: an unrecognized value warns and never reaches the top of the ladder', () => {
+    const warnings = captureWarn(() => {
+      assert.strictEqual(toPermissionMode('nonsense', 'plan'), 'plan');
+    });
+    assert.strictEqual(warnings.length, 1);
+    assert.match(warnings[0], /nonsense/);
+  })) p++; else f++;
 
   /* ------------------------------------------------------------ parseSpawnRequest */
 
@@ -190,6 +261,20 @@ export function run(): number {
     const r = parseSpawnRequest({ prompt: 'x', name: 'x"; rm -rf /; echo "' }, 'auto');
     assert.ok(r.ok);
     if (r.ok) assert.strictEqual(r.input.name, undefined);
+  })) p++; else f++;
+
+  if (test('a name may not start with a hyphen — "-p" must never become the value of -n', () => {
+    for (const name of ['-p', '--model', '-', '_x', ' leading space']) {
+      const r = parseSpawnRequest({ prompt: 'x', name }, 'auto');
+      assert.ok(r.ok);
+      if (r.ok) assert.strictEqual(r.input.name, undefined, `${JSON.stringify(name)} should be dropped`);
+    }
+  })) p++; else f++;
+
+  if (test('a dotted version-style name is kept (it used to be silently dropped)', () => {
+    const r = parseSpawnRequest({ prompt: 'x', name: 'v1.2 release' }, 'auto');
+    assert.ok(r.ok);
+    if (r.ok) assert.strictEqual(r.input.name, 'v1.2 release');
   })) p++; else f++;
 
   if (test('a name over NAME_CAP is dropped; exactly NAME_CAP is kept', () => {
@@ -546,9 +631,33 @@ export function run(): number {
     try {
       const id = launch(cfg(), REF, baseInput());
       children[0].emit('exit', 1, null);
-      const failedAtMs = listLaunching().find(e => e.sessionId === id)!.startedAtMs;
-      assert.strictEqual(listLaunching(failedAtMs + FAIL_TTL_MS - 1000).length, 1);
-      assert.strictEqual(listLaunching(failedAtMs + FAIL_TTL_MS + 1000).length, 0);
+      const startedAtMs = listLaunching().find(e => e.sessionId === id)!.startedAtMs;
+      assert.strictEqual(listLaunching(startedAtMs + FAIL_TTL_MS - 1000).length, 1);
+      assert.strictEqual(listLaunching(startedAtMs + FAIL_TTL_MS + 1000).length, 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  // The case above passes identically whether `failedAtMs` exists or not: a
+  // fake child fails in the same millisecond it launched, so the two clocks are
+  // indistinguishable. This one separates them — the failure lands measurably
+  // later than the launch, and the entry must then outlive
+  // `startedAtMs + FAIL_TTL_MS`, because the window is time-since-failure.
+  if (test('FAIL_TTL_MS runs from the failure, not from the launch (failedAtMs)', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      const startedAtMs = listLaunching().find(e => e.sessionId === id)!.startedAtMs;
+      const GAP_MS = 25;
+      spinMs(GAP_MS);
+      children[0].emit('exit', 1, null);
+
+      // Strictly past the launch-based deadline, but inside the failure-based
+      // one: only a separate failedAtMs keeps the entry alive here.
+      assert.strictEqual(listLaunching(startedAtMs + FAIL_TTL_MS + 5).length, 1);
+      // And it still expires — measured from the failure, so a whole gap later.
+      assert.strictEqual(listLaunching(startedAtMs + FAIL_TTL_MS + GAP_MS + 1000).length, 0);
     } finally { setSpawner(null); }
   })) p++; else f++;
 
@@ -608,7 +717,7 @@ export function run(): number {
     } finally { setSpawner(null); }
   })) p++; else f++;
 
-  if (test('the options are exactly cwd/detached/stdio, stdin piped and stdout ignored', () => {
+  if (test('the options are exactly cwd/detached/stdio, stdin piped, stdout ignored, stderr piped', () => {
     resetLaunches();
     const calls: SpawnCall[] = [];
     setSpawner(fakeSpawner(calls, []));
@@ -621,6 +730,9 @@ export function run(): number {
       const stdio = options.stdio as unknown[];
       assert.strictEqual(stdio[0], 'pipe');
       assert.strictEqual(stdio[1], 'ignore');
+      // stderr must stay piped for as long as the parent lives: the whole
+      // failure-reporting story (the stderr tail on a `failed` row) rests on it.
+      assert.strictEqual(stdio[2], 'pipe');
     } finally { setSpawner(null); }
   })) p++; else f++;
 

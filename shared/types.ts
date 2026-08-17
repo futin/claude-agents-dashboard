@@ -800,6 +800,17 @@ export interface SpawnRequest {
   permissionMode?: PermissionMode;
 }
 
+/**
+ * 200 body of `POST /api/spawn`. The id is minted before the child is spawned
+ * (`--session-id <uuid>` is honored end to end, see docs/subsystems/spawn.md),
+ * so it is valid the instant this response lands — the transcript it names does
+ * not exist yet, which is why the client can set its chat-drawer deep link from
+ * it but the drawer itself still waits for the id to appear in a poll.
+ */
+export interface SpawnResponse {
+  sessionId: string;
+}
+
 /** Full payload of `GET /api/sessions`. */
 export interface SessionsResponse {
   generatedAt: string;

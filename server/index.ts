@@ -35,6 +35,30 @@ const config = loadConfig();
 const isProd = process.env.NODE_ENV === 'production';
 const clientDist = path.join(process.cwd(), 'client', 'dist');
 
+/**
+ * A rejected promise nobody awaited must not end a dashboard that a dozen
+ * sessions are being watched through.
+ *
+ * Almost every handler below is dispatched with `void serveX(...)` — the
+ * request listener is sync, the handlers are async, and nothing awaits them. On
+ * Node's default `unhandledRejection: throw`, one throw inside any of them (a
+ * `res.writeHead` on an already-ended response, an `fs` call losing a race with
+ * a rotated transcript) takes the whole process down. Each handler owns a
+ * try/catch where it has a meaningful fallback; this is the floor under all of
+ * them, and it deliberately only **logs**: an unhandled rejection is a bug to
+ * fix, not a reason to stop serving the other 20 routes. Same log prefix as
+ * `api.ts`'s own catch blocks, so it lands in one grep.
+ *
+ * Not an `uncaughtException` handler, and `decodePath` below is not made
+ * redundant by this: a `URIError` from `decodeURIComponent` is thrown
+ * *synchronously* inside the request listener, so it never becomes a rejection.
+ * Swallowing genuine synchronous throws process-wide would keep a
+ * possibly-broken process alive, which is a different and worse trade.
+ */
+process.on('unhandledRejection', (reason: unknown) => {
+  console.error('[dashboard] unhandled rejection:', reason instanceof Error ? reason.stack || reason.message : reason);
+});
+
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',

@@ -65,14 +65,26 @@ export const PROMPT_CAP = 4000;
 export const NAME_CAP = 60;
 
 /**
- * Allowed charset for a session's display name: letters, digits, spaces,
- * hyphens, underscores. Nothing here is a shell metacharacter or a path
- * separator — the name ends up as a single argv element (never shell-parsed,
- * see the module doc comment above), but it also flows into UI and, later,
- * onto disk, so it is sanitized on its own merits rather than piggy-backing on
- * argv safety.
+ * Allowed charset for a session's display name: letters, digits, spaces, dots,
+ * hyphens, underscores — and the **first** character must be a letter or digit.
+ * Nothing here is a shell metacharacter or a path separator; the name ends up
+ * as a single argv element (never shell-parsed, see the module doc comment
+ * above), but it also flows into UI and, later, onto disk, so it is sanitized
+ * on its own merits rather than piggy-backing on argv safety.
+ *
+ * Two deliberate details:
+ *
+ *  - **The leading character is constrained separately** so a name can never
+ *    itself *look* like a flag: `-p` passed the old charset and became the
+ *    value of `-n`. No escalation was possible even then (a name is always
+ *    exactly one argv element, pinned by test), but the worst case — a name
+ *    the CLI's own option parser chokes on — is not worth keeping for zero
+ *    benefit.
+ *  - **`.` is allowed** because the spec's charset (`/^[\w .\-]*$/`) has it and
+ *    an ordinary name like `v1.2 release` was being silently dropped. A dot is
+ *    not a path separator, and a name is never joined into a path.
  */
-const NAME_RE = /^[A-Za-z0-9 _-]+$/;
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
 
 /** `PERMISSION_MODES` index of `value`, or of `'auto'` when `value` isn't one of them. */
 function modeIndex(value: unknown): number {
@@ -258,6 +270,27 @@ export const FAIL_TTL_MS = 5 * 60_000;
 
 /** Characters of the prompt kept in the store for display. The child on stdin still gets the full, untruncated prompt. */
 export const PROMPT_PREVIEW_CAP = 120;
+
+/**
+ * How many un-adopted launches may sit in this store before `serveSpawn`
+ * answers 429 (`api.ts`). The accident rail, not a security boundary: a caller
+ * with launch rights can simply prompt one session into spawning more, so this
+ * exists to stop a *mistake* — a retry loop, a flaky phone connection, a
+ * double-tap that beats React's re-render — from becoming N real `claude`
+ * processes burning the account's quota. `transcribe.ts` single-flights its own
+ * child for the same reason.
+ *
+ * ⚠️ What this counter spans is only the pre-adoption window (~3s, until
+ * `adoptLaunched` sees the id on disk) plus `FAIL_TTL_MS` for entries that
+ * failed. It therefore bounds **rapid-fire POSTs**, not the number of live
+ * sessions — ten launches a minute apart all succeed, because each has left
+ * the store before the next arrives. That is deliberate: capping live sessions
+ * would need the session registry this store is explicitly not (see the store's
+ * charter above). The flip side of counting `failed` entries too: four launches
+ * that failed back-to-back keep answering 429 until they age out, which for a
+ * rail whose job is damping a retry loop is the wanted behaviour.
+ */
+export const MAX_LAUNCHING = 4;
 
 function toPublic(e: Entry): LaunchingSession {
   const out: LaunchingSession = {

@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 
 import { usePersistedState } from './usePersistedState';
-import type { SpawnRequest } from '../../../shared/types';
+import type { SpawnRequest, SpawnResponse } from '../../../shared/types';
 
 export interface SpawnControl {
   /** POSTs `req` to `/api/spawn`. Resolves the new session id on success, `null` otherwise — never throws. */
@@ -52,7 +52,7 @@ export function useSpawn(): SpawnControl {
       }
       setNeedsToken(false);
       if (res.ok) {
-        const body = (await res.json()) as { sessionId: string };
+        const body = (await res.json()) as SpawnResponse;
         return body.sessionId;
       }
       const body = await res.json().catch(() => null) as { error?: string } | null;
