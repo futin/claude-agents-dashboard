@@ -112,8 +112,8 @@ visible to the dashboard.
   a local terminal TUI. **Read the verified/unverified split below before relying on
   any of this** — two earlier revisions of this file overstated it.
 
-  **Verified (2026-08-17).** A single successful run, executed headlessly under a pty
-  against a session made with `claude --cloud`:
+  **Verified (2026-08-17)** against a session made with `claude --cloud`, teleported
+  once headlessly under a pty and once from a bare shell:
 
   - Teleport executes and loads the cloud history: `Teleporting… → Validating session →
     Fetching session logs → Getting branch info → Checking out branch`, then the TUI
@@ -125,15 +125,30 @@ visible to the dashboard.
     reference a teleported id, and `list_sessions` never shows one. Structural, not a
     self-report — this is the fact that kills the cloud→sidebar→teleport idea.
 
-  **NOT verified: that teleport persists a local transcript at all.** No teleport on
-  this machine has ever produced one. Earlier revisions claimed `9fefb37c-….jsonl` and
-  `d49f5799-….jsonl` were teleport artifacts; reading their contents shows both are
-  ordinary local sessions whose *first user message is the literal text*
-  `claude --teleport …` — the command typed into a running session instead of a shell.
-  The ids matched the filenames by coincidence, and the claim survived two revisions
-  because nobody opened the files. Until a teleport is run in a real shell and a new
-  transcript is observed appearing, treat "you end up with two diverging sessions" as
-  **unproven**.
+  - The **local fork is real, and it persists** — settled by running teleport in a bare
+    shell and watching the filesystem. It appears as a **brand-new UUID transcript** in
+    `~/.claude/projects/<cwd-slug>/`, carrying the inherited cloud history, and the
+    dashboard lists it like any other session. Verified by the strongest available
+    probe: a marker file readable only on this Mac, which the cloud side had refused by
+    path minutes earlier, was read successfully after the teleport.
+
+  **Nothing links the three ids.** For the run above: cloud id
+  `session_011rhayQh5ZoiKenLuXugy1R`, the cloud session's own uuid
+  `81a41fc4-…`, and the local fork `98939737-…`. The fork's filename echoes none of
+  them — find it by mtime, by content, or just by watching the dashboard.
+
+  ⚠️ **The fork inherits the cloud session's self-descriptions.** That local transcript
+  literally contains the container's line *"This session is running in a remote Linux
+  container"* — written while it truly was. Ask the fork where it runs and it may repeat
+  that from history without checking. This is why locality is judged by the transcript,
+  never by the answer (below).
+
+  *Two earlier revisions got this wrong in both directions.* First they named
+  `9fefb37c-….jsonl` and `d49f5799-….jsonl` as teleport artifacts — reading the files
+  shows both are ordinary sessions whose first user message is the literal text
+  `claude --teleport …`, the ids matching by coincidence. The correction then
+  over-swung to "no fork is persisted at all", because no real shell teleport had been
+  run yet. Both errors came from not opening the file.
 
   **How to tell local from cloud — never ask the model.** A teleported session inherits
   the cloud history, so it can answer "where do you run?" from stale context instead of
