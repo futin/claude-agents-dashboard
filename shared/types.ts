@@ -735,6 +735,17 @@ export interface FileContent {
   error?: boolean;
 }
 
+/**
+ * Spawning a new headless session (a detached `claude -p` process). The
+ * launch form picks a permission mode; the server clamps it to a configured
+ * ceiling (`clampPermission` in `server/lib/spawn.ts`) so a browser can never
+ * ask for more than the host allows. Only the one type both sides must agree
+ * on lands here in this task — the request/response shapes follow later.
+ */
+
+/** The permission mode ladder, lowest to highest: plan < acceptEdits < auto < bypassPermissions. */
+export type PermissionMode = 'plan' | 'acceptEdits' | 'auto' | 'bypassPermissions';
+
 /** Full payload of `GET /api/sessions`. */
 export interface SessionsResponse {
   generatedAt: string;

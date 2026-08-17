@@ -59,6 +59,19 @@ export interface Config {
   whisperBin: string;
   /** ffmpeg, used to make whisper-readable 16kHz mono WAV from browser audio. */
   ffmpegBin: string;
+  /**
+   * The `claude` CLI to spawn for a new headless session. Empty (the default)
+   * disables the whole spawn-a-session feature outright — the same "unset
+   * means off" rule `NTFY_TOPIC` and `WHISPER_MODEL` already use, rather than
+   * a separate boolean.
+   */
+  claudeBin: string;
+  /**
+   * The permission mode ceiling every spawn request is clamped to
+   * (`clampPermission` in `server/lib/spawn.ts`), no matter what the launch
+   * form asks for.
+   */
+  spawnMaxPermission: string;
 }
 
 export const DEFAULTS = {
@@ -77,7 +90,9 @@ export const DEFAULTS = {
   DASHBOARD_PUBLIC_URL: '',
   WHISPER_MODEL: '',
   WHISPER_BIN: 'whisper-cli',
-  FFMPEG_BIN: 'ffmpeg'
+  FFMPEG_BIN: 'ffmpeg',
+  CLAUDE_BIN: '',
+  SPAWN_MAX_PERMISSION: 'auto'
 } as const;
 
 /** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
@@ -166,6 +181,8 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     publicUrl: (src('DASHBOARD_PUBLIC_URL') || DEFAULTS.DASHBOARD_PUBLIC_URL).trim().replace(/\/+$/, ''),
     whisperModel: (src('WHISPER_MODEL') || DEFAULTS.WHISPER_MODEL).trim(),
     whisperBin: (src('WHISPER_BIN') || DEFAULTS.WHISPER_BIN).trim(),
-    ffmpegBin: (src('FFMPEG_BIN') || DEFAULTS.FFMPEG_BIN).trim()
+    ffmpegBin: (src('FFMPEG_BIN') || DEFAULTS.FFMPEG_BIN).trim(),
+    claudeBin: (src('CLAUDE_BIN') || DEFAULTS.CLAUDE_BIN).trim(),
+    spawnMaxPermission: (src('SPAWN_MAX_PERMISSION') || DEFAULTS.SPAWN_MAX_PERMISSION).trim()
   };
 }
