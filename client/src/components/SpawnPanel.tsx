@@ -4,32 +4,24 @@ import MicButton from './MicButton';
 import { useManagementIndex } from '../hooks/useManagement';
 import { useSpawn } from '../hooks/useSpawn';
 import { appendTranscript } from '../lib/dictation';
+import {
+  EFFORTS, MODELS, NAME_CAP, PERMISSION_MODE_LABEL, PERMISSION_MODES, PROMPT_CAP,
+  allowedPermissionModes
+} from '../lib/spawnOptions';
 import type { PermissionMode, SpawnRequest } from '../../../shared/types';
-
-/**
- * Mirrors `server/lib/spawn.ts`'s `MODELS` / `EFFORTS` / `PERMISSION_MODES` /
- * `NAME_CAP` / `PROMPT_CAP`. Duplicated here rather than imported: that module
- * is server-only (the FE/BE boundary is `shared/types.ts`, and `SpawnRequest`
- * deliberately types `model`/`effort` as plain `string`, not a literal union).
- * A value here the server doesn't recognize is dropped, not rejected
- * (`parseSpawnRequest` fails soft on all four), so drift between the two
- * lists degrades this select's options rather than breaking a launch.
- */
-const MODELS = ['opus', 'sonnet', 'haiku', 'fable'] as const;
-const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
-const PERMISSION_MODES: { value: PermissionMode; label: string }[] = [
-  { value: 'plan', label: 'plan' },
-  { value: 'acceptEdits', label: 'accept edits' },
-  { value: 'auto', label: 'auto' },
-  { value: 'bypassPermissions', label: 'bypass permissions' }
-];
-const NAME_CAP = 60;
-const PROMPT_CAP = 4000;
 
 interface Props {
   onClose: () => void;
   /** A launch succeeded — the caller opens the chat drawer for it (and closes this panel). */
   onLaunched: (sessionId: string) => void;
+  /**
+   * The host's permission-mode ceiling (`HealthResponse.spawnMaxPermission`),
+   * lifted from the one `/api/health` poll `SessionsView` owns. Absent while
+   * that poll hasn't answered yet, or on an older server — the picker then
+   * falls back to offering up to `'auto'`, exactly as `allowedPermissionModes`
+   * treats a real `'auto'` ceiling.
+   */
+  spawnMaxPermission?: PermissionMode;
 }
 
 /**
@@ -41,7 +33,7 @@ interface Props {
  * Project defaults to the most recently active one — `useManagementIndex`'s
  * `projects` is already newest-first, so that's simply the first entry.
  */
-export default function SpawnPanel({ onClose, onLaunched }: Props) {
+export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: Props) {
   const { launch, pending, error, needsToken, setToken } = useSpawn();
   const { index, loading } = useManagementIndex(0);
   const projects = index?.projects ?? [];
@@ -53,15 +45,33 @@ export default function SpawnPanel({ onClose, onLaunched }: Props) {
   const [name, setName] = useState('');
   const [model, setModel] = useState('');
   const [effort, setEffort] = useState('');
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>('auto');
+  // Same null-means-untouched pattern as `project` above: the derived default
+  // below re-reacts if `spawnMaxPermission` arrives (or changes) after mount,
+  // without an effect to keep them in sync.
+  const [permissionMode, setPermissionMode] = useState<PermissionMode | null>(null);
   const [tokenDraft, setTokenDraft] = useState('');
 
   const selectedProject = project ?? projects[0]?.dirName ?? '';
+
+  // Only offer modes the server will actually honor — it clamps anything
+  // above its ceiling silently, so showing them here would let a user pick
+  // one thing and get another with no feedback. `allowedModes` always ends on
+  // the (validated) ceiling itself, so falling back to its last element when
+  // 'auto' isn't in range (a 'plan' ceiling) still clamps toward the ceiling
+  // rather than toward the top of the ladder.
+  const allowedModes = allowedPermissionModes(spawnMaxPermission);
+  const defaultMode = allowedModes.includes('auto') ? 'auto' : allowedModes[allowedModes.length - 1];
+  const selectedMode = permissionMode && allowedModes.includes(permissionMode) ? permissionMode : defaultMode;
+  const ceilingLimited = allowedModes.length < PERMISSION_MODES.length;
+  const permissionTitle = ceilingLimited
+    ? `This host limits launches to '${PERMISSION_MODE_LABEL[allowedModes[allowedModes.length - 1]]}' or below (SPAWN_MAX_PERMISSION).`
+    : undefined;
+
   const canLaunch = !pending && prompt.trim() !== '' && selectedProject !== '';
 
   async function doLaunch(): Promise<void> {
     if (!canLaunch) return;
-    const req: SpawnRequest = { project: selectedProject, prompt: prompt.trim(), permissionMode };
+    const req: SpawnRequest = { project: selectedProject, prompt: prompt.trim(), permissionMode: selectedMode };
     if (name.trim()) req.name = name.trim();
     if (model) req.model = model;
     if (effort) req.effort = effort;
@@ -135,11 +145,12 @@ export default function SpawnPanel({ onClose, onLaunched }: Props) {
           <span className="sp-label">permission</span>
           <select
             className="qp-select"
-            value={permissionMode}
+            value={selectedMode}
             disabled={pending}
+            title={permissionTitle}
             onChange={e => setPermissionMode(e.target.value as PermissionMode)}
           >
-            {PERMISSION_MODES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+            {allowedModes.map(m => <option key={m} value={m}>{PERMISSION_MODE_LABEL[m]}</option>)}
           </select>
         </label>
       </div>

@@ -5,6 +5,7 @@ import { SessionList } from './SessionList';
 import { Toolbar } from './Toolbar';
 import { deepLinkSession } from '../lib/deepLink';
 import { usePersistedState } from '../hooks/usePersistedState';
+import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
 import { useSessions } from '../hooks/useSessions';
 import { useSettings } from '../hooks/useSettings';
 import { applyView, DEFAULT_VIEW, type View } from '../lib/filterSort';
@@ -30,6 +31,10 @@ export function SessionsView() {
   const [chatId, setChatId] = useState<string | null>(() => deepLinkSession());
   // Not persisted either: a one-shot form, not a view setting.
   const [spawnOpen, setSpawnOpen] = useState(false);
+  // One `/api/health` poll, owned here so both the toolbar (badge, switch,
+  // "+ New" gate) and the spawn panel (its permission-mode ceiling) read the
+  // same snapshot instead of each starting their own.
+  const remoteAnswer = useRemoteAnswer();
 
   const shown = useMemo(
     () => (data ? applyView(data.sessions, view, Date.now()) : null),
@@ -46,12 +51,14 @@ export function SessionsView() {
         view={view}
         onChange={setView}
         onOpenSpawn={() => setSpawnOpen(true)}
+        remoteAnswer={remoteAnswer}
       />
       {spawnOpen && (
         <Suspense fallback={null}>
           <SpawnPanel
             onClose={() => setSpawnOpen(false)}
             onLaunched={id => { setChatId(id); setSpawnOpen(false); }}
+            spawnMaxPermission={remoteAnswer.state?.spawnMaxPermission}
           />
         </Suspense>
       )}

@@ -323,6 +323,17 @@ export interface HealthResponse extends RemoteAnswerState {
    * `probeSpawn` in `server/lib/spawn.ts`.
    */
   spawnAvailable?: boolean;
+  /**
+   * The permission-mode ceiling every launch is clamped to
+   * (`config.spawnMaxPermission`, see `clampPermission` in
+   * `server/lib/spawn.ts`). Not a secret — a ceiling, not a credential — so
+   * it rides the same probe `spawnAvailable` does. Lets the launch panel
+   * offer only the permission modes it can actually deliver, instead of
+   * silently clamping a choice the user made on purpose. Absent on an older
+   * server that predates this field; the panel then falls back to offering
+   * up to `'auto'`, today's default ceiling.
+   */
+  spawnMaxPermission?: PermissionMode;
 }
 
 /** `POST /api/transcribe` — text may be '' when the clip held no speech. */

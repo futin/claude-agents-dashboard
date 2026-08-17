@@ -416,7 +416,8 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
     answerSecs: settings.answerSecs,
     origin: classifyOrigin(req?.socket?.remoteAddress, req?.headers),
     transcribe: probeTranscribe(config),
-    spawnAvailable: probeSpawn(config)
+    spawnAvailable: probeSpawn(config),
+    spawnMaxPermission: config.spawnMaxPermission
   });
 }
 
