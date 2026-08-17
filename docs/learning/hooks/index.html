@@ -1,0 +1,990 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Code hooks — the learning guide</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1a1a1a; --muted: #5c6370; --line: #b8bec9;
+  --panel: #f5f6f8; --accent: #2563eb; --good: #15803d; --bad: #b91c1c;
+  --code-bg: #f2f3f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a; --fg: #e6e8ea; --muted: #9aa2ad; --line: #4a515c;
+    --panel: #1d2027; --accent: #7aa2f7; --good: #6ccf8e; --bad: #f2777a;
+    --code-bg: #1a1d23;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); margin: 0;
+  font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+/* Desktop is the base: sidebar + gap + a 60rem prose measure = a 78rem shell. */
+.shell {
+  display: grid; grid-template-columns: 17rem minmax(0, 1fr); gap: 1rem;
+  max-width: 78rem; margin: 0 auto; padding: 1.5rem 1.25rem;
+}
+.side { position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding-top: .5rem; }
+nav.toc { font-size: .875rem; }
+nav.toc ul { list-style: none; margin: 0; padding-left: .75rem; }
+nav.toc > ul { padding-left: 0; }
+nav.toc li { margin: .15rem 0; }
+nav.toc a { color: var(--muted); text-decoration: none; display: block; padding: .1rem .35rem; border-radius: 4px; }
+nav.toc a:hover { color: var(--fg); background: var(--panel); }
+nav.toc a.active { color: var(--accent); background: var(--panel); font-weight: 600; }
+nav.toc > ul > li > a { color: var(--fg); font-weight: 600; margin-top: .5rem; }
+main { min-width: 0; }
+h1 { font-size: 1.75rem; line-height: 1.25; margin: .25rem 0 .5rem; }
+h2 { font-size: 1.4rem; margin: 2.5rem 0 .75rem; padding-top: .5rem; border-top: 2px solid var(--line); }
+h3 { font-size: 1.15rem; margin: 1.75rem 0 .5rem; }
+h4 { font-size: 1rem; margin: 1.25rem 0 .4rem; }
+p, li { overflow-wrap: break-word; }
+.lede { color: var(--muted); }
+a { color: var(--accent); }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+code { background: var(--code-bg); padding: .1em .3em; border-radius: 3px; font-size: .875em;
+       overflow-wrap: anywhere; }
+pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px;
+      padding: .85rem 1rem; overflow-x: auto; }
+pre code { background: none; padding: 0; font-size: .8125rem; overflow-wrap: normal; }
+blockquote { margin: 1.25rem 0; padding: .1rem 1rem; border-left: 3px solid var(--accent);
+             background: var(--panel); border-radius: 0 6px 6px 0; }
+.tablewrap { overflow-x: auto; margin: 1.25rem 0; }
+table { border-collapse: collapse; font-size: .9rem; min-width: 100%; }
+th, td { border: 1px solid var(--line); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+th { background: var(--panel); }
+.diagram { overflow-x: auto; margin: 1.5rem 0 .35rem; }
+.diagram svg { display: block; min-width: 34rem; width: 100%; }
+.caption { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
+/* With a permanent sidebar these are noise; the narrow fallback restores them. */
+.backtop { display: none; }
+#navtoggle, .navlabel { display: none; }
+@media (max-width: 63.99rem) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; max-height: none; }
+  .navlabel { display: inline-block; cursor: pointer; color: var(--accent);
+              border: 1px solid var(--line); border-radius: 6px; padding: .35rem .7rem;
+              font-size: .875rem; }
+  nav.toc { display: none; margin-top: .75rem; }
+  /* The ID selector outranks nav.toc{display:none} regardless of source order. */
+  #navtoggle:checked ~ .shell nav.toc { display: block; }
+  .backtop { display: block; font-size: .875rem; }
+}
+</style>
+</head>
+<body>
+<input type="checkbox" id="navtoggle">
+<div class="shell">
+  <div class="side">
+    <label class="navlabel" for="navtoggle">☰ Contents</label>
+    <nav class="toc"><ul><li><a href="#README">Overview</a><ul><li><a href="#README--the-shape-of-the-whole-thing">The shape of the whole thing</a></li><li><a href="#README--the-five-scripts">The five scripts</a></li><li><a href="#README--chapters">Chapters</a></li><li><a href="#README--faq">FAQ</a></li><li><a href="#README--the-one-sentence-summary">The one-sentence summary</a></li></ul></li><li><a href="#lifecycle">The lifecycle and execution order</a><ul><li><a href="#lifecycle--1-what-a-hook-actually-is">1. What a hook actually is</a></li><li><a href="#lifecycle--2-one-real-turn-end-to-end">2. One real turn, end to end</a></li><li><a href="#lifecycle--3-userpromptsubmit-stdout-becomes-turn-context">3. <code>UserPromptSubmit</code> stdout becomes turn context</a></li><li><a href="#lifecycle--4-two-hooks-on-one-event-both-run-in-order">4. Two hooks on one event both run, in order</a></li><li><a href="#lifecycle--5-a-continued-turn-skips-the-front-of-the-lifecycle">5. A continued turn skips the front of the lifecycle</a></li><li><a href="#lifecycle--6-the-event-inventory-and-what-is-deliberately-missing">6. The event inventory, and what is deliberately missing</a></li></ul></li><li><a href="#answer-channel">The answer channel: deny + reason</a><ul><li><a href="#answer-channel--1-the-trick">1. The trick</a></li><li><a href="#answer-channel--2-three-events-three-json-shapes">2. Three events, three JSON shapes</a></li><li><a href="#answer-channel--3-the-reason-is-always-composed-server-side">3. The reason is always composed server-side</a></li><li><a href="#answer-channel--4-why-plans-can-only-be-rejected">4. Why plans can only be <em>rejected</em></a></li><li><a href="#answer-channel--5-askuserquestion-is-the-pivot-and-it-is-a-deliberate-choice">5. <code>AskUserQuestion</code> is the pivot, and it is a deliberate choice</a></li></ul></li><li><a href="#held-socket">The held socket</a><ul><li><a href="#held-socket--1-the-handler-that-deliberately-doesnt-respond">1. The handler that deliberately doesn't respond</a></li><li><a href="#held-socket--2-the-store-takes-an-injected-resolve-not-the-response">2. The store takes an injected <code>resolve</code>, not the response</a></li><li><a href="#held-socket--3-settle-is-the-entire-state-machine">3. <code>settle</code> is the entire state machine</a></li><li><a href="#held-socket--4-the-three-way-race">4. The three-way race</a></li><li><a href="#held-socket--5-no-locking-and-the-invariant-that-makes-that-safe">5. No locking, and the invariant that makes that safe</a></li><li><a href="#held-socket--6-four-stores-three-shapes">6. Four stores, three shapes</a></li><li><a href="#held-socket--7-permissionsts--the-instructive-outlier">7. <code>permissions.ts</code> — the instructive outlier</a></li></ul></li><li><a href="#stop-loop">The Stop-hook chat loop</a><ul><li><a href="#stop-loop--1-the-loop">1. The loop</a></li><li><a href="#stop-loop--2-stop_hook_active-was-demoted-from-a-guard-to-a-payload-field">2. <code>stop_hook_active</code> was demoted from a guard to a payload field</a></li><li><a href="#stop-loop--3-two-exits-and-the-old-behaviour-preserved-byte-for-byte">3. Two exits, and the old behaviour preserved byte-for-byte</a></li><li><a href="#stop-loop--4-background-work-aborts-before-anything-else">4. Background work aborts before anything else</a></li><li><a href="#stop-loop--5-the-prose-is-a-contract-between-two-modules">5. The prose is a contract between two modules</a></li><li><a href="#stop-loop--6-the-reaper-only-messagests-needs">6. The reaper only <code>messages.ts</code> needs</a></li></ul></li><li><a href="#fail-open">Fail-open, hook by hook</a><ul><li><a href="#fail-open--1-the-gate-stack">1. The gate stack</a></li><li><a href="#fail-open--2-why-the-arbitration-is-necessary-at-all">2. Why the arbitration is necessary at all</a></li><li><a href="#fail-open--3-the-complete-inventory">3. The complete inventory</a></li><li><a href="#fail-open--4-inputcat-comes-first-always">4. <code>INPUT=$(cat)</code> comes first, always</a></li><li><a href="#fail-open--5-the-measurementconfiguration-distinction">5. The measurement/configuration distinction</a></li><li><a href="#fail-open--6-three-call-sites-three-fail-directions-one-signal">6. Three call sites, three fail directions, one signal</a></li><li><a href="#fail-open--7-the-install-lives-outside-version-control">7. The install lives outside version control</a></li></ul></li><li><a href="#config">Timeouts, gates, and config precedence</a><ul><li><a href="#config--1-the-timeout-ladder">1. The timeout ladder</a></li><li><a href="#config--2-the-630-vs-600-constraint-enforced-from-both-ends">2. The 630 vs 600 constraint, enforced from both ends</a></li><li><a href="#config--3-precedence-three-sources-resolved-in-one-line-of-shell">3. Precedence: three sources, resolved in one line of shell</a></li><li><a href="#config--4-four-gate-stacks-people-conflate">4. Four gate stacks people conflate</a></li><li><a href="#config--5-the-values-in-one-table">5. The values, in one table</a></li></ul></li></ul></nav>
+  </div>
+  <main id="top">
+    <h1>Claude Code hooks in this project — the learning guide</h1>
+    <p class="lede">Why the five hook scripts in <code>scripts/</code> are shaped the way they
+    are. Generated from the markdown in <code>docs/learning/hooks/README.md</code> +
+    <code>docs/learning/hooks/guide/</code> by <code>docs/learning/hooks/tools/build.mjs</code>
+    — edit the markdown, not this file.</p>
+<section><h2 id="README">Overview</h2>
+<p>This guide teaches the five Claude Code lifecycle hooks this repo ships: what each one is, where it is wired, what order they fire in, and — the part reference docs skip — <strong>why each piece is shaped the way it is</strong>, by contrasting it with the naive approach and laying out what that trade cost.</p>
+<blockquote><p><strong>Mental model up front:</strong> A Claude Code hook is the CLI shelling out to <em>your</em> script at one of five named moments in a turn, handing it JSON on stdin and reading a decision off stdout. This repo uses that mechanism for exactly one purpose: <strong>making a terminal-bound session answerable from your phone.</strong> Four of the five hooks are variations on a single trick, and once you see the trick, the whole subsystem collapses into something simple.</p></blockquote>
+<blockquote><p>Baseline: written against <code>scripts/</code> + the hook-facing <code>server/lib/</code> stores at commit <code>092484b</code> (2026-08-17).</p></blockquote>
+<hr>
+<h3 id="README--the-shape-of-the-whole-thing">The shape of the whole thing</h3>
+<div class="diagram"><svg viewBox="0 0 660 326" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>Five hook scripts in the CLI POST to four in-memory stores on the dashboard, which the phone reads</title>
+      <defs><marker id="ar-whole" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/></marker></defs><rect x="4" y="26" width="250" height="290" rx="8" fill="none" stroke="var(--line)"
+    stroke-width="1" stroke-dasharray="5 4"/><text x="129" y="20" fill="var(--muted)" font-size="11" text-anchor="middle">your terminal — Claude Code CLI</text><rect x="330" y="60" width="180" height="230" rx="8" fill="none" stroke="var(--line)"
+    stroke-width="1" stroke-dasharray="5 4"/><text x="420" y="52" fill="var(--muted)" font-size="11" text-anchor="middle">dashboard server :4173</text><rect x="14" y="38" width="230" height="44" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="129" y="56.5">UserPromptSubmit</text><text x="129" y="71.5">remote-decision.sh</text></g><rect x="14" y="94" width="230" height="44" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="129" y="112.5">PreToolUse</text><text x="129" y="127.5">ask-remote.sh</text></g><rect x="14" y="150" width="230" height="44" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="129" y="168.5">PermissionRequest</text><text x="129" y="183.5">plan-remote.sh</text></g><rect x="14" y="206" width="230" height="44" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="129" y="224.5">PermissionRequest</text><text x="129" y="239.5">permission-notify.sh</text></g><rect x="14" y="262" width="230" height="44" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="129" y="280.5">Stop</text><text x="129" y="295.5">stop-notify.sh</text></g><rect x="340" y="72" width="160" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="420" y="96">pending.ts</text></g><rect x="340" y="124" width="160" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="420" y="148">plans.ts</text></g><rect x="340" y="176" width="160" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="420" y="200">messages.ts</text></g><rect x="340" y="228" width="160" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="420" y="252">permissions.ts</text></g><line x1="244" y1="116" x2="338" y2="92" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-whole)"/><line x1="244" y1="172" x2="338" y2="144" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-whole)"/><line x1="244" y1="284" x2="338" y2="196" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-whole)"/><line x1="244" y1="228" x2="338" y2="248" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-whole)"/><text x="292" y="104" fill="var(--muted)" font-size="11" text-anchor="middle">held</text><text x="300" y="240" fill="var(--muted)" font-size="11" text-anchor="middle">fire+forget</text><line x1="244" y1="60" x2="300" y2="60" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-whole)" stroke-dasharray="4 3"/><text x="288" y="48" fill="var(--muted)" font-size="11" text-anchor="middle">stdout only</text><rect x="560" y="150" width="90" height="60" rx="6" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="605" y="176.5">your</text><text x="605" y="191.5">phone</text></g><line x1="510" y1="180" x2="558" y2="180" stroke="var(--accent)"
+    stroke-width="1.5" marker-end="url(#ar-whole)"/></svg></div><p class="caption">Five scripts. One only prints text; one only records a fact; the other three are the same mechanism three times.</p>
+<p>Five scripts. One of them only prints text. One of them only records a fact. The other three are the same mechanism three times.</p>
+<h3 id="README--the-five-scripts">The five scripts</h3>
+<p>All five live in <a href="../../../scripts"><code>scripts/</code></a>, are symlinked into <code>~/.claude/hooks/</code>, and are registered in <code>~/.claude/settings.json</code> — <strong>not</strong> in the repo. See <a href="#fail-open">Fail-open</a> for why the install deliberately lives outside version control.</p>
+<div class="tablewrap"><table><thead><tr><th>Script</th><th>Event</th><th>Matcher</th><th>Blocks?</th><th>Purpose</th></tr></thead><tbody><tr><td><a href="../../../scripts/remote-decision-hook.sh"><code>remote-decision-hook.sh</code></a></td><td><code>UserPromptSubmit</code></td><td>all</td><td>no (~1s)</td><td>Injects the "route decisions through AskUserQuestion" instruction</td></tr><tr><td><a href="../../../scripts/ask-remote-hook.sh"><code>ask-remote-hook.sh</code></a></td><td><code>PreToolUse</code></td><td><code>AskUserQuestion</code></td><td>yes, ≤600s</td><td>Offer the question to your phone</td></tr><tr><td><a href="../../../scripts/plan-remote-hook.sh"><code>plan-remote-hook.sh</code></a></td><td><code>PermissionRequest</code></td><td><code>ExitPlanMode</code></td><td>yes, ≤600s</td><td>Offer a plan to your phone (reject-only)</td></tr><tr><td><a href="../../../scripts/permission-notify-hook.sh"><code>permission-notify-hook.sh</code></a></td><td><code>PermissionRequest</code> + <code>Notification</code></td><td>all</td><td>no (~1s)</td><td>Display-only: light up the <code>allow?</code> pill</td></tr><tr><td><a href="../../../scripts/stop-notify-hook.sh"><code>stop-notify-hook.sh</code></a></td><td><code>Stop</code></td><td>all</td><td>yes, ≤600s</td><td>Hold the finished turn open for a follow-up</td></tr></tbody></table></div>
+<p>Note what is <strong>absent</strong>: no <code>PostToolUse</code>, no <code>SessionStart</code>, no <code>SubagentStop</code>, no <code>PreCompact</code>. This project only hooks moments where <strong>a human is about to be asked something</strong>. That is the organizing principle, and it is why the set is five rather than fifteen.</p>
+<h3 id="README--chapters">Chapters</h3>
+<ol><li><strong><a href="#lifecycle">The lifecycle and execution order</a></strong> — the five events, what fires when inside one real turn, and the three ordering facts that are easy to get wrong.</li><li><strong><a href="#answer-channel">The answer channel: <code>deny</code> + reason</a></strong> — the keystone trick. There is no API for answering a tool call remotely, so the project abuses denial. Three events, three JSON shapes, and why plans can only ever be rejected.</li><li><strong><a href="#held-socket">The held socket</a></strong> — the server half: how an HTTP response stays open for ten minutes, the four in-memory stores, the shared state machine, and the three-way race every wait can lose.</li><li><strong><a href="#stop-loop">The Stop-hook chat loop</a></strong> — how a lifecycle hook becomes a conversation, why <code>stop_hook_active</code> was demoted from a guard to a payload field, and the prose contract between two modules.</li><li><strong><a href="#fail-open">Fail-open, hook by hook</a></strong> — twelve bail-outs, one success path, and the three call sites that fail deliberately opposite ways on the very same signal.</li><li><strong><a href="#config">Timeouts, gates, and config precedence</a></strong> — the four-layer timeout ladder, the three-source precedence chain, and the four independent gate stacks people conflate.</li></ol>
+<h3 id="README--faq">FAQ</h3>
+<p>These are the questions actually raised while this guide was written.</p>
+<h4 id="README--which-hooks--claude-code-hooks-or-the-react-hooks-in-clientsrchooks">"Which 'hooks' — Claude Code hooks, or the React hooks in <code>client/src/hooks/</code>?"</h4>
+<p>Both exist in this repo and the words collide, so it is worth naming the difference once. <code>client/src/hooks/</code> holds fifteen React hooks (<code>useSessions</code>, <code>usePendingQuestion</code>, <code>useDictation</code>, …) — browser-side state and polling. This guide is about the <strong>five shell scripts in <code>scripts/</code></strong> that Claude Code executes at lifecycle events.</p>
+<p>The tell is "order of execution": React hooks run in render order within one component, which is a React question. Claude Code hooks fire at named moments in a turn, across process boundaries, and <em>that</em> ordering is what the <a href="#lifecycle">lifecycle chapter</a> maps. They do meet — <code>usePendingQuestion</code> polls the endpoint that <code>ask-remote-hook.sh</code> is blocked on — but they are separate systems with separate failure modes.</p>
+<h4 id="README--what-hooks-are-used-and-where-are-they-wired">"What hooks are used, and where are they wired?"</h4>
+<p>Five scripts in <a href="../../../scripts"><code>scripts/</code></a>, symlinked into <code>~/.claude/hooks/</code>, registered in <code>~/.claude/settings.json</code>. The table above lists all five with their events and matchers. The registration deliberately is <strong>not</strong> in the repo — see <a href="#fail-open--7-the-install-lives-outside-version-control">Fail-open §7</a> for why committing it would install blocking hooks into every session that opens this project.</p>
+<p>To see the live wiring on your own machine:</p>
+<pre><code>jq '.hooks | keys' ~/.claude/settings.json
+ls -l ~/.claude/hooks/</code></pre>
+<p>The <code>ls -l</code> matters: the entries are symlinks back into this repo, so <code>git pull</code> updates the installed hooks while the registration stays put.</p>
+<h4 id="README--what-is-the-order-of-execution">"What is the order of execution?"</h4>
+<p>Within one turn: <code>UserPromptSubmit</code> → (<code>PreToolUse</code> / <code>PermissionRequest</code> per tool call) → <code>Stop</code>. Two facts that surprise people:</p>
+<ol><li><strong>Two hooks on the same event both run, in registration order</strong>, and both contribute output. This session's opening context contained a codegraph dump <em>and</em> a remote-decision banner because <code>UserPromptSubmit</code> has two entries.</li><li><strong>A turn continued by a <code>Stop</code> block skips <code>UserPromptSubmit</code> entirely</strong> — there was no user prompt. That is why the away-mode instructions are duplicated into the <code>Stop</code> block's reason text rather than relying on the injection hook.</li></ol>
+<h4 id="README--why-can-a-plan-be-rejected-from-the-phone-but-not-approved">"Why can a plan be rejected from the phone but not approved?"</h4>
+<p>The CLI discards a hook <code>allow</code> for any tool whose <code>requiresUserInteraction()</code> is true, and <code>ExitPlanMode</code> is one of them. Not a design choice — see <a href="#answer-channel">the answer channel §4</a>. The interesting consequence is that a <em>fifth</em> hook (<code>remote-decision-hook.sh</code>) exists purely to route around this limitation by telling the model not to use plan mode at all.</p>
+<h4 id="README--how-does-an-http-response-stay-open-for-ten-minutes">"How does an HTTP response stay open for ten minutes?"</h4>
+<p>The handler registers a callback and returns <strong>without ending the response</strong>. The socket stays open; <code>curl</code> in the hook stays blocked; the store fires the callback later. See <a href="#held-socket">the held socket</a>. The reason the store can do this without knowing anything about HTTP is that the handler injects a plain <code>resolve</code> function — which is also what makes the whole state machine unit-testable.</p>
+<h4 id="README--is-the-same-fail-open-rule-applied-everywhere">"Is the same fail-open rule applied everywhere?"</h4>
+<p>No, and that is the most instructive thing in the subsystem. The same unreadable-idle measurement is handled three different ways in three places, because the cost of guessing wrong differs at each: hiding a dialog from someone at their desk (expensive), sending one extra push (cheap), ending a turn you were about to reply to (expensive). See <a href="#fail-open">Fail-open §6</a>.</p>
+<h4 id="README--how-do-i-check-this-guide-is-still-true">"How do I check this guide is still true?"</h4>
+<p>Two committed checkers:</p>
+<pre><code>node docs/learning/hooks/tools/citations.mjs</code></pre>
+<p>verifies every <code>file:N-M</code> excerpt label still points at the code it quotes, classifying each as fresh / moved / gone / abridged. It found two real errors in this guide's first draft — a label three lines off, and an excerpt where comment prefixes had been added to text that is actually heredoc body.</p>
+<pre><code>node docs/learning/hooks/tools/check.mjs</code></pre>
+<p>verifies the generated page against the markdown: no dead links, no missing prose, no leaked markdown, no external assets.</p>
+<h3 id="README--the-one-sentence-summary">The one-sentence summary</h3>
+<p><strong>Five scripts, one trick (<code>deny</code> + reason), three gates, twelve fail-open guards, and a state machine that knows nothing about HTTP.</strong></p>
+<hr>
+<p><strong>Relevant files</strong></p>
+<ul><li><a href="../../../scripts/ask-remote-hook.sh"><code>scripts/ask-remote-hook.sh</code></a> — the reference implementation of the blocking pattern; read this one first</li><li><a href="../../../scripts/plan-remote-hook.sh"><code>scripts/plan-remote-hook.sh</code></a> — same pattern, different output shape, reject-only</li><li><a href="../../../scripts/stop-notify-hook.sh"><code>scripts/stop-notify-hook.sh</code></a> — same pattern plus a loop and a fallback path</li><li><a href="../../../scripts/permission-notify-hook.sh"><code>scripts/permission-notify-hook.sh</code></a> — the display-only outlier; deliberately incapable of deciding</li><li><a href="../../../scripts/remote-decision-hook.sh"><code>scripts/remote-decision-hook.sh</code></a> — pure context injection, no HTTP wait</li><li><a href="../../../server/lib/pending.ts"><code>server/lib/pending.ts</code></a> — the state machine the other two wait-stores copy</li><li><a href="../../../server/lib/plans.ts"><code>server/lib/plans.ts</code></a> — same machine, reject-only verdicts</li><li><a href="../../../server/lib/messages.ts"><code>server/lib/messages.ts</code></a> — same machine plus the 5s idle reaper</li><li><a href="../../../server/lib/permissions.ts"><code>server/lib/permissions.ts</code></a> — flag store, no socket, no verdict</li><li><a href="../../../server/lib/remoteState.ts"><code>server/lib/remoteState.ts</code></a> — the env gate × UI toggle product the hooks act on</li><li><a href="../../../server/lib/settings.ts"><code>server/lib/settings.ts</code></a> — the idle/answer values the hooks read off <code>/api/health</code></li><li><a href="../../../server/lib/notify.ts"><code>server/lib/notify.ts</code></a> — the push policy, and the clearest example of a deliberately inverted fail direction</li><li><a href="../../../server/api.ts"><code>server/api.ts</code></a> — the handlers that hold the sockets</li><li><code>docs/subsystems/remote-answer.md</code> — the reference doc this guide is the <em>why</em> layer for</li></ul>
+<p class="backtop"><a href="#top">↑ back to contents</a></p></section>
+<section><h2 id="lifecycle">The lifecycle and execution order</h2>
+<p>The five events, what fires when inside one real turn, and the ordering facts that catch people out.</p>
+<blockquote><p>Mental model: hooks fire <strong>per event, not per turn</strong>. There is no guarantee that a turn sees the front of the lifecycle at all — a turn resumed by a <code>Stop</code> block skips <code>UserPromptSubmit</code> entirely, and that single fact explains a design decision two chapters later.</p></blockquote>
+<h3 id="lifecycle--1-what-a-hook-actually-is">1. What a hook actually is</h3>
+<p>A hook is an entry in <code>~/.claude/settings.json</code> naming an event, an optional tool matcher, a shell command, and a timeout. When the event fires, the CLI runs the command as a subprocess, writes a JSON payload to its stdin, and waits for it to exit. What it reads off stdout — and which shape that output must take — depends on the event.</p>
+<p>Two consequences follow immediately, and everything in this guide descends from them:</p>
+<p><strong>a) The hook is synchronous.</strong> The CLI is blocked while your script runs. That is what makes a 600-second wait possible at all, and also what makes a slow hook a slow session. Every non-blocking hook in this repo caps its network calls at 1 second for exactly this reason.</p>
+<p><strong>b) The terminal UI renders <em>after</em> the hook exits.</strong> So a question cannot be live in the terminal <em>and</em> answerable on the phone. Something has to arbitrate — see <a href="#fail-open">Fail-open</a>.</p>
+<h3 id="lifecycle--2-one-real-turn-end-to-end">2. One real turn, end to end</h3>
+<p>You type a message, the model asks a question, then finishes:</p>
+<div class="diagram"><svg viewBox="0 0 760 600" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>One turn: UserPromptSubmit injects context, PreToolUse holds for a phone answer, Stop holds again at the end</title><defs><marker id="ar-turn" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/></marker></defs><rect x="8" y="8" width="136" height="30" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="76" y="26.666666666666668">You</text></g><line x1="76" y1="38" x2="76" y2="586" stroke="var(--line)"
+      stroke-width="1" stroke-dasharray="3 4"/><rect x="160" y="8" width="136" height="30" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="228" y="26.666666666666668">CLI</text></g><line x1="228" y1="38" x2="228" y2="586" stroke="var(--line)"
+      stroke-width="1" stroke-dasharray="3 4"/><rect x="312" y="8" width="136" height="30" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="380" y="26.666666666666668">hooks</text></g><line x1="380" y1="38" x2="380" y2="586" stroke="var(--line)"
+      stroke-width="1" stroke-dasharray="3 4"/><rect x="464" y="8" width="136" height="30" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="532" y="26.666666666666668">dashboard</text></g><line x1="532" y1="38" x2="532" y2="586" stroke="var(--line)"
+      stroke-width="1" stroke-dasharray="3 4"/><rect x="616" y="8" width="136" height="30" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="684" y="26.666666666666668">the model</text></g><line x1="684" y1="38" x2="684" y2="586" stroke="var(--line)"
+      stroke-width="1" stroke-dasharray="3 4"/><line x1="76" y1="46" x2="228" y2="46" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="152" y="40" fill="var(--muted)" font-size="11" text-anchor="middle">type a prompt</text><line x1="228" y1="79" x2="380" y2="79" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="304" y="73" fill="var(--muted)" font-size="11" text-anchor="middle">UserPromptSubmit</text><line x1="380" y1="112" x2="532" y2="112" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="456" y="106" fill="var(--muted)" font-size="11" text-anchor="middle">GET /api/health (1s)</text><line x1="380" y1="145" x2="228" y2="145" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="304" y="139" fill="var(--muted)" font-size="11" text-anchor="middle">stdout = instruction</text><line x1="228" y1="178" x2="684" y2="178" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="456" y="172" fill="var(--muted)" font-size="11" text-anchor="middle">prompt + injection</text><line x1="684" y1="211" x2="228" y2="211" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="456" y="205" fill="var(--muted)" font-size="11" text-anchor="middle">AskUserQuestion(...)</text><line x1="228" y1="244" x2="380" y2="244" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="304" y="238" fill="var(--muted)" font-size="11" text-anchor="middle">PreToolUse</text><line x1="380" y1="277" x2="532" y2="277" stroke="var(--accent)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="456" y="271" fill="var(--muted)" font-size="11" text-anchor="middle">POST questions/wait — HELD</text><line x1="76" y1="310" x2="532" y2="310" stroke="var(--accent)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="304" y="304" fill="var(--muted)" font-size="11" text-anchor="middle">tap an option on the phone</text><line x1="532" y1="343" x2="380" y2="343" stroke="var(--accent)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="456" y="337" fill="var(--muted)" font-size="11" text-anchor="middle">answered + reason</text><line x1="380" y1="376" x2="228" y2="376" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="304" y="370" fill="var(--muted)" font-size="11" text-anchor="middle">deny + reason</text><line x1="228" y1="409" x2="684" y2="409" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="456" y="403" fill="var(--muted)" font-size="11" text-anchor="middle">reads reason as the answer</text><line x1="684" y1="442" x2="228" y2="442" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="456" y="436" fill="var(--muted)" font-size="11" text-anchor="middle">turn over</text><line x1="228" y1="475" x2="380" y2="475" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="304" y="469" fill="var(--muted)" font-size="11" text-anchor="middle">Stop</text><line x1="380" y1="508" x2="532" y2="508" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="456" y="502" fill="var(--muted)" font-size="11" text-anchor="middle">POST messages/wait — HELD</text><line x1="380" y1="541" x2="228" y2="541" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="304" y="535" fill="var(--muted)" font-size="11" text-anchor="middle">block+reason, or exit 0</text></svg></div><p class="caption">The two held POSTs are the blocking hooks. Everything else returns in about a second.</p>
+<h3 id="lifecycle--3-userpromptsubmit-stdout-becomes-turn-context">3. <code>UserPromptSubmit</code> stdout becomes turn context</h3>
+<p>The first hook runs before the model sees anything, and its stdout is prepended to the turn:</p>
+<pre><code># scripts/remote-decision-hook.sh:60-68  (abridged here — heredoc truncated at rule 1)
+cat &lt;&lt;'EOF'
+REMOTE DECISION MODE — the dashboard is accepting phone answers and this session
+runs without permission prompts. The user may be away from the terminal: they can
+answer the AskUserQuestion tool from their phone, but they cannot read a
+plain-text question or approve a plan card. Therefore, for this session:
+1. Put EVERY decision through the AskUserQuestion tool — approach choices,
+   "should I proceed?", scope calls, and questions a skill tells you to ask
+   (e.g. the brainstorming skill's session-mode pick). Never end a turn on a
+   prose question.
+EOF</code></pre>
+<p><strong>Why a hook rather than a line in <code>CLAUDE.md</code>.</strong> The instruction is only correct under two live conditions — the dashboard is accepting phone answers, <em>and</em> this session runs in an auto-ish permission mode. Both are re-checked on every prompt, so flipping the dashboard toggle takes effect on your next message.</p>
+<p><strong>The bad alternative</strong> is putting it in <code>CLAUDE.md</code> (or a rules file):</p>
+<div class="tablewrap"><table><thead><tr><th></th><th><code>UserPromptSubmit</code> hook (chosen)</th><th>a line in <code>CLAUDE.md</code></th></tr></thead><tbody><tr><td>Correct when at the desk</td><td>Silent — prints nothing, costs zero tokens</td><td>Always present; tells the model to avoid plan mode even when you are sitting there</td></tr><tr><td>Responds to the toggle</td><td>Yes, next prompt</td><td>No — needs a file edit and a restart</td></tr><tr><td>Cost</td><td>~1s health probe per prompt, two <code>jq</code> calls</td><td>Free</td></tr><tr><td>Scope</td><td>Per session, per condition</td><td>Every session in the project, unconditionally</td></tr></tbody></table></div>
+<p>The condition check is the whole point. A permanently-installed instruction to never enter plan mode would be actively wrong most of the time.</p>
+<h3 id="lifecycle--4-two-hooks-on-one-event-both-run-in-order">4. Two hooks on one event both run, in order</h3>
+<p><code>UserPromptSubmit</code> has <strong>two</strong> registered entries in this setup: <code>codegraph-gate.sh</code> then <code>remote-decision.sh</code>. Both execute, both print, and both blocks land in the turn. The same is true of <code>PermissionRequest</code>, which carries <code>permission-notify.sh</code> (all tools) and <code>plan-remote.sh</code> (<code>ExitPlanMode</code> only) — on a plan proposal, both fire.</p>
+<p>This is why <code>plan-remote-hook.sh</code> re-checks the tool name even though its matcher already narrows it:</p>
+<pre><code># scripts/plan-remote-hook.sh:42-45
+# A matcher is configuration, so never trust it alone: this hook must be inert
+# for anything but a plan, whatever it ends up registered against.
+TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2&gt;/dev/null)
+[ "$TOOL" = "ExitPlanMode" ] || exit 0</code></pre>
+<p><strong>Why not trust the matcher:</strong> the matcher lives in <code>~/.claude/settings.json</code>, a file this repo neither owns nor tests. Registered under a bare <code>PermissionRequest</code>, this script would otherwise try to route <em>every</em> permission request in the session through the dashboard. The guard is defence against your own config, not against the CLI.</p>
+<p><strong>The bad alternative</strong> — trusting the matcher — is not unreasonable; it is how most hooks are written. The trade:</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>re-check <code>tool_name</code> (chosen)</th><th>trust the matcher</th></tr></thead><tbody><tr><td>Misregistration</td><td>Inert; nothing happens</td><td>Hijacks every permission request</td></tr><tr><td>Lines of code</td><td>2</td><td>0</td></tr><tr><td>Testability</td><td>The script's behaviour is self-contained</td><td>Behaviour depends on an untracked file</td></tr></tbody></table></div>
+<p>Two lines to make the script's contract independent of a file the repo can't see.</p>
+<h3 id="lifecycle--5-a-continued-turn-skips-the-front-of-the-lifecycle">5. A continued turn skips the front of the lifecycle</h3>
+<p>This is the ordering fact worth memorizing. A <code>Stop</code> hook that blocks does not end the turn — the model reads the reason and keeps working. But that continuation had <strong>no user prompt</strong>, so <code>UserPromptSubmit</code> never fires, so <code>remote-decision.sh</code> never runs, so its instruction is never injected.</p>
+<p>The consequence: the away-mode instructions have to ride inside the <code>Stop</code> block's own reason text, which is why <a href="../../../server/lib/messages.ts"><code>messages.ts</code></a> composes prose that carries both your follow-up <em>and</em> a re-statement of the rules:</p>
+<pre><code>// server/lib/messages.ts:44-48
+/**
+ * The prose the hook prints as the Stop block's `reason`. Two jobs: carry the
+ * text, and carry the away-mode instructions — `UserPromptSubmit` hooks (the
+ * remote-decision injection) do NOT fire on hook-continued turns, so this is
+ * the only place the reminder can ride.</code></pre>
+<p>See <a href="#stop-loop">The Stop-hook chat loop</a> for the rest of that mechanism.</p>
+<h3 id="lifecycle--6-the-event-inventory-and-what-is-deliberately-missing">6. The event inventory, and what is deliberately missing</h3>
+<div class="tablewrap"><table><thead><tr><th>Event</th><th>Used here</th><th>Why / why not</th></tr></thead><tbody><tr><td><code>UserPromptSubmit</code></td><td>yes</td><td>The one place to inject per-turn context</td></tr><tr><td><code>PreToolUse</code></td><td>yes, <code>AskUserQuestion</code> only</td><td>The only decision surface a phone can answer</td></tr><tr><td><code>PermissionRequest</code></td><td>yes, twice</td><td>Fires before the prompt is drawn, and carries <code>tool_name</code></td></tr><tr><td><code>Notification</code></td><td>yes, legacy fallback</td><td>Fires ~6s after a permission dialog opens, only on some engines</td></tr><tr><td><code>Stop</code></td><td>yes</td><td>The turn-end reply window</td></tr><tr><td><code>PostToolUse</code></td><td><strong>no</strong></td><td>Nothing to ask a human after a tool has already run</td></tr><tr><td><code>SessionStart</code></td><td><strong>no</strong></td><td>The dashboard discovers sessions by scanning transcripts; no hook needed</td></tr><tr><td><code>SubagentStop</code></td><td><strong>no</strong></td><td>A subagent finishing is not a moment a human is asked anything</td></tr><tr><td><code>PreCompact</code></td><td><strong>no</strong></td><td>Same</td></tr></tbody></table></div>
+<p><code>Notification</code> deserves a note, because carrying both it and <code>PermissionRequest</code> looks like belt-and-braces duplication and is not:</p>
+<pre><code># scripts/permission-notify-hook.sh:12-18
+#   PermissionRequest  fires on the ask path, immediately before the prompt is
+#                      drawn, and carries tool_name + tool_input. Works in the
+#                      desktop app. PREFERRED — register this one.
+#   Notification       fires ~6s after a permission dialog opens (and is
+#                      cancelled if you answer first), only on engines that emit
+#                      it: CLI &gt;= 2.1.233, and NOT the desktop app's bundled
+#                      engine as of 2.1.229. Kept for older/terminal setups.</code></pre>
+<p>One script serves both, keyed off <code>hook_event_name</code>. <strong>Why one script rather than two:</strong> the two events mean the same thing to the dashboard, and the store keeps one entry per session, so whichever arrives first shows the pill and the second just re-arms it. Two scripts would duplicate the payload parsing and the POST for no behavioural gain.</p>
+<hr>
+<p><strong>Next:</strong> <a href="#answer-channel">The answer channel: <code>deny</code> + reason</a> — the trick that makes any of this possible.</p>
+<p><a href="#README">↑ back to contents</a></p>
+<p class="backtop"><a href="#top">↑ back to contents</a></p></section>
+<section><h2 id="answer-channel">The answer channel: deny + reason</h2>
+<p>The keystone. Everything else in this subsystem is scaffolding around one idea.</p>
+<blockquote><p>Mental model: <strong>there is no Claude Code API for "here is the answer to that tool call."</strong> A <code>PreToolUse</code> hook can allow, deny, or stay silent — nothing more. So the project sends the answer through the only channel that exists: a denial whose <em>reason</em> states the choice.</p></blockquote>
+<h3 id="answer-channel--1-the-trick">1. The trick</h3>
+<pre><code># scripts/ask-remote-hook.sh:108-114
+jq -cn --arg r "$REASON" '{
+  hookSpecificOutput: {
+    hookEventName: "PreToolUse",
+    permissionDecision: "deny",
+    permissionDecisionReason: $r
+  }
+}'</code></pre>
+<p>The reason is written to be read as an answer, not as a refusal:</p>
+<pre><code>// server/lib/pending.ts:150-151
+return `The user answered via the dashboard (not the terminal dialog) — ${lines[0]}. `
+  + 'Treat this as the user\'s selection and continue; do not ask again.';</code></pre>
+<p><strong>What it does:</strong> the tool call fails, and the failure message tells the model what you picked. The model reads denial reasons and adapts — that behaviour already existed — so a denial whose reason names your choice is functionally an answer.</p>
+<p><strong>Why this way:</strong> it rides a documented, supported hook output. No part of it depends on undocumented internals.</p>
+<p><strong>The bad alternative</strong>, and the one most people reach for first, is to get the answer in from the outside: write to the session's stdin, or patch the transcript JSONL on disk.</p>
+<div class="tablewrap"><table><thead><tr><th></th><th><code>deny</code> + reason (chosen)</th><th>write stdin / patch transcript</th></tr></thead><tbody><tr><td>Supported surface</td><td>Yes — documented hook output</td><td>No; breaks on any CLI update</td></tr><tr><td>Model actually sees it</td><td>Guaranteed, it is a tool result</td><td>Racy — the CLI owns the file and its read offsets</td></tr><tr><td>Cost</td><td>One wasted tool call per answer, plus prose that must suppress a re-ask</td><td>None, when it works</td></tr><tr><td>Failure mode</td><td>Model re-asks (annoying, recoverable)</td><td>Corrupted transcript / desynced session</td></tr></tbody></table></div>
+<p>The cost is visible in the code rather than hidden: <code>composeReason</code> <strong>has</strong> to end with <em>"do not ask again"</em>, because a denied <code>AskUserQuestion</code> is otherwise an open invitation to retry. That sentence is load-bearing. Deleting it would produce a loop where every remote answer triggers the same question again.</p>
+<h3 id="answer-channel--2-three-events-three-json-shapes">2. Three events, three JSON shapes</h3>
+<p>Nothing unifies the output formats. Each event wants its own:</p>
+<pre><code># scripts/ask-remote-hook.sh:110-113  (PreToolUse — flat string)
+    hookEventName: "PreToolUse",
+    permissionDecision: "deny",
+    permissionDecisionReason: $r
+  }</code></pre>
+<pre><code># scripts/plan-remote-hook.sh:117-119  (PermissionRequest — nested object)
+    hookEventName: "PermissionRequest",
+    decision: { behavior: "deny", message: $r }
+  }</code></pre>
+<pre><code># scripts/stop-notify-hook.sh:111  (Stop — top level, no hookSpecificOutput at all)
+jq -cn --arg r "$REASON" '{decision: "block", reason: $r}'</code></pre>
+<p><code>PreToolUse</code> takes a flat <code>permissionDecision</code> string plus a sibling reason field. <code>PermissionRequest</code> takes a nested <code>decision</code> object with <code>behavior</code> and <code>message</code>. <code>Stop</code> takes neither wrapper — <code>decision</code> and <code>reason</code> at the top level.</p>
+<p><strong>Why the scripts hard-code these rather than sharing a helper:</strong> they were each verified against a specific CLI build, and the comments say so — <a href="../../../scripts/stop-notify-hook.sh"><code>stop-notify-hook.sh:11-12</code></a> records <em>"the ONLY output shape the CLI accepts for a Stop block (verified against 2.1.233)"</em>. A shared emitter would hide which shape was confirmed where, and the shapes have no common structure to factor out anyway. Three call sites, three literals, three provenance notes.</p>
+<h3 id="answer-channel--3-the-reason-is-always-composed-server-side">3. The reason is always composed server-side</h3>
+<p>Every one of the three scripts pulls <code>.reason</code> out of the HTTP response and prints it verbatim. None of them writes prose. From <code>ask-remote-hook.sh</code>:</p>
+<pre><code># scripts/ask-remote-hook.sh:105-107
+# 4. Inject. This block is the only mechanism-specific part of the feature —
+#    swap it if a native "answer the tool call" path ever lands. The reason is
+#    composed server-side (pending.ts composeReason), never here.</code></pre>
+<p><strong>Why prose lives in TypeScript and not in the shell:</strong> it is testable there. <code>composeReason</code> is a pure function over questions and answers, and it has real logic — a single question gets one sentence, several get a bulleted list:</p>
+<pre><code>// server/lib/pending.ts:143-156
+export function composeReason(questions: PendingQuestionItem[], answers: QuestionAnswer[]): string {
+  const byIndex = new Map(answers.map(a =&gt; [a.index, a.selected]));
+  const lines = questions.map((q, i) =&gt; {
+    const label = q.header || q.question;
+    return `${label}: ${(byIndex.get(i) ?? []).join(', ')}`;
+  });
+  if (lines.length === 1) {
+    return `The user answered via the dashboard (not the terminal dialog) — ${lines[0]}. `
+      + 'Treat this as the user\'s selection and continue; do not ask again.';
+  }
+  return 'The user answered via the dashboard (not the terminal dialog). Their selections:\n'
+    + lines.map(l =&gt; `- ${l}`).join('\n')
+    + '\nTreat these as the user\'s answers and continue; do not ask again.';
+}</code></pre>
+<p><strong>The bad alternative</strong> is composing it in the hook with <code>jq</code> string interpolation. Compare:</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>compose in TypeScript (chosen)</th><th>compose in the shell</th></tr></thead><tbody><tr><td>Unit-tested</td><td>Yes, plain function calls</td><td>Needs a shell harness, or goes untested</td></tr><tr><td>Multi-question formatting</td><td>A branch, readable</td><td>Nested <code>jq</code> interpolation</td></tr><tr><td>Swap the injection mechanism</td><td>One <code>jq</code> block per script changes</td><td>Prose is entangled with the emitter</td></tr><tr><td>Trade</td><td>The hook must trust the server's prose</td><td>Prose lives next to where it is used</td></tr></tbody></table></div>
+<p>The script keeps exactly one job: translate an HTTP result into the event's JSON shape. The comment marks that block as the single mechanism-specific part of the whole feature — the thing to replace if a native path ever lands.</p>
+<h3 id="answer-channel--4-why-plans-can-only-be-rejected">4. Why plans can only be <em>rejected</em></h3>
+<p>Not a design choice. A wall:</p>
+<pre><code># scripts/plan-remote-hook.sh:11-14
+# ⚠️ REJECT ONLY, and not by choice: the CLI discards a hook `allow` for any tool
+# whose requiresUserInteraction() is true ("the tool's approval card IS the
+# user-interaction surface"), and ExitPlanMode is one. So a plan can be sent back
+# from your phone but never approved from it.</code></pre>
+<p>The comment continues: <em>"Do not try to route around that by returning <code>updatedInput</code> — the guard is deliberate."</em> Someone tried, found the workaround, and documented why not to take it. That note is worth more than the code around it.</p>
+<p>And this single constraint is <strong>why a fifth hook exists at all.</strong> If plans cannot be approved remotely, the fix is not to keep trying — it is to stop the model from proposing plans that way:</p>
+<pre><code># scripts/remote-decision-hook.sh:69-72  (heredoc body — no comment prefixes here)
+2. Do not enter plan mode and do not call ExitPlanMode — its approval card can
+   only be answered at the terminal. Present a plan as a concise summary (or a
+   file) and then ask via AskUserQuestion: proceed, or revise (with an option to
+   say what).</code></pre>
+<p><code>remote-decision-hook.sh</code> exists to route around a limitation in <code>plan-remote-hook.sh</code>. A plan presented <em>through</em> <code>AskUserQuestion</code> is answerable from anywhere, because <code>AskUserQuestion</code> is the one surface that accepts a hook decision.</p>
+<p><strong>Why keep the reject path at all</strong>, given it is half a feature? Because rejection is the half that carries information. Approving a plan is one bit; sending it back needs a paragraph of feedback, and that paragraph is exactly what the phone is good for. The trade-off they accepted: an asymmetric feature that does the expensive direction well.</p>
+<h3 id="answer-channel--5-askuserquestion-is-the-pivot-and-it-is-a-deliberate-choice">5. <code>AskUserQuestion</code> is the pivot, and it is a deliberate choice</h3>
+<p>Trace the dependency: the phone can only answer <code>AskUserQuestion</code> → so plans get re-routed into <code>AskUserQuestion</code> → so the <code>UserPromptSubmit</code> hook tells the model to put <em>everything</em> through <code>AskUserQuestion</code> → so <code>pending.ts</code> gets <code>sanitizeQuestions</code> and <code>validateAnswer</code> while the other two stores need neither.</p>
+<p>One tool's hook-decidability propagates through all five scripts. This is the highest-leverage thing to understand about the subsystem: it is not five independent features, it is one capability plus four adaptations to its edges.</p>
+<hr>
+<p><strong>Next:</strong> <a href="#held-socket">The held socket</a> — the server half that makes the wait possible.</p>
+<p><a href="#README">↑ back to contents</a></p>
+<p class="backtop"><a href="#top">↑ back to contents</a></p></section>
+<section><h2 id="held-socket">The held socket</h2>
+<p>The server half. How an HTTP response stays open for ten minutes, and why the store that owns it knows nothing about HTTP.</p>
+<blockquote><p>Mental model: the hook's <code>curl</code> is blocked, so the handler's job is to <strong>not answer</strong>. It registers a callback and returns without ending the response. The socket stays open; the store fires the callback later; only then does <code>curl</code> return and the hook print its decision.</p></blockquote>
+<h3 id="held-socket--1-the-handler-that-deliberately-doesnt-respond">1. The handler that deliberately doesn't respond</h3>
+<div class="diagram"><svg viewBox="0 0 704 468" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>The handler registers a callback and returns without ending the response; the store fires it later</title><defs><marker id="ar-held" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/></marker></defs><rect x="8" y="8" width="160" height="30" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="88" y="26.666666666666668">ask-remote.sh</text></g><line x1="88" y1="38" x2="88" y2="454" stroke="var(--line)"
+      stroke-width="1" stroke-dasharray="3 4"/><rect x="184" y="8" width="160" height="30" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="264" y="26.666666666666668">serveQuestionWait</text></g><line x1="264" y1="38" x2="264" y2="454" stroke="var(--line)"
+      stroke-width="1" stroke-dasharray="3 4"/><rect x="360" y="8" width="160" height="30" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="440" y="26.666666666666668">pending.ts</text></g><line x1="440" y1="38" x2="440" y2="454" stroke="var(--line)"
+      stroke-width="1" stroke-dasharray="3 4"/><rect x="536" y="8" width="160" height="30" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="616" y="26.666666666666668">browser</text></g><line x1="616" y1="38" x2="616" y2="454" stroke="var(--line)"
+      stroke-width="1" stroke-dasharray="3 4"/><line x1="88" y1="46" x2="264" y2="46" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-held)"/><text x="176" y="40" fill="var(--muted)" font-size="11" text-anchor="middle">POST questions/wait</text><path d="M 264 71 q 34 0 34 9 q 0 9 -34 9" fill="none"
+        stroke="var(--line)" stroke-width="1.5" marker-end="url(#ar-held)"/><text x="308" y="81" fill="var(--muted)" font-size="11" text-anchor="start">gate: remoteAnswer? token? session?</text><path d="M 264 104 q 34 0 34 9 q 0 9 -34 9" fill="none"
+        stroke="var(--line)" stroke-width="1.5" marker-end="url(#ar-held)"/><text x="308" y="114" fill="var(--muted)" font-size="11" text-anchor="start">sanitizeQuestions(toolInput)</text><line x1="264" y1="145" x2="440" y2="145" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-held)"/><text x="352" y="139" fill="var(--muted)" font-size="11" text-anchor="middle">register(sid, qs, timeout, resolve)</text><path d="M 264 170 q 34 0 34 9 q 0 9 -34 9" fill="none"
+        stroke="var(--line)" stroke-width="1.5" marker-end="url(#ar-held)"/><text x="308" y="180" fill="var(--muted)" font-size="11" text-anchor="start">RETURNS — res never ended</text><path d="M 264 203 q 34 0 34 9 q 0 9 -34 9" fill="none"
+        stroke="var(--line)" stroke-width="1.5" marker-end="url(#ar-held)"/><text x="308" y="213" fill="var(--muted)" font-size="11" text-anchor="start">maybeSend(push) — fire+forget</text><line x1="616" y1="244" x2="264" y2="244" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-held)"/><text x="440" y="238" fill="var(--muted)" font-size="11" text-anchor="middle">GET sessions/:id/question</text><line x1="264" y1="277" x2="616" y2="277" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-held)"/><text x="440" y="271" fill="var(--muted)" font-size="11" text-anchor="middle">the questions</text><line x1="616" y1="310" x2="264" y2="310" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-held)"/><text x="440" y="304" fill="var(--muted)" font-size="11" text-anchor="middle">POST sessions/:id/answer</text><line x1="264" y1="343" x2="440" y2="343" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-held)"/><text x="352" y="337" fill="var(--muted)" font-size="11" text-anchor="middle">answer(sid, body)</text><path d="M 440 368 q 34 0 34 9 q 0 9 -34 9" fill="none"
+        stroke="var(--line)" stroke-width="1.5" marker-end="url(#ar-held)"/><text x="484" y="378" fill="var(--muted)" font-size="11" text-anchor="start">settle → clear, delete, resolve</text><line x1="440" y1="409" x2="88" y2="409" stroke="var(--accent)"
+    stroke-width="1.5" marker-end="url(#ar-held)"/><text x="264" y="403" fill="var(--muted)" font-size="11" text-anchor="middle">resolve fires → curl returns</text></svg></div><p class="caption">The handler’s job is to NOT answer. The socket stays open until the store settles the entry.</p>
+<p>The whole mechanism is six lines:</p>
+<pre><code>// server/api.ts:506-512
+let questionId = '';
+res.on('close', () =&gt; { if (questionId) cancelPending(sessionId, questionId); });
+questionId = register(sessionId, questions, clampTimeout(body.timeoutMs), (result: WaitResult) =&gt; {
+  if (res.writableEnded) return;
+  sendJson(res, 200, result);
+});
+if (res.destroyed) cancelPending(sessionId, questionId);</code></pre>
+<p><strong>Why the push comes last:</strong></p>
+<pre><code>// server/api.ts:514-515
+// Last, so a refused registration never pushes. Returns immediately — the
+// response above stays held either way.</code></pre>
+<p>Every gate that can reject the registration runs before <code>maybeSend</code>, so you never get a "question waiting" buzz for a question that was rejected as malformed.</p>
+<h3 id="held-socket--2-the-store-takes-an-injected-resolve-not-the-response">2. The store takes an injected <code>resolve</code>, not the response</h3>
+<p>This is the best decision in the subsystem. <a href="../../../server/lib/pending.ts"><code>pending.ts</code></a> imports <strong>no HTTP types at all</strong> — it takes a <code>(r: WaitResult) =&gt; void</code>:</p>
+<pre><code>// server/lib/pending.ts:14-15
+ *  - No HTTP types. The handler injects `resolve`, which is what makes the whole
+ *    state machine unit-testable (see test/pending.test.ts).</code></pre>
+<p><strong>What it does:</strong> the store is a pure state machine over a <code>Map&lt;string, Entry&gt;</code>. Registering takes a callback; settling calls it.</p>
+<p><strong>Why:</strong> testability, and reuse. The same shape appears verbatim in <a href="../../../server/lib/plans.ts"><code>plans.ts</code></a> and <a href="../../../server/lib/messages.ts"><code>messages.ts</code></a>.</p>
+<p><strong>The bad alternative</strong> — store the <code>ServerResponse</code> in the entry and call <code>res.end()</code> inside the store:</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>injected <code>resolve</code> (chosen)</th><th>store the <code>res</code></th></tr></thead><tbody><tr><td>Unit-testable</td><td><code>test/pending.test.ts</code> passes a plain function and asserts on what it gets</td><td>Needs a fake socket, or a real server per test</td></tr><tr><td>Coupling</td><td>Store knows nothing about HTTP</td><td>Store owns transport <em>and</em> lifecycle</td></tr><tr><td>Reuse</td><td>Same shape reused verbatim 3×</td><td>Re-derived 3×</td></tr><tr><td>Cost</td><td>An indirection, and the handler must guard <code>writableEnded</code> itself</td><td>Slightly less ceremony</td></tr></tbody></table></div>
+<p>That <code>writableEnded</code> guard is the price paid. The store promises to fire <code>resolve</code> at most once, but the <em>response</em> can die independently of the store, so the handler double-checks before writing to it.</p>
+<h3 id="held-socket--3-settle-is-the-entire-state-machine">3. <code>settle</code> is the entire state machine</h3>
+<pre><code>// server/lib/pending.ts:159-163
+function settle(entry: Entry, result: WaitResult): void {
+  clearTimeout(entry.timer);
+  if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
+  entry.resolve(result);
+}</code></pre>
+<p>Every exit routes through it — <code>answered</code>, <code>timeout</code>, <code>dismissed</code>, <code>superseded</code>, and (in <code>messages.ts</code>) <code>released</code>. Three lines, three invariants:</p>
+<ul><li><strong><code>clearTimeout</code></strong> — the deadline can never fire after another exit won.</li><li><strong>The identity check</strong> — <code>entries.get(…) === entry</code> means a <em>superseded</em> entry does not delete the replacement that just evicted it. Without it, <code>register</code>'s supersede path would remove the new entry from the map while leaving it live in a closure.</li><li><strong><code>resolve</code> last</strong> — the map is already consistent before anyone is notified.</li></ul>
+<h3 id="held-socket--4-the-three-way-race">4. The three-way race</h3>
+<p>Three things can end a wait, and they genuinely race:</p>
+<div class="diagram"><svg viewBox="0 0 620 420" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>A held wait can end four ways: answered, timed out, superseded, or cancelled when the hook dies</title><defs><marker id="ar-race" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/></marker></defs><rect x="232" y="14" width="156" height="40" rx="6" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="310" y="38">Held</text></g><rect x="216" y="96" width="188" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="310" y="120">Answered</text></g><text x="414" y="120" fill="var(--muted)" font-size="11" text-anchor="start">resolve(answered)</text><line x1="262" y1="54" x2="300" y2="94" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-race)"/><text x="208" y="120" fill="var(--muted)" font-size="11" text-anchor="end">browser POSTs</text><rect x="216" y="158" width="188" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="310" y="182">TimedOut</text></g><text x="414" y="182" fill="var(--muted)" font-size="11" text-anchor="start">resolve(timeout)</text><line x1="294" y1="54" x2="300" y2="156" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-race)"/><text x="208" y="182" fill="var(--muted)" font-size="11" text-anchor="end">deadline timer</text><rect x="216" y="220" width="188" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="310" y="244">Superseded</text></g><text x="414" y="244" fill="var(--muted)" font-size="11" text-anchor="start">resolve(superseded)</text><line x1="326" y1="54" x2="300" y2="218" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-race)"/><text x="208" y="244" fill="var(--muted)" font-size="11" text-anchor="end">re-register</text><rect x="216" y="282" width="188" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="310" y="306">Cancelled</text></g><text x="414" y="306" fill="var(--muted)" font-size="11" text-anchor="start">no resolve — nobody left</text><line x1="358" y1="54" x2="300" y2="280" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-race)"/><text x="208" y="306" fill="var(--muted)" font-size="11" text-anchor="end">socket closes</text></svg></div><p class="caption">Only Cancelled skips resolve — a closed socket means there is nobody left to answer to.</p>
+<p><code>Cancelled</code> is the one that needed care. The hook dying — Ctrl-C, CLI hook timeout, session interrupted — shows up only as a closed socket:</p>
+<pre><code>// server/api.ts:502-505
+// The hook's socket closing IS the signal that nobody is waiting any more
+// (session interrupted, hook killed, CLI hook timeout). Listen before
+// registering, and re-check after, so a socket that dies during the body read
+// can't leave an entry parked until its deadline.</code></pre>
+<p><strong>Why both a listener and a re-check:</strong> <code>readJsonBody</code> is <code>await</code>ed, so the socket can die <em>during</em> the body read — before the listener is attached, after which <code>close</code> never fires again. The <code>res.destroyed</code> re-check catches exactly that window.</p>
+<p><strong>Why <code>cancel</code> takes a <code>questionId</code>:</strong></p>
+<pre><code>// server/lib/pending.ts:249-254
+export function cancel(sessionId: string, questionId: string): void {
+  const entry = entries.get(sessionId);
+  if (!entry || entry.questionId !== questionId) return;
+  clearTimeout(entry.timer);
+  entries.delete(sessionId);
+}</code></pre>
+<p>The map is keyed by session, so a re-registration replaces the entry. Without the id check, a <em>late</em> socket-close from the dead first wait would delete the <em>live</em> second one. The id makes every terminal operation idempotent per entry. The browser echoes it back when answering too, which is what makes a stale phone tab 404 instead of answering the wrong question.</p>
+<h3 id="held-socket--5-no-locking-and-the-invariant-that-makes-that-safe">5. No locking, and the invariant that makes that safe</h3>
+<pre><code>// server/lib/pending.ts:218-222
+/**
+ * Answer (or dismiss) a session's pending question. Synchronous by design:
+ * Node is single-threaded, so two tabs submitting at once means the first wins
+ * outright and the second sees `not-found`, with no locking.
+ */</code></pre>
+<p><strong>Why no mutex:</strong> a single-threaded event loop plus a fully synchronous <code>answer()</code> means the critical section cannot be interleaved. The load-bearing invariant is that <code>answer</code> contains <strong>no <code>await</code></strong> — that is the thing to protect if anyone edits it, not a lock.</p>
+<p><strong>The bad alternative</strong> is a mutex or a compare-and-swap flag: real added complexity to buy a guarantee the runtime already provides. The trade-off they accepted is that the invariant is implicit — nothing mechanically stops someone adding an <code>await</code> to <code>answer()</code> and quietly introducing a race. The doc comment is the only guard.</p>
+<h3 id="held-socket--6-four-stores-three-shapes">6. Four stores, three shapes</h3>
+<div class="tablewrap"><table><thead><tr><th>Store</th><th>Held socket?</th><th>Verdicts</th><th>Distinctive</th></tr></thead><tbody><tr><td><a href="../../../server/lib/pending.ts"><code>pending.ts</code></a></td><td>yes</td><td>answered / timeout / dismissed / superseded</td><td><code>sanitizeQuestions</code> + <code>validateAnswer</code></td></tr><tr><td><a href="../../../server/lib/plans.ts"><code>plans.ts</code></a></td><td>yes</td><td>rejected only</td><td>accept refused upstream</td></tr><tr><td><a href="../../../server/lib/messages.ts"><code>messages.ts</code></a></td><td>yes</td><td>+ <strong>released</strong></td><td>the 5s idle reaper</td></tr><tr><td><a href="../../../server/lib/permissions.ts"><code>permissions.ts</code></a></td><td><strong>no</strong></td><td>none</td><td>display-only, 30min TTL</td></tr></tbody></table></div>
+<p><strong>Why three modules rather than one generic store:</strong></p>
+<pre><code>// server/lib/messages.ts:13-15
+ * Third parallel store, same state machine as `pending.ts`/`plans.ts` (same
+ * injected `resolve`, same one-entry-per-session rule), separate module for the
+ * same reason `plans.ts` is: the payloads and verdicts share nothing.</code></pre>
+<p>The <em>state machine</em> is identical; the <em>types</em> share nothing. <code>pending.ts</code> validates a structured answer against the questions it claims to answer; <code>messages.ts</code> takes a string; <code>plans.ts</code> has one verdict. A generic store would be parameterized over payload, verdict union, and validation — three type parameters to save maybe forty lines, and every call site would read worse. The duplication is deliberate and the comments say so at each site.</p>
+<p><code>pending.ts</code> also carries validation the others don't need, and it is worth noting what it <em>declines</em> to check:</p>
+<pre><code>// server/lib/pending.ts:115-116
+ * Values are deliberately NOT checked against the option labels: the terminal
+ * dialog always offers a free-text "Other", and the panel mirrors that.</code></pre>
+<p>Rejecting unknown values would be the obvious "safer" choice and would break the free-text path that the terminal dialog has always had. The caps (<code>SELECTED_CAP = 500</code>) do the memory-safety job instead.</p>
+<h3 id="held-socket--7-permissionsts--the-instructive-outlier">7. <code>permissions.ts</code> — the instructive outlier</h3>
+<p>No socket, no resolve, no verdict:</p>
+<pre><code>// server/lib/permissions.ts:10-12
+ * Display-only. Unlike `pending.ts` there is no held socket and no resolve: the
+ * CLI offers no way for anything outside the TUI to answer a permission dialog,
+ * so this store records a fact and nothing more. Answering stays in the terminal.</code></pre>
+<p>And the hook is kept deliberately incapable:</p>
+<pre><code># scripts/permission-notify-hook.sh:23-26
+# DISPLAY-ONLY, unlike ask-remote-hook.sh. This hook never prints anything on
+# stdout, which for PermissionRequest means "no decision" — the prompt renders
+# exactly as it would have. Do not make it emit a decision: an `allow` reaching
+# in over HTTP would turn the dashboard into a remote permission bypass.</code></pre>
+<p>That is a security boundary stated as a comment. The dashboard is reachable over your LAN or tailnet; a hook that could turn an HTTP POST into an <code>allow</code> would make every permission prompt in every session remotely bypassable.</p>
+<p><strong>How the pill clears, given there is nothing to resolve.</strong> This is the clever part:</p>
+<pre><code>// server/lib/permissions.ts:17-20
+ * Clearing is the scan's job, not this store's: answering the dialog (approve
+ * OR deny) appends a record to the transcript, so `lastMessageTs &gt; notifiedAt`
+ * means the wait is over. The TTL below is only a backstop for the paths that
+ * never append — a killed session, a dismissed dialog, a lost notify.</code></pre>
+<p><strong>The bad alternative</strong> — a short TTL as the primary mechanism:</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>transcript comparison (chosen)</th><th>short TTL</th></tr></thead><tbody><tr><td>Correctness</td><td>Causal — the clear happens because you answered</td><td>Guessed from elapsed time</td></tr><tr><td>Long dialogs</td><td>Pill stays until answered, however long</td><td>Clears early; row lies</td></tr><tr><td>Dead sessions</td><td>30min backstop catches them</td><td>Also caught</td></tr><tr><td>Cost</td><td>The scan must carry <code>notifiedAt</code> comparison logic</td><td>Trivial</td></tr></tbody></table></div>
+<p>Deriving it from the transcript makes the clear <em>causally</em> correct rather than probabilistically correct — and the TTL is kept, demoted to a backstop for the paths where no record is ever appended.</p>
+<hr>
+<p><strong>Next:</strong> <a href="#stop-loop">The Stop-hook chat loop</a> — the store that needed a reaper.</p>
+<p><a href="#README">↑ back to contents</a></p>
+<p class="backtop"><a href="#top">↑ back to contents</a></p></section>
+<section><h2 id="stop-loop">The Stop-hook chat loop</h2>
+<p>The strangest of the five, because it turns a lifecycle hook into a conversation.</p>
+<blockquote><p>Mental model: a <code>Stop</code> hook that <strong>blocks</strong> does not end the turn — the model reads the reason and keeps working. When it next finishes, <code>Stop</code> fires again. That is a loop, and the loop is the feature.</p></blockquote>
+<h3 id="stop-loop--1-the-loop">1. The loop</h3>
+<div class="diagram"><svg viewBox="0 0 620 320" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>A blocking Stop hook loops: the model continues and Stop fires again, up to eight times</title><defs><marker id="ar-stoploop" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/></marker></defs><rect x="216" y="12" width="170" height="38" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="301" y="35">turn ends</text></g><rect x="216" y="84" width="170" height="38" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="301" y="107">the gate stack</text></g><rect x="24" y="84" width="150" height="38" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="99" y="107">notify_fallback</text></g><rect x="216" y="160" width="170" height="38" rx="6" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="301" y="183">held ≤600s</text></g><rect x="216" y="240" width="170" height="38" rx="6" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="301" y="263">block the stop</text></g><rect x="440" y="240" width="156" height="38" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="518" y="263">session stops</text></g><line x1="301" y1="50" x2="301" y2="82" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stoploop)"/><line x1="214" y1="103" x2="176" y2="103" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stoploop)"/><text x="196" y="96" fill="var(--muted)" font-size="11" text-anchor="middle">at desk / off / bg work</text><line x1="301" y1="122" x2="301" y2="158" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stoploop)"/><text x="384" y="143" fill="var(--muted)" font-size="11" text-anchor="start">away + remoteAnswer on</text><line x1="301" y1="198" x2="301" y2="238" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stoploop)"/><text x="384" y="222" fill="var(--muted)" font-size="11" text-anchor="start">you type a follow-up</text><line x1="386" y1="259" x2="438" y2="259" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stoploop)"/><text x="412" y="300" fill="var(--muted)" font-size="11" text-anchor="middle">CLI 8-block cap</text><line x1="386" y1="180" x2="438" y2="180" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stoploop)" stroke-dasharray="4 3"/><text x="518" y="176" fill="var(--muted)" font-size="11" text-anchor="middle">timeout / dismiss</text><text x="518" y="192" fill="var(--muted)" font-size="11" text-anchor="middle">/ released</text><path d="M 216 259 q -80 0 -80 -60 q 0 -60 80 -180" fill="none" stroke="var(--accent)"
+    stroke-width="1.5" marker-end="url(#ar-stoploop)" stroke-dasharray="5 4"/><text x="96" y="200" fill="var(--muted)" font-size="11" text-anchor="middle">model continues</text><text x="96" y="216" fill="var(--muted)" font-size="11" text-anchor="middle">→ Stop fires again</text><line x1="99" y1="122" x2="99" y2="236" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stoploop)"/><line x1="174" y1="255" x2="214" y2="255" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stoploop)" stroke-dasharray="4 3"/></svg></div><p class="caption">The loop bound lives in the CLI (8 blocks), not in the script — which is why the script needs no counter.</p>
+<h3 id="stop-loop--2-stop_hook_active-was-demoted-from-a-guard-to-a-payload-field">2. <code>stop_hook_active</code> was demoted from a guard to a payload field</h3>
+<p>Conventionally a <code>Stop</code> hook checks <code>stop_hook_active</code> and bails, to avoid an infinite loop. This one can't:</p>
+<pre><code># scripts/stop-notify-hook.sh:14-18
+# The CLI caps consecutive Stop blocks at 8 (CLAUDE_CODE_STOP_HOOK_BLOCK_CAP),
+# then force-ends the turn — so a phone conversation is at most 8 replies per
+# stretch. stop_hook_active no longer short-circuits: mid-conversation stops
+# must re-hold (that IS the chat loop); it rides in the POST body instead so the
+# server skips the push you would not want mid-chat.</code></pre>
+<p>Bailing on that flag would cap the conversation at exactly <strong>one</strong> reply, because the second turn-end is by definition a mid-hook-conversation stop.</p>
+<p>So the flag changed jobs. It is no longer control flow; it is data:</p>
+<pre><code># scripts/stop-notify-hook.sh:90-95
+BODY=$(jq -cn \
+  --arg sid "$SESSION_ID" \
+  --arg pm "$PERM_MODE" \
+  --argjson sha "$SHA" \
+  --argjson t "$((TIMEOUT_S * 1000))" \
+  '{sessionId: $sid, timeoutMs: $t, permissionMode: $pm, stopHookActive: $sha}') || notify_fallback</code></pre>
+<p><strong>Why this is safe:</strong> the loop bound moved from the script to the platform. The CLI's own 8-block cap is the guard now, and it cannot be misconfigured away by editing this script — because the script no longer holds that responsibility.</p>
+<p><strong>The bad alternative</strong> is keeping the guard and finding some other way to allow more than one reply, e.g. a counter in the script or a server-side reply budget:</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>rely on the CLI cap (chosen)</th><th>keep the guard + own counter</th></tr></thead><tbody><tr><td>Loop safety</td><td>Enforced by the CLI, unconditionally</td><td>Enforced by your own bookkeeping</td></tr><tr><td>State needed</td><td>None — the script is stateless</td><td>A counter that must survive across subprocess invocations</td></tr><tr><td>Conversation length</td><td>Up to 8 replies</td><td>Whatever you implement</td></tr><tr><td>Risk</td><td>You inherit a cap you don't control (8, via env var)</td><td>A bug in your counter is an infinite loop</td></tr></tbody></table></div>
+<p>The script is invoked fresh per stop, with no memory. Any counter would have to live on disk or on the server, and a bug in it means a session that never stops. Delegating to the platform is strictly better here.</p>
+<h3 id="stop-loop--3-two-exits-and-the-old-behaviour-preserved-byte-for-byte">3. Two exits, and the old behaviour preserved byte-for-byte</h3>
+<p><code>notify_fallback</code> is a shell function used as a jump target:</p>
+<pre><code># scripts/stop-notify-hook.sh:58-65
+notify_fallback() {
+  [ "$SHA" = "true" ] &amp;&amp; exit 0
+  BODY=$(jq -cn --arg sid "$SESSION_ID" --arg pm "$PERM_MODE" \
+    '{sessionId: $sid, event: "stop", permissionMode: $pm}') || exit 0
+  curl -sf -m 1 -X POST -H 'Content-Type: application/json' "${AUTH[@]}" \
+    -d "$BODY" "$DASH/api/notify/event" &gt; /dev/null 2&gt;&amp;1 || true
+  exit 0
+}</code></pre>
+<p>Every non-hold path calls it. The header states the contract plainly:</p>
+<pre><code># scripts/stop-notify-hook.sh:6-9  (abridged here — line 9 truncated)
+# Two paths out of every run:
+#   at the desk / feature off → POST /api/notify/event (the old fire-and-forget
+#     push trigger) and exit 0 — byte-for-byte the pre-feature behaviour;
+#   away + remote answers on  → POST /api/messages/wait, held.</code></pre>
+<p><strong>Why it matters:</strong> the "task finished" push predates remote messages. Adding a hold could easily have re-routed the old path through the new one — and then a bug in the hold logic would take out notifications too. Instead the gates <em>add</em> a path; they never reroute the existing one. Even <code>notify_fallback</code> is reachable from mid-flight failures: a non-2xx from <code>/api/messages/wait</code> (feature flipped off, server restarted) falls back to the plain notify rather than exiting silently.</p>
+<p>Note also the <code>[ "$SHA" = "true" ] &amp;&amp; exit 0</code> at the top of the function: mid-conversation stops skip the notify, because <em>"the old script exited before notifying there too."</em> Even the suppression is a preserved behaviour, not a new one.</p>
+<h3 id="stop-loop--4-background-work-aborts-before-anything-else">4. Background work aborts before anything else</h3>
+<p>This runs before the health probe — before any network call at all:</p>
+<pre><code># scripts/stop-notify-hook.sh:41-44
+# Count in-flight background work. Missing keys -&gt; [] -&gt; 0 (safe fallback).
+# Only the hook payload carries this, which is why the guard stays here.
+bg=$(printf '%s' "$INPUT" | jq '((.background_tasks // []) | length) + ((.session_crons // []) | length)' 2&gt;/dev/null || echo 0)
+[ "${bg:-0}" -gt 0 ] 2&gt;/dev/null &amp;&amp; exit 0</code></pre>
+<p><strong>Why this one gate cannot move to the server:</strong> the dashboard reads transcripts off disk. It has no way to see in-flight background tasks or session crons — that information exists only in the hook payload. Most of this subsystem pushes decisions serverward (prose, timeouts, policy) precisely because the server is testable; this is the counter-example, and the comment marks it as such.</p>
+<p><strong>Why it aborts rather than holding:</strong> a turn that ends with a background agent still running is not really finished. The model will be re-invoked when that agent reports, so holding the turn open would park a session that is about to continue on its own — and would burn one of the 8 available blocks doing it.</p>
+<h3 id="stop-loop--5-the-prose-is-a-contract-between-two-modules">5. The prose is a contract between two modules</h3>
+<p><code>composeReason</code> carries your follow-up <strong>and</strong> re-injects the away-mode instructions:</p>
+<pre><code>// server/lib/messages.ts:55-62
+export function composeReason(text: string): string {
+  const trimmed = text.trim();
+  return 'The user is away from the terminal and sent this follow-up from the dashboard; '
+    + `treat it as their next message:\n${trimmed}\n\n`
+    + 'Continue working on it now. The user is still away: put any decision through the '
+    + 'AskUserQuestion tool, never end the turn on a prose question, and prefer '
+    + 'already-permitted tools — a permission dialog would park the session until they return.';
+}</code></pre>
+<p><strong>Why the instructions ride here:</strong> as <a href="#lifecycle">the lifecycle chapter</a> covers, <code>UserPromptSubmit</code> does not fire on a hook-continued turn. There was no user prompt. So <code>remote-decision-hook.sh</code> never runs and its injection never happens — this reason string is the only vehicle left.</p>
+<p>Then <a href="../../../server/lib/chat.ts"><code>chat.ts</code></a> mirrors that exact prose in a regex, to unwrap the record back into a plain drawer message:</p>
+<pre><code>// server/lib/chat.ts:74-83
+const REMOTE_MESSAGE_RE = new RegExp(
+  '^(?:Stop hook feedback:\\n)?'
+  + 'The user is away from the terminal and sent this follow-up from the dashboard; '
+  + 'treat it as their next message:\\n'
+  + '([\\s\\S]*)'
+  + '\\n\\nContinue working on it now\\. The user is still away: put any decision through the '
+  + 'AskUserQuestion tool, never end the turn on a prose question, and prefer '
+  + 'already-permitted tools — a permission dialog would park the session until they return\\.'
+  + '\\s*$'
+);</code></pre>
+<p>Without it, your one-line follow-up would display in the chat drawer as the whole four-line wrapper, instructions and all.</p>
+<p><strong>The bad alternative</strong> is a sentinel marker (<code>&lt;!--remote-msg--&gt;</code>) or a JSON envelope — trivially parseable, no duplicated prose:</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>mirrored prose (chosen)</th><th>sentinel / envelope</th></tr></thead><tbody><tr><td>What the model reads</td><td>Clean natural-language instruction</td><td>A marker it must be told to ignore</td></tr><tr><td>Parse robustness</td><td>Brittle — two copies must stay identical</td><td>Exact</td></tr><tr><td>Drift protection</td><td><code>chat.test.ts</code> imports <code>composeReason</code> and pins both ends</td><td>Not needed</td></tr><tr><td>Failure mode</td><td>Record silently not unwrapped (cosmetic)</td><td>—</td></tr></tbody></table></div>
+<p>They chose the <em>model's</em> reading experience over the parser's, and paid for it with a pinning test. The comment is explicit that this is a deliberate fail-closed design:</p>
+<pre><code>// server/lib/messages.ts:50-53
+ * ⚠️ `chat.ts` `REMOTE_MESSAGE_RE` mirrors this exact prose to unwrap the record
+ * back into a plain drawer message. Editing the wording here without editing it
+ * there breaks `chat.test.ts` — which is the point; it fails closed, and the
+ * follow-up just stops showing in the drawer.</code></pre>
+<p>Each end carries a pointer to the other — <code>messages.ts</code> warns about the regex, <a href="../../../server/lib/chat.ts"><code>chat.ts:70-71</code></a> notes that <em>"Both ends are anchored, so any drift in that prose fails closed."</em> Both anchored, drift caught by a test, worst case cosmetic. That is what makes an otherwise-fragile duplication affordable.</p>
+<h3 id="stop-loop--6-the-reaper-only-messagests-needs">6. The reaper only <code>messages.ts</code> needs</h3>
+<p><code>pending.ts</code> and <code>plans.ts</code> wait for you to <em>answer something</em>. <code>messages.ts</code> waits for you to <em>maybe say something</em>. That difference earns it a reaper:</p>
+<pre><code>// server/lib/messages.ts:189-198
+export function sweepIdle(): number {
+  if (entries.size === 0) return 0;
+  const thresholdSecs = getSettings().idleSecs;
+  if (thresholdSecs === 0) return 0;
+  const idle = (idleReader ?? readIdleSecs)();
+  if (idle === null || idle &gt;= thresholdSecs) return 0;
+  const waiting = [...entries.values()];
+  for (const entry of waiting) settle(entry, { status: 'released' });
+  return waiting.length;
+}</code></pre>
+<p><strong>Why:</strong> when you walk back to your desk, the right behaviour is for the session to stop immediately — not to make you find a phone panel and dismiss it. Hence the extra verdict, <code>released</code>, which exists in no other store.</p>
+<p>And the reaper self-terminates:</p>
+<pre><code>// server/lib/messages.ts:205-212
+function ensureReaper(): void {
+  if (reaper) return;
+  reaper = setInterval(() =&gt; {
+    sweepIdle();
+    if (entries.size === 0 &amp;&amp; reaper) { clearInterval(reaper); reaper = null; }
+  }, 5_000);
+  reaper.unref();
+}</code></pre>
+<p><strong>The bad alternative</strong> is a permanent 5-second interval started at boot:</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>on-demand reaper (chosen)</th><th>always-on interval</th></tr></thead><tbody><tr><td><code>ioreg</code> spawns when idle</td><td>Zero — <em>"an idle server never spawns <code>ioreg</code>"</em></td><td>17,280/day to serve an empty store</td></tr><tr><td>Holds the process open</td><td>No — <code>unref()</code></td><td>Needs <code>unref()</code> anyway</td></tr><tr><td>Complexity</td><td><code>ensureReaper</code> + the self-clear check</td><td>One line at boot</td></tr></tbody></table></div>
+<p>The store is empty the overwhelming majority of the time, and each sweep shells out to <code>ioreg</code>. Six extra lines to spawn no subprocesses when there is nothing to reap.</p>
+<p>Note the fail direction, which is the <em>opposite</em> of the hook's:</p>
+<pre><code>// server/lib/messages.ts:185-187
+ * Fail directions: unreadable idle (Docker, non-macOS) → never release — the
+ * deadline timer is the reaper of last resort. `idleSecs === 0` means the idle
+ * gate is disabled everywhere else, so it disables auto-release too.</code></pre>
+<p>Auto-releasing on a guess would end a turn you were about to reply to. See <a href="#fail-open">Fail-open</a> for all three directions side by side.</p>
+<hr>
+<p><strong>Next:</strong> <a href="#fail-open">Fail-open, hook by hook</a>.</p>
+<p><a href="#README">↑ back to contents</a></p>
+<p class="backtop"><a href="#top">↑ back to contents</a></p></section>
+<section><h2 id="fail-open">Fail-open, hook by hook</h2>
+<p>Twelve bail-outs, one success path — and three call sites that fail deliberately opposite ways on the very same signal.</p>
+<blockquote><p>Mental model: <strong>the hook's exit is what lets the terminal UI render.</strong> So every guard has the same escape: <code>exit 0</code>, and the dialog appears exactly as it would have without the hook installed. Fail-open toward the terminal is the invariant the whole subsystem is built to preserve.</p></blockquote>
+<h3 id="fail-open--1-the-gate-stack">1. The gate stack</h3>
+<div class="diagram"><svg viewBox="0 0 620 420" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>Six gates, each with the same bail-out: exit 0, and the terminal dialog renders as it always did</title><defs><marker id="ar-gates" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/></marker></defs><rect x="20" y="14" width="300" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11.5" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="170" y="37.833333333333336">CLAUDECODE=1 and jq present?</text></g><line x1="170" y1="54" x2="170" y2="70" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-gates)"/><line x1="320" y1="34" x2="392" y2="34" stroke="var(--line)"
+      stroke-width="1.5" stroke-dasharray="4 3"/><rect x="20" y="72" width="300" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11.5" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="170" y="95.83333333333333">GET /api/health — 1s hard cap</text></g><line x1="170" y1="112" x2="170" y2="128" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-gates)"/><line x1="320" y1="92" x2="392" y2="92" stroke="var(--line)"
+      stroke-width="1.5" stroke-dasharray="4 3"/><rect x="20" y="130" width="300" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11.5" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="170" y="153.83333333333334">remoteAnswer? (env AND toggle)</text></g><line x1="170" y1="170" x2="170" y2="186" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-gates)"/><line x1="320" y1="150" x2="392" y2="150" stroke="var(--line)"
+      stroke-width="1.5" stroke-dasharray="4 3"/><rect x="20" y="188" width="300" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11.5" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="170" y="211.83333333333334">ioreg idle ≥ threshold?</text></g><line x1="170" y1="228" x2="170" y2="244" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-gates)"/><line x1="320" y1="208" x2="392" y2="208" stroke="var(--line)"
+      stroke-width="1.5" stroke-dasharray="4 3"/><rect x="20" y="246" width="300" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11.5" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="170" y="269.8333333333333">POST wait — HELD ≤600s</text></g><line x1="170" y1="286" x2="170" y2="302" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-gates)"/><line x1="320" y1="266" x2="392" y2="266" stroke="var(--line)"
+      stroke-width="1.5" stroke-dasharray="4 3"/><rect x="20" y="304" width="300" height="40" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11.5" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="170" y="327.8333333333333">status == answered?</text></g><line x1="320" y1="324" x2="392" y2="324" stroke="var(--line)"
+      stroke-width="1.5" stroke-dasharray="4 3"/><line x1="392" y1="34" x2="392" y2="324" stroke="var(--line)" stroke-width="1.5"
+    stroke-dasharray="4 3"/><line x1="392" y1="180" x2="436" y2="180" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-gates)" stroke-dasharray="4 3"/><rect x="438" y="156" width="130" height="48" rx="6" fill="var(--panel)" stroke="var(--bad)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="503" y="184">exit 0</text></g><rect x="20" y="366" width="300" height="44" rx="6" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="170" y="392">emit deny + reason</text></g><line x1="170" y1="346" x2="170" y2="364" stroke="var(--accent)"
+    stroke-width="1.5" marker-end="url(#ar-gates)"/><rect x="438" y="250" width="168" height="60" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="522" y="276.5">terminal dialog renders</text><text x="522" y="291.5">exactly as before</text></g><line x1="503" y1="204" x2="503" y2="248" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-gates)"/><text x="503" y="138" fill="var(--muted)" font-size="11" text-anchor="middle">12 of 13 paths</text></svg></div><p class="caption">Every edge out of the stack except one lands on exit 0. Fail-open toward the terminal is the invariant.</p>
+<p>Every edge except one lands on <code>exit 0</code>.</p>
+<h3 id="fail-open--2-why-the-arbitration-is-necessary-at-all">2. Why the arbitration is necessary at all</h3>
+<pre><code># scripts/ask-remote-hook.sh:7-13
+# A question can't be live in the terminal AND answerable from the phone (the
+# dialog only renders once this hook exits), so three gates decide who gets it:
+#   1. REMOTE_ANSWER on the server — is the feature available at all?
+#   2. the dashboard toggle        — am I accepting remote answers right now?
+#   3. keyboard idle, below        — am I actually away from the desk?
+# At the desk, gate 3 falls through instantly, so the terminal dialog behaves
+# exactly as it did before this hook existed.</code></pre>
+<p>This is a genuine either/or, not a preference. The hook must decide <em>before</em> the dialog exists whether the dialog should exist. There is no design in which both surfaces are simultaneously live.</p>
+<h3 id="fail-open--3-the-complete-inventory">3. The complete inventory</h3>
+<div class="tablewrap"><table><thead><tr><th>Guard</th><th>Fails to</th><th>Reasoning</th></tr></thead><tbody><tr><td><code>CLAUDECODE != 1</code></td><td>terminal</td><td>Script may be invoked outside the CLI; nothing to hook</td></tr><tr><td>no <code>jq</code></td><td>terminal</td><td>Can't parse the payload at all</td></tr><tr><td><code>tool_name != ExitPlanMode</code></td><td>terminal</td><td><em>"A matcher is configuration, so never trust it alone"</em></td></tr><tr><td><code>/api/health</code> unreachable (1s)</td><td>terminal</td><td>Dashboard down — nobody could answer anyway</td></tr><tr><td><code>remoteAnswer != true</code></td><td>terminal</td><td>Env gate or toggle says no</td></tr><tr><td>non-numeric <code>idleSecs</code></td><td><strong>60</strong></td><td>An old server or odd payload must not disable the gate</td></tr><tr><td>idle unreadable</td><td>terminal</td><td><strong>Never hide the dialog on a guess</strong></td></tr><tr><td>idle &lt; threshold</td><td>terminal</td><td>You are at the desk</td></tr><tr><td>no <code>session_id</code></td><td>terminal</td><td>Can't register a wait without it</td></tr><tr><td>no <code>tool_input</code></td><td>terminal</td><td>Nothing to show on the phone</td></tr><tr><td>POST non-2xx / reset / timeout</td><td>terminal</td><td>Server restarted, or feature flipped off mid-flight</td></tr><tr><td><code>status != answered</code></td><td>terminal</td><td>timeout, dismissed, superseded, released — all mean "use the terminal"</td></tr><tr><td>empty <code>reason</code></td><td>terminal</td><td>Never emit a deny with no explanation</td></tr></tbody></table></div>
+<p>That table spans the set — the <code>tool_name</code> row is <code>plan-remote-hook.sh</code>'s alone, and the non-numeric <code>idleSecs</code> row is a default rather than a bail-out. <a href="../../../scripts/ask-remote-hook.sh"><code>ask-remote-hook.sh</code></a> itself contains <strong>thirteen</strong> <code>exit 0</code> statements: twelve bail-outs and one success exit after the decision is printed. <code>grep -c 'exit 0' scripts/*-hook.sh</code> gives 13 / 14 / 12 / 8 / 8 across the five. One path through to a decision, a dozen out. The asymmetry <em>is</em> the design.</p>
+<h3 id="fail-open--4-inputcat-comes-first-always">4. <code>INPUT=$(cat)</code> comes first, always</h3>
+<p>All five scripts open the same way:</p>
+<pre><code># scripts/ask-remote-hook.sh:28-36  (abridged here — comment lines elided)
+INPUT=$(cat)
+[ "$CLAUDECODE" = "1" ] || exit 0
+DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
+command -v jq &gt; /dev/null 2&gt;&amp;1 || exit 0</code></pre>
+<p><strong>Why drain stdin before the first bail-out:</strong> a script that exits while the CLI is still writing its payload gives the CLI a broken pipe. Reading it all first means every subsequent <code>exit 0</code> is clean, whatever the reason.</p>
+<p><strong>The bad alternative</strong> — check the cheap conditions first, before reading stdin — looks like an optimization and buys nothing: the payload is a few kilobytes already buffered in the pipe.</p>
+<h3 id="fail-open--5-the-measurementconfiguration-distinction">5. The measurement/configuration distinction</h3>
+<p>Two <code>case</code> statements, identical syntax, opposite conclusions:</p>
+<pre><code># scripts/ask-remote-hook.sh:66-69
+  case "$IDLE_S" in
+    ''|*[!0-9]*) exit 0 ;;                          # unreadable → treat as at-desk
+    *) [ "$IDLE_S" -lt "$IDLE_MIN_S" ] &amp;&amp; exit 0 ;; # at the desk → terminal dialog
+  esac</code></pre>
+<pre><code># scripts/ask-remote-hook.sh:49
+case "$IDLE_MIN_S" in ''|*[!0-9]*) IDLE_MIN_S=60 ;; esac</code></pre>
+<p>A bad <strong>measurement</strong> means <em>"I don't know whether you're there"</em> → don't act. A bad <strong>setting</strong> means <em>"I don't know your preference"</em> → use the sane default. The comment on the second is explicit that this is a choice: <em>"Anything non-numeric (old server, odd payload) falls back to 60 rather than being trusted blind."</em></p>
+<p><strong>Why not fail-open on bad config too</strong> (i.e. treat an unparseable threshold as "always wait")? Because that would silently <em>enable</em> the feature everywhere on a malformed payload — an old dashboard version that doesn't send <code>idleSecs</code> would start intercepting every question on every machine. Defaulting to 60 keeps the behaviour conservative and predictable.</p>
+<h3 id="fail-open--6-three-call-sites-three-fail-directions-one-signal">6. Three call sites, three fail directions, one signal</h3>
+<p>The same unreadable-idle measurement is handled three ways, and each is right for its own blast radius.</p>
+<p><strong>a) <code>ask-remote-hook.sh</code> — unknown idle → do NOT intercept.</strong></p>
+<pre><code># scripts/ask-remote-hook.sh:59-62
+# 2. Are you at the keyboard? If so the terminal dialog wins — remote answering
+#    only kicks in once you've stepped away. macOS reports idle nanoseconds via
+#    IOHIDSystem (~40ms to read). If it can't be read (non-macOS, ioreg missing)
+#    we assume you ARE at the desk: never hide the dialog on a guess.</code></pre>
+<p>Cost of guessing wrong: a dialog hidden from someone sitting right there. <strong>The session looks hung for up to ten minutes.</strong></p>
+<p><strong>b) <code>notify.ts</code> — unknown idle → DO push.</strong></p>
+<pre><code>// server/lib/notify.ts:71-78
+  if (policy.requireAfk) {
+    const idle = ctx.readIdle();
+    // Unreadable (Docker, non-macOS) → push anyway. Failing silent here would
+    // reintroduce the missed-notification bug this feature exists to fix, and a
+    // wrong guess costs one extra push rather than a hidden dialog — which is
+    // why this fails the opposite way to `ask-remote-hook.sh`.
+    if (idle !== null &amp;&amp; idle &lt; ctx.thresholdSecs) return false;
+  }</code></pre>
+<p>Cost of guessing wrong: <strong>one unnecessary buzz.</strong> The comment names the other call site explicitly and explains the inversion — this is the clearest example in the repo of a fail direction being derived rather than inherited from a house rule.</p>
+<p><strong>c) <code>messages.ts</code> <code>sweepIdle</code> — unknown idle → do NOT release.</strong></p>
+<p>Cost of guessing wrong: <strong>a turn ends that you were about to reply to.</strong> So the deadline timer stays the reaper of last resort.</p>
+<div class="diagram"><svg viewBox="0 0 620 300" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>One unreadable signal, three call sites, three opposite defaults — each derived from its own cost of being wrong</title><defs><marker id="ar-dirs" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/></marker></defs><rect x="20" y="128" width="150" height="52" rx="6" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="95" y="150.5">ioreg</text><text x="95" y="165.5">unreadable</text></g><rect x="232" y="24" width="168" height="56" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="316" y="48.5">ask-remote.sh</text><text x="316" y="63.5">don't intercept</text></g><line x1="170" y1="154" x2="230" y2="52" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-dirs)"/><rect x="438" y="24" width="168" height="56" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="522" y="48.666666666666664">worst case:</text><text x="522" y="62.666666666666664">no phone option</text></g><line x1="400" y1="52" x2="436" y2="52" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-dirs)"/><rect x="232" y="130" width="168" height="56" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="316" y="154.5">notify.ts</text><text x="316" y="169.5">push anyway</text></g><line x1="170" y1="154" x2="230" y2="158" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-dirs)"/><rect x="438" y="130" width="168" height="56" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="522" y="154.66666666666666">worst case:</text><text x="522" y="168.66666666666666">one extra buzz</text></g><line x1="400" y1="158" x2="436" y2="158" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-dirs)"/><rect x="232" y="236" width="168" height="56" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="316" y="260.5">sweepIdle</text><text x="316" y="275.5">don't release</text></g><line x1="170" y1="154" x2="230" y2="264" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-dirs)"/><rect x="438" y="236" width="168" height="56" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="522" y="260.6666666666667">worst case:</text><text x="522" y="274.6666666666667">hold runs to deadline</text></g><line x1="400" y1="264" x2="436" y2="264" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-dirs)"/></svg></div><p class="caption">Each site asks what being wrong costs here, not what the project normally does.</p>
+<p>Each site asks <em>"what does being wrong cost here?"</em> rather than <em>"what does the project normally do?"</em> — which is why the same input yields three different defaults and all three are correct.</p>
+<h3 id="fail-open--7-the-install-lives-outside-version-control">7. The install lives outside version control</h3>
+<p>The scripts are versioned in <a href="../../../scripts"><code>scripts/</code></a>; the <em>registration</em> is in <code>~/.claude/settings.json</code>, which the repo does not ship. The README frames this as the project having no config in Claude Code by default — hooks are installed only by the opt-in features that need one, and each script's header carries its own four-line install recipe:</p>
+<pre><code># scripts/ask-remote-hook.sh:17-22  (abridged here — line 22 truncated)
+# Install:
+#   ln -s "$PWD/scripts/ask-remote-hook.sh" ~/.claude/hooks/ask-remote.sh
+# then add to ~/.claude/settings.json under PreToolUse matcher AskUserQuestion:
+#   { "type": "command", "command": "bash \"$HOME/.claude/hooks/ask-remote.sh\"",
+#     "timeout": 630 }
+# The timeout MUST exceed the wait window, or the CLI kills the hook first.</code></pre>
+<p><strong>The bad alternative</strong> is committing <code>.claude/settings.json</code> with the hooks pre-wired:</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>manual opt-in install (chosen)</th><th>committed <code>.claude/settings.json</code></th></tr></thead><tbody><tr><td><code>git clone</code> behaviour</td><td>Working dashboard, zero hooks</td><td>Blocking hooks in every session, immediately</td></tr><tr><td>Blast radius of a bug</td><td>Only people who opted in</td><td>Anyone who opens the repo</td></tr><tr><td>Setup cost</td><td>~4 manual steps per feature</td><td>Zero</td></tr><tr><td>Discoverability</td><td>Needs docs (and has them: <a href="../../../docs/workflows"><code>docs/workflows/</code></a>)</td><td>Automatic</td></tr></tbody></table></div>
+<p>Merely opening this repo in Claude Code would otherwise install a hook that can hold a turn open for 600 seconds. The trade-off they accepted is a real setup tax — four steps, roughly two minutes, documented per feature — in exchange for never surprising someone who just wanted to read the code.</p>
+<p>Note the symlink in the recipe: <code>ln -s</code> rather than a copy, so <code>git pull</code> updates the installed hook. The registration is manual and one-time; the <em>code</em> stays tracked.</p>
+<hr>
+<p><strong>Next:</strong> <a href="#config">Timeouts, gates, and config precedence</a>.</p>
+<p><a href="#README">↑ back to contents</a></p>
+<p class="backtop"><a href="#top">↑ back to contents</a></p></section>
+<section><h2 id="config">Timeouts, gates, and config precedence</h2>
+<p>Four timeouts guarding one wait, three sources resolving one number, and four independent gate stacks that are easy to conflate.</p>
+<blockquote><p>Mental model: every layer here is <strong>strictly larger than the layer it guards</strong>, and every misconfiguration degrades to the terminal dialog rather than breaking. The ladder is designed so that getting it wrong is survivable.</p></blockquote>
+<h3 id="config--1-the-timeout-ladder">1. The timeout ladder</h3>
+<div class="diagram"><svg viewBox="0 0 620 340" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>Four timeouts guard one wait, each strictly larger than the layer below it</title><defs><marker id="ar-ladder" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/></marker></defs><rect x="20" y="16" width="150" height="46" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="95" y="43">curl -m 1</text></g><g fill="var(--fg)" font-size="12"><text x="188" y="38">health probe</text></g><text x="188" y="54" fill="var(--muted)" font-size="11" text-anchor="start">owner: the hook</text><line x1="95" y1="62" x2="95" y2="76" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-ladder)"/><rect x="20" y="78" width="150" height="46" rx="6" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="95" y="105">600s</text></g><g fill="var(--fg)" font-size="12"><text x="188" y="100">the actual window</text></g><text x="188" y="116" fill="var(--muted)" font-size="11" text-anchor="start">owner: server's setTimeout</text><line x1="95" y1="124" x2="95" y2="138" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-ladder)"/><rect x="20" y="140" width="150" height="46" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="95" y="167">curl -m 615</text></g><g fill="var(--fg)" font-size="12"><text x="188" y="162">hung-server backstop</text></g><text x="188" y="178" fill="var(--muted)" font-size="11" text-anchor="start">owner: the hook</text><line x1="95" y1="186" x2="95" y2="200" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-ladder)"/><rect x="20" y="202" width="150" height="46" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="95" y="229">timeout: 630</text></g><g fill="var(--fg)" font-size="12"><text x="188" y="224">the CLI's kill</text></g><text x="188" y="240" fill="var(--muted)" font-size="11" text-anchor="start">owner: Claude Code</text><line x1="95" y1="248" x2="95" y2="262" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-ladder)"/><rect x="20" y="264" width="150" height="46" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="95" y="291">5s … 1800s</text></g><g fill="var(--fg)" font-size="12"><text x="188" y="286">clampTimeout bound</text></g><text x="188" y="302" fill="var(--muted)" font-size="11" text-anchor="start">owner: pending.ts</text><text x="520" y="60" fill="var(--muted)" font-size="11" text-anchor="middle">each layer is</text><text x="520" y="76" fill="var(--muted)" font-size="11" text-anchor="middle">strictly larger</text><text x="520" y="92" fill="var(--muted)" font-size="11" text-anchor="middle">than the one</text><text x="520" y="108" fill="var(--muted)" font-size="11" text-anchor="middle">it guards</text></svg></div><p class="caption">Getting the ladder wrong degrades to the terminal dialog — never to a broken session.</p>
+<div class="tablewrap"><table><thead><tr><th>Layer</th><th>Value</th><th>Owner</th><th>What it guards against</th></tr></thead><tbody><tr><td>Health probe</td><td><code>curl -m 1</code></td><td>the hook</td><td>A hung or absent dashboard adding latency to every prompt</td></tr><tr><td>The window</td><td><code>TIMEOUT_S</code>, default 600s</td><td>the server's <code>setTimeout</code></td><td>Waiting forever for an answer that isn't coming</td></tr><tr><td>curl cap</td><td><code>TIMEOUT_S + 15</code></td><td>the hook</td><td>A server that accepted the POST and then hung</td></tr><tr><td>CLI hook timeout</td><td><code>timeout: 630</code> in settings.json</td><td>Claude Code</td><td>A hook that never returns</td></tr><tr><td>Store clamp</td><td>5s … 1800s</td><td><code>clampTimeout</code></td><td>A hostile or absurd hook-supplied value</td></tr></tbody></table></div>
+<p><strong>Why the server owns the deadline rather than curl:</strong></p>
+<pre><code># scripts/ask-remote-hook.sh:94-96
+# 3. Register and wait. The server resolves this itself at the deadline, so
+#    curl's own cap is only a backstop for a hung server. A non-2xx, a reset
+#    (server restarted), or a timeout all mean: use the terminal dialog.</code></pre>
+<p>The server knows <em>why</em> the wait ended — answered, timed out, dismissed, superseded, released — and reports it. A curl timeout would only tell the hook "no reply", collapsing five distinguishable outcomes into one.</p>
+<p><strong>The bad alternative</strong> — let curl's <code>-m</code> be the deadline and skip the server-side timer entirely:</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>server owns the deadline (chosen)</th><th>curl's <code>-m</code> is the deadline</th></tr></thead><tbody><tr><td>The hook learns why</td><td>Yes — a typed <code>status</code> field</td><td>No, just "no response"</td></tr><tr><td>Store cleanup</td><td><code>settle()</code> removes the entry and clears its timer</td><td>Entry leaks until something else evicts it</td></tr><tr><td>Browser sees the expiry</td><td>Yes — the entry disappears from <code>getPending</code></td><td>Panel keeps showing a dead question</td></tr><tr><td>Cost</td><td>Two timers for one wait</td><td>One</td></tr></tbody></table></div>
+<p>The redundancy buys observability. And the <code>+ 15</code> on curl's cap is what makes it a genuine backstop instead of a competitor — it can only fire if the server has already failed to.</p>
+<h3 id="config--2-the-630-vs-600-constraint-enforced-from-both-ends">2. The 630 vs 600 constraint, enforced from both ends</h3>
+<p>Every blocking script's header carries the same warning:</p>
+<pre><code># scripts/ask-remote-hook.sh:22-24
+# The timeout MUST exceed the wait window, or the CLI kills the hook first. The
+# window is Settings → "Answer window" (max 600s there for exactly this reason);
+# raising it past ~615s means raising this number too.</code></pre>
+<p>If the CLI's <code>timeout</code> is smaller than the window, <strong>the CLI kills the hook mid-wait</strong> — which degrades to the terminal dialog. Even a misconfigured ladder fails safe.</p>
+<p>The UI enforces it from the other end, twice. First the field simply won't go higher:</p>
+<pre><code>// client/src/components/settings/SettingsView.tsx:268-274
+&lt;NumberField
+  value={server.state.answerSecs}
+  min={5}
+  max={600}
+  unit="sec"
+  onCommit={answerSecs =&gt; void server.save({ answerSecs })}
+/&gt;</code></pre>
+<p>And if a value above 600 arrives some other way, it names the exact number you would need:</p>
+<pre><code>// client/src/components/settings/SettingsView.tsx:289-297  (compacted here)
+{server.state.answerSecs &gt; 600 &amp;&amp; (
+  &lt;div className="set-warn"&gt;
+    Above 600s the CLI kills the hook before the window closes, unless you also raise
+    &lt;code&gt;timeout&lt;/code&gt; on the hook entry in &lt;code&gt;~/.claude/settings.json&lt;/code&gt; to at least
+    &lt;code&gt;{server.state.answerSecs + 15}&lt;/code&gt;. Until then it falls back to the terminal dialog early.
+  &lt;/div&gt;
+)}</code></pre>
+<p>Meanwhile the server clamps to a <em>wider</em> bound:</p>
+<pre><code>// server/lib/settings.ts:42-45
+export const DEFAULT_ANSWER_SECS = 600;
+/** Mirrors `MIN_TIMEOUT_MS` / `MAX_TIMEOUT_MS` in `pending.ts` — the same window. */
+export const MIN_ANSWER_SECS = 5;
+export const MAX_ANSWER_SECS = 1800;</code></pre>
+<p><strong>Why the UI caps at 600 but the store allows 1800.</strong> This looks like an inconsistency and is deliberate layering: the <em>store</em> should not refuse a value that works perfectly well for someone who also raised their hook timeout, while the <em>UI</em> should not offer a value that silently breaks with the documented install. So the hard bound lives on the server and the advice lives in the UI — plus a warning for the gap between them.</p>
+<p><strong>The bad alternative</strong> is making the server enforce 600 too:</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>wide store bound + UI advice (chosen)</th><th>server clamps to 600</th></tr></thead><tbody><tr><td>Power user with <code>timeout: 1200</code></td><td>Supported</td><td>Silently clamped, no explanation</td></tr><tr><td>Default install</td><td>Warned before it can break</td><td>Cannot break</td></tr><tr><td>Consequence of the gap</td><td>One early fallback to the terminal dialog</td><td>—</td></tr></tbody></table></div>
+<p>The cost of the gap is bounded and visible: your window ends early and you get the terminal dialog. That is the same outcome as every other failure in this subsystem.</p>
+<h3 id="config--3-precedence-three-sources-resolved-in-one-line-of-shell">3. Precedence: three sources, resolved in one line of shell</h3>
+<pre><code># scripts/ask-remote-hook.sh:48
+IDLE_MIN_S="${CLAUDE_DASHBOARD_IDLE_SECS:-$(printf '%s' "$HEALTH" | jq -r '.idleSecs // 60')}"</code></pre>
+<p>Read right-to-left: <strong>exported env var → the dashboard's Settings (carried on the health probe) → hardcoded default.</strong> The same one-liner shape resolves <code>answerSecs</code>.</p>
+<p><strong>Why Settings rides on the health probe</strong> rather than having its own endpoint:</p>
+<pre><code># scripts/ask-remote-hook.sh:43-47
+# Seconds without keyboard/mouse input before you count as away. 0 disables the
+# check (always wait — the pre-idle-arbiter behaviour). An explicitly exported
+# env var wins; otherwise the dashboard's Settings page owns it, carried on the
+# probe above so no extra round trip is needed. Anything non-numeric (old server,
+# odd payload) falls back to 60 rather than being trusted blind.</code></pre>
+<p>The probe is already happening — it is gate 1 — so piggybacking two integers on it costs nothing.</p>
+<p><strong>The bad alternative</strong> is a <code>GET /api/settings</code> call. That doubles the latency added to <em>every</em> permission prompt and tool call in every session, to fetch two numbers that were already in flight.</p>
+<p><strong>Why the env var wins over the UI:</strong> it is the escape hatch for a setup the UI cannot model — Docker, CI, a second dashboard on another port. But a silently-losing UI control is a bad experience, so the server <em>detects</em> the override and the UI says so:</p>
+<pre><code>// server/lib/settings.ts:157
+export function detectEnvOverride(name: string, homeDir?: string): EnvOverride | null {</code></pre>
+<p>It checks both the shell environment and the <code>env</code> block of <code>~/.claude/settings.json</code>, and the Settings page renders which one, with an honest disclaimer: <em>"Remove it for the value above to take effect. The dashboard won't edit that file for you."</em></p>
+<p><strong>Why not just edit that file:</strong> it is the user's global Claude Code config, shared by every project and every session. A dashboard that rewrote it to make its own slider work would be reaching far outside its remit. Reporting the conflict is the correct scope.</p>
+<h3 id="config--4-four-gate-stacks-people-conflate">4. Four gate stacks people conflate</h3>
+<div class="diagram"><svg viewBox="0 0 620 288" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>Three independent gate stacks: is the feature on, should this one wait, and should it push</title><defs><marker id="ar-stacks" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/></marker></defs><text x="150" y="16" fill="var(--muted)" font-size="11" text-anchor="middle">stack 1 — is the feature on?</text><rect x="20" y="26" width="120" height="44" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="80" y="44.5">REMOTE_ANSWER</text><text x="80" y="59.5">env</text></g><rect x="160" y="26" width="120" height="44" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="220" y="52">UI toggle</text></g><rect x="70" y="100" width="180" height="44" rx="6" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="160" y="126">available AND enabled</text></g><line x1="80" y1="70" x2="140" y2="98" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stacks)"/><line x1="220" y1="70" x2="180" y2="98" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stacks)"/><text x="150" y="164" fill="var(--muted)" font-size="11" text-anchor="middle">stack 2 — should THIS one wait?</text><rect x="70" y="174" width="180" height="44" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="12" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="160" y="192.5">idle ≥ threshold?</text><text x="160" y="207.5">in the hook</text></g><line x1="160" y1="144" x2="160" y2="172" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stacks)"/><text x="452" y="16" fill="var(--muted)" font-size="11" text-anchor="middle">stack 3 — should it push?</text><rect x="360" y="26" width="190" height="34" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11.5" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="455" y="46.833333333333336">policy.enabled</text></g><line x1="455" y1="60" x2="455" y2="70" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stacks)"/><rect x="360" y="72" width="190" height="34" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11.5" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="455" y="92.83333333333333">events[event]</text></g><line x1="455" y1="106" x2="455" y2="116" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stacks)"/><rect x="360" y="118" width="190" height="34" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11.5" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="455" y="138.83333333333334">requireRemoteAnswer</text></g><line x1="455" y1="152" x2="455" y2="162" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stacks)"/><rect x="360" y="164" width="190" height="34" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11.5" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="455" y="184.83333333333334">requireAutoMode</text></g><line x1="455" y1="198" x2="455" y2="208" stroke="var(--line)"
+    stroke-width="1.5" marker-end="url(#ar-stacks)"/><rect x="360" y="210" width="190" height="34" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+    <g fill="var(--fg)" font-size="11.5" text-anchor="middle"
+       font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="455" y="230.83333333333334">requireAfk</text></g><text x="452" y="268" fill="var(--muted)" font-size="11" text-anchor="middle">orthogonal — governs pushes, not waits</text></svg></div><p class="caption">The hook is only ever told the product of stack 1. It never learns which layer said no.</p>
+<p><strong>Stack 1 — is the feature on?</strong> (<a href="../../../server/lib/remoteState.ts"><code>remoteState.ts</code></a>)</p>
+<pre><code>// server/lib/remoteState.ts:52-60
+export function getState(config: Config): RemoteAnswerState {
+  if (cached === null) cached = readStored() ?? config.remoteAnswer;
+  return {
+    available: config.remoteAnswer,
+    enabled: cached,
+    remoteAnswer: config.remoteAnswer &amp;&amp; cached,
+    persisted
+  };
+}</code></pre>
+<p>The hook is only ever told the <strong>product</strong>. It never learns which layer said no, and doesn't need to — every answer is the same <code>exit 0</code>.</p>
+<p><code>setEnabled</code> returns <code>null</code> when the env gate is off, so <strong>the toggle cannot turn the feature on.</strong> Env is a hard kill switch; the toggle only operates inside what env permits.</p>
+<p><strong>Why the toggle is persisted</strong> — the only thing this app writes to disk:</p>
+<pre><code>// server/lib/remoteState.ts:14-17
+ * The toggle is persisted because `tsx watch` restarts the server on every edit
+ * and a switch you flipped before walking away must survive that. It is the only
+ * thing this app writes to disk, and it fails open: an unwritable path keeps the
+ * in-memory value and reports `persisted: false` so the UI can say so.</code></pre>
+<p>A dev-loop detail drove a persistence decision, and the fail-open path (unwritable disk still works this run, and says so) means a read-only container doesn't lose the feature.</p>
+<p><strong>Stack 2 — should <em>this</em> one wait?</strong> The idle check, in the hook, per invocation. Never on the server, because the server can't see your keyboard from inside a container.</p>
+<p><strong>Stack 3 — should it push?</strong> (<a href="../../../server/lib/notify.ts"><code>notify.ts</code></a>) Orthogonal to the other two — it governs <em>notifications</em>, not waits:</p>
+<pre><code>// server/lib/notify.ts:65-69
+export function shouldNotify(event: NotifyEvent, policy: NotifyPolicy, ctx: PredicateContext): boolean {
+  if (!policy.enabled) return false;
+  if (!policy.events[event]) return false;
+  if (policy.requireRemoteAnswer &amp;&amp; !ctx.remoteAnswer) return false;
+  if (policy.requireAutoMode &amp;&amp; !AUTO_MODES.has(ctx.permissionMode ?? '')) return false;</code></pre>
+<p><code>requireAutoMode</code> is the reason <code>permissionMode</code> is threaded through every hook POST — you will see <code>--arg pm "$PERM_MODE"</code> in all four POSTing scripts, with the note <em>"Absent on older CLIs, which simply never satisfy that layer."</em> A missing field disables one policy layer rather than erroring.</p>
+<p><strong>Stack 4 — the wait endpoint vs the answer endpoint.</strong> One asymmetry that reads as a slip until you follow it through. <code>serveQuestionWait</code> gates on <code>getState(config).remoteAnswer</code> (env <strong>and</strong> toggle); <code>serveSessionAnswer</code> gates on <code>config.remoteAnswer</code> (env only).</p>
+<p>So flipping the toggle off stops <em>new</em> waits from registering but does not strand one already held. And the toggle handler releases the held ones deliberately:</p>
+<pre><code>// server/lib/pending.ts:256-266
+/**
+ * Hand every waiting question back to its terminal dialog. Used when the toggle
+ * is switched off: "stop accepting remote answers" should release the waits it
+ * already owns, not leave them parked until their deadlines.
+ * Returns how many were released.
+ */
+export function dismissAll(): number {
+  const waiting = [...entries.values()];
+  for (const entry of waiting) settle(entry, { status: 'dismissed' });
+  return waiting.length;
+}</code></pre>
+<p><strong>Why not gate the answer endpoint on the toggle too:</strong> a wait that is <em>already held</em> has a hook blocked on it. Refusing the answer would leave that hook waiting out its full deadline with no way to resolve early — the exact opposite of what "stop accepting remote answers" should mean. Turning the switch off releases what it owns; it does not orphan it.</p>
+<h3 id="config--5-the-values-in-one-table">5. The values, in one table</h3>
+<div class="tablewrap"><table><thead><tr><th>Constant</th><th>Value</th><th>Where</th></tr></thead><tbody><tr><td><code>DEFAULT_IDLE_SECS</code></td><td>60</td><td><a href="../../../server/lib/settings.ts"><code>settings.ts:37</code></a></td></tr><tr><td><code>MAX_IDLE_SECS</code></td><td>3600</td><td><code>settings.ts:39</code></td></tr><tr><td><code>DEFAULT_ANSWER_SECS</code></td><td>600</td><td><code>settings.ts:42</code></td></tr><tr><td><code>MIN_ANSWER_SECS</code> / <code>MAX_ANSWER_SECS</code></td><td>5 / 1800</td><td><code>settings.ts:44-45</code></td></tr><tr><td><code>DEFAULT_TIMEOUT_MS</code></td><td>600_000</td><td><a href="../../../server/lib/pending.ts"><code>pending.ts:44</code></a></td></tr><tr><td><code>MIN_TIMEOUT_MS</code> / <code>MAX_TIMEOUT_MS</code></td><td>5_000 / 1_800_000</td><td><code>pending.ts:45-46</code></td></tr><tr><td><code>PERMISSION_TTL_MS</code></td><td>30 min</td><td><a href="../../../server/lib/permissions.ts"><code>permissions.ts:26</code></a></td></tr><tr><td>idle reaper interval</td><td>5s</td><td><a href="../../../server/lib/messages.ts"><code>messages.ts:210</code></a></td></tr><tr><td><code>TEXT_CAP</code> (follow-up)</td><td>4000</td><td><code>messages.ts:27</code></td></tr><tr><td><code>QUESTION_CAP</code> / <code>LABEL_CAP</code> / <code>DESCRIPTION_CAP</code></td><td>2000 / 200 / 500</td><td><code>pending.ts:37-39</code></td></tr><tr><td>CLI Stop-block cap</td><td>8</td><td><code>CLAUDE_CODE_STOP_HOOK_BLOCK_CAP</code></td></tr><tr><td>hook <code>timeout</code> (blocking)</td><td>630</td><td><code>~/.claude/settings.json</code></td></tr><tr><td>hook <code>timeout</code> (display-only)</td><td>5</td><td><code>~/.claude/settings.json</code></td></tr></tbody></table></div>
+<p>The caps in the last rows are not ceremony. <code>pending.ts</code> states the reason: <em>"Length caps — a hostile/runaway tool input must not pin memory."</em> The store holds entries in RAM with no size bound other than one-per-session, so the per-field caps are the memory bound.</p>
+<hr>
+<p><a href="#README">↑ back to contents</a></p>
+<p class="backtop"><a href="#top">↑ back to contents</a></p></section>
+  </main>
+</div>
+<script>
+(function () {
+  var links = [].slice.call(document.querySelectorAll('nav.toc a[href^="#"]'));
+  var targets = links.map(function (a) { return document.getElementById(a.hash.slice(1)); });
+  var side = document.querySelector('.side');
+  var nav = document.querySelector('nav.toc');
+  function scroller() {
+    if (side && side.scrollHeight > side.clientHeight) return side;
+    if (nav && nav.scrollHeight > nav.clientHeight) return nav;
+    return null;
+  }
+  function onScroll() {
+    var best = -1;
+    for (var i = 0; i < targets.length; i++) {
+      var t = targets[i];
+      if (t && t.getBoundingClientRect().top <= 120) best = i;
+    }
+    for (var j = 0; j < links.length; j++) links[j].classList.toggle('active', j === best);
+    var box = scroller();
+    if (box && best >= 0) {
+      // offsetTop is relative to the offsetParent, not the scroll container, so
+      // compare rects instead.
+      var lr = links[best].getBoundingClientRect(), br = box.getBoundingClientRect();
+      if (lr.top < br.top) box.scrollTop -= (br.top - lr.top) + 20;
+      else if (lr.bottom > br.bottom) box.scrollTop += (lr.bottom - br.bottom) + 20;
+    }
+  }
+  document.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+</body>
+</html>
