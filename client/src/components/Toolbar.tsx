@@ -6,7 +6,7 @@ import {
   type SortKey,
   type View
 } from '../lib/filterSort';
-import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
+import type { RemoteAnswerControl } from '../hooks/useRemoteAnswer';
 import { MultiSelect } from './MultiSelect';
 import { OriginBadge } from './OriginBadge';
 import { RemoteAnswerToggle } from './RemoteAnswerToggle';
@@ -24,19 +24,34 @@ const SORTS: { key: SortKey; label: string }[] = [
 export function Toolbar({
   sessions,
   view,
-  onChange
+  onChange,
+  onOpenSpawn,
+  remoteAnswer
 }: {
   sessions: Session[];
   view: View;
   onChange: (v: View) => void;
+  /** Open the launch panel (its open/closed state lives in SessionsView, next to chatId). */
+  onOpenSpawn: () => void;
+  /**
+   * Owned by `SessionsView` and passed down rather than called here directly —
+   * `SpawnPanel` also needs a field off the same `/api/health` snapshot
+   * (`spawnMaxPermission`), and a second `useRemoteAnswer()` call site would
+   * mean a second, independent poll instead of one poll with more consumers.
+   */
+  remoteAnswer: RemoteAnswerControl;
 }) {
   const projects = distinctProjects(sessions);
   const set = (patch: Partial<View>) => onChange({ ...view, ...patch });
-  // One `/api/health` poll, two consumers: the badge and the switch.
-  const remoteAnswer = useRemoteAnswer();
 
   return (
     <div className="toolbar">
+      {remoteAnswer.state?.spawnAvailable && (
+        <button type="button" className="tb-new" onClick={onOpenSpawn}>
+          + New
+        </button>
+      )}
+
       <MultiSelect
         label="projects"
         options={projects.map(p => ({ value: p, label: p }))}

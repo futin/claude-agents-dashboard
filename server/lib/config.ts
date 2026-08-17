@@ -6,6 +6,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { PermissionMode } from '../../shared/types.js';
+
 export interface Config {
   port: number;
   /** Vite dev-server port (the `pnpm dev` UI). Only vite.config.ts reads it. */
@@ -59,6 +61,22 @@ export interface Config {
   whisperBin: string;
   /** ffmpeg, used to make whisper-readable 16kHz mono WAV from browser audio. */
   ffmpegBin: string;
+  /**
+   * The `claude` CLI to spawn for a new headless session. Empty (the default)
+   * disables the whole spawn-a-session feature outright — the same "unset
+   * means off" rule `NTFY_TOPIC` and `WHISPER_MODEL` already use, rather than
+   * a separate boolean.
+   */
+  claudeBin: string;
+  /**
+   * The permission mode ceiling every spawn request is clamped to
+   * (`clampPermission` in `server/lib/spawn.ts`), no matter what the launch
+   * form asks for. Validated by `toPermissionMode` at load time — this is
+   * the one knob that bounds the spawn feature's blast radius, so an
+   * unrecognized value is never silently accepted; it warns and falls back
+   * to `'auto'` instead.
+   */
+  spawnMaxPermission: PermissionMode;
 }
 
 export const DEFAULTS = {
@@ -77,7 +95,9 @@ export const DEFAULTS = {
   DASHBOARD_PUBLIC_URL: '',
   WHISPER_MODEL: '',
   WHISPER_BIN: 'whisper-cli',
-  FFMPEG_BIN: 'ffmpeg'
+  FFMPEG_BIN: 'ffmpeg',
+  CLAUDE_BIN: '',
+  SPAWN_MAX_PERMISSION: 'auto'
 } as const;
 
 /** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
@@ -111,6 +131,33 @@ export function toBool(value: unknown, fallback: boolean): boolean {
   const s = String(value).trim().toLowerCase();
   if (s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
   if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+  return fallback;
+}
+
+/** The exact literal set of `PermissionMode` — mirrors `PERMISSION_MODES` in `server/lib/spawn.ts`. */
+function isPermissionMode(s: string): s is PermissionMode {
+  return s === 'plan' || s === 'acceptEdits' || s === 'auto' || s === 'bypassPermissions';
+}
+
+/**
+ * Coerce to a `PermissionMode`. Unlike `toPosInt`/`toBool`, a present but
+ * unrecognized value doesn't fail silently: this field is the ceiling that
+ * bounds the whole spawn feature's blast radius (`clampPermission` in
+ * `server/lib/spawn.ts`), so a typo that silently raises it — e.g.
+ * `SPAWN_MAX_PERMISSION=Plan` (capital P) falling open to `'auto'` — must be
+ * visible in the log rather than a silent, invisibly-widened ceiling. An
+ * absent or explicitly empty value is the normal "unset" case, though, and
+ * stays silent, the same "empty means default" rule every other optional
+ * value in this file follows.
+ */
+export function toPermissionMode(value: unknown, fallback: PermissionMode): PermissionMode {
+  const s = typeof value === 'string' ? value.trim() : '';
+  if (s === '') return fallback;
+  if (isPermissionMode(s)) return s;
+  console.warn(
+    `[dashboard] SPAWN_MAX_PERMISSION="${s}" is not a recognized permission mode ` +
+    `(plan, acceptEdits, auto, bypassPermissions) — falling back to "${fallback}".`
+  );
   return fallback;
 }
 
@@ -166,6 +213,8 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     publicUrl: (src('DASHBOARD_PUBLIC_URL') || DEFAULTS.DASHBOARD_PUBLIC_URL).trim().replace(/\/+$/, ''),
     whisperModel: (src('WHISPER_MODEL') || DEFAULTS.WHISPER_MODEL).trim(),
     whisperBin: (src('WHISPER_BIN') || DEFAULTS.WHISPER_BIN).trim(),
-    ffmpegBin: (src('FFMPEG_BIN') || DEFAULTS.FFMPEG_BIN).trim()
+    ffmpegBin: (src('FFMPEG_BIN') || DEFAULTS.FFMPEG_BIN).trim(),
+    claudeBin: (src('CLAUDE_BIN') || DEFAULTS.CLAUDE_BIN).trim(),
+    spawnMaxPermission: toPermissionMode(src('SPAWN_MAX_PERMISSION'), DEFAULTS.SPAWN_MAX_PERMISSION)
   };
 }

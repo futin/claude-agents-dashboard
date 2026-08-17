@@ -65,7 +65,7 @@ That's the whole basic setup. Everything below is optional.
   and markdown rendering.
 - **[Remote answers](docs/subsystems/remote-answer.md)** — answer a session's
   `AskUserQuestion` from your phone; the pick is delivered into the live session. The first
-  of the app's three write paths, and the reason the hook install exists.
+  of the app's four write paths, and the reason the hook install exists.
 - **[Remote plan verdicts](docs/subsystems/remote-plan.md)** — send a proposed
   `ExitPlanMode` plan back for revision with feedback, from the same drawer. Reject-only:
   the CLI discards a hook `allow` for plans, so accepting stays a terminal action.
@@ -79,6 +79,13 @@ That's the whole basic setup. Everything below is optional.
   the ntfy push the only outbound call. The transcript lands in the textarea as editable
   text; **send** stays a deliberate tap. Off until you install the engine, and needs HTTPS
   (`pnpm tunnel`) to record at all from a phone.
+- **[New session](docs/subsystems/spawn.md)** — the toolbar's **+ New** button starts a
+  brand-new session from the dashboard: pick a recent project, write or dictate the prompt,
+  tap launch. The server spawns a detached, headless `claude -p` in that project's
+  directory and the row shows up a poll later, ordinary from then on. The fourth write
+  path, and the first one the dashboard *initiates* rather than answers. Off by default
+  (empty `CLAUDE_BIN`); how much a launch can do unattended is bounded by the
+  `SPAWN_MAX_PERMISSION` ceiling on the host, never by the browser.
 - **[Management tab](docs/subsystems/management.md)** — read-only browser for all Claude
   config on the machine: skills, agents, commands, rules, hooks, settings, plugins, per
   scope.
@@ -113,6 +120,12 @@ That's the whole basic setup. Everything below is optional.
   posture](docs/subsystems/dictation.md#security-posture) first if other devices can reach
   the dashboard — the endpoint spawns processes and is gated only by `ANSWER_TOKEN`, which
   defaults to empty.
+- **New sessions (spawn)** — 1 step, ~1 minute: point `CLAUDE_BIN` at your `claude` binary
+  (`which claude`), and set `SPAWN_MAX_PERMISSION` below its `auto` default if that's more
+  than you want an unattended launch to have. Read the [security
+  posture](docs/subsystems/spawn.md#security-posture) first — this is the widest write
+  surface in the app; it's gated by the same `ANSWER_TOKEN` that defaults to empty, and by
+  the remote-answer toggle, so flipping that pill off stops launching too.
 - **Docker** — production and dev images, read-only `~/.claude` mount:
   [docker](docs/workflows/docker.md).
 - **Configuration** — everything is optional, defaults work out of the box; the full

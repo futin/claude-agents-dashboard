@@ -28,12 +28,36 @@ import {
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
   serveSettingsRead, serveSettingsWrite, serveNotifyEvent, serveNotifyTest,
-  serveTranscribe
+  serveTranscribe, serveSpawn, serveSpawnStop
 } from './api.js';
 
 const config = loadConfig();
 const isProd = process.env.NODE_ENV === 'production';
 const clientDist = path.join(process.cwd(), 'client', 'dist');
+
+/**
+ * A rejected promise nobody awaited must not end a dashboard that a dozen
+ * sessions are being watched through.
+ *
+ * Almost every handler below is dispatched with `void serveX(...)` — the
+ * request listener is sync, the handlers are async, and nothing awaits them. On
+ * Node's default `unhandledRejection: throw`, one throw inside any of them (a
+ * `res.writeHead` on an already-ended response, an `fs` call losing a race with
+ * a rotated transcript) takes the whole process down. Each handler owns a
+ * try/catch where it has a meaningful fallback; this is the floor under all of
+ * them, and it deliberately only **logs**: an unhandled rejection is a bug to
+ * fix, not a reason to stop serving the other 20 routes. Same log prefix as
+ * `api.ts`'s own catch blocks, so it lands in one grep.
+ *
+ * Not an `uncaughtException` handler, and `decodePath` below is not made
+ * redundant by this: a `URIError` from `decodeURIComponent` is thrown
+ * *synchronously* inside the request listener, so it never becomes a rejection.
+ * Swallowing genuine synchronous throws process-wide would keep a
+ * possibly-broken process alive, which is a different and worse trade.
+ */
+process.on('unhandledRejection', (reason: unknown) => {
+  console.error('[dashboard] unhandled rejection:', reason instanceof Error ? reason.stack || reason.message : reason);
+});
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -70,6 +94,30 @@ function serveStatic(urlPath: string, res: http.ServerResponse): void {
 function methodNotAllowed(res: http.ServerResponse): void {
   res.writeHead(405, { 'Content-Type': 'application/json', 'Allow': 'POST', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify({ error: 'method not allowed' }));
+}
+
+/**
+ * `decodeURIComponent` throws a `URIError` on malformed percent-encoding
+ * (e.g. a lone `%ZZ`) — synchronously, inside this request listener, with no
+ * `uncaughtException` handler anywhere in this process. Left unguarded, one
+ * unauthenticated request (`POST /api/spawn/%ZZ/stop`, or the same against
+ * any other id-scoped route below) throws before any handler — before even
+ * `tokenOk` — and takes the whole dashboard process down for every session
+ * it was watching. Every site that pulls an id out of the URL below goes
+ * through this instead of calling `decodeURIComponent` directly.
+ */
+function decodePath(raw: string): string | null {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** A URL segment that failed to decode (see `decodePath`). */
+function badRequest(res: http.ServerResponse): void {
+  res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify({ error: 'bad path encoding' }));
 }
 
 const server = http.createServer((req, res) => {
@@ -138,37 +186,80 @@ const server = http.createServer((req, res) => {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return void serveTranscribe(config, req, res);
   }
+  // Spawn a new headless session (see server/lib/spawn.ts). The id-scoped stop
+  // route is anchored (`$`) and checked before the exact-path `/api/spawn`
+  // check below it — the same route-order trap the chat/question/plan/message
+  // regexes further down all document, kept here even though `===` equality
+  // can't itself be prefix-swallowed, so the ordering stays defensive if that
+  // check ever changes shape.
+  const spawnStop = u.pathname.match(/^\/api\/spawn\/([^/]+)\/stop$/);
+  if (spawnStop) {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    const id = decodePath(spawnStop[1]);
+    if (id === null) return badRequest(res);
+    return void serveSpawnStop(config, id, req, res);
+  }
+  if (u.pathname === '/api/spawn') {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return void serveSpawn(config, req, res);
+  }
   // Like the chat route below, these must be matched before the detail regex,
   // whose `[^/?]+` would otherwise swallow `/api/sessions/:id/<anything>`.
   const question = u.pathname.match(/^\/api\/sessions\/([^/]+)\/question$/);
-  if (question) return void serveSessionQuestion(decodeURIComponent(question[1]), res);
+  if (question) {
+    const id = decodePath(question[1]);
+    if (id === null) return badRequest(res);
+    return void serveSessionQuestion(id, res);
+  }
   const answer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/answer$/);
   if (answer) {
     if (req.method !== 'POST') return methodNotAllowed(res);
-    return void serveSessionAnswer(config, decodeURIComponent(answer[1]), req, res);
+    const id = decodePath(answer[1]);
+    if (id === null) return badRequest(res);
+    return void serveSessionAnswer(config, id, req, res);
   }
   const plan = u.pathname.match(/^\/api\/sessions\/([^/]+)\/plan$/);
-  if (plan) return void serveSessionPlan(decodeURIComponent(plan[1]), res);
+  if (plan) {
+    const id = decodePath(plan[1]);
+    if (id === null) return badRequest(res);
+    return void serveSessionPlan(id, res);
+  }
   const planAnswer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/plan-answer$/);
   if (planAnswer) {
     if (req.method !== 'POST') return methodNotAllowed(res);
-    return void serveSessionPlanAnswer(config, decodeURIComponent(planAnswer[1]), req, res);
+    const id = decodePath(planAnswer[1]);
+    if (id === null) return badRequest(res);
+    return void serveSessionPlanAnswer(config, id, req, res);
   }
   const message = u.pathname.match(/^\/api\/sessions\/([^/]+)\/message$/);
-  if (message) return void serveSessionMessage(decodeURIComponent(message[1]), res);
+  if (message) {
+    const id = decodePath(message[1]);
+    if (id === null) return badRequest(res);
+    return void serveSessionMessage(id, res);
+  }
   const messageAnswer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/message-answer$/);
   if (messageAnswer) {
     if (req.method !== 'POST') return methodNotAllowed(res);
-    return void serveSessionMessageAnswer(config, decodeURIComponent(messageAnswer[1]), req, res);
+    const id = decodePath(messageAnswer[1]);
+    if (id === null) return badRequest(res);
+    return void serveSessionMessageAnswer(config, id, req, res);
   }
   // Chat route must be matched before the detail regex below, whose `[^/?]+`
   // would otherwise swallow `/api/sessions/:id/chat` and answer with agents.
   const chat = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)\/chat(?:[?#]|$)/);
-  if (chat) return serveSessionChat(decodeURIComponent(chat[1]), u.searchParams, res);
+  if (chat) {
+    const id = decodePath(chat[1]);
+    if (id === null) return badRequest(res);
+    return serveSessionChat(id, u.searchParams, res);
+  }
   // Detail route must be matched before the generic prefix below, which would
   // otherwise swallow `/api/sessions/:id`.
   const detail = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)/);
-  if (detail) return serveSessionDetail(decodeURIComponent(detail[1]), res);
+  if (detail) {
+    const id = decodePath(detail[1]);
+    if (id === null) return badRequest(res);
+    return serveSessionDetail(id, res);
+  }
   if (req.url && req.url.startsWith('/api/sessions')) {
     // Query params carry the Settings page's per-device scan knobs (limit /
     // lookback / active). The detail regex above needs a slash, so a bare

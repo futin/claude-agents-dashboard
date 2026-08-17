@@ -15,7 +15,7 @@ docs-sync:
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: eeca21c754c09572be041a6806452abba4afe875
+  verified: 997d5bf1abb3d5253d43e7422a1a59e5b66cd755
 ---
 
 # Sessions — live monitor, status machine, subagent detail
@@ -61,6 +61,32 @@ Mustard rather than amber for the last one keeps the "needs you, but not here" c
 apart from the three you can act on from the phone. The label is `position: sticky` inside
 the tab, so it rides the top of the viewport instead of drifting off with an expanded card's
 subagent panel.
+
+### Phantom rows: a session that doesn't exist yet
+
+Above the real rows, `SessionList` also renders `SessionsResponse.launching` — sessions
+[spawn](spawn.md) has started but whose transcript hasn't appeared on disk yet. They are a
+different kind of thing from every other row here: nothing about them comes from a
+transcript, because there isn't one. Each carries only what the launch request knew —
+project name, a 120-character prompt preview — plus a state word: cyan `starting…`, or red
+`failed` with the child's stderr tail (or a synthesized reason) as the activity line.
+
+Three properties keep them from complicating the rest of this document:
+
+- **Never interactive.** No chat tab, no expand, no hover lift — there is nothing to open.
+  A row you cannot click needs none of the status machine below.
+- **They disappear by themselves, with no client-side reconciliation.** `serveSessions`
+  calls `adoptLaunched(ids)` with the freshly-scanned session ids *before* it calls
+  `listLaunching()`, so the poll that first sees the real transcript is the same poll that
+  stops sending the phantom. The row is never rendered twice, and the client never has to
+  match one against the other.
+- **They can outnumber the real rows only briefly.** A `launching` entry that nothing
+  adopts is dropped after 60s; a `failed` one after 5 minutes. Both live in RAM only (the
+  store in `server/lib/spawn.ts`), so a server restart clears them.
+
+A launching entry also renders when the filtered session list is empty — a fresh dashboard,
+or filters that exclude every real row, must still show the launch you just started, which
+is why the empty state checks both lists.
 
 ## Custom session titles
 

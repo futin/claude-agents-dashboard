@@ -317,6 +317,23 @@ export interface HealthResponse extends RemoteAnswerState {
    * remote answers off. One flag, one meaning.
    */
   transcribe?: boolean;
+  /**
+   * True when a `claude` binary is configured and runnable — the spawn
+   * form's gate, probed the same way `transcribe` gates the mic button. See
+   * `probeSpawn` in `server/lib/spawn.ts`.
+   */
+  spawnAvailable?: boolean;
+  /**
+   * The permission-mode ceiling every launch is clamped to
+   * (`config.spawnMaxPermission`, see `clampPermission` in
+   * `server/lib/spawn.ts`). Not a secret — a ceiling, not a credential — so
+   * it rides the same probe `spawnAvailable` does. Lets the launch panel
+   * offer only the permission modes it can actually deliver, instead of
+   * silently clamping a choice the user made on purpose. Absent on an older
+   * server that predates this field; the panel then falls back to offering
+   * up to `'auto'`, today's default ceiling.
+   */
+  spawnMaxPermission?: PermissionMode;
 }
 
 /** `POST /api/transcribe` — text may be '' when the clip held no speech. */
@@ -735,6 +752,65 @@ export interface FileContent {
   error?: boolean;
 }
 
+/**
+ * Spawning a new headless session (a detached `claude -p` process). The
+ * launch form picks a permission mode; the server clamps it to a configured
+ * ceiling (`clampPermission` in `server/lib/spawn.ts`) so a browser can never
+ * ask for more than the host allows. `PermissionMode` and `LaunchingSession`
+ * are the shapes the RAM-only launch store works in; `SpawnRequest` is the
+ * `POST /api/spawn` body that starts one (see `serveSpawn` in `server/api.ts`).
+ */
+
+/** The permission mode ladder, lowest to highest: plan < acceptEdits < auto < bypassPermissions. */
+export type PermissionMode = 'plan' | 'acceptEdits' | 'auto' | 'bypassPermissions';
+
+/**
+ * One in-flight `claude -p` launch the RAM-only store in `server/lib/spawn.ts`
+ * is still watching. Charter: explain the first ~3 seconds of a launch and
+ * report ones that never became a real session — this is deliberately NOT a
+ * session registry, and a launch that succeeds leaves no trace here.
+ */
+export interface LaunchingSession {
+  sessionId: string;
+  projectName: string;
+  projectPath: string;
+  /** First 120 characters only — a display preview, not the full request. */
+  prompt: string;
+  startedAtMs: number;
+  state: 'launching' | 'failed';
+  /** Set only when `state === 'failed'` and the child reported a numeric exit code. */
+  exitCode?: number;
+  /** Set only when `state === 'failed'` — the stderr tail (capped), or a synthesized reason. */
+  error?: string;
+}
+
+/**
+ * Body of `POST /api/spawn` — the launch form's request. `project` is a
+ * {@link ProjectRef.dirName}, resolved server-side against the enumerated
+ * recent-project list — it is never treated as a filesystem path. The server
+ * clamps `permissionMode` to `config.spawnMaxPermission` before anything
+ * spawns, so this field alone can never request more than the host allows.
+ */
+export interface SpawnRequest {
+  project: string;
+  prompt: string;
+  name?: string;
+  model?: string;
+  effort?: string;
+  permissionMode?: PermissionMode;
+}
+
+/**
+ * 200 body of `POST /api/spawn`. The id is minted before the child is spawned
+ * (`--session-id <uuid>` is honored end to end, see docs/subsystems/spawn.md),
+ * so it is valid the instant this response lands — the transcript it names does
+ * not exist yet, which is why the client can set its chat-drawer deep link from
+ * it but the drawer itself still waits for the id to appear in a poll.
+ */
+export interface SpawnResponse {
+  sessionId: string;
+}
+
 /** Full payload of `GET /api/sessions`. */
 export interface SessionsResponse {
   generatedAt: string;
@@ -743,6 +819,15 @@ export interface SessionsResponse {
   runningClaudeProcs: number | null;
   totals: Totals;
   sessions: Session[];
+  /**
+   * In-flight `claude -p` launches the RAM-only store in `server/lib/spawn.ts`
+   * is still watching (see {@link LaunchingSession}). Served alongside
+   * `sessions` deliberately, on the same 3s poll, rather than a second
+   * endpoint the client would have to poll on its own. Optional so an older
+   * client simply ignores a field it doesn't know about. Attached on both the
+   * success and error snapshots — see `serveSessions`.
+   */
+  launching?: LaunchingSession[];
   /**
    * Account rate-limit usage (5-hour + weekly), fetched live from Anthropic.
    * `null` when unavailable (no token, network error); absent when SHOW_USAGE

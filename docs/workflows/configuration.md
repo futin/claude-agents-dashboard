@@ -7,7 +7,7 @@ docs-sync:
     - scripts/ask-remote-hook.sh
     - .env.example
   kind: workflow
-  verified: eeca21c754c09572be041a6806452abba4afe875
+  verified: 77e990f6b0511101b36683840048bf3870761157
 ---
 
 # Configuration
@@ -43,6 +43,8 @@ environment variables override `.env`, which overrides the defaults
 | `WHISPER_MODEL` | _(empty)_ | Path to a GGML whisper model. **Empty disables [dictation](../subsystems/dictation.md) outright** — the same "unset means off" rule `NTFY_TOPIC` uses for pushes. Setting it arms `POST /api/transcribe`, an endpoint that spawns processes on this machine, gated only by the same `ANSWER_TOKEN` above (empty there means this is open too — see [dictation's security posture](../subsystems/dictation.md#security-posture) before setting this where other devices can reach it). Step-by-step: [dictation-setup](dictation-setup.md) |
 | `WHISPER_BIN` | `whisper-cli` | The whisper.cpp CLI, resolved from `PATH`. Override with an absolute path for a non-`PATH` install |
 | `FFMPEG_BIN` | `ffmpeg` | Transcodes the browser's recording (AAC or Opus) to the 16kHz mono WAV whisper.cpp requires. Resolved from `PATH`; override with an absolute path for a non-`PATH` install |
+| `CLAUDE_BIN` | _(empty)_ | Path or `PATH` name of the `claude` CLI to spawn for a new headless session (see [spawn](../subsystems/spawn.md)). **Empty disables the whole feature outright** — the same "unset means off" rule `NTFY_TOPIC`/`WHISPER_MODEL` already use, rather than a separate on/off flag. Setting it arms `POST /api/spawn`, an endpoint that spawns a whole new `claude` process on this machine, gated only by the same `ANSWER_TOKEN` above (empty there means this is open too) |
+| `SPAWN_MAX_PERMISSION` | `auto` | The permission-mode ceiling every launch request is clamped to, no matter what the launch form asks for — ladder `plan < acceptEdits < auto < bypassPermissions`. **Security note:** raising this to `bypassPermissions` lets anything that can reach `/api/spawn` run a fully unsandboxed `claude` process on this machine with no permission prompts at all — only raise it on a machine and network you fully trust (see [spawn's security posture](../subsystems/spawn.md#security-posture)). A present-but-unrecognized value (e.g. a typo'd case) does **not** fail silently like the rest of this table: it falls back to `auto` but also logs a warning, because this is the one knob that bounds the feature's blast radius |
 
 ## Process-environment only (not read from `.env`)
 

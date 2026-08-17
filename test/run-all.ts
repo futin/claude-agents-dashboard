@@ -29,6 +29,9 @@ import { run as runDeepLink } from './deep-link.test.js';
 import { run as runDictation } from './dictation.test.js';
 import { run as runTranscribe } from './transcribe.test.js';
 import { run as runApiBody } from './api-body.test.js';
+import { run as runSpawn } from './spawn.test.js';
+import { run as runSpawnEndpoint } from './spawn-endpoint.test.js';
+import { run as runSpawnOptions } from './spawn-options.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -61,6 +64,9 @@ failed += runDeepLink();
 failed += runDictation();
 failed += await runTranscribe();
 failed += await runApiBody();
+failed += runSpawn();
+failed += await runSpawnEndpoint();
+failed += runSpawnOptions();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

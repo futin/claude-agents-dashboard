@@ -169,6 +169,11 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .ra-pill.origin.o-unknown .ra-dot{background:var(--amber)}
 .toolbar .tb-dir{font-size:12px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 9px;cursor:pointer;transition:border-color .15s,color .15s;font-variant-numeric:tabular-nums}
 .toolbar .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
+/* the one write action in the toolbar — filled, so it doesn't read as just
+   another filter pill. Only rendered when the health poll says spawn is
+   configured (see Toolbar.tsx). */
+.tb-new{font-family:var(--display);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--on-accent);background:var(--cyan);border:1px solid var(--cyan);border-radius:2px;padding:5px 11px;cursor:pointer;transition:opacity .15s}
+.tb-new:hover{opacity:.88}
 
 /* twin gauges: 5H / WEEK */
 .usage{display:flex;gap:18px;margin:-6px 0 18px}
@@ -239,6 +244,24 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .question .dot{background:var(--amber)}
 .incomplete .dot{background:var(--mustard)}
 @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+/* Phantom rows for an in-flight `claude -p` launch (server/lib/spawn.ts's
+   RAM-only store — see SessionList's LaunchingRow). Same flight-strip chrome
+   as a real row; cyan while starting, since amber already means "working" and
+   mustard "incomplete" — cyan is the one color left in the ladder, and it
+   doubles as the accent SpawnPanel uses. Never interactive: no caret, no chat
+   tab, no hover lift. Failed re-uses every `.launching` rule below (the class
+   is additive, not a replacement) and only overrides the color to red. */
+.row.launching .row-main{cursor:default}
+.row.launching:hover{transform:none;box-shadow:inset 0 1px 0 var(--edge),0 1px 2px var(--shadow)}
+.row.launching{border-left-color:var(--cyan)}
+.row.launching .dot{background:var(--cyan);box-shadow:0 0 0 0 color-mix(in srgb,var(--cyan) 50%,transparent);animation:pulse-cyan 1.8s infinite}
+@keyframes pulse-cyan{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--cyan) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.row.launching .r2{margin-top:8px}
+.row.launching .r2 .status{color:var(--cyan)}
+.row.launching.failed{border-left-color:var(--red)}
+.row.launching.failed .dot{background:var(--red);animation:none;box-shadow:none}
+.row.launching.failed .r2 .status{color:var(--red)}
+.row.launching.failed .r2 .act{color:var(--red)}
 .proj{font-size:14px;font-weight:600;letter-spacing:-.01em}
 .session-name{font-size:14px;font-weight:600;letter-spacing:-.01em}
 /* printed form boxes: hairline border, no fill, teleprinter mono */
@@ -514,6 +537,34 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .pb-note{font-size:10.5px;color:var(--ink3);margin-left:auto}
 .chat-foot{display:flex;align-items:baseline;gap:10px;padding:9px 16px;border-top:1px solid var(--hairline);font-size:10.5px;color:var(--ink3);flex-shrink:0;font-family:var(--mono)}
 .chat-count{margin-left:auto;font-variant-numeric:tabular-nums}
+
+/* Spawn panel (SpawnPanel.tsx) — reuses .qpanel's chrome (it's the same pinned
+   family as MessagePanel/QuestionPanel) but tints cyan instead of amber: amber
+   means "a session is waiting on you", and this panel is the opposite of a
+   hold — a compose surface you opened on purpose. Cyan doubles as the
+   "starting…" phantom row's color, so the whole feature reads as one thread. */
+.qpanel.spawn{border-top:1px solid color-mix(in srgb,var(--cyan) 45%,transparent);background:color-mix(in srgb,var(--cyan) 6%,var(--board))}
+.qpanel.spawn .qp-badge{color:var(--cyan);border-color:var(--cyan)}
+.qpanel.spawn .qp-send{background:var(--cyan);border-color:var(--cyan)}
+.qpanel.spawn .qp-other:focus,.qpanel.spawn .qp-feedback:focus,.qpanel.spawn .qp-select:focus{border-color:var(--cyan)}
+/* close ✕, reusing the drawer's button look outside the drawer */
+.sp-x{margin-left:auto}
+/* project / name / model / effort / permission selects — same look as the
+   toolbar's, just under the qp- namespace so they sit inside a qpanel */
+.qp-select{font-family:var(--mono);font-size:10.5px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 8px;cursor:pointer;transition:border-color .15s,color .15s}
+.qp-select:hover{color:var(--ink);border-color:var(--hairline2)}
+.qp-select:focus{outline:none;border-color:var(--amber)}
+.qp-select:disabled{cursor:default;opacity:.55}
+/* name/model/effort/permission ride one row; each field is label-over-control.
+   Full width when a .sp-field is a direct child of .qpanel (the project
+   picker) comes for free from .qpanel's own flex-column stretch — no extra
+   rule needed here. */
+.sp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.sp-field{display:flex;flex-direction:column;gap:3px}
+.sp-label{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3)}
+.sp-name{width:160px}
+.sp-error{color:var(--red)}
+
 @media (max-width:700px){.chat{width:100%;border-left:none}.chat-body{padding:12px}.chat-head{padding:11px 12px}.chat-filter{padding:7px 12px}.chat-head .proj-pill,.chat-model{display:none}
   /* phone: full-width taps, and drop the option blurb that would wrap badly */
   .qpanel{padding:10px 12px;max-height:62vh}.qp-opts{flex-direction:column}
@@ -521,7 +572,12 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
   .qp-opt{width:100%;padding:12px;min-height:42px;align-items:center}.qp-desc{display:none}
   .qp-send,.qp-term{flex:1;padding:12px;min-height:42px}
   .qp-mic{min-height:42px}
-  .qp-plan{max-height:40vh}}
+  .qp-plan{max-height:40vh}
+  /* spawn panel: stack the config row instead of squeezing four selects
+     onto one line, and give every control a thumb-sized tap target */
+  .sp-row{flex-direction:column;align-items:stretch}
+  .sp-name{width:100%}
+  .qp-select{min-height:42px}}
 
 /* ---------------------------------------------- Settings section
    Reuses the management panel's chrome (.mdetail-label for group headers,
@@ -576,7 +632,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 /* ---------------------------------------------- quality floor */
 :where(button,select,input,textarea,summary,[role=button]):focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
 @media (prefers-reduced-motion:reduce){
-  .working .dot,.row-chat.answer,.row-chat.permission,.tl-bar.running,.row,.chat{animation:none}
+  .working .dot,.row.launching .dot,.row-chat.answer,.row-chat.permission,.tl-bar.running,.row,.chat{animation:none}
 }
 /* phone: strip fields wrap instead of clipping; model rides in the drawer anyway
    (same call as hiding .chat-model there) */

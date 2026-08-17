@@ -47,6 +47,9 @@ docs:
   - path: docs/subsystems/dictation.md
     kind: subsystem
     note: Dictation in the reply composer (local whisper)
+  - path: docs/subsystems/spawn.md
+    kind: subsystem
+    note: Spawning a new session (the fourth write path)
   - path: docs/workflows/configuration.md
     kind: workflow
     note: env and hook-side variable reference
