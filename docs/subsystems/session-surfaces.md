@@ -109,38 +109,44 @@ visible to the dashboard.
   memory, or files.
 - **Start on the phone → continue at the Mac with the Mac brain:**
   `claude --teleport <session-id>` — **verified**: the same cloud thread continues in
-  a local terminal TUI, with this machine's filesystem (it read uncommitted local
-  files) and global hooks (a SessionStart hook demonstrably fired). This is the
-  strongest phone→Mac chain: the session is visible on every account surface while
-  cloud, then lands locally with full powers when you sit down.
-  **Teleport forks; it does not move.** (An earlier revision of this file claimed the
-  opposite — "a move, not a mirror" — on evidence that turned out not to involve a real
-  cloud session. Retested properly on 2026-08-17 with one created via `claude --cloud`,
-  and the claim was wrong.) What actually happens:
+  a local terminal TUI. **Read the verified/unverified split below before relying on
+  any of this** — two earlier revisions of this file overstated it.
 
-  - The **cloud session survives**. Its desktop-app sidebar row stays, still opens, and
-    still answers — from its own Linux container (`cwd /home/user/<repo>`), with the
-    cloud brain. Asked to read a Mac-only path, it correctly reports no such file.
-  - The **local continuation is a separate session** — it materializes as an ordinary
-    transcript under `~/.claude/projects` (observed: a user-run terminal teleport left
-    `9fefb37c-….jsonl`, which the dashboard then lists like any other session). Two
-    headless probe runs produced *no* transcript, so treat "run it in a real terminal"
-    as the reliable path; a probe killed while idle proves nothing either way.
-  - The desktop app's registry gets **no row** for that local copy: zero rows reference
-    either teleported id, and `list_sessions` never shows one. This is the load-bearing
-    fact below — it is structural, not a self-report.
+  **Verified (2026-08-17).** A single successful run, executed headlessly under a pty
+  against a session made with `claude --cloud`:
 
-**How to tell local from cloud — never ask the model.** A teleported session inherits
-the cloud session's entire history, so it can answer "where do you run?" from stale
-context rather than by checking, and a cloud session answers correctly that it is in a
-container. Both look identical in chat. Use ground truth instead: a session is local iff
-a transcript for it is being written under `~/.claude/projects` — which is exactly what
-this dashboard scans, so *if the dashboard lists it, it is local*. (Thanks to a second
-session for pressing on this; the first version of this file leaned on a model's
-self-report.)
+  - Teleport executes and loads the cloud history: `Teleporting… → Validating session →
+    Fetching session logs → Getting branch info → Checking out branch`, then the TUI
+    shows the prior conversation.
+  - The **cloud session survives it**. Its desktop-app sidebar row stays, still opens,
+    and still answers — from its own Linux container (`cwd /home/user/<repo>`), with the
+    cloud brain. So teleport is *not* a move.
+  - The desktop app's registry gets **no row** for any teleported session: zero rows
+    reference a teleported id, and `list_sessions` never shows one. Structural, not a
+    self-report — this is the fact that kills the cloud→sidebar→teleport idea.
 
-  So after teleport you hold *two* sessions that share a history and then diverge — one
-  cloud (sidebar-visible, cloud brain), one local (dashboard-visible, Mac brain).
+  **NOT verified: that teleport persists a local transcript at all.** No teleport on
+  this machine has ever produced one. Earlier revisions claimed `9fefb37c-….jsonl` and
+  `d49f5799-….jsonl` were teleport artifacts; reading their contents shows both are
+  ordinary local sessions whose *first user message is the literal text*
+  `claude --teleport …` — the command typed into a running session instead of a shell.
+  The ids matched the filenames by coincidence, and the claim survived two revisions
+  because nobody opened the files. Until a teleport is run in a real shell and a new
+  transcript is observed appearing, treat "you end up with two diverging sessions" as
+  **unproven**.
+
+  **How to tell local from cloud — never ask the model.** A teleported session inherits
+  the cloud history, so it can answer "where do you run?" from stale context instead of
+  checking; a cloud session answers correctly that it is in a container. Both look the
+  same in chat. Ground truth: a session is local iff a transcript for it is being written
+  under `~/.claude/projects` — exactly what this dashboard scans, so *if the dashboard
+  lists it, it is local*.
+
+  **Watch for the command-into-session trap.** Typing `claude --teleport <id>` into a
+  window where Claude is already running sends it as a *message*; the session answers
+  helpfully about the flag, having run nothing. It looks like success — local files get
+  read, local hooks fire — because that session was already local. Run teleport in a
+  shell with no Claude session attached.
 
   **`--teleport` also requires a clean git working directory** — it refuses with
   `Git working directory is not clean. Please commit or stash your changes before using
