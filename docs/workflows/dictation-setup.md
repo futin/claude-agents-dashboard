@@ -5,7 +5,7 @@ docs-sync:
     - server/lib/transcribe.ts
     - server/api.ts
   kind: workflow
-  verified: aaf0831a4beadaffa6497efb3e89aeec0dd9c9c8
+  verified: eeca21c754c09572be041a6806452abba4afe875
 ---
 
 # Dictation — setup

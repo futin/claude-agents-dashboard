@@ -9,7 +9,7 @@ docs-sync:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: 3e1d51fd26c72d6c21bd9d6b8921ee3bb498518b
+  verified: eeca21c754c09572be041a6806452abba4afe875
 ---
 
 # Architecture overview

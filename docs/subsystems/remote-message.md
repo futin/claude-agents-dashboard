@@ -10,7 +10,7 @@ docs-sync:
     - client/src/hooks/usePendingMessage.ts
     - client/src/components/SessionRow.tsx
   kind: subsystem
-  verified: 3e1d51fd26c72d6c21bd9d6b8921ee3bb498518b
+  verified: eeca21c754c09572be041a6806452abba4afe875
 ---
 
 # Remote messages (the `reply?` tab)
