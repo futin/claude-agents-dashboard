@@ -343,9 +343,14 @@ export function run(): number {
     assert.strictEqual(args.length, 7);
   })) p++; else f++;
 
-  if (test('remoteControl appends --remote-control as the last flag, after every earlier option', () => {
-    const args = buildSpawnArgs({ sessionId: UUID, prompt: 'hi', permissionMode: 'auto', name: 'nightly', remoteControl: true });
-    assert.deepStrictEqual(args, ['-p', '--session-id', UUID, '--permission-mode', 'auto', '-n', 'nightly', '--remote-control']);
+  if (test('remoteControl with a name passes the name as the flag value, so the account registration is not auto-named', () => {
+    const args = buildSpawnArgs({ sessionId: UUID, prompt: 'hi', permissionMode: 'auto', name: 'nightly build', remoteControl: true });
+    assert.deepStrictEqual(args, ['-p', '--session-id', UUID, '--permission-mode', 'auto', '-n', 'nightly build', '--remote-control', 'nightly build']);
+  })) p++; else f++;
+
+  if (test('remoteControl without a name appends the bare flag last', () => {
+    const args = buildSpawnArgs({ sessionId: UUID, prompt: 'hi', permissionMode: 'auto', remoteControl: true });
+    assert.deepStrictEqual(args, ['-p', '--session-id', UUID, '--permission-mode', 'auto', '--remote-control']);
   })) p++; else f++;
 
   if (test('remoteControl: false emits no flag — argv identical to the minimal build', () => {

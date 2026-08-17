@@ -180,7 +180,13 @@ export function buildSpawnArgs(input: SpawnInput): string[] {
   if (input.model) args.push('--model', input.model);
   if (input.effort) args.push('--effort', input.effort);
   if (input.name) args.push('-n', input.name);
-  if (input.remoteControl) args.push('--remote-control');
+  // `--remote-control [name]` takes its own optional name; without it the
+  // account registration auto-names itself `<hostname>-N`. Reuse the form's
+  // (already charset-validated) name so the phone app shows the same label.
+  if (input.remoteControl) {
+    args.push('--remote-control');
+    if (input.name) args.push(input.name);
+  }
   return args;
 }
 
