@@ -24,6 +24,7 @@ function sess(p: Partial<Session>): Session {
     contextWindowLabel: '200k',
     contextPct: 0,
     status: p.status ?? 'idle',
+    surface: p.surface ?? 'local',
     remoteQuestion: p.remoteQuestion ?? false,
     remotePlan: p.remotePlan ?? false,
     remoteReply: p.remoteReply ?? false,

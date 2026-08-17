@@ -53,7 +53,8 @@ via `tsx`, dev and prod alike).
   outside the dashboard's own state, since what it writes is a whole new session's
   transcript rather than a row in a RAM-only store. Where such a session can be
   continued afterwards — phone app, terminal resume, and the surfaces that will
-  never show it — is mapped in [session surfaces](subsystems/session-surfaces.md).
+  never show it — is mapped in [session surfaces](subsystems/session-surfaces.md),
+  which is also where `Session.surface` (the row's `dashboard` pill) is specified.
 - **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only. Keep
   new npm deps out of it.
 - **Fail-open everywhere.** A missing token, an unreadable file, a failed probe — every

@@ -299,6 +299,11 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .ag-pill.running{color:var(--green);background:color-mix(in srgb,var(--green) 13%,transparent)}
 .ag-pill.done{color:var(--ink3);background:var(--steel)}
 .ag-pill.kaizen{color:var(--magenta);background:color-mix(in srgb,var(--magenta) 13%,transparent)}
+/* where the session lives (client/src/lib/surface.ts). Cyan borrows the spawn
+   panel's own accent, so a launched session carries the colour of the surface
+   that launched it; a future cloud session is deliberately the quieter steel. */
+.ag-pill.surface.dashboard{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 13%,transparent)}
+.ag-pill.surface.cloud{color:var(--ink3);background:var(--steel)}
 .kaizen-lesson{display:flex;align-items:flex-start;gap:8px;margin-top:11px;padding-top:11px;border-top:1px solid var(--hairline);font-size:11.5px;line-height:1.5;color:var(--ink2)}
 .kaizen-lesson .ag-pill{margin-top:1px}
 .ag-type{flex-shrink:0;font-family:var(--mono);color:var(--magenta);font-weight:600}

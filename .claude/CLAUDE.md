@@ -30,7 +30,9 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/transcript.ts  tail-reads last 256KB of a transcript → tokens/model/window/activity
   lib/title-cache.ts  remembers a session's custom-title once it sinks below that 256KB
                   window (chunked backward hunt, then a searched-byte-range cache)
-  lib/scan.ts     enumerates + ranks sessions across ~/.claude/projects
+  lib/scan.ts     enumerates + ranks sessions across ~/.claude/projects; `sessionSurface`
+                  maps a transcript's `entrypoint` → Session.surface (local | dashboard |
+                  cloud — see docs/subsystems/session-surfaces.md)
   lib/agents.ts   whole-file subagent parser: pure event parser + reducer → AgentJob[]
                   (tokens/toolUses/duration from toolUseResult + notification <usage> blocks)
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts, used only by the
@@ -85,6 +87,8 @@ client/           Vite + React + TypeScript frontend
   components/Markdown.tsx + lib/markdown.ts  zero-dep markdown-subset parser + renderer
                   for message text (no dangerouslySetInnerHTML; pure, unit-tested)
   lib/chatFilter.ts            drawer all/text/you message filter (pure; persisted)
+  lib/surface.ts               the `dashboard`/`cloud` pill (label + tooltip) shown on a
+                  row and in the drawer header; `local` renders nothing (pure)
   lib/deepLink.ts              the ?session=<id> entry point a tapped push opens —
                   read once, memoised for its two callers, then stripped from the URL
                   (see docs/subsystems/push-notify.md)

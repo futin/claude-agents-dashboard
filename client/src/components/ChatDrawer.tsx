@@ -13,6 +13,7 @@ import { usePersistedState } from '../hooks/usePersistedState';
 import { useSettings } from '../hooks/useSettings';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
 import { formatInterval } from '../lib/settings';
+import { surfacePill } from '../lib/surface';
 import type { ChatMessage, Session } from '../../../shared/types';
 
 /** Distance from the bottom (px) still counted as "following the tail". */
@@ -83,6 +84,7 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
   const { settings: { refreshMs } } = useSettings();
   const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
   const shown = useMemo(() => filterMessages(messages, mode), [messages, mode]);
+  const surfaceInfo = surfacePill(session.surface);
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -139,6 +141,12 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
           {session.sessionName && <span className="proj-pill">{session.project}</span>}
           {session.gitBranch && <span className="branch">{session.gitBranch}</span>}
           <span className="chat-model">{session.model}</span>
+          {/* repeated from the row on purpose: a drawer opened straight from a
+              tapped push (`?session=<id>`) never showed the list, so this is
+              the first place the reader learns the session lives only here. */}
+          {surfaceInfo && (
+            <span className={`ag-pill surface ${session.surface}`} title={surfaceInfo.title}>{surfaceInfo.label}</span>
+          )}
           <button className="chat-x" onClick={onClose} aria-label="Close">✕</button>
         </div>
 

@@ -2,6 +2,7 @@ import type { Session } from '../../../shared/types';
 import { fmtTok, formatAgo } from '../lib/format';
 import { SessionDetail } from './SessionDetail';
 import { STATUS_LABEL } from '../lib/filterSort';
+import { surfacePill } from '../lib/surface';
 
 interface Props {
   s: Session;
@@ -44,6 +45,7 @@ export function SessionRow({ s, selected, onToggle, onOpenChat }: Props) {
   const warn = pct >= 70;
   const statusTxt = STATUS_LABEL[s.status];
   const tab = chatTab(s);
+  const surface = surfacePill(s.surface);
 
   return (
     <div className={`row ${s.status}${selected ? ' selected' : ''}`}>
@@ -61,6 +63,13 @@ export function SessionRow({ s, selected, onToggle, onOpenChat }: Props) {
           {s.sessionName && <span className="proj-pill">{s.project}</span>}
           {s.gitBranch && <span className="branch">{s.gitBranch}</span>}
           <span className="model">{s.model}</span>
+          {/* where the session lives, when that isn't the obvious answer — a
+              headless spawn appears in no other list, which is worth saying on
+              the row rather than leaving to be rediscovered. Same no-handler
+              rule as the kaizen pill below. */}
+          {surface && (
+            <span className={`ag-pill surface ${s.surface}`} title={surface.title}>{surface.label}</span>
+          )}
           {/* the pill has no own handler: clicking it toggles the row like the rest
               of .r1, expanding the panel below where the full lesson is shown. */}
           {s.kaizenLesson && (

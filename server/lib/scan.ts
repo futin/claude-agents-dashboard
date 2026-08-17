@@ -12,7 +12,7 @@ import { readTranscript } from './transcript.js';
 import { readSessionAnalyticsLog, lessonForSession } from './sessionAnalyticsLog.js';
 import type { SessionAnalyticsLesson } from './sessionAnalyticsLog.js';
 import type { Config } from './config.js';
-import type { Session, SessionsResponse } from '../../shared/types.js';
+import type { Session, SessionSurface, SessionsResponse } from '../../shared/types.js';
 
 interface TranscriptRef {
   file: string;
@@ -71,6 +71,31 @@ export function decodeProjectName(dirName: string): string {
   const decoded = String(dirName).replace(/^-/, '').replace(/-/g, '/');
   const base = decoded.split('/').filter(Boolean).pop();
   return base || dirName;
+}
+
+/** The transcript `entrypoint` value a headless `claude -p` run writes. */
+const HEADLESS_ENTRYPOINT = 'sdk-cli';
+
+/**
+ * Which surfaces a session exists on, from the transcript's own `entrypoint`
+ * (see {@link SessionSurface} for what each value promises the reader).
+ *
+ * Only `sdk-cli` — a headless `-p` run, which is what a dashboard spawn is —
+ * earns `dashboard`. Everything else, **an unrecognized or absent value
+ * included**, is `local`: the failure direction matters, because `local` is the
+ * unremarkable case that prints no pill, while a wrong `dashboard` would tell
+ * you a session is invisible to the desktop app when it is sitting in its
+ * sidebar. Under-claiming loses a pill; over-claiming makes the row lie.
+ *
+ * The known imprecision, in the honest direction: `sdk-cli` says *headless*,
+ * not *launched by this dashboard*. Another SDK launcher on this machine reads
+ * the same — and the pill's claim (no other surface lists this session) is
+ * still true for it. Precise attribution would need a record of the ids
+ * `launch()` minted, which the RAM-only launch store deliberately does not
+ * keep past adoption (see `docs/subsystems/spawn.md`).
+ */
+export function sessionSurface(entrypoint: string | null | undefined): SessionSurface {
+  return entrypoint === HEADLESS_ENTRYPOINT ? 'dashboard' : 'local';
 }
 
 /** List every `.jsonl` transcript with its mtime, across all project dirs. */
@@ -249,6 +274,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       contextWindowLabel: parsed.contextWindowLabel,
       contextPct: parsed.contextPct,
       status,
+      surface: sessionSurface(parsed.entrypoint),
       remoteQuestion,
       remotePlan,
       remoteReply,

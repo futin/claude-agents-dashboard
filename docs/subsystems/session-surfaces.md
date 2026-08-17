@@ -30,6 +30,46 @@ reason D exists at all.
 | Terminal `claude --resume <id>` | any local transcript (A–D) | full TUI with complete history | ✅ |
 | Another local session (`ListAgents`/`SendMessage`) | any *live* local session, incl. one held in its reply window | enqueue a message; the reply comes back cross-session | n/a (agent-to-agent) |
 
+## What the dashboard says about it (the `dashboard` pill)
+
+Because those boundaries don't move, the row says so instead. Every session carries
+`Session.surface` (`shared/types.ts`) — `local | dashboard | cloud`, an enum rather
+than an `isLocalOnly` boolean because `cloud` is already a known third answer:
+
+| value | means | pill |
+|---|---|---|
+| `local` | an ordinary terminal (B) or desktop-app (A) session — the surface that started it lists it too | none, on purpose |
+| `dashboard` | a headless `-p` run (C/D): **no other list has it** | cyan `dashboard` |
+| `cloud` | reserved for E. Nothing produces it: a cloud session writes no transcript here, so the scanner cannot see one | grey `cloud` |
+
+It is read off the transcript's own `entrypoint` field — `cli`, `claude-desktop`,
+`sdk-cli` — which every user/assistant record carries (measured: 1504/1504 across the
+newest 12 transcripts on this machine), so it sits inside the 256KB tail
+`transcript.ts` already reads. **No stored state**: nothing to persist, nothing to
+prune, nothing lost on a restart, and sessions spawned before the field existed get
+labelled too.
+
+Three details that are load-bearing:
+
+- **Only `sdk-cli` earns `dashboard`; every other value, unknown or absent included,
+  is `local`.** The failure direction is chosen: under-claiming costs a pill, while
+  over-claiming would tell you a session is invisible to the desktop app while it sits
+  in its sidebar.
+- **Newest record wins.** One transcript on this machine runs `sdk-cli` →
+  `claude-desktop` — a headless session later picked up in the app — and that session
+  *is* in the sidebar now. Reading the oldest value would label it dashboard-only and
+  be wrong.
+- **`sdk-cli` means headless, not "launched by this dashboard."** Another SDK launcher
+  on this Mac reads the same, and the pill's claim still holds for it. Exact
+  attribution would need a record of the ids `launch()` minted, which the RAM-only
+  launch store deliberately drops at adoption ([spawn](spawn.md)) — so this reads the
+  disk instead of growing a fifth store.
+
+The pill renders in the list row and again in the chat drawer's header
+(`client/src/lib/surface.ts` holds the one copy of its tooltip): a drawer opened
+straight from a tapped push (`?session=<id>`) never showed the list, so the header is
+the first place that reader learns the session lives only here.
+
 ## The two boundaries that will not move from this repo
 
 - **Nothing external can add a row to the desktop app's local sidebar.** Its registry

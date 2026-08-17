@@ -65,6 +65,33 @@ export function run(): number {
     assert.strictEqual(s.gitBranch, 'main');
     assert.strictEqual(s.version, '2.1.0');
     assert.strictEqual(s.sessionName, null);
+    assert.strictEqual(s.entrypoint, null);   // no record carried one
+  })) p++; else f++;
+
+  if (test('readTranscript reports entrypoint off the newest record carrying one', () => {
+    // Real transcripts stamp `entrypoint` on every user/assistant record, and
+    // newest wins. That is not a tie-break detail: one transcript on this
+    // machine runs `sdk-cli` → `claude-desktop` (a headless session later picked
+    // up in the desktop app), and that session IS in the app's sidebar now — so
+    // reading the oldest value would label a visible session invisible.
+    const headless = tr.readTranscript(fixture([
+      { cwd: '/p', gitBranch: 'main', version: '2.1.0', timestamp: '2026-07-01T09:00:00Z', type: 'user', entrypoint: 'sdk-cli' },
+      { type: 'assistant', entrypoint: 'sdk-cli', message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 100 } } }
+    ]))!;
+    assert.strictEqual(headless.entrypoint, 'sdk-cli');
+
+    const resumed = tr.readTranscript(fixture([
+      { type: 'user', entrypoint: 'sdk-cli', message: { role: 'user', content: 'go' } },
+      { cwd: '/p', gitBranch: 'main', version: '2.1.0', timestamp: '2026-07-01T09:00:00Z', type: 'user', entrypoint: 'cli' },
+      { type: 'assistant', entrypoint: 'cli', message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 100 } } }
+    ]))!;
+    assert.strictEqual(resumed.entrypoint, 'cli');
+
+    // A non-string value is ignored rather than passed through.
+    const bogus = tr.readTranscript(fixture([
+      { type: 'user', entrypoint: 7, message: { role: 'user', content: 'go' } }
+    ]))!;
+    assert.strictEqual(bogus.entrypoint, null);
   })) p++; else f++;
 
   if (test('readTranscript extracts custom-title as sessionName', () => {

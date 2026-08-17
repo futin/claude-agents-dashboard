@@ -43,6 +43,10 @@ function toolRec(name: string, input: unknown) {
 function metaRec(cwd: string, branch: string) {
   return { cwd, gitBranch: branch, version: '2.1.0', timestamp: '2026-07-01T09:00:00Z', type: 'user' };
 }
+/** A conversational record stamped with the CLI entrypoint, as real ones are. */
+function entryRec(entrypoint: string) {
+  return { ...assistantDone(), type: 'assistant', entrypoint };
+}
 function assistantDone() {
   return { message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }], usage: { input_tokens: 1000 } } };
 }
@@ -455,6 +459,51 @@ export function run(): number {
     // showAnalytics:false takes the same branch (no inject) without touching disk
     const gated = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24, showAnalytics: false }, { root, now, skipProcScan: true });
     assert.strictEqual(gated.sessions[0].kaizenLesson, null);
+  })) p++; else f++;
+
+  if (test('sessionSurface: only sdk-cli is dashboard; anything unknown stays local', () => {
+    assert.strictEqual(scan.sessionSurface('sdk-cli'), 'dashboard');
+    assert.strictEqual(scan.sessionSurface('cli'), 'local');
+    assert.strictEqual(scan.sessionSurface('claude-desktop'), 'local');
+    // The failure direction is the point: an unknown or missing value must not
+    // claim "no other surface lists this" about a session sitting in the desktop
+    // app's sidebar. Under-claiming loses a pill; over-claiming makes the row lie.
+    assert.strictEqual(scan.sessionSurface('some-future-entrypoint'), 'local');
+    assert.strictEqual(scan.sessionSurface(null), 'local');
+    assert.strictEqual(scan.sessionSurface(undefined), 'local');
+    assert.strictEqual(scan.sessionSurface(''), 'local');
+  })) p++; else f++;
+
+  if (test('surface: a headless spawn is marked dashboard, terminal/desktop rows local', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-spawned', id: 'spawned', mtimeMs: now - 60 * 1000, records: [metaRec('/a/spawned', 'main'), entryRec('sdk-cli')] },
+      { dirName: '-a-term', id: 'term', mtimeMs: now - 90 * 1000, records: [metaRec('/a/term', 'main'), entryRec('cli')] },
+      { dirName: '-a-app', id: 'app', mtimeMs: now - 120 * 1000, records: [metaRec('/a/app', 'main'), entryRec('claude-desktop')] },
+      // Pre-field transcript: no entrypoint anywhere.
+      { dirName: '-a-old', id: 'old', mtimeMs: now - 150 * 1000, records: [metaRec('/a/old', 'main'), assistantDone()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
+    const byId = new Map(out.sessions.map(s => [s.id, s.surface]));
+    assert.strictEqual(byId.get('spawned'), 'dashboard');
+    assert.strictEqual(byId.get('term'), 'local');
+    assert.strictEqual(byId.get('app'), 'local');
+    assert.strictEqual(byId.get('old'), 'local');
+  })) p++; else f++;
+
+  if (test('surface: a spawn later continued elsewhere stops claiming dashboard', () => {
+    // Observed on this machine: one transcript runs sdk-cli → claude-desktop.
+    // The newest entrypoint decides, because that session is in the app's
+    // sidebar now — "dashboard-only" would be a false claim about it.
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      {
+        dirName: '-a-moved', id: 'moved', mtimeMs: now - 60 * 1000,
+        records: [metaRec('/a/moved', 'main'), entryRec('sdk-cli'), entryRec('claude-desktop')]
+      }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
+    assert.strictEqual(out.sessions[0].surface, 'local');
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

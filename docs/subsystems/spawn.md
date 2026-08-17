@@ -5,11 +5,15 @@ docs-sync:
     - server/api.ts
     - server/index.ts
     - server/lib/config.ts
+    - server/lib/scan.ts
+    - server/lib/transcript.ts
     - shared/types.ts
     - client/src/components/SpawnPanel.tsx
     - client/src/components/SessionList.tsx
+    - client/src/components/SessionRow.tsx
     - client/src/hooks/useSpawn.ts
     - client/src/lib/spawnOptions.ts
+    - client/src/lib/surface.ts
   kind: subsystem
   verified: ec2199b331e84448c99723d9a17c3860bf27aeb2
 ---
@@ -115,6 +119,21 @@ ordering contract. Nothing else changes: the ceiling still clamps the permission
 launch store watches the child the same way, and an account or org that refuses the
 registration surfaces it as the CLI's own startup error through the ordinary
 `failed`-entry path.
+
+## A spawned row says `dashboard`
+
+Once the launch is adopted it is an ordinary row — which was the problem: nothing on it
+said that this session appears in **no other list**, not the desktop app's sidebar (RC or
+not), not `claude.ai`. So `Session.surface`
+(`local | dashboard | cloud`) carries that, and a `sdk-cli` transcript — what `-p` writes
+— renders a cyan `dashboard` pill on the row and in the chat drawer's header.
+
+It is derived from the transcript's `entrypoint` field, not from this module's store: the
+store drops an entry at adoption by charter, and a mark that vanished three seconds after
+launch (or on the next `tsx watch` restart) would be worse than none. The consequence is
+that `dashboard` means *headless*, not *launched here* — any other SDK launcher on this
+machine reads the same, and the pill's claim is still true for it. Full rules, including
+why the newest record wins, are in [session-surfaces](session-surfaces.md#what-the-dashboard-says-about-it-the-dashboard-pill).
 
 ## The permission ladder, and where the ceiling lives
 
@@ -261,6 +280,8 @@ just costs you the ability to stop it remotely. Named and accepted, not fixed.
 | `client/src/lib/spawnOptions.ts` | the client's copy of `MODELS`/`EFFORTS`/`PERMISSION_MODES` (duplicated, not imported — the FE/BE boundary is `shared/types.ts` alone — kept honest by `test/spawn-options.test.ts` asserting byte-for-byte equality against the server's arrays) and `allowedPermissionModes` |
 | Toolbar's `+ New` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
 | `SessionList`'s phantom row | renders each `launching` entry above the real rows — project, truncated prompt, `starting…` or (for `failed`) the error — and disappears on its own once the real row adopts the id; never interactive |
+| `sessionSurface` (`server/lib/scan.ts`) | maps the transcript's `entrypoint` → `Session.surface`; `sdk-cli` ⇒ `dashboard`, everything else ⇒ `local` |
+| `client/src/lib/surface.ts` | the pill's label + tooltip, one copy shared by `SessionRow` and the `ChatDrawer` header |
 
 ## Endpoints
 

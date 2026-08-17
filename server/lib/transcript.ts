@@ -44,6 +44,16 @@ export interface ParsedTranscript {
   cwd: string | null;
   gitBranch: string | null;
   version: string | null;
+  /**
+   * How the CLI was entered, verbatim off the record: `cli` (terminal),
+   * `claude-desktop` (desktop app), `sdk-cli` (headless `-p` — a dashboard
+   * spawn). Null on a transcript old enough to predate the field. Every
+   * user/assistant record carries it (measured: 1504/1504 across the newest 12
+   * transcripts on this machine), so the tail window always holds one — which
+   * is what makes a session's surface readable with no stored state. `scan.ts`
+   * maps it to `Session.surface`; this stays the raw value.
+   */
+  entrypoint: string | null;
   /** User-set custom title (newest custom-title record); null when unnamed or placeholder. */
   sessionName: string | null;
   lastTimestamp: string | null;
@@ -196,6 +206,7 @@ export function readTranscript(
   let model = '';
   let activity: Activity | null = null;
   let cwd: string | null = null, gitBranch: string | null = null, version: string | null = null, lastTs: string | null = null;
+  let entrypoint: string | null = null;
   const sessionName = resolveSessionTitle(
     filePath, findSessionName(lines, first), tail.start, tail.size
   );
@@ -216,6 +227,7 @@ export function readTranscript(
     if (!cwd && typeof rec.cwd === 'string') cwd = rec.cwd;
     if (!gitBranch && typeof rec.gitBranch === 'string') gitBranch = rec.gitBranch;
     if (!version && typeof rec.version === 'string') version = rec.version;
+    if (!entrypoint && typeof rec.entrypoint === 'string') entrypoint = rec.entrypoint;
     if (!lastTs && typeof rec.timestamp === 'string') lastTs = rec.timestamp;
 
     if (!tokens) {
@@ -253,6 +265,12 @@ export function readTranscript(
       }
     }
 
+    // `entrypoint` is deliberately absent from this condition even though it is
+    // one of the returned fields: it is set at the top of the same iteration
+    // that flips `newestMessageSeen` (both come off a user/assistant record), so
+    // it is always already captured when this breaks. Adding it would only
+    // change behaviour for a transcript that predates the field — turning an
+    // early break into a full-tail scan on every poll, to find nothing.
     if (tokens && activity && cwd && lastTs && version && newestMessageSeen) break;
   }
 
@@ -269,6 +287,7 @@ export function readTranscript(
     cwd,
     gitBranch,
     version,
+    entrypoint,
     sessionName,
     lastTimestamp: lastTs,
     lastMessageTs,

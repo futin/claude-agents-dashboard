@@ -11,6 +11,30 @@ export interface Activity {
   detail: string;
 }
 
+/**
+ * Which surfaces a session exists on — not how it was *started*, but where it
+ * can be seen and continued (the map: `docs/subsystems/session-surfaces.md`).
+ * An enum rather than an `isLocalOnly` boolean because a third answer is
+ * already known to exist (`cloud`), and a boolean would have to be replaced
+ * rather than extended the day it arrives.
+ *
+ * - `local` — an ordinary terminal or desktop-app session. It has a transcript
+ *   on disk *and* the surface that started it lists it too, so nothing about
+ *   the row needs saying.
+ * - `dashboard` — a headless `-p` spawn: this dashboard's `+ New` button, or
+ *   any other SDK launcher on this machine. **No other surface lists it.** The
+ *   desktop app's sidebar registry cannot be added to from outside and shows
+ *   remote-control sessions nowhere; the phone app sees only the RC ones, and
+ *   only while alive. So this dashboard and `claude --resume <id>` are the ways
+ *   back in — which is exactly the confusion this field exists to remove.
+ * - `cloud` — reserved for a session running in Anthropic's sandbox (created
+ *   from the phone app / claude.ai). Nothing produces this value yet: those
+ *   sessions write no transcript to this machine, so the scanner cannot see
+ *   one. The value is here so the consumer that eventually can is a new
+ *   producer, not a contract change.
+ */
+export type SessionSurface = 'local' | 'dashboard' | 'cloud';
+
 /** A single Claude Code session, as shown in one dashboard row. */
 export interface Session {
   id: string;
@@ -25,6 +49,12 @@ export interface Session {
   contextWindowLabel: string;
   contextPct: number;
   status: 'working' | 'idle' | 'question' | 'incomplete';
+  /**
+   * Where this session can be seen besides here — see {@link SessionSurface}.
+   * Derived from the transcript's own `entrypoint` field (`sdk-cli` ⇒ headless
+   * spawn), so it needs no stored state and holds across a server restart.
+   */
+  surface: SessionSurface;
   /**
    * True while a remote `AskUserQuestion` wait is held for this session (the
    * in-memory pending store, not the transcript). The hook registers the wait
