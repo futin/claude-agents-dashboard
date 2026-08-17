@@ -15,6 +15,7 @@
  */
 
 import assert from 'node:assert';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -106,18 +107,30 @@ async function withEnv(body: string, fn: (cfg: ReturnType<typeof loadConfig>) =>
 }
 
 /**
- * A child that records nothing and never exits — enough to hold a store slot,
- * and to be `kill`ed by `stopLaunch`. Exactly the surface `launch`/`stopLaunch`
- * touch; `spawn.test.ts` owns the richer fake that also emits events.
+ * A child that never exits on its own — enough to hold a store slot, to be
+ * `kill`ed by `stopLaunch`, and (being an `EventEmitter`) to be *told* to exit
+ * so a test can drive an entry into the `failed` state. Exactly the surface
+ * `launch`/`stopLaunch` touch; `spawn.test.ts` owns the fuller fake.
  */
-function idleSpawner(): Spawner {
-  return () => ({
-    stdin: { on: () => undefined, write: () => true, end: () => undefined },
-    stderr: { on: () => undefined },
-    on: () => undefined,
-    kill: () => true,
-    unref: () => undefined
-  }) as unknown as ChildProcess;
+class FakeChild extends EventEmitter {
+  stdin = new EventEmitter() as EventEmitter & { write(c: string): boolean; end(): void };
+  stderr = new EventEmitter();
+  constructor() {
+    super();
+    this.stdin.write = (): boolean => true;
+    this.stdin.end = (): void => undefined;
+  }
+  kill(): boolean { return true; }
+  unref(): this { return this; }
+}
+
+/** A `Spawner` handing back a fresh {@link FakeChild}, appended to `children`. */
+function fakeSpawner(children: FakeChild[] = []): Spawner {
+  return () => {
+    const child = new FakeChild();
+    children.push(child);
+    return child as unknown as ChildProcess;
+  };
 }
 
 const REF: ProjectRef = {
@@ -164,7 +177,7 @@ export async function run(): Promise<number> {
 
   check(await testAsync('with the toggle on, a live launch is stopped: 200 {stopped:true}', async () => {
     await withEnv('CLAUDE_BIN=/bin/echo\n', async cfg => {
-      setSpawner(idleSpawner());
+      setSpawner(fakeSpawner());
       const id = launch(cfg, REF, { prompt: 'hold a slot', permissionMode: 'auto' });
       const reply = await post((req, res) => serveSpawnStop(cfg, id, req, res), '');
       assert.equal(reply.status, 200);
@@ -181,7 +194,7 @@ export async function run(): Promise<number> {
 
   check(await testAsync(`${MAX_LAUNCHING - 1} launches in flight: the request is NOT capped`, async () => {
     await withEnv('CLAUDE_BIN=/bin/echo\n', async cfg => {
-      setSpawner(idleSpawner());
+      setSpawner(fakeSpawner());
       for (let i = 0; i < MAX_LAUNCHING - 1; i++) {
         launch(cfg, REF, { prompt: `slot ${i}`, permissionMode: 'auto' });
       }
@@ -196,7 +209,7 @@ export async function run(): Promise<number> {
 
   check(await testAsync(`${MAX_LAUNCHING} launches in flight: 429 "too many launches in flight"`, async () => {
     await withEnv('CLAUDE_BIN=/bin/echo\n', async cfg => {
-      setSpawner(idleSpawner());
+      setSpawner(fakeSpawner());
       for (let i = 0; i < MAX_LAUNCHING; i++) {
         launch(cfg, REF, { prompt: `slot ${i}`, permissionMode: 'auto' });
       }
@@ -208,9 +221,51 @@ export async function run(): Promise<number> {
     });
   }));
 
+  // The correction to the cap's first cut: `listLaunching()` also returns
+  // `failed` rows, which linger for FAIL_TTL_MS (5 min) purely so the UI can
+  // explain itself and hold no process at all. Counting them would lock a user
+  // out of launching for five minutes after four transient failures, behind a
+  // 429 that explains nothing.
+  check(await testAsync(`${MAX_LAUNCHING} entries but one has failed: NOT capped — a failed row holds no process`, async () => {
+    await withEnv('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      const children: FakeChild[] = [];
+      setSpawner(fakeSpawner(children));
+      for (let i = 0; i < MAX_LAUNCHING; i++) {
+        launch(cfg, REF, { prompt: `slot ${i}`, permissionMode: 'auto' });
+      }
+      children[0].emit('exit', 1, null);
+
+      // Still four rows in the store — the failed one is retained for display.
+      assert.equal(listLaunching().length, MAX_LAUNCHING);
+      assert.equal(listLaunching().filter(e => e.state === 'failed').length, 1);
+
+      const reply = await post((req, res) => void serveSpawn(cfg, req, res), BAD_BODY);
+      assert.equal(reply.status, 400, 'the failed row must not hold a slot');
+      assert.equal(reply.json?.error, 'bad body');
+    });
+  }));
+
+  check(await testAsync(`all ${MAX_LAUNCHING} failing frees the cap entirely`, async () => {
+    await withEnv('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      const children: FakeChild[] = [];
+      setSpawner(fakeSpawner(children));
+      for (let i = 0; i < MAX_LAUNCHING; i++) {
+        launch(cfg, REF, { prompt: `slot ${i}`, permissionMode: 'auto' });
+      }
+      const capped = await post((req, res) => void serveSpawn(cfg, req, res), BAD_BODY);
+      assert.equal(capped.status, 429, 'four live children do cap it');
+
+      for (const child of children) child.emit('exit', 1, null);
+      assert.equal(listLaunching().filter(e => e.state === 'launching').length, 0);
+
+      const reply = await post((req, res) => void serveSpawn(cfg, req, res), BAD_BODY);
+      assert.equal(reply.status, 400, 'no live launches left, so nothing to cap');
+    });
+  }));
+
   check(await testAsync('the cap frees up as entries leave the store (adopted or stopped)', async () => {
     await withEnv('CLAUDE_BIN=/bin/echo\n', async cfg => {
-      setSpawner(idleSpawner());
+      setSpawner(fakeSpawner());
       const ids: string[] = [];
       for (let i = 0; i < MAX_LAUNCHING; i++) {
         ids.push(launch(cfg, REF, { prompt: `slot ${i}`, permissionMode: 'auto' }));

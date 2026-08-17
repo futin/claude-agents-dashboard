@@ -813,8 +813,10 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
   // otherwise be N live `claude` processes on the account's real quota. Counted
   // before the body is read, like transcribe's `isTranscribing()` peek — and
   // `listLaunching()` is also what expires stale entries, so a burst that has
-  // already aged out doesn't hold the door shut.
-  if (listLaunching().length >= MAX_LAUNCHING) {
+  // already aged out doesn't hold the door shut. Only `'launching'` rows count:
+  // a `failed` one lingers for FAIL_TTL_MS (5 min) so the UI can explain
+  // itself, holds no process, and must not lock the user out of launching.
+  if (listLaunching().filter(e => e.state === 'launching').length >= MAX_LAUNCHING) {
     return sendJson(res, 429, { error: 'too many launches in flight' });
   }
 

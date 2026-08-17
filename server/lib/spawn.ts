@@ -272,23 +272,26 @@ export const FAIL_TTL_MS = 5 * 60_000;
 export const PROMPT_PREVIEW_CAP = 120;
 
 /**
- * How many un-adopted launches may sit in this store before `serveSpawn`
- * answers 429 (`api.ts`). The accident rail, not a security boundary: a caller
- * with launch rights can simply prompt one session into spawning more, so this
- * exists to stop a *mistake* — a retry loop, a flaky phone connection, a
- * double-tap that beats React's re-render — from becoming N real `claude`
- * processes burning the account's quota. `transcribe.ts` single-flights its own
- * child for the same reason.
+ * How many entries still in the `'launching'` state may sit in this store
+ * before `serveSpawn` answers 429 (`api.ts`). The accident rail, not a security
+ * boundary: a caller with launch rights can simply prompt one session into
+ * spawning more, so this exists to stop a *mistake* — a retry loop, a flaky
+ * phone connection, a double-tap that beats React's re-render — from becoming N
+ * real `claude` processes burning the account's quota. `transcribe.ts`
+ * single-flights its own child for the same reason.
  *
- * ⚠️ What this counter spans is only the pre-adoption window (~3s, until
- * `adoptLaunched` sees the id on disk) plus `FAIL_TTL_MS` for entries that
- * failed. It therefore bounds **rapid-fire POSTs**, not the number of live
- * sessions — ten launches a minute apart all succeed, because each has left
- * the store before the next arrives. That is deliberate: capping live sessions
- * would need the session registry this store is explicitly not (see the store's
- * charter above). The flip side of counting `failed` entries too: four launches
- * that failed back-to-back keep answering 429 until they age out, which for a
- * rail whose job is damping a retry loop is the wanted behaviour.
+ * What it counts is deliberately narrow, on both axes:
+ *
+ *  - **`'launching'` only.** A `failed` entry lingers for `FAIL_TTL_MS`
+ *    (5 minutes) purely so the UI can explain itself, and it holds no process
+ *    at all — letting it hold a slot would lock a user out of launching for
+ *    five minutes after four transient failures, with a 429 that explains
+ *    nothing. The rail bounds concurrent *processes*, so it counts them.
+ *  - **The pre-adoption window only** (~3s, until `adoptLaunched` sees the id
+ *    on disk). It therefore bounds **rapid-fire POSTs**, not the number of live
+ *    sessions — ten launches a minute apart all succeed, because each has left
+ *    the store before the next arrives. Capping live sessions would need the
+ *    session registry this store is explicitly not (see the charter above).
  */
 export const MAX_LAUNCHING = 4;
 
