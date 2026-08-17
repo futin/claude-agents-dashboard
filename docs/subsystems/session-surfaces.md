@@ -75,6 +75,11 @@ the first place that reader learns the session lives only here.
 - **Nothing external can add a row to the desktop app's local sidebar.** Its registry
   is private and its management surface (`ccd_session_mgmt`) has list/get/send but no
   create/import. A spawned session — RC or not — will never appear there.
+- **No cloud + teleport sequence can put a *local* session in that sidebar.** Tested
+  end to end (`claude --cloud` → sidebar row → `claude --teleport`): the row is bound to
+  the cloud session for its whole life. It survives the teleport, but it keeps talking to
+  the container, never to the local continuation. The sidebar therefore shows the cloud
+  brain by construction — the exact thing the local continuation exists to avoid.
 - **The desktop app does not show remote-control sessions anywhere** (tested with one
   running and visible on the phone) — even though it *does* merge cloud sessions into
   its sidebar. The exclusion is specifically RC. Until the app grows that view,
@@ -108,11 +113,25 @@ visible to the dashboard.
   files) and global hooks (a SessionStart hook demonstrably fired). This is the
   strongest phone→Mac chain: the session is visible on every account surface while
   cloud, then lands locally with full powers when you sit down.
-  **Teleport is a move, not a mirror** (verified twice): the thread leaves the cloud,
-  so it disappears from the app sidebar and the phone list, and from then on it is an
-  ordinary terminal session — a transcript under `~/.claude/projects` that the
-  dashboard monitors and `--resume` reopens. You hold a session on exactly one side
-  at a time.
+  **Teleport forks; it does not move.** (An earlier revision of this file claimed the
+  opposite — "a move, not a mirror" — on evidence that turned out not to involve a real
+  cloud session. Retested properly on 2026-08-17 with one created via `claude --cloud`,
+  and the claim was wrong.) What actually happens:
+
+  - The **cloud session survives**. Its desktop-app sidebar row stays, still opens, and
+    still answers — from its own Linux container (`cwd /home/user/<repo>`), with the
+    cloud brain. Asked to read a Mac-only path, it correctly reports no such file.
+  - The **local continuation is a separate session**, with its own transcript under
+    `~/.claude/projects`. The desktop app's registry gets **no row** for it: zero rows
+    reference either teleported id, and `list_sessions` never shows one.
+
+  So after teleport you hold *two* sessions that share a history and then diverge — one
+  cloud (sidebar-visible, cloud brain), one local (dashboard-visible, Mac brain).
+
+  **`--teleport` also requires a clean git working directory** — it refuses with
+  `Git working directory is not clean. Please commit or stash your changes before using
+  --teleport.` For a repo that usually carries in-flight work, that alone makes teleport
+  unusable as an automated step.
 - **Start on the phone → continue at the Mac:** `claude --resume <session-id>` in a
   terminal — full history, everything local. (The id is in the dashboard row / chat
   drawer URL.)
