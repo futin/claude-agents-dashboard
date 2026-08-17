@@ -71,6 +71,12 @@ That's the whole basic setup. Everything below is optional.
   you're away, the `Stop` hook holds it open for a short window and you type a follow-up
   into the drawer; the model reads it as your next instruction and carries on. No reply and
   the session just stops, as it always did.
+- **[Dictation](docs/subsystems/dictation.md)** — a mic in that same composer: speak the
+  follow-up instead of thumb-typing it on a phone. Recorded in the browser, transcoded and
+  transcribed **on this machine** by a local whisper.cpp — no audio leaves the box, keeping
+  the ntfy push the only outbound call. The transcript lands in the textarea as editable
+  text; **send** stays a deliberate tap. Off until you install the engine, and needs HTTPS
+  (`pnpm tunnel`) to record at all from a phone.
 - **[Management tab](docs/subsystems/management.md)** — read-only browser for all Claude
   config on the machine: skills, agents, commands, rules, hooks, settings, plugins, per
   scope.
@@ -99,6 +105,12 @@ That's the whole basic setup. Everything below is optional.
 - **Push notifications to your phone** — 6 steps, ~5 minutes: pick a secret ntfy topic,
   subscribe the phone, set two `.env` values, enable it in Settings:
   [setup](docs/workflows/push-notify-setup.md).
+- **Dictation (local whisper)** — 5 steps, ~5 minutes and ~150MB of disk: `brew install
+  whisper-cpp` (plus `ffmpeg`), a model file, one `.env` line, and `pnpm tunnel` for phone
+  use: [setup](docs/workflows/dictation-setup.md). Read the [security
+  posture](docs/subsystems/dictation.md#security-posture) first if other devices can reach
+  the dashboard — the endpoint spawns processes and is gated only by `ANSWER_TOKEN`, which
+  defaults to empty.
 - **Docker** — production and dev images, read-only `~/.claude` mount:
   [docker](docs/workflows/docker.md).
 - **Configuration** — everything is optional, defaults work out of the box; the full
