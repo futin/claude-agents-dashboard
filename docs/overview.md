@@ -51,7 +51,9 @@ via `tsx`, dev and prod alike).
   further than any of those, [spawning a new `claude -p` process](subsystems/spawn.md) on
   this machine — off by default (empty `CLAUDE_BIN`), and the one exception that reaches
   outside the dashboard's own state, since what it writes is a whole new session's
-  transcript rather than a row in a RAM-only store.
+  transcript rather than a row in a RAM-only store. Where such a session can be
+  continued afterwards — phone app, terminal resume, and the surfaces that will
+  never show it — is mapped in [session surfaces](subsystems/session-surfaces.md).
 - **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only. Keep
   new npm deps out of it.
 - **Fail-open everywhere.** A missing token, an unreadable file, a failed probe — every

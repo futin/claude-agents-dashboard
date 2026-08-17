@@ -93,6 +93,10 @@ than assumed from its docs:
 
 ## Remote Control launches (opt-out)
 
+> Where an RC session can and cannot be continued — including the verified fact that
+> the desktop app shows it nowhere — is mapped in
+> [session-surfaces](session-surfaces.md).
+
 The form's **remote control** checkbox (default on) adds `--remote-control` to the
 argv. Verified against the same CLI build as the mechanics above: the flag combines
 with `-p` cleanly, and the session then *registers with the account* while still
