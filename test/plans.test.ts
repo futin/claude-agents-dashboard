@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import {
   FEEDBACK_CAP, PLAN_CAP,
   answer, cancel, composeReason, dismissAll, getPendingPlan, planSessionIds,
-  register, resetStore, sanitizePlan
+  register, resetStore, sanitizePlan, sweepDecided
 } from '../server/lib/plans.js';
 import type { PlanWaitResult } from '../shared/types.js';
 
@@ -165,6 +165,64 @@ export async function run(): Promise<number> {
     await new Promise(r => setTimeout(r, 40));
     assert.deepStrictEqual(w.results, [{ status: 'timeout' }]);
     assert.strictEqual(answer('s1', { planId, verdict: 'dismiss' }), 'not-found');
+  })) p++; else f++;
+
+
+  /* ------------------------------------------------ sweepDecided (the terminal won) */
+
+  if (test('sweepDecided releases a plan whose session moved on — the card decided it', () => {
+    resetStore();
+    const w = waiter();
+    register('s1', PLAN, 60_000, w.resolve);
+    assert.strictEqual(sweepDecided(() => true), 1);
+    assert.deepStrictEqual(w.results, [{ status: 'dismissed' }]);
+    assert.strictEqual(getPendingPlan('s1'), null);
+    assert.strictEqual(planSessionIds().size, 0);
+  })) p++; else f++;
+
+  if (test('sweepDecided leaves a plan that is still genuinely waiting', () => {
+    resetStore();
+    const w = waiter();
+    register('s1', PLAN, 60_000, w.resolve);
+    assert.strictEqual(sweepDecided(() => false), 0);
+    assert.strictEqual(w.results.length, 0);
+    assert.ok(getPendingPlan('s1'));
+  })) p++; else f++;
+
+  if (test('sweepDecided hands the predicate the sessionId and askedAt in ms', () => {
+    resetStore();
+    const w = waiter();
+    register('s7', PLAN, 60_000, w.resolve);
+    const asked = getPendingPlan('s7')!.askedAt;
+    const seen: Array<[string, number]> = [];
+    sweepDecided((sessionId, askedAtMs) => { seen.push([sessionId, askedAtMs]); return false; });
+    assert.deepStrictEqual(seen, [['s7', Date.parse(asked)]]);
+  })) p++; else f++;
+
+  if (test('sweepDecided with nothing held is free — the predicate never runs', () => {
+    resetStore();
+    let calls = 0;
+    assert.strictEqual(sweepDecided(() => { calls++; return true; }), 0);
+    assert.strictEqual(calls, 0);
+  })) p++; else f++;
+
+  if (test('a verdict sent after the sweep 404s instead of feeding an orphaned hook', () => {
+    resetStore();
+    const w = waiter();
+    const planId = register('s1', PLAN, 60_000, w.resolve);
+    sweepDecided(() => true);
+    assert.strictEqual(answer('s1', { planId, verdict: 'reject', feedback: 'too big' }), 'not-found');
+  })) p++; else f++;
+
+  if (test('sweepDecided sweeps only the sessions the predicate names', () => {
+    resetStore();
+    const a = waiter(), b = waiter();
+    register('gone', PLAN, 60_000, a.resolve);
+    register('live', PLAN, 60_000, b.resolve);
+    assert.strictEqual(sweepDecided(sessionId => sessionId === 'gone'), 1);
+    assert.deepStrictEqual(a.results, [{ status: 'dismissed' }]);
+    assert.strictEqual(b.results.length, 0);
+    assert.deepStrictEqual([...planSessionIds()], ['live']);
   })) p++; else f++;
 
   resetStore();

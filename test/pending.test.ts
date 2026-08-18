@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import {
   DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, MIN_TIMEOUT_MS, SELECTED_CAP,
   answer, cancel, clampTimeout, composeReason, getPending, pendingSessionIds,
-  register, resetStore, sanitizeQuestions, validateAnswer
+  register, resetStore, sanitizeQuestions, sweepDecided, validateAnswer
 } from '../server/lib/pending.js';
 import type { PendingQuestionItem, WaitResult } from '../shared/types.js';
 
@@ -310,6 +310,68 @@ export async function run(): Promise<number> {
     assert.strictEqual(getPending('s1'), null);
     // A submit racing the expiry loses cleanly.
     assert.strictEqual(answer('s1', { questionId: 'whatever', answers: [{ index: 0, selected: ['OAuth'] }] }), 'not-found');
+    resetStore();
+  })) p++; else f++;
+
+
+  /* ------------------------------------------------ sweepDecided (the terminal won) */
+
+  if (test('sweepDecided releases a wait whose session moved on — the card was answered', () => {
+    resetStore();
+    const w = waiter();
+    register('s1', [AUTH], 60_000, w.resolve);
+    assert.strictEqual(sweepDecided(() => true), 1);
+    assert.deepStrictEqual(w.results, [{ status: 'dismissed' }]);
+    assert.strictEqual(getPending('s1'), null);
+    assert.strictEqual(pendingSessionIds().size, 0);
+  })) p++; else f++;
+
+  if (test('sweepDecided leaves a wait that is still genuinely open', () => {
+    resetStore();
+    const w = waiter();
+    register('s1', [AUTH], 60_000, w.resolve);
+    assert.strictEqual(sweepDecided(() => false), 0);
+    assert.strictEqual(w.results.length, 0);
+    assert.ok(getPending('s1'));
+  })) p++; else f++;
+
+  if (test('sweepDecided hands the predicate the sessionId and askedAt in ms', () => {
+    resetStore();
+    const w = waiter();
+    register('s7', [AUTH], 60_000, w.resolve);
+    const asked = getPending('s7')!.askedAt;
+    const seen: Array<[string, number]> = [];
+    sweepDecided((sessionId, askedAtMs) => { seen.push([sessionId, askedAtMs]); return false; });
+    assert.deepStrictEqual(seen, [['s7', Date.parse(asked)]]);
+  })) p++; else f++;
+
+  if (test('sweepDecided with nothing held is free — the predicate never runs', () => {
+    resetStore();
+    let calls = 0;
+    assert.strictEqual(sweepDecided(() => { calls++; return true; }), 0);
+    assert.strictEqual(calls, 0);
+  })) p++; else f++;
+
+  if (test('an answer sent after the sweep 404s instead of feeding an orphaned hook', () => {
+    resetStore();
+    const w = waiter();
+    const questionId = register('s1', [AUTH], 60_000, w.resolve);
+    sweepDecided(() => true);
+    assert.strictEqual(
+      answer('s1', { questionId, answers: [{ index: 0, selected: ['OAuth'] }] }),
+      'not-found'
+    );
+  })) p++; else f++;
+
+  if (test('sweepDecided sweeps only the sessions the predicate names', () => {
+    resetStore();
+    const a = waiter(), b = waiter();
+    register('gone', [AUTH], 60_000, a.resolve);
+    register('live', [AUTH], 60_000, b.resolve);
+    assert.strictEqual(sweepDecided(sessionId => sessionId === 'gone'), 1);
+    assert.deepStrictEqual(a.results, [{ status: 'dismissed' }]);
+    assert.strictEqual(b.results.length, 0);
+    assert.deepStrictEqual([...pendingSessionIds()], ['live']);
     resetStore();
   })) p++; else f++;
 

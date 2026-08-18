@@ -6,7 +6,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { scanSessions, listTranscripts, projectsRoot } from './lib/scan.js';
+import { scanSessions, lastMessageMs, listTranscripts, projectsRoot } from './lib/scan.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
 import {
@@ -19,11 +19,13 @@ import {
 } from './lib/chat.js';
 import {
   answer as answerPending, cancel as cancelPending, clampTimeout,
-  dismissAll, getPending, pendingSessionIds, register, sanitizeQuestions
+  dismissAll, getPending, pendingSessionIds, register, sanitizeQuestions,
+  sweepDecided as sweepDecidedPending
 } from './lib/pending.js';
 import {
   answer as answerPlan, cancel as cancelPlan, dismissAll as dismissAllPlans,
-  getPendingPlan, planSessionIds, register as registerPlan, sanitizePlan
+  getPendingPlan, planSessionIds, register as registerPlan, sanitizePlan,
+  sweepDecided as sweepDecidedPlans
 } from './lib/plans.js';
 import {
   answer as answerMessage, cancel as cancelMessage, dismissAll as dismissAllMessages,
@@ -77,8 +79,34 @@ export function scanOverrides(config: Config, params?: URLSearchParams): Config 
   };
 }
 
+/**
+ * Release held question/plan waits whose session has moved on — the terminal
+ * card decided it. The CLI renders that card *alongside* the hook and, when the
+ * card wins, abandons the hook without killing it: `curl` stays connected, so no
+ * socket closes and neither store hears anything. Without this the entry sits
+ * out its whole deadline (up to 10 min) with the dashboard still offering an
+ * answer nothing will read.
+ *
+ * Runs off the scan tick and only while holds exist, so an idle server does no
+ * extra IO — the same shape as `messages.ts`'s idle reaper. One transcript read
+ * per held wait, and there is at most one per session.
+ */
+function sweepTerminalDecisions(): void {
+  if (pendingSessionIds().size === 0 && planSessionIds().size === 0) return;
+  const root = projectsRoot();
+  const movedOn = (sessionId: string, askedAtMs: number): boolean => {
+    const ms = lastMessageMs(root, sessionId);
+    return ms !== null && ms > askedAtMs;
+  };
+  sweepDecidedPending(movedOn);
+  sweepDecidedPlans(movedOn);
+}
+
 export function serveSessions(baseConfig: Config, res: ServerResponse, params?: URLSearchParams): void {
   const config = scanOverrides(baseConfig, params);
+  // Before the scan, not after: a wait the terminal already decided must not
+  // colour this tick's row blue either.
+  sweepTerminalDecisions();
   let data: SessionsResponse;
   try {
     // pendingIds comes from the RAM store, not disk: a question held by the

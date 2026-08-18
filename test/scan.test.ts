@@ -506,6 +506,42 @@ export function run(): number {
     assert.strictEqual(out.sessions[0].surface, 'local');
   })) p++; else f++;
 
+
+  /* --------------------------------------------------------- lastMessageMs */
+
+  if (test('lastMessageMs reports the newest conversational timestamp in ms', () => {
+    const root = makeRoot([{
+      dirName: '-a', id: 'sx',
+      records: [
+        metaRec('/a', 'main'),
+        at(assistantQuestion(), '2026-08-18T11:20:56.333Z'),
+        at(assistantDone(), '2026-08-18T11:21:59.809Z')
+      ]
+    }]);
+    assert.strictEqual(scan.lastMessageMs(root, 'sx'), Date.parse('2026-08-18T11:21:59.809Z'));
+  })) p++; else f++;
+
+  if (test('lastMessageMs is null for a session id the root does not hold', () => {
+    const root = makeRoot([{ dirName: '-a', id: 'sx', records: [metaRec('/a', 'main'), assistantDone()] }]);
+    assert.strictEqual(scan.lastMessageMs(root, 'nope'), null);
+  })) p++; else f++;
+
+  if (test('lastMessageMs ignores trailing records that carry no conversational role', () => {
+    const root = makeRoot([{
+      dirName: '-a', id: 'sx',
+      records: [
+        at(assistantQuestion(), '2026-08-18T11:20:56.333Z'),
+        { type: 'system', subtype: 'hook', timestamp: '2026-08-18T11:30:00.000Z' }
+      ]
+    }]);
+    assert.strictEqual(scan.lastMessageMs(root, 'sx'), Date.parse('2026-08-18T11:20:56.333Z'));
+  })) p++; else f++;
+
+  if (test('lastMessageMs is null when no conversational record is stamped', () => {
+    const root = makeRoot([{ dirName: '-a', id: 'sx', records: [assistantQuestion()] }]);
+    assert.strictEqual(scan.lastMessageMs(root, 'sx'), null);
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }

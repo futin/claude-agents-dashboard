@@ -132,6 +132,35 @@ export function listTranscripts(root: string): TranscriptRef[] {
   return results;
 }
 
+/**
+ * Newest conversational message in one session's transcript, in ms — or null
+ * when the session is unknown, unreadable, or has no stamped message yet.
+ *
+ * The staleness probe behind the remote stores' `sweepDecided`. Deliberately
+ * `lastMessageTs` and not `lastTimestamp`: hook and queue-operation records bump
+ * the file without a turn happening, and treating one of those as "the terminal
+ * decided it" would yank a plan out of the dashboard while it was still live.
+ * Same field, and so the same fail direction, as the `permissionWait` gate in
+ * {@link scanSessions}.
+ *
+ * Known imprecision, inherited from that gate: `readTranscript` does not filter
+ * sidechains, so a subagent writing while the main thread is parked on a wait
+ * would read as the session moving on. It needs a single assistant message that
+ * pairs a `Task` call with the wait tool, and it fails toward the terminal card
+ * — the direction this subsystem always prefers — so it is documented rather
+ * than guarded.
+ */
+export function lastMessageMs(root: string, sessionId: string): number | null {
+  let ref: TranscriptRef | undefined;
+  try { ref = listTranscripts(root).find(t => t.id === sessionId); }
+  catch { return null; }
+  if (!ref) return null;
+  const parsed = readTranscript(ref.file);
+  if (!parsed || !parsed.lastMessageTs) return null;
+  const ms = Date.parse(parsed.lastMessageTs);
+  return Number.isFinite(ms) ? ms : null;
+}
+
 /** Count running `claude` processes (informational cross-check). */
 export function countClaudeProcesses(): number | null {
   try {

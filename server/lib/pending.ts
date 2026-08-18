@@ -265,6 +265,39 @@ export function dismissAll(): number {
   return waiting.length;
 }
 
+/**
+ * Release every held question whose session has moved on without us — i.e. the
+ * question was answered on the card in the terminal.
+ *
+ * ⚠️ This is not belt-and-braces for the `res.on('close')` cleanup, it is the
+ * only signal for that case. The question card renders *concurrently* with this
+ * hook, and when the card wins the CLI does not kill the hook: it discards the
+ * hook's output and moves on, leaving `curl` connected. So no socket closes, no
+ * verdict arrives, and without this sweep the entry lives out its full deadline
+ * — the dashboard keeps offering picks the model will never see, and an answer
+ * POSTed in that window settles into an orphaned response.
+ *
+ * `movedOn` is injected rather than read here: the store owns no disk access,
+ * and the caller already parses the transcript every scan tick. It is handed
+ * each entry's session id and `askedAt` in ms; the transcript growing past that
+ * mark is the same "believed only until the transcript moves on" test that
+ * `scan.ts` applies to a terminal permission dialog.
+ *
+ * Settles as `dismissed`, which is correct in both worlds: an orphaned hook
+ * ignores it, and a hook still listening falls through to its card.
+ */
+export function sweepDecided(
+  movedOn: (sessionId: string, askedAtMs: number) => boolean
+): number {
+  let released = 0;
+  for (const entry of [...entries.values()]) {
+    if (!movedOn(entry.sessionId, Date.parse(entry.askedAt))) continue;
+    settle(entry, { status: 'dismissed' });
+    released++;
+  }
+  return released;
+}
+
 /** Test seam: drop every entry without resolving. */
 export function resetStore(): void {
   for (const entry of entries.values()) clearTimeout(entry.timer);
