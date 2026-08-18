@@ -9,7 +9,7 @@
  *   GET/POST /api/settings      → the non-per-device settings (see lib/settings.ts)
  *   everything else             → static files from client/dist (production build)
  *
- * In development you visit the Vite dev server (default :5173), which proxies
+ * In development you visit the Vite dev server (default :5174), which proxies
  * /api here; this server only needs to answer the API. In production, run
  * `pnpm build` then `pnpm start` — this server serves the built client too.
  */

@@ -21,7 +21,7 @@ of your host `~/.claude` — the transcripts it scans.
 # production image — serves built client + API on http://localhost:4173
 CLAUDE_CREDENTIALS_JSON=$(scripts/host-credentials.sh) docker compose up --build
 
-# dev image — Vite hot-reload on http://localhost:5173, source bind-mounted
+# dev image — Vite hot-reload on http://localhost:5174, source bind-mounted
 pnpm dev:docker
 ```
 

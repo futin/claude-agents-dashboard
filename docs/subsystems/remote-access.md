@@ -18,9 +18,9 @@ app depends on any of them being present.
 
 | Route | URL | Notes |
 |---|---|---|
-| **localhost** | `http://localhost:5173` (dev) / `:4173` (prod) | the default; nothing to set up |
-| **LAN** | `http://<lan-ip>:5173` / `:4173` | the `Network:` URL Vite prints. Free, but the IP moves when the network does |
-| **Tailscale** | `http://<host>.<tailnet>.ts.net:4173` (prod) / `:5173` (dev) | recommended for away-from-home — stable hostname, private, no auth gate needed. Dev needs `allowedHosts` (below) |
+| **localhost** | `http://localhost:5174` (dev) / `:4173` (prod) | the default; nothing to set up |
+| **LAN** | `http://<lan-ip>:5174` / `:4173` | the `Network:` URL Vite prints. Free, but the IP moves when the network does |
+| **Tailscale** | `http://<host>.<tailnet>.ts.net:4173` (prod) / `:5174` (dev) | recommended for away-from-home — stable hostname, private, no auth gate needed. Dev needs `allowedHosts` (below) |
 | **any other tunnel** | ngrok / Cloudflare / `ssh -L` … | works too, but read the warning below first |
 
 ## Why Tailscale is the recommended away-from-home option
@@ -73,7 +73,7 @@ noticing.
 3. MagicDNS is on by default; find the host's stable hostname with `tailscale status` or
    in the admin console — it looks like `<host-name>.<tailnet>.ts.net`.
 
-Dev works over the tailnet too (`:5173` — Vite proxies `/api` locally), unlike a
+Dev works over the tailnet too (`:5174` — Vite proxies `/api` locally), unlike a
 single-port public tunnel. **This is the mode to use while iterating**: prod (`:4173`)
 static-serves the built `client/dist`, so every change needs a `pnpm build` *and* a
 `pnpm start` restart, while dev hot-reloads and needs neither.

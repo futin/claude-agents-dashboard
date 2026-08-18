@@ -6,8 +6,8 @@ import { loadConfig } from './server/lib/config';
 
 // Reuse the backend config loader so the dev proxy targets the same PORT the
 // API server actually listens on (.env / process.env / default 4173), and the
-// dev UI itself honours WEB_PORT (default 5173 — set it when another Vite
-// project already sits there).
+// dev UI itself honours WEB_PORT (default 5174, not Vite's stock 5173, which
+// another project usually holds — set it if 5174 is taken too).
 const { port, webPort } = loadConfig();
 
 // No browser to open inside a container — skip, avoids a noisy spawn ENOENT.
