@@ -100,7 +100,7 @@ those matches sit above it.
 
 ## Dev vs prod
 
-- **Dev** (`pnpm dev`): Vite serves the page on `WEB_PORT` (default 5173) with HMR and
+- **Dev** (`pnpm dev`): Vite serves the page on `WEB_PORT` (default 5174) with HMR and
   proxies `/api` to the Node server on `PORT` (default 4173). The proxy sets `xfwd`, so
   the origin badge still sees the real client address.
 - **Prod** (`pnpm build` + `pnpm start`): the Node server static-serves `client/dist` and

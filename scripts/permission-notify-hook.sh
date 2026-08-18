@@ -45,7 +45,7 @@ INPUT=$(cat)
 # Only inside Claude Code (mirrors the other hooks in ~/.claude/settings.json).
 [ "$CLAUDECODE" = "1" ] || exit 0
 
-# The API port, not Vite's: in dev the page is on :5173 but /api lives here.
+# The API port, not Vite's: in dev the page is on :5174 but /api lives here.
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
 TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"
 

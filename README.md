@@ -34,7 +34,7 @@ pnpm install
 pnpm dev
 ```
 
-Open **`http://localhost:5173`** — the API server and the Vite dev server run together,
+Open **`http://localhost:5174`** — the API server and the Vite dev server run together,
 with hot reload.
 
 For a production run:

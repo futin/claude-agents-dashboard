@@ -9,7 +9,7 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS dev
 WORKDIR /app
 COPY . .
-EXPOSE 5173 4173
+EXPOSE 5174 4173
 CMD ["pnpm", "dev"]
 
 # --- build: bundle client → client/dist ---
