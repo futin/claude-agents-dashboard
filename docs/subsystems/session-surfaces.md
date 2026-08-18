@@ -1,3 +1,15 @@
+---
+docs-sync:
+  sources:
+    - server/lib/scan.ts
+    - server/lib/transcript.ts
+    - shared/types.ts
+    - client/src/lib/surface.ts
+    - client/src/components/SessionRow.tsx
+    - client/src/components/ChatDrawer.tsx
+  kind: subsystem
+---
+
 # Where a session lives, and where you can continue it
 
 Written after the remote-control spawn work (2026-08-17), because the boundaries
