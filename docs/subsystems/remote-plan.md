@@ -94,6 +94,16 @@ remote as a held question.
   `planId`.
 - **⚠️ Route order:** `/plan` and `/plan-answer` are `$`-anchored and must stay above the
   `:id` detail regex in `index.ts` — same trap as chat and question.
+- **A verdict on the terminal card releases the hold.** The approval card renders
+  *concurrently* with the hook, and when it wins the CLI abandons the hook without killing
+  it — `curl` stays connected, so nothing closes the socket and no verdict arrives. Without
+  a sweep the entry would hold its full deadline while the dashboard kept offering a
+  send-back the model will never see. `plans.ts`'s `sweepDecided(movedOn)` — driven from
+  `api.ts`'s `sweepTerminalDecisions` off the scan tick, only while holds exist — settles it
+  as `dismissed` once `lastMessageMs` shows the transcript has grown past its `askedAt`.
+  Identical to the question store's sweep (see
+  [remote-answer](remote-answer.md#state-machine) for why that test uses `lastMessageTs`);
+  `messages.ts` needs none, because its own idle reaper already releases every hold.
 - **The plan text is also on disk**, unlike a permission dialog. So even with no hook
   installed, a trailing `ExitPlanMode` tool_use turns the row blue via
   `transcript.ts`'s `WAIT_TOOLS` — the hook only adds the panel and the lead time.

@@ -46,9 +46,11 @@ override it (see `dashboard.section` below).
   once, memoises the answer for its two callers (`AppShell` picking the section,
   `SessionsView` opening the drawer), and strips it from the URL via `history.replaceState`,
   precisely so a refresh or a bookmark does *not* replay it.
-- **Not persisted:** row-expansion state (`SessionList.tsx` `expandedIds`) and the open chat
-  drawer (`SessionsView.tsx` `chatId`, seeded from the deep link above) stay ephemeral —
-  session IDs churn, so restored expansions and drawers would mostly be stale.
+- **Not persisted:** row-expansion state (`SessionList.tsx` `expandedIds`), the open chat
+  drawer (`SessionsView.tsx` `chatId`, seeded from the deep link above), and the
+  [launch panel](spawn.md) (`SessionsView.tsx` `spawnOpen` — a one-shot form, not a view
+  setting) stay ephemeral — session IDs churn, so restored expansions and drawers would
+  mostly be stale.
 - **Clearing them all** — Settings → Reset this device removes every key listed above
   (`OWNED_KEYS` in `hooks/useSettings.tsx`) and restores the defaults. It touches nothing on the
   server and nothing in `~/.claude`. Add a key here and it belongs in that list too.

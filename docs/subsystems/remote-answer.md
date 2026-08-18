@@ -126,6 +126,7 @@ One entry per session — the CLI only ever has one question open:
 ```
 register ─┬─ answer(questionId ok) ──→ answered   (reason + structured answers)
           ├─ answer(dismiss:true) ───→ dismissed  ("answer in the terminal")
+          ├─ sweepDecided(movedOn) ──→ dismissed  (the terminal card answered it)
           ├─ deadline timer ─────────→ timeout
           ├─ register again ─────────→ superseded (self-heals a re-asked question)
           └─ held socket closed ─────→ cancelled  (no resolve — nobody is listening)
@@ -137,6 +138,20 @@ guaranteed reaper, which is also the stale-answer guard: a late submit finds not
 a newer wait. Node is single-threaded and `answer` validates-deletes-resolves
 synchronously, so two tabs racing means the first wins and the second gets a clean 404 —
 no locking.
+
+**The sweep is the *only* signal that the terminal card won** — it is not belt-and-braces
+for the socket-close path. The question card renders *concurrently* with the hook, and when
+you answer it there the CLI discards the hook's output without killing it: `curl` stays
+connected, so no socket closes and no verdict ever arrives. Left alone the entry would sit
+out its whole deadline while the dashboard kept offering picks nothing will read, and an
+answer POSTed in that window would settle into an orphaned response. `sweepDecided(movedOn)`
+releases it instead. `api.ts`'s `sweepTerminalDecisions` drives it off the scan tick and only
+while holds exist — so an idle server does no extra IO — asking `scan.ts`'s `lastMessageMs`
+whether the transcript has grown past the entry's `askedAt`. That is deliberately
+`lastMessageTs` and not `lastTimestamp`: hook and queue records bump the file without a turn
+happening, and treating one of those as a decision would yank a live question out of the
+dashboard. It settles as `dismissed`, which is correct in both worlds — an orphaned hook
+ignores it, and a hook still listening falls through to its card.
 
 ## Invariants
 

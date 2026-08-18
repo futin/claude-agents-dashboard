@@ -77,11 +77,11 @@ than assumed from its docs:
 - **`--session-id <uuid>` is honored end to end.** A minted uuid passed to `claude -p
   --session-id <uuid>` comes back as that exact `session_id` in the JSON result, and
   `~/.claude/projects/<dir>/<uuid>.jsonl` appears under that name. This is what lets
-  `launch` (`server/lib/spawn.ts:313`) hand back a session id the instant the child is
+  `launch` (`server/lib/spawn.ts`) hand back a session id the instant the child is
   spawned — before any transcript exists — so the client can set its chat-drawer deep
   link to that id immediately (`SessionsView.tsx`'s `onLaunched` sets `chatId` right
   from the POST response). The drawer itself still waits: `chatSession`
-  (`SessionsView.tsx:44`) resolves by finding that id in the next `/api/sessions` poll,
+  (`SessionsView.tsx`) resolves by finding that id in the next `/api/sessions` poll,
   so it opens once the transcript actually exists, not before — there's nothing to
   render before then, but the *id* is known and correct from the first response.
 - **A prompt on stdin is never parsed as a flag.** `claude -p` reads argv the way
@@ -89,7 +89,7 @@ than assumed from its docs:
   regardless of what it follows — a prompt beginning `--` passed *positionally* would be
   read as one. Measured directly: piping the prompt `--version is not a flag here; just
   reply with the single word OK` to `claude -p …` on stdin produced the reply `OK`, not
-  a CLI-flag error. That's why `buildSpawnArgs` (`server/lib/spawn.ts:161`) never puts
+  a CLI-flag error. That's why `buildSpawnArgs` (`server/lib/spawn.ts`) never puts
   the prompt in argv at all — a prompt is untrusted free text a user typed, and
   `--dangerously-skip-permissions` is a perfectly ordinary-looking way to start a
   sentence — `launch` pipes it onto the child's stdin instead and ends the stream right
@@ -143,7 +143,7 @@ Four permission modes, lowest to highest:
 plan  <  acceptEdits  <  auto  <  bypassPermissions
 ```
 
-(`PERMISSION_MODES` in `server/lib/spawn.ts:53` — array-index order **is** the
+(`PERMISSION_MODES` in `server/lib/spawn.ts` — array-index order **is** the
 ordering). `manual` and `dontAsk` aren't in the enum at all: `manual` stalls headless by
 definition — there is no TTY for it to prompt into — and `dontAsk`'s headless behavior
 was never verified. This is a **policy** ladder, not a claim that each mode is a strict
@@ -151,7 +151,7 @@ superset of the one below: `acceptEdits` auto-approves edits but still stalls he
 on the first Bash prompt, while `auto` classifies both. It's ordered by how much
 unattended damage a launch under that mode can do.
 
-Two independent inputs feed `clampPermission(requested, ceiling)` (`spawn.ts:90`): what
+Two independent inputs feed `clampPermission(requested, ceiling)` (`spawn.ts`): what
 the launch form asked for, and `config.spawnMaxPermission` — the `SPAWN_MAX_PERMISSION`
 env var, defaulting to `auto`. The function returns whichever is *lower* on the ladder,
 and an unrecognized value on **either side** — including `undefined` — falls back to
@@ -161,7 +161,7 @@ raise it to `bypassPermissions` and a launch runs fully unsandboxed with no prom
 all; leave it at the default and the worst a browser can ask for is `auto`.
 
 ⚠️ **A typo here used to fail open.** `SPAWN_MAX_PERMISSION` is validated at
-config-load time by `toPermissionMode` (`config.ts:153`), which sits beside the existing
+config-load time by `toPermissionMode` (`config.ts`), which sits beside the existing
 `toPosInt`/`toBool` coercers but behaves differently on purpose: an unrecognized value
 doesn't silently become the fallback the way a bad `MAX_SESSIONS` would — it still falls
 back to `auto`, but it also `console.warn`s naming the bad value. This is the one knob
@@ -176,7 +176,7 @@ for a value that's *present and wrong*.
 The client never gets to discover the ceiling by trial and error: `HealthResponse`
 carries both `spawnAvailable` (is the feature on at all) and `spawnMaxPermission` (the
 ceiling itself — not a secret, a policy value), and `SpawnPanel`'s permission `<select>`
-(`allowedPermissionModes` in `client/src/lib/spawnOptions.ts:61`) lists only modes at or
+(`allowedPermissionModes` in `client/src/lib/spawnOptions.ts`) lists only modes at or
 below it. The alternative — offering all four and letting the server silently downgrade
 the choice — was tried and rejected during review: a user picking `bypass permissions`
 and quietly getting `auto` back with no feedback is worse than not offering the choice
@@ -186,7 +186,7 @@ at all.
 
 `SpawnRequest.project` is a `dirName`, resolved through the same `resolveProject`
 [management](management.md) already uses for its own `dirName` query param, against
-`listRecentProjects`'s enumerated list (`server/lib/management.ts:344,377`) — never
+`listRecentProjects`'s enumerated list (`server/lib/management.ts`) — never
 joined into a filesystem path. An unknown name is a 400, not a lookup that might escape
 somewhere unexpected. The project's `cwd` (read off its own most-recent transcript, not
 user input) becomes the child's working directory; there is no free-text cwd field, on
@@ -209,7 +209,7 @@ single source of truth, the same division that keeps `pending.ts`/`plans.ts`/
 - **No reaper — unlike the other three stores.** `pending.ts`, `plans.ts`, and
   `messages.ts` each run their own timer, because something has to fire even when
   nobody is reading. This store has no timer at all: `listLaunching(now)`
-  (`spawn.ts:400`) evaluates expiry lazily, on the same call the client already makes
+  (`spawn.ts`) evaluates expiry lazily, on the same call the client already makes
   every 3 seconds. `LAUNCH_TTL_MS` (60s) drops a `launching` entry nothing ever adopted;
   `FAIL_TTL_MS` (5 min) drops a `failed` one so a phone that never looks doesn't
   accumulate them. Nothing needs to fire without a reader, so nothing does.
@@ -219,7 +219,7 @@ single source of truth, the same division that keeps `pending.ts`/`plans.ts`/
   themselves (each stream is its own `EventEmitter`; an unhandled `'error'` there takes
   the whole dashboard process down independently of the child's own handler), and a
   nonzero or signal-killed `'exit'`. All four route through the same `fail()`
-  (`spawn.ts:285`), which no-ops if the entry is already gone — so a failure event
+  (`spawn.ts`), which no-ops if the entry is already gone — so a failure event
   arriving after `adoptLaunched` (or after `stopLaunch`) can never resurrect a deleted
   entry.
 - **A clean exit is left alone.** Exit code 0 before adoption doesn't mark the entry
@@ -233,7 +233,7 @@ single source of truth, the same division that keeps `pending.ts`/`plans.ts`/
 
 ## The stop endpoint, and its restart hole
 
-`POST /api/spawn/:id/stop` (`serveSpawnStop`, `api.ts:826`) sends `SIGTERM` to the live
+`POST /api/spawn/:id/stop` (`serveSpawnStop`, `api.ts`) sends `SIGTERM` to the live
 child behind a still-`launching` entry and deletes the entry immediately — it does not
 transition it to `failed`. That's deliberate: `LaunchingSession.state` is a
 shared-contract type the client already consumes, and widening it to a third value just
@@ -290,7 +290,7 @@ just costs you the ability to stop it remotely. Named and accepted, not fixed.
 | `POST` | `/api/spawn` | 200 `{sessionId}` (`SpawnResponse`); 400 malformed body / unknown project / empty or oversized prompt; 403 bad token; 404 remote answers off *or* feature off; 429 `MAX_LAUNCHING` launches already in flight; 500 spawn threw |
 | `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}`; 400 bad id shape; 403 bad token; 404 remote answers off *or* no live launch for that id |
 
-Both gated by the same `tokenOk` (`api.ts:389`) the other three write paths use — an
+Both gated by the same `tokenOk` (`api.ts`) the other three write paths use — an
 unset `ANSWER_TOKEN` leaves them open, matching the rest of the app's LAN-trust posture —
 and by the same remote-answer toggle (below).
 
@@ -347,7 +347,7 @@ branch, `POST /api/spawn/%ZZ/stop` (or the identical shape against any other `:i
 route) crashed the entire dashboard process, unauthenticated, before `tokenOk` or any
 handler ever ran.
 
-The fix is a single `decodePath(raw): string | null` helper (`index.ts:85`, try/catch
+The fix is a single `decodePath(raw): string | null` helper (`index.ts`, try/catch
 around `decodeURIComponent`, `400 {error: 'bad path encoding'}` on failure) — but it was
 applied at **all nine** sites in `index.ts` that pull an id out of a URL, not just the
 one this feature added: `/api/spawn/:id/stop` plus the eight pre-existing

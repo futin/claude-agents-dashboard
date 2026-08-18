@@ -98,6 +98,15 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 `/api/sessions/:id/chat|question|answer|plan|plan-answer|message|message-answer`, so all of
 those matches sit above it.
 
+⚠️ Every `:id` route decodes its segment through `decodePath` in `index.ts`, never
+`decodeURIComponent` directly. A malformed escape (a lone `%ZZ`) throws a `URIError`
+*synchronously* inside the request listener — before any handler, before even `tokenOk` — so
+one unauthenticated request could otherwise end the process for every session it was
+watching. A failed decode answers `400 {"error": "bad path encoding"}` instead. The async half
+of the same problem has its own floor: handlers are dispatched as `void serveX(...)` and
+nothing awaits them, so a process-wide `unhandledRejection` handler logs rather than throws —
+one bad route is not a reason to stop serving the other twenty.
+
 ## Dev vs prod
 
 - **Dev** (`pnpm dev`): Vite serves the page on `WEB_PORT` (default 5174) with HMR and

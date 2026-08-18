@@ -34,7 +34,7 @@ environment variables override `.env`, which overrides the defaults
 | `SHOW_USAGE` | `true` | Show the header [usage bars](../subsystems/usage-limits.md). `false` disables the fetch and the keychain read entirely |
 | `SHOW_ANALYTICS` | `true` | Show the [Analytics tab](../subsystems/analytics.md) |
 | `ANALYTICS_KEEP` | `5` | How many `/kaizen`-logged sessions the Analytics tab shows |
-| `REMOTE_ANSWER` | `true` | Whether [remote answers](../subsystems/remote-answer.md) are available at all — the hard kill switch for the app's only write path |
+| `REMOTE_ANSWER` | `true` | Whether [remote answers](../subsystems/remote-answer.md) are available at all — the hard kill switch in front of **every** write path, not just questions: [plans](../subsystems/remote-plan.md), [replies](../subsystems/remote-message.md), [spawn](../subsystems/spawn.md) and [dictation](../subsystems/dictation.md) each check it too. It is the app's only *runtime* switch (the `CLAUDE_BIN`/`WHISPER_MODEL` kill switches are restart-scoped), which is why it covers the widest path rather than excluding it |
 | `ANSWER_TOKEN` | _(empty)_ | Shared secret required by the remote-answer POSTs. Empty = open, matching the app's LAN-trust posture |
 | `SKIP_PROC_SCAN` | _(auto)_ | Skip the `lsof` process-liveness gate. Defaults to `true` inside a Docker container, `false` otherwise |
 | `NTFY_TOPIC` | _(empty)_ | ntfy topic for [push notifications](../subsystems/push-notify.md). Empty disables pushes outright. **Treat it as a secret** — the string is both the address and the credential, so anyone who learns it can publish to your phone as well as read it. Never returned by any endpoint. Step-by-step: [push-notify-setup](push-notify-setup.md) |
