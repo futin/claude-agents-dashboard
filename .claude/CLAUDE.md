@@ -196,3 +196,11 @@ with the log format above (contract details: `docs/subsystems/analytics.md`).
   dispatching a full review agent for one reliably finds nothing. Reserve the review seat
   for concurrency, subprocess handling, security surfaces, and anything with real design
   judgement in it.
+- **PR bodies follow `.github/pull_request_template.md`.** Conventional Commits title
+  (`feat(spawn):`, `fix(api):`, `docs:`), a lead in user terms, then *Why this shape* /
+  *What changed* grouped by boundary (Server / Client / Hook / Docs) / *Verification*.
+  Two rules are load-bearing: **state what you did NOT verify** (every merged PR here has
+  a "not verified, needs a human" line or an explicit *Unproven* row), and **never claim
+  green without the command output**. Optional sections — Security posture, ⚠️ Reaches
+  beyond the feature, Known limits, Process, After merge — are commented out in the
+  template; delete the ones that don't apply rather than filling them with nothing.
