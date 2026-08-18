@@ -7,7 +7,7 @@ docs-sync:
     - scripts/ask-remote-hook.sh
     - .env.example
   kind: workflow
-  verified: 77e990f6b0511101b36683840048bf3870761157
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
 ---
 
 # Configuration

@@ -15,7 +15,7 @@ docs-sync:
     - client/src/lib/spawnOptions.ts
     - client/src/lib/surface.ts
   kind: subsystem
-  verified: ec2199b331e84448c99723d9a17c3860bf27aeb2
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
 ---
 
 # Spawning a new session (the fourth write path)

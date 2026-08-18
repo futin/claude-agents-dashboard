@@ -7,7 +7,7 @@ docs-sync:
     - client/src/components/management/
     - client/src/lib/managementEntries.ts
   kind: subsystem
-  verified: eeca21c754c09572be041a6806452abba4afe875
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
 ---
 
 # Management — read-only config browser

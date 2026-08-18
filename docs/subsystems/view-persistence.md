@@ -7,7 +7,7 @@ docs-sync:
     - client/src/components/Toolbar.tsx
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 8dc61663925c310e9517576f5c456b0c8b4b4516
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
 ---
 
 # View persistence (Toolbar filters/sort)

@@ -10,7 +10,7 @@ docs-sync:
     - client/src/lib/dictation.ts
     - client/src/components/MessagePanel.tsx
   kind: subsystem
-  verified: 77e990f6b0511101b36683840048bf3870761157
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
 ---
 
 # Dictation in the reply composer (local whisper)

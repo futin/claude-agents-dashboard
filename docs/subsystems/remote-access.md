@@ -6,7 +6,7 @@ docs-sync:
     - vite.config.ts
     - package.json
   kind: subsystem
-  verified: 3e1d51fd26c72d6c21bd9d6b8921ee3bb498518b
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
 ---
 
 # Remote access — reaching the dashboard, and the origin badge
