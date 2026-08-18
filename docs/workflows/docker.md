@@ -8,7 +8,7 @@ docs-sync:
     - scripts/lan-ip.sh
     - server/lib/config.ts
   kind: workflow
-  verified: eeca21c754c09572be041a6806452abba4afe875
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
 ---
 
 # Running in Docker
@@ -60,6 +60,11 @@ Two things a container can't reach on its own:
   fails, `/api/health` reports `transcribe: false`, and the mic never renders (which is the
   designed no-engine behavior, not a broken state). Running the server on the host is the
   supported way to use it; see [dictation-setup](dictation-setup.md).
+- **Spawning a session is unavailable in these images too.** `config.ts` reads `CLAUDE_BIN`,
+  but neither compose file passes it and no stage installs the `claude` CLI — so `probeSpawn`
+  fails, `/api/health` reports `spawnAvailable: false`, and the toolbar's `+ New` button never
+  renders. Same designed no-binary behavior as dictation above, and the same fix: run the
+  server on the host. See [spawn](../subsystems/spawn.md).
 - **Push notifications need their three variables passed in explicitly.** `.env` is in
   `.dockerignore` and the runtime stage copies only `server/`, `shared/` and the built
   client, so `loadConfig()` finds no file in the production image. Both compose files

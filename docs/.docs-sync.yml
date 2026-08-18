@@ -50,6 +50,9 @@ docs:
   - path: docs/subsystems/spawn.md
     kind: subsystem
     note: Spawning a new session (the fourth write path)
+  - path: docs/subsystems/session-surfaces.md
+    kind: subsystem
+    note: Where a session lives, and where you can continue it
   - path: docs/workflows/configuration.md
     kind: workflow
     note: env and hook-side variable reference

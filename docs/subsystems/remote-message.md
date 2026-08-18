@@ -10,7 +10,7 @@ docs-sync:
     - client/src/hooks/usePendingMessage.ts
     - client/src/components/SessionRow.tsx
   kind: subsystem
-  verified: eeca21c754c09572be041a6806452abba4afe875
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
 ---
 
 # Remote messages (the `reply?` tab)
@@ -176,7 +176,8 @@ into a path; the store is keyed in memory, same as the other two.
 
 ## Security posture
 
-This is a wider surface than the other two write paths. A question or a plan is only
+This is a wider surface than the question and plan write paths ([spawn](spawn.md), added
+since, is wider still — it starts a session rather than steering one). A question or a plan is only
 steerable from the phone when the session *asked* for one; a reply window opens at the end
 of **every** AFK turn, so from the moment you step away, the model's next instruction on any
 session can come from whoever can reach these POSTs — not just whoever answers something a

@@ -10,7 +10,7 @@ docs-sync:
     - client/src/lib/dictation.ts
     - client/src/components/MessagePanel.tsx
   kind: subsystem
-  verified: 77e990f6b0511101b36683840048bf3870761157
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
 ---
 
 # Dictation in the reply composer (local whisper)
@@ -192,8 +192,16 @@ same as "no spawn is reachable without a token": the capability probe itself (pr
 section) is cached for the process's lifetime and also runs behind the unauthenticated
 `GET /api/health`, so it alone can be triggered with no token at all — a one-time
 `whisper-cli -h`, never `ffmpeg` or a per-clip `whisper-cli` run. That ordering is about
-keeping the auth boundary exactly where the other write paths keep it — not about hiding
-whether the capability exists.
+keeping the auth boundary where the other write paths keep it — not about hiding whether the
+capability exists.
+
+⚠️ One write path runs those two checks the *other* way round: `serveSpawn` calls
+`probeSpawn` before `tokenOk`. That divergence is harmless rather than principled, for the
+same reason the probe is harmless here — `GET /api/health` already publishes
+`spawnAvailable` unauthenticated and already calls the same memoised probe, so probe-first
+reveals nothing new and spawns no extra process. `api.ts` cross-references the two handlers
+in both directions on purpose: neither ordering should be "corrected" into matching the
+other without reading that paragraph. See [spawn](spawn.md#security-posture).
 
 ## The in-flight guard: a CPU- and memory-amplification defence
 

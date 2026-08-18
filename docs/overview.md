@@ -9,7 +9,7 @@ docs-sync:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: 77e990f6b0511101b36683840048bf3870761157
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
 ---
 
 # Architecture overview
@@ -97,6 +97,15 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 ⚠️ Route order in `index.ts` is load-bearing: the `:id` detail regex would swallow
 `/api/sessions/:id/chat|question|answer|plan|plan-answer|message|message-answer`, so all of
 those matches sit above it.
+
+⚠️ Every `:id` route decodes its segment through `decodePath` in `index.ts`, never
+`decodeURIComponent` directly. A malformed escape (a lone `%ZZ`) throws a `URIError`
+*synchronously* inside the request listener — before any handler, before even `tokenOk` — so
+one unauthenticated request could otherwise end the process for every session it was
+watching. A failed decode answers `400 {"error": "bad path encoding"}` instead. The async half
+of the same problem has its own floor: handlers are dispatched as `void serveX(...)` and
+nothing awaits them, so a process-wide `unhandledRejection` handler logs rather than throws —
+one bad route is not a reason to stop serving the other twenty.
 
 ## Dev vs prod
 

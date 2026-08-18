@@ -10,7 +10,7 @@ docs-sync:
     - client/src/lib/deepLink.ts
     - client/src/components/settings/SettingsView.tsx
   kind: subsystem
-  verified: eeca21c754c09572be041a6806452abba4afe875
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
 ---
 
 # Push notifications (ntfy)
@@ -98,7 +98,7 @@ from this module. `question` and `plan` reach `maybeSend` only because a hook PO
 their *own* idle check before that POST:
 
 ```
-ask-remote.sh:63-70
+ask-remote.sh
 if [ "$IDLE_MIN_S" != "0" ]; then
   IDLE_S=$(ioreg -c IOHIDSystem …)
   *) [ "$IDLE_S" -lt "$IDLE_MIN_S" ] && exit 0 ;;   # at the desk → terminal dialog
@@ -115,8 +115,8 @@ push attempt reaches the predicate either way. The hook's check gates which rout
 
 | Event | Idle gate in its hook | `requireAfk` off ⇒ always pushes? |
 |---|---|---|
-| `question` | yes — `ask-remote.sh:63` | **no**, still needs `idleSecs` of idle |
-| `plan` | yes — `plan-remote.sh:70` | **no**, still needs `idleSecs` of idle |
+| `question` | yes — `ask-remote.sh` | **no**, still needs `idleSecs` of idle |
+| `plan` | yes — `plan-remote.sh` | **no**, still needs `idleSecs` of idle |
 | `permission` | none | yes |
 | `stop` | only gates hold vs. fallback routing, not push eligibility | yes, from either route |
 

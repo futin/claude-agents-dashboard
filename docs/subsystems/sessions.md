@@ -15,7 +15,7 @@ docs-sync:
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 997d5bf1abb3d5253d43e7422a1a59e5b66cd755
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
 ---
 
 # Sessions — live monitor, status machine, subagent detail
@@ -32,6 +32,16 @@ params, so a changed row count or window takes effect on the next tick.
   project to a pill; an unnamed one leads with the project itself (real path from the
   transcript's `cwd`). Either way the row also carries its `gitBranch`.
 - **Model + CLI version** — what the session is running.
+- **Surface pill** — where the session lives, when that isn't the obvious answer. A headless
+  spawn appears in no other list, which is worth saying on the row rather than leaving to be
+  rediscovered. `scan.ts`'s `sessionSurface` reads the transcript's own `entrypoint`: only
+  `sdk-cli` (a headless `-p` run, which is what a [dashboard spawn](spawn.md) is) earns a
+  `dashboard` pill, and everything else — an unrecognized or absent value included — is
+  `local` and prints nothing at all. The fail direction is deliberate: under-claiming loses a
+  pill, while a wrong `dashboard` would say a session is invisible to the desktop app when it
+  is sitting in its sidebar. `lib/surface.ts` supplies the label and tooltip, and the pill has
+  no handler of its own — clicking it toggles the row like the rest of `.r1`. Which surface
+  can continue what is mapped in [session surfaces](session-surfaces.md).
 - **Context bar + %** — current context tokens vs. the model's window (1M for
   Sonnet/Opus/Fable, 200k for Haiku and unknowns; override with
   `CLAUDE_CODE_AUTO_COMPACT_WINDOW`). Turns orange/red as it fills.
