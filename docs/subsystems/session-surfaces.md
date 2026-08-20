@@ -83,11 +83,87 @@ The pill renders in the list row and again in the chat drawer's header
 straight from a tapped push (`?session=<id>`) never showed the list, so the header is
 the first place that reader learns the session lives only here.
 
+## Why `cloud` stays empty, and what it would cost to fill (probed 2026-08-20)
+
+The row above reserves `cloud` and notes that nothing produces it. This section
+records *why* nobody should re-derive that, and what the one real door costs.
+Probed against CLI 2.1.234 with **zero cloud sessions live on the account** — so
+the shape of a cloud row below is read off the CLI bundle, not observed.
+
+Four places could plausibly know about a cloud session. Only the last one does:
+
+| Door | Cloud rows? | Reachable from `server/` |
+|---|---|---|
+| `~/.claude/projects/*/*.jsonl` — today's scanner | never: a cloud session writes no transcript on this Mac | ✅ |
+| `claude agents --json --all` | no — 6/6 rows `kind: "interactive"` with a `pid`, backed by `~/.claude/sessions/<pid>.json`. It enumerates local processes, not account sessions | ✅ zero-dep `child_process` |
+| The desktop app's own registry (below) | no — 437/438 files are `local_*`, the 438th `scheduled-tasks`. Consistent with the verified claim above that the app *renders* cloud rows rather than importing them | ✅ plain JSON on disk |
+| The inter-Claude bridge — what `ListAgents` speaks | **yes, and only here** | ⚠️ see below |
+
+`listBridgePeerSessions` in the CLI bundle resolves to a single authenticated
+HTTPS call:
+
+```
+GET ${BASE_API_URL}/v1/code/sessions?limit=100[&cursor=…]
+  Authorization: <OAuth, from prepareApiRequest()>
+  x-organization-uuid: <orgUUID>
+  X-Trusted-Device-Token: <when the device is bound>
+```
+
+(without the code-sessions flag it falls back to `/v1/sessions` with an
+`anthropic-beta` header and `after_id` paging). There is no local file, no
+cache, and no socket behind it — cloud state exists only at the other end of
+that request. Adding it to this backend means a **second outbound call**
+(see the zero-dep rule in `CLAUDE.md`) plus reading an OAuth token the CLI keeps
+in the macOS keychain.
+
+**And the feature you'd buy is half a feature.** The bridge does expose
+`postInterClaudeMessage`, so a message can be sent *into* a cloud session — but
+the CLI's own constant `CLOUD_SESSION_CANNOT_SEND_HINT` renders as
+`a cloud session (can't reply yet)`. Remote-control peers get a reply address;
+cloud peers do not. Reading is worse: with no transcript on disk, `ChatDrawer`
+has nothing to page, so content would need a further endpoint. The result is a
+row you cannot open, cannot read, and can shout into once — while every
+interactive surface this dashboard has (`QuestionPanel`, `PlanPanel`,
+`MessagePanel`) is request→response by construction.
+
+### The desktop registry, and why it is not a shortcut
+
+The probe turned up the desktop app's session store, which is not documented
+elsewhere and looks more useful than it is:
+
+```
+~/Library/Application Support/Claude/claude-code-sessions/<a>/<b>/local_<uuid>.json
+  sessionId, cliSessionId, cwd, originCwd, title, titleSource, model, effort,
+  permissionMode, isArchived, createdAt, lastActivityAt, enabledMcpTools, …
+```
+
+`cliSessionId` joins straight onto the transcript filename `scan.ts` already
+keys on, which makes it tempting as a metadata source. Measured on this machine
+before believing it:
+
+| | count |
+|---|---|
+| transcripts on disk | 722 |
+| carrying a `custom-title` record (what `title-cache.ts` finds today) | 251 |
+| registry supplies a title | 193 |
+| — both sources agree | 189 |
+| — **registry only** | **4** |
+| — transcript only (registry misses) | 62 |
+
+The join is worth four titles out of 722 and loses 62, because the registry only
+holds desktop-app sessions — terminal sessions and dashboard spawns are never in
+it. Its other fields are no better: `"effort"` and `"permissionMode"` are both
+already present in the 256 KB tail `transcript.ts` decodes anyway. Nothing here
+is a source; it is a partial mirror of what the transcript already says.
+
 ## The two boundaries that will not move from this repo
 
 - **Nothing external can add a row to the desktop app's local sidebar.** Its registry
-  is private and its management surface (`ccd_session_mgmt`) has list/get/send but no
-  create/import. A spawned session — RC or not — will never appear there.
+  turns out to be *readable* — the JSON tree in the section above — but no supported
+  path writes to it: the management surface (`ccd_session_mgmt`) has list/get/send and
+  no create/import, and whether a hand-written row would be picked up is *untested*
+  (the files are user-owned, so the filesystem would not stop you). A spawned session —
+  RC or not — will never appear there through any documented route.
 - **No cloud + teleport sequence can put a *local* session in that sidebar.** Tested
   end to end (`claude --cloud` → sidebar row → `claude --teleport`): the row is bound to
   the cloud session for its whole life. It survives the teleport, but it keeps talking to
