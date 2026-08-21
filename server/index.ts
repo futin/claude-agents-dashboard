@@ -106,7 +106,7 @@ function methodNotAllowed(res: http.ServerResponse): void {
  * it was watching. Every site that pulls an id out of the URL below goes
  * through this instead of calling `decodeURIComponent` directly.
  */
-function decodePath(raw: string): string | null {
+export function decodePath(raw: string): string | null {
   try {
     return decodeURIComponent(raw);
   } catch {

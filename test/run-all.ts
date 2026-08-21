@@ -33,6 +33,7 @@ import { run as runSpawn } from './spawn.test.js';
 import { run as runSpawnEndpoint } from './spawn-endpoint.test.js';
 import { run as runSpawnOptions } from './spawn-options.test.js';
 import { run as runSurface } from './surface.test.js';
+import { run as runDecodePath } from './decode-path.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -69,6 +70,7 @@ failed += runSpawn();
 failed += await runSpawnEndpoint();
 failed += runSpawnOptions();
 failed += runSurface();
+failed += runDecodePath();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);
