@@ -1,18 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/messages.ts
-    - server/api.ts
-    - server/index.ts
-    - server/lib/scan.ts
-    - scripts/stop-notify-hook.sh
-    - client/src/components/MessagePanel.tsx
-    - client/src/hooks/usePendingMessage.ts
-    - client/src/components/SessionRow.tsx
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Remote messages (the `reply?` tab)
 
 When a session's turn ends while you are away, the [chat drawer](chat.md) can hold that
@@ -211,3 +196,17 @@ kills a hook at its configured `timeout` — so `630` (window + margin) is requi
 number and same reasoning as the ask/plan hooks. Miss it and a held turn dies mid-wait: the
 session stops early, exactly as if the gates had failed, and a Send that lands after that
 finds nothing (404 → the panel shows "gone"). Degrades, never wedges.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/messages.ts
+    - server/api.ts
+    - server/index.ts
+    - server/lib/scan.ts
+    - scripts/stop-notify-hook.sh
+    - client/src/components/MessagePanel.tsx
+    - client/src/hooks/usePendingMessage.ts
+    - client/src/components/SessionRow.tsx
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

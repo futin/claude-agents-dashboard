@@ -1,17 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/chat.ts
-    - server/api.ts
-    - client/src/components/ChatDrawer.tsx
-    - client/src/components/Markdown.tsx
-    - client/src/hooks/useSessionChat.ts
-    - client/src/lib/chatFilter.ts
-    - client/src/lib/markdown.ts
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Chat — history tail and the drawer
 
 The `chat` tab down the right edge of a session row opens a **full-height drawer** with that session's
@@ -137,3 +123,16 @@ worst case to the window size, not to the transcript size.
 - **⚠️ Route order:** the detail regex `/^\/api\/sessions\/([^/?]+)/` in `index.ts` also
   matches `/api/sessions/:id/chat` and would answer it with agents — the chat match
   **must** stay above it.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/chat.ts
+    - server/api.ts
+    - client/src/components/ChatDrawer.tsx
+    - client/src/components/Markdown.tsx
+    - client/src/hooks/useSessionChat.ts
+    - client/src/lib/chatFilter.ts
+    - client/src/lib/markdown.ts
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

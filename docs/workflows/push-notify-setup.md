@@ -1,16 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/config.ts
-    - server/lib/notify.ts
-    - scripts/stop-notify-hook.sh
-    - client/src/components/settings/SettingsView.tsx
-    - .env.example
-    - docker-compose.yml
-  kind: workflow
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Push notifications — setup
 
 Wires [push notifications](../subsystems/push-notify.md) to your phone through
@@ -168,3 +155,15 @@ Pushes carry no transcript content by design — the body is a session label and
 phrase (see [what a push contains](../subsystems/push-notify.md#what-a-push-contains)) —
 but the label is your project name, and the tap-through link is your dashboard's address.
 Assume a leaked topic reveals both.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/config.ts
+    - server/lib/notify.ts
+    - scripts/stop-notify-hook.sh
+    - client/src/components/settings/SettingsView.tsx
+    - .env.example
+    - docker-compose.yml
+  kind: workflow
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

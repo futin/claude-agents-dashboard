@@ -1,16 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/permissions.ts
-    - server/index.ts
-    - server/lib/scan.ts
-    - scripts/permission-notify-hook.sh
-    - client/src/components/PermissionBanner.tsx
-    - client/src/components/SessionRow.tsx
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Permission prompts (the `allow?` tab)
 
 When the CLI shows its interactive permission dialog — *"Do you want to allow Bash:
@@ -145,3 +132,15 @@ the second just re-arms it.
   LAN could light up rows.
 - **Per-session, not per-call:** one entry per session id, a second notify supersedes the first
   and re-arms the TTL — matching the CLI, which shows one dialog at a time.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/permissions.ts
+    - server/index.ts
+    - server/lib/scan.ts
+    - scripts/permission-notify-hook.sh
+    - client/src/components/PermissionBanner.tsx
+    - client/src/components/SessionRow.tsx
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

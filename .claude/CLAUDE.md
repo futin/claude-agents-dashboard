@@ -1,14 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/
-    - client/src/
-    - shared/types.ts
-    - package.json
-  kind: index
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Claude Agents Dashboard
 
 Live monitor for parallel Claude Code sessions. Reads `~/.claude/projects/*/*.jsonl`
@@ -204,3 +193,13 @@ with the log format above (contract details: `docs/subsystems/analytics.md`).
   green without the command output**. Optional sections — Security posture, ⚠️ Reaches
   beyond the feature, Known limits, Process, After merge — are commented out in the
   template; delete the ones that don't apply rather than filling them with nothing.
+
+<!-- docs-sync:
+  sources:
+    - server/
+    - client/src/
+    - shared/types.ts
+    - package.json
+  kind: index
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

@@ -1,16 +1,3 @@
----
-docs-sync:
-  sources:
-    - client/src/lib/settings.ts
-    - client/src/hooks/useSettings.tsx
-    - client/src/hooks/useServerSettings.ts
-    - client/src/components/settings/
-    - server/lib/settings.ts
-    - client/index.html
-  kind: subsystem
-  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
----
-
 # Settings
 
 The fourth section tab. Everything the dashboard used to need a `.env` edit, a rebuild, or a
@@ -203,3 +190,15 @@ a value the rows never reflect.
 - [remote-message](remote-message.md) — a third wait `answerSecs` now sizes, plus the auto-release sweep that reads `idleSecs` directly
 - [push-notify](push-notify.md) — where the `notify` policy is actually acted on
 - [configuration](../workflows/configuration.md) — the `.env` defaults these settings override
+
+<!-- docs-sync:
+  sources:
+    - client/src/lib/settings.ts
+    - client/src/hooks/useSettings.tsx
+    - client/src/hooks/useServerSettings.ts
+    - client/src/components/settings/
+    - server/lib/settings.ts
+    - client/index.html
+  kind: subsystem
+  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
+-->

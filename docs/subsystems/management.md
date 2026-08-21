@@ -1,15 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/management.ts
-    - server/lib/frontmatter.ts
-    - server/api.ts
-    - client/src/components/management/
-    - client/src/lib/managementEntries.ts
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Management — read-only config browser
 
 A **Management** section (top-level `SideRail` in `App.tsx`, persisted as
@@ -52,3 +40,14 @@ Read-only v1 — nothing is ever written.
   enumerated recent-project list, never joined into a path (same philosophy as
   `serveSessionDetail`). Content capped at 256 KB (`truncated` flag). `~/.claude.json`
   (huge, private) is never read.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/management.ts
+    - server/lib/frontmatter.ts
+    - server/api.ts
+    - client/src/components/management/
+    - client/src/lib/managementEntries.ts
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

@@ -1,13 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/config.ts
-    - server/lib/transcribe.ts
-    - server/api.ts
-  kind: workflow
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Dictation — setup
 
 Installs the engine behind [dictation](../subsystems/dictation.md): a mic button that
@@ -96,3 +86,12 @@ server restart.
 | Transcription always fails (`500`, reason `engine`) | `whisper-cli` exited non-zero — often a model file that doesn't match what the installed binary expects | Re-download the model; confirm `whisper-cli -m <model> -f <any.wav> -nt` runs cleanly by hand |
 | Every request times out (`504`) | A spawn ran past its 30s ceiling — a very slow machine, or an oversized model | Try a smaller model, or confirm nothing else is pinning the CPU |
 | `403` on every attempt | `ANSWER_TOKEN` is set and the browser's saved token doesn't match | Re-enter the token in the composer's token prompt, same as the other remote-answer surfaces |
+
+<!-- docs-sync:
+  sources:
+    - server/lib/config.ts
+    - server/lib/transcribe.ts
+    - server/api.ts
+  kind: workflow
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

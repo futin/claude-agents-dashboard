@@ -1,19 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/pending.ts
-    - server/lib/remoteState.ts
-    - server/api.ts
-    - scripts/ask-remote-hook.sh
-    - client/src/components/QuestionPanel.tsx
-    - client/src/components/RemoteAnswerToggle.tsx
-    - client/src/hooks/usePendingQuestion.ts
-    - client/src/hooks/useRemoteAnswer.ts
-    - client/src/components/SessionRow.tsx
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Remote answers (the first write path)
 
 When a session calls `AskUserQuestion`, the [chat drawer](chat.md) can render its options
@@ -233,3 +217,18 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
   will **not** appear as a chat message — `parseChatRecord` drops `tool_result` blocks by
   design — so the banner bridges the gap until the model's follow-up arrives on the
   normal 3s tail.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/pending.ts
+    - server/lib/remoteState.ts
+    - server/api.ts
+    - scripts/ask-remote-hook.sh
+    - client/src/components/QuestionPanel.tsx
+    - client/src/components/RemoteAnswerToggle.tsx
+    - client/src/hooks/usePendingQuestion.ts
+    - client/src/hooks/useRemoteAnswer.ts
+    - client/src/components/SessionRow.tsx
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->
