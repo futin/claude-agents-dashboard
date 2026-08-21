@@ -1,19 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/plans.ts
-    - server/api.ts
-    - server/index.ts
-    - server/lib/scan.ts
-    - scripts/plan-remote-hook.sh
-    - scripts/remote-decision-hook.sh
-    - client/src/components/PlanPanel.tsx
-    - client/src/hooks/usePendingPlan.ts
-    - client/src/components/SessionRow.tsx
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Remote plan verdicts (the `plan?` tab)
 
 When a session calls `ExitPlanMode`, the [chat drawer](chat.md) can render the proposed
@@ -153,3 +137,18 @@ The `timeout` must exceed the wait window (Settings → **Answer window**, or
 `CLAUDE_DASHBOARD_ANSWER_TIMEOUT`; default 600s) or the CLI kills the hook first — same rule,
 same failure mode, and the same one setting as
 [remote-answer-setup](../workflows/remote-answer-setup.md).
+
+<!-- docs-sync:
+  sources:
+    - server/lib/plans.ts
+    - server/api.ts
+    - server/index.ts
+    - server/lib/scan.ts
+    - scripts/plan-remote-hook.sh
+    - scripts/remote-decision-hook.sh
+    - client/src/components/PlanPanel.tsx
+    - client/src/hooks/usePendingPlan.ts
+    - client/src/components/SessionRow.tsx
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

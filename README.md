@@ -1,14 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/
-    - client/
-    - scripts/
-    - package.json
-  kind: readme
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Claude Agents Dashboard
 
 A live, always-open monitor for **parallel Claude Code sessions**. For the top N
@@ -143,3 +132,13 @@ invariants) live in [`docs/subsystems/`](docs/subsystems/); runnable procedures
 
 - Estimated USD cost per session. (Whole-session token totals live in the
   **Analytics** tab — run `/kaizen` on a session and it appears there.)
+
+<!-- docs-sync:
+  sources:
+    - server/
+    - client/
+    - scripts/
+    - package.json
+  kind: readme
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

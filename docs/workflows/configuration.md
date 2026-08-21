@@ -1,15 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/config.ts
-    - server/lib/transcript.ts
-    - server/lib/usage.ts
-    - scripts/ask-remote-hook.sh
-    - .env.example
-  kind: workflow
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Configuration
 
 **Most of this is now optional twice over.** The [Settings tab](../subsystems/settings.md) edits
@@ -77,3 +65,14 @@ environment, and reports which of the two places it found.)
 
 The hook also reads `~/.claude/hooks/dashboard-token` for the `ANSWER_TOKEN` value, if
 you set one. Full setup in [remote-answers.md](../subsystems/remote-answer.md).
+
+<!-- docs-sync:
+  sources:
+    - server/lib/config.ts
+    - server/lib/transcript.ts
+    - server/lib/usage.ts
+    - scripts/ask-remote-hook.sh
+    - .env.example
+  kind: workflow
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

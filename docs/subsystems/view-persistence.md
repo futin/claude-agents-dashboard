@@ -1,15 +1,3 @@
----
-docs-sync:
-  sources:
-    - client/src/hooks/usePersistedState.ts
-    - client/src/App.tsx
-    - client/src/components/SessionsView.tsx
-    - client/src/components/Toolbar.tsx
-    - client/src/lib/filterSort.ts
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # View persistence (Toolbar filters/sort)
 
 The Toolbar's `view` object (`projects`, `statuses`, `window`, `sortKey`, `sortDir` — the
@@ -54,3 +42,14 @@ override it (see `dashboard.section` below).
 - **Clearing them all** — Settings → Reset this device removes every key listed above
   (`OWNED_KEYS` in `hooks/useSettings.tsx`) and restores the defaults. It touches nothing on the
   server and nothing in `~/.claude`. Add a key here and it belongs in that list too.
+
+<!-- docs-sync:
+  sources:
+    - client/src/hooks/usePersistedState.ts
+    - client/src/App.tsx
+    - client/src/components/SessionsView.tsx
+    - client/src/components/Toolbar.tsx
+    - client/src/lib/filterSort.ts
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

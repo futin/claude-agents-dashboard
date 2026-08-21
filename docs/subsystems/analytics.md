@@ -1,17 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/analytics.ts
-    - server/lib/analyze.ts
-    - server/lib/sessionAnalyticsLog.ts
-    - server/api.ts
-    - client/src/components/analytics/
-    - client/src/lib/analyticsFilterSort.ts
-    - .claude/skills/kaizen/
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Analytics — kaizen-fed session post-mortems
 
 An **Analytics** section (third `SideRail` entry, persisted `dashboard.section`) shows the
@@ -113,3 +99,16 @@ above still holds.
   many sessions at once and a read-modify-write of a shared file loses concurrent entries
   silently. `AnalyticsReport.lessonStatus` is the newest status matching the session
   (prefix + newest-wins, mirroring `lessonForSession`); `null`/absent = still **open**.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/analytics.ts
+    - server/lib/analyze.ts
+    - server/lib/sessionAnalyticsLog.ts
+    - server/api.ts
+    - client/src/components/analytics/
+    - client/src/lib/analyticsFilterSort.ts
+    - .claude/skills/kaizen/
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

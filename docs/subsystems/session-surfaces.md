@@ -1,16 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/scan.ts
-    - server/lib/transcript.ts
-    - shared/types.ts
-    - client/src/lib/surface.ts
-    - client/src/components/SessionRow.tsx
-    - client/src/components/ChatDrawer.tsx
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Where a session lives, and where you can continue it
 
 Written after the remote-control spawn work (2026-08-17), because the boundaries
@@ -276,3 +263,15 @@ visible to the dashboard.
   RC-registered, so the phone *app* cannot attach to them.
 - **Start in the desktop app → continue in the desktop app:** its own sidebar,
   as always.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/scan.ts
+    - server/lib/transcript.ts
+    - shared/types.ts
+    - client/src/lib/surface.ts
+    - client/src/components/SessionRow.tsx
+    - client/src/components/ChatDrawer.tsx
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

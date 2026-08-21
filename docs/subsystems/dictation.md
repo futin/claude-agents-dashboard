@@ -1,18 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/transcribe.ts
-    - server/api.ts
-    - server/index.ts
-    - client/src/hooks/useDictation.ts
-    - client/src/hooks/useTranscribeAvailable.ts
-    - client/src/components/MicButton.tsx
-    - client/src/lib/dictation.ts
-    - client/src/components/MessagePanel.tsx
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Dictation in the reply composer (local whisper)
 
 A mic button in the [reply composer](remote-message.md)'s action row lets you speak a
@@ -271,3 +256,17 @@ mitigations above are what stand in the token's place if you choose not to set o
 - **The backend's spawn surface grows by two external binaries** (`ffmpeg`, `whisper-cli`),
   neither bundled and neither present on a stock Mac — a real widening of the existing
   `lsof`/`ps`/`ioreg`/`open` spawn surface, accepted for what the feature buys.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/transcribe.ts
+    - server/api.ts
+    - server/index.ts
+    - client/src/hooks/useDictation.ts
+    - client/src/hooks/useTranscribeAvailable.ts
+    - client/src/components/MicButton.tsx
+    - client/src/lib/dictation.ts
+    - client/src/components/MessagePanel.tsx
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->
