@@ -139,7 +139,8 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
         <div className="chat-head">
           <span className="chat-title">{session.sessionName || session.project}</span>
           {session.sessionName && <span className="proj-pill">{session.project}</span>}
-          {session.gitBranch && <span className="branch">{session.gitBranch}</span>}
+          {/* title: the pill ellipsises on a narrow drawer, so keep the full ref reachable */}
+          {session.gitBranch && <span className="branch" title={session.gitBranch}>{session.gitBranch}</span>}
           <span className="chat-model">{session.model}</span>
           {/* repeated from the row on purpose: a drawer opened straight from a
               tapped push (`?session=<id>`) never showed the list, so this is
