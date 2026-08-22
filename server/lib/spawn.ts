@@ -424,9 +424,22 @@ export function launch(
   const args = buildSpawnArgs({ ...input, sessionId, resume: resumeId !== undefined });
   const doSpawn = spawner ?? nodeSpawn;
 
+  // The child inherits this server's environment — minus CLAUDE_CODE_ENTRYPOINT.
+  // A server started from inside another Claude Code context (a desktop-app
+  // terminal, a Claude-driven shell) carries that marker, and a child that
+  // inherits it stamps it into the transcript instead of `sdk-cli` — losing the
+  // `dashboard` pill and the right to be resumed (`sessionSurface`, scan.ts).
+  // Measured both ways on CLI 2.1.233: with the variable the transcript says
+  // `claude-desktop`; without it a `-p` run says `sdk-cli`. `delete`, not an
+  // `undefined` assignment: this Node build happens to omit undefined-valued
+  // keys (measured), but that is filtering behaviour to not lean on — an
+  // absent key needs no guarantee at all.
+  const env = { ...process.env };
+  delete env.CLAUDE_CODE_ENTRYPOINT;
+
   let child: ChildProcess;
   try {
-    child = doSpawn(config.claudeBin, args, { cwd: ref.path, detached: true, stdio: ['pipe', 'ignore', 'pipe'] });
+    child = doSpawn(config.claudeBin, args, { cwd: ref.path, env, detached: true, stdio: ['pipe', 'ignore', 'pipe'] });
   } catch (err) {
     fail(sessionId, undefined, errMessage(err));
     return sessionId;

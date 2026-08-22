@@ -746,14 +746,14 @@ export function run(): number {
     } finally { setSpawner(null); }
   })) p++; else f++;
 
-  if (test('the options are exactly cwd/detached/stdio, stdin piped, stdout ignored, stderr piped', () => {
+  if (test('the options are exactly cwd/env/detached/stdio, stdin piped, stdout ignored, stderr piped', () => {
     resetLaunches();
     const calls: SpawnCall[] = [];
     setSpawner(fakeSpawner(calls, []));
     try {
       launch(cfg(), REF, baseInput());
       const { options } = calls[0];
-      assert.deepStrictEqual(Object.keys(options).sort(), ['cwd', 'detached', 'stdio']);
+      assert.deepStrictEqual(Object.keys(options).sort(), ['cwd', 'detached', 'env', 'stdio']);
       assert.strictEqual(options.cwd, REF.path);
       assert.strictEqual(options.detached, true);
       const stdio = options.stdio as unknown[];
@@ -885,6 +885,25 @@ export function run(): number {
       assert.strictEqual(entry.resume, true);
       assert.ok(entry.error!.includes('resume exploded'));
     } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('launch strips CLAUDE_CODE_ENTRYPOINT from the child env (child must stamp sdk-cli)', () => {
+    resetLaunches();
+    const calls: SpawnCall[] = [];
+    setSpawner(fakeSpawner(calls, []));
+    const prev = process.env.CLAUDE_CODE_ENTRYPOINT;
+    process.env.CLAUDE_CODE_ENTRYPOINT = 'claude-desktop';
+    try {
+      launch(cfg(), REF, baseInput());
+      const env = calls[0].options.env as Record<string, string> | undefined;
+      assert.ok(env, 'launch must pass an explicit env to the spawner');
+      assert.ok(!('CLAUDE_CODE_ENTRYPOINT' in env), 'the inherited entrypoint marker must not reach the child');
+      assert.strictEqual(env.PATH, process.env.PATH, 'everything else passes through untouched');
+    } finally {
+      if (prev === undefined) delete process.env.CLAUDE_CODE_ENTRYPOINT;
+      else process.env.CLAUDE_CODE_ENTRYPOINT = prev;
+      setSpawner(null);
+    }
   })) p++; else f++;
 
   if (test('stopLaunch still SIGTERMs a launching resume entry', () => {

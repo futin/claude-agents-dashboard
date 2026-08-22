@@ -154,13 +154,17 @@ which is right — they are real processes), and the client (`SessionList`) hide
 rendering a `failed` one, which is the only signal a broken resume gets
 (`LaunchingSession.resume` carries the flag across the contract).
 
-⚠️ **The transcript's `entrypoint` decides resumability, and the *server's environment*
-decides the entrypoint.** A `claude` child inherits `CLAUDE_CODE_ENTRYPOINT` from the
-dashboard server's own environment: started from a plain terminal the children stamp
-`sdk-cli` (the `dashboard` pill, resumable), but a server started from inside another
-Claude Code context would pass its marker through — the children stamp that instead, get
-no pill, and refuse to resume. Observed directly during this feature's verification, not
-hypothesized. Run the dashboard from a plain shell.
+⚠️ **The transcript's `entrypoint` decides resumability, and the *child's environment*
+decides the entrypoint** — so `launch()` strips `CLAUDE_CODE_ENTRYPOINT` from the env it
+hands the child. A server started from inside another Claude Code context (a desktop-app
+terminal, a Claude-driven shell) carries that marker, and a child that inherited it
+stamped it into the transcript instead of `sdk-cli` — losing the `dashboard` pill and
+refusing to resume. Observed directly during this feature's verification (with the
+variable: `claude-desktop`; without: `sdk-cli`), then fixed at the spawn site rather than
+left as a "run from a plain shell" footnote, because the wrong stamp is silent until the
+day a resume fails. The strip covers only sessions this dashboard launches: transcripts
+written *before* the fix by a marker-carrying server stay `local` and stay unresumable —
+the stamp is in the file, not recomputed.
 
 ## A spawned row says `dashboard`
 
