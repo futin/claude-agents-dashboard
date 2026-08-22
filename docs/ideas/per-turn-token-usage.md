@@ -85,25 +85,16 @@ Two consequences:
    *or* summing. (`requestId` works equally well — measured 1:1 with `message.id`
    across 182 turns in 4 transcripts, zero violations.)
 
-### Live bug this uncovered — `analyze.ts` over-counts
+### Live bug this uncovered — `analyze.ts` and `/kaizen` over-count
 
-`server/lib/analyze.ts:114-124` sums `msg.usage` per *record* with no
-`message.id` dedup, so a split turn is counted once per content block. Measured
-over the four most recent transcripts on this machine, naive vs deduped:
+The same duplication that breaks the delta also inflates every token total the
+Analytics tab and `/kaizen` print, by 1.7–2.6×, because both sum `msg.usage` per
+*record* with no `message.id` dedup. Written up separately, with the
+measurements, the field-by-field blast radius and the fix:
+**`docs/bugs/analyze-double-counts-split-turns.md`**.
 
-| transcript | turns | combined tokens | inflation |
-|---|---|---|---|
-| `64bbe973` | 57 → 33 | 3,134,730 → 1,836,027 | 1.71× |
-| `acbdcd0d` | 21 → 10 | 1,081,798 → 521,677 | 2.07× |
-| `6f8c3c9e` | 191 → 88 | 33,659,952 → 16,195,571 | 2.08× |
-| `25ec88c3` | 101 → 46 | 13,522,664 → 6,476,471 | 2.09× |
-
-So `SessionAnalysis.totals`, `turnCount`, `maxTurnIndex` and the per-tool
-`approxOutputTokens` split are all inflated ~1.7–2.1× today, and the Analytics
-tab and `/kaizen` report those numbers. **Fix this before or alongside building
-the idea** — it is a one-line `Set<string>` guard on `msg.id`, but it changes
-every number the Analytics tab prints, so it wants its own change and its own
-test.
+**Fix that before or alongside building this idea** — the dedup is a prerequisite
+here, not just a neighbouring cleanup.
 
 `server/lib/transcript.ts` is **not** affected: it reads the *latest* usage
 rather than summing, and the duplicates are identical, so the row's live
