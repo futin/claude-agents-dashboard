@@ -61,7 +61,9 @@ That's the whole basic setup. Everything below is optional.
 - **[Remote messages](docs/subsystems/remote-message.md)** — when a turn finishes while
   you're away, the `Stop` hook holds it open for a short window and you type a follow-up
   into the drawer; the model reads it as your next instruction and carries on. No reply and
-  the session just stops, as it always did.
+  the session just stops, as it always did. Sessions the dashboard spawned itself are the
+  exception to *away*: they have no terminal to type into, so their window opens — and
+  survives the idle sweep — whether you're at the desk or not.
 - **[Dictation](docs/subsystems/dictation.md)** — a mic in that same composer: speak the
   follow-up instead of thumb-typing it on a phone. Recorded in the browser, transcoded and
   transcribed **on this machine** by a local whisper.cpp — no audio leaves the box, keeping
@@ -72,12 +74,16 @@ That's the whole basic setup. Everything below is optional.
   brand-new session from the dashboard: pick a recent project, write or dictate the prompt,
   tap launch. The server spawns a detached, headless `claude -p` in that project's
   directory and the row shows up a poll later, ordinary from then on. The fourth write
-  path, and the first one the dashboard *initiates* rather than answers. Off by default
+  path, and the first one the dashboard *initiates* rather than answers. A session started
+  this way is also not a dead end once its turn is over: its chat drawer offers a **resume**
+  composer that relaunches the same session id, so the same transcript continues and the
+  same row wakes up. Off by default
   (empty `CLAUDE_BIN`); how much a launch can do unattended is bounded by the
   `SPAWN_MAX_PERMISSION` ceiling on the host, never by the browser.
 - **[Management tab](docs/subsystems/management.md)** — read-only browser for all Claude
   config on the machine: skills, agents, commands, rules, hooks, settings, plugins, per
-  scope.
+  scope. A skill that ships more than `SKILL.md` opens its whole directory in a file rail
+  beside the viewer.
 - **[Analytics tab](docs/subsystems/analytics.md)** — per-session post-mortem cards
   (tokens, priciest tools/subagents) paired with the lesson the `/kaizen` skill logged.
 - **[Usage bars](docs/subsystems/usage-limits.md)** — the header's 5h / Week account
@@ -140,5 +146,5 @@ invariants) live in [`docs/subsystems/`](docs/subsystems/); runnable procedures
     - scripts/
     - package.json
   kind: readme
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
 -->

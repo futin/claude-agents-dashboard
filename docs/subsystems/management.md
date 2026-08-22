@@ -9,6 +9,8 @@ Read-only v1 — nothing is ever written.
   settings, and installed plugins for the selected scope, grouped by type and filterable.
   Every item is tagged with its source: `user`, `project`, or `plugin:<name>` — installed
   plugins are fully expanded, so plugin-provided skills/hooks/agents/rules show up too.
+  The filter matches an item's name and description, and for a skill its **file names**
+  too, so searching a reference doc finds the skill that ships it.
 - **Right — detail pane:** the selected item's metadata and file content (SKILL.md, hook
   script, settings.json, …). A **skill that ships more than SKILL.md** gets a file rail
   beside the viewer — the whole skill directory (references, scripts, agents, docs), any
@@ -63,5 +65,5 @@ Read-only v1 — nothing is ever written.
     - client/src/components/management/
     - client/src/lib/managementEntries.ts
   kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
 -->

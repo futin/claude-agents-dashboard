@@ -165,5 +165,5 @@ Assume a leaked topic reveals both.
     - .env.example
     - docker-compose.yml
   kind: workflow
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
 -->

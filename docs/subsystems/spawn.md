@@ -339,7 +339,7 @@ just costs you the ability to stop it remotely. Named and accepted, not fixed.
 
 | Method | Path | Codes |
 |---|---|---|
-| `POST` | `/api/spawn` | 200 `{sessionId}` (`SpawnResponse`); 400 malformed body / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target; 403 bad token; 404 remote answers off *or* feature off; 409 resume of a still-running or already-resuming session; 429 `MAX_LAUNCHING` launches already in flight; 500 spawn threw |
+| `POST` | `/api/spawn` | 200 `{sessionId}` (`SpawnResponse`); 400 malformed body / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target / resume target with no recorded cwd; 403 bad token; 404 remote answers off *or* feature off; 409 resume of a still-running or already-resuming session; 429 `MAX_LAUNCHING` launches already in flight; 500 spawn threw |
 | `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}`; 400 bad id shape; 403 bad token; 404 remote answers off *or* no live launch for that id |
 
 Both gated by the same `tokenOk` (`api.ts`) the other three write paths use — an
@@ -480,8 +480,10 @@ new reason:
 - **No streamed output.** The transcript is the output, and the chat drawer already
   renders it — `--output-format stream-json` would be a second rendering path for the
   same bytes.
-- **No spawn from an existing session row.** The entry point is the toolbar only; rows
-  stay read-only.
+- **No *fresh* spawn from an existing session row.** The toolbar is still the only way to
+  start a *new* session, and rows themselves stay read-only. Continuing an *ended*
+  dashboard session from its chat drawer is a different thing, and it now exists — see
+  [resume](#resuming-an-ended-session-resume).
 - **A stopped launch and an orphaned one are not symmetric.** See [the stop endpoint's
   restart hole](#the-stop-endpoint-and-its-restart-hole) above — a detached child
   outlives a server restart by design, but the store that could `stop` it does not.
@@ -496,11 +498,14 @@ new reason:
     - server/lib/transcript.ts
     - shared/types.ts
     - client/src/components/SpawnPanel.tsx
+    - client/src/components/ResumePanel.tsx
+    - client/src/components/ChatDrawer.tsx
     - client/src/components/SessionList.tsx
     - client/src/components/SessionRow.tsx
     - client/src/hooks/useSpawn.ts
+    - client/src/lib/resume.ts
     - client/src/lib/spawnOptions.ts
     - client/src/lib/surface.ts
   kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
 -->

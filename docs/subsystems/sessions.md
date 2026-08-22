@@ -69,7 +69,13 @@ Three properties keep them from complicating the rest of this document:
   calls `adoptLaunched(ids)` with the freshly-scanned session ids *before* it calls
   `listLaunching()`, so the poll that first sees the real transcript is the same poll that
   stops sending the phantom. The row is never rendered twice, and the client never has to
-  match one against the other.
+  match one against the other. **One exception, and it is why `LaunchingSession.resume`
+  exists:** a [resume](spawn.md#resuming-an-ended-session-resume) launch reuses an existing
+  session id, so its transcript is already on disk and seeing it in a scan proves nothing —
+  `adoptLaunched` skips those entries deliberately, or the first poll would delete them and
+  swallow a failure before it could be rendered. They leave the store by TTL, `stopLaunch`,
+  or a failure instead, and `SessionList` drops a `launching` resume phantom (the real row
+  below *is* the progress indicator) while still rendering a `failed` one.
 - **They can outnumber the real rows only briefly.** A `launching` entry that nothing
   adopts is dropped after 60s; a `failed` one after 5 minutes. Both live in RAM only (the
   store in `server/lib/spawn.ts`), so a server restart clears them.
@@ -260,5 +266,5 @@ Client-side controls above the list: project, status, activity window, and sort
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
 -->

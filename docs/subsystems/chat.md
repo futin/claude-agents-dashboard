@@ -8,7 +8,11 @@ renders as an action bar pinned above the footer, a proposed plan does the same 
 `PlanPanel` (see [remote-plan](remote-plan.md)), and a turn-end reply window through
 `MessagePanel` (see [remote-message](remote-message.md)). All three stores hold one entry
 per session and a session can only be parked on one thing at a time, so in practice at most
-one of the three ever renders.
+one of the three ever renders. A fourth pinned panel is not a hold at all: an ended
+`dashboard`-surface session gets the resume composer (`ResumePanel`, see
+[spawn](spawn.md#resuming-an-ended-session-resume)), which renders precisely when none of
+the three do — nothing pending and the turn over — so it can appear under `MessagePanel`'s
+"gone" note as the hand-off.
 
 ## What's shown
 
@@ -134,5 +138,5 @@ worst case to the window size, not to the transcript size.
     - client/src/lib/chatFilter.ts
     - client/src/lib/markdown.ts
   kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
 -->

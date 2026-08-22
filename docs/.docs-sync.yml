@@ -88,3 +88,5 @@ out-of-scope:
     reason: study-session artifacts; regenerate rather than maintain
   - path: .claude/skills/
     reason: vendored skills, maintained upstream
+  - path: .github/pull_request_template.md
+    reason: PR body template — a form, not reference prose; no code to drift against
