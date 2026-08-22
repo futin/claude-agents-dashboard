@@ -66,9 +66,9 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `POST /api/plans/wait` | the plan hook's held-open wait (write path) |
 | `GET /api/sessions/:id/message` | pending reply window, if any |
 | `POST /api/sessions/:id/message-answer` | send free text into a finished turn, or let it stop (write path) |
-| `POST /api/messages/wait` | the Stop hook's held-open wait, away only (write path) |
+| `POST /api/messages/wait` | the Stop hook's held-open wait, away only — except headless sessions, which hold at the desk too (write path) |
 | `POST /api/transcribe` | a recorded clip in, transcribed text out — feeds the reply composer's mic (write path) |
-| `POST /api/spawn` | start a new headless `claude -p` session in a recent project (write path, the one the dashboard initiates rather than answers) |
+| `POST /api/spawn` | start a new headless `claude -p` session in a recent project, or `resume` an ended `dashboard` one by id (write path, the one the dashboard initiates rather than answers) |
 | `POST /api/spawn/:id/stop` | SIGTERM a still-launching session's child (write path) |
 | `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) |
 | `POST /api/notify/event` | the Stop hook's push trigger — the other three events notify from the endpoint they already POST to |
@@ -127,7 +127,8 @@ server/
   lib/pending.ts  in-memory pending-question store (the first of the four write paths)
   lib/plans.ts    in-memory pending-plan store (same machine, reject-only verdicts)
   lib/messages.ts in-memory turn-end reply-window store (same machine, plus a 5s
-                  idle sweep that auto-releases every hold)
+                  idle sweep that auto-releases every terminal-backed hold — headless
+                  ones are exempt)
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)
   lib/settings.ts persisted idle threshold, answer window + push policy
   lib/notify.ts   server-sent ntfy pushes — the layered policy and the one
@@ -135,19 +136,21 @@ server/
   lib/origin.ts   connection classifier → local | lan | tailnet | unknown
   lib/transcribe.ts  ffmpeg → whisper-cli pipeline behind POST /api/transcribe: mime
                   allowlist, cached engine probe, single-flight guard, typed failures
-  lib/spawn.ts    launches a detached, headless `claude -p` session — the fourth write
-                  path, and the first the dashboard initiates (see docs/subsystems/spawn.md)
+  lib/spawn.ts    launches a detached, headless `claude -p` session, or resumes an ended
+                  one — the fourth write path, and the first the dashboard initiates
+                  (see docs/subsystems/spawn.md)
 client/src/
   App.tsx         shell: side rail (Sessions | Management | Analytics | Settings) + lazy views
   components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
-                  MessagePanel, MicButton, SpawnPanel, PermissionBanner, RemoteAnswerToggle,
-                  OriginBadge, Markdown, management/, analytics/, settings/
+                  MessagePanel, MicButton, SpawnPanel, ResumePanel, PermissionBanner,
+                  RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
+                  settings/
   hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
                   usePendingQuestion, usePendingPlan, usePendingMessage, useRemoteAnswer,
                   useSpawn, usePersistedState, useSettings, useServerSettings, useDictation,
                   useTranscribeAvailable
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
-                  deepLink, dictation, spawnOptions
+                  deepLink, dictation, spawnOptions, resume
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          ask-remote-hook.sh, plan-remote-hook.sh, permission-notify-hook.sh,
@@ -191,5 +194,5 @@ that area:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
 -->

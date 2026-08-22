@@ -43,7 +43,7 @@ with exactly the granularity the user picks events at:
 | `question` | `POST /api/questions/wait` | `serveQuestionWait`, after the wait registers |
 | `plan` | `POST /api/plans/wait` | `servePlanWait`, after the wait registers |
 | `permission` | `POST /api/permissions/notify` | `servePermissionNotify` |
-| `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on |
+| `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on (headless sessions take the hold route at the desk too) |
 
 Only `stop` needed a new route, because a finished turn registers nothing. So the whole
 policy lives in one testable module instead of being re-implemented in four shell scripts —
@@ -94,7 +94,10 @@ exists — so the predicate is never evaluated at all. `permission` has no idle 
 hook, so it really does become unconditional. `stop` is the mixed case: `stop-notify-hook.sh`
 now runs the same idle check `ask-remote.sh` does, but only in front of the *hold* route —
 at the desk it falls through to the plain `notify_fallback` POST instead of exiting, so a
-push attempt reaches the predicate either way. The hook's check gates which route fires
+push attempt reaches the predicate either way. One exception on the routing side: a
+**headless** session (no controlling TTY — a dashboard spawn) skips that idle check
+entirely and takes the hold route at the desk too, because there is no terminal to type
+the follow-up into. Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
 (and so which phrase and suppression rule apply), not whether `stop` pushes at all — see
 [remote-message](remote-message.md).
 
@@ -229,5 +232,5 @@ server write path. ntfy makes it unnecessary for now.
     - client/src/lib/deepLink.ts
     - client/src/components/settings/SettingsView.tsx
   kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
 -->

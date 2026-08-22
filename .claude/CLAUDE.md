@@ -43,7 +43,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/plans.ts    in-memory pending-ExitPlanMode store — same state machine, reject-only
                   verdicts (accept is refused upstream; see docs/subsystems/remote-plan.md)
   lib/messages.ts  in-memory turn-end reply-window store — same state machine, plus a 5s
-                  idle sweep that auto-releases every hold (see docs/subsystems/remote-message.md)
+                  idle sweep that auto-releases every terminal-backed hold; headless
+                  (`claude -p`) holds are exempt (see docs/subsystems/remote-message.md)
   lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags, fed by
                   the PermissionRequest hook (Notification is the legacy fallback);
                   display-only (see docs/subsystems/permission-notify.md)
@@ -67,7 +68,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   core (buildSpawnArgs, clampPermission, parseSpawnRequest) plus a RAM-only
                   launch-tracking store with no reaper (probeSpawn, launch, listLaunching,
                   adoptLaunched, stopLaunch) — the fourth write path, and the first the
-                  dashboard initiates (see docs/subsystems/spawn.md)
+                  dashboard initiates; `--resume <id>` reuses an existing dashboard
+                  session's id instead of minting one (see docs/subsystems/spawn.md)
 client/           Vite + React + TypeScript frontend
   src/App.tsx     shell: side rail (Sessions | Management | Analytics | Settings), lazy-loads all but Sessions
   components/SessionsView.tsx  the original live monitor (owns the 3s poll + chat drawer state)
@@ -96,6 +98,9 @@ client/           Vite + React + TypeScript frontend
   components/SpawnPanel.tsx + lib/spawnOptions.ts  the launch form: pick a recent project,
                   write or dictate a prompt, tap launch — starts a detached headless
                   `claude -p` (own lazy chunk; hooks/useSpawn — see docs/subsystems/spawn.md)
+  components/ResumePanel.tsx + lib/resume.ts  the resume composer pinned in an ended
+                  dashboard session's drawer, plus `resumeEligible` — the pure gate that
+                  decides when to offer it (see docs/subsystems/spawn.md)
   components/PermissionBanner.tsx  pinned drawer strip naming the tool call a terminal
                   permission dialog is asking about (display-only; no controls by design)
   components/RemoteAnswerToggle.tsx  toolbar pill for the remote-answer switch
@@ -230,5 +235,5 @@ nothing outside it is published. An allowlist directory, not a `robots.txt` deny
     - shared/types.ts
     - package.json
   kind: index
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
 -->

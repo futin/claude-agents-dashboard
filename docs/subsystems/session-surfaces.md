@@ -26,7 +26,7 @@ reason D exists at all.
 | Desktop app sidebar | A + E — it merges the account's **cloud** sessions into the list (verified: a phone-created cloud session appears; its id is absent from the app's local registry, so this is a rendered merge, not an import). **Not D** — a live, phone-visible RC session shows nowhere in the app | A full UI; E as a cloud thread | ✅ |
 | Phone Claude app | D (while alive), E | D and E, full chat UI | ✅ |
 | claude.ai web | E; D *untested* | E | ✅ |
-| This dashboard | A, B, C, D (anything with a transcript on disk) | any of them via the turn-end reply window (away-only), 8 replies per stretch | ⚠️ composer, not a thread UI |
+| This dashboard | A, B, C, D (anything with a transcript on disk) | any of them via the turn-end reply window (away-only), 8 replies per stretch; **C/D also via [resume](spawn.md#resuming-an-ended-session-resume)** once the turn is over — no away gate, no reply cap | ⚠️ composer, not a thread UI |
 | Terminal `claude --resume <id>` | any local transcript (A–D) | full TUI with complete history | ✅ |
 | Another local session (`ListAgents`/`SendMessage`) | any *live* local session, incl. one held in its reply window | enqueue a message; the reply comes back cross-session | n/a (agent-to-agent) |
 
@@ -258,6 +258,12 @@ visible to the dashboard.
 - **Start on the phone → continue at the Mac:** `claude --resume <session-id>` in a
   terminal — full history, everything local. (The id is in the dashboard row / chat
   drawer URL.)
+- **Dashboard spawn → keep going from the dashboard after it stopped:** the ended
+  session's chat drawer offers the resume composer — `--resume` on the same id, so the
+  same transcript continues and the same row wakes up. `dashboard`-surface (C/D) only: a
+  terminal session stays terminal-owned, since resuming one here could race a still-open
+  interactive session on the same transcript
+  ([spawn](spawn.md#resuming-an-ended-session-resume)).
 - **Start at the Mac (Harness) → continue on the phone:** the dashboard already
   monitors every local session; use the reply window. A-sessions are not
   RC-registered, so the phone *app* cannot attach to them.
@@ -273,5 +279,5 @@ visible to the dashboard.
     - client/src/components/SessionRow.tsx
     - client/src/components/ChatDrawer.tsx
   kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
 -->
