@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<!-- tutor-deck -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The write paths — a tutor lesson</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1c20;
+    --muted: #5b6husk;
+    --muted: #5b6270;
+    --card: #f6f7f9;
+    --line: #d9dde3;
+    --accent: #2f6feb;
+    --correct: #1f8a4c;
+    --wrong: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #eceef1;
+      --muted: #a3a8b0;
+      --card: #2a2e35;
+      --line: #3a404a;
+      --accent: #6ea3ff;
+      --correct: #57d68d;
+      --wrong: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    font-size: 17px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  #progress-track { height: 4px; background: var(--line); flex: 0 0 auto; }
+  #progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .18s ease; }
+  main { flex: 1 1 auto; padding: 18px 16px 24px; max-width: 44rem; width: 100%; margin: 0 auto; }
+  .card { display: none; }
+  .card.active { display: block; }
+  h1 { font-size: 1.35rem; line-height: 1.3; margin: .2rem 0 .8rem; }
+  h2 { font-size: 1.12rem; line-height: 1.3; margin: .2rem 0 .7rem; }
+  p { margin: 0 0 .85rem; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
+  pre {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .82rem;
+    line-height: 1.45;
+    margin: 0 0 .9rem;
+  }
+  .eyebrow { color: var(--muted); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 .35rem; }
+  details { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 .9rem; background: var(--card); }
+  summary { cursor: pointer; font-weight: 600; font-size: .92rem; }
+  details p { margin: .7rem 0 0; font-size: .95rem; }
+  .quiz-prompt { font-weight: 600; }
+  .quiz-options { display: flex; flex-direction: column; gap: 10px; }
+  .quiz-option-btn {
+    display: block; width: 100%; text-align: left;
+    font: inherit; font-size: .98rem;
+    color: var(--fg); background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 13px 14px; cursor: pointer; min-height: 46px;
+  }
+  .quiz-option-btn:disabled { cursor: default; }
+  .quiz-feedback {
+    display: none;
+    color: var(--muted); font-size: .93rem;
+    margin: 8px 2px 2px; padding-left: 10px;
+    border-left: 2px solid var(--line);
+  }
+  .quiz-option.revealed .quiz-feedback { display: block; }
+  .quiz-option.revealed[data-correct="true"] .quiz-option-btn { border-color: var(--correct); border-width: 2px; }
+  .quiz-option.revealed[data-correct="false"] .quiz-option-btn { border-color: var(--wrong); border-width: 2px; }
+  .divider-flow { color: var(--muted); font-size: .95rem; margin-bottom: 1rem; }
+  .xlink { font-size: .92rem; }
+  a { color: var(--accent); }
+  .recap-score { font-size: 1.5rem; font-weight: 700; margin: .2rem 0 1rem; }
+  .section-jump {
+    display: block; width: 100%; text-align: left;
+    font: inherit; font-size: .95rem; color: var(--fg);
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px; padding: 11px 12px; margin-bottom: 8px; cursor: pointer;
+  }
+  .stamp { color: var(--muted); font-size: .8rem; margin-top: 1.2rem; }
+  nav {
+    flex: 0 0 auto; display: flex; gap: 12px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line); background: var(--bg);
+  }
+  nav button {
+    flex: 1; font: inherit; font-size: 1rem; padding: 13px 10px;
+    border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--fg); cursor: pointer; min-height: 48px;
+  }
+  nav button:disabled { opacity: .4; cursor: default; }
+  svg { max-width: 100%; height: auto; display: block; margin: 0 0 .9rem; }
+  @media (min-width: 780px) { body { font-size: 18px; } main { padding: 28px 24px 34px; } }
+</style>
+</head>
+<body>
+
+<div id="progress-track"><div id="progress-fill"></div></div>
+
+<main>
+
+<!-- ============ opener ============ -->
+<div class="card card-mental active">
+  <p class="eyebrow">Mental model</p>
+  <h1>Three ways to write into a session that only ever reads</h1>
+  <p>This dashboard is a reader. It tails transcript files off disk and shows you what your
+  Claude Code sessions are doing; it has no daemon, no socket into the CLI, no privileged
+  channel. So how does a button on your phone put an answer into a session running in a
+  terminal three rooms away?</p>
+  <p>The answer is that it doesn't, quite. A Claude Code <em>hook</em> — a script the CLI shells
+  out to at a named moment in a turn — calls into this server and then simply
+  <strong>refuses to return</strong>. The turn is now parked on an open HTTP response. Your phone
+  reads what the hook registered, you tap, and that tap resolves the held response; the hook
+  finally answers the CLI, and the session moves. The dashboard never pushed anything. It
+  answered a question that was already waiting.</p>
+  <p>Three files implement that trick — <code>pending.ts</code>, <code>plans.ts</code>,
+  <code>messages.ts</code> — and they are near-identical by design. Once you see the shared
+  shape, each one collapses into "the same machine, bent around a different constraint the
+  CLI imposed." A fourth path, <code>spawn.ts</code>, inverts the whole thing; it gets its own
+  lesson.</p>
+</div>
+
+<!-- ============ s1 ============ -->
+<section id="s1">
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 1 · The shared shape</p>
+    <h2>A store that holds a promise, not a request</h2>
+    <p>Each store keeps one <code>Map</code> of session id to an entry, and the entry's most
+    important field is not data at all — it is a function:</p>
+<pre>// pending.ts:51-58 (compacted here)
+interface Entry {
+  timer: NodeJS.Timeout;
+  resolve: (r: WaitResult) =&gt; void;
+}</pre>
+    <p>The HTTP handler creates the held response and passes <code>resolve</code> <em>in</em>.
+    The store never imports an HTTP type, never sees a socket, never knows a browser exists.
+    It is a state machine over promises that some caller happens to have attached to a
+    response.</p>
+    <p>The obvious alternative is to let the store own the response object and call
+    <code>res.end()</code> itself. That works, and it is how most people would write it first —
+    but then every test of "does a superseded question release its waiter?" needs a fake
+    request, a fake response, and a fake socket. The file's own header says the injection is
+    "what makes the whole state machine unit-testable."</p>
+    <p>The trade-off they accepted: the store cannot clean up after a dead peer on its own,
+    because it cannot see the socket close. Something outside has to notice and call
+    <code>cancel</code> — which is exactly why that function exists.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>One entry per session, and a newer one wins</h2>
+    <p>Every store keys by session id and holds at most one entry. A second registration for a
+    session that already has one does not error and does not queue — it <em>supersedes</em>:</p>
+<pre>// pending.ts:173-183 (compacted here)
+// An existing entry for the session is superseded — its waiter is
+// released with `superseded` and falls back to the terminal dialog.
+if (prev) settle(prev, { status: 'superseded' });</pre>
+    <p>Why not a queue? Because the thing being modelled has no queue. The CLI has exactly one
+    question open at a time; a second registration means the first one is already gone — the
+    tool call was denied and the model re-asked. Queueing would faithfully preserve a state
+    the real system cannot be in, and the phone would answer a question the session stopped
+    caring about minutes ago.</p>
+    <p>Superseding also self-heals. A re-asked question after a deny silently replaces the
+    stale entry instead of colliding with it, so the failure mode is "the terminal dialog
+    handles it" rather than "the store is wedged."</p>
+    <p>What it costs: an answer in flight from your phone can lose a race it cannot see, and
+    the tap lands on an entry that no longer exists. That is what the mismatch check is for.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Every exit runs through one funnel</h2>
+    <p>Answered, dismissed, superseded, expired, cancelled — every terminal transition goes
+    through the same four lines:</p>
+<pre>// pending.ts:158-163
+/** Finish an entry: fire `resolve` once, clear its timer, drop it from the map. */
+function settle(entry: Entry, result: WaitResult): void {
+  clearTimeout(entry.timer);
+  if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
+  entry.resolve(result);
+}</pre>
+    <p>Note the identity check before the delete. It is not the session id that must match —
+    it is the <em>entry object</em>. A late timer firing for an entry that was already replaced
+    must not evict its replacement.</p>
+    <svg viewBox="0 0 320 92" role="img" aria-label="Hook registers, browser answers, settle resolves the held response">
+      <g fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="26" width="74" height="38" rx="6"/>
+        <rect x="123" y="26" width="74" height="38" rx="6"/>
+        <rect x="244" y="26" width="74" height="38" rx="6"/>
+        <path d="M78 45 h43 M199 45 h43"/>
+        <path d="M114 41 l7 4 -7 4z" fill="currentColor" stroke="none"/>
+        <path d="M235 41 l7 4 -7 4z" fill="currentColor" stroke="none"/>
+      </g>
+      <g fill="currentColor" font-size="10" font-family="sans-serif" text-anchor="middle">
+        <text x="39" y="42">hook</text><text x="39" y="55">registers</text>
+        <text x="160" y="42">entry held</text><text x="160" y="55">in RAM</text>
+        <text x="281" y="42">settle()</text><text x="281" y="55">resolves</text>
+        <text x="100" y="20">holds response</text>
+        <text x="221" y="20">one exit</text>
+      </g>
+    </svg>
+    <p>The naive version — deleting by session id, or letting each call site resolve its own
+    promise — leaks waiters: a path that forgets to resolve parks a turn forever, and there is
+    no daemon to notice. Funnelling every exit means "fires at most once" is a property of one
+    function you can read in full, not a discipline spread across nine call sites.</p>
+    <details><summary>More detail: why the timer is called the guaranteed reaper</summary>
+      <p>The expiry timer is not a convenience — it is the only thing that bounds a hold. If
+      the browser never answers, if the phone loses signal mid-tap, if the tab is closed: the
+      timer fires, <code>settle</code> runs, the hook falls back to the terminal dialog. An
+      answer arriving after it finds nothing and gets a 404, which the module header names as
+      the stale-answer guard.</p>
+    </details>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Two browser tabs are open on the same session and both tap an answer
+    at almost the same instant. What does the second tap get, and why?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Both are applied, last write wins</button>
+        <p class="quiz-feedback">This would be the behaviour if answering merely wrote a field
+        onto the entry. But answering calls <code>settle</code>, which deletes the entry as part
+        of finishing it — after the first tap there is no entry left for a second write to
+        land on.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The store locks and serialises them</button>
+        <p class="quiz-feedback">There is no lock anywhere in these stores, and deliberately so.
+        The comment on <code>answer</code> spells out the reasoning: Node is single-threaded, so
+        the interleaving a lock would protect against cannot occur in the first place.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">The first wins; the second sees not-found</button>
+        <p class="quiz-feedback">Correct. <code>answer</code> is synchronous by design: the first
+        tap runs to completion, and <code>settle</code> has already removed the entry by the time
+        the second is handled, so its lookup misses and returns <code>not-found</code>.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The second is queued behind the first</button>
+        <p class="quiz-feedback">Nothing in these stores queues. One entry exists per session and
+        a terminal transition removes it; there is no pending-answer list for a second submission
+        to wait in, only the entry that is now gone.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============ s2 ============ -->
+<section id="s2">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>Section 1 → Section 2</h2>
+    <p class="divider-flow">You have the shared machine: an injected <code>resolve</code>, one
+    entry per session, one funnel out. Now the first of the three paths — and the constraint
+    that makes it strange.</p>
+    <p class="xlink"><a href="../learning/hooks/guide/answer-channel.md">Related chapter in the
+    hooks guide: the answer channel</a></p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 2 · pending.ts</p>
+    <h2>Answering a question you are not allowed to answer</h2>
+    <p>Here is the constraint everything in this file bends around: <strong>no hook can supply an
+    answer to <code>AskUserQuestion</code>.</strong> The hook API has no "here is the user's
+    choice" channel. What it has is the ability to <em>deny</em> a tool call with a reason
+    string.</p>
+    <p>So the answer travels as a rejection. The module header states it plainly:</p>
+<pre>// pending.ts:5-8 (compacted here)
+// the answer resolves the held response — the hook then denies the tool
+// call with a reason naming the choice, which is the only supported way
+// to get an answer into a live session.</pre>
+    <p>The model asked a question, the tool call was denied, and the denial reason says "the
+    user picked <em>Rewrite the parser</em>." The model reads that and proceeds as though it had
+    been told — because it has been.</p>
+    <p>The alternative a beginner would reach for is to write the answer into the transcript
+    file directly, or to fake a tool result. Both desynchronise the CLI from its own state: the
+    transcript is a record, not an inbox, and the CLI's in-memory turn would still be waiting
+    on a tool call nobody completed.</p>
+    <p>The cost of using the deny channel is that the answer arrives as an interruption rather
+    than a return value, and the prose has to do the work of sounding like an answer.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Untrusted input, twice over</h2>
+    <p>The question text arrives from the hook's stdin, and the answer arrives from a browser
+    that may be on the open internet. Both are treated as hostile. <code>sanitizeQuestions</code>
+    caps the number of questions, the number of options, and the length of every string, and
+    drops anything malformed rather than throwing:</p>
+<pre>// pending.ts:80-90 (compacted here)
+export function sanitizeQuestions(toolInput: unknown): PendingQuestionItem[] {
+  if (!input || typeof input !== 'object' || !Array.isArray(input.questions)) return [];
+  for (const raw of input.questions) {
+    if (out.length &gt;= MAX_QUESTIONS) break;
+    const question = str(q.question, QUESTION_CAP);
+    if (!question) continue;</pre>
+    <p>Returning an empty array is not a silent failure — it is a signal. The header explains
+    that an empty result tells the caller to reject the registration, which makes the hook fall
+    back to the terminal dialog. The session is never worse off than if the dashboard did not
+    exist.</p>
+    <p>Throwing would have been simpler to write. But a throw inside a hook-facing path turns a
+    malformed payload into a stalled turn, and the whole design rule here is that every failure
+    direction ends at the terminal dialog rather than at a hung session.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>The nonce that stops a stale tab</h2>
+    <p>Registration returns a <code>questionId</code>, and any answer must echo it back. If it
+    does not match the entry currently in the map, the answer is refused with
+    <code>mismatch</code> before validation even runs.</p>
+    <p>This is the counterpart to superseding. A tab left open on your desk is showing a
+    question that has since been denied, re-asked, and replaced by a new entry with a new id.
+    Without the nonce, that stale tab's answer would apply to whatever question happens to be
+    open now — which is worse than not answering at all, because the model would receive a
+    confident answer to a question the user never saw.</p>
+    <p>The same pattern appears in <code>cancel</code>: a late socket-close for a stale
+    <code>questionId</code> is a no-op, so a dying peer cannot evict the entry that replaced it.</p>
+    <p>What it costs: every client has to carry and echo the id, and every answer path grows a
+    branch. That is three extra lines in exchange for making the entire class of
+    wrong-question-answered bugs unrepresentable.</p>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Why does <code>sanitizeQuestions</code> return an empty array on a
+    malformed payload instead of throwing?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Throwing would crash the whole server process outright</button>
+        <p class="quiz-feedback">An exception inside a request handler does not take the process
+        down; it becomes a failed response. The reason for the empty array is about where the
+        session ends up, not about protecting the process from a crash.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">It signals the caller to reject the registration</button>
+        <p class="quiz-feedback">Correct. The empty array is a signal, not a swallowed error: it
+        makes the hook decline to register, so the question falls back to the terminal dialog and
+        the session continues normally.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">TypeScript cannot properly type a function that throws</button>
+        <p class="quiz-feedback">TypeScript models throwing functions without difficulty, and
+        several paths in this codebase do throw. The choice here is a deliberate failure-direction
+        decision rather than anything the type system forced.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The calling code has no try/catch around it</button>
+        <p class="quiz-feedback">Adding a try/catch at the call site would be trivial if that were
+        the obstacle. The point is what happens to the parked turn afterwards, which a caught
+        exception still leaves unresolved.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============ s3 ============ -->
+<section id="s3">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>Section 2 → Section 3</h2>
+    <p class="divider-flow">The answer channel exists because denial was the only door.
+    <code>plans.ts</code> hits a harder version of the same wall: a door that only opens one
+    way, permanently.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 3 · plans.ts</p>
+    <h2>The verdict the engine refuses to accept</h2>
+    <p><code>plans.ts</code> is <code>pending.ts</code> with one capability deliberately missing:
+    you can send a plan back for revision from your phone, but you can never approve one. That is
+    not caution — it is the CLI's own rule. <code>ExitPlanMode</code> is a tool the engine marks
+    as requiring user interaction, and for such tools the CLI discards a hook's bare
+    <code>allow</code>. Approval only counts when it happens on the plan card itself.</p>
+    <p>So the store's verdict union has exactly two members, and anything else is malformed:</p>
+<pre>// plans.ts:144-148 (compacted here)
+if (req.verdict === 'dismiss') {
+  settle(entry, { status: 'dismissed' });
+  return 'ok';
+}
+if (req.verdict !== 'reject') return 'malformed';</pre>
+    <p>The alternative — shipping an Approve button that calls <code>allow</code> anyway — would
+    have produced the worst possible artifact: a control that looks like it works, returns 200,
+    and silently does nothing, leaving the session parked while the user believes they released
+    it. Refusing to build the button is the honest encoding of an engine constraint.</p>
+    <p>The accepted cost is a genuinely asymmetric remote: away from your desk you can redirect
+    work but never green-light it.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Feedback is mandatory, and it is the payload</h2>
+    <p>A reject with an empty feedback string is rejected as malformed — the store will not let
+    you send a bare "no":</p>
+<pre>// plans.ts:151-154 (compacted here)
+// Feedback is the whole point of a remote reject: without it the model has
+// nothing to revise against, and a bare "no" is better said on the card.
+const feedback = typeof req.feedback === 'string' ? req.feedback.slice(0, FEEDBACK_CAP) : '';
+if (!feedback.trim()) return 'malformed';</pre>
+    <p>The feedback then becomes the deny message the model reads, wrapped in prose that also
+    tells it what to do next: revise, call <code>ExitPlanMode</code> again, stay in plan mode,
+    do not start implementing.</p>
+    <p>That wrapper is doing real work. A denied <code>ExitPlanMode</code> with no instructions
+    is a dead end — the model knows it was refused but not that it should try again, so it may
+    abandon planning entirely or start coding. The CLI's own rejection path tells the model to
+    revise; the hook has to reproduce that instruction itself, because it has replaced that
+    path.</p>
+    <p>What it costs: the exact prose is now load-bearing behaviour, coupled to how the model
+    responds — and prose has no type checker.</p>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Why is there no Approve button in the plan panel?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Approving remotely was judged too risky to expose</button>
+        <p class="quiz-feedback">A reasonable guess, and it would be a policy choice the team
+        could revisit. The real reason is not a judgement call at all — the capability is refused
+        upstream, so there is nothing here to decide.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The plan store has no way to reach the model</button>
+        <p class="quiz-feedback">It reaches the model on every reject: the feedback travels as the
+        deny message the model reads. The channel exists and works; it is specifically the
+        approving verdict that does not survive.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Nobody has implemented that verdict yet</button>
+        <p class="quiz-feedback">This reads like an unfinished feature but it is a closed
+        decision. Building it would produce a button that returns success and changes nothing,
+        which is why the verdict union has only two members by design.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">The CLI discards a hook allow for this tool</button>
+        <p class="quiz-feedback">Correct. <code>ExitPlanMode</code> requires user interaction, and
+        for such tools the engine drops a hook's <code>allow</code> — the approval card is the only
+        surface that can approve, so a remote Approve could never work.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============ s4 ============ -->
+<section id="s4">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>Section 3 → Section 4</h2>
+    <p class="divider-flow">Both paths so far hold a turn that the model itself paused. The last
+    one holds a turn that had already finished — which breaks the release mechanism the other
+    two rely on.</p>
+    <p class="xlink"><a href="../learning/hooks/guide/stop-loop.md">Related chapter in the hooks
+    guide: the stop loop</a></p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 4 · messages.ts</p>
+    <h2>Holding open a turn that already ended</h2>
+    <p>The other two paths intercept a tool call mid-turn. This one fires on <code>Stop</code> —
+    the moment the model has finished and is about to hand control back to you. The hook blocks
+    that stop, which reopens the turn and lets a message typed on your phone become the session's
+    next user message.</p>
+    <p>The reason text carries both the message and a set of away-mode instructions, and the
+    comment explains why they have to ride along here:</p>
+<pre>// messages.ts:44-47 (compacted here)
+// carry the away-mode instructions — `UserPromptSubmit` hooks (the
+// remote-decision injection) do NOT fire on hook-continued turns, so this
+// is the only place the reminder can ride.</pre>
+    <p>The obvious alternative is a second hook on <code>UserPromptSubmit</code> to inject that
+    context. It does not fire on a turn continued by a hook, so the instructions would silently
+    vanish exactly when they are needed. Bundling them into the one reason string is the only
+    delivery that survives.</p>
+    <p>The cost is a piece of prose duplicated in two places: the chat reader mirrors this exact
+    wording to unwrap the record back into a normal-looking drawer message. Edit one without the
+    other and a test fails — which the comment notes is the point, since it fails closed.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>The sweep that has to exist here and nowhere else</h2>
+    <p>The other stores get released by the world: a superseding registration, a tool result, a
+    closing socket. A stopped turn produces none of those — nothing further happens in that
+    session by definition, so nothing will arrive to release the hold. Left alone, every
+    finished turn would sit parked until its deadline expired.</p>
+    <p>So this store runs its own reaper, and the release condition is not about the session at
+    all — it is about <em>you</em>:</p>
+<pre>// messages.ts:189-196 (compacted here)
+export function sweepIdle(): number {
+  const thresholdSecs = getSettings().idleSecs;
+  if (thresholdSecs === 0) return 0;
+  const idle = (idleReader ?? readIdleSecs)();
+  if (idle === null || idle &gt;= thresholdSecs) return 0;
+  for (const entry of waiting) settle(entry, { status: 'released' });</pre>
+    <p>If your machine reports recent input, you are back at the keyboard, and holding the turn
+    open for a phone reply is pointless — so every hold is released at once.</p>
+    <p>Read the guard conditions as failure directions. Unreadable idle time, on Docker or
+    non-macOS, returns <code>null</code> and releases nothing, leaving the deadline timer as the
+    reaper of last resort. Never releasing is a delay; releasing wrongly would cut short a window
+    you were about to use.</p>
+    <details><summary>More detail: the reaper only exists while holds do</summary>
+      <p>The 5-second interval is created on the first hold and cleared when the last one goes,
+      and it is <code>unref()</code>'d so it cannot keep the process alive. An idle server never
+      spawns the <code>ioreg</code> subprocess that reads idle time — the cost is paid only while
+      someone is actually waiting.</p>
+    </details>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">The idle reader cannot read idle time (you are on Linux, say) and
+    returns <code>null</code>. What happens to a hold that is currently open?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">It is released immediately as a safety default</button>
+        <p class="quiz-feedback">This is the opposite of the chosen direction. Releasing on an
+        unreadable signal would close reply windows on every machine that cannot report idle time,
+        which is precisely the outcome the guard avoids.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Nothing; the deadline timer eventually reaps it</button>
+        <p class="quiz-feedback">Correct. A <code>null</code> reading makes <code>sweepIdle</code>
+        return without releasing anything, so the hold stands and its expiry timer remains the
+        reaper of last resort — the documented fail direction.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The reaper stops running for that session</button>
+        <p class="quiz-feedback">The interval keeps running as long as any hold exists; it clears
+        only when the last entry is gone. An unreadable reading affects one sweep's outcome, not
+        whether sweeps continue.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">It falls back to the transcript's last activity time</button>
+        <p class="quiz-feedback">No such fallback is wired in here. Substituting a different signal
+        would mean guessing at presence from session activity, and the code deliberately prefers
+        doing nothing over inferring it.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============ recap ============ -->
+<div class="card card-recap">
+  <p class="eyebrow">Recap</p>
+  <h1>Recap</h1>
+  <p class="recap-score">Score: <span id="score-correct">0</span> / <span id="score-total">0</span></p>
+  <p id="weak-note"></p>
+  <p>Jump back to any section:</p>
+  <button class="section-jump" data-target="s1">Section 1 — The shared shape</button>
+  <button class="section-jump" data-target="s2">Section 2 — pending.ts, the answer channel</button>
+  <button class="section-jump" data-target="s3">Section 3 — plans.ts, the refused verdict</button>
+  <button class="section-jump" data-target="s4">Section 4 — messages.ts, the reply window</button>
+  <p class="xlink" style="margin-top:1rem"><a href="../learning/hooks/README.md">Written guide
+  covering the hook side of this subsystem: the hooks learning walkthrough</a></p>
+  <p class="xlink">Next in this series: <strong>the write paths, part 2 — spawn.ts</strong>
+  (the path the dashboard initiates). Not yet built.</p>
+  <p class="stamp">built at 438f2b9</p>
+</div>
+
+</main>
+
+<nav>
+  <button id="nav-back" disabled>Back</button>
+  <button id="nav-next">Next</button>
+</nav>
+
+<script type="application/json" id="provenance">
+{
+  "commit": "438f2b96bcf9a8945cc5e5c93e8f28e61d2b3db3",
+  "generated": "2026-08-21",
+  "sources": ["server/lib/pending.ts", "server/lib/plans.ts", "server/lib/messages.ts"],
+  "sections": [
+    { "id": "s1", "title": "The shared shape", "sources": ["server/lib/pending.ts", "server/lib/plans.ts", "server/lib/messages.ts"] },
+    { "id": "s2", "title": "pending.ts, the answer channel", "sources": ["server/lib/pending.ts"] },
+    { "id": "s3", "title": "plans.ts, the refused verdict", "sources": ["server/lib/plans.ts"] },
+    { "id": "s4", "title": "messages.ts, the reply window", "sources": ["server/lib/messages.ts"] }
+  ]
+}
+</script>
+
+<script>
+(function () {
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+  var idx = 0;
+  var score = { correct: 0, total: 0 };
+  var back = document.getElementById('nav-back');
+  var next = document.getElementById('nav-next');
+  var fill = document.getElementById('progress-fill');
+
+  function isBlockedQuiz(card) {
+    return card.classList.contains('card-quiz') && card.dataset.answered !== 'true';
+  }
+
+  function show(i) {
+    if (i < 0 || i >= cards.length) return;
+    cards[idx].classList.remove('active');
+    idx = i;
+    cards[idx].classList.add('active');
+    window.scrollTo(0, 0);
+    refresh();
+  }
+
+  function refresh() {
+    back.disabled = idx === 0;
+    next.disabled = idx === cards.length - 1 || isBlockedQuiz(cards[idx]);
+    fill.style.width = (cards.length > 1 ? (idx / (cards.length - 1)) * 100 : 100) + '%';
+    if (cards[idx].classList.contains('card-recap')) renderScore();
+  }
+
+  function renderScore() {
+    document.getElementById('score-correct').textContent = String(score.correct);
+    document.getElementById('score-total').textContent = String(score.total);
+    var note = document.getElementById('weak-note');
+    if (score.total === 0) { note.textContent = 'No questions answered yet.'; return; }
+    note.textContent = score.correct === score.total
+      ? 'Every check answered correctly.'
+      : 'Worth a second pass: the sections whose checks you missed are linked below.';
+  }
+
+  cards.forEach(function (card) {
+    var opts = Array.prototype.slice.call(card.querySelectorAll('.quiz-option'));
+    opts.forEach(function (opt) {
+      var btn = opt.querySelector('.quiz-option-btn');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        if (card.dataset.answered === 'true') return;
+        card.dataset.answered = 'true';
+        opt.classList.add('revealed');
+        opts.forEach(function (o) {
+          var b = o.querySelector('.quiz-option-btn');
+          if (b) b.disabled = true;
+        });
+        score.total += 1;
+        if (opt.getAttribute('data-correct') === 'true') score.correct += 1;
+        refresh();
+      });
+    });
+  });
+
+  Array.prototype.slice.call(document.querySelectorAll('.section-jump')).forEach(function (b) {
+    b.addEventListener('click', function () {
+      var wrapper = document.getElementById(b.getAttribute('data-target'));
+      if (!wrapper) return;
+      for (var i = 0; i < cards.length; i++) {
+        if (wrapper.contains(cards[i])) { show(i); return; }
+      }
+    });
+  });
+
+  back.addEventListener('click', function () { if (!back.disabled) show(idx - 1); });
+  next.addEventListener('click', function () { if (!next.disabled) show(idx + 1); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' && !next.disabled) show(idx + 1);
+    if (e.key === 'ArrowLeft' && !back.disabled) show(idx - 1);
+  });
+
+  refresh();
+})();
+</script>
+
+</body>
+</html>
