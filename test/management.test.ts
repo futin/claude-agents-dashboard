@@ -278,6 +278,78 @@ export async function run(): Promise<number> {
     assert.ok(!allowed.has(envFile));
   }));
 
+  tally(await test('skill dir with only SKILL.md → files omitted', async () => {
+    const home = makeHome();
+    put(home, '.claude/skills/solo/SKILL.md', SKILL_MD);
+    const scope = await mgmt.readGlobalScope(home);
+    assert.strictEqual(scope.skills.length, 1);
+    assert.strictEqual(scope.skills[0].files, undefined);
+  }));
+
+  tally(await test('skill dir files: SKILL.md first then rel-sorted, sizes, nested rels, dotfiles skipped', async () => {
+    const home = makeHome();
+    put(home, '.claude/skills/rich/SKILL.md', SKILL_MD);
+    put(home, '.claude/skills/rich/zeta.md', 'z');
+    put(home, '.claude/skills/rich/references/api.md', 'ab');
+    put(home, '.claude/skills/rich/scripts/run.sh', 'abc');
+    put(home, '.claude/skills/rich/.hidden.md', 'nope');
+    put(home, '.claude/skills/rich/.git/config', 'nope');
+    const scope = await mgmt.readGlobalScope(home);
+    const files = scope.skills[0].files!;
+    assert.deepStrictEqual(files.map(f => f.rel), ['SKILL.md', 'references/api.md', 'scripts/run.sh', 'zeta.md']);
+    assert.strictEqual(files[0].size, SKILL_MD.length);
+    assert.strictEqual(files[1].size, 2);
+    assert.strictEqual(files[2].size, 3);
+    assert.strictEqual(files[3].size, 1);
+  }));
+
+  tally(await test('skill dir files: walk stops past max depth', async () => {
+    const home = makeHome();
+    put(home, '.claude/skills/deep/SKILL.md', SKILL_MD);
+    put(home, '.claude/skills/deep/a/b/c/ok.md', 'x');
+    put(home, '.claude/skills/deep/a/b/c/d/too-deep.md', 'x');
+    const scope = await mgmt.readGlobalScope(home);
+    const rels = scope.skills[0].files!.map(f => f.rel);
+    assert.ok(rels.includes('a/b/c/ok.md'));
+    assert.ok(!rels.includes('a/b/c/d/too-deep.md'));
+  }));
+
+  tally(await test('skill dir files: capped at SKILL_FILES_CAP, SKILL.md kept', async () => {
+    const home = makeHome();
+    put(home, '.claude/skills/many/SKILL.md', SKILL_MD);
+    for (let i = 0; i < mgmt.SKILL_FILES_CAP + 20; i++) {
+      put(home, `.claude/skills/many/f${String(i).padStart(4, '0')}.md`, 'x');
+    }
+    const scope = await mgmt.readGlobalScope(home);
+    const files = scope.skills[0].files!;
+    assert.strictEqual(files.length, mgmt.SKILL_FILES_CAP);
+    assert.strictEqual(files[0].rel, 'SKILL.md');
+  }));
+
+  tally(await test('skill dir files: symlinks are never listed (they would escape the servable set)', async () => {
+    const home = makeHome();
+    put(home, '.claude/skills/linky/SKILL.md', SKILL_MD);
+    const secret = put(home, '.claude/.credentials.json', '{"secret":true}');
+    fs.symlinkSync(secret, path.join(home, '.claude/skills/linky/creds.json'));
+    fs.symlinkSync(path.join(home, '.claude'), path.join(home, '.claude/skills/linky/escape'));
+    const scope = await mgmt.readGlobalScope(home);
+    assert.strictEqual(scope.skills[0].files, undefined);
+  }));
+
+  tally(await test('collectServablePaths: every listed skill file is servable; skipped dotfile is not', async () => {
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const home = makeHome();
+    put(home, '.claude/skills/rich/SKILL.md', SKILL_MD);
+    const ref = put(home, '.claude/skills/rich/references/api.md', 'ab');
+    const script = put(home, '.claude/skills/rich/scripts/run.sh', 'abc');
+    const hidden = put(home, '.claude/skills/rich/.secret.md', 'no');
+    const root = makeProjectsRoot([]);
+    const allowed = await mgmt.collectServablePaths({ lookbackHours: 24 }, { root, now: NOW, homeDir: home });
+    assert.ok(allowed.has(ref));
+    assert.ok(allowed.has(script));
+    assert.ok(!allowed.has(hidden));
+  }));
+
   tally(await test('readServableFile: member served; non-member and ..-path rejected', async () => {
     const home = makeHome();
     const skill = put(home, '.claude/skills/s/SKILL.md', SKILL_MD);

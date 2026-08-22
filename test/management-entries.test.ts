@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { buildEntries, filterEntries } from '../client/src/lib/managementEntries.js';
+import { buildEntries, filterEntries, railRows } from '../client/src/lib/managementEntries.js';
 import type { ScopeConfig } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -40,6 +40,40 @@ export function run(): number {
     assert.strictEqual(e.filePath, '/p/SKILL.md');
     assert.strictEqual(e.subgroup, 'x');
     assert.ok(e.key);
+  })) p++; else f++;
+
+  if (test('skill entry carries its dir files with abs paths + fileKind; absent when single-file', () => {
+    const g = buildEntries(scope({
+      skills: [
+        { name: 'rich', description: null, path: '/s/rich/SKILL.md', source: 'user', files: [
+          { rel: 'SKILL.md', size: 10 },
+          { rel: 'references/api.md', size: 20 },
+          { rel: 'scripts/run.sh', size: 30 }
+        ] },
+        { name: 'solo', description: null, path: '/s/solo/SKILL.md', source: 'user' }
+      ]
+    }));
+    const [rich, solo] = g.find(x => x.title === 'Skills')!.entries;
+    assert.strictEqual(rich.kind, 'file');
+    if (rich.kind !== 'file') return;
+    assert.deepStrictEqual(rich.files!.map(f => f.path), ['/s/rich/SKILL.md', '/s/rich/references/api.md', '/s/rich/scripts/run.sh']);
+    assert.deepStrictEqual(rich.files!.map(f => f.rel), ['SKILL.md', 'references/api.md', 'scripts/run.sh']);
+    assert.deepStrictEqual(rich.files!.map(f => f.fileKind), ['markdown', 'markdown', 'text']);
+    assert.deepStrictEqual(rich.files!.map(f => f.size), [10, 20, 30]);
+    if (solo.kind === 'file') assert.strictEqual(solo.files, undefined);
+  })) p++; else f++;
+
+  if (test('filterEntries matches a skill on one of its file rels', () => {
+    const groups = buildEntries(scope({
+      skills: [{ name: 'rich', description: null, path: '/s/rich/SKILL.md', source: 'user', files: [
+        { rel: 'SKILL.md', size: 1 },
+        { rel: 'references/tone-guide.md', size: 2 }
+      ] }]
+    }));
+    const hit = filterEntries(groups, 'TONE-GUIDE');
+    assert.strictEqual(hit.length, 1);
+    assert.strictEqual(hit[0].entries[0].label, 'rich');
+    assert.strictEqual(filterEntries(groups, 'nothing-here').length, 0);
   })) p++; else f++;
 
   if (test('skills sort user/project first, then plugin subgroups + labels alphabetically', () => {
@@ -119,6 +153,35 @@ export function run(): number {
     assert.strictEqual(hit[0].entries[0].label, 'study');
     assert.strictEqual(hit[0].entries[0].subgroup, 'user');
     assert.deepStrictEqual(filterEntries(groups, ''), groups);
+  })) p++; else f++;
+
+  if (test('railRows: root files first, then dir headers with their files, leaf labels', () => {
+    const files = [
+      { rel: 'SKILL.md', path: '/s/SKILL.md', size: 1, fileKind: 'markdown' as const },
+      { rel: 'notes.md', path: '/s/notes.md', size: 2, fileKind: 'markdown' as const },
+      { rel: 'references/api.md', path: '/s/references/api.md', size: 3, fileKind: 'markdown' as const },
+      { rel: 'references/tone.md', path: '/s/references/tone.md', size: 4, fileKind: 'markdown' as const },
+      { rel: 'scripts/deep/run.sh', path: '/s/scripts/deep/run.sh', size: 5, fileKind: 'text' as const }
+    ];
+    const rows = railRows(files);
+    assert.deepStrictEqual(rows.map(r => r.kind), ['file', 'file', 'dir', 'file', 'file', 'dir', 'file']);
+    assert.deepStrictEqual(
+      rows.map(r => (r.kind === 'dir' ? r.dir : r.label)),
+      ['SKILL.md', 'notes.md', 'references/', 'api.md', 'tone.md', 'scripts/deep/', 'run.sh']
+    );
+    const paths = rows.filter(r => r.kind === 'file').map(r => (r.kind === 'file' ? r.file.path : ''));
+    assert.deepStrictEqual(paths, [
+      '/s/SKILL.md', '/s/notes.md', '/s/references/api.md', '/s/references/tone.md', '/s/scripts/deep/run.sh'
+    ]);
+  })) p++; else f++;
+
+  if (test('railRows: dirs sorted after root files even when a dir sorts first by rel', () => {
+    const files = [
+      { rel: 'aaa/one.md', path: '/s/aaa/one.md', size: 1, fileKind: 'markdown' as const },
+      { rel: 'zzz.md', path: '/s/zzz.md', size: 1, fileKind: 'markdown' as const }
+    ];
+    assert.deepStrictEqual(railRows(files).map(r => r.kind), ['file', 'dir', 'file']);
+    assert.deepStrictEqual(railRows([]), []);
   })) p++; else f++;
 
   console.log(`\nmanagementEntries: ${p} passed, ${f} failed`);

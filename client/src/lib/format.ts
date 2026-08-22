@@ -7,6 +7,13 @@ export function fmtTok(n: number): string {
   return String(n || 0);
 }
 
+/** Compact file size: 0 B, 1023 B, 15.1 KB, 2.5 MB. */
+export function fmtBytes(n: number): string {
+  if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n || 0) + ' B';
+}
+
 /** Compact elapsed duration in ms: 900ms, 12s, 1m30s, 2h5m. */
 export function fmtDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '';

@@ -685,6 +685,14 @@ export interface AnalyticsResponse {
 /** Where a config item comes from: 'user', 'project', or 'plugin:<name>'. */
 export type ItemSource = string;
 
+/** One file inside a skill directory, relative to the directory that holds SKILL.md. */
+export interface SkillFile {
+  /** Path relative to the skill dir, '/'-separated (e.g. 'references/api.md'). */
+  rel: string;
+  /** Byte size on disk. */
+  size: number;
+}
+
 /** One skill / agent / command / rule / memory file (metadata only, no body). */
 export interface ConfigItem {
   /** Frontmatter name, else dir/file basename. */
@@ -694,6 +702,11 @@ export interface ConfigItem {
   /** Absolute path to the .md/.toml file. */
   path: string;
   source: ItemSource;
+  /**
+   * Skills only: every file in the skill dir (SKILL.md first, then by rel),
+   * when there is more than SKILL.md. All of them are servable.
+   */
+  files?: SkillFile[];
 }
 
 /** One hook entry, flattened from settings.json / plugin hooks.json. */
