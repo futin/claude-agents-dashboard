@@ -13,6 +13,7 @@ import { usePendingMessage } from '../hooks/usePendingMessage';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useSettings } from '../hooks/useSettings';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
+import { fmtTok } from '../lib/format';
 import { resumeEligible } from '../lib/resume';
 import { formatInterval } from '../lib/settings';
 import { surfacePill } from '../lib/surface';
@@ -96,6 +97,9 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
   const shown = useMemo(() => filterMessages(messages, mode), [messages, mode]);
   const surfaceInfo = surfacePill(session.surface);
+  // same 70% threshold the row uses — one context reading, two places.
+  const ctxPct = session.contextPct || 0;
+  const ctxWarn = ctxPct >= 70;
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -159,6 +163,15 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
           {surfaceInfo && (
             <span className={`ag-pill surface ${session.surface}`} title={surfaceInfo.title}>{surfaceInfo.label}</span>
           )}
+          <span className="spacer" />
+          {/* live context, straight off the same 3s poll that feeds the row —
+              no extra read. A drawer opened from a tapped push never showed
+              the list, so this is the only place that reader sees how full the
+              session is. */}
+          <span className="tok" title={`${session.tokens.toLocaleString()} of ${session.contextWindow.toLocaleString()} context tokens`}>
+            {fmtTok(session.tokens)} / {session.contextWindowLabel}
+          </span>
+          <span className="pct" style={{ color: ctxWarn ? 'var(--orange)' : 'var(--text)' }}>{ctxPct}%</span>
           <button className="chat-x" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
