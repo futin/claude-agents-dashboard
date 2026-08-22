@@ -469,6 +469,10 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
    drawer became impossible to close. Capped + ellipsised instead. */
 .chat-head .proj-pill,.chat-head .branch{flex-shrink:1;min-width:0;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-model{font-size:10.5px;color:var(--ink3);font-family:var(--mono);flex-shrink:0}
+/* the head is a single flex row on a phone-width drawer too: the context
+   readout never gives up width — the project/branch pills ellipsise instead. */
+.chat-head .tok,.chat-head .pct{flex-shrink:0}
+.chat-head .pct{min-width:0}
 .chat-x{font-size:12px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:4px 8px;cursor:pointer;flex-shrink:0;transition:color .15s,border-color .15s}
 .chat-x:hover{color:var(--ink);border-color:var(--hairline2)}
 .chat-filter{display:flex;gap:5px;padding:8px 16px;border-bottom:1px solid var(--hairline);flex-shrink:0}
