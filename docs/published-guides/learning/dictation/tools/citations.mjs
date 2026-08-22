@@ -3,8 +3,8 @@
  * citations.mjs — verify every `// file.ts:N-M` excerpt label still points at
  * the code it quotes.
  *
- *   node docs/learning/dictation/tools/citations.mjs
- *   node docs/learning/dictation/tools/citations.mjs --fix
+ *   node docs/published-guides/learning/dictation/tools/citations.mjs
+ *   node docs/published-guides/learning/dictation/tools/citations.mjs --fix
  *
  * Line numbers rot fast: a source file gaining 40 lines silently repoints half
  * a guide at unrelated code. Each excerpt is classified:
@@ -32,7 +32,24 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
-const REPO = path.join(ROOT, '..', '..', '..');
+
+/**
+ * Walk up to the repo root rather than hardcoding a hop count. Citation paths are
+ * repo-relative, so a wrong root reports every excerpt as `gone` — which is what a
+ * fixed `../../..` did the moment this guide moved from `docs/learning/dictation/`
+ * to `docs/published-guides/learning/dictation/` and the extra level made it point
+ * at `docs/`.
+ */
+function findRepoRoot(from) {
+  let dir = from;
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    dir = path.dirname(dir);
+  }
+  throw new Error('repo root not found (no package.json above ' + from + ')');
+}
+
+const REPO = findRepoRoot(ROOT);
 const FIX = process.argv.includes('--fix');
 const DOCS = ['README.md', 'guide/why-local-whisper.md', 'guide/render-gate.md',
               'guide/recorder-lifecycle.md'];

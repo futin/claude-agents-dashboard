@@ -10,7 +10,7 @@ advances to EOF. `readAgents` remains the whole-file oracle
 (`test/agents-cache.test.ts` asserts byte-for-byte equivalence under chunked
 appends). Per the recommendation at the bottom, the cache serves only
 `GET /api/sessions/:id`; the 3s list poll is untouched.
-**Context:** see `docs/learning/session-and-agent-tracking.md` for how subagent
+**Context:** see `docs/learning-notes/session-and-agent-tracking.md` for how subagent
 tracking works today.
 
 ## Problem
