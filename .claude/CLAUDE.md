@@ -142,6 +142,24 @@ lives in `docs/overview.md` — read the relevant `docs/subsystems/*.md` before 
 that area, and keep the vendored `/kaizen` skill (`.claude/skills/kaizen/`) in lockstep
 with the log format above (contract details: `docs/subsystems/analytics.md`).
 
+### Where study guides and lesson decks go
+
+`docs/published-guides/` is the **only** directory GitHub Pages serves, and it is served
+*as the site root* — so everything inside is world-readable and search-indexable, and
+nothing outside it is published. An allowlist directory, not a `robots.txt` denylist.
+
+- A new `/study` guide or `/tutor` deck belongs under `docs/published-guides/`. Both
+  skills ask for the output path per session (their own defaults are `learning-docs/…`);
+  answer with this one.
+- Then add its card to `docs/published-guides/index.html`. The hub is hand-maintained, so
+  a new guide is *served* but not *reachable* until it is linked.
+- Everything not meant for the public web stays outside: reference docs
+  (`docs/subsystems/`, `docs/overview.md`), records of a moment (`docs/ideas/`,
+  `docs/plans/`, `docs/superpowers/`), and raw study notes (`docs/learning-notes/`).
+- A guide's `tools/*.mjs` must find the repo root by walking up for `package.json`, never
+  by a fixed `../..` hop count. A fixed count silently repoints at `docs/` the next time a
+  guide moves, and every citation then reports as `gone`. This has now bitten twice.
+
 ## Conventions / gotchas
 
 - **ESM everywhere** (`"type": "module"`). Server imports use `.js` suffix (resolves to `.ts`

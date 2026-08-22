@@ -16,7 +16,7 @@ reference: for the endpoint table, the status codes and the accepted limits, rea
 > **Read it in a browser:** [`index.html`](./index.html) — this whole guide as one
 > page, with the diagrams drawn and every cross-reference as an in-page jump. It is
 > **generated** from these markdown files by [`tools/build.mjs`](./tools/build.mjs), so edit
-> the markdown and re-run `node docs/learning/dictation/tools/build.mjs`; never edit
+> the markdown and re-run `node docs/published-guides/learning/dictation/tools/build.mjs`; never edit
 > `index.html` by hand.
 
 <!-- study-provenance: sources=server/lib/transcribe.ts,server/api.ts,client/src/hooks/useDictation.ts,client/src/hooks/useTranscribeAvailable.ts,client/src/components/MicButton.tsx,client/src/lib/dictation.ts commit=efea9f0 date=2026-08-17 -->

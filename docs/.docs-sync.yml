@@ -82,7 +82,9 @@ out-of-scope:
     reason: records of a moment
   - path: docs/superpowers/
     reason: plans and specs — records of a moment
-  - path: docs/learning/
+  - path: docs/published-guides/
+    reason: study guides and lesson decks; regenerate rather than maintain
+  - path: docs/learning-notes/
     reason: study-session artifacts; regenerate rather than maintain
   - path: .claude/skills/
     reason: vendored skills, maintained upstream
