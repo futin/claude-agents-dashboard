@@ -113,11 +113,26 @@ export interface SpawnInput {
   effort?: string;
   /** Launch with `--remote-control`: the session registers with the account and is drivable from the phone app (docs/subsystems/spawn.md). */
   remoteControl?: boolean;
+  /**
+   * Resume `sessionId` instead of starting it fresh: argv carries
+   * `--resume <sessionId>` and NO `--session-id` — the CLI refuses that pair
+   * without `--fork-session`, and a fork is exactly what resume must not do
+   * (verified on 2.1.233: plain `--resume` keeps the id and appends to the
+   * same transcript, which is what makes the dashboard row wake up).
+   */
+  resume?: boolean;
 }
+
+/**
+ * The charset a `resume` session id must match before it is looked up — the
+ * same shape `api.ts`'s `ID_RE` holds every `:id` path segment to. Duplicated
+ * rather than imported: this module stays free of the handler layer.
+ */
+const RESUME_ID_RE = /^[A-Za-z0-9._-]+$/;
 
 /** Result of validating an untrusted POST body against {@link SpawnInput}. */
 export type ParseResult =
-  | { ok: true; input: Omit<SpawnInput, 'sessionId'> }
+  | { ok: true; input: Omit<SpawnInput, 'sessionId'>; resumeId?: string }
   | { ok: false; error: string };
 
 /**
@@ -163,6 +178,23 @@ export function parseSpawnRequest(body: unknown, ceiling: PermissionMode): Parse
   // the same drop-don't-reject rule the fields above follow.
   const remoteControl = b.remoteControl === true;
 
+  // `resume` is the one optional field that REJECTS when present-but-malformed
+  // instead of dropping: silently ignoring it would launch a fresh session
+  // somewhere the user never asked for, which is worse than any 400. A valid
+  // one also forces the identity fields off — `-n` renames and
+  // `--remote-control` registration on a resumed session are unverified CLI
+  // combos, so they are never sent.
+  if (b.resume !== undefined) {
+    if (typeof b.resume !== 'string' || b.resume === '' || !RESUME_ID_RE.test(b.resume)) {
+      return { ok: false, error: 'bad resume id' };
+    }
+    return {
+      ok: true,
+      input: { prompt, permissionMode, name: undefined, model, effort, remoteControl: false },
+      resumeId: b.resume
+    };
+  }
+
   return { ok: true, input: { prompt, permissionMode, name, model, effort, remoteControl } };
 }
 
@@ -176,7 +208,12 @@ export function parseSpawnRequest(body: unknown, ceiling: PermissionMode): Parse
  * The prompt is deliberately absent: see the module doc comment.
  */
 export function buildSpawnArgs(input: SpawnInput): string[] {
-  const args = ['-p', '--session-id', input.sessionId, '--permission-mode', input.permissionMode];
+  // Resume swaps how the id is passed and nothing else: `--resume <id>` in
+  // place of `--session-id <id>` (the CLI refuses the pair without
+  // `--fork-session`). Every append below stays mode-agnostic.
+  const args = input.resume
+    ? ['-p', '--resume', input.sessionId, '--permission-mode', input.permissionMode]
+    : ['-p', '--session-id', input.sessionId, '--permission-mode', input.permissionMode];
   if (input.model) args.push('--model', input.model);
   if (input.effort) args.push('--effort', input.effort);
   if (input.name) args.push('-n', input.name);
@@ -265,6 +302,13 @@ interface Entry {
   error?: string;
   /** When `state` became `'failed'`; undefined while still `'launching'`. Kept separate from `startedAtMs` so `FAIL_TTL_MS` measures time-since-failure, not time-since-launch. */
   failedAtMs?: number;
+  /**
+   * This launch resumes an existing session rather than starting one — its id
+   * already names a transcript on disk, so `adoptLaunched` must skip it (the
+   * first poll would otherwise delete it instantly, swallowing any failure).
+   * It leaves the store via the same TTLs, `stopLaunch`, or a failure.
+   */
+  resume: boolean;
   /** The live child, for `stopLaunch`. Null only in the (rare) synchronous-throw path. */
   child: ChildProcess | null;
 }
@@ -318,6 +362,7 @@ function toPublic(e: Entry): LaunchingSession {
   };
   if (e.exitCode !== undefined) out.exitCode = e.exitCode;
   if (e.error !== undefined) out.error = e.error;
+  if (e.resume) out.resume = true;
   return out;
 }
 
@@ -358,8 +403,12 @@ function fail(sessionId: string, exitCode: number | undefined, error: string): v
  * once stdio has actually finished draining — see its handler below for why
  * it cannot simply replace `'exit'`.
  */
-export function launch(config: Config, ref: ProjectRef, input: Omit<SpawnInput, 'sessionId'>): string {
-  const sessionId = randomUUID();
+export function launch(
+  config: Config, ref: ProjectRef, input: Omit<SpawnInput, 'sessionId'>, resumeId?: string
+): string {
+  // A resume reuses the transcript's own id — minting one would tell the CLI
+  // to fork, and the handler needs the same id back to keep the row stable.
+  const sessionId = resumeId ?? randomUUID();
   const entry: Entry = {
     sessionId,
     projectName: ref.name,
@@ -367,11 +416,12 @@ export function launch(config: Config, ref: ProjectRef, input: Omit<SpawnInput, 
     prompt: input.prompt.slice(0, PROMPT_PREVIEW_CAP),
     startedAtMs: Date.now(),
     state: 'launching',
+    resume: resumeId !== undefined,
     child: null
   };
   entries.set(sessionId, entry);
 
-  const args = buildSpawnArgs({ ...input, sessionId });
+  const args = buildSpawnArgs({ ...input, sessionId, resume: resumeId !== undefined });
   const doSpawn = spawner ?? nodeSpawn;
 
   let child: ChildProcess;
@@ -469,7 +519,12 @@ export function listLaunching(now: number = Date.now()): LaunchingSession[] {
 export function adoptLaunched(ids: string[]): number {
   let n = 0;
   for (const id of ids) {
-    if (entries.delete(id)) n++;
+    // A resume entry's id names a transcript that already exists, so seeing it
+    // in a scan proves nothing — deleting it here would swallow a failure
+    // before the user's next poll could ever render it. Resume entries leave
+    // via the TTLs in `listLaunching`, `stopLaunch`, or a failure instead.
+    const entry = entries.get(id);
+    if (entry && !entry.resume && entries.delete(id)) n++;
   }
   return n;
 }

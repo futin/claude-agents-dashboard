@@ -55,7 +55,10 @@ drawer replying and do not need telling the turn finished again.
 **⚠️ The CLI caps consecutive blocks at 8** (`CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`,
 env-raisable). Past the cap it force-ends the turn regardless of what the hook returns, so a
 phone conversation tops out at 8 replies per stretch. Documented as an accepted limit, not
-worked around.
+worked around — and no longer a dead end for dashboard-spawned sessions: once the window is
+over (capped out, expired, or dismissed), the drawer offers the
+[resume composer](spawn.md#resuming-an-ended-session-resume) instead, which relaunches the
+same session with your follow-up.
 
 ## The pieces
 

@@ -49,7 +49,9 @@ export function SessionList({ sessions, launching, onOpenChat }: Props) {
     });
   }
 
-  const phantoms = launching ?? [];
+  // A resume's id already names a real row below — its `launching` phantom
+  // would be a duplicate, so only its FAILURE is worth a row of its own.
+  const phantoms = (launching ?? []).filter(l => !l.resume || l.state === 'failed');
 
   if (sessions === null) {
     return (

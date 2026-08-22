@@ -825,6 +825,12 @@ export interface LaunchingSession {
   exitCode?: number;
   /** Set only when `state === 'failed'` — the stderr tail (capped), or a synthesized reason. */
   error?: string;
+  /**
+   * This launch resumes an existing session (`--resume`), so its id already
+   * names a real row: the client hides the `launching` phantom for it (the
+   * real row is the progress indicator) and renders only a `failed` one.
+   */
+  resume?: boolean;
 }
 
 /**
@@ -835,7 +841,8 @@ export interface LaunchingSession {
  * spawns, so this field alone can never request more than the host allows.
  */
 export interface SpawnRequest {
-  project: string;
+  /** Required for a fresh launch; ignored when `resume` is set (the session's own cwd wins). */
+  project?: string;
   prompt: string;
   name?: string;
   model?: string;
@@ -844,8 +851,17 @@ export interface SpawnRequest {
   /**
    * Launch with `--remote-control`: the session registers with the account, so
    * the phone app can see and drive it. Anything but literal `true` means off.
+   * Forced off on a resume (unverified CLI combo).
    */
   remoteControl?: boolean;
+  /**
+   * Resume this session id instead of starting fresh: the child runs
+   * `--resume <id>` in the session's own cwd and appends to the same
+   * transcript under the same id. Only sessions whose transcript says
+   * `sdk-cli` (the `dashboard` pill) qualify; malformed-when-present is a 400,
+   * never a silent fresh launch.
+   */
+  resume?: string;
 }
 
 /**

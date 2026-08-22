@@ -100,6 +100,68 @@ launch store watches the child the same way, and an account or org that refuses 
 registration surfaces it as the CLI's own startup error through the ordinary
 `failed`-entry path.
 
+## Resuming an ended session (`resume`)
+
+The spawn path's first extension, and the one its own accepted-limits list predicted: a
+dashboard session whose turn is over — the [reply window](remote-message.md) expired, was
+released, or hit the CLI's 8-block cap — is not a dead end anymore. The chat drawer of an
+ended `dashboard`-surface session offers a **resume composer** (`ResumePanel`): type a
+follow-up, tap *resume session*, and `POST /api/spawn` relaunches the same session with
+`SpawnRequest.resume: <sessionId>`.
+
+Measured against the CLI (2.1.233), same method as the mechanics above:
+
+- **Plain `--resume <id>` keeps the session id and appends to the same transcript.** The
+  resumed run's JSON result reports the *original* `session_id`, the same `.jsonl` grows,
+  and the model demonstrably recalls the earlier turns. That is what makes the feature
+  cheap: the existing row wakes up on the next poll, the open drawer live-tails the
+  continuation, and nothing downstream needed teaching.
+- **`--session-id` must NOT accompany `--resume`** — the CLI refuses the pair outright
+  unless `--fork-session` is added, and a fork (new id, new row) is exactly what resume
+  must not do. `buildSpawnArgs` therefore swaps `--session-id <id>` for `--resume <id>`
+  and changes nothing else.
+
+The request reuses the launch machinery wholesale — same toggle/probe/token/cap gates,
+same permission ladder and ceiling, prompt still stdin-only — with these differences:
+
+- **`resume` rejects when present-but-malformed** (400 `bad resume id`), the opposite of
+  the cosmetic fields' drop-don't-reject rule: silently ignoring it would start a fresh
+  session somewhere the user never asked for.
+- **Membership check against enumerated transcripts, never a path.** The id is matched
+  against `listTranscripts(projectsRoot())` (`unknown session` otherwise), and the child's
+  cwd is the *transcript's own* `cwd` — `body.project` is ignored.
+- **`dashboard`-surface only** (`sessionSurface(entrypoint) === 'dashboard'`, i.e.
+  `sdk-cli`): a terminal session is terminal-owned, and resuming one here could race a
+  still-open interactive session on the same transcript. 400 `only dashboard sessions can
+  be resumed`.
+- **Alive sessions 409.** A held question, plan, or reply window means the process is
+  still running (`session is still running`); a resume already in flight for that id is
+  `already resuming`. The client-side gate (`resumeEligible`, `client/src/lib/resume.ts`)
+  hides the composer in those states too — plus while `working` — but the server checks
+  are the boundary, the gate is UX.
+- **`name` and `--remote-control` are forced off** on a resume: renaming or
+  account-registering a *resumed* session are unverified CLI combos, so they are never
+  sent. `model`/`effort`/`permissionMode` pass through as usual.
+
+**The store treats a resume entry specially.** Its id names a transcript that already
+exists, so `adoptLaunched` skips it — adoption-on-scan would delete the entry on the first
+poll and swallow any failure before the UI could render it. A resume entry leaves the
+store the ordinary ways instead: `LAUNCH_TTL_MS` (60s) while `launching`, `FAIL_TTL_MS`
+after a failure, or `stopLaunch`. Two visible consequences: a `launching` resume holds one
+of the `MAX_LAUNCHING` slots for up to 60s (so resumes count toward the accident rail,
+which is right — they are real processes), and the client (`SessionList`) hides a
+`launching` resume phantom — the real row is the progress indicator — while still
+rendering a `failed` one, which is the only signal a broken resume gets
+(`LaunchingSession.resume` carries the flag across the contract).
+
+⚠️ **The transcript's `entrypoint` decides resumability, and the *server's environment*
+decides the entrypoint.** A `claude` child inherits `CLAUDE_CODE_ENTRYPOINT` from the
+dashboard server's own environment: started from a plain terminal the children stamp
+`sdk-cli` (the `dashboard` pill, resumable), but a server started from inside another
+Claude Code context would pass its marker through — the children stamp that instead, get
+no pill, and refuse to resume. Observed directly during this feature's verification, not
+hypothesized. Run the dashboard from a plain shell.
+
 ## A spawned row says `dashboard`
 
 Once the launch is adopted it is an ordinary row — which was the problem: nothing on it
@@ -261,13 +323,15 @@ just costs you the ability to stop it remotely. Named and accepted, not fixed.
 | Toolbar's `+ New` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
 | `SessionList`'s phantom row | renders each `launching` entry above the real rows — project, truncated prompt, `starting…` or (for `failed`) the error — and disappears on its own once the real row adopts the id; never interactive |
 | `sessionSurface` (`server/lib/scan.ts`) | maps the transcript's `entrypoint` → `Session.surface`; `sdk-cli` ⇒ `dashboard`, everything else ⇒ `local` |
+| `client/src/components/ResumePanel.tsx` | the resume composer pinned in an ended dashboard session's chat drawer — textarea + mic + *resume session*, POSTing `useSpawn().launch({prompt, resume: id})` |
+| `client/src/lib/resume.ts` | `resumeEligible` — the pure gate deciding when the drawer offers that composer (dashboard surface, nothing pending, turn over, spawn available); unit-tested like every other client lib |
 | `client/src/lib/surface.ts` | the pill's label + tooltip, one copy shared by `SessionRow` and the `ChatDrawer` header |
 
 ## Endpoints
 
 | Method | Path | Codes |
 |---|---|---|
-| `POST` | `/api/spawn` | 200 `{sessionId}` (`SpawnResponse`); 400 malformed body / unknown project / empty or oversized prompt; 403 bad token; 404 remote answers off *or* feature off; 429 `MAX_LAUNCHING` launches already in flight; 500 spawn threw |
+| `POST` | `/api/spawn` | 200 `{sessionId}` (`SpawnResponse`); 400 malformed body / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target; 403 bad token; 404 remote answers off *or* feature off; 409 resume of a still-running or already-resuming session; 429 `MAX_LAUNCHING` launches already in flight; 500 spawn threw |
 | `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}`; 400 bad id shape; 403 bad token; 404 remote answers off *or* no live launch for that id |
 
 Both gated by the same `tokenOk` (`api.ts`) the other three write paths use — an
@@ -297,8 +361,11 @@ What it counts is narrow on both axes, and both are deliberate:
 
 `serveSpawn`'s check order: is the switch on (`getState`) → is the feature configured
 (`probeSpawn`) → who's asking (`tokenOk`) → is anything already in flight
-(`MAX_LAUNCHING`) → does the named project exist (`resolveProject`) → is the rest of the
-request usable (`parseSpawnRequest`). Note that the probe runs *before* the token check,
+(`MAX_LAUNCHING`) → is the request usable (`parseSpawnRequest`, pure — it also decides
+fresh-vs-resume) → then the filesystem step for the chosen shape: `resolveProject` for a
+fresh launch, the transcript hunt plus liveness checks for a resume. Parse moving ahead
+of `resolveProject` is deliberate (cheapest first), so a fresh request with both a bad
+prompt and an unknown project now reports the prompt. Note that the probe runs *before* the token check,
 which is the opposite of `serveTranscribe`'s documented order — and that divergence is
 harmless rather than principled, so **neither one should be "corrected" into matching the
 other**: `GET /api/health` already publishes `spawnAvailable` unauthenticated and already
@@ -398,9 +465,6 @@ Each of the following was considered during design and deliberately left out of 
 feature rather than overlooked — the next reader shouldn't re-litigate them without a
 new reason:
 
-- **No `--resume`.** Reviving a stopped session is the obvious next step — same spawn
-  path plus a `--resume <id>` sourced from an enumerated row — but this path proves
-  itself first.
 - **No `--worktree` isolation.** Would keep a phone-launched session off your dirty
   tree; deferred so v1 has one spawn path, not two.
 - **No budget cap (`--max-budget-usd`).** A real rail on an unattended run; not shipped

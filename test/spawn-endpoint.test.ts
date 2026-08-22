@@ -23,6 +23,7 @@ import path from 'node:path';
 
 import { serveSpawn, serveSpawnStop } from '../server/api.js';
 import { loadConfig } from '../server/lib/config.js';
+import { register as registerMessage, resetStore as resetMessages } from '../server/lib/messages.js';
 import { resetState } from '../server/lib/remoteState.js';
 import {
   MAX_LAUNCHING, adoptLaunched, launch, listLaunching, resetLaunches, resetSpawnProbe, setSpawner
@@ -260,6 +261,106 @@ export async function run(): Promise<number> {
 
       const reply = await post((req, res) => void serveSpawn(cfg, req, res), BAD_BODY);
       assert.equal(reply.status, 400, 'no live launches left, so nothing to cap');
+    });
+  }));
+
+  /* --------------------------------------------------------------- resume */
+
+  // A fixed uuid pair for the resume fixtures below.
+  const RES_ID = '22222222-2222-4222-8222-222222222222';
+  const LOCAL_ID = '33333333-3333-4333-8333-333333333333';
+
+  /**
+   * Point `projectsRoot()` (which reads `os.homedir()`, and POSIX node reads
+   * `$HOME`) at a throwaway home containing exactly the transcripts a test
+   * plants: RES_ID as a dashboard (`sdk-cli`) session whose cwd is the fake
+   * home itself, LOCAL_ID as a terminal (`cli`) one.
+   */
+  async function withResumeHome(
+    envBody: string, fn: (cfg: ReturnType<typeof loadConfig>) => Promise<void>
+  ): Promise<void> {
+    await withEnv(envBody, async cfg => {
+      const home = process.cwd(); // withEnv already chdir'd to a fresh tmpdir
+      const proj = path.join(home, '.claude', 'projects', '-fake-proj');
+      fs.mkdirSync(proj, { recursive: true });
+      const rec = (entrypoint: string): string => JSON.stringify({
+        entrypoint, cwd: home, timestamp: '2026-08-22T10:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'hi' }] }
+      }) + '\n';
+      fs.writeFileSync(path.join(proj, `${RES_ID}.jsonl`), rec('sdk-cli'));
+      fs.writeFileSync(path.join(proj, `${LOCAL_ID}.jsonl`), rec('cli'));
+      const prevHome = process.env.HOME;
+      try {
+        process.env.HOME = home;
+        resetMessages();
+        await fn(cfg);
+      } finally {
+        if (prevHome === undefined) delete process.env.HOME; else process.env.HOME = prevHome;
+        resetMessages();
+      }
+    });
+  }
+
+  check(await testAsync('resume of an unknown session id is 400 — never a fresh launch in disguise', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      setSpawner(fakeSpawner());
+      const body = JSON.stringify({ prompt: 'continue', resume: '44444444-4444-4444-8444-444444444444' });
+      const reply = await post((req, res) => void serveSpawn(cfg, req, res), body);
+      assert.equal(reply.status, 400);
+      assert.equal(reply.json?.error, 'unknown session');
+      assert.equal(listLaunching().length, 0, 'nothing may have spawned');
+    });
+  }));
+
+  check(await testAsync('resume of a terminal (non-dashboard) session is 400 — terminal sessions stay terminal-owned', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      setSpawner(fakeSpawner());
+      const body = JSON.stringify({ prompt: 'continue', resume: LOCAL_ID });
+      const reply = await post((req, res) => void serveSpawn(cfg, req, res), body);
+      assert.equal(reply.status, 400);
+      assert.equal(reply.json?.error, 'only dashboard sessions can be resumed');
+      assert.equal(listLaunching().length, 0);
+    });
+  }));
+
+  check(await testAsync('resume while the session still holds a reply window is 409 — it is alive, not stale', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      setSpawner(fakeSpawner());
+      registerMessage(RES_ID, 60_000, () => undefined);
+      const body = JSON.stringify({ prompt: 'continue', resume: RES_ID });
+      const reply = await post((req, res) => void serveSpawn(cfg, req, res), body);
+      assert.equal(reply.status, 409);
+      assert.equal(reply.json?.error, 'session is still running');
+      assert.equal(listLaunching().length, 0);
+    });
+  }));
+
+  check(await testAsync('a second resume of the same session while one is launching is 409', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      setSpawner(fakeSpawner());
+      const body = JSON.stringify({ prompt: 'continue', resume: RES_ID });
+      const first = await post((req, res) => void serveSpawn(cfg, req, res), body);
+      assert.equal(first.status, 200);
+      const second = await post((req, res) => void serveSpawn(cfg, req, res), body);
+      assert.equal(second.status, 409);
+      assert.equal(second.json?.error, 'already resuming');
+    });
+  }));
+
+  check(await testAsync('resume happy path: 200 with the SAME session id, child spawned with --resume in the session cwd', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      const calls: Array<{ args: string[]; options: Record<string, unknown> }> = [];
+      setSpawner(((command: string, args: string[], options: object) => {
+        calls.push({ args: args.slice(), options: { ...options } });
+        const child = new FakeChild();
+        return child as unknown as ChildProcess;
+      }) as Spawner);
+      const body = JSON.stringify({ prompt: 'pick it back up', resume: RES_ID });
+      const reply = await post((req, res) => void serveSpawn(cfg, req, res), body);
+      assert.equal(reply.status, 200);
+      assert.equal((reply.json as { sessionId?: string })?.sessionId, RES_ID);
+      assert.deepEqual(calls[0].args.slice(0, 3), ['-p', '--resume', RES_ID]);
+      assert.equal(calls[0].options.cwd, process.cwd(), "child cwd is the session transcript's cwd");
     });
   }));
 
