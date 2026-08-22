@@ -1,16 +1,14 @@
 import { useEffect, useState } from 'react';
 
 import MicButton from './MicButton';
+import { MinimisedPanel, PanelHead } from './PanelChrome';
 import { appendTranscript } from '../lib/dictation';
+import { collapsedSummary, fmtLeft } from '../lib/panelCollapse';
 import type { PendingMessageState } from '../hooks/usePendingMessage';
 
 /** Seconds left in the window, clamped at 0. */
 function secsLeft(expiresAt: string): number {
   return Math.max(0, Math.ceil((Date.parse(expiresAt) - Date.now()) / 1000));
-}
-
-function fmtLeft(s: number): string {
-  return s >= 120 ? `${Math.floor(s / 60)}m` : `${s}s`;
 }
 
 /**
@@ -28,11 +26,14 @@ export default function MessagePanel({ state }: { state: PendingMessageState }) 
   const [text, setText] = useState('');
   const [tokenDraft, setTokenDraft] = useState('');
   const [left, setLeft] = useState(0);
+  const [minimised, setMinimised] = useState(false);
 
-  // A new window (or a fresh drawer) starts from a clean slate.
+  // A new window (or a fresh drawer) starts from a clean slate — expanded
+  // included, so a fresh window is never hidden behind an old stub.
   const messageId = pending?.messageId ?? null;
   useEffect(() => {
     setText('');
+    setMinimised(false);
   }, [messageId]);
 
   // 1s countdown while a window is open — typing against an invisible
@@ -65,14 +66,25 @@ export default function MessagePanel({ state }: { state: PendingMessageState }) 
 
   if (!pending) return null;
 
+  if (minimised) {
+    return (
+      <MinimisedPanel
+        badge="turn finished"
+        summary={collapsedSummary({ kind: 'message', secsLeft: left })}
+        onExpand={() => setMinimised(false)}
+      />
+    );
+  }
+
   const busy = phase === 'submitting';
 
   return (
     <div className="qpanel">
-      <div className="qp-head">
-        <span className="qp-badge">turn finished</span>
-        <span className="qp-hint">reply to continue it · closes in {fmtLeft(left)}</span>
-      </div>
+      <PanelHead
+        badge="turn finished"
+        hint={`reply to continue it · closes in ${fmtLeft(left)}`}
+        onMinimise={() => setMinimised(true)}
+      />
 
       {needsToken && (
         <div className="qp-token">

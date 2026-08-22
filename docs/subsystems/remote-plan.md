@@ -121,6 +121,11 @@ tunnel needs `ANSWER_TOKEN`). It is an **instruction, not a gate**: the model fo
 like any context, and the hard gates (the plan card, permission dialogs) sit exactly where
 they did.
 
+`PlanPanel` minimises to a one-line stub through the same shared chrome the question panel
+uses (`PanelHead` / `MinimisedPanel`, text from `lib/panelCollapse.ts`) — see
+[remote-answer](remote-answer.md). Per-panel state, reset on a new `planId`, never
+persisted: a re-proposed plan always arrives expanded.
+
 ## Install
 
 ```bash
@@ -147,6 +152,8 @@ same failure mode, and the same one setting as
     - scripts/plan-remote-hook.sh
     - scripts/remote-decision-hook.sh
     - client/src/components/PlanPanel.tsx
+    - client/src/components/PanelChrome.tsx
+    - client/src/lib/panelCollapse.ts
     - client/src/hooks/usePendingPlan.ts
     - client/src/components/SessionRow.tsx
   kind: subsystem

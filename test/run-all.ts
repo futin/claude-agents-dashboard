@@ -36,6 +36,7 @@ import { run as runResumeEligible } from './resume-eligible.test.js';
 import { run as runSurface } from './surface.test.js';
 import { run as runDecodePath } from './decode-path.test.js';
 import { run as runFormat } from './format.test.js';
+import { run as runPanelCollapse } from './panel-collapse.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -75,6 +76,7 @@ failed += runResumeEligible();
 failed += runSurface();
 failed += runDecodePath();
 failed += runFormat();
+failed += runPanelCollapse();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);
