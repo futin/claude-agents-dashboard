@@ -667,7 +667,7 @@ export async function serveMessageWait(config: Config, req: IncomingMessage, res
   if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
 
   const body = await readJsonBody(req) as
-    { sessionId?: unknown; timeoutMs?: unknown; permissionMode?: unknown; stopHookActive?: unknown } | null;
+    { sessionId?: unknown; timeoutMs?: unknown; permissionMode?: unknown; stopHookActive?: unknown; headless?: unknown } | null;
   if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
@@ -675,10 +675,13 @@ export async function serveMessageWait(config: Config, req: IncomingMessage, res
 
   let messageId = '';
   res.on('close', () => { if (messageId) cancelMessage(sessionId, messageId); });
+  // Strictly `=== true`, same rule as spawn's `remoteControl`: anything else
+  // fails soft to the terminal-backed default, and a caller "lying" headless
+  // only opts its own hold out of the idle release — the deadline still caps it.
   messageId = registerMessage(sessionId, clampTimeout(body.timeoutMs), (result: MessageWaitResult) => {
     if (res.writableEnded) return;
     sendJson(res, 200, result);
-  });
+  }, body.headless === true);
   if (res.destroyed) cancelMessage(sessionId, messageId);
 
   // Mid-conversation stops (stop_hook_active) don't re-push — you are already

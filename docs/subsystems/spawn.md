@@ -41,7 +41,11 @@ Headless `-p` runs anywhere the server itself runs, writes an ordinary transcrip
 any other session, and — because it fires the same global hooks a terminal session
 does — inherits remote `AskUserQuestion` and the `Stop` reply window for free. Neither
 of those features had to be taught about spawned sessions; they just work, because a
-headless run looks like any other run to the hooks that matter. "For free" means
+headless run looks like any other run to the hooks that matter. One deliberate exception
+since: the reply window's *at-desk* gates do not apply to headless runs — the hook skips
+its idle check and the server's idle sweep skips their holds, because sitting down at the
+keyboard gives you no terminal to continue this session in (see
+[remote-message](remote-message.md#the-released-status-and-the-idle-sweep)). "For free" means
 *inherited*, not *guaranteed*: whatever those hooks are (or aren't) configured to do on
 this host is what a spawned session gets — see the `Stop` `timeout` warning at the top.
 

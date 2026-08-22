@@ -6,6 +6,9 @@
 # Two paths out of every run:
 #   at the desk / feature off → POST /api/notify/event (the old fire-and-forget
 #     push trigger) and exit 0 — byte-for-byte the pre-feature behaviour;
+#     ("at the desk" is skipped for headless sessions — see HEADLESS below:
+#     a dashboard-spawned `claude -p` has no terminal, so the desk gives you
+#     no other way to reply and the hold must open regardless of idle);
 #   away + remote answers on  → POST /api/messages/wait, held. A reply becomes
 #     {"decision":"block","reason":…} on stdout — the ONLY output shape the CLI
 #     accepts for a Stop block (verified against 2.1.233; reason is fed to the
@@ -47,6 +50,16 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 [ -n "$SESSION_ID" ] || exit 0
 PERM_MODE=$(printf '%s' "$INPUT" | jq -r '.permission_mode // empty')
 
+# Headless detection. This hook inherits the `claude` process's controlling
+# terminal: a dashboard-spawned `claude -p` runs detached with none, so
+# `ps -o tty=` prints `??` (macOS; `?` on Linux), while a terminal session
+# prints its tty name. Verified both ways against this host's `ps`. Unreadable
+# output fails to "terminal" — never exempt a session on a guess; the worst
+# case is today's behaviour (the desk gate closes the window).
+TTY_NAME=$(ps -o tty= -p $$ 2>/dev/null | tr -d '[:space:]')
+HEADLESS=false
+case "$TTY_NAME" in '??'|'?') HEADLESS=true ;; esac
+
 AUTH=()
 if [ -f "$TOKEN_FILE" ]; then
   AUTH=(-H "Authorization: Bearer $(tr -d '\n' < "$TOKEN_FILE")")
@@ -74,8 +87,10 @@ IDLE_MIN_S="${CLAUDE_DASHBOARD_IDLE_SECS:-$(printf '%s' "$HEALTH" | jq -r '.idle
 case "$IDLE_MIN_S" in ''|*[!0-9]*) IDLE_MIN_S=60 ;; esac
 
 # At the keyboard → no hold (you can just type in the terminal). Unreadable
-# idle counts as at-desk — never park a session on a guess.
-if [ "$IDLE_MIN_S" != "0" ]; then
+# idle counts as at-desk — never park a session on a guess. Headless sessions
+# skip this gate entirely: there is no terminal to type into, so the dashboard
+# window is the only channel whether you are at the desk or not.
+if [ "$HEADLESS" != "true" ] && [ "$IDLE_MIN_S" != "0" ]; then
   IDLE_S=$(ioreg -c IOHIDSystem 2>/dev/null \
     | awk '/HIDIdleTime/ {print int($NF / 1000000000); exit}')
   case "$IDLE_S" in
@@ -91,8 +106,9 @@ BODY=$(jq -cn \
   --arg sid "$SESSION_ID" \
   --arg pm "$PERM_MODE" \
   --argjson sha "$SHA" \
+  --argjson hl "$HEADLESS" \
   --argjson t "$((TIMEOUT_S * 1000))" \
-  '{sessionId: $sid, timeoutMs: $t, permissionMode: $pm, stopHookActive: $sha}') || notify_fallback
+  '{sessionId: $sid, timeoutMs: $t, permissionMode: $pm, stopHookActive: $sha, headless: $hl}') || notify_fallback
 
 # Register and hold. The server resolves this at the deadline (or the moment
 # you touch the keyboard — the idle sweep); curl's cap is only a backstop. A

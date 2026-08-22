@@ -64,7 +64,7 @@ same session with your follow-up.
 
 | Piece | What it does |
 |---|---|
-| `scripts/stop-notify-hook.sh` | Extended in place, not duplicated — a second hook would race the notify POST and double-push. Away + remote answers on → holds; otherwise the pre-feature `notify_fallback` path (`POST /api/notify/event`), byte-for-byte unchanged. Failed wait POST (non-2xx) also falls back to plain notify POST |
+| `scripts/stop-notify-hook.sh` | Extended in place, not duplicated — a second hook would race the notify POST and double-push. Away + remote answers on → holds; otherwise the pre-feature `notify_fallback` path (`POST /api/notify/event`), byte-for-byte unchanged. Failed wait POST (non-2xx) also falls back to plain notify POST. Headless sessions (no controlling TTY — `ps -o tty=` prints `??`; the dashboard's own `-p` launches) skip the at-desk gate and hold regardless of idle, sending `headless: true` in the wait body |
 | `POST /api/messages/wait` | `serveMessageWait` — held open until an answer, a dismiss, the deadline, an idle release, or a supersede |
 | `GET /api/sessions/:id/message` | `serveSessionMessage` — what the browser polls, at the configured refresh rate (`usePendingMessage` reads `refreshMs` from `useSettings`, exactly as `usePendingPlan`/`usePendingQuestion` do) |
 | `POST /api/sessions/:id/message-answer` | `serveSessionMessageAnswer` — `{messageId, text}` or `{messageId, dismiss: true}`. Token-gated |
@@ -116,9 +116,26 @@ drawer — walking away is what opened the window, so walking back should close 
    [push-notify](push-notify.md#fail-directions)), because guessing wrong here ends a
    session early instead of merely sending an extra ping. Same direction `ask-remote-hook.sh`
    takes for the same reason.
-4. Otherwise (a real reading below the threshold) → every open entry settles as `released`;
-   each hook's held `/api/messages/wait` call returns with that status, exits 0, and the
-   session stops — within ~5s of the first keystroke.
+4. Otherwise (a real reading below the threshold) → every open **terminal-backed** entry
+   settles as `released`; each hook's held `/api/messages/wait` call returns with that
+   status, exits 0, and the session stops — within ~5s of the first keystroke.
+
+**Headless holds are exempt from the sweep.** "Back at the keyboard" ends a hold because
+you can type the follow-up in the terminal instead — but a [dashboard-spawned](spawn.md)
+`claude -p` session has no terminal, so the desk gives you no other channel and releasing
+its window would orphan the session mid-conversation. The hook detects the missing
+controlling TTY (`??` from `ps -o tty=`, verified both ways: a detached spawn reads `??`,
+a pty session reads its tty name) and sends `headless: true`; unreadable TTY output fails
+to "terminal", so a session is never exempted on a guess. `serveMessageWait` accepts it
+only as a strict `=== true` (the same fail-soft rule as spawn's `remoteControl` — and a
+caller "lying" headless only opts its own hold out of the release; the deadline still caps
+it), `register` stamps the entry, and `sweepIdle` releases only unstamped ones. The same
+gate is skipped hook-side, so the window *opens* at the desk too, not just survives it.
+While only headless holds exist, `sweepIdle` returns before reading idle at all — no
+`ioreg` spawns for holds it could never release. Everything else still ends a headless
+hold: the deadline, an answer, a dismiss, a supersede, and `dismissAll` (the remote-answer
+toggle flipping off clears headless holds too, deliberately — the switch means "stop
+accepting remote input", which a headless session is not excused from).
 
 `released` is never pushed into the model — it is not an `answered` result, so the hook
 never prints a block. It differs from `dismissed` (you chose "let it stop" from the panel)

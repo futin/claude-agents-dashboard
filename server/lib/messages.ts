@@ -35,6 +35,13 @@ interface Entry {
   askedAt: string;
   expiresAt: string;
   timer: NodeJS.Timeout;
+  /**
+   * The session runs headless (`claude -p`, the dashboard `+ New` path) — no
+   * terminal exists, so "back at the keyboard" gives the user no other way to
+   * reply. The idle sweep skips these; only the deadline, an answer, a dismiss,
+   * or a supersede ends them.
+   */
+  headless: boolean;
   /** Completes the hook's held response. Called at most once. */
   resolve: (r: MessageWaitResult) => void;
 }
@@ -78,7 +85,8 @@ function settle(entry: Entry, result: MessageWaitResult): void {
 export function register(
   sessionId: string,
   timeoutMs: number,
-  resolve: (r: MessageWaitResult) => void
+  resolve: (r: MessageWaitResult) => void,
+  headless = false
 ): string {
   const prev = entries.get(sessionId);
   if (prev) settle(prev, { status: 'superseded' });
@@ -91,6 +99,7 @@ export function register(
     askedAt: new Date(now).toISOString(),
     expiresAt: new Date(now + timeoutMs).toISOString(),
     timer: setTimeout(() => settle(entry, { status: 'timeout' }), timeoutMs),
+    headless,
     resolve
   };
   entries.set(sessionId, entry);
@@ -180,7 +189,10 @@ export function setIdleReader(fn: (() => number | null) | null): void {
 }
 
 /**
- * Release every hold if the user is back at the keyboard. Returns how many.
+ * Release every terminal-backed hold if the user is back at the keyboard.
+ * Returns how many. Headless holds are skipped: coming back to the desk gives
+ * their sessions no terminal to type into, so the dashboard window stays the
+ * only channel and stays open until answered, dismissed, or timed out.
  *
  * Fail directions: unreadable idle (Docker, non-macOS) → never release — the
  * deadline timer is the reaper of last resort. `idleSecs === 0` means the idle
@@ -188,13 +200,14 @@ export function setIdleReader(fn: (() => number | null) | null): void {
  */
 export function sweepIdle(): number {
   if (entries.size === 0) return 0;
+  const releasable = [...entries.values()].filter(e => !e.headless);
+  if (releasable.length === 0) return 0; // nothing to release — don't spawn ioreg
   const thresholdSecs = getSettings().idleSecs;
   if (thresholdSecs === 0) return 0;
   const idle = (idleReader ?? readIdleSecs)();
   if (idle === null || idle >= thresholdSecs) return 0;
-  const waiting = [...entries.values()];
-  for (const entry of waiting) settle(entry, { status: 'released' });
-  return waiting.length;
+  for (const entry of releasable) settle(entry, { status: 'released' });
+  return releasable.length;
 }
 
 /**

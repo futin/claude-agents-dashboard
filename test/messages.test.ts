@@ -207,6 +207,58 @@ export async function run(): Promise<number> {
     });
   })) p++; else f++;
 
+  if (test('sweepIdle releases only terminal-backed holds — headless ones keep waiting', () => {
+    inTmpCwd(() => {
+      resetStore();
+      setSettings({ idleSecs: 60 });
+      const terminal = waiter(); const headless = waiter();
+      register('s1', 60_000, terminal.resolve);
+      register('s2', 60_000, headless.resolve, true);
+      setIdleReader(() => 3); // back at the keyboard
+      try {
+        assert.strictEqual(sweepIdle(), 1);
+        assert.deepStrictEqual(terminal.results, [{ status: 'released' }]);
+        assert.strictEqual(headless.results.length, 0);
+        assert.deepStrictEqual([...messageSessionIds()], ['s2']);
+      } finally {
+        setIdleReader(null);
+      }
+    });
+  })) p++; else f++;
+
+  if (test('sweepIdle never reads idle while only headless holds exist', () => {
+    inTmpCwd(() => {
+      resetStore();
+      setSettings({ idleSecs: 60 });
+      const w = waiter();
+      register('s1', 60_000, w.resolve, true);
+      let reads = 0;
+      setIdleReader(() => { reads++; return 3; });
+      try {
+        assert.strictEqual(sweepIdle(), 0);
+        assert.strictEqual(reads, 0);
+      } finally {
+        setIdleReader(null);
+      }
+    });
+  })) p++; else f++;
+
+  if (await testAsync('a headless hold still ends at its deadline', async () => {
+    resetStore();
+    const w = waiter();
+    register('s1', 10, w.resolve, true);
+    await new Promise(r => setTimeout(r, 40));
+    assert.deepStrictEqual(w.results, [{ status: 'timeout' }]);
+  })) p++; else f++;
+
+  if (test('dismissAll releases headless holds too (toggle-off clears everything)', () => {
+    resetStore();
+    const w = waiter();
+    register('s1', 60_000, w.resolve, true);
+    assert.strictEqual(dismissAll(), 1);
+    assert.deepStrictEqual(w.results, [{ status: 'dismissed' }]);
+  })) p++; else f++;
+
   if (test('sweepIdle returns 0 when idleSecs is 0 (idle check disabled)', () => {
     inTmpCwd(() => {
       resetStore();
