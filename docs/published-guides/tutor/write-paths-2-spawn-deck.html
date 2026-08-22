@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<!-- tutor-deck -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The write paths, part 2 — spawn.ts — a tutor lesson</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1c20;
+    --muted: #5b6270;
+    --card: #f6f7f9;
+    --line: #d9dde3;
+    --accent: #2f6feb;
+    --correct: #1f8a4c;
+    --wrong: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #eceef1;
+      --muted: #a3a8b0;
+      --card: #2a2e35;
+      --line: #3a404a;
+      --accent: #6ea3ff;
+      --correct: #57d68d;
+      --wrong: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    font-size: 17px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  #progress-track { height: 4px; background: var(--line); flex: 0 0 auto; }
+  #progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .18s ease; }
+  main { flex: 1 1 auto; padding: 18px 16px 24px; max-width: 44rem; width: 100%; margin: 0 auto; }
+  .card { display: none; }
+  .card.active { display: block; }
+  h1 { font-size: 1.35rem; line-height: 1.3; margin: .2rem 0 .8rem; }
+  h2 { font-size: 1.12rem; line-height: 1.3; margin: .2rem 0 .7rem; }
+  p { margin: 0 0 .85rem; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
+  pre {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .82rem;
+    line-height: 1.45;
+    margin: 0 0 .9rem;
+  }
+  .eyebrow { color: var(--muted); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 .35rem; }
+  details { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 .9rem; background: var(--card); }
+  summary { cursor: pointer; font-weight: 600; font-size: .92rem; }
+  details p { margin: .7rem 0 0; font-size: .95rem; }
+  .quiz-prompt { font-weight: 600; }
+  .quiz-options { display: flex; flex-direction: column; gap: 10px; }
+  .quiz-option-btn {
+    display: block; width: 100%; text-align: left;
+    font: inherit; font-size: .98rem;
+    color: var(--fg); background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 13px 14px; cursor: pointer; min-height: 46px;
+  }
+  .quiz-option-btn:disabled { cursor: default; }
+  .quiz-feedback {
+    display: none;
+    color: var(--muted); font-size: .93rem;
+    margin: 8px 2px 2px; padding-left: 10px;
+    border-left: 2px solid var(--line);
+  }
+  .quiz-option.revealed .quiz-feedback { display: block; }
+  .quiz-option.revealed[data-correct="true"] .quiz-option-btn { border-color: var(--correct); border-width: 2px; }
+  .quiz-option.revealed[data-correct="false"] .quiz-option-btn { border-color: var(--wrong); border-width: 2px; }
+  .divider-flow { color: var(--muted); font-size: .95rem; margin-bottom: 1rem; }
+  .xlink { font-size: .92rem; }
+  a { color: var(--accent); }
+  .recap-score { font-size: 1.5rem; font-weight: 700; margin: .2rem 0 1rem; }
+  .section-jump {
+    display: block; width: 100%; text-align: left;
+    font: inherit; font-size: .95rem; color: var(--fg);
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px; padding: 11px 12px; margin-bottom: 8px; cursor: pointer;
+  }
+  .stamp { color: var(--muted); font-size: .8rem; margin-top: 1.2rem; }
+  nav {
+    flex: 0 0 auto; display: flex; gap: 12px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line); background: var(--bg);
+  }
+  nav button {
+    flex: 1; font: inherit; font-size: 1rem; padding: 13px 10px;
+    border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--fg); cursor: pointer; min-height: 48px;
+  }
+  nav button:disabled { opacity: .4; cursor: default; }
+  svg { max-width: 100%; height: auto; display: block; margin: 0 0 .9rem; }
+  @media (min-width: 780px) { body { font-size: 18px; } main { padding: 28px 24px 34px; } }
+</style>
+</head>
+<body>
+
+<div id="progress-track"><div id="progress-fill"></div></div>
+
+<main>
+
+<!-- ============ opener ============ -->
+<div class="card card-mental active">
+  <p class="eyebrow">Mental model</p>
+  <h1>The path that starts the conversation</h1>
+  <p>Every other write path in this dashboard answers a question that was already waiting. A
+  Claude Code <em>hook</em> — a script the CLI shells out to at a named moment in a turn — calls
+  this server and then refuses to return, parking the turn on an open HTTP response; your phone
+  reads what the hook registered, you tap, and that tap resolves the held response. Three files
+  do that, and they share one shape: a <code>Map</code> of session id to an entry whose most
+  important field is an injected <code>resolve</code> function, at most one entry per session,
+  and a single <code>settle</code> funnel every exit runs through — plus a reaper, because
+  nothing else will ever come along to release a hold.</p>
+  <p><code>spawn.ts</code> inverts all of it. There is no hook, no parked turn, no held response.
+  The dashboard is the one initiating, and what it creates is an operating-system process it
+  immediately stops owning. So every piece of that shared machine is gone: nothing to resolve,
+  nothing to funnel, and — the part worth watching — no reaper either.</p>
+  <p>What replaces them is a different problem. You spawned a detached child in another
+  directory and returned instantly. Did it become a real session? The only honest answer lives
+  on disk, in a transcript this server merely reads. Most of this lesson is about the three
+  seconds before that answer exists.</p>
+</div>
+
+<!-- ============ s1 ============ -->
+<section id="s1">
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 1 · Untrusted text, meet a flag parser</p>
+    <h2>The prompt is never an argv element</h2>
+    <p>The prompt a user types is the most obviously hostile input this feature handles, and the
+    module's own doc comment states the rule it never breaks:</p>
+<pre>// spawn.ts:25-29 (compacted here)
+//  - The prompt is never an argv element. `claude -p` parses argv the way
+//    almost every CLI does: a value starting with `-`/`--` is read as a flag,
+//    not as data, regardless of what flag it happens to follow. A prompt is
+//    untrusted free text a user typed — `--dangerously-skip-permissions` is a
+//    perfectly ordinary-looking sentence to start a prompt with</pre>
+    <p>Read that middle clause carefully: <em>regardless of what flag it happens to follow.</em>
+    Passing the prompt as the value of some flag does not protect it — the parser sees a token
+    that starts with dashes and treats it as the next option, not as the previous one's value.</p>
+    <p>So the prompt goes somewhere the flag parser never looks. <code>launch</code> writes it to
+    the child's stdin and closes the stream:</p>
+<pre>// spawn.ts:458-459
+child.stdin?.write(input.prompt);
+child.stdin?.end();</pre>
+    <p>The obvious alternative — append the prompt to argv, quote it carefully — fails because
+    there is nothing to quote against. Quoting is a shell concept, and no shell is involved.</p>
+    <p>The cost is a stream to manage rather than a string to pass, and a stream is an error
+    surface of its own. Section 3 is where that bill arrives.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Array-form spawn, and never a shell</h2>
+    <p>The second half of the same rule concerns how the child is started at all:</p>
+<pre>// spawn.ts:33-36 (compacted here)
+//  - `child_process.spawn` is always called in array form, never with
+//    `shell: true`. `shell: true` hands the whole command line to `/bin/sh`,
+//    which re-tokenizes it — the exact step that turns a value into code if
+//    it contains a quote, `;`, `$(...)`, or a stray space.</pre>
+    <p>The actual call keeps that promise, and the option that would break it is simply absent:</p>
+<pre>// spawn.ts:442
+child = doSpawn(config.claudeBin, args, { cwd: ref.path, env, detached: true, stdio: ['pipe', 'ignore', 'pipe'] });</pre>
+    <p><code>shell: true</code> is genuinely tempting: it is what lets you write
+    <code>cd dir &amp;&amp; claude …</code>, expand a <code>~</code>, or glob a path. Every one of
+    those conveniences is the same mechanism — a second parse of the command line by
+    <code>/bin/sh</code> — and that second parse is exactly what turns data into code.</p>
+    <p>The trade-off is that everything the shell would have done must now be done in Node
+    explicitly. That is why the working directory arrives as the <code>cwd</code> option rather
+    than a <code>cd</code>, and why the environment is built as an object a few lines earlier
+    instead of being inherited through a shell invocation.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>A name that cannot look like a flag</h2>
+    <p>The optional display name <em>is</em> an argv element — it rides in as the value of
+    <code>-n</code> — so it gets a charset of its own:</p>
+<pre>// spawn.ts:87
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;</pre>
+    <p>Note that the first character is constrained separately from the rest. The comment above it
+    says why, and it is a bug report rather than a hypothetical:</p>
+<pre>// spawn.ts:77-81 (compacted here)
+//  - **The leading character is constrained separately** so a name can never
+//    itself *look* like a flag: `-p` passed the old charset and became the
+//    value of `-n`. No escalation was possible even then (a name is always
+//    exactly one argv element, pinned by test), but the worst case — a name
+//    the CLI's own option parser chokes on — is not worth keeping</pre>
+    <p>The naive position here would be "argv safety already covers it, so skip the charset" —
+    and strictly, for <em>escalation</em>, that is true. The comment concedes as much. The name is
+    sanitized anyway because it also flows into the UI and later onto disk, so it earns validation
+    on its own merits rather than borrowing argv's.</p>
+    <p>What it costs: a perfectly reasonable name containing <code>/</code>, <code>:</code>, or an
+    emoji is silently dropped to <code>undefined</code> rather than reported. The dot is allowed
+    only because that silence had already eaten <code>v1.2 release</code> once.</p>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">A user's prompt begins with the literal text
+    <code>--dangerously-skip-permissions is a flag I should never use</code>. What keeps the CLI
+    from reading that first token as an actual flag?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The parser strips leading dashes from it</button>
+        <p class="quiz-feedback">Nothing rewrites the prompt's content.
+        <code>parseSpawnRequest</code> only trims it and length-caps it (spawn.ts:159-165); the
+        text the child receives is byte-for-byte what the user typed.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">It is quoted before being appended to argv</button>
+        <p class="quiz-feedback">There is nothing to quote against. Argv elements are handed to
+        the child directly with no shell in between, so quoting has no meaning at this boundary —
+        and the flag parser would still see the leading dashes.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">It travels on stdin, never argv</button>
+        <p class="quiz-feedback">Correct. <code>launch</code> writes it to <code>child.stdin</code>
+        and ends the stream (spawn.ts:458-459). The CLI's option parser reads argv, never stdin, so
+        no value there can be mistaken for a flag.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Array-form spawn keeps the shell from expanding it</button>
+        <p class="quiz-feedback">Array-form <code>spawn</code> does avoid <code>/bin/sh</code>, and
+        that genuinely matters — but against a different attack. Removing the shell changes nothing
+        about the CLI's <em>own</em> option parser, which would still read a leading <code>--</code>
+        element as a flag.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============ s2 ============ -->
+<section id="s2">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>Section 1 → Section 2</h2>
+    <p class="divider-flow">You have the two argv rules that never bend. Now the layer above them:
+    deciding whether a request is safe to act on at all — and which single field is allowed to
+    refuse the whole launch.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 2 · Validation</p>
+    <h2>A ladder where malformed means lower</h2>
+    <p>Permission mode is the one field where getting validation wrong is a privilege escalation,
+    so it is not validated — it is <em>clamped</em>:</p>
+<pre>// spawn.ts:52-53, 102-103
+/** The permission ladder, lowest to highest. Array index order IS the ordering. */
+export const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto', 'bypassPermissions'] as const;
+
+export function clampPermission(requested: unknown, ceiling: unknown): PermissionMode {
+  return PERMISSION_MODES[Math.min(modeIndex(requested), modeIndex(ceiling))];</pre>
+    <p>The result is never higher on the ladder than the server-configured ceiling, and an
+    unrecognized value on either side — including <code>undefined</code> — resolves to
+    <code>'auto'</code> rather than to the top. A malformed input can only ever make the outcome
+    <em>less</em> permissive.</p>
+    <p>Two alternatives are worse in opposite directions. Throwing on an unknown mode turns a
+    client typo into a dead launch button. Defaulting an unknown mode to the top of the ladder
+    turns the same typo into <code>bypassPermissions</code> — the failure you least want to reach
+    by accident.</p>
+    <p>The accepted cost is real, though: a client sending a mode this server has never heard of
+    gets <code>'auto'</code> silently, with no error to debug against. And "array index order IS
+    the ordering" means reordering that one array is a semantic change, not a cosmetic one.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Only the prompt is allowed to refuse</h2>
+    <p>Every other field in the request fails soft. An unrecognized <code>model</code>,
+    <code>effort</code>, or <code>name</code> is dropped to <code>undefined</code>; a
+    <code>permissionMode</code> outside the enum is clamped; only the prompt can reject the
+    request outright:</p>
+<pre>// spawn.ts:156-165, 168-176 (compacted here)
+if (typeof b.prompt !== 'string') return { ok: false, error: 'prompt is required' };
+const prompt = b.prompt.trim();
+if (prompt === '') return { ok: false, error: 'prompt must not be empty' };
+if (prompt.length &gt; PROMPT_CAP) return { ok: false, error: `prompt must be at most …` };
+
+const model = typeof b.model === 'string' &amp;&amp; MODELS.includes(b.model) ? b.model : undefined;</pre>
+    <p>The reason is version skew. The dashboard and this server are deployed together but not
+    always <em>reloaded</em> together, and a phone can hold a stale tab open for days. Strict
+    validation that rejected any unknown field would make every version mismatch a broken launch
+    button; drop-don't-reject means the rest of the request is still honored.</p>
+    <p><code>remoteControl</code> shows the same instinct taken to its strictest form —
+    <code>b.remoteControl === true</code> at spawn.ts:179, so absent, <code>"yes"</code> and
+    <code>1</code> all fail soft to false.</p>
+    <p>The cost is silence in the one place you would want noise: a typo'd model name launches
+    happily on the default model, and nothing anywhere says so.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>The one field that refuses instead</h2>
+    <p><code>resume</code> breaks the drop-don't-reject rule on purpose, and the comment states
+    the reasoning as a comparison of harms:</p>
+<pre>// spawn.ts:181-189 (compacted here)
+// `resume` is the one optional field that REJECTS when present-but-malformed
+// instead of dropping: silently ignoring it would launch a fresh session
+// somewhere the user never asked for, which is worse than any 400.
+if (b.resume !== undefined) {
+  if (typeof b.resume !== 'string' || b.resume === '' || !RESUME_ID_RE.test(b.resume)) {
+    return { ok: false, error: 'bad resume id' };</pre>
+    <p>That is the whole test for whether a field may fail soft: what does the user get if it is
+    ignored? A dropped model gives them the default model. A dropped resume id gives them a brand
+    new session in a project they were only trying to continue.</p>
+    <p>Resume also changes argv's shape, and only its shape:</p>
+<pre>// spawn.ts:214-216
+const args = input.resume
+  ? ['-p', '--resume', input.sessionId, '--permission-mode', input.permissionMode]
+  : ['-p', '--session-id', input.sessionId, '--permission-mode', input.permissionMode];</pre>
+    <p>The CLI refuses <code>--resume</code> together with <code>--session-id</code> unless you
+    also pass <code>--fork-session</code>, and forking is precisely what a resume must not do —
+    plain <code>--resume</code> keeps the id and appends to the same transcript, which is what
+    makes the dashboard row wake up. The cost: two argv shapes to keep in step, and no
+    <code>-n</code> or <code>--remote-control</code> on a resume, since those combinations are
+    unverified.</p>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">A request arrives with <code>model: "opus-9"</code> and
+    <code>resume: "not a valid id!"</code>. What does <code>parseSpawnRequest</code> return?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Success, with both unknown fields dropped</button>
+        <p class="quiz-feedback">Dropping is right for <code>model</code> and wrong for
+        <code>resume</code>. Resume is the single optional field that rejects when
+        present-but-malformed (spawn.ts:187-190), exactly so a bad id can never quietly become a
+        fresh session.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">An error: <code>bad resume id</code></button>
+        <p class="quiz-feedback">Correct. The unknown model fails soft to <code>undefined</code>,
+        but a malformed <code>resume</code> returns <code>{ ok: false }</code> and the launch never
+        happens.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">An error naming the unrecognized model</button>
+        <p class="quiz-feedback">An unrecognized <code>model</code> never produces an error at all —
+        it is dropped to <code>undefined</code> (spawn.ts:168-170) so a client running a different
+        build can still launch with the rest of its request honored.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Success, with <code>resume</code> clamped to a valid id</button>
+        <p class="quiz-feedback">There is no ladder to clamp a session id onto — clamping is what
+        <code>permissionMode</code> gets, because its values are ordered. A resume id either matches
+        <code>RESUME_ID_RE</code> or the entire request is refused.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============ s3 ============ -->
+<section id="s3">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>Section 2 → Section 3</h2>
+    <p class="divider-flow">The request is now safe and the argv is decided. What follows is the
+    only genuinely impure moment in the module — and the point past which this server no longer
+    owns what it created.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 3 · The launch</p>
+    <h2>Register first, spawn second</h2>
+    <p>The store entry is created <em>before</em> the process is, which looks backwards until you
+    ask where a synchronous failure would otherwise be recorded:</p>
+<pre>// spawn.ts:422, 440-446 (compacted here)
+entries.set(sessionId, entry);
+…
+let child: ChildProcess;
+try {
+  child = doSpawn(config.claudeBin, args, { … detached: true, stdio: ['pipe', 'ignore', 'pipe'] });
+} catch (err) {
+  fail(sessionId, undefined, errMessage(err));
+  return sessionId;
+}</pre>
+    <p>A spawner that throws synchronously still has somewhere to write the reason, and the caller
+    still gets an id it can poll for that reason. Spawn-then-register would leave that failure
+    with nowhere to land: the POST returns an id nobody is tracking, and the UI has a row it can
+    never explain.</p>
+    <p>The <code>stdio</code> triple is deliberate too — stdin piped because the prompt goes there,
+    stdout ignored because nothing reads it, stderr piped because a failure's only explanation
+    arrives on it. And <code>detached: true</code> with <code>child.unref()</code> at spawn.ts:497
+    is what lets the child outlive this server rather than dying with it.</p>
+    <p>The trade-off is an entry that can describe a process which never existed. That is why
+    <code>fail</code> tolerates being called on an id that is already gone.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>One environment variable, deleted on purpose</h2>
+    <p>The child inherits this server's environment with a single key removed:</p>
+<pre>// spawn.ts:437-438
+const env = { ...process.env };
+delete env.CLAUDE_CODE_ENTRYPOINT;</pre>
+    <p>That one deletion is load-bearing for the dashboard's own display. A server started from
+    inside another Claude Code context — a desktop-app terminal, a Claude-driven shell — carries
+    that marker in its environment, and a child that inherits it stamps
+    <code>claude-desktop</code> into its transcript instead of <code>sdk-cli</code>. The scanner
+    reads that stamp to decide a session's surface, so inheriting the variable costs the launched
+    session its <code>dashboard</code> pill and its right to be resumed. The comment records both
+    readings as measured on CLI 2.1.233, not inferred.</p>
+    <p>The tempting shorthand is <code>env.CLAUDE_CODE_ENTRYPOINT = undefined</code>. The comment
+    rejects it precisely: this Node build happens to omit undefined-valued keys, but that is
+    filtering behaviour to not lean on, whereas an absent key needs no guarantee from anyone.</p>
+    <p>The accepted trade-off is a denylist rather than an allowlist. Everything else the CLI needs
+    — <code>PATH</code>, <code>HOME</code>, credentials — lives in that same environment, so
+    passing only known-good keys would mean maintaining a list of the CLI's entire runtime
+    dependency surface.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Four ways to fail, and the listener that saves the server</h2>
+    <p>Failure can reach the store from four independent places — a synchronous throw from the
+    spawner, the child's own <code>'error'</code> event, an <code>'error'</code> on the
+    stdin/stderr streams, and a nonzero <code>'exit'</code> — and all four route through one
+    function, safe to call twice or after the entry is gone (spawn.ts:378).</p>
+    <p>The third of those is the one worth slowing down for:</p>
+<pre>// spawn.ts:455-457
+child.stdin?.on('error', err =&gt; {
+  fail(sessionId, undefined, errMessage(err));
+});</pre>
+    <p>A stream is its own <code>EventEmitter</code>. The handler on <code>child</code> does not
+    cover it. Without this listener, an async EPIPE — the child dies, or never reads stdin, before
+    the write finishes — throws unhandled and takes the entire dashboard server down. The comment
+    records that as observed on Node 22, not theorised.</p>
+    <p>The naive version is one <code>'error'</code> handler on the child, on the assumption that
+    a parent covers its streams. It reads as complete and is the single most expensive omission
+    available here: the failure mode is not a lost launch, it is a dead server.</p>
+    <p>The cost is four listeners per launch on an object this process has deliberately stopped
+    owning.</p>
+    <details><summary>More detail: why <code>'close'</code> refines rather than replaces</summary>
+      <p>Node may fire <code>'exit'</code> before the child's stdio has finished draining, so the
+      stderr tail can still grow afterwards. The <code>'close'</code> handler therefore only
+      refines the message with whatever arrived since. It cannot become the sole path: a spawn that
+      never started at all fires no <code>'exit'</code> and reaches <code>'close'</code> with a
+      synthetic negative libuv code, and refining on that would clobber the far better message the
+      <code>'error'</code> handler already set — which is why the guard at spawn.ts:490 checks all
+      three of tail, non-null code, and positive code.</p>
+    </details>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Why attach an <code>'error'</code> listener to <code>child.stdin</code>
+    when <code>child</code> already has one?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">To retry the write if the first attempt fails</button>
+        <p class="quiz-feedback">Nothing retries anywhere in this module. The handler's only action
+        is <code>fail(...)</code> — the launch is recorded as failed, never attempted a second
+        time.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">To capture the stderr tail before the child exits</button>
+        <p class="quiz-feedback">That is a different listener: <code>child.stderr.on('data')</code>
+        accumulates the tail. This one covers an error on the <em>write</em> side, which produces no
+        stderr output at all.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Because <code>detached: true</code> changes event delivery</button>
+        <p class="quiz-feedback"><code>detached</code> governs process groups and lifetime — whether
+        the child survives its parent — and has no bearing on which events reach which emitter. The
+        child's own <code>'error'</code> event fires exactly as it would otherwise; it simply never
+        covered the stream in the first place.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">A stream is its own emitter</button>
+        <p class="quiz-feedback">Correct. <code>child.stdin</code> is a separate
+        <code>EventEmitter</code>, so the child's handler does not cover it — and an async EPIPE
+        with no listener throws unhandled, taking the whole process down.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">A launched child exits cleanly with code 0 a few seconds in. What does
+    the store record?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">A <code>failed</code> entry carrying exit code 0</button>
+        <p class="quiz-feedback">The exit handler returns early on <code>code === 0</code>
+        (spawn.ts:472), so nothing is ever marked failed. A clean exit is not a failure to report.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Nothing; adoption or a TTL settles it</button>
+        <p class="quiz-feedback">Correct. A fast run can finish before the next scan ever sees it,
+        and the transcript, not the exit, is what matters then (spawn.ts:469-471).</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The exit handler deletes the entry immediately</button>
+        <p class="quiz-feedback">The exit handler only ever calls <code>fail</code>; it never
+        deletes. Entries leave the store through <code>adoptLaunched</code>, a TTL evaluated inside
+        <code>listLaunching</code>, or <code>stopLaunch</code>.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The <code>close</code> handler refines it to failed</button>
+        <p class="quiz-feedback">That handler guards on <code>code &lt;= 0</code>, so a zero exit is
+        excluded there too — the same clean-exit rule — and it only ever refines a message some
+        earlier failure had already set.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============ s4 ============ -->
+<section id="s4">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>Section 3 → Section 4</h2>
+    <p class="divider-flow">The child is running and unowned. What remains on this side is a small
+    RAM-only store — and the most instructive thing about it is a piece of machinery the other
+    three write paths all needed and this one does not.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 4 · The store</p>
+    <h2>A store defined by what it refuses to be</h2>
+    <p>The store's doc comment opens with a charter, and the second sentence is a refusal:</p>
+<pre>// spawn.ts:283-288 (compacted here)
+// RAM-only store of launches still being watched. Charter: explain the first
+// ~3 seconds of a launch, and report ones that never became a real session.
+// This is NOT a session registry — the transcript stays the single source of
+// truth … A launch that succeeds leaves no trace here once `adoptLaunched`
+// sees its id; a restart drops every entry, live children included.</pre>
+    <p>That scope is what keeps the dashboard honest about its own architecture. The whole app is
+    a reader of transcripts on disk; a store that remembered live sessions would become a second,
+    competing source of truth, and the two would drift the first time a session ended in a way
+    nobody anticipated.</p>
+    <p>The alternative a beginner reaches for is exactly that second registry — track every
+    session you launched, because you know about them. It works until a restart, at which point
+    your registry is empty and the sessions are still running, and now the UI disagrees with
+    reality with no way to tell which side is wrong.</p>
+    <p>The accepted cost is stated plainly in the comment: a restart drops every entry, live
+    children included. A launch in flight across a server restart becomes invisible — until the
+    scanner finds its transcript, which is the only claim this design was ever making.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>No reaper, because someone is already looking</h2>
+    <p>Here is the direct contrast with the other three paths, in the code's own words:</p>
+<pre>// spawn.ts:503-506
+// Expiry is evaluated lazily here rather than on a timer: `pending.ts`/
+// `plans.ts`/`messages.ts` each need a reaper because nothing else would ever
+// read their entries, but the dashboard already polls every 3s, so the next
+// `listLaunching` call is strictly simpler and cannot hold the process open.</pre>
+    <p>Expiry is a side effect of being read. Both TTLs are checked inside the loop that builds
+    the response, and an expired entry is deleted on the way past:</p>
+<pre>// spawn.ts:513-521 (compacted here)
+for (const [id, entry] of entries) {
+  if (entry.state === 'launching' &amp;&amp; now - entry.startedAtMs &gt; LAUNCH_TTL_MS) {
+    entries.delete(id);
+    continue;
+  }
+  if (entry.state === 'failed' &amp;&amp; now - (entry.failedAtMs ?? entry.startedAtMs) &gt; FAIL_TTL_MS) {</pre>
+    <p>A <code>setInterval</code> would work — it is what <code>messages.ts</code> does — but it
+    brings machinery this store has no use for: create it on the first entry, clear it on the last,
+    <code>unref</code> it so it cannot hold the process open. All of that exists to serve a reader
+    that never comes, and here a reader comes every three seconds.</p>
+    <p>The cost is that expiry only happens when someone looks: a store nobody polls holds stale
+    entries for the process's lifetime. Note also that <code>now</code> is a parameter rather than
+    read internally, so a test can simulate elapsed time without faking the clock.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>A rail against accidents, not attackers</h2>
+    <p><code>MAX_LAUNCHING</code> caps in-flight launches at four, and the comment is unusually
+    careful to say what kind of limit it is <em>not</em>:</p>
+<pre>// spawn.ts:341-350 (compacted here)
+//  - **`'launching'` only.** A `failed` entry lingers for `FAIL_TTL_MS`
+//    (5 minutes) purely so the UI can explain itself, and it holds no process
+//    at all — letting it hold a slot would lock a user out of launching for
+//    five minutes after four transient failures, with a 429 that explains nothing.
+//  - **The pre-adoption window only** (~3s, until `adoptLaunched` sees the id
+//    on disk). It therefore bounds **rapid-fire POSTs**, not the number of live
+//    sessions — ten launches a minute apart all succeed</pre>
+    <p>It is not a security boundary, and the comment says why it cannot be: a caller with launch
+    rights can simply prompt one session into spawning more. What it stops is a <em>mistake</em> —
+    a retry loop, a flaky phone connection, a double-tap that beats React's re-render — from
+    becoming four real <code>claude</code> processes on the account's quota. The handler enforces it
+    at api.ts:856-857, filtering to <code>'launching'</code> before answering 429.</p>
+    <p>Capping live sessions instead would need the session registry the previous card explained
+    this store is deliberately not.</p>
+    <p>So the honest trade-off: no protection whatsoever against deliberate abuse, and a limit that
+    is invisible to anyone who spaces their launches out — which is the entire population of
+    non-accidents.</p>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">You launch ten sessions, one per minute, with <code>MAX_LAUNCHING</code>
+    at 4. How many are refused with a 429?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Six — every launch past the fourth is refused</button>
+        <p class="quiz-feedback">This is what you would get if the rail counted sessions. It counts
+        entries still in the <code>launching</code> state, and each of those has already left the
+        store long before the next POST arrives a minute later.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Four, then the rest succeed as slots free</button>
+        <p class="quiz-feedback">The arithmetic is inverted — the first four are the ones that
+        succeed, not the ones refused. And with a full minute between POSTs, no slot is ever
+        occupied when the next one lands.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">None of them</button>
+        <p class="quiz-feedback">Correct. The rail bounds only the ~3-second pre-adoption window, so
+        each launch has left the store before the next arrives — it limits rapid-fire POSTs, not
+        live sessions.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">It depends on whether any of them failed</button>
+        <p class="quiz-feedback">A <code>failed</code> entry deliberately holds no slot: it lingers
+        for <code>FAIL_TTL_MS</code> only so the UI can explain itself, and counting it would lock
+        the user out for five minutes (spawn.ts:341-345).</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============ s5 ============ -->
+<section id="s5">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>Section 4 → Section 5</h2>
+    <p class="divider-flow">One question is still open, and it is the one the whole feature turns
+    on: how does a store that refuses to be a session registry ever learn that a launch worked?
+    The answer is that it does not — it is told.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 5 · Adoption</p>
+    <h2>The scanner is the witness</h2>
+    <p>The store never looks at the filesystem. The sessions handler, which has just scanned it,
+    hands over the ids it saw:</p>
+<pre>// api.ts:141-146 (compacted here)
+// Adopt before listing: a launch id that just showed up in `sessions` must
+// not also be reported as still `launching` in the same poll.
+adoptLaunched(data.sessions.map(s =&gt; s.id));
+data.launching = listLaunching();</pre>
+    <p>A launch that became a real session leaves no trace: its id appears in a scan, the entry is
+    deleted, and from then on it is an ordinary row like any other. Note the ordering the comment
+    insists on — adopt first, then list, so a single poll can never show the same session twice in
+    two different states.</p>
+    <svg viewBox="0 0 320 92" role="img" aria-label="A launching entry, the transcript the child writes on disk, and the scan that adopts the entry away">
+      <g fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="26" width="74" height="38" rx="6"/>
+        <rect x="123" y="26" width="74" height="38" rx="6"/>
+        <rect x="244" y="26" width="74" height="38" rx="6"/>
+        <path d="M78 45 h43 M199 45 h43"/>
+        <path d="M114 41 l7 4 -7 4z" fill="currentColor" stroke="none"/>
+        <path d="M235 41 l7 4 -7 4z" fill="currentColor" stroke="none"/>
+      </g>
+      <g fill="currentColor" font-size="10" font-family="sans-serif" text-anchor="middle">
+        <text x="39" y="42">entry</text><text x="39" y="55">launching</text>
+        <text x="160" y="42">transcript</text><text x="160" y="55">on disk</text>
+        <text x="281" y="42">entry</text><text x="281" y="55">gone</text>
+        <text x="100" y="20">child writes</text>
+        <text x="221" y="20">scan adopts</text>
+      </g>
+    </svg>
+    <p>The alternative is to have <code>launch</code> watch for the transcript itself — an
+    <code>fs.watch</code>, or its own poll. That duplicates the scanner inside the store and gives
+    the store filesystem knowledge its charter says it should not have.</p>
+    <p>The cost is a dependency on being called correctly: an entry lingers until its TTL if a
+    caller ever passes an incomplete id list.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>The witness that proves nothing</h2>
+    <p>Adoption has one exception, and it is the case where the evidence is worthless:</p>
+<pre>// spawn.ts:535-540
+// A resume entry's id names a transcript that already exists, so seeing it
+// in a scan proves nothing — deleting it here would swallow a failure
+// before the user's next poll could ever render it. Resume entries leave
+// via the TTLs in `listLaunching`, `stopLaunch`, or a failure instead.
+const entry = entries.get(id);
+if (entry &amp;&amp; !entry.resume &amp;&amp; entries.delete(id)) n++;</pre>
+    <p>For a fresh launch, "this id is on disk" means the CLI got far enough to write a transcript.
+    For a resume, the transcript was there before the launch existed — that is what makes it a
+    resume. So the same observation carries information in one case and none in the other, and the
+    <code>resume</code> flag on the entry exists to tell them apart.</p>
+    <p>Treating both alike is the natural mistake and it fails silently in the worst direction: the
+    row vanishes on the very first poll, so a resume that died on startup is indistinguishable from
+    one that worked.</p>
+    <p>The trade-off runs the other way instead. A resume that succeeds sits in the launching list
+    for the full <code>LAUNCH_TTL_MS</code> — sixty seconds — even though it is fine, so the UI
+    briefly shows a launching row for a session that is already running. A stale-looking row is
+    cheaper than a swallowed failure.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Stopping is a deletion, not a state</h2>
+    <p>The last operation signals the child and removes the entry in the same breath:</p>
+<pre>// spawn.ts:559-564
+export function stopLaunch(id: string): boolean {
+  const entry = entries.get(id);
+  if (!entry || entry.state !== 'launching' || !entry.child) return false;
+  entry.child.kill('SIGTERM');
+  entries.delete(id);
+  return true;</pre>
+    <p>Leaving the entry in place would let the eventual <code>exit</code> mark it
+    <code>failed</code>, and it would then sit in the list for five minutes labelled as a crash the
+    user never hit — because they stopped it themselves. The two-state union
+    (<code>'launching' | 'failed'</code>) has no way to say "you stopped this" separately from
+    "it broke".</p>
+    <p>Widening that union to a third state is the obvious fix and the comment declines it: the type
+    is a shared contract the handler and the client already consume, so a new state ripples outward
+    for one row's phrasing.</p>
+    <p>The cost is that the entry is gone before the child is: SIGTERM is a request, not a
+    guarantee, and the store has kept no record to correct if the child ignores it. The later
+    <code>exit</code> finds nothing and no-ops through <code>fail</code>'s presence guard — the same
+    path any exit takes after adoption.</p>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Why does <code>adoptLaunched</code> skip an entry whose
+    <code>resume</code> flag is set?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">A resumed session keeps its old transcript, so it never shows up in a scan</button>
+        <p class="quiz-feedback">It does show up — <code>--resume</code> keeps the id and appends to
+        the same transcript, which is exactly why the scan finds it. Appearing is what makes the
+        check useless here, not what makes it work.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Resume entries are removed by <code>stopLaunch</code></button>
+        <p class="quiz-feedback"><code>stopLaunch</code> is one of the three exits available to a
+        resume entry, alongside a TTL and a failure, but it only ever fires when the user asks for
+        it. Nothing about being a resume routes an entry's removal through that function.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Its id already named a transcript, so a scan proves nothing</button>
+        <p class="quiz-feedback">Correct. The id was on disk before this launch existed, so seeing it
+        says nothing about whether the run started — and deleting on the first poll would swallow a
+        failure before the user could see it.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Deleting it would break the row's stable id</button>
+        <p class="quiz-feedback">The row's id is stable either way — that is why a resume reuses the
+        existing id instead of minting one. What deletion would break is failure reporting, not
+        identity.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============ recap ============ -->
+<div class="card card-recap">
+  <p class="eyebrow">Recap</p>
+  <h1>Recap</h1>
+  <p class="recap-score">Score: <span id="score-correct">0</span> / <span id="score-total">0</span></p>
+  <p id="weak-note"></p>
+  <p>Jump back to any section:</p>
+  <button class="section-jump" data-target="s1">Section 1 — The prompt never touches argv</button>
+  <button class="section-jump" data-target="s2">Section 2 — Fails soft, except where it must not</button>
+  <button class="section-jump" data-target="s3">Section 3 — The detached launch, and four ways to fail</button>
+  <button class="section-jump" data-target="s4">Section 4 — The store with no reaper</button>
+  <button class="section-jump" data-target="s5">Section 5 — Adoption: the handoff back to reading</button>
+  <p class="xlink" style="margin-top:1rem">Earlier in this series:
+  <a href="write-paths-deck.html">the write paths, part 1 — the three held-response paths</a>
+  (<code>pending.ts</code>, <code>plans.ts</code>, <code>messages.ts</code>), which this lesson's
+  contrasts refer back to.</p>
+  <p class="xlink">No written reference guide covers this subsystem yet; one could be generated as a
+  follow-up if a prose walkthrough would be more useful than these cards.</p>
+  <p class="stamp">built at fa9fdbc</p>
+</div>
+
+</main>
+
+<nav>
+  <button id="nav-back" disabled>Back</button>
+  <button id="nav-next">Next</button>
+</nav>
+
+<script type="application/json" id="provenance">
+{
+  "commit": "fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14",
+  "generated": "2026-08-22",
+  "sources": ["server/lib/spawn.ts", "server/api.ts"],
+  "sections": [
+    { "id": "s1", "title": "The prompt never touches argv", "sources": ["server/lib/spawn.ts"] },
+    { "id": "s2", "title": "Fails soft, except where it must not", "sources": ["server/lib/spawn.ts"] },
+    { "id": "s3", "title": "The detached launch, and four ways to fail", "sources": ["server/lib/spawn.ts"] },
+    { "id": "s4", "title": "The store with no reaper", "sources": ["server/lib/spawn.ts", "server/api.ts"] },
+    { "id": "s5", "title": "Adoption: the handoff back to reading", "sources": ["server/lib/spawn.ts", "server/api.ts"] }
+  ]
+}
+</script>
+
+<script>
+(function () {
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+  var idx = 0;
+  var score = { correct: 0, total: 0 };
+  var back = document.getElementById('nav-back');
+  var next = document.getElementById('nav-next');
+  var fill = document.getElementById('progress-fill');
+
+  function isBlockedQuiz(card) {
+    return card.classList.contains('card-quiz') && card.dataset.answered !== 'true';
+  }
+
+  function show(i) {
+    if (i < 0 || i >= cards.length) return;
+    cards[idx].classList.remove('active');
+    idx = i;
+    cards[idx].classList.add('active');
+    window.scrollTo(0, 0);
+    refresh();
+  }
+
+  function refresh() {
+    back.disabled = idx === 0;
+    next.disabled = idx === cards.length - 1 || isBlockedQuiz(cards[idx]);
+    fill.style.width = (cards.length > 1 ? (idx / (cards.length - 1)) * 100 : 100) + '%';
+    if (cards[idx].classList.contains('card-recap')) renderScore();
+  }
+
+  function renderScore() {
+    document.getElementById('score-correct').textContent = String(score.correct);
+    document.getElementById('score-total').textContent = String(score.total);
+    var note = document.getElementById('weak-note');
+    if (score.total === 0) { note.textContent = 'No questions answered yet.'; return; }
+    note.textContent = score.correct === score.total
+      ? 'Every check answered correctly.'
+      : 'Worth a second pass: the sections whose checks you missed are linked below.';
+  }
+
+  cards.forEach(function (card) {
+    var opts = Array.prototype.slice.call(card.querySelectorAll('.quiz-option'));
+    opts.forEach(function (opt) {
+      var btn = opt.querySelector('.quiz-option-btn');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        if (card.dataset.answered === 'true') return;
+        card.dataset.answered = 'true';
+        opt.classList.add('revealed');
+        opts.forEach(function (o) {
+          var b = o.querySelector('.quiz-option-btn');
+          if (b) b.disabled = true;
+        });
+        score.total += 1;
+        if (opt.getAttribute('data-correct') === 'true') score.correct += 1;
+        refresh();
+      });
+    });
+  });
+
+  Array.prototype.slice.call(document.querySelectorAll('.section-jump')).forEach(function (b) {
+    b.addEventListener('click', function () {
+      var wrapper = document.getElementById(b.getAttribute('data-target'));
+      if (!wrapper) return;
+      for (var i = 0; i < cards.length; i++) {
+        if (wrapper.contains(cards[i])) { show(i); return; }
+      }
+    });
+  });
+
+  back.addEventListener('click', function () { if (!back.disabled) show(idx - 1); });
+  next.addEventListener('click', function () { if (!next.disabled) show(idx + 1); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' && !next.disabled) show(idx + 1);
+    if (e.key === 'ArrowLeft' && !back.disabled) show(idx - 1);
+  });
+
+  refresh();
+})();
+</script>
+
+</body>
+</html>

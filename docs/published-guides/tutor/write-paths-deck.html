@@ -458,7 +458,6 @@ if (!feedback.trim()) return 'malformed';</pre>
 
 <!-- ============ s4 ============ -->
 <section id="s4">
-
   <div class="card card-divider">
     <p class="eyebrow">Next section</p>
     <h2>Section 3 → Section 4</h2>
@@ -478,7 +477,7 @@ if (!feedback.trim()) return 'malformed';</pre>
     next user message.</p>
     <p>The reason text carries both the message and a set of away-mode instructions, and the
     comment explains why they have to ride along here:</p>
-<pre>// messages.ts:44-47 (compacted here)
+<pre>// messages.ts:53-55 (compacted here)
 // carry the away-mode instructions — `UserPromptSubmit` hooks (the
 // remote-decision injection) do NOT fire on hook-continued turns, so this
 // is the only place the reminder can ride.</pre>
@@ -499,25 +498,55 @@ if (!feedback.trim()) return 'malformed';</pre>
     finished turn would sit parked until its deadline expired.</p>
     <p>So this store runs its own reaper, and the release condition is not about the session at
     all — it is about <em>you</em>:</p>
-<pre>// messages.ts:189-196 (compacted here)
-export function sweepIdle(): number {
-  const thresholdSecs = getSettings().idleSecs;
-  if (thresholdSecs === 0) return 0;
-  const idle = (idleReader ?? readIdleSecs)();
-  if (idle === null || idle &gt;= thresholdSecs) return 0;
-  for (const entry of waiting) settle(entry, { status: 'released' });</pre>
-    <p>If your machine reports recent input, you are back at the keyboard, and holding the turn
-    open for a phone reply is pointless — so every hold is released at once.</p>
+<pre>// messages.ts:205-210
+const thresholdSecs = getSettings().idleSecs;
+if (thresholdSecs === 0) return 0;
+const idle = (idleReader ?? readIdleSecs)();
+if (idle === null || idle &gt;= thresholdSecs) return 0;
+for (const entry of releasable) settle(entry, { status: 'released' });
+return releasable.length;</pre>
+    <p>If your machine reports recent input, you are back at the keyboard, and holding a turn open
+    for a phone reply is pointless — so the releasable holds go at once.</p>
     <p>Read the guard conditions as failure directions. Unreadable idle time, on Docker or
     non-macOS, returns <code>null</code> and releases nothing, leaving the deadline timer as the
     reaper of last resort. Never releasing is a delay; releasing wrongly would cut short a window
     you were about to use.</p>
     <details><summary>More detail: the reaper only exists while holds do</summary>
-      <p>The 5-second interval is created on the first hold and cleared when the last one goes,
-      and it is <code>unref()</code>'d so it cannot keep the process alive. An idle server never
-      spawns the <code>ioreg</code> subprocess that reads idle time — the cost is paid only while
-      someone is actually waiting.</p>
+      <p>The 5-second interval is created on the first hold and cleared when the last one goes
+      (messages.ts:218-224), and it is <code>unref()</code>'d so it cannot keep the process alive.
+      An idle server never spawns the <code>ioreg</code> subprocess that reads idle time — the cost
+      is paid only while someone is actually waiting.</p>
     </details>
+  </div>
+
+  <div class="card card-concept">
+    <h2>The hold the sweep must not touch</h2>
+    <p>That release condition has one exception, and it is the case where "you are back at the
+    keyboard" stops being good news. A session launched headless — <code>claude -p</code>, which is
+    what the dashboard's own <code>+ New</code> button starts — has no terminal at all, so the
+    entry records that fact:</p>
+<pre>// messages.ts:39-44 (compacted here)
+// The session runs headless (`claude -p`, the dashboard `+ New` path) — no
+// terminal exists, so "back at the keyboard" gives the user no other way to
+// reply. The idle sweep skips these; only the deadline, an answer, a dismiss,
+// or a supersede ends them.
+headless: boolean;</pre>
+    <p>Releasing a hold is only safe because the user has somewhere better to answer — the
+    terminal they just sat down at. For a headless session that place does not exist: the dashboard
+    window <em>is</em> the only channel. Releasing it would close the single door the user has,
+    precisely at the moment they came back to use it.</p>
+    <p>So the filter runs first, before anything else the sweep does:</p>
+<pre>// messages.ts:201-204
+export function sweepIdle(): number {
+  if (entries.size === 0) return 0;
+  const releasable = [...entries.values()].filter(e =&gt; !e.headless);
+  if (releasable.length === 0) return 0; // nothing to release — don't spawn ioreg</pre>
+    <p>Checking the flag inside the release loop instead would be equally correct and quietly
+    wasteful: every sweep would still read settings and shell out to <code>ioreg</code> on behalf of
+    holds it was never going to release. Filtering first buys an early return.</p>
+    <p>What it costs: a headless hold now has exactly one automatic exit, its deadline. Nothing
+    else ends it but an answer, a dismiss, or a supersede — so an answer window set too long
+    strands that session for the full duration rather than freeing it when you reappear.</p>
   </div>
 
   <div class="card card-quiz">
@@ -551,6 +580,37 @@ export function sweepIdle(): number {
     </div>
   </div>
 
+  <div class="card card-quiz">
+    <p class="quiz-prompt">A session started from the dashboard's <code>+ New</code> button is
+    holding a reply window open. You sit back down at your Mac. What happens to that hold?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">It is released, like any other hold when you return</button>
+        <p class="quiz-feedback">That was the behaviour before an entry carried a
+        <code>headless</code> flag. The sweep now filters those entries out of the releasable set
+        before it reads a setting or probes anything (messages.ts:203).</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">It is released only if the idle threshold is zero</button>
+        <p class="quiz-feedback">An <code>idleSecs</code> of zero disables auto-release rather than
+        enabling it, so that setting can only ever keep a hold open longer than it otherwise would
+        have stayed.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Nothing; it has no terminal to fall back to</button>
+        <p class="quiz-feedback">Correct. A headless session has no terminal, so sitting down gives
+        you no other way to reply — the dashboard window stays the only channel until the hold is
+        answered, dismissed, or times out.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">It is released once the next 5-second sweep runs</button>
+        <p class="quiz-feedback">The sweep does keep running for as long as any hold exists, so the
+        timing is right — but a headless entry is filtered out of the releasable set on every single
+        pass, so no number of sweeps will ever end it.</p>
+      </div>
+    </div>
+  </div>
+
 </section>
 
 <!-- ============ recap ============ -->
@@ -566,9 +626,10 @@ export function sweepIdle(): number {
   <button class="section-jump" data-target="s4">Section 4 — messages.ts, the reply window</button>
   <p class="xlink" style="margin-top:1rem"><a href="../learning/hooks/README.md">Written guide
   covering the hook side of this subsystem: the hooks learning walkthrough</a></p>
-  <p class="xlink">Next in this series: <strong>the write paths, part 2 — spawn.ts</strong>
-  (the path the dashboard initiates). Not yet built.</p>
-  <p class="stamp">built at 438f2b9</p>
+  <p class="xlink">Next in this series:
+  <a href="write-paths-2-spawn-deck.html">the write paths, part 2 — spawn.ts</a>
+  (the path the dashboard initiates).</p>
+  <p class="stamp">built at fa9fdbc</p>
 </div>
 
 </main>
@@ -580,8 +641,8 @@ export function sweepIdle(): number {
 
 <script type="application/json" id="provenance">
 {
-  "commit": "438f2b96bcf9a8945cc5e5c93e8f28e61d2b3db3",
-  "generated": "2026-08-21",
+  "commit": "fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14",
+  "generated": "2026-08-22",
   "sources": ["server/lib/pending.ts", "server/lib/plans.ts", "server/lib/messages.ts"],
   "sections": [
     { "id": "s1", "title": "The shared shape", "sources": ["server/lib/pending.ts", "server/lib/plans.ts", "server/lib/messages.ts"] },
