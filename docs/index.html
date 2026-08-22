@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>claude-agents-dashboard — guides</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1c20;
+    --muted: #5b6270;
+    --card: #f6f7f9;
+    --line: #d9dde3;
+    --accent: #2f6feb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #eceef1;
+      --muted: #a3a8b0;
+      --card: #2a2e35;
+      --line: #3a404a;
+      --accent: #6ea3ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    font-size: 17px;
+  }
+  main { padding: 22px 16px 40px; max-width: 44rem; margin: 0 auto; }
+  h1 { font-size: 1.35rem; line-height: 1.3; margin: 0 0 .3rem; }
+  .kicker { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 1.4rem; }
+  .lede { color: var(--muted); font-size: .95rem; margin: 0 0 1.6rem; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li + li { margin-top: 12px; }
+  a.card {
+    display: block;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-decoration: none;
+    color: inherit;
+    min-height: 44px;
+  }
+  a.card:hover { border-color: var(--accent); }
+  .name { font-weight: 600; font-size: 1.02rem; color: var(--accent); }
+  .desc { color: var(--muted); font-size: .88rem; margin-top: 3px; }
+  .kind { font-size: .72rem; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  footer { margin-top: 2.4rem; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>claude-agents-dashboard</h1>
+  <p class="kicker">guides &amp; lesson decks</p>
+  <p class="lede">Self-contained HTML — no build step, no network. Each one works offline once loaded.</p>
+
+  <ul>
+    <li>
+      <a class="card" href="tutor/write-paths-deck.html">
+        <span class="kind">tutor deck</span>
+        <div class="name">The write paths</div>
+        <div class="desc">Interactive lesson on the app's four write paths — pending answers, plans, messages, spawn. Comprehension questions between cards.</div>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="learning/hooks/index.html">
+        <span class="kind">study guide</span>
+        <div class="name">Claude Code hooks</div>
+        <div class="desc">Why the hook layer is shaped the way it is — the answer channel, the stop loop, the held socket, fail-open.</div>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="learning/dictation/index.html">
+        <span class="kind">study guide</span>
+        <div class="name">Dictation</div>
+        <div class="desc">The ffmpeg → whisper-cli pipeline: recorder lifecycle, the render gate, and why the transcription stays local.</div>
+      </a>
+    </li>
+  </ul>
+
+  <footer>
+    Markdown sources live beside each guide in the repo. The subsystem reference docs
+    are under <code>docs/subsystems/</code> and read best on GitHub.
+  </footer>
+</main>
+</body>
+</html>
