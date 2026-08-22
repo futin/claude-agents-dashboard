@@ -152,28 +152,50 @@ the improvements into **codifiable** (a durable rule that changes future session
 "subagents return terse findings") vs **habit** (a live discipline no config can enforce,
 e.g. `/clear` between phases). Habits: just name them, nothing to apply.
 
+**Route each lesson by scope — narrowest home that always fires wins.** Before defaulting to
+CLAUDE.md, ask *when* the lesson needs to apply:
+
+- **Tied to a specific step of an existing skill** (a tool call it makes, a shell idiom it uses,
+  a flag it should/shouldn't pass) → **update that skill**, not CLAUDE.md. The fix loads only when
+  the skill runs, right at the point of use, at zero always-on token cost — and it can't drift out
+  of sync with the procedure it corrects. Check the installed skills (the list surfaced to you, or
+  `.claude/skills/`) for one whose description matches the lesson; if a step in its `SKILL.md` is
+  what went wrong, that skill is the home. *Example: "don't pass `getCollection model:full`"
+  belongs in the postman-sync skill; "build curl JSON in a file, not inline zsh" belongs in the
+  create-MR skill — neither is a CLAUDE.md fact.*
+- **A general project convention** (not owned by any one skill) → project CLAUDE.md.
+- **The user's own working habits / no repo to commit to** → memory.
+
 **Default persistence is the project, not global.** A lesson from one session is a weak
 signal — it may be a per-project quirk. Keep it local until the cross-project watch (step 6)
 proves it recurs. Global `~/.claude/CLAUDE.md` loads in *every* session of *every* project, so
 its input-token cost is paid always — reserve it for patterns earned by evidence, not one data
 point.
 
-For the codifiable ones, use **AskUserQuestion** to ask how to persist them. Offer these
-options (recommend "Add to project CLAUDE.md" first):
+For the codifiable ones, use **AskUserQuestion** to ask how to persist them. Order the options so
+the **recommended** one matches the scope above — lead with "Update the <name> skill" when a skill
+owns the lesson, otherwise lead with "Add to project CLAUDE.md":
 
+- **Update the relevant skill** — edit the offending step in an existing skill's `SKILL.md` (name
+  the skill and the step). Best when the lesson corrects *how a skill does something*: loads only
+  when that skill runs, fixes it at the source, no always-on cost. Recommend this first whenever a
+  skill clearly owns the lesson.
 - **Add to project CLAUDE.md** — one line in the project's `.claude/CLAUDE.md` conventions
-  (or root `CLAUDE.md`). Applies every session in this repo; checked into git and shared with
-  teammates. **This is the default home for a new lesson.**
+  (or root `CLAUDE.md`). For a cross-cutting convention no single skill owns. Applies every session
+  in this repo; checked into git and shared with teammates. **This is the default home for a new
+  lesson that no skill owns.**
 - **Save as memory** — a `feedback`-type memory under the project's memory dir + a MEMORY.md
   index line. Use when there's no repo to commit to, or the lesson is about the user's own
   habits rather than the project.
-- **Both** — CLAUDE.md for this repo + team, memory as a personal echo.
+- **Both / combination** — e.g. skill edit for the procedure + memory as a personal echo, or
+  CLAUDE.md for this repo + team plus memory as a personal echo.
 - **Nothing** — leave config alone; the user steers it live.
 
-Then act on the answer: make the CLAUDE.md edit and/or write the memory (follow the memory
-format — frontmatter + **Why:** / **How to apply:**), and reference `~/.claude/session-analytics-log.md`
-so the reasoning stays traceable. If several suggestions are codifiable, one multi-select
-question covering them is fine — don't ask a separate question per suggestion.
+Then act on the answer: edit the skill's `SKILL.md` step and/or make the CLAUDE.md edit and/or write
+the memory (follow the memory format — frontmatter + **Why:** / **How to apply:**), and reference
+`~/.claude/session-analytics-log.md` so the reasoning stays traceable. If several suggestions are
+codifiable, one multi-select question covering them is fine — don't ask a separate question per
+suggestion.
 
 ### Promotion to global (only when step 6 flagged ≥ 4 projects)
 
