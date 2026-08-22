@@ -1,14 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/origin.ts
-    - client/src/components/OriginBadge.tsx
-    - vite.config.ts
-    - package.json
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Remote access — reaching the dashboard, and the origin badge
 
 Both servers already bind all interfaces — `server/index.ts` `server.listen(config.port)`
@@ -139,3 +128,13 @@ dictates" without any change of its own.
 - **Docker runs are unaffected** — Tailscale runs on the host and forwards to the
   published localhost ports, same as a LAN client. The badge sees the container's view of
   the peer address, so containerized dev may read `lan` where a host run reads `local`.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/origin.ts
+    - client/src/components/OriginBadge.tsx
+    - vite.config.ts
+    - package.json
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

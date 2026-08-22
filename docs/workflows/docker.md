@@ -1,16 +1,3 @@
----
-docs-sync:
-  sources:
-    - Dockerfile
-    - docker-compose.yml
-    - docker-compose.dev.yml
-    - scripts/host-credentials.sh
-    - scripts/lan-ip.sh
-    - server/lib/config.ts
-  kind: workflow
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Running in Docker
 
 The repo ships one multi-stage `Dockerfile` (`deps` → `dev` / `build` → `runtime`,
@@ -76,3 +63,15 @@ Two things a container can't reach on its own:
   default, and a `localhost` value would resolve inside the container's own network
   namespace — so the tailnet hostname is the only useful one here. See
   [push-notify-setup](push-notify-setup.md#docker).
+
+<!-- docs-sync:
+  sources:
+    - Dockerfile
+    - docker-compose.yml
+    - docker-compose.dev.yml
+    - scripts/host-credentials.sh
+    - scripts/lan-ip.sh
+    - server/lib/config.ts
+  kind: workflow
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

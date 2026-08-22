@@ -1,23 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/scan.ts
-    - server/lib/transcript.ts
-    - server/lib/config.ts
-    - server/lib/agents.ts
-    - server/lib/agents-cache.ts
-    - server/lib/title-cache.ts
-    - client/src/components/SessionsView.tsx
-    - client/src/components/SessionList.tsx
-    - client/src/components/SessionRow.tsx
-    - client/src/components/SessionDetail.tsx
-    - client/src/hooks/useSessions.ts
-    - client/src/hooks/useSessionDetail.ts
-    - client/src/lib/filterSort.ts
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Sessions — live monitor, status machine, subagent detail
 
 The default section: one row per Claude Code session, refreshed on the interval the Settings
@@ -263,3 +243,22 @@ Client-side controls above the list: project, status, activity window, and sort
 `localStorage` (`dashboard.view`) so it survives refresh and tab-close — see
 [view-persistence](view-persistence.md). Row expansion is deliberately not persisted
 (session IDs churn).
+
+<!-- docs-sync:
+  sources:
+    - server/lib/scan.ts
+    - server/lib/transcript.ts
+    - server/lib/config.ts
+    - server/lib/agents.ts
+    - server/lib/agents-cache.ts
+    - server/lib/title-cache.ts
+    - client/src/components/SessionsView.tsx
+    - client/src/components/SessionList.tsx
+    - client/src/components/SessionRow.tsx
+    - client/src/components/SessionDetail.tsx
+    - client/src/hooks/useSessions.ts
+    - client/src/hooks/useSessionDetail.ts
+    - client/src/lib/filterSort.ts
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

@@ -1,18 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/notify.ts
-    - server/lib/settings.ts
-    - server/lib/config.ts
-    - server/api.ts
-    - server/index.ts
-    - scripts/stop-notify-hook.sh
-    - client/src/lib/deepLink.ts
-    - client/src/components/settings/SettingsView.tsx
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Push notifications (ntfy)
 
 The dashboard publishes a push to an [ntfy](https://ntfy.sh) topic when a session starts
@@ -232,3 +217,17 @@ chatty. Not built; the predicate has an obvious place for it (a final clause ove
 **iOS PWA / Web Push.** Still the only way to notify from the dashboard itself rather than
 via ntfy. Manifest, icons, service worker, VAPID signing, subscription storage, and a second
 server write path. ntfy makes it unnecessary for now.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/notify.ts
+    - server/lib/settings.ts
+    - server/lib/config.ts
+    - server/api.ts
+    - server/index.ts
+    - scripts/stop-notify-hook.sh
+    - client/src/lib/deepLink.ts
+    - client/src/components/settings/SettingsView.tsx
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

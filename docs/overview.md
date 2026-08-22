@@ -1,17 +1,3 @@
----
-docs-sync:
-  sources:
-    - shared/types.ts
-    - server/index.ts
-    - server/api.ts
-    - server/lib/
-    - client/src/
-    - vite.config.ts
-    - package.json
-  kind: overview
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Architecture overview
 
 A **monolith split into three domains**: a Node backend (`server/`), a Vite + React +
@@ -194,3 +180,16 @@ that area:
 - [remote-answer-setup](workflows/remote-answer-setup.md) — per-machine hook install
 - [push-notify-setup](workflows/push-notify-setup.md) — ntfy topic, phone subscription, Stop hook
 - [dictation-setup](workflows/dictation-setup.md) — installing whisper.cpp and a model, and the HTTPS tunnel phone use needs
+
+<!-- docs-sync:
+  sources:
+    - shared/types.ts
+    - server/index.ts
+    - server/api.ts
+    - server/lib/
+    - client/src/
+    - vite.config.ts
+    - package.json
+  kind: overview
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

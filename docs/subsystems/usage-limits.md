@@ -1,13 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/usage.ts
-    - server/api.ts
-    - client/src/components/Header.tsx
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Usage limits (header bars)
 
 The header shows two mini progress bars — **5h** and **Week** — the same account
@@ -64,3 +54,12 @@ local credentials.
   `docs/plans/2026-07-06-usage-token-refresh-removal.md` for the removed design + a
   platform-independent Docker approach to revisit **if** a future feature genuinely needs
   the dashboard to make its own authenticated Anthropic API call.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/usage.ts
+    - server/api.ts
+    - client/src/components/Header.tsx
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

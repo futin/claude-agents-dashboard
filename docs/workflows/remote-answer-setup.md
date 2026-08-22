@@ -1,12 +1,3 @@
----
-docs-sync:
-  sources:
-    - scripts/ask-remote-hook.sh
-    - server/api.ts
-  kind: workflow
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Remote answers — per-machine hook setup
 
 Wires the [remote-answer](../subsystems/remote-answer.md) hook into Claude Code on one
@@ -90,3 +81,11 @@ without waiting for a real question.
 - **403 from the POSTs** — `ANSWER_TOKEN` is set server-side but missing/wrong in
   `~/.claude/hooks/dashboard-token` or the browser prompt (see the security section of
   [remote-answer](../subsystems/remote-answer.md)).
+
+<!-- docs-sync:
+  sources:
+    - scripts/ask-remote-hook.sh
+    - server/api.ts
+  kind: workflow
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

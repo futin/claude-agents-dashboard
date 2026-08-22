@@ -1,23 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/spawn.ts
-    - server/api.ts
-    - server/index.ts
-    - server/lib/config.ts
-    - server/lib/scan.ts
-    - server/lib/transcript.ts
-    - shared/types.ts
-    - client/src/components/SpawnPanel.tsx
-    - client/src/components/SessionList.tsx
-    - client/src/components/SessionRow.tsx
-    - client/src/hooks/useSpawn.ts
-    - client/src/lib/spawnOptions.ts
-    - client/src/lib/surface.ts
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Spawning a new session (the fourth write path)
 
 The toolbar's **+ New** button starts a brand-new Claude Code session from the
@@ -433,3 +413,22 @@ new reason:
 - **A stopped launch and an orphaned one are not symmetric.** See [the stop endpoint's
   restart hole](#the-stop-endpoint-and-its-restart-hole) above — a detached child
   outlives a server restart by design, but the store that could `stop` it does not.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/spawn.ts
+    - server/api.ts
+    - server/index.ts
+    - server/lib/config.ts
+    - server/lib/scan.ts
+    - server/lib/transcript.ts
+    - shared/types.ts
+    - client/src/components/SpawnPanel.tsx
+    - client/src/components/SessionList.tsx
+    - client/src/components/SessionRow.tsx
+    - client/src/hooks/useSpawn.ts
+    - client/src/lib/spawnOptions.ts
+    - client/src/lib/surface.ts
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

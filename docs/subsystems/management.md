@@ -1,15 +1,3 @@
----
-docs-sync:
-  sources:
-    - server/lib/management.ts
-    - server/lib/frontmatter.ts
-    - server/api.ts
-    - client/src/components/management/
-    - client/src/lib/managementEntries.ts
-  kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
----
-
 # Management — read-only config browser
 
 A **Management** section (top-level `SideRail` in `App.tsx`, persisted as
@@ -66,3 +54,14 @@ Read-only v1 — nothing is ever written.
   `withFileTypes` dirents never report a symlink as a file, so the explicit
   `isSymbolicLink()` guard is belt-and-braces; a refactor to plain `readdir` + `stat`
   would silently follow links, which is exactly what the regression test pins.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/management.ts
+    - server/lib/frontmatter.ts
+    - server/api.ts
+    - client/src/components/management/
+    - client/src/lib/managementEntries.ts
+  kind: subsystem
+  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+-->

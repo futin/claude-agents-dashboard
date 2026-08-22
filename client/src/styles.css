@@ -458,13 +458,16 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 /* ---------------------------------------------- chat-history drawer
    (the way in is `.row-chat`, up in the strip block) */
 .chat-back{position:fixed;inset:0;background:var(--scrim);display:flex;justify-content:flex-end;z-index:50}
-.chat{display:flex;flex-direction:column;width:min(720px,100%);height:100%;background:var(--board);border-left:1px solid var(--hairline2);animation:chat-in .16s ease-out}
+.chat{display:flex;flex-direction:column;width:min(720px,100%);min-width:0;height:100%;background:var(--board);border-left:1px solid var(--hairline2);animation:chat-in .16s ease-out}
 @keyframes chat-in{from{transform:translateX(16px);opacity:.4}to{transform:none;opacity:1}}
 .chat-head{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--hairline);flex-shrink:0;overflow:hidden;background:var(--strip);box-shadow:inset 0 1px 0 var(--edge)}
 /* the title absorbs the free space so the pills, model and ✕ stay pinned right
    and reachable at any width (the mobile drawer has no backdrop to tap) */
 .chat-title{flex:1;min-width:0;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chat-head .proj-pill,.chat-head .branch{flex-shrink:0;white-space:nowrap}
+/* the pills DO shrink: a 70-char branch name at flex-shrink:0 is wider than a
+   phone drawer, and it shoved the ✕ outside the head's overflow:hidden — the
+   drawer became impossible to close. Capped + ellipsised instead. */
+.chat-head .proj-pill,.chat-head .branch{flex-shrink:1;min-width:0;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-model{font-size:10.5px;color:var(--ink3);font-family:var(--mono);flex-shrink:0}
 .chat-x{font-size:12px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:4px 8px;cursor:pointer;flex-shrink:0;transition:color .15s,border-color .15s}
 .chat-x:hover{color:var(--ink);border-color:var(--hairline2)}
@@ -562,6 +565,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
    Pinned like .qpanel so it survives scrolling the history */
 .pbanner{flex-shrink:0;display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;border-top:1px solid color-mix(in srgb,var(--mustard) 45%,transparent);background:color-mix(in srgb,var(--mustard) 6%,var(--board));padding:9px 16px;font-size:11.5px;color:var(--ink2)}
 .pb-badge{font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mustard);border:1px solid var(--mustard);border-radius:2px;padding:0 6px 1px}
+.pb-text{min-width:0;overflow-wrap:anywhere}
 .pb-text .tool{font-family:var(--mono);color:var(--cyan);font-weight:600}
 .pb-note{font-size:10.5px;color:var(--ink3);margin-left:auto}
 .chat-foot{display:flex;align-items:baseline;gap:10px;padding:9px 16px;border-top:1px solid var(--hairline);font-size:10.5px;color:var(--ink3);flex-shrink:0;font-family:var(--mono)}
