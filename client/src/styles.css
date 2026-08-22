@@ -525,6 +525,12 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
    Pinned above the footer so it stays reachable while scrolling history */
 .qpanel{flex-shrink:0;border-top:1px solid color-mix(in srgb,var(--amber) 45%,transparent);background:color-mix(in srgb,var(--amber) 6%,var(--board));padding:10px 16px;display:flex;flex-direction:column;gap:9px;max-height:56vh;overflow-y:auto}
 .qpanel.sent,.qpanel.gone{padding:8px 16px}
+/* A textarea is by far the most compressible thing in a flex column: once the
+   panel reaches its max-height the browser shrinks the children toward their
+   min-content size instead of scrolling, so `rows` stops meaning anything and
+   the prompt box collapses to a sliver. Pin every child at its natural height
+   and let .qpanel's own overflow-y do the scrolling. */
+.qpanel>*{flex-shrink:0}
 .qp-head{display:flex;align-items:baseline;gap:8px}
 .qp-badge{font-family:var(--display);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--amber);border:1px solid var(--amber);border-radius:2px;padding:0 6px 1px}
 .qp-hint,.qp-note{font-size:10.5px;color:var(--ink3)}
@@ -577,6 +583,12 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
    hold — a compose surface you opened on purpose. Cyan doubles as the
    "starting…" phantom row's color, so the whole feature reads as one thread. */
 .qpanel.spawn{border-top:1px solid color-mix(in srgb,var(--cyan) 45%,transparent);background:color-mix(in srgb,var(--cyan) 6%,var(--board))}
+/* ...and this is the one qpanel that does NOT live inside the fixed-height
+   chat drawer — it sits in page flow under the toolbar. A vh cap there buys
+   nothing and costs a nested scroller: on a phone the stacked config row
+   alone overruns 62vh, so the prompt box ends up half outside the panel's own
+   scroll window. Let the panel be as tall as it needs and let the page scroll. */
+.qpanel.spawn{max-height:none;overflow:visible}
 .qpanel.spawn .qp-badge{color:var(--cyan);border-color:var(--cyan)}
 .qpanel.spawn .qp-send{background:var(--cyan);border-color:var(--cyan)}
 .qpanel.spawn .qp-other:focus,.qpanel.spawn .qp-feedback:focus,.qpanel.spawn .qp-select:focus{border-color:var(--cyan)}
