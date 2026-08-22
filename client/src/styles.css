@@ -677,3 +677,20 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
   /* the tab is the row's thumb target — narrower than desktop, still full height */
   .row-chat{flex:0 0 52px}
 }
+
+/* ---------------------------------------------- touch: no focus auto-zoom
+   iOS Safari zooms the viewport when a focused field's font size is under 16px,
+   and it never zooms back out on blur — you are left stranded at that scale for
+   the rest of the visit. Every field here is 10.5–13px by design, so the whole
+   app tripped it. Floor them at an *effective* 16px on coarse pointers only;
+   the mouse-driven layout keeps its density. Divided by --font-scale because
+   .shell{zoom} (line ~96) multiplies into the rendered size, so at text scale
+   90% a plain 16px would render as 14.4px and trip the zoom again; max() keeps
+   the declared value from dropping below 16px when the scale is above 1. */
+@media (pointer:coarse){
+  .qp-feedback,.qp-other,.mgmt-filter,
+  .toolbar select,.qp-select,
+  .set-control select,.set-control input[type=number],.set-control input[type=text]{
+    font-size:max(16px,calc(16px / var(--font-scale,1)))
+  }
+}
