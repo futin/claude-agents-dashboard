@@ -373,6 +373,30 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .mdetail-label .tb-dir{font-size:10px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:3px 7px;cursor:pointer;text-transform:none;letter-spacing:0;font-family:var(--font)}
 .mdetail-label .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
 .mdetail-type{font-size:9px;font-weight:600;font-family:var(--mono);color:var(--ink3);text-transform:uppercase;letter-spacing:.06em}
+/* Skill directory: a file rail beside the viewer. Only skills with more than
+   SKILL.md get this layout; single-file items keep the plain path + viewer. */
+.skill-body{display:grid;grid-template-columns:212px minmax(0,1fr);gap:10px;align-items:start;margin-top:4px}
+.skill-file{display:flex;flex-direction:column;gap:6px;min-width:0}
+.frail{background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:6px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.frail-h{font-family:var(--display);font-size:9.5px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.09em;padding:4px 6px 5px}
+.fdir{font-family:var(--mono);font-size:10px;color:var(--ink3);padding:6px 7px 3px;word-break:break-all}
+.ffile{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;text-align:left;color:var(--ink2);background:none;border:1px solid transparent;border-radius:2px;padding:5px 7px;cursor:pointer;min-width:0;transition:background .12s,color .12s}
+.ffile:hover{background:var(--strip);color:var(--ink)}
+.ffile:focus-visible{outline:none;border-color:var(--cyan)}
+.ffile.on{color:var(--ink);background:var(--strip-hi);border-color:var(--hairline2);box-shadow:0 0 0 1px var(--cyan)}
+.ffile.ind{padding-left:18px}
+.ffile-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ffile .fsize{margin-left:auto;flex-shrink:0;font-size:9px;color:var(--ink3);font-variant-numeric:tabular-nums}
+/* Phones: same breakpoint where .mgmt collapses to one column — the rail can't
+   hold its own column there, so it becomes a wrapping chip strip */
+@media (max-width:700px){
+  .skill-body{grid-template-columns:minmax(0,1fr)}
+  .frail{flex-direction:row;flex-wrap:wrap;align-items:center;gap:5px}
+  .frail-h,.fdir{padding:2px 4px}
+  .ffile{border:1px solid var(--hairline);background:var(--strip)}
+  .ffile.ind{padding-left:7px}
+  .ffile .fsize{margin-left:4px}
+}
 /* Desktop: management is an app shell — page never scrolls, each pane does */
 @media (min-width:1201px){
   /* Same 100vh-under-zoom correction as the rail: divide by --font-scale, and

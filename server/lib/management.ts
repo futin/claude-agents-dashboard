@@ -23,11 +23,14 @@ import { listTranscripts } from './scan.js';
 import { readTranscript } from './transcript.js';
 import type { Config } from './config.js';
 import type {
-  ConfigItem, FileContent, HookInfo, PluginInfo, ProjectRef, ScopeConfig, SettingsFileInfo
+  ConfigItem, FileContent, HookInfo, PluginInfo, ProjectRef, ScopeConfig, SettingsFileInfo, SkillFile
 } from '../../shared/types.js';
 
 /** Max bytes served per file by GET /api/management/file. */
 export const FILE_CONTENT_CAP = 256 * 1024;
+
+/** Max files listed per skill dir (after sorting, so SKILL.md always survives). */
+export const SKILL_FILES_CAP = 200;
 
 export function claudeHome(homeDir?: string): string {
   return path.join(homeDir || os.homedir(), '.claude');
@@ -61,7 +64,60 @@ async function readJsonIfFile(p: string): Promise<unknown | null> {
   }
 }
 
-/** Skill dirs: each subdir containing a SKILL.md. */
+/** Max path segments of a listed skill file's rel — 'a/b/c/ok.md' is the deepest. */
+const SKILL_WALK_DEPTH = 4;
+
+/**
+ * Every file in one skill dir, rel-keyed, SKILL.md first then rel-sorted.
+ *
+ * ⚠️ These paths join the servable set, so the walk enumerates only plain
+ * files it can see itself: **symlinks are skipped** (one pointing at
+ * `~/.claude/.credentials.json` or a project `.env` would otherwise become
+ * servable), and so are dotfiles/dot-dirs (`.git/`, editor state). Depth and
+ * count are capped so a skill that vendors `node_modules` can't blow up the
+ * scan.
+ */
+async function readSkillFiles(skillDir: string): Promise<SkillFile[]> {
+  const out: SkillFile[] = [];
+
+  const walk = async (dir: string, prefix: string, depth: number): Promise<void> => {
+    let entries: fs.Dirent[];
+    try {
+      entries = await fsp.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('.') || e.isSymbolicLink()) continue;
+      const full = path.join(dir, e.name);
+      const rel = prefix === '' ? e.name : `${prefix}/${e.name}`;
+      if (e.isDirectory()) {
+        if (depth > 1) await walk(full, rel, depth - 1);
+        continue;
+      }
+      if (!e.isFile()) continue;
+      try {
+        const stat = await fsp.lstat(full);
+        if (!stat.isFile()) continue;
+        out.push({ rel, size: stat.size });
+      } catch { /* vanished mid-walk */ }
+    }
+  };
+
+  await walk(skillDir, '', SKILL_WALK_DEPTH);
+  out.sort((a, b) => {
+    if (a.rel === 'SKILL.md') return -1;
+    if (b.rel === 'SKILL.md') return 1;
+    return a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0;
+  });
+  return out.slice(0, SKILL_FILES_CAP);
+}
+
+/**
+ * Skill dirs: each subdir containing a SKILL.md. `files` is the whole skill
+ * directory (see readSkillFiles), set only when there is more than SKILL.md —
+ * a single-file skill stays exactly as it was.
+ */
 export async function readSkillsDir(dir: string, source: string): Promise<ConfigItem[]> {
   let entries: fs.Dirent[];
   try {
@@ -70,15 +126,18 @@ export async function readSkillsDir(dir: string, source: string): Promise<Config
     return [];
   }
   const items = await Promise.all(entries.filter(e => e.isDirectory()).map(async e => {
-    const file = path.join(dir, e.name, 'SKILL.md');
+    const skillDir = path.join(dir, e.name);
+    const file = path.join(skillDir, 'SKILL.md');
     const text = await readTextIfFile(file);
     if (text === null) return null;
     const fm = parseFrontmatter(text).data;
+    const files = await readSkillFiles(skillDir);
     return {
       name: fm.name || e.name,
       description: fm.description || null,
       path: file,
-      source
+      source,
+      ...(files.length > 1 ? { files } : {})
     } as ConfigItem;
   }));
   return items.filter((i): i is ConfigItem => i !== null);
@@ -398,6 +457,11 @@ export async function collectServablePaths(config: Partial<Config>, options: Pro
   for (const scope of scopes) {
     for (const item of [...scope.skills, ...scope.agents, ...scope.commands, ...scope.rules, ...scope.memory]) {
       allowed.add(item.path);
+      // A skill's own directory: every file the scanner itself enumerated,
+      // resolved off SKILL.md's dir — still exact set membership, never a prefix rule.
+      for (const f of item.files ?? []) {
+        allowed.add(path.join(path.dirname(item.path), ...f.rel.split('/')));
+      }
     }
     for (const hook of scope.hooks) {
       allowed.add(hook.declaredIn);

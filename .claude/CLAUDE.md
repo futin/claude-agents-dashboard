@@ -31,6 +31,7 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/usage.ts    fetches account 5h/weekly limits from Anthropic (see docs/subsystems/usage-limits.md)
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser (key:value + >/| scalars, fail-open)
   lib/management.ts   config scanner: global/project ScopeConfig, plugins, recent projects,
+                  per-skill directory listing (ConfigItem.files — symlinks/dotfiles skipped),
                   servable-path security set (see docs/subsystems/management.md)
   lib/analyze.ts  whole-file session post-mortem → SessionAnalysis (the /kaizen analyzer; pure)
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md → lesson / status /
@@ -101,7 +102,8 @@ client/           Vite + React + TypeScript frontend
                   (fed by hooks/useRemoteAnswer, which the Toolbar owns)
   components/OriginBadge.tsx   toolbar pill: how this browser reached the dashboard
                   (reads `origin` off the same /api/health poll; display-only)
-  components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane, FileViewer)
+  components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane,
+                  FileViewer, SkillFileRail — a multi-file skill's whole directory)
   components/analytics/AnalyticsView.tsx  the report-card list (own lazy chunk; read-only)
   hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
   components/settings/         the Settings tab (own lazy chunk) — themes, density/text scale,

@@ -10,7 +10,9 @@ Read-only v1 — nothing is ever written.
   Every item is tagged with its source: `user`, `project`, or `plugin:<name>` — installed
   plugins are fully expanded, so plugin-provided skills/hooks/agents/rules show up too.
 - **Right — detail pane:** the selected item's metadata and file content (SKILL.md, hook
-  script, settings.json, …).
+  script, settings.json, …). A **skill that ships more than SKILL.md** gets a file rail
+  beside the viewer — the whole skill directory (references, scripts, agents, docs), any
+  file of which opens in place. Single-file skills keep the plain path + viewer.
 
 ## Mechanism
 
@@ -23,6 +25,11 @@ Read-only v1 — nothing is ever written.
   installPath → skills/agents/commands/rules/hooks.json), items tagged `plugin:<name>`.
   Project = `<cwd>/.claude/*` + root CLAUDE.md, items tagged `project`. Recent projects
   come from transcript cwds (same lookback as sessions), deduped by cwd, newest-first.
+- **Skill directories:** `readSkillsDir` walks each skill dir at scan time and sets
+  `ConfigItem.files` (`{rel, size}[]`, SKILL.md first then rel-sorted) — only when there
+  is more than SKILL.md, so a single-file skill's payload is byte-identical to before. No
+  file bodies are read during the scan; the rail fetches one on click through the same
+  `/api/management/file`. Caps: depth 4 rel-segments, 200 files per skill.
 - **No polling:** config changes over days. Index fetched on section mount / manual ↻;
   project scopes + file bodies fetched lazily on click and cached in ref-held Maps.
   Switching to Management unmounts SessionsView → the 3s poll stops.
@@ -40,6 +47,13 @@ Read-only v1 — nothing is ever written.
   enumerated recent-project list, never joined into a path (same philosophy as
   `serveSessionDetail`). Content capped at 256 KB (`truncated` flag). `~/.claude.json`
   (huge, private) is never read.
+- **⚠️ The skill-dir walk feeds that set, so it enumerates only what it can see itself:**
+  **symlinks and dotfiles/dot-dirs are skipped**. A symlink inside a skill dir pointing at
+  `~/.claude/.credentials.json` or a project `.env` would otherwise turn into a servable
+  member — the one way this feature could breach the invariant above. `readdir`'s
+  `withFileTypes` dirents never report a symlink as a file, so the explicit
+  `isSymbolicLink()` guard is belt-and-braces; a refactor to plain `readdir` + `stat`
+  would silently follow links, which is exactly what the regression test pins.
 
 <!-- docs-sync:
   sources:

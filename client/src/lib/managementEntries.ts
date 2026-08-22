@@ -7,6 +7,16 @@ import type { ConfigItem, HookInfo, ScopeConfig } from '../../../shared/types';
 
 export type FileKind = 'markdown' | 'json' | 'text';
 
+/** One file of a skill directory, ready to open in the detail pane. */
+export interface EntryFile {
+  /** Path relative to the skill dir — the rail's label. */
+  rel: string;
+  /** Absolute path, resolved off SKILL.md's dir; what the file endpoint takes. */
+  path: string;
+  size: number;
+  fileKind: FileKind;
+}
+
 interface EntryBase {
   /** Unique within the scope — selection key. */
   key: string;
@@ -22,7 +32,7 @@ interface EntryBase {
 
 /** One selectable row in the item list. */
 export type Entry =
-  | (EntryBase & { kind: 'file'; fileKind: FileKind })
+  | (EntryBase & { kind: 'file'; fileKind: FileKind; files?: EntryFile[] })
   | (EntryBase & { kind: 'hook'; hook: HookInfo });
 
 export interface EntryGroup {
@@ -54,6 +64,24 @@ function bySubgroupThenLabel(a: Entry, b: Entry): number {
   return 0;
 }
 
+/** Drop the last '/'-segment of an absolute path — the skill dir of a SKILL.md. */
+function dirOf(p: string): string {
+  const cut = p.lastIndexOf('/');
+  return cut <= 0 ? p : p.slice(0, cut);
+}
+
+/** ConfigItem.files (rel + size) → openable entry files, rooted at the item's dir. */
+function toEntryFiles(item: ConfigItem): EntryFile[] | undefined {
+  if (item.files === undefined || item.files.length === 0) return undefined;
+  const dir = dirOf(item.path);
+  return item.files.map(f => ({
+    rel: f.rel,
+    path: `${dir}/${f.rel}`,
+    size: f.size,
+    fileKind: fileKind(f.rel)
+  }));
+}
+
 function fromItems(items: ConfigItem[], subgrouped: boolean): Entry[] {
   const entries: Entry[] = items.map(i => ({
     kind: 'file',
@@ -63,7 +91,8 @@ function fromItems(items: ConfigItem[], subgrouped: boolean): Entry[] {
     sublabel: i.description,
     badge: i.source,
     filePath: i.path,
-    subgroup: subgrouped ? itemSubgroup(i.source) : null
+    subgroup: subgrouped ? itemSubgroup(i.source) : null,
+    ...(toEntryFiles(i) !== undefined ? { files: toEntryFiles(i) } : {})
   }));
   if (subgrouped) entries.sort(bySubgroupThenLabel);
   return entries;
@@ -128,15 +157,56 @@ export function buildEntries(scope: ScopeConfig): EntryGroup[] {
   return groups;
 }
 
-/** Case-insensitive label+sublabel match; empty query returns groups as-is. */
+/** One line of the skill file rail: a folder header, or an openable file. */
+export type RailRow =
+  | { kind: 'dir'; dir: string }
+  | { kind: 'file'; label: string; file: EntryFile; nested: boolean };
+
+/**
+ * Flatten a skill's files into rail lines: root-level files first (SKILL.md
+ * leads, since readSkillFiles sorts it there), then one header per folder with
+ * its files under it. Folders keep their full relative path as the header, so a
+ * nested `scripts/deep/` reads correctly without an indent ladder.
+ */
+export function railRows(files: EntryFile[]): RailRow[] {
+  const roots: RailRow[] = [];
+  const dirs = new Map<string, RailRow[]>();
+
+  for (const file of files) {
+    const cut = file.rel.lastIndexOf('/');
+    if (cut === -1) {
+      roots.push({ kind: 'file', label: file.rel, file, nested: false });
+      continue;
+    }
+    const dir = file.rel.slice(0, cut);
+    const rows = dirs.get(dir) ?? [];
+    rows.push({ kind: 'file', label: file.rel.slice(cut + 1), file, nested: true });
+    dirs.set(dir, rows);
+  }
+
+  const out = [...roots];
+  for (const dir of [...dirs.keys()].sort()) {
+    out.push({ kind: 'dir', dir: `${dir}/` });
+    out.push(...dirs.get(dir)!);
+  }
+  return out;
+}
+
+/**
+ * Case-insensitive label+sublabel match, plus a skill's own file names — so
+ * searching a reference doc finds the skill that ships it. Empty query returns
+ * groups as-is.
+ */
 export function filterEntries(groups: EntryGroup[], query: string): EntryGroup[] {
   const q = query.trim().toLowerCase();
   if (!q) return groups;
+  const matches = (e: Entry): boolean =>
+    e.label.toLowerCase().includes(q) ||
+    (e.sublabel !== null && e.sublabel.toLowerCase().includes(q)) ||
+    (e.kind === 'file' && (e.files ?? []).some(f => f.rel.toLowerCase().includes(q)));
   const out: EntryGroup[] = [];
   for (const g of groups) {
-    const entries = g.entries.filter(
-      e => e.label.toLowerCase().includes(q) || (e.sublabel !== null && e.sublabel.toLowerCase().includes(q))
-    );
+    const entries = g.entries.filter(matches);
     if (entries.length > 0) out.push({ title: g.title, entries });
   }
   return out;
