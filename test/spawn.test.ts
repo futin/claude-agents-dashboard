@@ -810,6 +810,95 @@ export function run(): number {
     } finally { setSpawner(null); }
   })) p++; else f++;
 
+  /* ----------------------------------------------------------------- resume */
+
+  if (test('buildSpawnArgs: resume swaps --session-id for --resume, everything after unchanged', () => {
+    const args = buildSpawnArgs({
+      sessionId: UUID, prompt: 'p', permissionMode: 'auto', model: 'haiku', effort: 'low', resume: true
+    });
+    assert.deepStrictEqual(args, [
+      '-p', '--resume', UUID, '--permission-mode', 'auto', '--model', 'haiku', '--effort', 'low'
+    ]);
+    assert.ok(!args.includes('--session-id'), 'CLI refuses --session-id with --resume sans --fork-session');
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest: a valid resume id comes back as resumeId, identity fields forced off', () => {
+    const r = parseSpawnRequest(
+      { prompt: 'go on', resume: UUID, name: 'My Run', remoteControl: true }, 'auto'
+    );
+    assert.ok(r.ok);
+    if (r.ok) {
+      assert.strictEqual(r.resumeId, UUID);
+      // -n renames and --remote-control registration on a resumed session are
+      // unverified CLI combos — dropped, never sent.
+      assert.strictEqual(r.input.name, undefined);
+      assert.strictEqual(r.input.remoteControl, false);
+    }
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest: a present-but-malformed resume REJECTS (load-bearing, unlike cosmetic fields)', () => {
+    for (const bad of [42, '', '../evil', 'a b', {}]) {
+      const r = parseSpawnRequest({ prompt: 'p', resume: bad }, 'auto');
+      assert.strictEqual(r.ok, false, `resume=${JSON.stringify(bad)} must reject, not silently launch fresh`);
+    }
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest: absent resume yields no resumeId (fresh-launch path unchanged)', () => {
+    const r = parseSpawnRequest({ prompt: 'p' }, 'auto');
+    assert.ok(r.ok);
+    if (r.ok) assert.strictEqual(r.resumeId, undefined);
+  })) p++; else f++;
+
+  if (test('launch with a resume id: reuses that id, spawns --resume, and flags the entry', () => {
+    resetLaunches();
+    const calls: SpawnCall[] = [];
+    setSpawner(fakeSpawner(calls, []));
+    try {
+      const id = launch(cfg(), REF, baseInput({ resume: true }), UUID);
+      assert.strictEqual(id, UUID, 'resume must not mint a new id — the transcript already owns this one');
+      assert.deepStrictEqual(calls[0].args.slice(0, 3), ['-p', '--resume', UUID]);
+      const entry = listLaunching().find(e => e.sessionId === UUID)!;
+      assert.strictEqual(entry.resume, true);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('adoptLaunched skips resume entries — the id pre-exists on disk, so adoption means nothing', () => {
+    resetLaunches();
+    setSpawner(fakeSpawner([], []));
+    try {
+      launch(cfg(), REF, baseInput({ resume: true }), UUID);
+      assert.strictEqual(adoptLaunched([UUID]), 0);
+      assert.strictEqual(listLaunching().length, 1, 'entry must survive the poll that would adopt a fresh launch');
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a failed resume stays visible as a failed entry (the one signal the user gets)', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      launch(cfg(), REF, baseInput({ resume: true }), UUID);
+      children[0].stderr.emit('data', 'resume exploded');
+      children[0].emit('exit', 1, null);
+      const entry = listLaunching().find(e => e.sessionId === UUID)!;
+      assert.strictEqual(entry.state, 'failed');
+      assert.strictEqual(entry.resume, true);
+      assert.ok(entry.error!.includes('resume exploded'));
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('stopLaunch still SIGTERMs a launching resume entry', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      launch(cfg(), REF, baseInput({ resume: true }), UUID);
+      assert.strictEqual(stopLaunch(UUID), true);
+      assert.deepStrictEqual(children[0].killSignals, ['SIGTERM']);
+      assert.strictEqual(listLaunching().length, 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
   resetLaunches();
   resetSpawnProbe();
 

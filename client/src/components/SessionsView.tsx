@@ -71,7 +71,12 @@ export function SessionsView() {
       {chatSession && (
         <Suspense fallback={null}>
           {/* keyed by id: switching sessions remounts the tail cleanly */}
-          <ChatDrawer key={chatSession.id} session={chatSession} onClose={() => setChatId(null)} />
+          <ChatDrawer
+            key={chatSession.id}
+            session={chatSession}
+            onClose={() => setChatId(null)}
+            spawnAvailable={remoteAnswer.state?.spawnAvailable}
+          />
         </Suspense>
       )}
     </>

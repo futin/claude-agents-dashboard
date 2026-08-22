@@ -5,8 +5,10 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import nodePath from 'node:path';
 
-import { scanSessions, lastMessageMs, listTranscripts, projectsRoot } from './lib/scan.js';
+import { scanSessions, lastMessageMs, listTranscripts, projectsRoot, sessionSurface } from './lib/scan.js';
+import { readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
 import {
@@ -825,13 +827,17 @@ export async function serveNotifyTest(
  * should be "corrected" to match the other without reading this paragraph.
  * From there the order does earn itself — who's asking, then how many launches
  * are already in flight (before a body is read, the same pre-buffer refusal
- * `serveTranscribe` does), then whether the named project exists, then whether
- * the rest of the request is usable.
+ * `serveTranscribe` does), then whether the request is usable
+ * (`parseSpawnRequest`, pure, which also decides fresh-vs-resume), then the
+ * filesystem step for the chosen shape.
  *
- * `body.project` never reaches the filesystem by being joined into a path —
- * it is resolved through `resolveProject`'s membership check against the
- * enumerated recent-project list, the same reasoning `serveManagementProject`
- * documents for its `dirName` query param.
+ * Neither `body.project` nor `body.resume` ever reaches the filesystem by
+ * being joined into a path — the former resolves through `resolveProject`'s
+ * membership check against the enumerated recent-project list (the same
+ * reasoning `serveManagementProject` documents for its `dirName` query param),
+ * the latter through an exact-id match against the enumerated transcripts.
+ * Resume additionally requires the target to be a `dashboard`-surface
+ * (`sdk-cli`) session with no live hold — see docs/subsystems/spawn.md.
  */
 export async function serveSpawn(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
@@ -851,24 +857,51 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
   const body = await readJsonBody(req) as Partial<SpawnRequest> | null;
   if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
-  const projectName = typeof body.project === 'string' ? body.project : '';
+  // Parse before any filesystem work — it is pure and decides which of the two
+  // launch shapes this is (fresh vs resume). Fresh requests therefore see
+  // parse errors before `unknown project`, a deliberate reordering.
+  const parsed = parseSpawnRequest(body, config.spawnMaxPermission);
+  if (!parsed.ok) return sendBadBody(res, { error: parsed.error });
 
-  // resolveProject reads the recent-projects list off disk (same as
-  // serveManagementProject's identical call) and launch() spawns a process —
-  // both can throw on an unexpected failure, and this handler is void-
-  // dispatched from an async function in index.ts, so an uncaught throw here
-  // would be an unhandled rejection (process death) rather than a 500.
+  // resolveProject / the transcript hunt read disk and launch() spawns a
+  // process — all can throw on an unexpected failure, and this handler is
+  // void-dispatched from an async function in index.ts, so an uncaught throw
+  // here would be an unhandled rejection (process death) rather than a 500.
   let sessionId: string;
   try {
-    const ref = resolveProject(config, projectName);
-    // Named, but bounded: the body cap is 64KB, and every other rejection in
-    // this file answers with a fixed string.
-    if (!ref) return sendJson(res, 400, { error: `unknown project: ${projectName.slice(0, 60)}` });
+    if (parsed.resumeId) {
+      const rid = parsed.resumeId;
+      // Membership check against the enumerated transcripts, same posture as
+      // resolveProject below: the id never becomes a path by joining.
+      const t = listTranscripts(projectsRoot()).find(x => x.id === rid);
+      if (!t) return sendJson(res, 400, { error: 'unknown session' });
+      const tr = readTranscript(t.file);
+      // Only headless (`sdk-cli` → the `dashboard` pill) sessions: a terminal
+      // session is terminal-owned, and resuming one here could race a still-
+      // open interactive session on the same transcript.
+      if (!tr || sessionSurface(tr.entrypoint) !== 'dashboard') {
+        return sendJson(res, 400, { error: 'only dashboard sessions can be resumed' });
+      }
+      if (!tr.cwd) return sendJson(res, 400, { error: 'session has no working directory' });
+      // A held question, plan, or reply window means the process is alive —
+      // resuming now would put a second writer on the same session.
+      if (getPending(rid) || getPendingPlan(rid) || getPendingMessage(rid)) {
+        return sendJson(res, 409, { error: 'session is still running' });
+      }
+      if (listLaunching().some(e => e.sessionId === rid)) {
+        return sendJson(res, 409, { error: 'already resuming' });
+      }
+      const ref = { dirName: t.dirName, name: nodePath.basename(tr.cwd), path: tr.cwd, lastActiveMs: t.mtimeMs };
+      sessionId = launch(config, ref, parsed.input, rid);
+    } else {
+      const projectName = typeof body.project === 'string' ? body.project : '';
+      const ref = resolveProject(config, projectName);
+      // Named, but bounded: the body cap is 64KB, and every other rejection in
+      // this file answers with a fixed string.
+      if (!ref) return sendJson(res, 400, { error: `unknown project: ${projectName.slice(0, 60)}` });
 
-    const parsed = parseSpawnRequest(body, config.spawnMaxPermission);
-    if (!parsed.ok) return sendBadBody(res, { error: parsed.error });
-
-    sessionId = launch(config, ref, parsed.input);
+      sessionId = launch(config, ref, parsed.input);
+    }
   } catch (e) {
     console.error('[dashboard] spawn failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'spawn failed' });

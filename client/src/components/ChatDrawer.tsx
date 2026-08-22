@@ -5,6 +5,7 @@ import { PermissionBanner } from './PermissionBanner';
 import QuestionPanel from './QuestionPanel';
 import PlanPanel from './PlanPanel';
 import MessagePanel from './MessagePanel';
+import ResumePanel from './ResumePanel';
 import { useSessionChat } from '../hooks/useSessionChat';
 import { usePendingQuestion } from '../hooks/usePendingQuestion';
 import { usePendingPlan } from '../hooks/usePendingPlan';
@@ -12,6 +13,7 @@ import { usePendingMessage } from '../hooks/usePendingMessage';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useSettings } from '../hooks/useSettings';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
+import { resumeEligible } from '../lib/resume';
 import { formatInterval } from '../lib/settings';
 import { surfacePill } from '../lib/surface';
 import type { ChatMessage, Session } from '../../../shared/types';
@@ -75,11 +77,20 @@ function Message({ m }: { m: ChatMessage }) {
  * the bottom (so reading history isn't yanked away); a prepend restores the
  * previous position by the height the new page added.
  */
-export default function ChatDrawer({ session, onClose }: { session: Session; onClose: () => void }) {
+export default function ChatDrawer({ session, onClose, spawnAvailable }: {
+  session: Session; onClose: () => void;
+  /** From the health poll SessionsView owns — gates the resume composer. */
+  spawnAvailable?: boolean;
+}) {
   const { messages, hasMore, loading, loadingOlder, error, loadOlder } = useSessionChat(session.id);
   const question = usePendingQuestion(session.id);
   const plan = usePendingPlan(session.id);
   const message = usePendingMessage(session.id);
+  const canResume = resumeEligible(
+    session,
+    { question: !!question.pending, plan: !!plan.pending, message: !!message.pending },
+    spawnAvailable
+  );
   const [filter, setFilter] = usePersistedState<ChatFilter>('dashboard.chatFilter', 'all');
   const { settings: { refreshMs } } = useSettings();
   const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
@@ -205,6 +216,13 @@ export default function ChatDrawer({ session, onClose }: { session: Session; onC
             a session parks on one thing at a time, so at most one of the three
             panels renders. */}
         <MessagePanel state={message} />
+
+        {/* The opposite case: a dashboard session whose turn is OVER — window
+            expired, released, or capped out. Sends `resume` through the spawn
+            path; the same transcript (same id) continues, so this drawer
+            live-tails the answer. Can render under MessagePanel's "gone" note,
+            which is the natural hand-off. */}
+        {canResume && <ResumePanel session={session} />}
 
         <div className="chat-foot">
           <span>live · refreshing every {formatInterval(refreshMs)}</span>
