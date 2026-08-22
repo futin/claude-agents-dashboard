@@ -691,18 +691,25 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 }
 
 /* ---------------------------------------------- touch: no focus auto-zoom
-   iOS Safari zooms the viewport when a focused field's font size is under 16px,
-   and it never zooms back out on blur — you are left stranded at that scale for
-   the rest of the visit. Every field here is 10.5–13px by design, so the whole
-   app tripped it. Floor them at an *effective* 16px on coarse pointers only;
-   the mouse-driven layout keeps its density. Divided by --font-scale because
-   .shell{zoom} (line ~96) multiplies into the rendered size, so at text scale
-   90% a plain 16px would render as 14.4px and trip the zoom again; max() keeps
-   the declared value from dropping below 16px when the scale is above 1. */
+   iOS Safari (and iOS Chrome, same engine) zooms the viewport when a focused
+   field's font size is under 16px, and it never zooms back out on blur — you
+   are left stranded at that scale for the rest of the visit. Every field here
+   is 10.5–13px by design, so the whole app tripped it. Floor them at an
+   *effective* 16px on coarse pointers only; the mouse-driven layout keeps its
+   density. Divided by --font-scale because .shell{zoom} (line ~96) multiplies
+   into the rendered size, so at text scale 90% a plain 16px would render as
+   14.4px and trip the zoom again; max() keeps the declared value from dropping
+   below 16px when the scale is above 1.
+
+   TEXT-ENTRY FIELDS ONLY. A <select> was in this list and it is the one control
+   that must not be: it sits in the toolbar filter row next to .tb-multi (10.5px)
+   and .tb-dir (12px), so flooring it at 16px made one filter ~50% larger than
+   its neighbours and the row read as broken type. A select also does not need
+   the floor — tapping one opens a native picker sheet rather than putting a
+   caret in the page, which is the thing that triggers the zoom. */
 @media (pointer:coarse){
   .qp-feedback,.qp-other,.mgmt-filter,
-  .toolbar select,.qp-select,
-  .set-control select,.set-control input[type=number],.set-control input[type=text]{
+  .set-control input[type=number],.set-control input[type=text]{
     font-size:max(16px,calc(16px / var(--font-scale,1)))
   }
 }
