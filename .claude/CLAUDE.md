@@ -175,6 +175,15 @@ with the log format above (contract details: `docs/subsystems/analytics.md`).
   Critical/Important findings only — the same contract implementers already get. The rule
   above was read as covering implementers alone, which is why this recurred; reviewers are
   the larger half of the spend in a subagent-driven run.
+  **Paste this into every review dispatch** — the plugin template says the opposite, and
+  whichever text sits in front of you while writing the dispatch is the one that wins:
+  ```
+  Write your full report to <path>. Then reply with ONLY: the spec-compliance verdict,
+  the Critical and Important findings (file:line each), and the task-quality verdict.
+  No Minor findings inline, no strengths section, no restated summary.
+  ```
+  Session 45be9cde broke this rule in all 15 review dispatches despite the rule existing
+  here, costing ~1.89M tokens of replayed reviewer prose (48% of that run's subagent spend).
 - **Implementation plans specify behaviour and exact test *cases* — not literal code.**
   A plan that hands over complete code blocks gets transcribed verbatim (that is what
   "use the brief's code" means to an implementer), so a bug in the plan becomes a bug in
