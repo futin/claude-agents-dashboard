@@ -795,6 +795,43 @@ export interface FileContent {
   error?: boolean;
 }
 
+/** One quiz section inside a tutor deck's provenance stamp. */
+export interface DeckSection {
+  id: string;
+  title: string;
+}
+
+/** One tutor deck found under docs/published-guides/ (see GuidesIndex). */
+export interface DeckRef {
+  /** Path relative to docs/published-guides/. */
+  relPath: string;
+  title: string;
+  /** From the deck's provenance stamp; null if the stamp is absent or malformed. */
+  generated: string | null;
+  /** From the deck's provenance stamp; null if the stamp is absent or malformed. */
+  commit: string | null;
+  /** From the deck's provenance stamp; null if the stamp is absent or malformed. */
+  sections: DeckSection[] | null;
+}
+
+/** One study guide found under docs/published-guides/ that is not a tutor deck. */
+export interface GuideRef {
+  /** Path relative to docs/published-guides/. */
+  relPath: string;
+  /** Basename without extension. */
+  name: string;
+  /** From the file's first `<title>` element; null when absent. */
+  title: string | null;
+}
+
+/** Payload of `GET /api/guides`. */
+export interface GuidesIndex {
+  generatedAt: string;
+  decks: DeckRef[];
+  guides: GuideRef[];
+  error?: boolean;
+}
+
 /**
  * Spawning a new headless session (a detached `claude -p` process). The
  * launch form picks a permission mode; the server clamps it to a configured
