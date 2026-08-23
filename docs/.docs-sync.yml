@@ -53,6 +53,9 @@ docs:
   - path: docs/subsystems/session-surfaces.md
     kind: subsystem
     note: Where a session lives, and where you can continue it
+  - path: docs/subsystems/guides.md
+    kind: subsystem
+    note: Guides tab — decks and study guides served same-origin
   - path: docs/workflows/configuration.md
     kind: workflow
     note: env and hook-side variable reference

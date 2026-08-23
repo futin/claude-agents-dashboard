@@ -13,7 +13,7 @@ typed JSON payloads in `shared/types.ts` (`GET /api/sessions*`, `GET /api/manage
 shared/types.ts   API contract (SessionsResponse, Session, ManagementIndex, ScopeConfig,
                   SessionAnalysis, AnalyticsReport…).
 server/           Node backend, TypeScript, run via tsx (no compile step)
-  index.ts        HTTP entry: routes /api/sessions(+/:id/chat) + /api/management + /api/analytics + /api/settings; static-serves client/dist in prod
+  index.ts        HTTP entry: routes /api/sessions(+/:id/chat) + /api/management + /api/analytics + /api/settings + /api/guides, plus /guides/<relPath> (guide files, last before the static fallback); static-serves client/dist in prod
   api.ts          the /api/sessions + /api/management + /api/analytics handlers (+ error fallbacks)
   lib/config.ts   .env loader — precedence process.env > .env > defaults
   lib/transcript.ts  tail-reads last 256KB of a transcript → tokens/model/window/activity
@@ -70,8 +70,12 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   adoptLaunched, stopLaunch) — the fourth write path, and the first the
                   dashboard initiates; `--resume <id>` reuses an existing dashboard
                   session's id instead of minting one (see docs/subsystems/spawn.md)
+  lib/guides.ts   pure published-guides domain: deck marker/title/provenance parsing,
+                  the docs/published-guides/ walk (hub skipped, guide dirs not descended),
+                  and resolveGuidePath — a realpath-both-sides traversal guard deliberately
+                  stricter than serveStatic's (see docs/subsystems/guides.md)
 client/           Vite + React + TypeScript frontend
-  src/App.tsx     shell: side rail (Sessions | Management | Analytics | Settings), lazy-loads all but Sessions
+  src/App.tsx     shell: side rail (Sessions | Management | Analytics | Guides | Settings), lazy-loads all but Sessions
   components/SessionsView.tsx  the original live monitor (owns the 3s poll + chat drawer state)
   components/{Header,SessionList,SessionRow,Toolbar,SideRail}
   components/ChatDrawer.tsx    full-height chat-history drawer (own lazy chunk;
@@ -110,13 +114,16 @@ client/           Vite + React + TypeScript frontend
   components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane,
                   FileViewer, SkillFileRail — a multi-file skill's whole directory)
   components/analytics/AnalyticsView.tsx  the report-card list (own lazy chunk; read-only)
+  components/guides/GuidesView.tsx  the Guides tab: deck/guide cards, then a same-origin
+                  iframe on /guides/<relPath> (own lazy chunk; read-only, unpolled;
+                  hooks/useGuides fetches once per mount — see docs/subsystems/guides.md)
   hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
   components/settings/         the Settings tab (own lazy chunk) — themes, density/text scale,
                   refresh rate, scan knobs, push policy, idle threshold (see docs/subsystems/settings.md)
   hooks/useSettings.tsx        per-device settings context (localStorage) — the source of
                   refreshMs for every poll and of the data-theme/data-density attributes
   hooks/usePersistedState.ts  localStorage-backed useState (see docs/subsystems/view-persistence.md)
-vite.config.ts    dev proxy /api → backend; reuses server loadConfig() for the port
+vite.config.ts    dev proxy /api + /guides → backend; reuses server loadConfig() for the port
 test/             node-assert tests over backend domain logic, tmpdir JSONL fixtures
 ```
 

@@ -22,6 +22,7 @@ environment variables override `.env`, which overrides the defaults
 | `SHOW_USAGE` | `true` | Show the header [usage bars](../subsystems/usage-limits.md). `false` disables the fetch and the keychain read entirely |
 | `SHOW_ANALYTICS` | `true` | Show the [Analytics tab](../subsystems/analytics.md) |
 | `ANALYTICS_KEEP` | `5` | How many `/kaizen`-logged sessions the Analytics tab shows |
+| `GUIDES_DIR` | `<cwd>/docs/published-guides` | Directory the [Guides tab](../subsystems/guides.md) lists, and the root `GET /guides/<relPath>` serves out of. **Unset means the default directory, not off** — the opposite of the `NTFY_TOPIC`/`WHISPER_MODEL`/`CLAUDE_BIN` rule below; there is no on/off flag, and a missing directory renders an empty tab rather than hiding it |
 | `REMOTE_ANSWER` | `true` | Whether [remote answers](../subsystems/remote-answer.md) are available at all — the hard kill switch in front of **every** write path, not just questions: [plans](../subsystems/remote-plan.md), [replies](../subsystems/remote-message.md), [spawn](../subsystems/spawn.md) and [dictation](../subsystems/dictation.md) each check it too. It is the app's only *runtime* switch (the `CLAUDE_BIN`/`WHISPER_MODEL` kill switches are restart-scoped), which is why it covers the widest path rather than excluding it |
 | `ANSWER_TOKEN` | _(empty)_ | Shared secret required by the remote-answer POSTs. Empty = open, matching the app's LAN-trust posture |
 | `SKIP_PROC_SCAN` | _(auto)_ | Skip the `lsof` process-liveness gate. Defaults to `true` inside a Docker container, `false` otherwise |
