@@ -176,6 +176,10 @@ nothing outside it is published. An allowlist directory, not a `robots.txt` deny
 - A guide's `tools/*.mjs` must find the repo root by walking up for `package.json`, never
   by a fixed `../..` hop count. A fixed count silently repoints at `docs/` the next time a
   guide moves, and every citation then reports as `gone`. This has now bitten twice.
+- `docs/bugs/`, `docs/ideas/`, and `docs/plans/` are this repo's own hand-maintained
+  convention, not a store — the global `backlog-*` skills use a separate `backlog/`
+  directory for that, and this repo deliberately doesn't have one, so don't migrate
+  these files into it.
 
 ## Conventions / gotchas
 
