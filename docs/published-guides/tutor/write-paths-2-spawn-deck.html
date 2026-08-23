@@ -242,6 +242,43 @@ const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;</pre>
     </div>
   </div>
 
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>If array-form <code>spawn</code> never involves a shell, why sanitize the name at all?</summary>
+      <p>Because argv safety is not the only thing the name has to survive.
+      <code>spawn.ts:70-73</code> makes the reasoning explicit: the name "ends up as a single argv
+      element (never shell-parsed…), but it also flows into UI and, later, onto disk, so it is
+      sanitized on its own merits rather than piggy-backing on argv safety." That last phrase is the
+      point. A charset justified by "the shell can't see it anyway" quietly becomes wrong the first
+      time the value is used somewhere a shell, a path join, or a renderer <em>can</em> see it —
+      and nothing in <code>NAME_RE</code> would have to change for that to break.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Why is <code>.</code> allowed if the charset is meant to be strict?</summary>
+      <p>Because strictness that rejects ordinary names is a bug, not a safety property.
+      <code>spawn.ts:83-85</code> records both halves: the spec's own charset
+      (<code>/^[\w .\-]*$/</code>) includes the dot, and without it "an ordinary name like
+      <code>v1.2 release</code> was being silently dropped" — silently, because an invalid name fails
+      soft to <code>undefined</code> rather than erroring. The safety argument for excluding it never
+      existed: "a dot is not a path separator, and a name is never joined into a path." Strict where
+      it buys something, permissive where it costs a real user a real name.</p>
+    </details>
+    <details class="qa-item">
+      <summary><code>buildSpawnArgs</code> pushes <code>input.name</code> twice when remote control is on — is that a bug?</summary>
+      <p>No — the two appearances are different flags' values. <code>-n</code> takes the name as the
+      session's display name (<code>spawn.ts:219</code>), and <code>--remote-control</code> takes its
+      own optional name argument (<code>spawn.ts:223-226</code>):</p>
+<pre>// spawn.ts:223-226
+if (input.remoteControl) {
+  args.push('--remote-control');
+  if (input.name) args.push(input.name);
+}</pre>
+      <p>The comment above it says why the same value is reused: without a name the account
+      registration "auto-names itself <code>&lt;hostname&gt;-N</code>", so passing it again is what
+      makes the phone app show the label the form asked for.</p>
+    </details>
+  </div>
 </section>
 
 <!-- ============ s2 ============ -->
@@ -362,6 +399,39 @@ const args = input.resume
     </div>
   </div>
 
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>Why does a valid <code>resume</code> force <code>name</code> and <code>remoteControl</code> off?</summary>
+      <p>Because those two combinations were never verified against the CLI.
+      <code>spawn.ts:183-186</code> states it plainly: "<code>-n</code> renames and
+      <code>--remote-control</code> registration on a resumed session are unverified CLI combos, so
+      they are never sent." The resume branch therefore returns
+      <code>name: undefined, remoteControl: false</code> (<code>spawn.ts:191-195</code>) no matter
+      what the body asked for. Note the shape of the decision: not "these are dangerous", but "we
+      have not measured what they do" — and the fields are dropped rather than the request refused,
+      so the resume the user actually wanted still happens.</p>
+    </details>
+    <details class="qa-item">
+      <summary><code>remoteControl</code> is checked with <code>=== true</code> — why not plain truthiness?</summary>
+      <p>To keep it on the same fail-soft rule as every other optional field.
+      <code>spawn.ts:177-179</code> spells it out: "Strictly <code>=== true</code>: anything else
+      (absent, "yes", <code>1</code>) fails soft to false, the same drop-don't-reject rule the fields
+      above follow." Truthiness would accept the string <code>"false"</code> and the number
+      <code>1</code>, quietly turning a malformed body into a session registered with the account.
+      The strict check makes the ambiguous case resolve toward <em>less</em> capability — the same
+      direction <code>clampPermission</code> resolves an unrecognized mode.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Why does <code>parseSpawnRequest</code> ignore <code>body.project</code> entirely?</summary>
+      <p>Because resolving it would make the function impure. <code>spawn.ts:140-142</code> gives the
+      reason: it "deliberately ignores <code>body.project</code>: resolving a project needs config and
+      the filesystem, which a pure function doesn't have — the handler resolves it separately." That
+      is the seam the whole module is organised around (<code>spawn.ts:5-11</code> lists the pure core
+      as its own numbered half). Validation you can unit-test with a plain object stays here;
+      anything needing disk lives in the handler.</p>
+    </details>
+  </div>
 </section>
 
 <!-- ============ s3 ============ -->
@@ -516,6 +586,41 @@ child.stdin?.on('error', err =&gt; {
     </div>
   </div>
 
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>Why <code>delete env.CLAUDE_CODE_ENTRYPOINT</code> rather than assigning <code>undefined</code>?</summary>
+      <p>Because the assignment relies on behaviour nobody promised.
+      <code>spawn.ts:433-436</code> records the measurement and the conclusion together: "this Node
+      build happens to omit undefined-valued keys (measured), but that is filtering behaviour to not
+      lean on — an absent key needs no guarantee at all." An <code>undefined</code> value would work
+      until a Node release passed the key through as the literal string
+      <code>"undefined"</code>, at which point the child stamps a bogus entrypoint into its
+      transcript and quietly loses its <code>dashboard</code> pill. <code>delete</code> has no such
+      failure mode to inherit.</p>
+    </details>
+    <details class="qa-item">
+      <summary><code>stdio</code> is <code>['pipe', 'ignore', 'pipe']</code> — why capture stderr but throw stdout away?</summary>
+      <p>Because only one of them tells you something the transcript won't. stderr is kept as a
+      bounded tail (<code>spawn.ts:461-464</code>, capped by <code>STDERR_TAIL_CAP</code> at
+      <code>spawn.ts:318-319</code>) purely so a failed launch can explain itself. stdout of a
+      <code>claude -p</code> run is the session's own output, and the store's charter
+      (<code>spawn.ts:283-287</code>) refuses to duplicate that: "the transcript stays the single
+      source of truth". Piping it would mean buffering a whole session's output in the server's
+      memory to re-derive something already on disk.</p>
+    </details>
+    <details class="qa-item">
+      <summary>All four failure paths call <code>fail</code> — can't two fire and record the failure twice?</summary>
+      <p>They can both fire; there is nothing to corrupt when they do. <code>fail</code>
+      (<code>spawn.ts:373-385</code>) looks the entry up and returns immediately when it is gone, then
+      simply overwrites <code>state</code>, <code>exitCode</code>, <code>error</code> and
+      <code>failedAtMs</code> — assignment, not accumulation. The doc comment at
+      <code>spawn.ts:394-395</code> makes that a stated property: all four "route through
+      <code>fail</code>, which is safe to call more than once (or after the entry is gone)". The
+      presence guard is what stops a late <code>exit</code> resurrecting an entry
+      <code>adoptLaunched</code> already removed.</p>
+    </details>
+  </div>
 </section>
 
 <!-- ============ s4 ============ -->
@@ -633,6 +738,39 @@ for (const [id, entry] of entries) {
     </div>
   </div>
 
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>Why doesn't a <code>failed</code> entry count toward <code>MAX_LAUNCHING</code>?</summary>
+      <p>Because the rail bounds concurrent <em>processes</em>, and a failed entry holds none.
+      <code>spawn.ts:341-345</code> works the alternative through: a failed row lingers for
+      <code>FAIL_TTL_MS</code> only so the UI can explain itself, so counting it would "lock a user
+      out of launching for five minutes after four transient failures, with a 429 that explains
+      nothing." The filter is visible at the call site — <code>api.ts:856</code> counts only
+      <code>e.state === 'launching'</code>. Four failures in a row is exactly when you most want to
+      retry, which is the worst possible moment to refuse.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Why two TTLs — 60 seconds for a launching entry, five minutes for a failed one?</summary>
+      <p>They answer different questions. <code>LAUNCH_TTL_MS</code>
+      (<code>spawn.ts:321-322</code>) bounds how long an entry can claim to be starting before it is
+      treated as orphaned — roughly "adoption should have happened by now".
+      <code>FAIL_TTL_MS</code> (<code>spawn.ts:324-325</code>) bounds how long an explanation stays
+      readable for a phone that isn't looking yet. They are measured from different instants, too:
+      <code>failedAtMs</code> is stored separately "so <code>FAIL_TTL_MS</code> measures
+      time-since-failure, not time-since-launch" (<code>spawn.ts:303-304</code>).</p>
+    </details>
+    <details class="qa-item">
+      <summary>Why does <code>listLaunching</code> take <code>now</code> as a parameter instead of reading the clock?</summary>
+      <p>So expiry is testable without faking time. <code>spawn.ts:508-509</code> says it directly:
+      "<code>now</code> is a parameter, not <code>Date.now()</code> read internally, so a test can
+      simulate elapsed time without faking the clock." A test proves the 60-second and 5-minute rules
+      by calling <code>listLaunching(start + 61_000)</code> — no timer, no clock monkey-patching, no
+      waiting. It is the same instinct as the injected <code>resolve</code> in the other three
+      stores: push the untestable dependency out to the caller and the logic left behind is a pure
+      function of its arguments.</p>
+    </details>
+  </div>
 </section>
 
 <!-- ============ s5 ============ -->
@@ -762,6 +900,40 @@ export function stopLaunch(id: string): boolean {
     </div>
   </div>
 
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>Why adopt <em>before</em> listing, rather than after building the response?</summary>
+      <p>Otherwise one session appears twice in the same payload. <code>api.ts:141-145</code> states
+      the ordering as a rule with its reason attached: "Adopt before listing: a launch id that just
+      showed up in <code>sessions</code> must not also be reported as still <code>launching</code> in
+      the same poll."</p>
+<pre>// api.ts:145-146
+adoptLaunched(data.sessions.map(s =&gt; s.id));
+data.launching = listLaunching();</pre>
+      <p>The same call is attached to the error snapshot too, because "a failed scan is exactly when
+      'did my launch work?' matters most."</p>
+    </details>
+    <details class="qa-item">
+      <summary>After <code>stopLaunch</code> deletes the entry, the child's <code>exit</code> still fires. What happens then?</summary>
+      <p>Nothing — and that is by construction, not luck. <code>spawn.ts:552-554</code> names the
+      case: "The later <code>exit</code>/<code>close</code> for this id finds no entry and no-ops
+      through <code>fail</code>'s presence guard, the same as any exit arriving after
+      <code>adoptLaunched</code>." The guard is the first line of <code>fail</code>
+      (<code>spawn.ts:379-380</code>): look the entry up, return if it is gone. One two-line check
+      covers stop, adoption, and TTL expiry alike, which is why none of those paths needs to detach
+      the child's listeners on the way out.</p>
+    </details>
+    <details class="qa-item">
+      <summary><code>stopLaunch</code> returns false for a launch that already failed — why can't you stop it?</summary>
+      <p>There is nothing left to signal. <code>stopLaunch</code>
+      (<code>spawn.ts:559-565</code>) returns false for "an unknown id or one that has already left
+      the <code>launching</code> state (nothing left alive to signal)" — a failed entry's process is
+      already gone, so the only thing a stop could do is delete a row the UI is deliberately keeping
+      for five minutes to explain itself. The handler turns that false into a 404
+      (<code>api.ts:939</code>), which is honest: there is no live launch by that id.</p>
+    </details>
+  </div>
 </section>
 
 <!-- ============ recap ============ -->
@@ -782,7 +954,7 @@ export function stopLaunch(id: string): boolean {
   contrasts refer back to.</p>
   <p class="xlink">No written reference guide covers this subsystem yet; one could be generated as a
   follow-up if a prose walkthrough would be more useful than these cards.</p>
-  <p class="stamp">built at fa9fdbc</p>
+  <p class="stamp">built at 669d6e2</p>
 </div>
 
 </main>
@@ -794,8 +966,8 @@ export function stopLaunch(id: string): boolean {
 
 <script type="application/json" id="provenance">
 {
-  "commit": "fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14",
-  "generated": "2026-08-22",
+  "commit": "669d6e29b27f1cf24033a82ea2bd11845ed6c1f1",
+  "generated": "2026-08-23",
   "sources": ["server/lib/spawn.ts", "server/api.ts"],
   "sections": [
     { "id": "s1", "title": "The prompt never touches argv", "sources": ["server/lib/spawn.ts"] },
