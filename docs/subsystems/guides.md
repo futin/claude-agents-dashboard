@@ -211,20 +211,24 @@ any of it; the element and its class name are the entire commitment.
 
 ## Known limits / not verified
 
-- **iOS Safari is still unverified** — the phone overlay was measured in a desktop browser at
-  375×812 (overlay 375×812, iframe 763px, pager on screen, `‹ Guides` returns to the list) and
-  at text scales 1.0/1.1/1.25. `100dvh` is chosen *for* the collapsing URL bar and `position:fixed`
-  under `zoom` held at all three scales, but no real device saw any of it. Still needs a human pass.
-- **The scroll lock is unverified on a real phone too.** The class toggles correctly, the
-  computed styles land only under the phone breakpoint, the inner iframe still scrolls to
-  its own end, and cleanup runs on both close and unmount — all in a desktop browser with a
-  mouse. Touch-driven chaining and iOS's rubber band are the actual failure mode, and
-  neither was exercised. Refusing the chain at its *source* (an `overscroll-behavior` on
-  the deck documents themselves) stays available if the root-level refusal turns out not to
-  hold on iOS.
+- **The phone pass was done, on the phone.** 2026-08-23: the overlay and the scroll lock were
+  both driven by hand on the author's phone against the branch build and reported correct —
+  which is the only test that counts here, since touch chaining and the URL-bar rubber band
+  are the failure modes and neither can be produced with a mouse. The device and browser were
+  not recorded, so read this as "a real phone", not "iOS Safari 18". Everything else about
+  those two behaviours (the 375×812 measurements, text scales 1.0/1.1/1.25, the media gate,
+  cleanup on unmount) was a desktop browser at a phone-sized viewport.
+- **The chain is refused at one end only.** `.guide-locked` stops the gesture at the root; the
+  deck documents themselves still carry `overscroll-behavior: auto`. That held on the phone it
+  was tested on. An engine where a root-level refusal does not stop a chain out of an iframe
+  would need the property on the guide documents instead — a tutor deck-contract change, and
+  the two study guides separately.
+- **Android untested,** and only the tutor decks were opened on a phone — the two study guides
+  (`learning/hooks`, `learning/dictation`) are long scrolling documents rather than paged decks,
+  which is the shape that leans hardest on the lock.
 - **Narrow-viewport wrapping of the decks' Q&A cards** — checked once at 375px, in a desktop
   browser: three `<summary>` lines carrying inline `<code>` wrap onto two lines each without
-  overflowing. Not seen on a real phone.
+  overflowing. The phone pass above covered reaching and reading them, not this measurement.
 - **No deep link.** `?guide=<relPath>` was proposed and rejected for v1; the tab always opens on
   the list (contrast `?session=`, see [push-notify](push-notify.md)).
 - **No cross-project scan.** Only this repo's `guidesDir`. The scanner and the marker generalize;
