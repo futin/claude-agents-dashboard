@@ -217,6 +217,18 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
   will **not** appear as a chat message — `parseChatRecord` drops `tool_result` blocks by
   design — so the banner bridges the gap until the model's follow-up arrives on the
   normal 3s tail.
+- **It minimises.** The panel is capped at `56vh` (`62vh` on a phone), so a two- or
+  three-question ask squeezes the `.chat-body` above it to a few lines — exactly when the
+  reader needs to scroll the transcript back to *decide* what to answer. The caret in
+  `PanelHead` collapses the panel to a one-line `.qpanel.min` stub (badge +
+  `collapsedSummary()` text + caret), which drops the `vh` cap and hands the height back to
+  the chat. The chrome (`components/PanelChrome.tsx`) and the stub text
+  (`lib/panelCollapse.ts`) are shared with `PlanPanel` and `MessagePanel`, so the caret sits
+  in the same corner in all three.
+  State is **per panel and per ask**: it lives in the panel's own `useState` and is reset by
+  the same effect that clears the draft on a new `questionId`. Deliberately **not**
+  persisted — a collapsed panel that survived a reload, or outlived the question it was
+  hiding, is a wait you can miss. There is no auto-collapse heuristic for the same reason.
 
 <!-- docs-sync:
   sources:
@@ -225,6 +237,8 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
     - server/api.ts
     - scripts/ask-remote-hook.sh
     - client/src/components/QuestionPanel.tsx
+    - client/src/components/PanelChrome.tsx
+    - client/src/lib/panelCollapse.ts
     - client/src/components/RemoteAnswerToggle.tsx
     - client/src/hooks/usePendingQuestion.ts
     - client/src/hooks/useRemoteAnswer.ts

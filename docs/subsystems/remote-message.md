@@ -217,6 +217,12 @@ number and same reasoning as the ask/plan hooks. Miss it and a held turn dies mi
 session stops early, exactly as if the gates had failed, and a Send that lands after that
 finds nothing (404 → the panel shows "gone"). Degrades, never wedges.
 
+`MessagePanel` minimises like the other two holds, through the shared `PanelHead` /
+`MinimisedPanel` chrome — see [remote-answer](remote-answer.md). Its stub carries the
+countdown (`closes in 42s`), formatted by `fmtLeft()`, which now lives in
+`lib/panelCollapse.ts` so the stub and the expanded hint cannot drift apart. Per-panel
+state, reset on a new `messageId`, never persisted.
+
 <!-- docs-sync:
   sources:
     - server/lib/messages.ts
@@ -225,6 +231,8 @@ finds nothing (404 → the panel shows "gone"). Degrades, never wedges.
     - server/lib/scan.ts
     - scripts/stop-notify-hook.sh
     - client/src/components/MessagePanel.tsx
+    - client/src/components/PanelChrome.tsx
+    - client/src/lib/panelCollapse.ts
     - client/src/hooks/usePendingMessage.ts
     - client/src/components/SessionRow.tsx
   kind: subsystem

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 
 import { Markdown } from './Markdown';
+import { MinimisedPanel, PanelHead } from './PanelChrome';
+import { collapsedSummary } from '../lib/panelCollapse';
 import type { PendingPlanState } from '../hooks/usePendingPlan';
 
 /**
@@ -22,12 +24,15 @@ export default function PlanPanel({ state }: { state: PendingPlanState }) {
   const [feedback, setFeedback] = useState('');
   const [tokenDraft, setTokenDraft] = useState('');
   const [open, setOpen] = useState(false);
+  const [minimised, setMinimised] = useState(false);
 
-  // A revised plan (or a fresh drawer) starts from a clean slate.
+  // A revised plan (or a fresh drawer) starts from a clean slate — expanded
+  // included, so a re-proposed plan is never hidden behind an old stub.
   const planId = pending?.planId ?? null;
   useEffect(() => {
     setFeedback('');
     setOpen(false);
+    setMinimised(false);
   }, [planId]);
 
   if (phase === 'gone') {
@@ -50,14 +55,25 @@ export default function PlanPanel({ state }: { state: PendingPlanState }) {
 
   if (!pending) return null;
 
+  if (minimised) {
+    return (
+      <MinimisedPanel
+        badge="plan proposed"
+        summary={collapsedSummary({ kind: 'plan' })}
+        onExpand={() => setMinimised(false)}
+      />
+    );
+  }
+
   const busy = phase === 'submitting';
 
   return (
     <div className="qpanel">
-      <div className="qp-head">
-        <span className="qp-badge">plan proposed</span>
-        <span className="qp-hint">approve on the card · revise from here</span>
-      </div>
+      <PanelHead
+        badge="plan proposed"
+        hint="approve on the card · revise from here"
+        onMinimise={() => setMinimised(true)}
+      />
 
       <div className="qp-q">
         <button

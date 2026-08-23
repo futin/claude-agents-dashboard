@@ -529,6 +529,13 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
    Pinned above the footer so it stays reachable while scrolling history */
 .qpanel{flex-shrink:0;border-top:1px solid color-mix(in srgb,var(--amber) 45%,transparent);background:color-mix(in srgb,var(--amber) 6%,var(--board));padding:10px 16px;display:flex;flex-direction:column;gap:9px;max-height:56vh;overflow-y:auto}
 .qpanel.sent,.qpanel.gone{padding:8px 16px}
+/* Minimised wait panel — one row, and no vh cap, so the height goes straight
+   back to the chat body above it: the whole point is reading the transcript
+   before answering. Row is the hit target, not the caret alone (phone). */
+.qpanel.min{flex-direction:row;align-items:baseline;gap:8px;padding:8px 16px;max-height:none;overflow:visible}
+.qp-minrow{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.qp-min{font-size:12px;line-height:1;color:var(--ink3);background:none;border:0;padding:1px 3px;cursor:pointer}
+button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var(--ink)}
 /* A textarea is by far the most compressible thing in a flex column: once the
    panel reaches its max-height the browser shrinks the children toward their
    min-content size instead of scrolling, so `rows` stops meaning anything and
