@@ -1,15 +1,79 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
 import { isTutorDeck, parseDeckMeta, extractTitle, scanGuides, resolveGuidePath, GUIDE_MIME } from '../server/lib/guides.js';
+import { serveGuidesIndex, serveGuideFile } from '../server/api.js';
+import { loadConfig, type Config } from '../server/lib/config.js';
+import { decodePath } from '../server/index.js';
 
 function test(name: string, fn: () => void | Promise<void>): Promise<boolean> {
   return Promise.resolve()
     .then(fn)
     .then(() => { console.log('  ✓ ' + name); return true; })
     .catch(e => { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; });
+}
+
+/* ---------------------------------------------------------- Task 4: endpoint test helpers */
+
+type Reply = { status: number; headers: http.IncomingHttpHeaders; body: string };
+
+/**
+ * GET `urlPath` from a one-shot server running `handler`, and return the
+ * reply. Same shape (and the same settle-exactly-once guard) as the `post`
+ * helper in test/api-body.test.ts / test/spawn-endpoint.test.ts — a bare
+ * `http.request` has no default `'error'` listener, and without one a late
+ * socket error becomes an unhandled throw that kills the whole `pnpm test`
+ * process instead of failing one case.
+ */
+function get(
+  handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
+  urlPath = '/'
+): Promise<Reply> {
+  return new Promise((resolve, reject) => {
+    const srv = http.createServer(handler);
+    let done = false;
+    const settle = (fn: () => void): void => {
+      if (done) return;
+      done = true;
+      srv.close();
+      fn();
+    };
+    srv.on('error', e => settle(() => reject(e)));
+    srv.listen(0, () => {
+      const port = (srv.address() as { port: number }).port;
+      const req = http.request({ port, method: 'GET', path: urlPath }, res => {
+        let raw = '';
+        res.on('data', c => { raw += c; });
+        res.on('end', () => settle(() => resolve({ status: res.statusCode || 0, headers: res.headers, body: raw })));
+        res.on('error', e => settle(() => reject(e)));
+      });
+      req.on('error', e => settle(() => reject(e)));
+      req.end();
+    });
+  });
+}
+
+/** A .env path guaranteed not to exist, so a developer's real .env can't leak into these configs. */
+const NONEXISTENT_ENV = path.join(os.tmpdir(), 'guides-endpoint-nonexistent.env');
+
+/**
+ * A `Config` whose `guidesDir` is `dir`, built through the real
+ * `GUIDES_DIR` env var → `loadConfig` path rather than a hand-built object,
+ * so these tests also exercise the same wiring the loadConfig tests check in
+ * isolation. `loadConfig` is synchronous, so the env var is set and restored
+ * with no async window where a concurrent access could observe the override.
+ */
+function guidesConfig(dir: string): Config {
+  const prev = process.env.GUIDES_DIR;
+  process.env.GUIDES_DIR = dir;
+  try {
+    return loadConfig({ envPath: NONEXISTENT_ENV });
+  } finally {
+    if (prev === undefined) delete process.env.GUIDES_DIR; else process.env.GUIDES_DIR = prev;
+  }
 }
 
 /** A tutor deck as the skill actually writes one — see docs/published-guides/tutor/*.html. */
@@ -386,6 +450,121 @@ export async function run(): Promise<number> {
       '.mjs': 'text/javascript; charset=utf-8',
       '.md': 'text/markdown; charset=utf-8',
     });
+  })) p++; else f++;
+
+  /* ---------------------------------------------------------- Task 4: loadConfig */
+
+  if (await test('loadConfig: guidesDir defaults to <cwd>/docs/published-guides when GUIDES_DIR is unset', () => {
+    const prev = process.env.GUIDES_DIR;
+    delete process.env.GUIDES_DIR;
+    try {
+      const cfg = loadConfig({ envPath: NONEXISTENT_ENV });
+      assert.ok(
+        cfg.guidesDir.endsWith(path.join('docs', 'published-guides')),
+        `expected guidesDir to end with docs/published-guides, got ${cfg.guidesDir}`
+      );
+    } finally {
+      if (prev === undefined) delete process.env.GUIDES_DIR; else process.env.GUIDES_DIR = prev;
+    }
+  })) p++; else f++;
+
+  if (await test('loadConfig: GUIDES_DIR is trimmed, same shape as claudeBin', () => {
+    const prev = process.env.GUIDES_DIR;
+    process.env.GUIDES_DIR = '/tmp/x ';
+    try {
+      const cfg = loadConfig({ envPath: NONEXISTENT_ENV });
+      assert.strictEqual(cfg.guidesDir, '/tmp/x');
+    } finally {
+      if (prev === undefined) delete process.env.GUIDES_DIR; else process.env.GUIDES_DIR = prev;
+    }
+  })) p++; else f++;
+
+  /* ---------------------------------------------------------- Task 4: serveGuidesIndex */
+
+  if (await test('serveGuidesIndex: 200 with the fixture\'s GuidesIndex, Cache-Control: no-store', async () => {
+    const root = makeGuidesFixture();
+    try {
+      const cfg = guidesConfig(root);
+      const reply = await get((req, res) => void serveGuidesIndex(cfg, res));
+      assert.strictEqual(reply.status, 200);
+      assert.strictEqual(reply.headers['cache-control'], 'no-store');
+      const body = JSON.parse(reply.body);
+      assert.strictEqual(body.decks.length, 2);
+      assert.strictEqual(body.guides.length, 1);
+      assert.strictEqual('error' in body, false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  })) p++; else f++;
+
+  if (await test('serveGuidesIndex: a missing guidesDir is still 200 with empty arrays, no error flag', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'guides-'));
+    try {
+      const cfg = guidesConfig(path.join(root, 'does-not-exist'));
+      const reply = await get((req, res) => void serveGuidesIndex(cfg, res));
+      assert.strictEqual(reply.status, 200);
+      const body = JSON.parse(reply.body);
+      assert.deepStrictEqual(body.decks, []);
+      assert.deepStrictEqual(body.guides, []);
+      assert.strictEqual('error' in body, false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  })) p++; else f++;
+
+  /* ---------------------------------------------------------- Task 4: serveGuideFile */
+
+  if (await test('serveGuideFile: 200 with the file bytes and Content-Type text/html; charset=utf-8', async () => {
+    const root = makeGuidesFixture();
+    try {
+      const cfg = guidesConfig(root);
+      const reply = await get((req, res) => void serveGuideFile(cfg, 'tutor/a-deck.html', res));
+      assert.strictEqual(reply.status, 200);
+      assert.strictEqual(reply.headers['content-type'], 'text/html; charset=utf-8');
+      assert.strictEqual(reply.headers['cache-control'], 'no-store');
+      assert.ok(reply.body.includes('tutor-deck'), 'expected the tutor-deck marker in the served bytes');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  })) p++; else f++;
+
+  if (await test('serveGuideFile: a relPath with a literal ".." segment is rejected — 404 { error: "not found" }, no file content', async () => {
+    const root = makeGuidesFixture();
+    try {
+      const cfg = guidesConfig(root);
+      const reply = await get((req, res) => void serveGuideFile(cfg, '../.env', res));
+      assert.strictEqual(reply.status, 404);
+      assert.deepStrictEqual(JSON.parse(reply.body), { error: 'not found' });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  })) p++; else f++;
+
+  if (await test('the /guides/<rest> route glue: a percent-encoded ".." segment is rejected, never 200, never leaks .env', async () => {
+    // Mirrors server/index.ts's route glue exactly (see the comment there):
+    // slice off the '/guides/' prefix, decodePath it, then serveGuideFile.
+    // `new URL()` normalizes a LITERAL ".." segment away before `u.pathname`
+    // is ever read (so `/guides/../.env` arrives as `/.env` and never reaches
+    // this code at all) but does NOT normalize a percent-encoded one — so
+    // `..%2f.env` is the shape that actually has to be rejected here.
+    const root = makeGuidesFixture();
+    try {
+      const cfg = guidesConfig(root);
+      const reply = await get((req, res) => {
+        const u = new URL(req.url || '/', 'http://local');
+        const relPath = decodePath(u.pathname.slice('/guides/'.length));
+        if (relPath === null) {
+          res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+          res.end(JSON.stringify({ error: 'bad path encoding' }));
+          return;
+        }
+        void serveGuideFile(cfg, relPath, res);
+      }, '/guides/..%2f.env');
+      assert.ok(reply.status === 400 || reply.status === 404, `expected 400 or 404, got ${reply.status}`);
+      assert.ok(!/ANSWER_TOKEN|NTFY_TOPIC/.test(reply.body), 'must never leak .env content');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   })) p++; else f++;
 
   for (const dir of outsideDirs) fs.rmSync(dir, { recursive: true, force: true });
