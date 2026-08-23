@@ -1,9 +1,10 @@
-export type Section = 'sessions' | 'management' | 'analytics' | 'settings';
+export type Section = 'sessions' | 'management' | 'analytics' | 'guides' | 'settings';
 
 const TABS: { id: Section; label: string }[] = [
   { id: 'sessions', label: 'Sessions' },
   { id: 'management', label: 'Management' },
   { id: 'analytics', label: 'Analytics' },
+  { id: 'guides', label: 'Guides' },
   { id: 'settings', label: 'Settings' }
 ];
 

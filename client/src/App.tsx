@@ -10,6 +10,7 @@ import { SettingsProvider, useSettings } from './hooks/useSettings';
 // view's bundle is unaffected.
 const ManagementView = lazy(() => import('./components/management/ManagementView'));
 const AnalyticsView = lazy(() => import('./components/analytics/AnalyticsView'));
+const GuidesView = lazy(() => import('./components/guides/GuidesView'));
 const SettingsView = lazy(() => import('./components/settings/SettingsView'));
 
 export function App() {
@@ -41,9 +42,10 @@ function AppShell() {
     setStored(s);
   };
 
-  // The three-pane management view and the analytics cards need the room;
-  // sessions and settings are single-column and read better narrow.
-  const wide = section === 'management' || section === 'analytics';
+  // The three-pane management view, the analytics cards, and the guides
+  // list/viewer need the room; sessions and settings are single-column and
+  // read better narrow.
+  const wide = section === 'management' || section === 'analytics' || section === 'guides';
 
   return (
     <div className="shell">
@@ -59,6 +61,10 @@ function AppShell() {
           ) : section === 'analytics' ? (
             <Suspense fallback={<div className="an-empty">loading…</div>}>
               <AnalyticsView />
+            </Suspense>
+          ) : section === 'guides' ? (
+            <Suspense fallback={<div className="guides-empty">loading…</div>}>
+              <GuidesView />
             </Suspense>
           ) : (
             <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
