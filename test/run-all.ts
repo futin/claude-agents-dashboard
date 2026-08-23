@@ -78,7 +78,7 @@ failed += runSurface();
 failed += runDecodePath();
 failed += runFormat();
 failed += runPanelCollapse();
-failed += runGuides();
+failed += await runGuides();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

@@ -1,5 +1,8 @@
 /**
- * guides.ts — pure metadata extraction for the Guides tab (GET /api/guides).
+ * guides.ts — pure metadata extraction for the Guides tab (GET /api/guides),
+ * plus scanGuides(), the recursive directory walk over docs/published-guides/
+ * that builds the GuidesIndex the endpoint serves.
+ *
  * Reads a tutor deck's `<title>` and its `id="provenance"` JSON stamp via
  * targeted regexes, not a full HTML parser.
  *
@@ -8,11 +11,16 @@
  * never adversarial HTML — so there is no untrusted-input surface a real
  * parser would need to defend against.
  *
- * Everything here fails open: a missing marker, missing stamp, or malformed
- * JSON yields null fields, never a throw.
+ * Everything here fails open: a missing marker, missing stamp, malformed
+ * JSON, or an unreadable file/directory yields null fields or an empty
+ * result, never a throw.
  */
 
-import type { DeckSection } from '../../shared/types.js';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+
+import type { DeckRef, DeckSection, GuideRef, GuidesIndex } from '../../shared/types.js';
 
 /** The tutor skill writes this literal comment right after `<!DOCTYPE html>`. */
 const TUTOR_DECK_MARKER = '<!-- tutor-deck -->';
@@ -76,4 +84,118 @@ export function parseDeckMeta(html: string): {
     : null;
 
   return { title, generated, commit, sections };
+}
+
+/** Read a file's text, or null if it can't be read — never throws. */
+async function readFileOrNull(p: string): Promise<string | null> {
+  try {
+    return await fsp.readFile(p, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/** generated descending, nulls last; any tie (including null-vs-null) breaks by relPath ascending. */
+function compareDecks(a: DeckRef, b: DeckRef): number {
+  if (a.generated !== b.generated) {
+    if (a.generated === null) return 1;
+    if (b.generated === null) return -1;
+    return a.generated < b.generated ? 1 : -1;
+  }
+  return a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0;
+}
+
+interface WalkResult {
+  decks: DeckRef[];
+  guides: GuideRef[];
+}
+
+const EMPTY_WALK: WalkResult = { decks: [], guides: [] };
+
+/**
+ * Recursively scan one directory for decks and guides. `relDir` is the
+ * POSIX-style path from the scan root to `dir` (`''` at the root itself) —
+ * built by hand with `/` throughout rather than via `path.join`, so relPath
+ * never picks up a platform separator.
+ *
+ * Non-descent rule (deliberate, not an oversight): a directory other than
+ * the root whose immediate children include `index.html` is a *guide
+ * directory*. It becomes exactly one GuideRef, and its entire subtree — every
+ * file and subdirectory beneath it — is skipped from here on. A guide's own
+ * supporting files (a `guide/` subdir of source notes, a `tools/` subdir of
+ * scripts, or even a marker'd deck the guide happens to embed) must never
+ * surface as a second, nested guide or a stray deck. The check runs before
+ * anything in this directory is otherwise inspected, and returns immediately
+ * — nothing below this point in the function runs for a guide directory.
+ */
+async function scanDir(dir: string, relDir: string): Promise<WalkResult> {
+  let entries: fs.Dirent[];
+  try {
+    entries = await fsp.readdir(dir, { withFileTypes: true });
+  } catch {
+    return EMPTY_WALK; // unreadable directory — fail open, skip it
+  }
+
+  const isRoot = relDir === '';
+
+  // Guide directory: see the non-descent rule in the function doc above.
+  if (!isRoot && entries.some(e => e.isFile() && e.name === 'index.html')) {
+    const html = await readFileOrNull(path.join(dir, 'index.html'));
+    const guide: GuideRef = {
+      relPath: relDir,
+      name: path.basename(dir),
+      title: html === null ? null : extractTitle(html),
+    };
+    return { decks: [], guides: [guide] };
+  }
+
+  const results = await Promise.all(entries.map(async (entry): Promise<WalkResult> => {
+    const rel = isRoot ? entry.name : `${relDir}/${entry.name}`;
+
+    if (entry.isDirectory()) return scanDir(path.join(dir, entry.name), rel);
+    if (!entry.isFile() || !entry.name.endsWith('.html')) return EMPTY_WALK;
+    if (isRoot && entry.name === 'index.html') return EMPTY_WALK; // the GitHub Pages hub itself
+
+    const html = await readFileOrNull(path.join(dir, entry.name));
+    if (html === null || !isTutorDeck(html)) return EMPTY_WALK;
+
+    const meta = parseDeckMeta(html);
+    const deck: DeckRef = {
+      relPath: rel,
+      title: meta.title ?? entry.name.slice(0, -'.html'.length),
+      generated: meta.generated,
+      commit: meta.commit,
+      sections: meta.sections,
+    };
+    return { decks: [deck], guides: [] };
+  }));
+
+  return {
+    decks: results.flatMap(r => r.decks),
+    guides: results.flatMap(r => r.guides),
+  };
+}
+
+/**
+ * Build the Guides tab's index by walking `guidesDir` (docs/published-guides/)
+ * for tutor decks and study guides. Never rejects: a missing/unreadable
+ * `guidesDir`, or any unreadable entry within it, is treated as simply
+ * absent rather than as an error (see scanDir) — an empty tab, not a broken
+ * one, and no `error` flag is set for it.
+ */
+export async function scanGuides(guidesDir: string): Promise<GuidesIndex> {
+  let walked: WalkResult = EMPTY_WALK;
+  try {
+    walked = await scanDir(guidesDir, '');
+  } catch {
+    // Defensive only: scanDir already wraps every fallible call in its own
+    // try/catch. This outer net just makes "never rejects" an absolute
+    // guarantee rather than one contingent on scanDir's internals.
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    decks: [...walked.decks].sort(compareDecks),
+    guides: [...walked.guides].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
+  };
 }
