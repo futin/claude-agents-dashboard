@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { DeckRef, GuideRef } from '../../../../shared/types';
 import { useGuides } from '../../hooks/useGuides';
@@ -23,6 +23,23 @@ interface ViewerState {
 export default function GuidesView() {
   const { index, loading, error } = useGuides();
   const [viewer, setViewer] = useState<ViewerState | null>(null);
+  const viewing = viewer !== null;
+
+  /*
+    Phone only in effect (the CSS rule lives inside the max-width:700px
+    breakpoint), but the class goes on unconditionally: the viewer is an
+    overlay at that width, and the deck it frames scrolls inside an iframe.
+    A scroller in another document can't be given `overscroll-behavior`
+    from here the way .chat-body gives itself one, so the chain is refused
+    at the root instead — see the .guide-locked rule in styles.css. Must sit
+    above the early return below: hooks don't get to be conditional.
+  */
+  useEffect(() => {
+    if (!viewing) return;
+    const root = document.documentElement;
+    root.classList.add('guide-locked');
+    return () => root.classList.remove('guide-locked');
+  }, [viewing]);
 
   if (viewer !== null) {
     return (

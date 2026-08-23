@@ -510,6 +510,19 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 @media (min-width:701px) and (max-width:1200px){
   .guide-viewer-body{min-height:calc(100dvh / var(--font-scale,1) - 2 * var(--body-pad) - 62px)}
 }
+/* While the phone overlay owns the screen, the page under it must not move.
+   The deck scrolls inside the iframe, and an iframe's scroller cannot be
+   reached from out here — `.chat-body`'s `overscroll-behavior:contain` has no
+   equivalent across a document boundary — so the chain is stopped at the far
+   end instead: `overscroll-behavior:none` on the root refuses the chained
+   gesture (and the rubber-band that comes with it even when, as here, the
+   outer document has nothing to scroll), and `overflow:hidden` leaves that
+   gesture nothing to act on in engines that ignore the property. The class is
+   added by GuidesView for exactly as long as a guide is open, and the rule is
+   inside the phone breakpoint because the overlay is. */
+@media (max-width:700px){
+  html.guide-locked,html.guide-locked body{overflow:hidden;overscroll-behavior:none}
+}
 
 /* ---------------------------------------------- chat-history drawer
    (the way in is `.row-chat`, up in the strip block) */
