@@ -16,9 +16,9 @@ interface ViewerState {
  * Default export → lazy chunk, matching Management/Analytics/Settings.
  *
  * Two states: a card list (Decks, then Study guides), or — once a card is
- * tapped — a viewer pane. The iframe itself is Task 6's; this component only
- * lays out the header (`.guide-viewer-head`, the exact class name a later
- * Ask-Claude companion mounts into) and an empty body for it to fill.
+ * tapped — a same-origin iframe viewer. `.guide-viewer-head` is kept as its
+ * own element deliberately: it's the exact class name a later Ask-Claude
+ * companion panel (on-hold spec) mounts into, so its shape must stay stable.
  */
 export default function GuidesView() {
   const { index, loading, error } = useGuides();
@@ -31,7 +31,27 @@ export default function GuidesView() {
           <button className="guide-viewer-back" onClick={() => setViewer(null)}>‹ Guides</button>
           <span className="guide-viewer-title">{viewer.title}</span>
         </div>
-        <div className="guide-viewer-body" />
+        <div className="guide-viewer-body">
+          {/*
+            No `sandbox` attribute: this iframe is same-origin — our own
+            server, serving our own generated HTML from
+            docs/published-guides/, on purpose. The deck's inline <script>
+            is what makes it work at all: every `.card` starts
+            `display:none` and only `.card.active` shows one, so Back/Next,
+            the arrow-key shortcuts, and the quiz's click-to-reveal feedback
+            are entirely script-driven — block scripts and the deck freezes
+            on its first card forever. (The "Questions you might ask"
+            <details> cards are native disclosure and don't need scripting;
+            it's the pager and the quiz that do.) There is no untrusted
+            content here to isolate, so don't add a `sandbox` back without
+            re-testing the pager and the quiz against it.
+          */}
+          <iframe
+            className="guide-viewer-frame"
+            src={`/guides/${encodeURI(viewer.relPath)}`}
+            title={viewer.title}
+          />
+        </div>
       </div>
     );
   }
