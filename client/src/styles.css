@@ -487,6 +487,42 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
    of the iframe's own. */
 .guide-viewer-body{flex:1;min-height:200px;display:flex;flex-direction:column;overflow:hidden}
 .guide-viewer-frame{flex:1 1 auto;border:0;width:100%}
+/* Phones: below 1201px the shell is a plain scrolling page, so .guide-viewer has
+   no height to inherit and .guide-viewer-body falls back to its 200px floor — a
+   deck whose own content runs well past 1000px then reads through a quarter-screen
+   porthole. Lift the viewer out of flow instead, the way the chat drawer already
+   does (.chat-back is this file's precedent for `position:fixed` under .shell's
+   `zoom`): the deck gets the whole screen and its own head is the only chrome.
+   `100dvh` rather than `vh` so iOS Safari's collapsing URL bar cannot leave the
+   deck permanently short, and `/var(--font-scale)` for the same `.shell{zoom}`
+   correction the rail makes at line ~110 — zoom scales a fixed child's viewport
+   units too, so an uncorrected 100dvh overhangs by the scale at 110% text. */
+@media (max-width:700px){
+  .guide-viewer{position:fixed;inset:0;z-index:40;gap:0;background:var(--board);height:calc(100dvh / var(--font-scale,1));width:calc(100vw / var(--font-scale,1))}
+  .guide-viewer-head{flex-shrink:0;padding:11px 12px;background:var(--strip);box-shadow:inset 0 1px 0 var(--edge)}
+  /* the overlay supplies the height; the 200px floor would now be a floor on nothing */
+  .guide-viewer-body{min-height:0}
+}
+/* Tablets: same missing height, but the rail is a left column here and the page
+   reads fine as a scroller — so keep the viewer in flow and give the body a
+   viewport-derived floor instead. Subtrahend is .main's padding (twice, from the
+   density token) plus the head and the gap above it. */
+@media (min-width:701px) and (max-width:1200px){
+  .guide-viewer-body{min-height:calc(100dvh / var(--font-scale,1) - 2 * var(--body-pad) - 62px)}
+}
+/* While the phone overlay owns the screen, the page under it must not move.
+   The deck scrolls inside the iframe, and an iframe's scroller cannot be
+   reached from out here — `.chat-body`'s `overscroll-behavior:contain` has no
+   equivalent across a document boundary — so the chain is stopped at the far
+   end instead: `overscroll-behavior:none` on the root refuses the chained
+   gesture (and the rubber-band that comes with it even when, as here, the
+   outer document has nothing to scroll), and `overflow:hidden` leaves that
+   gesture nothing to act on in engines that ignore the property. The class is
+   added by GuidesView for exactly as long as a guide is open, and the rule is
+   inside the phone breakpoint because the overlay is. */
+@media (max-width:700px){
+  html.guide-locked,html.guide-locked body{overflow:hidden;overscroll-behavior:none}
+}
 
 /* ---------------------------------------------- chat-history drawer
    (the way in is `.row-chat`, up in the strip block) */
