@@ -60,6 +60,19 @@ TTY_NAME=$(ps -o tty= -p $$ 2>/dev/null | tr -d '[:space:]')
 HEADLESS=false
 case "$TTY_NAME" in '??'|'?') HEADLESS=true ;; esac
 
+# ...but a missing TTY is not the same thing as a missing place to type. The
+# desktop app runs the CLI with no pty (measured: `ps -o tty=` prints `??`,
+# CLAUDE_CODE_ENTRYPOINT=claude-desktop, CLI 2.1.237) and still puts a composer
+# in front of you — so on the TTY test alone every desktop turn parks on the
+# dashboard, ignores your idle time, and is then skipped by the idle sweep,
+# which exempts headless holds by design. The entrypoint separates the two
+# cases: `sdk-cli` is what a dashboard-spawned `-p` child stamps (scan.ts:77;
+# spawn.ts deletes the inherited value so it cannot stamp anything else), while
+# an interactive front-end names itself. Only values measured to be interactive
+# are listed, so an unfamiliar entrypoint leaves the TTY verdict standing and a
+# new headless front-end still fails closed.
+case "$CLAUDE_CODE_ENTRYPOINT" in claude-desktop) HEADLESS=false ;; esac
+
 AUTH=()
 if [ -f "$TOKEN_FILE" ]; then
   AUTH=(-H "Authorization: Bearer $(tr -d '\n' < "$TOKEN_FILE")")
