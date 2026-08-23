@@ -11,7 +11,9 @@
     "tunnel": "tailscale serve --bg 5174",
     "test": "tsx test/run-all.ts",
     "typecheck": "tsc --noEmit",
-    "session-analytics": "tsx scripts/session-analytics.ts"
+    "session-analytics": "tsx scripts/session-analytics.ts",
+    "hooks:install": "bash scripts/install-hooks.sh",
+    "hooks:uninstall": "bash scripts/install-hooks.sh --uninstall"
   },
   "engines": {
     "node": ">=18"

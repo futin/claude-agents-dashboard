@@ -183,6 +183,7 @@ that area:
 - [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and why they replaced browser alerts outright
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [docker](workflows/docker.md) — running in containers, dev + prod
+- [hooks-setup](workflows/hooks-setup.md) — `pnpm hooks:install`: all five hooks, one command
 - [remote-answer-setup](workflows/remote-answer-setup.md) — per-machine hook install
 - [push-notify-setup](workflows/push-notify-setup.md) — ntfy topic, phone subscription, Stop hook
 - [dictation-setup](workflows/dictation-setup.md) — installing whisper.cpp and a model, and the HTTPS tunnel phone use needs

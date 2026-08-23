@@ -133,6 +133,11 @@ test/             node-assert tests over backend domain logic, tmpdir JSONL fixt
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: serves built client + API on http://localhost:4173 (`NODE_ENV=production`).
 - `pnpm test` — runs `test/run-all.ts` via tsx; it prints the case count.
+- `pnpm hooks:install` — symlinks the five hook scripts into `~/.claude/hooks` and merges the
+  six `settings.json` entries. Idempotent; `-- --dry-run` / `-- --uninstall` / `-- --force`.
+  Registration is user-global **on purpose** — the dashboard watches every project, so
+  project-scoped hooks would answer only sessions started in this repo
+  (see `docs/workflows/hooks-setup.md`).
 - `pnpm typecheck` — `tsc --noEmit`.
 - `pnpm tunnel` — optional: `tailscale serve --bg 5174`, fronts that fixed port over HTTPS
   on the tailnet — keep it matching the port you actually serve (prod `PORT` or a dev

@@ -51,6 +51,9 @@ that you edited `.env` rather than `.env.example`.
 arrive on hooks you may already have; this one has nothing to ride on, because a finished
 turn registers nothing with the dashboard.
 
+> `pnpm hooks:install` installs this hook along with the other four —
+> see [hooks-setup](hooks-setup.md).
+
 ```bash
 ln -s "$PWD/scripts/stop-notify-hook.sh" ~/.claude/hooks/stop-notify.sh
 ```
