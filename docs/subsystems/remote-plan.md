@@ -128,6 +128,9 @@ persisted: a re-proposed plan always arrives expanded.
 
 ## Install
 
+`pnpm hooks:install` covers this hook and the other four
+([hooks-setup](../workflows/hooks-setup.md)); by hand it is:
+
 ```bash
 ln -s "$PWD/scripts/plan-remote-hook.sh" ~/.claude/hooks/plan-remote.sh
 ```

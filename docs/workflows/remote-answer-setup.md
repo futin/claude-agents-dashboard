@@ -15,6 +15,9 @@ phone over LAN or Tailscale (see [remote-access](../subsystems/remote-access.md)
 **2. Link the hook**, from the repo root. A symlink rather than a copy, so `git pull`
 keeps it current:
 
+> `pnpm hooks:install` does this step and the next one for all five hooks at once —
+> see [hooks-setup](hooks-setup.md). The manual recipe below is what it automates.
+
 ```bash
 mkdir -p ~/.claude/hooks && ln -s "$PWD/scripts/ask-remote-hook.sh" ~/.claude/hooks/ask-remote.sh
 ```

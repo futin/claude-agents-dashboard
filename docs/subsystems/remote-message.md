@@ -215,7 +215,8 @@ parked session brand-new instructions."
 ## Install
 
 Same symlink as [push-notify-setup](../workflows/push-notify-setup.md) — existing installs
-gain this feature by pulling, since the hook is extended in place rather than replaced:
+gain this feature by pulling, since the hook is extended in place rather than replaced.
+`pnpm hooks:install` does it for you ([hooks-setup](../workflows/hooks-setup.md)); by hand:
 
 ```bash
 ln -s "$PWD/scripts/stop-notify-hook.sh" ~/.claude/hooks/stop-notify.sh
