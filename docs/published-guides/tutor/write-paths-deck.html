@@ -259,6 +259,40 @@ function settle(entry: Entry, result: WaitResult): void {
     </div>
   </div>
 
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>If all three stores are the same state machine, why not one generic module?</summary>
+      <p>Both module headers answer it outright: the <em>shape</em> is shared, nothing else is.
+      <code>plans.ts:20-23</code> calls a plan and a question "the same kind of wait with different
+      payloads", and says they stay separate modules "because their payloads and verdicts share
+      nothing" — a question carries <code>PendingQuestionItem[]</code> and can settle
+      <code>answered</code>; a plan carries markdown and can only settle <code>rejected</code>.
+      <code>messages.ts:13-15</code> repeats the reasoning for the third. A generic store would need
+      a type parameter for the payload, another for the verdict, and an injected validator per
+      caller — three seams bought with the forty lines the duplication actually costs.</p>
+    </details>
+    <details class="qa-item">
+      <summary>The card says every exit runs through <code>settle</code> — but <code>cancel</code> deletes the entry directly. Which is it?</summary>
+      <p><code>cancel</code> is the one exit that must <em>not</em> resolve. It fires when the hook's
+      own socket closes — session interrupted, hook killed — and as <code>pending.ts:245-247</code>
+      puts it: "No <code>resolve</code>: there is nobody left to answer to." Firing one would push a
+      verdict into a dead response. So <code>cancel</code> (<code>pending.ts:249-254</code>) clears
+      the timer and deletes by hand, while guarding the same staleness the funnel does — it takes the
+      <code>questionId</code> and returns early unless it matches, "so a late close can't evict a
+      newer entry". The funnel covers every exit that still has someone to answer to.</p>
+    </details>
+    <details class="qa-item">
+      <summary>What happens to every open wait when the dashboard server restarts?</summary>
+      <p>They vanish, by design. All three stores hold their entries in a plain in-memory
+      <code>Map</code> (<code>pending.ts:61</code>, <code>plans.ts:50</code>,
+      <code>messages.ts:49</code>), and <code>pending.ts:10-11</code> states the consequence:
+      "nothing here ever touches disk, so a restart just drops every wait (the hooks fall back to the
+      terminal dialog)". No <code>resolve</code> fires, so each hook's held HTTP request dies with the
+      process, the CLI sees the hook fail, and the terminal dialog or plan card takes over. That is
+      always the safe direction — the fallback is the surface that existed before any of this did.</p>
+    </details>
+  </div>
 </section>
 
 <!-- ============ s2 ============ -->
@@ -367,6 +401,40 @@ export function sanitizeQuestions(toolInput: unknown): PendingQuestionItem[] {
     </div>
   </div>
 
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>Why doesn't <code>validateAnswer</code> check the submitted values against the option labels?</summary>
+      <p>Because the terminal dialog it mirrors always offers a free-text "Other".
+      <code>pending.ts:115-116</code> says so directly: values are "deliberately NOT checked against
+      the option labels". Validation is therefore structural only
+      (<code>pending.ts:118-136</code>) — one answer per question, no duplicate
+      <code>index</code>, non-empty strings under <code>SELECTED_CAP</code>, and exactly one value
+      unless the question is <code>multiSelect</code>. Label-matching would break the single case the
+      panel exists to support: typing an answer the model never listed.</p>
+    </details>
+    <details class="qa-item">
+      <summary>The hook <em>denies</em> the tool call — what stops the model from just asking again?</summary>
+      <p>The deny reason does. <code>composeReason</code> (<code>pending.ts:143-156</code>) writes the
+      prose the hook returns as <code>permissionDecisionReason</code>, and <code>:139-141</code> names
+      its two jobs: state the choice, and stop the re-ask, "a denied AskUserQuestion is otherwise an
+      invitation to try again". Both the one-question and many-question branches end on the same
+      instruction:</p>
+<pre>// pending.ts:150-151
+return `The user answered via the dashboard (not the terminal dialog) — ${lines[0]}. `
+  + 'Treat this as the user\'s selection and continue; do not ask again.';</pre>
+    </details>
+    <details class="qa-item">
+      <summary>The question text comes from our own CLI, not the network — why cap it at all?</summary>
+      <p>"Our own CLI" is not the same as trusted input: the tool input is whatever the <em>model</em>
+      wrote, which runs long by accident as easily as by attack. The caps at
+      <code>pending.ts:36-41</code> carry their own reason — "a hostile/runaway tool input must not
+      pin memory". Note the shape of the enforcement: <code>str()</code>
+      (<code>pending.ts:63-65</code>) <em>slices</em> rather than rejecting, so an over-long question
+      still yields a usable panel instead of collapsing to the terminal. The caps bound memory; the
+      empty-array return handles genuinely malformed input.</p>
+    </details>
+  </div>
 </section>
 
 <!-- ============ s3 ============ -->
@@ -454,6 +522,42 @@ if (!feedback.trim()) return 'malformed';</pre>
     </div>
   </div>
 
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>What does the model actually receive when I send a plan back?</summary>
+      <p>Feedback wrapped in instructions. <code>composeReason</code>
+      (<code>plans.ts:70-76</code>) exists because a denied <code>ExitPlanMode</code> is otherwise a
+      dead end (<code>plans.ts:64-68</code>):</p>
+<pre>// plans.ts:72-75
+'The user reviewed this plan on the dashboard (not the plan card) and sent it back '
+  + `for revision. Their feedback: ${trimmed}\n`
+  + 'Revise the plan accordingly and call ExitPlanMode again. Stay in plan mode; '
+  + 'do not start implementing.'</pre>
+      <p>That last sentence is load-bearing: a model reads a bare denial as "stop", and the entire
+      point of the path is that it revises and comes back.</p>
+    </details>
+    <details class="qa-item">
+      <summary>If a rejected plan comes straight back as a new <code>ExitPlanMode</code>, doesn't the old wait leak?</summary>
+      <p>No — the new registration evicts it. <code>register</code> (<code>plans.ts:99-100</code>)
+      settles any existing entry for that session as <code>superseded</code> before installing the new
+      one, and the docstring names this exact loop at <code>plans.ts:89-91</code>: it "self-heals the
+      revise loop: a rejected plan comes straight back as a new <code>ExitPlanMode</code> call". The
+      superseded waiter is released rather than orphaned, so its hook falls through to the plan card
+      instead of hanging to its deadline. One entry per session is what makes that safe — there is
+      never a queue to get out of order.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Why is the plan capped at 20 000 characters but feedback at only 2 000?</summary>
+      <p>They cap opposite directions of travel. <code>PLAN_CAP</code>
+      (<code>plans.ts:32-33</code>) bounds what the <em>model</em> sends in; a plan "is markdown and
+      can be long", so the cap is there only so a runaway tool input can't pin memory.
+      <code>FEEDBACK_CAP</code> (<code>plans.ts:34-35</code>) bounds what <em>you</em> send back, and
+      that text reaches the model verbatim inside <code>composeReason</code>. Two thousand characters
+      is already far more than a revision note needs — the tighter number reflects a phone composer,
+      not a document editor.</p>
+    </details>
+  </div>
 </section>
 
 <!-- ============ s4 ============ -->
@@ -611,6 +715,37 @@ export function sweepIdle(): number {
     </div>
   </div>
 
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>Why does the follow-up text itself carry the away-mode instructions?</summary>
+      <p>Because nothing else can. <code>composeReason</code> (<code>messages.ts:62-69</code>) appends
+      the "user is still away" reminder — put decisions through <code>AskUserQuestion</code>, never
+      end the turn on a prose question, prefer already-permitted tools — and
+      <code>messages.ts:53-56</code> gives the reason: "<code>UserPromptSubmit</code> hooks (the
+      remote-decision injection) do NOT fire on hook-continued turns, so this is the only place the
+      reminder can ride." A turn resumed by a Stop hook never passes through the prompt-submit path,
+      so instructions that normally ride there have to travel inside the message itself.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Could I reword <code>composeReason</code> without touching anything else?</summary>
+      <p>No — one other file mirrors the wording. <code>messages.ts:57-60</code> flags it:
+      <code>chat.ts</code>'s <code>REMOTE_MESSAGE_RE</code> matches this exact prose to unwrap the
+      record back into a plain drawer message, and "editing the wording here without editing it there
+      breaks <code>chat.test.ts</code> — which is the point; it fails closed". Without that test the
+      failure would be silent: the follow-up simply stops appearing in the chat drawer, with no error
+      anywhere. The coupling is deliberate, and guarded by a test rather than engineered away.</p>
+    </details>
+    <details class="qa-item">
+      <summary>If the idle threshold is set to 0, does that release every hold instantly, or never?</summary>
+      <p>Never. <code>sweepIdle</code> returns 0 before it even reads idle time when the threshold is
+      zero (<code>messages.ts:205-206</code>), and the fail-direction comment at
+      <code>messages.ts:198-199</code> gives the reason: "<code>idleSecs === 0</code> means the idle
+      gate is disabled everywhere else, so it disables auto-release too." Zero means "no idle gating",
+      not "zero seconds of idleness required". Under that setting a hold ends the ordinary ways — you
+      answer, you dismiss, a new hook supersedes it, or its own deadline timer fires.</p>
+    </details>
+  </div>
 </section>
 
 <!-- ============ recap ============ -->
@@ -629,7 +764,7 @@ export function sweepIdle(): number {
   <p class="xlink">Next in this series:
   <a href="write-paths-2-spawn-deck.html">the write paths, part 2 — spawn.ts</a>
   (the path the dashboard initiates).</p>
-  <p class="stamp">built at fa9fdbc</p>
+  <p class="stamp">built at 669d6e2</p>
 </div>
 
 </main>
@@ -641,8 +776,8 @@ export function sweepIdle(): number {
 
 <script type="application/json" id="provenance">
 {
-  "commit": "fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14",
-  "generated": "2026-08-22",
+  "commit": "669d6e29b27f1cf24033a82ea2bd11845ed6c1f1",
+  "generated": "2026-08-23",
   "sources": ["server/lib/pending.ts", "server/lib/plans.ts", "server/lib/messages.ts"],
   "sections": [
     { "id": "s1", "title": "The shared shape", "sources": ["server/lib/pending.ts", "server/lib/plans.ts", "server/lib/messages.ts"] },
