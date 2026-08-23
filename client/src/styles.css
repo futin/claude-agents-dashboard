@@ -409,6 +409,8 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
   .mgmt-list .mgmt-filter{position:sticky;top:0;z-index:1;flex-shrink:0;box-shadow:0 0 0 5px var(--board)}
   .mdetail .mgmt-file{max-height:none;overflow:visible} /* the pane is the scroller */
   .wrap.wide .analytics{flex:1;min-height:0;overflow-y:auto} /* the tab is the scroller */
+  .wrap.wide .guides{flex:1;min-height:0;overflow-y:auto} /* the tab is the scroller */
+  .wrap.wide .guide-viewer{flex:1;min-height:0}
 }
 
 /* Analytics section — the logbook */
@@ -454,6 +456,37 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .an-review{font-family:var(--display);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--amber);border:1px solid var(--amber);border-radius:2px;padding:0 7px 1px;align-self:center}
 .an-review code{font-family:var(--mono);text-transform:none;letter-spacing:0;color:inherit}
 @media (max-width:700px){.an-cols{grid-template-columns:1fr}}
+
+/* Guides section — tutor decks + study guides under docs/published-guides/,
+   read via GET /api/guides (server/lib/guides.ts). Two states: a card list
+   (Decks, then Study guides) or, once a card is tapped, the viewer pane —
+   a same-origin iframe in .guide-viewer-body. */
+.guides{display:flex;flex-direction:column;gap:14px}
+.guides-bar{display:flex;align-items:baseline;gap:10px}
+.guides-title{font-family:var(--display);font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--ink)}
+.guides-empty{font-size:11px;color:var(--ink3);padding:20px 2px;text-align:center}
+.guides-group{display:flex;flex-direction:column;gap:8px}
+.guides-group-h{font-family:var(--display);font-size:10.5px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.09em}
+.guides-list{display:flex;flex-direction:column;gap:10px}
+.guides-card{background:var(--strip);border:1px solid var(--hairline);border-radius:2px;padding:10px 14px;cursor:pointer;transition:border-color .15s;box-shadow:inset 0 1px 0 var(--edge)}
+.guides-card:hover{border-color:var(--hairline2)}
+.guides-card-title{font-size:13px;font-weight:600;color:var(--ink)}
+.guides-card-meta{font-size:10.5px;color:var(--ink3);font-family:var(--mono);margin-top:3px}
+/* Viewer pane — .guide-viewer-head is the exact class name a future
+   Ask-Claude companion panel (on-hold spec) mounts into; keep it stable. */
+.guide-viewer{display:flex;flex-direction:column;min-height:0;gap:12px}
+.guide-viewer-head{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--hairline)}
+.guide-viewer-back{font-family:var(--font);font-size:11.5px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 10px;cursor:pointer;transition:color .15s,border-color .15s}
+.guide-viewer-back:hover{color:var(--ink);border-color:var(--hairline2)}
+.guide-viewer-title{font-size:13px;font-weight:600;color:var(--ink)}
+/* Body is itself a flex column (not just a flex item) so the iframe's own
+   `flex:1 1 auto` has a flex context to fill; `overflow:hidden` is the fix for
+   the one edge case that would otherwise double-scroll — a tiny viewport where
+   the iframe's replaced-element floor (its intrinsic min-height) exceeds the
+   space this pane was given — clipping there beats a second scrollbar on top
+   of the iframe's own. */
+.guide-viewer-body{flex:1;min-height:200px;display:flex;flex-direction:column;overflow:hidden}
+.guide-viewer-frame{flex:1 1 auto;border:0;width:100%}
 
 /* ---------------------------------------------- chat-history drawer
    (the way in is `.row-chat`, up in the strip block) */

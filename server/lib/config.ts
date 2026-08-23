@@ -77,6 +77,20 @@ export interface Config {
    * to `'auto'` instead.
    */
   spawnMaxPermission: PermissionMode;
+  /**
+   * Root directory the Guides tab scans (`GET /api/guides`) and serves
+   * (`GET /guides/<relPath>`) — `docs/published-guides/` by default, same
+   * cwd convention as `clientDist` in server/index.ts:36. Computed at
+   * `loadConfig` call time rather than stored in `DEFAULTS`, which is
+   * `as const` and holds only literals.
+   *
+   * Unlike `claudeBin`/`ntfyTopic`/`whisperModel`, leaving this unset does
+   * NOT turn the feature off: the Guides tab always exists. An unpublished
+   * or missing directory just makes `scanGuides` return empty arrays, the
+   * same "empty tab, not a broken one" fail-open the scanner itself
+   * guarantees — there is no separate on/off flag to check.
+   */
+  guidesDir: string;
 }
 
 export const DEFAULTS = {
@@ -215,6 +229,9 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     whisperBin: (src('WHISPER_BIN') || DEFAULTS.WHISPER_BIN).trim(),
     ffmpegBin: (src('FFMPEG_BIN') || DEFAULTS.FFMPEG_BIN).trim(),
     claudeBin: (src('CLAUDE_BIN') || DEFAULTS.CLAUDE_BIN).trim(),
-    spawnMaxPermission: toPermissionMode(src('SPAWN_MAX_PERMISSION'), DEFAULTS.SPAWN_MAX_PERMISSION)
+    spawnMaxPermission: toPermissionMode(src('SPAWN_MAX_PERMISSION'), DEFAULTS.SPAWN_MAX_PERMISSION),
+    // Computed at call time (not a DEFAULTS literal) so cwd is resolved fresh
+    // each call, the same reasoning as isDockerContainer() above.
+    guidesDir: (src('GUIDES_DIR') || path.join(process.cwd(), 'docs', 'published-guides')).trim()
   };
 }
