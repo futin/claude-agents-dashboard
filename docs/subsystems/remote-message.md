@@ -254,5 +254,5 @@ state, reset on a new `messageId`, never persisted.
     - client/src/hooks/usePendingMessage.ts
     - client/src/components/SessionRow.tsx
   kind: subsystem
-  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
+  verified: 34d41e5b900ae76c01f450631b3482a1b27aa827
 -->
