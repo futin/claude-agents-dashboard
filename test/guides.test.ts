@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { isTutorDeck, parseDeckMeta, extractTitle, scanGuides } from '../server/lib/guides.js';
+import { isTutorDeck, parseDeckMeta, extractTitle, scanGuides, resolveGuidePath, GUIDE_MIME } from '../server/lib/guides.js';
 
 function test(name: string, fn: () => void | Promise<void>): Promise<boolean> {
   return Promise.resolve()
@@ -68,6 +68,24 @@ function put(root: string, rel: string, content: string): void {
   fs.writeFileSync(full, content);
 }
 
+/**
+ * Real files created outside any guides-fixture root, to be symlinked from
+ * inside one (for traversal-escape tests). `makeGuidesFixture` only returns
+ * `root`, and every existing call site cleans up just `root` in its own
+ * `finally` — so these are tracked here and swept once at the very end of
+ * `run()` instead of per-test.
+ */
+const outsideDirs: string[] = [];
+
+/** A real file living outside any fixture root — a symlink escape target. */
+function makeOutsideFile(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guides-outside-'));
+  outsideDirs.push(dir);
+  const file = path.join(dir, 'secret.html');
+  fs.writeFileSync(file, '<title>secret</title>');
+  return file;
+}
+
 /** Marker'd deck with a full stamp: one section, a generated date. */
 const DECK_A = `<!DOCTYPE html>
 <!-- tutor-deck -->
@@ -107,6 +125,12 @@ const DECK_BURIED = `<!DOCTYPE html>
  *   learning/dictation/index.html     — <title>Dictation</title>; makes this a GuideRef
  *   learning/dictation/guide/x.md     — inside the guide dir; must not surface
  *   learning/dictation/index2.html    — marker'd deck inside the guide dir; must NOT be listed
+ *   tutor/escape.html                 — SYMLINK to a real file outside the tmpdir entirely;
+ *                                        for resolveGuidePath traversal tests. Harmless to
+ *                                        scanGuides: fs.Dirent.isFile() is false for a
+ *                                        symlink dirent (unfollowed), so scanDir's
+ *                                        `!entry.isFile()` guard skips it before the
+ *                                        `.html` check ever runs — decks.length stays 2.
  *
  * Task 3 (resolveGuidePath / GUIDE_MIME) reuses this exact tree — extend it
  * in place rather than duplicating it.
@@ -121,6 +145,7 @@ function makeGuidesFixture(): string {
   put(root, 'learning/dictation/index.html', '<title>Dictation</title>');
   put(root, 'learning/dictation/guide/x.md', '# source notes\n');
   put(root, 'learning/dictation/index2.html', DECK_BURIED);
+  fs.symlinkSync(makeOutsideFile(), path.join(root, 'tutor', 'escape.html'));
   return root;
 }
 
@@ -257,6 +282,113 @@ export async function run(): Promise<number> {
       fs.rmSync(root, { recursive: true, force: true });
     }
   })) p++; else f++;
+
+  /* ---------------------------------------------------------- resolveGuidePath */
+
+  if (await test('resolveGuidePath: a real deck resolves to its realpath\'d absolute path', () => {
+    const root = makeGuidesFixture();
+    try {
+      const expected = fs.realpathSync(path.join(root, 'tutor', 'a-deck.html'));
+      assert.strictEqual(resolveGuidePath(root, 'tutor/a-deck.html'), expected);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  })) p++; else f++;
+
+  if (await test('resolveGuidePath: rejects traversal, absolute path, empty, a directory, a missing file, and the escape symlink', () => {
+    const root = makeGuidesFixture();
+    try {
+      const cases = ['../x', 'a/../../x', '/etc/passwd', '', 'tutor', 'tutor/missing.html', 'tutor/escape.html'];
+      for (const relPath of cases) {
+        assert.strictEqual(resolveGuidePath(root, relPath), null, `expected null for ${JSON.stringify(relPath)}`);
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  })) p++; else f++;
+
+  if (await test('resolveGuidePath: extra edge cases — bare "..", ".", backslash, embedded NUL, missing guidesDir', () => {
+    const root = makeGuidesFixture();
+    try {
+      assert.strictEqual(resolveGuidePath(root, '..'), null, 'bare ".." with no slash is still a ".." segment');
+      assert.strictEqual(resolveGuidePath(root, '.'), null, 'resolves to guidesDir itself, which is not a file');
+      assert.strictEqual(resolveGuidePath(root, 'tutor\\a-deck.html'), null, 'backslash');
+      assert.strictEqual(resolveGuidePath(root, 'tutor/a-deck.html\0.png'), null, 'embedded NUL byte must not throw');
+      assert.strictEqual(resolveGuidePath(path.join(root, 'does-not-exist'), 'tutor/a-deck.html'), null, 'guidesDir itself missing must not throw');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  })) p++; else f++;
+
+  if (await test('resolveGuidePath: a filename merely containing ".." (not a full segment) is not rejected on that ground', () => {
+    const root = makeGuidesFixture();
+    try {
+      put(root, 'tutor/a..b.html', '<title>dotted</title>');
+      const expected = fs.realpathSync(path.join(root, 'tutor', 'a..b.html'));
+      assert.strictEqual(resolveGuidePath(root, 'tutor/a..b.html'), expected);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  })) p++; else f++;
+
+  if (await test('resolveGuidePath: symlink to a sibling dir sharing guidesDir as a raw string prefix is rejected (the separator check)', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'guides-'));
+    const sibling = root + '-secret'; // e.g. ".../guides-XXXX-secret" — starts with ".../guides-XXXX"
+    fs.mkdirSync(sibling);
+    try {
+      fs.mkdirSync(path.join(root, 'tutor'), { recursive: true });
+      fs.writeFileSync(path.join(sibling, 'leak.html'), '<title>leak</title>');
+      fs.symlinkSync(path.join(sibling, 'leak.html'), path.join(root, 'tutor', 'sibling-escape.html'));
+      assert.strictEqual(resolveGuidePath(root, 'tutor/sibling-escape.html'), null);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(sibling, { recursive: true, force: true });
+    }
+  })) p++; else f++;
+
+  if (await test('resolveGuidePath: a symlinked directory that resolves outside guidesDir is rejected', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'guides-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'guides-outside-'));
+    try {
+      fs.writeFileSync(path.join(outside, 'file.html'), '<title>outside file</title>');
+      fs.mkdirSync(path.join(root, 'tutor'), { recursive: true });
+      fs.symlinkSync(outside, path.join(root, 'tutor', 'linked-dir'));
+      assert.strictEqual(resolveGuidePath(root, 'tutor/linked-dir/file.html'), null);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  })) p++; else f++;
+
+  /* ---------------------------------------------------------- GUIDE_MIME */
+
+  if (await test('GUIDE_MIME: the two guide-specific entries have the exact documented values', () => {
+    assert.strictEqual(GUIDE_MIME['.mjs'], 'text/javascript; charset=utf-8');
+    assert.strictEqual(GUIDE_MIME['.md'], 'text/markdown; charset=utf-8');
+  })) p++; else f++;
+
+  if (await test('GUIDE_MIME: mirrors the eight server/index.ts entries verbatim, ten keys total, no case-folding', () => {
+    // Checked before deepStrictEqual deliberately: @types/node types it as
+    // `asserts actual is T`, so TS narrows GUIDE_MIME's static type to the
+    // literal shape below afterward, and a `['.HTML']` lookup past that
+    // point fails to typecheck (no such key on the narrowed type) even
+    // though it is perfectly valid at runtime.
+    assert.strictEqual(GUIDE_MIME['.HTML'], undefined, 'no case-folding, same as the map it mirrors');
+    assert.deepStrictEqual(GUIDE_MIME, {
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'text/javascript; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
+      '.svg': 'image/svg+xml',
+      '.png': 'image/png',
+      '.ico': 'image/x-icon',
+      '.woff2': 'font/woff2',
+      '.mjs': 'text/javascript; charset=utf-8',
+      '.md': 'text/markdown; charset=utf-8',
+    });
+  })) p++; else f++;
+
+  for (const dir of outsideDirs) fs.rmSync(dir, { recursive: true, force: true });
 
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;

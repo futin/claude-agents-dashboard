@@ -199,3 +199,100 @@ export async function scanGuides(guidesDir: string): Promise<GuidesIndex> {
     guides: [...walked.guides].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
   };
 }
+
+/**
+ * Resolve `relPath` (as requested by Task 4's `GET /guides/<relPath>`) to an
+ * absolute on-disk path inside `guidesDir`, or `null` if anything about the
+ * request is unsafe or the target doesn't qualify.
+ *
+ * This is the feature's entire security surface: docs/published-guides/
+ * sits inside the repo, alongside `.env` (the ntfy push topic and the
+ * remote-answer token). Every check below exists solely to keep this
+ * function from ever handing back a path outside `guidesDir`.
+ *
+ * Checks run in this order — cheap string rejects on the raw, unresolved
+ * `relPath` first; filesystem syscalls only for survivors:
+ *   1. non-empty.
+ *   2. no `..` path segment. This means an exact segment equal to `..`
+ *      (e.g. the second segment of "a/../b") — a filename that merely
+ *      *contains* ".." as a substring, like "a..b.html", is a literal,
+ *      filesystem-safe name and is left alone: only an exact ".." segment
+ *      means "go up a directory" to the filesystem.
+ *   3. no leading "/" (would make `path.join` treat relPath as its own
+ *      absolute root, ignoring `guidesDir`, on POSIX).
+ *   4. no backslash (not a POSIX separator, but rejected outright rather
+ *      than special-cased per platform).
+ *   5. no NUL byte (Node's `fs` calls throw a TypeError on one; reject up
+ *      front rather than lean on the catch-all below for this case).
+ *   6. `fs.realpathSync` BOTH `guidesDir` and the joined candidate path, and
+ *      require the resolved target to sit strictly inside the resolved
+ *      root: `target.startsWith(root + path.sep)`.
+ *
+ *      Both sides must be realpath'd, not just the target. On macOS,
+ *      `os.tmpdir()` — and so most tmpdir-based fixtures — already lives
+ *      under a symlink (`/var` -> `/private/var`), so comparing a
+ *      realpath'd target against a raw `guidesDir` string would fail this
+ *      check for every request, traversal or not.
+ *
+ *      The separator in `root + path.sep` is deliberate, and stricter than
+ *      `serveStatic`'s prefix check (server/index.ts:78), which tests
+ *      `startsWith(clientDist)` with no separator — a check that a sibling
+ *      directory named e.g. "guides-secret" would pass. Do not "simplify"
+ *      this back to match serveStatic; the asymmetry is the point.
+ *
+ *      This same step also transparently rejects: a symlink (file or
+ *      directory) that leads outside `guidesDir`, since realpath follows it
+ *      before the prefix check runs; and a relPath that resolves to
+ *      `guidesDir` itself (e.g. "."), since the exact root has no trailing
+ *      separator and so never matches its own `root + sep` prefix.
+ *   7. the resolved target is a regular file — not a directory, not a
+ *      device, etc.
+ *
+ * Never throws: a nonexistent path (ENOENT from realpathSync), a broken
+ * symlink, a permissions error, a bogus `guidesDir`, or any other failure
+ * during resolution is caught and yielded as `null`, the same as a
+ * deliberate traversal attempt.
+ */
+export function resolveGuidePath(guidesDir: string, relPath: string): string | null {
+  if (relPath === '') return null;
+  if (relPath.split('/').includes('..')) return null;
+  if (relPath.startsWith('/')) return null;
+  if (relPath.includes('\\')) return null;
+  if (relPath.includes('\0')) return null;
+
+  try {
+    const root = fs.realpathSync(guidesDir);
+    const target = fs.realpathSync(path.join(guidesDir, relPath));
+    if (!target.startsWith(root + path.sep)) return null;
+    if (!fs.statSync(target).isFile()) return null;
+    return target;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * MIME lookup for GET /guides/<relPath> (Task 4). The first eight entries
+ * mirror the private `MIME` map in server/index.ts:62-71 verbatim (same
+ * keys, same values) — duplicated rather than imported, since that map is
+ * module-private there. `.mjs` and `.md` are added for guide content:
+ * tutor decks load ES modules directly, and study guides can serve their
+ * source Markdown alongside the rendered HTML.
+ *
+ * Lookup (at the call site, not here) is a plain `GUIDE_MIME[ext]` keyed by
+ * `path.extname(...)`, same as the map it mirrors — no case-folding, so an
+ * uppercase extension misses and falls back to `application/octet-stream`,
+ * exactly like the existing MIME map already behaves.
+ */
+export const GUIDE_MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
+};
