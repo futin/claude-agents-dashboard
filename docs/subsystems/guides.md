@@ -177,6 +177,19 @@ unreachable. Height is not cosmetic here the way it would be for a scrolling doc
 strip, the page padding and the tab chrome are worth more as reading area than as
 wayfinding. The head stays put, so `‹ Guides` remains the way back out.
 
+**The overlay also locks the page under it.** A deck scrolls *inside the iframe*, and a
+scroller in another document cannot be handed an `overscroll-behavior` from out here the
+way `.chat-body` hands itself one. So the chain is refused at the far end instead:
+`GuidesView` puts `.guide-locked` on `<html>` for exactly as long as a guide is open, and
+the phone breakpoint gives that class `overflow:hidden;overscroll-behavior:none`. Without
+it, reaching the bottom of a deck chains the gesture out to the document and rubber-bands
+the whole app past the edges of the overlay — and since the outer document has nothing to
+scroll (812 of 812 on a phone), that bounce is the *entire* visible effect, which is why
+`overflow:hidden` alone would not have been enough. The class goes on unconditionally and
+is gated in CSS, so desktop keeps its own behaviour; the effect's cleanup runs on unmount
+as well as on close, because leaving the tab with a guide open must not strand the app
+with an unscrollable page.
+
 ⚠️ **Both viewport-derived heights divide by `--font-scale`.** `.shell{zoom}` scales a
 fixed child's viewport units too, so an uncorrected `100dvh` overhangs by the scale at
 110% text — the same correction the rail makes, for the same reason. And both use
@@ -202,6 +215,13 @@ any of it; the element and its class name are the entire commitment.
   375×812 (overlay 375×812, iframe 763px, pager on screen, `‹ Guides` returns to the list) and
   at text scales 1.0/1.1/1.25. `100dvh` is chosen *for* the collapsing URL bar and `position:fixed`
   under `zoom` held at all three scales, but no real device saw any of it. Still needs a human pass.
+- **The scroll lock is unverified on a real phone too.** The class toggles correctly, the
+  computed styles land only under the phone breakpoint, the inner iframe still scrolls to
+  its own end, and cleanup runs on both close and unmount — all in a desktop browser with a
+  mouse. Touch-driven chaining and iOS's rubber band are the actual failure mode, and
+  neither was exercised. Refusing the chain at its *source* (an `overscroll-behavior` on
+  the deck documents themselves) stays available if the root-level refusal turns out not to
+  hold on iOS.
 - **Narrow-viewport wrapping of the decks' Q&A cards** — checked once at 375px, in a desktop
   browser: three `<summary>` lines carrying inline `<code>` wrap onto two lines each without
   overflowing. Not seen on a real phone.
@@ -224,5 +244,5 @@ any of it; the element and its class name are the entire commitment.
     - client/src/styles.css
     - vite.config.ts
   kind: subsystem
-  verified: eecb0c59c6e8fd1973106ffc72aee712e966a133
+  verified: 4df7473f1a717e168c5b59079824667dbdb24402
 -->
