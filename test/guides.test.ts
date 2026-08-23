@@ -529,6 +529,17 @@ export async function run(): Promise<number> {
   })) p++; else f++;
 
   if (await test('serveGuideFile: a relPath with a literal ".." segment is rejected — 404 { error: "not found" }, no file content', async () => {
+    // Weaker than it looks, so read this before trusting it: this exercises
+    // resolveGuidePath's cheap string-based segment reject, which runs on the
+    // raw relPath before any filesystem call — a different, earlier-firing
+    // mechanism than the realpath-based symlink-escape check the next test
+    // covers. '../.env' resolves to os.tmpdir()/.env, which makeGuidesFixture
+    // never creates, so this case would ALSO 404 (via ENOENT in the catch
+    // below) even if the guard did nothing at all — it cannot by itself tell
+    // "rejected" apart from "absent, and nothing happened to be there". Kept
+    // because it documents the string-reject path's response shape (still a
+    // real, distinct mechanism worth a regression test); the next test is
+    // the one that actually proves the guard is load-bearing.
     const root = makeGuidesFixture();
     try {
       const cfg = guidesConfig(root);
@@ -540,13 +551,39 @@ export async function run(): Promise<number> {
     }
   })) p++; else f++;
 
+  if (await test('serveGuideFile: the symlink-escape decoy (tutor/escape.html) is rejected — the case that actually proves the guard is load-bearing', async () => {
+    // Unlike '../.env' above, this target is real: makeGuidesFixture (:212)
+    // plants tutor/escape.html as a symlink to a real, readable file outside
+    // the fixture root entirely (makeOutsideFile's '<title>secret</title>').
+    // So if resolveGuidePath's realpath+prefix check were ever removed or
+    // broken, this request would actually succeed in reading that file — a
+    // genuine 200 with leaked content, not a coincidental ENOENT. That is
+    // what makes this assertion non-vacuous, unlike the '../.env' case above
+    // — confirmed by deliberately breaking the guard and watching this case
+    // (and only this case) fail; see the fix report for the measurement.
+    const root = makeGuidesFixture();
+    try {
+      const cfg = guidesConfig(root);
+      const reply = await get((req, res) => void serveGuideFile(cfg, 'tutor/escape.html', res));
+      assert.strictEqual(reply.status, 404);
+      assert.deepStrictEqual(JSON.parse(reply.body), { error: 'not found' });
+      assert.ok(!reply.body.includes('secret'), "must never leak the outside file's real content");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  })) p++; else f++;
+
   if (await test('the /guides/<rest> route glue: a percent-encoded ".." segment is rejected, never 200, never leaks .env', async () => {
     // Mirrors server/index.ts's route glue exactly (see the comment there):
     // slice off the '/guides/' prefix, decodePath it, then serveGuideFile.
     // `new URL()` normalizes a LITERAL ".." segment away before `u.pathname`
     // is ever read (so `/guides/../.env` arrives as `/.env` and never reaches
     // this code at all) but does NOT normalize a percent-encoded one — so
-    // `..%2f.env` is the shape that actually has to be rejected here.
+    // `..%2f.env` is the shape that actually has to be rejected here. Same
+    // caveat as the literal-".." case above applies: the decoded target
+    // (../.env) doesn't exist either, so this proves the URL-decoding step
+    // composes correctly with the segment-reject path, not that the guard is
+    // load-bearing — that proof lives in the escape.html case above.
     const root = makeGuidesFixture();
     try {
       const cfg = guidesConfig(root);
