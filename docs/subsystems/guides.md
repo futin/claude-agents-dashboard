@@ -184,6 +184,7 @@ any of it; the element and its class name are the entire commitment.
     - server/api.ts
     - server/index.ts
     - server/lib/config.ts
+    - shared/types.ts
     - client/src/hooks/useGuides.ts
     - client/src/components/guides/GuidesView.tsx
     - vite.config.ts

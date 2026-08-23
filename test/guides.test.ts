@@ -573,7 +573,7 @@ export async function run(): Promise<number> {
     }
   })) p++; else f++;
 
-  if (await test('the /guides/<rest> route glue: a percent-encoded ".." segment is rejected, never 200, never leaks .env', async () => {
+  if (await test('the /guides/<rest> slice-and-decode logic (a pasted copy, not the live route): a percent-encoded ".." segment is rejected, never 200, never leaks .env', async () => {
     // Mirrors server/index.ts's route glue exactly (see the comment there):
     // slice off the '/guides/' prefix, decodePath it, then serveGuideFile.
     // `new URL()` normalizes a LITERAL ".." segment away before `u.pathname`
