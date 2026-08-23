@@ -150,6 +150,39 @@ moves. A stale cached deck after a refresh is a worse failure than re-sending a 
 would be studying yesterday's file while its own card reads today's date. The files are small
 and the tab is opened by hand; there is nothing here worth caching for.
 
+## Where the viewer's height comes from — three different answers
+
+An iframe is a replaced element with no content-derived height, so whatever the pane is
+given is the whole of what the learner reads through. The shell hands it one in three
+different ways, and the phone one is not a smaller version of the desktop one.
+
+| Width | Shape | Why |
+|---|---|---|
+| ≥1201px | `.wrap.wide` is an app shell (`height:calc(100vh…)`); the viewer is a flex child | the page never scrolls, each pane does |
+| 701–1200px | in flow; `.guide-viewer-body` gets a `100dvh`-derived `min-height` floor | the rail is a left column here and the page reads fine as a scroller |
+| ≤700px | out of flow entirely: `position:fixed;inset:0`, its own head the only chrome | below |
+
+⚠️ **Below 1201px there is no height to inherit.** `.wrap.wide`'s `height` lives inside
+`@media (min-width:1201px)`; everywhere else the viewer is an auto-height block, so
+`.guide-viewer-body{flex:1;min-height:200px}` lands on its own floor and nothing else.
+Measured on a 375×812 viewport before this was fixed: iframe **200px**, deck content
+**1235px** — and, the part that actually broke the tab, the deck's own Back/Next pager
+laid out at y=340–418, **140px past the bottom of the porthole**. A deck is *paged*, not
+scrolled, so an unreachable pager means card one forever: the per-section Q&A cards (card
+6 of 32 in the spawn deck, behind a gating quiz) read as missing when they were merely
+unreachable. Height is not cosmetic here the way it would be for a scrolling document.
+
+**The phone gets an overlay, not a taller pane.** `position:fixed;inset:0` is the move
+`.chat-back` already makes in this stylesheet, for the same reason: on a phone the rail
+strip, the page padding and the tab chrome are worth more as reading area than as
+wayfinding. The head stays put, so `‹ Guides` remains the way back out.
+
+⚠️ **Both viewport-derived heights divide by `--font-scale`.** `.shell{zoom}` scales a
+fixed child's viewport units too, so an uncorrected `100dvh` overhangs by the scale at
+110% text — the same correction the rail makes, for the same reason. And both use
+`100dvh`, never `100vh`: iOS Safari's collapsing URL bar would otherwise leave the deck
+permanently short by the height of the bar.
+
 ## The reserved companion slot
 
 `.guide-viewer-head` is kept as its own element with a stable class name because it is where the
@@ -165,12 +198,13 @@ any of it; the element and its class name are the entire commitment.
 
 ## Known limits / not verified
 
-- **iOS Safari iframe scrolling is unverified** — no device was available. Height and
-  scroll-inside-iframe on iOS is the risk flagged at design time and it needs a human pass on a
-  real phone. `.guide-viewer-body` carries `overflow:hidden` so a cramped viewport clips instead
-  of double-scrolling, but that is reasoning, not a measurement.
-- **Narrow-viewport wrapping of the decks' Q&A cards is unverified** — long `<summary>` lines
-  carrying inline `<code>` were never checked at phone widths.
+- **iOS Safari is still unverified** — the phone overlay was measured in a desktop browser at
+  375×812 (overlay 375×812, iframe 763px, pager on screen, `‹ Guides` returns to the list) and
+  at text scales 1.0/1.1/1.25. `100dvh` is chosen *for* the collapsing URL bar and `position:fixed`
+  under `zoom` held at all three scales, but no real device saw any of it. Still needs a human pass.
+- **Narrow-viewport wrapping of the decks' Q&A cards** — checked once at 375px, in a desktop
+  browser: three `<summary>` lines carrying inline `<code>` wrap onto two lines each without
+  overflowing. Not seen on a real phone.
 - **No deep link.** `?guide=<relPath>` was proposed and rejected for v1; the tab always opens on
   the list (contrast `?session=`, see [push-notify](push-notify.md)).
 - **No cross-project scan.** Only this repo's `guidesDir`. The scanner and the marker generalize;
@@ -187,7 +221,8 @@ any of it; the element and its class name are the entire commitment.
     - shared/types.ts
     - client/src/hooks/useGuides.ts
     - client/src/components/guides/GuidesView.tsx
+    - client/src/styles.css
     - vite.config.ts
   kind: subsystem
-  verified: 8b899976811d80eb4e64e295238bed9bee79c8d8
+  verified: eecb0c59c6e8fd1973106ffc72aee712e966a133
 -->
