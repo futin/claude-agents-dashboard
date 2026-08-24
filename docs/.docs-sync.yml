@@ -79,10 +79,8 @@ overlap-ok:
   - pair: docs/subsystems/push-notify.md ~ docs/workflows/push-notify-setup.md
     reason: same code, different register — why the policy is shaped this way vs the steps you run; a changed sendTest string or config default genuinely stales the setup doc too
 out-of-scope:
-  - path: docs/ideas/
-    reason: idea notes — records of a moment
-  - path: docs/plans/
-    reason: records of a moment
+  - path: backlog/
+    reason: the bugs/ideas/tasks store — item lifecycle, not reference prose
   - path: docs/superpowers/
     reason: plans and specs — records of a moment
   - path: docs/guides/

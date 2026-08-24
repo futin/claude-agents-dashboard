@@ -25,7 +25,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/agents.ts   whole-file subagent parser: pure event parser + reducer → AgentJob[]
                   (tokens/toolUses/duration from toolUseResult + notification <usage> blocks)
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts, used only by the
-                  on-demand GET /api/sessions/:id (see docs/ideas/agent-tracking-cache.md)
+                  on-demand GET /api/sessions/:id (see
+                  backlog/ideas/done/idea-1-incremental-cache-for-subagent-tracking.md)
   lib/chat.ts     byte-offset paged chat history for GET /api/sessions/:id/chat — tail /
                   ?after= (live) / ?before= (older) (see docs/subsystems/chat.md)
   lib/usage.ts    fetches account 5h/weekly limits from Anthropic (see docs/subsystems/usage-limits.md)
@@ -171,15 +172,18 @@ is the only viewer.
 - No hub or index to update — `scanGuides` walks the tree itself, so a new deck or guide
   directory shows up in the tab the next time it's opened, nothing to link by hand.
 - Everything else stays outside: reference docs (`docs/subsystems/`, `docs/overview.md`),
-  records of a moment (`docs/ideas/`, `docs/plans/`, `docs/superpowers/`), and raw study
-  notes (`docs/learning-notes/`).
+  records of a moment (`docs/superpowers/`), and raw study notes (`docs/learning-notes/`).
 - A guide's `tools/*.mjs` must find the repo root by walking up for `package.json`, never
   by a fixed `../..` hop count. A fixed count silently repoints at `docs/` the next time a
   guide moves, and every citation then reports as `gone`. This has now bitten twice.
-- `docs/bugs/`, `docs/ideas/`, and `docs/plans/` are this repo's own hand-maintained
-  convention, not a store — the global `backlog-*` skills use a separate `backlog/`
-  directory for that, and this repo deliberately doesn't have one, so don't migrate
-  these files into it.
+- Bugs, ideas, and tasks live in **`backlog/`** (the global `backlog-*` skills' store —
+  `/backlog`, `/backlog-capture`, `/backlog-groom`, `/backlog-execute`), not under `docs/`.
+  `docs/bugs/`, `docs/ideas/`, and `docs/plans/` were this repo's own hand-maintained
+  convention before that store existed; their contents were migrated into `backlog/`
+  (bugs → `backlog/bugs/`, ideas → `backlog/ideas/`, plans → `backlog/tasks/`, since a
+  plan is "future work whose plan is already known") on 2026-08-24 and the three
+  directories were removed. File a new bug/idea/task with `backlog-capture`, not a
+  hand-written doc under `docs/`.
 
 ## Conventions / gotchas
 

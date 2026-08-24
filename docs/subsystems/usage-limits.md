@@ -51,7 +51,7 @@ local credentials.
   `claude -p` to force-refresh was removed — too much machinery (CLI-spawn + Docker/PATH
   resolution) for a cosmetic header feature, and it could never work in Docker (no CLI in
   the container, `~/.claude` mounted read-only). See
-  `docs/plans/2026-07-06-usage-token-refresh-removal.md` for the removed design + a
+  `backlog/tasks/done/task-1-remove-in-app-oauth-token-refresh.md` for the removed design + a
   platform-independent Docker approach to revisit **if** a future feature genuinely needs
   the dashboard to make its own authenticated Anthropic API call.
 

@@ -8,7 +8,7 @@
  * completions work with no re-scan: a background launch stays registered in
  * `byAgentId` across calls until its `<task-notification>` finally arrives —
  * settled jobs are never re-parsed, and there is no low-water-mark checkpoint
- * to maintain (see docs/ideas/agent-tracking-cache.md).
+ * to maintain (see backlog/ideas/done/idea-1-incremental-cache-for-subagent-tracking.md).
  *
  * Correctness notes:
  *  - Offsets are BYTES and lines are split on 0x0A before decoding — a
