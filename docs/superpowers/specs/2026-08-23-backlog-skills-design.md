@@ -156,10 +156,18 @@ a *new* task file with `from: idea-N`; the idea moves to `ideas/done/` with
 and `## Fix`. A bug stays a bug from capture through to done — no promotion, no second
 file, no id churn, and one place to read the whole story of a defect.
 
-**Reject** (any section). Moves the item to `out-of-scope/`, and requires both `## Why
-rejected` and `## What would change the answer`. The second heading is not decoration: a
-rejection without it is unreviewable a month later, and re-litigating a decision you
-cannot reconstruct is the waste this whole store exists to prevent.
+**Reject** (any section, `open/` only). Moves the item to `out-of-scope/`, and requires
+both `## Why rejected` and `## What would change the answer`. The second heading is not
+decoration: a rejection without it is unreviewable a month later, and re-litigating a
+decision you cannot reconstruct is the waste this whole store exists to prevent.
+
+Anything already in `done/` is refused, in every section. Reject replaces the item's
+*entire* body, and a done item's body is a record: an idea's `promoted-to:`, a bug's or
+task's `## Outcome` naming the command output that proved the work. Rejecting it would
+destroy exactly that, and the tool cannot stop it — `move <done-id> out-of-scope` succeeds,
+since `move` knows about the terminal directory but nothing about `done/`. Finished work
+that turns out to have been a mistake is a *new* item citing the old one, which is what
+`from:` exists for, not a rewrite of the record proving what was done.
 
 Triggers: `/backlog-groom`, "groom the backlog", "plan idea 3", "reject task 5",
 "this is out of scope".
