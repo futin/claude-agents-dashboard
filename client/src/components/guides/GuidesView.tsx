@@ -11,7 +11,7 @@ interface ViewerState {
 
 /**
  * Guides section — tutor decks and study guides published under
- * docs/published-guides/, read via GET /api/guides (server/lib/guides.ts).
+ * docs/guides/, read via GET /api/guides (server/lib/guides.ts).
  * Read-only and unpolled: guides change on the order of days, not seconds.
  * Default export → lazy chunk, matching Management/Analytics/Settings.
  *
@@ -52,7 +52,7 @@ export default function GuidesView() {
           {/*
             No `sandbox` attribute: this iframe is same-origin — our own
             server, serving our own generated HTML from
-            docs/published-guides/, on purpose. The deck's inline <script>
+            docs/guides/, on purpose. The deck's inline <script>
             is what makes it work at all: every `.card` starts
             `display:none` and only `.card.active` shows one, so Back/Next,
             the arrow-key shortcuts, and the quiz's click-to-reveal feedback

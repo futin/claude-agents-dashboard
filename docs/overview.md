@@ -139,7 +139,7 @@ server/
   lib/spawn.ts    launches a detached, headless `claude -p` session, or resumes an ended
                   one — the fourth write path, and the first the dashboard initiates
                   (see docs/subsystems/spawn.md)
-  lib/guides.ts   published-guides scanner (decks + study guides) + the traversal guard
+  lib/guides.ts   docs/guides/ scanner (decks + study guides) + the traversal guard
                   behind GET /guides/<relPath> (see docs/subsystems/guides.md)
 client/src/
   App.tsx         shell: side rail (Sessions | Management | Analytics | Guides | Settings) + lazy views
@@ -175,7 +175,7 @@ that area:
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
-- [guides](subsystems/guides.md) — tutor decks + study guides, served same-origin out of `docs/published-guides/`
+- [guides](subsystems/guides.md) — tutor decks + study guides, served same-origin out of `docs/guides/`
 - [usage-limits](subsystems/usage-limits.md) — header account usage bars
 - [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold, answer window, push policy
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage

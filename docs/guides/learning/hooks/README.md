@@ -16,7 +16,7 @@ what that trade cost.
 > **Read it in a browser:** [`index.html`](./index.html) — this whole guide as one page,
 > with the diagrams drawn and every cross-reference as an in-page jump. It is **generated**
 > from these markdown files by [`tools/build.mjs`](./tools/build.mjs), so edit the markdown
-> and re-run `node docs/published-guides/learning/hooks/tools/build.mjs`; never edit `index.html` by hand.
+> and re-run `node docs/guides/learning/hooks/tools/build.mjs`; never edit `index.html` by hand.
 
 > Baseline: written against `scripts/` + the hook-facing `server/lib/` stores at commit
 > `092484b` (2026-08-17).
@@ -164,7 +164,7 @@ extra push (cheap), ending a turn you were about to reply to (expensive). See
 Two committed checkers:
 
 ```
-node docs/published-guides/learning/hooks/tools/citations.mjs
+node docs/guides/learning/hooks/tools/citations.mjs
 ```
 
 verifies every `file:N-M` excerpt label still points at the code it quotes, classifying each
@@ -173,7 +173,7 @@ label three lines off, and an excerpt where comment prefixes had been added to t
 actually heredoc body.
 
 ```
-node docs/published-guides/learning/hooks/tools/check.mjs
+node docs/guides/learning/hooks/tools/check.mjs
 ```
 
 verifies the generated page against the markdown: no dead links, no missing prose, no leaked

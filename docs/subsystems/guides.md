@@ -1,22 +1,20 @@
 # Guides (the fifth rail section)
 
-A **Guides** tab listing every learning artifact under `docs/published-guides/` — tutor decks
+A **Guides** tab listing every learning artifact under `docs/guides/` — tutor decks
 and study guides — and opening the file itself inside the dashboard, in an iframe served from
 our own origin. Read-only and unpolled; the only tab whose content is authored by a skill
 (`/tutor`, `/study`) rather than by the app.
 
-## Why serve them here at all — GitHub Pages already does
+## Why serve them here at all
 
-`docs/published-guides/` is the one directory GitHub Pages publishes, and that stays: public,
-indexable, zero infra. What it can never host is the live companion. A public HTTPS page
-cannot reliably reach a private dashboard — mixed content blocks `http://…:4173`, Private
-Network Access blocks the LAN hop, and the only way around both is baking a tailnet hostname
-into world-readable HTML. Serving the same bytes from the dashboard flips every one of those
-constraints at once: same origin, private by default, reachable on the phone wherever the
-dashboard already is.
+`docs/guides/` is plain repo content, not a published site — there is no public host for
+these files, so the dashboard is the only place they're readable as HTML rather than raw
+source. Same origin, private by default, reachable on the phone wherever the dashboard
+already is: no mixed-content or Private Network Access hop to worry about, the two failure
+modes a public HTTPS page would hit trying to reach a private one.
 
-**Dual home, one artifact.** This adds a second *serving route* over the same files on disk,
-not a second copy. Nothing here generates, mirrors, or writes anything.
+Nothing here generates, mirrors, or writes anything — this is a serving route over files
+already on disk.
 
 ## The two routes
 
@@ -43,7 +41,7 @@ none of which appear in `GuidesIndex`.
 prefix, **no separator**. With a root of `/x/guides`, a sibling `/x/guides-secret` passes that
 check. It survives there because `clientDist` is a build output nobody plants siblings beside.
 
-`resolveGuidePath` gets no such luxury: `docs/published-guides/` lives in the repo, one `../`
+`resolveGuidePath` gets no such luxury: `docs/guides/` lives in the repo, one `../`
 from `.env` and its ntfy topic and answer token. So it
 
 1. rejects the raw string first — empty, an exact `..` **segment** (a filename that merely
@@ -75,8 +73,8 @@ refused; only the second is this route's own job.
   nullable — a legacy deck with a marker and no stamp still lists, with a title and nothing else.
 - A **guide** is a directory other than the root whose immediate children include `index.html`.
   `name` is the basename, `title` its `<title>` or null.
-- ⚠️ **The root `index.html` is skipped.** It is the GitHub Pages hub — a link page for the
-  public site, not an artifact.
+- ⚠️ **The root `index.html` is skipped**, if one exists there — a root index page is never a
+  guide artifact, unlike a subdirectory's.
 - ⚠️ **A guide directory is never descended into.** It yields exactly one `GuideRef` and its
   **whole subtree** is then skipped — subdirectories *and* immediate files. A guide's `guide/`
   notes, its `tools/` scripts, and even a marker'd deck sitting inside it are deliberately not
@@ -102,14 +100,14 @@ left ties to `Array.prototype.sort` would make the order arbitrary right now, no
 | `server/lib/guides.ts` | The whole domain, pure and unit-tested: `isTutorDeck`, `extractTitle`, `parseDeckMeta`, `scanGuides`, `resolveGuidePath`, `GUIDE_MIME`. No HTTP, no config. 28 cases in `test/guides.test.ts` |
 | `serveGuidesIndex` / `serveGuideFile` (`server/api.ts`) | The two handlers. `serveGuideFile` never echoes the resolved path into a response — it is an absolute, canonical filesystem path, and disclosing the layout is exactly what the guard exists to prevent |
 | `server/index.ts` | `/api/guides` exact match, and `/guides/<rest>` last before `serveStatic` |
-| `config.guidesDir` | `GUIDES_DIR` or `<cwd>/docs/published-guides`, trimmed, resolved inside `loadConfig()` |
+| `config.guidesDir` | `GUIDES_DIR` or `<cwd>/docs/guides`, trimmed, resolved inside `loadConfig()` |
 | `useGuides` + `GuidesView` | Fetch-once hook and the lazy-chunk view: a two-group card list (Decks, Study guides), and the iframe viewer a card swaps to |
 | `vite.config.ts` | `/guides` next to `/api` in the dev proxy. The route lives in the Node server, so without this entry the iframe 404s — under `pnpm dev` only, which is the worst kind of gap to find later |
 
 ## `GUIDES_DIR`: unset means the default directory, not off
 
 Unlike `NTFY_TOPIC`, `WHISPER_MODEL` and `CLAUDE_BIN` — where empty disables the feature —
-leaving `GUIDES_DIR` unset selects `<cwd>/docs/published-guides`. **The tab exists whenever the
+leaving `GUIDES_DIR` unset selects `<cwd>/docs/guides`. **The tab exists whenever the
 directory does**; there is no on/off flag, and an absent directory just renders an empty tab. It
 resolves from `process.cwd()`, so it follows where the server was started from rather than
 walking up for a repo root.
@@ -118,7 +116,7 @@ walking up for a repo root.
 
 - **A missing or unreadable directory, or any unreadable entry inside it, is not an error.**
   `scanGuides` skips it and returns empty arrays with **no `error` flag**; the tab reads
-  *"nothing published yet"*. An empty tab, not a broken one — deleting `docs/published-guides/`
+  *"nothing published yet"*. An empty tab, not a broken one — deleting `docs/guides/`
   must not look like a bug.
 - **A thrown scan is.** `serveGuidesIndex` catches, logs, and answers **200** with
   `error: true`; the tab reads *"guides unavailable"*. Still 200, because the client keys off
@@ -206,8 +204,8 @@ not as the deck's snapshot remembers it.
 That spec, `docs/superpowers/specs/2026-08-22-guide-ask-design.md`, is **on hold since
 2026-08-22** — deliberately not approved alongside this tab. The panel is specified to live in
 the dashboard chrome *around* the iframe, never inside the deck HTML, so the deck contract stays
-network-free and the GitHub Pages copy degrades to "no panel" for free. Nothing here implements
-any of it; the element and its class name are the entire commitment.
+network-free regardless. Nothing here implements any of it; the element and its class name are
+the entire commitment.
 
 ## Known limits / not verified
 

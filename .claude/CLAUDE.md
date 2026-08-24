@@ -70,8 +70,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   adoptLaunched, stopLaunch) — the fourth write path, and the first the
                   dashboard initiates; `--resume <id>` reuses an existing dashboard
                   session's id instead of minting one (see docs/subsystems/spawn.md)
-  lib/guides.ts   pure published-guides domain: deck marker/title/provenance parsing,
-                  the docs/published-guides/ walk (hub skipped, guide dirs not descended),
+  lib/guides.ts   pure docs/guides/ domain: deck marker/title/provenance parsing,
+                  the docs/guides/ walk (root index.html skipped, guide dirs not descended),
                   and resolveGuidePath — a realpath-both-sides traversal guard deliberately
                   stricter than serveStatic's (see docs/subsystems/guides.md)
 client/           Vite + React + TypeScript frontend
@@ -161,18 +161,18 @@ with the log format above (contract details: `docs/subsystems/analytics.md`).
 
 ### Where study guides and lesson decks go
 
-`docs/published-guides/` is the **only** directory GitHub Pages serves, and it is served
-*as the site root* — so everything inside is world-readable and search-indexable, and
-nothing outside it is published. An allowlist directory, not a `robots.txt` denylist.
+`docs/guides/` is the directory the in-app **Guides tab** scans and serves (see
+`docs/subsystems/guides.md`) — nothing here is published to the public web; the dashboard
+is the only viewer.
 
-- A new `/study` guide or `/tutor` deck belongs under `docs/published-guides/`. Both
-  skills ask for the output path per session (their own defaults are `learning-docs/…`);
-  answer with this one.
-- Then add its card to `docs/published-guides/index.html`. The hub is hand-maintained, so
-  a new guide is *served* but not *reachable* until it is linked.
-- Everything not meant for the public web stays outside: reference docs
-  (`docs/subsystems/`, `docs/overview.md`), records of a moment (`docs/ideas/`,
-  `docs/plans/`, `docs/superpowers/`), and raw study notes (`docs/learning-notes/`).
+- A new `/study` guide or `/tutor` deck belongs under `docs/guides/`. Both skills ask for
+  the output path per session (their own defaults are `learning-docs/…`); answer with this
+  one.
+- No hub or index to update — `scanGuides` walks the tree itself, so a new deck or guide
+  directory shows up in the tab the next time it's opened, nothing to link by hand.
+- Everything else stays outside: reference docs (`docs/subsystems/`, `docs/overview.md`),
+  records of a moment (`docs/ideas/`, `docs/plans/`, `docs/superpowers/`), and raw study
+  notes (`docs/learning-notes/`).
 - A guide's `tools/*.mjs` must find the repo root by walking up for `package.json`, never
   by a fixed `../..` hop count. A fixed count silently repoints at `docs/` the next time a
   guide moves, and every citation then reports as `gone`. This has now bitten twice.

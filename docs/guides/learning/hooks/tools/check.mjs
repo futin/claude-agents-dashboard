@@ -1,7 +1,7 @@
 /**
  * check.mjs — verify the generated page against the markdown it came from.
  *
- *   node docs/published-guides/learning/hooks/tools/check.mjs
+ *   node docs/guides/learning/hooks/tools/check.mjs
  *
  * Exits non-zero on failure. Four checks, each guarding a failure that actually
  * happens when a minimal markdown renderer is 90% right:

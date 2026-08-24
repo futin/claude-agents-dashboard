@@ -76,7 +76,7 @@ function guidesConfig(dir: string): Config {
   }
 }
 
-/** A tutor deck as the skill actually writes one — see docs/published-guides/tutor/*.html. */
+/** A tutor deck as the skill actually writes one — see docs/guides/tutor/*.html. */
 const DECK_FIXTURE = `<!DOCTYPE html>
 <!-- tutor-deck -->
 <html lang="en">
@@ -454,14 +454,14 @@ export async function run(): Promise<number> {
 
   /* ---------------------------------------------------------- Task 4: loadConfig */
 
-  if (await test('loadConfig: guidesDir defaults to <cwd>/docs/published-guides when GUIDES_DIR is unset', () => {
+  if (await test('loadConfig: guidesDir defaults to <cwd>/docs/guides when GUIDES_DIR is unset', () => {
     const prev = process.env.GUIDES_DIR;
     delete process.env.GUIDES_DIR;
     try {
       const cfg = loadConfig({ envPath: NONEXISTENT_ENV });
       assert.ok(
-        cfg.guidesDir.endsWith(path.join('docs', 'published-guides')),
-        `expected guidesDir to end with docs/published-guides, got ${cfg.guidesDir}`
+        cfg.guidesDir.endsWith(path.join('docs', 'guides')),
+        `expected guidesDir to end with docs/guides, got ${cfg.guidesDir}`
       );
     } finally {
       if (prev === undefined) delete process.env.GUIDES_DIR; else process.env.GUIDES_DIR = prev;

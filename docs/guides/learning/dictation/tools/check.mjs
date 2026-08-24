@@ -2,7 +2,7 @@
 /**
  * check.mjs — verify the generated page against the markdown it came from.
  *
- *   node docs/published-guides/learning/dictation/tools/check.mjs
+ *   node docs/guides/learning/dictation/tools/check.mjs
  *
  * Exits non-zero on failure. Four checks, all of which have caught a real bug:
  *   1. no in-guide `.md` links survive, and every in-page anchor resolves;

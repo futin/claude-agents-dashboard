@@ -457,7 +457,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .an-review code{font-family:var(--mono);text-transform:none;letter-spacing:0;color:inherit}
 @media (max-width:700px){.an-cols{grid-template-columns:1fr}}
 
-/* Guides section — tutor decks + study guides under docs/published-guides/,
+/* Guides section — tutor decks + study guides under docs/guides/,
    read via GET /api/guides (server/lib/guides.ts). Two states: a card list
    (Decks, then Study guides) or, once a card is tapped, the viewer pane —
    a same-origin iframe in .guide-viewer-body. */

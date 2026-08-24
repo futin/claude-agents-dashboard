@@ -2,8 +2,8 @@
  * citations.mjs — verify every `file:N-M` excerpt label in the guide still points
  * at the code it quotes.
  *
- *   node docs/published-guides/learning/hooks/tools/citations.mjs          # report
- *   node docs/published-guides/learning/hooks/tools/citations.mjs --fix     # rewrite stale labels
+ *   node docs/guides/learning/hooks/tools/citations.mjs          # report
+ *   node docs/guides/learning/hooks/tools/citations.mjs --fix     # rewrite stale labels
  *
  * Line numbers rot fast: a source file gaining forty lines silently repoints half
  * a guide at unrelated code. Each excerpt is classified:

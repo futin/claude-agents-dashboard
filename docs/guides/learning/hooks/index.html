@@ -86,8 +86,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
   <main id="top">
     <h1>Claude Code hooks in this project — the learning guide</h1>
     <p class="lede">Why the five hook scripts in <code>scripts/</code> are shaped the way they
-    are. Generated from the markdown in <code>docs/published-guides/learning/hooks/README.md</code> +
-    <code>docs/published-guides/learning/hooks/guide/</code> by <code>docs/published-guides/learning/hooks/tools/build.mjs</code>
+    are. Generated from the markdown in <code>docs/guides/learning/hooks/README.md</code> +
+    <code>docs/guides/learning/hooks/guide/</code> by <code>docs/guides/learning/hooks/tools/build.mjs</code>
     — edit the markdown, not this file.</p>
 <section><h2 id="README">Overview</h2>
 <p>This guide teaches the five Claude Code lifecycle hooks this repo ships: what each one is, where it is wired, what order they fire in, and — the part reference docs skip — <strong>why each piece is shaped the way it is</strong>, by contrasting it with the naive approach and laying out what that trade cost.</p>
@@ -157,9 +157,9 @@ ls -l ~/.claude/hooks/</code></pre>
 <p>No, and that is the most instructive thing in the subsystem. The same unreadable-idle measurement is handled three different ways in three places, because the cost of guessing wrong differs at each: hiding a dialog from someone at their desk (expensive), sending one extra push (cheap), ending a turn you were about to reply to (expensive). See <a href="#fail-open">Fail-open §6</a>.</p>
 <h4 id="README--how-do-i-check-this-guide-is-still-true">"How do I check this guide is still true?"</h4>
 <p>Two committed checkers:</p>
-<pre><code>node docs/published-guides/learning/hooks/tools/citations.mjs</code></pre>
+<pre><code>node docs/guides/learning/hooks/tools/citations.mjs</code></pre>
 <p>verifies every <code>file:N-M</code> excerpt label still points at the code it quotes, classifying each as fresh / moved / gone / abridged. It found two real errors in this guide's first draft — a label three lines off, and an excerpt where comment prefixes had been added to text that is actually heredoc body.</p>
-<pre><code>node docs/published-guides/learning/hooks/tools/check.mjs</code></pre>
+<pre><code>node docs/guides/learning/hooks/tools/check.mjs</code></pre>
 <p>verifies the generated page against the markdown: no dead links, no missing prose, no leaked markdown, no external assets.</p>
 <h3 id="README--the-one-sentence-summary">The one-sentence summary</h3>
 <p><strong>Five scripts, one trick (<code>deny</code> + reason), three gates, twelve fail-open guards, and a state machine that knows nothing about HTTP.</strong></p>

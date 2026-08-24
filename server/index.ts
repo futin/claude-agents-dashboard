@@ -269,7 +269,7 @@ const server = http.createServer((req, res) => {
     // `/api/sessions?limit=20` still lands here.
     return serveSessions(config, res, u.searchParams);
   }
-  // GET /guides/<relPath> — one file from docs/published-guides/, guarded by
+  // GET /guides/<relPath> — one file from docs/guides/, guarded by
   // resolveGuidePath (server/lib/guides.ts). GET-only is implicit, matching
   // the other read routes above.
   //

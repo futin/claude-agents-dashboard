@@ -2,7 +2,7 @@
 /**
  * build.mjs — render the dictation guide's markdown into one offline HTML page.
  *
- *   node docs/published-guides/learning/dictation/tools/build.mjs
+ *   node docs/guides/learning/dictation/tools/build.mjs
  *
  * The markdown is canonical. This script is the ONLY way index.html changes;
  * never hand-edit the page. Paths resolve against import.meta.url, and the
@@ -347,9 +347,9 @@ ${nav}
   <div class="main">
     <h1>Dictation — the learning guide</h1>
     <p class="lede">Why the mic button in the reply composer is shaped the way it is.
-      Generated from the markdown in <code>docs/published-guides/learning/dictation/README.md</code> and
-      <code>docs/published-guides/learning/dictation/guide/</code> by
-      <code>docs/published-guides/learning/dictation/tools/build.mjs</code> — edit the markdown, not this file.</p>
+      Generated from the markdown in <code>docs/guides/learning/dictation/README.md</code> and
+      <code>docs/guides/learning/dictation/guide/</code> by
+      <code>docs/guides/learning/dictation/tools/build.mjs</code> — edit the markdown, not this file.</p>
 ${body}
   </div>
 </div>

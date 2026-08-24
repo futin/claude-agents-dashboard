@@ -801,9 +801,9 @@ export interface DeckSection {
   title: string;
 }
 
-/** One tutor deck found under docs/published-guides/ (see GuidesIndex). */
+/** One tutor deck found under docs/guides/ (see GuidesIndex). */
 export interface DeckRef {
-  /** Path relative to docs/published-guides/. */
+  /** Path relative to docs/guides/. */
   relPath: string;
   title: string;
   /** From the deck's provenance stamp; null if the stamp is absent or malformed. */
@@ -814,9 +814,9 @@ export interface DeckRef {
   sections: DeckSection[] | null;
 }
 
-/** One study guide found under docs/published-guides/ that is not a tutor deck. */
+/** One study guide found under docs/guides/ that is not a tutor deck. */
 export interface GuideRef {
-  /** Path relative to docs/published-guides/. */
+  /** Path relative to docs/guides/. */
   relPath: string;
   /** Basename without extension. */
   name: string;

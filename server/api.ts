@@ -1013,7 +1013,7 @@ export async function serveManagementFile(config: Config, rawPath: string, res: 
 
 /**
  * `GET /api/guides` — the tutor-deck/study-guide index under
- * `config.guidesDir` (docs/published-guides/ by default). Not polled; the
+ * `config.guidesDir` (docs/guides/ by default). Not polled; the
  * Guides tab fetches once on open, the same cadence as `/api/management` —
  * published guides change on the order of days, not seconds.
  *
@@ -1048,7 +1048,7 @@ export async function serveGuidesIndex(config: Config, res: ServerResponse): Pro
  * small window between `resolveGuidePath` validating `target` below and the
  * `fsp.readFile` actually reading it, in which the file could be removed or
  * swapped. Exploiting that window needs local write access to
- * `docs/published-guides/`, which already grants a direct read of `.env` —
+ * `docs/guides/`, which already grants a direct read of `.env` —
  * no new capability — so it is left unmitigated here.
  */
 export async function serveGuideFile(config: Config, relPath: string, res: ServerResponse): Promise<void> {

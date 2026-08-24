@@ -79,7 +79,7 @@ export interface Config {
   spawnMaxPermission: PermissionMode;
   /**
    * Root directory the Guides tab scans (`GET /api/guides`) and serves
-   * (`GET /guides/<relPath>`) — `docs/published-guides/` by default, same
+   * (`GET /guides/<relPath>`) — `docs/guides/` by default, same
    * cwd convention as `clientDist` in server/index.ts:36. Computed at
    * `loadConfig` call time rather than stored in `DEFAULTS`, which is
    * `as const` and holds only literals.
@@ -232,6 +232,6 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     spawnMaxPermission: toPermissionMode(src('SPAWN_MAX_PERMISSION'), DEFAULTS.SPAWN_MAX_PERMISSION),
     // Computed at call time (not a DEFAULTS literal) so cwd is resolved fresh
     // each call, the same reasoning as isDockerContainer() above.
-    guidesDir: (src('GUIDES_DIR') || path.join(process.cwd(), 'docs', 'published-guides')).trim()
+    guidesDir: (src('GUIDES_DIR') || path.join(process.cwd(), 'docs', 'guides')).trim()
   };
 }

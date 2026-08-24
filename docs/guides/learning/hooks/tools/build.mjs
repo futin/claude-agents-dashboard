@@ -1,8 +1,8 @@
 /**
- * build.mjs — generate docs/published-guides/learning/hooks/index.html from the markdown.
+ * build.mjs — generate docs/guides/learning/hooks/index.html from the markdown.
  *
  * The markdown is canonical. Run this after editing it:
- *   node docs/published-guides/learning/hooks/tools/build.mjs
+ *   node docs/guides/learning/hooks/tools/build.mjs
  *
  * Why generate rather than hand-author: the page carries the WHOLE guide (so that
  * no cross-reference is a dead `.md` link in a browser), and hand-copying that much
@@ -386,8 +386,8 @@ const html = `<!doctype html>
   <main id="top">
     <h1>Claude Code hooks in this project — the learning guide</h1>
     <p class="lede">Why the five hook scripts in <code>scripts/</code> are shaped the way they
-    are. Generated from the markdown in <code>docs/published-guides/learning/hooks/README.md</code> +
-    <code>docs/published-guides/learning/hooks/guide/</code> by <code>docs/published-guides/learning/hooks/tools/build.mjs</code>
+    are. Generated from the markdown in <code>docs/guides/learning/hooks/README.md</code> +
+    <code>docs/guides/learning/hooks/guide/</code> by <code>docs/guides/learning/hooks/tools/build.mjs</code>
     — edit the markdown, not this file.</p>
 ${body}
   </main>

@@ -3,8 +3,8 @@
  * citations.mjs — verify every `// file.ts:N-M` excerpt label still points at
  * the code it quotes.
  *
- *   node docs/published-guides/learning/dictation/tools/citations.mjs
- *   node docs/published-guides/learning/dictation/tools/citations.mjs --fix
+ *   node docs/guides/learning/dictation/tools/citations.mjs
+ *   node docs/guides/learning/dictation/tools/citations.mjs --fix
  *
  * Line numbers rot fast: a source file gaining 40 lines silently repoints half
  * a guide at unrelated code. Each excerpt is classified:
