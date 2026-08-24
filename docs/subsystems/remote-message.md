@@ -64,7 +64,7 @@ same session with your follow-up.
 
 | Piece | What it does |
 |---|---|
-| `scripts/stop-notify-hook.sh` | Extended in place, not duplicated — a second hook would race the notify POST and double-push. Away + remote answers on → holds; otherwise the pre-feature `notify_fallback` path (`POST /api/notify/event`), byte-for-byte unchanged. Failed wait POST (non-2xx) also falls back to plain notify POST. Headless sessions (no controlling TTY — `ps -o tty=` prints `??`; the dashboard's own `-p` launches) skip the at-desk gate and hold regardless of idle, sending `headless: true` in the wait body |
+| `scripts/stop-notify-hook.sh` | Extended in place, not duplicated — a second hook would race the notify POST and double-push. Away + remote answers on → holds; otherwise the pre-feature `notify_fallback` path (`POST /api/notify/event`), byte-for-byte unchanged. Failed wait POST (non-2xx) also falls back to plain notify POST. Headless sessions (no controlling TTY — `ps -o tty=` prints `??`; the dashboard's own `-p` launches — **and** not a front-end named in the interactive-entrypoint allowlist) skip the at-desk gate and hold regardless of idle, sending `headless: true` in the wait body |
 | `POST /api/messages/wait` | `serveMessageWait` — held open until an answer, a dismiss, the deadline, an idle release, or a supersede |
 | `GET /api/sessions/:id/message` | `serveSessionMessage` — what the browser polls, at the configured refresh rate (`usePendingMessage` reads `refreshMs` from `useSettings`, exactly as `usePendingPlan`/`usePendingQuestion` do) |
 | `POST /api/sessions/:id/message-answer` | `serveSessionMessageAnswer` — `{messageId, text}` or `{messageId, dismiss: true}`. Token-gated |
@@ -126,7 +126,25 @@ you can type the follow-up in the terminal instead — but a [dashboard-spawned]
 its window would orphan the session mid-conversation. The hook detects the missing
 controlling TTY (`??` from `ps -o tty=`, verified both ways: a detached spawn reads `??`,
 a pty session reads its tty name) and sends `headless: true`; unreadable TTY output fails
-to "terminal", so a session is never exempted on a guess. `serveMessageWait` accepts it
+to "terminal", so a session is never exempted on a guess.
+
+⚠️ **A missing TTY is not the same thing as a missing place to type,** and the TTY test
+alone got that wrong for a whole front-end. The desktop app runs the CLI with no pty
+(measured on CLI 2.1.237: `ps -o tty=` → `??`, `CLAUDE_CODE_ENTRYPOINT=claude-desktop`) and
+still puts a composer in front of you. Classified headless, every desktop turn parked on
+the dashboard whatever your idle time said, and the sweep — which exempts headless holds by
+design — then had no way to let go of it: the hold ran to `answerSecs` or until someone
+replied from a phone. So the TTY verdict is now qualified by the entrypoint:
+
+```bash
+case "$CLAUDE_CODE_ENTRYPOINT" in claude-desktop) HEADLESS=false ;; esac
+```
+
+`sdk-cli` is what a dashboard-spawned `-p` child stamps ([spawn](spawn.md) deletes the
+inherited value precisely so it cannot stamp anything else; `sessionSurface`, scan.ts).
+The list holds only values measured to be interactive, so an unfamiliar entrypoint leaves
+the TTY verdict standing and a new headless front-end still fails closed — the same
+direction as the unreadable-TTY case above. `serveMessageWait` accepts it
 only as a strict `=== true` (the same fail-soft rule as spawn's `remoteControl` — and a
 caller "lying" headless only opts its own hold out of the release; the deadline still caps
 it), `register` stamps the entry, and `sweepIdle` releases only unstamped ones. The same
@@ -197,7 +215,8 @@ parked session brand-new instructions."
 ## Install
 
 Same symlink as [push-notify-setup](../workflows/push-notify-setup.md) — existing installs
-gain this feature by pulling, since the hook is extended in place rather than replaced:
+gain this feature by pulling, since the hook is extended in place rather than replaced.
+`pnpm hooks:install` does it for you ([hooks-setup](../workflows/hooks-setup.md)); by hand:
 
 ```bash
 ln -s "$PWD/scripts/stop-notify-hook.sh" ~/.claude/hooks/stop-notify.sh
@@ -236,5 +255,5 @@ state, reset on a new `messageId`, never persisted.
     - client/src/hooks/usePendingMessage.ts
     - client/src/components/SessionRow.tsx
   kind: subsystem
-  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
+  verified: 34d41e5b900ae76c01f450631b3482a1b27aa827
 -->

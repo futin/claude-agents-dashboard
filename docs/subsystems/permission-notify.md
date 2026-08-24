@@ -95,6 +95,10 @@ reads `idle`, not a permanent blue dot. Below `remoteQuestion`, `remotePlan` and
 
 ## Install (manual, user-consented)
 
+`pnpm hooks:install` does both registrations below, plus the other four hooks
+([hooks-setup](../workflows/hooks-setup.md)). It is still user-consented: a command you run,
+not something a clone wires for you. By hand:
+
 ```bash
 ln -s "$PWD/scripts/permission-notify-hook.sh" ~/.claude/hooks/permission-notify.sh
 ```
