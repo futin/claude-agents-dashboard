@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 
 import { Header } from './Header';
 import { SessionList } from './SessionList';
@@ -8,7 +8,7 @@ import { usePersistedState } from '../hooks/usePersistedState';
 import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
 import { useSessions } from '../hooks/useSessions';
 import { useSettings } from '../hooks/useSettings';
-import { applyView, DEFAULT_VIEW, type View } from '../lib/filterSort';
+import { applyView, pruneProjects, DEFAULT_VIEW, type View } from '../lib/filterSort';
 import { formatInterval } from '../lib/settings';
 
 /** Own chunk — the drawer only loads the first time a chat is opened. */
@@ -35,6 +35,18 @@ export function SessionsView() {
   // "+ New" gate) and the spawn panel (its permission-mode ceiling) read the
   // same snapshot instead of each starting their own.
   const remoteAnswer = useRemoteAnswer();
+
+  // The project facet is persisted, so a selection can outlive the sessions it
+  // named: every row then fails the filter and the list claims there are no
+  // recent sessions at all. Once a payload proves a selected project is gone,
+  // drop it — losing the last one means "All projects" again. Deliberately
+  // project-only: statuses and the activity window are fixed enums that cannot
+  // go stale this way.
+  useEffect(() => {
+    if (!data) return;
+    const pruned = pruneProjects(view.projects, data.sessions);
+    if (pruned !== view.projects) setView({ ...view, projects: pruned });
+  }, [data, view, setView]);
 
   const shown = useMemo(
     () => (data ? applyView(data.sessions, view, Date.now()) : null),

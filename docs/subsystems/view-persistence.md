@@ -13,6 +13,17 @@ override it (see `dashboard.section` below).
   throwing `localStorage` (private mode / quota) falls back to the passed default, never crashes
   render. Object values are shallow-merged over the default (`{ ...fallback, ...parsed }`) so a
   value stored by an older release still gains any newly-added `View` field's default.
+- **Stale project names self-heal** — the `projects` facet is the one field whose valid values
+  are *data*, not a fixed enum, so a persisted selection can outlive the sessions it named
+  (the project went quiet, or fell out of the `limit`/`lookback` window). Left alone every row
+  fails the filter and `SessionList` reports "No recent sessions in the lookback window" —
+  naming the wrong cause, so it reads as an API/scan failure rather than a filter that is
+  still on. `pruneProjects(selected, sessions)` in `lib/filterSort.ts` (pure, unit-tested)
+  drops selected names a payload does not contain; an effect in `SessionsView.tsx` applies it
+  on every poll, so losing the last surviving name lands back on "All projects". An **empty
+  payload prunes nothing** — no rows is no evidence, and the first poll of a mount arrives
+  before any rows do. The tradeoff is deliberate: a filtered project that momentarily drops
+  out of the top-`limit` ranking clears the filter rather than showing an empty list.
 - **Other persisted keys** — each owned by its own subsystem; indexed here, documented there:
   `dashboard.settings` (theme, density, text scale, refresh rate, scan knobs, landing tab
   — see [settings](settings.md); re-clamped on every read by `clampSettings`, and the

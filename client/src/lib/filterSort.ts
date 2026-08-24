@@ -64,6 +64,28 @@ export function distinctProjects(sessions: Session[]): string[] {
   return Array.from(new Set(sessions.map(s => s.project))).sort((a, b) => a.localeCompare(b));
 }
 
+/**
+ * Drop selected project names the payload no longer contains, so a filter
+ * persisted from an earlier visit cannot silently hide every row — the empty
+ * state blames the lookback window, which reads as "the API returned nothing"
+ * (see docs/subsystems/view-persistence.md).
+ *
+ * Rules, in the order they matter:
+ * - An empty payload prunes nothing. No sessions is no evidence, not evidence
+ *   of absence, and the very first poll of a mount arrives before any rows do.
+ * - Names still present survive; only the absent ones go. Pruning the last
+ *   survivor yields `[]`, which MultiSelect and applyView both read as
+ *   "All projects".
+ * - Nothing to prune returns `selected` itself, so a caller can compare by
+ *   reference instead of deep-equality to decide whether to write state.
+ */
+export function pruneProjects(selected: string[], sessions: Session[]): string[] {
+  if (!selected.length || !sessions.length) return selected;
+  const present = new Set(sessions.map(s => s.project));
+  const kept = selected.filter(p => present.has(p));
+  return kept.length === selected.length ? selected : kept;
+}
+
 /** Compare two sessions by the given key. Ascending; caller flips for desc. */
 function compare(a: Session, b: Session, key: SortKey): number {
   switch (key) {
