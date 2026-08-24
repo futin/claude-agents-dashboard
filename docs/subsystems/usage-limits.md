@@ -3,7 +3,9 @@
 The header shows two mini progress bars — **5h** and **Week** — the same account
 rate-limit utilization Claude Code's `/usage` reports. Unlike everything else in the app,
 these are **not on disk**: `lib/usage.ts` fetches them live from Anthropic using your
-local credentials.
+local credentials. Under each bar sits a **time strip** (`lib/usage-pace.ts` +
+`client/src/lib/pace.ts`) that answers the question a bare percentage can't: *at this
+pace, do I run dry before the window resets?*
 
 ## Mechanism
 
@@ -40,6 +42,48 @@ local credentials.
 - **Toggle:** `SHOW_USAGE=false` disables the feature entirely (no fetch, no keychain
   read). Default on.
 
+## Pace + the time strip
+
+**What the 5h window actually is.** It is a **fixed session window**, not a sliding one:
+it anchors on the first message after an idle gap and fully resets to 0% at
+`resets_at`. Spend does *not* age out token-by-token. Verified empirically on
+2026-08-24: `resets_at` stayed at 23:50:00Z across fetches while utilization climbed
+32 → 35 → 51, and 23:50 − 5h = 18:50 is exactly when transcripts show the first message
+after a 1.5h idle gap. A sliding window would have pushed `resets_at` forward on every
+fetch. The richer `limits[]` array in the same payload names this window `kind: "session"`.
+This matters because the natural reading of "5h limit" — that you get a fraction back
+each hour — is wrong, and the strip exists to make the real shape visible.
+
+- **Sampling:** `lib/usage-pace.ts` keeps a RAM-only ring of `{t, utilization}` per window
+  (cap 720 ≈ half a day at one sample/min), appended by `refreshNow()` on each successful
+  fetch. No persistence — after a restart the pace fields are null for a few minutes.
+- **Slope:** `computePace` is pure: least-recent → most-recent over a lookback window
+  (5h: 30 min lookback / 5 min min-span; weekly: 6h / 30 min, since the weekly number
+  moves in ~1% integer steps). Under the min span → `null`, and the header renders
+  exactly as it did before. A non-positive slope reports `ratePerHour: 0` and no projection.
+- **Window rolls** are handled twice over: `prunedSamples` drops anything older than the
+  anchor (`resetsAt − window length`), and any utilization *drop* clears the history —
+  otherwise a pre-reset 90% would poison the post-reset slope.
+- **Contract:** `RateLimit` gained optional `ratePerHour` and `projectedExhaustAt`
+  (both `number | null` / `string | null`). Optional on purpose — every consumer must
+  survive their absence.
+- **The strip** (`client/src/lib/pace.ts`, pure + unit-tested): a second thin track under
+  the token bar whose axis is the window's *clock* — elapsed fill, a cyan `now` tick, and
+  a red tick where the current pace projects 100%. Verdict on the right: `wall 1:37am ▮
+  reset 1:50am` (red) when the projection lands before the reset, `lasts → 1:50am` (green)
+  otherwise. The title attribute states the mechanics in words: window start, "fully
+  resets to 0%", current burn.
+- **`User-Agent`:** `requestHeaders()` sends `claude-code/…`. Without a claude-code UA the
+  endpoint routes to an aggressively rate-limited bucket and answers persistent 429s
+  ([anthropics/claude-code#30930](https://github.com/anthropics/claude-code/issues/30930)).
+
+⚠️ **Unproven:** the *weekly* window's length is assumed to be exactly 7 days
+(`SEVEN_DAY_MS`), which is what its elapsed fill is drawn against. Anthropic doesn't
+document the weekly reset mechanism and community reports conflict (some observed
+72-hour intervals). The weekly **verdict** doesn't depend on this — it only compares
+`projectedExhaustAt` to `resetsAt` — but the weekly strip's *position* would be wrong if
+the window isn't 7 days. The 5h window is the verified one.
+
 ## Invariants
 
 - **Fail-open everywhere:** no token / expired / network error / non-2xx / unparseable →
@@ -58,6 +102,8 @@ local credentials.
 <!-- docs-sync:
   sources:
     - server/lib/usage.ts
+    - server/lib/usage-pace.ts
+    - client/src/lib/pace.ts
     - server/api.ts
     - client/src/components/Header.tsx
   kind: subsystem

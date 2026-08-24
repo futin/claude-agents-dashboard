@@ -30,6 +30,9 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/chat.ts     byte-offset paged chat history for GET /api/sessions/:id/chat — tail /
                   ?after= (live) / ?before= (older) (see docs/subsystems/chat.md)
   lib/usage.ts    fetches account 5h/weekly limits from Anthropic (see docs/subsystems/usage-limits.md)
+  lib/usage-pace.ts  RAM-only utilization sample ring → burn rate + projected 100% per
+                  window; the 5h window is a fixed session anchor that resets to 0%, not
+                  a sliding one (see docs/subsystems/usage-limits.md)
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser (key:value + >/| scalars, fail-open)
   lib/management.ts   config scanner: global/project ScopeConfig, plugins, recent projects,
                   per-skill directory listing (ConfigItem.files — symlinks/dotfiles skipped),
@@ -84,6 +87,9 @@ client/           Vite + React + TypeScript frontend
   components/Markdown.tsx + lib/markdown.ts  zero-dep markdown-subset parser + renderer
                   for message text (no dangerouslySetInnerHTML; pure, unit-tested)
   lib/chatFilter.ts            drawer all/text/you message filter (pure; persisted)
+  lib/pace.ts                  pure view-model for the usage bars' time strip: elapsed /
+                  now-tick / projected-wall-tick + the wall-vs-lasts verdict
+                  (see docs/subsystems/usage-limits.md)
   lib/surface.ts               the `dashboard`/`cloud` pill (label + tooltip) shown on a
                   row and in the drawer header; `local` renders nothing (pure)
   lib/deepLink.ts              the ?session=<id> entry point a tapped push opens —
