@@ -1,9 +1,35 @@
-# Bug: token totals double-count, because one API turn is several JSONL records
+---
+id: bug-1
+title: Analyze double-counts split turns
+created: 2026-08-22
+---
 
-**Status:** open, not fixed. Research only — the numbers below are measured, the
-fix is specified but deliberately unwritten.
+## Symptom
 
-**Affects:** `server/lib/analyze.ts` (the Analytics tab) and
+Every token total the Analytics tab and `/kaizen` print is roughly **1.7–2.6×
+too high**, and the per-tool breakdown is inflated by a *different, much smaller*
+factor — so the two do not reconcile, and the ratio between them is what misleads
+worst.
+
+## Repro
+
+Run `/kaizen` (or open the Analytics tab) on any real transcript with 20+ turns
+and compare its `turnCount` / totals against a manual count of actual assistant
+turns in that transcript — the tool's numbers run ~1.7–2.2× high on `turnCount`
+and ~1.7–2.6× high on the token totals. Measured on four transcripts (2026-08-22):
+
+| transcript | turnCount | combined | output | billableApprox | byTool as % of output |
+|---|---|---|---|---|---|
+| `64bbe973` | 96 → 56 | 6,497,505 → 3,814,540 | 56,773 → 30,871 | 354,214 → 183,616 | 49% → 90% |
+| `acbdcd0d` | 23 → 11 | 1,218,794 → 590,175 | 25,135 → 11,224 | 158,100 → 60,841 | 17% → 34% |
+| `6f8c3c9e` | 191 → 88 | 33,659,952 → 16,195,571 | 298,414 → 113,826 | 874,087 → 334,537 | 42% → 98% |
+| `25ec88c3` | 101 → 46 | 13,522,664 → 6,476,471 | 91,636 → 41,089 | 454,783 → 194,275 | 56% → 98% |
+
+(naive-today → deduped-by-`message.id`, per field.)
+
+## Affects
+
+`server/lib/analyze.ts` (the Analytics tab) and
 `.claude/skills/kaizen/kaizen.mjs` (the `/kaizen` skill) — which carry the *same
 loop*, and the vendored copy is byte-identical to the global one at
 `~/.claude/skills/kaizen/kaizen.mjs` (`diff` is silent). So the same fix has to
@@ -14,18 +40,10 @@ requires breaks.
 the chat-drawer context readout. It reads the *latest* usage rather than summing,
 and the duplicate records are identical, so its numbers are right.
 
-**Context:** `docs/subsystems/analytics.md`, and
-`docs/ideas/per-turn-token-usage.md` — which is where this was found, and which
-needs the same dedup to work at all.
+**Context:** `docs/subsystems/analytics.md`, and the sibling idea this was found
+while researching — see `from:` below.
 
-## Symptom
-
-Every token total the Analytics tab and `/kaizen` print is roughly **1.7–2.6×
-too high**, and the per-tool breakdown is inflated by a *different, much smaller*
-factor — so the two do not reconcile, and the ratio between them is what misleads
-worst.
-
-## Mechanism
+## Cause
 
 A single assistant response is not one line in the transcript. Claude Code writes
 **one record per content block**, and every one of those records carries a full
@@ -66,19 +84,6 @@ if (combined > 0) {
 
 There is no `message.id` guard, so each copy is added again.
 
-## Blast radius — measured
-
-Four transcripts, naive (today) → deduped by `message.id`. Measured 2026-08-22;
-`64bbe973` was a live session still being written, so treat the ratios rather
-than its absolutes as the finding.
-
-| transcript | turnCount | combined | output | billableApprox | byTool as % of output |
-|---|---|---|---|---|---|
-| `64bbe973` | 96 → 56 | 6,497,505 → 3,814,540 | 56,773 → 30,871 | 354,214 → 183,616 | 49% → 90% |
-| `acbdcd0d` | 23 → 11 | 1,218,794 → 590,175 | 25,135 → 11,224 | 158,100 → 60,841 | 17% → 34% |
-| `6f8c3c9e` | 191 → 88 | 33,659,952 → 16,195,571 | 298,414 → 113,826 | 874,087 → 334,537 | 42% → 98% |
-| `25ec88c3` | 101 → 46 | 13,522,664 → 6,476,471 | 91,636 → 41,089 | 454,783 → 194,275 | 56% → 98% |
-
 Field by field:
 
 - **`totals.input` / `output` / `cacheCreation` / `cacheRead` / `combined`** —
@@ -107,7 +112,8 @@ is true. That is exactly the judgement `/kaizen` exists to inform.
 
 ## Fix
 
-Two changes, in the same loop, in all three copies:
+Two changes, in the same loop, in all three copies (`analyze.ts`, the vendored
+and the global `kaizen.mjs`):
 
 1. **Dedup the usage sum.** Keep a `Set` of `message.id` seen; skip the usage
    accumulation (and `turnCount++`) on a repeat. `requestId` works equally well —
@@ -154,9 +160,8 @@ computed under the old, inflated arithmetic, so historical entries in that file
 are not comparable with post-fix ones. Worth a dated marker line in the log at
 the point the fix lands, rather than silently changing the scale of the series.
 
-## How it was found
-
-Researching `docs/ideas/per-turn-token-usage.md` — specifically, why differencing
-consecutive records' context totals produced `+559, 0, +3171, 0, +1165, 0…`. The
-alternating zeros were not quiet turns; they were the second record of a split
-turn. The same duplication that broke the delta is what inflates the sums.
+Found while researching per-turn token attribution (idea-2 in this backlog) —
+specifically, why differencing consecutive records' context totals produced
+`+559, 0, +3171, 0, +1165, 0…`. The alternating zeros were not quiet turns; they
+were the second record of a split turn. The same duplication that broke the
+delta is what inflates the sums.
