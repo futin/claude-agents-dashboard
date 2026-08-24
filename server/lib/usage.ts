@@ -22,6 +22,7 @@ import http from 'node:http';
 import https from 'node:https';
 
 import type { UsageLimits, RateLimit, UsageStatus } from '../../shared/types.js';
+import { recordAndPace } from './usage-pace.js';
 
 /** Outcome of looking for a stored OAuth token. */
 export type TokenState =
@@ -140,6 +141,22 @@ export function mapUsage(payload: unknown): UsageLimits | null {
   };
 }
 
+/**
+ * Request headers for the usage endpoint. The `claude-code/` User-Agent
+ * matters: without one the endpoint routes to an aggressively rate-limited
+ * bucket and answers persistent 429s (anthropics/claude-code#30930). The
+ * version is a placeholder — the bucket keys off the product prefix.
+ */
+export function requestHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    'User-Agent': 'claude-code/2.0 (claude-agents-dashboard)',
+    'anthropic-beta': 'oauth-2025-04-20',
+    'anthropic-version': '2023-06-01',
+    'Content-Type': 'application/json'
+  };
+}
+
 /** GET the usage endpoint with the OAuth headers the CLI uses. Fails open to null. */
 export function fetchUsage(token: string): Promise<UsageLimits | null> {
   return new Promise((resolve) => {
@@ -158,12 +175,7 @@ export function fetchUsage(token: string): Promise<UsageLimits | null> {
       url,
       {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'anthropic-beta': 'oauth-2025-04-20',
-          'anthropic-version': '2023-06-01',
-          'Content-Type': 'application/json'
-        },
+        headers: requestHeaders(token),
         timeout: REQUEST_TIMEOUT_MS
       },
       (res) => {
@@ -217,7 +229,14 @@ function refreshNow(): Promise<void> {
         return;
       }
       const limits = await fetchUsage(t.token);
-      cached = limits;
+      // Feed the pace store one sample per window and attach burn rate +
+      // projected exhaustion (null until enough history accumulates).
+      cached = limits
+        ? {
+            fiveHour: recordAndPace('fiveHour', limits.fiveHour),
+            sevenDay: recordAndPace('sevenDay', limits.sevenDay)
+          }
+        : null;
       cachedStatus = limits ? 'ok' : 'unavailable';
     } catch {
       // Fail open: this promise is often fire-and-forget (`void refreshNow()`),

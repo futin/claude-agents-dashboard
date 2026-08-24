@@ -101,12 +101,24 @@ export interface Totals {
   active: number;
 }
 
-/** One rolling rate-limit window (percent used + when it resets). */
+/** One rate-limit window (percent used + when it resets). */
 export interface RateLimit {
   /** 0–100 percent of the window consumed, or null if unknown/unscoped. */
   utilization: number | null;
-  /** ISO 8601 reset time, or null if unknown. */
+  /** ISO 8601 reset time, or null if unknown. The window fully resets to 0% then. */
   resetsAt: string | null;
+  /**
+   * Burn rate in percent-per-hour over the server's recent utilization samples,
+   * 0 when idle, or null while there isn't enough history yet (the sample store
+   * is RAM-only, so it refills within minutes of a server restart).
+   */
+  ratePerHour?: number | null;
+  /**
+   * ISO 8601 time the window is projected to hit 100% at the current pace, or
+   * null when idle / unknown. May land after resetsAt — the client compares the
+   * two to decide "wall before reset" vs "lasts to reset".
+   */
+  projectedExhaustAt?: string | null;
 }
 
 /**

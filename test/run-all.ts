@@ -38,12 +38,16 @@ import { run as runDecodePath } from './decode-path.test.js';
 import { run as runFormat } from './format.test.js';
 import { run as runPanelCollapse } from './panel-collapse.test.js';
 import { run as runGuides } from './guides.test.js';
+import { run as runUsagePace } from './usage-pace.test.js';
+import { run as runPaceView } from './pace-view.test.js';
 
 let failed = 0;
 failed += runTranscript();
 failed += runTitleCache();
 failed += runScan();
 failed += runUsage();
+failed += runUsagePace();
+failed += runPaceView();
 failed += runAgents();
 failed += runAgentsCache();
 failed += runChat();

@@ -188,6 +188,20 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .usage .u-pct{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink2);min-width:34px;text-align:right;font-family:var(--mono)}
 .usage .u-reset{font-size:10px;color:var(--ink3);white-space:nowrap;flex-shrink:0;font-family:var(--mono)}
 .usage .u-msg{font-size:11px;color:var(--ink3)}
+/* Time strip: the same bar width, but the axis is the window's clock rather
+   than its tokens — elapsed fill, a `now` tick, and the projected-100% tick.
+   Reading them together answers "do I run dry before the reset?". */
+.usage .u-time-row{display:flex;align-items:center;gap:8px;margin-top:3px}
+.usage .u-time{flex:1;position:relative;height:3px;background:var(--steel)}
+.usage .u-time-fill{position:absolute;left:0;top:0;height:100%;background:var(--hairline2);transition:width .5s ease}
+.usage .u-time-spacer{min-width:34px}
+.usage .u-tick{position:absolute;top:-2px;height:7px}
+.usage .u-tick.now{width:1px;background:var(--cyan)}
+.usage .u-tick.wall{width:2px;background:var(--red)}
+.usage .u-time-labels{display:flex;justify-content:space-between;gap:8px;padding-right:42px;font-family:var(--mono);font-size:9px;color:var(--ink3)}
+.usage .u-verdict{white-space:nowrap}
+.usage .u-verdict.wall{color:var(--red)}
+.usage .u-verdict.lasts{color:var(--green)}
 
 .rows{display:flex;flex-direction:column;gap:var(--rows-gap)}
 /* a session is a flight strip: square paper card in a colored holder edge.

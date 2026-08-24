@@ -68,6 +68,13 @@ export function run(): number {
     assert.deepStrictEqual(usage.tokenFromCredsBlob(JSON.stringify({ claudeAiOauth: {} }), NOW), { state: 'missing' });
   })) p++; else f++;
 
+  if (test('requestHeaders: carries the token + a claude-code User-Agent', () => {
+    const h = usage.requestHeaders('tok-9');
+    assert.strictEqual(h.Authorization, 'Bearer tok-9');
+    assert.ok(/^claude-code\//.test(h['User-Agent']), 'User-Agent must start with claude-code/ (endpoint 429s otherwise)');
+    assert.strictEqual(h['anthropic-beta'], 'oauth-2025-04-20');
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }
