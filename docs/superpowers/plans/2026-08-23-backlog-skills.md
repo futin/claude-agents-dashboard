@@ -295,8 +295,10 @@ In `~/.claude` if it is a repo; otherwise nothing to commit — see Task 1's not
 - Produces: `readItem`, `listOpen`, and `main` handling `board` and `show`.
 
 **`board` stdout contract.** Sections in fixed order — bugs, ideas, tasks — each with a
-header line and one indented line per open item, ids left-padded to a common width within
-the section:
+header line and one indented line per open item, ids left-aligned and padded to a common
+width. That width is computed across whatever is being printed, not per section, so a
+short id in one section still lines up under a longer one elsewhere on the same board;
+under `--section` the two are the same thing, since that slice is all there is to print:
 
 ```
 bugs (1 open)
@@ -550,9 +552,13 @@ moves, converts or reclassifies an existing item — that is groom's job.
 `unknown` — that is precisely what makes the bug ungroomed, and `backlog-execute` will
 refuse it until groom fills them.
 
-**Store creation:** this skill runs `init` itself when `new` exits 3. It is the only one of
-the four that may create the store, because the first capture in a repo should not fail on
-a missing directory.
+**Store creation:** this skill runs `init` itself, unconditionally, before `new`. It is the
+only one of the four that may create the store, because the first capture in a repo should
+not fail on a missing directory. Unconditional rather than triggered by a failing `new`:
+`new` never checks for the store — it needs only a resolvable root, so on a store-less repo
+it prints a path and exits 0, having created nothing — and there is no exit code to react
+to. `init` is idempotent (it returns only what it actually created, and never touches an
+existing README), so running it every time costs one no-op call and removes a branch.
 
 - [ ] **Step 1: Write the skill file**
 
@@ -561,7 +567,7 @@ a missing directory.
 ```bash
 cd $(mktemp -d) && git init -q . && node ~/.claude/skills/backlog/tools/backlog.mjs new ideas 'Backlog dashboard tab'; echo "exit=$?"
 ```
-Expected: `exit=3` with a message naming `init` — confirming the skill genuinely needs its own `init` step, and that the tool does not scaffold silently.
+Expected: `exit=0`, a path printed under `backlog/ideas/open/`, and **no `backlog/` directory created** — confirming the skill genuinely needs its own `init` step (nothing else will scaffold the store) and that `new` does not scaffold silently.
 
 - [ ] **Step 3: Verify the happy path end to end by hand**
 
