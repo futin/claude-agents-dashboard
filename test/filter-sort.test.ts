@@ -1,7 +1,13 @@
 import assert from 'node:assert';
 
 import type { Session } from '../shared/types.js';
-import { applyView, distinctProjects, DEFAULT_VIEW, type View } from '../client/src/lib/filterSort.js';
+import {
+  applyView,
+  distinctProjects,
+  pruneProjects,
+  DEFAULT_VIEW,
+  type View
+} from '../client/src/lib/filterSort.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -138,6 +144,42 @@ export function run(): number {
     assert.strictEqual(out.length, 1);
     assert.strictEqual(out[0].project, 'a');
     assert.strictEqual(out[0].status, 'working');
+  })) p++; else f++;
+
+  if (test('pruneProjects: a name absent from the payload resets to all projects', () => {
+    const out = pruneProjects(['gone'], [sess({ project: 'a' }), sess({ project: 'b' })]);
+    assert.deepStrictEqual(out, []);
+  })) p++; else f++;
+
+  if (test('pruneProjects: drops only the absent names, keeps the present ones', () => {
+    const out = pruneProjects(['a', 'gone'], [sess({ project: 'a' }), sess({ project: 'b' })]);
+    assert.deepStrictEqual(out, ['a']);
+  })) p++; else f++;
+
+  if (test('pruneProjects: nothing to prune returns the same array reference', () => {
+    const selected = ['a', 'b'];
+    assert.strictEqual(
+      pruneProjects(selected, [sess({ project: 'a' }), sess({ project: 'b' })]),
+      selected
+    );
+  })) p++; else f++;
+
+  if (test('pruneProjects: an empty payload prunes nothing (no evidence of absence)', () => {
+    const selected = ['a'];
+    assert.strictEqual(pruneProjects(selected, []), selected);
+  })) p++; else f++;
+
+  if (test('pruneProjects: an empty selection is left alone', () => {
+    const selected: string[] = [];
+    assert.strictEqual(pruneProjects(selected, [sess({ project: 'a' })]), selected);
+  })) p++; else f++;
+
+  if (test('pruneProjects result unhides the rows applyView was dropping', () => {
+    const list = [sess({ project: 'a' }), sess({ project: 'b' })];
+    const stale = view({ projects: ['gone'] });
+    assert.strictEqual(applyView(list, stale, NOW).length, 0);
+    const healed = view({ projects: pruneProjects(stale.projects, list) });
+    assert.strictEqual(applyView(list, healed, NOW).length, 2);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
