@@ -324,6 +324,19 @@ testable against the one before it.
    and `usage-pace.ts` handing its active rate to the forecast.
 5. **Client** — `pace.ts` gains the pessimistic tick and confidence; `Header.tsx`
    renders the band; the weekly `%/day` text is corrected for duty cycle.
+6. **Profile inspector** — `GET /api/usage/profile` plus a 24×7 hour-of-week heatmap in
+   the Analytics tab, with the forward walk that produced the current projection
+   underneath it. Chosen as variant C of
+   `docs/guides/mockups/usage-profile-heatmap-mockups.html`.
+
+   This is disclosure, not decoration. The forecast quietly changes a number the user
+   acts on, using a model learned in the background; with no way to inspect it, a wrong
+   projection is undebuggable and the only recourse is reading `.usage-profile.json` by
+   hand. The 168 weights *are* the explanation, and the walk is what ties them to the
+   number on the header bar. Evidence is rendered as texture rather than a second hue —
+   an untrusted cell has no value, not a low one — and the ramp is derived with
+   `color-mix(in oklab, var(--cyan) N%, var(--strip))` so all five themes hold from one
+   rule.
 
 Behaviour with recording off, or on but with an empty profile, is today's behaviour
 exactly. That is the regression floor and it should have a test of its own.
@@ -405,5 +418,8 @@ keeps the history if this ever matters), sub-hour profile resolution, holiday or
 vacation calendars, configurable timezone
 (host-local is correct — the server and the user are the same machine), per-project
 profiles, and any change to the 5h window's own projection. The history *charts* from
-idea-5 are also out of scope here; this design delivers the persistence they need, and
-the view is separate work.
+idea-5 remain out of scope — utilization over days and weeks, read from the raw JSONL,
+answering different questions. This design delivers the persistence they need and the
+view stays separate work. The **profile inspector** is a different thing and is in
+scope (step 6 above): it reads the 6.6 KB aggregate, not the log, and explains the
+calculation rather than charting history.

@@ -10,6 +10,90 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-25-usage-forecast-duty-cycle-design.md`
 
+## Context for a fresh session
+
+This plan and its spec were argued out over one long conversation. Everything
+load-bearing from that conversation is written down here, so no later session needs
+it. Read the spec for *why*; this plan is *how*.
+
+**Design reference:** `docs/guides/mockups/usage-profile-heatmap-mockups.html`, visible
+in the dashboard's Guides tab. Variant **C** was chosen — see Task 7.
+
+### Decisions, settled
+
+| # | Decision | Because |
+|---|---|---|
+| 1 | One branch, not two phases | A flat weight-`1.0` fallback *is* today's arithmetic, and its duty-cycle measurement wants 24h of a RAM-only ring that request-driven sampling rarely fills. Persistence is a prerequisite, not a follow-up. |
+| 2 | The projection renders as a band | A single tick claims precision the data lacks while buckets are thin. |
+| 3 | Learn from the **5h** window, predict the **weekly** one | Only the 5h window is verified monotonic; the weekly reset mechanism is documented as unproven (community reports of 72-hour intervals). The 5h window also sweeps 0→~50% in five hours where the weekly crawls in ~1% steps — far better resolution. The 5h window's own projection is left alone; duty cycle inside five hours is ~1 by construction. |
+| 4 | Write-on-change + a 15-min heartbeat | The gap rule already reads sparse records correctly, so per-minute density buys the profile nothing. The heartbeat doubles as the liveness marker separating downtime from quiet. ~17 MB/year instead of ~55. |
+| 5 | Recording is opt-in, default off | It makes the server call Anthropic once a minute for the life of the process with nobody watching. That should be a choice, not a surprise. |
+| 6 | Ambiguous gaps are discarded | Spreading a rise across its hours by existing weights trains the profile on its own output, entrenching whatever shape it started with. |
+| 7 | No SQLite | `node:sqlite` works here (Node v22.23.1) and is a built-in, so it wouldn't break the zero-dep rule — but it emits `ExperimentalWarning` on every start, landed in 22.5.0 against an `engines: >=18` floor, and buys nothing against a 6.6 KB aggregate plus a tail read. **What would flip it:** arbitrary year-range `GROUP BY`, or joining usage against per-project token stats (idea-4). The JSONL is replayable, so that migration would be an import, not a rewrite. |
+| 8 | Heatmap ramp derived via `color-mix`, not hand-picked | Five themes × five steps is 25 hex values nobody can validate. `color-mix(in oklab, var(--cyan) N%, var(--strip))` is monotonic by construction — verified across midnight/graphite/amber/paper at steps 0.098–0.133 — and cannot violate the no-hardcoded-color rule. |
+
+### Traps — every one of these was gotten wrong once
+
+Each of these looks obviously right in the wrong direction. They are listed because a
+fresh reader will independently reach for the wrong version.
+
+1. **A flat interval is a *measurement* of idleness, not missing data.** The intuitive
+   rule — "no data means unknown" — defeats the entire feature: the laptop sleeps at
+   night, night is what the profile most needs to learn, so the night buckets would
+   collect no evidence, stay untrusted, and fall back to a working-hours-dominated
+   mean. Utilization is cumulative within a window, so two samples bracketing a gap
+   with unchanged `resetsAt` and unchanged utilization *prove* nothing was spent. A
+   sleeping laptop is the profile's best teacher.
+2. **Ambiguity is a function of duration, not direction.** Two samples a minute apart
+   with utilization rising are precisely attributable, and are the only way
+   `activeMin` ever grows. Only a *long* rising interval is ambiguous. Get this
+   backwards and every hour learns as idle.
+3. **A quiet bucket freezes; it does not decay.** A weight only moves when its bucket
+   folds, so an abandoned hour keeps its old weight forever while lifetime evidence
+   keeps it trusted. And marking it untrusted is wrong-directioned — untrusted falls
+   back to the global mean, which is *higher*. It must decay, over observed weeks only.
+4. **Fold, then decay — not the reverse.** The pending accumulators belong to the
+   bucket's stamped week and the skipped weeks came after it.
+5. **Sampling is request-driven today.** `getCachedUsageState()` has exactly one
+   caller, the `/api/sessions` handler at `server/api.ts:152`. No timer. Nothing is
+   recorded unless a browser is polling, so the log would describe when the dashboard
+   was watched rather than when work happened.
+6. **Learning is live; the log is not a replayable substitute.** The profile learns at
+   one-minute resolution against the in-memory previous sample. The log is sparser, so
+   rebuilding a profile from it alone is lossy — a flat stretch ending in a rise
+   appears as one long rising interval and is discarded as ambiguous. The profile file
+   is the profile's source of truth.
+7. **`DutyProfile` does not belong in `shared/types.ts`.** The 168 weights never cross
+   the FE/BE boundary; only the derived `dutyCycle` number and confidence string do.
+8. **History files resolve from the repo root, not `process.cwd()`.** `settings.ts`
+   uses cwd; do not copy it. A settings file that resets when you start the server
+   elsewhere is a nuisance, but a history file that does is weeks of learning silently
+   replaced by an empty file, with no error.
+9. **A cell is one hour *of the week*, and evidence accumulates across *weeks*.**
+   Monday 09:00 and Tuesday 09:00 are different cells; nothing is averaged across
+   days. A cell gathers at most 60 minutes per week, so any UI copy must say weeks —
+   "300 min observed" on a one-hour cell reads as a contradiction.
+
+### What cannot be verified in this branch
+
+The plumbing is provable and every pure function is tested, but the forecast's
+*accuracy* is not. The profile needs roughly two to three weeks of real samples before
+`confidence` leaves `thin`, and no test substitutes for that. Do not claim the
+prediction is correct; claim the mechanism works. This belongs in the PR body verbatim.
+
+### Repo conventions that have bitten before
+
+- **Check the working tree before staging.** This repo runs parallel sessions that
+  commit mid-flight; a targeted `git add` can still sweep in someone else's work.
+- **Plan and spec docs go straight to `main`.** Code and subsystem docs branch.
+- **If you dispatch review subagents, paste the reviewer contract** from
+  `.claude/CLAUDE.md` into every dispatch. The plugin template says the opposite and
+  whichever text is in front of you wins.
+- **A guard test that stays green with the guard deleted proves nothing.** Task 3 has
+  an explicit step that removes each guard and requires the test to fail.
+
+---
+
 ## Global Constraints
 
 - **Server is zero-runtime-dependency.** Node built-ins only. Do not add anything to `server/`'s imports that isn't `node:*` or a local file.
@@ -34,13 +118,18 @@
 | `server/lib/usage-history.ts` | *Create.* Pure core (interval classification, bucket accounting, EWMA fold, profile derivation) plus a thin I/O shell (append, tail-read, rotate, atomic profile write). |
 | `server/lib/usage-pace.ts` | *Modify.* Hands its active rate to the forecast for the weekly window; gains ring rehydration. |
 | `server/lib/settings.ts` | *Modify.* One new persisted boolean, `recordUsageHistory`. |
-| `server/index.ts` | *Modify.* The opt-in sampling interval. |
+| `server/index.ts` | *Modify.* The opt-in sampling interval, and the `/api/usage/profile` route. |
 | `client/src/lib/pace.ts` | *Modify.* Pessimistic tick + confidence; duty-cycle-corrected `%/day` text. |
 | `client/src/components/Header.tsx` | *Modify.* Renders the band between the two ticks. |
 | `client/src/components/settings/SettingsView.tsx` | *Modify.* The recording toggle. |
+| `server/api.ts` | *Modify.* The `GET /api/usage/profile` handler (Task 7). |
+| `client/src/components/analytics/UsageProfile.tsx` | *Create.* The 24×7 heatmap plus the forward-walk strip. Inherits the Analytics tab's lazy chunk. |
+| `client/src/hooks/useUsageProfile.ts` | *Create.* Fetches once per mount, unpolled. |
+| `client/src/components/analytics/AnalyticsView.tsx` | *Modify.* Mounts the inspector as a section. |
 | `test/usage-forecast.test.ts` | *Create.* |
 | `test/usage-history.test.ts` | *Create.* |
-| `test/run-all.ts` | *Modify.* Register both new suites. |
+| `test/usage-profile-api.test.ts` | *Create.* |
+| `test/run-all.ts` | *Modify.* Register all three new suites. |
 
 **One deliberate divergence from the spec's build order.** The spec says the `DutyProfile` shape goes in `shared/types.ts`. It should not: the profile never crosses the FE/BE boundary — only the derived `dutyCycle` number and `forecastConfidence` string do. Per the project convention that `shared/types.ts` is the API contract and nothing else, `DutyProfile` lives in `server/lib/usage-forecast.ts`.
 
@@ -1320,7 +1409,212 @@ git commit -m "feat(usage): draw the forecast band and correct the weekly rate t
 
 ---
 
-## Task 7: Documentation
+## Task 7: The profile inspector (mockup variant C)
+
+**Files:**
+- Modify: `shared/types.ts`
+- Modify: `server/api.ts` (a new handler), `server/index.ts` (the route)
+- Modify: `server/lib/usage-history.ts` (one read-only accessor)
+- Create: `client/src/components/analytics/UsageProfile.tsx`
+- Create: `client/src/hooks/useUsageProfile.ts`
+- Modify: `client/src/components/analytics/AnalyticsView.tsx`, `client/src/styles.css`
+- Create: `test/usage-profile-api.test.ts`; Modify: `test/run-all.ts`
+
+**Interfaces:**
+- Consumes: `deriveProfile`, `loadProfileState` (Task 3/4); `walkForward`, `confidenceOf`, `localOffsetMinutes` (Task 2); `getCachedUsageState` (existing).
+- Produces:
+  - `interface UsageProfileCell { hourOfWeek: number; weight: number | null; observedMin: number; staleWeeks: number }`
+  - `interface ForecastStep { t: string; gain: number }`
+  - `interface UsageProfileResponse { cells: UsageProfileCell[]; globalMean: number; confidence: ForecastConfidence; recording: boolean; walk: ForecastStep[]; exhaustAt: string | null }`
+  - `usage-history.ts` exports `function profileSnapshot(): ProfileState`
+
+**Why this exists.** The forecast silently changes a number the user acts on, using a
+model built in the background. Without an inspector, a wrong projection is
+undebuggable — the only recourse is reading `.usage-profile.json` by hand. The 168
+weights *are* the explanation. This is disclosure, not decoration.
+
+**Scope boundary.** This shows the *learned profile* and the walk that produced the
+current projection. It is **not** idea-5's usage-history charts (utilization over days
+and weeks, read from the raw JSONL) — those stay in
+`backlog/ideas/open/idea-5-long-term-5h-weekly-usage-history.md`.
+
+**Read the `dataviz` skill before writing any chart code.** A 7×24 heatmap is squarely
+in its scope. The constraints it imposes, already resolved for you:
+
+- **Form:** heatmap for grid magnitude → **sequential, one hue**. Never a multi-hue ramp.
+- **Ramp:** `color-mix(in oklab, var(--cyan) N%, var(--strip))` at N = 20/40/60/80/100.
+  Monotonic by construction in every theme (verified: steps 0.098–0.133 across
+  midnight, graphite, amber, paper). Do **not** hand-pick hex values — that would break
+  the no-hardcoded-color rule and can't be validated for five themes.
+- **Evidence is not a second hue.** An untrusted cell has *no value*, not a low one, so
+  it gets texture (`repeating-linear-gradient` in `var(--hairline)`) and a dashed
+  border. Hue-coding confidence reads as a rainbow ramp and treats confidence as a
+  magnitude on the same scale as weight, which it isn't.
+- **A scale legend is mandatory** with a sequential ramp, and must include the
+  no-evidence swatch.
+- **Per-cell hover tooltip** and **a table view** are both required, not optional: the
+  two lowest ramp steps fall below 3:1 contrast against the card surface, and that WARN
+  obligates relief.
+- **2px gap between cells**, 1px `var(--hairline)` border so the grid reads even at
+  weight 0.
+
+- [ ] **Step 1: Add the response contract**
+
+In `shared/types.ts`, after the `ForecastConfidence` type from Task 1:
+
+```ts
+/** One hour-of-week bucket, as shown in the profile inspector. */
+export interface UsageProfileCell {
+  /** 0–167, where 0 is Sunday 00:00 in the host's local timezone. */
+  hourOfWeek: number;
+  /**
+   * 0–1 expected active share of that hour, or null when the bucket has under
+   * an hour of accumulated evidence and the forecast falls back to the mean.
+   */
+  weight: number | null;
+  /** Accumulated observed minutes across all weeks. Caps at 60 per week. */
+  observedMin: number;
+  /** Observed weeks since this bucket last folded. 0 when current. */
+  staleWeeks: number;
+}
+
+/** One hour of the forward walk behind the current weekly projection. */
+export interface ForecastStep {
+  /** ISO 8601 start of the hour. */
+  t: string;
+  /** Percentage points this hour is expected to add. */
+  gain: number;
+}
+
+/** `GET /api/usage/profile` — read-only. Never includes raw samples. */
+export interface UsageProfileResponse {
+  cells: UsageProfileCell[];
+  /** Fallback weight for untrusted buckets. */
+  globalMean: number;
+  confidence: ForecastConfidence;
+  /** False when the recording setting is off — the view says so rather than showing an empty grid. */
+  recording: boolean;
+  /** The walk from now to the weekly reset. Empty when there is no projection. */
+  walk: ForecastStep[];
+  /** ISO 8601 crossing time, or null when the window coasts to its reset. */
+  exhaustAt: string | null;
+}
+```
+
+- [ ] **Step 2: Write the failing endpoint test**
+
+Create `test/usage-profile-api.test.ts`. Test the handler's pure shaping function, not
+the HTTP layer — follow whatever `test/api-body.test.ts` already does for this.
+Required cases:
+
+```
+- recording off        → { recording: false, cells: 168 entries, confidence: 'none', walk: [] }
+- empty profile        → 168 cells, every weight null, globalMean 1, confidence 'none'
+- a seeded profile     → the trusted bucket's weight round-trips; a thin bucket reports
+                         weight null but its real observedMin
+- staleWeeks           → a bucket whose last fold was 3 observed weeks ago reports 3
+- walk length          → one step per hour from now to resetsAt, never more than 168
+- no weekly resetsAt   → walk is [] and exhaustAt is null, and the handler does not throw
+```
+
+Assert exact values, and assert `cells.length === 168` in every case — a short array
+would silently render a torn grid.
+
+- [ ] **Step 3: Run the test to verify it fails**
+
+Run: `pnpm test`
+Expected: FAIL — the handler does not exist.
+
+- [ ] **Step 4: Implement the endpoint**
+
+- `usage-history.ts` gains `profileSnapshot()` returning the in-memory `ProfileState`
+  (loading from disk if not yet loaded). Read-only; no mutation.
+- `server/api.ts` gains the handler. It derives the profile, maps buckets to cells,
+  reads the current weekly `RateLimit` from `getCachedUsageState()`, and recomputes the
+  walk with `walkForward` to emit per-hour gains. Fail open: any error returns
+  `recording: false` with 168 null cells rather than a 500.
+- `server/index.ts` routes `GET /api/usage/profile`. Place it with the other `/api/*`
+  routes, before the static fallback.
+- **The response must never include raw samples or file paths** — the same posture as
+  `NTFY_TOPIC` never leaving the server. Cells and the walk only.
+
+- [ ] **Step 5: Run the tests**
+
+Run: `pnpm test && pnpm typecheck`
+Expected: PASS, clean.
+
+- [ ] **Step 6: Build the view**
+
+`client/src/hooks/useUsageProfile.ts` fetches once per mount — unpolled, like
+`hooks/useGuides`. This data changes on a weekly cadence; a 3s poll would be absurd.
+
+`client/src/components/analytics/UsageProfile.tsx` renders, using the mockup as the
+reference implementation (`docs/guides/mockups/usage-profile-heatmap-mockups.html`,
+variant C — the grid plus the forward-walk strip beneath it):
+
+- 24 rows × 7 columns — **hours as rows**. This is variant B's orientation, chosen so
+  the axis needing 24 slots runs the direction a phone actually has.
+- Beneath it, the walk strip: one bar per hour, height proportional to `gain`, flat
+  `var(--hairline)` stubs for idle hours, and the crossing labelled from `exhaustAt`.
+  The visible weekend gap is the feature explaining itself — do not compress it away.
+- `recording: false` renders a short explanation and a pointer to the Settings toggle,
+  never an empty grid.
+- `confidence` shown in words next to the legend, with the honest caveat that a `thin`
+  profile is expected for the first couple of weeks.
+
+Copy the mockup's tooltip wording, including the weeks-not-minutes phrasing and the
+"falls back to the weekly mean" line for untrusted cells. That wording exists because
+the earlier version was actively misleading.
+
+- [ ] **Step 7: Add it to the Analytics tab**
+
+Mount the component as a section in `AnalyticsView.tsx`. It inherits that tab's
+existing lazy chunk, so no new route or rail entry. A whole side-rail tab for one grid
+is not warranted when the rail already has five entries.
+
+- [ ] **Step 8: Styles**
+
+Add to `client/src/styles.css`, below the theme-token block, using only tokens and
+`color-mix`:
+
+```css
+.up-grid{display:grid;gap:2px}
+.up-cell{border:1px solid var(--hairline);border-radius:2px;aspect-ratio:1}
+.up-cell.q1{background:color-mix(in oklab,var(--cyan) 20%,var(--strip))}
+.up-cell.q2{background:color-mix(in oklab,var(--cyan) 40%,var(--strip))}
+.up-cell.q3{background:color-mix(in oklab,var(--cyan) 60%,var(--strip))}
+.up-cell.q4{background:color-mix(in oklab,var(--cyan) 80%,var(--strip))}
+.up-cell.q5{background:var(--cyan)}
+.up-cell.unknown{background:repeating-linear-gradient(135deg,var(--hairline) 0 2px,transparent 2px 5px);border-style:dashed}
+```
+
+Not a single literal color, so all five themes hold.
+
+- [ ] **Step 9: Verify in the browser**
+
+Run: `pnpm dev`, open Analytics.
+Check: 168 cells render in a 24×7 grid with no torn row; the legend includes the
+no-evidence swatch; tooltips report weeks; the table view toggles; the walk strip shows
+visible idle stubs; **cycle all five themes** and confirm the ramp stays legible in
+each — the light theme is the one that breaks.
+
+State what you did not verify: with an empty profile every cell is hatched, so the
+ramp's *appearance* can only be checked by seeding a fake profile file. Do that
+deliberately and say you did.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add shared/types.ts server/api.ts server/index.ts server/lib/usage-history.ts \
+  client/src/components/analytics/UsageProfile.tsx client/src/hooks/useUsageProfile.ts \
+  client/src/components/analytics/AnalyticsView.tsx client/src/styles.css \
+  test/usage-profile-api.test.ts test/run-all.ts
+git commit -m "feat(usage): add the duty-cycle profile inspector"
+```
+
+---
+
+## Task 8: Documentation
 
 **Files:**
 - Modify: `docs/subsystems/usage-limits.md`
@@ -1332,7 +1626,7 @@ git commit -m "feat(usage): draw the forecast band and correct the weekly rate t
 
 - [ ] **Step 1: Update `docs/subsystems/usage-limits.md`**
 
-Add a section after *Pace + the time strip* covering: the active-rate / duty-cycle split; that the 5h window is the sensor and the weekly window the prediction, and why (the weekly reset mechanism is documented in that same file as unproven); the interval classification table from Task 3; that a flat overnight interval is the most valuable input; the two state files and that path resolution walks up for `package.json` rather than using cwd; the opt-in timer and its unattended-polling consequence; and the DST limitation.
+Add a section after *Pace + the time strip* covering: the profile inspector and its endpoint (`GET /api/usage/profile`, read-only, never returns raw samples); the active-rate / duty-cycle split; that the 5h window is the sensor and the weekly window the prediction, and why (the weekly reset mechanism is documented in that same file as unproven); the interval classification table from Task 3; that a flat overnight interval is the most valuable input; the two state files and that path resolution walks up for `package.json` rather than using cwd; the opt-in timer and its unattended-polling consequence; and the DST limitation.
 
 Update the ⚠️ **Unproven** block: the weekly window's length is still assumed to be 7 days, and now a second thing depends on it — the walk's horizon. Say so.
 
@@ -1351,6 +1645,15 @@ Add one line each, in the established terse style:
                   100%, plus the flat-profile pessimistic edge (see docs/subsystems/usage-limits.md)
   lib/usage-history.ts  persisted usage samples → learned 168-bucket duty-cycle profile;
                   a flat overnight interval is an idle *measurement*, not missing data
+```
+
+and on the client side:
+
+```
+  components/analytics/UsageProfile.tsx  the duty-cycle inspector: a 24×7 hour-of-week
+                  heatmap over the learned weights plus the forward walk behind the
+                  current weekly projection (hooks/useUsageProfile, fetched once per
+                  mount; ramp derived with color-mix so all five themes hold)
 ```
 
 - [ ] **Step 4: Update backlog idea-5**
@@ -1374,6 +1677,7 @@ git commit -m "docs(usage): document duty-cycle forecasting and the recording op
 - [ ] Confirm `.usage-history.jsonl` and `.usage-profile.json` are gitignored and absent from `git status`.
 - [ ] Confirm recording defaults to **off** on a fresh `.dashboard-settings.json` (delete it and restart).
 - [ ] Re-run the Task 3 Step 6 mutation checks once more on the final code, and state both outcomes in the PR.
+- [ ] Cycle all five themes with the inspector open. The light theme is the one a colour mistake shows up in.
 
 **PR body** follows `.github/pull_request_template.md`: Conventional Commits title, a lead in user terms, *Why this shape* / *What changed* grouped by boundary (Server / Client / Docs) / *Verification*. Two rules are load-bearing here:
 
