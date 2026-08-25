@@ -19,6 +19,16 @@ then waits here), read by the remote-answer hooks — now three of them — plus
 policy, which the **server itself** acts on when it decides whether to send a push. This is
 the app's second and last write to disk, after [the remote-answer toggle](remote-answer.md).
 
+`recordUsageHistory` (default **false**) is the fourth, and it is the clearest case of all:
+it starts a **server-side timer** that samples account usage once a minute so the weekly
+forecast can learn which hours you actually work (see
+[usage-limits](usage-limits.md)). A per-device toggle could not start a server-side timer at
+all, so it cannot live in localStorage even in principle. It defaults off because switching
+it on makes the server call Anthropic for as long as the process lives, with nobody
+necessarily watching — the honest place for that is a switch the user throws, and the help
+text in Settings says so in as many words. The server re-reads it on every tick, so flipping
+it takes effect without a restart.
+
 The three scan knobs are the interesting case: they change what the **server** computes, but
 they are still per-device, so they travel as query params on the poll the client already makes —
 `GET /api/sessions?limit=20&lookback=48&active=5`. Request input, not stored state. Nothing new
@@ -200,5 +210,5 @@ a value the rows never reflect.
     - server/lib/settings.ts
     - client/index.html
   kind: subsystem
-  verified: 9af535e56b1ce8ae4fc8b5a551fe106bf0244736
+  verified: ae66f03b0dd6c0c24cd1bba0c10525d5e6b700de
 -->

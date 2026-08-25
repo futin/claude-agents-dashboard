@@ -13,7 +13,7 @@ typed JSON payloads in `shared/types.ts` (`GET /api/sessions*`, `GET /api/manage
 shared/types.ts   API contract (SessionsResponse, Session, ManagementIndex, ScopeConfig,
                   SessionAnalysis, AnalyticsReport…).
 server/           Node backend, TypeScript, run via tsx (no compile step)
-  index.ts        HTTP entry: routes /api/sessions(+/:id/chat) + /api/management + /api/analytics + /api/settings + /api/guides, plus /guides/<relPath> (guide files, last before the static fallback); static-serves client/dist in prod
+  index.ts        HTTP entry: routes /api/sessions(+/:id/chat) + /api/management + /api/analytics + /api/settings + /api/usage/profile + /api/guides, plus /guides/<relPath> (guide files, last before the static fallback); static-serves client/dist in prod
   api.ts          the /api/sessions + /api/management + /api/analytics handlers (+ error fallbacks)
   lib/config.ts   .env loader — precedence process.env > .env > defaults
   lib/transcript.ts  tail-reads last 256KB of a transcript → tokens/model/window/activity
@@ -33,6 +33,10 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/usage-pace.ts  RAM-only utilization sample ring → burn rate + projected 100% per
                   window; the 5h window is a fixed session anchor that resets to 0%, not
                   a sliding one (see docs/subsystems/usage-limits.md)
+  lib/usage-forecast.ts  pure forward walk: activeRate × hour-of-week weight → projected
+                  100%, plus the flat-profile pessimistic edge (see docs/subsystems/usage-limits.md)
+  lib/usage-history.ts  persisted usage samples → learned 168-bucket duty-cycle profile;
+                  a flat overnight interval is an idle *measurement*, not missing data
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser (key:value + >/| scalars, fail-open)
   lib/management.ts   config scanner: global/project ScopeConfig, plugins, recent projects,
                   per-skill directory listing (ConfigItem.files — symlinks/dotfiles skipped),
@@ -124,6 +128,10 @@ client/           Vite + React + TypeScript frontend
   components/management/       three-pane management UI (ScopeMenu, ItemList, DetailPane,
                   FileViewer, SkillFileRail — a multi-file skill's whole directory)
   components/analytics/AnalyticsView.tsx  the report-card list (own lazy chunk; read-only)
+  components/analytics/UsageProfile.tsx  the duty-cycle inspector: a 24×7 hour-of-week
+                  heatmap over the learned weights plus the forward walk behind the
+                  current weekly projection (hooks/useUsageProfile, fetched once per
+                  mount; ramp derived with color-mix so all five themes hold)
   components/guides/GuidesView.tsx  the Guides tab: deck/guide cards, then a same-origin
                   iframe on /guides/<relPath> (own lazy chunk; read-only, unpolled;
                   hooks/useGuides fetches once per mount — see docs/subsystems/guides.md)
