@@ -47,7 +47,7 @@ in the dashboard's Guides tab. Variant **C** was chosen — see Task 7.
 | 6 | Ambiguous gaps are discarded | Spreading a rise across its hours by existing weights trains the profile on its own output, entrenching whatever shape it started with. |
 | 7 | No SQLite | `node:sqlite` works here (Node v22.23.1) and is a built-in, so it wouldn't break the zero-dep rule — but it emits `ExperimentalWarning` on every start, landed in 22.5.0 against an `engines: >=18` floor, and buys nothing against a 6.6 KB aggregate plus a tail read. **What would flip it:** arbitrary year-range `GROUP BY`, or joining usage against per-project token stats (idea-4). The JSONL is replayable, so that migration would be an import, not a rewrite. |
 | 8 | Heatmap ramp derived via `color-mix`, not hand-picked | Five themes × five steps is 25 hex values nobody can validate. `color-mix(in oklab, var(--cyan) N%, var(--strip))` is monotonic by construction — verified across midnight/graphite/amber/paper at steps 0.098–0.133 — and cannot violate the no-hardcoded-color rule. |
-| 9 | The weekly rate is un-diluted by **measured** active time, not by the learned profile | Once the 24/7 timer feeds the pace ring, the 6h endpoint slope is a wall rate — idle hours inside the lookback dilute it, and the walk would then discount idle a *second* time via the weights. Dividing by profile-*expected* duty instead would explode on unusual hours (a worked weekend meets a near-zero expected weight). Measured active time from the recorder's live classifier is bounded and honest; with recording off the source is absent and the slope stays exactly today's. |
+| 9 | The weekly rate divides the lookback's delta by **measured** active time, not by profile-expected duty | Once the 24/7 timer feeds the pace ring, the 6h endpoint slope is a wall rate — idle hours inside the lookback dilute it, and the walk would then discount idle a *second* time via the weights. Dividing by profile-*expected* duty instead would explode on unusual hours (a worked weekend meets a near-zero expected weight). Measured active time from the recorder's live classifier is bounded and honest; with recording off the source is absent and the slope stays exactly today's. |
 
 ### Traps — every one of these was gotten wrong once
 
@@ -91,13 +91,15 @@ fresh reader will independently reach for the wrong version.
    days. A cell gathers at most 60 minutes per week, so any UI copy must say weeks —
    "300 min observed" on a one-hour cell reads as a contradiction.
 10. **Turning the timer on changes what the weekly slope measures.** Today the ring
-   only sees samples while a browser polls, so the 6h endpoint slope is close to an
-   active rate by accident of presence. A 24/7 timer feeds the ring through the
-   night; the same formula then returns an idle-diluted wall rate, and the walk
-   multiplies idle out a *second* time via the weights — a double discount that
-   shows up as a systematically optimistic forecast, worst in the first hours after
-   you resume work. The weekly rate must be divided by measured active time
-   (Task 5), and neither ring may ever be seeded with the other window's samples.
+   only sees samples while a browser polls — no browser, no samples — so the 6h
+   endpoint slope is close to an active rate purely by that accident of presence.
+   A 24/7 timer feeds the ring through the night; the same formula then returns an
+   idle-diluted wall rate, and the walk multiplies idle out a *second* time via the
+   weights — a double discount that shows up as a systematically optimistic
+   forecast, worst in the first hours after you resume work. The weekly rate must
+   be the lookback's utilization delta over *measured* active time (Task 5), and
+   neither ring may ever be seeded with the other window's samples — the two
+   windows' utilization are different series.
 
 ### What cannot be verified in this branch
 
@@ -1200,7 +1202,7 @@ git commit -m "feat(usage): persist usage samples and the learned profile"
   - `usage-history.ts` gains `function observedActiveMs(sinceMs: number, untilMs: number): number | null` over a RAM ring of classified intervals (see Step 4).
   - `server/index.ts` exports nothing new; it starts the interval.
 
-**How the pieces meet.** For the `sevenDay` window, `recordAndPace` first computes the endpoint slope as today, then — when an active-time source is set and returns a measurement — replaces it with the **active rate**: the lookback's utilization delta divided by the active hours the recorder actually observed inside that same span. This is trap 10: once the timer feeds the ring 24/7, the raw slope is idle-diluted, and the walk would discount idle a second time via the weights. A `null` from the source (recording off, or the classifier ring does not yet cover the whole span) keeps the raw slope — today's behaviour, exactly. A measured `0` (or near-zero) active time against a positive delta means the rise cannot be attributed — a recording gap — so rate and projection both go null rather than inventing a number. It then calls `walkForward` twice — once with the current profile and once with `flatProfile(1)` — and attaches `projectedExhaustAt` (profile walk), `pessimisticExhaustAt` (flat walk), `dutyCycle`, and `forecastConfidence`. For `fiveHour` nothing changes at all: its 30-minute lookback is close to all-active by construction, duty cycle inside five hours is ~1 (spec decision 3), and its `projectedExhaustAt` stays the closed-form one.
+**How the pieces meet.** For the `sevenDay` window, `recordAndPace` first computes the endpoint slope as today, then — when an active-time source is set and returns a measurement — replaces it with the **active rate**: the lookback's utilization delta divided by the active hours the recorder actually observed inside that same span. This is trap 10: once the timer feeds the ring 24/7, the raw slope is idle-diluted, and the walk would discount idle a second time via the weights. A `null` from the source (recording off, or the classifier ring does not yet cover the whole span) keeps the raw slope — today's behaviour, exactly. A measured `0` (or near-zero) active time against a positive delta means the rise cannot be attributed — a recording gap — so rate and projection both go null rather than inventing a number. It then calls `walkForward` twice — once with the current profile and once with `flatProfile(1)` — and attaches `projectedExhaustAt` (profile walk), `pessimisticExhaustAt` (flat walk), `dutyCycle`, and `forecastConfidence`. For `fiveHour` nothing changes at all: its 30-minute lookback bounds any idle dilution to the first half-hour after resuming work (after which the lookback is all-active and self-heals), duty cycle inside five hours is ~1 (spec decision 3), and its `projectedExhaustAt` stays the closed-form one.
 
 **When confidence is `none`, `projectedExhaustAt` must equal the flat walk.** That is the regression floor, and Step 1 tests it.
 
