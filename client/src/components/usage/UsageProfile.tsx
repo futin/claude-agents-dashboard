@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ForecastConfidence, UsageProfileCell } from '../../../../shared/types';
 import { useUsageProfile } from '../../hooks/useUsageProfile';
+import { fmtObserved, nextWeekStartMs, profileProgress, TRUST_FLOOR_MIN } from '../../lib/usageProfile';
 
 /**
  * The duty-cycle profile inspector — a 24×7 hour-of-week heatmap over the
@@ -92,13 +93,13 @@ function cellTitle(cell: UsageProfileCell, day: number, hour: number): string {
   const weeks = cell.observedMin / 60;
   if (cell.weight == null) {
     return (
-      `${when}\nno evidence yet\n${Math.round(cell.observedMin)} of 60 min needed\n` +
+      `${when}\nno evidence yet\n${Math.round(cell.observedMin)} of ${TRUST_FLOOR_MIN} min needed\n` +
       'falls back to the weekly mean'
     );
   }
   const evidence = weeks >= 2
     ? `${Math.round(weeks)} weeks of evidence`
-    : `${Math.round(cell.observedMin)} of 60 min — under one week`;
+    : `${Math.round(cell.observedMin)} of ${TRUST_FLOOR_MIN} min — under one week`;
   const stale = cell.staleWeeks > 8 ? `\nlast seen ${cell.staleWeeks} weeks ago` : '';
   const level = cell.weight <= 0.02
     ? 'never active — measured, not missing'
@@ -110,6 +111,42 @@ const fmtHour = (iso: string) => {
   const d = new Date(iso);
   return `${DAYS[d.getDay()]} ${String(d.getHours()).padStart(2, '0')}:00`;
 };
+
+/**
+ * What the profile has so far, and which gate it is waiting on.
+ *
+ * Without this the inspector's first week is 168 identical hatched cells and no
+ * sign that recording works — which reads as broken rather than as early. The
+ * grid itself stays honest (evidence is texture, never a colour step); this says
+ * in words what the texture cannot.
+ */
+function RecordingStatus({ cells, recording }: { cells: UsageProfileCell[]; recording: boolean }) {
+  const { touched, totalMin, atFloor, trusted } = profileProgress(cells);
+  if (!recording && touched === 0) return null;   // the `.up-off` block says it all
+
+  const monday = new Date(nextWeekStartMs(Date.now()));
+  const when = monday.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+
+  return (
+    <div className="up-status">
+      <span>{touched} of 168 hours observed</span>
+      <span>{fmtObserved(totalMin)} recorded</span>
+      {trusted > 0 ? (
+        <span>{trusted} carrying a weight</span>
+      ) : atFloor > 0 ? (
+        <span className="up-status-wait">
+          {atFloor} {atFloor === 1 ? 'hour has' : 'hours have'} enough evidence — weights appear
+          when the week rolls over on {when}
+        </span>
+      ) : (
+        <span className="up-status-wait">
+          no weights yet — an hour needs {TRUST_FLOOR_MIN} min of evidence, and the first fold
+          happens when the week rolls over on {when}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export function UsageProfile() {
   const { profile, loading, error } = useUsageProfile();
@@ -225,6 +262,8 @@ export function UsageProfile() {
           forecast improves.
         </div>
       )}
+
+      <RecordingStatus cells={cells} recording={recording} />
 
       {showTable ? (
         <div className="up-tablewrap">

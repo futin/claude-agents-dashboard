@@ -834,6 +834,11 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    cells → 992px tall (measured off the mockup, not eyeballed); 250px gives ~28px
    cells and ~730px, which keeps the calendar reading while bringing the week
    within about a screen. */
+/* The "is this thing on?" line. Without it the first week of the grid is 168
+   identical hatched cells and no evidence that recording works. */
+.up-status{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:10px;
+  font-family:var(--mono);font-size:10px;line-height:1.5;color:var(--text3)}
+.up-status-wait{color:var(--text2)}
 .up-grid{display:grid;gap:2px;margin-top:12px;max-width:250px}
 .up-axis{font-family:var(--mono);font-size:11px;line-height:1;color:var(--text3);text-align:center;align-self:center}
 .up-axis.left{text-align:right;padding-right:6px}
