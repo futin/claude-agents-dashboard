@@ -828,13 +828,15 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .up-note{margin:8px 0 0;padding-left:12px;max-width:70ch;font-size:12px;line-height:1.5;
   color:var(--text3);border-left:2px solid var(--border2)}
 
-.up-grid{display:grid;gap:2px;margin-top:12px;max-width:420px}
-.up-axis{font-family:var(--mono);font-size:9px;color:var(--text3);text-align:center;align-self:center}
-.up-axis.left{text-align:right;padding-right:4px}
-/* Not square: 24 rows of square cells makes a 1048px-tall grid (measured). A
-   fixed 14px row keeps the whole week on one screen, which is the only way the
-   weekend gap and the working-hours block read as shapes at all. */
-.up-cell{border:1px solid var(--hairline);border-radius:2px;height:14px}
+/* Square cells, as the mockup has them (variant C: 320px wide → 38.84px cells,
+   992px tall — measured off the mockup itself, not eyeballed). `max-width` is
+   the single knob: the cells are `1fr` and square, so the grid's width sets the
+   cell size and therefore the total height. */
+.up-grid{display:grid;gap:2px;margin-top:12px;max-width:320px}
+.up-axis{font-family:var(--mono);font-size:11px;line-height:1;color:var(--text3);text-align:center;align-self:center}
+.up-axis.left{text-align:right;padding-right:6px}
+.up-cell{position:relative;border:1px solid var(--hairline);border-radius:2px;aspect-ratio:1;min-width:0}
+.up-cell:hover{outline:2px solid var(--accent);outline-offset:0;z-index:2}
 .up-cell.q1{background:color-mix(in oklab,var(--cyan) 20%,var(--strip))}
 .up-cell.q2{background:color-mix(in oklab,var(--cyan) 40%,var(--strip))}
 .up-cell.q3{background:color-mix(in oklab,var(--cyan) 60%,var(--strip))}
@@ -846,8 +848,8 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .up-legend{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:12px}
 .up-legend small{font-family:var(--mono);font-size:10px;color:var(--text3)}
 .up-swatches{display:flex;gap:2px}
-.up-swatches .up-cell{width:14px}
-.up-legend-none{width:14px;margin-left:10px}
+.up-swatches .up-cell{width:14px;height:14px;aspect-ratio:auto}
+.up-legend-none{width:14px;height:14px;aspect-ratio:auto;margin-left:10px}
 .up-legend .up-conf{width:100%;color:var(--text2)}
 
 .up-walk{margin-top:16px}
