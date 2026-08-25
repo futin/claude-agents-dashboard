@@ -10,7 +10,7 @@ created: 2026-08-25
 
 **Goal:** Make the weekly usage-limit projection account for the hours you actually work, instead of extrapolating a working-hours burn rate across nights and weekends.
 
-**Architecture:** Split the single `ratePerHour` into an *active rate* (%/active-hour, short lookback, unchanged) and a *duty cycle* (what fraction of each calendar hour you typically work). Projection becomes a forward walk that adds `activeRate × weight(hourOfWeek)` hour by hour until the weekly reset. The 168 weights are learned from persisted 5-hour-window samples and applied to the weekly projection. A pure seam separates the walk (`usage-forecast.ts`, profile-agnostic) from the profile's source (`usage-history.ts`), so every calendar edge case is tested against synthetic profiles with no filesystem and no clock.
+**Architecture:** Split the single `ratePerHour` into an *active rate* (%/active-hour — the short-lookback slope divided by *measured* active time; once the recording timer feeds the ring around the clock, the raw slope alone stops being an active rate) and a *duty cycle* (what fraction of each calendar hour you typically work). Projection becomes a forward walk that adds `activeRate × weight(hourOfWeek)` hour by hour until the weekly reset. The 168 weights are learned from persisted 5-hour-window samples and applied to the weekly projection. A pure seam separates the walk (`usage-forecast.ts`, profile-agnostic) from the profile's source (`usage-history.ts`), so every calendar edge case is tested against synthetic profiles with no filesystem and no clock.
 
 **Tech Stack:** TypeScript, ESM, Node built-ins only on the server (zero runtime deps), `tsx` (no compile step), React on the client, `node:assert` tests via `test/run-all.ts`.
 
@@ -47,6 +47,7 @@ in the dashboard's Guides tab. Variant **C** was chosen — see Task 7.
 | 6 | Ambiguous gaps are discarded | Spreading a rise across its hours by existing weights trains the profile on its own output, entrenching whatever shape it started with. |
 | 7 | No SQLite | `node:sqlite` works here (Node v22.23.1) and is a built-in, so it wouldn't break the zero-dep rule — but it emits `ExperimentalWarning` on every start, landed in 22.5.0 against an `engines: >=18` floor, and buys nothing against a 6.6 KB aggregate plus a tail read. **What would flip it:** arbitrary year-range `GROUP BY`, or joining usage against per-project token stats (idea-4). The JSONL is replayable, so that migration would be an import, not a rewrite. |
 | 8 | Heatmap ramp derived via `color-mix`, not hand-picked | Five themes × five steps is 25 hex values nobody can validate. `color-mix(in oklab, var(--cyan) N%, var(--strip))` is monotonic by construction — verified across midnight/graphite/amber/paper at steps 0.098–0.133 — and cannot violate the no-hardcoded-color rule. |
+| 9 | The weekly rate is un-diluted by **measured** active time, not by the learned profile | Once the 24/7 timer feeds the pace ring, the 6h endpoint slope is a wall rate — idle hours inside the lookback dilute it, and the walk would then discount idle a *second* time via the weights. Dividing by profile-*expected* duty instead would explode on unusual hours (a worked weekend meets a near-zero expected weight). Measured active time from the recorder's live classifier is bounded and honest; with recording off the source is absent and the slope stays exactly today's. |
 
 ### Traps — every one of these was gotten wrong once
 
@@ -89,6 +90,14 @@ fresh reader will independently reach for the wrong version.
    Monday 09:00 and Tuesday 09:00 are different cells; nothing is averaged across
    days. A cell gathers at most 60 minutes per week, so any UI copy must say weeks —
    "300 min observed" on a one-hour cell reads as a contradiction.
+10. **Turning the timer on changes what the weekly slope measures.** Today the ring
+   only sees samples while a browser polls, so the 6h endpoint slope is close to an
+   active rate by accident of presence. A 24/7 timer feeds the ring through the
+   night; the same formula then returns an idle-diluted wall rate, and the walk
+   multiplies idle out a *second* time via the weights — a double discount that
+   shows up as a systematically optimistic forecast, worst in the first hours after
+   you resume work. The weekly rate must be divided by measured active time
+   (Task 5), and neither ring may ever be seeded with the other window's samples.
 
 ### What cannot be verified in this branch
 
@@ -113,14 +122,14 @@ prediction is correct; claim the mechanism works. This belongs in the PR body ve
 ## Global Constraints
 
 - **Server is zero-runtime-dependency.** Node built-ins only. Do not add anything to `server/`'s imports that isn't `node:*` or a local file.
-- **No `node:sqlite`.** Decision 4 in the spec. Storage is JSONL + a small JSON file. `package.json` declares `engines: node >=18`; `node:sqlite` landed in 22.5.0 and must not raise that floor.
+- **No `node:sqlite`.** Decision 7 in the table above (the spec argues it in its *Storage: no database* section — the spec's numbered list stops at 6). Storage is JSONL + a small JSON file. `package.json` declares `engines: node >=18`; `node:sqlite` landed in 22.5.0 and must not raise that floor.
 - **ESM everywhere.** Server imports use a `.js` suffix even for `.ts` files. Cross-boundary imports use `import type`.
 - **`shared/types.ts` is edited first** for any field that crosses the FE/BE boundary, and *only* for fields that actually cross it.
 - **All new `RateLimit` fields are optional.** Every consumer must survive their absence — the existing invariant.
 - **Fail open, always.** No new code path may throw into `scanSessions` or the `/api/sessions` handler. Unreadable/absent/malformed files fall back to defaults.
 - **Never hardcode a color or shadow** in `client/src/styles.css` below the theme-token block. The five themes are pure `[data-theme]` token overrides.
 - **Recording is opt-in and defaults to off.** Spec decision 5.
-- **Regression floor:** with recording off, or on with an empty profile, output must equal today's behaviour exactly. This gets its own test (Task 2, Step 1).
+- **Regression floor:** with recording **off**, output must equal today's behaviour exactly — no active-time source, flat walk, same numbers (Task 2 Step 1; Task 5 Step 1). With recording **on**, the trailing weekly rate is deliberately corrected by measured active time, so it is *not* identical to today; the floor there is that an empty profile keeps `projectedExhaustAt === pessimisticExhaustAt` (both flat walks over the same rate).
 - **Tests are deterministic.** No `Date.now()`, no ambient timezone. Timezone enters only as an injected `offsetMinutes` parameter; tests pass `0`.
 
 ---
@@ -132,7 +141,7 @@ prediction is correct; claim the mechanism works. This belongs in the PR body ve
 | `shared/types.ts` | *Modify.* Three optional `RateLimit` fields + `ForecastConfidence`. Nothing else — the 168-weight profile never crosses the boundary. |
 | `server/lib/usage-forecast.ts` | *Create.* Pure. `hourOfWeek`, `flatProfile`, `weightAt`, `walkForward`, `confidenceOf`. Knows nothing about disk. |
 | `server/lib/usage-history.ts` | *Create.* Pure core (interval classification, bucket accounting, EWMA fold, profile derivation) plus a thin I/O shell (append, tail-read, rotate, atomic profile write). |
-| `server/lib/usage-pace.ts` | *Modify.* Hands its active rate to the forecast for the weekly window; gains ring rehydration. |
+| `server/lib/usage-pace.ts` | *Modify.* Hands its active rate to the forecast for the weekly window; the weekly rate divides by measured active time (`setActiveTimeSource`); the **5h ring only** gains boot rehydration. |
 | `server/lib/settings.ts` | *Modify.* One new persisted boolean, `recordUsageHistory`. |
 | `server/index.ts` | *Modify.* The opt-in sampling interval, and the `/api/usage/profile` route. |
 | `client/src/lib/pace.ts` | *Modify.* Pessimistic tick + confidence; duty-cycle-corrected `%/day` text. |
@@ -148,6 +157,8 @@ prediction is correct; claim the mechanism works. This belongs in the PR body ve
 | `test/run-all.ts` | *Modify.* Register all three new suites. |
 
 **One deliberate divergence from the spec's build order.** The spec says the `DutyProfile` shape goes in `shared/types.ts`. It should not: the profile never crosses the FE/BE boundary — only the derived `dutyCycle` number and `forecastConfidence` string do. Per the project convention that `shared/types.ts` is the API contract and nothing else, `DutyProfile` lives in `server/lib/usage-forecast.ts`.
+
+**Two further deliberate divergences from the spec.** (1) The spec's *Restart behaviour* section says the raw log lets the server "rehydrate the ring". Only the **5h** ring is rehydrated: the log records the 5h sensor series (Task 5), and the two windows' utilization are different series — seeding the weekly ring with 5h samples would poison its slope for up to the 6h lookback. The weekly pace simply returns after ~30 minutes of live sampling, as it does today. (2) The spec asserts `ratePerHour`'s meaning "sharpens to %/active-hour" but changes nothing about its measurement. That holds today only by accident — sampling is presence-gated, so the ring rarely contains idle stretches. Once the timer feeds the ring 24/7 the slope dilutes, so Task 5 makes the semantic real: the weekly rate divides the lookback's utilization delta by **measured active time** from the recorder's classifier (decision 9, trap 10).
 
 ---
 
@@ -216,32 +227,40 @@ Append inside `run()` in `test/settings.test.ts`, following the existing `test(.
 
 ```ts
   if (test('recordUsageHistory: defaults off', () => {
-    resetSettings();
-    assert.strictEqual(getSettings().recordUsageHistory, false);
+    inTmpCwd(() => {
+      resetSettings();
+      assert.strictEqual(getSettings().recordUsageHistory, false);
+    });
   })) p++; else f++;
 
   if (test('recordUsageHistory: accepts a boolean patch', () => {
-    resetSettings();
-    const s = setSettings({ recordUsageHistory: true });
-    assert.strictEqual(s?.recordUsageHistory, true);
+    inTmpCwd(() => {
+      resetSettings();
+      const s = setSettings({ recordUsageHistory: true });
+      assert.strictEqual(s?.recordUsageHistory, true);
+    });
   })) p++; else f++;
 
   if (test('recordUsageHistory: a non-boolean rejects the whole patch', () => {
-    resetSettings();
-    assert.strictEqual(setSettings({ recordUsageHistory: 'yes' }), null);
+    inTmpCwd(() => {
+      resetSettings();
+      assert.strictEqual(setSettings({ recordUsageHistory: 'yes' }), null);
+    });
   })) p++; else f++;
 
   if (test('recordUsageHistory: rejecting leaves the stored value untouched', () => {
-    resetSettings();
-    setSettings({ recordUsageHistory: true });
-    setSettings({ recordUsageHistory: 3 });
-    assert.strictEqual(getSettings().recordUsageHistory, true);
+    inTmpCwd(() => {
+      resetSettings();
+      setSettings({ recordUsageHistory: true });
+      setSettings({ recordUsageHistory: 3 });
+      assert.strictEqual(getSettings().recordUsageHistory, true);
+    });
   })) p++; else f++;
 ```
 
 The last case is the one that matters: `setSettings` rejects a whole patch when any present key is unusable, and that promise must hold for the new key too.
 
-Note this test writes `.dashboard-settings.json` into the process cwd. Run it from the repo root, and be aware the file is gitignored.
+Every case wraps its body in the file's existing `inTmpCwd` helper, like every other case in that suite. The settings file is resolved from `process.cwd()`, so an unwrapped case run from the repo root would overwrite the developer's **real** `.dashboard-settings.json` — notify policy, idle threshold, all of it — silently, since the file is gitignored.
 
 - [ ] **Step 4: Run the test to verify it fails**
 
@@ -308,7 +327,8 @@ git commit -m "feat(usage): add forecast contract fields and the recording opt-i
 - Consumes: `ForecastConfidence` from `shared/types.ts` (Task 1).
 - Produces:
   - `interface DutyProfile { weights: (number | null)[]; globalMean: number; trustedCount: number }`
-  - `interface ForecastResult { exhaustAtMs: number | null; dutyCycle: number }`
+  - `interface ForecastStepMs { tMs: number; gain: number }` — one walked slice; Task 7 serves these as the inspector's walk strip
+  - `interface ForecastResult { exhaustAtMs: number | null; dutyCycle: number; steps: ForecastStepMs[] }`
   - `interface WalkOpts { nowMs: number; utilization: number; activeRatePerHour: number; profile: DutyProfile; resetsAtMs: number; offsetMinutes: number }`
   - `function hourOfWeek(ms: number, offsetMinutes: number): number`
   - `function flatProfile(weight: number): DutyProfile`
@@ -374,9 +394,12 @@ export function run(): number {
     assert.strictEqual(hourOfWeek(FRI_18, 0), 138);
   })) p++; else f++;
 
-  if (test('hourOfWeek: a positive offset shifts the index, and it wraps at 168', () => {
+  if (test('hourOfWeek: offsets shift the index and wrap at both week edges', () => {
     // 23:30 UTC Saturday + 120min = 01:30 Sunday local → index 1.
     assert.strictEqual(hourOfWeek(Date.parse('2026-08-29T23:30:00Z'), 120), 1);
+    // 02:00 UTC Sunday − 300min = 21:00 Saturday local → index 165. A naive
+    // modulo goes negative here; this pins the negative-offset wrap.
+    assert.strictEqual(hourOfWeek(Date.parse('2026-08-30T02:00:00Z'), -300), 165);
   })) p++; else f++;
 
   if (test('REGRESSION FLOOR: a flat 1.0 profile reproduces the old closed form', () => {
@@ -466,6 +489,22 @@ export function run(): number {
     assert.ok(Math.abs(r.dutyCycle - 1 / 6) < 1e-9, 'expected 1/6, got ' + r.dutyCycle);
   })) p++; else f++;
 
+  if (test('steps: one per slice, gains match the profile, full window even past the crossing', () => {
+    const r = walkForward({
+      nowMs: FRI_18, utilization: 60, activeRatePerHour: 5,
+      profile: officeHours(), resetsAtMs: WED_00, offsetMinutes: 0
+    });
+    // Fri 18:00 → Wed 00:00 on exact hour boundaries: 6 + 24×4 = 102 slices.
+    assert.strictEqual(r.steps.length, 102);
+    assert.strictEqual(r.steps[0].tMs, FRI_18);
+    assert.strictEqual(r.steps[0].gain, 5);  // Fri 18–19 is in-profile
+    assert.strictEqual(r.steps[1].gain, 0);  // Fri 19–20 is not
+    // Steps keep going past the Monday-16:00 crossing: the strip and dutyCycle
+    // both want the whole remaining window. 21 active hours × 5 = 105.
+    const total = r.steps.reduce((a, s) => a + s.gain, 0);
+    assert.ok(Math.abs(total - 105) < 1e-9, 'expected 105, got ' + total);
+  })) p++; else f++;
+
   if (test('weightAt falls back to globalMean for an untrusted bucket', () => {
     const weights: (number | null)[] = new Array(HOURS_PER_WEEK).fill(null);
     weights[33] = 0.9;
@@ -507,7 +546,8 @@ Create `server/lib/usage-forecast.ts`. Write it yourself from the interface bloc
 - `flatProfile(w)` returns all 168 weights set to `w`, `globalMean: w`, `trustedCount: HOURS_PER_WEEK`.
 - `weightAt(profile, hw)` returns the bucket weight, or `profile.globalMean` when the bucket is `null` or out of range.
 - `walkForward` walks local-hour slices from `nowMs` to `resetsAtMs`, accumulating `activeRatePerHour × weightAt(...) × sliceHours`, returning the interpolated crossing time (rounded to the nearest whole millisecond) or `null`. It also returns `dutyCycle`, the time-weighted mean weight across the whole remaining window — computed over the full window even when the walk exits early, because the client uses it to render a rate, not a projection.
-- Edge cases, all asserted above: `resetsAtMs <= nowMs` → `{ exhaustAtMs: null, dutyCycle: 0 }`; `utilization >= 100` → `exhaustAtMs: nowMs`; `activeRatePerHour <= 0` → `null`; a zero-weight slice contributes nothing and cannot produce a crossing.
+- `steps`: one `{ tMs, gain }` per slice, partial first and last slices included, `gain = activeRatePerHour × weightAt(...) × sliceHours`. Steps cover the **full** remaining window even after the crossing — the inspector's walk strip and `dutyCycle` both want the whole window, and this is the single walk implementation Task 7 reuses. A span of up to 168h can slice into **169** entries (partial + 167 full + partial); nothing may assume 168.
+- Edge cases, all asserted above: `resetsAtMs <= nowMs` → `{ exhaustAtMs: null, dutyCycle: 0, steps: [] }`; `utilization >= 100` → `exhaustAtMs: nowMs`; `activeRatePerHour <= 0` → `exhaustAtMs: null` (steps still cover the window, gains all 0); a zero-weight slice contributes nothing and cannot produce a crossing.
 - `confidenceOf`: `trustedCount === 0` → `'none'`; `< TRUSTED_OK` → `'thin'`; else `'ok'`. Define `const TRUSTED_OK = 120` with a comment: ~120 of 168 buckets is roughly two to three weeks of ordinary use, the point at which the profile's shape stops moving much.
 - `localOffsetMinutes(ms)` returns `-new Date(ms).getTimezoneOffset()`. This is the only impure function in the module; keep it a one-liner so the rest stays trivially testable.
 
@@ -516,7 +556,7 @@ Include a module docstring in the house style: what it does, why the timezone is
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `pnpm test && pnpm typecheck`
-Expected: all 14 new cases PASS, existing suites unchanged, typecheck clean.
+Expected: all 15 new cases PASS, existing suites unchanged, typecheck clean.
 
 - [ ] **Step 6: Commit**
 
@@ -586,7 +626,7 @@ leaving a stale seed at full strength. Fold, then decay.
 it at the normal half-life. Same principle as the interval table: absence of data is
 not evidence of absence, but observed quiet is.
 
-**Interval-spanning.** An interval can cross hour boundaries, so `accumulate` splits it at local hour boundaries and credits each hour-of-week bucket its own share of the minutes. An overnight idle interval therefore teaches eight buckets at once.
+**Interval-spanning.** An interval can cross hour boundaries, so `accumulate` splits it at local hour boundaries and credits each hour-of-week bucket its own share of the minutes. An overnight idle interval therefore teaches eight buckets at once. When the split crosses the ISO-week boundary (Sunday→Monday local), each hour-slice uses **its own** week key for stamping and folding — one key per interval would misfile the Sunday side's minutes into the new week. (Deliberate mismatch to keep straight: `hourOfWeek` starts its week on Sunday to match `getUTCDay`, while ISO weeks fold on Monday. Bucket indexing and fold grouping are independent axes.)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -686,6 +726,16 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  if (test('accumulate: a week-boundary interval stamps each side with its own week', () => {
+    // Sun 23:30 → Mon 00:30 local. Sunday is day 0 → bucket 23; Monday → bucket 24.
+    // One week key per interval would file Sunday's minutes into the new week.
+    const SUN_2330 = Date.parse('2026-08-30T23:30:00Z');
+    const st = accumulate(emptyState(), s(SUN_2330, 40), s(SUN_2330 + H, 40), 0);
+    assert.strictEqual(st.buckets[23].observedMin, 30);
+    assert.strictEqual(st.buckets[24].observedMin, 30);
+    assert.notStrictEqual(st.buckets[23].weekStamp, st.buckets[24].weekStamp);
+  })) p++; else f++;
+
   if (test('MUTATION GUARD: an ambiguous interval leaves every counter untouched', () => {
     const st = accumulate(emptyState(), s(MON_09, 40), s(MON_09 + 4 * H, 55), 0);
     const touched = st.buckets.filter((b) => b.observedMin !== 0 || b.activeMin !== 0);
@@ -708,6 +758,19 @@ export function run(): number {
     const prevWeek = Date.parse('2026-08-26T12:00:00Z');
     assert.strictEqual(isoWeekKey(mon, 0), isoWeekKey(tue, 0));
     assert.notStrictEqual(isoWeekKey(mon, 0), isoWeekKey(prevWeek, 0));
+  })) p++; else f++;
+
+  if (test('isoWeekKey: the year-end week is one week (2026-W53 reaches into January)', () => {
+    // 2026-12-28 is a Monday, 2027-01-01 a Friday — the same ISO week, the exact
+    // boundary naive day-of-year arithmetic breaks. 2027-01-04 starts W01.
+    assert.strictEqual(
+      isoWeekKey(Date.parse('2026-12-28T12:00:00Z'), 0),
+      isoWeekKey(Date.parse('2027-01-01T12:00:00Z'), 0)
+    );
+    assert.notStrictEqual(
+      isoWeekKey(Date.parse('2027-01-01T12:00:00Z'), 0),
+      isoWeekKey(Date.parse('2027-01-04T12:00:00Z'), 0)
+    );
   })) p++; else f++;
 
   if (test('week rollover: the first fold seeds the weight with the raw ratio', () => {
@@ -772,7 +835,8 @@ export function run(): number {
   if (test('MUTATION GUARD: unobserved weeks do not decay (downtime is not idleness)', () => {
     // Week 1 active, nothing recorded anywhere for three weeks, then active again.
     // k must be 0 both times, so two ratio-1.0 folds leave the weight at 1.0.
-    // Delete the "only observed weeks count" rule and this drops to 0.49.
+    // Delete the "only observed weeks count" rule and this lands at 0.643 — the
+    // seed decays to 0.49 (1 × 0.7²) before the week-4 ratio-1.0 fold — not 1.
     let st = activeMinutes(emptyState(), MON_09, 10);
     const w4 = MON_09 + 3 * 7 * 24 * H;
     st = activeMinutes(st, w4, 10);
@@ -869,7 +933,7 @@ Write the module docstring in the house style: why duration decides ambiguity ra
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `pnpm test && pnpm typecheck`
-Expected: all 21 new cases PASS.
+Expected: all 26 new cases PASS. (Count them — an earlier draft of this plan said 21 for a 24-case block; per the `compute-before-asserting-a-number` lesson, trust the block, not the prose.)
 
 - [ ] **Step 6: Prove the mutation guards actually guard**
 
@@ -905,7 +969,7 @@ git commit -m "feat(usage): classify sample intervals and learn hour-of-week buc
   - `function shouldWrite(prev: UsageSample | null, next: UsageSample, heartbeatMs?: number): boolean`
   - `function appendSample(sample: UsageSample, dir?: string): void`
   - `function readRecentSamples(dir?: string, maxBytes?: number): UsageSample[]`
-  - `function rotateIfNeeded(dir?: string): void`
+  - `function rotateIfNeeded(dir?: string, maxBytes?: number): void`
   - `function loadProfileState(dir?: string): ProfileState`
   - `function saveProfileState(state: ProfileState, dir?: string): boolean`
   - `const HEARTBEAT_MS = 900_000`, `const MAX_HISTORY_BYTES = 33_554_432`, `const TAIL_BYTES = 262_144`
@@ -1124,17 +1188,19 @@ git commit -m "feat(usage): persist usage samples and the learned profile"
 - Modify: `server/lib/usage-pace.ts`
 - Modify: `server/lib/usage.ts` (the `refreshNow` success path, ~line 221-250)
 - Modify: `server/index.ts`
-- Test: `test/usage-pace.test.ts` (extend)
+- Test: `test/usage-pace.test.ts` (extend); `test/usage-history.test.ts` (extend — the classifier-ring cases)
 
 **Interfaces:**
 - Consumes: everything from Tasks 1–4.
 - Produces:
   - `usage-pace.ts` exports `function setForecastProfile(p: DutyProfile | null): void` and keeps `recordAndPace(win, rl, now?)` with its existing signature.
+  - `usage-pace.ts` exports `function setActiveTimeSource(src: ((sinceMs: number, untilMs: number) => number | null) | null): void` — how the recorder's measured active time reaches the weekly rate. Injected in this direction (like `setForecastProfile`) so `usage-pace` never imports `usage-history`; the reverse import already exists, and both would be a cycle.
   - `usage-pace.ts` exports `function seedSamples(win: PaceWindow, samples: PaceSample[]): void` for rehydration.
-  - `usage-history.ts` gains `function recordTick(sample: UsageSample): void` — the single entry point the timer and the refresh path both call.
+  - `usage-history.ts` gains `function recordTick(sample: UsageSample, dir?: string): void` — the single entry point the timer and the refresh path both call (`dir` exists so tests can point it at a tmpdir; production omits it).
+  - `usage-history.ts` gains `function observedActiveMs(sinceMs: number, untilMs: number): number | null` over a RAM ring of classified intervals (see Step 4).
   - `server/index.ts` exports nothing new; it starts the interval.
 
-**How the pieces meet.** `recordAndPace` keeps computing the active rate exactly as it does today. For the `sevenDay` window only, it additionally calls `walkForward` twice — once with the current profile and once with `flatProfile(1)` — and attaches `projectedExhaustAt` (profile walk), `pessimisticExhaustAt` (flat walk), `dutyCycle`, and `forecastConfidence`. For `fiveHour` it attaches nothing new: duty cycle inside a five-hour window is ~1 by construction (spec decision 3), and its existing `projectedExhaustAt` stays the closed-form one.
+**How the pieces meet.** For the `sevenDay` window, `recordAndPace` first computes the endpoint slope as today, then — when an active-time source is set and returns a measurement — replaces it with the **active rate**: the lookback's utilization delta divided by the active hours the recorder actually observed inside that same span. This is trap 10: once the timer feeds the ring 24/7, the raw slope is idle-diluted, and the walk would discount idle a second time via the weights. A `null` from the source (recording off, or the classifier ring does not yet cover the whole span) keeps the raw slope — today's behaviour, exactly. A measured `0` (or near-zero) active time against a positive delta means the rise cannot be attributed — a recording gap — so rate and projection both go null rather than inventing a number. It then calls `walkForward` twice — once with the current profile and once with `flatProfile(1)` — and attaches `projectedExhaustAt` (profile walk), `pessimisticExhaustAt` (flat walk), `dutyCycle`, and `forecastConfidence`. For `fiveHour` nothing changes at all: its 30-minute lookback is close to all-active by construction, duty cycle inside five hours is ~1 (spec decision 3), and its `projectedExhaustAt` stays the closed-form one.
 
 **When confidence is `none`, `projectedExhaustAt` must equal the flat walk.** That is the regression floor, and Step 1 tests it.
 
@@ -1143,9 +1209,10 @@ git commit -m "feat(usage): persist usage samples and the learned profile"
 Add to `test/usage-pace.test.ts`, following the existing style in that file:
 
 ```ts
-  if (test('REGRESSION FLOOR: with no profile, the weekly projection is the flat one', () => {
+  if (test('REGRESSION FLOOR: no profile, no active-time source → the flat closed form', () => {
     resetPaceStore();
     setForecastProfile(null);
+    setActiveTimeSource(null);
     const resetsAt = new Date(NOW + 48 * H).toISOString();
     recordAndPace('sevenDay', { utilization: 40, resetsAt }, NOW - 60 * 60_000);
     const rl = recordAndPace('sevenDay', { utilization: 45, resetsAt }, NOW);
@@ -1153,8 +1220,30 @@ Add to `test/usage-pace.test.ts`, following the existing style in that file:
     assert.strictEqual(rl.projectedExhaustAt, rl.pessimisticExhaustAt);
   })) p++; else f++;
 
+  if (test('the weekly rate is per ACTIVE hour when the recorder measured the span', () => {
+    resetPaceStore();
+    setForecastProfile(null);
+    setActiveTimeSource(() => 1 * H); // a 3% rise over 6h of wall clock, 1h of it active
+    const resetsAt = new Date(NOW + 48 * H).toISOString();
+    recordAndPace('sevenDay', { utilization: 40, resetsAt }, NOW - 6 * H);
+    const rl = recordAndPace('sevenDay', { utilization: 43, resetsAt }, NOW);
+    assert.strictEqual(rl.ratePerHour, 3); // 3 %/active-hour — not the 0.5 %/h wall slope
+  })) p++; else f++;
+
+  if (test('a rise the recorder saw no active time for yields no projection', () => {
+    resetPaceStore();
+    setForecastProfile(null);
+    setActiveTimeSource(() => 0); // the rise happened across a recording gap
+    const resetsAt = new Date(NOW + 48 * H).toISOString();
+    recordAndPace('sevenDay', { utilization: 40, resetsAt }, NOW - 6 * H);
+    const rl = recordAndPace('sevenDay', { utilization: 43, resetsAt }, NOW);
+    assert.strictEqual(rl.ratePerHour, null);
+    assert.strictEqual(rl.projectedExhaustAt, null);
+  })) p++; else f++;
+
   if (test('a night-heavy profile pushes the weekly projection out past the flat one', () => {
     resetPaceStore();
+    setActiveTimeSource(null);
     // Half the hours idle → the profile walk must reach 100% strictly later.
     setForecastProfile(flatProfile(0.5));
     const resetsAt = new Date(NOW + 120 * H).toISOString();
@@ -1166,12 +1255,14 @@ Add to `test/usage-pace.test.ts`, following the existing style in that file:
       'the duty-cycle projection must be the later of the two');
   })) p++; else f++;
 
-  if (test('the 5h window gains no forecast fields', () => {
+  if (test('the 5h window gains no forecast fields and no rate correction', () => {
     resetPaceStore();
     setForecastProfile(flatProfile(0.5));
+    setActiveTimeSource(() => 1 * H); // must be ignored for fiveHour
     const resetsAt = new Date(NOW + 3 * H).toISOString();
     recordAndPace('fiveHour', { utilization: 20, resetsAt }, NOW - 10 * 60_000);
     const rl = recordAndPace('fiveHour', { utilization: 30, resetsAt }, NOW);
+    assert.strictEqual(rl.ratePerHour, 60); // 10% over 10 min — the plain slope
     assert.strictEqual(rl.dutyCycle, undefined);
     assert.strictEqual(rl.pessimisticExhaustAt, undefined);
   })) p++; else f++;
@@ -1179,6 +1270,7 @@ Add to `test/usage-pace.test.ts`, following the existing style in that file:
   if (test('seedSamples restores enough history to produce a pace immediately', () => {
     resetPaceStore();
     setForecastProfile(null);
+    setActiveTimeSource(null);
     const resetsAt = new Date(NOW + 48 * H).toISOString();
     seedSamples('sevenDay', [
       { t: NOW - 6 * H, utilization: 30 },
@@ -1190,20 +1282,21 @@ Add to `test/usage-pace.test.ts`, following the existing style in that file:
   })) p++; else f++;
 ```
 
-Add the needed imports to that test file: `setForecastProfile`, `seedSamples` from `usage-pace.js`, and `flatProfile` from `usage-forecast.js`.
+Add the needed imports to that test file: `setForecastProfile`, `setActiveTimeSource`, `seedSamples`, `recordAndPace`, `resetPaceStore` from `usage-pace.js`, and `flatProfile` from `usage-forecast.js` — note the existing suite imports the module as `* as pace`, so either add these as named imports alongside it or prefix every call above with `pace.`.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm test`
-Expected: FAIL — `setForecastProfile` and `seedSamples` are not exported.
+Expected: FAIL — `setForecastProfile`, `setActiveTimeSource`, and `seedSamples` are not exported.
 
 - [ ] **Step 3: Wire `usage-pace.ts`**
 
-- Add a module-level `let forecastProfile: DutyProfile | null = null` and `setForecastProfile`.
-- Add `seedSamples(win, samples)`: replaces the ring for that window with the given samples, sorted by `t` and capped at that window's `MAX_SAMPLES`. Used only at boot.
-- Make `MAX_SAMPLES` per-window in the `WINDOWS` config: `fiveHour: 720`, `sevenDay: 2016` (7 days at 5-minute resolution). Replace the module-level constant.
-- In `recordAndPace`, after computing `pace`, for `win === 'sevenDay'` and when `pace` is non-null and `rl.resetsAt` parses, compute both walks and attach the four new fields. Supply `offsetMinutes: localOffsetMinutes(now)` — this is the one place production reads the machine's timezone, which is exactly why `walkForward` takes it as a parameter rather than reading it itself. `projectedExhaustAt` becomes the profile walk's result when `forecastProfile` is non-null, else the flat walk's. `forecastConfidence` is `confidenceOf(forecastProfile)` or `'none'`.
-- Update the `ratePerHour` docstring in `shared/types.ts` to say **percent per active hour**, and note that the weekly window's rate must be multiplied by `dutyCycle` to get a per-wall-hour figure. This is the one silent semantic change in the design — the spec flags it, and Task 6 depends on it being written down.
+- Add a module-level `let forecastProfile: DutyProfile | null = null` and `setForecastProfile`; likewise `let activeTimeSource: ((sinceMs: number, untilMs: number) => number | null) | null = null` and `setActiveTimeSource`.
+- Add `seedSamples(win, samples)`: replaces the ring for that window with the given samples, sorted by `t` and capped at `MAX_SAMPLES`. Used only at boot — and in production only ever for `fiveHour` (Step 5).
+- `MAX_SAMPLES` stays the single module constant it is: 720 at the timer's one-minute cadence is ~12h of ring, which always covers the 6h lookback.
+- In `recordAndPace`, for `win === 'sevenDay'` only, after the endpoint slope: call `activeTimeSource(first.t, now)` over the same recent samples the slope used. `null` (or no source) → keep the slope: recording is off, or the classifier does not cover the span — today's behaviour. Active time `>= 60_000` → `ratePerHour = delta / activeHours`. Below that floor with a positive delta → the rise is unattributable: rate and projection null. Below it with a zero delta → rate 0, as today.
+- Still for `sevenDay`, when the (possibly corrected) rate is positive and `rl.resetsAt` parses, compute both walks and attach the four new fields. Supply `offsetMinutes: localOffsetMinutes(now)` — this is the one place production reads the machine's timezone, which is exactly why `walkForward` takes it as a parameter rather than reading it itself. `projectedExhaustAt` becomes the profile walk's result when `forecastProfile` is non-null, else the flat walk's. `forecastConfidence` is `confidenceOf(forecastProfile)` or `'none'`.
+- Update the `ratePerHour` docstring in `shared/types.ts` to say **percent per active hour**, and note that the weekly window's rate must be multiplied by `dutyCycle` to get a per-wall-hour figure. This is the one silent semantic change in the design — the spec flags it, and Task 6 depends on it being written down. The active-time correction above is what makes the claim true; without it the docstring would document a semantics the number does not have.
 
 - [ ] **Step 4: Wire `usage.ts`**
 
@@ -1211,7 +1304,8 @@ In the success path of `refreshNow()`, after the usage is mapped and before/alon
 
 - Build a `UsageSample` from the **five-hour** window (`{ t: now, utilization, resetsAt }`) — the 5h window is the sensor, per spec decision 3.
 - Note the resolution asymmetry, and do not try to "fix" it. Learning happens **live**, on every one-minute tick, against the in-memory previous sample — so the profile always learns at full sampling resolution. The *log* is sparser (write-on-change plus a heartbeat), which is fine for charts and for rehydrating the pace ring, but means rebuilding a profile from the log alone would be lossy: a flat stretch that ends in a rise gets written as one long rising interval, which classifies as `ambiguous` and is discarded. The profile file is the profile's source of truth; the log is not a replayable substitute for it.
-- Call `recordTick(sample)`, which is the one function that owns the write path: it keeps the last-written sample in memory, consults `shouldWrite`, appends when true, calls `accumulate` against the in-memory `ProfileState` using the previous sample, calls `saveProfileState` at most every `HEARTBEAT_MS`, and calls `rotateIfNeeded` on save. Implement `recordTick` in `usage-history.ts`, not here — `usage.ts` should gain about three lines.
+- Call `recordTick(sample)`, which is the one function that owns the write path: it keeps the last-written sample in memory, consults `shouldWrite`, appends when true, calls `accumulate` against the in-memory `ProfileState` using the previous sample, calls `saveProfileState` at most every `HEARTBEAT_MS`, and calls `rotateIfNeeded` on save. **It passes `offsetMinutes = localOffsetMinutes(sample.t)` to `accumulate`** — the profile must be learned on the same local clock the walk queries; passing `0` (as every test does, on UTC fixtures) would silently shift every bucket by the machine's UTC offset. It also pushes each classified interval `{ endMs, spanMs, kind }` onto a RAM ring pruned to the last 12h — the data behind `observedActiveMs`. Implement `recordTick` in `usage-history.ts`, not here — `usage.ts` should gain about three lines.
+- `observedActiveMs(sinceMs, untilMs)` sums the overlap of `active`-classified intervals with the span, but returns `null` unless the ring's coverage reaches back to `sinceMs` — a half-covered lookback would undercount active time and overstate the rate. Extend `test/usage-history.test.ts`: a ring holding one active minute inside a fully covered span returns `60_000`; the same query against a ring whose oldest entry starts after `sinceMs` returns `null`; an empty ring returns `null`.
 - Push the freshly derived profile into `usage-pace.ts` via `setForecastProfile(deriveProfile(state))`.
 
 Wrap the whole block in try/catch. Recording must never break the usage fetch — the fail-open invariant.
@@ -1231,7 +1325,8 @@ if (config.showUsage) startUsageRecording();
 
 `startUsageRecording` belongs in `usage-history.ts`. It must:
 
-- On call, if `getSettings().recordUsageHistory`, load the profile state and seed both pace rings from `readRecentSamples`, converting each `UsageSample` to a `PaceSample`.
+- On call, if `getSettings().recordUsageHistory`, load the profile state and seed **the `fiveHour` ring only** from `readRecentSamples`, converting each `UsageSample` to a `PaceSample`. Never seed the `sevenDay` ring from this log: it records the 5h sensor series (Step 4), and the two windows' utilization are different series — a weekly ring seeded with 5h numbers either poisons the slope for up to the 6h lookback or gets wiped by the drop check; wrong either way. The weekly pace returns after ~30 minutes of live sampling, exactly as today.
+- Wire `setActiveTimeSource((a, b) => getSettings().recordUsageHistory ? observedActiveMs(a, b) : null)` here, next to the profile push — re-reading the setting per call, so toggling recording off also retires the rate correction without a restart.
 - Start `setInterval(..., 60_000)` and call `.unref()` on the handle so the interval never holds the process open.
 - **Re-read the setting on every tick**, so toggling it in Settings takes effect without a restart. When off, the tick returns immediately without touching the network.
 - Each active tick calls the same non-blocking refresh the poll uses, so there is exactly one code path that fetches from Anthropic.
@@ -1529,7 +1624,8 @@ Required cases:
 - a seeded profile     → the trusted bucket's weight round-trips; a thin bucket reports
                          weight null but its real observedMin
 - staleWeeks           → a bucket whose last fold was 3 observed weeks ago reports 3
-- walk length          → one step per hour from now to resetsAt, never more than 168
+- walk length          → one step per hour-slice from now to resetsAt, never more than
+                         169 (a full 168h span slices into partial + 167 full + partial)
 - no weekly resetsAt   → walk is [] and exhaustAt is null, and the handler does not throw
 ```
 
@@ -1546,8 +1642,10 @@ Expected: FAIL — the handler does not exist.
 - `usage-history.ts` gains `profileSnapshot()` returning the in-memory `ProfileState`
   (loading from disk if not yet loaded). Read-only; no mutation.
 - `server/api.ts` gains the handler. It derives the profile, maps buckets to cells,
-  reads the current weekly `RateLimit` from `getCachedUsageState()`, and recomputes the
-  walk with `walkForward` to emit per-hour gains. Fail open: any error returns
+  reads the current weekly `RateLimit` from `getCachedUsageState()`, re-runs
+  `walkForward`, and maps its `steps` (`{ tMs, gain }`, Task 2) to `ForecastStep[]`
+  (`tMs` → ISO `t`) — the same walk implementation that produced the projection, so
+  the inspector can never drift from what it discloses. Fail open: any error returns
   `recording: false` with 168 null cells rather than a 500.
 - `server/index.ts` routes `GET /api/usage/profile`. Place it with the other `/api/*`
   routes, before the static fallback.
@@ -1642,7 +1740,7 @@ git commit -m "feat(usage): add the duty-cycle profile inspector"
 
 - [ ] **Step 1: Update `docs/subsystems/usage-limits.md`**
 
-Add a section after *Pace + the time strip* covering: the profile inspector and its endpoint (`GET /api/usage/profile`, read-only, never returns raw samples); the active-rate / duty-cycle split; that the 5h window is the sensor and the weekly window the prediction, and why (the weekly reset mechanism is documented in that same file as unproven); the interval classification table from Task 3; that a flat overnight interval is the most valuable input; the two state files and that path resolution walks up for `package.json` rather than using cwd; the opt-in timer and its unattended-polling consequence; and the DST limitation.
+Add a section after *Pace + the time strip* covering: the profile inspector and its endpoint (`GET /api/usage/profile`, read-only, never returns raw samples); the active-rate / duty-cycle split, including the measured-active-time correction that keeps the trailing rate an *active* rate once the timer samples around the clock (trap 10); that the 5h window is the sensor and the weekly window the prediction, and why (the weekly reset mechanism is documented in that same file as unproven); the interval classification table from Task 3; that a flat overnight interval is the most valuable input; the two state files and that path resolution walks up for `package.json` rather than using cwd; the opt-in timer and its unattended-polling consequence; and the DST limitation.
 
 Update the ⚠️ **Unproven** block: the weekly window's length is still assumed to be 7 days, and now a second thing depends on it — the walk's horizon. Say so.
 
