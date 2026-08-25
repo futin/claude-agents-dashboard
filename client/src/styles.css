@@ -839,6 +839,14 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .up-axis.left{text-align:right;padding-right:6px}
 .up-cell{position:relative;border:1px solid var(--hairline);border-radius:2px;aspect-ratio:1;min-width:0}
 .up-cell:hover{outline:2px solid var(--accent);outline-offset:0;z-index:2}
+/* The floating tooltip. `title` was the wrong mechanism: it never fires on
+   touch, and this board is read from a phone. `pre-line` is what lets the
+   content be set with textContent rather than any innerHTML. */
+.up-tip{position:fixed;left:0;top:0;z-index:40;max-width:240px;padding:6px 8px;
+  font-family:var(--mono);font-size:10px;line-height:1.45;white-space:pre-line;
+  color:var(--text);background:var(--surface2);border:1px solid var(--border2);
+  border-radius:3px;box-shadow:0 4px 12px var(--shadow2);
+  opacity:0;pointer-events:none;transition:opacity .12s ease}
 .up-cell.q1{background:color-mix(in oklab,var(--cyan) 20%,var(--strip))}
 .up-cell.q2{background:color-mix(in oklab,var(--cyan) 40%,var(--strip))}
 .up-cell.q3{background:color-mix(in oklab,var(--cyan) 60%,var(--strip))}
@@ -857,6 +865,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .up-walk{margin-top:16px}
 .up-walkbars{display:flex;gap:1px;align-items:flex-end;height:64px;border-bottom:1px solid var(--border)}
 .up-wb{flex:1;min-width:0;background:color-mix(in oklab,var(--cyan) 60%,var(--strip));border-radius:2px 2px 0 0}
+.up-wb:hover,.up-wb:focus-visible{outline:1px solid var(--accent);outline-offset:0}
 .up-wb.idle{background:var(--hairline);height:2px}
 .up-walkmeta{display:flex;justify-content:space-between;gap:8px;margin-top:5px;
   font-family:var(--mono);font-size:10px;color:var(--text3)}

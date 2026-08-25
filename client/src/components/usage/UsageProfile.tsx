@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ForecastConfidence, UsageProfileCell } from '../../../../shared/types';
 import { useUsageProfile } from '../../hooks/useUsageProfile';
@@ -34,6 +34,13 @@ import { useUsageProfile } from '../../hooks/useUsageProfile';
  * - **The table view is required, not a nicety.** The two lowest ramp steps fall
  *   below 3:1 against the card surface, and that obligates a non-colour path to
  *   the same numbers.
+ * - **A real tooltip element, not the `title` attribute.** `title` is drawn by
+ *   browser chrome, needs a dwell, and — the reason that settles it — never
+ *   fires on touch. This dashboard is read from a phone, so `title` put the
+ *   per-cell evidence out of reach on the device that matters most. The floating
+ *   element here answers hover, press (pointerenter fires on touch-down, so
+ *   press-and-hold inspects a cell), and keyboard focus, and it is written with
+ *   `textContent` + `white-space: pre-line` rather than any innerHTML.
  * - **Square cells, at the mockup's proportions, one size down.**
  *   `aspect-ratio: 1` is what makes this read as a calendar rather than a bar
  *   chart lying down. The mockup's variant C is 320px wide → 38.84px cells →
@@ -108,6 +115,78 @@ export function UsageProfile() {
   const { profile, loading, error } = useUsageProfile();
   const [showTable, setShowTable] = useState(false);
 
+  // Written to directly rather than through state: a pointermove that re-rendered
+  // 168 cells to move one box would be absurd.
+  const tipRef = useRef<HTMLDivElement>(null);
+  /** The mark a *keyboard*-shown tooltip belongs to; null when pointer-shown. */
+  const anchorRef = useRef<HTMLElement | null>(null);
+
+  const placeTip = useCallback((x: number, y: number) => {
+    const tip = tipRef.current;
+    if (!tip) return;
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.max(8, Math.min(x + 14, window.innerWidth - w - 8)) + 'px';
+    // Flip above the pointer near the bottom edge — on a phone the finger is
+    // usually low on the screen, and a tooltip off-viewport is no tooltip.
+    tip.style.top = (y + 18 + h > window.innerHeight - 8 ? y - h - 14 : y + 18) + 'px';
+  }, []);
+
+  const showTip = useCallback((text: string, x: number, y: number) => {
+    const tip = tipRef.current;
+    if (!tip) return;
+    tip.textContent = text;   // never innerHTML; the CSS keeps the newlines
+    tip.style.opacity = '1';
+    placeTip(x, y);
+  }, [placeTip]);
+
+  const hideTip = useCallback(() => {
+    const tip = tipRef.current;
+    if (tip) tip.style.opacity = '0';
+  }, []);
+
+  // A shown tooltip is positioned in viewport coordinates, so a scroll would
+  // strand it — the panel holding still while the mark slides out from under it.
+  // `capture` because the scroller is an ancestor, not the window.
+  //
+  // A *keyboard*-shown tooltip follows its mark instead of hiding: tabbing to an
+  // off-screen cell makes the browser scroll it into view, and hiding on that
+  // scroll would blank the tooltip the focus had just opened.
+  useEffect(() => {
+    const onScroll = () => {
+      const anchor = anchorRef.current;
+      if (anchor && document.activeElement === anchor) {
+        const r = anchor.getBoundingClientRect();
+        placeTip(r.right, r.bottom);
+        return;
+      }
+      hideTip();
+    };
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    window.addEventListener('resize', hideTip);
+    return () => {
+      window.removeEventListener('scroll', onScroll, { capture: true } as EventListenerOptions);
+      window.removeEventListener('resize', hideTip);
+    };
+  }, [hideTip, placeTip]);
+
+  /** Hover / press / focus handlers for one hoverable mark. */
+  const tipHandlers = useCallback((text: string) => ({
+    onPointerEnter: (e: React.PointerEvent) => {
+      anchorRef.current = null;          // pointer-shown: a scroll should hide it
+      showTip(text, e.clientX, e.clientY);
+    },
+    onPointerMove: (e: React.PointerEvent) => placeTip(e.clientX, e.clientY),
+    onPointerLeave: hideTip,
+    onPointerCancel: hideTip,
+    // Keyboard: anchor to the mark itself, since there is no pointer.
+    onFocus: (e: React.FocusEvent<HTMLElement>) => {
+      anchorRef.current = e.currentTarget;
+      const r = e.currentTarget.getBoundingClientRect();
+      showTip(text, r.right, r.bottom);
+    },
+    onBlur: () => { anchorRef.current = null; hideTip(); }
+  }), [showTip, placeTip, hideTip]);
+
   if (loading) return <div className="up-note">reading the usage profile…</div>;
   if (error || !profile) return <div className="up-note">The usage profile could not be read.</div>;
 
@@ -117,6 +196,7 @@ export function UsageProfile() {
 
   return (
     <div className="up">
+      <div className="up-tip" ref={tipRef} role="tooltip" aria-hidden="true" />
       <div className="up-head">
         <div>
           <h3>LEARNED HOURS</h3>
@@ -186,8 +266,8 @@ export function UsageProfile() {
                     key={d}
                     className={`up-cell ${c.weight == null ? 'unknown' : stepOf(c.weight)}`.trim()}
                     tabIndex={0}
-                    title={cellTitle(c, day, hour)}
                     aria-label={cellTitle(c, day, hour).replace(/\n/g, ' — ')}
+                    {...tipHandlers(cellTitle(c, day, hour))}
                   />
                 );
               })}
@@ -221,7 +301,9 @@ export function UsageProfile() {
                 style={step.gain > 0 && maxGain > 0
                   ? { height: `${Math.max(3, (step.gain / maxGain) * 100)}%` }
                   : undefined}
-                title={`${fmtHour(step.t)} · +${step.gain.toFixed(1)}%`}
+                tabIndex={0}
+                aria-label={`${fmtHour(step.t)} · +${step.gain.toFixed(1)}%`}
+                {...tipHandlers(`${fmtHour(step.t)}\n+${step.gain.toFixed(1)}% this hour`)}
               />
             ))}
           </div>
