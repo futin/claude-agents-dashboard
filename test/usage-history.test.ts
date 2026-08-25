@@ -1,4 +1,7 @@
 import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import {
   emptyState,
@@ -8,7 +11,17 @@ import {
   deriveProfile,
   MAX_ATTRIBUTABLE_MS,
   TRUST_FLOOR_MIN,
-  EWMA_ALPHA
+  EWMA_ALPHA,
+  shouldWrite,
+  appendSample,
+  readRecentSamples,
+  rotateIfNeeded,
+  loadProfileState,
+  saveProfileState,
+  HISTORY_FILE,
+  PROFILE_FILE,
+  HEARTBEAT_MS,
+  MAX_HISTORY_BYTES
 } from '../server/lib/usage-history.js';
 import type { UsageSample } from '../server/lib/usage-history.js';
 import { HOURS_PER_WEEK } from '../server/lib/usage-forecast.js';
@@ -263,6 +276,150 @@ export function run(): number {
   if (test('deriveProfile: always returns 168 weights', () => {
     assert.strictEqual(deriveProfile(emptyState()).weights.length, HOURS_PER_WEEK);
   })) p++; else f++;
+
+  // ── I/O shell (tmpdir-backed) ──
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-history-'));
+
+  if (test('shouldWrite: the first sample always writes', () => {
+    assert.strictEqual(shouldWrite(null, s(0, 40)), true);
+  })) p++; else f++;
+
+  if (test('shouldWrite: a changed utilization writes', () => {
+    assert.strictEqual(shouldWrite(s(0, 40), s(MIN, 41)), true);
+  })) p++; else f++;
+
+  if (test('shouldWrite: a changed resetsAt writes even at the same utilization', () => {
+    assert.strictEqual(shouldWrite(s(0, 40, R1), s(MIN, 40, R2)), true);
+  })) p++; else f++;
+
+  if (test('shouldWrite: an unchanged sample inside the heartbeat does not write', () => {
+    assert.strictEqual(shouldWrite(s(0, 40), s(MIN, 40)), false);
+  })) p++; else f++;
+
+  if (test('shouldWrite: an unchanged sample past the heartbeat writes', () => {
+    assert.strictEqual(shouldWrite(s(0, 40), s(HEARTBEAT_MS + MIN, 40)), true);
+  })) p++; else f++;
+
+  if (test('append then read round-trips samples in order', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'rt-'));
+    appendSample(s(1000, 10), dir);
+    appendSample(s(2000, 20), dir);
+    const back = readRecentSamples(dir);
+    assert.strictEqual(back.length, 2);
+    assert.strictEqual(back[0].t, 1000);
+    assert.strictEqual(back[1].utilization, 20);
+  })) p++; else f++;
+
+  if (test('readRecentSamples on an absent file returns empty, does not throw', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'absent-'));
+    assert.deepStrictEqual(readRecentSamples(dir), []);
+  })) p++; else f++;
+
+  if (test('readRecentSamples skips a truncated leading line', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'trunc-'));
+    // A partial first line is what a tail read produces mid-file.
+    fs.writeFileSync(path.join(dir, HISTORY_FILE),
+      '{"t":1,"utiliz\n' + JSON.stringify({ t: 2000, utilization: 20, resetsAt: R1 }) + '\n');
+    const back = readRecentSamples(dir);
+    assert.strictEqual(back.length, 1);
+    assert.strictEqual(back[0].t, 2000);
+  })) p++; else f++;
+
+  if (test('readRecentSamples drops a malformed line without losing the good ones', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'bad-'));
+    fs.writeFileSync(path.join(dir, HISTORY_FILE),
+      JSON.stringify({ t: 1000, utilization: 10, resetsAt: R1 }) + '\n' +
+      'not json at all\n' +
+      JSON.stringify({ t: 3000, utilization: 30, resetsAt: R1 }) + '\n');
+    const back = readRecentSamples(dir);
+    assert.strictEqual(back.length, 2);
+    assert.strictEqual(back[1].t, 3000);
+  })) p++; else f++;
+
+  if (test('profile state round-trips through disk', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'prof-'));
+    const st = emptyState();
+    st.buckets[33] = { weight: 0.75, weekStamp: '2026-W35', observedMin: 5, activeMin: 2, lifetimeObservedMin: 600 };
+    assert.strictEqual(saveProfileState(st, dir), true);
+    const back = loadProfileState(dir);
+    assert.strictEqual(back.buckets[33].weight, 0.75);
+    assert.strictEqual(back.buckets[33].lifetimeObservedMin, 600);
+    assert.strictEqual(back.buckets.length, HOURS_PER_WEEK);
+  })) p++; else f++;
+
+  if (test('loadProfileState on an absent file returns an empty state', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'noprof-'));
+    assert.strictEqual(loadProfileState(dir).buckets.length, HOURS_PER_WEEK);
+    assert.strictEqual(loadProfileState(dir).buckets[0].weight, null);
+  })) p++; else f++;
+
+  if (test('loadProfileState on a malformed file falls back rather than throwing', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'badprof-'));
+    fs.writeFileSync(path.join(dir, PROFILE_FILE), '{ this is not json');
+    assert.strictEqual(loadProfileState(dir).buckets.length, HOURS_PER_WEEK);
+  })) p++; else f++;
+
+  if (test('loadProfileState on a wrong-length bucket array falls back', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'shortprof-'));
+    fs.writeFileSync(path.join(dir, PROFILE_FILE), JSON.stringify({ buckets: [{ weight: 1 }] }));
+    assert.strictEqual(loadProfileState(dir).buckets.length, HOURS_PER_WEEK);
+    assert.strictEqual(loadProfileState(dir).buckets[0].weight, null);
+  })) p++; else f++;
+
+  if (test('saveProfileState leaves no .tmp file behind', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'atomic-'));
+    saveProfileState(emptyState(), dir);
+    const leftovers = fs.readdirSync(dir).filter((n) => n.endsWith('.tmp'));
+    assert.deepStrictEqual(leftovers, []);
+  })) p++; else f++;
+
+  // The rotation cases pass an explicit small cap rather than writing 32 MB per
+  // case: the behaviour under test is the trim-and-keep-the-tail logic, and
+  // MAX_HISTORY_BYTES is asserted separately to be the production default.
+  const ROT_CAP = 64 * 1024;
+
+  if (test('MAX_HISTORY_BYTES is the production cap the timer runs against', () => {
+    assert.strictEqual(MAX_HISTORY_BYTES, 33_554_432);
+  })) p++; else f++;
+
+  if (test('rotation trims an oversized log but keeps the newest lines readable', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'rot-'));
+    const file = path.join(dir, HISTORY_FILE);
+    const line = JSON.stringify({ t: 1, utilization: 1, resetsAt: R1 }) + '\n';
+    // Exceed the cap, ending with a uniquely identifiable newest line.
+    fs.writeFileSync(file, line.repeat(Math.ceil(ROT_CAP / line.length) + 10));
+    fs.appendFileSync(file, JSON.stringify({ t: 999_999, utilization: 77, resetsAt: R1 }) + '\n');
+    rotateIfNeeded(dir, ROT_CAP);
+    assert.ok(fs.statSync(file).size < ROT_CAP, 'still oversized after rotation');
+    const back = readRecentSamples(dir);
+    assert.strictEqual(back[back.length - 1].t, 999_999, 'newest line lost in rotation');
+  })) p++; else f++;
+
+  if (test('rotation does not touch a log under the cap', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'norot-'));
+    appendSample(s(1000, 10), dir);
+    const before = fs.statSync(path.join(dir, HISTORY_FILE)).size;
+    rotateIfNeeded(dir);
+    assert.strictEqual(fs.statSync(path.join(dir, HISTORY_FILE)).size, before);
+  })) p++; else f++;
+
+  if (test('the profile survives rotation of the raw log', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'rotprof-'));
+    const st = emptyState();
+    st.buckets[33] = { weight: 0.6, weekStamp: '2026-W35', observedMin: 0, activeMin: 0, lifetimeObservedMin: 900 };
+    saveProfileState(st, dir);
+    const file = path.join(dir, HISTORY_FILE);
+    const line = JSON.stringify({ t: 1, utilization: 1, resetsAt: R1 }) + '\n';
+    fs.writeFileSync(file, line.repeat(Math.ceil(ROT_CAP / line.length) + 10));
+    rotateIfNeeded(dir, ROT_CAP);
+    // The learned profile is derived state in its own file; truncating the raw
+    // log must not touch it. This is why the EWMA never needs the raw history.
+    assert.strictEqual(loadProfileState(dir).buckets[33].weight, 0.6);
+    assert.strictEqual(loadProfileState(dir).buckets[33].lifetimeObservedMin, 900);
+  })) p++; else f++;
+
+  fs.rmSync(tmp, { recursive: true, force: true });
 
   console.log('\n  ' + p + ' passed, ' + f + ' failed');
   return f;
