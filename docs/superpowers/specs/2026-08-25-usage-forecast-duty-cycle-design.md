@@ -6,6 +6,7 @@ implementation plan
 **Touches:** `server/lib/usage-pace.ts`, new `server/lib/usage-forecast.ts`, new
 `server/lib/usage-history.ts`, `client/src/lib/pace.ts`, `server/lib/settings.ts`,
 `client/src/components/Header.tsx`, `shared/types.ts`
+**Implementation plan:** `backlog/tasks/open/task-4-duty-cycle-usage-forecast.md`
 **Related backlog:** `backlog/ideas/open/idea-5-long-term-5h-weekly-usage-history.md`
 
 ## Problem

@@ -1,3 +1,9 @@
+---
+id: task-4
+title: Duty-cycle-aware usage forecast
+created: 2026-08-25
+---
+
 # Duty-Cycle-Aware Usage Forecast Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -8,7 +14,17 @@
 
 **Tech Stack:** TypeScript, ESM, Node built-ins only on the server (zero runtime deps), `tsx` (no compile step), React on the client, `node:assert` tests via `test/run-all.ts`.
 
-**Spec:** `docs/superpowers/specs/2026-08-25-usage-forecast-duty-cycle-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-25-usage-forecast-duty-cycle-design.md` — the
+argument for this shape. Read it first; this file is the execution of it.
+
+**Lifecycle:** this task lives in the backlog store (`backlog/README.md`), so it moves
+to `backlog/tasks/done/` when the work ships. The ten plans still under
+`docs/superpowers/plans/` are finished work kept as records — the split is by state,
+not by kind.
+
+**Naming, to avoid a collision:** this file is backlog item `task-4`. The "Task 1"
+through "Task 8" headings below are the eight implementation steps *within* it, not
+other backlog items. `backlog/tasks/` currently has ids 1–3, all done.
 
 ## Context for a fresh session
 
