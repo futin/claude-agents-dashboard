@@ -65,7 +65,10 @@ function UsageBar({ label, rl, windowMs }: { label: string; rl: RateLimit; windo
   const view = paceView(rl, windowMs);
   const title = rl.resetsAt
     ? `Window started ${formatResetTime(new Date(view!.startMs).toISOString())} · fully resets to 0% at ${formatResetTime(rl.resetsAt)}` +
-      (view?.rateText ? ` · burning ${view.rateText}` : '')
+      (view?.rateText ? ` · burning ${view.rateText}` : '') +
+      // The mechanics stay stated in words, as they always have been here: the
+      // band is the only place the duty cycle shows up otherwise.
+      (rl.dutyCycle != null ? ` · working ~${Math.round(rl.dutyCycle * 100)}% of the hours left` : '')
     : undefined;
   return (
     <div className="u" title={title}>
@@ -93,6 +96,13 @@ function UsageBar({ label, rl, windowMs }: { label: string; rl: RateLimit; windo
  * is time): elapsed fill + a "now" tick, a red tick where the current pace
  * projects 100%, and a wall/lasts verdict on the right. Quiet until the
  * server has enough samples to know the pace.
+ *
+ * Two ticks, not one, once the weekly window has a duty-cycle forecast: the
+ * best estimate and the pessimistic "you work every remaining hour" edge. The
+ * *band* between them is drawn only while confidence is below `ok` — once the
+ * profile is trustworthy the two converge in meaning and a band would imply
+ * doubt that is no longer there. Both ticks always render, so both edges of the
+ * estimate are always visible.
  */
 function TimeStrip({ view, resetsAt }: { view: NonNullable<ReturnType<typeof paceView>>; resetsAt: string }) {
   return (
@@ -100,8 +110,20 @@ function TimeStrip({ view, resetsAt }: { view: NonNullable<ReturnType<typeof pac
       <div className="u-time-row">
         <div className="u-time">
           <div className="u-time-fill" style={{ width: `${view.elapsedPct}%` }} />
+          {view.wallPct != null && view.wallPctPessimistic != null && view.confidence !== 'ok' && (
+            <div
+              className="u-band"
+              style={{
+                left: `${Math.min(view.wallPct, view.wallPctPessimistic)}%`,
+                width: `${Math.abs(view.wallPct - view.wallPctPessimistic)}%`
+              }}
+            />
+          )}
           <div className="u-tick now" style={{ left: `${view.elapsedPct}%` }} />
           {view.wallPct != null && <div className="u-tick wall" style={{ left: `${view.wallPct}%` }} />}
+          {view.wallPctPessimistic != null && (
+            <div className="u-tick wall-pessimistic" style={{ left: `${view.wallPctPessimistic}%` }} />
+          )}
         </div>
         <span className="u-time-spacer" />
       </div>

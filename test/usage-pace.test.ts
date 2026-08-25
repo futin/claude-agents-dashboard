@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 
 import * as pace from '../server/lib/usage-pace.js';
+import { flatProfile } from '../server/lib/usage-forecast.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -142,6 +143,84 @@ export function run(): number {
     const out = pace.recordAndPace('sevenDay', { utilization: 11, resetsAt: null }, NOW);
     assert.strictEqual(out.ratePerHour, null); // 10min < the weekly 30min min span
   })) p++; else f++;
+
+  // ── the duty-cycle forecast handoff (sevenDay only) ──
+
+  if (test('REGRESSION FLOOR: no profile, no active-time source → the flat closed form', () => {
+    pace.resetPaceStore();
+    pace.setForecastProfile(null);
+    pace.setActiveTimeSource(null);
+    const resetsAt = new Date(NOW + 48 * H).toISOString();
+    pace.recordAndPace('sevenDay', { utilization: 40, resetsAt }, NOW - 60 * MIN);
+    const rl = pace.recordAndPace('sevenDay', { utilization: 45, resetsAt }, NOW);
+    assert.strictEqual(rl.forecastConfidence, 'none');
+    assert.strictEqual(rl.projectedExhaustAt, rl.pessimisticExhaustAt);
+  })) p++; else f++;
+
+  if (test('the weekly rate is per ACTIVE hour when the recorder measured the span', () => {
+    pace.resetPaceStore();
+    pace.setForecastProfile(null);
+    pace.setActiveTimeSource(() => 1 * H); // a 3% rise over 6h of wall clock, 1h of it active
+    const resetsAt = new Date(NOW + 48 * H).toISOString();
+    pace.recordAndPace('sevenDay', { utilization: 40, resetsAt }, NOW - 6 * H);
+    const rl = pace.recordAndPace('sevenDay', { utilization: 43, resetsAt }, NOW);
+    assert.strictEqual(rl.ratePerHour, 3); // 3 %/active-hour — not the 0.5 %/h wall slope
+  })) p++; else f++;
+
+  if (test('a rise the recorder saw no active time for yields no projection', () => {
+    pace.resetPaceStore();
+    pace.setForecastProfile(null);
+    pace.setActiveTimeSource(() => 0); // the rise happened across a recording gap
+    const resetsAt = new Date(NOW + 48 * H).toISOString();
+    pace.recordAndPace('sevenDay', { utilization: 40, resetsAt }, NOW - 6 * H);
+    const rl = pace.recordAndPace('sevenDay', { utilization: 43, resetsAt }, NOW);
+    assert.strictEqual(rl.ratePerHour, null);
+    assert.strictEqual(rl.projectedExhaustAt, null);
+  })) p++; else f++;
+
+  if (test('a night-heavy profile pushes the weekly projection out past the flat one', () => {
+    pace.resetPaceStore();
+    pace.setActiveTimeSource(null);
+    // Half the hours idle → the profile walk must reach 100% strictly later.
+    pace.setForecastProfile(flatProfile(0.5));
+    const resetsAt = new Date(NOW + 120 * H).toISOString();
+    pace.recordAndPace('sevenDay', { utilization: 40, resetsAt }, NOW - 60 * MIN);
+    const rl = pace.recordAndPace('sevenDay', { utilization: 45, resetsAt }, NOW);
+    assert.ok(rl.projectedExhaustAt, 'expected a projection');
+    assert.ok(rl.pessimisticExhaustAt, 'expected a pessimistic edge');
+    assert.ok(Date.parse(rl.projectedExhaustAt!) > Date.parse(rl.pessimisticExhaustAt!),
+      'the duty-cycle projection must be the later of the two');
+  })) p++; else f++;
+
+  if (test('the 5h window gains no forecast fields and no rate correction', () => {
+    pace.resetPaceStore();
+    pace.setForecastProfile(flatProfile(0.5));
+    pace.setActiveTimeSource(() => 1 * H); // must be ignored for fiveHour
+    const resetsAt = new Date(NOW + 3 * H).toISOString();
+    pace.recordAndPace('fiveHour', { utilization: 20, resetsAt }, NOW - 10 * MIN);
+    const rl = pace.recordAndPace('fiveHour', { utilization: 30, resetsAt }, NOW);
+    assert.strictEqual(rl.ratePerHour, 60); // 10% over 10 min — the plain slope
+    assert.strictEqual(rl.dutyCycle, undefined);
+    assert.strictEqual(rl.pessimisticExhaustAt, undefined);
+  })) p++; else f++;
+
+  if (test('seedSamples restores enough history to produce a pace immediately', () => {
+    pace.resetPaceStore();
+    pace.setForecastProfile(null);
+    pace.setActiveTimeSource(null);
+    const resetsAt = new Date(NOW + 48 * H).toISOString();
+    pace.seedSamples('sevenDay', [
+      { t: NOW - 6 * H, utilization: 30 },
+      { t: NOW - 3 * H, utilization: 35 }
+    ]);
+    // A single fresh sample would normally be too thin for a slope.
+    const rl = pace.recordAndPace('sevenDay', { utilization: 40, resetsAt }, NOW);
+    assert.ok(rl.ratePerHour != null && rl.ratePerHour > 0, 'expected a rate from seeded history');
+  })) p++; else f++;
+
+  // Leave the module-level seams as the rest of the app expects to find them.
+  pace.setForecastProfile(null);
+  pace.setActiveTimeSource(null);
 
   console.log(`\n  usage-pace: ${p} passed, ${f} failed`);
   return f;

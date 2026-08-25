@@ -12,6 +12,9 @@ import { scanSessions, lastMessageMs, listTranscripts, projectsRoot, sessionSurf
 import { readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
+import { deriveProfile, profileSnapshot } from './lib/usage-history.js';
+import type { ProfileState } from './lib/usage-history.js';
+import { HOURS_PER_WEEK, confidenceOf, localOffsetMinutes, walkForward } from './lib/usage-forecast.js';
 import {
   claudeHome, collectServablePaths, listRecentProjects, readGlobalScope,
   readProjectScope, readServableFile, resolveProject
@@ -48,7 +51,7 @@ import { toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, GuidesIndex, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
-  SpawnResponse, WaitResult
+  RateLimit, SpawnResponse, UsageProfileCell, UsageProfileResponse, WaitResult
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -466,6 +469,110 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
  */
 export function serveSettingsRead(config: Config, res: ServerResponse): void {
   sendJson(res, 200, { ...getSettings(), notifyAvailable: config.ntfyTopic !== '' });
+}
+
+/** An empty grid, for the fail-open path and for a never-recorded profile. */
+function blankCells(): UsageProfileCell[] {
+  return Array.from({ length: HOURS_PER_WEEK }, (_, hourOfWeek) => ({
+    hourOfWeek, weight: null, observedMin: 0, staleWeeks: 0
+  }));
+}
+
+/**
+ * Shape one `GET /api/usage/profile` body. Pure — no clock, no disk, no
+ * timezone — so every calendar edge is testable (test/usage-profile-api.test.ts).
+ *
+ * The walk is re-run here with the *same* implementation that produced the
+ * projection in `usage-pace.ts`, so the inspector can never drift from what it
+ * claims to disclose. And it deliberately carries **no raw samples and no file
+ * paths** — cells and the walk only, the same posture as `NTFY_TOPIC` never
+ * leaving the server.
+ *
+ * With recording off the learned cells are still returned (they are real
+ * evidence, and this endpoint exists to disclose it) but `confidence` is `none`
+ * and the walk is empty: nothing is feeding the forecast, so claiming otherwise
+ * would be the dishonest option. The view leads with `recording: false`.
+ */
+export function shapeUsageProfile(opts: {
+  recording: boolean;
+  state: ProfileState;
+  weekly: RateLimit | null;
+  nowMs: number;
+  offsetMinutes: number;
+}): UsageProfileResponse {
+  const { recording, state, weekly, nowMs, offsetMinutes } = opts;
+  const profile = deriveProfile(state);
+
+  const cells: UsageProfileCell[] = state.buckets.map((b, hourOfWeek) => {
+    const stamp = b.weekStamp;
+    return {
+      hourOfWeek,
+      weight: profile.weights[hourOfWeek],
+      observedMin: b.lifetimeObservedMin,
+      // Observed weeks after the one this bucket last saw traffic in — the same
+      // count the fold's decay applies. `observedWeeks` never holds a future
+      // week, so "after the stamp" already means "up to now".
+      staleWeeks: stamp === null ? 0 : state.observedWeeks.filter((w) => w > stamp).length
+    };
+  });
+
+  const rate = weekly?.ratePerHour ?? null;
+  const resetsAtMs = weekly?.resetsAt ? Date.parse(weekly.resetsAt) : Number.NaN;
+  const canWalk =
+    recording && rate != null && rate > 0 &&
+    weekly?.utilization != null && Number.isFinite(resetsAtMs);
+
+  if (!canWalk) {
+    return {
+      cells,
+      globalMean: profile.globalMean,
+      confidence: recording ? confidenceOf(profile) : 'none',
+      recording,
+      walk: [],
+      exhaustAt: null
+    };
+  }
+
+  const walked = walkForward({
+    nowMs,
+    utilization: weekly!.utilization as number,
+    activeRatePerHour: rate as number,
+    profile,
+    resetsAtMs,
+    offsetMinutes
+  });
+  return {
+    cells,
+    globalMean: profile.globalMean,
+    confidence: confidenceOf(profile),
+    recording,
+    walk: walked.steps.map((x) => ({ t: new Date(x.tMs).toISOString(), gain: x.gain })),
+    exhaustAt: walked.exhaustAtMs == null ? null : new Date(walked.exhaustAtMs).toISOString()
+  };
+}
+
+/**
+ * `GET /api/usage/profile` — the duty-cycle inspector's data. Read-only.
+ *
+ * Fails open to an empty grid rather than a 500: this is a disclosure view, and
+ * a torn one is worse than an honest empty one.
+ */
+export function serveUsageProfile(res: ServerResponse): void {
+  try {
+    const now = Date.now();
+    sendJson(res, 200, shapeUsageProfile({
+      recording: getSettings().recordUsageHistory,
+      state: profileSnapshot(),
+      weekly: getCachedUsageState().usage?.sevenDay ?? null,
+      nowMs: now,
+      offsetMinutes: localOffsetMinutes(now)
+    }));
+  } catch {
+    sendJson(res, 200, {
+      cells: blankCells(), globalMean: 1, confidence: 'none',
+      recording: false, walk: [], exhaustAt: null
+    } satisfies UsageProfileResponse);
+  }
 }
 
 /**

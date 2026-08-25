@@ -8,3 +8,5 @@ client/dist/
 .ua/.trash-*/
 .remote-answer.json
 .dashboard-settings.json
+.usage-history.jsonl
+.usage-profile.json

@@ -28,8 +28,10 @@ import {
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
   serveSettingsRead, serveSettingsWrite, serveNotifyEvent, serveNotifyTest,
-  serveTranscribe, serveSpawn, serveSpawnStop
+  serveTranscribe, serveSpawn, serveSpawnStop, serveUsageProfile
 } from './api.js';
+import { startUsageRecording } from './lib/usage-history.js';
+import { refreshUsageNow } from './lib/usage.js';
 
 const config = loadConfig();
 const isProd = process.env.NODE_ENV === 'production';
@@ -149,6 +151,11 @@ const server = http.createServer((req, res) => {
   if (u.pathname === '/api/settings') {
     if (req.method === 'POST') return void serveSettingsWrite(config, req, res);
     return void serveSettingsRead(config, res);
+  }
+  // The duty-cycle profile behind the weekly forecast — read-only, and never
+  // carrying raw samples (see docs/subsystems/usage-limits.md).
+  if (u.pathname === '/api/usage/profile') {
+    return void serveUsageProfile(res);
   }
   // The only write endpoints in the app (see docs/subsystems/remote-answer.md).
   // `wait` holds its response open for minutes — that is by design.
@@ -310,6 +317,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         child.on('error', () => { /* no browser to open (e.g. headless/container) — best-effort */ });
       } catch { /* best-effort */ }
     }
+
+    // Usage-history recording (opt-in, and re-read on every tick). Rehydrates
+    // the 5h pace ring from disk, then samples on our own interval — the
+    // /api/sessions poll only fires while a browser is open, which would make
+    // the recorded history describe when the dashboard was watched rather than
+    // when work happened. See docs/subsystems/usage-limits.md.
+    if (config.showUsage) startUsageRecording(refreshUsageNow);
   });
 }
 

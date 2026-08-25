@@ -23,6 +23,22 @@ The header's 5h/Week bars show only the *current* utilization. Two gaps:
 
 ## Rough shape
 
+> **The persistence half landed on 2026-08-25** via task-4 (duty-cycle usage forecast;
+> spec `docs/superpowers/specs/2026-08-25-usage-forecast-duty-cycle-design.md`). There are
+> now two gitignored state files at the repo root — `.usage-history.jsonl` (append-only
+> samples, write-on-change plus a 15-min heartbeat, rotated past 32 MB) and
+> `.usage-profile.json` — with `server/lib/usage-history.ts` owning both, resolving them
+> from the repo root by walking up for `package.json`, behind the opt-in
+> `recordUsageHistory` setting. Two differences from the shape sketched below: the log
+> records the **5h window only** (it is the sensor; see
+> `docs/subsystems/usage-limits.md`), not both windows in one record, and there is no
+> `GET /api/usage/history` — the only endpoint is `GET /api/usage/profile`, which serves
+> the *derived* profile and deliberately never returns raw samples. So the remaining work
+> here is the **history-view half**, and it would either read the JSONL through a new
+> endpoint or widen the record to carry the weekly window too. Whoever grooms this next:
+> the keepalive bullet is also still open, and is now more relevant, since recording runs
+> unattended by design.
+
 Two halves; the first is useful alone.
 
 - **Persist utilization samples.** Append each successful `refreshNow()` fetch to a

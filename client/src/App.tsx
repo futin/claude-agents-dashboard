@@ -10,6 +10,7 @@ import { SettingsProvider, useSettings } from './hooks/useSettings';
 // view's bundle is unaffected.
 const ManagementView = lazy(() => import('./components/management/ManagementView'));
 const AnalyticsView = lazy(() => import('./components/analytics/AnalyticsView'));
+const UsageView = lazy(() => import('./components/usage/UsageView'));
 const GuidesView = lazy(() => import('./components/guides/GuidesView'));
 const SettingsView = lazy(() => import('./components/settings/SettingsView'));
 
@@ -61,6 +62,10 @@ function AppShell() {
           ) : section === 'analytics' ? (
             <Suspense fallback={<div className="an-empty">loading…</div>}>
               <AnalyticsView />
+            </Suspense>
+          ) : section === 'usage' ? (
+            <Suspense fallback={<div className="an-empty">loading…</div>}>
+              <UsageView />
             </Suspense>
           ) : section === 'guides' ? (
             <Suspense fallback={<div className="guides-empty">loading…</div>}>

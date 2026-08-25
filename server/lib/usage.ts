@@ -22,7 +22,9 @@ import http from 'node:http';
 import https from 'node:https';
 
 import type { UsageLimits, RateLimit, UsageStatus } from '../../shared/types.js';
-import { recordAndPace } from './usage-pace.js';
+import { recordAndPace, setForecastProfile } from './usage-pace.js';
+import { deriveProfile, profileSnapshot, recordTick } from './usage-history.js';
+import { getSettings } from './settings.js';
 
 /** Outcome of looking for a stored OAuth token. */
 export type TokenState =
@@ -229,6 +231,31 @@ function refreshNow(): Promise<void> {
         return;
       }
       const limits = await fetchUsage(t.token);
+      // Record before pacing: the classifier ring the weekly active rate is
+      // measured against must already include the interval ending now. The 5h
+      // window is the sensor (its utilization is verified monotonic and moves
+      // in ~10%/h steps, where the weekly crawls in ~1% ones).
+      if (getSettings().recordUsageHistory) {
+        try {
+          if (limits && limits.fiveHour.utilization != null) {
+            recordTick({
+              t: Date.now(),
+              utilization: limits.fiveHour.utilization,
+              resetsAt: limits.fiveHour.resetsAt
+            });
+          }
+          setForecastProfile(deriveProfile(profileSnapshot()));
+        } catch {
+          /* recording must never break the usage fetch */
+        }
+      } else {
+        // Retire the profile the moment recording is switched off, in the same
+        // place the active-time source retires itself. Leaving the last-pushed
+        // profile in place would shape the walk with learned weights while the
+        // rate had already reverted to a raw *wall* slope — the double discount,
+        // inverted, and a silently under-projected week.
+        setForecastProfile(null);
+      }
       // Feed the pace store one sample per window and attach burn rate +
       // projected exhaustion (null until enough history accumulates).
       cached = limits
@@ -249,6 +276,22 @@ function refreshNow(): Promise<void> {
     }
   })();
   return refreshing;
+}
+
+/**
+ * Force one fetch cycle now, bypassing the cache TTL. Fire-and-forget.
+ *
+ * The recorder's timer needs this rather than `getCachedUsageState`: that call
+ * only refreshes when the cache is older than `CACHE_TTL_MS`, and with the timer
+ * running at the same 60s the two alternate — measured, the recorder sampled
+ * every ~120s instead of every 60s, halving the profile's resolution. Still
+ * exactly one path to Anthropic (`refreshNow`, single-flight), just not
+ * TTL-gated; and because a forced refresh also stamps `cachedAt`, the
+ * browser-poll path stays quiet for its own 60s afterwards, so the combined
+ * request rate is unchanged.
+ */
+export function refreshUsageNow(): void {
+  void refreshNow();
 }
 
 /**

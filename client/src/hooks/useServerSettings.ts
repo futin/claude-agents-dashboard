@@ -4,7 +4,7 @@ import { usePersistedState } from './usePersistedState';
 import type { NotifyPatch, ServerSettings } from '../../../shared/types';
 
 /** What a caller can ask about: the two number fields, or the notify policy. */
-export type SavingKey = 'idleSecs' | 'answerSecs' | 'notify';
+export type SavingKey = 'idleSecs' | 'answerSecs' | 'notify' | 'recordUsageHistory';
 
 export interface ServerSettingsControl {
   state: ServerSettings | null;
@@ -26,9 +26,11 @@ export interface ServerSettingsControl {
 
 /**
  * The handful of settings that can't be per-device, over `GET/POST
- * /api/settings`. Today that is the idle threshold, the answer window and the
- * push-notification policy — see `server/lib/settings.ts` for why they can't
- * live in localStorage with the rest.
+ * /api/settings`. Today that is the idle threshold, the answer window, the
+ * push-notification policy and the usage-recording switch — see
+ * `server/lib/settings.ts` for why they can't live in localStorage with the
+ * rest. (Recording is the clearest case: a per-device toggle cannot start a
+ * server-side timer.)
  *
  * Fetched once when the Settings page opens rather than polled: unlike the
  * remote-answer switch, nothing else in the app flips this behind your back.

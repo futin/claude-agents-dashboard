@@ -102,15 +102,68 @@ export interface Totals {
 }
 
 /** One rate-limit window (percent used + when it resets). */
+/**
+ * How much the duty-cycle profile can be trusted. `none` = no learned buckets
+ * yet (the projection is the flat-rate one, i.e. today's behaviour); `thin` =
+ * some buckets but not a representative week; `ok` = enough to lead with.
+ */
+export type ForecastConfidence = 'none' | 'thin' | 'ok';
+
+/** One hour-of-week bucket, as shown in the profile inspector. */
+export interface UsageProfileCell {
+  /** 0–167, where 0 is Sunday 00:00 in the host's local timezone. */
+  hourOfWeek: number;
+  /**
+   * 0–1 expected active share of that hour, or null when the bucket has under
+   * an hour of accumulated evidence and the forecast falls back to the mean.
+   */
+  weight: number | null;
+  /** Accumulated observed minutes across all weeks. Caps at 60 per week. */
+  observedMin: number;
+  /** Observed weeks since this bucket last folded. 0 when current. */
+  staleWeeks: number;
+}
+
+/** One hour of the forward walk behind the current weekly projection. */
+export interface ForecastStep {
+  /** ISO 8601 start of the hour. */
+  t: string;
+  /** Percentage points this hour is expected to add. */
+  gain: number;
+}
+
+/** `GET /api/usage/profile` — read-only. Never includes raw samples. */
+export interface UsageProfileResponse {
+  cells: UsageProfileCell[];
+  /** Fallback weight for untrusted buckets. */
+  globalMean: number;
+  confidence: ForecastConfidence;
+  /** False when the recording setting is off — the view says so rather than showing an empty grid. */
+  recording: boolean;
+  /** The walk from now to the weekly reset. Empty when there is no projection. */
+  walk: ForecastStep[];
+  /** ISO 8601 crossing time, or null when the window coasts to its reset. */
+  exhaustAt: string | null;
+}
+
 export interface RateLimit {
   /** 0–100 percent of the window consumed, or null if unknown/unscoped. */
   utilization: number | null;
   /** ISO 8601 reset time, or null if unknown. The window fully resets to 0% then. */
   resetsAt: string | null;
   /**
-   * Burn rate in percent-per-hour over the server's recent utilization samples,
-   * 0 when idle, or null while there isn't enough history yet (the sample store
-   * is RAM-only, so it refills within minutes of a server restart).
+   * Burn rate in percent per **active** hour over the server's recent
+   * utilization samples, 0 when idle, or null while there isn't enough history
+   * yet (the sample store is RAM-only, so it refills within minutes of a server
+   * restart).
+   *
+   * For the weekly window that "active" is literal: with usage recording on, the
+   * lookback's delta is divided by the active time the recorder actually
+   * measured, so idle hours don't dilute it. Multiply by {@link dutyCycle} to
+   * get a per-*wall*-hour figure — printing `ratePerHour × 24` as a daily rate
+   * overstates it by `1/dutyCycle`. With recording off there is no measurement,
+   * the raw wall slope stands, and `dutyCycle` is 1 — so the same arithmetic
+   * still holds.
    */
   ratePerHour?: number | null;
   /**
@@ -119,6 +172,22 @@ export interface RateLimit {
    * two to decide "wall before reset" vs "lasts to reset".
    */
   projectedExhaustAt?: string | null;
+  /**
+   * The same projection computed with a flat duty cycle of 1.0 — i.e. assuming
+   * you work every remaining hour. The pessimistic edge of the band the strip
+   * draws; `projectedExhaustAt` is the best estimate. Null under the same
+   * conditions as `projectedExhaustAt`.
+   */
+  pessimisticExhaustAt?: string | null;
+  /**
+   * 0–1: the share of the hours between now and `resetsAt` that the learned
+   * profile expects to be active. Null when there is no profile. Note this is
+   * forward-looking over the *remaining* window, not a trailing average — the
+   * whole point is that Friday evening and Monday morning differ.
+   */
+  dutyCycle?: number | null;
+  /** How far to trust `dutyCycle` and `projectedExhaustAt`. See {@link ForecastConfidence}. */
+  forecastConfidence?: ForecastConfidence;
 }
 
 /**
@@ -311,6 +380,13 @@ export interface ServerSettings {
    * hook gives up and lets the terminal dialog appear. The hooks' wait window.
    */
   answerSecs: number;
+  /**
+   * Record account-usage samples to disk so the duty-cycle profile can be
+   * learned. Off by default: switching it on makes the server call Anthropic
+   * about once a minute for as long as the process lives, with nobody
+   * necessarily watching. See docs/subsystems/usage-limits.md.
+   */
+  recordUsageHistory: boolean;
   /** False when the value couldn't be written to disk (won't survive a restart). */
   persisted: boolean;
   /**

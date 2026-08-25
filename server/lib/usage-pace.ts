@@ -16,6 +16,13 @@
  * the header simply renders what it always did.
  */
 
+import {
+  confidenceOf,
+  flatProfile,
+  localOffsetMinutes,
+  walkForward
+} from './usage-forecast.js';
+import type { DutyProfile } from './usage-forecast.js';
 import type { RateLimit } from '../../shared/types.js';
 
 export interface PaceSample {
@@ -98,9 +105,66 @@ export function resetPaceStore(): void {
 }
 
 /**
+ * Replace a window's ring — boot-time rehydration only.
+ *
+ * In production this is only ever called for `fiveHour`: the recorded log is
+ * the 5h sensor series, and the two windows' utilization are different series,
+ * so seeding the weekly ring from it would poison its slope for up to the 6h
+ * lookback. The weekly pace simply returns after ~30 minutes of live sampling.
+ */
+export function seedSamples(win: PaceWindow, samples: PaceSample[]): void {
+  const sorted = [...samples].sort((a, b) => a.t - b.t);
+  store.set(win, sorted.length > MAX_SAMPLES ? sorted.slice(-MAX_SAMPLES) : sorted);
+}
+
+// ── The forecast seams ──
+//
+// Both are injected *into* this module rather than imported: `usage-history.ts`
+// already imports `usage-forecast.ts`, and the recorder is what owns both the
+// profile and the classifier, so importing it here would be a cycle.
+
+let forecastProfile: DutyProfile | null = null;
+
+/** Hand the weekly walk its learned duty cycle. Null = flat, i.e. today. */
+export function setForecastProfile(p: DutyProfile | null): void {
+  forecastProfile = p;
+}
+
+let activeTimeSource: ((sinceMs: number, untilMs: number) => number | null) | null = null;
+
+/**
+ * How measured active time reaches the weekly rate.
+ *
+ * Without this the weekly slope is a *wall* rate, and once the recorder's timer
+ * feeds the ring around the clock the idle hours inside the lookback dilute it —
+ * then the walk would discount idle a second time through the weights. A null
+ * source (or a null return) keeps the raw slope: exactly today's behaviour.
+ */
+export function setActiveTimeSource(
+  src: ((sinceMs: number, untilMs: number) => number | null) | null
+): void {
+  activeTimeSource = src;
+}
+
+/**
+ * Least measured active time that can carry a rate. Below this the denominator
+ * is noise, so a rise across it is a recording gap rather than a fast burn.
+ */
+const MIN_ACTIVE_MS = 60_000;
+
+const iso = (ms: number | null): string | null => (ms == null ? null : new Date(ms).toISOString());
+
+/**
  * Record one fetched utilization sample for a window and return the RateLimit
  * with pace fields attached. A utilization drop means the window reset — the
  * old history would poison the slope, so it's discarded.
+ *
+ * The **weekly** window then goes further: its rate is corrected to a
+ * per-*active*-hour figure where the recorder measured the lookback, and its
+ * projection comes from the duty-cycle forward walk rather than one division.
+ * The **5h** window is left exactly as it was — its 30-minute lookback bounds
+ * any idle dilution to the first half hour after resuming work, and duty cycle
+ * inside five hours is ~1 by construction.
  */
 export function recordAndPace(win: PaceWindow, rl: RateLimit, now = Date.now()): RateLimit {
   if (rl.utilization == null) return { ...rl, ratePerHour: null, projectedExhaustAt: null };
@@ -113,9 +177,55 @@ export function recordAndPace(win: PaceWindow, rl: RateLimit, now = Date.now()):
   if (samples.length > MAX_SAMPLES) samples = samples.slice(-MAX_SAMPLES);
   store.set(win, samples);
   const pace = computePace(samples, { lookbackMs: cfg.lookbackMs, minSpanMs: cfg.minSpanMs, now });
-  return {
-    ...rl,
+
+  const flatFields = {
     ratePerHour: pace ? pace.ratePerHour : null,
     projectedExhaustAt: pace ? pace.projectedExhaustAt : null
+  };
+  if (win !== 'sevenDay' || !pace) return { ...rl, ...flatFields };
+
+  // ── Correct the trailing slope into an active rate, where it can be. ──
+  let ratePerHour = pace.ratePerHour;
+  if (activeTimeSource) {
+    const recent = samples.filter((s) => s.t >= now - cfg.lookbackMs);
+    const activeMs = activeTimeSource(recent[0].t, now);
+    if (activeMs != null) {
+      const delta = recent[recent.length - 1].utilization - recent[0].utilization;
+      if (activeMs >= MIN_ACTIVE_MS) {
+        ratePerHour = Math.max(0, delta / (activeMs / HOUR_MS));
+      } else if (delta > 0) {
+        // A rise with no active time to attribute it to is a recording gap, not
+        // a fast burn. Inventing a rate here is the one dishonest option.
+        return { ...rl, ratePerHour: null, projectedExhaustAt: null };
+      } else {
+        ratePerHour = 0;
+      }
+    }
+  }
+
+  const resetsAtMs = rl.resetsAt ? Date.parse(rl.resetsAt) : Number.NaN;
+  if (ratePerHour <= 0 || !Number.isFinite(resetsAtMs)) {
+    return { ...rl, ratePerHour, projectedExhaustAt: null };
+  }
+
+  const base = {
+    nowMs: now,
+    utilization: rl.utilization,
+    activeRatePerHour: ratePerHour,
+    resetsAtMs,
+    // The one place production reads the machine's timezone — which is exactly
+    // why walkForward takes it as a parameter instead of reading it itself.
+    offsetMinutes: localOffsetMinutes(now)
+  };
+  const flat = walkForward({ ...base, profile: flatProfile(1) });
+  const shaped = forecastProfile ? walkForward({ ...base, profile: forecastProfile }) : flat;
+
+  return {
+    ...rl,
+    ratePerHour,
+    projectedExhaustAt: iso(shaped.exhaustAtMs),
+    pessimisticExhaustAt: iso(flat.exhaustAtMs),
+    dutyCycle: shaped.dutyCycle,
+    forecastConfidence: forecastProfile ? confidenceOf(forecastProfile) : 'none'
   };
 }
