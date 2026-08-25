@@ -34,6 +34,14 @@ import { useUsageProfile } from '../../hooks/useUsageProfile';
  * - **The table view is required, not a nicety.** The two lowest ramp steps fall
  *   below 3:1 against the card surface, and that obligates a non-colour path to
  *   the same numbers.
+ * - **Every hour carries a label, not every second one.** Labelling alternate
+ *   rows put the axis's only vertical rhythm cue at *twice* the row pitch, and
+ *   the eye chunked the rows into pairs and read each pair boundary as a wider
+ *   gap. The geometry was never uneven — measured at DPR 2, every row boundary
+ *   snapped to exactly 32 device pixels — so this is a fix to a Gestalt
+ *   artefact, and labelling every row removes the offending rhythm rather than
+ *   hiding it. Labelling every 6th hour also removes it, but then an hour can
+ *   only be identified by counting rows.
  *
  * Reference: `docs/guides/mockups/usage-profile-heatmap-mockups.html`, variant C.
  */
@@ -163,9 +171,7 @@ export function UsageProfile() {
           {DAYS.map(d => <div key={d} className="up-axis">{d}</div>)}
           {Array.from({ length: 24 }, (_, hour) => (
             <div key={hour} className="up-hourrow" style={{ display: 'contents' }}>
-              <div className="up-axis left">
-                {hour % 2 === 0 ? `${String(hour).padStart(2, '0')}:00` : ''}
-              </div>
+              <div className="up-axis left">{String(hour).padStart(2, '0')}:00</div>
               {DAYS.map((d, day) => {
                 const c = at(day, hour);
                 return (
