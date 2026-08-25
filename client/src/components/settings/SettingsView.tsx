@@ -213,6 +213,19 @@ export default function SettingsView() {
         </SettingsRow>
       </SettingsGroup>
 
+      <SettingsGroup title="Usage forecast · every device">
+        <SettingsRow
+          name="Record usage history"
+          hint="Samples your account usage to disk so the weekly forecast can learn which hours you actually work. While on, the server contacts Anthropic about once a minute even with no browser open. Needs ~2 weeks of data before the forecast improves."
+        >
+          <Segmented
+            value={server.state?.recordUsageHistory ? 'on' : 'off'}
+            options={ON_OFF}
+            onChange={v => void server.save({ recordUsageHistory: v === 'on' })}
+          />
+        </SettingsRow>
+      </SettingsGroup>
+
       <SettingsGroup title="Remote answers · every device">
         <SettingsRow
           name="Phone answers"

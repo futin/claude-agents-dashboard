@@ -66,6 +66,30 @@ export const MAX_ATTRIBUTABLE_MS = 300_000;
 /** Matches the utilization-drop epsilon `recordAndPace` already uses. */
 const MOVE_EPSILON = 0.5;
 
+/**
+ * How far two `resetsAt` stamps may differ and still be the same window.
+ *
+ * **Not string equality, and this was measured, not guessed.** The upstream
+ * endpoint recomputes the stamp per request, so four consecutive real fetches of
+ * one unchanged 5-hour window returned `21:19:59.657311`, `21:20:00.387292`,
+ * `21:20:00.404859`, `21:20:00.508567` — sub-second jitter, ~0.85s across the
+ * set. Comparing the strings would classify *every* interval as a `reset`, so
+ * the profile would never learn a single minute, and `shouldWrite` would append
+ * a line every tick. Two minutes is three orders of magnitude above the observed
+ * jitter and three orders below a genuine window change (+5h, or +7d).
+ */
+const SAME_WINDOW_MS = 120_000;
+
+/** Same window? Compares parsed stamps with {@link SAME_WINDOW_MS} of slack. */
+function sameWindow(a: string | null, b: string | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false; // scoped ⇄ unscoped is a real change
+  const ta = Date.parse(a);
+  const tb = Date.parse(b);
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return a === b;
+  return Math.abs(ta - tb) <= SAME_WINDOW_MS;
+}
+
 /** Observed weeks retained for the decay count. Half a year is plenty. */
 const MAX_OBSERVED_WEEKS = 26;
 
@@ -131,7 +155,7 @@ export function classifyInterval(
   b: UsageSample,
   maxAttributableMs: number = MAX_ATTRIBUTABLE_MS
 ): IntervalKind {
-  if (a.resetsAt !== b.resetsAt) return 'reset';
+  if (!sameWindow(a.resetsAt, b.resetsAt)) return 'reset';
   const delta = b.utilization - a.utilization;
   if (delta < -MOVE_EPSILON) return 'reset';
   if (delta > MOVE_EPSILON) {
@@ -326,7 +350,7 @@ export function shouldWrite(
 ): boolean {
   if (prev === null) return true;
   if (Math.abs(next.utilization - prev.utilization) > 0.01) return true;
-  if (next.resetsAt !== prev.resetsAt) return true;
+  if (!sameWindow(prev.resetsAt, next.resetsAt)) return true;
   return next.t - prev.t >= heartbeatMs;
 }
 

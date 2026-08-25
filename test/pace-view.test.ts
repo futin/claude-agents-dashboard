@@ -87,6 +87,67 @@ export function run(): number {
     assert.strictEqual(v.elapsedPct, 100);
   })) p++; else f++;
 
+  // ── the duty-cycle band and the corrected weekly rate ──
+
+  if (test('weekly rate text is corrected by the duty cycle', () => {
+    const weekReset = new Date(NOW + 48 * H).toISOString();
+    const v = paceView(
+      { utilization: 40, resetsAt: weekReset, ratePerHour: 5, dutyCycle: 0.25, projectedExhaustAt: null },
+      SEVEN_DAY_MS,
+      NOW
+    )!;
+    // 5 %/active-hour × 0.25 × 24h = 30 %/day, not 120.
+    assert.strictEqual(v.rateText, '30%/day');
+  })) p++; else f++;
+
+  if (test('weekly rate text falls back to the flat formula without a duty cycle', () => {
+    const weekReset = new Date(NOW + 48 * H).toISOString();
+    const v = paceView(
+      { utilization: 40, resetsAt: weekReset, ratePerHour: 5, projectedExhaustAt: null },
+      SEVEN_DAY_MS,
+      NOW
+    )!;
+    assert.strictEqual(v.rateText, '120%/day');
+  })) p++; else f++;
+
+  if (test('the pessimistic tick is placed on the time axis', () => {
+    const v = paceView(
+      {
+        utilization: 35, resetsAt, ratePerHour: 22,
+        projectedExhaustAt: new Date(NOW + 2.5 * H).toISOString(),
+        pessimisticExhaustAt: new Date(NOW + 1 * H).toISOString(),
+        forecastConfidence: 'ok'
+      },
+      FIVE_HOUR_MS,
+      NOW
+    )!;
+    assert.strictEqual(v.wallPct, 90);   // (5h − 0.5h)/5h
+    assert.strictEqual(v.wallPctPessimistic, 60); // (2h + 1h)/5h
+    assert.strictEqual(v.confidence, 'ok');
+  })) p++; else f++;
+
+  if (test('a pessimistic edge after the reset is dropped, like the optimistic one', () => {
+    const v = paceView(
+      {
+        utilization: 35, resetsAt, ratePerHour: 1,
+        projectedExhaustAt: new Date(NOW + 30 * H).toISOString(),
+        pessimisticExhaustAt: new Date(NOW + 20 * H).toISOString(),
+        forecastConfidence: 'thin'
+      },
+      FIVE_HOUR_MS,
+      NOW
+    )!;
+    assert.strictEqual(v.verdict, 'lasts');
+    assert.strictEqual(v.wallPct, null);
+    assert.strictEqual(v.wallPctPessimistic, null);
+  })) p++; else f++;
+
+  if (test('confidence defaults to none when the server sends nothing', () => {
+    const v = paceView({ utilization: 35, resetsAt }, FIVE_HOUR_MS, NOW)!;
+    assert.strictEqual(v.confidence, 'none');
+    assert.strictEqual(v.wallPctPessimistic, null);
+  })) p++; else f++;
+
   console.log(`\n  pace-view: ${p} passed, ${f} failed`);
   return f;
 }

@@ -198,6 +198,8 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .usage .u-tick{position:absolute;top:-2px;height:7px}
 .usage .u-tick.now{width:1px;background:var(--cyan)}
 .usage .u-tick.wall{width:2px;background:var(--red)}
+.usage .u-tick.wall-pessimistic{width:1px;background:var(--red);opacity:.45}
+.usage .u-band{position:absolute;top:-2px;height:7px;background:var(--red);opacity:.14}
 .usage .u-time-labels{display:flex;justify-content:space-between;gap:8px;padding-right:42px;font-family:var(--mono);font-size:9px;color:var(--ink3)}
 .usage .u-verdict{white-space:nowrap}
 .usage .u-verdict.wall{color:var(--red)}

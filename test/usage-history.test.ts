@@ -82,6 +82,36 @@ export function run(): number {
     assert.strictEqual(classifyInterval(s(0, 40), s(MIN, 40.3)), 'idle');
   })) p++; else f++;
 
+  // Four consecutive *real* fetches of one unchanged 5-hour window, straight out
+  // of .usage-history.jsonl. The endpoint recomputes resetsAt per request, so
+  // string equality would call every one of these a reset and the profile would
+  // never learn a minute. This is the case that caught it.
+  const JITTER = [
+    '2026-08-25T21:19:59.657311+00:00',
+    '2026-08-25T21:20:00.387292+00:00',
+    '2026-08-25T21:20:00.404859+00:00',
+    '2026-08-25T21:20:00.508567+00:00'
+  ];
+
+  if (test('classify: sub-second resetsAt jitter is the same window, not a reset', () => {
+    for (let i = 1; i < JITTER.length; i++) {
+      assert.strictEqual(
+        classifyInterval(s(0, 40, JITTER[i - 1]), s(MIN, 40, JITTER[i])), 'idle',
+        'jitter pair ' + i
+      );
+    }
+    // Across the whole set, not just neighbours.
+    assert.strictEqual(classifyInterval(s(0, 40, JITTER[0]), s(MIN, 41, JITTER[3])), 'active');
+  })) p++; else f++;
+
+  if (test('MUTATION GUARD: the jitter tolerance does not swallow a real window change', () => {
+    // R1 → R2 is five hours: a genuinely new 5h window. Widen the tolerance far
+    // enough to cover that and this fails.
+    assert.strictEqual(classifyInterval(s(0, 40, R1), s(MIN, 40, R2)), 'reset');
+    // And an unscoped ⇄ scoped transition is a real change too, not jitter.
+    assert.strictEqual(classifyInterval(s(0, 40, null), s(MIN, 40, R1)), 'reset');
+  })) p++; else f++;
+
   // ── accumulate ──
 
   if (test('accumulate: an idle hour credits observed minutes and zero active', () => {
@@ -294,6 +324,12 @@ export function run(): number {
 
   if (test('shouldWrite: a changed resetsAt writes even at the same utilization', () => {
     assert.strictEqual(shouldWrite(s(0, 40, R1), s(MIN, 40, R2)), true);
+  })) p++; else f++;
+
+  if (test('shouldWrite: sub-second resetsAt jitter is not a change', () => {
+    // Otherwise write-on-change silently becomes write-always: ~55 MB/year
+    // instead of ~17, which is the arithmetic the storage decision rests on.
+    assert.strictEqual(shouldWrite(s(0, 40, JITTER[0]), s(MIN, 40, JITTER[3])), false);
   })) p++; else f++;
 
   if (test('shouldWrite: an unchanged sample inside the heartbeat does not write', () => {
