@@ -202,11 +202,18 @@ part) returns the 168 cells, the fallback mean, the confidence, and the walk beh
 current projection — **never raw samples and never file paths**, the same posture as
 `NTFY_TOPIC` never leaving the server. It re-runs the *same* `walkForward` that produced
 the projection, so the inspector cannot drift from what it discloses.
-`client/src/components/analytics/UsageProfile.tsx` renders it in the Analytics tab: 24
-rows × 7 columns (the axis needing 24 slots runs the direction a phone has), a sequential
-one-hue ramp derived with `color-mix` so all five themes hold, texture rather than a sixth
-colour step for no-evidence cells, and a required table view because the lowest ramp steps
-fall under 3:1 against the card surface.
+`client/src/components/usage/UsageProfile.tsx` renders it in its own **Usage** rail
+section (`UsageView.tsx`, own lazy chunk): 24 rows × 7 columns (the axis needing 24 slots
+runs the direction a phone has — at 375px the whole week fits with no horizontal scroll), a
+sequential one-hue ramp derived with `color-mix` so all five themes hold, texture rather
+than a sixth colour step for no-evidence cells, a bare cell for a *measured* zero (never
+working an hour is a different statement from working 15% of it), and a required table view
+because the lowest ramp steps fall under 3:1 against the card surface.
+
+It is a section of its own rather than a block inside Analytics: that tab is about
+*sessions* (the `/kaizen` report cards) and this is about the *account* — they share no
+data, no endpoint and no cadence. The obvious next tenant is idea-5's
+utilization-over-time charts, which read the same log this profile is learned from.
 
 Confidence is `none` (no trusted buckets — the projection is the flat one) / `thin` /
 `ok` (≥ 120 of 168 trusted, roughly two to three weeks of ordinary use). Below `ok` the
@@ -241,7 +248,7 @@ before `confidence` leaves `thin`, and no test substitutes for that.
     - client/src/lib/pace.ts
     - server/api.ts
     - client/src/components/Header.tsx
-    - client/src/components/analytics/UsageProfile.tsx
+    - client/src/components/usage/
   kind: subsystem
   verified: ae66f03b0dd6c0c24cd1bba0c10525d5e6b700de
 -->

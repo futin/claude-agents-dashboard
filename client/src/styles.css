@@ -815,7 +815,8 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    five hand-picked hex values per theme would be 25 nobody can validate, and
    would break the no-hardcoded-color rule. Evidence is texture, never a sixth
    colour step: an untrusted cell has no value, not a low one. */
-.up{margin-top:18px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:3px}
+.usage-section{display:flex;flex-direction:column}
+.up{margin-top:12px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:3px}
 .up-head{display:flex;align-items:flex-start;gap:12px}
 .up-head h3{margin:0;font-family:var(--display);font-size:14px;letter-spacing:.08em;color:var(--text)}
 .up-sub{margin:4px 0 0;max-width:70ch;font-size:12px;line-height:1.5;color:var(--text3)}

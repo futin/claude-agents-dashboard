@@ -104,7 +104,7 @@ export function UsageProfile() {
     <div className="up">
       <div className="up-head">
         <div>
-          <h3>USAGE PROFILE</h3>
+          <h3>LEARNED HOURS</h3>
           <p className="up-sub">
             The 168 hour-of-week weights the weekly forecast walks over. Each cell is{' '}
             <em>one hour of the week</em> — Monday 09:00 is a different cell from Tuesday
