@@ -434,7 +434,7 @@ git commit -m "feat(usage): add the pure duty-cycle forecast walk"
 - Produces:
   - `interface UsageSample { t: number; utilization: number; resetsAt: string | null }`
   - `interface Bucket { weight: number | null; weekStamp: string | null; observedMin: number; activeMin: number; lifetimeObservedMin: number }`
-  - `interface ProfileState { buckets: Bucket[] }`
+  - `interface ProfileState { buckets: Bucket[]; observedWeeks: string[] }`
   - `type IntervalKind = 'active' | 'idle' | 'ambiguous' | 'reset'`
   - `function emptyState(): ProfileState`
   - `function classifyInterval(a: UsageSample, b: UsageSample, maxAttributableMs?: number): IntervalKind`
@@ -455,6 +455,23 @@ git commit -m "feat(usage): add the pure duty-cycle forecast walk"
 `MAX_ATTRIBUTABLE_MS = 300_000` (5 minutes) — comfortably above the one-minute sampling cadence, well below any real gap. The flat case has no duration limit, and that is deliberate: an overnight flat interval is exactly the sleep measurement the feature depends on.
 
 The `0.5` epsilon matches the existing utilization-drop check in `recordAndPace` (`usage-pace.ts`).
+
+**Quiet weeks must decay a bucket, not freeze it.** A bucket's weight only moves when
+it folds, so an hour that goes quiet stops folding and keeps its old weight forever
+while its lifetime evidence keeps it trusted. `ProfileState.observedWeeks` fixes this:
+it holds the ISO week keys in which *any* bucket was observed, pruned to the last 26.
+On fold, let `k` be the number of entries strictly between the bucket's `weekStamp`
+and the current week. Apply the decay first, then the normal fold:
+
+```
+weight ← weight × (1 − EWMA_ALPHA) ** k
+weight ← (1 − EWMA_ALPHA) * weight + EWMA_ALPHA * (activeMin / observedMin)
+```
+
+`k` counts only weeks we were recording, so a month of server downtime contributes
+`k = 0` and changes nothing, while a month of ordinary use with that hour idle decays
+it at the normal half-life. Same principle as the interval table: absence of data is
+not evidence of absence, but observed quiet is.
 
 **Interval-spanning.** An interval can cross hour boundaries, so `accumulate` splits it at local hour boundaries and credits each hour-of-week bucket its own share of the minutes. An overnight idle interval therefore teaches eight buckets at once.
 
@@ -605,6 +622,51 @@ export function run(): number {
       'expected ' + expected + ', got ' + st.buckets[33].weight);
   })) p++; else f++;
 
+  if (test('quiet weeks decay a bucket rather than freezing it', () => {
+    // Week 1: bucket 33 fully active → ratio 1.0.
+    let st = accumulate(emptyState(), s(MON_09, 40), s(MON_09 + 60 * MIN, 70), 0);
+    // Weeks 2 and 3: we were recording (a different hour saw traffic), but
+    // bucket 33 was idle in both. Use hour 12 → hourOfWeek 36.
+    const MON_12 = MON_09 + 3 * H;
+    for (const wk of [1, 2]) {
+      const t = MON_12 + wk * 7 * 24 * H;
+      st = accumulate(st, s(t, 40), s(t + MIN, 41), 0);
+    }
+    // Week 4: bucket 33 folds. It skipped 2 observed weeks, so the week-1
+    // ratio of 1.0 must have decayed by (1 − α)^2 before the fold.
+    const w4 = MON_09 + 3 * 7 * 24 * H;
+    st = accumulate(st, s(w4, 40), s(w4 + 30 * MIN, 40), 0);
+    const w5 = MON_09 + 4 * 7 * 24 * H;
+    st = accumulate(st, s(w5, 40), s(w5 + MIN, 40), 0);
+    const decayed = 1 * Math.pow(1 - EWMA_ALPHA, 2);
+    const expected = (1 - EWMA_ALPHA) * decayed + EWMA_ALPHA * 0; // week 4 was idle
+    assert.ok(Math.abs((st.buckets[33].weight ?? -1) - expected) < 1e-9,
+      'expected ' + expected + ', got ' + st.buckets[33].weight);
+  })) p++; else f++;
+
+  if (test('MUTATION GUARD: unobserved weeks do not decay (server downtime is not idleness)', () => {
+    // Week 1 active, then nothing recorded anywhere for three weeks, then a fold.
+    // k must be 0, so the weight is the plain two-fold EWMA with no decay.
+    let st = accumulate(emptyState(), s(MON_09, 40), s(MON_09 + 60 * MIN, 70), 0);
+    const w4 = MON_09 + 3 * 7 * 24 * H;
+    st = accumulate(st, s(w4, 40), s(w4 + 60 * MIN, 70), 0);
+    const w5 = MON_09 + 4 * 7 * 24 * H;
+    st = accumulate(st, s(w5, 40), s(w5 + MIN, 40), 0);
+    // Both observed weeks were fully active → 1.0 either way. Decay would drop it.
+    assert.ok(Math.abs((st.buckets[33].weight ?? -1) - 1) < 1e-9,
+      'downtime must not decay; expected 1, got ' + st.buckets[33].weight);
+  })) p++; else f++;
+
+  if (test('observedWeeks is pruned and never grows without bound', () => {
+    let st = emptyState();
+    for (let wk = 0; wk < 40; wk++) {
+      const t = MON_09 + wk * 7 * 24 * H;
+      st = accumulate(st, s(t, 40), s(t + MIN, 41), 0);
+    }
+    assert.ok(st.observedWeeks.length <= 26,
+      'expected <= 26 retained weeks, got ' + st.observedWeeks.length);
+  })) p++; else f++;
+
   if (test('week rollover: two samples in the same week do not fold twice', () => {
     let st = accumulate(emptyState(), s(MON_09, 40), s(MON_09 + 30 * MIN, 45), 0);
     st = accumulate(st, s(MON_09 + 30 * MIN, 45), s(MON_09 + 60 * MIN, 45), 0);
@@ -673,6 +735,8 @@ Create `server/lib/usage-history.ts` with the pure functions only — no `node:f
 - `isoWeekKey(ms, offsetMinutes)` returns something like `'2026-W35'`. Implement real ISO-8601 week numbering (Thursday-anchored), not `Math.floor(dayOfYear / 7)`, so the fold boundary is stable across year ends. Only equality is ever compared, but a wrong boundary would fold twice in one week or skip one entirely.
 - Fold order inside `accumulate`: for each bucket the interval touches, if `bucket.weekStamp !== null && bucket.weekStamp !== currentWeekKey`, fold `activeMin / observedMin` into `weight` via the EWMA (seeding directly with the ratio when `weight === null`), then zero `observedMin`/`activeMin`. Then set `weekStamp = currentWeekKey` and add this interval's minutes. Guard `observedMin === 0` — do not fold a zero-denominator week; leave `weight` as it was.
 - `lifetimeObservedMin` accumulates forever and is never reset by a fold. It is the trust floor's input.
+- `emptyState()` also returns `observedWeeks: []`. Every `accumulate` that credits any bucket adds the current ISO week key if absent, keeps the list sorted, and prunes to the newest 26 entries.
+- Before the EWMA fold, decay by the observed weeks the bucket skipped: `k` = the count of `observedWeeks` entries strictly between the bucket's `weekStamp` and the current key, then `weight *= (1 - EWMA_ALPHA) ** k`. Skip the decay entirely when `weight === null` (nothing to decay yet). A bucket that has never folded is unaffected.
 - `deriveProfile(state)`: `weights[i] = bucket.lifetimeObservedMin >= TRUST_FLOOR_MIN ? bucket.weight : null`; `globalMean` = mean of the non-null weights, or `1` when there are none (weight 1 is the safe pessimistic default — it reproduces today's behaviour); `trustedCount` = the non-null count.
 
 Write the module docstring in the house style: why duration decides ambiguity rather than direction, why a flat overnight interval is the most valuable input the module gets, and why the trust floor is lifetime rather than per-week.

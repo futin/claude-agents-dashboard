@@ -194,7 +194,32 @@ weight ← (1−α)·weight + α·(activeMin / observedMin)     α ≈ 0.3
 ```
 
 α = 0.3 per week gives a ~2-week half-life (`ln 0.5 / ln 0.7 ≈ 1.94`), so recent
-habits dominate. A bucket holds at most 60 observed minutes per week, so the floor is
+habits dominate.
+
+**A frozen weight is not a decayed one.** A bucket's weight only moves when that
+bucket folds. If an hour goes quiet the bucket simply stops folding, so its weight
+freezes at the old value and its lifetime evidence keeps it trusted forever. Stop
+working Saturday afternoons in March and that cell still claims 40% in September,
+with the forecast budgeting for a habit you dropped.
+
+Marking such a cell untrusted is the wrong repair: untrusted falls back to the global
+mean, which is dominated by working hours, so an hour you have genuinely abandoned
+would be *over*-estimated. It has to decay instead.
+
+So the profile also tracks which ISO weeks were observed **at all** — a bounded list
+on `ProfileState`, pruned to the last 26. When a bucket folds, count the observed
+weeks strictly between its `weekStamp` and the current one; call that `k`. Then:
+
+```
+weight ← weight × (1−α)^k          // k weeks we were recording and this hour was quiet
+weight ← (1−α)·weight + α·ratio    // then the normal fold
+```
+
+`k` counts only weeks we were actually recording, so a month with the server off
+contributes `k = 0` and changes nothing, while a month of ordinary use with that hour
+idle decays it at the same ~2-week half-life as everything else. This is the
+gap-versus-idle rule from above applied one level up: absence of data is not evidence
+of absence, but observed quiet is. A bucket holds at most 60 observed minutes per week, so the floor is
 **lifetime**: under 60 accumulated observed minutes the bucket reports no weight and
 the walk falls back to the profile's global mean. A week whose bucket saw only a few
 minutes still folds in — the EWMA weights it the same as a full week, which is why the
@@ -369,7 +394,10 @@ reasoning is what a future change needs to argue against.
 ## Not doing
 
 Explicitly out of scope, so a later reader does not mistake absence for oversight:
-sub-hour profile resolution, holiday or vacation calendars, configurable timezone
+per-cell variance or stability (a cell reports one smoothed weight, so
+"consistently 50%" and "100% for four weeks then 0%" look identical — the raw log
+keeps the history if this ever matters), sub-hour profile resolution, holiday or
+vacation calendars, configurable timezone
 (host-local is correct — the server and the user are the same machine), per-project
 profiles, and any change to the 5h window's own projection. The history *charts* from
 idea-5 are also out of scope here; this design delivers the persistence they need, and

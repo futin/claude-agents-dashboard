@@ -104,8 +104,12 @@ td:first-child,th:first-child{text-align:left}
 <p>Three ways to show the learned duty-cycle profile — the 168 hour-of-week weights the
 weekly forecast walks over. Pick one; the differences are about which screen you read it on
 and how directly it explains the projected number.</p>
-<div class="sub">Synthetic data. Weight = the share of that clock hour you are typically
-active. Hatched = not enough evidence yet, which is a different thing from zero.</div>
+<div class="sub">Synthetic data. Each cell is <em>one hour of the week</em> — Monday 09:00
+is a different cell from Tuesday 09:00, and nothing is averaged across days. What
+accumulates across <em>weeks</em> is the evidence: a cell can gather at most 60 minutes
+per week, so "5 weeks of evidence" means five separate Mondays. Weight = the share of
+that hour you are typically active. Hatched = not enough evidence yet, which is a
+different thing from zero.</div>
 
 <div class="bar">
   <button id="theme" aria-pressed="false">Switch to light theme</button>
@@ -209,7 +213,10 @@ function fixture() {
       if (w > 0) w = Math.max(0, Math.min(1, w + ((d * 7 + h) % 5 - 2) * 0.03));
       // 04:00–06:00 never accumulated an hour of evidence.
       const observedMin = h >= 4 && h < 7 ? 20 + (h * 3) % 20 : 300 + ((d * 24 + h) * 37) % 900;
-      cells.push({ d, h, w, observedMin, trusted: observedMin >= 60 });
+      // Saturday afternoons were a habit months ago and are not any more:
+      // trusted by lifetime evidence, but the weight is long stale.
+      const staleWeeks = d === 6 && h >= 12 && h < 15 ? 14 : 0;
+      cells.push({ d, h, w, observedMin, staleWeeks, trusted: observedMin >= 60 });
     }
   }
   return cells;
@@ -231,10 +238,18 @@ const tip = document.getElementById('tip');
 function wireTip(el, c) {
   el.addEventListener('pointerenter', () => {
     const pct = Math.round(c.w * 100);
+    // A cell is ONE hour of the week, and it can only ever gather 60 minutes
+    // per week — so evidence is stated in weeks. Saying "300 min observed"
+    // against a one-hour cell reads as a contradiction.
+    const weeks = c.observedMin / 60;
+    const weekTxt = weeks >= 2 ? `${Math.round(weeks)} weeks of evidence`
+      : `${Math.round(c.observedMin)} of 60 min — under one week`;
     tip.innerHTML = c.trusted
-      ? `${DAYS[c.d]} ${String(c.h).padStart(2, '0')}:00<br><b>${pct}% active</b>` +
-        `<br>${Math.round(c.observedMin)} min observed`
-      : `${DAYS[c.d]} ${String(c.h).padStart(2, '0')}:00<br><span class="warn">no evidence yet</span>` +
+      ? `${DAYS[c.d]} ${String(c.h).padStart(2, '0')}:00 · every week<br><b>${pct}% active</b>` +
+        `<br>${weekTxt}` + (c.staleWeeks > 8
+          ? `<br><span class="warn">last seen ${c.staleWeeks} weeks ago</span>` : '')
+      : `${DAYS[c.d]} ${String(c.h).padStart(2, '0')}:00 · every week<br>` +
+        `<span class="warn">no evidence yet</span>` +
         `<br>${Math.round(c.observedMin)} of 60 min needed<br>falls back to the weekly mean`;
     tip.style.opacity = '1';
   });
