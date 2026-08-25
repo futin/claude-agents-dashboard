@@ -139,29 +139,51 @@ Files (both gitignored, both resolved from the repo root — not cwd — per the
 - `.usage-profile.json` — the 168 buckets. Derived state, EWMA-updated, survives
   rotation (it never needs the raw file again).
 
-## The correctness trap: gaps are unknown, not idle
+## Gaps: what a sleeping laptop actually tells us
 
-A bucket must not learn "you never work at 15:00" because the server was off, or
-because `usageStatus` was `token-expired` — which per idea-5 is the normal
-away-from-terminal state, i.e. it correlates with exactly the hours we most want to
-measure. Recording a gap as zero activity would bias the profile toward the machine's
-uptime, not the user's habits.
+The naive rule — "no data means unknown, never idle" — is wrong here, and wrong in a
+way that defeats the whole feature. The machine sleeps at night. Night is exactly the
+block of hours the profile most needs to learn is quiet. Treat those gaps as unknown
+and the night buckets collect almost no evidence, stay below the trust floor forever,
+fall back to the global mean — and the global mean is dominated by working hours. The
+projection over-predicts night burn again, which is the bug we set out to fix.
 
-Each bucket therefore carries two counters:
+The utilization number itself resolves this. It is cumulative within a window and
+does not age out token-by-token (verified 2026-08-24: `resets_at` held constant while
+utilization climbed 32 → 35 → 51). So the two samples bracketing a gap say what
+happened inside it:
 
-```
-{ observedMin: number,   // sample-minutes we actually had data for
-  activeMin:  number }   // of those, minutes where utilization rose
-weight = activeMin / observedMin
-```
+| Gap, bracketed by two successful samples | Interpretation |
+|---|---|
+| `resetsAt` unchanged **and** utilization unchanged | **Observed idle.** Nothing was spent, whatever the reason. Counts into `observedMin` with `activeMin += 0`. |
+| `resetsAt` unchanged, utilization **rose** by Δ | **Unknown.** We know the total but not its distribution across the gap's hours. Counts into neither. |
+| `resetsAt` changed (window reset inside the gap) | **Unknown.** The comparison is meaningless — 40% → 40% across a reset is consistent with working the whole time. |
 
-Missing minutes are simply never counted in either denominator or numerator.
+This inverts which case is the exception. Sleep, a shut lid, dinner — all land in row
+one, so a sleeping laptop becomes the profile's single best teacher rather than a hole
+in it. Only the genuinely ambiguous case (spend happened, timing unknown) is
+discarded, and that case is rarer.
 
-Each bucket keeps three numbers: the current week's `observedMin`/`activeMin`
-accumulators plus a `weekStamp`, and separately a **lifetime** `observedMin` used only
-as an evidence floor. When a sample arrives whose ISO week differs from the bucket's
-`weekStamp`, that week's ratio is folded into the EWMA weight and the accumulators
-reset:
+### Sensor choice: learn from the 5h window, predict the weekly one
+
+Row one's inference depends on utilization being monotonic within its window. That is
+**verified** for the 5h window and **unproven** for the weekly one — the docs flag
+that Anthropic doesn't document the weekly reset and community reports conflict (some
+observed 72-hour intervals). A sliding weekly window could *fall* as old spend ages
+out, and "unchanged" would stop proving anything.
+
+So: derive the 168-bucket profile from **5h-window samples**, and apply it to the
+**weekly** projection. Beyond dodging the monotonicity question, the 5h window is
+simply the better sensor — it sweeps 0 → ~50% within five hours, where the weekly
+number crawls in ~1% integer steps. The thing being predicted and the thing being
+measured are deliberately different windows.
+
+### Bucket accounting
+
+Each bucket keeps the current week's `observedMin`/`activeMin` accumulators plus a
+`weekStamp`, and separately a **lifetime** `observedMin` used only as an evidence
+floor. When a sample arrives whose ISO week differs from the bucket's `weekStamp`,
+that week's ratio folds into the EWMA weight and the accumulators reset:
 
 ```
 weight ← (1−α)·weight + α·(activeMin / observedMin)     α ≈ 0.3
@@ -173,6 +195,46 @@ habits dominate. A bucket holds at most 60 observed minutes per week, so the flo
 the walk falls back to the profile's global mean. A week whose bucket saw only a few
 minutes still folds in — the EWMA weights it the same as a full week, which is why the
 lifetime floor, not a per-week one, is what gates trust.
+
+## Sampling is request-driven today, and that has to change
+
+`getCachedUsageState()` has exactly one caller: the `/api/sessions` handler
+(`server/api.ts:152`). There is no timer. Samples are therefore recorded **only while
+a browser has the dashboard open and polling**.
+
+For the live header bars that is correct — no viewer, no reason to fetch. For history
+recording it is fatal: the log would describe when a dashboard tab was open, not when
+work happened. A machine awake all day with the tab closed records nothing, and the
+profile learns browsing habits.
+
+Phase 2 therefore needs its own sampling interval, independent of browser polling and
+gated on history recording being enabled. Consequences to accept explicitly:
+
+- The server calls Anthropic ~once/minute for the life of the process with nobody
+  watching. Same single outbound call kind the project already makes (`lib/notify.ts`
+  is the other), now on a schedule rather than on demand.
+- After a long sleep the access token is usually expired, so the first post-wake
+  samples fail. The row-one inference still works — it only needs the two *successful*
+  samples bracketing the gap, however far apart they are.
+- macOS suspends timers during sleep; the interval fires on wake. Gap detection must
+  come from comparing sample timestamps, never from counting missed ticks.
+
+## Restart behaviour
+
+Today a restart wipes the RAM ring: the 5h pace returns after 5 minutes of fresh
+samples, the weekly after 30 (`usage-pace.ts:44-45`). Phase 1 keeps exactly that, by
+design — the flat fallback profile means the weekly projection reverts to today's
+behaviour rather than blanking while it waits to measure a duty cycle.
+
+Phase 2 largely removes the cost. The profile is on disk, so the learned pattern
+survives. And the raw log lets the server **rehydrate the ring** from the last few
+hours on boot, so the active rate is available immediately instead of 30 minutes
+later.
+
+Nothing here reads transcripts. Utilization comes only from the OAuth usage endpoint;
+transcript token counts do not map onto Anthropic's opaque percentage, which is why
+idea-4 is a complement rather than a substitute. The new files hold copies of numbers
+already fetched.
 
 ## Confidence and the UI
 
@@ -213,13 +275,21 @@ the weekly `fmtRate` (`client/src/lib/pace.ts:33`, which multiplies by 24 to sho
 `usage-forecast.ts` + `walkForward` + flat profile; per-window ring sizes and
 lookbacks (weekly ring extended to ~7 days at 5-min resolution ≈ 2,016 samples);
 duty cycle measured from the ring when it holds ≥24h, else weight `1.0`; band UI.
-Independently valuable, and by construction cannot regress current behaviour.
+By construction it cannot regress current behaviour.
+
+Be honest about how much phase 1 actually buys, though. Sampling is request-driven
+and the ring is RAM-only, so ≥24h of continuous history requires a dashboard tab
+polling for a full day without a restart. That will often not hold, and the flat
+weight `1.0` fallback *is* today's arithmetic. Phase 1's real deliverables are
+therefore the tested seam and the band UI — the projection only starts improving
+materially once phase 2 supplies a durable profile.
 
 **Phase 2 — learned profile (architectural).**
-`usage-history.ts`: append, rotate, tail-read, bucket learning with the
-observed/active counters, atomic profile write. Feeds the same seam. Also delivers
-idea-5's persistence half as a byproduct — the history charts then need only a
-reader and a view.
+`usage-history.ts`: append, rotate, tail-read, gap classification, bucket learning
+with the observed/active counters, atomic profile write, ring rehydration on boot,
+and its own sampling interval decoupled from browser polling. Feeds the same seam.
+Also delivers idea-5's persistence half as a byproduct — the history charts then
+need only a reader and a view.
 
 Phase 2's projection is not trustworthy until ~2–3 weeks of buckets exist. Until
 then `confidence` stays `thin` and the band stays wide. That is the honest behaviour,
@@ -236,9 +306,12 @@ Pure functions, fixed clocks, no network — matching `test/usage.test.ts` and
   closed-form `(100−util)/rate`, proving phase 1 is a no-op at the fallback.
 - Crossing exactly at an hour boundary, and inside an hour (interpolation).
 - `util` already ≥100 → immediate; `activeRate` 0 → null.
-- Bucket learning: a gap must leave `observedMin` **unchanged** — and per the
-  `mutation-prove-security-tests` lesson, that test must fail if the gap-skip is
-  deleted.
+- Gap classification, one case each: unchanged `resetsAt` + unchanged utilization
+  counts a full night as observed idle; unchanged `resetsAt` + risen utilization
+  counts nothing; changed `resetsAt` counts nothing even when utilization is
+  identical across the gap. Per the `test-the-untested-complement` lesson, all three
+  rows get a test, not just the happy one — and per `mutation-prove-security-tests`,
+  the reset-guard test must fail if the `resetsAt` comparison is deleted.
 - Thin bucket (lifetime `observedMin < 60`) falls back to the global mean, not to 0.
 - Week rollover: a fold happens exactly once per bucket per ISO week, and the
   accumulators reset; two samples in the same week must not fold twice.
@@ -252,3 +325,10 @@ Pure functions, fixed clocks, no network — matching `test/usage.test.ts` and
    short enough that duty cycle inside it is ~1 — leaning weekly-only.)
 4. Sampling density on disk: write-on-change + heartbeat (≲17 MB/year) vs every
    minute (55 MB/year, simpler code, better charts).
+5. The phase-2 sampling timer runs unattended by design. Always-on whenever the
+   server is up, or opt-in via a Settings toggle? (Leaning: on with history
+   recording, which is itself opt-in.)
+6. Should an ambiguous gap (utilization rose, timing unknown) really be discarded, or
+   spread across its hours in proportion to the existing profile weights? Discarding
+   is honest and simple; spreading recovers signal but lets the profile reinforce
+   itself.
