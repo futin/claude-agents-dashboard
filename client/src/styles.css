@@ -809,3 +809,56 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
     font-size:max(16px,calc(16px / var(--font-scale,1)))
   }
 }
+
+/* ── Usage profile inspector (Analytics tab) ─────────────────────────────
+   A sequential one-hue ramp, derived with color-mix so all five themes hold —
+   five hand-picked hex values per theme would be 25 nobody can validate, and
+   would break the no-hardcoded-color rule. Evidence is texture, never a sixth
+   colour step: an untrusted cell has no value, not a low one. */
+.up{margin-top:18px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:3px}
+.up-head{display:flex;align-items:flex-start;gap:12px}
+.up-head h3{margin:0;font-family:var(--display);font-size:14px;letter-spacing:.08em;color:var(--text)}
+.up-sub{margin:4px 0 0;max-width:70ch;font-size:12px;line-height:1.5;color:var(--text3)}
+.up-toggle{margin-left:auto;flex:none;font-family:var(--mono);font-size:11px;color:var(--text2);
+  background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:4px 8px;cursor:pointer}
+.up-toggle:hover{border-color:var(--border2);color:var(--text)}
+.up-off{margin-top:10px;padding:8px 10px;font-size:12px;line-height:1.5;color:var(--text2);
+  background:var(--surface2);border-left:2px solid var(--orange);border-radius:2px}
+.up-note{margin:8px 0 0;padding-left:12px;max-width:70ch;font-size:12px;line-height:1.5;
+  color:var(--text3);border-left:2px solid var(--border2)}
+
+.up-grid{display:grid;gap:2px;margin-top:12px;max-width:420px}
+.up-axis{font-family:var(--mono);font-size:9px;color:var(--text3);text-align:center;align-self:center}
+.up-axis.left{text-align:right;padding-right:4px}
+/* Not square: 24 rows of square cells makes a 1048px-tall grid (measured). A
+   fixed 14px row keeps the whole week on one screen, which is the only way the
+   weekend gap and the working-hours block read as shapes at all. */
+.up-cell{border:1px solid var(--hairline);border-radius:2px;height:14px}
+.up-cell.q1{background:color-mix(in oklab,var(--cyan) 20%,var(--strip))}
+.up-cell.q2{background:color-mix(in oklab,var(--cyan) 40%,var(--strip))}
+.up-cell.q3{background:color-mix(in oklab,var(--cyan) 60%,var(--strip))}
+.up-cell.q4{background:color-mix(in oklab,var(--cyan) 80%,var(--strip))}
+.up-cell.q5{background:var(--cyan)}
+.up-cell.unknown{background:repeating-linear-gradient(135deg,var(--hairline) 0 2px,transparent 2px 5px);border-style:dashed}
+.up-cell:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+
+.up-legend{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:12px}
+.up-legend small{font-family:var(--mono);font-size:10px;color:var(--text3)}
+.up-swatches{display:flex;gap:2px}
+.up-swatches .up-cell{width:14px}
+.up-legend-none{width:14px;margin-left:10px}
+.up-legend .up-conf{width:100%;color:var(--text2)}
+
+.up-walk{margin-top:16px}
+.up-walkbars{display:flex;gap:1px;align-items:flex-end;height:64px;border-bottom:1px solid var(--border)}
+.up-wb{flex:1;min-width:0;background:color-mix(in oklab,var(--cyan) 60%,var(--strip));border-radius:2px 2px 0 0}
+.up-wb.idle{background:var(--hairline);height:2px}
+.up-walkmeta{display:flex;justify-content:space-between;gap:8px;margin-top:5px;
+  font-family:var(--mono);font-size:10px;color:var(--text3)}
+.up-hit{color:var(--red)}
+
+.up-tablewrap{margin-top:12px;overflow-x:auto}
+.up-table{border-collapse:collapse;font-family:var(--mono);font-size:10px;color:var(--text2)}
+.up-table th,.up-table td{border:1px solid var(--border);padding:2px 6px;text-align:right;white-space:nowrap}
+.up-table thead th{color:var(--text3);font-weight:400}
+.up-table td.up-td-none{color:var(--text3)}

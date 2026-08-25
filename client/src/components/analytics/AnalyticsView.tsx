@@ -10,6 +10,7 @@ import {
   type AnalyticsView as AnalyticsViewState
 } from '../../lib/analyticsFilterSort';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
+import { UsageProfile } from './UsageProfile';
 
 /**
  * Analytics section — the last N sessions the `/kaizen` skill has logged, each
@@ -87,6 +88,11 @@ export default function AnalyticsView() {
           ))}
         </div>
       )}
+
+      {/* The duty-cycle inspector. A section here rather than its own rail entry:
+          the rail already has five, and one grid does not warrant a sixth. It
+          inherits this tab's lazy chunk for free. */}
+      <UsageProfile />
     </div>
   );
 }

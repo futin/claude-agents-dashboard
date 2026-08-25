@@ -270,6 +270,22 @@ function refreshNow(): Promise<void> {
 }
 
 /**
+ * Force one fetch cycle now, bypassing the cache TTL. Fire-and-forget.
+ *
+ * The recorder's timer needs this rather than `getCachedUsageState`: that call
+ * only refreshes when the cache is older than `CACHE_TTL_MS`, and with the timer
+ * running at the same 60s the two alternate — measured, the recorder sampled
+ * every ~120s instead of every 60s, halving the profile's resolution. Still
+ * exactly one path to Anthropic (`refreshNow`, single-flight), just not
+ * TTL-gated; and because a forced refresh also stamps `cachedAt`, the
+ * browser-poll path stays quiet for its own 60s afterwards, so the combined
+ * request rate is unchanged.
+ */
+export function refreshUsageNow(): void {
+  void refreshNow();
+}
+
+/**
  * Current usage snapshot + status (synchronous). Returns the last fetched value
  * and triggers a non-blocking background refresh when stale. The very first
  * call returns `unavailable` until the first fetch lands (next poll picks it up).
