@@ -211,9 +211,14 @@ on `ProfileState`, pruned to the last 26. When a bucket folds, count the observe
 weeks strictly between its `weekStamp` and the current one; call that `k`. Then:
 
 ```
-weight ← weight × (1−α)^k          // k weeks we were recording and this hour was quiet
-weight ← (1−α)·weight + α·ratio    // then the normal fold
+w      ← weight === null ? ratio : (1−α)·weight + α·ratio   // fold the pending week
+weight ← w × (1−α)^k                                        // then age it by k quiet weeks
 ```
+
+Order matters: the pending accumulators belong to the bucket's stamped week, and the
+`k` skipped weeks came *after* it, so they age that week's contribution. Decaying
+first would age a weight the skipped weeks predate, and a first-ever fold would escape
+the decay entirely and leave a stale seed at full strength.
 
 `k` counts only weeks we were actually recording, so a month with the server off
 contributes `k = 0` and changes nothing, while a month of ordinary use with that hour

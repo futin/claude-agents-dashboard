@@ -464,9 +464,17 @@ On fold, let `k` be the number of entries strictly between the bucket's `weekSta
 and the current week. Apply the decay first, then the normal fold:
 
 ```
-weight ← weight × (1 − EWMA_ALPHA) ** k
-weight ← (1 − EWMA_ALPHA) * weight + EWMA_ALPHA * (activeMin / observedMin)
+// 1. Fold the week whose accumulators are pending (seed if this is the first).
+w = weight === null ? ratio : (1 - EWMA_ALPHA) * weight + EWMA_ALPHA * ratio
+// 2. Then age it by the observed weeks this bucket sat out, which came after it.
+weight = w * (1 - EWMA_ALPHA) ** k
 ```
+
+**The order is load-bearing and easy to get backwards.** The pending accumulators
+belong to the bucket's `weekStamp` week, and the `k` skipped weeks came *after* it — so
+they age that week's contribution. Decaying first would age a weight the skipped weeks
+predate, and a first-ever fold (`weight === null`) would skip the decay entirely,
+leaving a stale seed at full strength. Fold, then decay.
 
 `k` counts only weeks we were recording, so a month of server downtime contributes
 `k = 0` and changes nothing, while a month of ordinary use with that hour idle decays
@@ -622,37 +630,49 @@ export function run(): number {
       'expected ' + expected + ', got ' + st.buckets[33].weight);
   })) p++; else f++;
 
+  // A rising interval only counts as `active` when it is within
+  // MAX_ATTRIBUTABLE_MS, so an active stretch must be fed one minute at a time.
+  // Ten active minutes and no idle ones gives that week a ratio of exactly 1.0.
+  function activeMinutes(st: ReturnType<typeof emptyState>, startMs: number, mins: number) {
+    let cur = st;
+    for (let i = 0; i < mins; i++) {
+      cur = accumulate(cur, s(startMs + i * MIN, 40 + i), s(startMs + (i + 1) * MIN, 41 + i), 0);
+    }
+    return cur;
+  }
+
   if (test('quiet weeks decay a bucket rather than freezing it', () => {
-    // Week 1: bucket 33 fully active → ratio 1.0.
-    let st = accumulate(emptyState(), s(MON_09, 40), s(MON_09 + 60 * MIN, 70), 0);
-    // Weeks 2 and 3: we were recording (a different hour saw traffic), but
-    // bucket 33 was idle in both. Use hour 12 → hourOfWeek 36.
+    // Week 1: bucket 33 active for ten minutes → that week's ratio is 1.0.
+    let st = activeMinutes(emptyState(), MON_09, 10);
+    // Weeks 2 and 3: we were recording — a different hour saw traffic — but
+    // bucket 33 was idle. Monday 12:00 is hourOfWeek 36.
     const MON_12 = MON_09 + 3 * H;
     for (const wk of [1, 2]) {
       const t = MON_12 + wk * 7 * 24 * H;
       st = accumulate(st, s(t, 40), s(t + MIN, 41), 0);
     }
-    // Week 4: bucket 33 folds. It skipped 2 observed weeks, so the week-1
-    // ratio of 1.0 must have decayed by (1 − α)^2 before the fold.
+    // Week 4 touches bucket 33 again, folding week 1 and then ageing it by the
+    // two observed weeks it sat out. Thirty idle minutes accumulate for week 4.
     const w4 = MON_09 + 3 * 7 * 24 * H;
     st = accumulate(st, s(w4, 40), s(w4 + 30 * MIN, 40), 0);
+    // Week 5 folds week 4's ratio of 0.
     const w5 = MON_09 + 4 * 7 * 24 * H;
     st = accumulate(st, s(w5, 40), s(w5 + MIN, 40), 0);
-    const decayed = 1 * Math.pow(1 - EWMA_ALPHA, 2);
-    const expected = (1 - EWMA_ALPHA) * decayed + EWMA_ALPHA * 0; // week 4 was idle
+    const afterW4Fold = 1 * Math.pow(1 - EWMA_ALPHA, 2);          // 0.49
+    const expected = (1 - EWMA_ALPHA) * afterW4Fold + EWMA_ALPHA * 0; // 0.343
     assert.ok(Math.abs((st.buckets[33].weight ?? -1) - expected) < 1e-9,
       'expected ' + expected + ', got ' + st.buckets[33].weight);
   })) p++; else f++;
 
-  if (test('MUTATION GUARD: unobserved weeks do not decay (server downtime is not idleness)', () => {
-    // Week 1 active, then nothing recorded anywhere for three weeks, then a fold.
-    // k must be 0, so the weight is the plain two-fold EWMA with no decay.
-    let st = accumulate(emptyState(), s(MON_09, 40), s(MON_09 + 60 * MIN, 70), 0);
+  if (test('MUTATION GUARD: unobserved weeks do not decay (downtime is not idleness)', () => {
+    // Week 1 active, nothing recorded anywhere for three weeks, then active again.
+    // k must be 0 both times, so two ratio-1.0 folds leave the weight at 1.0.
+    // Delete the "only observed weeks count" rule and this drops to 0.49.
+    let st = activeMinutes(emptyState(), MON_09, 10);
     const w4 = MON_09 + 3 * 7 * 24 * H;
-    st = accumulate(st, s(w4, 40), s(w4 + 60 * MIN, 70), 0);
+    st = activeMinutes(st, w4, 10);
     const w5 = MON_09 + 4 * 7 * 24 * H;
     st = accumulate(st, s(w5, 40), s(w5 + MIN, 40), 0);
-    // Both observed weeks were fully active → 1.0 either way. Decay would drop it.
     assert.ok(Math.abs((st.buckets[33].weight ?? -1) - 1) < 1e-9,
       'downtime must not decay; expected 1, got ' + st.buckets[33].weight);
   })) p++; else f++;
@@ -736,7 +756,7 @@ Create `server/lib/usage-history.ts` with the pure functions only — no `node:f
 - Fold order inside `accumulate`: for each bucket the interval touches, if `bucket.weekStamp !== null && bucket.weekStamp !== currentWeekKey`, fold `activeMin / observedMin` into `weight` via the EWMA (seeding directly with the ratio when `weight === null`), then zero `observedMin`/`activeMin`. Then set `weekStamp = currentWeekKey` and add this interval's minutes. Guard `observedMin === 0` — do not fold a zero-denominator week; leave `weight` as it was.
 - `lifetimeObservedMin` accumulates forever and is never reset by a fold. It is the trust floor's input.
 - `emptyState()` also returns `observedWeeks: []`. Every `accumulate` that credits any bucket adds the current ISO week key if absent, keeps the list sorted, and prunes to the newest 26 entries.
-- Before the EWMA fold, decay by the observed weeks the bucket skipped: `k` = the count of `observedWeeks` entries strictly between the bucket's `weekStamp` and the current key, then `weight *= (1 - EWMA_ALPHA) ** k`. Skip the decay entirely when `weight === null` (nothing to decay yet). A bucket that has never folded is unaffected.
+- Fold **then** decay, in that order (see the block above): fold the pending ratio into `weight` — seeding directly with the ratio when `weight === null` — and only then multiply by `(1 - EWMA_ALPHA) ** k`, where `k` is the count of `observedWeeks` entries strictly between the bucket's `weekStamp` and the current key. The decay applies even to a freshly seeded weight; a bucket with no pending accumulators (`observedMin === 0`) folds nothing and decays nothing.
 - `deriveProfile(state)`: `weights[i] = bucket.lifetimeObservedMin >= TRUST_FLOOR_MIN ? bucket.weight : null`; `globalMean` = mean of the non-null weights, or `1` when there are none (weight 1 is the safe pessimistic default — it reproduces today's behaviour); `trustedCount` = the non-null count.
 
 Write the module docstring in the house style: why duration decides ambiguity rather than direction, why a flat overnight interval is the most valuable input the module gets, and why the trust floor is lifetime rather than per-week.
@@ -1085,6 +1105,7 @@ Expected: FAIL — `setForecastProfile` and `seedSamples` are not exported.
 In the success path of `refreshNow()`, after the usage is mapped and before/alongside the existing `recordAndPace` calls, when `getSettings().recordUsageHistory` is true:
 
 - Build a `UsageSample` from the **five-hour** window (`{ t: now, utilization, resetsAt }`) — the 5h window is the sensor, per spec decision 3.
+- Note the resolution asymmetry, and do not try to "fix" it. Learning happens **live**, on every one-minute tick, against the in-memory previous sample — so the profile always learns at full sampling resolution. The *log* is sparser (write-on-change plus a heartbeat), which is fine for charts and for rehydrating the pace ring, but means rebuilding a profile from the log alone would be lossy: a flat stretch that ends in a rise gets written as one long rising interval, which classifies as `ambiguous` and is discarded. The profile file is the profile's source of truth; the log is not a replayable substitute for it.
 - Call `recordTick(sample)`, which is the one function that owns the write path: it keeps the last-written sample in memory, consults `shouldWrite`, appends when true, calls `accumulate` against the in-memory `ProfileState` using the previous sample, calls `saveProfileState` at most every `HEARTBEAT_MS`, and calls `rotateIfNeeded` on save. Implement `recordTick` in `usage-history.ts`, not here — `usage.ts` should gain about three lines.
 - Push the freshly derived profile into `usage-pace.ts` via `setForecastProfile(deriveProfile(state))`.
 
