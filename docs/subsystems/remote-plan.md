@@ -86,8 +86,14 @@ remote as a held question.
   `api.ts`'s `sweepTerminalDecisions` off the scan tick, only while holds exist — settles it
   as `dismissed` once `lastMessageMs` shows the transcript has grown past its `askedAt`.
   Identical to the question store's sweep (see
-  [remote-answer](remote-answer.md#state-machine) for why that test uses `lastMessageTs`);
-  `messages.ts` needs none, because its own idle reaper already releases every hold.
+  [remote-answer](remote-answer.md#state-machine) for why that test uses `lastMessageTs`).
+- **So does coming back to the keyboard.** `plans.ts` runs the same 5s `sweepIdle()` reaper
+  as `pending.ts`, over the same shared `lib/idle.ts` `backAtDesk()` policy, settling held
+  plans as `released` so the plan card appears within ~5s of your first keystroke. Read
+  [the idle sweep](remote-answer.md#the-idle-sweep-coming-back-to-the-desk) for the
+  reasoning, the fail directions, and why there is no headless exemption. Before this,
+  a plan raised while you were away stayed parked for its whole `answerSecs` window and
+  **decide on the card** was the only way out.
 - **The plan text is also on disk**, unlike a permission dialog. So even with no hook
   installed, a trailing `ExitPlanMode` tool_use turns the row blue via
   `transcript.ts`'s `WAIT_TOOLS` — the hook only adds the panel and the lead time.
@@ -149,6 +155,7 @@ same failure mode, and the same one setting as
 <!-- docs-sync:
   sources:
     - server/lib/plans.ts
+    - server/lib/idle.ts
     - server/api.ts
     - server/index.ts
     - server/lib/scan.ts

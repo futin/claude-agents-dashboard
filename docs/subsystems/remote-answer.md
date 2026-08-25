@@ -56,10 +56,14 @@ take one away. If the dashboard isn't running, the probe gives up in under a sec
   for the [push notifier](push-notify.md)'s auto-mode layer — the mode is visible only inside
   a hook payload, and a registered question is exactly where a push may be worth sending.
   Optional, so an un-upgraded hook keeps working.
-- **⚠️ The gates are evaluated when the question is asked, not continuously.** Walking
-  away after a question landed doesn't move it to the phone, and coming back doesn't move
-  it to the terminal (the panel's dismiss button is the manual hand-back). Anything else
-  would mean re-deciding mid-wait, which the deny-with-reason mechanism can't express.
+- **⚠️ The gates are evaluated when the question is asked, not continuously — but coming
+  back to the desk does end the wait.** Walking away after a question landed does not move
+  it to the phone: that direction would mean re-deciding mid-wait, which the
+  deny-with-reason mechanism can't express. The reverse direction is a plain release, and
+  is handled — see [the idle sweep](#the-idle-sweep-coming-back-to-the-desk) below. Before
+  that existed, a question raised while you were away stayed parked on the dashboard for
+  its whole `answerSecs` window (10 minutes by default) even once you were typing at the
+  keyboard, and the only way out was tapping **answer in the terminal** on the panel.
 - **Why deny-with-reason.** No hook (and nothing else outside the CLI) can *supply* an
   answer to `AskUserQuestion` — `updatedInput` is documented for Bash/Edit/Write only.
   The one supported injection is a `PreToolUse` hook returning
@@ -111,6 +115,7 @@ One entry per session — the CLI only ever has one question open:
 register ─┬─ answer(questionId ok) ──→ answered   (reason + structured answers)
           ├─ answer(dismiss:true) ───→ dismissed  ("answer in the terminal")
           ├─ sweepDecided(movedOn) ──→ dismissed  (the terminal card answered it)
+          ├─ sweepIdle() ────────────→ released   (you came back to the keyboard)
           ├─ deadline timer ─────────→ timeout
           ├─ register again ─────────→ superseded (self-heals a re-asked question)
           └─ held socket closed ─────→ cancelled  (no resolve — nobody is listening)
@@ -136,6 +141,37 @@ whether the transcript has grown past the entry's `askedAt`. That is deliberatel
 happening, and treating one of those as a decision would yank a live question out of the
 dashboard. It settles as `dismissed`, which is correct in both worlds — an orphaned hook
 ignores it, and a hook still listening falls through to its card.
+
+## The idle sweep: coming back to the desk
+
+Walking away is what sent the question to your phone, so walking back should bring it home.
+A 5-second `setInterval` (armed on the first `register`, cleared once the store empties,
+`unref()`d so it can't hold the process open) calls `sweepIdle()`, which settles every held
+question as `released`; the hook's `/api/questions/wait` returns, exits 0, and the terminal
+dialog appears — within ~5s of the first keystroke, with nothing to tap.
+
+`sweepDecided` does **not** cover this, and that is why the gap existed unnoticed for so
+long: it fires on the *transcript* growing past `askedAt`, and typing at the keyboard does
+not grow the transcript. The two sweeps answer different questions — "did the terminal card
+already decide this?" versus "is the user back?".
+
+- **`released`, not `dismissed`.** Both end the wait identically and the hook treats every
+  non-`answered` status alike; the distinct status records who triggered it, matching
+  `messages.ts`.
+- **The policy is shared, the sweep is not.** `lib/idle.ts` owns `backAtDesk()` — the
+  threshold read, the `ioreg` reading, the `setIdleReader` test seam, and both fail
+  directions (unreadable idle → stay held, never guess; `idleSecs === 0` → the idle gate is
+  off everywhere else, so it's off here too). Each store keeps its own `sweepIdle()`,
+  because *what* is releasable and *which* status it settles as differ. This layout is the
+  fix for the bug itself: the sweep first lived only in `messages.ts`, and questions and
+  plans were simply never given one.
+- **Callers check they have something releasable before asking**, so an idle server never
+  spawns `ioreg`.
+- **No headless exemption here**, unlike [remote-message](remote-message.md). A reply window
+  is the only channel a [dashboard-spawned](spawn.md) `claude -p` session has, so releasing
+  one orphans it — a question is not: `ask-remote-hook.sh` does no TTY detection at all, so
+  a headless session's question already falls through to the CLI's own handling whenever
+  you are at the desk. Releasing it lands in the same place.
 
 ## Invariants
 
@@ -233,6 +269,7 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
 <!-- docs-sync:
   sources:
     - server/lib/pending.ts
+    - server/lib/idle.ts
     - server/lib/remoteState.ts
     - server/api.ts
     - scripts/ask-remote-hook.sh

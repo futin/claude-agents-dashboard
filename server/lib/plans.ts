@@ -27,6 +27,7 @@
 
 import { randomUUID } from 'node:crypto';
 
+import { backAtDesk } from './idle.js';
 import type { PendingPlan, PlanAnswerRequest, PlanWaitResult } from '../../shared/types.js';
 
 /** A plan is markdown and can be long; cap it so a runaway tool input can't pin memory. */
@@ -109,6 +110,7 @@ export function register(
     resolve
   };
   entries.set(sessionId, entry);
+  ensureReaper();
   return planId;
 }
 
@@ -216,4 +218,40 @@ export function sweepDecided(
 export function resetStore(): void {
   for (const entry of entries.values()) clearTimeout(entry.timer);
   entries.clear();
+  if (reaper) { clearInterval(reaper); reaper = null; }
+}
+
+/* ------------------------------------------------- idle auto-release */
+
+let reaper: NodeJS.Timeout | null = null;
+
+/**
+ * Hand every held plan back to its plan card if the user is back at the
+ * keyboard. Returns how many. Same reasoning, same shape, and the same shared
+ * {@link backAtDesk} policy as `pending.ts`'s sweep — walking back to the desk
+ * should end a wait that only exists because you walked away, instead of
+ * leaving it parked until `answerSecs` runs out.
+ *
+ * Settles as `released`; the hook exits 0 on any non-`rejected` status, which
+ * is what makes the plan card appear.
+ */
+export function sweepIdle(): number {
+  if (entries.size === 0) return 0; // nothing to release — don't spawn ioreg
+  if (!backAtDesk()) return 0;
+  const waiting = [...entries.values()];
+  for (const entry of waiting) settle(entry, { status: 'released' });
+  return waiting.length;
+}
+
+/**
+ * The 5s reaper behind {@link sweepIdle}. Runs only while holds exist — an idle
+ * server never spawns `ioreg`. `unref()` so it cannot hold the process open.
+ */
+function ensureReaper(): void {
+  if (reaper) return;
+  reaper = setInterval(() => {
+    sweepIdle();
+    if (entries.size === 0 && reaper) { clearInterval(reaper); reaper = null; }
+  }, 5_000);
+  reaper.unref();
 }

@@ -1,10 +1,15 @@
 import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
+import { setIdleReader } from '../server/lib/idle.js';
 import {
   FEEDBACK_CAP, PLAN_CAP,
   answer, cancel, composeReason, dismissAll, getPendingPlan, planSessionIds,
-  register, resetStore, sanitizePlan, sweepDecided
+  register, resetStore, sanitizePlan, sweepDecided, sweepIdle
 } from '../server/lib/plans.js';
+import { setSettings, resetSettings } from '../server/lib/settings.js';
 import type { PlanWaitResult } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -21,6 +26,21 @@ async function testAsync(name: string, fn: () => Promise<void>): Promise<boolean
 function waiter(): { results: PlanWaitResult[]; resolve: (r: PlanWaitResult) => void } {
   const results: PlanWaitResult[] = [];
   return { results, resolve: r => { results.push(r); } };
+}
+
+/** Run a test in isolation: tmpdir cwd so the settings file is unshared with the real one. */
+function inTmpCwd(fn: () => void): void {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-plans-'));
+  const prev = process.cwd();
+  try {
+    process.chdir(dir);
+    resetSettings();
+    fn();
+  } finally {
+    process.chdir(prev);
+    resetSettings();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 const PLAN = '## Steps\n1. Wire the store\n2. Ship it';
@@ -223,6 +243,107 @@ export async function run(): Promise<number> {
     assert.deepStrictEqual(a.results, [{ status: 'dismissed' }]);
     assert.strictEqual(b.results.length, 0);
     assert.deepStrictEqual([...planSessionIds()], ['live']);
+  })) p++; else f++;
+
+  /* ----------------------------------------------------- idle auto-release */
+
+  if (test('sweepIdle releases a held plan when you are back at the keyboard', () => {
+    inTmpCwd(() => {
+      resetStore();
+      setSettings({ idleSecs: 60 });
+      const w = waiter();
+      register('s1', PLAN, 60_000, w.resolve);
+      setIdleReader(() => 3); // 3s idle < 60s threshold
+      try {
+        assert.strictEqual(sweepIdle(), 1);
+        assert.deepStrictEqual(w.results, [{ status: 'released' }]);
+        assert.strictEqual(getPendingPlan('s1'), null);
+      } finally {
+        setIdleReader(null);
+      }
+    });
+  })) p++; else f++;
+
+  if (test('sweepIdle leaves a held plan alone while still away', () => {
+    inTmpCwd(() => {
+      resetStore();
+      setSettings({ idleSecs: 60 });
+      const w = waiter();
+      register('s1', PLAN, 60_000, w.resolve);
+      setIdleReader(() => 9999); // 9999s idle >= 60s threshold
+      try {
+        assert.strictEqual(sweepIdle(), 0);
+        assert.strictEqual(w.results.length, 0);
+      } finally {
+        setIdleReader(null);
+      }
+    });
+  })) p++; else f++;
+
+  if (test('unreadable idle never auto-releases a plan (Docker/non-macOS)', () => {
+    inTmpCwd(() => {
+      resetStore();
+      setSettings({ idleSecs: 60 });
+      const w = waiter();
+      register('s1', PLAN, 60_000, w.resolve);
+      setIdleReader(() => null); // unreadable idle
+      try {
+        assert.strictEqual(sweepIdle(), 0);
+        assert.strictEqual(w.results.length, 0);
+      } finally {
+        setIdleReader(null);
+      }
+    });
+  })) p++; else f++;
+
+  if (test('sweepIdle returns 0 when idleSecs is 0 (idle check disabled)', () => {
+    inTmpCwd(() => {
+      resetStore();
+      setSettings({ idleSecs: 0 });
+      const w = waiter();
+      register('s1', PLAN, 60_000, w.resolve);
+      setIdleReader(() => 3);
+      try {
+        assert.strictEqual(sweepIdle(), 0);
+        assert.strictEqual(w.results.length, 0);
+      } finally {
+        setIdleReader(null);
+      }
+    });
+  })) p++; else f++;
+
+  if (test('sweepIdle with nothing held never reads idle', () => {
+    inTmpCwd(() => {
+      resetStore();
+      setSettings({ idleSecs: 60 });
+      let reads = 0;
+      setIdleReader(() => { reads++; return 3; });
+      try {
+        assert.strictEqual(sweepIdle(), 0);
+        assert.strictEqual(reads, 0);
+      } finally {
+        setIdleReader(null);
+      }
+    });
+  })) p++; else f++;
+
+  if (test('sweepIdle releases every held plan, not just the first', () => {
+    inTmpCwd(() => {
+      resetStore();
+      setSettings({ idleSecs: 60 });
+      const a = waiter(), b = waiter();
+      register('s1', PLAN, 60_000, a.resolve);
+      register('s2', PLAN, 60_000, b.resolve);
+      setIdleReader(() => 3);
+      try {
+        assert.strictEqual(sweepIdle(), 2);
+        assert.deepStrictEqual(a.results, [{ status: 'released' }]);
+        assert.deepStrictEqual(b.results, [{ status: 'released' }]);
+        assert.deepStrictEqual([...planSessionIds()], []);
+      } finally {
+        setIdleReader(null);
+      }
+    });
   })) p++; else f++;
 
   resetStore();

@@ -49,6 +49,9 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
   lib/messages.ts  in-memory turn-end reply-window store — same state machine, plus a 5s
                   idle sweep that auto-releases every terminal-backed hold; headless
                   (`claude -p`) holds are exempt (see docs/subsystems/remote-message.md)
+  lib/idle.ts     shared `backAtDesk()` policy behind all three stores' 5s `sweepIdle`
+                  reapers — threshold, `ioreg` reading, test seam, fail directions
+                  (see docs/subsystems/remote-answer.md)
   lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags, fed by
                   the PermissionRequest hook (Notification is the legacy fallback);
                   display-only (see docs/subsystems/permission-notify.md)
