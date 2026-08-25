@@ -21,7 +21,10 @@ import {
   HISTORY_FILE,
   PROFILE_FILE,
   HEARTBEAT_MS,
-  MAX_HISTORY_BYTES
+  MAX_HISTORY_BYTES,
+  recordTick,
+  observedActiveMs,
+  resetRecorder
 } from '../server/lib/usage-history.js';
 import type { UsageSample } from '../server/lib/usage-history.js';
 import { HOURS_PER_WEEK } from '../server/lib/usage-forecast.js';
@@ -419,6 +422,55 @@ export function run(): number {
     assert.strictEqual(loadProfileState(dir).buckets[33].lifetimeObservedMin, 900);
   })) p++; else f++;
 
+  // ── the classifier ring behind observedActiveMs ──
+
+  if (test('observedActiveMs: an empty ring returns null, never 0', () => {
+    resetRecorder();
+    assert.strictEqual(observedActiveMs(MON_09, MON_09 + H), null);
+  })) p++; else f++;
+
+  if (test('observedActiveMs: one active minute inside a fully covered span', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'ring-'));
+    resetRecorder();
+    // Two idle minutes, one active minute, one more idle: coverage starts at MON_09.
+    recordTick(s(MON_09, 40), dir);
+    recordTick(s(MON_09 + MIN, 40), dir);
+    recordTick(s(MON_09 + 2 * MIN, 41), dir);   // the active minute
+    recordTick(s(MON_09 + 3 * MIN, 41), dir);
+    assert.strictEqual(observedActiveMs(MON_09, MON_09 + 3 * MIN), 60_000);
+  })) p++; else f++;
+
+  if (test('observedActiveMs: a span reaching back before the ring returns null', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'ring-partial-'));
+    resetRecorder();
+    recordTick(s(MON_09, 40), dir);
+    recordTick(s(MON_09 + MIN, 41), dir);
+    // Half-covered would undercount active time and overstate the rate, so the
+    // only honest answer is "I don't know".
+    assert.strictEqual(observedActiveMs(MON_09 - H, MON_09 + MIN), null);
+  })) p++; else f++;
+
+  if (test('observedActiveMs: only the overlap with the span counts', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'ring-overlap-'));
+    resetRecorder();
+    recordTick(s(MON_09, 40), dir);
+    recordTick(s(MON_09 + 2 * MIN, 42), dir);   // 2 active minutes, MON_09 → +2min
+    recordTick(s(MON_09 + 3 * MIN, 42), dir);
+    // Ask about the second half of the active interval only.
+    assert.strictEqual(observedActiveMs(MON_09 + MIN, MON_09 + 3 * MIN), 60_000);
+  })) p++; else f++;
+
+  if (test('recordTick: an idle tick teaches the profile without writing a line', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'tick-'));
+    resetRecorder();
+    recordTick(s(MON_09, 40), dir);              // first sample always writes
+    recordTick(s(MON_09 + MIN, 40), dir);        // unchanged, inside the heartbeat
+    const lines = fs.readFileSync(path.join(dir, HISTORY_FILE), 'utf8').trim().split('\n');
+    assert.strictEqual(lines.length, 1, 'the unchanged sample must not be appended');
+    assert.strictEqual(observedActiveMs(MON_09, MON_09 + MIN), 0, 'idle, but observed');
+  })) p++; else f++;
+
+  resetRecorder();
   fs.rmSync(tmp, { recursive: true, force: true });
 
   console.log('\n  ' + p + ' passed, ' + f + ' failed');

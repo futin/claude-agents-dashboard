@@ -30,6 +30,8 @@ import {
   serveSettingsRead, serveSettingsWrite, serveNotifyEvent, serveNotifyTest,
   serveTranscribe, serveSpawn, serveSpawnStop
 } from './api.js';
+import { startUsageRecording } from './lib/usage-history.js';
+import { getCachedUsageState } from './lib/usage.js';
 
 const config = loadConfig();
 const isProd = process.env.NODE_ENV === 'production';
@@ -310,6 +312,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         child.on('error', () => { /* no browser to open (e.g. headless/container) — best-effort */ });
       } catch { /* best-effort */ }
     }
+
+    // Usage-history recording (opt-in, and re-read on every tick). Rehydrates
+    // the 5h pace ring from disk, then samples on our own interval — the
+    // /api/sessions poll only fires while a browser is open, which would make
+    // the recorded history describe when the dashboard was watched rather than
+    // when work happened. See docs/subsystems/usage-limits.md.
+    if (config.showUsage) startUsageRecording(getCachedUsageState);
   });
 }
 

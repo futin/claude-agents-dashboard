@@ -115,9 +115,18 @@ export interface RateLimit {
   /** ISO 8601 reset time, or null if unknown. The window fully resets to 0% then. */
   resetsAt: string | null;
   /**
-   * Burn rate in percent-per-hour over the server's recent utilization samples,
-   * 0 when idle, or null while there isn't enough history yet (the sample store
-   * is RAM-only, so it refills within minutes of a server restart).
+   * Burn rate in percent per **active** hour over the server's recent
+   * utilization samples, 0 when idle, or null while there isn't enough history
+   * yet (the sample store is RAM-only, so it refills within minutes of a server
+   * restart).
+   *
+   * For the weekly window that "active" is literal: with usage recording on, the
+   * lookback's delta is divided by the active time the recorder actually
+   * measured, so idle hours don't dilute it. Multiply by {@link dutyCycle} to
+   * get a per-*wall*-hour figure — printing `ratePerHour × 24` as a daily rate
+   * overstates it by `1/dutyCycle`. With recording off there is no measurement,
+   * the raw wall slope stands, and `dutyCycle` is 1 — so the same arithmetic
+   * still holds.
    */
   ratePerHour?: number | null;
   /**

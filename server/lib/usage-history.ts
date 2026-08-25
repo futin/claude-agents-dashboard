@@ -37,8 +37,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { HOURS_PER_WEEK, hourOfWeek } from './usage-forecast.js';
+import { getSettings } from './settings.js';
+import { HOURS_PER_WEEK, hourOfWeek, localOffsetMinutes } from './usage-forecast.js';
 import type { DutyProfile } from './usage-forecast.js';
+import { seedSamples, setActiveTimeSource, setForecastProfile } from './usage-pace.js';
 
 const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
@@ -459,5 +461,196 @@ export function saveProfileState(state: ProfileState, dir?: string): boolean {
   } catch {
     try { fs.unlinkSync(tmp); } catch { /* nothing to clean up */ }
     return false;
+  }
+}
+
+// ───────────────────────── the recorder ─────────────────────────
+//
+// One entry point, `recordTick`, owns everything that happens per sample: the
+// write decision, the live fold into the profile, the periodic save, and the
+// classifier ring the weekly active rate is measured against.
+//
+// **Learning is live; the log is not a replayable substitute for it.** The
+// profile learns at full one-minute sampling resolution against the in-memory
+// previous sample. The log is deliberately sparser (write-on-change plus a
+// heartbeat), which is fine for charts and for rehydrating the pace ring, but
+// rebuilding a profile from the log alone would be lossy: a flat stretch that
+// ends in a rise gets written as one long rising interval, which classifies as
+// `ambiguous` and is discarded. The profile file is the profile's source of
+// truth.
+
+/** One classified interval, kept in RAM only. Feeds `observedActiveMs`. */
+interface ClassifiedInterval {
+  endMs: number;
+  spanMs: number;
+  kind: IntervalKind;
+}
+
+/** How much classified history the ring keeps — twice the weekly lookback. */
+const RING_MS = 12 * HOUR_MS;
+
+/**
+ * How far behind `untilMs` the newest ring entry may be and still count as
+ * covering it. A stale ring (recording toggled off, then a rise, then on again)
+ * must not be read as "no active time in that span".
+ */
+const RING_FRONT_TOLERANCE_MS = MAX_ATTRIBUTABLE_MS;
+
+let lastWritten: UsageSample | null = null;
+let lastSample: UsageSample | null = null;
+let liveState: ProfileState | null = null;
+let lastSavedAt = 0;
+let ring: ClassifiedInterval[] = [];
+
+/** One minute — the cadence the profile learns at. */
+const SAMPLE_INTERVAL_MS = 60_000;
+
+let timer: ReturnType<typeof setInterval> | null = null;
+
+/** Test seam: forget everything the recorder holds in memory. */
+export function resetRecorder(): void {
+  lastWritten = null;
+  lastSample = null;
+  liveState = null;
+  lastSavedAt = 0;
+  ring = [];
+}
+
+/**
+ * Record one sample of the 5-hour window: append it if it says anything new,
+ * fold the interval since the previous sample into the profile, and save.
+ *
+ * `dir` exists so tests can point at a tmpdir; production omits it. Never
+ * throws — recording must not be able to break the usage fetch.
+ */
+export function recordTick(sample: UsageSample, dir?: string): void {
+  try {
+    if (liveState === null) liveState = loadProfileState(dir);
+
+    if (shouldWrite(lastWritten, sample)) {
+      appendSample(sample, dir);
+      lastWritten = sample;
+    }
+
+    if (lastSample !== null && sample.t > lastSample.t) {
+      ring.push({
+        endMs: sample.t,
+        spanMs: sample.t - lastSample.t,
+        kind: classifyInterval(lastSample, sample)
+      });
+      const cutoff = sample.t - RING_MS;
+      if (ring[0] && ring[0].endMs <= cutoff) ring = ring.filter((x) => x.endMs > cutoff);
+      // The profile must be learned on the same local clock the walk queries;
+      // passing 0 here would silently shift every bucket by the UTC offset.
+      liveState = accumulate(liveState, lastSample, sample, localOffsetMinutes(sample.t));
+    }
+    lastSample = sample;
+
+    if (lastSavedAt === 0 || sample.t - lastSavedAt >= HEARTBEAT_MS) {
+      if (saveProfileState(liveState, dir)) rotateIfNeeded(dir);
+      lastSavedAt = sample.t;
+    }
+  } catch {
+    /* fail open — a broken recorder must never break the usage fetch */
+  }
+}
+
+/**
+ * Active time the recorder actually observed inside `[sinceMs, untilMs]`, or
+ * null when the ring does not cover that whole span.
+ *
+ * Null rather than a partial sum on purpose: a half-covered lookback would
+ * undercount active time, and the caller divides by it — so the rate would come
+ * out too high, in the pessimistic direction, silently. Coverage is walked
+ * backwards from the newest entry and stops at the first hole, so a gap in the
+ * middle disqualifies the answer too, not just a short back edge.
+ */
+export function observedActiveMs(sinceMs: number, untilMs: number): number | null {
+  if (ring.length === 0) return null;
+  const sorted = [...ring].sort((a, b) => a.endMs - b.endMs);
+  const newest = sorted[sorted.length - 1];
+  if (untilMs - newest.endMs > RING_FRONT_TOLERANCE_MS) return null;
+
+  // Walk back through contiguous entries; the first gap ends the coverage.
+  let coveredFrom = newest.endMs - newest.spanMs;
+  for (let i = sorted.length - 2; i >= 0; i--) {
+    if (sorted[i].endMs < coveredFrom) break; // a hole
+    coveredFrom = Math.min(coveredFrom, sorted[i].endMs - sorted[i].spanMs);
+  }
+  if (coveredFrom > sinceMs) return null;
+
+  let total = 0;
+  for (const x of sorted) {
+    if (x.kind !== 'active') continue;
+    const start = Math.max(x.endMs - x.spanMs, sinceMs);
+    const end = Math.min(x.endMs, untilMs);
+    if (end > start) total += end - start;
+  }
+  return total;
+}
+
+/**
+ * The live profile state, loading it from disk on first use. Read-only — the
+ * caller derives a `DutyProfile` from it or maps it into the inspector's cells.
+ */
+export function profileSnapshot(dir?: string): ProfileState {
+  if (liveState === null) liveState = loadProfileState(dir);
+  return liveState;
+}
+
+/**
+ * Turn on recording: rehydrate what can be rehydrated, wire the active-time
+ * seam, and start sampling on our own interval.
+ *
+ * The interval exists because sampling is otherwise **request-driven** — the
+ * `/api/sessions` handler is the only caller of `getCachedUsageState`, so with
+ * no browser open nothing is sampled and the recorded history would describe
+ * when the dashboard was *watched* rather than when work happened.
+ *
+ * `refresh` is injected rather than imported: `usage.ts` imports this module for
+ * `recordTick`, so importing it back would be a cycle. Production passes
+ * `getCachedUsageState`, which is the same non-blocking refresh the poll uses —
+ * one code path to Anthropic, not two.
+ */
+export function startUsageRecording(refresh: () => void, dir?: string): void {
+  try {
+    if (getSettings().recordUsageHistory) {
+      liveState = loadProfileState(dir);
+      setForecastProfile(deriveProfile(liveState));
+      // **The 5h ring only.** The log records the 5h sensor series, and the two
+      // windows' utilization are different series — a weekly ring seeded from it
+      // either poisons the slope for up to the 6h lookback or gets wiped by the
+      // drop check. Wrong either way; the weekly pace returns after ~30 minutes
+      // of live sampling, exactly as today.
+      const samples = readRecentSamples(dir);
+      if (samples.length > 0) {
+        seedSamples('fiveHour', samples.map((x) => ({ t: x.t, utilization: x.utilization })));
+      }
+    }
+    // Re-read the setting per call so toggling recording off also retires the
+    // rate correction, with no restart.
+    setActiveTimeSource((a, b) =>
+      getSettings().recordUsageHistory ? observedActiveMs(a, b) : null
+    );
+
+    stopUsageRecording();
+    timer = setInterval(() => {
+      // Re-read on every tick: flipping the toggle in Settings takes effect
+      // immediately, and while off this costs nothing and touches no network.
+      if (!getSettings().recordUsageHistory) return;
+      try { refresh(); } catch { /* the refresh path fails open on its own */ }
+    }, SAMPLE_INTERVAL_MS);
+    // Never hold the process open for a sample.
+    timer.unref();
+  } catch {
+    /* recording is best-effort; the dashboard works without it */
+  }
+}
+
+/** Stop sampling. The interval is already unref'd, so this is for shutdown. */
+export function stopUsageRecording(): void {
+  if (timer !== null) {
+    clearInterval(timer);
+    timer = null;
   }
 }

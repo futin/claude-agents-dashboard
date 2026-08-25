@@ -22,7 +22,9 @@ import http from 'node:http';
 import https from 'node:https';
 
 import type { UsageLimits, RateLimit, UsageStatus } from '../../shared/types.js';
-import { recordAndPace } from './usage-pace.js';
+import { recordAndPace, setForecastProfile } from './usage-pace.js';
+import { deriveProfile, profileSnapshot, recordTick } from './usage-history.js';
+import { getSettings } from './settings.js';
 
 /** Outcome of looking for a stored OAuth token. */
 export type TokenState =
@@ -229,6 +231,22 @@ function refreshNow(): Promise<void> {
         return;
       }
       const limits = await fetchUsage(t.token);
+      // Record before pacing: the classifier ring the weekly active rate is
+      // measured against must already include the interval ending now. The 5h
+      // window is the sensor (its utilization is verified monotonic and moves
+      // in ~10%/h steps, where the weekly crawls in ~1% ones).
+      if (limits && limits.fiveHour.utilization != null && getSettings().recordUsageHistory) {
+        try {
+          recordTick({
+            t: Date.now(),
+            utilization: limits.fiveHour.utilization,
+            resetsAt: limits.fiveHour.resetsAt
+          });
+          setForecastProfile(deriveProfile(profileSnapshot()));
+        } catch {
+          /* recording must never break the usage fetch */
+        }
+      }
       // Feed the pace store one sample per window and attach burn rate +
       // projected exhaustion (null until enough history accumulates).
       cached = limits
