@@ -107,6 +107,14 @@ drawer — walking away is what opened the window, so walking back should close 
 5-second `setInterval` (started on the first `register`, cleared once the store empties,
 `unref()`d so it can't hold the process open) calls `sweepIdle()`:
 
+⚠️ **This reaper was originally unique to this store, and that was a bug in the other two.**
+Held questions and plans had no equivalent, so a question raised while you were away sat
+parked on the dashboard for its full `answerSecs` window even once you were back at the
+keyboard. `pending.ts` and `plans.ts` now run the same reaper; the shared half of the
+policy — the reading, the threshold, and the fail directions in steps 2 and 3 below — lives
+in `lib/idle.ts` as `backAtDesk()`, which is also where the `setIdleReader` test seam now
+lives. What stays here is the headless exemption, which is this store's alone.
+
 1. No entries → no-op; an idle server never spawns `ioreg`.
 2. `getSettings().idleSecs === 0` → the idle gate is disabled everywhere else, so it's
    disabled here too.
@@ -245,6 +253,7 @@ state, reset on a new `messageId`, never persisted.
 <!-- docs-sync:
   sources:
     - server/lib/messages.ts
+    - server/lib/idle.ts
     - server/api.ts
     - server/index.ts
     - server/lib/scan.ts

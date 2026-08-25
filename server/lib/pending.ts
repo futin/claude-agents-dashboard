@@ -25,6 +25,7 @@
 
 import { randomUUID } from 'node:crypto';
 
+import { backAtDesk } from './idle.js';
 import type {
   AnswerRequest, PendingOption, PendingQuestion, PendingQuestionItem,
   QuestionAnswer, WaitResult
@@ -195,6 +196,7 @@ export function register(
     resolve
   };
   entries.set(sessionId, entry);
+  ensureReaper();
   return questionId;
 }
 
@@ -302,4 +304,52 @@ export function sweepDecided(
 export function resetStore(): void {
   for (const entry of entries.values()) clearTimeout(entry.timer);
   entries.clear();
+  if (reaper) { clearInterval(reaper); reaper = null; }
+}
+
+/* ------------------------------------------------- idle auto-release */
+
+let reaper: NodeJS.Timeout | null = null;
+
+/**
+ * Hand every held question back to its terminal dialog if the user is back at
+ * the keyboard. Returns how many.
+ *
+ * Walking away is what sent the question to the phone, so walking back should
+ * bring it home — without this the entry sat out its full `answerSecs` window
+ * (10 minutes by default) and the only way out was tapping "answer in the
+ * terminal" on the panel. `sweepDecided` does not cover it: that fires on the
+ * transcript growing, and typing at the keyboard does not grow the transcript.
+ *
+ * Settles as `released` rather than `dismissed` purely to record who triggered
+ * it; the hook exits 0 on both, which is what makes the terminal dialog appear.
+ *
+ * The fail directions (unreadable idle, `idleSecs === 0`) live in
+ * {@link backAtDesk}, shared with `plans.ts` and `messages.ts`.
+ *
+ * ⚠️ No headless exemption, unlike `messages.ts`. A reply window is the only
+ * channel a `claude -p` session has, so releasing one orphans it; a question is
+ * not — `ask-remote-hook.sh` does no TTY detection at all, so a headless
+ * session's question already goes to the CLI's own handling whenever the user
+ * is at the desk. Releasing it here lands in the same place.
+ */
+export function sweepIdle(): number {
+  if (entries.size === 0) return 0; // nothing to release — don't spawn ioreg
+  if (!backAtDesk()) return 0;
+  const waiting = [...entries.values()];
+  for (const entry of waiting) settle(entry, { status: 'released' });
+  return waiting.length;
+}
+
+/**
+ * The 5s reaper behind {@link sweepIdle}. Runs only while holds exist — an idle
+ * server never spawns `ioreg`. `unref()` so it cannot hold the process open.
+ */
+function ensureReaper(): void {
+  if (reaper) return;
+  reaper = setInterval(() => {
+    sweepIdle();
+    if (entries.size === 0 && reaper) { clearInterval(reaper); reaper = null; }
+  }, 5_000);
+  reaper.unref();
 }

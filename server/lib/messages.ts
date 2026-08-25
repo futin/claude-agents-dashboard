@@ -19,8 +19,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { readIdleSecs } from './notify.js';
-import { getSettings } from './settings.js';
+import { backAtDesk } from './idle.js';
 import type { MessageAnswerRequest, MessageWaitResult, PendingMessage } from '../../shared/types.js';
 
 /** Cap on the follow-up that reaches the model verbatim. */
@@ -180,32 +179,24 @@ export function resetStore(): void {
 
 /* ------------------------------------------------- idle auto-release */
 
-let idleReader: (() => number | null) | null = null;
 let reaper: NodeJS.Timeout | null = null;
-
-/** Test seam: swap the idle source so no test spawns `ioreg`. `null` restores it. */
-export function setIdleReader(fn: (() => number | null) | null): void {
-  idleReader = fn;
-}
 
 /**
  * Release every terminal-backed hold if the user is back at the keyboard.
  * Returns how many. Headless holds are skipped: coming back to the desk gives
  * their sessions no terminal to type into, so the dashboard window stays the
- * only channel and stays open until answered, dismissed, or timed out.
+ * only channel and stays open until answered, dismissed, or timed out. That
+ * exemption is what makes this sweep differ from `pending.ts`/`plans.ts`, which
+ * release everything.
  *
- * Fail directions: unreadable idle (Docker, non-macOS) → never release — the
- * deadline timer is the reaper of last resort. `idleSecs === 0` means the idle
- * gate is disabled everywhere else, so it disables auto-release too.
+ * The fail directions (unreadable idle, `idleSecs === 0`) live in
+ * {@link backAtDesk}, shared with the other two stores.
  */
 export function sweepIdle(): number {
   if (entries.size === 0) return 0;
   const releasable = [...entries.values()].filter(e => !e.headless);
   if (releasable.length === 0) return 0; // nothing to release — don't spawn ioreg
-  const thresholdSecs = getSettings().idleSecs;
-  if (thresholdSecs === 0) return 0;
-  const idle = (idleReader ?? readIdleSecs)();
-  if (idle === null || idle >= thresholdSecs) return 0;
+  if (!backAtDesk()) return 0;
   for (const entry of releasable) settle(entry, { status: 'released' });
   return releasable.length;
 }

@@ -3,10 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { setIdleReader } from '../server/lib/idle.js';
 import {
   TEXT_CAP,
   answer, cancel, composeReason, dismissAll, getPendingMessage, messageSessionIds,
-  register, resetStore, setIdleReader, sweepIdle
+  register, resetStore, sweepIdle
 } from '../server/lib/messages.js';
 import { setSettings, resetSettings } from '../server/lib/settings.js';
 import type { MessageWaitResult } from '../shared/types.js';

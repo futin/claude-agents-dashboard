@@ -434,7 +434,13 @@ export interface AnswerRequest {
  * terminal dialog takes over.
  */
 export interface WaitResult {
-  status: 'answered' | 'timeout' | 'superseded' | 'dismissed';
+  /**
+   * `released` is the idle sweep's verdict — the user came back to the keyboard,
+   * so the wait was handed to the terminal dialog without anyone touching the
+   * panel. It differs from `dismissed` (they tapped "answer in the terminal")
+   * only in who triggered it; the hook treats every non-`answered` status alike.
+   */
+  status: 'answered' | 'timeout' | 'superseded' | 'dismissed' | 'released';
   /**
    * Prose the hook hands to the model verbatim (`permissionDecisionReason`).
    * Composed server-side so the injection mechanism can change without touching
@@ -485,7 +491,8 @@ export interface PlanAnswerRequest {
  * plan card takes over.
  */
 export interface PlanWaitResult {
-  status: 'rejected' | 'timeout' | 'superseded' | 'dismissed';
+  /** `released` is the idle sweep's verdict — see {@link WaitResult.status}. */
+  status: 'rejected' | 'timeout' | 'superseded' | 'dismissed' | 'released';
   /**
    * Prose the hook hands the model as the deny `message`. Composed server-side
    * so the injection mechanism can change without touching the hook script.
