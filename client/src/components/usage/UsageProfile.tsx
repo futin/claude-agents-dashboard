@@ -34,12 +34,13 @@ import { useUsageProfile } from '../../hooks/useUsageProfile';
  * - **The table view is required, not a nicety.** The two lowest ramp steps fall
  *   below 3:1 against the card surface, and that obligates a non-colour path to
  *   the same numbers.
- * - **Square cells, at the mockup's proportions.** `aspect-ratio: 1` with a
- *   320px grid, which measures out at 38px cells and a 971px-tall grid — the
- *   mockup's variant C is 38.84px and 992px, the difference being that this
- *   labels all 24 hours and so needs a wider axis column. `max-width` on
- *   `.up-grid` is the single knob: the columns are `1fr` and the cells are
- *   square, so the grid's width sets the cell size and therefore the height.
+ * - **Square cells, at the mockup's proportions, one size down.**
+ *   `aspect-ratio: 1` is what makes this read as a calendar rather than a bar
+ *   chart lying down. The mockup's variant C is 320px wide → 38.84px cells →
+ *   992px tall; this uses 250px → ~28px cells → ~730px, which keeps the shape
+ *   and brings the week within about one screen. `max-width` on `.up-grid` is
+ *   the single knob: the columns are `1fr` and the cells are square, so width
+ *   sets the cell size and therefore the height.
  * - **Every hour carries a label, not every second one.** Labelling alternate
  *   rows put the axis's only vertical rhythm cue at *twice* the row pitch, and
  *   the eye chunked the rows into pairs and read each pair boundary as a wider
