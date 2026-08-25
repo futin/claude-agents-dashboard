@@ -165,3 +165,140 @@ specifically, why differencing consecutive records' context totals produced
 `+559, 0, +3171, 0, +1165, 0…`. The alternating zeros were not quiet turns; they
 were the second record of a split turn. The same duplication that broke the
 delta is what inflates the sums.
+
+## Outcome
+
+**2026-08-25 — fixed.** Both changes landed in all three copies (`server/lib/analyze.ts`,
+`.claude/skills/kaizen/kaizen.mjs`, and the global `~/.claude/skills/kaizen/kaizen.mjs`,
+still byte-identical to the vendored one).
+
+**Shape of the fix.** One `Map` keyed by `message.id` holds each turn's `output_tokens`
+plus every tool block it emitted across all of its records. Usage, `models`, `turnCount`
+and `server_tool_use` accumulate on a turn's **first** record only (`firstOfTurn`); the
+per-tool token split is buffered and settled in one pass after the walk, so a turn's output
+divides across *all* of its tool blocks rather than per record. `count` / `durationMs` /
+`errors` / `retries` stay per tool **call** — parallel calls really are separate calls, and
+only the token split is per turn. No `message.id` → key is `#anon<n>`, unique per record,
+which is exactly the pre-fix behaviour (fail open, never drop a turn).
+
+`server_tool_use` was **also** double-counted — it rides in the same replicated usage block
+and the plan didn't mention it. It is now inside the same gate. Latent only: zero records
+with `web_search_requests`/`web_fetch_requests` > 0 across all 406 transcripts on this
+machine, so no observed number changes.
+
+**Root cause re-confirmed live before changing anything** (2026-08-25, fresh transcripts):
+
+```
+45be9cde  usage records 511  distinct message.id 263  inflation 1.94x  ids w/ >1 tool-bearing rec 6
+b4d0e509  usage records 250  distinct message.id 140  inflation 1.79x  ids w/ >1 tool-bearing rec 17
+15ac05f3  usage records 649  distinct message.id 281  inflation 2.31x  ids w/ >1 tool-bearing rec 18
+347fd1ec  usage records 232  distinct message.id 155  inflation 1.50x  ids w/ >1 tool-bearing rec 4
+ids whose duplicate usages DIFFER: 0 on all four  <- dedup by message.id is safe
+records with no message.id:        0 on all four
+```
+
+**Before → after on the four transcripts this bug originally measured** (old = the
+`kaizen.mjs` at HEAD, new = the fixed one; `byTool %` is the byTool sum as a share of
+`totals.output`):
+
+| transcript | turnCount | combined | output | billableApprox | byTool % of output |
+|---|---|---|---|---|---|
+| `64bbe973` | 130 → 77 | 10,245,289 → 6,127,605 | 82,778 → 44,701 | 411,592 → 216,958 | 49% → 90% |
+| `acbdcd0d` | 75 → 36 | 7,578,832 → 3,733,589 | 130,155 → 53,889 | 617,261 → 246,275 | 36% → 81% |
+| `6f8c3c9e` | 191 → 88 | 33,659,952 → 16,195,571 | 298,414 → 113,826 | 874,087 → 334,537 | 42% → 98% |
+| `25ec88c3` | 101 → 46 | 13,522,664 → 6,476,471 | 91,636 → 41,089 | 454,783 → 194,275 | 56% → 98% |
+
+`6f8c3c9e` and `25ec88c3` reproduce this bug's independently-computed
+"deduped-by-`message.id`" predictions **exactly**, field for field. `64bbe973` and
+`acbdcd0d` are larger than in the 2026-08-22 table because those two sessions kept running
+after it was written; their ratios match.
+
+Two independent cross-checks:
+- `perTurn.count` now equals a standalone probe's distinct-`message.id` count on all four
+  sampled transcripts (263 / 140 / 281 / 155 — exact).
+- `byTool` sum never exceeds `totals.output` on **any** of the 406 transcripts on this
+  machine (the invariant that was structurally violable before). Single-record sessions are
+  untouched (e.g. `004b19bb`, `09bd300c`, `14d49778` — identical before and after), so the
+  fix does not over-correct.
+- `kaizen.mjs` and `analyze.ts` produce **byte-identical** JSON on real transcripts, so the
+  two implementations have not drifted.
+
+### Verification
+
+`pnpm typecheck` — exit 0, no output.
+
+`pnpm test` — 665 assertions, 0 failures, `ALL PASS`. The `analyze.ts` section (17 cases,
+6 new):
+
+```
+=== analyze.ts ===
+  ✓ four-field totals + billableApprox excludes cacheRead
+  ✓ totals sum across turns; perTurn max + index
+  ✓ a turn split across records sharing one message.id counts once
+  ✓ parallel tool_use in separate records split that turn's output once
+  ✓ same tool across three records of one turn: count 3, one turn's output
+  ✓ maxTurnIndex indexes deduped turns, not records
+  ✓ records with no message.id each still count (fail-open)
+  ✓ a split sidechain turn stays fully excluded
+  ✓ sidechain usage excluded from totals but Task shows in bySubagent
+  ✓ per-tool even-split approxOutputTokens
+  ✓ toolErrors counts both is_error and <tool_use_error>
+  ✓ retries: a tool re-invoked after it errored
+  ✓ userCorrections counts human turns, ignores tool_result + task-notification
+  ✓ unknown-token subagent → unknownTokenCount + note
+  ✓ multi-model models[]
+  ✓ serverTools + duration span
+  ✓ missing file → null
+
+Passed: 17  Failed: 0
+```
+
+Written test-first. All four dedup cases failed before the change, for the right reason —
+doubled and tripled values, not errors:
+
+```
+  ✗ a turn split across records sharing one message.id counts once      200 !== 100
+  ✗ parallel tool_use in separate records split that turn's output once 200 !== 100
+  ✗ same tool across three records of one turn: count 3, one turn's out 270 !== 90
+  ✗ maxTurnIndex indexes deduped turns, not records                    1400 !== 800
+  Passed: 13  Failed: 4
+```
+
+The two cases that passed at RED are regression guards, so the fail-open one was
+mutation-proved: collapsing `#anon${anonTurnSeq++}` to a constant key kills it plus two
+pre-existing cases —
+
+```
+  ✗ totals sum across turns; perTurn max + index                        100 !== 800
+  ✗ records with no message.id each still count (fail-open)             100 !== 200
+  ✗ multi-model models[]                                                  1 !== 2
+  Passed: 14  Failed: 3
+```
+
+`node --check` passes on both `kaizen.mjs` copies and `diff` between them is silent.
+
+**End-to-end, in the running app** (`dev-verify`, ports 4700/5700). `GET /api/analytics`
+returned 5 reports, no error, all with the deduped arithmetic (`turns=263` for `45be9cde` —
+the exact figure the standalone probe computed; byTool 83–100% of output across the five).
+The Analytics tab renders it: that card now reads **263 TURNS / 1.49M BILLABLE** where the
+lesson text logged beside it on 2026-08-22 says "495 turns, 3.39M billable" — the scale
+break the marker line documents, visible in one card. `43 · 3.96M SUBAGENTS` is unchanged,
+correct: subagent tokens come from `readAgents`, not the usage loop. No console errors.
+
+**Not verified:** only the Analytics tab was exercised in the browser — `/kaizen`'s own
+`--latest` path and its log-append were not run end-to-end (the CLI was invoked directly on
+explicit transcript paths instead). The next real `/kaizen` run is the first exercise of
+that path.
+
+### Rollout
+
+One marker line was appended to `~/.claude/session-analytics-log.md`, dated 2026-08-25,
+saying totals above it are ~1.5–2.3× inflated and are not comparable with the ones below.
+It deliberately matches none of the three parser shapes (`LINE_RE` / `STATUS_RE` /
+`REVIEW_RE`), verified by parsing the log with and without it: `lessons=12 evLessons=12
+statuses=4 lastReview=2026-08-12` both ways, so the Analytics tab reads exactly as before.
+
+`docs/subsystems/analytics.md` gained a leading **Invariants** bullet stating the
+one-turn-is-not-one-record rule. Its `docs-sync` stamp still points at the pre-fix commit
+(`verified: fa9fdbc0…`) and both `server/lib/analyze.ts` and `.claude/skills/kaizen/` are
+in its `sources:` — **run `/docs-sync` after committing** to re-baseline it.

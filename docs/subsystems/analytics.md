@@ -80,6 +80,24 @@ above still holds.
 
 ## Invariants
 
+- **⚠️ One turn is not one record — `analyzeSession` counts per `message.id`.** Claude
+  Code writes **one transcript record per content block** (a turn that thinks, talks and
+  fires two tools is four records), and every one of them carries a full copy of that
+  turn's `message.usage` under the same `message.id`. So the walk sums usage on a turn's
+  **first** record only and skips the copies, and `perTurn.count` / `maxTurnIndex` are
+  ordinals over *turns*, not records. Summing per record inflated every total **1.5–2.3×**
+  on real transcripts (`backlog/bugs/done/bug-1-…`). A record with **no** `message.id`
+  (old or malformed transcript) counts as its own turn — fail open, never drop a turn.
+  `byTool.approxOutputTokens` follows from the same fact: a turn's `output_tokens` is split
+  across **all** of that turn's tool blocks, which is why tool blocks are buffered per
+  `message.id` and settled after the walk rather than attributed per record — parallel tool
+  calls land in separate records, and splitting per record charged each of them the whole
+  turn. `count` / `durationMs` / `errors` stay **per call** (parallel calls are real,
+  separate calls); only the token split is per turn. `server_tool_use` rides in the same
+  usage block, so it is deduped too.
+  **Not affected:** `lib/transcript.ts` (session rows, chat-drawer context) reads the
+  *latest* usage rather than summing, and the copies are identical — its numbers were
+  always right.
 - **⚠️ Log grammar (the contract with `/kaizen` — three line shapes, all append-only):**
 
   ```
