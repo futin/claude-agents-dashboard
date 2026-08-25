@@ -59,10 +59,14 @@ export const DEFAULT_NOTIFY: NotifyPolicy = {
 
 const NOTIFY_EVENTS: readonly NotifyEvent[] = ['question', 'stop', 'permission', 'plan'];
 
+/** Off by default — recording makes the server poll Anthropic unattended. */
+export const DEFAULT_RECORD_USAGE_HISTORY = false;
+
 interface Stored {
   idleSecs: number;
   answerSecs: number;
   notify: NotifyPolicy;
+  recordUsageHistory: boolean;
 }
 
 let cached: Stored | null = null;
@@ -125,7 +129,8 @@ function readStored(): Stored {
   const fallback: Stored = {
     idleSecs: DEFAULT_IDLE_SECS,
     answerSecs: DEFAULT_ANSWER_SECS,
-    notify: DEFAULT_NOTIFY
+    notify: DEFAULT_NOTIFY,
+    recordUsageHistory: DEFAULT_RECORD_USAGE_HISTORY
   };
   try {
     const raw = JSON.parse(fs.readFileSync(statePath(), 'utf8'));
@@ -133,7 +138,11 @@ function readStored(): Stored {
     return {
       idleSecs: clampIdleSecs(raw.idleSecs) ?? fallback.idleSecs,
       answerSecs: clampAnswerSecs(raw.answerSecs) ?? fallback.answerSecs,
-      notify: mergeNotify(DEFAULT_NOTIFY, raw.notify) ?? DEFAULT_NOTIFY
+      notify: mergeNotify(DEFAULT_NOTIFY, raw.notify) ?? DEFAULT_NOTIFY,
+      recordUsageHistory:
+        typeof raw.recordUsageHistory === 'boolean'
+          ? raw.recordUsageHistory
+          : fallback.recordUsageHistory
     };
   } catch {
     return fallback; // absent / unreadable / malformed — fall back to the defaults
@@ -202,7 +211,12 @@ export function getSettings(homeDir?: string): ServerSettings {
  * a half-applied save is the one outcome the UI can't report honestly.
  */
 export function setSettings(patch: unknown): ServerSettings | null {
-  const body = patch as { idleSecs?: unknown; answerSecs?: unknown; notify?: unknown } | null;
+  const body = patch as {
+    idleSecs?: unknown;
+    answerSecs?: unknown;
+    notify?: unknown;
+    recordUsageHistory?: unknown;
+  } | null;
   if (!body || typeof body !== 'object') return null;
 
   const next: Partial<Stored> = {};
@@ -221,6 +235,10 @@ export function setSettings(patch: unknown): ServerSettings | null {
     const notify = mergeNotify(cached.notify, body.notify);
     if (notify === null) return null;
     next.notify = notify;
+  }
+  if (body.recordUsageHistory !== undefined) {
+    if (typeof body.recordUsageHistory !== 'boolean') return null;
+    next.recordUsageHistory = body.recordUsageHistory;
   }
   if (Object.keys(next).length === 0) return null;
 

@@ -297,6 +297,33 @@ export function run(): number {
     });
   })) p++; else f++;
 
+  if (test('recordUsageHistory: defaults off', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(getSettings().recordUsageHistory, false);
+    });
+  })) p++; else f++;
+
+  if (test('recordUsageHistory: accepts a boolean patch', () => {
+    inTmpCwd(() => {
+      const s = setSettings({ recordUsageHistory: true });
+      assert.strictEqual(s?.recordUsageHistory, true);
+    });
+  })) p++; else f++;
+
+  if (test('recordUsageHistory: a non-boolean rejects the whole patch', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ recordUsageHistory: 'yes' }), null);
+    });
+  })) p++; else f++;
+
+  if (test('recordUsageHistory: rejecting leaves the stored value untouched', () => {
+    inTmpCwd(() => {
+      setSettings({ recordUsageHistory: true });
+      setSettings({ recordUsageHistory: 3 });
+      assert.strictEqual(getSettings().recordUsageHistory, true);
+    });
+  })) p++; else f++;
+
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }

@@ -102,6 +102,13 @@ export interface Totals {
 }
 
 /** One rate-limit window (percent used + when it resets). */
+/**
+ * How much the duty-cycle profile can be trusted. `none` = no learned buckets
+ * yet (the projection is the flat-rate one, i.e. today's behaviour); `thin` =
+ * some buckets but not a representative week; `ok` = enough to lead with.
+ */
+export type ForecastConfidence = 'none' | 'thin' | 'ok';
+
 export interface RateLimit {
   /** 0–100 percent of the window consumed, or null if unknown/unscoped. */
   utilization: number | null;
@@ -119,6 +126,22 @@ export interface RateLimit {
    * two to decide "wall before reset" vs "lasts to reset".
    */
   projectedExhaustAt?: string | null;
+  /**
+   * The same projection computed with a flat duty cycle of 1.0 — i.e. assuming
+   * you work every remaining hour. The pessimistic edge of the band the strip
+   * draws; `projectedExhaustAt` is the best estimate. Null under the same
+   * conditions as `projectedExhaustAt`.
+   */
+  pessimisticExhaustAt?: string | null;
+  /**
+   * 0–1: the share of the hours between now and `resetsAt` that the learned
+   * profile expects to be active. Null when there is no profile. Note this is
+   * forward-looking over the *remaining* window, not a trailing average — the
+   * whole point is that Friday evening and Monday morning differ.
+   */
+  dutyCycle?: number | null;
+  /** How far to trust `dutyCycle` and `projectedExhaustAt`. See {@link ForecastConfidence}. */
+  forecastConfidence?: ForecastConfidence;
 }
 
 /**
@@ -311,6 +334,13 @@ export interface ServerSettings {
    * hook gives up and lets the terminal dialog appear. The hooks' wait window.
    */
   answerSecs: number;
+  /**
+   * Record account-usage samples to disk so the duty-cycle profile can be
+   * learned. Off by default: switching it on makes the server call Anthropic
+   * about once a minute for as long as the process lives, with nobody
+   * necessarily watching. See docs/subsystems/usage-limits.md.
+   */
+  recordUsageHistory: boolean;
   /** False when the value couldn't be written to disk (won't survive a restart). */
   persisted: boolean;
   /**
