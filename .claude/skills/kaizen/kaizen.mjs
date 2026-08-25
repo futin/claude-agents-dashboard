@@ -205,6 +205,21 @@ function analyzeSession(filePath, id) {
     return s;
   };
 
+  // ONE TURN IS NOT ONE RECORD. Claude Code writes one record per content block
+  // and every one carries a full copy of the turn's usage under the same
+  // message.id, so usage is summed once per message.id (1.5-2.3x inflation
+  // otherwise) and a turn's output_tokens is split across ALL of its tool
+  // blocks — buffered here, settled after the walk. No message.id (old or
+  // malformed transcript) → each record is its own turn.
+  const turns = new Map();
+  const getTurn = (key) => {
+    let t = turns.get(key);
+    if (!t) { t = { out: 0, tools: [] }; turns.set(key, t); }
+    return t;
+  };
+  const countedTurns = new Set();
+  let anonTurnSeq = 0;
+
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -221,14 +236,21 @@ function analyzeSession(filePath, id) {
     const content = msg.content;
 
     if (msg.role === 'assistant') {
-      let outTokens = 0;
+      // No message.id → fail open: this record is its own turn. `#` cannot
+      // collide with a real id (they are all `msg_…`).
+      const turnKey = typeof msg.id === 'string' && msg.id ? msg.id : `#anon${anonTurnSeq++}`;
+      const firstOfTurn = !countedTurns.has(turnKey);
+      countedTurns.add(turnKey);
+      const turn = getTurn(turnKey);
+
       const u = msg.usage;
       if (u && typeof u === 'object') {
         const inp = num(u.input_tokens), out = num(u.output_tokens);
         const cc = num(u.cache_creation_input_tokens), cr = num(u.cache_read_input_tokens);
-        outTokens = out;
+        if (out > 0 && turn.out === 0) turn.out = out;
         const combined = inp + out + cc + cr;
-        if (combined > 0) {
+        // Only the turn's first record contributes — the rest are copies of it.
+        if (combined > 0 && firstOfTurn) {
           input += inp; output += out; cacheCreation += cc; cacheRead += cr;
           if (typeof msg.model === 'string' && msg.model) models.add(msg.model);
           const idx = turnCount++;
@@ -236,15 +258,16 @@ function analyzeSession(filePath, id) {
           if (combined > maxCombined) { maxCombined = combined; maxTurnIndex = idx; }
         }
         const stu = u.server_tool_use;
-        if (stu && typeof stu === 'object') { serverWebSearch += num(stu.web_search_requests); serverWebFetch += num(stu.web_fetch_requests); }
+        if (stu && typeof stu === 'object' && firstOfTurn) { serverWebSearch += num(stu.web_search_requests); serverWebFetch += num(stu.web_fetch_requests); }
       }
       if (Array.isArray(content)) {
         const toolBlocks = content.filter(b => b && b.type === 'tool_use' && typeof b.name === 'string');
-        const share = toolBlocks.length > 0 ? outTokens / toolBlocks.length : 0;
         for (const b of toolBlocks) {
           const s = getTool(b.name);
+          // count/duration/retries are per tool CALL — parallel calls really do
+          // land in separate records. Only the token split is per turn.
           s.count++;
-          s.approxOutputTokens += share;
+          turn.tools.push(b.name);
           if (errorOutstanding.has(b.name)) { retries++; errorOutstanding.delete(b.name); }
           if (typeof b.id === 'string') pendingTool.set(b.id, { name: b.name, ts });
         }
@@ -266,6 +289,13 @@ function analyzeSession(filePath, id) {
       const t = userText(msg);
       if (t && !t.includes('<task-notification>') && CORRECTION_RE.test(t)) userCorrections++;
     }
+  }
+
+  // Settle the per-tool split: one turn's output_tokens across all its tools.
+  for (const t of turns.values()) {
+    if (t.tools.length === 0) continue;
+    const share = t.out / t.tools.length;
+    for (const name of t.tools) getTool(name).approxOutputTokens += share;
   }
 
   const combined = input + output + cacheCreation + cacheRead;
