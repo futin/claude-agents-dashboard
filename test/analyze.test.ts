@@ -17,24 +17,45 @@ function fixture(records: unknown[]): string {
   return file;
 }
 
-/** Assistant record carrying a usage block (a "turn"). */
+/**
+ * Assistant record carrying a usage block. NOTE: one `message.id` is one *turn*,
+ * and Claude Code writes one record per content block — so several records can
+ * share an id and each carries a full copy of that turn's usage. Pass `id` to
+ * model a split turn; omit it to model an old/malformed transcript.
+ */
 function usageRec(
   usage: Record<string, unknown>,
   iso: string,
-  opts: { model?: string; content?: unknown[]; sidechain?: boolean } = {}
+  opts: { model?: string; content?: unknown[]; sidechain?: boolean; id?: string } = {}
 ) {
   return {
     ...(opts.sidechain ? { isSidechain: true } : {}),
     timestamp: iso,
-    message: { role: 'assistant', model: opts.model ?? 'claude-opus-4-8', usage, content: opts.content ?? [] }
+    message: {
+      role: 'assistant',
+      ...(opts.id ? { id: opts.id } : {}),
+      model: opts.model ?? 'claude-opus-4-8',
+      usage,
+      content: opts.content ?? []
+    }
   };
 }
-/** Assistant record emitting tool_use blocks (optionally with usage). */
-function toolUseRec(blocks: unknown[], iso: string, usage?: Record<string, unknown>) {
+/** Assistant record emitting tool_use blocks (optionally with usage + a turn id). */
+function toolUseRec(blocks: unknown[], iso: string, usage?: Record<string, unknown>, id?: string) {
   return {
     timestamp: iso,
-    message: { role: 'assistant', model: 'claude-opus-4-8', ...(usage ? { usage } : {}), content: blocks }
+    message: {
+      role: 'assistant',
+      ...(id ? { id } : {}),
+      model: 'claude-opus-4-8',
+      ...(usage ? { usage } : {}),
+      content: blocks
+    }
   };
+}
+/** A thinking block — the record that most often precedes a turn's tool_use records. */
+function think(text = 'hmm') {
+  return { type: 'thinking', thinking: text };
 }
 function tu(id: string, name: string, input: Record<string, unknown> = {}) {
   return { type: 'tool_use', id, name, input };
@@ -86,6 +107,92 @@ export function run(): number {
     assert.strictEqual(a.perTurn.maxCombined, 500);
     assert.strictEqual(a.perTurn.maxTurnIndex, 1);
     assert.strictEqual(a.perTurn.avgCombined, 267); // round(800/3)
+  })) p++; else f++;
+
+  // --- split turns (bug-1) -------------------------------------------------
+  // Claude Code writes one record per content block, each with a full copy of
+  // the turn's usage under the same message.id. Summing per record double-counts.
+
+  if (test('a turn split across records sharing one message.id counts once', () => {
+    const u = { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 10, cache_read_input_tokens: 900 };
+    const file = fixture([
+      usageRec(u, '2026-07-01T10:00:00Z', { id: 'msg_a', content: [think()] }),
+      usageRec(u, '2026-07-01T10:00:01Z', { id: 'msg_a', content: [tu('b1', 'Bash')] })
+    ]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.totals.input, 100);
+    assert.strictEqual(a.totals.output, 50);
+    assert.strictEqual(a.totals.cacheCreation, 10);
+    assert.strictEqual(a.totals.cacheRead, 900);
+    assert.strictEqual(a.totals.combined, 1060);
+    assert.strictEqual(a.totals.billableApprox, 160);
+    assert.strictEqual(a.perTurn.count, 1);
+    assert.strictEqual(a.perTurn.avgCombined, 1060);
+  })) p++; else f++;
+
+  if (test('parallel tool_use in separate records split that turn\'s output once', () => {
+    const u = { output_tokens: 100 };
+    const file = fixture([
+      toolUseRec([tu('b1', 'Bash')], '2026-07-01T10:00:00Z', u, 'msg_a'),
+      toolUseRec([tu('r1', 'Read')], '2026-07-01T10:00:01Z', u, 'msg_a')
+    ]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.totals.output, 100);
+    assert.strictEqual(a.byTool.find(t => t.tool === 'Bash')!.approxOutputTokens, 50);
+    assert.strictEqual(a.byTool.find(t => t.tool === 'Read')!.approxOutputTokens, 50);
+    assert.strictEqual(a.byTool.find(t => t.tool === 'Bash')!.count, 1);
+    assert.strictEqual(a.byTool.find(t => t.tool === 'Read')!.count, 1);
+  })) p++; else f++;
+
+  if (test('same tool across three records of one turn: count 3, one turn\'s output', () => {
+    const u = { output_tokens: 90 };
+    const file = fixture([
+      toolUseRec([tu('b1', 'Bash')], '2026-07-01T10:00:00Z', u, 'msg_a'),
+      toolUseRec([tu('b2', 'Bash')], '2026-07-01T10:00:01Z', u, 'msg_a'),
+      toolUseRec([tu('b3', 'Bash')], '2026-07-01T10:00:02Z', u, 'msg_a')
+    ]);
+    const a = analyzeSession(file)!;
+    const bash = a.byTool.find(t => t.tool === 'Bash')!;
+    assert.strictEqual(bash.count, 3);              // three real calls
+    assert.strictEqual(bash.approxOutputTokens, 90); // but one turn's output
+  })) p++; else f++;
+
+  if (test('maxTurnIndex indexes deduped turns, not records', () => {
+    const file = fixture([
+      usageRec({ input_tokens: 100 }, '2026-07-01T10:00:00Z', { id: 'msg_a', content: [think()] }),
+      usageRec({ input_tokens: 100 }, '2026-07-01T10:00:01Z', { id: 'msg_a', content: [tu('b1', 'Bash')] }),
+      usageRec({ input_tokens: 500 }, '2026-07-01T10:01:00Z', { id: 'msg_b', content: [think()] }),
+      usageRec({ input_tokens: 500 }, '2026-07-01T10:01:01Z', { id: 'msg_b', content: [tu('b2', 'Bash')] }),
+      usageRec({ input_tokens: 200 }, '2026-07-01T10:02:00Z', { id: 'msg_c' })
+    ]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.totals.combined, 800);
+    assert.strictEqual(a.perTurn.count, 3);
+    assert.strictEqual(a.perTurn.maxCombined, 500);
+    assert.strictEqual(a.perTurn.maxTurnIndex, 1);   // 2nd deduped turn, not the 2nd record
+  })) p++; else f++;
+
+  if (test('records with no message.id each still count (fail-open)', () => {
+    const file = fixture([
+      usageRec({ input_tokens: 100 }, '2026-07-01T10:00:00Z'),
+      usageRec({ input_tokens: 100 }, '2026-07-01T10:00:01Z')
+    ]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.totals.combined, 200);
+    assert.strictEqual(a.perTurn.count, 2);
+  })) p++; else f++;
+
+  if (test('a split sidechain turn stays fully excluded', () => {
+    const u = { input_tokens: 999 };
+    const file = fixture([
+      usageRec({ input_tokens: 100 }, '2026-07-01T10:00:00Z', { id: 'msg_a' }),
+      usageRec(u, '2026-07-01T10:00:01Z', { id: 'msg_s', sidechain: true, content: [think()] }),
+      usageRec(u, '2026-07-01T10:00:02Z', { id: 'msg_s', sidechain: true, content: [tu('x1', 'Grep')] })
+    ]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.totals.combined, 100);
+    assert.strictEqual(a.perTurn.count, 1);
+    assert.strictEqual(a.byTool.length, 0);
   })) p++; else f++;
 
   if (test('sidechain usage excluded from totals but Task shows in bySubagent', () => {
