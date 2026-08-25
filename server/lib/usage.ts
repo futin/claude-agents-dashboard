@@ -235,17 +235,26 @@ function refreshNow(): Promise<void> {
       // measured against must already include the interval ending now. The 5h
       // window is the sensor (its utilization is verified monotonic and moves
       // in ~10%/h steps, where the weekly crawls in ~1% ones).
-      if (limits && limits.fiveHour.utilization != null && getSettings().recordUsageHistory) {
+      if (getSettings().recordUsageHistory) {
         try {
-          recordTick({
-            t: Date.now(),
-            utilization: limits.fiveHour.utilization,
-            resetsAt: limits.fiveHour.resetsAt
-          });
+          if (limits && limits.fiveHour.utilization != null) {
+            recordTick({
+              t: Date.now(),
+              utilization: limits.fiveHour.utilization,
+              resetsAt: limits.fiveHour.resetsAt
+            });
+          }
           setForecastProfile(deriveProfile(profileSnapshot()));
         } catch {
           /* recording must never break the usage fetch */
         }
+      } else {
+        // Retire the profile the moment recording is switched off, in the same
+        // place the active-time source retires itself. Leaving the last-pushed
+        // profile in place would shape the walk with learned weights while the
+        // rate had already reverted to a raw *wall* slope — the double discount,
+        // inverted, and a silently under-projected week.
+        setForecastProfile(null);
       }
       // Feed the pace store one sample per window and attach burn rate +
       // projected exhaustion (null until enough history accumulates).
