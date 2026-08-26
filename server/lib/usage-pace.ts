@@ -139,6 +139,10 @@ let activeTimeSource: ((sinceMs: number, untilMs: number) => number | null) | nu
  * feeds the ring around the clock the idle hours inside the lookback dilute it —
  * then the walk would discount idle a second time through the weights. A null
  * source (or a null return) keeps the raw slope: exactly today's behaviour.
+ *
+ * The correction is only *applied* while a trusted profile exists to spend it
+ * (see {@link recordAndPace}): the two halves are one unit, and they do not
+ * arrive at the same time.
  */
 export function setActiveTimeSource(
   src: ((sinceMs: number, untilMs: number) => number | null) | null
@@ -165,6 +169,14 @@ const iso = (ms: number | null): string | null => (ms == null ? null : new Date(
  * The **5h** window is left exactly as it was — its 30-minute lookback bounds
  * any idle dilution to the first half hour after resuming work, and duty cycle
  * inside five hours is ~1 by construction.
+ *
+ * Both of those weekly steps are gated on the *same* condition: a profile with
+ * at least one trusted bucket. An active rate is a rate per hour *worked*, and
+ * only learned weights say how many of the remaining hours those are — until
+ * they exist, `deriveProfile` weights every hour 1.0, so the pair would project
+ * an always-on week (39% → 100% by tonight when the real duty cycle is ~20%).
+ * The wall slope needs no weights to be honest, so that is what stands: the
+ * documented pre-forecast closed form, unchanged for the whole first week.
  */
 export function recordAndPace(win: PaceWindow, rl: RateLimit, now = Date.now()): RateLimit {
   if (rl.utilization == null) return { ...rl, ratePerHour: null, projectedExhaustAt: null };
@@ -184,9 +196,15 @@ export function recordAndPace(win: PaceWindow, rl: RateLimit, now = Date.now()):
   };
   if (win !== 'sevenDay' || !pace) return { ...rl, ...flatFields };
 
+  // A profile with nothing trusted in it cannot spend an active rate — see the
+  // header. Null it out here so the correction, the walk and the disclosed
+  // confidence all read from one decision.
+  const trusted =
+    forecastProfile && confidenceOf(forecastProfile) !== 'none' ? forecastProfile : null;
+
   // ── Correct the trailing slope into an active rate, where it can be. ──
   let ratePerHour = pace.ratePerHour;
-  if (activeTimeSource) {
+  if (activeTimeSource && trusted) {
     const recent = samples.filter((s) => s.t >= now - cfg.lookbackMs);
     const activeMs = activeTimeSource(recent[0].t, now);
     if (activeMs != null) {
@@ -218,7 +236,7 @@ export function recordAndPace(win: PaceWindow, rl: RateLimit, now = Date.now()):
     offsetMinutes: localOffsetMinutes(now)
   };
   const flat = walkForward({ ...base, profile: flatProfile(1) });
-  const shaped = forecastProfile ? walkForward({ ...base, profile: forecastProfile }) : flat;
+  const shaped = trusted ? walkForward({ ...base, profile: trusted }) : flat;
 
   return {
     ...rl,
@@ -226,6 +244,6 @@ export function recordAndPace(win: PaceWindow, rl: RateLimit, now = Date.now()):
     projectedExhaustAt: iso(shaped.exhaustAtMs),
     pessimisticExhaustAt: iso(flat.exhaustAtMs),
     dutyCycle: shaped.dutyCycle,
-    forecastConfidence: forecastProfile ? confidenceOf(forecastProfile) : 'none'
+    forecastConfidence: trusted ? confidenceOf(trusted) : 'none'
   };
 }

@@ -168,6 +168,17 @@ there is no measurement, the raw slope stands, and `dutyCycle` is 1, so the numb
 exactly today's. A rise the recorder saw no active time for is a recording gap, so rate
 and projection both go `null` rather than inventing a number.
 
+**The active basis and the learned weights are one unit — both are gated on
+`confidenceOf(profile) !== 'none'`.** An active rate is a rate per hour *worked*, and only
+the weights say how many of the remaining hours those are. `deriveProfile` weights every
+hour `1.0` until a bucket clears the trust floor (the deliberate pessimistic default), so
+pairing the two halves before the weights land projects an *always-on* week: observed on
+2026-08-26 with 8.6 %/active-hour against a real duty cycle near 0.2 — 39% read as 100%
+by that evening, five days before the reset. The wall slope needs no weights to be honest,
+so at `none` it is what stands, `dutyCycle` is 1, and the strip is the documented
+pre-forecast closed form for the whole first week. The recording-gap `null` above belongs
+to the active basis too, and is gated with it.
+
 Consequence for the client: `ratePerHour × 24` overstates the daily figure by
 `1/dutyCycle`. `fmtRate` multiplies by `dutyCycle ?? 1` first.
 
@@ -278,5 +289,5 @@ before `confidence` leaves `thin`, and no test substitutes for that.
     - client/src/components/Header.tsx
     - client/src/components/usage/
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 70148d40eb360339eef66e57925983ee3d446889
 -->

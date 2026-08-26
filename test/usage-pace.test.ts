@@ -157,9 +157,35 @@ export function run(): number {
     assert.strictEqual(rl.projectedExhaustAt, rl.pessimisticExhaustAt);
   })) p++; else f++;
 
-  if (test('the weekly rate is per ACTIVE hour when the recorder measured the span', () => {
+  if (test('no profile at all → the active-time source is ignored, wall slope stands', () => {
     pace.resetPaceStore();
     pace.setForecastProfile(null);
+    pace.setActiveTimeSource(() => 1 * H);
+    const resetsAt = new Date(NOW + 48 * H).toISOString();
+    pace.recordAndPace('sevenDay', { utilization: 40, resetsAt }, NOW - 6 * H);
+    const rl = pace.recordAndPace('sevenDay', { utilization: 43, resetsAt }, NOW);
+    // 3% over 6h of wall clock — not 3 %/active-hour. (Float: 0.49999999999999994.)
+    assert.ok(Math.abs(rl.ratePerHour! - 0.5) < 1e-9, `wall slope expected, got ${rl.ratePerHour}`)
+  })) p++; else f++;
+
+  if (test('an untrusted profile (the first week) keeps the wall slope, not the active rate', () => {
+    pace.resetPaceStore();
+    // Exactly what deriveProfile() hands over before any bucket clears the trust
+    // floor: a real profile object, no weights, globalMean 1. Pairing an active
+    // rate with those flat-1.0 weights projects an always-on week.
+    pace.setForecastProfile({ weights: new Array(168).fill(null), globalMean: 1, trustedCount: 0 });
+    pace.setActiveTimeSource(() => 1 * H);
+    const resetsAt = new Date(NOW + 48 * H).toISOString();
+    pace.recordAndPace('sevenDay', { utilization: 40, resetsAt }, NOW - 6 * H);
+    const rl = pace.recordAndPace('sevenDay', { utilization: 43, resetsAt }, NOW);
+    assert.ok(Math.abs(rl.ratePerHour! - 0.5) < 1e-9, `wall slope expected, got ${rl.ratePerHour}`);
+    assert.strictEqual(rl.forecastConfidence, 'none');
+  })) p++; else f++;
+
+  if (test('the weekly rate is per ACTIVE hour when the recorder measured the span', () => {
+    pace.resetPaceStore();
+    // A trusted profile is what licenses the active basis — see the guard above.
+    pace.setForecastProfile(flatProfile(1));
     pace.setActiveTimeSource(() => 1 * H); // a 3% rise over 6h of wall clock, 1h of it active
     const resetsAt = new Date(NOW + 48 * H).toISOString();
     pace.recordAndPace('sevenDay', { utilization: 40, resetsAt }, NOW - 6 * H);
@@ -169,7 +195,7 @@ export function run(): number {
 
   if (test('a rise the recorder saw no active time for yields no projection', () => {
     pace.resetPaceStore();
-    pace.setForecastProfile(null);
+    pace.setForecastProfile(flatProfile(1)); // trusted, so the active basis is in play
     pace.setActiveTimeSource(() => 0); // the rise happened across a recording gap
     const resetsAt = new Date(NOW + 48 * H).toISOString();
     pace.recordAndPace('sevenDay', { utilization: 40, resetsAt }, NOW - 6 * H);
