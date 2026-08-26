@@ -266,5 +266,5 @@ Client-side controls above the list: project, status, activity window, and sort
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
+  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
 -->
