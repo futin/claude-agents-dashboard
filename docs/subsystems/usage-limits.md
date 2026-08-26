@@ -236,8 +236,16 @@ Two things the grid alone cannot do:
   touch-down, so press-and-hold inspects a cell) and keyboard focus; it is written with
   `textContent` plus `white-space: pre-line`, never `innerHTML`, and positioned by writing
   to the node directly rather than through state — re-rendering 168 cells to move one box
-  would be absurd. It flips above the pointer near the bottom edge (a finger is usually low
-  on the screen), hides on scroll when pointer-shown, and *follows* its mark when
+  would be absurd. It rides beside the pointer at a *constant* offset — clamped against
+  the side edges, but deliberately not vertically: a vertical clamp has an engage point,
+  and crossing it reads as the panel drifting around the pointer mid-sweep (near the
+  bottom edge the panel may instead lose its last lines, which is the accepted side of
+  that trade). One coordinate trap: `.shell{zoom:var(--font-scale)}` means the panel's
+  `position:fixed` left/top are *multiplied by the text scale*, while `clientX/Y` and
+  `getBoundingClientRect` stay in visual viewport px — at scale 100% the spaces coincide
+  and the bug is invisible, at 125% the panel lands 25% down-right of the pointer, an
+  error that grows with page position. `placeTip` divides the visual coords by
+  `--font-scale` before writing them. It hides on scroll when pointer-shown, and *follows* its mark when
   keyboard-shown, since tabbing to an off-screen cell scrolls it into view and hiding then
   would blank the tooltip the focus had just opened.
 - **The forward walk is drawn as a cumulative climb to a 100% ceiling**
