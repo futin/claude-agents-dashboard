@@ -799,13 +799,56 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .up-legend .up-conf{width:100%;color:var(--text2)}
 
 .up-walk{margin-top:16px}
-.up-walkbars{display:flex;gap:1px;align-items:flex-end;height:64px;border-bottom:1px solid var(--border)}
-.up-wb{flex:1;min-width:0;background:color-mix(in oklab,var(--cyan) 60%,var(--strip));border-radius:2px 2px 0 0}
-.up-wb:hover,.up-wb:focus-visible{outline:1px solid var(--accent);outline-offset:0}
-.up-wb.idle{background:var(--hairline);height:2px}
-.up-walkmeta{display:flex;justify-content:space-between;gap:8px;margin-top:5px;
+.up-walkmeta{display:flex;justify-content:space-between;gap:8px;
   font-family:var(--mono);font-size:10px;color:var(--text3)}
 .up-hit{color:var(--red)}
+
+/* The cumulative walk chart. One viewBox stretched with preserveAspectRatio:none,
+   so every stroke below carries vector-effect:non-scaling-stroke — that pair is
+   what removes the per-element device-pixel rounding the old bar strip had. */
+.up-chartwrap{position:relative;margin-top:6px}
+.up-chart{display:block;width:100%;height:96px;overflow:visible}
+.up-chart line,.up-chart polyline{vector-effect:non-scaling-stroke;fill:none}
+/* Drawn *over* the area fill, not under it: at the alpha a full-height wash can
+   afford, a tint beneath the fill is invisible. Deliberately faint — the
+   over-window is usually two thirds of the walk, and a strong field there
+   buries the shape the solid/dashed split just exposed. */
+.up-dead{fill:var(--red);opacity:.08}
+.up-daytick{stroke:var(--hairline);stroke-width:1}
+.up-ceiling{stroke:var(--red);stroke-width:1;stroke-dasharray:4 3;opacity:.7}
+.up-area{fill:color-mix(in oklab,var(--cyan) 12%,transparent);stroke:none}
+.up-line{stroke:var(--cyan);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+/* Same height, weaker claim: an assumed hour keeps its contribution and loses
+   its ink. Dashed rather than faded so it survives the light theme. */
+.up-line.assumed{stroke-dasharray:3 3;opacity:.75}
+.up-cross{stroke:var(--red);stroke-width:1.5}
+/* Never an outline on a hit column, in any state. The column is ~5px wide at
+   phone width, so a focus ring is *thicker than the thing it rings* — and
+   several engines (Safari most visibly) draw theirs as a filled rounded halo,
+   which renders as a fat opaque bar taller than the chart. The wash below is
+   the focus indicator instead: it is exactly one hour wide, by construction. */
+.up-hit-col{fill:transparent;stroke:none;cursor:crosshair;outline:none;
+  -webkit-tap-highlight-color:transparent}
+.up-hit-col:hover{fill:var(--accent);fill-opacity:.14}
+.up-hit-col:focus-visible{fill:var(--accent);fill-opacity:.3;outline:none}
+
+.up-ceillab,.up-crosslab{position:absolute;font-family:var(--mono);font-size:9px;
+  line-height:1;color:var(--red);pointer-events:none;white-space:nowrap}
+/* `top` comes from the same yOf() the rule is drawn with — never a CSS copy of
+   the y scale, which would drift the label off the line the moment Y_MAX moved. */
+.up-ceillab{right:0;transform:translateY(-100%);margin-top:-2px}
+.up-crosslab{top:0;transform:translateX(-50%);padding:0 3px;background:var(--surface);border-radius:2px}
+
+.up-days{position:relative;height:13px;margin-top:2px}
+.up-daylab{position:absolute;top:0;transform:translateX(-50%);
+  font-family:var(--mono);font-size:9px;line-height:1;color:var(--text3);white-space:nowrap}
+.up-nowlab{position:absolute;left:0;top:0;font-family:var(--mono);font-size:9px;line-height:1;
+  color:var(--text2);pointer-events:none;white-space:nowrap}
+
+.up-key{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+.up-key i{display:inline-block;width:14px;height:0}
+.up-key-solid{border-top:2px solid var(--cyan)}
+.up-key-dash{border-top:2px dashed var(--cyan);opacity:.75}
 
 .up-tablewrap{margin-top:12px;overflow-x:auto}
 .up-table{border-collapse:collapse;font-family:var(--mono);font-size:10px;color:var(--text2)}

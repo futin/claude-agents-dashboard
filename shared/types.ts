@@ -130,6 +130,25 @@ export interface ForecastStep {
   t: string;
   /** Percentage points this hour is expected to add. */
   gain: number;
+  /**
+   * Window % consumed after this hour — the curve's y value.
+   *
+   * Server-side rather than a client running-sum: the response carries no
+   * `utilization` for the client to seed a sum from, and `exhaustAt` is derived
+   * from these same partial sums. Summing twice in two languages is exactly the
+   * drift this shape is meant to make impossible.
+   */
+  cum: number;
+  /** The weight actually used for this hour, 0–1 (globalMean when untrusted). */
+  weight: number;
+  /**
+   * True when {@link weight} came from the bucket; false when it is the
+   * fallback. Deliberately not derivable from `weight`: a measured `1.0` and a
+   * fallback `1.0` are the same number and different statements, and deriving
+   * it client-side would mean re-implementing `hourOfWeek` timezone arithmetic
+   * in the browser.
+   */
+  learned: boolean;
 }
 
 /** `GET /api/usage/profile` — read-only. Never includes raw samples. */
@@ -144,6 +163,14 @@ export interface UsageProfileResponse {
   walk: ForecastStep[];
   /** ISO 8601 crossing time, or null when the window coasts to its reset. */
   exhaustAt: string | null;
+  /**
+   * Why there is no walk to draw, or `null` whenever {@link walk} is non-empty.
+   *
+   * The strip is a disclosure view, so "nothing to draw" is a state that gets a
+   * sentence rather than an unmounted section — idle is normal, and a panel that
+   * vanishes reads as a broken feature.
+   */
+  walkAbsent: null | 'recording-off' | 'no-rate' | 'no-window';
 }
 
 export interface RateLimit {

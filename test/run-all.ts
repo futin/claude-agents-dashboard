@@ -43,6 +43,7 @@ import { run as runUsageForecast } from './usage-forecast.test.js';
 import { run as runUsageHistory } from './usage-history.test.js';
 import { run as runUsageProfileApi } from './usage-profile-api.test.js';
 import { run as runUsageProfileView } from './usage-profile-view.test.js';
+import { run as runWalkChart } from './walk-chart.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -55,6 +56,7 @@ failed += runUsageForecast();
 failed += runUsageHistory();
 failed += runUsageProfileApi();
 failed += runUsageProfileView();
+failed += runWalkChart();
 failed += runAgents();
 failed += runAgentsCache();
 failed += runChat();

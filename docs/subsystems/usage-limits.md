@@ -240,6 +240,40 @@ Two things the grid alone cannot do:
   on the screen), hides on scroll when pointer-shown, and *follows* its mark when
   keyboard-shown, since tabbing to an off-screen cell scrolls it into view and hiding then
   would blank the tooltip the focus had just opened.
+- **The forward walk is drawn as a cumulative climb to a 100% ceiling**
+  (`WalkStrip` in the same file, over the pure geometry in
+  `client/src/lib/walkChart.ts`). The walk carries four numbers per hour — the slice, the
+  weight, the per-hour gain, and the running total — and the strip plots the *fourth*:
+  the panel exists to answer "when does the weekly window hit 100%", and a curve puts that
+  answer at an intersection instead of asking the reader to integrate 117 bars. Three
+  things are load-bearing:
+  - **Solid = measured, dashed = assumed, and the height is identical either way.** Not a
+    reversal of the encoding, a split of it. The forecast genuinely counts an unlearned
+    hour at `globalMean`, and that pessimistic edge is deliberate; only the ink says which
+    hours are a measurement. This needs a per-step bit the walk did not carry, so
+    `ForecastStep` gained `cum`, `weight` and `learned` — `learned` separately from
+    `weight` because a measured `1.0` and a fallback `1.0` are the same number and
+    different statements, and `cum` server-side because the response has no `utilization`
+    to seed a client running-sum from and `exhaustAt` comes off the same partial sums.
+    With `confidence: none` the whole line is dashed, which is the honest picture. A
+    single `<polyline>` cannot be half dashed, so `splitRuns` cuts the walk into runs of
+    equal `learned` with **adjacent runs sharing their boundary point** — otherwise the
+    line has a one-hour hole at every encoding change.
+  - **One `viewBox`, `preserveAspectRatio="none"`, `vector-effect: non-scaling-stroke`.**
+    The strip used to be 118 flex children with fractional CSS widths, and the compositor
+    rounded each one's two painted edges to device pixels independently — a ±1px swing
+    between neighbours (25% of the bar width at 640px) that no CSS tuning can remove,
+    because the rounding is per element. One coordinate space scaled uniformly removes it
+    structurally. Labels are HTML overlays positioned by percentage, since
+    `preserveAspectRatio="none"` stretches glyphs too. The y domain is fixed at
+    `0 … 130%`, never auto-scaled to the endpoint: a week ending at 294.7% would squash
+    the 100% rule into the bottom third, and everything above the ceiling is equally over.
+  - **"Nothing to draw" is a sentence, not an unmounted section.** `walkAbsent` names
+    which precondition failed — `recording-off`, `no-rate` (the RAM-only pace ring reads 0
+    when idle, so this fires within minutes of going quiet), or `no-window` — and is
+    `null` whenever the walk is non-empty. The old `walk.length > 0` render gate made the
+    whole panel appear and disappear with no text saying why, which reads as a broken
+    feature rather than as an idle account.
 - **A status line says where the profile is up to** (`RecordingStatus`, over the pure
   helpers in `client/src/lib/usageProfile.ts`): hours observed of 168, total time recorded,
   and either how many hours carry a weight or which gate is still pending — the
@@ -285,6 +319,7 @@ before `confidence` leaves `thin`, and no test substitutes for that.
     - server/lib/usage-history.ts
     - client/src/lib/pace.ts
     - client/src/lib/usageProfile.ts
+    - client/src/lib/walkChart.ts
     - server/api.ts
     - client/src/components/Header.tsx
     - client/src/components/usage/

@@ -65,6 +65,12 @@ export interface DutyProfile {
 export interface ForecastStepMs {
   tMs: number;
   gain: number;
+  /** Window % consumed after this slice, i.e. `utilization + Σgain` so far. */
+  cum: number;
+  /** The weight this slice was walked with, 0–1 (`globalMean` when untrusted). */
+  weight: number;
+  /** True when {@link weight} came from the bucket rather than the fallback. */
+  learned: boolean;
 }
 
 export interface ForecastResult {
@@ -117,6 +123,18 @@ export function weightAt(profile: DutyProfile, hw: number): number {
   return typeof w === 'number' ? w : profile.globalMean;
 }
 
+/**
+ * Whether the bucket carries a real weight, i.e. whether {@link weightAt}
+ * returned a measurement rather than the fallback.
+ *
+ * Same branch, named separately because the walk has to *say* which of the two
+ * it took — the numbers alone cannot, since a measured 1.0 and a fallback 1.0
+ * are indistinguishable.
+ */
+export function isLearnedAt(profile: DutyProfile, hw: number): boolean {
+  return typeof profile.weights[hw] === 'number';
+}
+
 /** Start of the next local hour after `ms`, in ms epoch. */
 function nextLocalHour(ms: number, offsetMinutes: number): number {
   const shift = offsetMinutes * 60_000;
@@ -153,10 +171,19 @@ export function walkForward(opts: WalkOpts): ForecastResult {
   while (t < resetsAtMs) {
     const sliceEnd = Math.min(nextLocalHour(t, offsetMinutes), resetsAtMs);
     const sliceMs = sliceEnd - t;
-    const weight = weightAt(profile, hourOfWeek(t, offsetMinutes));
+    const hw = hourOfWeek(t, offsetMinutes);
+    const weight = weightAt(profile, hw);
     const gain = activeRatePerHour * weight * (sliceMs / HOUR_MS);
 
-    steps.push({ tMs: t, gain });
+    // `cum` is the running total *including* this slice, offset by what the
+    // window has already spent — the y value the strip plots against 100%.
+    steps.push({
+      tMs: t,
+      gain,
+      cum: utilization + accumulated + gain,
+      weight,
+      learned: isLearnedAt(profile, hw)
+    });
     weightedMs += weight * sliceMs;
     totalMs += sliceMs;
 

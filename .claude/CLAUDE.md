@@ -92,6 +92,9 @@ client/           Vite + React + TypeScript frontend
   components/Markdown.tsx + lib/markdown.ts  zero-dep markdown-subset parser + renderer
                   for message text (no dangerouslySetInnerHTML; pure, unit-tested)
   lib/chatFilter.ts            drawer all/text/you message filter (pure; persisted)
+  lib/walkChart.ts             pure geometry for the Usage tab's forward-walk strip: the
+                  y scale, the measured/assumed run splitter, day ticks and the tooltip
+                  text (see docs/subsystems/usage-limits.md)
   lib/pace.ts                  pure view-model for the usage bars' time strip: elapsed /
                   now-tick / projected-wall-tick + the wall-vs-lasts verdict
                   (see docs/subsystems/usage-limits.md)
@@ -134,10 +137,12 @@ client/           Vite + React + TypeScript frontend
   components/usage/UsageView.tsx  the Usage tab (own lazy chunk): the duty-cycle inspector
                   in components/usage/UsageProfile.tsx — a 24×7 hour-of-week heatmap over
                   the learned weights plus the forward walk behind the current weekly
-                  projection (hooks/useUsageProfile, fetched once per mount, unpolled;
-                  ramp derived with color-mix so all five themes hold; per-cell evidence on
-                  a real tooltip element, never `title`, which never fires on touch —
-                  lib/usageProfile.ts holds the pure status-line helpers). Its own section
+                  projection, drawn as a cumulative climb to a 100% ceiling with measured
+                  hours solid and assumed ones dashed (hooks/useUsageProfile, fetched once
+                  per mount, unpolled; ramp derived with color-mix so all five themes hold;
+                  per-cell evidence on a real tooltip element, never `title`, which never
+                  fires on touch — lib/usageProfile.ts holds the pure status-line helpers,
+                  lib/walkChart.ts the strip's geometry). Its own section
                   rather than a block in Analytics: that tab is about *sessions*, this is
                   about the *account* — no shared data, endpoint or cadence
   hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
