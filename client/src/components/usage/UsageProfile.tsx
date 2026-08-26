@@ -329,7 +329,19 @@ export function UsageProfile() {
     tip.style.left = '0px';
     tip.style.top = '0px';
     const w = tip.offsetWidth;
-    tip.style.left = Math.max(8, Math.min(x + 14, window.innerWidth - w - 8)) + 'px';
+    // `.shell{zoom:var(--font-scale)}` puts this fixed-positioned panel in a
+    // *zoomed* coordinate space: its left/top are multiplied by the text scale,
+    // while clientX/Y (and getBoundingClientRect) stay in visual viewport px.
+    // At scale 100% the two spaces coincide and the bug is invisible; at 125%
+    // the panel lands 25% further down-right than the pointer, an error that
+    // grows with page position. Divide the visual coords (and the viewport
+    // width the clamp compares against) back into the panel's own space.
+    const z = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--font-scale')
+    ) || 1;
+    const vx = x / z, vy = y / z;
+    tip.style.left =
+      Math.max(8, Math.min(vx + 14, window.innerWidth / z - w - 8)) + 'px';
     // Beside the pointer at a constant offset — never above it, and with no
     // vertical clamp. The panel used to sit above the mark and clamp against
     // the viewport, but a clamp has an engage point, and crossing it reads as
@@ -338,7 +350,7 @@ export function UsageProfile() {
     // offset keeps the pointer→panel distance identical on every cell. The
     // price is that the last ~60px above the bottom edge can shave the panel's
     // final lines — accepted; that is the very trade the clamp reversed.
-    tip.style.top = (y - 14) + 'px';
+    tip.style.top = (vy - 14) + 'px';
   }, []);
 
   const showTip = useCallback((text: string, x: number, y: number) => {

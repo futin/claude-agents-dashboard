@@ -240,7 +240,12 @@ Two things the grid alone cannot do:
   the side edges, but deliberately not vertically: a vertical clamp has an engage point,
   and crossing it reads as the panel drifting around the pointer mid-sweep (near the
   bottom edge the panel may instead lose its last lines, which is the accepted side of
-  that trade). It hides on scroll when pointer-shown, and *follows* its mark when
+  that trade). One coordinate trap: `.shell{zoom:var(--font-scale)}` means the panel's
+  `position:fixed` left/top are *multiplied by the text scale*, while `clientX/Y` and
+  `getBoundingClientRect` stay in visual viewport px — at scale 100% the spaces coincide
+  and the bug is invisible, at 125% the panel lands 25% down-right of the pointer, an
+  error that grows with page position. `placeTip` divides the visual coords by
+  `--font-scale` before writing them. It hides on scroll when pointer-shown, and *follows* its mark when
   keyboard-shown, since tabbing to an off-screen cell scrolls it into view and hiding then
   would blank the tooltip the focus had just opened.
 - **The forward walk is drawn as a cumulative climb to a 100% ceiling**
