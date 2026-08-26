@@ -52,15 +52,6 @@ Two things a container can't reach on its own:
   fails, `/api/health` reports `spawnAvailable: false`, and the toolbar's `+ New` button never
   renders. Same designed no-binary behavior as dictation above, and the same fix: run the
   server on the host. See [spawn](../subsystems/spawn.md).
-- **The Guides tab renders empty in the production image.** `config.ts` resolves
-  `guidesDir` from `GUIDES_DIR`, defaulting to `<cwd>/docs/guides`, but the runtime stage
-  copies only `package.json`, `server/`, `shared/` and the built client — `docs/` never
-  reaches the image, so `scanGuides` finds nothing there. That is the designed fail-open
-  (an empty tab, not a broken one), and unlike dictation and spawning above there is no
-  availability flag to check: the tab always exists. The dev compose bind-mounts the whole
-  repo at `/app`, so decks and guides list normally there. To serve them from the
-  production image, mount the directory in and point `GUIDES_DIR` at the mount. See
-  [guides](../subsystems/guides.md).
 - **Push notifications need their three variables passed in explicitly.** `.env` is in
   `.dockerignore` and the runtime stage copies only `server/`, `shared/` and the built
   client, so `loadConfig()` finds no file in the production image. Both compose files

@@ -86,9 +86,6 @@ That's the whole basic setup. Everything below is optional.
   beside the viewer.
 - **[Analytics tab](docs/subsystems/analytics.md)** — per-session post-mortem cards
   (tokens, priciest tools/subagents) paired with the lesson the `/kaizen` skill logged.
-- **[Guides tab](docs/subsystems/guides.md)** — browse the tutor decks and study guides
-  published under `docs/guides/`, each opened inside the dashboard itself — same-origin,
-  readable on a phone over the tailnet.
 - **[Usage bars and forecast](docs/subsystems/usage-limits.md)** — the header's 5h / Week
   account rate-limit bars, same numbers as `/usage` in the CLI, each with a time strip
   underneath: how much of the window has elapsed, your burn rate, and where the current

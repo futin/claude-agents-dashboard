@@ -37,7 +37,6 @@ import { run as runSurface } from './surface.test.js';
 import { run as runDecodePath } from './decode-path.test.js';
 import { run as runFormat } from './format.test.js';
 import { run as runPanelCollapse } from './panel-collapse.test.js';
-import { run as runGuides } from './guides.test.js';
 import { run as runUsagePace } from './usage-pace.test.js';
 import { run as runPaceView } from './pace-view.test.js';
 import { run as runUsageForecast } from './usage-forecast.test.js';
@@ -90,7 +89,6 @@ failed += runSurface();
 failed += runDecodePath();
 failed += runFormat();
 failed += runPanelCollapse();
-failed += await runGuides();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

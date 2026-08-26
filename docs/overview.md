@@ -79,8 +79,6 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/management`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
-| `GET /api/guides` | the tutor-deck / study-guide index under `GUIDES_DIR` |
-| `GET /guides/<relPath>` | one guide file, resolved through `resolveGuidePath`'s traversal guard |
 | anything else | static files from `client/dist` (production only) |
 
 ⚠️ Route order in `index.ts` is load-bearing: the `:id` detail regex would swallow
@@ -99,8 +97,7 @@ one bad route is not a reason to stop serving the other twenty.
 ## Dev vs prod
 
 - **Dev** (`pnpm dev`): Vite serves the page on `WEB_PORT` (default 5174) with HMR and
-  proxies `/api` and `/guides` to the Node server on `PORT` (default 4173). The proxy sets
-  `xfwd`, so
+  proxies `/api` to the Node server on `PORT` (default 4173). The proxy sets `xfwd`, so
   the origin badge still sees the real client address.
 - **Prod** (`pnpm build` + `pnpm start`): the Node server static-serves `client/dist` and
   answers the API on `PORT`, auto-opening the browser.
@@ -149,24 +146,22 @@ server/
   lib/spawn.ts    launches a detached, headless `claude -p` session, or resumes an ended
                   one — the fourth write path, and the first the dashboard initiates
                   (see docs/subsystems/spawn.md)
-  lib/guides.ts   docs/guides/ scanner (decks + study guides) + the traversal guard
-                  behind GET /guides/<relPath> (see docs/subsystems/guides.md)
 client/src/
-  App.tsx         shell: side rail (Sessions | Management | Analytics | Usage | Guides |
+  App.tsx         shell: side rail (Sessions | Management | Analytics | Usage |
                   Settings) + lazy views
   components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   MicButton, SpawnPanel, ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
-                  usage/, guides/, settings/
+                  usage/, settings/
   hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
-                  useGuides, useUsageProfile, usePendingQuestion, usePendingPlan,
+                  useUsageProfile, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, usePersistedState,
                   useSettings, useServerSettings, useDictation, useTranscribeAvailable
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
                   deepLink, dictation, spawnOptions, resume, pace, usageProfile,
                   panelCollapse
-vite.config.ts    dev proxy /api + /guides → backend; reuses the server config loader
+vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   plan-remote-hook.sh, permission-notify-hook.sh,
@@ -189,7 +184,6 @@ that area:
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
-- [guides](subsystems/guides.md) — tutor decks + study guides, served same-origin out of `docs/guides/`
 - [usage-limits](subsystems/usage-limits.md) — header account usage bars
 - [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold, answer window, push policy
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage

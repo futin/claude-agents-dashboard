@@ -47,10 +47,7 @@ export default defineConfig({
       // xfwd adds X-Forwarded-For. The dev proxy reaches the API over loopback,
       // so without it every dev client — including a phone on the LAN — would
       // be classified `local` by server/lib/origin.ts.
-      '/api': { target: `http://localhost:${port}`, xfwd: true },
-      // Guide/deck files (GET /guides/<relPath>), same reasoning as '/api'
-      // above — needed so the Guides tab's iframe works in dev too.
-      '/guides': { target: `http://localhost:${port}`, xfwd: true }
+      '/api': { target: `http://localhost:${port}`, xfwd: true }
     }
   },
   build: {
