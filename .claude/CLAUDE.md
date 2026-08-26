@@ -68,8 +68,10 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   gitignored .remote-answer.json (fails open)
   lib/settings.ts persisted idle threshold + answer window for the remote-answer hooks
                   (served on /api/health, since they can't read our env) + detection of
-                  overriding CLAUDE_DASHBOARD_{IDLE_SECS,ANSWER_TIMEOUT}, plus the
-                  notify policy lib/notify.ts acts on (see docs/subsystems/settings.md)
+                  overriding CLAUDE_DASHBOARD_{IDLE_SECS,ANSWER_TIMEOUT}, the notify
+                  policy lib/notify.ts acts on, and recordUsageHistory — the switch that
+                  arms the usage recorder, server-side because a per-device toggle cannot
+                  start a server-side timer (see docs/subsystems/settings.md)
   lib/origin.ts   pure connection classifier → local | lan | tailnet | unknown, on
                   /api/health for the toolbar badge (see docs/subsystems/remote-access.md)
   lib/transcribe.ts  ffmpeg → whisper-cli pipeline for POST /api/transcribe: mime
@@ -108,6 +110,11 @@ client/           Vite + React + TypeScript frontend
                   (hooks/usePendingPlan — see docs/subsystems/remote-plan.md)
   components/MessagePanel.tsx  pinned composer for a turn-end reply window: send free text
                   back, or let the session stop (hooks/usePendingMessage — see docs/subsystems/remote-message.md)
+  components/PanelChrome.tsx + lib/panelCollapse.ts  the head row and one-line stub all
+                  three pinned panels share, plus the pure `collapsedSummary` text on that
+                  stub — so the minimise caret sits in the same corner in each. Collapse
+                  state lives in each panel and resets on a new pending id: a NEW ask always
+                  arrives expanded, and it is deliberately not persisted
   components/MicButton.tsx + lib/dictation.ts  tap-to-record mic in that composer's action
                   row, plus its pure mime-pick/elapsed-fmt/transcript-append helpers
                   (hooks/useDictation + hooks/useTranscribeAvailable — see
@@ -132,7 +139,9 @@ client/           Vite + React + TypeScript frontend
                   in components/usage/UsageProfile.tsx — a 24×7 hour-of-week heatmap over
                   the learned weights plus the forward walk behind the current weekly
                   projection (hooks/useUsageProfile, fetched once per mount, unpolled;
-                  ramp derived with color-mix so all five themes hold). Its own section
+                  ramp derived with color-mix so all five themes hold; per-cell evidence on
+                  a real tooltip element, never `title`, which never fires on touch —
+                  lib/usageProfile.ts holds the pure status-line helpers). Its own section
                   rather than a block in Analytics: that tab is about *sessions*, this is
                   about the *account* — no shared data, endpoint or cadence
   components/guides/GuidesView.tsx  the Guides tab: deck/guide cards, then a same-origin

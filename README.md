@@ -89,8 +89,16 @@ That's the whole basic setup. Everything below is optional.
 - **[Guides tab](docs/subsystems/guides.md)** — browse the tutor decks and study guides
   published under `docs/guides/`, each opened inside the dashboard itself — same-origin,
   readable on a phone over the tailnet.
-- **[Usage bars](docs/subsystems/usage-limits.md)** — the header's 5h / Week account
-  rate-limit bars, same numbers as `/usage` in the CLI.
+- **[Usage bars and forecast](docs/subsystems/usage-limits.md)** — the header's 5h / Week
+  account rate-limit bars, same numbers as `/usage` in the CLI, each with a time strip
+  underneath: how much of the window has elapsed, your burn rate, and where the current
+  pace projects 100% — as a band rather than a single tick while the estimate is still
+  young. Opt in to recording and the weekly projection learns which hours you actually
+  work, so idle nights stop being counted as burn.
+- **[Usage tab](docs/subsystems/usage-limits.md#the-inspector)** — the duty-cycle
+  inspector behind that forecast: a 24×7 hour-of-week heatmap of the learned weights plus
+  the forward walk to the weekly reset, so the projection can be checked rather than
+  trusted. Read-only, and it never exposes raw samples or file paths.
 - **[Push notifications](docs/subsystems/push-notify.md)** — the server publishes to an
   [ntfy](https://ntfy.sh) topic when a session needs you (question, plan, permission
   dialog, finished turn); tapping the push opens that session's chat. Off by default, and
@@ -98,8 +106,9 @@ That's the whole basic setup. Everything below is optional.
   in-browser alert layer was deleted rather than kept: WebKit has no `Notification` API in
   a tab, so it could never fire on an iPhone.
 - **[Settings tab](docs/subsystems/settings.md)** — themes, density and text scale, refresh
-  rate, the scan knobs, the push-notification policy, and the remote-answer idle threshold
-  and answer window — all editable in the app, no `.env` edit or rebuild.
+  rate, the scan knobs, the push-notification policy, usage-history recording, and the
+  remote-answer idle threshold and answer window — all editable in the app, no `.env` edit
+  or rebuild.
 - **[Phone access & origin badge](docs/subsystems/remote-access.md)** — reach the
   dashboard over LAN, Tailscale, or a tunnel; a toolbar pill shows which route you're on.
 

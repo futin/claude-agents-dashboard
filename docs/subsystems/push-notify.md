@@ -95,9 +95,13 @@ hook, so it really does become unconditional. `stop` is the mixed case: `stop-no
 now runs the same idle check `ask-remote.sh` does, but only in front of the *hold* route —
 at the desk it falls through to the plain `notify_fallback` POST instead of exiting, so a
 push attempt reaches the predicate either way. One exception on the routing side: a
-**headless** session (no controlling TTY — a dashboard spawn) skips that idle check
-entirely and takes the hold route at the desk too, because there is no terminal to type
-the follow-up into. Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
+**headless** session (a dashboard spawn) skips that idle check entirely and takes the hold
+route at the desk too, because there is no terminal to type the follow-up into. "Headless"
+is **not** simply "no controlling TTY": the desktop app runs the CLI with no pty and still
+puts a composer in front of you, so the hook exempts it by entrypoint
+(`CLAUDE_CODE_ENTRYPOINT=claude-desktop`) and the TTY verdict stands for everything else.
+Only entrypoints measured to be interactive are listed, so an unfamiliar one still fails
+closed to headless. Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
 (and so which phrase and suppression rule apply), not whether `stop` pushes at all — see
 [remote-message](remote-message.md).
 
