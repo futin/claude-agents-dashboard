@@ -1799,3 +1799,93 @@ git commit -m "docs(usage): document duty-cycle forecasting and the recording op
 
 - **State what you did not verify.** The honest line: the plumbing is proven and every pure function is tested, but the forecast's *accuracy* is unproven — it needs roughly two weeks of real samples, and no test can substitute for that. Say it plainly.
 - **Never claim green without the command output.**
+
+---
+
+## Outcome
+
+**Shipped 2026-08-26.** All eight implementation steps landed on
+`feat/duty-cycle-usage-forecast` (15 commits) and merged as
+[PR #48](https://github.com/futin/claude-agents-dashboard/pull/48), merge commit
+`f20142f`. One follow-up (`cb1aa76`, the inspector's status line) landed directly
+on `main` — see *Process notes* below.
+
+### Verification, with the actual output
+
+```
+$ pnpm test
+  28 passed, 0 failed
+ALL PASS
+$ pnpm test | grep -oE "[0-9]+ passed, [0-9]+ failed" | awk ...
+494 passed, 0 failed across 26 suites
+$ pnpm typecheck
+> tsc --noEmit          (clean)
+$ pnpm build
+✓ built in 907ms        (clean)
+```
+
+102 new cases: usage-forecast 15, usage-history 52, usage-profile-api 10,
+usage-profile-view 10, usage-pace +6, pace-view +5, settings +4.
+
+**Mutation checks, run on the final code** (Task 3 Step 6, re-run before the PR).
+Each mutation killed exactly the test named, and all were restored green:
+
+| Mutation | Test that failed |
+|---|---|
+| Delete the window comparison in `classifyInterval` | *a reset interval leaves every counter untouched* + *the jitter tolerance…* |
+| Long-gap-rising branch returns `'active'` | *an ambiguous interval leaves every counter untouched* |
+| `foldBucket` decays before folding | *quiet weeks decay a bucket rather than freezing it* |
+| Widen the jitter tolerance to 6h | *the jitter tolerance does not swallow a real window change* |
+
+### Three bugs the live run found that this plan could not have
+
+1. **`resetsAt` jitters ~0.85s between fetches** — four consecutive real fetches of
+   one unchanged 5h window returned `21:19:59.657311`, `21:20:00.387292`,
+   `21:20:00.404859`, `21:20:00.508567`. The plan compared these as strings, so
+   *every* interval classified as `reset`: the profile would have learned nothing,
+   ever, and write-on-change would have degraded to write-always. Window identity
+   is now a parsed comparison with 2 minutes of slack.
+2. **The sampling timer was gated by the cache TTL it shared a period with** — the
+   tick called `getCachedUsageState`, which only refreshes past 60s, against a 60s
+   timer, so they alternated and the recorder measured out at ~120s.
+3. **Toggling recording off left the profile shaping a wall rate** — the double
+   discount inverted, i.e. a silently under-projected week for the process's life.
+
+### What is still NOT verified
+
+- **The forecast's accuracy.** As this plan predicted: the profile needs two to
+  three weeks of real samples before `confidence` leaves `thin`. At close it had
+  37 observed minutes across 2 of 168 buckets and 0 trusted. The mechanism is
+  proven; the prediction is not.
+- **The band and the walk strip against live data.** Both need a positive weekly
+  rate, and the weekly utilization sat flat at 37% for the whole session — a flat
+  slope gives rate 0, so neither could render. The walk strip was verified by
+  stubbing the endpoint (102 bars, 81 idle stubs, crossing labelled); nobody has
+  seen either off real numbers. Needs a day when the weekly figure ticks.
+- The tooltip's hide-on-scroll branch, the `recordUsageHistory: false` branch in
+  `refreshNow`, the DST transition, and the 7-day weekly-window assumption that
+  the walk's horizon now also depends on.
+
+### Process notes for whoever reads this next
+
+- **Three of this plan's own rollover test cases were internally inconsistent
+  with its own classification table** — they fed 30- and 60-minute *rising*
+  intervals and expected them to count as active time, which the table classifies
+  as `ambiguous` and discards. Corrected with intent preserved. The plan's own
+  warning that a plan should specify cases rather than literal code earned itself.
+- **Two UI defects were caught by the user, not by the implementer**, and both
+  were fidelity drifts from the mockup: cells rendered as rectangles rather than
+  squares (I had traded that away to keep the week on one screen and recorded it
+  in a commit message instead of asking), and per-cell metadata used the native
+  `title` attribute — which never fires on touch, so on the phone this dashboard
+  exists to be read from, the evidence was unreachable.
+- **A third gap the user surfaced by asking a question:** the inspector shows 168
+  identical hatched cells for its whole first week, because a weight requires both
+  60 lifetime minutes *and* an ISO-week fold. Correct by the model, unreadable as
+  a UI. Fixed with a status line naming which gate you are waiting on.
+- **`cb1aa76` went straight to `main`, unreviewed.** The user merged #48 and
+  pulled mid-turn, which switched the working tree from the feature branch to
+  `main`; the follow-up commit was made without re-checking the branch and pushed
+  to `origin/main`. Tree was green and the user chose to leave it. Lesson: on this
+  repo the branch can change under you inside a single turn — re-check
+  `git branch --show-current` immediately before every commit, not once per task.
