@@ -215,6 +215,27 @@ and there's no on-disk link from the new session back to the cleared one to dedu
 `newestMessageSeen`, true once a `message.role` user/assistant record appears in the
 tail). Nothing to show → not shown. The old session ages to `idle` on its own once stale.
 
+**Slash-command-only filter:** a `/login` (or a `!ls` bang command) run in a fresh terminal
+writes a transcript of nothing but local plumbing — a `<local-command-caveat>`, the
+`<command-name>` echo, a `<local-command-stdout>` — and stops. No assistant ever answers,
+so there are no tokens, but those records *are* `message.role: user` records, so the
+empty-session filter above waves them through: fresh mtime + a user newest record =
+recent + turn-open = a 0% yellow "your turn" phantom. `transcript.ts` therefore also
+exposes `commandOnly`, and `scan.ts` drops it on the same "nothing to show" policy.
+
+It is decided from the newest conversational record (content text starts with
+`<command-name|-message|-args>`, `<local-command-*>`, or `<bash-input|stdout|stderr>`)
+**plus `tokens === 0`**. The token half is load-bearing in the honest direction: the same
+command run at the *end* of a real session leaves usage on an older assistant record, so
+that session keeps its row; and a fresh session where you typed a real prompt the assistant
+hasn't answered yet also has zero tokens but real content, so it keeps its green row too.
+
+**Candidate pool vs. row cap:** both filters can only be decided *after* parsing, so
+`scan.ts` over-fetches — the recency sort takes `maxSessions * 2` candidates and the build
+loop breaks at `maxSessions`. Without that, a dropped transcript cost a display slot: two
+`/login` phantoms on a `maxSessions: 5` config rendered 3 rows. With no phantoms present the
+loop still breaks at the cap, so the common case parses exactly as many transcripts as before.
+
 **Signals** come from the **newest message record** (newest tail record with
 `message.role` of `user`/`assistant`): `transcript.ts` exposes `turnComplete` (default
 true; false unless that record is an assistant with `end_turn`), `waitingOnQuestion`, and

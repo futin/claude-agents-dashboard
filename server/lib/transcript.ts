@@ -34,6 +34,26 @@ export const DEFAULT_TAIL_BYTES = 256 * 1024;
  */
 export const WAIT_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+/**
+ * A user-role message whose text is local CLI plumbing rather than something
+ * said to the model: a slash command's echo (`<command-name>`/`-message`/
+ * `-args`), its stdout/stderr/caveat wrapper, or a `!` bang command's
+ * input/output. Anchored at the start, so a message merely *mentioning* one of
+ * these tags is unaffected.
+ *
+ * Deliberately does NOT list bare `<command>`: that tag appears inside tool
+ * inputs and prompts, not as a record's content prefix.
+ */
+const LOCAL_PLUMBING = /^<(command-(name|message|args)|local-command-[a-z]+|bash-(input|stdout|stderr))>/;
+
+/** Text of a message record's content, whether stored as a string or as blocks. */
+function contentText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  const first = content.find((b: any) => b && b.type === 'text' && typeof b.text === 'string') as any;
+  return first ? first.text : '';
+}
+
 export interface ParsedTranscript {
   tokens: number;
   model: string;
@@ -71,6 +91,19 @@ export interface ParsedTranscript {
    * which has no content worth showing.
    */
   hasMessages: boolean;
+  /**
+   * Every conversational record this transcript has is local slash-command
+   * plumbing — a `/login` (or `!ls`) run in a fresh terminal, which writes
+   * user-role messages and stops: no assistant turn, no tokens. `hasMessages`
+   * cannot catch it, because those records ARE messages; left alone it reads as
+   * recent + turn-open and shows a phantom "your turn" row.
+   *
+   * Decided from the newest conversational record plus `tokens === 0`. The
+   * token half is load-bearing: the same command run at the END of a real
+   * session leaves usage on an older assistant record, and that session must
+   * stay visible.
+   */
+  commandOnly: boolean;
   /** Newest assistant turn ended cleanly (stop_reason "end_turn"). */
   turnComplete: boolean;
   /** Newest assistant action is an unanswered {@link WAIT_TOOLS} call. */
@@ -216,6 +249,7 @@ export function readTranscript(
   let turnComplete = true;
   let waitingOnQuestion = false;
   let lastMessageTs: string | null = null;
+  let newestIsPlumbing = false;
 
   // Single newest-first scan gathers everything we need.
   for (let i = lines.length - 1; i >= first; i--) {
@@ -258,6 +292,7 @@ export function readTranscript(
       const m = rec.message;
       if (typeof rec.timestamp === 'string') lastMessageTs = rec.timestamp;
       turnComplete = role === 'assistant' && m.stop_reason === 'end_turn';
+      newestIsPlumbing = role === 'user' && LOCAL_PLUMBING.test(contentText(m.content).trimStart());
       if (role === 'assistant' && Array.isArray(m.content)) {
         waitingOnQuestion = m.content.some(
           (b: any) => b && b.type === 'tool_use' && WAIT_TOOLS.has(b.name)
@@ -292,6 +327,7 @@ export function readTranscript(
     lastTimestamp: lastTs,
     lastMessageTs,
     hasMessages: newestMessageSeen,
+    commandOnly: newestIsPlumbing && tokens === 0,
     turnComplete,
     waitingOnQuestion
   };
