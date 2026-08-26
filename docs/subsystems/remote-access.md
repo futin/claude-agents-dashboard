@@ -29,8 +29,9 @@ The trade-off: every connecting device needs the Tailscale app, so you can't han
 to someone who isn't on your tailnet.
 
 > ⚠️ **If you pick a public tunnel instead** (ngrok, Cloudflare, …), understand what it
-> exposes: *every* read endpoint is open — full transcripts, chat history, and
-> `/api/management/file` (config file bodies) — to anyone with the link. And if you have
+> exposes: *every* read endpoint is open — full transcripts, chat history,
+> `/api/management/file` (config file bodies) and `/guides/<relPath>` (any file under
+> `GUIDES_DIR`, see [guides](guides.md)) — to anyone with the link. And if you have
 > set `CLAUDE_BIN`, so is [spawn](spawn.md): with `ANSWER_TOKEN` empty, anyone with the
 > link can start a real Claude Code session on this machine. Set
 > `ANSWER_TOKEN` at minimum, and put auth at the edge (ngrok Basic Auth / Cloudflare
@@ -136,5 +137,5 @@ dictates" without any change of its own.
     - vite.config.ts
     - package.json
   kind: subsystem
-  verified: 8326b88586603f5ad72061c686d3d33bd8f50f67
+  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
 -->

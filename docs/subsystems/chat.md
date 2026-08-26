@@ -3,6 +3,11 @@
 The `chat` tab down the right edge of a session row opens a **full-height drawer** with that session's
 conversation: newest page on open, live-tailed at the configured refresh rate, "load older"
 walking backwards through the whole transcript. Read-only, like everything else in the app.
+The header carries that session's live context reading — `tokens / window` and the percent,
+tinted orange at the same 70% threshold the list row uses, off the same 3s poll rather than
+a second read. It is there because a drawer opened straight from a tapped push
+([deep link](push-notify.md)) never showed the list, so this is the only place that reader
+sees how full the session is.
 This drawer is also where [remote answers](remote-answer.md) surface: a pending question
 renders as an action bar pinned above the footer, a proposed plan does the same through
 `PlanPanel` (see [remote-plan](remote-plan.md)), and a turn-end reply window through
@@ -138,5 +143,5 @@ worst case to the window size, not to the transcript size.
     - client/src/lib/chatFilter.ts
     - client/src/lib/markdown.ts
   kind: subsystem
-  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
+  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
 -->

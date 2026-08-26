@@ -75,9 +75,12 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said |
 | `POST /api/remote-answer` | flip the remote-answer toggle (write path) |
 | `GET /api/health` | liveness + remote-answer state + connection origin + the two hook numbers (idle threshold, answer window) |
-| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, plus `notifyAvailable` (never the ntfy topic itself); write path |
+| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, plus `notifyAvailable` (never the ntfy topic itself); write path |
 | `GET /api/management`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
+| `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
+| `GET /api/guides` | the tutor-deck / study-guide index under `GUIDES_DIR` |
+| `GET /guides/<relPath>` | one guide file, resolved through `resolveGuidePath`'s traversal guard |
 | anything else | static files from `client/dist` (production only) |
 
 ⚠️ Route order in `index.ts` is load-bearing: the `:id` detail regex would swallow
@@ -96,7 +99,8 @@ one bad route is not a reason to stop serving the other twenty.
 ## Dev vs prod
 
 - **Dev** (`pnpm dev`): Vite serves the page on `WEB_PORT` (default 5174) with HMR and
-  proxies `/api` to the Node server on `PORT` (default 4173). The proxy sets `xfwd`, so
+  proxies `/api` and `/guides` to the Node server on `PORT` (default 4173). The proxy sets
+  `xfwd`, so
   the origin badge still sees the real client address.
 - **Prod** (`pnpm build` + `pnpm start`): the Node server static-serves `client/dist` and
   answers the API on `PORT`, auto-opening the browser.
@@ -119,6 +123,9 @@ server/
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts
   lib/chat.ts     byte-offset paged chat history
   lib/usage.ts    account 5h/weekly limits from Anthropic (OAuth)
+  lib/usage-pace.ts  utilization sample ring → burn rate + projected 100% per window
+  lib/usage-forecast.ts  forward walk over hour-of-week weights → projected 100%
+  lib/usage-history.ts  persisted samples → the learned 168-bucket duty-cycle profile
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser
   lib/management.ts   config scanner + servable-path security set
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
@@ -129,8 +136,11 @@ server/
   lib/messages.ts in-memory turn-end reply-window store (same machine, plus a 5s
                   idle sweep that auto-releases every terminal-backed hold — headless
                   ones are exempt)
+  lib/idle.ts     the shared `backAtDesk()` policy behind all three stores' 5s sweeps —
+                  threshold, ioreg reading, test seam, fail directions
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)
-  lib/settings.ts persisted idle threshold, answer window + push policy
+  lib/settings.ts persisted idle threshold, answer window, push policy + the
+                  usage-recording switch
   lib/notify.ts   server-sent ntfy pushes — the layered policy and the one
                   outbound call the backend makes
   lib/origin.ts   connection classifier → local | lan | tailnet | unknown
@@ -142,20 +152,24 @@ server/
   lib/guides.ts   docs/guides/ scanner (decks + study guides) + the traversal guard
                   behind GET /guides/<relPath> (see docs/subsystems/guides.md)
 client/src/
-  App.tsx         shell: side rail (Sessions | Management | Analytics | Guides | Settings) + lazy views
+  App.tsx         shell: side rail (Sessions | Management | Analytics | Usage | Guides |
+                  Settings) + lazy views
   components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
-                  MessagePanel, MicButton, SpawnPanel, ResumePanel, PermissionBanner,
+                  MessagePanel, PanelChrome (the head/stub the three panels share),
+                  MicButton, SpawnPanel, ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
-                  guides/, settings/
+                  usage/, guides/, settings/
   hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
-                  useGuides, usePendingQuestion, usePendingPlan, usePendingMessage,
-                  useRemoteAnswer, useSpawn, usePersistedState, useSettings,
-                  useServerSettings, useDictation, useTranscribeAvailable
+                  useGuides, useUsageProfile, usePendingQuestion, usePendingPlan,
+                  usePendingMessage, useRemoteAnswer, useSpawn, usePersistedState,
+                  useSettings, useServerSettings, useDictation, useTranscribeAvailable
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
-                  deepLink, dictation, spawnOptions, resume
+                  deepLink, dictation, spawnOptions, resume, pace, usageProfile,
+                  panelCollapse
 vite.config.ts    dev proxy /api + /guides → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
-scripts/          ask-remote-hook.sh, plan-remote-hook.sh, permission-notify-hook.sh,
+scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
+                  plan-remote-hook.sh, permission-notify-hook.sh,
                   remote-decision-hook.sh, stop-notify-hook.sh, host-credentials.sh,
                   lan-ip.sh
 ```
@@ -198,5 +212,5 @@ that area:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: fa9fdbc0d1f74c5ba2d43f90ecb63806e5b39b14
+  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
 -->

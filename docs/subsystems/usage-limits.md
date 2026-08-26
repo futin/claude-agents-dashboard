@@ -208,7 +208,34 @@ runs the direction a phone has — at 375px the whole week fits with no horizont
 sequential one-hue ramp derived with `color-mix` so all five themes hold, texture rather
 than a sixth colour step for no-evidence cells, a bare cell for a *measured* zero (never
 working an hour is a different statement from working 15% of it), and a required table view
-because the lowest ramp steps fall under 3:1 against the card surface.
+because the lowest ramp steps fall under 3:1 against the card surface. Cells are square
+(`aspect-ratio: 1`), which is what makes the grid read as a calendar rather than a bar chart
+on its side, and `max-width` on `.up-grid` is the single knob for the whole thing: `1fr`
+columns plus square cells means width sets cell size and therefore height. Every hour row
+carries its own label — labelling alternate rows put the only vertical rhythm cue at twice
+the row pitch, so the eye chunked rows into pairs and read each pair boundary as a wider
+gap (measured at DPR 2 the geometry was exactly even; the artefact was Gestalt, not layout).
+
+Two things the grid alone cannot do:
+
+- **Per-cell evidence rides on a real tooltip element, never the `title` attribute.**
+  `title` needs a dwell, is drawn by browser chrome, and — the part that settles it — never
+  fires on touch, so on the phone this dashboard is mostly read from it put the evidence
+  out of reach entirely. The floating panel answers hover, press (`pointerenter` fires on
+  touch-down, so press-and-hold inspects a cell) and keyboard focus; it is written with
+  `textContent` plus `white-space: pre-line`, never `innerHTML`, and positioned by writing
+  to the node directly rather than through state — re-rendering 168 cells to move one box
+  would be absurd. It flips above the pointer near the bottom edge (a finger is usually low
+  on the screen), hides on scroll when pointer-shown, and *follows* its mark when
+  keyboard-shown, since tabbing to an off-screen cell scrolls it into view and hiding then
+  would blank the tooltip the focus had just opened.
+- **A status line says where the profile is up to** (`RecordingStatus`, over the pure
+  helpers in `client/src/lib/usageProfile.ts`): hours observed of 168, total time recorded,
+  and either how many hours carry a weight or which gate is still pending — the
+  `TRUST_FLOOR_MIN` evidence floor, then the week roll-over that folds it. Without it the
+  first week is 168 identical hatched cells with no sign that recording works, which reads
+  as broken rather than as early. The grid stays honest either way (evidence is texture,
+  never a colour step); this states in words what the texture cannot.
 
 It is a section of its own rather than a block inside Analytics: that tab is about
 *sessions* (the `/kaizen` report cards) and this is about the *account* — they share no
@@ -246,9 +273,10 @@ before `confidence` leaves `thin`, and no test substitutes for that.
     - server/lib/usage-forecast.ts
     - server/lib/usage-history.ts
     - client/src/lib/pace.ts
+    - client/src/lib/usageProfile.ts
     - server/api.ts
     - client/src/components/Header.tsx
     - client/src/components/usage/
   kind: subsystem
-  verified: 11b8ed0d0aeb05c5da91b89eee51d283aa092355
+  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
 -->
