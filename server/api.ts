@@ -5,7 +5,6 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import fsp from 'node:fs/promises';
 import nodePath from 'node:path';
 
 import { scanSessions, lastMessageMs, listTranscripts, projectsRoot, sessionSurface } from './lib/scan.js';
@@ -19,7 +18,6 @@ import {
   claudeHome, collectServablePaths, listRecentProjects, readGlobalScope,
   readProjectScope, readServableFile, resolveProject
 } from './lib/management.js';
-import { scanGuides, resolveGuidePath, GUIDE_MIME } from './lib/guides.js';
 import { listReports, reviewStatus } from './lib/analytics.js';
 import {
   CHAT_PAGE_MESSAGES, DEFAULT_CAPS, NO_CAPS, readChatAfter, readChatBefore, readChatTail
@@ -49,7 +47,7 @@ import {
 } from './lib/spawn.js';
 import { toPosInt, type Config } from './lib/config.js';
 import type {
-  AnalyticsResponse, GuidesIndex, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig,
+  AnalyticsResponse, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
   RateLimit, SpawnResponse, UsageProfileCell, UsageProfileResponse, WaitResult
 } from '../shared/types.js';
@@ -1113,63 +1111,6 @@ export async function serveManagementFile(config: Config, rawPath: string, res: 
   } catch (e) {
     console.error('[dashboard] management file failed:', (e as Error).message);
     fail(500);
-  }
-}
-
-/* -------------------------------------------------- guides endpoints */
-
-/**
- * `GET /api/guides` — the tutor-deck/study-guide index under
- * `config.guidesDir` (docs/guides/ by default). Not polled; the
- * Guides tab fetches once on open, the same cadence as `/api/management` —
- * published guides change on the order of days, not seconds.
- *
- * `scanGuides` itself never rejects (see server/lib/guides.ts), so this
- * try/catch is defensive-only — the same belt-and-suspenders shape
- * `serveManagementIndex` uses above, kept for symmetry rather than a known
- * failure mode.
- */
-export async function serveGuidesIndex(config: Config, res: ServerResponse): Promise<void> {
-  let data: GuidesIndex;
-  try {
-    data = await scanGuides(config.guidesDir);
-  } catch (e) {
-    console.error('[dashboard] guides index failed:', (e as Error).message);
-    data = { error: true, generatedAt: new Date().toISOString(), decks: [], guides: [] };
-  }
-  sendJson(res, 200, data);
-}
-
-/**
- * `GET /guides/<relPath>` — one file from `config.guidesDir`, gated by
- * `resolveGuidePath` (server/lib/guides.ts), which resolves and realpath's
- * `relPath` and rejects anything that would land outside that root. A `null`
- * resolution — traversal, an absolute path, a directory, or simply nothing
- * there — is answered with 404 `{ error: 'not found' }`. The resolved path
- * itself is a realpath'd, absolute, canonical filesystem path and must never
- * be echoed into a response: doing so would disclose the server's real
- * directory layout to the client, which is exactly the kind of information
- * this route's guard exists to keep private.
- *
- * TOCTOU, accepted as Minor (carried over from Task 3's review): there is a
- * small window between `resolveGuidePath` validating `target` below and the
- * `fsp.readFile` actually reading it, in which the file could be removed or
- * swapped. Exploiting that window needs local write access to
- * `docs/guides/`, which already grants a direct read of `.env` —
- * no new capability — so it is left unmitigated here.
- */
-export async function serveGuideFile(config: Config, relPath: string, res: ServerResponse): Promise<void> {
-  const notFound = (): void => sendJson(res, 404, { error: 'not found' });
-  const target = resolveGuidePath(config.guidesDir, relPath);
-  if (target === null) return notFound();
-  try {
-    const buf = await fsp.readFile(target);
-    const contentType = GUIDE_MIME[nodePath.extname(target)] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store' });
-    res.end(buf);
-  } catch (e) {
-    console.error('[dashboard] guide file failed:', (e as Error).message);
-    notFound();
   }
 }
 

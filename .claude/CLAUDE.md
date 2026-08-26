@@ -13,7 +13,7 @@ typed JSON payloads in `shared/types.ts` (`GET /api/sessions*`, `GET /api/manage
 shared/types.ts   API contract (SessionsResponse, Session, ManagementIndex, ScopeConfig,
                   SessionAnalysis, AnalyticsReport…).
 server/           Node backend, TypeScript, run via tsx (no compile step)
-  index.ts        HTTP entry: routes /api/sessions(+/:id/chat) + /api/management + /api/analytics + /api/settings + /api/usage/profile + /api/guides, plus /guides/<relPath> (guide files, last before the static fallback); static-serves client/dist in prod
+  index.ts        HTTP entry: routes /api/sessions(+/:id/chat) + /api/management + /api/analytics + /api/settings + /api/usage/profile; static-serves client/dist in prod
   api.ts          the /api/sessions + /api/management + /api/analytics handlers (+ error fallbacks)
   lib/config.ts   .env loader — precedence process.env > .env > defaults
   lib/transcript.ts  tail-reads last 256KB of a transcript → tokens/model/window/activity
@@ -83,12 +83,8 @@ server/           Node backend, TypeScript, run via tsx (no compile step)
                   adoptLaunched, stopLaunch) — the fourth write path, and the first the
                   dashboard initiates; `--resume <id>` reuses an existing dashboard
                   session's id instead of minting one (see docs/subsystems/spawn.md)
-  lib/guides.ts   pure docs/guides/ domain: deck marker/title/provenance parsing,
-                  the docs/guides/ walk (root index.html skipped, guide dirs not descended),
-                  and resolveGuidePath — a realpath-both-sides traversal guard deliberately
-                  stricter than serveStatic's (see docs/subsystems/guides.md)
 client/           Vite + React + TypeScript frontend
-  src/App.tsx     shell: side rail (Sessions | Management | Analytics | Usage | Guides | Settings), lazy-loads all but Sessions
+  src/App.tsx     shell: side rail (Sessions | Management | Analytics | Usage | Settings), lazy-loads all but Sessions
   components/SessionsView.tsx  the original live monitor (owns the 3s poll + chat drawer state)
   components/{Header,SessionList,SessionRow,Toolbar,SideRail}
   components/ChatDrawer.tsx    full-height chat-history drawer (own lazy chunk;
@@ -144,16 +140,13 @@ client/           Vite + React + TypeScript frontend
                   lib/usageProfile.ts holds the pure status-line helpers). Its own section
                   rather than a block in Analytics: that tab is about *sessions*, this is
                   about the *account* — no shared data, endpoint or cadence
-  components/guides/GuidesView.tsx  the Guides tab: deck/guide cards, then a same-origin
-                  iframe on /guides/<relPath> (own lazy chunk; read-only, unpolled;
-                  hooks/useGuides fetches once per mount — see docs/subsystems/guides.md)
   hooks/useSessions, hooks/useManagement, hooks/useAnalytics, lib/format, lib/managementEntries
   components/settings/         the Settings tab (own lazy chunk) — themes, density/text scale,
                   refresh rate, scan knobs, push policy, idle threshold (see docs/subsystems/settings.md)
   hooks/useSettings.tsx        per-device settings context (localStorage) — the source of
                   refreshMs for every poll and of the data-theme/data-density attributes
   hooks/usePersistedState.ts  localStorage-backed useState (see docs/subsystems/view-persistence.md)
-vite.config.ts    dev proxy /api + /guides → backend; reuses server loadConfig() for the port
+vite.config.ts    dev proxy /api → backend; reuses server loadConfig() for the port
 test/             node-assert tests over backend domain logic, tmpdir JSONL fixtures
 ```
 
@@ -191,15 +184,18 @@ with the log format above (contract details: `docs/subsystems/analytics.md`).
 
 ### Where study guides and lesson decks go
 
-`docs/guides/` is the directory the in-app **Guides tab** scans and serves (see
-`docs/subsystems/guides.md`) — nothing here is published to the public web; the dashboard
-is the only viewer.
+`docs/guides/` holds this repo's generated study guides and tutor decks. The dashboard
+itself no longer reads or serves them — the in-app Guides tab, `GET /api/guides`,
+`GET /guides/<relPath>` and `server/lib/guides.ts` were removed on 2026-08-26. The reader
+is the sibling **guide-manager** app (`../guide-manager`), which serves every guide across
+every project off its own registry.
 
 - A new `/study` guide or `/tutor` deck belongs under `docs/guides/`. Both skills ask for
   the output path per session (their own defaults are `learning-docs/…`); answer with this
   one.
-- No hub or index to update — `scanGuides` walks the tree itself, so a new deck or guide
-  directory shows up in the tab the next time it's opened, nothing to link by hand.
+- A guide shows up on the guide-manager board only once it is registered there
+  (`bin/register.js` writes `~/.guide-manager/registry.json`; the skills call it at the end
+  of a run). Nothing in this repo indexes `docs/guides/` any more.
 - Everything else stays outside: reference docs (`docs/subsystems/`, `docs/overview.md`),
   records of a moment (`docs/superpowers/`), and raw study notes (`docs/learning-notes/`).
 - A guide's `tools/*.mjs` must find the repo root by walking up for `package.json`, never

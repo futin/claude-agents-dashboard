@@ -30,8 +30,7 @@ to someone who isn't on your tailnet.
 
 > ⚠️ **If you pick a public tunnel instead** (ngrok, Cloudflare, …), understand what it
 > exposes: *every* read endpoint is open — full transcripts, chat history,
-> `/api/management/file` (config file bodies) and `/guides/<relPath>` (any file under
-> `GUIDES_DIR`, see [guides](guides.md)) — to anyone with the link. And if you have
+> and `/api/management/file` (config file bodies) — to anyone with the link. And if you have
 > set `CLAUDE_BIN`, so is [spawn](spawn.md): with `ANSWER_TOKEN` empty, anyone with the
 > link can start a real Claude Code session on this machine. Set
 > `ANSWER_TOKEN` at minimum, and put auth at the edge (ngrok Basic Auth / Cloudflare

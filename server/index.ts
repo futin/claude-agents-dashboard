@@ -23,7 +23,7 @@ import { loadConfig } from './lib/config.js';
 import {
   serveSessions, serveSessionDetail, serveSessionChat,
   serveManagementIndex, serveManagementProject, serveManagementFile,
-  serveAnalytics, serveGuidesIndex, serveGuideFile, serveHealth, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
+  serveAnalytics, serveHealth, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
@@ -138,9 +138,6 @@ const server = http.createServer((req, res) => {
   }
   if (u.pathname === '/api/analytics') {
     return void serveAnalytics(config, res);
-  }
-  if (u.pathname === '/api/guides') {
-    return void serveGuidesIndex(config, res);
   }
   if (u.pathname === '/api/health') {
     return void serveHealth(config, res, req);
@@ -275,25 +272,6 @@ const server = http.createServer((req, res) => {
     // lookback / active). The detail regex above needs a slash, so a bare
     // `/api/sessions?limit=20` still lands here.
     return serveSessions(config, res, u.searchParams);
-  }
-  // GET /guides/<relPath> — one file from docs/guides/, guarded by
-  // resolveGuidePath (server/lib/guides.ts). GET-only is implicit, matching
-  // the other read routes above.
-  //
-  // Surprising on purpose, so read this before "simplifying" it: a LITERAL
-  // ".." segment never reaches here at all — `new URL()` above already
-  // normalized `/guides/../.env` down to pathname `/.env` before this line
-  // runs, so that request falls through to serveStatic below instead. The
-  // traversal shape that actually arrives intact is the percent-encoded one:
-  // `/guides/..%2f.env` keeps pathname `/guides/..%2f.env` verbatim (`URL`
-  // does not decode `%2f`), the slice below yields `..%2f.env`, `decodePath`
-  // un-escapes it to `../.env`, and `resolveGuidePath` rejects the literal
-  // `..` segment that decodes to. Both shapes end up rejected, but only the
-  // percent-encoded one is this route's actual job to catch.
-  if (u.pathname.startsWith('/guides/')) {
-    const relPath = decodePath(u.pathname.slice('/guides/'.length));
-    if (relPath === null) return badRequest(res);
-    return void serveGuideFile(config, relPath, res);
   }
   return serveStatic(req.url || '/', res);
 });

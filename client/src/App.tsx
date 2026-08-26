@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 
-import { SideRail, type Section } from './components/SideRail';
+import { SideRail, isSection, type Section } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
 import { deepLinkSession } from './lib/deepLink';
 import { usePersistedState } from './hooks/usePersistedState';
@@ -11,7 +11,6 @@ import { SettingsProvider, useSettings } from './hooks/useSettings';
 const ManagementView = lazy(() => import('./components/management/ManagementView'));
 const AnalyticsView = lazy(() => import('./components/analytics/AnalyticsView'));
 const UsageView = lazy(() => import('./components/usage/UsageView'));
-const GuidesView = lazy(() => import('./components/guides/GuidesView'));
 const SettingsView = lazy(() => import('./components/settings/SettingsView'));
 
 export function App() {
@@ -34,19 +33,23 @@ function AppShell() {
   // navigation is normal and the last section is still remembered for next time.
   // A `?session=` deep link — a tapped push notification — beats both: it exists
   // only to put you on that session's chat.
-  const [section, setSection] = useState<Section>(() =>
-    deepLinkSession() ? 'sessions' : settings.landing === 'last' ? stored : settings.landing
-  );
+  // `isSection` filters a value left over from a release that had a section
+  // this one doesn't (the removed Guides tab), which would otherwise render
+  // the final `else` branch — Settings — instead of the sessions list.
+  const [section, setSection] = useState<Section>(() => {
+    if (deepLinkSession()) return 'sessions';
+    const want = settings.landing === 'last' ? stored : settings.landing;
+    return isSection(want) ? want : 'sessions';
+  });
 
   const change = (s: Section): void => {
     setSection(s);
     setStored(s);
   };
 
-  // The three-pane management view, the analytics cards, and the guides
-  // list/viewer need the room; sessions and settings are single-column and
-  // read better narrow.
-  const wide = section === 'management' || section === 'analytics' || section === 'guides';
+  // The three-pane management view and the analytics cards need the room;
+  // sessions and settings are single-column and read better narrow.
+  const wide = section === 'management' || section === 'analytics';
 
   return (
     <div className="shell">
@@ -66,10 +69,6 @@ function AppShell() {
           ) : section === 'usage' ? (
             <Suspense fallback={<div className="an-empty">loading…</div>}>
               <UsageView />
-            </Suspense>
-          ) : section === 'guides' ? (
-            <Suspense fallback={<div className="guides-empty">loading…</div>}>
-              <GuidesView />
             </Suspense>
           ) : (
             <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
