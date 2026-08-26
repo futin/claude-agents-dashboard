@@ -328,22 +328,17 @@ export function UsageProfile() {
     // lets it hang off the screen by the difference.
     tip.style.left = '0px';
     tip.style.top = '0px';
-    const w = tip.offsetWidth, h = tip.offsetHeight;
+    const w = tip.offsetWidth;
     tip.style.left = Math.max(8, Math.min(x + 14, window.innerWidth - w - 8)) + 'px';
-    // Above the mark, always — whatever is pointing at it sits underneath (a
-    // cursor a little, a finger a lot), so the space below is both occluded and
-    // the half far more likely to run off the bottom of the screen.
-    //
-    // Short of room, the panel *slides* up against the edge rather than
-    // flipping to the other side. A flip is a discontinuity: it used to switch
-    // sides once the pointer came within `h + 22` of the top, which measured as
-    // a 103px jump for a **one pixel** cursor move, and which side you got
-    // depended on where the page happened to be scrolled rather than on
-    // anything about the mark. Clamping keeps the movement continuous — near
-    // the top edge the panel simply ends up beside the pointer, still 14px
-    // clear to its right, so it never covers the mark being inspected.
-    tip.style.top =
-      Math.min(Math.max(y - h - 14, 8), window.innerHeight - h - 8) + 'px';
+    // Beside the pointer at a constant offset — never above it, and with no
+    // vertical clamp. The panel used to sit above the mark and clamp against
+    // the viewport, but a clamp has an engage point, and crossing it reads as
+    // the panel drifting around the pointer mid-sweep: walking down the grid,
+    // the tip held still near the top edge and then started moving. A constant
+    // offset keeps the pointer→panel distance identical on every cell. The
+    // price is that the last ~60px above the bottom edge can shave the panel's
+    // final lines — accepted; that is the very trade the clamp reversed.
+    tip.style.top = (y - 14) + 'px';
   }, []);
 
   const showTip = useCallback((text: string, x: number, y: number) => {
