@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<!-- tutor-deck -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usage pace — tutor lesson 1 of 4</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1c20;
+    --muted: #5b6270;
+    --card: #f6f7f9;
+    --line: #d9dde3;
+    --accent: #2f6feb;
+    --correct: #1f8a4c;
+    --wrong: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #eceef1;
+      --muted: #a3a8b0;
+      --card: #2a2e35;
+      --line: #3a404a;
+      --accent: #6ea3ff;
+      --correct: #57d68d;
+      --wrong: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    font-size: 17px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  #progress-track { height: 4px; background: var(--line); flex: 0 0 auto; }
+  #progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .18s ease; }
+  main { flex: 1 1 auto; padding: 18px 16px 24px; max-width: 44rem; width: 100%; margin: 0 auto; }
+  .card { display: none; }
+  .card.active { display: block; }
+  h1 { font-size: 1.35rem; line-height: 1.3; margin: .2rem 0 .8rem; }
+  h2 { font-size: 1.12rem; line-height: 1.3; margin: .2rem 0 .7rem; }
+  p { margin: 0 0 .85rem; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
+  pre {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .82rem;
+    line-height: 1.45;
+    margin: 0 0 .9rem;
+  }
+  .eyebrow { color: var(--muted); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 .35rem; }
+  details { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 .9rem; background: var(--card); }
+  summary { cursor: pointer; font-weight: 600; font-size: .92rem; }
+  details p { margin: .7rem 0 0; font-size: .95rem; }
+  .quiz-prompt { font-weight: 600; }
+  .quiz-options { display: flex; flex-direction: column; gap: 10px; }
+  .quiz-option-btn {
+    display: block; width: 100%; text-align: left;
+    font: inherit; font-size: .98rem;
+    color: var(--fg); background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 13px 14px; cursor: pointer; min-height: 46px;
+  }
+  .quiz-option-btn:disabled { cursor: default; }
+  .quiz-feedback {
+    display: none;
+    color: var(--muted); font-size: .93rem;
+    margin: 8px 2px 2px; padding-left: 10px;
+    border-left: 2px solid var(--line);
+  }
+  .quiz-option.revealed .quiz-feedback { display: block; }
+  .quiz-option.revealed[data-correct="true"] .quiz-option-btn { border-color: var(--correct); border-width: 2px; }
+  .quiz-option.revealed[data-correct="false"] .quiz-option-btn { border-color: var(--wrong); border-width: 2px; }
+  .divider-flow { color: var(--muted); font-size: .95rem; margin-bottom: 1rem; }
+  .xlink { font-size: .92rem; }
+  a { color: var(--accent); }
+  .recap-score { font-size: 1.5rem; font-weight: 700; margin: .2rem 0 1rem; }
+  .section-jump {
+    display: block; width: 100%; text-align: left;
+    font: inherit; font-size: .95rem; color: var(--fg);
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px; padding: 11px 12px; margin-bottom: 8px; cursor: pointer;
+  }
+  .series-next { font-size: .93rem; color: var(--muted); margin: 1.1rem 0 0; }
+  .series-next ul { margin: .4rem 0 0; padding-left: 1.2rem; }
+  .series-next li { margin: .2rem 0; }
+  .stamp { color: var(--muted); font-size: .8rem; margin-top: 1.2rem; }
+  nav {
+    flex: 0 0 auto; display: flex; gap: 12px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line); background: var(--bg);
+  }
+  nav button {
+    flex: 1; font: inherit; font-size: 1rem; padding: 13px 10px;
+    border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--fg); cursor: pointer; min-height: 48px;
+  }
+  nav button:disabled { opacity: .4; cursor: default; }
+  svg { max-width: 100%; height: auto; display: block; margin: 0 0 .9rem; }
+  .fig-cap { color: var(--muted); font-size: .86rem; margin: -.4rem 0 .9rem; }
+  @media (min-width: 780px) { body { font-size: 18px; } main { padding: 28px 24px 34px; } }
+</style>
+</head>
+<body>
+
+<div id="progress-track"><div id="progress-fill"></div></div>
+
+<main>
+
+<!-- ============ opener ============ -->
+<div class="card card-mental active">
+  <p class="eyebrow">Mental model</p>
+  <h1>An odometer, a speedometer, and a calendar</h1>
+  <p>The endpoint behind the header's usage bars is an <strong>odometer</strong>. Once a
+  minute the dashboard asks Anthropic one question and gets one answer: <em>"you are 39%
+  through your weekly allowance, and it resets Monday at 09:59."</em> That is all it says —
+  no history, no rate, no trend (<code>usage-pace.ts:4-6</code>).</p>
+  <p>Everything on the second line of each bar is derived <strong>locally</strong>. Watch
+  that odometer tick over time, difference the readings, and you have a
+  <strong>speedometer</strong>: <code>37%/day</code>, a tick where the current pace hits
+  100%, a <code>wall Thu 13:41</code> verdict.</p>
+  <p>But a speedometer alone answers the wrong question for a <em>week-long</em> window. It
+  assumes you keep driving at this speed for all 130 remaining hours — including the ones
+  you spend asleep. So the weekly window gained a third instrument: a <strong>calendar</strong>
+  of when you have historically actually worked, and the projection walks forward hour by
+  hour through it rather than dividing once.</p>
+  <p>This lesson is the odometer and the speedometer, plus the seam where the calendar plugs
+  in. The calendar itself — how those hours are learned, and how they are drawn — is
+  lessons 2 through 4.</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- s1                                                            -->
+<!-- ============================================================ -->
+<section id="s1">
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 1 · The two clocks</p>
+    <h2>The 5h window is a session, not a sliding window</h2>
+    <p>The natural reading of "5-hour limit" is a sliding window: spend ages out
+    token-by-token, so you get a fraction of your budget back every hour. That reading is
+    <strong>wrong</strong>, and the whole time strip exists to make the real shape visible.</p>
+    <p>It is a <strong>fixed session window</strong>. It anchors on your first message after
+    an idle gap, climbs, and drops to 0% all at once at <code>resets_at</code>. Nothing ages
+    out in between.</p>
+    <p>This was established empirically rather than from documentation, because the endpoint
+    is private and undocumented. On 2026-08-24 <code>resets_at</code> stayed pinned at
+    23:50:00Z across successive fetches while utilization climbed 32 → 35 → 51, and
+    23:50 − 5h = 18:50 is exactly when transcripts show the first message after a 1.5-hour
+    idle gap. A sliding window would have pushed <code>resets_at</code> forward on every
+    fetch. The richer <code>limits[]</code> array in the same payload independently names
+    this window <code>kind: "session"</code>.</p>
+    <p>The trade-off accepted here: a load-bearing behaviour is pinned by one careful
+    observation plus a corroborating field, not by a contract. If Anthropic changes the
+    mechanism, nothing in the code will announce it.</p>
+    <svg viewBox="0 0 620 190" role="img" aria-label="A fixed session window keeps resets_at pinned while utilization climbs; a sliding window would push resets_at forward on every fetch.">
+      <g font-family="ui-monospace, Menlo, monospace" font-size="12" fill="currentColor">
+        <text x="0" y="14" font-size="12.5" fill="var(--muted)">FIXED SESSION (what it actually is)</text>
+        <line x1="60" y1="46" x2="560" y2="46" stroke="var(--line)" stroke-width="2"/>
+        <line x1="60" y1="38" x2="60" y2="54" stroke="currentColor" stroke-width="2"/>
+        <text x="34" y="70" fill="var(--muted)">18:50</text>
+        <text x="26" y="84" fill="var(--muted)">anchor</text>
+        <line x1="560" y1="30" x2="560" y2="62" stroke="var(--wrong)" stroke-width="2"/>
+        <text x="516" y="76" fill="var(--wrong)">23:50 reset</text>
+        <circle cx="200" cy="46" r="4" fill="var(--accent)"/>
+        <text x="182" y="34" fill="var(--accent)">32%</text>
+        <circle cx="310" cy="46" r="4" fill="var(--accent)"/>
+        <text x="292" y="34" fill="var(--accent)">35%</text>
+        <circle cx="452" cy="46" r="4" fill="var(--accent)"/>
+        <text x="434" y="34" fill="var(--accent)">51%</text>
+        <text x="0" y="126" font-size="12.5" fill="var(--muted)">SLIDING (what it is not)</text>
+        <line x1="60" y1="158" x2="470" y2="158" stroke="var(--line)" stroke-width="2"/>
+        <line x1="470" y1="150" x2="470" y2="166" stroke="var(--line)" stroke-width="2"/>
+        <line x1="510" y1="150" x2="510" y2="166" stroke="var(--line)" stroke-width="2"/>
+        <line x1="550" y1="142" x2="550" y2="174" stroke="var(--muted)" stroke-width="2"/>
+        <path d="M470 182 L556 182" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <path d="M550 178 L558 182 L550 186 Z" fill="var(--muted)"/>
+        <text x="96" y="146" fill="var(--muted)">reset creeps right each fetch</text>
+      </g>
+    </svg>
+    <p class="fig-cap">Three fetches, one pinned reset. The dashed arrow is the behaviour that
+    was ruled out.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 1 · The two clocks</p>
+    <h2>The weekly window's length is assumed, not verified</h2>
+    <p>The 5h window is the verified one. The weekly window is <em>not</em>: its length is
+    assumed to be exactly seven days (<code>SEVEN_DAY_MS</code>), and that assumption is
+    what its elapsed fill is drawn against. Anthropic documents no weekly reset mechanism and
+    community reports conflict — some observers report 72-hour intervals.</p>
+    <p>The honest thing about how this is handled is <em>where</em> the assumption does and
+    does not reach. The weekly <strong>verdict</strong> does not depend on it at all: that
+    comparison is between two absolute timestamps, the projected exhaustion and
+    <code>resetsAt</code>, and a window length never enters it. What <em>would</em> be wrong
+    if the window isn't seven days is the strip's <strong>position</strong> — where the
+    elapsed fill and the ticks land along the track.</p>
+    <p>A second thing now depends on it too: the forward walk's horizon. The walk steps from
+    now to <code>resetsAt</code>, so a wrong span means too few hours (over-pessimistic) or
+    too many (over-optimistic). It is also why nothing may hard-code 168: a span of up to
+    168 hours can slice into <strong>169</strong> entries once local-hour boundaries are
+    respected.</p>
+    <p>The trade-off: rather than blocking the feature on an unknowable, the doc marks the
+    assumption ⚠️ <em>Unproven</em> and names exactly which outputs inherit it.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 1 · The two clocks</p>
+    <h2>Two windows, two different series</h2>
+    <p>It is tempting to treat the two bars as two views of one number. They are not — they
+    are independent sensors with different resolutions, and the code takes that seriously in
+    a place you would not expect.</p>
+    <p>The 5h utilization is the good sensor: verified monotonic within a window, and it
+    moves in roughly 10%-per-hour steps. The weekly figure crawls in ~1% integer steps
+    (<code>usage.ts:234-237</code>). That resolution gap is why the sampling policy differs
+    per window, and it is also why boot-time rehydration is deliberately one-sided:</p>
+    <pre>// usage-pace.ts:107-118
+/**
+ * Replace a window's ring — boot-time rehydration only.
+ *
+ * In production this is only ever called for `fiveHour`: the recorded log is
+ * the 5h sensor series, and the two windows' utilization are different series,
+ * so seeding the weekly ring from it would poison its slope for up to the 6h
+ * lookback. The weekly pace simply returns after ~30 minutes of live sampling.
+ */
+export function seedSamples(win: PaceWindow, samples: PaceSample[]): void {</pre>
+    <p>The bad alternative is the obvious one: you have a persisted log of samples, so seed
+    both rings from it and both bars show a pace immediately after a restart. That would
+    feed 5h readings into the weekly slope and produce a confidently wrong number for up to
+    six hours. The trade-off taken instead is a real cost — the weekly bar is blank for about
+    half an hour after a restart — paid to avoid a wrong figure that nothing would flag.</p>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">On 2026-08-24, <code>resets_at</code> held at 23:50:00Z across
+    three fetches while utilization went 32 → 35 → 51. What did that observation rule out?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">That utilization is monotonic inside a window</button>
+        <p class="quiz-feedback">The climb 32 → 35 → 51 is consistent with monotonicity, but
+        it does not test it — a sliding window's utilization could also rise across three
+        fetches. Monotonicity of the 5h series is asserted separately, at
+        <code>usage.ts:234-237</code>, and it is what makes the 5h window usable as the
+        recorder's sensor.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">That the weekly window is exactly seven days long</button>
+        <p class="quiz-feedback">Nothing about a 5h observation speaks to the weekly window's
+        length. That length stays explicitly ⚠️ <em>Unproven</em> in the subsystem doc, with
+        conflicting community reports of 72-hour intervals, and it is the one assumption the
+        strip's <em>position</em> and the walk's horizon both inherit.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">That the window slides</button>
+        <p class="quiz-feedback">Correct. A sliding window ages spend out continuously, so
+        its end would move forward on every fetch. A pinned <code>resets_at</code> is only
+        consistent with a fixed session anchored once — corroborated by 23:50 − 5h = 18:50
+        matching the first message after an idle gap.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Why is <code>seedSamples</code> only ever called for
+    <code>fiveHour</code> in production?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The weekly ring is too large to rehydrate cheaply</button>
+        <p class="quiz-feedback">Size is not the constraint. Both rings share the same
+        <code>MAX_SAMPLES</code> cap of 720 at <code>usage-pace.ts:51</code>, and rehydration
+        is a sort plus a slice — the cost would be identical for either window.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">The persisted log is the 5h series, and the two windows' utilization are different series</button>
+        <p class="quiz-feedback">Correct. Seeding the weekly ring from 5h readings would
+        poison its slope for up to its own 6-hour lookback. The accepted cost is a blank
+        weekly pace for ~30 minutes after a restart.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The weekly window resets too rarely for old samples to matter</button>
+        <p class="quiz-feedback">Rarity of resets is an argument <em>for</em> seeding, not
+        against: a week-long window is exactly where losing history hurts most, which is why
+        the weekly bar staying blank for half an hour is framed as a real cost being paid
+        rather than a non-issue.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Only the 5h window has a verified <code>resets_at</code>, so only it can be pruned</button>
+        <p class="quiz-feedback">Pruning and seeding are separate mechanisms. <code>prunedSamples</code>
+        at <code>usage-pace.ts:87-97</code> runs for both windows and simply keeps everything
+        when <code>resetsAt</code> is absent or unparseable — so an unverified reset does not
+        disable it.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>If the 5h window is a fixed session, why does the bar ever show a decrease?</summary>
+      <p>Only at the boundary. Utilization drops to 0% all at once when the session resets,
+      and that drop is precisely what <code>recordAndPace</code> watches for at
+      <code>usage-pace.ts:186</code> to clear stale history. Within a window the 5h series is
+      treated as monotonic (<code>usage.ts:234-237</code>), which is what qualifies it as the
+      recorder's sensor. A mid-window decrease would be a signal the model of the window is
+      wrong.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Why not just read the window length from the <code>limits[]</code> array instead of assuming 7 days?</summary>
+      <p>The array is where <code>kind: "session"</code> was read from, so it does carry
+      window metadata. Nothing in the current code derives <code>SEVEN_DAY_MS</code> from it,
+      though — the constant is hard-coded at <code>pace.ts:13</code>. That makes it a genuine
+      open avenue rather than a settled decision, which is why the doc marks the length
+      ⚠️ <em>Unproven</em> instead of claiming it is unknowable.</p>
+    </details>
+    <details class="qa-item">
+      <summary>The endpoint is private and undocumented. Why depend on it at all?</summary>
+      <p>Because there is no public alternative that reports account rate-limit utilization,
+      and the whole feature is the one thing in the app not read off local disk. The exposure
+      is bounded deliberately: <code>SHOW_USAGE=false</code> disables the feature entirely, and
+      <code>usageStatus</code> distinguishes <code>token-expired</code> from a generic
+      <code>unavailable</code> so every failure is fail-open rather than an error state.</p>
+    </details>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- s2                                                            -->
+<!-- ============================================================ -->
+<section id="s2">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next up</p>
+    <h2>From the clocks to the readings</h2>
+    <p class="divider-flow">You just pinned down <strong>the two clocks</strong> — what the
+    5h and weekly windows actually are, and why they are separate series. Next,
+    <strong>sampling and slope</strong>: how a stream of one-number readings becomes a rate,
+    and why the two windows are read on deliberately different cadences.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 2 · Sampling and slope</p>
+    <h2>A RAM-only ring, on purpose</h2>
+    <p>To differentiate readings you need at least two of them, so <code>usage-pace.ts</code>
+    keeps a ring of <code>{t, utilization}</code> per window. It is a plain
+    module-level <code>Map</code>, capped at 720 samples — roughly half a day at one sample
+    per minute.</p>
+    <pre>// usage-pace.ts:50-100 (compacted here)
+/** Cap per-window history; at one sample/min this is half a day. */
+const MAX_SAMPLES = 720;
+// ── RAM-only per-window sample store ──
+const store = new Map&lt;PaceWindow, PaceSample[]&gt;();</pre>
+    <p>Nothing here is persisted. After a restart the pace fields are <code>null</code> for a
+    few minutes and the header renders exactly as it did before the feature existed. The bad
+    alternative — persisting the pace ring itself — sounds strictly better, and the previous
+    card shows why it is not: a persisted series is a series from <em>one</em> sensor, and
+    replaying it into the wrong window produces a confidently wrong slope.</p>
+    <p>The trade-off is that this module owns no durability at all. Note the shape carefully,
+    because it is easy to misread: usage samples <em>are</em> persisted elsewhere, by the
+    recorder in <code>usage-history.ts</code>, for a different purpose. This ring is the
+    speedometer's short-term memory; that log is the calendar's long-term one. Keeping them
+    separate is what lets this module stay pure arithmetic over a bounded buffer.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 2 · Sampling and slope</p>
+    <h2><code>computePace</code>: first to last, not last two</h2>
+    <p>The slope itself is one pure function. It filters the ring to a lookback, takes the
+    oldest and newest survivors, and divides.</p>
+    <pre>// usage-pace.ts:69-80
+export function computePace(samples: PaceSample[], opts: PaceOpts): Pace | null {
+  const recent = samples.filter((s) =&gt; s.t &gt;= opts.now - opts.lookbackMs);
+  if (recent.length &lt; 2) return null;
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  const span = last.t - first.t;
+  if (span &lt; opts.minSpanMs) return null;
+  const rate = ((last.utilization - first.utilization) / span) * HOUR_MS;
+  if (rate &lt;= 0) return { ratePerHour: 0, projectedExhaustAt: null };
+  const msLeft = ((100 - last.utilization) / rate) * HOUR_MS;
+  return { ratePerHour: rate, projectedExhaustAt: new Date(opts.now + msLeft).toISOString() };
+}</pre>
+    <p>The bad alternative is differencing the last two samples. That is cheaper and
+    responds instantly — and it is dominated by quantisation noise, because the weekly figure
+    only moves in ~1% integer steps. One step across one minute reads as 60%/hour.</p>
+    <p>Two guards keep it honest instead of fast. Under <code>minSpanMs</code> it returns
+    <code>null</code> rather than a number, so a thin history produces no claim at all. And a
+    non-positive slope reports <code>ratePerHour: 0</code> with <em>no</em> projection —
+    idle or declining has no meaningful "you hit 100% at" answer, and inventing one by
+    extrapolating backwards would be worse than silence.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 2 · Sampling and slope</p>
+    <h2>Two windows, two sampling policies</h2>
+    <p>Because the two series have different resolutions, one lookback cannot serve both. The
+    policy is a small table, and every number in it is a consequence of the previous
+    section:</p>
+    <pre>// usage-pace.ts:53-59
+/** Per-window sampling policy: how far back the slope looks, and the minimum
+ * history span before showing a pace at all. The weekly window moves in ~1%
+ * integer steps, so a short lookback would only ever see 0 or a spike. */
+const WINDOWS = {
+  fiveHour: { windowMs: 5 * HOUR_MS, lookbackMs: 30 * 60_000, minSpanMs: 5 * 60_000 },
+  sevenDay: { windowMs: 7 * 24 * HOUR_MS, lookbackMs: 6 * HOUR_MS, minSpanMs: 30 * 60_000 }
+} as const;</pre>
+    <p>The 5h window looks back 30 minutes and needs 5; the weekly looks back 6 hours and
+    needs 30 minutes. The asymmetry is a 12× difference in lookback, and it buys resolution:
+    across six hours the weekly counter accumulates enough 1% steps that the quantisation
+    averages out.</p>
+    <p>The bad alternative — one shared lookback — forces a choice between a weekly rate made
+    of noise (short) and a 5h rate that cannot react inside its own five-hour window (long).
+    The trade-off actually paid is <em>latency</em>: the weekly rate is a six-hour trailing
+    average, so it lags a genuine change in behaviour by hours. Later sections show the
+    weekly projection compensating for exactly that lag in a different way.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 2 · Sampling and slope</p>
+    <h2>Who calls the sampler, and the 120-second bug</h2>
+    <p>The ring is fed from one place: <code>refreshNow()</code> in <code>usage.ts</code>,
+    single-flight via a <code>refreshing</code> promise. Reads go through a synchronous
+    accessor that never blocks the 3-second session poll:</p>
+    <pre>// usage.ts:297-305
+export function getCachedUsageState(): UsageState {
+  if (!refreshing &amp;&amp; (cachedAt === 0 || Date.now() - cachedAt &gt; CACHE_TTL_MS)) void refreshNow();
+  return { usage: cached, status: cachedStatus };
+}</pre>
+    <p>It returns the last value and kicks off a background refresh when stale
+    (<code>CACHE_TTL_MS</code> is 60s at <code>usage.ts:37</code>). The bad alternative —
+    <code>await</code> the network inside the poll handler — would put an external
+    round-trip on the critical path of a request that fires every three seconds.</p>
+    <p>Then a subtlety worth the whole card. The recorder's own timer also wants a sample
+    every 60s, and it must <em>not</em> go through this accessor:</p>
+    <pre>// usage.ts:284-291
+ * The recorder's timer needs this rather than `getCachedUsageState`: that call
+ * only refreshes when the cache is older than `CACHE_TTL_MS`, and with the timer
+ * running at the same 60s the two alternate — measured, the recorder sampled
+ * every ~120s instead of every 60s, halving the profile's resolution. Still
+ * exactly one path to Anthropic (`refreshNow`, single-flight), just not
+ * TTL-gated; and because a forced refresh also stamps `cachedAt`, the
+ * browser-poll path stays quiet for its own 60s afterwards, so the combined
+ * request rate is unchanged.</pre>
+    <p>Two 60-second cadences interleaved through a 60-second TTL beat against each other and
+    halve the effective rate. <code>refreshUsageNow()</code> bypasses the TTL while keeping
+    the single-flight guarantee, so the request rate to Anthropic is unchanged.</p>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">The weekly window uses a 6-hour lookback while the 5h window uses
+    30 minutes. What is the 6-hour figure buying?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Fewer requests to Anthropic, since a longer lookback needs fewer samples</button>
+        <p class="quiz-feedback">Lookback and fetch cadence are independent. Both windows are
+        fed from the same <code>refreshNow()</code> call at roughly one sample per minute; the
+        lookback only selects which of the already-collected samples feed the division, so it
+        changes no request count at all.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Faster reaction when your burn rate suddenly changes</button>
+        <p class="quiz-feedback">Backwards — this is the cost, not the benefit. A six-hour
+        trailing average lags a genuine change in behaviour by hours, and the card names that
+        latency as the trade-off actually paid for the longer lookback.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Resolution, because the weekly counter only moves in ~1% integer steps</button>
+        <p class="quiz-feedback">Correct. Over six hours enough 1% steps accumulate that the
+        quantisation averages out. A short lookback on that series sees either zero movement
+        or a single step read as a spike.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Protection against a window roll polluting the slope</button>
+        <p class="quiz-feedback">That job belongs to two other mechanisms entirely —
+        <code>prunedSamples</code> and the utilization-drop check, which is the whole of the
+        next section. A longer lookback would if anything make a roll <em>more</em> dangerous
+        by keeping pre-reset samples in scope for longer.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Why does the recorder's timer call <code>refreshUsageNow()</code>
+    instead of <code>getCachedUsageState()</code>?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Because <code>getCachedUsageState</code> is synchronous and the recorder needs to await the fetch</button>
+        <p class="quiz-feedback"><code>refreshUsageNow()</code> is fire-and-forget too — it
+        is <code>void refreshNow()</code> at <code>usage.ts:293-295</code> and returns
+        nothing. Neither call gives the recorder something to await, so awaiting is not the
+        difference between them. Both are declared to return <code>void</code>, and the
+        single-flight guard at <code>usage.ts:224</code> means an awaited call would merely
+        join the fetch already in flight.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Two 60s cadences through a 60s TTL alternate, measurably halving sample resolution to ~120s</button>
+        <p class="quiz-feedback">Correct. The TTL gate turns one of every two timer ticks into
+        a no-op. Bypassing the TTL — while keeping the single-flight guard — restores 60s
+        sampling, and because a forced refresh also stamps <code>cachedAt</code>, the combined
+        request rate is unchanged.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">To keep the recorder off the shared cache so its samples stay independent of the browser poll</button>
+        <p class="quiz-feedback">There is deliberately no second path: the comment stresses
+        "still exactly one path to Anthropic (<code>refreshNow</code>, single-flight)". The
+        recorder and the browser poll share the same fetch and the same cache — only the TTL
+        gate differs.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- s3                                                            -->
+<!-- ============================================================ -->
+<section id="s3">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next up</p>
+    <h2>What happens at the boundary</h2>
+    <p class="divider-flow">You have <strong>sampling and slope</strong> — a ring, a pure
+    division, and two cadences. Next, <strong>surviving a window roll</strong>: the moment
+    the odometer resets to zero is the moment a differencing scheme is most likely to lie,
+    and it is guarded twice.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 3 · Surviving a window roll</p>
+    <h2>Prune by the anchor</h2>
+    <p>Section 1 established that a window has a hard start: <code>resetsAt</code> minus the
+    window length. That makes the first guard purely a matter of timestamps.</p>
+    <pre>// usage-pace.ts:87-97
+export function prunedSamples(
+  samples: PaceSample[],
+  resetsAt: string | null,
+  windowMs: number
+): PaceSample[] {
+  if (!resetsAt) return samples;
+  const end = Date.parse(resetsAt);
+  if (Number.isNaN(end)) return samples;
+  const start = end - windowMs;
+  return samples.filter((s) =&gt; s.t &gt;= start);
+}</pre>
+    <p>Anything older than the anchor belongs to a previous window and is dropped. Note what
+    it does <em>not</em> look at: utilization never appears. It is a pure function of sample
+    times against a computed boundary, which is what makes it unit-testable with a fixed
+    clock.</p>
+    <p>Both early returns fail <strong>open</strong>: a missing or unparseable
+    <code>resetsAt</code> keeps every sample rather than discarding the history. The bad
+    alternative is failing closed — clearing the ring when the boundary is unknown — which
+    would silently disable the pace display whenever the endpoint returned an odd timestamp.
+    The trade-off is that fail-open leaves a real gap: with no parseable
+    <code>resetsAt</code>, this guard contributes nothing at all. Which is exactly why there
+    is a second one.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 3 · Surviving a window roll</p>
+    <h2>And clear on any drop</h2>
+    <p>The second guard sits inline in <code>recordAndPace</code> and works from the opposite
+    signal — utilization alone, no timestamp required.</p>
+    <pre>// usage-pace.ts:184-190
+  let samples = store.get(win) ?? [];
+  const last = samples[samples.length - 1];
+  if (last &amp;&amp; rl.utilization &lt; last.utilization - 0.5) samples = [];
+  samples.push({ t: now, utilization: rl.utilization });
+  samples = prunedSamples(samples, rl.resetsAt, cfg.windowMs);
+  if (samples.length &gt; MAX_SAMPLES) samples = samples.slice(-MAX_SAMPLES);
+  store.set(win, samples);</pre>
+    <p>A drop means the window reset. Keeping the history would make the slope span a
+    discontinuity — a pre-reset 90% followed by a post-reset 2% reads as a steep
+    <em>negative</em> rate, and after the sign guard in <code>computePace</code>, as a
+    permanent <code>ratePerHour: 0</code>.</p>
+    <p>The <code>0.5</code> is an epsilon, not a threshold on meaningful change: it absorbs
+    rounding jitter in a percentage so that noise does not clear a healthy ring.</p>
+    <p>Why keep both guards, when either alone catches the ordinary case? Because their blind
+    spots are complementary. The anchor prune needs a parseable <code>resetsAt</code> and
+    ignores utilization entirely; the drop check needs no timestamp but only fires once a
+    lower reading actually arrives. A reset with a garbled timestamp is caught by the second;
+    a stale sample from a window that rolled while the process was idle is caught by the
+    first. The cost is two mechanisms to keep straight — the reason they are documented
+    together.</p>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">The endpoint returns an unparseable <code>resetsAt</code>, and
+    then the window rolls. What still protects the slope?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Nothing — <code>prunedSamples</code> returns early, so the stale history survives and poisons the rate</button>
+        <p class="quiz-feedback">The early return is real: with an unparseable timestamp that
+        function does contribute nothing. But it is not the only guard, which is precisely the
+        argument the section makes for keeping two mechanisms with complementary blind
+        spots.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The <code>MAX_SAMPLES</code> cap, which evicts the pre-reset samples once 720 accumulate</button>
+        <p class="quiz-feedback">The cap bounds memory, not correctness, and it evicts on
+        count rather than on meaning. At one sample per minute it would take half a day to
+        push a pre-reset sample out — long after a wrong rate had been displayed.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The <code>minSpanMs</code> guard, which suppresses the pace until a fresh history accumulates</button>
+        <p class="quiz-feedback"><code>minSpanMs</code> checks the span between the oldest and
+        newest samples in the lookback. Stale pre-reset samples <em>widen</em> that span, so
+        the guard is satisfied sooner, not later — it would not suppress the bad rate.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">The utilization-drop check, which needs no timestamp at all</button>
+        <p class="quiz-feedback">Correct. It compares the new reading to the last one and
+        clears the ring on a drop beyond the 0.5 epsilon. Needing no timestamp is exactly the
+        blind spot of the anchor prune that it covers.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- s4                                                            -->
+<!-- ============================================================ -->
+<section id="s4">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next up</p>
+    <h2>Where the calendar plugs in</h2>
+    <p class="divider-flow">That closes <strong>surviving a window roll</strong>, and with it
+    the pre-forecast subsystem: ring, slope, two guards. Next,
+    <strong>from wall rate to active rate</strong> — the seam where the learned duty cycle
+    arrives, and the single condition that gates it.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 4 · From wall rate to active rate</p>
+    <h2>The double discount</h2>
+    <p>Everything so far computes a <strong>wall</strong> rate: utilization delta divided by
+    elapsed clock time. That is the right number when your samples come only from moments you
+    were working. It becomes the wrong number the moment a recorder timer feeds the ring
+    around the clock — because then the six-hour weekly lookback includes the hours you were
+    asleep, and the slope is <em>idle-diluted</em>.</p>
+    <p>Now stack the forecast on top. The walk discounts idle hours a second time, through
+    the learned weights. Discounting the same idleness twice produces a systematically
+    <strong>optimistic</strong> projection, worst in the hours just after you resume work
+    (<code>usage-limits.md:163-166</code>).</p>
+    <p>The fix is to change the denominator: divide the delta by the active time the recorder
+    actually <em>measured</em>, giving percent per hour <em>worked</em>. Then the weights are
+    the only place idleness is accounted for.</p>
+    <p>The bad alternative is to leave the wall slope alone and simply not weight the walk —
+    keeping one honest number instead of two interacting ones. That is genuinely simpler, and
+    it is also what the code falls back to. The trade-off accepted for the richer version is
+    that <em>two</em> quantities now have to be correct together, and the next cards are
+    almost entirely about enforcing that pairing.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 4 · From wall rate to active rate</p>
+    <h2>Two seams, injected rather than imported</h2>
+    <p>Both new inputs — the learned profile, and a way to ask "how much active time did you
+    measure between these two instants?" — are pushed <em>into</em> this module by setters:</p>
+    <pre>// usage-pace.ts:120-133 (compacted here)
+// ── The forecast seams ──
+//
+// Both are injected *into* this module rather than imported: `usage-history.ts`
+// already imports `usage-forecast.ts`, and the recorder is what owns both the
+// profile and the classifier, so importing it here would be a cycle.
+
+let forecastProfile: DutyProfile | null = null;
+
+/** Hand the weekly walk its learned duty cycle. Null = flat, i.e. today. */
+export function setForecastProfile(p: DutyProfile | null): void {
+  forecastProfile = p;
+}
+
+let activeTimeSource: ((sinceMs: number, untilMs: number) =&gt; number | null) | null = null;</pre>
+    <p>The obvious alternative is a direct import of the recorder. It fails: the recorder
+    already imports <code>usage-forecast.ts</code>, and it owns both the profile and the
+    classifier, so importing it here closes a cycle.</p>
+    <p>Dependency injection buys more than cycle-breaking, though. Both seams default to
+    <code>null</code>, and <code>null</code> means "behave exactly as before the forecast
+    existed". That is what lets the whole feature sit behind an opt-in without a second code
+    path, and it keeps the module testable with no recorder present. The trade-off is that
+    the wiring is now invisible at the import graph — you cannot see from this file who calls
+    these setters, which is why the comment names the caller explicitly.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 4 · From wall rate to active rate</p>
+    <h2>A rise with no active time is a gap, not a burn</h2>
+    <p>Changing the denominator introduces a failure mode the wall slope never had: the
+    denominator can be near zero. If the recorder measured two seconds of active time while
+    utilization rose 3%, the division yields thousands of percent per hour.</p>
+    <pre>// usage-pace.ts:207-222
+  if (activeTimeSource &amp;&amp; trusted) {
+    const recent = samples.filter((s) =&gt; s.t &gt;= now - cfg.lookbackMs);
+    const activeMs = activeTimeSource(recent[0].t, now);
+    if (activeMs != null) {
+      const delta = recent[recent.length - 1].utilization - recent[0].utilization;
+      if (activeMs &gt;= MIN_ACTIVE_MS) {
+        ratePerHour = Math.max(0, delta / (activeMs / HOUR_MS));
+      } else if (delta &gt; 0) {
+        // A rise with no active time to attribute it to is a recording gap, not
+        // a fast burn. Inventing a rate here is the one dishonest option.
+        return { ...rl, ratePerHour: null, projectedExhaustAt: null };
+      } else {
+        ratePerHour = 0;
+      }
+    }
+  }</pre>
+    <p><code>MIN_ACTIVE_MS</code> is 60 seconds (<code>usage-pace.ts:153-157</code>): below
+    it the denominator is noise. The interesting branch is the middle one. A rise with no
+    active time to attribute it to means the <em>recorder</em> missed the interval, not that
+    you burned fast — so rate and projection both go <code>null</code>.</p>
+    <p>Two alternatives were available and both are worse: clamp to some maximum, or fall
+    back to the wall slope. Each would show a number, and a number here is a claim the data
+    does not support. Returning <code>null</code> shows nothing — the deliberate choice of a
+    blank over a guess.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 4 · From wall rate to active rate</p>
+    <h2>The gate: both halves, or neither</h2>
+    <p>An active rate is a rate per hour <em>worked</em>. On its own it says nothing about how
+    many of the remaining hours are working hours — only the learned weights say that. So the
+    two halves are one unit, and one condition gates both:</p>
+    <pre>// usage-pace.ts:199-203
+  // A profile with nothing trusted in it cannot spend an active rate — see the
+  // header. Null it out here so the correction, the walk and the disclosed
+  // confidence all read from one decision.
+  const trusted =
+    forecastProfile &amp;&amp; confidenceOf(forecastProfile) !== 'none' ? forecastProfile : null;</pre>
+    <p>Why this is not defensive over-engineering: <code>deriveProfile</code> weights every
+    hour <code>1.0</code> until a bucket clears the trust floor — a deliberately pessimistic
+    default. Pair an active rate with all-1.0 weights and you have asserted an
+    <strong>always-on week</strong>. Observed on 2026-08-26: 8.6% per active hour against a
+    real duty cycle near 0.2 turned 39% used into a projected 100% <em>that evening</em>,
+    five days before the reset (<code>usage-limits.md:171-180</code>).</p>
+    <p>The wall slope needs no weights to be honest. So at <code>none</code> that is what
+    stands, <code>dutyCycle</code> is 1, and the strip is the documented pre-forecast closed
+    form for the whole first week. The bad alternative — ship each half as it becomes
+    available — is what produced the observation above. The trade-off is a visibly worse
+    forecast for a week, chosen over a confidently wrong one on day one.</p>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Recording is on, a profile exists, but no bucket has cleared the
+    trust floor yet. What does the weekly bar show?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Nothing — rate and projection are both <code>null</code> until the profile is trusted</button>
+        <p class="quiz-feedback">Blanking is reserved for the recording-gap case, where a rise
+        cannot be attributed to measured active time. An untrusted profile is a different
+        situation: a perfectly honest wall slope is still available, so there is no reason to
+        show nothing.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The active rate, with the walk falling back to flat weights of 1.0</button>
+        <p class="quiz-feedback">This is the exact combination the gate exists to prevent. It
+        was measured on 2026-08-26: 8.6% per active hour against a real duty cycle near 0.2
+        projected 39% as 100% by that evening, five days early.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">The wall slope, <code>dutyCycle</code> 1, and confidence <code>none</code></button>
+        <p class="quiz-feedback">Correct. <code>trusted</code> resolves to <code>null</code>,
+        so neither the correction nor the shaped walk applies and the strip is the documented
+        pre-forecast closed form — for the whole first week.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The active rate with the walk disabled, so the projection is one division again</button>
+        <p class="quiz-feedback">This splits the pair the other way, and the section's core
+        claim is that it cannot be split at all: percent per hour worked is uninterpretable
+        without weights saying how many remaining hours are worked. Either both halves apply
+        or neither does.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Why are <code>setForecastProfile</code> and
+    <code>setActiveTimeSource</code> setters rather than plain imports of the recorder?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">So the profile can be swapped at runtime when the user changes settings</button>
+        <p class="quiz-feedback">Runtime replacement is a real consequence — <code>usage.ts:257</code>
+        pushes <code>null</code> the moment recording is switched off. But it is a benefit the
+        shape enables, not the constraint that forced it; an import could not be used here at
+        all.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Importing the recorder would close a dependency cycle</button>
+        <p class="quiz-feedback">Correct. <code>usage-history.ts</code> already imports
+        <code>usage-forecast.ts</code>, and the recorder owns both the profile and the
+        classifier, so a direct import from here completes the loop. Injection breaks it.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The backend is zero-dependency, so runtime imports between server modules are avoided</button>
+        <p class="quiz-feedback">The zero-dependency rule is about <em>npm</em> packages, not
+        about modules importing each other. This very file imports four symbols from
+        <code>./usage-forecast.js</code> at <code>usage-pace.ts:19-24</code>, so intra-server
+        imports are plainly fine.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">To keep <code>computePace</code> and <code>prunedSamples</code> pure and unit-testable</button>
+        <p class="quiz-feedback">Those two were already pure before the forecast existed —
+        they take their inputs as arguments and touch no module state. The setters feed
+        <code>recordAndPace</code>, which is the stateful function, so this explains neither
+        their existence nor their shape.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>Why is the 5h window left out of all of this?</summary>
+      <p>Two reasons, both at <code>usage-pace.ts:166-171</code>. Its 30-minute lookback
+      bounds any idle dilution to the first half hour after you resume work, so the wall
+      slope barely drifts. And duty cycle inside a five-hour session is ~1 by
+      construction — you opened the session by working. The correction would cost complexity
+      and change almost nothing, so <code>recordAndPace</code> returns early for any window
+      that is not <code>sevenDay</code>.</p>
+    </details>
+    <details class="qa-item">
+      <summary>What happens to the profile when recording is switched off mid-session?</summary>
+      <p><code>usage.ts:251-257</code> pushes <code>setForecastProfile(null)</code> in the
+      same place the active-time source retires itself. Leaving the last profile in place
+      would shape the walk with learned weights while the rate had already reverted to a raw
+      wall slope — the double discount inverted, and a silently <em>under</em>-projected
+      week. Retiring both together is the same "both halves or neither" rule seen from the
+      other direction.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Is <code>confidenceOf</code> only used for the gate?</summary>
+      <p>No — it is used twice, for two purposes. As a gate it is thresholded at
+      <code>!== 'none'</code>. As disclosure it is returned to the client verbatim as
+      <code>forecastConfidence</code> (<code>usage-pace.ts:247</code>), where
+      <code>thin</code> versus <code>ok</code> decides whether the strip draws a band. The
+      split lives at <code>usage-forecast.ts:206-210</code>: <code>none</code> at zero
+      trusted buckets, <code>thin</code> below 120, <code>ok</code> at or above it.</p>
+    </details>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- s5                                                            -->
+<!-- ============================================================ -->
+<section id="s5">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next up</p>
+    <h2>Turning all of it into pixels</h2>
+    <p class="divider-flow">You have the rate: corrected to per-active-hour when, and only
+    when, a trusted profile can spend it. That was <strong>from wall rate to active
+    rate</strong>. Finally, <strong>two ticks and a band</strong>: how a rate plus a profile
+    becomes a projection, and how the honest uncertainty in it gets drawn.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 5 · Two ticks and a band</p>
+    <h2><code>walkForward</code>: marching, not dividing</h2>
+    <p>The pre-forecast projection was one division: remaining percent over rate. The walk
+    replaces it with a march over local-hour slices, each contributing the rate scaled by
+    that hour's weight.</p>
+    <pre>// usage-forecast.ts:171-197 (compacted here)
+  while (t &lt; resetsAtMs) {
+    const sliceEnd = Math.min(nextLocalHour(t, offsetMinutes), resetsAtMs);
+    const sliceMs = sliceEnd - t;
+    const hw = hourOfWeek(t, offsetMinutes);
+    const weight = weightAt(profile, hw);
+    const gain = activeRatePerHour * weight * (sliceMs / HOUR_MS);
+    steps.push({
+      tMs: t,
+      gain,
+      cum: utilization + accumulated + gain,
+      weight,
+      learned: isLearnedAt(profile, hw)
+    });
+    // A zero-weight or zero-rate slice adds nothing, so it can never cross —
+    // and the guard is what keeps the interpolation from dividing by zero.
+    if (exhaustAtMs === null &amp;&amp; gain &gt; 0 &amp;&amp; accumulated + gain &gt;= remaining) {
+      exhaustAtMs = Math.round(t + ((remaining - accumulated) / gain) * sliceMs);
+    }
+    accumulated += gain;
+    t = sliceEnd;
+  }</pre>
+    <p>Slices are cut on <em>local</em> hour boundaries, which is why the first and last are
+    partial and why a 168-hour span can produce 169 entries. The crossing is interpolated
+    <em>within</em> the slice that breaches 100%, not rounded to the hour.</p>
+    <p>The walk keeps going past the crossing on purpose (<code>usage-forecast.ts:149-152</code>):
+    the client renders <code>dutyCycle</code> over the whole window, and the profile inspector
+    draws every slice — because the weekend gap is the feature explaining itself. The
+    trade-off is up to 169 objects allocated per fetch where a division allocated none.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 5 · Two ticks and a band</p>
+    <h2>Run it twice: the estimate and the pessimistic edge</h2>
+    <p>A single projected timestamp hides how much guessing produced it. So the walk runs
+    twice per fetch, over the same base inputs, differing only in the profile:</p>
+    <pre>// usage-pace.ts:229-248
+  const base = {
+    nowMs: now,
+    utilization: rl.utilization,
+    activeRatePerHour: ratePerHour,
+    resetsAtMs,
+    // The one place production reads the machine's timezone — which is exactly
+    // why walkForward takes it as a parameter instead of reading it itself.
+    offsetMinutes: localOffsetMinutes(now)
+  };
+  const flat = walkForward({ ...base, profile: flatProfile(1) });
+  const shaped = trusted ? walkForward({ ...base, profile: trusted }) : flat;
+
+  return {
+    ...rl,
+    ratePerHour,
+    projectedExhaustAt: iso(shaped.exhaustAtMs),
+    pessimisticExhaustAt: iso(flat.exhaustAtMs),
+    dutyCycle: shaped.dutyCycle,
+    forecastConfidence: trusted ? confidenceOf(trusted) : 'none'
+  };</pre>
+    <p><code>flatProfile(1)</code> weights every hour 1.0 — "you work every remaining hour",
+    the pessimistic edge, and also exactly the pre-forecast arithmetic
+    (<code>usage-forecast.ts:111-118</code>). <code>shaped</code> uses the learned weights.
+    Without a trusted profile the two are the same object, so the pair degrades to one tick
+    and no claim of extra knowledge.</p>
+    <p>The bad alternative is publishing one number and a confidence label beside it. Two
+    timestamps are strictly more informative: the reader sees the actual span of the
+    uncertainty rather than an adjective for it. The cost is a second walk each fetch and a
+    wider API surface — two more optional <code>RateLimit</code> fields every consumer must
+    survive the absence of.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 5 · Two ticks and a band</p>
+    <h2><code>paceView</code>: percentages, and a verdict from two timestamps</h2>
+    <p>The client converts all of that into strip geometry. Every output is a 0–100 position
+    along the window's <em>clock</em> axis, plus a verdict.</p>
+    <pre>// pace.ts:57-62
+/** A projected-exhaust ISO stamp as a 0–100 strip position, or null. */
+function tickPct(iso: string | null | undefined, start: number, end: number, windowMs: number): number | null {
+  const at = iso ? Date.parse(iso) : Number.NaN;
+  if (Number.isNaN(at) || at &gt;= end) return null; // absent, unparseable, or past the reset
+  return clampPct(((at - start) / windowMs) * 100);
+}</pre>
+    <p>One line carries most of the meaning: a projection at or beyond the reset returns
+    <code>null</code>, collapsing "absent", "unparseable" and "lands after the reset" into a
+    single no-tick outcome. There is nothing to draw in any of those cases.</p>
+    <p>The verdict follows the same logic at <code>pace.ts:84-96</code>:
+    <code>wall</code> when the projection parses and lands before <code>end</code>,
+    <code>lasts</code> otherwise, <code>null</code> when there is no rate yet. Notice what is
+    absent — <code>windowMs</code> is not a term in that comparison. The verdict is two
+    absolute timestamps against each other, which is exactly why section 1's ⚠️
+    <em>Unproven</em> weekly length affects the strip's <em>position</em> without touching
+    its <em>conclusion</em>. Separating the two was worth a slightly redundant-looking
+    signature.</p>
+  </div>
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 5 · Two ticks and a band</p>
+    <h2>Drawing doubt only while it exists</h2>
+    <p>Both ticks always render. The <em>band</em> between them is conditional:</p>
+    <pre>// Header.tsx:113-123
+          {view.wallPct != null &amp;&amp; view.wallPctPessimistic != null &amp;&amp; view.confidence !== 'ok' &amp;&amp; (
+            &lt;div
+              className="u-band"
+              style={{
+                left: `${Math.min(view.wallPct, view.wallPctPessimistic)}%`,
+                width: `${Math.abs(view.wallPct - view.wallPctPessimistic)}%`
+              }}
+            /&gt;
+          )}
+          &lt;div className="u-tick now" style={{ left: `${view.elapsedPct}%` }} /&gt;
+          {view.wallPct != null &amp;&amp; &lt;div className="u-tick wall" style={{ left: `${view.wallPct}%` }} /&gt;}</pre>
+    <svg viewBox="0 0 620 120" role="img" aria-label="The time strip: elapsed fill, a now tick, a shaded band between the shaped and pessimistic projections, and the reset at the right edge.">
+      <g font-family="ui-monospace, Menlo, monospace" font-size="11.5" fill="currentColor">
+        <rect x="40" y="40" width="530" height="18" rx="4" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+        <rect x="41" y="41" width="228" height="16" rx="3" fill="var(--line)"/>
+        <rect x="330" y="41" width="150" height="16" fill="var(--wrong)" opacity="0.18"/>
+        <line x1="269" y1="34" x2="269" y2="64" stroke="var(--accent)" stroke-width="2.5"/>
+        <text x="248" y="28" fill="var(--accent)">now</text>
+        <line x1="330" y1="34" x2="330" y2="64" stroke="var(--wrong)" stroke-width="2.5"/>
+        <text x="288" y="82" fill="var(--wrong)">shaped</text>
+        <line x1="480" y1="34" x2="480" y2="64" stroke="var(--wrong)" stroke-width="2.5" stroke-dasharray="3 3"/>
+        <text x="438" y="96" fill="var(--wrong)">pessimistic</text>
+        <line x1="570" y1="30" x2="570" y2="68" stroke="var(--muted)" stroke-width="2"/>
+        <text x="546" y="24" fill="var(--muted)">reset</text>
+        <text x="336" y="82" fill="var(--muted)">← band drawn only while confidence &#60; ok →</text>
+      </g>
+    </svg>
+    <p class="fig-cap">Elapsed fill to the <code>now</code> tick; the band spans the two
+    projections.</p>
+    <p>Once the profile is trustworthy the two ticks converge in meaning, and a band would
+    imply doubt that is no longer there (<code>Header.tsx:100-105</code>). Suppressing it is
+    honesty in the other direction — the bad alternative, always shading, would make a mature
+    forecast look as tentative as a first-week one.</p>
+    <p>One arithmetic trap closes the loop. <code>ratePerHour</code> is per <em>active</em>
+    hour, so the daily figure needs scaling first: <code>fmtRate</code> multiplies by
+    <code>dutyCycle ?? 1</code> before the ×24 (<code>pace.ts:50-55</code>). Skip it and a
+    typical profile overstates the day by about 3.4×. With recording off the duty cycle is
+    absent, <code>?? 1</code> applies, and the formula is exactly the old one.</p>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">The weekly window's length is ⚠️ <em>Unproven</em>. Why does the
+    <code>wall</code>/<code>lasts</code> verdict not inherit that uncertainty?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The verdict is computed on the server, where the real window length is known</button>
+        <p class="quiz-feedback">It is computed on the client, in <code>paceView</code> at
+        <code>pace.ts:84-96</code>. And no layer knows the real length — the seven-day figure
+        is a hard-coded constant at <code>pace.ts:13</code>, which is what makes it an
+        assumption rather than a lookup.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The verdict is derived from <code>elapsedPct</code>, which is clamped to 0–100 either way</button>
+        <p class="quiz-feedback">Clamping bounds a value into a drawable range; it does not
+        make it correct. <code>elapsedPct</code> is in fact one of the outputs that <em>is</em>
+        wrong if the window is not seven days — it is computed against
+        <code>windowMs</code> at <code>pace.ts:70</code>.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The walk re-derives the true span while stepping to <code>resetsAt</code>, so any error cancels</button>
+        <p class="quiz-feedback">The walk consumes the span, it cannot validate it — and it
+        is named as the <em>second</em> thing depending on the assumption
+        (<code>usage-limits.md:87-91</code>): a wrong span gives it too few hours or too many.
+        Nothing there cancels.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">It compares two absolute timestamps, and window length is not a term in that comparison</button>
+        <p class="quiz-feedback">Correct. The projected exhaustion is compared directly to
+        <code>resetsAt</code>. Both are absolute instants carrying their own timestamps, so
+        the assumed length moves the strip's <em>position</em> without touching its
+        <em>conclusion</em>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Recording is on with a mature profile, confidence <code>ok</code>.
+    What does the weekly strip draw?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">One tick only — the pessimistic edge stops being computed once the profile is trusted</button>
+        <p class="quiz-feedback">The flat walk runs unconditionally at
+        <code>usage-pace.ts:238</code>, before the <code>trusted</code> branch, and
+        <code>pessimisticExhaustAt</code> is always populated from it. It is the
+        <em>shaped</em> walk that is conditional, falling back to <code>flat</code>.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Both ticks plus the band, since both projections are available to span</button>
+        <p class="quiz-feedback">Availability is necessary but not sufficient — the render
+        condition also requires <code>view.confidence !== 'ok'</code>. At <code>ok</code> the
+        two ticks converge in meaning and a band would imply doubt that is no longer
+        there.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Both ticks, no band</button>
+        <p class="quiz-feedback">Correct. Both ticks always render so both edges of the
+        estimate stay visible; the band is suppressed at <code>ok</code> so a mature forecast
+        does not look as tentative as a first-week one.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>Why does <code>walkForward</code> take <code>offsetMinutes</code> instead of reading the timezone itself?</summary>
+      <p>To stay pure. <code>localOffsetMinutes</code> is documented as the module's only
+      impure line (<code>usage-forecast.ts:212-214</code>), and production calls it in exactly
+      one place — building <code>base</code> in <code>recordAndPace</code>
+      (<code>usage-pace.ts:234-236</code>). Passing the offset in means the walk can be tested
+      across arbitrary timezones and DST boundaries with fixed inputs, instead of depending on
+      whatever machine runs the suite.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Why does <code>isLearnedAt</code> exist when <code>weightAt</code> already returns the number?</summary>
+      <p>Because the numbers alone cannot say which branch was taken: a measured 1.0 and the
+      <code>globalMean</code> fallback of 1.0 are indistinguishable
+      (<code>usage-forecast.ts:126-136</code>). The walk has to <em>report</em> the difference
+      — each step carries <code>learned</code>, and the inspector draws measured hours solid
+      and assumed ones dashed. Same branch, named twice, so provenance survives into the
+      drawing.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Why is <code>dutyCycle</code> sent to the client rather than the 168 weights?</summary>
+      <p>Deliberate boundary discipline, stated at <code>usage-forecast.ts:45-50</code>:
+      <code>DutyProfile</code> is kept out of <code>shared/types.ts</code> because the weights
+      never cross the FE/BE boundary. Only the derived <code>dutyCycle</code> number and the
+      confidence string do. The client needs the scalar for one multiplication in
+      <code>fmtRate</code>; shipping 168 floats per poll would buy it nothing.</p>
+    </details>
+  </div>
+
+</section>
+
+<!-- ============ recap ============ -->
+<div class="card card-recap">
+  <p class="eyebrow">Recap</p>
+  <h1>Usage pace — lesson 1 of 4</h1>
+  <p class="recap-score"><span id="score-correct">0</span> / <span id="score-total">0</span></p>
+  <p id="weak-note">No questions answered yet.</p>
+
+  <p>Jump back into any section:</p>
+  <button class="section-jump" data-target="s1">1 · The two clocks</button>
+  <button class="section-jump" data-target="s2">2 · Sampling and slope</button>
+  <button class="section-jump" data-target="s3">3 · Surviving a window roll</button>
+  <button class="section-jump" data-target="s4">4 · From wall rate to active rate</button>
+  <button class="section-jump" data-target="s5">5 · Two ticks and a band</button>
+
+  <div class="series-next">
+    <p><strong>The rest of the series</strong> — not built yet. Each is its own lesson and its
+    own deck; running one is what creates it. The numbers are a suggested reading order, not a
+    gate.</p>
+    <ul>
+      <li><code>usage-2-learning-the-profile</code> — how an interval becomes
+      <code>active</code>, <code>idle</code>, <code>ambiguous</code> or <code>reset</code>;
+      hour-of-week bucket folding; the trust floor; storage and the opt-in.</li>
+      <li><code>usage-3-forecast-walk</code> — the weights themselves: <code>hourOfWeek</code>
+      indexing, week decay, and what <code>confidenceOf</code>'s thresholds are measuring.</li>
+      <li><code>usage-4-inspector</code> — the Usage tab: the 24×7 heatmap, its
+      <code>color-mix</code> ramp across five themes, and the cumulative-climb strip.</li>
+    </ul>
+  </div>
+
+  <p class="series-next">No written prose guide covers this subsystem yet — only the reference
+  doc at <code>docs/subsystems/usage-limits.md</code>, which is a specification rather than a
+  walkthrough. A narrative guide would be a reasonable follow-up if one would help.</p>
+
+  <p class="stamp">built at ac8d11d</p>
+</div>
+
+</main>
+
+<nav>
+  <button id="nav-back" disabled>Back</button>
+  <button id="nav-next">Next</button>
+</nav>
+
+<script type="application/json" id="provenance">
+{
+  "commit": "ac8d11dce45c454299a6fa2cfd9e5b1dd8af6d0b",
+  "generated": "2026-08-26",
+  "sources": [
+    "server/lib/usage-pace.ts",
+    "server/lib/usage.ts",
+    "server/lib/usage-forecast.ts",
+    "client/src/lib/pace.ts",
+    "client/src/components/Header.tsx",
+    "docs/subsystems/usage-limits.md"
+  ],
+  "sections": [
+    { "id": "s1", "title": "The two clocks", "sources": ["docs/subsystems/usage-limits.md", "server/lib/usage-pace.ts", "server/lib/usage.ts", "client/src/lib/pace.ts"] },
+    { "id": "s2", "title": "Sampling and slope", "sources": ["server/lib/usage-pace.ts", "server/lib/usage.ts"] },
+    { "id": "s3", "title": "Surviving a window roll", "sources": ["server/lib/usage-pace.ts"] },
+    { "id": "s4", "title": "From wall rate to active rate", "sources": ["server/lib/usage-pace.ts", "server/lib/usage-forecast.ts", "server/lib/usage.ts", "docs/subsystems/usage-limits.md"] },
+    { "id": "s5", "title": "Two ticks and a band", "sources": ["server/lib/usage-forecast.ts", "server/lib/usage-pace.ts", "client/src/lib/pace.ts", "client/src/components/Header.tsx", "docs/subsystems/usage-limits.md"] }
+  ]
+}
+</script>
+
+<script>
+(function () {
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+  var idx = 0;
+  var score = { correct: 0, total: 0 };
+  var back = document.getElementById('nav-back');
+  var next = document.getElementById('nav-next');
+  var fill = document.getElementById('progress-fill');
+
+  function isBlockedQuiz(card) {
+    return card.classList.contains('card-quiz') && card.dataset.answered !== 'true';
+  }
+
+  function show(i) {
+    if (i < 0 || i >= cards.length) return;
+    cards[idx].classList.remove('active');
+    idx = i;
+    cards[idx].classList.add('active');
+    window.scrollTo(0, 0);
+    refresh();
+  }
+
+  function refresh() {
+    back.disabled = idx === 0;
+    next.disabled = idx === cards.length - 1 || isBlockedQuiz(cards[idx]);
+    fill.style.width = (cards.length > 1 ? (idx / (cards.length - 1)) * 100 : 100) + '%';
+    if (cards[idx].classList.contains('card-recap')) renderScore();
+  }
+
+  function renderScore() {
+    document.getElementById('score-correct').textContent = String(score.correct);
+    document.getElementById('score-total').textContent = String(score.total);
+    var note = document.getElementById('weak-note');
+    if (score.total === 0) { note.textContent = 'No questions answered yet.'; return; }
+    note.textContent = score.correct === score.total
+      ? 'Every check answered correctly.'
+      : 'Worth a second pass: the sections whose checks you missed are linked below.';
+  }
+
+  cards.forEach(function (card) {
+    var opts = Array.prototype.slice.call(card.querySelectorAll('.quiz-option'));
+    opts.forEach(function (opt) {
+      var btn = opt.querySelector('.quiz-option-btn');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        if (card.dataset.answered === 'true') return;
+        card.dataset.answered = 'true';
+        opt.classList.add('revealed');
+        opts.forEach(function (o) {
+          var b = o.querySelector('.quiz-option-btn');
+          if (b) b.disabled = true;
+        });
+        score.total += 1;
+        if (opt.getAttribute('data-correct') === 'true') score.correct += 1;
+        refresh();
+      });
+    });
+  });
+
+  Array.prototype.slice.call(document.querySelectorAll('.section-jump')).forEach(function (b) {
+    b.addEventListener('click', function () {
+      var wrapper = document.getElementById(b.getAttribute('data-target'));
+      if (!wrapper) return;
+      for (var i = 0; i < cards.length; i++) {
+        if (wrapper.contains(cards[i])) { show(i); return; }
+      }
+    });
+  });
+
+  back.addEventListener('click', function () { if (!back.disabled) show(idx - 1); });
+  next.addEventListener('click', function () { if (!next.disabled) show(idx + 1); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' && !next.disabled) show(idx + 1);
+    if (e.key === 'ArrowLeft' && !back.disabled) show(idx - 1);
+  });
+
+  refresh();
+})();
+</script>
+
+</body>
+</html>
