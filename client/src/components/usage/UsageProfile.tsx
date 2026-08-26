@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { ForecastConfidence, UsageProfileCell } from '../../../../shared/types';
+import type { ForecastConfidence, UsageProfileCell, UsageProfileResponse } from '../../../../shared/types';
 import { useUsageProfile } from '../../hooks/useUsageProfile';
 import { fmtObserved, nextWeekStartMs, profileProgress, TRUST_FLOOR_MIN } from '../../lib/usageProfile';
+import {
+  absentText, areaPath, crossingX, dayTicks, fmtWalkHour, hitRect, hourOfWeekLocal,
+  pctX, pctY, pointsAttr, splitRuns, stepTitle, VIEW_H, walkPoints, walkWidth, Y_MAX, yOf
+} from '../../lib/walkChart';
 
 /**
  * The duty-cycle profile inspector — a 24×7 hour-of-week heatmap over the
@@ -107,11 +111,6 @@ function cellTitle(cell: UsageProfileCell, day: number, hour: number): string {
   return `${when}\n${level}\n${evidence}${stale}`;
 }
 
-const fmtHour = (iso: string) => {
-  const d = new Date(iso);
-  return `${DAYS[d.getDay()]} ${String(d.getHours()).padStart(2, '0')}:00`;
-};
-
 /**
  * What the profile has so far, and which gate it is waiting on.
  *
@@ -148,6 +147,167 @@ function RecordingStatus({ cells, recording }: { cells: UsageProfileCell[]; reco
   );
 }
 
+/**
+ * The handler bundle {@link UsageProfile.tipHandlers} hands a hoverable mark.
+ *
+ * Typed against `Element`, not `HTMLElement`: the same bundle is spread onto the
+ * heatmap's `<div>` cells and the strip's `<rect>` hit columns.
+ */
+interface TipHandlers {
+  onPointerEnter: (e: React.PointerEvent) => void;
+  onPointerMove: (e: React.PointerEvent) => void;
+  onPointerLeave: () => void;
+  onPointerCancel: () => void;
+  onFocus: (e: React.FocusEvent<Element>) => void;
+  onBlur: () => void;
+}
+
+/**
+ * The forward walk, as a cumulative climb to a 100% ceiling.
+ *
+ * Design notes that are deliberate, not incidental:
+ *
+ * - **The y axis is the cumulative window percentage, not the per-hour gain.**
+ *   The panel exists to answer "when does the weekly window hit 100%". A
+ *   per-hour bar chart makes the reader integrate 117 bars to get there; a
+ *   climbing curve puts the answer at the intersection with the ceiling. The
+ *   per-hour auditing a bar chart is good at is already done better by the 24×7
+ *   heatmap directly above — the old strip was competing with its own card.
+ * - **Solid = measured, dashed = assumed. The curve's *height* is unchanged.**
+ *   Not a reversal of the encoding, a split of it: the forecast genuinely counts
+ *   an unlearned hour at `globalMean`, and that pessimistic edge is deliberate.
+ *   Only the ink says which hours are a measurement. With no learned buckets at
+ *   all the whole line is dashed — which is the honest picture, and the reason
+ *   the old "the visible gap across the weekend" note had to go: it narrated a
+ *   profile the reader did not have.
+ * - **One SVG with a `viewBox`, `preserveAspectRatio="none"` and
+ *   `vector-effect: non-scaling-stroke`.** The flexbox strip gave every bar a
+ *   fractional CSS width, and the compositor rounded each bar's two edges to
+ *   device pixels independently — a ±1px swing between neighbours that no CSS
+ *   tuning can remove, because the rounding is per element. One coordinate
+ *   space scaled uniformly removes it structurally instead.
+ * - **Text lives outside the SVG.** `preserveAspectRatio="none"` stretches
+ *   everything it paints, glyphs included, so every label is an HTML overlay
+ *   positioned by percentage.
+ * - **Full-height hit columns, and a real tooltip element.** A hit area on the
+ *   line itself is a mouse-only affordance; `title` never fires on touch. Both
+ *   matter more than usual here — this is read from a phone.
+ */
+function WalkStrip({ walk, exhaustAt, walkAbsent, globalMean, cells, tipHandlers }: {
+  walk: UsageProfileResponse['walk'];
+  exhaustAt: string | null;
+  walkAbsent: UsageProfileResponse['walkAbsent'];
+  globalMean: number;
+  cells: UsageProfileCell[];
+  tipHandlers: (text: string) => TipHandlers;
+}) {
+  const n = walk.length;
+  const w = walkWidth(n);
+  const runs = splitRuns(walk);
+  const points = walkPoints(walk);
+  const cross = crossingX(walk);
+  const ticks = dayTicks(walk);
+  const ceiling = yOf(100);
+
+  return (
+    <div className="up-walk">
+      <div className="up-walkmeta">
+        <span>the walk behind the current weekly projection</span>
+        {n > 0 && (
+          <span className={exhaustAt ? 'up-hit' : undefined}>
+            {exhaustAt ? `hits 100% ${fmtWalkHour(exhaustAt)}` : 'coasts to the reset'}
+          </span>
+        )}
+      </div>
+
+      {n === 0 ? (
+        // Never an unmounted section: idle is a normal state, and a panel that
+        // vanishes reads as a broken feature rather than as nothing to draw.
+        <p className="up-note">{absentText(walkAbsent ?? 'no-window')}</p>
+      ) : (
+        <>
+          <div className="up-chartwrap">
+            <svg
+              className="up-chart"
+              viewBox={`0 0 ${w} ${VIEW_H}`}
+              preserveAspectRatio="none"
+              focusable="false"
+            >
+              {ticks.filter(t => t.kind === 'day').map(t => (
+                <line key={t.x} className="up-daytick" x1={t.x} x2={t.x} y1={0} y2={VIEW_H} />
+              ))}
+              <line className="up-ceiling" x1={0} x2={w} y1={ceiling} y2={ceiling} />
+              <path className="up-area" d={areaPath(points)} />
+              {/* After the area, before the line: a wash faint enough not to bury
+                  the curve is also too faint to survive being painted under the
+                  area fill. */}
+              {cross !== null && (
+                <rect className="up-dead" x={cross} y={0} width={w - cross} height={VIEW_H} />
+              )}
+              {runs.map((run, i) => (
+                <polyline
+                  key={i}
+                  className={`up-line${run.learned ? '' : ' assumed'}`}
+                  points={pointsAttr(run.points)}
+                />
+              ))}
+              {cross !== null && (
+                <line className="up-cross" x1={cross} x2={cross} y1={0} y2={VIEW_H} />
+              )}
+              {walk.map((step, i) => {
+                const rect = hitRect(i, n);
+                const text = stepTitle(step, cells[hourOfWeekLocal(step.t)]);
+                return (
+                  <rect
+                    key={step.t}
+                    className="up-hit-col"
+                    x={rect.x}
+                    y={0}
+                    width={rect.w}
+                    height={VIEW_H}
+                    role="img"
+                    tabIndex={0}
+                    aria-label={text.replace(/\n/g, ' — ')}
+                    {...tipHandlers(text)}
+                  />
+                );
+              })}
+            </svg>
+            <span className="up-ceillab" style={{ top: `${pctY(ceiling)}%` }}>100%</span>
+            {/* `now` sits in the chart's top-left corner rather than in the day
+                row: the first midnight can be one hour away, and a centred day
+                label that close to x=0 lands straight on top of it. The corner
+                is empty by construction — the curve starts at the window's
+                current utilization, never at the ceiling. */}
+            <span className="up-nowlab">now</span>
+            {cross !== null && exhaustAt && (
+              <span className="up-crosslab" style={{ left: `${pctX(cross, n)}%` }}>
+                {fmtWalkHour(exhaustAt)}
+              </span>
+            )}
+          </div>
+          <div className="up-days">
+            {ticks.filter(t => t.kind === 'day').map(t => (
+              <span key={t.x} className="up-daylab" style={{ left: `${pctX(t.x, n)}%` }}>
+                {t.label}
+              </span>
+            ))}
+          </div>
+          <p className="up-note">
+            Cumulative window use from now to the weekly reset.{' '}
+            <span className="up-key"><i className="up-key-solid" /> solid</span> hours are walked
+            with a measured weight;{' '}
+            <span className="up-key"><i className="up-key-dash" /> dashed</span> hours have no
+            evidence for that hour of the week yet and fall back to the{' '}
+            {Math.round(globalMean * 100)}% weekly mean — the same height, a weaker claim. The
+            scale stops at {Y_MAX}%: past the ceiling, everything is equally over.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function UsageProfile() {
   const { profile, loading, error } = useUsageProfile();
   const [showTable, setShowTable] = useState(false);
@@ -156,16 +316,28 @@ export function UsageProfile() {
   // 168 cells to move one box would be absurd.
   const tipRef = useRef<HTMLDivElement>(null);
   /** The mark a *keyboard*-shown tooltip belongs to; null when pointer-shown. */
-  const anchorRef = useRef<HTMLElement | null>(null);
+  const anchorRef = useRef<Element | null>(null);
 
   const placeTip = useCallback((x: number, y: number) => {
     const tip = tipRef.current;
     if (!tip) return;
+    // Measure from the origin, never from wherever the panel was last left.
+    // It is `position: fixed` with no `right`, so the viewport edge caps its
+    // available width: measured while sitting near the right edge it reports a
+    // *narrower* box than it will occupy once moved, and the clamp below then
+    // lets it hang off the screen by the difference.
+    tip.style.left = '0px';
+    tip.style.top = '0px';
     const w = tip.offsetWidth, h = tip.offsetHeight;
     tip.style.left = Math.max(8, Math.min(x + 14, window.innerWidth - w - 8)) + 'px';
-    // Flip above the pointer near the bottom edge — on a phone the finger is
-    // usually low on the screen, and a tooltip off-viewport is no tooltip.
-    tip.style.top = (y + 18 + h > window.innerHeight - 8 ? y - h - 14 : y + 18) + 'px';
+    // Above the mark by default, not below. Whatever is pointing at it sits
+    // underneath — a cursor a little, a finger a lot — so the space below is
+    // both occluded and the half far more likely to run off the bottom of the
+    // screen. Drop under only when there is no room above, and clamp either
+    // way so the panel can never leave the viewport.
+    const above = y - h - 14;
+    const below = Math.min(y + 18, window.innerHeight - h - 8);
+    tip.style.top = Math.max(8, above >= 8 ? above : below) + 'px';
   }, []);
 
   const showTip = useCallback((text: string, x: number, y: number) => {
@@ -193,7 +365,7 @@ export function UsageProfile() {
       const anchor = anchorRef.current;
       if (anchor && document.activeElement === anchor) {
         const r = anchor.getBoundingClientRect();
-        placeTip(r.right, r.bottom);
+        placeTip(r.right, r.top);
         return;
       }
       hideTip();
@@ -216,10 +388,10 @@ export function UsageProfile() {
     onPointerLeave: hideTip,
     onPointerCancel: hideTip,
     // Keyboard: anchor to the mark itself, since there is no pointer.
-    onFocus: (e: React.FocusEvent<HTMLElement>) => {
+    onFocus: (e: React.FocusEvent<Element>) => {
       anchorRef.current = e.currentTarget;
       const r = e.currentTarget.getBoundingClientRect();
-      showTip(text, r.right, r.bottom);
+      showTip(text, r.right, r.top);
     },
     onBlur: () => { anchorRef.current = null; hideTip(); }
   }), [showTip, placeTip, hideTip]);
@@ -227,9 +399,8 @@ export function UsageProfile() {
   if (loading) return <div className="up-note">reading the usage profile…</div>;
   if (error || !profile) return <div className="up-note">The usage profile could not be read.</div>;
 
-  const { cells, globalMean, confidence, recording, walk, exhaustAt } = profile;
+  const { cells, globalMean, confidence, recording, walk, exhaustAt, walkAbsent } = profile;
   const at = (day: number, hour: number) => cells[day * 24 + hour];
-  const maxGain = walk.reduce((m, s) => Math.max(m, s.gain), 0);
 
   return (
     <div className="up">
@@ -330,35 +501,14 @@ export function UsageProfile() {
         <small className="up-conf">confidence: {confidence} — {CONFIDENCE_TEXT[confidence]}</small>
       </div>
 
-      {walk.length > 0 && (
-        <div className="up-walk">
-          <div className="up-walkbars">
-            {walk.map(step => (
-              <div
-                key={step.t}
-                className={`up-wb${step.gain <= 0 ? ' idle' : ''}`}
-                style={step.gain > 0 && maxGain > 0
-                  ? { height: `${Math.max(3, (step.gain / maxGain) * 100)}%` }
-                  : undefined}
-                tabIndex={0}
-                aria-label={`${fmtHour(step.t)} · +${step.gain.toFixed(1)}%`}
-                {...tipHandlers(`${fmtHour(step.t)}\n+${step.gain.toFixed(1)}% this hour`)}
-              />
-            ))}
-          </div>
-          <div className="up-walkmeta">
-            <span>the walk behind the current weekly projection</span>
-            <span className={exhaustAt ? 'up-hit' : undefined}>
-              {exhaustAt ? `hits 100% ${fmtHour(exhaustAt)}` : 'coasts to the reset'}
-            </span>
-          </div>
-          <p className="up-note">
-            Flat stubs are hours the profile expects to be idle — they contribute nothing,
-            which is the whole point of the feature. The visible gap across the weekend is
-            what stops the projection landing on Saturday.
-          </p>
-        </div>
-      )}
+      <WalkStrip
+        walk={walk}
+        exhaustAt={exhaustAt}
+        walkAbsent={walkAbsent}
+        globalMean={globalMean}
+        cells={cells}
+        tipHandlers={tipHandlers}
+      />
     </div>
   );
 }

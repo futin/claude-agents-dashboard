@@ -516,18 +516,24 @@ export function shapeUsageProfile(opts: {
 
   const rate = weekly?.ratePerHour ?? null;
   const resetsAtMs = weekly?.resetsAt ? Date.parse(weekly.resetsAt) : Number.NaN;
-  const canWalk =
-    recording && rate != null && rate > 0 &&
-    weekly?.utilization != null && Number.isFinite(resetsAtMs);
+  // Ordered, not combined: the strip states *which* precondition is missing, so
+  // "there is nothing to draw" reads as a state rather than as a broken panel.
+  // Recording first — with it off nothing else has been measured either.
+  const absent: UsageProfileResponse['walkAbsent'] =
+    !recording ? 'recording-off'
+      : rate == null || rate <= 0 ? 'no-rate'
+        : weekly?.utilization == null || !Number.isFinite(resetsAtMs) ? 'no-window'
+          : null;
 
-  if (!canWalk) {
+  if (absent !== null) {
     return {
       cells,
       globalMean: profile.globalMean,
       confidence: recording ? confidenceOf(profile) : 'none',
       recording,
       walk: [],
-      exhaustAt: null
+      exhaustAt: null,
+      walkAbsent: absent
     };
   }
 
@@ -544,8 +550,17 @@ export function shapeUsageProfile(opts: {
     globalMean: profile.globalMean,
     confidence: confidenceOf(profile),
     recording,
-    walk: walked.steps.map((x) => ({ t: new Date(x.tMs).toISOString(), gain: x.gain })),
-    exhaustAt: walked.exhaustAtMs == null ? null : new Date(walked.exhaustAtMs).toISOString()
+    walk: walked.steps.map((x) => ({
+      t: new Date(x.tMs).toISOString(),
+      gain: x.gain,
+      cum: x.cum,
+      weight: x.weight,
+      learned: x.learned
+    })),
+    exhaustAt: walked.exhaustAtMs == null ? null : new Date(walked.exhaustAtMs).toISOString(),
+    // A walked window has nothing absent to report; the field is the negative
+    // space of `walk`, so a non-empty walk always pairs with null.
+    walkAbsent: null
   };
 }
 
@@ -568,7 +583,7 @@ export function serveUsageProfile(res: ServerResponse): void {
   } catch {
     sendJson(res, 200, {
       cells: blankCells(), globalMean: 1, confidence: 'none',
-      recording: false, walk: [], exhaustAt: null
+      recording: false, walk: [], exhaustAt: null, walkAbsent: 'recording-off'
     } satisfies UsageProfileResponse);
   }
 }
