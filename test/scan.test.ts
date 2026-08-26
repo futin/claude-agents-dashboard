@@ -434,6 +434,50 @@ export function run(): number {
     assert.strictEqual(out.totals.shown, 1);
   })) p++; else f++;
 
+  if (test('slash-command-only session (e.g. /login) is excluded', () => {
+    // Running `/login` in a fresh terminal writes a transcript of nothing but
+    // local-command records: user-role messages, so `hasMessages` passes, but no
+    // assistant turn and no tokens. Fresh mtime + role 'user' read as
+    // recent + !turnComplete = a yellow "your turn" phantom row.
+    const now = 1_700_000_000_000;
+    const iso = new Date(now - 5 * 1000).toISOString();
+    const root = makeRoot([
+      { dirName: '-a-login', id: 'login', mtimeMs: now - 5 * 1000, records: [
+        metaRec('/a/login', 'main'),
+        { type: 'user', timestamp: iso, message: { role: 'user', content: '<command-name>/login</command-name>' } },
+        { type: 'user', timestamp: iso, message: { role: 'user', content: '<local-command-stdout>Login successful</local-command-stdout>' } }
+      ] },
+      { dirName: '-a-real', id: 'real', mtimeMs: now - 60 * 1000, records: [metaRec('/a/real', 'main'), at(assistantPending(), new Date(now - 60 * 1000).toISOString())] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null });
+    assert.strictEqual(out.sessions.length, 1);
+    assert.strictEqual(out.sessions[0].project, 'real');
+    assert.strictEqual(out.totals.shown, 1);
+  })) p++; else f++;
+
+  if (test('dropped sessions do not eat a maxSessions slot', () => {
+    // The candidate pool is sliced before parsing, so a filtered-out transcript
+    // used to cost a display slot: 2 phantoms + maxSessions 3 showed 1 row.
+    // Pool over-fetches; the cap still holds at exactly maxSessions.
+    const now = 1_700_000_000_000;
+    const iso = (agoSec: number) => new Date(now - agoSec * 1000).toISOString();
+    const login = (n: number) => ({
+      dirName: '-a-l' + n, id: 'l' + n, mtimeMs: now - n * 1000, records: [
+        metaRec('/a/l' + n, 'main'),
+        { type: 'user', timestamp: iso(n), message: { role: 'user', content: '<command-name>/login</command-name>' } }
+      ]
+    });
+    const real = (n: number) => ({
+      dirName: '-a-r' + n, id: 'r' + n, mtimeMs: now - n * 1000,
+      records: [metaRec('/a/r' + n, 'main'), at(assistantPending(), iso(n))]
+    });
+    // Newest first: two phantoms, then three real sessions.
+    const root = makeRoot([login(1), login(2), real(3), real(4), real(5)]);
+    const out = scan.scanSessions({ maxSessions: 3, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null });
+    assert.deepStrictEqual(out.sessions.map(s => s.id), ['r3', 'r4', 'r5']);
+    assert.strictEqual(out.totals.shown, 3);
+  })) p++; else f++;
+
   if (test('kaizen: injected lesson tags the matching session by id-prefix', () => {
     const now = 1_700_000_000_000;
     const root = makeRoot([

@@ -218,10 +218,16 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   const lookbackMs = lookbackHours * 60 * 60 * 1000;
   const activeMs = activeWindowMin * 60 * 1000;
 
+  // Candidate POOL, not the display count: the two skips below (no messages,
+  // slash-command-only) can only be decided after parsing, so a slice of exactly
+  // maxSessions let a dropped transcript cost a display slot — two `/login`
+  // phantoms on a maxSessions=5 config showed 3 rows. Over-fetch, then hold the
+  // real cap in the loop. Costs extra readTranscript calls only when phantoms
+  // exist; with none, the loop breaks at maxSessions like before.
   const candidates = listTranscripts(root)
     .filter(t => now - t.mtimeMs <= lookbackMs)
     .sort((a, b) => b.mtimeMs - a.mtimeMs)
-    .slice(0, maxSessions);
+    .slice(0, maxSessions * 2);
 
   // Set of cwds with a live `claude` process. null = probe skipped/unavailable
   // → fail open (no gating). A session whose cwd is absent has no live process,
@@ -239,6 +245,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
 
   const sessions: Session[] = [];
   for (const c of candidates) {
+    if (sessions.length >= maxSessions) break;   // the pool over-fetches; this is the cap
     const parsed = readTranscript(c.file);
     if (!parsed) continue;
     // Skip transcripts with no conversational message: a session just started or
@@ -247,6 +254,12 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     // = "incomplete", showing a phantom "pending" row beside the real session
     // (which `/clear` abandoned). Nothing to display → drop it.
     if (!parsed.hasMessages) continue;
+    // Skip a transcript whose whole conversation is local slash-command plumbing
+    // — `/login` (or `!ls`) run in a fresh terminal. Those records are user-role
+    // messages, so the guard above passes them, but no assistant ever answered
+    // and no tokens were spent: a 0% phantom row reading "your turn". Same
+    // policy as above — nothing to display → drop it.
+    if (parsed.commandOnly) continue;
     const projectPath = parsed.cwd || null;
     const project = projectPath ? (projectPath.split('/').filter(Boolean).pop() || projectPath) : decodeProjectName(c.dirName);
     // Recency tracks real agent activity, not file touches: selecting a session
