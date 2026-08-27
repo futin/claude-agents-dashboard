@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<!-- tutor-deck -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The inspector — tutor lesson 3 of 3</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1c20;
+    --muted: #5b6270;
+    --card: #f6f7f9;
+    --line: #d9dde3;
+    --accent: #2f6feb;
+    --correct: #1f8a4c;
+    --wrong: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #eceef1;
+      --muted: #a3a8b0;
+      --card: #2a2e35;
+      --line: #3a404a;
+      --accent: #6ea3ff;
+      --correct: #57d68d;
+      --wrong: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    font-size: 17px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  #progress-track { height: 4px; background: var(--line); flex: 0 0 auto; }
+  #progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .18s ease; }
+  main { flex: 1 1 auto; padding: 18px 16px 24px; max-width: 44rem; width: 100%; margin: 0 auto; }
+  .card { display: none; }
+  .card.active { display: block; }
+  h1 { font-size: 1.35rem; line-height: 1.3; margin: .2rem 0 .8rem; }
+  h2 { font-size: 1.12rem; line-height: 1.3; margin: .2rem 0 .7rem; }
+  p { margin: 0 0 .85rem; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
+  pre {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .82rem;
+    line-height: 1.45;
+    margin: 0 0 .9rem;
+  }
+  .eyebrow { color: var(--muted); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 .35rem; }
+  details { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 .9rem; background: var(--card); }
+  summary { cursor: pointer; font-weight: 600; font-size: .92rem; }
+  details p { margin: .7rem 0 0; font-size: .95rem; }
+  .quiz-prompt { font-weight: 600; }
+  .quiz-options { display: flex; flex-direction: column; gap: 10px; }
+  .quiz-option-btn {
+    display: block; width: 100%; text-align: left;
+    font: inherit; font-size: .98rem;
+    color: var(--fg); background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 13px 14px; cursor: pointer; min-height: 46px;
+  }
+  .quiz-option-btn:disabled { cursor: default; }
+  .quiz-feedback {
+    display: none;
+    color: var(--muted); font-size: .93rem;
+    margin: 8px 2px 2px; padding-left: 10px;
+    border-left: 2px solid var(--line);
+  }
+  .quiz-option.revealed .quiz-feedback { display: block; }
+  .quiz-option.revealed[data-correct="true"] .quiz-option-btn { border-color: var(--correct); border-width: 2px; }
+  .quiz-option.revealed[data-correct="false"] .quiz-option-btn { border-color: var(--wrong); border-width: 2px; }
+  .divider-flow { color: var(--muted); font-size: .95rem; margin-bottom: 1rem; }
+  .xlink { font-size: .92rem; }
+  a { color: var(--accent); }
+  .recap-score { font-size: 1.5rem; font-weight: 700; margin: .2rem 0 1rem; }
+  .section-jump {
+    display: block; width: 100%; text-align: left;
+    font: inherit; font-size: .95rem; color: var(--fg);
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px; padding: 11px 12px; margin-bottom: 8px; cursor: pointer;
+  }
+  .series-next { font-size: .93rem; color: var(--muted); margin: 1.1rem 0 0; }
+  .series-next ul { margin: .4rem 0 0; padding-left: 1.2rem; }
+  .series-next li { margin: .2rem 0; }
+  .stamp { color: var(--muted); font-size: .8rem; margin-top: 1.2rem; }
+  nav {
+    flex: 0 0 auto; display: flex; gap: 12px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line); background: var(--bg);
+  }
+  nav button {
+    flex: 1; font: inherit; font-size: 1rem; padding: 13px 10px;
+    border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--fg); cursor: pointer; min-height: 48px;
+  }
+  nav button:disabled { opacity: .4; cursor: default; }
+  svg { max-width: 100%; height: auto; display: block; margin: 0 0 .9rem; }
+  .fig-cap { color: var(--muted); font-size: .86rem; margin: -.4rem 0 .9rem; }
+  @media (min-width: 780px) { body { font-size: 18px; } main { padding: 28px 24px 34px; } }
+</style>
+</head>
+<body>
+
+<div id="progress-track"><div id="progress-fill"></div></div>
+
+<main>
+
+<!-- ============ opener ============ -->
+<div class="card card-mental active">
+  <p class="eyebrow">Mental model</p>
+  <h1>The 168 weights are the explanation</h1>
+  <p>Lessons 1 and 2 built a machine that quietly changes a number you act on. The header
+  says the weekly window hits 100% on Thursday afternoon, and that claim now rests on a
+  duty-cycle model learned in the background from a month of samples you never saw.</p>
+  <p>So the mental model for this lesson is <strong>disclosure, not decoration</strong>. The
+  Usage tab is not a nicer way to look at a forecast; it is the only thing standing between
+  a wrong projection and being undebuggable. Without it your recourse is opening
+  <code>.usage-profile.json</code> in an editor and counting buckets by hand
+  (<code>UsageProfile.tsx:16-20</code>).</p>
+  <p>Two panels do that job. A <strong>24×7 heatmap</strong> shows all 168 hour-of-week
+  weights at once, so you can see the shape the model believes you work. A
+  <strong>forward-walk strip</strong> below it replays the specific walk that produced the
+  current projection, climbing to a 100% ceiling, with measured hours drawn solid and
+  assumed ones dashed.</p>
+  <p>Almost every design decision in these ~925 lines follows from two constraints that
+  sound minor and are not: this is read on a <em>phone</em>, and the dashboard ships
+  <em>five</em> colour themes. Between them they rule out the obvious implementation of the
+  ramp, the tooltip, and the strip.</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- s1                                                            -->
+<!-- ============================================================ -->
+<section id="s1">
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 1 · Why an inspector exists</p>
+    <h2>Disclosure, not decoration</h2>
+    <p>It is worth being precise about what makes this panel load-bearing rather than nice
+    to have, because that judgement is what justifies its size. The forecast changed a
+    number the user acts on, and it did so using a model built from data the user cannot
+    see. A projection that is wrong is therefore not just wrong — it is unfalsifiable from
+    the outside.</p>
+    <p>The alternative that gets built by default is a confidence label: show
+    <code>thin</code> or <code>ok</code> next to the projection and leave it there. That is
+    strictly cheaper and it answers the wrong question. "How sure is this?" is a summary;
+    "which hours does it think I work?" is the actual thing a user can check against their
+    own memory of last week, and it is the only form of the answer that can be
+    <em>contradicted</em>. A single scalar cannot be contradicted.</p>
+    <p>So the panel's contract is that the 168 weights <em>are</em> the explanation, shown
+    directly rather than summarised. The confidence label still exists — it sits in the
+    legend — but as one line beside the evidence, not instead of it. The cost is a
+    non-trivial component: 527 lines of view code plus 370 in pure helpers, for a panel most
+    users open once.</p>
+<pre>// UsageProfile.tsx:16-20
+ * **Why this exists.** The forecast silently changes a number the user acts on,
+ * using a model built in the background. Without an inspector a wrong
+ * projection is undebuggable — the only recourse is reading `.usage-profile.json`
+ * by hand. The 168 weights *are* the explanation. This is disclosure, not
+ * decoration.</pre>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">The panel could have shipped as a confidence badge next to the
+    projection instead of a 168-cell grid. What does the grid provide that the badge cannot?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Higher accuracy, because seeing the weights lets the
+        forecast use more of them</button>
+        <p class="quiz-feedback">The inspector is strictly read-only — it fetches a profile
+        and draws it, and nothing in it feeds back into the forecast. Displaying a model
+        cannot change the model, so accuracy is untouched either way.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">A faster read: one glance replaces reading a
+        sentence</button>
+        <p class="quiz-feedback">A badge is unquestionably the faster read — that is its
+        advantage, and the reason it is the default thing to build. Speed is not what it is
+        missing.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">A claim specific enough to be contradicted by what
+        you remember doing</button>
+        <p class="quiz-feedback">Correct. "Thin" cannot be argued with; "you never work
+        Tuesday mornings" can be, and being wrong about it is visible at a glance. That is
+        what makes the projection debuggable rather than merely qualified.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Somewhere to expose the raw
+        <code>.usage-history.jsonl</code> samples for auditing</button>
+        <p class="quiz-feedback">The endpoint deliberately never carries raw samples — the
+        comment at <code>server/index.ts:152-153</code> says so. The panel shows the learned
+        weights and per-cell evidence totals, which is derived state, not the sample log.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-concept">
+    <h2>One fetch, and a length check that is an error</h2>
+    <p><code>useUsageProfile</code> is 44 lines and does something unusual for this codebase:
+    it fetches once per mount and never polls. Every other view here is on the 3-second
+    refresh, and applying that here would be absurd — a bucket's weight only moves when its
+    ISO week folds, so the data changes on a <em>weekly</em> cadence. Reopening the tab is
+    the refresh.</p>
+    <p>The guard on the response is the interesting part. A short <code>cells</code> array
+    is treated as an <em>error</em>, not as partial data: 168 exactly, or the hook reports
+    failure and the panel renders "The usage profile could not be read." The permissive
+    alternative — draw whatever cells arrived — produces a torn grid, a week missing its
+    last few hours, with nothing on screen saying so. A visibly broken panel is recoverable;
+    a plausible-looking wrong one is not.</p>
+    <p>Note the <code>alive</code> flag closed over by both handlers and cleared in the
+    effect's teardown. The tab is lazily loaded and can be unmounted mid-flight, and setting
+    state after that is the classic React warning. Note too that the <code>catch</code>
+    keeps the <em>previous</em> profile rather than clearing it — a failed refetch should not
+    blank a grid the user is reading.</p>
+<pre>// useUsageProfile.ts:27-41
+  useEffect(() =&gt; {
+    let alive = true;
+    fetch('/api/usage/profile')
+      .then(res =&gt; res.json() as Promise&lt;UsageProfileResponse&gt;)
+      .then(profile =&gt; {
+        // A short cell array would render a torn grid, so treat it as an error
+        // rather than drawing part of a week.
+        const ok = Array.isArray(profile?.cells) &amp;&amp; profile.cells.length === 168;
+        if (alive) setState({ profile: ok ? profile : null, loading: false, error: !ok });
+      })
+      .catch(() =&gt; {
+        if (alive) setState(prev =&gt; ({ profile: prev.profile, loading: false, error: true }));
+      });
+    return () =&gt; { alive = false; };
+  }, []);</pre>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Its own tab, and why not inside Analytics</h2>
+    <p><code>UsageView</code> is 28 lines — a title bar and the inspector — and almost all
+    of its interest is in the docstring explaining why it is a separate rail entry rather
+    than a block inside the Analytics tab, which is where a reviewer would naturally
+    suggest putting it.</p>
+    <p>The dividing line is the subject. Analytics is about <em>sessions</em>: the
+    <code>/kaizen</code> report cards, re-read from transcripts each time you open it. This
+    is about the <em>account</em>. The two share no data, no endpoint and no cadence — one
+    re-reads transcripts on demand, the other reads a profile that moves once a week.
+    Merging them would produce a tab whose two halves refresh on different schedules from
+    different sources and answer unrelated questions, which is a worse outcome than one
+    extra rail entry.</p>
+    <p>The <code>export default</code> is also load-bearing rather than stylistic: it is
+    what makes this its own lazy chunk, like every section but Sessions. A panel most users
+    open rarely should not be in the initial bundle.</p>
+<pre>// UsageView.tsx:7-14
+ * Its own rail entry rather than a block inside Analytics: Analytics is about
+ * *sessions* (the `/kaizen` report cards), and this is about the *account*. They
+ * share no data, no endpoint and no cadence — Analytics re-reads transcripts,
+ * this reads a profile that moves once a week.
+ *
+ * Default export → its own lazy chunk, like every section but Sessions. The
+ * obvious next tenant is idea-5's utilization-over-time charts, which read the
+ * same `.usage-history.jsonl` this section's profile is learned from.</pre>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Why does <code>useUsageProfile</code> fetch once per mount rather
+    than joining the dashboard's 3-second poll?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The endpoint is expensive, since it re-reads
+        <code>.usage-history.jsonl</code> from disk on every call</button>
+        <p class="quiz-feedback"><code>serveUsageProfile</code> reads
+        <code>profileSnapshot()</code>, which is the in-memory live state — the log is not
+        touched. Cost is not the argument; if it were, the fix would be a cache rather than a
+        different cadence.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">A weight only moves when its ISO week folds, so the
+        data changes weekly</button>
+        <p class="quiz-feedback">Correct. Lesson 2's fold is the only thing that moves a
+        weight, and it happens once a week per bucket. Polling every 3 seconds would issue
+        roughly 200,000 requests between two changes.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Polling would defeat the <code>alive</code> flag, so
+        state could be set after unmount</button>
+        <p class="quiz-feedback">The <code>alive</code> flag is a teardown guard and works
+        the same under any cadence — a polling hook would simply clear an interval as well.
+        It is a correctness detail of this hook, not a reason for its cadence.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Because the tab is lazily loaded, so its hooks cannot
+        register on the shared refresh</button>
+        <p class="quiz-feedback">Lazy chunks have no such restriction — the Analytics and
+        Management tabs are lazy too and are perfectly free to poll. Nothing about the code
+        splitting constrains what a hook may subscribe to.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- s2                                                            -->
+<!-- ============================================================ -->
+<section id="s2">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>2 · A calendar, not a bar chart</h2>
+    <p class="divider-flow">Section 1 established what the panel owes the user: the weights
+    themselves, not a summary of them.</p>
+    <p class="divider-flow">Section 2 is how 168 numbers get drawn — the five-step ramp and
+    why no colour in it is written down, why "no evidence" is a texture rather than a sixth
+    step, and why a plain table is required rather than optional.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Five steps, plus two states that are not steps</h2>
+    <p><code>stepOf</code> maps a weight to a CSS class, and the shape of the ladder matters
+    more than the thresholds. Five filled steps cover 0.02 upward, and a weight at or below
+    0.02 gets the <em>empty string</em> — no step class at all, so the cell renders as a bare
+    bordered track.</p>
+    <p>That empty case is the design decision. "You never work this hour" and "you work 15%
+    of it" are different statements, and a five-step ramp starting at zero would paint both
+    as <code>q1</code>. A separate third state — untrusted cells, drawn with a hatched
+    <code>unknown</code> texture — completes the set. So the grid has exactly three visually
+    distinct meanings: <strong>empty is measured idle, hatched is no evidence, filled is
+    measured active</strong>.</p>
+    <p>The naive version merges the first two: paint an unlearned cell as very pale and be
+    done. It reads as "barely any activity here", which is a claim the model has not made,
+    and it is the single most misleading thing this panel could say — a fresh install would
+    look like a user who never works. The cost of keeping them apart is a legend with three
+    keys instead of one continuous bar.</p>
+<pre>// UsageProfile.tsx:79-86
+function stepOf(weight: number): string {
+  if (weight &lt;= 0.02) return '';           // measured idle — the bare track
+  if (weight &lt;= 0.2) return 'q1';
+  if (weight &lt;= 0.4) return 'q2';
+  if (weight &lt;= 0.6) return 'q3';
+  if (weight &lt;= 0.8) return 'q4';
+  return 'q5';
+}</pre>
+  </div>
+
+  <div class="card card-concept">
+    <h2>A ramp with no colours in it</h2>
+    <p>The CSS for those five steps names exactly one colour — <code>--cyan</code>, a theme
+    token — and derives the rest by mixing it with the surface at 20, 40, 60 and 80 percent,
+    with <code>q5</code> being the token itself. Nothing is hard-coded.</p>
+    <p>Two independent constraints force this. First, a grid of magnitudes is a sequential
+    scale, so a multi-hue ramp is simply the wrong encoding — hue differences read as
+    <em>category</em> differences, and these cells differ only in amount. Second, the
+    dashboard ships five themes as pure token overrides, and this repo forbids a literal
+    colour below the token block: five hand-picked hex values per theme would be 25 values
+    nobody can validate, and the light theme is where such a set breaks first.</p>
+    <p>The mixing is done <code>in oklab</code>, a perceptually uniform space, which is what
+    makes the five steps read as evenly spaced rather than bunching in the middle the way an
+    sRGB mix does. And because the ramp is a formula over one token, it is monotonic
+    <em>by construction</em> in every theme — a property no hand-picked palette can promise.
+    The hatched <code>unknown</code> state is built the same way, from
+    <code>--hairline</code> and a repeating gradient, so it also cannot go wrong per theme.</p>
+<pre>// styles.css:786-791
+.up-cell.q1{background:color-mix(in oklab,var(--cyan) 20%,var(--strip))}
+.up-cell.q2{background:color-mix(in oklab,var(--cyan) 40%,var(--strip))}
+.up-cell.q3{background:color-mix(in oklab,var(--cyan) 60%,var(--strip))}
+.up-cell.q4{background:color-mix(in oklab,var(--cyan) 80%,var(--strip))}
+.up-cell.q5{background:var(--cyan)}
+.up-cell.unknown{background:repeating-linear-gradient(135deg,var(--hairline) 0 2px,transparent 2px 5px);border-style:dashed}</pre>
+  </div>
+
+  <div class="card card-concept">
+    <h2>The table is required, not a nicety</h2>
+    <p>A <code>show table</code> toggle swaps the grid for a 24-row, 7-column table of
+    percentages, with an em dash where a cell has no weight. It looks like a courtesy
+    feature. It is an obligation, and the docstring says why in one measurement: the two
+    lowest ramp steps fall below 3:1 contrast against the card surface.</p>
+    <p>That is below the threshold for non-text contrast, and it is not fixable within the
+    design. Raising the low end of the ramp to clear 3:1 would compress the five steps into
+    a narrower band and cost the panel its main job — telling a 20% hour from a 60% one at a
+    glance. So the ramp keeps its range, and the obligation is discharged by providing a
+    second, non-colour path to the same numbers rather than by weakening the first one.</p>
+    <p>Note what the table is <em>not</em>: it is not a fallback that appears on small
+    screens or under a media query, and it is not the accessible-only view. It is a toggle
+    any user can flip, rendering from the same <code>cells</code> array, with real
+    <code>&lt;th scope&gt;</code> headers. Every cell also carries an
+    <code>aria-label</code> built from the same tooltip text, with newlines flattened to
+    dashes — so the grid itself is readable without colour too.</p>
+<pre>// UsageProfile.tsx:39-41
+ * - **The table view is required, not a nicety.** The two lowest ramp steps fall
+ *   below 3:1 against the card surface, and that obligates a non-colour path to
+ *   the same numbers.</pre>
+    <details>
+      <summary>More detail — why hours are rows and days are columns</summary>
+      <p>Because the axis needing 24 slots should run the direction a phone actually has.
+      Days across gives 7 columns of <code>1fr</code>; hours down gives 24 rows that scroll
+      naturally. With <code>aspect-ratio: 1</code> on the cells, <code>max-width</code> on
+      <code>.up-grid</code> is then the single knob for the whole panel's size: width sets
+      the cell size, which sets the height. The mockup's variant C used 320px, giving 38.84px
+      cells and a 992px-tall week; the shipped version uses 250px, giving ~28px cells and
+      ~730px, which keeps the proportions and brings a week within about one screen.</p>
+    </details>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">A bucket's weight is <code>0</code> — measured, several weeks of
+    evidence, genuinely never active. How does its cell render?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">As <code>q1</code>, the palest of the five filled
+        steps</button>
+        <p class="quiz-feedback">This is the merge <code>stepOf</code> exists to prevent. A
+        weight of 0 and a weight of 0.15 would then look identical, and the panel would be
+        unable to distinguish "never" from "rarely" — the two ends of its own scale.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">With the hatched <code>unknown</code> texture, since
+        there is no activity to colour</button>
+        <p class="quiz-feedback">The hatch means something quite different: <em>no
+        evidence</em>. This cell has plenty of evidence and the evidence says zero. Painting
+        it as unknown would throw away a measurement, which is the mirror of the previous
+        option's error.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">It is omitted from the grid, leaving a gap in that
+        day's column</button>
+        <p class="quiz-feedback">All 168 cells are always rendered — the grid is built by
+        iterating 24 hours × 7 days unconditionally, and a missing cell would shift every
+        cell after it into the wrong day. Nothing is ever omitted.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">As a bare bordered cell, because
+        <code>stepOf</code> returns the empty string</button>
+        <p class="quiz-feedback">Correct. At or below 0.02 there is no step class, so only
+        <code>.up-cell</code>'s own border and radius apply. Empty means measured idle, which
+        the tooltip states in words as "never active — measured, not missing".</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Why is the five-step ramp derived with <code>color-mix</code>
+    instead of five hex values chosen per theme?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Because <code>color-mix</code> guarantees each step
+        clears 3:1 contrast against the surface</button>
+        <p class="quiz-feedback">It guarantees no such thing, and in fact the two lowest
+        steps fall <em>below</em> 3:1 — which is precisely why the table view is an
+        obligation rather than an option. Monotonicity and contrast are different
+        properties.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">To keep the stylesheet smaller than five separate
+        rules would be</button>
+        <p class="quiz-feedback">It is five rules either way — the excerpt shows them. The
+        saving is not in rule count but in the number of values a human has to get right and
+        keep right.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">So the ramp can be recomputed at runtime when the
+        user switches theme</button>
+        <p class="quiz-feedback">True as a mechanism and not the reason. Five hard-coded sets
+        under <code>[data-theme]</code> selectors would also switch correctly; they would
+        just be 25 values, each an independent chance to break the ordering.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">A formula over one token is monotonic by
+        construction, in all five themes</button>
+        <p class="quiz-feedback">Correct — and it cannot violate the repo's no-hardcoded-colour
+        rule either. Twenty-five hand-picked values are twenty-five chances for a step to sit
+        out of order, and nobody can validate them all.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- s3                                                            -->
+<!-- ============================================================ -->
+<section id="s3">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>3 · A tooltip that works on a phone</h2>
+    <p class="divider-flow">Section 2 drew 168 cells whose colour carries one number. The
+    evidence behind each — how many weeks, how stale, how far from the trust floor — has
+    nowhere to live in a coloured square.</p>
+    <p class="divider-flow">Section 3 is the floating panel that carries it, and the reasons
+    the obvious implementation is unusable on the device this dashboard is mostly read
+    from.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Why not <code>title</code></h2>
+    <p>The obvious way to attach per-cell detail is the <code>title</code> attribute: one
+    string, zero code, native everywhere. It shipped that way, and it was wrong for a reason
+    no amount of styling could fix — <strong><code>title</code> never fires on touch</strong>.
+    It is drawn by browser chrome, needs a hover dwell, and a phone has no hover. The panel's
+    per-cell evidence was therefore unreachable on the device the dashboard is mostly read
+    from.</p>
+    <p>The replacement is one real element — a single <code>.up-tip</code> div, reused by
+    every mark rather than one per cell — positioned <code>fixed</code> and faded in on
+    demand. It answers three input modes: hover, <em>press</em> (because
+    <code>pointerenter</code> fires on touch-down, so press-and-hold inspects a cell), and
+    keyboard focus, since every cell is <code>tabIndex={0}</code>.</p>
+    <p>The trade-off is real and worth naming: a custom tooltip is code you now own —
+    positioning, dismissal, scroll behaviour, and the accessibility affordances the native
+    one gave free. Each of those is a bug you can write. The <code>aria-label</code> on every
+    cell exists partly to cover that: a screen reader reads the same text without going
+    through this panel at all.</p>
+<pre>// UsageProfile.tsx:42-48
+ * - **A real tooltip element, not the `title` attribute.** `title` is drawn by
+ *   browser chrome, needs a dwell, and — the reason that settles it — never
+ *   fires on touch. This dashboard is read from a phone, so `title` put the
+ *   per-cell evidence out of reach on the device that matters most. The floating
+ *   element here answers hover, press (pointerenter fires on touch-down, so
+ *   press-and-hold inspects a cell), and keyboard focus, and it is written with
+ *   `textContent` + `white-space: pre-line` rather than any innerHTML.</pre>
+  </div>
+
+  <div class="card card-concept">
+    <h2><code>textContent</code>, and one shared bundle of handlers</h2>
+    <p>The tooltip text is multi-line — <code>cellTitle</code> and
+    <code>stepTitle</code> both join their lines with <code>\n</code>. Rendering that as
+    markup would mean <code>innerHTML</code> with <code>&lt;br&gt;</code>, and this codebase
+    does not use <code>innerHTML</code> anywhere. So the text goes in via
+    <code>textContent</code> and the newlines are honoured by CSS:
+    <code>white-space: pre-line</code> on <code>.up-tip</code>. Data stays data.</p>
+    <p>Note also how the panel is updated: <code>tipRef.current</code> is written
+    <em>directly</em>, never through <code>useState</code>. A <code>pointermove</code> that
+    re-rendered 168 cells to move one box would be absurd, and at one event per frame it
+    would be visibly slow. This is the sanctioned exception to "state drives the DOM" — a
+    purely presentational overlay with no bearing on the tree below it.</p>
+    <p>The handlers come from <code>tipHandlers(text)</code>, a factory returning one bundle
+    that is spread onto every mark. It is typed against <code>Element</code> rather than
+    <code>HTMLElement</code> for a concrete reason: the same bundle goes onto the heatmap's
+    <code>&lt;div&gt;</code> cells <em>and</em> the strip's SVG <code>&lt;rect&gt;</code> hit
+    columns, so both halves of the card behave identically.</p>
+<pre>// UsageProfile.tsx:395-409 (compacted here)
+  const tipHandlers = useCallback((text: string) =&gt; ({
+    onPointerEnter: (e: React.PointerEvent) =&gt; {
+      anchorRef.current = null;          // pointer-shown: a scroll should hide it
+      showTip(text, e.clientX, e.clientY);
+    },
+    onPointerMove: (e: React.PointerEvent) =&gt; placeTip(e.clientX, e.clientY),
+    …
+    // Keyboard: anchor to the mark itself, since there is no pointer.
+    onFocus: (e: React.FocusEvent&lt;Element&gt;) =&gt; {
+      anchorRef.current = e.currentTarget;
+      const r = e.currentTarget.getBoundingClientRect();
+      showTip(text, r.right, r.top);
+    },</pre>
+    <details>
+      <summary>More detail — what <code>anchorRef</code> is for</summary>
+      <p>It records whether the tooltip was opened by the keyboard, and which mark it belongs
+      to. A scroll normally hides the tooltip, because it is positioned in viewport
+      coordinates and would otherwise hold still while the mark slides out from under it —
+      and the listener is registered with <code>capture</code> because the scroller is an
+      ancestor, not the window. But tabbing to an off-screen cell makes the browser scroll it
+      into view, and hiding on that scroll would blank the tooltip the focus had just opened.
+      So a keyboard-shown tooltip <em>follows</em> its anchor instead of hiding.</p>
+    </details>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Two positioning bugs worth knowing</h2>
+    <p><code>placeTip</code> is 34 lines for what sounds like "put the box next to the
+    pointer", and both of the surprises in it are the kind that only appear in one
+    configuration.</p>
+    <p>The first: the panel is <code>position: fixed</code> with no <code>right</code>, so
+    the viewport edge caps its available width. Measured while it happens to be sitting near
+    the right edge, <code>offsetWidth</code> reports a <em>narrower</em> box than it will
+    occupy once moved — and the clamp then lets it hang off screen by the difference. The fix
+    is the two lines that reset <code>left</code> and <code>top</code> to <code>0</code>
+    before measuring: always measure from the origin, never from wherever it was last left.</p>
+    <p>The second is a coordinate-space mismatch. <code>.shell</code> applies
+    <code>zoom: var(--font-scale)</code>, so this fixed panel's <code>left</code>/<code>top</code>
+    are multiplied by the text scale, while <code>clientX/Y</code> stay in visual viewport
+    pixels. At 100% the two spaces coincide and the bug is invisible; at 125% the panel lands
+    25% further down-right than the pointer, an error that grows with position on the page. So
+    the visual coordinates — and the viewport width the clamp compares against — are divided
+    back by that scale.</p>
+<pre>// UsageProfile.tsx:332-344 (compacted here)
+    // `.shell{zoom:var(--font-scale)}` puts this fixed-positioned panel in a
+    // *zoomed* coordinate space: its left/top are multiplied by the text scale,
+    // while clientX/Y (and getBoundingClientRect) stay in visual viewport px.
+    …
+    const z = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--font-scale')
+    ) || 1;
+    const vx = x / z, vy = y / z;
+    tip.style.left =
+      Math.max(8, Math.min(vx + 14, window.innerWidth / z - w - 8)) + 'px';</pre>
+    <p>And one deliberate non-fix. Vertically the panel sits at a constant offset beside the
+    pointer, with <em>no</em> clamp. It used to sit above the mark and clamp to the viewport,
+    but a clamp has an engage point, and crossing it reads as the panel drifting around the
+    pointer mid-sweep: walking down the grid, the tip held still near the top edge and then
+    started moving. A constant offset keeps the pointer-to-panel distance identical on every
+    cell. The accepted price is that the last ~60px above the bottom edge can shave the
+    panel's final lines.</p>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">The tooltip is positioned correctly at the default text scale but
+    lands progressively further down and to the right at a 125% scale. What is the cause?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The pointer event's <code>clientX/Y</code> are scaled
+        by <code>--font-scale</code> and need dividing</button>
+        <p class="quiz-feedback">Exactly inverted, and worth being precise about:
+        <code>clientX/Y</code> are the values that stay in visual viewport pixels. They are
+        divided by <code>z</code> not because they are scaled, but so they land in the
+        panel's zoomed space, which is.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The cells grow with the text scale, so
+        <code>getBoundingClientRect</code> returns stale geometry</button>
+        <p class="quiz-feedback">Rects are measured fresh on each focus and reflect the
+        rendered size, scaled or not. There is nothing stale — and the error appears under
+        pointer input too, where no rect is read at all.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">The shell's <code>zoom</code> scales the panel's
+        offsets, not the pointer</button>
+        <p class="quiz-feedback">Correct. Two coordinate spaces coincide at 100%, which is
+        why this is invisible until someone raises the text scale, and why the error grows
+        with position on the page.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Measuring <code>offsetWidth</code> near the right
+        edge under-reports the width, shifting it</button>
+        <p class="quiz-feedback">That is the other bug in this function, and it produces a
+        different symptom: the panel hangs off the <em>right</em> edge, only near that edge.
+        It does not grow with vertical position and is unrelated to the text scale.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Why does the tooltip use <code>textContent</code> plus
+    <code>white-space: pre-line</code> rather than <code>innerHTML</code> with
+    <code>&lt;br&gt;</code>?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn"><code>innerHTML</code> would force a full re-render
+        of the 168 cells on each pointer move</button>
+        <p class="quiz-feedback">Neither property re-renders anything — both write into a ref
+        that React does not manage. What avoids the 168-cell re-render is going through the
+        ref at all instead of through <code>useState</code>, whichever property is used.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">It keeps tooltip text as data, never as markup the
+        page parses</button>
+        <p class="quiz-feedback">Correct, and it matches how the rest of the dashboard is
+        built — the markdown renderer avoids <code>dangerouslySetInnerHTML</code> for the
+        same reason. The newlines are then a styling concern, which is where they belong.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn"><code>white-space: pre-line</code> is required for
+        the panel's <code>max-width</code> to wrap long lines</button>
+        <p class="quiz-feedback">Wrapping at <code>max-width</code> works under the default
+        <code>normal</code> too. What <code>pre-line</code> adds is honouring the explicit
+        <code>\n</code> characters, which <code>normal</code> would collapse into
+        spaces.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Because <code>&lt;br&gt;</code> elements are not
+        announced by screen readers reading the tooltip</button>
+        <p class="quiz-feedback">Screen readers reach this content through each mark's
+        <code>aria-label</code>, not through the tooltip element — and that label flattens
+        the newlines to dashes itself. How the visible panel breaks its lines is not what
+        assistive tech reads.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>
+        Why one shared tooltip element instead of one per cell?
+      </summary>
+      <p>Because 168 hidden panels is 168 elements, each with its own layout and paint cost,
+      to show at most one at a time — and the strip's hit columns would add ~118 more. One
+      element written by <code>textContent</code> is also what makes the handler bundle
+      reusable across two very different marks. The cost is that the tooltip has no DOM
+      relationship to its mark, which is exactly why <code>anchorRef</code> has to record
+      that relationship by hand for the keyboard case.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Does the tooltip say anything the grid's colour does not?</summary>
+      <p>Yes, and that is its point. A cell's colour carries the weight alone. The tooltip
+      adds the evidence behind it: how many weeks of observation, or how far short of the
+      60-minute trust floor, plus a staleness note when the hour was last seen more than
+      eight weeks ago. It also states evidence in <em>weeks</em> rather than minutes — "300
+      min observed" on a one-hour cell reads as a contradiction.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Why does a <em>pointer</em>-shown tooltip hide on scroll while a focused one follows?</summary>
+      <p>Because the pointer does not move with the page. Scrolling slides the cell out from
+      under a panel positioned in viewport coordinates, so the pairing is already broken and
+      hiding is honest. Keyboard focus <em>does</em> move with the page — and browsers scroll
+      a newly focused off-screen cell into view, so hiding there would blank the tooltip that
+      the focus had just opened.</p>
+    </details>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- s4                                                            -->
+<!-- ============================================================ -->
+<section id="s4">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>4 · The strip's geometry</h2>
+    <p class="divider-flow">Sections 2 and 3 covered the heatmap: what the model believes,
+    hour by hour, and how to interrogate one cell.</p>
+    <p class="divider-flow">Section 4 is the panel below it — the specific forward walk that
+    produced the current projection, drawn as a climb to a 100% ceiling, with every piece of
+    arithmetic pushed out into a testable module.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Cumulative, and clamped at 130</h2>
+    <p>The strip plots one point per walked hour, x being the step index and y the
+    <em>cumulative</em> window percentage after that hour — not the per-hour gain. That is a
+    deliberate reversal of the obvious chart. The panel exists to answer "when does the
+    weekly window hit 100%", and a per-hour bar chart makes the reader integrate 117 bars to
+    find out; a climbing curve puts the answer at an intersection with the ceiling. The
+    per-hour view a bar chart is good at is already served better by the heatmap directly
+    above — the previous strip was competing with its own card.</p>
+    <p>The y domain is fixed at <code>Y_MAX</code> of 130%, not scaled to the walk's
+    endpoint. Auto-scaling is the reflex and it hurts twice: a walk ending at 294.7% would
+    squash the 100% rule into the bottom third of the box, and two different weeks would
+    render as visibly different charts even where they agree. Since every value over 100% is
+    equally "over", resolving them gains nothing.</p>
+    <p><code>yOf</code> is the whole scale, and it is written to hold three properties a fill
+    height and a <code>&lt;polyline&gt;</code> both depend on: non-increasing in
+    <code>cum</code>, never <code>NaN</code>, never outside <code>0…VIEW_H</code>. Hence the
+    <code>Number.isFinite</code> guard and the clamp before the arithmetic.</p>
+<pre>// walkChart.ts:97-101
+export function yOf(cum: number): number {
+  if (!Number.isFinite(cum)) return VIEW_H;
+  const clamped = Math.min(Math.max(cum, 0), Y_MAX);
+  return VIEW_H - (clamped / Y_MAX) * VIEW_H;
+}</pre>
+    <details>
+      <summary>More detail — why all the arithmetic left the component</summary>
+      <p><code>walkChart.ts</code> is 250 lines of pure geometry with no DOM, and the
+      component that draws the strip ends up with none of its own. That split is not
+      tidiness. The previous strip's defects were <em>all</em> geometry — per-element
+      device-pixel rounding, an encoding that contradicted the heatmap, a y value nobody
+      could check — and geometry that only exists inside JSX cannot be pinned by a test.
+      Moving it out is what makes each of those a unit test instead of a screenshot.</p>
+    </details>
+  </div>
+
+  <div class="card card-concept">
+    <h2>One coordinate space, because rounding is per element</h2>
+    <p>The strip is a single <code>&lt;svg&gt;</code> with a <code>viewBox</code>,
+    <code>preserveAspectRatio="none"</code>, and <code>vector-effect: non-scaling-stroke</code>
+    on every stroked element. That combination is chosen to remove a specific defect
+    <em>structurally</em> rather than by tuning.</p>
+    <p>The previous implementation was a flexbox strip of bars. Each bar got a fractional CSS
+    width, and the compositor rounded each bar's two edges to device pixels
+    <em>independently</em> — a ±1px swing between neighbours that no amount of CSS can fix,
+    because the rounding happens per element. Replacing 118 independently rounded boxes with
+    one coordinate space scaled uniformly means there is nothing left to round
+    inconsistently.</p>
+    <p>The cost is that <code>preserveAspectRatio="none"</code> stretches everything the SVG
+    paints, glyphs included. So no text lives inside it: every label — the <code>100%</code>
+    ceiling marker, <code>now</code>, the crossing time, the day names — is an HTML overlay
+    positioned by percentage, which is what <code>pctX</code> and <code>pctY</code> are for.
+    The same applies to hit targets: the per-hour hit areas are full-height
+    <code>&lt;rect&gt;</code> columns from <code>hitRect</code>, not a strip along the line,
+    because a 2px-tall target on a curve is a mouse-only affordance.</p>
+<pre>// walkChart.ts:30-38
+/**
+ * Top of the y domain, in window percent.
+ *
+ * Fixed rather than scaled to the walk's endpoint. A walk that ends at 294.7%
+ * would squash the 100% rule into the bottom third of the box and make two
+ * different weeks look like different charts; and every value above 100% is
+ * equally "over", so there is nothing gained by resolving them.
+ */
+export const Y_MAX = 130;</pre>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Splitting the line, and finding the crossing</h2>
+    <p>Measured hours are drawn solid and assumed ones dashed, and the curve's <em>height</em>
+    is identical either way — the forecast genuinely counts an unlearned hour at
+    <code>globalMean</code>, and lesson 2 showed why that pessimism is deliberate. Only the
+    ink says which hours are a measurement. With no learned buckets at all the whole line is
+    dashed, which is the honest picture.</p>
+    <p>A single <code>&lt;polyline&gt;</code> cannot be half dashed, which is the entire
+    reason <code>splitRuns</code> exists: it cuts the walk into consecutive runs of equal
+    <code>learned</code>. The subtlety is the boundary — each run includes the <em>first
+    point of the next run</em>, so the solid and dashed segments meet instead of leaving a
+    one-hour hole at every transition. That is what <code>Math.min(i, walk.length - 1)</code>
+    is doing.</p>
+    <p><code>crossingX</code> then locates where the curve reaches 100%, interpolating inside
+    the crossing hour from <code>cum</code> and <code>gain</code> — never from a parsed
+    timestamp — using the same arithmetic the server used for <code>exhaustAt</code>, so the
+    drawn rule cannot drift away from the label printed beside it. Two guards earn their
+    keep: a first point already at the ceiling has no segment to its left to interpolate
+    along, and a zero-gain hour cannot be the hour that crossed — which is also what stops
+    the division by zero.</p>
+<pre>// walkChart.ts:115-130
+export function splitRuns(walk: ForecastStep[]): WalkRun[] {
+  if (walk.length === 0) return [];
+  const pts = walkPoints(walk);
+  const runs: WalkRun[] = [];
+  let start = 0;
+  for (let i = 1; i &lt;= walk.length; i++) {
+    if (i === walk.length || walk[i].learned !== walk[start].learned) {
+      // `i` is one past the run; including its point (when there is one) is the
+      // shared boundary that closes the gap.
+      const end = Math.min(i, walk.length - 1);
+      runs.push({ learned: walk[start].learned, points: pts.slice(start, end + 1) });
+      start = i;
+    }
+  }
+  return runs;
+}</pre>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">In <code>splitRuns</code>, why does each run include the first
+    point of the run that follows it?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">So the last run reaches the right edge of the chart
+        rather than stopping an hour short</button>
+        <p class="quiz-feedback">The final run already ends on the last point: the loop's
+        <code>i === walk.length</code> arm fires there, and <code>Math.min</code> caps
+        <code>end</code> at the last index. The right edge is covered without any
+        overlap.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">To let the dashed run's stroke pattern stay in phase
+        across a transition</button>
+        <p class="quiz-feedback">Dash phase is not preserved across separate
+        <code>&lt;polyline&gt;</code> elements and nothing here tries to — each run's dashes
+        restart. The shared point solves a geometry problem, not a stroke-pattern one.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Otherwise the solid and dashed halves leave a
+        one-hour gap where the encoding changes</button>
+        <p class="quiz-feedback">Correct. Runs are drawn as separate polylines because one
+        cannot be half dashed, and without a shared boundary point each transition would show
+        a visible hole in the curve.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Because <code>crossingX</code> needs one point beyond
+        the crossing to interpolate against</button>
+        <p class="quiz-feedback"><code>crossingX</code> reads the raw <code>walk</code> array
+        directly and never sees a run — it interpolates from that hour's own
+        <code>cum</code> and <code>gain</code>. The two functions share no data at all.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt"><code>dayTicks</code> emits a tick when the local <em>date</em>
+    changes, rather than when a step's local hour reads <code>00:00</code>. What does that
+    buy?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Fewer ticks on a long walk, since a date can repeat
+        across a week</button>
+        <p class="quiz-feedback">A calendar date does not repeat inside a seven-day walk, and
+        the tick count is the same either way in the normal case — one per day. The
+        difference only shows up on the abnormal day.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Exactly one tick per day even when a DST day runs 23
+        or 25 hours</button>
+        <p class="quiz-feedback">Correct. Slices are cut with a single UTC offset held for
+        the whole window, so after a transition a slice's local hour drifts by one and a
+        midnight can be missed or seen twice.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Correct day labels, since
+        <code>getDay()</code> is unreliable at exactly midnight</button>
+        <p class="quiz-feedback"><code>getDay()</code> is perfectly reliable at midnight —
+        it is read on the same <code>Date</code> either way, and the labels come from it in
+        both designs. The problem is whether the tick fires at all, not what it is called.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">A tick at <code>x = 0</code> for <code>now</code>,
+        which an hour check would miss</button>
+        <p class="quiz-feedback">The <code>now</code> tick is pushed unconditionally before
+        the loop starts, so it is present under either rule. It is also the reason the loop
+        begins at <code>i = 1</code>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>
+        Why does the strip's tooltip distinguish "assumed" from "measured" when the weights
+        can be identical?
+      </summary>
+      <p>Because that is the only place the distinction can be stated. A fallback weight of
+      1.0 and a measured weight of 1.0 are the same number and completely different claims,
+      and the curve's height is identical for both by design. <code>stepTitle</code>
+      therefore says <code>assumed (no evidence)</code> or <code>measured, N weeks</code> on
+      its last line — the strip's dashing shows it graphically, and the tooltip states it in
+      words for anyone who cannot resolve dash from solid.</p>
+    </details>
+    <details class="qa-item">
+      <summary>What happens when there is no walk to draw?</summary>
+      <p>The section stays mounted and says why, in one sentence from
+      <code>absentText</code>. Its three cases map to the response's
+      <code>walkAbsent</code> reason: recording off (no profile to project through), no
+      current burn rate (nothing to project from), or no weekly window read yet. Unmounting
+      instead was rejected deliberately — idle is a normal state, and a panel that vanishes
+      reads as a broken feature rather than as nothing to show.</p>
+    </details>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- s5                                                            -->
+<!-- ============================================================ -->
+<section id="s5">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>5 · Not a blank grid</h2>
+    <p class="divider-flow">Everything so far assumed there is a profile to draw. On a fresh
+    install there is not — and will not be for a week.</p>
+    <p class="divider-flow">Section 5 is the last piece: the status line that tells an early
+    user which of two gates they are waiting on, so the first week does not read as a broken
+    feature.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>168 identical hatched cells is the correct first week</h2>
+    <p>Here is the problem the 76 lines of pure helper exist for. A weight is a weekly
+    EWMA fold, so there is genuinely nothing to average until a week completes. For the whole
+    first week, every one of the 168 cells is untrusted, so the grid is <em>entirely</em>
+    texture — correct by the model, and indistinguishable from a feature that does not
+    work.</p>
+    <p><code>profileProgress</code> counts what there is to count: buckets with any evidence
+    at all, total observed minutes, buckets past the trust floor, and buckets actually
+    carrying a weight. Four numbers rather than one, because two independent gates stand
+    between a recorded minute and a coloured cell — 60 lifetime observed minutes for that
+    bucket, <em>and</em> at least one fold. An hour can be past the floor and still have no
+    weight for up to a week, so a single "progress" number could not say which one you are
+    waiting on.</p>
+    <p>Note that <code>TRUST_FLOOR_MIN</code> is redeclared here, client-side, rather than
+    sent over the wire. It is a constant of the model, not a runtime value — but the
+    duplication is real, and the docstring says outright that the two must move together.</p>
+<pre>// usageProfile.ts:45-54
+export function profileProgress(cells: UsageProfileCell[]): ProfileProgress {
+  let touched = 0, totalMin = 0, atFloor = 0, trusted = 0;
+  for (const c of cells) {
+    if (c.observedMin &gt; 0) touched++;
+    totalMin += c.observedMin;
+    if (c.observedMin &gt;= TRUST_FLOOR_MIN) atFloor++;
+    if (c.weight != null) trusted++;
+  }
+  return { touched, totalMin, atFloor, trusted };
+}</pre>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Naming the gate, and naming the date</h2>
+    <p><code>RecordingStatus</code> turns those four counts into one of three messages, and
+    the branch order is the useful part. If any bucket carries a weight, say how many — the
+    panel is working, nothing to explain. Otherwise, if some buckets have cleared the floor,
+    the thing being waited on is the <em>fold</em>, so name the date it will happen. Otherwise
+    nothing has cleared the floor yet, so name the floor itself <em>and</em> the date.</p>
+    <p>Naming a date is what makes this a status line rather than a spinner. "Weights appear
+    when the week rolls over on Mon 1 Sep" is checkable; "collecting data…" is not.
+    <code>nextWeekStartMs</code> computes it: local midnight starting the next ISO week. Note
+    the two details in seven lines — <code>getDay() || 7</code> converts JavaScript's
+    Sunday-is-0 to ISO's Sunday-is-7, and on a Monday the function deliberately returns the
+    <em>following</em> Monday, because the current week is the one still accumulating.</p>
+    <p>One early-return sits above all of it: with recording off and nothing observed, the
+    component renders nothing, because the separate <code>.up-off</code> block already
+    explains the situation and offers the setting to change it. Two overlapping explanations
+    of the same emptiness would be worse than one.</p>
+<pre>// usageProfile.ts:63-69
+export function nextWeekStartMs(nowMs: number): number {
+  const d = new Date(nowMs);
+  d.setHours(0, 0, 0, 0);
+  const isoDay = d.getDay() || 7;   // getDay(): Sunday is 0; ISO wants 7
+  d.setDate(d.getDate() + (8 - isoDay));
+  return d.getTime();
+}</pre>
+    <details>
+      <summary>More detail — the third branch's wording</summary>
+      <p>The "no weights yet" branch names both gates in one sentence, because at that point
+      the user is waiting on both and will hit them in order. Its text reads: an hour needs
+      <code>TRUST_FLOOR_MIN</code> minutes of evidence, and the first fold happens when the
+      week rolls over on that date. The interpolated constant is the same 60 the server
+      enforces, which is the practical reason the duplication matters — the sentence would
+      otherwise be able to state a threshold the server does not use.</p>
+    </details>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Recording has been on for three days. Several hour-of-week buckets
+    have well over 60 observed minutes, but no cell is coloured. What does the status line
+    say, and is anything wrong?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">That N hours are trusted — the cells are coloured and
+        the grid just needs a reload</button>
+        <p class="quiz-feedback">The <code>trusted</code> count counts buckets whose
+        <code>weight</code> is non-null, and no fold has happened yet, so it is zero. The
+        grid and the count agree with each other; there is nothing stale to reload.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">That recording is off, since <code>atFloor</code>
+        cannot be reached in three days</button>
+        <p class="quiz-feedback">It is reachable — a bucket accrues at most 60 minutes a
+        week, and an hour observed edge to edge clears the floor in a single week. And the
+        recording-off message comes from the <code>.up-off</code> block, which reads the
+        setting, not any count.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Nothing — the component early-returns until at least
+        one bucket carries a weight</button>
+        <p class="quiz-feedback">The early return is much narrower than that: it fires only
+        when recording is off <em>and</em> <code>touched</code> is zero. With evidence
+        recorded, this is precisely the case the status line was written for.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">That those hours have enough evidence and weights
+        appear at the week roll-over — nothing is wrong</button>
+        <p class="quiz-feedback">Correct: this is the middle branch. The trust floor is
+        cleared, the fold is not, and a fold only happens when a sample lands in a bucket in
+        a new ISO week. The line names that Monday so the wait is legible.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>
+        Why does <code>profileProgress</code> compare against <code>observedMin</code> when
+        lesson 2's server-side gate used <code>lifetimeObservedMin</code>?
+      </summary>
+      <p>Because they are not the same field. The endpoint shapes each bucket into a
+      <code>UsageProfileCell</code>, and that cell's <code>observedMin</code> is the evidence
+      total the panel is meant to show — which is why <code>cellTitle</code> can print "N of
+      60 min needed" from it. The server's own trust gate still runs on its internal
+      lifetime counter; the client is reading a shaped response, not the raw bucket.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Why is <code>Date.now()</code> called inside the component rather than passed in?</summary>
+      <p>Because the value it feeds — the next ISO week's start — is a display string, not
+      part of any computation the rest of the panel depends on, and it is re-derived on each
+      render anyway. The arithmetic that would be awkward to test with an ambient clock lives
+      in <code>nextWeekStartMs</code>, which takes <code>nowMs</code> as a parameter and is
+      unit-tested with fixed inputs. The component keeps only the call.</p>
+    </details>
+  </div>
+
+</section>
+
+<!-- ============ recap ============ -->
+<div class="card card-recap">
+  <p class="eyebrow">Recap</p>
+  <h1>The inspector — lesson 3 of 3</h1>
+  <p class="recap-score"><span id="score-correct">0</span> / <span id="score-total">0</span></p>
+  <p id="weak-note">No questions answered yet.</p>
+
+  <p>Jump back into any section:</p>
+  <button class="section-jump" data-target="s1">1 · Why an inspector exists</button>
+  <button class="section-jump" data-target="s2">2 · A calendar, not a bar chart</button>
+  <button class="section-jump" data-target="s3">3 · A tooltip that works on a phone</button>
+  <button class="section-jump" data-target="s4">4 · The strip's geometry</button>
+  <button class="section-jump" data-target="s5">5 · Not a blank grid</button>
+
+  <div class="series-next">
+    <p><strong>The series</strong> — this is the last lesson. The numbers are a suggested
+    reading order, not a gate.</p>
+    <ul>
+      <li><a href="usage-1-pace.html"><code>usage-1-pace</code></a> — the odometer and the
+      speedometer: the two windows, sampling and slope, surviving a window roll, and the
+      forward walk this panel draws.</li>
+      <li><a href="usage-2-learning-the-profile.html"><code>usage-2-learning-the-profile</code></a>
+      — where the 168 weights come from: interval classification, hour-of-week bucket
+      folding, the trust floor, and the opt-in.</li>
+      <li><strong>usage-3-inspector</strong> — you are here.</li>
+    </ul>
+  </div>
+
+  <p class="series-next">No written prose guide covers this subsystem yet — only the
+  reference doc at <code>docs/subsystems/usage-limits.md</code>, whose §The inspector is the
+  specification behind this lesson rather than a walkthrough. A narrative guide would be a
+  reasonable follow-up if one would help.</p>
+
+  <p class="stamp">built at fbdc350</p>
+</div>
+
+</main>
+
+<nav>
+  <button id="nav-back" disabled>Back</button>
+  <button id="nav-next">Next</button>
+</nav>
+
+<script type="application/json" id="provenance">
+{
+  "commit": "fbdc350f8e6d47c5ddf9db0015ad4659767097fd",
+  "generated": "2026-08-27",
+  "sources": [
+    "client/src/components/usage/UsageProfile.tsx",
+    "client/src/components/usage/UsageView.tsx",
+    "client/src/hooks/useUsageProfile.ts",
+    "client/src/lib/usageProfile.ts",
+    "client/src/lib/walkChart.ts",
+    "client/src/styles.css",
+    "server/index.ts",
+    "docs/subsystems/usage-limits.md"
+  ],
+  "sections": [
+    { "id": "s1", "title": "Why an inspector exists", "sources": ["client/src/components/usage/UsageProfile.tsx", "client/src/components/usage/UsageView.tsx", "client/src/hooks/useUsageProfile.ts", "server/index.ts"] },
+    { "id": "s2", "title": "A calendar, not a bar chart", "sources": ["client/src/components/usage/UsageProfile.tsx", "client/src/styles.css"] },
+    { "id": "s3", "title": "A tooltip that works on a phone", "sources": ["client/src/components/usage/UsageProfile.tsx", "client/src/styles.css", "client/src/lib/walkChart.ts"] },
+    { "id": "s4", "title": "The strip's geometry", "sources": ["client/src/lib/walkChart.ts", "client/src/components/usage/UsageProfile.tsx", "docs/subsystems/usage-limits.md"] },
+    { "id": "s5", "title": "Not a blank grid", "sources": ["client/src/lib/usageProfile.ts", "client/src/components/usage/UsageProfile.tsx"] }
+  ]
+}
+</script>
+
+<script>
+(function () {
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+  var idx = 0;
+  var score = { correct: 0, total: 0 };
+  var back = document.getElementById('nav-back');
+  var next = document.getElementById('nav-next');
+  var fill = document.getElementById('progress-fill');
+
+  function isBlockedQuiz(card) {
+    return card.classList.contains('card-quiz') && card.dataset.answered !== 'true';
+  }
+
+  function show(i) {
+    if (i < 0 || i >= cards.length) return;
+    cards[idx].classList.remove('active');
+    idx = i;
+    cards[idx].classList.add('active');
+    window.scrollTo(0, 0);
+    refresh();
+  }
+
+  function refresh() {
+    back.disabled = idx === 0;
+    next.disabled = idx === cards.length - 1 || isBlockedQuiz(cards[idx]);
+    fill.style.width = (cards.length > 1 ? (idx / (cards.length - 1)) * 100 : 100) + '%';
+    if (cards[idx].classList.contains('card-recap')) renderScore();
+  }
+
+  function renderScore() {
+    document.getElementById('score-correct').textContent = String(score.correct);
+    document.getElementById('score-total').textContent = String(score.total);
+    var note = document.getElementById('weak-note');
+    if (score.total === 0) { note.textContent = 'No questions answered yet.'; return; }
+    note.textContent = score.correct === score.total
+      ? 'Every check answered correctly.'
+      : 'Worth a second pass: the sections whose checks you missed are linked below.';
+  }
+
+  cards.forEach(function (card) {
+    var opts = Array.prototype.slice.call(card.querySelectorAll('.quiz-option'));
+    opts.forEach(function (opt) {
+      var btn = opt.querySelector('.quiz-option-btn');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        if (card.dataset.answered === 'true') return;
+        card.dataset.answered = 'true';
+        opt.classList.add('revealed');
+        opts.forEach(function (o) {
+          var b = o.querySelector('.quiz-option-btn');
+          if (b) b.disabled = true;
+        });
+        score.total += 1;
+        if (opt.getAttribute('data-correct') === 'true') score.correct += 1;
+        refresh();
+      });
+    });
+  });
+
+  Array.prototype.slice.call(document.querySelectorAll('.section-jump')).forEach(function (b) {
+    b.addEventListener('click', function () {
+      var wrapper = document.getElementById(b.getAttribute('data-target'));
+      if (!wrapper) return;
+      for (var i = 0; i < cards.length; i++) {
+        if (wrapper.contains(cards[i])) { show(i); return; }
+      }
+    });
+  });
+
+  back.addEventListener('click', function () { if (!back.disabled) show(idx - 1); });
+  next.addEventListener('click', function () { if (!next.disabled) show(idx + 1); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' && !next.disabled) show(idx + 1);
+    if (e.key === 'ArrowLeft' && !back.disabled) show(idx - 1);
+  });
+
+  refresh();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<!-- tutor-deck -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning the profile — tutor lesson 2 of 3</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1c20;
+    --muted: #5b6270;
+    --card: #f6f7f9;
+    --line: #d9dde3;
+    --accent: #2f6feb;
+    --correct: #1f8a4c;
+    --wrong: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #eceef1;
+      --muted: #a3a8b0;
+      --card: #2a2e35;
+      --line: #3a404a;
+      --accent: #6ea3ff;
+      --correct: #57d68d;
+      --wrong: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    font-size: 17px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  #progress-track { height: 4px; background: var(--line); flex: 0 0 auto; }
+  #progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .18s ease; }
+  main { flex: 1 1 auto; padding: 18px 16px 24px; max-width: 44rem; width: 100%; margin: 0 auto; }
+  .card { display: none; }
+  .card.active { display: block; }
+  h1 { font-size: 1.35rem; line-height: 1.3; margin: .2rem 0 .8rem; }
+  h2 { font-size: 1.12rem; line-height: 1.3; margin: .2rem 0 .7rem; }
+  p { margin: 0 0 .85rem; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
+  pre {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .82rem;
+    line-height: 1.45;
+    margin: 0 0 .9rem;
+  }
+  .eyebrow { color: var(--muted); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 .35rem; }
+  details { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 .9rem; background: var(--card); }
+  summary { cursor: pointer; font-weight: 600; font-size: .92rem; }
+  details p { margin: .7rem 0 0; font-size: .95rem; }
+  .quiz-prompt { font-weight: 600; }
+  .quiz-options { display: flex; flex-direction: column; gap: 10px; }
+  .quiz-option-btn {
+    display: block; width: 100%; text-align: left;
+    font: inherit; font-size: .98rem;
+    color: var(--fg); background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 13px 14px; cursor: pointer; min-height: 46px;
+  }
+  .quiz-option-btn:disabled { cursor: default; }
+  .quiz-feedback {
+    display: none;
+    color: var(--muted); font-size: .93rem;
+    margin: 8px 2px 2px; padding-left: 10px;
+    border-left: 2px solid var(--line);
+  }
+  .quiz-option.revealed .quiz-feedback { display: block; }
+  .quiz-option.revealed[data-correct="true"] .quiz-option-btn { border-color: var(--correct); border-width: 2px; }
+  .quiz-option.revealed[data-correct="false"] .quiz-option-btn { border-color: var(--wrong); border-width: 2px; }
+  .divider-flow { color: var(--muted); font-size: .95rem; margin-bottom: 1rem; }
+  .xlink { font-size: .92rem; }
+  a { color: var(--accent); }
+  .recap-score { font-size: 1.5rem; font-weight: 700; margin: .2rem 0 1rem; }
+  .section-jump {
+    display: block; width: 100%; text-align: left;
+    font: inherit; font-size: .95rem; color: var(--fg);
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px; padding: 11px 12px; margin-bottom: 8px; cursor: pointer;
+  }
+  .series-next { font-size: .93rem; color: var(--muted); margin: 1.1rem 0 0; }
+  .series-next ul { margin: .4rem 0 0; padding-left: 1.2rem; }
+  .series-next li { margin: .2rem 0; }
+  .stamp { color: var(--muted); font-size: .8rem; margin-top: 1.2rem; }
+  nav {
+    flex: 0 0 auto; display: flex; gap: 12px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line); background: var(--bg);
+  }
+  nav button {
+    flex: 1; font: inherit; font-size: 1rem; padding: 13px 10px;
+    border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--fg); cursor: pointer; min-height: 48px;
+  }
+  nav button:disabled { opacity: .4; cursor: default; }
+  svg { max-width: 100%; height: auto; display: block; margin: 0 0 .9rem; }
+  .fig-cap { color: var(--muted); font-size: .86rem; margin: -.4rem 0 .9rem; }
+  @media (min-width: 780px) { body { font-size: 18px; } main { padding: 28px 24px 34px; } }
+</style>
+</head>
+<body>
+
+<div id="progress-track"><div id="progress-fill"></div></div>
+
+<main>
+
+<!-- ============ opener ============ -->
+<div class="card card-mental active">
+  <p class="eyebrow">Mental model</p>
+  <h1>A sleeping laptop is the best teacher</h1>
+  <p>Lesson 1 ended with the weekly forecast walking forward across 168 hour-of-week
+  weights, and treated those weights as given. This lesson is where they come from.</p>
+  <p>The useful mental model is not a logger. It is a <strong>witness taking pairwise
+  depositions</strong>. The recorder never observes "activity" — it cannot. All it ever
+  gets is the same odometer reading lesson 1 described: a utilization percentage and a
+  reset stamp, once a minute. So it works on <em>pairs</em>: take this sample and the one
+  before it, and ask what the span between them <em>proves</em>.</p>
+  <p>The surprise is which pairs carry the most information. Two readings seven hours
+  apart, both saying <code>61.0%</code>, both naming the same reset — a laptop asleep
+  overnight — are not a hole in the data. Utilization is cumulative inside a window, so
+  identical readings <em>prove</em> nothing was spent between them. That is a measurement
+  of seven idle hours, and night is exactly what the profile most needs to learn
+  (<code>usage-history.ts:13-19</code>).</p>
+  <p>Everything else follows from that stream of verdicts: file each one under the hour of
+  the week it happened in, fold a week's worth into a standing weight once the week ends,
+  and let an hour that has gone quiet fade rather than freeze.</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- s1                                                            -->
+<!-- ============================================================ -->
+<section id="s1">
+
+  <div class="card card-concept">
+    <p class="eyebrow">Section 1 · What a pair of samples proves</p>
+    <h2>Four verdicts, from two readings</h2>
+    <p><code>classifyInterval</code> is the whole sensor. Given two consecutive samples it
+    returns one of four kinds — <code>active</code>, <code>idle</code>,
+    <code>ambiguous</code> or <code>reset</code> — and the rest of the module only ever
+    consumes that verdict, never the raw readings.</p>
+    <p>Read the body in order, because it is a priority ladder. A different reset stamp
+    means the two readings measure different windows, so the span is meaningless:
+    <code>reset</code>. A utilization that went <em>down</em> by more than
+    <code>MOVE_EPSILON</code> (0.5) means the window rolled between the samples even though
+    the stamp did not look like it: also <code>reset</code>. A rise means real spend, so
+    <code>active</code> — unless the pair is too far apart to say <em>when</em> in the span
+    it happened, which is <code>ambiguous</code>. Everything left over is flat, and flat is
+    <code>idle</code>.</p>
+    <p>The naive alternative is a boolean — "busy or not" — derived from whether
+    utilization moved. That collapses two genuinely different failures into one: "I know
+    this hour was quiet" and "I have no idea what happened in these six hours" would both
+    come back as <em>not busy</em>, and the second would then be learned as evidence of
+    idleness. Four kinds exist so the two discardable cases can be discarded separately
+    from the two that teach.</p>
+<pre>// usage-history.ts:158-164
+  if (!sameWindow(a.resetsAt, b.resetsAt)) return 'reset';
+  const delta = b.utilization - a.utilization;
+  if (delta &lt; -MOVE_EPSILON) return 'reset';
+  if (delta &gt; MOVE_EPSILON) {
+    return b.t - a.t &lt;= maxAttributableMs ? 'active' : 'ambiguous';
+  }
+  return 'idle'; // flat at any duration — the sleep measurement</pre>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Your laptop sleeps at 01:00 and wakes at 08:00. The last sample
+    before it slept and the first one after both read <code>61.0%</code> with the same
+    <code>resetsAt</code>. What does <code>classifyInterval</code> return for that
+    seven-hour pair?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn"><code>'ambiguous'</code> — seven hours is far past
+        the five-minute attributability limit</button>
+        <p class="quiz-feedback">The duration test is real, but it is only reached inside
+        the <code>delta &gt; MOVE_EPSILON</code> branch — it guards a <em>rise</em> that
+        cannot be pinned to a particular hour. This pair does not rise at all, so control
+        never enters that branch and the duration is never consulted.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn"><code>'reset'</code> — a seven-hour gap in sampling
+        cannot be trusted as one window</button>
+        <p class="quiz-feedback"><code>reset</code> is decided only by evidence that the
+        window itself changed: a <code>resetsAt</code> outside the two-minute slack, or a
+        utilization that fell. Here the stamp matches and the number held, so both of those
+        tests pass. Sampling gaps get no say.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn"><code>'idle'</code> — identical readings prove
+        nothing was spent in between</button>
+        <p class="quiz-feedback">Correct. Utilization is cumulative within a window, so two
+        equal readings under one reset stamp are positive evidence of no spend. The comment
+        on the final line calls it exactly that — the sleep measurement.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn"><code>'active'</code> — the machine was on for part
+        of that span</button>
+        <p class="quiz-feedback"><code>active</code> requires <code>delta</code> to exceed
+        <code>MOVE_EPSILON</code>. A flat reading gives <code>delta</code> of zero, which
+        falls through to the last line.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Same window? Not string equality</h2>
+    <p>The first line of the ladder asks whether two samples describe the same window, and
+    the obvious implementation — compare the two <code>resetsAt</code> strings — is wrong
+    in a way that would silently kill the feature.</p>
+    <p>The upstream endpoint recomputes that stamp per request, so four consecutive real
+    fetches of one <em>unchanged</em> 5-hour window came back with sub-second jitter,
+    around 0.85s across the set. String equality would therefore report a different window
+    on almost every tick: every interval would classify as <code>reset</code>, every
+    interval would be discarded, and the profile would never learn a single minute. The
+    same jitter would also make <code>shouldWrite</code> append a log line every tick.</p>
+    <p><code>sameWindow</code> parses both stamps and allows <code>SAME_WINDOW_MS</code>
+    (two minutes) of slack — chosen with room on both sides, three orders of magnitude
+    above the measured jitter and three orders below the smallest genuine window change
+    (+5h, or +7d). Note the two guards around the comparison: <code>null</code> against a
+    string is treated as a real change, since a scoped and an unscoped window are not the
+    same thing, and an unparseable stamp falls back to strict equality rather than
+    pretending to a numeric answer.</p>
+<pre>// usage-history.ts:84-91
+function sameWindow(a: string | null, b: string | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false; // scoped ⇄ unscoped is a real change
+  const ta = Date.parse(a);
+  const tb = Date.parse(b);
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return a === b;
+  return Math.abs(ta - tb) &lt;= SAME_WINDOW_MS;
+}</pre>
+    <details>
+      <summary>More detail — why the tolerance is a constant and not a heuristic</summary>
+      <p>Two minutes is not tuned to the jitter; it is chosen to sit in the empty space
+      between two known scales. Anything the endpoint's own recomputation can produce is
+      under a second. Anything a real window transition can produce is at least five hours.
+      A threshold anywhere in the middle behaves identically, which is what makes the
+      constant safe to hard-code rather than something that needs to adapt. The docstring
+      at <code>usage-history.ts:69-81</code> records the four observed stamps so the next
+      reader does not have to re-measure them.</p>
+    </details>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Ambiguity is duration, not direction</h2>
+    <p>The counter-intuitive half of the ladder is the <code>active</code> branch's
+    duration test. A rise is only usable if it can be attributed to a particular hour, and
+    <code>MAX_ATTRIBUTABLE_MS</code> (five minutes) is where that stops being possible. Two
+    samples a minute apart with utilization rising pin that spend to that minute — and this
+    is the <em>only</em> way <code>activeMin</code> ever grows. A rise across six hours
+    could have happened in any of them.</p>
+    <p>The tempting alternative is to spread a long rise across the hours it spans,
+    weighted by what the profile already believes about those hours. That is quietly
+    circular: the profile would be training on its own output, and an early wrong guess
+    would reinforce itself every time a long interval landed on it. Discarding is the
+    honest option — you lose the datum instead of manufacturing one.</p>
+    <p>Note which way round the asymmetry runs, because it was gotten backwards once. It is
+    <em>rises</em> that expire with duration, never flats. A flat interval is
+    <code>idle</code> at any length, because flatness across six hours says the same
+    unambiguous thing about all six. Invert this — make long flats ambiguous and long rises
+    idle — and every hour learns as idle, which is the shape of a profile that looks
+    plausible and is wrong everywhere.</p>
+<pre>// usage-history.ts:58-64
+/**
+ * Longest rising interval whose activity can still be pinned to it. Comfortably
+ * above the one-minute sampling cadence, well below any real gap. A rise across
+ * anything longer is discarded rather than spread — spreading it by existing
+ * weights would train the profile on its own output.
+ */
+export const MAX_ATTRIBUTABLE_MS = 300_000;</pre>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Two samples are 45 seconds apart. Utilization rose from 58.0 to
+    61.0. Their <code>resetsAt</code> stamps differ by 0.85 seconds. Which kind comes
+    back?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn"><code>'reset'</code>, because the two
+        <code>resetsAt</code> strings are not identical</button>
+        <p class="quiz-feedback">This is exactly the bug <code>sameWindow</code> exists to
+        prevent, and it is worth being able to predict its consequences: with string
+        equality this pair — and nearly every other pair — would classify as
+        <code>reset</code>, so nothing would ever be learned. 0.85s is well inside the
+        two-minute slack, so the window counts as unchanged.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn"><code>'active'</code>, and this pair is what grows
+        <code>activeMin</code></button>
+        <p class="quiz-feedback">Correct. Same window within the slack, a rise of 3.0 well
+        past <code>MOVE_EPSILON</code>, and 45 seconds is inside the five-minute
+        attributability limit — so the spend is pinned to that minute.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn"><code>'ambiguous'</code>, because the stamps moved
+        during a rise</button>
+        <p class="quiz-feedback"><code>ambiguous</code> has one and only one cause: a rise
+        spanning more than <code>MAX_ATTRIBUTABLE_MS</code>. The stamps play no part in it —
+        by the time that branch runs, <code>sameWindow</code> has already said yes.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn"><code>'idle'</code>, since 3.0 is a small
+        move</button>
+        <p class="quiz-feedback">The threshold for "a move" is <code>MOVE_EPSILON</code>,
+        which is 0.5. A rise of 3.0 is six times that, so the flat fall-through is never
+        reached.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>
+        Why is a utilization <em>drop</em> treated as a reset rather than as bad data?
+      </summary>
+      <p>Because within one window utilization only ever rises. A fall therefore means the
+      window rolled between the two samples, and the new window's stamp had not been
+      observed yet — the drop is the earlier, more reliable signal of the roll than the
+      stamp is. <code>MOVE_EPSILON</code> keeps rounding noise from tripping it. Lesson 1
+      met the same constant in <code>recordAndPace</code>, doing the same job for the pace
+      ring; the comment at <code>usage-history.ts:67</code> says so explicitly.</p>
+    </details>
+    <details class="qa-item">
+      <summary>
+        Does <code>classifyInterval</code> ever look at the clock, e.g. to ignore intervals
+        while the machine was suspended?
+      </summary>
+      <p>No — it reads only <code>t</code>, <code>utilization</code> and
+      <code>resetsAt</code> off the two samples, and duration only inside the rising
+      branch. It has no notion of suspend, and deliberately so: a suspended machine is
+      indistinguishable from an awake, idle one <em>as far as the account is concerned</em>,
+      and the account is what is being forecast. Both spend nothing, and both should teach
+      the same thing.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Where does the <code>maxAttributableMs</code> parameter get overridden?</summary>
+      <p>Only by tests. The signature at <code>usage-history.ts:153-157</code> gives it a
+      default of <code>MAX_ATTRIBUTABLE_MS</code>, and every production call site — the
+      classifier ring inside <code>recordTick</code>, and <code>accumulate</code>'s first
+      line — passes two samples and nothing else. It is a seam for pinning the branch, not
+      a knob.</p>
+    </details>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- s2                                                            -->
+<!-- ============================================================ -->
+<section id="s2">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>2 · Two calendars, one grid</h2>
+    <p class="divider-flow">You have a verdict about a span of time. Now it has to be
+    <em>filed</em> — and the span rarely lines up with the boxes it is filed into.</p>
+    <p class="divider-flow">Section 1 turned a pair of readings into one of four kinds.
+    Section 2 is about the two independent calendars that decide where a kind lands: the
+    Sunday-first index of the 168 buckets, and the Monday-anchored ISO week that groups
+    folds.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>168 buckets, indexed from Sunday</h2>
+    <p>A bucket is one hour <em>of the week</em>: Monday 09:00 is a different bucket from
+    Tuesday 09:00, and there are 168 of them. <code>hourOfWeek</code>, which lesson 1 met
+    on the forecast side, is the index function both halves share — the walk queries the
+    same numbering the recorder writes.</p>
+    <p>It counts from Sunday, and that choice is purely mechanical:
+    <code>getUTCDay()</code> already numbers Sunday as 0, so shifting a timestamp into
+    local time and reading the day and hour off it is a two-line function. A Monday-first
+    index would need a wrap-around adjustment on every call, for no gain — the index is
+    internal, and nothing outside these two modules ever sees a bucket number.</p>
+    <p>Note the shape of the local-time trick: rather than reasoning about time zones, the
+    offset in minutes is <em>added to the timestamp</em> and the result is read with UTC
+    accessors. That keeps one arithmetic path for every zone. The cost is the one lesson 1
+    already flagged for the walk — a single offset held for a whole window, so a DST
+    transition inside it is off by an hour.</p>
+<pre>// usage-forecast.ts:100-109
+ * Sunday-first matches `Date.prototype.getUTCDay()`'s numbering, which is what
+ * makes this a three-line function instead of a wrap-around puzzle: shift the
+ * timestamp into local time and read the UTC day and hour off it. (ISO weeks
+ * start on Monday, and `usage-history.ts` folds on that boundary — bucket
+ * indexing and fold grouping are independent axes. Keep them straight.)
+ */
+export function hourOfWeek(ms: number, offsetMinutes: number): number {
+  const local = new Date(ms + offsetMinutes * 60_000);
+  return local.getUTCDay() * 24 + local.getUTCHours();
+}</pre>
+  </div>
+
+  <div class="card card-concept">
+    <h2>…and folded on Monday</h2>
+    <p>The second calendar is the one that decides <em>when a week is over</em>, and it is
+    not the same axis. <code>isoWeekKey</code> returns a <code>YYYY-Www</code> string for
+    the real ISO-8601 week — Thursday-anchored numbering, Monday start.</p>
+    <p>Only equality is ever compared between two of these keys, which makes the obvious
+    shortcut tempting: <code>dayOfYear / 7</code> produces a string that also changes about
+    once a week and needs none of the Thursday arithmetic. The reason it is not used is
+    that a wrong boundary does not produce a wrong <em>number</em>, it produces a wrong
+    <em>count of folds</em>: an off-by-one at the year edge either folds a bucket twice in
+    one week — halving a weight for no reason — or skips a fold entirely, leaving a week's
+    accumulators to be merged into the next week's.</p>
+    <p>So the two axes are independent by design, and the warning is written into both
+    files: buckets are indexed Sunday-first, folds are grouped Monday-first. Nothing
+    reconciles them, and nothing needs to — an index and a grouping key are different
+    questions about the same timestamp. Conflating them is the trap, and the excerpt above
+    from <code>usage-forecast.ts</code> exists to flag it from the other side.</p>
+<pre>// usage-history.ts:175-181
+export function isoWeekKey(ms: number, offsetMinutes: number): string {
+  const d = new Date(ms + offsetMinutes * 60_000);
+  // Move to the Thursday of this ISO week; its calendar year is the ISO year.
+  const dayNum = (d.getUTCDay() + 6) % 7; // Monday = 0
+  const thursday = new Date(d.getTime());
+  thursday.setUTCDate(d.getUTCDate() - dayNum + 3);
+  thursday.setUTCHours(0, 0, 0, 0);</pre>
+  </div>
+
+  <div class="card card-concept">
+    <h2>One interval, sliced at every hour boundary</h2>
+    <p>A classified interval is a span, and buckets are hours, so <code>accumulate</code>
+    walks the span and cuts it at each local hour boundary. Each slice credits its own
+    bucket with its own minutes: <code>observedMin</code> and
+    <code>lifetimeObservedMin</code> always, plus <code>activeMin</code> when the kind is
+    <code>active</code>. Only <code>active</code> and <code>idle</code> get this far —
+    <code>reset</code> and <code>ambiguous</code> return the state untouched.</p>
+    <p>The load-bearing detail is line 248: <code>weekKey</code> is recomputed
+    <em>per slice</em>, from that slice's own start. Computing it once per interval would be
+    the natural simplification, and it breaks precisely at the boundary that matters — an
+    interval spanning Sunday 23:30 to Monday 00:30 would file its Sunday minutes under the
+    <em>new</em> ISO week, so the Sunday bucket's pending accumulators would be stamped a
+    week ahead and fold at the wrong time.</p>
+    <p>Note also that <code>accumulate</code> copies before it mutates: the buckets array is
+    mapped into fresh objects and <code>observedWeeks</code> is spread. Callers hold onto
+    earlier states, so in-place mutation would rewrite history under them. The cost is an
+    168-element copy per sample, once a minute — irrelevant next to the class of bug it
+    removes.</p>
+<pre>// usage-history.ts:242-255
+  let t = a.t;
+  while (t &lt; b.t) {
+    const shift = offsetMinutes * 60_000;
+    const nextHour = Math.floor((t + shift) / HOUR_MS) * HOUR_MS + HOUR_MS - shift;
+    const sliceEnd = Math.min(nextHour, b.t);
+    const mins = (sliceEnd - t) / MINUTE_MS;
+    const weekKey = isoWeekKey(t, offsetMinutes);
+    const bucket = buckets[hourOfWeek(t, offsetMinutes)];
+
+    foldBucket(bucket, weekKey, observedWeeks);
+    bucket.weekStamp = weekKey;
+    bucket.observedMin += mins;
+    bucket.lifetimeObservedMin += mins;
+    if (kind === 'active') bucket.activeMin += mins;</pre>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">An <code>idle</code> interval runs from Sunday 23:30 to Monday
+    00:30 local. What does <code>accumulate</code> do with it?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Credits all 60 minutes to the Sunday 23:00 bucket,
+        since that is where the interval started</button>
+        <p class="quiz-feedback">That would be the behaviour without the slicing loop, and
+        it is why the loop exists — a single interval can span any number of hours, and an
+        interval attributed wholly to its first hour would misfile every minute after the
+        first boundary. The <code>while (t &lt; b.t)</code> loop cuts at
+        <code>nextHour</code> instead.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Discards it, because an interval crossing a week
+        boundary cannot be attributed</button>
+        <p class="quiz-feedback">Nothing about a boundary crossing is discardable — only
+        <code>reset</code> and <code>ambiguous</code> kinds are dropped, and this one is
+        <code>idle</code>. Boundary crossings are handled by splitting, which is the normal
+        path, not an exception.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Splits it into two 30-minute slices, both stamped
+        with the new ISO week</button>
+        <p class="quiz-feedback">The split is right and the stamping is not. One week key
+        per interval is exactly the simplification the per-slice <code>weekKey</code> call
+        rules out: the Sunday half belongs to the old ISO week, and stamping it with the new
+        one would leave the Sunday bucket's pending accumulators to fold a week late.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Splits it into two 30-minute slices in different
+        buckets, each stamped with its own week key</button>
+        <p class="quiz-feedback">Correct. The Sunday slice lands in bucket 23 under the
+        outgoing ISO week; the Monday slice lands in bucket 24 under the new one. Both the
+        bucket index and the week key are recomputed from each slice's own start.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Bucket indexing starts on Sunday; ISO weeks start on Monday.
+    What is the consequence of that mismatch for the code?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Sunday's 24 buckets fold one week later than the
+        other six days', so Sunday lags by a week</button>
+        <p class="quiz-feedback">Plausible-sounding, but folding is not driven by a bucket's
+        index at all — it is driven by the week key stamped on it, and every bucket gets its
+        key from the same <code>isoWeekKey</code> call. Sunday's buckets fold on exactly the
+        same boundary as Monday's.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">None — they are independent axes, so the only cost
+        is that a reader can conflate them</button>
+        <p class="quiz-feedback">Correct. An index and a grouping key are separate questions
+        about one timestamp, and nothing in the code needs them aligned. The risk is purely
+        to the reader, which is why both files carry the warning.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The weights come out rotated by 24 buckets, which
+        the forecast walk corrects when it reads them</button>
+        <p class="quiz-feedback">There is no rotation to correct. The walk calls the same
+        <code>hourOfWeek</code> the recorder does — that shared function is what guarantees
+        writer and reader agree, and it is why the index's origin is an internal detail
+        rather than a contract.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Intervals that cross Sunday midnight are dropped to
+        keep the two calendars consistent</button>
+        <p class="quiz-feedback">Nothing is dropped for calendar reasons. Sunday midnight is
+        an ordinary hour boundary to the slicing loop, and the previous question's interval
+        crosses it and is fully credited.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- s3                                                            -->
+<!-- ============================================================ -->
+<section id="s3">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>3 · Fold, then age</h2>
+    <p class="divider-flow">Section 2 filed minutes into buckets, but nothing has produced
+    a <em>weight</em> yet — only pending counters for the current week.</p>
+    <p class="divider-flow">Section 3 is the once-a-week event that turns those counters
+    into a standing weight, and the decay that keeps an abandoned hour from holding its
+    weight forever.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>A week's ratio, folded through an EWMA</h2>
+    <p>A bucket accumulates <code>observedMin</code> and <code>activeMin</code> for the
+    current week and carries no weight at all until that week ends. The trigger is not a
+    timer: <code>foldBucket</code> runs at the top of every slice in
+    <code>accumulate</code>, and does nothing unless the slice's week key differs from the
+    bucket's stamp. So the fold happens on the first sample that lands in a bucket in a new
+    week — lazily, per bucket, with no scheduler.</p>
+    <p>The fold itself is an exponentially weighted moving average with
+    <code>EWMA_ALPHA</code> of 0.3: three tenths of the new week's ratio replaces seven
+    tenths of the standing weight. That gives a half-life of about two weeks — fast enough
+    to follow a genuine change of working habit, slow enough that one unusual week does not
+    rewrite the profile. A plain lifetime average would be the simpler choice and would
+    never adapt; taking the newest week outright would make the forecast jitter weekly.</p>
+    <p>Two guards on the way in. A bucket whose stamp is <code>null</code> has never been
+    touched, so there is nothing to fold; and a bucket with no pending minutes folds
+    nothing and — the part that matters for the next card — <em>decays</em> nothing.</p>
+<pre>// usage-history.ts:207-218
+function foldBucket(bucket: Bucket, weekKey: string, observedWeeks: string[]): void {
+  if (bucket.weekStamp === null || bucket.weekStamp === weekKey) return;
+  if (bucket.observedMin &lt;= 0) return; // nothing pending: nothing folds, nothing decays
+
+  const ratio = bucket.activeMin / bucket.observedMin;
+  const folded = bucket.weight === null
+    ? ratio
+    : (1 - EWMA_ALPHA) * bucket.weight + EWMA_ALPHA * ratio;
+  const k = skippedWeeks(observedWeeks, bucket.weekStamp, weekKey);
+  bucket.weight = folded * Math.pow(1 - EWMA_ALPHA, k);
+  bucket.observedMin = 0;
+  bucket.activeMin = 0;</pre>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Decay after the fold, never before</h2>
+    <p>Look again at the order of the last four statements: fold into <code>folded</code>,
+    <em>then</em> multiply by <code>(1 - EWMA_ALPHA)^k</code>, then clear the accumulators.
+    That order is load-bearing, and reversing it is the kind of change that looks like a
+    harmless reshuffle.</p>
+    <p>The reason is what the two operations are <em>about</em>. The pending accumulators
+    belong to the week named by <code>bucket.weekStamp</code>, and the skipped weeks came
+    <em>after</em> that week. So they age that week's contribution: fold first, and the
+    decay applies to a value the skipped weeks postdate, which is correct. Decay first, and
+    you age a weight that those weeks predate — and worse, a first-ever fold (where
+    <code>bucket.weight</code> is <code>null</code>) would have nothing to decay, so the
+    decay would be skipped entirely and a stale seed would enter at full strength.</p>
+    <p>The alternative design is a scheduled sweep: once a week, walk all 168 buckets and
+    decay the untouched ones. That needs a timer, needs to know it did not miss a week
+    while the process was down, and gives a bucket two places it can change. Folding lazily
+    on first touch keeps every mutation of a bucket in one function, at the cost of this
+    ordering subtlety — which is why the docstring above the function spells it out.</p>
+<pre>// usage-history.ts:191-195
+function skippedWeeks(observedWeeks: string[], from: string, to: string): number {
+  let n = 0;
+  for (const wk of observedWeeks) if (wk &gt; from &amp;&amp; wk &lt; to) n++;
+  return n;
+}</pre>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Weeks we were recording, not weeks that elapsed</h2>
+    <p><code>skippedWeeks</code> does not count calendar weeks between two stamps — it
+    counts entries of <code>observedWeeks</code> strictly between them. That list holds
+    every ISO week in which <em>any</em> bucket was observed at all, which makes it a
+    record of when the recorder was running.</p>
+    <p>The distinction is the whole point. Two months of server downtime should age nothing:
+    an hour you have no evidence about did not become less likely, you simply stopped
+    looking. Two months of ordinary use during which that hour was always quiet <em>should</em>
+    age it, at the normal half-life. Counting elapsed weeks would conflate the two and
+    quietly wash out a profile every time the dashboard sat unused — the naive version of
+    "old data decays".</p>
+    <p>The list is appended to inside the same slice loop, kept sorted, and pruned to the
+    newest <code>MAX_OBSERVED_WEEKS</code> (26 — half a year). Sorting matters because the
+    comparison is a string range: ISO keys are <code>YYYY-Www</code>, zero-padded precisely
+    so that lexical order is chronological order. The pruning bounds the file and the loop;
+    26 weeks of decay already drives any weight to a rounding error.</p>
+<pre>// usage-history.ts:256-262
+
+    if (!observedWeeks.includes(weekKey)) {
+      observedWeeks.push(weekKey);
+      observedWeeks.sort();
+      if (observedWeeks.length &gt; MAX_OBSERVED_WEEKS) {
+        observedWeeks.splice(0, observedWeeks.length - MAX_OBSERVED_WEEKS);
+      }</pre>
+    <details>
+      <summary>More detail — why a quiet bucket cannot simply be left alone</summary>
+      <p>Because a weight only moves when its bucket folds, and a bucket only folds when a
+      sample lands in it in a new week. An hour you have stopped working would therefore
+      keep its old weight indefinitely, while <code>lifetimeObservedMin</code> — which never
+      resets — kept it above the trust floor. The forecast would go on projecting spend into
+      an hour abandoned months ago, with full confidence. The module docstring at
+      <code>usage-history.ts:28-32</code> states the rule as "a quiet bucket must decay, not
+      freeze".</p>
+    </details>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Suppose <code>foldBucket</code> were rewritten to apply the decay
+    <em>before</em> the EWMA fold. What is the specific extra failure on a bucket's
+    <strong>first-ever</strong> fold?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The pending accumulators would be cleared twice,
+        losing that week's minutes</button>
+        <p class="quiz-feedback">The two assignments that zero <code>observedMin</code> and
+        <code>activeMin</code> are unconditional and run once either way. Reordering the
+        fold and the decay does not duplicate them.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">The ratio would be computed from the decayed
+        counters, so it would come out too low</button>
+        <p class="quiz-feedback">The decay multiplies <code>bucket.weight</code>, never the
+        counters — <code>ratio</code> is <code>activeMin / observedMin</code> and both are
+        raw. A reordering changes what the decay is applied <em>to</em>, not what the ratio
+        is computed from.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Nothing on the first fold; the divergence only shows
+        up from the second fold onwards</button>
+        <p class="quiz-feedback">The first fold is precisely where the extra failure lives.
+        Every later fold at least has a weight to decay, so reordering there only ages the
+        wrong quantity; the first fold has no weight at all.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">No weight exists yet to decay, so a stale seed lands
+        at full strength</button>
+        <p class="quiz-feedback">Correct. On a first fold <code>bucket.weight</code> is
+        <code>null</code> and <code>folded</code> is the raw ratio. Decaying beforehand has
+        nothing to act on, so a week's evidence that is already several observed weeks old
+        enters the profile undiminished.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">The dashboard is not run for two months, then started again.
+    What happens to the weight of an hour that was busy before the outage?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">It decays by eight weeks' worth on the first fold
+        after the restart</button>
+        <p class="quiz-feedback">That is what counting elapsed weeks would do, and it is the
+        behaviour <code>observedWeeks</code> exists to avoid. Those eight weeks are absent
+        from the list, so <code>skippedWeeks</code> does not see them and
+        <code>k</code> does not include them.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">It is discarded, since <code>MAX_OBSERVED_WEEKS</code>
+        has expired</button>
+        <p class="quiz-feedback"><code>MAX_OBSERVED_WEEKS</code> prunes the
+        <em>observed-weeks list</em>, not weights, and it prunes by count rather than by
+        age — an outage adds no entries, so it moves the window not at all. No code path
+        ever deletes a weight.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Nothing ages it — the outage weeks were never
+        observed</button>
+        <p class="quiz-feedback">Correct. The weight survives untouched, because "we have no
+        evidence" is not the same claim as "we observed this hour going quiet". Decay
+        resumes at the normal rate once ordinary use records weeks again.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">It stays frozen permanently, because a bucket only
+        folds while the process is running</button>
+        <p class="quiz-feedback">Frozen during the outage, yes — but not permanently. The
+        first sample landing in that bucket in a new week folds it, and any weeks recorded
+        between its stamp and that key do count, so ordinary use ages it again.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>
+        A bucket can only gather 60 minutes a week. Does an <code>observedMin</code> of 12
+        make its ratio nearly worthless?
+      </summary>
+      <p>The ratio itself is fine — 12 observed minutes of which 6 were active is a real
+      50%. What makes it thin is the sample size, and that is the trust floor's job, not the
+      fold's: <code>foldBucket</code> will happily fold a 12-minute week, but
+      <code>deriveProfile</code> will not <em>expose</em> the resulting weight until the
+      bucket has 60 lifetime observed minutes. Section 4 covers that gate. The two
+      mechanisms are deliberately separate.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Why keep <code>observedWeeks</code> globally instead of per bucket?</summary>
+      <p>Because the question it answers is global: "were we recording that week at all?"
+      A per-bucket list would answer "was <em>this hour</em> observed that week", which is
+      the wrong question — an hour being unobserved in a week we were otherwise recording is
+      exactly the case that should decay. One shared list also costs 26 strings instead of
+      168 lists, and is what makes a skipped week mean the same thing to every bucket.</p>
+    </details>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- s4                                                            -->
+<!-- ============================================================ -->
+<section id="s4">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>4 · Trust before use</h2>
+    <p class="divider-flow">Section 3 produced weights. Not all of them deserve to be
+    believed.</p>
+    <p class="divider-flow">Section 4 is the gate between a folded weight and a weight the
+    forecast is allowed to walk over, and the deliberately pessimistic fallback for
+    everything on the wrong side of it.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>A lifetime floor, not a weekly one</h2>
+    <p><code>deriveProfile</code> is the boundary between this module and the walk lesson 1
+    taught. It maps the 168 buckets into the <code>DutyProfile</code> the forecast consumes,
+    and it is where the trust decision is made: a bucket's weight is passed through only if
+    its <code>lifetimeObservedMin</code> is at least <code>TRUST_FLOOR_MIN</code>. Everything
+    else becomes <code>null</code> — no weight, rather than a low one.</p>
+    <p>The floor is on <em>lifetime</em> minutes, and this is the third thing in this module
+    that was gotten backwards once. A bucket is one hour of the week, so it can gather at
+    most 60 minutes per week: a per-week floor of 60 could only ever be met by an hour
+    observed edge to edge, every single week, and any lower per-week floor would be
+    satisfied by a fortnight of noise. Trust has to accrue across weeks. Recency is not this
+    gate's job at all — that is what the decay in section 3 tracks, and the two are
+    intentionally different mechanisms with different inputs.</p>
+    <p>Notice which counter is which: <code>observedMin</code> is cleared on every fold,
+    <code>lifetimeObservedMin</code> never is. That is the only reason the floor can be
+    stated as a lifetime quantity at all.</p>
+<pre>// usage-history.ts:55-56
+/** Lifetime observed minutes before a bucket's weight is used at all. */
+export const TRUST_FLOOR_MIN = 60;</pre>
+  </div>
+
+  <div class="card card-concept">
+    <h2>The fallback is 1, and that is on purpose</h2>
+    <p>Untrusted buckets need something to stand in for them, and
+    <code>deriveProfile</code> supplies <code>globalMean</code>: the mean of the weights
+    that <em>are</em> trusted. An hour with no evidence is treated as an average hour, which
+    is the least-assuming answer available once some hours are known.</p>
+    <p>The interesting case is a brand-new profile, where nothing is trusted and there is no
+    mean to take. The value is <code>1</code> — assume every unknown hour is fully active.
+    That is deliberately pessimistic, and the reasoning is about what it degrades <em>to</em>:
+    a duty cycle of 1 for every hour makes the forward walk arithmetically identical to
+    lesson 1's flat-rate projection. So a fresh install behaves exactly as it did before this
+    feature existed, and improves from there. Picking an optimistic default instead — say
+    0.3, "most hours are quiet" — would invent a claim from no evidence and push the
+    projected exhaustion later, in the direction that costs a user their week.</p>
+    <p><code>trustedCount</code> travels alongside as the confidence input: the walk reports
+    <code>none</code>, <code>thin</code> or <code>ok</code> from it, so the UI can say how
+    much of the projection rests on measurement.</p>
+<pre>// usage-history.ts:277-287
+export function deriveProfile(state: ProfileState): DutyProfile {
+  const weights: (number | null)[] = state.buckets.map((b) =&gt;
+    b.lifetimeObservedMin &gt;= TRUST_FLOOR_MIN ? b.weight : null
+  );
+  const trusted = weights.filter((w): w is number =&gt; typeof w === 'number');
+  return {
+    weights,
+    globalMean: trusted.length &gt; 0 ? trusted.reduce((a, w) =&gt; a + w, 0) / trusted.length : 1,
+    trustedCount: trusted.length
+  };
+}</pre>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Why is <code>TRUST_FLOOR_MIN</code> checked against
+    <code>lifetimeObservedMin</code> rather than against the current week's
+    <code>observedMin</code>?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Because <code>observedMin</code> is not written until
+        the week folds, so it is zero when the gate runs</button>
+        <p class="quiz-feedback">Backwards: <code>observedMin</code> is the counter that
+        accumulates <em>during</em> the week and is <em>zeroed</em> by the fold. It is
+        non-zero most of the time. The problem with it is its ceiling, not its timing.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">A bucket gathers at most 60 minutes a week, so a
+        weekly floor of 60 is unreachable</button>
+        <p class="quiz-feedback">Correct. One hour of the week comes round once a week, so a
+        weekly floor at 60 would demand a perfectly, continuously observed hour every week.
+        Trust accrues across weeks; recency is the decay's job instead.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">So that an hour which has gone quiet loses its
+        weight again once its evidence ages out</button>
+        <p class="quiz-feedback">That is what decay does, and it works on the weight rather
+        than on trust. <code>lifetimeObservedMin</code> never decreases, so a bucket that has
+        cleared the floor stays cleared — an abandoned hour keeps its trust and loses its
+        magnitude.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Because the weekly counter is reset by the
+        <code>reset</code> interval kind, which would drop the trust with it</button>
+        <p class="quiz-feedback">The <code>reset</code> kind causes an interval to be
+        discarded before <code>accumulate</code> touches any bucket — it never clears a
+        counter. The only thing that zeroes <code>observedMin</code> is a fold.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- s5                                                            -->
+<!-- ============================================================ -->
+<section id="s5">
+
+  <div class="card card-divider">
+    <p class="eyebrow">Next section</p>
+    <h2>5 · The I/O shell and the opt-in</h2>
+    <p class="divider-flow">Sections 1 to 4 were pure functions: samples in, a
+    <code>DutyProfile</code> out, nothing touched.</p>
+    <p class="divider-flow">Section 5 is the shell around them — two files on disk, the
+    write policy, the single entry point that owns a tick, and the setting without which
+    none of it runs.</p>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Two files, and only one of them is authoritative</h2>
+    <p>Recording writes two gitignored files at the repo root. <code>.usage-history.jsonl</code>
+    is an append-only log of raw samples — one compact JSON object per line, replayable,
+    rotated, and explicitly <em>not</em> authoritative. <code>.usage-profile.json</code> is
+    the learned state, written atomically via a temp file and a rename, and it is the
+    profile's source of truth.</p>
+    <p>The tempting simplification is one file: keep the log and rebuild the profile from it
+    on startup. It fails for a specific, non-obvious reason. The log is deliberately sparse
+    — write-on-change plus a heartbeat — while learning happens at the full one-minute
+    cadence against the in-memory previous sample. A flat stretch that ends in a rise gets
+    written to the log as <em>one long rising interval</em>, which classifies as
+    <code>ambiguous</code> and is discarded. Replaying the log would therefore throw away
+    exactly the evidence live sampling captured. The log is for charts and for rehydrating
+    the pace ring; the profile file holds the learning.</p>
+    <p>The cost of two files is that they can disagree, and the design accepts it: the log
+    is allowed to be lossy, and rotation throws its oldest half away without the forecast
+    noticing — which is the same fact from the other side.</p>
+<pre>// usage-history.ts:296-306
+/** Append-only raw samples. Replayable, rotated, never authoritative. */
+export const HISTORY_FILE = '.usage-history.jsonl';
+/** The learned profile — derived state, written atomically, authoritative. */
+export const PROFILE_FILE = '.usage-profile.json';
+
+/** Longest silence before an unchanged sample is written anyway. */
+export const HEARTBEAT_MS = 900_000;
+/** ~32 MB, roughly two years of write-on-change samples. */
+export const MAX_HISTORY_BYTES = 33_554_432;
+/** Tail window for a read — the same 256 KB `transcript.ts` uses. */
+export const TAIL_BYTES = 262_144;</pre>
+    <details>
+      <summary>More detail — rotation, tail reads, and the 32 MB ceiling</summary>
+      <p><code>rotateIfNeeded</code> trims the log to its newest half once it passes
+      <code>MAX_HISTORY_BYTES</code> (33,554,432 bytes — 32 MiB, roughly two years of
+      write-on-change samples), by reading that half back and rewriting the file.
+      <code>readRecentSamples</code> reads only the trailing <code>TAIL_BYTES</code>
+      (262,144 — 256 KiB, the same window <code>transcript.ts</code> uses) and drops the
+      first line whenever the window did not reach the top of the file, since a byte-offset
+      read almost always starts mid-line. Malformed lines are skipped individually rather
+      than failing the whole read.</p>
+    </details>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Write on change, plus a heartbeat</h2>
+    <p><code>shouldWrite</code> is the log's whole policy, and it is four lines of guards.
+    No previous sample writes. A utilization that moved by more than 0.01 writes. A
+    different window writes — via the same <code>sameWindow</code> from section 1, which is
+    why the reset-stamp jitter would otherwise have appended a line every tick. Otherwise,
+    write only if the last write was at least <code>HEARTBEAT_MS</code> ago: 15 minutes.</p>
+    <p>Sampling every minute into the log would be the obvious approach and buys the profile
+    nothing, because the gap rule from section 1 already reads sparse records correctly —
+    two flat samples 15 minutes apart say the same thing as fifteen consecutive flat ones.
+    What the heartbeat adds is a distinction the log could not otherwise express: it is a
+    liveness marker. A gap longer than the heartbeat means the recorder was not running,
+    which is what separates <em>server downtime</em> from <em>a quiet machine</em> — the
+    same distinction <code>observedWeeks</code> makes for decay.</p>
+    <p>The trade-off is that the log's timestamps are irregular, so anything charting it has
+    to handle uneven spacing rather than assuming a fixed cadence.</p>
+<pre>// usage-history.ts:346-355
+export function shouldWrite(
+  prev: UsageSample | null,
+  next: UsageSample,
+  heartbeatMs: number = HEARTBEAT_MS
+): boolean {
+  if (prev === null) return true;
+  if (Math.abs(next.utilization - prev.utilization) &gt; 0.01) return true;
+  if (!sameWindow(prev.resetsAt, next.resetsAt)) return true;
+  return next.t - prev.t &gt;= heartbeatMs;
+}</pre>
+  </div>
+
+  <div class="card card-concept">
+    <h2>Where the files live, and why not <code>cwd</code></h2>
+    <p>Both paths are resolved through <code>repoRoot</code>, which walks up from this
+    module's own directory looking for a <code>package.json</code>. It deliberately does not
+    use <code>process.cwd()</code>, even though <code>settings.ts</code> next door does.</p>
+    <p>The asymmetry is about the cost of being wrong. A settings file that resets when you
+    start the server from a different directory is an annoyance you notice immediately. A
+    <em>history</em> file that does the same thing is weeks of learning silently replaced by
+    an empty one, with no error and nothing in the UI to say so — you would only find out
+    when the forecast quietly went back to flat-rate. So the two files use different
+    strategies on purpose.</p>
+    <p>Note the failure mode of the walk itself: it stops when <code>path.dirname</code>
+    stops changing, and falls back to <code>process.cwd()</code> at the filesystem root
+    rather than throwing. An unreadable directory is caught and the walk continues. This is
+    the same rule the repo's guide tooling follows — walk up for a marker, never a fixed
+    <code>../..</code> hop count, because a fixed count silently repoints the moment a file
+    moves.</p>
+<pre>// usage-history.ts:317-329
+export function repoRoot(startDir: string = import.meta.dirname): string {
+  let dir = startDir;
+  for (;;) {
+    try {
+      if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    } catch {
+      /* unreadable — keep walking */
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return process.cwd(); // hit the filesystem root
+    dir = parent;
+  }
+}</pre>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt">Why can the learned profile not simply be rebuilt from
+    <code>.usage-history.jsonl</code> on startup, instead of being persisted in its own
+    file?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Because rotation deletes the oldest samples, so old
+        weeks would be missing from the rebuild</button>
+        <p class="quiz-feedback">True but not the blocker — and note the EWMA is exactly
+        what makes it survivable: a weight is a running fold, so weeks past the half-life
+        contribute almost nothing and the module's own comment says throwing old samples away
+        "costs nothing the forecast depends on". The rebuild fails on recent samples, not
+        old ones.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Because the log stores no <code>resetsAt</code>, so
+        intervals could not be classified</button>
+        <p class="quiz-feedback">It does store it — <code>UsageSample</code> is
+        <code>t</code>, <code>utilization</code> and <code>resetsAt</code>, and
+        <code>appendSample</code> serialises the whole object. A replay would classify
+        happily; it would just classify the wrong intervals.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Because the log is written best-effort and can be
+        silently truncated on a read-only filesystem</button>
+        <p class="quiz-feedback">Appends really are best-effort and swallow failures, so a
+        read-only filesystem loses samples. But that is a robustness gap rather than the
+        structural reason, and it applies to the profile file's writes too.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">Write-on-change collapses a flat stretch ending in a
+        rise into one long <code>ambiguous</code> interval</button>
+        <p class="quiz-feedback">Correct. Learning runs at the full one-minute cadence
+        against the in-memory previous sample; the log is sparser by design. Replaying it
+        turns minutes that were classified as <code>idle</code> plus one attributable
+        <code>active</code> minute into a single unattributable span, which is discarded.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-concept">
+    <h2>One tick, and the switch that arms it</h2>
+    <p><code>recordTick</code> owns everything that happens per sample: append if
+    <code>shouldWrite</code> says so, push the classified interval onto a 12-hour RAM-only
+    ring, fold the interval into the live state via <code>accumulate</code>, and save every
+    <code>HEARTBEAT_MS</code>. The whole body sits in a <code>try</code> that swallows —
+    recording must never be able to break the usage fetch it rides along with.</p>
+    <p>One line inside is worth pausing on: <code>accumulate</code> is called with
+    <code>localOffsetMinutes(sample.t)</code>, never 0. The profile has to be learned on the
+    same local clock the walk queries it with; passing 0 would shift every bucket by the UTC
+    offset, producing a profile that is internally consistent and describes someone else's
+    day.</p>
+    <p>None of this runs by default. <code>recordUsageHistory</code> is a persisted setting,
+    default <code>false</code>, and <code>startUsageRecording</code> re-reads it on every
+    tick rather than capturing it once — so toggling the switch in Settings takes effect
+    immediately, with no restart. The recorder also needs its <em>own</em> interval, because
+    sampling is otherwise request-driven: <code>/api/sessions</code> is the only caller of
+    the usage refresh, so with no browser open nothing would be sampled and the recorded
+    history would describe when the dashboard was <em>watched</em> rather than when work
+    happened.</p>
+<pre>// usage-history.ts:660-669
+    stopUsageRecording();
+    timer = setInterval(() =&gt; {
+      // Re-read on every tick: flipping the toggle in Settings takes effect
+      // immediately, and while off this costs nothing and touches no network.
+      if (!getSettings().recordUsageHistory) return;
+      try { refresh(); } catch { /* the refresh path fails open on its own */ }
+    }, SAMPLE_INTERVAL_MS);
+    // Never hold the process open for a sample.
+    timer.unref();
+  } catch {</pre>
+  </div>
+
+  <div class="card card-quiz">
+    <p class="quiz-prompt"><code>startUsageRecording</code> creates a one-minute interval of
+    its own. What would the recorded history describe if it relied on the existing
+    <code>/api/sessions</code> poll instead?</p>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Nothing would change — the sessions poll already runs
+        every 3 seconds, which is denser than one minute</button>
+        <p class="quiz-feedback">Denser while a browser is open, and absent otherwise, which
+        is the whole problem. The poll is driven by a client; the recorder needs a cadence
+        that does not depend on one existing. Density was never the missing property.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">Only the log would suffer; the profile would still
+        learn correctly from the in-memory previous sample</button>
+        <p class="quiz-feedback">Inverted. The profile is the part that learns from
+        consecutive samples, so missing samples hit it hardest — the gaps become long
+        intervals, and a long rising one is discarded as <code>ambiguous</code>. The log
+        would merely be sparser than intended.</p>
+      </div>
+      <div class="quiz-option" data-correct="true">
+        <button class="quiz-option-btn">When the dashboard was <em>watched</em>, not when
+        work happened</button>
+        <p class="quiz-feedback">Correct. Sampling is request-driven, and
+        <code>/api/sessions</code> is the only caller of the usage refresh — so hours spent
+        working with no browser open would record no samples at all, and the profile would
+        learn the shape of your dashboard-watching habits instead.</p>
+      </div>
+      <div class="quiz-option" data-correct="false">
+        <button class="quiz-option-btn">It would double-count, since both the poll and the
+        recorder would classify the same pair of samples</button>
+        <p class="quiz-feedback">There is only one path to Anthropic either way — the
+        interval calls the same non-blocking refresh the poll uses, which is why
+        <code>refresh</code> is injected rather than imported. Extra callers produce extra
+        cache reads, not extra samples.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-qa">
+    <p class="eyebrow">Questions you might ask</p>
+    <details class="qa-item">
+      <summary>
+        Why is <code>refresh</code> passed into <code>startUsageRecording</code> instead of
+        imported?
+      </summary>
+      <p>To break an import cycle. <code>usage.ts</code> imports this module for
+      <code>recordTick</code>, so this module importing <code>usage.ts</code> back for
+      <code>getCachedUsageState</code> would be circular. Injection also keeps one code path
+      to Anthropic: production passes the same non-blocking refresh the
+      <code>/api/sessions</code> poll uses, rather than a second fetcher with its own cache
+      and its own failure modes.</p>
+    </details>
+    <details class="qa-item">
+      <summary>What is the 12-hour ring for, if the profile is already being folded?</summary>
+      <p>It answers a different question: how much active time was <em>actually observed</em>
+      inside a given span, which lesson 1's active-rate correction divides by.
+      <code>observedActiveMs</code> returns <code>null</code> rather than a partial sum when
+      the ring does not cover the whole span — a half-covered lookback would undercount
+      active time, and since the caller divides by it, the rate would come out too high in
+      the pessimistic direction, silently. Twelve hours is twice the weekly lookback.</p>
+    </details>
+    <details class="qa-item">
+      <summary>Why is the profile saved only every 15 minutes rather than every tick?</summary>
+      <p>Because a lost save costs at most that window's folds, while writing 168 buckets to
+      disk every minute is pure churn. The save is also the trigger for
+      <code>rotateIfNeeded</code>, so the two disk-touching operations share one cadence. The
+      write itself is atomic — temp file then rename — and returns <code>false</code> instead
+      of throwing, mirroring how <code>settings.ts</code> reports a failed persist.</p>
+    </details>
+  </div>
+
+</section>
+
+<!-- ============ recap ============ -->
+<div class="card card-recap">
+  <p class="eyebrow">Recap</p>
+  <h1>Learning the profile — lesson 2 of 3</h1>
+  <p class="recap-score"><span id="score-correct">0</span> / <span id="score-total">0</span></p>
+  <p id="weak-note">No questions answered yet.</p>
+
+  <p>Jump back into any section:</p>
+  <button class="section-jump" data-target="s1">1 · What a pair of samples proves</button>
+  <button class="section-jump" data-target="s2">2 · Two calendars, one grid</button>
+  <button class="section-jump" data-target="s3">3 · Fold, then age</button>
+  <button class="section-jump" data-target="s4">4 · Trust before use</button>
+  <button class="section-jump" data-target="s5">5 · The I/O shell and the opt-in</button>
+
+  <div class="series-next">
+    <p><strong>The series</strong> — the numbers are a suggested reading order, not a gate.</p>
+    <ul>
+      <li><a href="usage-1-pace.html"><code>usage-1-pace</code></a> — the odometer and the
+      speedometer: the two windows, sampling and slope, surviving a window roll, and the
+      forward walk this lesson's weights feed.</li>
+      <li><strong>usage-2-learning-the-profile</strong> — you are here.</li>
+      <li><a href="usage-3-inspector.html"><code>usage-3-inspector</code></a> — the Usage
+      tab: the 24×7 heatmap and its <code>color-mix</code> ramp, the tooltip that works on
+      touch, and the cumulative-climb strip.</li>
+    </ul>
+  </div>
+
+  <p class="series-next">No written prose guide covers this subsystem yet — only the
+  reference doc at <code>docs/subsystems/usage-limits.md</code>, whose §Interval
+  classification and §Storage, and the opt-in are the specification behind this lesson
+  rather than a walkthrough. A narrative guide would be a reasonable follow-up if one would
+  help.</p>
+
+  <p class="stamp">built at fbdc350</p>
+</div>
+
+</main>
+
+<nav>
+  <button id="nav-back" disabled>Back</button>
+  <button id="nav-next">Next</button>
+</nav>
+
+<script type="application/json" id="provenance">
+{
+  "commit": "fbdc350f8e6d47c5ddf9db0015ad4659767097fd",
+  "generated": "2026-08-27",
+  "sources": [
+    "server/lib/usage-history.ts",
+    "server/lib/usage-forecast.ts",
+    "server/lib/settings.ts",
+    "docs/subsystems/usage-limits.md"
+  ],
+  "sections": [
+    { "id": "s1", "title": "What a pair of samples proves", "sources": ["server/lib/usage-history.ts", "docs/subsystems/usage-limits.md"] },
+    { "id": "s2", "title": "Two calendars, one grid", "sources": ["server/lib/usage-history.ts", "server/lib/usage-forecast.ts"] },
+    { "id": "s3", "title": "Fold, then age", "sources": ["server/lib/usage-history.ts"] },
+    { "id": "s4", "title": "Trust before use", "sources": ["server/lib/usage-history.ts", "server/lib/usage-forecast.ts"] },
+    { "id": "s5", "title": "The I/O shell and the opt-in", "sources": ["server/lib/usage-history.ts", "server/lib/settings.ts", "docs/subsystems/usage-limits.md"] }
+  ]
+}
+</script>
+
+<script>
+(function () {
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+  var idx = 0;
+  var score = { correct: 0, total: 0 };
+  var back = document.getElementById('nav-back');
+  var next = document.getElementById('nav-next');
+  var fill = document.getElementById('progress-fill');
+
+  function isBlockedQuiz(card) {
+    return card.classList.contains('card-quiz') && card.dataset.answered !== 'true';
+  }
+
+  function show(i) {
+    if (i < 0 || i >= cards.length) return;
+    cards[idx].classList.remove('active');
+    idx = i;
+    cards[idx].classList.add('active');
+    window.scrollTo(0, 0);
+    refresh();
+  }
+
+  function refresh() {
+    back.disabled = idx === 0;
+    next.disabled = idx === cards.length - 1 || isBlockedQuiz(cards[idx]);
+    fill.style.width = (cards.length > 1 ? (idx / (cards.length - 1)) * 100 : 100) + '%';
+    if (cards[idx].classList.contains('card-recap')) renderScore();
+  }
+
+  function renderScore() {
+    document.getElementById('score-correct').textContent = String(score.correct);
+    document.getElementById('score-total').textContent = String(score.total);
+    var note = document.getElementById('weak-note');
+    if (score.total === 0) { note.textContent = 'No questions answered yet.'; return; }
+    note.textContent = score.correct === score.total
+      ? 'Every check answered correctly.'
+      : 'Worth a second pass: the sections whose checks you missed are linked below.';
+  }
+
+  cards.forEach(function (card) {
+    var opts = Array.prototype.slice.call(card.querySelectorAll('.quiz-option'));
+    opts.forEach(function (opt) {
+      var btn = opt.querySelector('.quiz-option-btn');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        if (card.dataset.answered === 'true') return;
+        card.dataset.answered = 'true';
+        opt.classList.add('revealed');
+        opts.forEach(function (o) {
+          var b = o.querySelector('.quiz-option-btn');
+          if (b) b.disabled = true;
+        });
+        score.total += 1;
+        if (opt.getAttribute('data-correct') === 'true') score.correct += 1;
+        refresh();
+      });
+    });
+  });
+
+  Array.prototype.slice.call(document.querySelectorAll('.section-jump')).forEach(function (b) {
+    b.addEventListener('click', function () {
+      var wrapper = document.getElementById(b.getAttribute('data-target'));
+      if (!wrapper) return;
+      for (var i = 0; i < cards.length; i++) {
+        if (wrapper.contains(cards[i])) { show(i); return; }
+      }
+    });
+  });
+
+  back.addEventListener('click', function () { if (!back.disabled) show(idx - 1); });
+  next.addEventListener('click', function () { if (!next.disabled) show(idx + 1); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' && !next.disabled) show(idx + 1);
+    if (e.key === 'ArrowLeft' && !back.disabled) show(idx - 1);
+  });
+
+  refresh();
+})();
+</script>
+
+</body>
+</html>
