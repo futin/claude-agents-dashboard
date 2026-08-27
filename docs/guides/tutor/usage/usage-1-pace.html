@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Usage pace — tutor lesson 1 of 4</title>
+<title>Usage pace — tutor lesson 1 of 3</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -226,7 +226,7 @@
     moves in roughly 10%-per-hour steps. The weekly figure crawls in ~1% integer steps
     (<code>usage.ts:234-237</code>). That resolution gap is why the sampling policy differs
     per window, and it is also why boot-time rehydration is deliberately one-sided:</p>
-    <pre>// usage-pace.ts:107-118
+    <pre>// usage-pace.ts:107-118 (compacted here)
 /**
  * Replace a window's ring — boot-time rehydration only.
  *
@@ -433,7 +433,7 @@ const WINDOWS = {
     <p>The ring is fed from one place: <code>refreshNow()</code> in <code>usage.ts</code>,
     single-flight via a <code>refreshing</code> promise. Reads go through a synchronous
     accessor that never blocks the 3-second session poll:</p>
-    <pre>// usage.ts:297-305
+    <pre>// usage.ts:297-305 (compacted here)
 export function getCachedUsageState(): UsageState {
   if (!refreshing &amp;&amp; (cachedAt === 0 || Date.now() - cachedAt &gt; CACHE_TTL_MS)) void refreshNow();
   return { usage: cached, status: cachedStatus };
@@ -1110,7 +1110,7 @@ function tickPct(iso: string | null | undefined, start: number, end: number, win
 <!-- ============ recap ============ -->
 <div class="card card-recap">
   <p class="eyebrow">Recap</p>
-  <h1>Usage pace — lesson 1 of 4</h1>
+  <h1>Usage pace — lesson 1 of 3</h1>
   <p class="recap-score"><span id="score-correct">0</span> / <span id="score-total">0</span></p>
   <p id="weak-note">No questions answered yet.</p>
 
@@ -1122,17 +1122,16 @@ function tickPct(iso: string | null | undefined, start: number, end: number, win
   <button class="section-jump" data-target="s5">5 · Two ticks and a band</button>
 
   <div class="series-next">
-    <p><strong>The rest of the series</strong> — not built yet. Each is its own lesson and its
-    own deck; running one is what creates it. The numbers are a suggested reading order, not a
-    gate.</p>
+    <p><strong>The rest of the series</strong> — two lessons, both built. The numbers are a
+    suggested reading order, not a gate.</p>
     <ul>
-      <li><code>usage-2-learning-the-profile</code> — how an interval becomes
-      <code>active</code>, <code>idle</code>, <code>ambiguous</code> or <code>reset</code>;
-      hour-of-week bucket folding; the trust floor; storage and the opt-in.</li>
-      <li><code>usage-3-forecast-walk</code> — the weights themselves: <code>hourOfWeek</code>
-      indexing, week decay, and what <code>confidenceOf</code>'s thresholds are measuring.</li>
-      <li><code>usage-4-inspector</code> — the Usage tab: the 24×7 heatmap, its
-      <code>color-mix</code> ramp across five themes, and the cumulative-climb strip.</li>
+      <li><a href="usage-2-learning-the-profile.html"><code>usage-2-learning-the-profile</code></a>
+      — how an interval becomes <code>active</code>, <code>idle</code>, <code>ambiguous</code>
+      or <code>reset</code>; hour-of-week bucket folding; the trust floor; storage and the
+      opt-in.</li>
+      <li><a href="usage-3-inspector.html"><code>usage-3-inspector</code></a> — the Usage
+      tab: the 24×7 heatmap, its <code>color-mix</code> ramp across five themes, the tooltip
+      that works on touch, and the cumulative-climb strip.</li>
     </ul>
   </div>
 
