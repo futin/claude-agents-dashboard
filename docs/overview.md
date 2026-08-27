@@ -115,6 +115,7 @@ server/
   api.ts          all /api handlers (+ error fallbacks)
   lib/config.ts   .env loader — process.env > .env > defaults
   lib/transcript.ts  tail-reads a transcript → tokens/model/window/activity
+  lib/title-cache.ts  remembers a custom title once it sinks below the tail window
   lib/scan.ts     enumerates + ranks sessions; status machine; liveness gate
   lib/agents.ts   whole-file subagent parser → AgentJob[]
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts
@@ -141,6 +142,8 @@ server/
   lib/notify.ts   server-sent ntfy pushes — the layered policy and the one
                   outbound call the backend makes
   lib/origin.ts   connection classifier → local | lan | tailnet | unknown
+  lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags,
+                  fed by the PermissionRequest hook; display-only
   lib/transcribe.ts  ffmpeg → whisper-cli pipeline behind POST /api/transcribe: mime
                   allowlist, cached engine probe, single-flight guard, typed failures
   lib/spawn.ts    launches a detached, headless `claude -p` session, or resumes an ended
@@ -160,7 +163,7 @@ client/src/
                   useSettings, useServerSettings, useDictation, useTranscribeAvailable
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
                   deepLink, dictation, spawnOptions, resume, pace, usageProfile,
-                  panelCollapse
+                  panelCollapse, surface, walkChart
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
