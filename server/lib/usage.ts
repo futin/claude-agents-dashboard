@@ -35,6 +35,15 @@ export type TokenState =
 const USAGE_PATH = '/api/oauth/usage';
 const KEYCHAIN_SERVICE = 'Claude Code-credentials';
 const CACHE_TTL_MS = 60_000;
+/**
+ * How long an in-flight refresh may run before the next call is allowed to
+ * abandon it and start its own. A whole cycle is bounded well under this
+ * (≤3 credential reads at 5s each + one 5s request), so crossing it means the
+ * cycle is stuck — `https` only times out a socket it *has*, so a request that
+ * never gets one (DNS stall, saturated agent queue) hangs forever, and before
+ * this guard it pinned the single flight and froze `usageStatus` until restart.
+ */
+const REFRESH_STALL_MS = 45_000;
 const REQUEST_TIMEOUT_MS = 5_000;
 
 /**
@@ -213,21 +222,53 @@ let cached: UsageLimits | null = null;
 let cachedStatus: UsageStatus = 'unavailable';
 let cachedAt = 0;
 let refreshing: Promise<void> | null = null;
+let refreshStartedAt = 0;
+let cycleSeq = 0;
 
 export interface UsageState {
   usage: UsageLimits | null;
   status: UsageStatus;
 }
 
-/** One fetch cycle: token → endpoint → cache. Single-flight via `refreshing`. */
-function refreshNow(): Promise<void> {
-  if (refreshing) return refreshing;
-  refreshing = (async () => {
+/** What {@link shouldRefresh} decides on: the in-flight cycle + the cache age. */
+export interface RefreshGate {
+  inFlight: boolean;
+  startedAt: number;
+  cachedAt: number;
+}
+
+/**
+ * May a new fetch cycle start? Pure, so the stall rule is testable without a
+ * network. An in-flight cycle holds the single flight until it is stalled —
+ * past that, it is abandoned rather than trusted, which is the whole point:
+ * `refreshing` must never be a permanent latch.
+ */
+export function shouldRefresh(gate: RefreshGate, now: number, force = false): boolean {
+  if (gate.inFlight) return now - gate.startedAt >= REFRESH_STALL_MS;
+  if (force) return true;
+  return gate.cachedAt === 0 || now - gate.cachedAt > CACHE_TTL_MS;
+}
+
+/** Module state as the gate sees it. */
+function gateState(): RefreshGate {
+  return { inFlight: refreshing !== null, startedAt: refreshStartedAt, cachedAt };
+}
+
+/**
+ * One fetch cycle: token → endpoint → cache. Single-flight via `refreshing`,
+ * but the flight is *abandonable* — see {@link shouldRefresh}.
+ */
+function refreshNow(force = false): Promise<void> {
+  const now = Date.now();
+  if (!shouldRefresh(gateState(), now, force)) return refreshing ?? Promise.resolve();
+  const mine = ++cycleSeq;
+  refreshStartedAt = now;
+  const cycle = (async () => {
+    let next: UsageState = { usage: null, status: 'unavailable' };
     try {
       const t = readToken();
       if (t.state !== 'ok') {
-        cached = null;
-        cachedStatus = t.state === 'expired' ? 'token-expired' : 'unavailable';
+        next = { usage: null, status: t.state === 'expired' ? 'token-expired' : 'unavailable' };
         return;
       }
       const limits = await fetchUsage(t.token);
@@ -258,24 +299,38 @@ function refreshNow(): Promise<void> {
       }
       // Feed the pace store one sample per window and attach burn rate +
       // projected exhaustion (null until enough history accumulates).
-      cached = limits
-        ? {
-            fiveHour: recordAndPace('fiveHour', limits.fiveHour),
-            sevenDay: recordAndPace('sevenDay', limits.sevenDay)
-          }
-        : null;
-      cachedStatus = limits ? 'ok' : 'unavailable';
+      next = {
+        usage: limits
+          ? {
+              fiveHour: recordAndPace('fiveHour', limits.fiveHour),
+              sevenDay: recordAndPace('sevenDay', limits.sevenDay)
+            }
+          : null,
+        status: limits ? 'ok' : 'unavailable'
+      };
     } catch {
       // Fail open: this promise is often fire-and-forget (`void refreshNow()`),
       // so a rejection here would be unhandled and kill the process.
-      cached = null;
-      cachedStatus = 'unavailable';
+      next = { usage: null, status: 'unavailable' };
     } finally {
-      cachedAt = Date.now();
-      refreshing = null;
+      // Only the newest cycle owns the cache: one the gate already abandoned as
+      // stalled must not clobber fresher state if it ever wakes up.
+      if (mine === cycleSeq) {
+        cached = next.usage;
+        cachedStatus = next.status;
+        cachedAt = Date.now();
+      }
     }
   })();
-  return refreshing;
+  refreshing = cycle;
+  // Released here rather than in the body's `finally`: a cycle with no usable
+  // token settles synchronously, before `refreshing = cycle` above runs, and
+  // clearing from inside would then leave a settled promise pinned in its place.
+  const release = () => {
+    if (refreshing === cycle) refreshing = null;
+  };
+  cycle.then(release, release);
+  return cycle;
 }
 
 /**
@@ -291,7 +346,7 @@ function refreshNow(): Promise<void> {
  * request rate is unchanged.
  */
 export function refreshUsageNow(): void {
-  void refreshNow();
+  void refreshNow(true);
 }
 
 /**
@@ -300,6 +355,6 @@ export function refreshUsageNow(): void {
  * call returns `unavailable` until the first fetch lands (next poll picks it up).
  */
 export function getCachedUsageState(): UsageState {
-  if (!refreshing && (cachedAt === 0 || Date.now() - cachedAt > CACHE_TTL_MS)) void refreshNow();
+  if (shouldRefresh(gateState(), Date.now())) void refreshNow();
   return { usage: cached, status: cachedStatus };
 }

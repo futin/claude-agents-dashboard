@@ -32,6 +32,12 @@ pace, do I run dry before the window resets?*
   fires a **non-blocking** background refresh when older than 60s. So the 3s
   `/api/sessions` poll never blocks on the network, and Anthropic is hit at most
   ~once/min. First load shows no bars until the first fetch lands (next poll picks it up).
+  One cycle at a time (`refreshing`), but that flight is **abandonable**: `shouldRefresh()`
+  lets the next call start its own cycle once the current one is past `REFRESH_STALL_MS`
+  (45s), and only the newest cycle may write the cache. Without that, a request that hangs
+  without ever getting a socket — `https` can only time out a socket it *has* — latched the
+  guard permanently and froze `usageStatus` (seen live: a stale `token-expired` served for
+  hours against a valid token, curable only by restarting the server).
 - **Wiring:** `SessionsResponse.usage?: UsageLimits | null` (in `shared/types.ts`);
   attached in `api.ts` (both success and error branches) only when `config.showUsage`.
   Still **zero npm deps** — `https` + `child_process` are Node built-ins.
