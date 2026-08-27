@@ -124,6 +124,8 @@ server/
   lib/usage-pace.ts  utilization sample ring → burn rate + projected 100% per window
   lib/usage-forecast.ts  forward walk over hour-of-week weights → projected 100%
   lib/usage-history.ts  persisted samples → the learned 168-bucket duty-cycle profile
+  lib/token-refresh.ts  makes the CLI renew an expired OAuth token (auth status,
+                  then one haiku turn) so the bars self-heal
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser
   lib/management.ts   config scanner + servable-path security set
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis

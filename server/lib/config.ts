@@ -16,6 +16,13 @@ export interface Config {
   activeWindowMin: number;
   lookbackHours: number;
   showUsage: boolean;
+  /**
+   * Renew an expired OAuth token automatically by asking the CLI to (see
+   * server/lib/token-refresh.ts). A kill switch, not a feature flag: renewal
+   * spawns `claude` and may spend one haiku turn, so a host that wants neither
+   * sets `USAGE_AUTO_REFRESH=false` and gets the old "token expired" hint back.
+   */
+  usageAutoRefresh: boolean;
   skipProcScan: boolean;
   /** How many generated analytics reports the Analytics tab shows (newest-first). */
   analyticsKeep: number;
@@ -86,6 +93,7 @@ export const DEFAULTS = {
   ACTIVE_WINDOW_MIN: 5,
   LOOKBACK_HOURS: 24,
   SHOW_USAGE: true,
+  USAGE_AUTO_REFRESH: true,
   ANALYTICS_KEEP: 5,
   SHOW_ANALYTICS: true,
   REMOTE_ANSWER: true,
@@ -201,6 +209,7 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     activeWindowMin: toPosInt(src('ACTIVE_WINDOW_MIN'), DEFAULTS.ACTIVE_WINDOW_MIN),
     lookbackHours: toPosInt(src('LOOKBACK_HOURS'), DEFAULTS.LOOKBACK_HOURS),
     showUsage: toBool(src('SHOW_USAGE'), DEFAULTS.SHOW_USAGE),
+    usageAutoRefresh: toBool(src('USAGE_AUTO_REFRESH'), DEFAULTS.USAGE_AUTO_REFRESH),
     skipProcScan: toBool(src('SKIP_PROC_SCAN'), isDockerContainer()),
     analyticsKeep: toPosInt(src('ANALYTICS_KEEP'), DEFAULTS.ANALYTICS_KEEP),
     showAnalytics: toBool(src('SHOW_ANALYTICS'), DEFAULTS.SHOW_ANALYTICS),
