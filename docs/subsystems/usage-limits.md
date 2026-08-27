@@ -48,6 +48,58 @@ pace, do I run dry before the window resets?*
 - **Toggle:** `SHOW_USAGE=false` disables the feature entirely (no fetch, no keychain
   read). Default on.
 
+### Automatic renewal (`lib/token-refresh.ts`)
+
+A cycle that reads an **expired** token kicks off a background renewal and still returns
+`token-expired` for that cycle; a later poll picks up the fresh token (the renewal zeroes
+`cachedAt`, so the next poll refetches instead of serving a known-stale status for another
+minute).
+
+Two steps, cheapest first:
+
+1. `claude auth status` — a local read, ~0.5s, costs nothing.
+2. `claude -p ok --model haiku` — one cheap turn, only if step 1 did not renew.
+
+**Success is a re-probe of the credential store, never an exit code.** `claude` exits 0 in
+plenty of states that leave the token untouched — and `--bare` would exit 0 having never
+read the keychain at all, so never add it here.
+
+That rule also makes a hanging CLI harmless. Measured on macOS 2026-08-27: `claude -p`
+*completed its turn* (the transcript shows the haiku reply) and then did not exit for 90s+
+— identically with `--strict-mcp-config` and with `--no-session-persistence`, so it is not
+MCP shutdown and no extra flag fixes it. Waiting on the **process** would therefore serve
+`token-expired` for a minute after the **token** was already good, so `spawnWatching` polls
+the credential store every `PROBE_POLL_MS` (2s) *while* the spawn runs and returns as soon
+as it turns over, leaving the spawn to its own timeout. It races the spawn too, so a
+fast, well-behaved CLI costs no extra wait.
+
+The argv stays deliberately minimal — `-p ok --model haiku`, nothing newer. Flags that
+buy nothing measurable would only add CLI-version coupling to the one path whose job is to
+work when things are already broken.
+
+`missing` is deliberately not covered. No spawn conjures credentials that were never
+stored — that needs a login.
+
+**Backoff** (`shouldAutoRefresh`, pure): 5 min after the first failure, doubling, capped at
+an hour. The common failure is *structural* — logged out, no `claude` on PATH under a
+launchd PATH, subscription lapsed — not transient, so a fixed retry would spawn a process
+a minute forever against it. `cliMissing` (ENOENT on **both** steps) disables renewal for
+the process lifetime: that is the Docker case, and there is nothing to wait for.
+
+**The turn's transcript is filtered out.** It runs in `~/.claude/dashboard-refresh`, and
+`scan.ts` drops any transcript whose cwd is that directory — otherwise the dashboard's own
+plumbing shows up as a phantom session row.
+
+**Kill switch:** `USAGE_AUTO_REFRESH=false` restores the old hint-only behaviour. It is a
+kill switch rather than a feature flag because renewal spawns a process and may spend one
+haiku turn; it is server-side, not a per-device UI toggle, for the same reason the usage
+recorder is — the renewal happens inside the server's fetch cycle whether or not anyone
+has the page open.
+
+⚠️ **Unverified:** whether step 1 alone renews an expired token. It was measured fast and
+harmless, but the token was valid at the time, so there was nothing to renew — step 2
+exists precisely because that is unproven. Confirming it needs a genuinely expired token.
+
 ## Pace + the time strip
 
 **What the 5h window actually is.** It is a **fixed session window**, not a sliding one:
@@ -315,15 +367,20 @@ before `confidence` leaves `thin`, and no test substitutes for that.
 - **Fail-open everywhere:** no token / expired / network error / non-2xx / unparseable →
   `usage: null` → the header simply omits the bars. Never throws into `scanSessions`
   (which stays pure).
-- **We never refresh the token** — that would mutate your credentials. An expired token
-  just hides the bars; the CLI renews its own token the next time it runs (on host use),
-  and the next poll flips `usageStatus` back to `ok`. A "Sync" button that spawned
-  `claude -p` to force-refresh was removed — too much machinery (CLI-spawn + Docker/PATH
-  resolution) for a cosmetic header feature, and it could never work in Docker (no CLI in
-  the container, `~/.claude` mounted read-only). See
-  `backlog/tasks/done/task-1-remove-in-app-oauth-token-refresh.md` for the removed design + a
-  platform-independent Docker approach to revisit **if** a future feature genuinely needs
-  the dashboard to make its own authenticated Anthropic API call.
+- **We never write credentials ourselves — we make the CLI do it.** Direct OAuth refresh
+  is still rejected: undocumented endpoint, and taking a rotated refresh token and then
+  dropping it can log the CLI out.
+- **The token is renewed automatically** (see *Automatic renewal* above). What changed on
+  2026-08-27 is the assumption the previous hint-only behaviour rested on — "the CLI
+  renews its own token the next time it runs" — which is false in a desktop-only
+  workflow. Measured that day: the keychain item had not been written for 10 hours while
+  sessions ran all morning, `expiresAt` was 2h past, and the usage endpoint returned 401.
+  Only a real `claude` CLI process writes `Claude Code-credentials`; Claude Code Desktop
+  keeps its own store. Nothing renewed it, so "token expired" was permanent rather than
+  self-healing, and the only cure was to run the CLI by hand. The earlier removal
+  (`backlog/tasks/done/task-1-remove-in-app-oauth-token-refresh.md`) also rejected
+  *auto*-refresh as "burning turns silently"; at one haiku turn per 8h, with a free
+  `auth status` tried first, that cost is worth a header that heals itself.
 
 <!-- docs-sync:
   sources:
@@ -331,6 +388,7 @@ before `confidence` leaves `thin`, and no test substitutes for that.
     - server/lib/usage-pace.ts
     - server/lib/usage-forecast.ts
     - server/lib/usage-history.ts
+    - server/lib/token-refresh.ts
     - client/src/lib/pace.ts
     - client/src/lib/usageProfile.ts
     - client/src/lib/walkChart.ts

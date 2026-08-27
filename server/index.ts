@@ -31,9 +31,12 @@ import {
   serveTranscribe, serveSpawn, serveSpawnStop, serveUsageProfile
 } from './api.js';
 import { startUsageRecording } from './lib/usage-history.js';
-import { refreshUsageNow } from './lib/usage.js';
+import { refreshUsageNow, setUsageAutoRefresh } from './lib/usage.js';
 
 const config = loadConfig();
+// Arm automatic OAuth-token renewal. Gated on showUsage too: with usage off
+// nothing ever reads the token, so there is nothing to renew.
+setUsageAutoRefresh(config.showUsage && config.usageAutoRefresh);
 const isProd = process.env.NODE_ENV === 'production';
 const clientDist = path.join(process.cwd(), 'client', 'dist');
 

@@ -25,6 +25,7 @@ import type { UsageLimits, RateLimit, UsageStatus } from '../../shared/types.js'
 import { recordAndPace, setForecastProfile } from './usage-pace.js';
 import { deriveProfile, profileSnapshot, recordTick } from './usage-history.js';
 import { getSettings } from './settings.js';
+import { autoRenew } from './token-refresh.js';
 
 /** Outcome of looking for a stored OAuth token. */
 export type TokenState =
@@ -222,6 +223,12 @@ let cached: UsageLimits | null = null;
 let cachedStatus: UsageStatus = 'unavailable';
 let cachedAt = 0;
 let refreshing: Promise<void> | null = null;
+/**
+ * Whether an expired token may be renewed automatically. Set once at boot from
+ * `USAGE_AUTO_REFRESH`; a kill switch rather than a feature flag, because the
+ * renewal spawns a process and can spend one (haiku) turn.
+ */
+let autoRefreshEnabled = true;
 let refreshStartedAt = 0;
 let cycleSeq = 0;
 
@@ -269,6 +276,20 @@ function refreshNow(force = false): Promise<void> {
       const t = readToken();
       if (t.state !== 'ok') {
         next = { usage: null, status: t.state === 'expired' ? 'token-expired' : 'unavailable' };
+        // A stored token only ever expires — and nothing renews it in a
+        // desktop-only workflow, since only a real `claude` CLI process writes
+        // the keychain item we read. So ask the CLI to, in the background.
+        // This cycle still reports `token-expired`; a later poll picks up the
+        // renewed token. `missing` is deliberately excluded: no spawn can
+        // conjure credentials that were never stored — that needs a login.
+        if (t.state === 'expired' && autoRefreshEnabled) {
+          void autoRenew({
+            probe: () => readToken().state === 'ok',
+            // Drop the TTL so the very next poll refetches, instead of serving
+            // a known-stale `token-expired` for up to another CACHE_TTL_MS.
+            onRenewed: () => { cachedAt = 0; }
+          });
+        }
         return;
       }
       const limits = await fetchUsage(t.token);
@@ -345,6 +366,17 @@ function refreshNow(force = false): Promise<void> {
  * browser-poll path stays quiet for its own 60s afterwards, so the combined
  * request rate is unchanged.
  */
+/**
+ * Arm or disarm automatic token renewal (boot-time, from `USAGE_AUTO_REFRESH`).
+ * Server-side rather than a per-device UI toggle for the same reason the usage
+ * recorder is: the renewal runs inside the server's fetch cycle, and a browser
+ * preference cannot gate a process spawn that happens whether or not anyone
+ * has the page open.
+ */
+export function setUsageAutoRefresh(on: boolean): void {
+  autoRefreshEnabled = on;
+}
+
 export function refreshUsageNow(): void {
   void refreshNow(true);
 }
