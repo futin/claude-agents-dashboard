@@ -75,6 +75,43 @@ export function run(): number {
     assert.strictEqual(h['anthropic-beta'], 'oauth-2025-04-20');
   })) p++; else f++;
 
+  // ── shouldRefresh: the gate that decides when a new fetch cycle may start ──
+  // A refresh promise that never settles used to pin the single-flight guard
+  // forever, freezing usageStatus at whatever the last completed cycle saw.
+
+  const GATE = { inFlight: false, startedAt: 0, cachedAt: NOW };
+
+  if (test('shouldRefresh: nothing in flight and the cache is stale → true', () => {
+    assert.strictEqual(usage.shouldRefresh({ ...GATE }, NOW + 61_000), true);
+  })) p++; else f++;
+
+  if (test('shouldRefresh: nothing in flight and the cache is fresh → false', () => {
+    assert.strictEqual(usage.shouldRefresh({ ...GATE }, NOW + 5_000), false);
+  })) p++; else f++;
+
+  if (test('shouldRefresh: never fetched (cachedAt 0) → true', () => {
+    assert.strictEqual(usage.shouldRefresh({ inFlight: false, startedAt: 0, cachedAt: 0 }, NOW), true);
+  })) p++; else f++;
+
+  if (test('shouldRefresh: a young in-flight cycle holds the single flight → false', () => {
+    const gate = { inFlight: true, startedAt: NOW, cachedAt: NOW - 120_000 };
+    assert.strictEqual(usage.shouldRefresh(gate, NOW + 5_000), false);
+  })) p++; else f++;
+
+  if (test('shouldRefresh: an in-flight cycle past the stall deadline is abandoned → true', () => {
+    const gate = { inFlight: true, startedAt: NOW, cachedAt: NOW - 120_000 };
+    assert.strictEqual(usage.shouldRefresh(gate, NOW + 60_000), true);
+  })) p++; else f++;
+
+  if (test('shouldRefresh: force ignores the cache TTL', () => {
+    assert.strictEqual(usage.shouldRefresh({ ...GATE }, NOW + 5_000, true), true);
+  })) p++; else f++;
+
+  if (test('shouldRefresh: force still yields to a young in-flight cycle', () => {
+    const gate = { inFlight: true, startedAt: NOW, cachedAt: NOW };
+    assert.strictEqual(usage.shouldRefresh(gate, NOW + 5_000, true), false);
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }
