@@ -294,7 +294,8 @@ function WalkStrip({ walk, exhaustAt, walkAbsent, globalMean, cells, tipHandlers
             ))}
           </div>
           <p className="up-note">
-            Cumulative window use from now to the weekly reset.{' '}
+            Cumulative window use from now to the weekly reset.
+            <br />
             <span className="up-key"><i className="up-key-solid" /> solid</span> hours are walked
             with a measured weight;{' '}
             <span className="up-key"><i className="up-key-dash" /> dashed</span> hours have no
