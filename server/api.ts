@@ -874,11 +874,18 @@ export async function servePermissionNotify(
   if (!sessionId || !ID_RE.test(sessionId)) return sendJson(res, 400, { error: 'bad sessionId' });
   if (!sessionExists(sessionId)) return sendJson(res, 404, { error: 'unknown session' });
 
-  notifyPermission(sessionId, body.message);
-  maybeSend(config, 'permission', {
-    sessionId,
-    permissionMode: typeof body.permissionMode === 'string' ? body.permissionMode : undefined
-  });
+  // Two hook events report one dialog (`PermissionRequest`, then `Notification`
+  // ~6s later). The flag is idempotent, a push is not, so the store's own
+  // "is this a new dialog" answer is what gates the buzz. Same shape as the
+  // `stopHookActive` suppression on the message-wait route: the route decides,
+  // `shouldNotify` stays a pure policy predicate.
+  const freshDialog = notifyPermission(sessionId, body.message);
+  if (freshDialog) {
+    maybeSend(config, 'permission', {
+      sessionId,
+      permissionMode: typeof body.permissionMode === 'string' ? body.permissionMode : undefined
+    });
+  }
   sendJson(res, 200, { ok: true });
 }
 

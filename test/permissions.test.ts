@@ -1,8 +1,8 @@
 import assert from 'node:assert';
 
 import {
-  MESSAGE_CAP, clearPermission, notifyPermission, permissionMessage,
-  permissionWaits, resetPermissions
+  MESSAGE_CAP, PERMISSION_PUSH_DEDUPE_MS, clearPermission, notifyPermission,
+  permissionMessage, permissionWaits, resetPermissions
 } from '../server/lib/permissions.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -108,6 +108,68 @@ export async function run(): Promise<number> {
     }
     resetPermissions();
   }
+
+  // --- push dedupe: two hooks, one dialog ---------------------------------
+  //
+  // `permission-notify.sh` is registered on BOTH `PermissionRequest` and
+  // `Notification`, which fire ~6s apart for the same dialog. The store has
+  // always coped (one entry, re-armed), but the caller also pushes, and two
+  // POSTs meant two buzzes. The return value is what lets the route push once.
+
+  if (test('first notify for a session is fresh', () => {
+    resetPermissions();
+    assert.strictEqual(notifyPermission('sess-a', '', 60_000, 1_000), true);
+  })) p++; else f++;
+
+  if (test('the paired hook 6s later is not fresh', () => {
+    resetPermissions();
+    notifyPermission('sess-a', '', 60_000, 1_000);
+    assert.strictEqual(notifyPermission('sess-a', '', 60_000, 7_000), false);
+  })) p++; else f++;
+
+  if (test('a notify past the dedupe window is fresh again', () => {
+    resetPermissions();
+    notifyPermission('sess-a', '', 60_000, 1_000);
+    const after = 1_000 + PERMISSION_PUSH_DEDUPE_MS;
+    assert.strictEqual(notifyPermission('sess-a', '', 60_000, after), true);
+  })) p++; else f++;
+
+  if (test('the boundary itself is inside the window', () => {
+    resetPermissions();
+    notifyPermission('sess-a', '', 60_000, 1_000);
+    const edge = 1_000 + PERMISSION_PUSH_DEDUPE_MS - 1;
+    assert.strictEqual(notifyPermission('sess-a', '', 60_000, edge), false);
+  })) p++; else f++;
+
+  if (test('freshness is per session, not global', () => {
+    resetPermissions();
+    notifyPermission('sess-a', '', 60_000, 1_000);
+    assert.strictEqual(notifyPermission('sess-b', '', 60_000, 2_000), true);
+  })) p++; else f++;
+
+  if (test('a suppressed notify still re-arms the entry', () => {
+    resetPermissions();
+    notifyPermission('sess-a', 'first', 60_000, 1_000);
+    notifyPermission('sess-a', 'second', 60_000, 7_000);
+    assert.strictEqual(permissionWaits().get('sess-a'), 7_000);
+    assert.strictEqual(permissionMessage('sess-a'), 'second');
+  })) p++; else f++;
+
+  if (test('dedupe measures from the last notify, not the first', () => {
+    // Three notifies, each 6s apart. The third is 12s after the first — past
+    // nothing, because the second re-armed the clock. Only the first pushes.
+    resetPermissions();
+    assert.strictEqual(notifyPermission('sess-a', '', 60_000, 1_000), true);
+    assert.strictEqual(notifyPermission('sess-a', '', 60_000, 7_000), false);
+    assert.strictEqual(notifyPermission('sess-a', '', 60_000, 13_000), false);
+  })) p++; else f++;
+
+  if (test('clearing a session makes the next notify fresh', () => {
+    resetPermissions();
+    notifyPermission('sess-a', '', 60_000, 1_000);
+    clearPermission('sess-a');
+    assert.strictEqual(notifyPermission('sess-a', '', 60_000, 2_000), true);
+  })) p++; else f++;
 
   if (test('resetPermissions clears entries (and their timers)', () => {
     notifyPermission('sess-a', '', 60_000, 1_000);

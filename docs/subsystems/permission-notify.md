@@ -114,6 +114,22 @@ osascript banner, ntfy, …), never replacing it:
 Registering both is safe: one entry per session, so whichever arrives first flips the tab and
 the second just re-arms it.
 
+That idempotence used to be claimed for the whole route, and it was only ever true of the
+*flag*. `servePermissionNotify` also pushes, and a push is not idempotent — so one dialog
+buzzed the phone twice, about six seconds apart, which is exactly the `PermissionRequest` →
+`Notification` gap. `notifyPermission` now returns whether the report looks like a *new*
+dialog (no live entry, or the last one older than `PERMISSION_PUSH_DEDUPE_MS` = 15s) and the
+route pushes only then. The flag is still written on every report, so the pill behaves as it
+always did.
+
+15s rather than the 30-minute `PERMISSION_TTL_MS`: the TTL is a backstop reaper for a flag
+that the transcript normally clears, and reusing it would have silenced every *later* dialog
+in the session. The window is measured from the last report, not the first, so a third
+reporter would be suppressed too.
+
+Like the `stopHookActive` case on the message-wait route, this is a suppression the **route**
+applies — `shouldNotify` stays a pure policy predicate with no per-session memory in it.
+
 ## Gotchas
 
 - **`Notification` fires for more than permissions** (`idle_prompt`, auth, elicitation). Newer

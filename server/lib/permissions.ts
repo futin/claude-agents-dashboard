@@ -26,6 +26,22 @@
 export const PERMISSION_TTL_MS = 30 * 60_000;
 /** Cap on the hook-supplied message ("Claude needs your permission to use Bash"). */
 export const MESSAGE_CAP = 200;
+/**
+ * How long after a notify the *same* session's next notify counts as the same
+ * dialog, and so must not push again.
+ *
+ * `permission-notify.sh` is deliberately registered on two hook events —
+ * `PermissionRequest` fires as the prompt is drawn, `Notification` ~6s later on
+ * engines that emit it — because neither one covers every engine. That has
+ * always been harmless for the flag this module keeps (one entry per session,
+ * re-armed), but the route also pushes, and one dialog was buzzing the phone
+ * twice, six seconds apart.
+ *
+ * 15s: comfortably past the ~6s pairing, short enough that a genuinely new
+ * dialog still buzzes. Deliberately NOT `PERMISSION_TTL_MS` — that flag lives
+ * 30 minutes, and reusing it would silence every later dialog in the session.
+ */
+export const PERMISSION_PUSH_DEDUPE_MS = 15_000;
 
 interface Entry {
   /** Epoch ms the notification arrived — compared against the transcript. */
@@ -41,6 +57,12 @@ const entries = new Map<string, Entry>();
  * (the CLI shows one dialog at a time); a second notify supersedes the first,
  * which re-arms both the timestamp and the TTL.
  *
+ * Returns whether this looks like a *new* dialog rather than the second hook
+ * reporting the one already recorded — see {@link PERMISSION_PUSH_DEDUPE_MS}.
+ * The flag itself is written either way; only the caller's push depends on it,
+ * which keeps the display path (idempotent by design) and the notify path
+ * (emphatically not) from having to agree about anything else.
+ *
  * `now` and `ttlMs` are injectable so the tests don't have to sleep.
  */
 export function notifyPermission(
@@ -48,8 +70,11 @@ export function notifyPermission(
   message?: unknown,
   ttlMs: number = PERMISSION_TTL_MS,
   now: number = Date.now()
-): void {
+): boolean {
   const prev = entries.get(sessionId);
+  // Measured from the last notify, not the first: two hooks is the case this
+  // exists for, and a third report would be the same dialog too.
+  const fresh = !prev || now - prev.notifiedAt >= PERMISSION_PUSH_DEDUPE_MS;
   if (prev) clearTimeout(prev.timer);
 
   const entry: Entry = {
@@ -62,6 +87,7 @@ export function notifyPermission(
   // Never hold the process open for a display-only flag.
   entry.timer.unref?.();
   entries.set(sessionId, entry);
+  return fresh;
 }
 
 /**
