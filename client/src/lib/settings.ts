@@ -19,6 +19,7 @@
  */
 
 import type { Section } from '../components/SideRail';
+import { EFFORTS, MODELS } from './spawnOptions';
 
 export const THEMES = [
   { id: 'midnight', label: 'Midnight Radar', hint: 'the original — deep navy scope room' },
@@ -51,7 +52,14 @@ export interface Settings {
    * that happened before the JSON was written.
    */
   chatFullText: boolean;
+  /** Preselected in the launch panel's model picker. '' = leave it on "default" (the `claude` CLI's own choice). */
+  spawnDefaultModel: SpawnDefaultModel;
+  /** Same as `spawnDefaultModel`, for the effort picker. */
+  spawnDefaultEffort: SpawnDefaultEffort;
 }
+
+export type SpawnDefaultModel = '' | (typeof MODELS)[number];
+export type SpawnDefaultEffort = '' | (typeof EFFORTS)[number];
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'midnight',
@@ -62,7 +70,9 @@ export const DEFAULT_SETTINGS: Settings = {
   lookbackHours: 24,
   activeWindowMin: 5,
   landing: 'last',
-  chatFullText: false
+  chatFullText: false,
+  spawnDefaultModel: '',
+  spawnDefaultEffort: ''
 };
 
 /**
@@ -98,6 +108,8 @@ function pickBool(value: unknown, fallback: boolean): boolean {
 
 const THEME_IDS = THEMES.map(t => t.id);
 const LANDINGS: Landing[] = ['last', 'sessions', 'management', 'analytics', 'settings'];
+const SPAWN_MODELS: SpawnDefaultModel[] = ['', ...MODELS];
+const SPAWN_EFFORTS: SpawnDefaultEffort[] = ['', ...EFFORTS];
 
 /**
  * Coerce anything (a stored blob from an older release, a hand-edited
@@ -115,7 +127,9 @@ export function clampSettings(raw: unknown): Settings {
     lookbackHours: clampNumber(s.lookbackHours, DEFAULT_SETTINGS.lookbackHours, LIMITS.lookbackHours.min, LIMITS.lookbackHours.max),
     activeWindowMin: clampNumber(s.activeWindowMin, DEFAULT_SETTINGS.activeWindowMin, LIMITS.activeWindowMin.min, LIMITS.activeWindowMin.max),
     landing: pickOne(s.landing, LANDINGS, DEFAULT_SETTINGS.landing),
-    chatFullText: pickBool(s.chatFullText, DEFAULT_SETTINGS.chatFullText)
+    chatFullText: pickBool(s.chatFullText, DEFAULT_SETTINGS.chatFullText),
+    spawnDefaultModel: pickOne(s.spawnDefaultModel, SPAWN_MODELS, DEFAULT_SETTINGS.spawnDefaultModel),
+    spawnDefaultEffort: pickOne(s.spawnDefaultEffort, SPAWN_EFFORTS, DEFAULT_SETTINGS.spawnDefaultEffort)
   };
 }
 

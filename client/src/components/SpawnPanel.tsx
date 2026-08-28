@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import MicButton from './MicButton';
 import { useManagementIndex } from '../hooks/useManagement';
+import { useSettings } from '../hooks/useSettings';
 import { useSpawn } from '../hooks/useSpawn';
 import { appendTranscript } from '../lib/dictation';
 import {
@@ -36,6 +37,7 @@ interface Props {
 export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: Props) {
   const { launch, pending, error, needsToken, setToken } = useSpawn();
   const { index, loading } = useManagementIndex(0);
+  const { settings } = useSettings();
   const projects = index?.projects ?? [];
 
   // null = "the user hasn't touched this control yet" — once projects load,
@@ -43,8 +45,10 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
   const [project, setProject] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [name, setName] = useState('');
-  const [model, setModel] = useState('');
-  const [effort, setEffort] = useState('');
+  // Seeded from the per-device Settings defaults; '' still means "send no
+  // --model/--effort flag and let the CLI decide".
+  const [model, setModel] = useState<string>(settings.spawnDefaultModel);
+  const [effort, setEffort] = useState<string>(settings.spawnDefaultEffort);
   // Same null-means-untouched pattern as `project` above: the derived default
   // below re-reacts if `spawnMaxPermission` arrives (or changes) after mount,
   // without an effect to keep them in sync.

@@ -7,8 +7,9 @@ import { useServerSettings } from '../../hooks/useServerSettings';
 import { useSettings } from '../../hooks/useSettings';
 import {
   FONT_SCALES, LIMITS, REFRESH_CHOICES, THEMES,
-  formatInterval, type Landing, type ThemeId
+  formatInterval, type Landing, type SpawnDefaultEffort, type SpawnDefaultModel, type ThemeId
 } from '../../lib/settings';
+import { EFFORTS, MODELS } from '../../lib/spawnOptions';
 
 /**
  * Preview colors per theme — board / strip / accent, in that order. A mirror of
@@ -210,6 +211,34 @@ export default function SettingsView() {
             unit="min"
             onCommit={activeWindowMin => update({ activeWindowMin })}
           />
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup title="New sessions · this device">
+        <SettingsRow
+          name="Default model"
+          hint="Preselected in the launch panel's model picker. “CLI default” sends no --model flag, letting Claude Code pick. You can still override it per launch."
+        >
+          <select
+            value={settings.spawnDefaultModel}
+            onChange={e => update({ spawnDefaultModel: e.target.value as SpawnDefaultModel })}
+          >
+            <option value="">CLI default</option>
+            {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </SettingsRow>
+
+        <SettingsRow
+          name="Default effort"
+          hint="Preselected in the launch panel's effort picker. “CLI default” sends no --effort flag."
+        >
+          <select
+            value={settings.spawnDefaultEffort}
+            onChange={e => update({ spawnDefaultEffort: e.target.value as SpawnDefaultEffort })}
+          >
+            <option value="">CLI default</option>
+            {EFFORTS.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
         </SettingsRow>
       </SettingsGroup>
 
