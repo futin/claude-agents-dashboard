@@ -36,42 +36,146 @@ succeeds while every write path is rejected. The one visible signal was wrong.
 ## Affects
 
 - scripts/install-hooks.sh:262 — `grep -E '^ANSWER_TOKEN='`, anchored, no `[[:space:]]*`
-- server/lib/config.ts:116 — `parseEnv` does `rawLine.trim()`, so the server accepts the same line
+- server/lib/config.ts:112 — `parseEnv` does `rawLine.trim()`, so the server accepts the same line
+- scripts/install-hooks.sh:258 — an existing token file is "left alone" and never compared to `.env`
 - scripts/ask-remote-hook.sh:89 — `AUTH=()` stays empty when the token file is absent
 - scripts/stop-notify-hook.sh:76 — same
 - scripts/plan-remote-hook.sh:38, scripts/permission-notify-hook.sh:50 — same TOKEN_FILE lookup
 - scripts/ask-remote-hook.sh:97, scripts/stop-notify-hook.sh:130 — `curl -sf` turns the 403 into a silent `exit 0`
-- server/api.ts:641,714,789,867,901,926 — the `tokenOk` gates that reject
+- scripts/remote-decision-hook.sh:56 — arms the banner off an untokened `GET /api/health`
+- server/api.ts:426 — `tokenOk`, the gate; 15 call sites reject with no log line
+- server/api.ts:447 — `serveHealth`, which never says a token is required
 
 ## Cause
 
-Two readers of the same `.env` line disagree about leading whitespace. `parseEnv`
-trims each raw line before splitting, so the server sees a token. The installer
-greps with a `^`-anchor and no whitespace class, so it sees nothing and takes its
-"no token configured" branch. The asymmetry means the token can be simultaneously
-*enforced* by the server and *invisible* to the thing whose job is to distribute it.
+**Two independent parsers read the same `.env` key and disagree.** `parseEnv`
+(server/lib/config.ts:112) trims each raw line, splits on the first `=`, trims the
+value, and strips one *matched* surrounding quote pair; later keys overwrite earlier
+ones. The installer (scripts/install-hooks.sh:262) instead runs
+`grep -E '^ANSWER_TOKEN=' | head -1 | cut -d= -f2- | tr -d "\"' \r"`. The reported
+leading-space case is one of at least three divergences, all measured on this repo:
 
-Second, contributing: the failure is unobservable from every surface a user checks.
+| `.env` line | server reads | installer reads | result |
+|---|---|---|---|
+| ` ANSWER_TOKEN=abc` | `abc` | *(nothing — takes the TODO branch)* | no token file |
+| `ANSWER_TOKEN="a b"` | `a b` | `ab` (`tr -d` strips **every** space/quote, not just the wrapping pair) | wrong token file |
+| two `ANSWER_TOKEN=` lines | last wins | first wins (`head -1`) | wrong token file |
+
+All three land in the same place: the server *enforces* a token that the component
+whose only job is to distribute it either cannot see or copies wrongly. Patching the
+grep anchor fixes row 1 and leaves rows 2 and 3 — the anchor is the instance, the
+second parser is the defect.
+
+**Contributing — the installer never re-checks an existing token file.** Line 258
+prints `ok  … already exists (left alone)` on presence alone. Once a wrong token file
+exists (rows 2–3 above, or a hand-copied one from another machine), every subsequent
+`pnpm hooks:install` reports success forever and no run ever compares it to `.env`.
+
+**Contributing — the failure is unobservable from every surface a user checks.**
 The hooks discard the 403 (`curl -sf` + `|| exit 0` / `|| true`), the server logs
-nothing for a rejected hook POST, and the only status indicator anyone looks at —
-the REMOTE DECISION banner — is fed by an endpoint that does not require the token.
+nothing for a rejected POST, `GET /api/health` never mentions that a token is
+required, and the one status indicator anyone reads — the REMOTE DECISION banner —
+is fed by that same untokened endpoint. A misconfigured token is pixel-identical to
+"feature switched off". This is already documented as a known blind spot in
+docs/subsystems/push-notify.md:139; this bug is that blind spot being hit for real.
 
 ## Fix
 
-unknown — candidate directions, to be settled at groom:
+Four parts. **1 and 2 are the fix**; 3 and 4 are the observability the incident
+proved missing and are what stops the *next* token mismatch costing 12 silent hours.
+They are independent — 1 and 2 are worth shipping alone if 3–4 get deferred.
 
-1. Make the installer's reader match the server's: `grep -E '^[[:space:]]*ANSWER_TOKEN='`,
-   trimming the captured value. Narrow, fixes this exact trap. Consider whether every
-   other `grep '^KEY='` over `.env` in `scripts/` has the same hole.
-2. Have the installer stop parsing `.env` itself and ask the running server / reuse
-   `parseEnv`, so there is one reader rather than two. Removes the class, not just the case.
-3. Make the silence loud, independently of 1 and 2: have the hooks distinguish a 403 from
-   an unreachable server (they currently cannot), and/or have the server log a rejected
-   hook POST once. A token misconfiguration should not look identical to "feature off".
-4. Consider whether the REMOTE DECISION banner should reflect *write* reachability
-   rather than `GET /api/health`, since that is the claim it actually makes.
+**1. One reader, not two (root cause).**
+Add `scripts/env-value.ts`, a small tsx entry that imports `parseEnv` from
+`server/lib/config.ts` and prints one key's value:
+`tsx scripts/env-value.ts <KEY> [--env <path>]` → value on stdout, exit 0; nothing on
+stdout, exit 1 when unset or empty. Mirror `loadConfig`'s precedence — `process.env`
+over the file — and name the winning source on **stderr**, so the shell that exported
+a token falls into the same answer the server would give. Never print the value
+anywhere but stdout, so the installer can capture it without it reaching the console.
 
-Immediate workaround applied on this machine (not a fix):
-`printf '%s' "$ANSWER_TOKEN" > ~/.claude/hooks/dashboard-token && chmod 600` plus
-removing the leading space from the `.env` line. Verified by a real `stop` push
-landing on the ntfy topic.
+Replace scripts/install-hooks.sh:262 with a call to it via `"$REPO/node_modules/.bin/tsx"`
+(no new dependency: tsx is already the devDependency every `pnpm` script runs through).
+If that binary is missing — a checkout with no `pnpm install` — print an explicit
+`TODO run pnpm install first, then re-run` step. **Do not fall back to the grep**, and
+do not let a missing binary re-enter the "no ANSWER_TOKEN in .env" branch: silently
+reporting "no token" for a token that exists is the entire bug.
+
+**2. Stop trusting an existing token file (the other half).**
+At scripts/install-hooks.sh:258, when `$TOKEN_FILE` exists *and* `.env` yields a value,
+compare them and branch three ways: identical → `ok` as today; different → a `warn`
+step saying they differ and how to fix it; `.env` empty → `ok … (left alone)`. Compare
+byte-wise without printing either value or any prefix of them. Do not overwrite
+without `--force` — a deliberately different per-machine token is legitimate, and
+clobbering it would be a worse bug than the one being fixed.
+
+**3. Server logs a rejected write (make the 403 audible).**
+In `tokenOk` (server/api.ts:426), on the false branch emit one
+`console.error('[dashboard] rejected write: <METHOD> <path> (bad or missing token)')`,
+following the existing `[dashboard] …` convention. Throttle it — one line per path per
+process, or per 60s — because a held `stop` hook can retry in a loop. **Never log the
+expected token, the received header, or any prefix of either**; the path and method are
+the whole diagnostic.
+
+**4. Health tells the truth about the token, and the banner uses it.**
+Add `tokenRequired: config.answerToken !== ''` to `serveHealth` (server/api.ts:447) and
+to the `/api/health` shape in `shared/types.ts`. This leaks nothing a 403 does not
+already announce. Then in scripts/remote-decision-hook.sh, after the health probe at
+line 56: if `.tokenRequired` is true and `~/.claude/hooks/dashboard-token` is absent,
+do not print the "dashboard is accepting phone answers" banner — print a one-line
+notice that the token file is missing instead. The banner's claim then matches the
+write path it is actually describing.
+
+**Considered and declined: teaching the hooks to distinguish 403 from unreachable**
+(candidate 3 in the original capture). It means replacing `curl -sf` with
+`-o body -w '%{http_code}'` in five hooks whose fail-open behaviour is load-bearing —
+`permission-notify-hook.sh` runs *inline* before the permission prompt is drawn. Parts
+3 and 4 surface the same information from the server and the banner at a fraction of
+the risk. Revisit only if a mismatch survives 1–4.
+
+### Test cases
+
+`scripts/` is shell and nothing in `test/` can reach it. That is a reason to put the
+parsing in a TS entry rather than a reason to skip coverage — part 1 makes the one
+piece that matters testable, and the rest is honestly manual:
+
+- `test/env-value.test.ts` (new), spawning `scripts/env-value.ts --env <tmpdir .env>`:
+  - ` ANSWER_TOKEN=abc` → stdout `abc`, exit 0
+  - `ANSWER_TOKEN="a b"` → stdout `a b`, exit 0 (inner space survives)
+  - `ANSWER_TOKEN=one` then `ANSWER_TOKEN=two` → stdout `two`, exit 0 (last wins)
+  - `# ANSWER_TOKEN=abc` → empty stdout, exit 1
+  - no `.env` at the path at all → empty stdout, exit 1
+  - `ANSWER_TOKEN` in `process.env` and a different value in the file → env value wins
+  - each of the first three asserted **equal to `parseEnv(<same text>).ANSWER_TOKEN`**,
+    so the test fails if the two readers ever diverge again
+- `test/api-remote-toggle.test.ts` (where `/api/health` is exercised today): health
+  reports `tokenRequired: true` with `ANSWER_TOKEN` set and `false` without it.
+- Mutation check on part 3: delete the `tokenOk` false-branch log and the new 403 test
+  must fail. A log assertion that passes with the log removed proves nothing.
+
+Manual, and **must be stated as manual in the PR** — nothing here automates them:
+
+- `pnpm hooks:install -- --dry-run` against each of the three `.env` rows above, with
+  no `~/.claude/hooks/dashboard-token` present: all three must print the `write` step,
+  none may print the TODO branch.
+- Token file present and *differing* from `.env` → the new `warn` step, file untouched.
+- Token file present and matching → `ok`, file untouched.
+- End to end: correct token installed, trigger a `stop` → push lands on the ntfy topic.
+  Then corrupt one byte of the token file → push does not land **and** the server prints
+  the new rejected-write line **and** the REMOTE DECISION banner does not appear.
+
+### Done when
+
+- The three `.env` rows in ## Cause produce a token file identical to what the server
+  enforces, proven by the parity assertions in `test/env-value.test.ts`.
+- No `grep -E '^KEY='` over `.env` remains anywhere in `scripts/` (line 262 was the only one).
+- A wrong token file is reported by `pnpm hooks:install` instead of being left alone.
+- A rejected hook POST leaves a trace on the server, and the banner stops claiming
+  remote answering is armed when the token file is missing.
+- `pnpm test` and `pnpm typecheck` pass, with the output pasted in the PR.
+
+### Workaround
+
+Applied on this machine, not a fix: `printf '%s' "$ANSWER_TOKEN" > ~/.claude/hooks/dashboard-token
+&& chmod 600 ~/.claude/hooks/dashboard-token`, plus removing the leading space from the
+`.env` line. Verified by a real `stop` push landing on the ntfy topic.
