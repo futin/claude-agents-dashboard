@@ -35,6 +35,7 @@ import { run as runSpawnOptions } from './spawn-options.test.js';
 import { run as runResumeEligible } from './resume-eligible.test.js';
 import { run as runSurface } from './surface.test.js';
 import { run as runDecodePath } from './decode-path.test.js';
+import { run as runStaticPath } from './static-path.test.js';
 import { run as runFormat } from './format.test.js';
 import { run as runPanelCollapse } from './panel-collapse.test.js';
 import { run as runUsagePace } from './usage-pace.test.js';
@@ -91,6 +92,7 @@ failed += runSpawnOptions();
 failed += runResumeEligible();
 failed += runSurface();
 failed += runDecodePath();
+failed += runStaticPath();
 failed += runFormat();
 failed += runPanelCollapse();
 

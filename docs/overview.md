@@ -81,6 +81,16 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
 | anything else | static files from `client/dist` (production only) |
 
+⚠️ The static catch-all resolves through `resolveStaticPath` in `index.ts`, which confines
+the result to `client/dist` by comparing against the root **plus `path.sep`**. A bare
+`startsWith(clientDist)` is a string-prefix test, so `../dist-old/x` — any sibling whose name
+merely begins with `dist` — reads as inside the root and is served. It decodes through
+`decodePath` for the same reason the `:id` routes do, which is also what makes the trailing
+separator load-bearing rather than belt-and-braces: decoding is what turns `%2e%2e` into a
+real `..`. This path is unauthenticated and answers on every interface, in dev as well as
+prod — the "production only" in the table above is about what is *useful* there, not about
+what the route will answer.
+
 ⚠️ Route order in `index.ts` is load-bearing: the `:id` detail regex would swallow
 `/api/sessions/:id/chat|question|answer|plan|plan-answer|message|message-answer`, so all of
 those matches sit above it.

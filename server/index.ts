@@ -75,12 +75,39 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2'
 };
 
+/**
+ * Resolve a request path to a file inside `root`, or to the SPA fallback.
+ *
+ * Two things here are load-bearing and easy to undo by accident:
+ *
+ * 1. The containment test compares against `root + path.sep`, not bare `root`.
+ *    `path.join(root, '../dist-secret/x')` collapses the `..` itself and yields
+ *    `<parent>/dist-secret/x`, which *is* a legitimate string prefix of
+ *    `<parent>/dist` — so a bare `startsWith` reads a sibling directory whose
+ *    name merely begins with `dist` as "inside the dist root" and serves it.
+ *    A `client/dist-old` or `client/dist.bak` left behind by a build is all it
+ *    takes, and this listener binds every interface.
+ * 2. Decoding goes through `decodePath`, never `decodeURIComponent` directly.
+ *    A raw call throws `URIError` on `%ZZ` synchronously inside the request
+ *    listener and takes the process down — the exact failure `decodePath`
+ *    exists to prevent. Undecoded is not an option either: without decoding,
+ *    an asset named `my app.css` is looked up as the literal `my%20app.css`.
+ *
+ * Split out of `serveStatic` so both halves are testable without a socket.
+ */
+export function resolveStaticPath(urlPath: string, root: string = clientDist): string {
+  const fallback = path.join(root, 'index.html');
+  const decoded = decodePath(urlPath.split('?')[0].replace(/^\/+/, ''));
+  if (decoded === null) return fallback;
+  const filePath = path.join(root, decoded || 'index.html');
+  // The root itself is in-bounds; the isFile check below rejects it as a directory.
+  if (filePath !== root && !filePath.startsWith(root + path.sep)) return fallback;
+  return filePath;
+}
+
 /** Serve a file from client/dist, falling back to index.html (SPA-style). */
 function serveStatic(urlPath: string, res: http.ServerResponse): void {
-  const clean = urlPath.split('?')[0].replace(/^\/+/, '');
-  let filePath = path.join(clientDist, clean || 'index.html');
-  // Prevent path traversal outside the dist root.
-  if (!filePath.startsWith(clientDist)) filePath = path.join(clientDist, 'index.html');
+  let filePath = resolveStaticPath(urlPath);
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
     filePath = path.join(clientDist, 'index.html');
   }
