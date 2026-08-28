@@ -214,11 +214,20 @@ Test cases:
 
 Files: create `client/src/hooks/useUsageRates.ts`, `client/src/components/usage/
 UsageRates.tsx`, `client/src/lib/usageRatesFormat.ts`; modify
-`client/src/components/usage/UsageView.tsx` (render card above `UsageProfile`),
+`client/src/components/usage/UsageView.tsx` (sub-tabs, see below),
 `client/src/styles.css` (new `.rates-*` classes below the theme-token block, theme
 tokens only — no literal colors), `docs/subsystems/usage-limits.md` (new section),
 `docs/overview.md` (§Map lines for the two new server libs);
 test `test/usage-rates-format.test.ts`.
+
+Placement (settled with the user — no stacking, `UsageProfile` is tall):
+`UsageView` gains a segmented sub-tab switch in its existing `an-bar` header row —
+`Forecast | Token value` — styled after the Settings page's `.set-seg` control.
+Only the active sub-view mounts, so each one-fetch-per-mount hook fires only when
+its tab is opened. The selected tab persists per device via the existing
+`client/src/lib/settings.ts` localStorage mechanism (key `usageTab`, values
+`'forecast' | 'rates'`, default `'forecast'`; an unknown stored value falls back
+to the default — add that case to the settings lib's existing fallback tests).
 
 Behaviour: hook = one fetch per mount, no polling, fail-open keeping prior data
 (mirror `useUsageProfile`). Card per approved mockup: title "Token value per

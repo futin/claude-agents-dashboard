@@ -89,8 +89,12 @@ once per Usage-tab mount (no 3s polling — it reads two files and does arithmet
 
 ### 4. Client — model rates card in the Usage tab
 
-New `UsageRates` component rendered by `UsageView` above/below `UsageProfile`, fed by a
-new `useUsageRates` hook (same one-fetch-per-mount shape as `useUsageProfile`). Per the
+The Usage section splits into sub-tabs — `Forecast | Token value` — via a segmented
+switch in its header row (the Settings page's `.set-seg` pattern), because
+`UsageProfile` is tall and stacking would force scrolling. Only the active sub-view
+mounts; the selected tab persists per device in the localStorage settings lib. The new
+`UsageRates` component is the second tab, fed by a new `useUsageRates` hook (same
+one-fetch-per-mount shape as `useUsageProfile`). Per the
 approved mockup: one row per model (name, "N tok / 1%", baseline + window count,
 deviation line, verdict badge), external-burn footer. All colors via theme tokens;
 class names added to `styles.css` below the token block with zero literals.
