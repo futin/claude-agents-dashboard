@@ -3,7 +3,7 @@ id: idea-10
 title: Measure tokens-per-percent of usage windows
 created: 2026-08-28
 tags: usage, forecast
-started: 2026-08-28T19:55:18Z
+promoted-to: task-8
 ---
 
 ## Problem
