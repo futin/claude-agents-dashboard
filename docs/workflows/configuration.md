@@ -75,5 +75,5 @@ you set one. Full setup in [remote-answers.md](../subsystems/remote-answer.md).
     - scripts/ask-remote-hook.sh
     - .env.example
   kind: workflow
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 69dc049345a08127684ec8813ccd31aaedf4ea84
 -->
