@@ -28,6 +28,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { backAtDesk } from './idle.js';
+import { noteTerminalHandoff } from './permissions.js';
 import type { PendingPlan, PlanAnswerRequest, PlanWaitResult } from '../../shared/types.js';
 
 /** A plan is markdown and can be long; cap it so a runaway tool input can't pin memory. */
@@ -80,6 +81,10 @@ export function composeReason(feedback: string): string {
 function settle(entry: Entry, result: PlanWaitResult): void {
   clearTimeout(entry.timer);
   if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
+  // `rejected` is this store's "acted on remotely"; everything else hands the
+  // plan back to its card in the terminal, which then reports itself as a
+  // permission event. Same handoff the question store records.
+  if (result.status !== 'rejected') noteTerminalHandoff(entry.sessionId);
   entry.resolve(result);
 }
 

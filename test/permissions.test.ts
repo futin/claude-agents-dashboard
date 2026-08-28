@@ -1,8 +1,9 @@
 import assert from 'node:assert';
 
 import {
-  MESSAGE_CAP, PERMISSION_PUSH_DEDUPE_MS, clearPermission, notifyPermission,
-  permissionMessage, permissionWaits, resetPermissions
+  MESSAGE_CAP, PERMISSION_PUSH_DEDUPE_MS, TERMINAL_HANDOFF_MS, clearPermission,
+  handedToTerminal, noteTerminalHandoff, notifyPermission, permissionMessage,
+  permissionWaits, resetPermissions
 } from '../server/lib/permissions.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -169,6 +170,68 @@ export async function run(): Promise<number> {
     notifyPermission('sess-a', '', 60_000, 1_000);
     clearPermission('sess-a');
     assert.strictEqual(notifyPermission('sess-a', '', 60_000, 2_000), true);
+  })) p++; else f++;
+
+  // --- terminal handoff: the dialog you asked for is not news ------------
+  //
+  // Tapping "answer in the terminal" (or the idle sweep releasing a wait, or a
+  // wait timing out) hands the question to a terminal dialog. That dialog then
+  // reports itself as a permission event ~10-15s later, and pushing it buzzes
+  // the phone about a prompt the user just chose to walk over and answer.
+  // The HID idle gate cannot catch this: the tap happened on a phone, so the
+  // Mac has been idle the whole time.
+
+  if (test('a handoff suppresses the permission push that follows', () => {
+    resetPermissions();
+    noteTerminalHandoff('sess-a', 1_000);
+    assert.strictEqual(notifyPermission('sess-a', '', 60_000, 13_000), false);
+  })) p++; else f++;
+
+  if (test('a suppressed handoff push still shows the pill', () => {
+    resetPermissions();
+    noteTerminalHandoff('sess-a', 1_000);
+    notifyPermission('sess-a', 'needs Bash', 60_000, 13_000);
+    assert.strictEqual(permissionWaits().get('sess-a'), 13_000);
+    assert.strictEqual(permissionMessage('sess-a'), 'needs Bash');
+  })) p++; else f++;
+
+  if (test('past the handoff window a dialog pushes again', () => {
+    resetPermissions();
+    noteTerminalHandoff('sess-a', 1_000);
+    assert.strictEqual(notifyPermission('sess-a', '', 60_000, 1_000 + TERMINAL_HANDOFF_MS), true);
+  })) p++; else f++;
+
+  if (test('the handoff boundary itself is still inside the window', () => {
+    resetPermissions();
+    noteTerminalHandoff('sess-a', 1_000);
+    assert.strictEqual(notifyPermission('sess-a', '', 60_000, 1_000 + TERMINAL_HANDOFF_MS - 1), false);
+  })) p++; else f++;
+
+  if (test('a handoff is per session', () => {
+    resetPermissions();
+    noteTerminalHandoff('sess-a', 1_000);
+    assert.strictEqual(notifyPermission('sess-b', '', 60_000, 5_000), true);
+  })) p++; else f++;
+
+  if (test('handedToTerminal reports the window directly', () => {
+    resetPermissions();
+    assert.strictEqual(handedToTerminal('sess-a', 5_000), false);
+    noteTerminalHandoff('sess-a', 1_000);
+    assert.strictEqual(handedToTerminal('sess-a', 5_000), true);
+    assert.strictEqual(handedToTerminal('sess-a', 1_000 + TERMINAL_HANDOFF_MS), false);
+  })) p++; else f++;
+
+  if (test('a later handoff re-arms the window', () => {
+    resetPermissions();
+    noteTerminalHandoff('sess-a', 1_000);
+    noteTerminalHandoff('sess-a', 20_000);
+    assert.strictEqual(handedToTerminal('sess-a', 40_000), true);
+  })) p++; else f++;
+
+  if (test('resetPermissions clears handoffs too', () => {
+    noteTerminalHandoff('sess-a', 1_000);
+    resetPermissions();
+    assert.strictEqual(handedToTerminal('sess-a', 2_000), false);
   })) p++; else f++;
 
   if (test('resetPermissions clears entries (and their timers)', () => {

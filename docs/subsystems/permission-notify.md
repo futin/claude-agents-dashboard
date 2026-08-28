@@ -130,6 +130,29 @@ reporter would be suppressed too.
 Like the `stopHookActive` case on the message-wait route, this is a suppression the **route**
 applies — `shouldNotify` stays a pure policy predicate with no per-session memory in it.
 
+### A dialog you asked for is not news
+
+The second suppression is about *why* the dialog opened. Tapping "answer in the terminal" on
+the phone settles the question wait as `dismissed`; the idle sweep settles it `released`; an
+unanswered one settles `timeout`; a newer question settles the old one `superseded`. Every
+status but `answered` means the same thing, in the wait contract's own words: **the terminal
+dialog takes over**. That dialog then reports itself here ~10–15s later, and pushing it buzzes
+the phone about a prompt the user just chose to walk over and answer.
+
+So each wait store's `settle` calls `noteTerminalHandoff(sessionId)` on any non-acted status
+(`!== 'answered'` for questions and messages, `!== 'rejected'` for plans — that store's
+equivalent), and `notifyPermission` returns `false` for `TERMINAL_HANDOFF_MS` (30s) after one.
+The flag is still written, so the row pill is unaffected.
+
+**The idle gate cannot do this job.** `requireAfk` reads the Mac's HID idle, and the tap that
+causes the handoff happens on a *phone* — the Mac has been idle the whole time, so the clause
+passes and the push goes out. Away-ness and this-was-my-own-doing are different facts, and
+only the second one is knowable from the wait's outcome.
+
+`messages.ts` deliberately does **not** record a handoff: dismissing a reply window lets the
+session stop normally, and no dialog follows it, so suppressing there would only risk
+silencing an unrelated prompt.
+
 ## Gotchas
 
 - **`Notification` fires for more than permissions** (`idle_prompt`, auth, elicitation). Newer

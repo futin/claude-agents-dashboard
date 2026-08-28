@@ -42,6 +42,24 @@ export const MESSAGE_CAP = 200;
  * 30 minutes, and reusing it would silence every later dialog in the session.
  */
 export const PERMISSION_PUSH_DEDUPE_MS = 15_000;
+/**
+ * How long after a wait is handed to the terminal that session's next permission
+ * report is treated as *that* dialog, and so must not push.
+ *
+ * Tapping "answer in the terminal" settles the wait as `dismissed`; the idle
+ * sweep settles it `released`; an unanswered one settles `timeout`, and a newer
+ * question settles the old one `superseded`. Every status but `answered` means
+ * the same thing — the terminal dialog takes over — and that dialog then
+ * reports itself here ~10-15s later. Pushing it buzzes the phone about a prompt
+ * the user just chose to walk over and answer.
+ *
+ * The HID idle gate cannot catch this case: the tap happens on a phone, so the
+ * Mac has been idle the whole time and `requireAfk` passes.
+ *
+ * 30s covers the observed dismiss→dialog gap with room, and expires long before
+ * an unrelated dialog later in the session.
+ */
+export const TERMINAL_HANDOFF_MS = 30_000;
 
 interface Entry {
   /** Epoch ms the notification arrived — compared against the transcript. */
@@ -52,13 +70,41 @@ interface Entry {
 
 const entries = new Map<string, Entry>();
 
+/** `sessionId → when a wait for it last fell back to the terminal dialog`. */
+const handoffs = new Map<string, number>();
+
+/**
+ * Record that a wait for this session just fell back to the terminal dialog, so
+ * the permission report that follows is that dialog and is not news.
+ *
+ * Called from every wait store's `settle` on any non-`answered` status. Plain
+ * timestamps rather than timers: there is nothing to clean up if the dialog
+ * never reports, and a stale entry is inert once its window passes.
+ */
+export function noteTerminalHandoff(sessionId: string, now: number = Date.now()): void {
+  // Prune on write — the map is only ever read for the session being reported,
+  // so nothing else would ever evict a session that has gone away.
+  for (const [id, at] of handoffs) {
+    if (now - at >= TERMINAL_HANDOFF_MS) handoffs.delete(id);
+  }
+  handoffs.set(sessionId, now);
+}
+
+/** Whether this session handed a wait to the terminal within the window. */
+export function handedToTerminal(sessionId: string, now: number = Date.now()): boolean {
+  const at = handoffs.get(sessionId);
+  return at !== undefined && now - at < TERMINAL_HANDOFF_MS;
+}
+
 /**
  * Record that a session is showing a permission dialog. One entry per session
  * (the CLI shows one dialog at a time); a second notify supersedes the first,
  * which re-arms both the timestamp and the TTL.
  *
- * Returns whether this looks like a *new* dialog rather than the second hook
- * reporting the one already recorded — see {@link PERMISSION_PUSH_DEDUPE_MS}.
+ * Returns whether this is worth pushing about: a *new* dialog rather than the
+ * second hook reporting the one already recorded (see
+ * {@link PERMISSION_PUSH_DEDUPE_MS}), and not one the user just sent to the
+ * terminal themselves (see {@link TERMINAL_HANDOFF_MS}).
  * The flag itself is written either way; only the caller's push depends on it,
  * which keeps the display path (idempotent by design) and the notify path
  * (emphatically not) from having to agree about anything else.
@@ -74,7 +120,9 @@ export function notifyPermission(
   const prev = entries.get(sessionId);
   // Measured from the last notify, not the first: two hooks is the case this
   // exists for, and a third report would be the same dialog too.
-  const fresh = !prev || now - prev.notifiedAt >= PERMISSION_PUSH_DEDUPE_MS;
+  const unseen = !prev || now - prev.notifiedAt >= PERMISSION_PUSH_DEDUPE_MS;
+  // A dialog the user asked for is not news, however new it is to this store.
+  const fresh = unseen && !handedToTerminal(sessionId, now);
   if (prev) clearTimeout(prev.timer);
 
   const entry: Entry = {
@@ -118,4 +166,5 @@ export function clearPermission(sessionId: string): void {
 export function resetPermissions(): void {
   for (const entry of entries.values()) clearTimeout(entry.timer);
   entries.clear();
+  handoffs.clear();
 }

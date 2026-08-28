@@ -109,7 +109,7 @@ closed to headless. Push eligibility is unchanged; only which route reached the 
 |---|---|---|
 | `question` | yes — `ask-remote.sh` | **no**, still needs `idleSecs` of idle |
 | `plan` | yes — `plan-remote.sh` | **no**, still needs `idleSecs` of idle |
-| `permission` | none | yes |
+| `permission` | none | yes, but see the two route-level suppressions in [permission-notify](permission-notify.md): one dialog reported twice pushes once, and a dialog that follows a wait the user handed to the terminal does not push at all |
 | `stop` | only gates hold vs. fallback routing, not push eligibility | yes, from either route |
 
 Not a bug in the layering: remote answering *is* an away-feature, and a question answered at
