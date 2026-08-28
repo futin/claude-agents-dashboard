@@ -114,6 +114,45 @@ osascript banner, ntfy, …), never replacing it:
 Registering both is safe: one entry per session, so whichever arrives first flips the tab and
 the second just re-arms it.
 
+That idempotence used to be claimed for the whole route, and it was only ever true of the
+*flag*. `servePermissionNotify` also pushes, and a push is not idempotent — so one dialog
+buzzed the phone twice, about six seconds apart, which is exactly the `PermissionRequest` →
+`Notification` gap. `notifyPermission` now returns whether the report looks like a *new*
+dialog (no live entry, or the last one older than `PERMISSION_PUSH_DEDUPE_MS` = 15s) and the
+route pushes only then. The flag is still written on every report, so the pill behaves as it
+always did.
+
+15s rather than the 30-minute `PERMISSION_TTL_MS`: the TTL is a backstop reaper for a flag
+that the transcript normally clears, and reusing it would have silenced every *later* dialog
+in the session. The window is measured from the last report, not the first, so a third
+reporter would be suppressed too.
+
+Like the `stopHookActive` case on the message-wait route, this is a suppression the **route**
+applies — `shouldNotify` stays a pure policy predicate with no per-session memory in it.
+
+### A dialog you asked for is not news
+
+The second suppression is about *why* the dialog opened. Tapping "answer in the terminal" on
+the phone settles the question wait as `dismissed`; the idle sweep settles it `released`; an
+unanswered one settles `timeout`; a newer question settles the old one `superseded`. Every
+status but `answered` means the same thing, in the wait contract's own words: **the terminal
+dialog takes over**. That dialog then reports itself here ~10–15s later, and pushing it buzzes
+the phone about a prompt the user just chose to walk over and answer.
+
+So each wait store's `settle` calls `noteTerminalHandoff(sessionId)` on any non-acted status
+(`!== 'answered'` for questions and messages, `!== 'rejected'` for plans — that store's
+equivalent), and `notifyPermission` returns `false` for `TERMINAL_HANDOFF_MS` (30s) after one.
+The flag is still written, so the row pill is unaffected.
+
+**The idle gate cannot do this job.** `requireAfk` reads the Mac's HID idle, and the tap that
+causes the handoff happens on a *phone* — the Mac has been idle the whole time, so the clause
+passes and the push goes out. Away-ness and this-was-my-own-doing are different facts, and
+only the second one is knowable from the wait's outcome.
+
+`messages.ts` deliberately does **not** record a handoff: dismissing a reply window lets the
+session stop normally, and no dialog follows it, so suppressing there would only risk
+silencing an unrelated prompt.
+
 ## Gotchas
 
 - **`Notification` fires for more than permissions** (`idle_prompt`, auth, elicitation). Newer

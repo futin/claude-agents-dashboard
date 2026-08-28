@@ -26,6 +26,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { backAtDesk } from './idle.js';
+import { noteTerminalHandoff } from './permissions.js';
 import type {
   AnswerRequest, PendingOption, PendingQuestion, PendingQuestionItem,
   QuestionAnswer, WaitResult
@@ -160,6 +161,11 @@ export function composeReason(questions: PendingQuestionItem[], answers: Questio
 function settle(entry: Entry, result: WaitResult): void {
   clearTimeout(entry.timer);
   if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
+  // Anything but `answered` means the terminal dialog takes over, and that
+  // dialog reports itself as a permission event a few seconds later. Record the
+  // handoff so it does not buzz a phone about a prompt the user chose to walk
+  // over and answer — see `noteTerminalHandoff`.
+  if (result.status !== 'answered') noteTerminalHandoff(entry.sessionId);
   entry.resolve(result);
 }
 

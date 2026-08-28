@@ -45,6 +45,9 @@ with exactly the granularity the user picks events at:
 | `permission` | `POST /api/permissions/notify` | `servePermissionNotify` |
 | `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on (headless sessions take the hold route at the desk too) |
 
+All four are token-gated (`tokenOk`), so a hook that cannot read the token file reaches
+none of them — see the last row of [Fail directions](#fail-directions).
+
 Only `stop` needed a new route, because a finished turn registers nothing. So the whole
 policy lives in one testable module instead of being re-implemented in four shell scripts —
 which is what this replaced. The previous design kept a `CLAUDE_NTFY=1` prefix on one hook
@@ -109,7 +112,7 @@ closed to headless. Push eligibility is unchanged; only which route reached the 
 |---|---|---|
 | `question` | yes — `ask-remote.sh` | **no**, still needs `idleSecs` of idle |
 | `plan` | yes — `plan-remote.sh` | **no**, still needs `idleSecs` of idle |
-| `permission` | none | yes |
+| `permission` | none | yes, but see the two route-level suppressions in [permission-notify](permission-notify.md): one dialog reported twice pushes once, and a dialog that follows a wait the user handed to the terminal does not push at all |
 | `stop` | only gates hold vs. fallback routing, not push eligibility | yes, from either route |
 
 Not a bug in the layering: remote answering *is* an away-feature, and a question answered at
@@ -133,6 +136,7 @@ Silence is the bug this feature exists to fix, so every failure gets an explicit
 | ntfy request fails or times out | **swallow — except in the test** | 2s cap, never awaited, never fails the caller — `maybeSend` `void`s the promise and catches it, since an un-awaited rejection would escape the surrounding `try` and take the process down. `sendTest` is the one send that *does* await the answer, distinguishing a refusal (`<server> refused it (HTTP 404): …  — check NTFY_TOPIC`, the first line of ntfy's own body) from an unreachable server (`couldn't reach <server>: …`), because a button whose job is proving delivery must be able to fail |
 | session scan fails | **push with a short id** | A poor label beats no push |
 | settings file unreadable | **all switches off** | Same fail-open read as the rest of `settings.ts` |
+| hook POST rejected `403 bad token` | **silent — nothing is pushed, and nothing says so** | The four entry routes are `tokenOk`-gated like every other write path, and the hooks read the token from `~/.claude/hooks/dashboard-token`. Missing or wrong there while `ANSWER_TOKEN` is set server-side, and every POST is refused before `maybeSend` runs; the hooks use `curl -sf`, so the 403 is swallowed and the CLI never mentions it. Indistinguishable from "feature off" from every surface — the Settings switches still read On and `notifyAvailable` still reports `true`, because both describe the topic, not the token. If nothing arrives and the test button works, check the token file first ([remote-answer-setup](../workflows/remote-answer-setup.md#failure-modes)) |
 
 ## The topic is a secret
 
@@ -236,5 +240,5 @@ server write path. ntfy makes it unnecessary for now.
     - client/src/lib/deepLink.ts
     - client/src/components/settings/SettingsView.tsx
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 69dc049345a08127684ec8813ccd31aaedf4ea84
 -->

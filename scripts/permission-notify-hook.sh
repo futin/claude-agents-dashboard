@@ -18,7 +18,9 @@
 #                      engine as of 2.1.229. Kept for older/terminal setups.
 #
 # Both are harmless together: the store keeps one entry per session, so whichever
-# arrives first shows the pill and the second just re-arms it.
+# arrives first shows the pill and the second just re-arms it. The push is the
+# part that is NOT idempotent — the server dedupes it per session over a short
+# window (PERMISSION_PUSH_DEDUPE_MS), so registering both costs one buzz, not two.
 #
 # DISPLAY-ONLY, unlike ask-remote-hook.sh. This hook never prints anything on
 # stdout, which for PermissionRequest means "no decision" — the prompt renders

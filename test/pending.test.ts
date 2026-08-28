@@ -9,6 +9,7 @@ import {
   answer, cancel, clampTimeout, composeReason, getPending, pendingSessionIds,
   register, resetStore, sanitizeQuestions, sweepDecided, sweepIdle, validateAnswer
 } from '../server/lib/pending.js';
+import { handedToTerminal, resetPermissions } from '../server/lib/permissions.js';
 import { setSettings, resetSettings } from '../server/lib/settings.js';
 import type { PendingQuestionItem, WaitResult } from '../shared/types.js';
 
@@ -496,6 +497,43 @@ export async function run(): Promise<number> {
     });
   })) p++; else f++;
 
+  // --- terminal handoff wiring -------------------------------------------
+  //
+  // `settle` is what tells the permission store that a dialog is about to open
+  // because the user asked for it. Without these the suppression in
+  // permissions.ts would be dead code nothing ever calls.
+
+  if (test('dismissing a question records a terminal handoff', () => {
+    resetStore();
+    resetPermissions();
+    const w = waiter();
+    const id = register('s1', [AUTH], 20_000, w.resolve);
+    assert.strictEqual(answer('s1', { questionId: id, dismiss: true }), 'ok');
+    assert.strictEqual(w.results[0]?.status, 'dismissed');
+    assert.strictEqual(handedToTerminal('s1'), true);
+  })) p++; else f++;
+
+  if (test('answering a question records no handoff', () => {
+    resetStore();
+    resetPermissions();
+    const w = waiter();
+    const id = register('s1', [AUTH], 20_000, w.resolve);
+    assert.strictEqual(answer('s1', { questionId: id, answers: [{ index: 0, selected: ['OAuth'] }] }), 'ok');
+    assert.strictEqual(w.results[0]?.status, 'answered');
+    assert.strictEqual(handedToTerminal('s1'), false);
+  })) p++; else f++;
+
+  if (test('a superseded question records a handoff for its session', () => {
+    resetStore();
+    resetPermissions();
+    const w1 = waiter(), w2 = waiter();
+    register('s1', [AUTH], 20_000, w1.resolve);
+    register('s1', [LANGS], 20_000, w2.resolve);
+    assert.strictEqual(w1.results[0]?.status, 'superseded');
+    assert.strictEqual(handedToTerminal('s1'), true);
+  })) p++; else f++;
+
+  resetPermissions();
   resetStore();
 
   console.log(`\n  ${p} passed, ${f} failed`);
