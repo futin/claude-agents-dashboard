@@ -20,6 +20,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 import { loadConfig } from './lib/config.js';
+import type { Config } from './lib/config.js';
 import {
   serveSessions, serveSessionDetail, serveSessionChat,
   serveManagementIndex, serveManagementProject, serveManagementFile,
@@ -152,159 +153,172 @@ function badRequest(res: http.ServerResponse): void {
   res.end(JSON.stringify({ error: 'bad path encoding' }));
 }
 
-const server = http.createServer((req, res) => {
-  // Management routes take query params — parse once. Handlers are async but
-  // self-contained (they always end the response), so `void` keeps the
-  // callback signature.
-  const u = new URL(req.url || '/', 'http://local');
-  if (u.pathname === '/api/management/file') {
-    return void serveManagementFile(config, u.searchParams.get('path') || '', res);
-  }
-  if (u.pathname === '/api/management/project') {
-    return void serveManagementProject(config, u.searchParams.get('dir') || '', res);
-  }
-  if (u.pathname === '/api/management') {
-    return void serveManagementIndex(config, res);
-  }
-  if (u.pathname === '/api/analytics') {
-    return void serveAnalytics(config, res);
-  }
-  if (u.pathname === '/api/health') {
-    return void serveHealth(config, res, req);
-  }
-  // Read on GET, write on POST — the write is guarded like the others below.
-  // Only holds settings a separate process must agree on (see lib/settings.ts);
-  // the rest of the Settings page is per-device localStorage.
-  if (u.pathname === '/api/settings') {
-    if (req.method === 'POST') return void serveSettingsWrite(config, req, res);
-    return void serveSettingsRead(config, res);
-  }
-  // The duty-cycle profile behind the weekly forecast — read-only, and never
-  // carrying raw samples (see docs/subsystems/usage-limits.md).
-  if (u.pathname === '/api/usage/profile') {
-    return void serveUsageProfile(res);
-  }
-  // The only write endpoints in the app (see docs/subsystems/remote-answer.md).
-  // `wait` holds its response open for minutes — that is by design.
-  if (u.pathname === '/api/questions/wait') {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    return void serveQuestionWait(config, req, res);
-  }
-  if (u.pathname === '/api/plans/wait') {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    return void servePlanWait(config, req, res);
-  }
-  if (u.pathname === '/api/messages/wait') {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    return void serveMessageWait(config, req, res);
-  }
-  if (u.pathname === '/api/remote-answer') {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    return void serveRemoteAnswerToggle(config, req, res);
-  }
-  // Fire-and-forget flag from the PermissionRequest hook: a session is showing a
-  // permission dialog (see docs/subsystems/permission-notify.md). Display-only.
-  if (u.pathname === '/api/permissions/notify') {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    return void servePermissionNotify(config, req, res);
-  }
-  // Push trigger for the Stop hook — the other three events notify from the
-  // endpoint they were already POSTing to (see docs/subsystems/push-notify.md).
-  if (u.pathname === '/api/notify/event') {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    return void serveNotifyEvent(config, req, res);
-  }
-  if (u.pathname === '/api/notify/test') {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    return void serveNotifyTest(config, req, res);
-  }
-  // Dictation: a recorded clip in, text out (see docs/subsystems/dictation.md).
-  if (u.pathname === '/api/transcribe') {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    return void serveTranscribe(config, req, res);
-  }
-  // Spawn a new headless session (see server/lib/spawn.ts). The id-scoped stop
-  // route is anchored (`$`) and checked before the exact-path `/api/spawn`
-  // check below it — the same route-order trap the chat/question/plan/message
-  // regexes further down all document, kept here even though `===` equality
-  // can't itself be prefix-swallowed, so the ordering stays defensive if that
-  // check ever changes shape.
-  const spawnStop = u.pathname.match(/^\/api\/spawn\/([^/]+)\/stop$/);
-  if (spawnStop) {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    const id = decodePath(spawnStop[1]);
-    if (id === null) return badRequest(res);
-    return void serveSpawnStop(config, id, req, res);
-  }
-  if (u.pathname === '/api/spawn') {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    return void serveSpawn(config, req, res);
-  }
-  // Like the chat route below, these must be matched before the detail regex,
-  // whose `[^/?]+` would otherwise swallow `/api/sessions/:id/<anything>`.
-  const question = u.pathname.match(/^\/api\/sessions\/([^/]+)\/question$/);
-  if (question) {
-    const id = decodePath(question[1]);
-    if (id === null) return badRequest(res);
-    return void serveSessionQuestion(id, res);
-  }
-  const answer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/answer$/);
-  if (answer) {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    const id = decodePath(answer[1]);
-    if (id === null) return badRequest(res);
-    return void serveSessionAnswer(config, id, req, res);
-  }
-  const plan = u.pathname.match(/^\/api\/sessions\/([^/]+)\/plan$/);
-  if (plan) {
-    const id = decodePath(plan[1]);
-    if (id === null) return badRequest(res);
-    return void serveSessionPlan(id, res);
-  }
-  const planAnswer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/plan-answer$/);
-  if (planAnswer) {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    const id = decodePath(planAnswer[1]);
-    if (id === null) return badRequest(res);
-    return void serveSessionPlanAnswer(config, id, req, res);
-  }
-  const message = u.pathname.match(/^\/api\/sessions\/([^/]+)\/message$/);
-  if (message) {
-    const id = decodePath(message[1]);
-    if (id === null) return badRequest(res);
-    return void serveSessionMessage(id, res);
-  }
-  const messageAnswer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/message-answer$/);
-  if (messageAnswer) {
-    if (req.method !== 'POST') return methodNotAllowed(res);
-    const id = decodePath(messageAnswer[1]);
-    if (id === null) return badRequest(res);
-    return void serveSessionMessageAnswer(config, id, req, res);
-  }
-  // Chat route must be matched before the detail regex below, whose `[^/?]+`
-  // would otherwise swallow `/api/sessions/:id/chat` and answer with agents.
-  const chat = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)\/chat(?:[?#]|$)/);
-  if (chat) {
-    const id = decodePath(chat[1]);
-    if (id === null) return badRequest(res);
-    return serveSessionChat(id, u.searchParams, res);
-  }
-  // Detail route must be matched before the generic prefix below, which would
-  // otherwise swallow `/api/sessions/:id`.
-  const detail = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)/);
-  if (detail) {
-    const id = decodePath(detail[1]);
-    if (id === null) return badRequest(res);
-    return serveSessionDetail(id, res);
-  }
-  if (req.url && req.url.startsWith('/api/sessions')) {
-    // Query params carry the Settings page's per-device scan knobs (limit /
-    // lookback / active). The detail regex above needs a slash, so a bare
-    // `/api/sessions?limit=20` still lands here.
-    return serveSessions(config, res, u.searchParams);
-  }
-  return serveStatic(req.url || '/', res);
-});
+/**
+ * The route table, as a request listener bound to one {@link Config}.
+ *
+ * A factory rather than a bare listener so the routes can be driven over a real
+ * socket with a throwaway config — `test/api-*.test.ts` exercise the handlers
+ * *through* this table, which is the only way the route-order traps documented
+ * below (chat before detail, question/answer before detail, …) are covered by
+ * anything. The production server binds the module-level config, unchanged.
+ */
+export function createRequestListener(config: Config): http.RequestListener {
+  return (req, res) => {
+    // Management routes take query params — parse once. Handlers are async but
+    // self-contained (they always end the response), so `void` keeps the
+    // callback signature.
+    const u = new URL(req.url || '/', 'http://local');
+    if (u.pathname === '/api/management/file') {
+      return void serveManagementFile(config, u.searchParams.get('path') || '', res);
+    }
+    if (u.pathname === '/api/management/project') {
+      return void serveManagementProject(config, u.searchParams.get('dir') || '', res);
+    }
+    if (u.pathname === '/api/management') {
+      return void serveManagementIndex(config, res);
+    }
+    if (u.pathname === '/api/analytics') {
+      return void serveAnalytics(config, res);
+    }
+    if (u.pathname === '/api/health') {
+      return void serveHealth(config, res, req);
+    }
+    // Read on GET, write on POST — the write is guarded like the others below.
+    // Only holds settings a separate process must agree on (see lib/settings.ts);
+    // the rest of the Settings page is per-device localStorage.
+    if (u.pathname === '/api/settings') {
+      if (req.method === 'POST') return void serveSettingsWrite(config, req, res);
+      return void serveSettingsRead(config, res);
+    }
+    // The duty-cycle profile behind the weekly forecast — read-only, and never
+    // carrying raw samples (see docs/subsystems/usage-limits.md).
+    if (u.pathname === '/api/usage/profile') {
+      return void serveUsageProfile(res);
+    }
+    // The only write endpoints in the app (see docs/subsystems/remote-answer.md).
+    // `wait` holds its response open for minutes — that is by design.
+    if (u.pathname === '/api/questions/wait') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveQuestionWait(config, req, res);
+    }
+    if (u.pathname === '/api/plans/wait') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void servePlanWait(config, req, res);
+    }
+    if (u.pathname === '/api/messages/wait') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveMessageWait(config, req, res);
+    }
+    if (u.pathname === '/api/remote-answer') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveRemoteAnswerToggle(config, req, res);
+    }
+    // Fire-and-forget flag from the PermissionRequest hook: a session is showing a
+    // permission dialog (see docs/subsystems/permission-notify.md). Display-only.
+    if (u.pathname === '/api/permissions/notify') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void servePermissionNotify(config, req, res);
+    }
+    // Push trigger for the Stop hook — the other three events notify from the
+    // endpoint they were already POSTing to (see docs/subsystems/push-notify.md).
+    if (u.pathname === '/api/notify/event') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveNotifyEvent(config, req, res);
+    }
+    if (u.pathname === '/api/notify/test') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveNotifyTest(config, req, res);
+    }
+    // Dictation: a recorded clip in, text out (see docs/subsystems/dictation.md).
+    if (u.pathname === '/api/transcribe') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveTranscribe(config, req, res);
+    }
+    // Spawn a new headless session (see server/lib/spawn.ts). The id-scoped stop
+    // route is anchored (`$`) and checked before the exact-path `/api/spawn`
+    // check below it — the same route-order trap the chat/question/plan/message
+    // regexes further down all document, kept here even though `===` equality
+    // can't itself be prefix-swallowed, so the ordering stays defensive if that
+    // check ever changes shape.
+    const spawnStop = u.pathname.match(/^\/api\/spawn\/([^/]+)\/stop$/);
+    if (spawnStop) {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      const id = decodePath(spawnStop[1]);
+      if (id === null) return badRequest(res);
+      return void serveSpawnStop(config, id, req, res);
+    }
+    if (u.pathname === '/api/spawn') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveSpawn(config, req, res);
+    }
+    // Like the chat route below, these must be matched before the detail regex,
+    // whose `[^/?]+` would otherwise swallow `/api/sessions/:id/<anything>`.
+    const question = u.pathname.match(/^\/api\/sessions\/([^/]+)\/question$/);
+    if (question) {
+      const id = decodePath(question[1]);
+      if (id === null) return badRequest(res);
+      return void serveSessionQuestion(id, res);
+    }
+    const answer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/answer$/);
+    if (answer) {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      const id = decodePath(answer[1]);
+      if (id === null) return badRequest(res);
+      return void serveSessionAnswer(config, id, req, res);
+    }
+    const plan = u.pathname.match(/^\/api\/sessions\/([^/]+)\/plan$/);
+    if (plan) {
+      const id = decodePath(plan[1]);
+      if (id === null) return badRequest(res);
+      return void serveSessionPlan(id, res);
+    }
+    const planAnswer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/plan-answer$/);
+    if (planAnswer) {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      const id = decodePath(planAnswer[1]);
+      if (id === null) return badRequest(res);
+      return void serveSessionPlanAnswer(config, id, req, res);
+    }
+    const message = u.pathname.match(/^\/api\/sessions\/([^/]+)\/message$/);
+    if (message) {
+      const id = decodePath(message[1]);
+      if (id === null) return badRequest(res);
+      return void serveSessionMessage(id, res);
+    }
+    const messageAnswer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/message-answer$/);
+    if (messageAnswer) {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      const id = decodePath(messageAnswer[1]);
+      if (id === null) return badRequest(res);
+      return void serveSessionMessageAnswer(config, id, req, res);
+    }
+    // Chat route must be matched before the detail regex below, whose `[^/?]+`
+    // would otherwise swallow `/api/sessions/:id/chat` and answer with agents.
+    const chat = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)\/chat(?:[?#]|$)/);
+    if (chat) {
+      const id = decodePath(chat[1]);
+      if (id === null) return badRequest(res);
+      return serveSessionChat(id, u.searchParams, res);
+    }
+    // Detail route must be matched before the generic prefix below, which would
+    // otherwise swallow `/api/sessions/:id`.
+    const detail = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)/);
+    if (detail) {
+      const id = decodePath(detail[1]);
+      if (id === null) return badRequest(res);
+      return serveSessionDetail(id, res);
+    }
+    if (req.url && req.url.startsWith('/api/sessions')) {
+      // Query params carry the Settings page's per-device scan knobs (limit /
+      // lookback / active). The detail regex above needs a slash, so a bare
+      // `/api/sessions?limit=20` still lands here.
+      return serveSessions(config, res, u.searchParams);
+    }
+    return serveStatic(req.url || '/', res);
+  };
+}
+
+const server = http.createServer(createRequestListener(config));
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   server.listen(config.port, () => {
