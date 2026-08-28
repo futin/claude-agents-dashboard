@@ -18,10 +18,11 @@ A tailnet is a private WireGuard network between your own devices, so the dashbo
 touches the public internet. **Device identity is the auth** — only devices signed into
 your Tailscale account can connect, there is no URL to guess, and traffic is end-to-end
 encrypted. That is *stronger* than the app's LAN-trust posture, so the existing security
-model carries over unchanged: reads stay open, and `ANSWER_TOKEN` (gating the four write
-POSTs — including [spawn](spawn.md), which starts a brand-new `claude` process on this
-machine rather than answering a session that already asked something — plus
-[dictation](dictation.md)) may stay empty. Set `ANSWER_TOKEN` only if you **share the
+model carries over unchanged: reads stay open, and `ANSWER_TOKEN` (gating **every** write
+endpoint — `grep -c 'tokenOk(config, req)' server/api.ts` for the current count — including
+[spawn](spawn.md), which starts a brand-new `claude` process on this machine rather than
+answering a session that already asked something, plus [dictation](dictation.md) and the
+[push](push-notify.md) endpoints the hooks POST to) may stay empty. Set `ANSWER_TOKEN` only if you **share the
 tailnet** with other people — inside a tailnet it means exactly what it meant on a shared
 LAN.
 
@@ -134,6 +135,7 @@ dictates" without any change of its own.
     - server/lib/origin.ts
     - client/src/components/OriginBadge.tsx
     - vite.config.ts
+    - server/api.ts
     - package.json
   kind: subsystem
   verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
