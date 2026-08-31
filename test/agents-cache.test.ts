@@ -46,6 +46,16 @@ function notifyRec(agentId: string, iso: string, usage?: { tokens: number; toolU
   };
 }
 
+/** The message-less shapes a notification takes when absorbed mid-turn (bug-11). */
+function absorbedRecs(agentId: string, iso: string, usage: { tokens: number; toolUses: number; durationMs: number }) {
+  const body = `<task-notification>\n<task-id>${agentId}</task-id>\n<status>completed</status>\n<usage><subagent_tokens>${usage.tokens}</subagent_tokens><tool_uses>${usage.toolUses}</tool_uses><duration_ms>${usage.durationMs}</duration_ms></usage>\n</task-notification>`;
+  return [
+    { type: 'queue-operation', operation: 'enqueue', timestamp: iso, sessionId: 's1', content: body },
+    { type: 'attachment', timestamp: iso, attachment: { type: 'queued_command', commandMode: 'prompt', timestamp: iso, prompt: body } },
+    { type: 'queue-operation', operation: 'remove', reason: 'absorbed_mid_turn', timestamp: iso, sessionId: 's1', content: body }
+  ];
+}
+
 /** Assert the cache output matches the whole-file oracle exactly. */
 function assertMatchesOracle(file: string) {
   assert.deepStrictEqual(readAgentsCached(file), readAgents(file));
@@ -144,6 +154,32 @@ export function run(): number {
     assert.strictEqual(a.status, 'done');
     assert.strictEqual(a.tokens, 555);
     assert.strictEqual(a.durationMs, 540000);
+  })) p++; else f++;
+
+  if (test('absorbed mid-turn completion: byte-split appends still match the oracle', () => {
+    _resetAgentsCache();
+    const file = tmpFile();
+    const head = [
+      taskRec('a', 'general-purpose', 'work', '2026-07-01T10:00:00Z'),
+      ackRec('a', 'bgZ', '2026-07-01T10:00:00.030Z')
+    ];
+    fs.writeFileSync(file, head.map(r => JSON.stringify(r)).join('\n') + '\n');
+    assert.strictEqual(readAgentsCached(file)![0].status, 'running');
+
+    // Append the three message-less records one byte-chunk at a time, so the
+    // notification itself straddles read boundaries.
+    const tail = absorbedRecs('bgZ', '2026-07-01T10:14:50Z', { tokens: 146111, toolUses: 71, durationMs: 872048 })
+      .map(r => JSON.stringify(r)).join('\n') + '\n';
+    for (let i = 0; i < tail.length; i += 37) {
+      fs.appendFileSync(file, tail.slice(i, i + 37));
+      readAgentsCached(file);
+    }
+    assertMatchesOracle(file);
+    const a = readAgentsCached(file)![0];
+    assert.strictEqual(a.status, 'done');
+    assert.strictEqual(a.endedAt, '2026-07-01T10:14:50Z');
+    assert.strictEqual(a.tokens, 146111);
+    assert.strictEqual(a.durationMs, 872048);
   })) p++; else f++;
 
   if (test('truncation resets state and matches oracle of new content', () => {
