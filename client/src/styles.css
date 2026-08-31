@@ -798,6 +798,51 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .up-legend-none{width:14px;height:14px;aspect-ratio:auto;margin-left:10px}
 .up-legend .up-conf{width:100%;color:var(--text2)}
 
+/* Usage sub-tabs. The switch sits at the far end of the section bar, which is
+   `align-items:baseline` — the control has no text baseline of its own, so it
+   is pinned to the centre explicitly rather than drifting with the title. */
+.usage-tabs{margin-left:auto;align-self:center}
+
+/* Token value per model. Every colour here is a theme token or a `color-mix`
+   over one — the five themes are pure token overrides, and one literal breaks
+   the light one. */
+.rates-list{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.rates-row{padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:3px}
+.rates-line{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.rates-line + .rates-line{margin-top:6px}
+.rates-model{font-family:var(--mono);font-size:12px;color:var(--text);word-break:break-all}
+.rates-value{font-family:var(--display);font-size:20px;font-weight:600;letter-spacing:.02em;color:var(--text)}
+.rates-unit{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--text3)}
+.rates-dev{font-family:var(--mono);font-size:11px;color:var(--text2)}
+.rates-dev.drift{color:var(--red)}
+.rates-meta{margin-top:6px;font-family:var(--mono);font-size:10.5px;color:var(--text3)}
+.rates-hint{margin-top:4px;max-width:60ch;font-size:11.5px;line-height:1.5;color:var(--text2)}
+
+/* The badge carries the verdict, and `thin` is deliberately the quiet one —
+   collecting is the normal first-fortnight state and must not read as a fault. */
+.rates-badge{margin-left:auto;flex:none;font-family:var(--display);font-size:10.5px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.07em;padding:3px 8px;border-radius:2px;
+  border:1px solid var(--border2);color:var(--text2);background:var(--surface)}
+.rates-badge.drift{color:var(--red);border-color:color-mix(in oklab,var(--red) 55%,var(--border2));
+  background:color-mix(in oklab,var(--red) 14%,var(--surface))}
+.rates-badge.stable{color:var(--green);border-color:color-mix(in oklab,var(--green) 45%,var(--border2));
+  background:color-mix(in oklab,var(--green) 12%,var(--surface))}
+.rates-badge.mix{color:var(--amber);border-color:color-mix(in oklab,var(--amber) 50%,var(--border2));
+  background:color-mix(in oklab,var(--amber) 13%,var(--surface))}
+.rates-badge.thin{color:var(--text3)}
+
+.rates-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;
+  font-family:var(--mono);font-size:10.5px;color:var(--text3)}
+.rates-pill{padding:3px 8px;border-radius:999px;color:var(--text2);
+  background:var(--surface2);border:1px solid var(--border)}
+
+/* Phone: the badge stops sharing a line with a long model id, and the numbers
+   keep a 38px-ish touch rhythm rather than crowding. */
+@media (max-width:560px){
+  .rates-badge{margin-left:0}
+  .rates-row{padding:12px}
+}
+
 .up-walk{margin-top:16px}
 .up-walkmeta{display:flex;justify-content:space-between;gap:8px;
   font-family:var(--mono);font-size:10px;color:var(--text3)}

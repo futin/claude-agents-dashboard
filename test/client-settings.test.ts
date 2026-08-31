@@ -50,6 +50,13 @@ export function run(): number {
     assert.strictEqual(ids.length, 5);
   })) p++; else f++;
 
+  if (test('the Usage sub-tab defaults to the forecast and rejects anything else', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.usageTab, 'forecast');
+    assert.strictEqual(clampSettings({ usageTab: 'rates' }).usageTab, 'rates');
+    assert.strictEqual(clampSettings({ usageTab: 'nonsense' }).usageTab, 'forecast');
+    assert.strictEqual(clampSettings({ usageTab: 7 }).usageTab, 'forecast');
+  })) p++; else f++;
+
   if (test('scanQuery carries all three knobs', () => {
     assert.strictEqual(
       scanQuery(clampSettings({ maxSessions: 3, lookbackHours: 48, activeWindowMin: 15 })),

@@ -4,7 +4,7 @@ const TABS: { id: Section; label: string }[] = [
   { id: 'sessions', label: 'Sessions' },
   { id: 'management', label: 'Management' },
   { id: 'analytics', label: 'Analytics' },
-  { id: 'usage', label: 'Usage Forecast' },
+  { id: 'usage', label: 'Usage' },
   { id: 'settings', label: 'Settings' }
 ];
 

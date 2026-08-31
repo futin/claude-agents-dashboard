@@ -31,6 +31,8 @@ export const THEMES = [
 
 export type ThemeId = (typeof THEMES)[number]['id'];
 export type Density = 'comfortable' | 'compact';
+/** Which sub-view the Usage section opens on. */
+export type UsageTab = 'forecast' | 'rates';
 /** Which section opens on load. `last` restores whatever you were on. */
 export type Landing = Section | 'last';
 
@@ -56,6 +58,11 @@ export interface Settings {
   spawnDefaultModel: SpawnDefaultModel;
   /** Same as `spawnDefaultModel`, for the effort picker. */
   spawnDefaultEffort: SpawnDefaultEffort;
+  /**
+   * Which Usage sub-tab is showing. Per device like everything else here: the
+   * phone on the desk watches the forecast, the laptop checks token value.
+   */
+  usageTab: UsageTab;
 }
 
 export type SpawnDefaultModel = '' | (typeof MODELS)[number];
@@ -72,7 +79,8 @@ export const DEFAULT_SETTINGS: Settings = {
   landing: 'last',
   chatFullText: false,
   spawnDefaultModel: '',
-  spawnDefaultEffort: ''
+  spawnDefaultEffort: '',
+  usageTab: 'forecast'
 };
 
 /**
@@ -110,6 +118,7 @@ const THEME_IDS = THEMES.map(t => t.id);
 const LANDINGS: Landing[] = ['last', 'sessions', 'management', 'analytics', 'settings'];
 const SPAWN_MODELS: SpawnDefaultModel[] = ['', ...MODELS];
 const SPAWN_EFFORTS: SpawnDefaultEffort[] = ['', ...EFFORTS];
+const USAGE_TABS: UsageTab[] = ['forecast', 'rates'];
 
 /**
  * Coerce anything (a stored blob from an older release, a hand-edited
@@ -129,7 +138,8 @@ export function clampSettings(raw: unknown): Settings {
     landing: pickOne(s.landing, LANDINGS, DEFAULT_SETTINGS.landing),
     chatFullText: pickBool(s.chatFullText, DEFAULT_SETTINGS.chatFullText),
     spawnDefaultModel: pickOne(s.spawnDefaultModel, SPAWN_MODELS, DEFAULT_SETTINGS.spawnDefaultModel),
-    spawnDefaultEffort: pickOne(s.spawnDefaultEffort, SPAWN_EFFORTS, DEFAULT_SETTINGS.spawnDefaultEffort)
+    spawnDefaultEffort: pickOne(s.spawnDefaultEffort, SPAWN_EFFORTS, DEFAULT_SETTINGS.spawnDefaultEffort),
+    usageTab: pickOne(s.usageTab, USAGE_TABS, DEFAULT_SETTINGS.usageTab)
   };
 }
 
