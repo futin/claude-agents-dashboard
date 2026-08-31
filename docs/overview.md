@@ -134,6 +134,10 @@ server/
   lib/usage-pace.ts  utilization sample ring → burn rate + projected 100% per window
   lib/usage-forecast.ts  forward walk over hour-of-week weights → projected 100%
   lib/usage-history.ts  persisted samples → the learned 168-bucket duty-cycle profile
+  lib/usage-ledger.ts  per-minute per-model token ledger: reads new transcript bytes,
+                  appends one line a tick (`.usage-ledger.jsonl`)
+  lib/usage-rate.ts  joins history × ledger into classified intervals → tokens per 1%
+                  of the 5h window per model, baseline vs trailing, drift verdicts
   lib/token-refresh.ts  makes the CLI renew an expired OAuth token (auth status,
                   then one haiku turn) so the bars self-heal
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser
@@ -170,12 +174,12 @@ client/src/
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
                   usage/, settings/
   hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
-                  useUsageProfile, usePendingQuestion, usePendingPlan,
+                  useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, usePersistedState,
                   useSettings, useServerSettings, useDictation, useTranscribeAvailable
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
                   deepLink, dictation, spawnOptions, resume, pace, usageProfile,
-                  panelCollapse, surface, walkChart
+                  usageRatesFormat, panelCollapse, surface, walkChart
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,

@@ -362,6 +362,146 @@ single tick would claim precision the data does not have.
 plumbing is verified, but the profile needs roughly two to three weeks of real samples
 before `confidence` leaves `thin`, and no test substitutes for that.
 
+## Token value per model (the exchange rate, and its drift)
+
+The bars say a percent was spent. Nothing said what a percent *is* — and the
+planning question behind this feature is exactly that: "if 1% of Opus is ~900k
+tokens for two weeks and suddenly becomes ~1.5M in week 3, I want to see it."
+Anthropic never publishes the window budget, so the rate has to be **measured**,
+and both halves are already on this machine: `.usage-history.jsonl` prices each
+minute in percent, and the transcripts weigh it in tokens.
+
+Design record: `docs/superpowers/specs/2026-08-28-model-token-rates-design.md`.
+
+### No dollars, only ratios
+
+API pricing survives here as **ratios between token types** and nothing else:
+`in 1 · out 5 · cache-write 1.25 · cache-read 0.1` (`TYPE_WEIGHTS`). Those
+ratios are uniform across current models, so one set suffices, and per-model
+base-price differences are exactly what the fitted per-model rate absorbs.
+Carrying absolute prices would double-count them and put a currency in a
+product that shows none.
+
+**Drift is judged on the weighted rate only.** Weighted tokens per percent are
+mix-invariant *and* effort-invariant — thinking tokens are output tokens, so
+raising effort from `high` to `xhigh` raises consumption and utilization
+together and leaves the rate flat. The raw "1% ≈ N tokens" figure is a courtesy
+translation at the model's recent mix; when raw moves and weighted did not, the
+card says **mix shift**, never drift.
+
+### The ledger (`lib/usage-ledger.ts`)
+
+One line per tick to `.usage-ledger.jsonl` (repo root, gitignored, sibling of
+the history log), written from the same fetch-success path that calls
+`recordTick`, so a ledger line and a history sample describe the same instant.
+Each tick reads only the bytes appended to each transcript since the last one
+(a RAM map of per-file offsets over `listTranscripts`), sums `message.usage`
+per model, and appends `{t, prevT, tok}`.
+
+Five things are deliberate:
+
+- **`prevT` is carried explicitly.** It is what makes a recording gap visible;
+  a bare `t` could never show that two lines do not abut, and the fitter would
+  bridge downtime silently.
+- **A line is written every tick, even an empty one.** `tok: {}` is a *measured
+  zero* — nothing was spent here this minute — and that is what separates "no
+  local tokens" (another device burned the window) from "not recording".
+- **Offsets only advance to a line boundary.** A transcript being written while
+  we read it ends mid-line; re-reading that fragment next tick is the only way
+  it is ever seen whole. A file shorter than its offset was rotated, so its
+  cursor restarts at 0 and the window rule drops what it already covered.
+- **Sidechain turns are counted**, unlike in `analyze.ts` — which skips them so
+  a session's main-agent totals don't double against `bySubagent`. This ledger
+  asks what the *account* spent, and a subagent turn spends like any other. Turn
+  ids are remembered per file (a bounded ring) because the records of one turn
+  share a `message.id` and each carries a copy of the same usage block.
+- **The first tick after start writes nothing**, and switching recording off
+  drops the offsets so switching it back on reseeds the same way. One lost
+  minute, rather than a backlog dumped into a single interval.
+
+### The fitter (`lib/usage-rate.ts`, pure)
+
+`joinIntervals` pairs consecutive history samples — same window under the same
+`sameWindow` slack, utilization not falling — and gathers the ledger's overlap
+with each pair. Then each interval is classified:
+
+| Condition | Kind | Used for |
+|---|---|---|
+| ledger covers < 80% of the span | `gap` | nothing — the server was down |
+| `Δutil ≤ 0.01` | `idle` | nothing (but it is a measurement, not a hole) |
+| weighted tokens < 5 000 | `external` | the disclosed burn share only |
+| one model holds ≥ 90% of weighted tokens | `{model}` | that model's rate |
+| otherwise | `mixed` | nothing |
+
+**The join is overlap-weighted, and that was measured rather than chosen.** The
+two logs sit on different grids: history samples are write-on-change, so an
+interval starts and ends whenever utilization moved, while ledger ticks land
+once a minute. Counting only the lines lying *wholly* inside an interval —
+the obvious rule, and the one the plan specified — throws away up to a minute at
+each edge, which is most of a short interval. Run against real logs it
+classified **759 of 759** intervals as `gap`: the feature measured nothing at
+all. Consecutive ticks tile the timeline, so summing *overlaps* instead recovers
+the full duration whenever the recorder was up and falls short by exactly the
+minutes it was not — which is what the coverage floor is meant to test. The two
+edge ticks are split pro rata, which assumes uniform spend inside those two
+minutes; that is the one approximation, it is bounded, and the alternative was
+measuring nothing.
+
+**Dominance, not decomposition.** With a handful of models and one equation per
+interval, a least-squares split is under-determined exactly when it matters (two
+models always used together), and a wrong split is indistinguishable from drift.
+Mixed intervals are discarded; the follow-up is filed if the discard share
+proves high.
+
+**Pooled Σtokens / Σutil, not a mean of per-interval ratios.** A mean lets a
+0.02% interval with a noisy numerator count as much as an hour of steady work.
+Pooling weights each interval by the movement it explains, and the confidence
+floors are what keep it robust — which is why a median was not needed.
+
+**Baseline** is `[now−17d, now−3d)`; **current** is `[now−3d, …)`, open at the
+top so an interval stamped a moment ahead of the request clock is not dropped at
+the very edge the window watches. Floors: 30 intervals **and** 15 cumulative
+percentage points for the baseline, 10 and 5 for the current window — both,
+because either alone is fooled (200 intervals of 0.02% is a rounding error; one
+interval covering 20% is a single unrepeated observation). Verdict order is
+`thin` → `drift` (weighted deviation > ±20%) → `mix-shift` (raw > ±25%) →
+`stable`, and **thin outranks everything**: a rate fitted on too little data can
+deviate by any amount, so calling that drift would make the badge fire hardest
+exactly when it knows least.
+
+### The endpoint and the card
+
+`GET /api/usage/rates` (`shapeUsageRates` is the pure part) returns one row per
+model that owns at least one attributable interval, richest evidence first, plus
+`externalSharePct`. Read-only, unpolled — it reads two files and does
+arithmetic, and the numbers move on a scale of days — and it fails open to an
+honest empty body exactly like `serveUsageProfile`. A model seen only in mixed,
+external or gap intervals gets **no row**: a row of nulls reads as a broken fit
+rather than as an absence of evidence.
+
+The **Usage** section is now two sub-tabs — `Forecast | Token value` — through
+the Settings page's `.set-seg` control, persisted per device as `usageTab`.
+`UsageProfile` is a full week of hour cells and runs to about a screen, so
+stacking would bury the shorter view; only the active sub-view mounts, which
+also means each one's fetch-per-mount hook fires when its tab is opened rather
+than on every visit to the section.
+
+`UsageRates.tsx` leads each row with the **raw** figure (the number you plan
+against) and judges with the **weighted** one, shows every rate beside its
+evidence (windows + cumulative points), treats `collecting` as a first-class
+state rather than an empty row, and discloses the external-burn share in a
+footer pill because it is the one systematic bias in the measurement. Every
+explanation is real text in the row — no `title` attributes, for the reason the
+profile tooltip exists.
+
+⚠️ **Drift detection itself is unproven.** Every pure function is tested and the
+plumbing is verified end to end against live logs, but a `drift` or `stable`
+verdict needs a 17-day baseline to exist at all, and nothing shorter than weeks
+of real recording can confirm it fires when it should and stays quiet when it
+should not. What *is* verified is that ledger lines accumulate once a minute,
+that real intervals classify to a real model, and that every empty and thin
+state is honest.
+
 ## Invariants
 
 - **Fail-open everywhere:** no token / expired / network error / non-2xx / unparseable →
@@ -388,10 +528,13 @@ before `confidence` leaves `thin`, and no test substitutes for that.
     - server/lib/usage-pace.ts
     - server/lib/usage-forecast.ts
     - server/lib/usage-history.ts
+    - server/lib/usage-ledger.ts
+    - server/lib/usage-rate.ts
     - server/lib/token-refresh.ts
     - client/src/lib/pace.ts
     - client/src/lib/usageProfile.ts
     - client/src/lib/walkChart.ts
+    - client/src/lib/usageRatesFormat.ts
     - server/api.ts
     - client/src/components/Header.tsx
     - client/src/components/usage/
