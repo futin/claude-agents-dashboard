@@ -181,7 +181,7 @@ Every consecutive pair of samples is classified, and the accounting follows from
 
 | Condition | Kind | Accounting |
 |---|---|---|
-| `resetsAt` moved more than 2 min, or utilization fell by > 0.5 | `reset` | discarded |
+| `resetsAt` moved more than 2 min, or utilization fell by > 0.5 | `reset` | discarded, **except** its provably-idle sub-span (below) |
 | utilization rose by > 0.5, interval ≤ 5 min | `active` | `observedMin += mins`, `activeMin += mins` |
 | utilization rose by > 0.5, interval > 5 min | `ambiguous` | discarded |
 | otherwise (flat, **any** duration) | `idle` | `observedMin += mins`, `activeMin += 0` |
@@ -192,8 +192,10 @@ Three things here are counter-intuitive and each was gotten backwards once:
    cumulative within a window, so two samples bracketing a gap with the same window and
    the same utilization *prove* nothing was spent. "No data means unknown" would defeat
    the feature: the laptop sleeps at night, night is what the profile most needs to learn,
-   and those buckets would never collect evidence. **An overnight flat interval is the
-   single most valuable input this module gets** — it teaches eight buckets at once.
+   and those buckets would never collect evidence. **An overnight sleep is the single most
+   valuable input this module gets** — it teaches eight buckets at once. Note it usually
+   arrives as a window *change* rather than a flat interval, because any sleep past five
+   hours outlasts the window; see the sub-span rule below for what survives of it.
 2. **Ambiguity is a function of duration, not direction.** Two samples a minute apart with
    utilization rising pin that activity to that minute, and that is the only way
    `activeMin` ever grows. Only a *long* rising interval is unattributable.
@@ -204,6 +206,42 @@ Three things here are counter-intuitive and each was gotten backwards once:
    `reset`, so the profile learns nothing at all, and write-on-change degrades to
    write-always. Two minutes is far above the observed jitter and far below a real window
    change (+5h, or +7d).
+
+#### The provably-idle sub-span of a window change
+
+A `reset` interval is not uniformly unattributable. Utilization is cumulative *within* one
+window and says nothing across a boundary — but the **existence** of a window carries
+across it: between the moment one window expires and the moment the next opens, no window
+is open at all, and no window open means nothing was spent.
+
+`provableIdleSpan(a, b)` returns that gap, and `accumulate` credits it as `idle`:
+
+| Edge | Taken from |
+|---|---|
+| start | `a.resetsAt`, the old window's expiry — or `a.t` itself when `a.resetsAt` is null |
+| end | `b.resetsAt − 5h`, the new window's derived opening — or `b.t` when `b.resetsAt` is null |
+
+Both edges are then clamped into `[a.t, b.t]`, and nothing is credited unless the result
+has positive length. That single clamp is what rejects clock skew, overlapping stamps, and
+an unparseable stamp alike — `Math.max`/`Math.min` propagate `NaN` and every comparison
+against it is false, so explicit NaN checks would be dead code.
+
+Two things this deliberately does **not** do. A `resetsAt` of null alongside a non-zero
+utilization is a sample contradicting itself, and a contradiction is not evidence — that
+pair is discarded. And the remainder either side of the gap stays discarded: before the old
+expiry tokens could have been spent and the counter that would have shown it has since
+reset, and after the new window opened its own utilization is the only witness.
+
+The 5h subtraction is the one assumption. The payload carries `resets_at` and nothing else,
+so a window's *start* can only be derived — and the endpoint's own field name is
+`five_hour`, which is what makes it safe. Watch one direction if that ever changes: a real
+window **longer** than 5h puts the derived start too late and would credit idleness over a
+stretch that did have a window open. A shorter one only under-credits, which is harmless.
+
+Measured on the live log (915 samples, 140h) when this landed: 27 intervals and 151.5
+minutes moved from `reset` to `idle`, 15.2% of all reset minutes. Most of it is short
+window rollovers worth a minute each; the bulk of the value is the rarer overnight case,
+where a single sleep contributed 70 minutes.
 
 A cell is **one hour of the week** — Monday 09:00 and Tuesday 09:00 are different cells,
 and nothing is averaged across days. What accumulates across *weeks* is the evidence: a

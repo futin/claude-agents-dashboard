@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   emptyState,
   classifyInterval,
+  provableIdleSpan,
   isoWeekKey,
   accumulate,
   deriveProfile,
@@ -40,6 +41,10 @@ const R1 = '2026-08-28T23:00:00.000Z';
 const R2 = '2026-08-29T04:00:00.000Z';
 const MON_09 = Date.parse('2026-08-31T09:00:00Z'); // hourOfWeek 33
 const FRI_22 = Date.parse('2026-08-28T22:00:00Z'); // hourOfWeek 142
+const MON_00 = Date.parse('2026-08-31T00:00:00Z'); // hourOfWeek 24
+const SUN_21 = Date.parse('2026-08-30T21:00:00Z'); // hourOfWeek 21, the ISO week before
+
+const iso = (ms: number) => new Date(ms).toISOString();
 
 const s = (t: number, utilization: number, resetsAt: string | null = R1): UsageSample =>
   ({ t, utilization, resetsAt });
@@ -159,6 +164,122 @@ export function run(): number {
     const st = accumulate(emptyState(), s(MON_09, 40, R1), s(MON_09 + 4 * H, 40, R2), 0);
     const touched = st.buckets.filter((b) => b.observedMin !== 0 || b.activeMin !== 0);
     assert.strictEqual(touched.length, 0);
+  })) p++; else f++;
+
+
+  // ── provableIdleSpan: the sub-span of a window change that is still evidence ──
+
+  if (test('provable: sleep ending with no window open credits from the old expiry', () => {
+    // Window expires 3h in, machine wakes 9h in with nothing open. Nothing can
+    // have been spent after the expiry, so those six hours are measured idleness.
+    const a = s(MON_00, 46, iso(MON_00 + 3 * H));
+    const b = s(MON_00 + 9 * H, 0, null);
+    assert.deepStrictEqual(provableIdleSpan(a, b), [MON_00 + 3 * H, MON_00 + 9 * H]);
+  })) p++; else f++;
+
+  if (test('provable: sleep ending with a fresh window open stops at its derived start', () => {
+    // The 8/27 shape. b's window resets 11h in, so it opened 6h in; activity
+    // happened somewhere after that and cannot be placed, but 2h→6h is clean.
+    const a = s(MON_00, 0, iso(MON_00 + 2 * H));
+    const b = s(MON_00 + 7 * H, 16, iso(MON_00 + 11 * H));
+    assert.deepStrictEqual(provableIdleSpan(a, b), [MON_00 + 2 * H, MON_00 + 6 * H]);
+  })) p++; else f++;
+
+  if (test('provable: a window reading 0% still bounds the span at its derived start', () => {
+    // A window that reads 0 has still been *opened* — the moment is bounded, not
+    // known — so the derived start is the end of what is provable, not b.t.
+    const a = s(MON_00, 46, iso(MON_00 + 3 * H));
+    const b = s(MON_00 + 9 * H, 0, iso(MON_00 + 13 * H));
+    assert.deepStrictEqual(provableIdleSpan(a, b), [MON_00 + 3 * H, MON_00 + 8 * H]);
+  })) p++; else f++;
+
+  if (test('provable: no window before, one after — the sample itself is the start', () => {
+    const a = s(MON_00, 0, null);
+    const b = s(MON_00 + 9 * H, 5, iso(MON_00 + 13 * H));
+    assert.deepStrictEqual(provableIdleSpan(a, b), [MON_00, MON_00 + 8 * H]);
+  })) p++; else f++;
+
+  if (test('provable: a short rollover during active use still yields its real minute', () => {
+    // The window expired 30s in and nothing had reopened by +90s. One minute of
+    // genuine idleness, and self-limiting: a prompt reopen credits almost nothing.
+    const a = s(MON_00, 96, iso(MON_00 + 30_000));
+    const b = s(MON_00 + 90_000, 0, null);
+    assert.deepStrictEqual(provableIdleSpan(a, b), [MON_00 + 30_000, MON_00 + 90_000]);
+  })) p++; else f++;
+
+  if (test('MUTATION GUARD: a same-window pair is never the helper’s business', () => {
+    // Two unscoped samples are the *same* window — no window — so classifyInterval
+    // already calls this idle and credits the whole span. Delete the sameWindow
+    // early return and the helper starts claiming it a second time.
+    assert.strictEqual(provableIdleSpan(s(MON_00, 0, null), s(MON_00 + 9 * H, 0, null)), null);
+  })) p++; else f++;
+
+  if (test('MUTATION GUARD: a sample claiming spend with no window open proves nothing', () => {
+    // resetsAt null means no window exists, so a non-zero utilization is
+    // self-contradictory. Drop either check and a contradiction becomes evidence.
+    assert.strictEqual(provableIdleSpan(s(MON_00, 40, null), s(MON_00 + 9 * H, 5, iso(MON_00 + 13 * H))), null);
+    assert.strictEqual(provableIdleSpan(s(MON_00, 46, iso(MON_00 + 3 * H)), s(MON_00 + 9 * H, 12, null)), null);
+  })) p++; else f++;
+
+  if (test('MUTATION GUARD: an expiry later than b.t yields no negative-length span', () => {
+    // Clock skew, or a sleep shorter than the window. Remove the hi > lo clamp
+    // and this returns a backwards span that accumulate would loop on forever.
+    assert.strictEqual(provableIdleSpan(s(MON_00, 46, iso(MON_00 + 10 * H)), s(MON_00 + 9 * H, 0, null)), null);
+  })) p++; else f++;
+
+  if (test('MUTATION GUARD: overlapping stamps yield nothing rather than a gap', () => {
+    // b's window is derived to have opened 4h in, before a's expired at 6h — so
+    // there is no moment with no window open. Same clamp, the other direction.
+    assert.strictEqual(provableIdleSpan(s(MON_00, 46, iso(MON_00 + 6 * H)), s(MON_00 + 9 * H, 5, iso(MON_00 + 9 * H))), null);
+  })) p++; else f++;
+
+  if (test('MUTATION GUARD: an unparseable stamp on either side yields null, not NaN', () => {
+    assert.strictEqual(provableIdleSpan(s(MON_00, 46, 'not-a-date'), s(MON_00 + 9 * H, 0, null)), null);
+    assert.strictEqual(provableIdleSpan(s(MON_00, 46, iso(MON_00 + 3 * H)), s(MON_00 + 9 * H, 0, 'nope')), null);
+  })) p++; else f++;
+
+  if (test('MUTATION GUARD: the derived start is a whole window before the reset', () => {
+    // Drop the - WINDOW_MS and the derived start becomes b's *expiry*, crediting
+    // five hours in which the new window was demonstrably open.
+    const span = provableIdleSpan(s(MON_00, 0, iso(MON_00 + 2 * H)), s(MON_00 + 7 * H, 16, iso(MON_00 + 11 * H)));
+    assert.strictEqual(span![1] - Date.parse(iso(MON_00 + 11 * H)), -5 * H);
+  })) p++; else f++;
+
+  // ── accumulate: crediting the recovered sub-span ──
+
+  if (test('accumulate: a recovered sleep credits its hours and leaves the rest alone', () => {
+    // Mon 00:00 → 09:00, window expiring at 03:00. Buckets 27–32 are 03:00–09:00.
+    const st = accumulate(emptyState(), s(MON_00, 46, iso(MON_00 + 3 * H)), s(MON_00 + 9 * H, 0, null), 0);
+    for (const hw of [27, 28, 29, 30, 31, 32]) {
+      assert.strictEqual(st.buckets[hw].observedMin, 60, 'bucket ' + hw);
+      assert.strictEqual(st.buckets[hw].activeMin, 0, 'bucket ' + hw);
+      assert.strictEqual(st.buckets[hw].lifetimeObservedMin, 60, 'bucket ' + hw);
+    }
+    // The pre-expiry hours stay discarded: tokens could have been spent there.
+    for (const hw of [24, 25, 26]) {
+      assert.strictEqual(st.buckets[hw].observedMin, 0, 'bucket ' + hw);
+      assert.strictEqual(st.buckets[hw].lifetimeObservedMin, 0, 'bucket ' + hw);
+    }
+  })) p++; else f++;
+
+  if (test('accumulate: a recovered span crossing a week boundary stamps each side separately', () => {
+    // Sun 21:00 → Mon 03:00, window expiring at 22:00. Credit is 22:00–03:00:
+    // buckets 22, 23 on Sunday and 24, 25, 26 on Monday, two ISO weeks.
+    const st = accumulate(emptyState(), s(SUN_21, 46, iso(SUN_21 + H)), s(SUN_21 + 6 * H, 0, null), 0);
+    for (const hw of [22, 23, 24, 25, 26]) {
+      assert.strictEqual(st.buckets[hw].observedMin, 60, 'bucket ' + hw);
+    }
+    assert.strictEqual(st.buckets[21].observedMin, 0, 'the pre-expiry hour stays discarded');
+    assert.notStrictEqual(st.buckets[23].weekStamp, st.buckets[24].weekStamp);
+  })) p++; else f++;
+
+  if (test('MUTATION GUARD: an unprovable window change still touches nothing', () => {
+    // Utilization dropped and no window is open at b, so b contradicts itself.
+    // The state must come back untouched — and identical, not merely equal.
+    const before = emptyState();
+    const st = accumulate(before, s(MON_00, 46, iso(MON_00 + 3 * H)), s(MON_00 + 9 * H, 12, null), 0);
+    assert.deepStrictEqual(st, before);
+    assert.strictEqual(st.buckets.some((b) => Number.isNaN(b.observedMin)), false);
   })) p++; else f++;
 
   // ── week rollover ──

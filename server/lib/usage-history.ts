@@ -16,7 +16,10 @@
  *    spent in between. "No data means unknown" would defeat the whole feature:
  *    the laptop sleeps at night, night is exactly what the profile needs to
  *    learn, and those buckets would never collect evidence. A sleeping laptop is
- *    the best teacher this module has.
+ *    the best teacher this module has — but only for the stretch of the sleep
+ *    during which no window was open. A sleep long enough to outlast a window
+ *    is a window *change*, and `provableIdleSpan` is what salvages it: most of a
+ *    real overnight sleep, never the tail after the next window opens.
  * 2. **Ambiguity is a function of duration, not direction.** Two samples a
  *    minute apart with utilization rising pin that activity to that minute —
  *    it is the only way `activeMin` ever grows. Only a *long* rising interval is
@@ -149,6 +152,9 @@ export function emptyState(): ProfileState {
  *
  * `reset` and `ambiguous` are both discarded — the first spans two different
  * windows, the second cannot be attributed to any particular hour inside it.
+ * A `reset` is not the end of it, though: {@link provableIdleSpan} recovers the
+ * part of a window change during which no window was open at all, and
+ * {@link accumulate} credits that.
  */
 export function classifyInterval(
   a: UsageSample,
@@ -162,6 +168,62 @@ export function classifyInterval(
     return b.t - a.t <= maxAttributableMs ? 'active' : 'ambiguous';
   }
   return 'idle'; // flat at any duration — the sleep measurement
+}
+
+/**
+ * Length of the 5-hour window, and the only way to date one's *start*: the
+ * payload carries `resets_at` and nothing else (`usage.ts` `toRateLimit`), so a
+ * window is known to have opened exactly this long before it resets.
+ *
+ * The name is the endpoint's own — `five_hour` — which is what makes the
+ * subtraction safe. Watch one direction if that ever changes: a real window
+ * *longer* than this puts the derived start too late and would credit idleness
+ * over a stretch that did have a window open. A shorter one only under-credits.
+ */
+const WINDOW_MS = 5 * HOUR_MS;
+
+/**
+ * The sub-span of `[a.t, b.t]` during which no window was open at all, or null
+ * when nothing is provable.
+ *
+ * Only ever asked about a **window change**, which {@link classifyInterval}
+ * discards whole as `reset` — rightly, since utilization is cumulative *within*
+ * one window and says nothing across a boundary. But the *existence* of a window
+ * does carry across it: no window open means nothing has been spent. Both edges
+ * of that gap are in hand — the old window's expiry is `a.resetsAt` directly,
+ * the new one's opening is `b.resetsAt` less {@link WINDOW_MS} — and either edge
+ * can instead be a sample whose `resetsAt` is null, which says no window was
+ * open at that instant.
+ *
+ * A null `resetsAt` alongside a non-zero utilization is a sample contradicting
+ * itself, and a contradiction is not evidence.
+ */
+export function provableIdleSpan(a: UsageSample, b: UsageSample): [number, number] | null {
+  if (sameWindow(a.resetsAt, b.resetsAt)) return null;
+
+  let from: number;
+  if (a.resetsAt === null) {
+    if (a.utilization !== 0) return null;
+    from = a.t;
+  } else {
+    from = Date.parse(a.resetsAt);
+  }
+
+  let to: number;
+  if (b.resetsAt === null) {
+    if (b.utilization !== 0) return null;
+    to = b.t;
+  } else {
+    to = Date.parse(b.resetsAt) - WINDOW_MS;
+  }
+
+  // The clamp is the only guard the ends need, and it is load-bearing four ways:
+  // clock skew, a window still open at `b`, stamps that overlap, and an
+  // unparseable stamp — `Math.max`/`Math.min` propagate the NaN and every
+  // comparison against it is false. Explicit NaN checks here would be dead code.
+  const lo = Math.max(from, a.t);
+  const hi = Math.min(to, b.t);
+  return hi > lo ? [lo, hi] : null;
 }
 
 /**
@@ -219,7 +281,8 @@ function foldBucket(bucket: Bucket, weekKey: string, observedWeeks: string[]): v
 }
 
 /**
- * Credit one classified interval to every hour-of-week bucket it spans.
+ * Credit one classified interval to every hour-of-week bucket it spans — or,
+ * for a window change, just the sub-span {@link provableIdleSpan} vouches for.
  *
  * Never mutates `state` — callers hold onto earlier states. An interval can
  * cross hour and week boundaries, so it is split at local hour boundaries and
@@ -233,17 +296,31 @@ export function accumulate(
   offsetMinutes: number
 ): ProfileState {
   const kind = classifyInterval(a, b);
-  if (kind !== 'active' && kind !== 'idle') return state; // discarded
-  if (b.t <= a.t) return state;
+  let creditKind: 'active' | 'idle';
+  let fromMs: number;
+  let toMs: number;
+  if (kind === 'active' || kind === 'idle') {
+    creditKind = kind;
+    fromMs = a.t;
+    toMs = b.t;
+  } else {
+    // A window change is not all-or-nothing: part of it may still be provably
+    // idle. `ambiguous` never yields a span — it can only arise inside one window.
+    const span = provableIdleSpan(a, b);
+    if (span === null) return state; // discarded
+    creditKind = 'idle';
+    [fromMs, toMs] = span;
+  }
+  if (toMs <= fromMs) return state;
 
   const buckets = state.buckets.map((x) => ({ ...x }));
   const observedWeeks = [...state.observedWeeks];
 
-  let t = a.t;
-  while (t < b.t) {
+  let t = fromMs;
+  while (t < toMs) {
     const shift = offsetMinutes * 60_000;
     const nextHour = Math.floor((t + shift) / HOUR_MS) * HOUR_MS + HOUR_MS - shift;
-    const sliceEnd = Math.min(nextHour, b.t);
+    const sliceEnd = Math.min(nextHour, toMs);
     const mins = (sliceEnd - t) / MINUTE_MS;
     const weekKey = isoWeekKey(t, offsetMinutes);
     const bucket = buckets[hourOfWeek(t, offsetMinutes)];
@@ -252,7 +329,7 @@ export function accumulate(
     bucket.weekStamp = weekKey;
     bucket.observedMin += mins;
     bucket.lifetimeObservedMin += mins;
-    if (kind === 'active') bucket.activeMin += mins;
+    if (creditKind === 'active') bucket.activeMin += mins;
 
     if (!observedWeeks.includes(weekKey)) {
       observedWeeks.push(weekKey);
