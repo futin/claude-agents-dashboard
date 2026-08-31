@@ -1,22 +1,12 @@
 /**
  * usage-rate.ts — what one percent of the 5-hour window is worth, per model.
  *
- * Anthropic publishes a utilization *percent* and never the budget behind it,
- * so the exchange rate has to be measured. Both halves are already on this
- * machine: `.usage-history.jsonl` prices each minute (percent), and
- * `.usage-ledger.jsonl` weighs it (tokens). This module joins them into
- * intervals, throws away every interval it cannot attribute, and fits a rate
- * per model over what survives.
+ * Joins `.usage-history.jsonl` (percent) with `.usage-ledger.jsonl` (tokens)
+ * into intervals, discards every interval it cannot attribute, and fits a rate
+ * per model over what survives. Pure — no clock, no disk, everything injected.
  *
- * Pure throughout — no clock, no disk. Everything arrives as arguments so each
- * threshold and calendar edge is testable (`test/usage-rate-*.test.ts`).
- *
- * **The discipline here is refusal.** Almost every kind of interval is thrown
- * away: a window roll, a utilization drop, a minute the recorder missed, a
- * minute where two models were both busy, a minute burned on another device.
- * What is left is a small, clean sample — and the alternative (spreading
- * ambiguous spend across models by some assumption) would train the fit on its
- * own guesses. See `docs/subsystems/usage-limits.md`.
+ * The discipline is refusal: which intervals are thrown away and why is the
+ * classification table in `docs/subsystems/usage-limits.md`.
  */
 
 import { sameWindow } from './usage-history.js';
@@ -27,42 +17,16 @@ import type { LedgerLine, TokenCounts } from './usage-ledger.js';
 /** Weighted share of an interval one model must hold to own it. */
 export const DOMINANCE = 0.9;
 
-/**
- * Utilization movement below this is no movement at all. Matches the epsilon
- * `shouldWrite` already treats as an unchanged sample, so an interval the
- * history log considered worth no new line is never fitted on either.
- */
+/** Matches `shouldWrite`'s epsilon, so a sample the history log thought unchanged is never fitted on. */
 export const IDLE_EPS = 0.01;
 
-/**
- * Weighted tokens under which a *rising* interval is someone else's spend.
- *
- * A percent of the window is on the order of a million weighted tokens, so a
- * rise backed by a few thousand cannot have happened here — it is another
- * device on the same account. Excluded from every fit and disclosed separately;
- * it is the one systematic bias in the measurement.
- */
+/** A percent is ~a million weighted tokens, so a rise backed by less was another device. */
 export const EXTERNAL_WEIGHTED_MAX = 5_000;
 
-/**
- * Fraction of an interval's duration that must be covered by ledger lines.
- *
- * History samples are write-on-change compressed, so one interval routinely
- * spans several ledger lines — but a *missing* line means the server was down
- * for that minute, and the tokens spent then were never measured. Attributing
- * the whole interval's utilization to the minutes we did see would inflate the
- * rate silently, so the interval is marked `gap` and dropped instead.
- */
+/** Below this the recorder missed minutes we would otherwise price — the interval is `gap`. */
 export const LEDGER_COVERAGE_MIN = 0.8;
 
-/**
- * What an interval turned out to be.
- *
- * `{model}` is the only kind a rate is ever fitted on. The rest are named
- * rather than merged into one "unusable" bucket because they mean different
- * things: `external` is a disclosed bias, `gap` is our own downtime, `mixed` is
- * a limitation of dominance attribution, and `idle` is a measurement.
- */
+/** What an interval turned out to be. Only `{model}` is ever fitted on; the rest are named separately because they mean different things. */
 export type IntervalKind = 'idle' | 'external' | 'mixed' | 'gap' | { model: string };
 
 /** One consecutive pair of history samples, with the tokens spent between them. */
@@ -71,12 +35,10 @@ export interface Interval {
   toT: number;
   /** Utilization percentage points gained. Never negative — a drop is discarded. */
   dUtil: number;
-  /** Per-model counts summed from the ledger lines inside the interval. */
   tok: Record<string, TokenCounts>;
   kind: IntervalKind;
 }
 
-/** Total weighted tokens across every model in an interval. */
 export function totalWeighted(tok: Record<string, TokenCounts>): number {
   let sum = 0;
   for (const counts of Object.values(tok)) sum += weightedTokens(counts);
@@ -86,11 +48,9 @@ export function totalWeighted(tok: Record<string, TokenCounts>): number {
 /**
  * Which model owns this interval, or null when none holds {@link DOMINANCE}.
  *
- * Dominance rather than a least-squares decomposition of mixed intervals: with
- * a handful of models and one equation per interval the decomposition is
- * under-determined exactly when it matters (two models always used together),
- * and a wrong split is indistinguishable from drift. Discarding is honest and
- * costs only sample size — revisit if the discard share proves high.
+ * Dominance rather than decomposing mixed intervals: one equation per interval
+ * is under-determined exactly when it matters (two models always used together),
+ * and a wrong split is indistinguishable from drift.
  */
 export function dominantModel(tok: Record<string, TokenCounts>): string | null {
   const total = totalWeighted(tok);
@@ -104,23 +64,10 @@ export function dominantModel(tok: Record<string, TokenCounts>): string | null {
 /**
  * The ledger's overlap with `[fromT, toT]`: tokens summed, milliseconds covered.
  *
- * **Overlap-weighted, not whole-lines-only** — and this was measured, not
- * chosen for elegance. The two logs are written on different grids: history
- * samples are write-on-change, so an interval starts and ends whenever
- * utilization happened to move, while ledger ticks land once a minute. Counting
- * only the lines lying *wholly* inside an interval therefore throws away up to
- * a minute at each edge, which is most of a short interval — run against real
- * logs that rule classified **759 of 759** intervals as `gap`, i.e. the feature
- * measured nothing at all.
- *
- * Consecutive ticks tile the timeline (`prevT` of one is the `t` of the last),
- * so summing overlaps recovers the interval's full duration whenever the
- * recorder was running, and falls short by exactly the minutes it was not —
- * which is what {@link LEDGER_COVERAGE_MIN} is meant to test.
- *
- * The edge ticks are split *pro rata*, which assumes spend was uniform inside
- * those two minutes. That is the one approximation here, it is bounded by two
- * ticks per interval, and the alternative was measuring nothing.
+ * Overlap-weighted, not whole-lines-only: the two logs are written on different
+ * grids, and against real logs the whole-lines rule classified **759 of 759**
+ * intervals as `gap`. Edge ticks are split pro rata — the one approximation
+ * here, bounded by two ticks per interval.
  */
 function gather(ledger: LedgerLine[], fromT: number, toT: number): {
   tok: Record<string, TokenCounts>;
@@ -154,15 +101,9 @@ function classify(dUtil: number, tok: Record<string, TokenCounts>, covered: bool
 /**
  * Pair consecutive samples into classified intervals.
  *
- * A pair survives only inside one window and only rising: a reset restarts the
- * count at zero (the 5-hour window is a fixed session window, not a sliding
- * one — see `docs/subsystems/usage-limits.md`), and a drop without a window
- * change is a reading we cannot explain. Both are dropped entirely rather than
- * clamped, because a clamped interval would contribute tokens with no price.
- *
- * Samples are assumed time-ordered, as both the log and the reader produce
- * them; a pair that is not strictly increasing is discarded rather than sorted,
- * since out-of-order samples mean something upstream is wrong.
+ * A pair survives only inside one window and only rising, and is dropped rather
+ * than clamped — a clamped interval contributes tokens with no price. An
+ * out-of-order pair is discarded, not sorted: upstream is wrong.
  */
 export function joinIntervals(samples: UsageSample[], ledger: LedgerLine[]): Interval[] {
   const out: Interval[] = [];
@@ -191,21 +132,10 @@ export const BASELINE_MS = 17 * DAY_MS;
 /** The trailing span compared against that baseline. */
 export const CURRENT_MS = 3 * DAY_MS;
 
-/**
- * Weighted deviation from baseline, in percent, beyond which the rate has
- * genuinely moved. Wide on purpose: the pooled ratio still carries sampling
- * noise, and a badge that cries drift at ±5% would be ignored within a week.
- */
+/** Wide on purpose: a badge that cries drift at ±5% is ignored within a week. */
 export const DRIFT_PCT = 20;
 
-/**
- * The same for the *raw* rate, and only ever reported as a **mix shift**.
- *
- * Raw tokens per percent move whenever the token mix does — a session leaning
- * harder on cache reads shifts it a long way with nothing repriced. Wider than
- * {@link DRIFT_PCT} because it is the noisier quantity, and it is never called
- * drift: the weighted rate is the one that means the exchange rate changed.
- */
+/** Wider still, and never called drift — raw moves whenever the token mix does. */
 export const RAW_SHIFT_PCT = 25;
 
 /** What a rate needs before it is worth reporting. */
@@ -218,10 +148,8 @@ export interface RateFloors {
 
 /**
  * Both floors, because either alone is fooled: 200 intervals of 0.02% is a
- * rounding-error rate, and one interval covering 20% is a single unrepeated
- * observation. The current floors are lower than the baseline's because the
- * current window is a fifth of the span — holding it to the same evidence
- * would mean the card never said anything until the fourteenth day.
+ * rounding-error rate, one interval covering 20% is unrepeated. Current is
+ * looser only because its window is a fifth of the baseline's span.
  */
 export const BASELINE_FLOORS: RateFloors = { minIntervals: 30, minUtil: 15 };
 export const CURRENT_FLOORS: RateFloors = { minIntervals: 10, minUtil: 5 };
@@ -259,12 +187,9 @@ export function baselineRange(nowMs: number): { sinceMs: number; untilMs: number
 }
 
 /**
- * `[now−3d, ∞)` — the trailing window.
- *
- * Open at the top rather than closed at `now`: an interval stamped a moment
- * ahead of the request clock is still the most recent thing measured, and
- * dropping it for being a second in the future would be a silent hole at
- * exactly the edge this window exists to watch.
+ * `[now−3d, ∞)` — open at the top rather than closed at `now`, so an interval
+ * stamped a moment ahead of the request clock is not dropped at exactly the
+ * edge this window exists to watch.
  */
 export function currentRange(nowMs: number): { sinceMs: number; untilMs: number } {
   return { sinceMs: nowMs - CURRENT_MS, untilMs: Number.POSITIVE_INFINITY };
@@ -295,11 +220,9 @@ function pool(intervals: Interval[], model: string, sinceMs: number, untilMs: nu
 /**
  * One model's rate over a window, or null when the evidence is too thin.
  *
- * **Pooled Σtokens / Σutil, not a mean of per-interval ratios.** A mean lets a
- * 0.02% interval with a noisy numerator count as much as an hour of steady
- * work; pooling weights every interval by the movement it actually explains,
- * which is the quantity being measured. The floors are what keep the pool
- * robust — and they are the reason a median was not needed instead.
+ * Pooled Σtokens / Σutil, not a mean of per-interval ratios: a mean lets a
+ * 0.02% interval count as much as an hour of steady work. The floors are what
+ * keep the pool robust, and why a median was not needed instead.
  */
 export function rateFor(
   intervals: Interval[], model: string, sinceMs: number, untilMs: number, floors: RateFloors
@@ -318,16 +241,10 @@ function deviation(current: number, baseline: number): number {
 /**
  * Compare a model's trailing rate against its baseline.
  *
- * Verdict order matters: **thin outranks everything**. A rate fitted on too
- * little data can deviate by any amount at all, so calling that drift would
- * make the badge fire hardest exactly when it knows least. Only once both sides
- * are real does the weighted deviation decide, and only if *that* is flat does
- * the raw one get to speak — as `mix-shift`, which explicitly says the exchange
- * rate did not move.
- *
- * The evidence counters describe the **current** window and are reported
- * whatever the verdict: "collecting — 4 windows, 1.2 points" is a useful thing
- * for the card to say, and a bare `thin` is not.
+ * Verdict order matters — **thin outranks everything**, or the badge would fire
+ * hardest exactly when it knows least. The evidence counters describe the
+ * *current* window and are reported whatever the verdict, so the card can say
+ * "collecting — 4 windows, 1.2 points" rather than a bare `thin`.
  */
 export function driftRow(intervals: Interval[], model: string, nowMs: number): DriftRow {
   const base = baselineRange(nowMs);
@@ -364,14 +281,10 @@ export function driftRow(intervals: Interval[], model: string, nowMs: number): D
 /**
  * Share of the *moved* utilization that this machine cannot account for.
  *
- * The denominator is everything that moved and was measured — external, clean
- * and mixed intervals. `idle` is excluded because nothing moved, and `gap`
- * because we were not watching: counting our own downtime as another device's
- * spend would turn a server restart into a claim about the account.
- *
- * Null rather than 0 when nothing moved at all: "no external burn" and "no
- * evidence either way" are different statements, and only one of them belongs
- * on a card.
+ * `idle` and `gap` are out of the denominator — counting our own downtime as
+ * another device's spend would turn a server restart into a claim about the
+ * account. Null rather than 0 when nothing moved: "no external burn" and "no
+ * evidence either way" are different statements.
  */
 export function externalShare(intervals: Interval[], sinceMs: number, untilMs: number): number | null {
   let external = 0, moved = 0;

@@ -1,23 +1,12 @@
 /**
  * usage-ledger.ts — what this machine actually spent, per minute, per model.
  *
- * `usage-history.ts` records the *price* side of the exchange (utilization
- * percent of the 5-hour window). This module records the *goods* side: the
- * tokens the transcripts on this machine show being consumed over the same
- * minute. Divide one by the other and you get what a percent is worth in
- * tokens — see `usage-rate.ts`, and `docs/subsystems/usage-limits.md`.
+ * The *goods* side of the exchange `usage-history.ts` prices: tokens consumed
+ * over the same minute, so `usage-rate.ts` can divide one by the other. Split
+ * into a pure core (weights, windowing, the line codec) and an I/O shell.
  *
- * Two halves, split the way the rest of this subsystem splits: a pure core
- * (weights, windowing, the line codec) that tests can drive with plain values,
- * and an I/O shell (offsets, appends, reads) around it.
- *
- * **Token types are weighted, not summed.** Output tokens cost about 5× input,
- * a cache write 1.25×, a cache read 0.1× — uniform ratios across current
- * Anthropic models, which is what makes one ratio set enough. Weighted tokens
- * are therefore mix-invariant: a turn that shifts from cache reads to fresh
- * input moves the raw count a long way and the weighted count barely at all,
- * so a *weighted* rate that moves is a repricing rather than a change of habit.
- * No dollars appear anywhere — only the ratios between types survive.
+ * Token types are weighted, not summed — see `docs/subsystems/usage-limits.md`
+ * for why mix-invariance is the property the whole feature rests on.
  */
 
 import fs from 'node:fs';
@@ -43,11 +32,7 @@ export interface TokenCounts {
 export interface LedgerLine {
   /** Tick time, ms epoch. */
   t: number;
-  /**
-   * The previous tick's time. Carried explicitly so a recording gap is
-   * *visible* — a fitter can see that two lines do not abut and refuse to
-   * bridge them, which a bare `t` could never show.
-   */
+  /** The previous tick's time. Explicit so a recording gap is *visible* — two lines that do not abut cannot be bridged. */
   prevT: number;
   /** Model id → its counts. Empty means a measured zero, not missing data. */
   tok: Record<string, TokenCounts>;
@@ -63,12 +48,8 @@ export interface UsageEvent {
 }
 
 /**
- * Cost ratios between token types, normalized to input = 1.
- *
- * From published API pricing, and deliberately *only* the ratios: per-model
- * base price differences are exactly what a fitted per-model rate absorbs, so
- * carrying absolute prices here would double-count them and put a currency in
- * a product that shows none.
+ * Cost ratios between token types, normalized to input = 1. Deliberately only
+ * the ratios: a fitted per-model rate already absorbs base price differences.
  */
 export const TYPE_WEIGHTS: Readonly<TokenCounts> = { in: 1, out: 5, cc: 1.25, cr: 0.1 };
 
@@ -104,15 +85,10 @@ export function addCounts(into: TokenCounts, from: TokenCounts): void {
 }
 
 /**
- * Sum events per model over the **half-open** interval `(prevT, t]`.
- *
- * Half-open, and closed on the right, so consecutive ticks tile the timeline
- * exactly once: an event landing on a tick boundary belongs to the tick that
- * just ended, never to both and never to neither.
- *
- * An event with no model is dropped rather than bucketed under `''` — an
- * unattributable token cannot support a per-model rate, and a `''` row would
- * eventually reach the UI as a model named nothing.
+ * Sum events per model over the **half-open** interval `(prevT, t]`, so
+ * consecutive ticks tile the timeline exactly once. An event with no model is
+ * dropped rather than bucketed under `''`, which would reach the UI as a model
+ * named nothing.
  */
 export function sumWindow(events: UsageEvent[], prevT: number, t: number): Record<string, TokenCounts> {
   const out: Record<string, TokenCounts> = {};
@@ -135,11 +111,8 @@ function num(value: unknown): number {
 }
 
 /**
- * Parse one ledger line, or null when it isn't usable.
- *
- * `prevT` is required alongside `t`: without it the line cannot say how much
- * time it covers, and a fitter that guessed would silently bridge exactly the
- * gaps `prevT` exists to expose.
+ * Parse one ledger line, or null when it isn't usable. `prevT` is required
+ * alongside `t`: a fitter that guessed it would bridge the gaps it exposes.
  */
 export function parseLedgerLine(line: string): LedgerLine | null {
   let raw: Record<string, unknown>;
@@ -164,11 +137,8 @@ export function parseLedgerLine(line: string): LedgerLine | null {
 }
 
 // ── The I/O shell ────────────────────────────────────────────────────────────
-//
-// One file, gitignored, beside `.usage-history.jsonl` at the repo root — the
-// two are read together and a rate is meaningless without both.
 
-/** Append-only per-tick token ledger. Sibling of the history log. */
+/** Append-only per-tick token ledger. Gitignored, beside the history log. */
 export const LEDGER_FILE = '.usage-ledger.jsonl';
 
 /** ~32 MB, the same ceiling the history log uses. Trimmed to its newest half. */
@@ -181,10 +151,8 @@ const NEWLINE = 0x0a;
 
 /**
  * Turn ids remembered per transcript, so a turn split across two ticks is not
- * counted twice. Records of one turn share a `message.id` and each carries a
- * *copy* of the same usage block (the convention `analyze.ts` handles with
- * `firstOfTurn`); a chunk boundary can land between those copies, which is the
- * only reason this outlives a single read.
+ * counted twice — records of one turn each carry a *copy* of the same usage
+ * block, and a chunk boundary can land between those copies.
  */
 const MAX_SEEN_IDS = 256;
 
@@ -225,11 +193,9 @@ function numField(value: unknown): number {
 /**
  * Read one transcript record into an event, or null when it carries no spend.
  *
- * Mirrors `analyze.ts`'s conventions for the same on-disk shape, with one
- * deliberate difference: **sidechain (subagent) turns are counted here.**
- * `analyze.ts` skips them so a session's main-agent totals don't double against
- * `bySubagent`; this ledger is asking what the *account* spent, and a subagent
- * turn spends exactly as much as any other.
+ * Mirrors `analyze.ts` for the same on-disk shape with one deliberate
+ * difference: **sidechain (subagent) turns are counted here.** This ledger asks
+ * what the *account* spent, and a subagent turn spends like any other.
  */
 function eventFromRecord(raw: unknown, cursor: FileCursor): UsageEvent | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -270,9 +236,7 @@ function eventFromRecord(raw: unknown, cursor: FileCursor): UsageEvent | null {
  *
  * Offsets only ever advance to a **line boundary**: a transcript being written
  * while we read it ends mid-line, and re-reading that fragment next tick is the
- * only way it is ever seen whole. A file shorter than its stored offset was
- * rotated or truncated, so its cursor restarts at 0 — `sumWindow` then drops
- * everything already outside this tick's window.
+ * only way it is ever seen whole.
  */
 function collectEvents(root: string): UsageEvent[] {
   const events: UsageEvent[] = [];
@@ -359,22 +323,13 @@ export function rotateLedgerIfNeeded(dir?: string, maxBytes: number = MAX_LEDGER
  * Record one tick: everything the transcripts on this machine consumed since
  * the previous tick, per model, as one line.
  *
- * Called beside `recordTick` on the usage fetch's success path, so a ledger
- * line and a history sample describe the same instant — which is the whole
- * basis of the join in `usage-rate.ts`.
+ * Called beside `recordTick` so a ledger line and a history sample describe the
+ * same instant — the whole basis of the join in `usage-rate.ts`. A line is
+ * written every tick, even an empty one, and the first tick after start writes
+ * nothing; `docs/subsystems/usage-limits.md` covers why both matter.
  *
- * **A line is written every tick, even an empty one.** `tok: {}` is a measured
- * zero — this machine spent nothing this minute — and that is data: it is what
- * separates "no local tokens" (someone else's device burned the window) from
- * "not recording" (no line at all).
- *
- * The **first tick after start writes nothing**: it only seeds the offsets, so
- * whatever was already on disk isn't attributed to one minute. Switching
- * recording off drops that state, so switching it back on reseeds the same way
- * — one lost minute instead of a backlog dumped into a single interval.
- *
- * `dir` (ledger location) and `root` (transcripts) are injectable for tests;
- * production passes neither. Never throws — this runs inside the usage fetch.
+ * `dir` and `root` are injectable for tests. Never throws — this runs inside
+ * the usage fetch.
  */
 export function recordLedgerTick(opts?: { dir?: string; root?: string; nowMs?: number }): void {
   try {
@@ -402,12 +357,9 @@ export function recordLedgerTick(opts?: { dir?: string; root?: string; nowMs?: n
 /**
  * Every ledger line stamped at or after `sinceMs`, oldest first.
  *
- * Read **backwards** in chunks and stopped at the first line older than the
- * cutoff, rather than tail-reading a fixed byte window: a fixed cap that
- * happened to be smaller than the caller's horizon would silently drop the
- * oldest part of the baseline, and a baseline quietly fitted on less data than
- * it claims is exactly the failure this feature exists to catch. Malformed
- * lines are skipped individually and never end the scan.
+ * Read **backwards** in chunks to the cutoff rather than tail-reading a fixed
+ * byte window: a cap smaller than the caller's horizon would silently shorten
+ * the baseline, which is exactly the failure this feature exists to catch.
  */
 export function readLedgerSince(sinceMs: number, dir?: string): LedgerLine[] {
   let fd: number | undefined;
@@ -438,14 +390,12 @@ export function readLedgerSince(sinceMs: number, dir?: string): LedgerLine[] {
         segments.push(combined.subarray(idx, nl));
         idx = nl + 1;
       }
-      // Whatever follows the last newline is a whole line: on the first pass
-      // it is a file not ending in one, and afterwards it is the line that
-      // straddled the chunk boundary (the carry cannot contain a newline).
+      // Whatever follows the last newline is a whole line — the carry cannot
+      // contain a newline.
       const trailing = combined.subarray(idx);
       if (trailing.length > 0) segments.push(trailing);
-      // The head of this chunk continues a line that started in the previous
-      // one — carried as bytes, never as a string, so a multi-byte character
-      // split across the boundary survives.
+      // Carried as bytes, never as a string, so a multi-byte character split
+      // across the chunk boundary survives.
       if (start > 0 && segments.length > 0) carry = segments.shift() as Buffer<ArrayBufferLike>;
 
       for (let i = segments.length - 1; i >= 0; i--) {

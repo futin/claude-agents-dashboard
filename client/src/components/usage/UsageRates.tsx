@@ -8,28 +8,10 @@ import {
  * Token value per model — what one percent of the 5-hour window actually costs,
  * and whether that price has moved.
  *
- * **Why this exists.** The header bars say a percent was spent; nothing said
- * what a percent *is*. Without that, choosing a model is anecdote ("Opus feels
- * expensive"), and a change in the exchange rate is invisible — which is the
- * thing worth knowing, because it changes what a day's budget buys.
- *
- * Design notes that are deliberate:
- *
- * - **The raw number leads, the weighted one judges.** "9.0M / 1%" is the
- *   figure a person can plan against; the verdict badge underneath is computed
- *   on the *weighted* rate, which is mix-invariant. When only the raw number
- *   moves the badge says `mix shift`, in as many words — never `drift`.
- * - **Every rate is shown with its evidence.** Windows and cumulative movement
- *   sit on the same row as the number. A rate with no evidence line would be a
- *   claim; with one it is a measurement.
- * - **`collecting` is a first-class state, not an empty row.** Most models will
- *   sit there for the first fortnight, and a card that showed nothing during
- *   its own warm-up would read as broken.
- * - **The external-burn pill is not decoration.** Utilization burned on another
- *   device cannot be attributed here, so it is excluded from the fit — and the
- *   one systematic bias in the measurement is disclosed rather than absorbed.
- * - **No `title` attributes.** This board is read from a phone, where `title`
- *   never fires; every explanation is real text in the row.
+ * The raw number leads because it is what a person plans against; the badge
+ * underneath judges on the weighted rate. `collecting` is a first-class state,
+ * not an empty row — most models sit there for the first fortnight. No `title`
+ * attributes: this board is read from a phone, where `title` never fires.
  */
 
 const BADGE_CLASS: Record<ModelRateRow['verdict'], string> = {

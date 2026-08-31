@@ -1,21 +1,16 @@
 /**
  * usageRatesFormat.ts — the pure formatting behind the token-value card.
  *
- * Kept out of the component for the usual reason in this codebase: these are
- * the statements the card makes, and a statement worth making is worth a test.
- * Nothing here rounds a *decision* — the verdict arrives from the server; this
- * only decides how many digits a reader can act on.
+ * Out of the component so the statements the card makes can be tested. Nothing
+ * here rounds a *decision* — the verdict arrives from the server.
  */
 
 import type { ModelRateVerdict } from '../../../shared/types';
 
 /**
- * Tokens, at a magnitude a person can hold in their head.
- *
- * Three digits at most, and **one decimal in the millions** — the range the
- * interesting numbers live in, where `1.5M` and `2.0M` are a distinction worth
- * drawing and `1_500_000` is not. `—` for null, never `0`: an unfitted rate is
- * an absence, and printing zero would claim a measurement.
+ * Tokens, at a magnitude a person can hold in their head. One decimal in the
+ * millions, where the interesting numbers live. `—` for null, never `0`:
+ * printing zero would claim a measurement that was never fitted.
  */
 export function formatTok(n: number | null): string {
   if (n === null || !Number.isFinite(n)) return '—';

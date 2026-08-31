@@ -5,14 +5,10 @@ import type { UsageRatesResponse } from '../../../shared/types';
 /**
  * What a percent of the 5-hour window costs in tokens, per model.
  *
- * One fetch per mount, unpolled — the same reasoning as `useUsageProfile`, and
- * a stronger case for it: the baseline is a 14-day window, so nothing here can
- * move within a session. Reopening the tab is how you pick up a new fit.
- *
- * A failed fetch keeps whatever was already on screen. The endpoint fails open
- * to an honest empty body, so a *thrown* fetch means the server is gone — and
- * blanking a card the reader was looking at would say something false about the
- * account rather than about the connection.
+ * One fetch per mount, unpolled, like `useUsageProfile` — the baseline is 14
+ * days, so nothing here moves within a session. A failed fetch keeps what is
+ * already on screen: the endpoint fails open, so a *thrown* fetch means the
+ * server is gone, which is not a statement about the account.
  */
 
 export interface UsageRatesState {
