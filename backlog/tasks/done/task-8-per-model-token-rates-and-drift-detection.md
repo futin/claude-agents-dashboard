@@ -3,6 +3,7 @@ id: task-8
 title: Per-model token rates and drift detection
 created: 2026-08-28
 from: idea-10
+started: 2026-08-31T07:33:48Z
 ---
 
 ## Goal
@@ -274,3 +275,89 @@ and missing-file endpoint honesty, and the five `formatTok` values.
 - Docs updated (`usage-limits.md`, `overview.md`); PR follows the template with an
   explicit "not verified" line for long-horizon drift behaviour (needs weeks of
   real data by nature).
+
+## Outcome
+
+**2026-08-31 — done.** All six tasks built, verified green, and verified live against
+the running dev server. Two deviations from the plan, both deliberate:
+
+1. **The join rule in the plan was wrong, and live data proved it.** The plan
+   specified summing "every ledger line with `prevT >= from.t && t <= to.t`".
+   History samples are write-on-change and ledger ticks land once a minute, so the
+   two grids never align and that rule discards up to a minute of coverage at each
+   interval edge. Implemented literally, it classified **759 of 759** real
+   intervals as `gap` — the feature measured nothing. Replaced with
+   overlap-weighted attribution (edge ticks split pro rata, coverage = Σ overlap /
+   duration), after which the same live logs classify real intervals to
+   `claude-opus-5`. The floor still catches genuine downtime. Documented in
+   `docs/subsystems/usage-limits.md`.
+2. **The current window is `[now−3d, ∞)`, not `[now−3d, now]`** — open at the top so
+   an interval stamped a moment ahead of the request clock is not dropped at
+   exactly the edge the window exists to watch. Behaviourally identical otherwise.
+
+Also changed beyond the plan's file list: the side-rail label `Usage Forecast` →
+`Usage` (display-only). The section now holds two sub-tabs, and naming it after one
+of them hid the other.
+
+### Verification
+
+`pnpm typecheck` (exit 0, no output):
+
+```
+> claude-agents-dashboard@0.1.0 typecheck
+> tsc --noEmit
+=== TYPECHECK exit: 0 ===
+```
+
+`pnpm test` — 594 cases, 0 failures:
+
+```
+=== usage-ledger.ts (pure core) ===        12 passed, 0 failed
+=== usage-ledger.ts (recorder I/O) ===     10 passed, 0 failed
+=== usage-rate.ts (join + classify) ===    15 passed, 0 failed
+=== usage-rate.ts (rates + drift) ===      14 passed, 0 failed
+=== usageRatesFormat.ts ===                 6 passed, 0 failed
+=== usage rates endpoint ===                6 passed, 0 failed
+TOTAL passed=594 failed=0
+ALL PASS
+```
+
+`pnpm build` — client bundles, `UsageView` chunk 16.11 kB (was ~11 kB).
+
+**Live, against the running dev server with recording already on:**
+
+```
+$ wc -l < .usage-ledger.jsonl     # 12 lines at 07:55, 21 at 08:04 — one per minute
+21
+$ tail -1 .usage-ledger.jsonl
+{"t":1788162877011,"prevT":1788162816876,"tok":{"claude-opus-5":{"in":8,"out":2873,"cc":201782,"cr":720089}}}
+
+$ curl -s -i http://localhost:4173/api/usage/rates | head -2
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+$ curl -s http://localhost:4173/api/usage/rates
+{"generatedAt":"2026-08-31T08:04:02.011Z","recording":true,"models":[{"model":"claude-opus-5",
+"rawPerPct":null,"weightedPerPct":null,"baselineRawPerPct":null,"baselineWeightedPerPct":null,
+"deviationPct":null,"verdict":"thin","intervals":7,"utilSum":7}],"externalSharePct":0}
+```
+
+UI verified in the browser at `localhost:5174`: sub-tab switch works and persists, the
+card renders against real data (`claude-opus-5`, COLLECTING, evidence line, 0% external
+pill), and the populated four-verdict state renders correctly in **all five themes**
+(midnight, graphite, amber, nightshift, daylight) and at 375px, plus the
+`recording: false` empty state. No literal colours were added to `styles.css`.
+
+### Not verified — needs a human, and needs time
+
+- **Drift detection itself.** A `drift` / `stable` / `mix-shift` verdict requires a
+  17-day baseline to exist. Every threshold is unit-tested at its boundary and the
+  pipeline is proven end to end, but nothing shorter than weeks of real recording can
+  show that the badge fires when it should and stays quiet when it should not.
+- **The populated card was rendered against a stubbed API response** (the real fit is
+  still `thin`), so the row markup and badge colours are verified, but not the exact
+  numbers a real drift row will carry.
+- **Rate accuracy.** Whether ~900k weighted tokens per 1% is the *true* exchange rate
+  is unknowable from here — Anthropic publishes no budget. The measurement is
+  self-consistent; that is all it claims.
+- Nothing was committed or pushed, per the request. The tree is dirty on `main`.
