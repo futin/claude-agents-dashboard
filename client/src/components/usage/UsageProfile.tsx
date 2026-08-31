@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ForecastConfidence, UsageProfileCell, UsageProfileResponse } from '../../../../shared/types';
 import { useUsageProfile } from '../../hooks/useUsageProfile';
-import { fmtObserved, nextWeekStartMs, profileProgress, TRUST_FLOOR_MIN } from '../../lib/usageProfile';
+import {
+  cellTitle, DAYS, earliestWeightMs, fmtObserved, nextWeekStartMs, profileProgress, TRUST_FLOOR_MIN
+} from '../../lib/usageProfile';
 import {
   absentText, areaPath, crossingX, dayTicks, fmtWalkHour, hitRect, hourOfWeekLocal,
   pctX, pctY, pointsAttr, splitRuns, stepTitle, VIEW_H, walkPoints, walkWidth, Y_MAX, yOf
@@ -65,8 +67,6 @@ import {
  * Reference: `docs/guides/mockups/usage-profile-heatmap-mockups.html`, variant C.
  */
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
 /**
  * Which of the five ramp steps a weight lands on.
  *
@@ -91,26 +91,6 @@ const CONFIDENCE_TEXT: Record<ForecastConfidence, string> = {
   ok: 'enough evidence to lead with'
 };
 
-/** The tooltip for one cell. Wording matters here — see the module docstring. */
-function cellTitle(cell: UsageProfileCell, day: number, hour: number): string {
-  const when = `${DAYS[day]} ${String(hour).padStart(2, '0')}:00 · every week`;
-  const weeks = cell.observedMin / 60;
-  if (cell.weight == null) {
-    return (
-      `${when}\nno evidence yet\n${Math.round(cell.observedMin)} of ${TRUST_FLOOR_MIN} min needed\n` +
-      'falls back to the weekly mean'
-    );
-  }
-  const evidence = weeks >= 2
-    ? `${Math.round(weeks)} weeks of evidence`
-    : `${Math.round(cell.observedMin)} of ${TRUST_FLOOR_MIN} min — under one week`;
-  const stale = cell.staleWeeks > 8 ? `\nlast seen ${cell.staleWeeks} weeks ago` : '';
-  const level = cell.weight <= 0.02
-    ? 'never active — measured, not missing'
-    : `${Math.round(cell.weight * 100)}% active`;
-  return `${when}\n${level}\n${evidence}${stale}`;
-}
-
 /**
  * What the profile has so far, and which gate it is waiting on.
  *
@@ -123,8 +103,13 @@ function RecordingStatus({ cells, recording }: { cells: UsageProfileCell[]; reco
   const { touched, totalMin, atFloor, trusted } = profileProgress(cells);
   if (!recording && touched === 0) return null;   // the `.up-off` block says it all
 
-  const monday = new Date(nextWeekStartMs(Date.now()));
-  const when = monday.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  // Dated from the cells, not the calendar: a bucket carrying last week's stamp
+  // folds at its next occurrence, which is usually days before the next Monday.
+  // With nothing recorded there is no occurrence to date, and the week boundary
+  // is then the true floor — an hour has to be observed before it can fold.
+  const now = Date.now();
+  const first = new Date(earliestWeightMs(cells, now) ?? nextWeekStartMs(now));
+  const when = first.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 
   return (
     <div className="up-status">
@@ -134,13 +119,13 @@ function RecordingStatus({ cells, recording }: { cells: UsageProfileCell[]; reco
         <span>{trusted} carrying a weight</span>
       ) : atFloor > 0 ? (
         <span className="up-status-wait">
-          {atFloor} {atFloor === 1 ? 'hour has' : 'hours have'} enough evidence — weights appear
-          when the week rolls over on {when}
+          {atFloor} {atFloor === 1 ? 'hour has' : 'hours have'} enough evidence — the first weight
+          appears on {when}, when that hour comes round in a new week
         </span>
       ) : (
         <span className="up-status-wait">
-          no weights yet — an hour needs {TRUST_FLOOR_MIN} min of evidence, and the first fold
-          happens when the week rolls over on {when}
+          no weights yet — an hour needs {TRUST_FLOOR_MIN} min of evidence and one week to
+          fold; the earliest a weight can appear is {when}
         </span>
       )}
     </div>
