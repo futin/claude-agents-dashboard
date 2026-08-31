@@ -173,6 +173,57 @@ export interface UsageProfileResponse {
   walkAbsent: null | 'recording-off' | 'no-rate' | 'no-window';
 }
 
+/** What the drift comparison concluded for one model. */
+export type ModelRateVerdict = 'drift' | 'stable' | 'mix-shift' | 'thin';
+
+/**
+ * One model's token-value row in `GET /api/usage/rates`.
+ *
+ * Every rate is "tokens per one percentage point of the 5-hour window", fitted
+ * from what this machine spent against what the window charged for it. Nulls
+ * are load-bearing: they mean *not enough evidence to say*, never zero.
+ */
+export interface ModelRateRow {
+  /** Model id exactly as the transcripts record it. */
+  model: string;
+  /** Plain tokens per 1% — the courtesy translation, at the model's recent mix. */
+  rawPerPct: number | null;
+  /** Type-weighted tokens per 1% — the mix-invariant quantity drift is judged on. */
+  weightedPerPct: number | null;
+  baselineRawPerPct: number | null;
+  baselineWeightedPerPct: number | null;
+  /** Signed percent change of the weighted rate against baseline. */
+  deviationPct: number | null;
+  verdict: ModelRateVerdict;
+  /** Intervals behind the current-window fit — the evidence, shown either way. */
+  intervals: number;
+  /** Cumulative utilization points behind it. */
+  utilSum: number;
+}
+
+/**
+ * `GET /api/usage/rates` — read-only, unpolled, and honest when empty.
+ *
+ * `recording: false` is the leading fact: with the recorder off there is no
+ * ledger, so there are no rows and the view says why rather than showing a
+ * blank table.
+ */
+export interface UsageRatesResponse {
+  /** ISO 8601 — when the fit was run. */
+  generatedAt: string;
+  recording: boolean;
+  /** One row per model seen in an attributable interval, richest evidence first. */
+  models: ModelRateRow[];
+  /**
+   * Percent of moved utilization that this machine cannot account for — spend
+   * from another device on the same account. Null when nothing moved.
+   * Disclosed because it is the one systematic bias in the measurement.
+   */
+  externalSharePct: number | null;
+  /** Only set when the fit itself failed; a missing ledger is not an error. */
+  error?: boolean;
+}
+
 export interface RateLimit {
   /** 0–100 percent of the window consumed, or null if unknown/unscoped. */
   utilization: number | null;

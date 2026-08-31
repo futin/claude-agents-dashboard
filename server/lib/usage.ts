@@ -24,6 +24,7 @@ import https from 'node:https';
 import type { UsageLimits, RateLimit, UsageStatus } from '../../shared/types.js';
 import { recordAndPace, setForecastProfile } from './usage-pace.js';
 import { deriveProfile, profileSnapshot, recordTick } from './usage-history.js';
+import { recordLedgerTick } from './usage-ledger.js';
 import { getSettings } from './settings.js';
 import { autoRenew } from './token-refresh.js';
 
@@ -306,6 +307,11 @@ function refreshNow(force = false): Promise<void> {
               resetsAt: limits.fiveHour.resetsAt
             });
           }
+          // Beside `recordTick`, not inside it: the ledger measures what this
+          // machine *spent* over the same minute the sample prices, and the
+          // rate fitter joins the two by time. It records even when `limits`
+          // came back null — the tokens were still spent.
+          recordLedgerTick();
           setForecastProfile(deriveProfile(profileSnapshot()));
         } catch {
           /* recording must never break the usage fetch */

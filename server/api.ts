@@ -11,8 +11,11 @@ import { scanSessions, lastMessageMs, listTranscripts, projectsRoot, sessionSurf
 import { readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
-import { deriveProfile, profileSnapshot } from './lib/usage-history.js';
-import type { ProfileState } from './lib/usage-history.js';
+import { deriveProfile, profileSnapshot, readRecentSamples } from './lib/usage-history.js';
+import type { ProfileState, UsageSample } from './lib/usage-history.js';
+import { readLedgerSince } from './lib/usage-ledger.js';
+import type { LedgerLine } from './lib/usage-ledger.js';
+import { BASELINE_MS, driftRow, externalShare, joinIntervals } from './lib/usage-rate.js';
 import { HOURS_PER_WEEK, confidenceOf, localOffsetMinutes, walkForward } from './lib/usage-forecast.js';
 import {
   claudeHome, collectServablePaths, listRecentProjects, readGlobalScope,
@@ -49,7 +52,8 @@ import { toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
-  RateLimit, SpawnResponse, UsageProfileCell, UsageProfileResponse, WaitResult
+  ModelRateRow, RateLimit, SpawnResponse, UsageProfileCell, UsageProfileResponse,
+  UsageRatesResponse, WaitResult
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -585,6 +589,95 @@ export function serveUsageProfile(res: ServerResponse): void {
       cells: blankCells(), globalMean: 1, confidence: 'none',
       recording: false, walk: [], exhaustAt: null, walkAbsent: 'recording-off'
     } satisfies UsageProfileResponse);
+  }
+}
+
+/**
+ * How much of the history log a rate fit reads.
+ *
+ * Sized for the baseline horizon at the worst case — one write-on-change
+ * sample per minute for 17 days is ~24_500 lines of ~80 bytes, under 2 MB — so
+ * the fit can never be quietly starved of the oldest part of its own baseline.
+ * Quiet stretches write the 15-minute heartbeat instead and cost far less.
+ */
+export const RATES_HISTORY_BYTES = 4_194_304;
+
+/** An honest empty body — no ledger yet, recording off, or a failed fit. */
+function emptyRates(nowMs: number, recording: boolean, error?: true): UsageRatesResponse {
+  return {
+    generatedAt: new Date(nowMs).toISOString(),
+    recording,
+    models: [],
+    externalSharePct: null,
+    ...(error ? { error: true } : {})
+  };
+}
+
+/**
+ * Shape one `GET /api/usage/rates` body. Pure — no clock, no disk — so the
+ * arithmetic and every honesty rule are testable (test/api-usage-rates.test.ts).
+ *
+ * One row per model that owns at least one attributable interval, richest
+ * evidence first: the model you actually use should not sit under a model you
+ * tried once. Models seen only in mixed, external or gap intervals get no row
+ * at all — there is nothing to say about them yet, and a row of nulls reads as
+ * a broken fit rather than as an absence of evidence.
+ */
+export function shapeUsageRates(opts: {
+  recording: boolean;
+  samples: UsageSample[];
+  ledger: LedgerLine[];
+  nowMs: number;
+}): UsageRatesResponse {
+  const { recording, samples, ledger, nowMs } = opts;
+  if (!recording) return emptyRates(nowMs, false);
+
+  const intervals = joinIntervals(samples, ledger);
+  const models = new Set<string>();
+  for (const interval of intervals) {
+    if (typeof interval.kind === 'object') models.add(interval.kind.model);
+  }
+
+  const rows: ModelRateRow[] = [...models]
+    .map((model) => driftRow(intervals, model, nowMs))
+    .sort((a, b) => b.utilSum - a.utilSum || a.model.localeCompare(b.model));
+
+  // Over the whole fitted horizon, not just the trailing window: it describes
+  // how much of everything behind these numbers had to be thrown away.
+  const share = externalShare(intervals, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY);
+
+  return {
+    generatedAt: new Date(nowMs).toISOString(),
+    recording: true,
+    models: rows,
+    externalSharePct: share === null ? null : share * 100
+  };
+}
+
+/**
+ * `GET /api/usage/rates` — what a percent of the 5-hour window costs, per model.
+ *
+ * Read-only and unpolled: it reads two files and does arithmetic, and the
+ * numbers move on a scale of days. Fails open to an empty, honest body rather
+ * than a 500 — the same posture as `serveUsageProfile`, and for the same
+ * reason: this is a disclosure view, and a torn one is worse than an empty one.
+ *
+ * `dir` is injectable so a test can point both readers at a fixture; production
+ * omits it and both resolve from the repo root.
+ */
+export function serveUsageRates(res: ServerResponse, dir?: string): void {
+  const now = Date.now();
+  try {
+    const recording = getSettings().recordUsageHistory;
+    if (!recording) return sendJson(res, 200, emptyRates(now, false));
+    sendJson(res, 200, shapeUsageRates({
+      recording,
+      samples: readRecentSamples(dir, RATES_HISTORY_BYTES),
+      ledger: readLedgerSince(now - BASELINE_MS, dir),
+      nowMs: now
+    }));
+  } catch {
+    sendJson(res, 200, emptyRates(now, false, true));
   }
 }
 

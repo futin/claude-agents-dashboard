@@ -81,7 +81,7 @@ const MOVE_EPSILON = 0.5;
 const SAME_WINDOW_MS = 120_000;
 
 /** Same window? Compares parsed stamps with {@link SAME_WINDOW_MS} of slack. */
-function sameWindow(a: string | null, b: string | null): boolean {
+export function sameWindow(a: string | null, b: string | null): boolean {
   if (a === b) return true;
   if (a === null || b === null) return false; // scoped ⇄ unscoped is a real change
   const ta = Date.parse(a);

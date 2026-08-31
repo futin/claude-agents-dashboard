@@ -29,7 +29,7 @@ import {
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
   serveSettingsRead, serveSettingsWrite, serveNotifyEvent, serveNotifyTest,
-  serveTranscribe, serveSpawn, serveSpawnStop, serveUsageProfile
+  serveTranscribe, serveSpawn, serveSpawnStop, serveUsageProfile, serveUsageRates
 } from './api.js';
 import { startUsageRecording } from './lib/usage-history.js';
 import { refreshUsageNow, setUsageAutoRefresh } from './lib/usage.js';
@@ -194,6 +194,11 @@ export function createRequestListener(config: Config): http.RequestListener {
     // carrying raw samples (see docs/subsystems/usage-limits.md).
     if (u.pathname === '/api/usage/profile') {
       return void serveUsageProfile(res);
+    }
+    // What a percent of the 5h window costs in tokens, per model, and whether
+    // that rate has drifted. Read-only, unpolled, empty-honest.
+    if (u.pathname === '/api/usage/rates') {
+      return void serveUsageRates(res);
     }
     // The only write endpoints in the app (see docs/subsystems/remote-answer.md).
     // `wait` holds its response open for minutes — that is by design.

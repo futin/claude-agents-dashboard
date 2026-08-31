@@ -9,4 +9,5 @@ client/dist/
 .remote-answer.json
 .dashboard-settings.json
 .usage-history.jsonl
+.usage-ledger.jsonl
 .usage-profile.json
