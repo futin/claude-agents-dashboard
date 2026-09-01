@@ -99,3 +99,44 @@ one API test needs a built `client/dist` and fails in a fresh worktree without i
 Not verified: a real phone. The report came from one, and the emulation is
 Chromes; iOS Safari sizes fixed panels the same way, but that is reasoning, not a
 measurement.
+
+## Outcome
+
+2026-09-01 — Fixed and merged to main as `d4ad309` (merge of `fix/drawer-viewport-overflow`,
+commit `5a7a652`). The fix landed as three CSS changes in `client/src/styles.css`:
+`overflow-x:clip` on `.main` so nothing inside can widen the phone's layout viewport, and
+`min-width:0;overflow:hidden;text-overflow:ellipsis` on `.usage .u-reset` (replacing
+`flex-shrink:0`) and on `.usage .u-verdict` so the usage strip shrinks instead of
+overflowing sideways. `clip` rather than `hidden` deliberately: it creates no scroll
+container, so the sticky rail and the inner horizontal scrollers (`.md-pre`,
+`.up-tablewrap`) are unaffected. The same guard on `html` was measured ineffective.
+
+This item was never run through `/backlog-execute` — it was groomed (`716ca73`), then
+implemented and committed by hand on a branch, which is why it sat in `open/` with no
+`started:` marker after the fix already existed. Archived retroactively.
+
+Verification on merged main:
+
+```
+$ pnpm typecheck
+> claude-agents-dashboard@0.1.0 typecheck /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+> tsc --noEmit
+
+
+$ pnpm test
+  ...
+  panelCollapse: 8 passed, 0 failed
+  ALL PASS
+  (768 passed, 0 failed across all suites)
+
+$ pnpm build
+dist/assets/ChatDrawer-B4R_4qWe.js                                  25.84 kB │ gzip:  7.41 kB
+dist/assets/index-d2pwEjm6.js                                      169.68 kB │ gzip: 55.20 kB
+✓ built in 863ms
+```
+
+**Not verified — needs a human.** None of the three commands exercises CSS. The
+390x844 measurements in the `## Cause` section come from the implementing session and
+were not reproduced post-merge; nobody has tapped a real push notification on a phone
+since the fix landed. If the drawer's close button is still off-screen there, reopen
+rather than filing a new bug.
