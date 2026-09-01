@@ -12,14 +12,30 @@
  */
 
 import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { testAsync, userRecord, withServer } from './api-harness.js';
+import { appSessionsRoot, resetArchivedCache } from '../server/lib/archived.js';
 
 /** A session id that satisfies `ID_RE` and looks like a real transcript name. */
 const ID = '11111111-1111-4111-8111-111111111111';
 
 /** No usage cache, no `ps`, no push — see `api-harness.ts`. */
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
+
+/**
+ * Write one desktop-app session record under the throwaway `$HOME`, as the app
+ * does when you archive ("delete") a session from its list.
+ */
+function plantAppRecord(home: string, cliSessionId: string, isArchived: boolean): void {
+  const dir = path.join(appSessionsRoot(home), 'install-1', 'account-1');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, `local_${cliSessionId}.json`),
+    JSON.stringify({ sessionId: `local_${cliSessionId}`, cliSessionId, isArchived, name: 'a session' })
+  );
+}
 
 export async function run(): Promise<number> {
   console.log('\n=== read endpoints (api.ts via the router) ===\n');
@@ -36,6 +52,41 @@ export async function run(): Promise<number> {
       assert.ok(Array.isArray(reply.json?.sessions), 'sessions must be an array');
       assert.equal(reply.json?.error, undefined, 'a healthy scan sets no error flag');
       assert.ok(reply.json?.totals, 'totals is part of the contract');
+    });
+  }));
+
+  check(await testAsync('GET /api/sessions omits a session the desktop app archived', async () => {
+    await withServer(ENV, async h => {
+      resetArchivedCache();
+      h.plant(ID);
+      plantAppRecord(h.home, ID, true);
+      const reply = await h.req('/api/sessions');
+      assert.equal(reply.status, 200);
+      const ids = (reply.json?.sessions as { id: string }[]).map(s => s.id);
+      assert.deepEqual(ids, [], 'the archived session must not be listed');
+    });
+  }));
+
+  check(await testAsync('GET /api/sessions still lists a session whose app record is not archived', async () => {
+    await withServer(ENV, async h => {
+      resetArchivedCache();
+      h.plant(ID);
+      plantAppRecord(h.home, ID, false);
+      const reply = await h.req('/api/sessions');
+      assert.equal(reply.status, 200);
+      const ids = (reply.json?.sessions as { id: string }[]).map(s => s.id);
+      assert.deepEqual(ids, [ID]);
+    });
+  }));
+
+  check(await testAsync('GET /api/sessions lists a session with no app record at all (a terminal run)', async () => {
+    await withServer(ENV, async h => {
+      resetArchivedCache();
+      h.plant(ID);
+      const reply = await h.req('/api/sessions');
+      assert.equal(reply.status, 200);
+      const ids = (reply.json?.sessions as { id: string }[]).map(s => s.id);
+      assert.deepEqual(ids, [ID], 'no record to mirror ⇒ nothing to hide');
     });
   }));
 

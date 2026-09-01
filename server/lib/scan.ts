@@ -56,6 +56,13 @@ interface ScanOptions {
    * dialog, either way, appends a record. Omitted/null ⇒ no session is flagged.
    */
   permissionWaits?: ReadonlyMap<string, number> | null;
+  /**
+   * Transcript ids the desktop app has archived — "deleted" in its session list
+   * (`archived.ts` `archivedSessionIds()`), injected by the handler so this
+   * module never reaches into the app's own store. Omitted/null ⇒ nothing is
+   * hidden, which is also what every tmpdir fixture wants.
+   */
+  archivedIds?: ReadonlySet<string> | null;
 }
 
 /** Default transcripts root. */
@@ -297,7 +304,10 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   // phantoms on a maxSessions=5 config showed 3 rows. Over-fetch, then hold the
   // real cap in the loop. Costs extra readTranscript calls only when phantoms
   // exist; with none, the loop breaks at maxSessions like before.
+  // Archived first, so a deleted session doesn't eat a pool slot either.
+  const archived = options.archivedIds || null;
   const candidates = listTranscripts(root)
+    .filter(t => !archived || !archived.has(t.id))
     .filter(t => now - t.mtimeMs <= lookbackMs)
     .sort((a, b) => b.mtimeMs - a.mtimeMs)
     .slice(0, maxSessions * 2);

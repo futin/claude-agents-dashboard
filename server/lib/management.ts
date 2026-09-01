@@ -40,6 +40,13 @@ interface ProjectsOptions {
   root?: string;
   now?: number;
   homeDir?: string;
+  /**
+   * Transcript ids the desktop app has archived (`archived.ts`
+   * `archivedSessionIds()`), injected by the handler. A project whose only
+   * recent session was deleted in the app should stop reading as recently
+   * active. Omitted/null ⇒ nothing is hidden.
+   */
+  archivedIds?: ReadonlySet<string> | null;
 }
 
 /* ---------------------------------------------------------------- helpers */
@@ -408,7 +415,9 @@ export function listRecentProjects(config: Partial<Config>, options: ProjectsOpt
 
   // Newest transcript per project dir, inside the lookback window.
   const newestPerDir = new Map<string, { file: string; mtimeMs: number }>();
+  const archived = options.archivedIds || null;
   for (const t of listTranscripts(root)) {
+    if (archived && archived.has(t.id)) continue;
     if (now - t.mtimeMs > lookbackMs) continue;
     const cur = newestPerDir.get(t.dirName);
     if (!cur || t.mtimeMs > cur.mtimeMs) newestPerDir.set(t.dirName, { file: t.file, mtimeMs: t.mtimeMs });

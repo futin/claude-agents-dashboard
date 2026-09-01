@@ -2,6 +2,7 @@
 import { run as runTranscript } from './transcript.test.js';
 import { run as runTitleCache } from './title-cache.test.js';
 import { run as runScan } from './scan.test.js';
+import { run as runArchived } from './archived.test.js';
 import { run as runUsage } from './usage.test.js';
 import { run as runAgents } from './agents.test.js';
 import { run as runAgentsCache } from './agents-cache.test.js';
@@ -66,6 +67,7 @@ let failed = 0;
 failed += runTranscript();
 failed += runTitleCache();
 failed += runScan();
+failed += runArchived();
 failed += runUsage();
 failed += runUsagePace();
 failed += runPaceView();

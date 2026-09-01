@@ -3,6 +3,9 @@ id: bug-8
 title: Deleted sessions still show in the dashboard
 created: 2026-08-29
 tags: sessions, scan, ui
+updated: 2026-09-01T20:30:32Z
+started: 2026-09-01T20:15:49Z
+execute-elapsed: 883
 ---
 
 ## Symptom
@@ -116,3 +119,67 @@ in one file and keeps the existing tmpdir-fixture tests working with no store pr
   is never filtered. Correct: the app's list never showed it, so there is nothing to mirror.
 - Archiving also stops the process and cleans the worktree, but only the `isArchived` flag
   matters here.
+
+## Outcome
+
+2026-09-01 — fixed as planned. New `server/lib/archived.ts` reads the desktop app's own
+`isArchived` flag out of
+`~/Library/Application Support/Claude/claude-code-sessions/*/*/local_*.json` and returns the
+`cliSessionId` set; `api.ts` injects it into `scanSessions` (the Sessions view) and
+`listRecentProjects` (the management side-menu). `listTranscripts()` itself is unchanged, so
+`analytics.ts` `listReports`, `usage-ledger.ts` and the `api.ts` id lookups keep seeing
+archived transcripts.
+
+Two deviations from the plan, both documented in `docs/subsystems/sessions.md`:
+
+- **The cache is mtime-keyed as specified, but a re-read is two-step.** A full parse of the
+  store measured 4004 ms on this machine today (669 records, up from the plan's 613/2318 ms) —
+  worse than the plan's figure, so the first sweep needed to be cheaper than "parse
+  everything once". `isArchived` and `cliSessionId` are top-level fields inside the first
+  ~700 bytes of every record, so a re-read first prefix-reads 8 KB and is trusted **only** to
+  say "not archived"; hiding a session always costs a real `JSON.parse`. Cold sweep is
+  1382 ms, warm is 8 ms.
+- **`usage-ledger.ts:243` is a seventh `listTranscripts` caller the plan's table missed.**
+  Left unfiltered — a delete must not rewrite token history.
+
+`collectServablePaths` deliberately keeps its full allowlist (it takes no `archivedIds`), so
+the management file endpoint's 403 surface is unchanged.
+
+### Verification
+
+Guard tests mutation-proved: with the one `scanSessions` filter line removed,
+
+```
+### with the scan filter reverted:
+  ✗ scanSessions: archived id is excluded from the session list
+  ✗ scanSessions: an archived transcript does not consume a maxSessions slot
+  16/18 passed
+  ✗ GET /api/sessions omits a session the desktop app archived
+  17/18 passed
+### restored:
+  18/18 passed
+```
+
+Live store, real `~/.claude/projects` (not fixtures):
+
+```
+archivedSessionIds: cold 1382ms (28 archived), warm 8ms (28)
+  known-archived 6a901e8a-23ea-41c8-952c-110df9567f7a: in set = true
+  known-archived 6747da3e-b2f2-445a-802e-369daa27dbfe: in set = true
+scanSessions (168h, cap 300): unfiltered 297 rows → filtered 296 rows
+  hidden: 6a901e8a-23ea-41c8-952c-110df9567f7a  project=guide-manager  title=""
+listRecentProjects (168h): 42 → 42 projects
+```
+
+(The second known-archived transcript sits outside a 168 h window, so only one row is
+hidden. `guide-manager` keeps its project entry because it has other live sessions —
+correct.)
+
+`pnpm typecheck` (`tsc --noEmit`) — no output, exit 0. `pnpm test` — 1088 cases, `ALL PASS`
+(needs `pnpm build` first in a fresh worktree, else `api-usage-rates` fails misleadingly).
+
+**Not verified, needs a human:** the actual repro — archive a session in the desktop app with
+the dashboard open and watch the row disappear within one 3 s poll. Everything above proves
+the id set and the filter, not the browser. Also unproven: a second signed-in account (the
+two-account-directory case is fixture-tested only, this machine has one), and any non-macOS
+host (fail-open path, fixture-tested via a missing store root).

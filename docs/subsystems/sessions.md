@@ -239,6 +239,40 @@ command run at the *end* of a real session leaves usage on an older assistant re
 that session keeps its row; and a fresh session where you typed a real prompt the assistant
 hasn't answered yet also has zero tokens but real content, so it keeps its green row too.
 
+**Archived-session filter:** "delete" in the Claude Code desktop app's session list is an
+**archive** — it flips `isArchived` in the app's own record and never touches the
+transcript, so the row used to survive every 3s poll and only vanish once it aged out of
+`lookbackHours`. `server/lib/archived.ts` reads the app's store
+(`~/Library/Application Support/Claude/claude-code-sessions/<install>/<account>/local_*.json`,
+both segments wildcards — a second signed-in account adds a second account dir) and returns
+the `cliSessionId` of every archived record. That id, not the app's own `local_<uuid>`
+`sessionId`, is what the `.jsonl` is named after; a record without one never started a CLI
+run. Un-archiving is free: reopening from the app's Archived list rewrites the record, so
+the session comes back on the next poll.
+
+Two properties make it affordable and safe:
+
+- **mtime-keyed cache.** The records are ~200 KB each (they embed
+  `remoteMcpServersConfig` with full tool descriptions); parsing all 669 on this machine
+  costs 4.0s against a 3s poll, while stat-sweeping them costs 3ms. So the sweep re-reads
+  only records whose mtime advanced — and archiving rewrites the record, so its mtime moves.
+  A record whose mtime is unchanged is never re-read. Within a re-read, a prefix read
+  (8 KB, where both top-level fields actually sit) is trusted only to say *"not archived"*;
+  hiding a session always costs a real `JSON.parse`, so a false positive in the cheap path
+  cannot reach the caller.
+- **Fail open.** Missing store (every non-macOS host), unreadable file, malformed JSON,
+  absent flag → empty set, nothing hidden. Wrongly hiding a live session is the harmful
+  direction. A transcript with **no** app record — a terminal `claude` run, a dashboard
+  spawn — is never filtered: the app's list never showed it, so there is nothing to mirror.
+
+The filter is applied at the **call sites**, not inside `listTranscripts()`: `api.ts` passes
+`archivedIds: archivedSessionIds()` into `scanSessions` and into `listRecentProjects`
+([management](management.md)), the same injected-Set pattern as `pendingIds`. The other
+`listTranscripts` callers deliberately keep seeing archived transcripts — `analytics.ts`
+`listReports` (a kaizen entry must still resolve its transcript), `usage-ledger.ts` (token
+history is not rewritten by a delete), and the `api.ts` id lookups behind the transcript and
+chat panels (a panel already open would 404 for no gain).
+
 **Candidate pool vs. row cap:** both filters can only be decided *after* parsing, so
 `scan.ts` over-fetches — the recency sort takes `maxSessions * 2` candidates and the build
 loop breaks at `maxSessions`. Without that, a dropped transcript cost a display slot: two
@@ -283,6 +317,7 @@ Client-side controls above the list: project, status, activity window, and sort
 <!-- docs-sync:
   sources:
     - server/lib/scan.ts
+    - server/lib/archived.ts
     - server/lib/transcript.ts
     - server/lib/config.ts
     - server/lib/agents.ts
