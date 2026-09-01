@@ -136,7 +136,7 @@ so `UserPromptSubmit` never fires, so `remote-decision.sh` never runs, so its in
 never injected.
 
 The consequence: the away-mode instructions have to ride inside the `Stop` block's own
-reason text, which is why [`messages.ts`](../../../../server/lib/messages.ts) composes prose
+reason text, which is why [`messages.ts`](../../../../../server/lib/messages.ts) composes prose
 that carries both your follow-up *and* a re-statement of the rules:
 
 ```ts

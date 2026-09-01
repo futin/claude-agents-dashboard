@@ -176,7 +176,7 @@ flowchart TD
     H --> I["requireAfk"]
 ```
 
-**Stack 1 — is the feature on?** ([`remoteState.ts`](../../../../server/lib/remoteState.ts))
+**Stack 1 — is the feature on?** ([`remoteState.ts`](../../../../../server/lib/remoteState.ts))
 
 ```ts
 // server/lib/remoteState.ts:52-60
@@ -213,7 +213,7 @@ works this run, and says so) means a read-only container doesn't lose the featur
 **Stack 2 — should *this* one wait?** The idle check, in the hook, per invocation. Never on the
 server, because the server can't see your keyboard from inside a container.
 
-**Stack 3 — should it push?** ([`notify.ts`](../../../../server/lib/notify.ts)) Orthogonal to the
+**Stack 3 — should it push?** ([`notify.ts`](../../../../../server/lib/notify.ts)) Orthogonal to the
 other two — it governs *notifications*, not waits:
 
 ```ts
@@ -261,14 +261,14 @@ should mean. Turning the switch off releases what it owns; it does not orphan it
 
 | Constant | Value | Where |
 |---|---|---|
-| `DEFAULT_IDLE_SECS` | 60 | [`settings.ts:37`](../../../../server/lib/settings.ts) |
+| `DEFAULT_IDLE_SECS` | 60 | [`settings.ts:37`](../../../../../server/lib/settings.ts) |
 | `MAX_IDLE_SECS` | 3600 | `settings.ts:39` |
 | `DEFAULT_ANSWER_SECS` | 600 | `settings.ts:42` |
 | `MIN_ANSWER_SECS` / `MAX_ANSWER_SECS` | 5 / 1800 | `settings.ts:44-45` |
-| `DEFAULT_TIMEOUT_MS` | 600_000 | [`pending.ts:44`](../../../../server/lib/pending.ts) |
+| `DEFAULT_TIMEOUT_MS` | 600_000 | [`pending.ts:44`](../../../../../server/lib/pending.ts) |
 | `MIN_TIMEOUT_MS` / `MAX_TIMEOUT_MS` | 5_000 / 1_800_000 | `pending.ts:45-46` |
-| `PERMISSION_TTL_MS` | 30 min | [`permissions.ts:26`](../../../../server/lib/permissions.ts) |
-| idle reaper interval | 5s | [`messages.ts:210`](../../../../server/lib/messages.ts) |
+| `PERMISSION_TTL_MS` | 30 min | [`permissions.ts:26`](../../../../../server/lib/permissions.ts) |
+| idle reaper interval | 5s | [`messages.ts:210`](../../../../../server/lib/messages.ts) |
 | `TEXT_CAP` (follow-up) | 4000 | `messages.ts:27` |
 | `QUESTION_CAP` / `LABEL_CAP` / `DESCRIPTION_CAP` | 2000 / 200 / 500 | `pending.ts:37-39` |
 | CLI Stop-block cap | 8 | `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` |

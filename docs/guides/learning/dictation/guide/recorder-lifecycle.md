@@ -80,7 +80,7 @@ the counter jump, but never make it lie.
 ## Race one: the panel closes while the permission prompt is open
 
 This hook lives inside `MessagePanel`, the turn-end reply window — and per
-[`docs/subsystems/remote-message.md`](../../../subsystems/remote-message.md) that panel has
+[`docs/subsystems/remote-message.md`](../../../../subsystems/remote-message.md) that panel has
 an **idle sweep that tears it down on its own**, with nobody clicking anything. So: you tap
 the mic, iOS puts up "Allow microphone?", you hesitate, and the panel dies underneath the
 dialog.
@@ -207,7 +207,7 @@ Fewer moving parts today. But then the hook owns the append-versus-replace polic
 4000-character cap, and the never-auto-send rule — three decisions that belong to the
 composer, not to the microphone. And `appendTranscript` would stop being a pure function
 testable with node-assert and no DOM, which is exactly how this repo tests client code;
-[`client/src/lib/dictation.ts`](../../../../client/src/lib/dictation.ts) says so in its own
+[`client/src/lib/dictation.ts`](../../../../../client/src/lib/dictation.ts) says so in its own
 header comment.
 
 The seam pays off concretely: the mic drops into any composer, and the interesting logic —
@@ -217,4 +217,4 @@ module with zero browser API in it.
 ---
 
 Back to [the contents](../README.md), or read
-[`docs/subsystems/dictation.md`](../../../subsystems/dictation.md) for the server half.
+[`docs/subsystems/dictation.md`](../../../../subsystems/dictation.md) for the server half.

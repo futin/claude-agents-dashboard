@@ -4,7 +4,7 @@ This guide teaches the dictation subsystem — the mic button in the reply compo
 explaining **why** each piece is shaped the way it is, contrasting every mechanism with
 the naive alternative a first draft would have reached for. It is a *why* layer, not a
 reference: for the endpoint table, the status codes and the accepted limits, read
-[`docs/subsystems/dictation.md`](../../subsystems/dictation.md) instead.
+[`docs/subsystems/dictation.md`](../../../subsystems/dictation.md) instead.
 
 > Mental model up front: dictation is a **local subprocess pipeline wearing a browser API
 > on the front**. The browser's job is to capture a blob and hand it over; the server's
@@ -68,7 +68,7 @@ have no chapter yet. They are listed here rather than silently omitted:
 - **Security posture** — why `/api/health` publishes `transcribe` unauthenticated, the
   check ordering in `serveTranscribe`, and the four mitigations that stand in for a token.
 
-For those, [`docs/subsystems/dictation.md`](../../subsystems/dictation.md) is the current
+For those, [`docs/subsystems/dictation.md`](../../../subsystems/dictation.md) is the current
 best source — it covers the *what* thoroughly, and a fair amount of the *why*.
 
 ## FAQ
@@ -81,10 +81,10 @@ guide is next extended.
 
 **Relevant files**
 
-- [`client/src/components/MicButton.tsx`](../../../client/src/components/MicButton.tsx) — the three-way render gate; owns no logic beyond it.
-- [`client/src/hooks/useDictation.ts`](../../../client/src/hooks/useDictation.ts) — the `MediaRecorder` state machine and both liveness races.
-- [`client/src/lib/dictation.ts`](../../../client/src/lib/dictation.ts) — the pure half: mime pick, error copy, elapsed format, transcript folding.
-- [`client/src/hooks/useTranscribeAvailable.ts`](../../../client/src/hooks/useTranscribeAvailable.ts) — the read-once-then-share engine probe, with eviction on failure.
-- [`server/lib/transcribe.ts`](../../../server/lib/transcribe.ts) — ffmpeg + whisper spawns, temp-dir hygiene, typed failures, the single-flight flag.
-- [`server/api.ts`](../../../server/api.ts) — `serveTranscribe`: the check ordering and the status-code mapping.
-- [`docs/subsystems/dictation.md`](../../subsystems/dictation.md) — the reference doc this guide deliberately does not restate.
+- [`client/src/components/MicButton.tsx`](../../../../client/src/components/MicButton.tsx) — the three-way render gate; owns no logic beyond it.
+- [`client/src/hooks/useDictation.ts`](../../../../client/src/hooks/useDictation.ts) — the `MediaRecorder` state machine and both liveness races.
+- [`client/src/lib/dictation.ts`](../../../../client/src/lib/dictation.ts) — the pure half: mime pick, error copy, elapsed format, transcript folding.
+- [`client/src/hooks/useTranscribeAvailable.ts`](../../../../client/src/hooks/useTranscribeAvailable.ts) — the read-once-then-share engine probe, with eviction on failure.
+- [`server/lib/transcribe.ts`](../../../../server/lib/transcribe.ts) — ffmpeg + whisper spawns, temp-dir hygiene, typed failures, the single-flight flag.
+- [`server/api.ts`](../../../../server/api.ts) — `serveTranscribe`: the check ordering and the status-code mapping.
+- [`docs/subsystems/dictation.md`](../../../subsystems/dictation.md) — the reference doc this guide deliberately does not restate.

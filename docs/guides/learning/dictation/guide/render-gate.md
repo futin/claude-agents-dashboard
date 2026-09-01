@@ -44,7 +44,7 @@ answering a session over a tailnet URL like `http://mac.tailnet.ts.net:4173`. Pl
 The exact case dictation was built for is the exact case the browser forbids — which is
 why `pnpm tunnel` went from a convenience (no port number in the bookmark) to the only
 route that lets a phone dictate at all. See
-[`docs/subsystems/remote-access.md`](../../../subsystems/remote-access.md).
+[`docs/subsystems/remote-access.md`](../../../../subsystems/remote-access.md).
 
 ## The bad alternative
 
