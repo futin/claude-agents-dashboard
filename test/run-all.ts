@@ -60,6 +60,7 @@ import { run as runWalkChart } from './walk-chart.test.js';
 import { run as runTokenRefresh } from './token-refresh.test.js';
 import { run as runDocsLinks } from './docs-links.test.js';
 import { run as runEnvValue } from './env-value.test.js';
+import { run as runInstallHooksToken } from './install-hooks-token.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -123,6 +124,7 @@ failed += runFormat();
 failed += runPanelCollapse();
 failed += runDocsLinks();
 failed += runEnvValue();
+failed += runInstallHooksToken();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

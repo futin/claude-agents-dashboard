@@ -87,7 +87,15 @@ Stop event*; that belongs behind a command someone chose to run, not behind `git
   `.env` is read by `scripts/env-value.ts`, which calls the server's own `parseEnv` — so the
   installer and the server can no longer disagree about what the token is. That needs
   `node_modules/.bin/tsx`, so run `pnpm install` first; without it the installer says so
-  outright instead of reporting "no ANSWER_TOKEN" for a token that exists.
+  outright instead of reporting "no ANSWER_TOKEN" for a token that exists. Same for a reader
+  that runs but fails: node exits `1` for a crash and `env-value.ts` exits `1` for "unset", so
+  the installer requires the `unset` line on stderr before it will say there is no token, and
+  reports anything else as a read failure that judges nothing.
+
+  It also mirrors `loadConfig`'s **precedence**: an `ANSWER_TOKEN` exported in your shell beats
+  the one in `.env`, exactly as it would for the server. Every line the installer prints names
+  whichever source actually won — "the ANSWER_TOKEN exported in this shell" or "this checkout's
+  `.env` ANSWER_TOKEN" — so a `warn` never sends you to edit a `.env` that already matches.
 
 ## After installing
 

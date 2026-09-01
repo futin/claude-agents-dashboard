@@ -26,6 +26,24 @@
  * ran me wrong", because silently reporting the first when the second happened
  * is precisely how a configured token went missing for twelve hours.
  *
+ * ## The stderr contract
+ *
+ * Exit codes alone are NOT enough to tell those cases apart, because a caller
+ * cannot distinguish this script's deliberate exit 1 from node's exit 1 for an
+ * uncaught error — a broken loader, a half-installed `node_modules`, a
+ * `NODE_OPTIONS` that fails at import. So the two normal outcomes each announce
+ * themselves on stderr with a fixed, greppable first token, and a caller must
+ * require the marker rather than trust the code:
+ *
+ *   env-value: <KEY> from <source>                  (exit 0; source is `process.env` or the .env path)
+ *   env-value: <KEY> unset (checked process.env and <path>)   (exit 1)
+ *
+ * Neither line ever carries the value. Anything else on stderr — or either code
+ * without its marker — means the reader failed and the caller must say so, not
+ * quietly translate it into "no token set". `scripts/install-hooks.sh` is the
+ * one production caller and does exactly that; `test/install-hooks-token.test.ts`
+ * pins the behaviour, including a reader made to crash on purpose.
+ *
  * Values are trimmed, mirroring `loadConfig`, which trims every string field it
  * builds. It does not reproduce the few per-field extras `loadConfig` applies on
  * top (`NTFY_SERVER` and `DASHBOARD_PUBLIC_URL` also lose trailing slashes) — a

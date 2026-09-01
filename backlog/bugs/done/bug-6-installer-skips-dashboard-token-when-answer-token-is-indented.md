@@ -374,3 +374,143 @@ pipeline that was removed. No live code.
   run to get a green suite. `test/api-usage-rates.test.ts`'s "a near-miss path is not the rates
   endpoint" case asserts the static handler serves `<!DOCTYPE html>`, so it fails in any
   checkout that has never been built — unrelated to this fix, but worth knowing.
+
+### Review round 1 — two Important findings, both fixed (2026-09-01)
+
+Both were the same call site, `scripts/install-hooks.sh:279`, and both were real. Confirmed
+before changing anything.
+
+**1. `2> /dev/null` threw away the one signal that says which source won.** `env-value.ts`
+mirrors `loadConfig`, so an exported `ANSWER_TOKEN` beats `.env` — deliberate — but every
+message downstream hardcoded the word `.env`. So the installer wrote the shell's token while
+reporting it had copied the checkout's, and its `warn` line told the user to go and edit a
+`.env` that could match the token file byte for byte.
+
+Fixed: stderr is captured to a temp file (the *value* only ever travels through the command
+substitution, never through the file), the source is parsed out of `env-value: ANSWER_TOKEN
+from <source>`, and `$srclabel` — "the ANSWER_TOKEN exported in this shell" or "this checkout's
+`.env` ANSWER_TOKEN" — is used in every `write`, `warn` and `ok … matches` line.
+
+```
+───── shell export set, token file matches .env byte for byte
+token
+  warn     …/dashboard-token differs from the ANSWER_TOKEN exported in this shell.
+           Left alone. If the ANSWER_TOKEN exported in this shell is the one you want, re-run with --force,
+           or: printf '%s' "$ANSWER_TOKEN" > …/dashboard-token && chmod 600 …/dashboard-token
+
+───── shell export set, no token file
+token
+  write    …/dashboard-token from the ANSWER_TOKEN exported in this shell
+```
+
+**2. `|| envtok=""` collapsed a failed reader into "no token".** node exits 1 for an uncaught
+error and `env-value.ts` exits 1 for "unset", so the exit code cannot separate them — a
+half-installed `node_modules` (tsx present, hence past the `-x` guard, but failing to import)
+printed `TODO no ANSWER_TOKEN in .env` for a token that was plainly there. That sentence is the
+symptom this item is named after.
+
+Fixed: the call site now resolves one of four states — `notsx`, `ok`, `unset`, `broken` — and
+`unset` requires the `env-value: ANSWER_TOKEN unset` marker on stderr, not merely exit 1.
+Anything else is `broken`, which gets its own step, judges nothing, and touches nothing. The
+stderr contract is now written down as a contract in `scripts/env-value.ts`'s header rather than
+being an accident of its output.
+
+```
+───── reader crashes (exit 1, same code as "unset"), token IS in .env
+token
+  TODO     could not read ANSWER_TOKEN — scripts/env-value.ts exited 1
+           without saying the key was unset. This is NOT "no token set":
+           nothing is known either way, and …/dashboard-token is left as it is.
+           it said: …/scripts/env-value.ts:1
+           Try: …/node_modules/.bin/tsx …/scripts/env-value.ts ANSWER_TOKEN --env …/.env
+
+  [token file after: live-token]
+```
+
+#### The call site is now tested, not just demonstrated
+
+The review asked for coverage "if it can be reached from test/". It can. New
+`test/install-hooks-token.test.ts` (18 cases) spawns the **real** `install-hooks.sh` against a
+scratch checkout — real `scripts/`, everything else symlinked — always `--dry-run`, always with
+`CLAUDE_CONFIG_DIR` and `HOME` redirected into tmpdirs, asserting the token file's exact bytes
+afterwards. It covers the three `## Cause` rows through the caller, both source-naming branches,
+the compare/`--force`/left-alone branches, the missing-binary branch, four separately broken
+readers (throws at import; exits 3; exits 0 silently; prints a value but no source line), and a
+sweep proving no branch ever prints either token value. It skips loudly if `jq` is absent, since
+the script exits before the token block without it.
+
+```
+=== install-hooks.sh: the token block (env-value.ts call site) ===
+  ✓ a leading space in .env reaches the write branch, not the TODO branch
+  ✓ a quoted inner space in .env reaches the write branch, not the TODO branch
+  ✓ a duplicated key in .env reaches the write branch, not the TODO branch
+  ✓ an exported ANSWER_TOKEN is named as the shell, never as .env
+  ✓ the warn line names the shell too, so its advice is actionable
+  ✓ with no export, the source named is .env
+  ✓ a token file that differs is warned about and left alone
+  ✓ a trailing newline is a real difference, not a match
+  ✓ --force takes the write branch on a differing file
+  ✓ a token file with nothing in .env to compare is left alone
+  ✓ genuinely no token anywhere is the TODO branch
+  ✓ a reader that throws at import (node exits 1, the same code as "unset") is a distinct failure, not "no ANSWER_TOKEN"
+  ✓ a reader that exits nonzero without a marker is a distinct failure, not "no ANSWER_TOKEN"
+  ✓ a reader that exits 0 but prints nothing at all is a distinct failure, not "no ANSWER_TOKEN"
+  ✓ a reader that prints a value but no source line is a distinct failure, not "no ANSWER_TOKEN"
+  ✓ a failing reader leaves an existing token file untouched and unjudged
+  ✓ no node_modules at all says "run pnpm install", not "no ANSWER_TOKEN"
+  ✓ no branch ever prints the token value
+  18/18 passed
+```
+
+These tests were written after the fix, so each was proved mutation-sensitive by putting the
+finding back. Finding 1 restored (hardcode `.env` in the `write`/`warn` lines) → **16/18**, the
+two failures being exactly the two source-naming cases. Finding 2 restored (collapse every
+nonzero into `unset`) → **13/18**, the five failures being exactly the broken-reader cases:
+
+```
+MUTATION A (finding 1 back)          MUTATION B (finding 2 back)
+  ✗ an exported ANSWER_TOKEN is        ✗ …throws at import…
+    named as the shell, never .env     ✗ …exits nonzero without a marker…
+  ✗ the warn line names the shell      ✗ …exits 0 but prints nothing…
+    too, so its advice is actionable   ✗ …prints a value but no source line…
+  16/18 passed                         ✗ a failing reader leaves an existing
+                                         token file untouched and unjudged
+                                       13/18 passed
+RESTORED: 18/18 passed
+```
+
+Neither mutation broke a case belonging to the other finding, so the two are independently
+pinned.
+
+#### Full suite after the fix
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+$ echo $?
+0
+$ pnpm test > /dev/null 2>&1; echo $?
+0
+$ pnpm test 2>&1 | tail -3
+
+  18/18 passed
+ALL PASS
+$ pnpm test 2>&1 | grep -c "✗"
+0
+$ pnpm test 2>&1 | grep -c "✓"
+1050
+```
+
+1050 cases (was 1032; +18 for the new call-site file), zero failures.
+
+`docs/workflows/hooks-setup.md` gained the two behaviours a reader would otherwise have to
+infer: the precedence (an exported token wins, and every line names whichever source won) and
+the fact that a reader which runs but fails is reported as a read failure, never as "no token".
+
+**Still not verified, unchanged from above:** no non-dry-run `pnpm hooks:install` was run, and
+the real `~/.claude/hooks/dashboard-token` was not written, moved or chmod'd — the new test
+redirects both `CLAUDE_CONFIG_DIR` and `HOME`. The ntfy end-to-end push remains unrun.
+
+**Left alone deliberately:** the review's three Minor findings. The `umask` window at
+`install-hooks.sh:287` is pre-existing and carried unchanged, and the `rejectLogged` flush and
+the `tokenRequired` disclosure were both weighed and accepted in the report itself.
