@@ -3,7 +3,10 @@ import assert from 'node:assert';
 import type { Session } from '../shared/types.js';
 import {
   applyView,
+  clearFilters,
+  describeEmpty,
   distinctProjects,
+  hasActiveFilters,
   pruneProjects,
   DEFAULT_VIEW,
   type View
@@ -180,6 +183,69 @@ export function run(): number {
     assert.strictEqual(applyView(list, stale, NOW).length, 0);
     const healed = view({ projects: pruneProjects(stale.projects, list) });
     assert.strictEqual(applyView(list, healed, NOW).length, 2);
+  })) p++; else f++;
+
+  const TWO_HOURS = 2 * 60 * 60_000;
+
+  if (test('describeEmpty: an empty payload is the payload, never a filter', () => {
+    assert.deepStrictEqual(describeEmpty([], DEFAULT_VIEW, NOW), {
+      payloadEmpty: true, total: 0, culprits: []
+    });
+  })) p++; else f++;
+
+  if (test('describeEmpty: an empty payload blames no filter even with filters set', () => {
+    const v = view({ projects: ['a'], window: '15m' });
+    assert.deepStrictEqual(describeEmpty([], v, NOW), {
+      payloadEmpty: true, total: 0, culprits: []
+    });
+  })) p++; else f++;
+
+  if (test('describeEmpty: a project filter that rejects every row is named', () => {
+    const list = [sess({ project: 'a' }), sess({ project: 'a' }), sess({ project: 'a' })];
+    assert.deepStrictEqual(describeEmpty(list, view({ projects: ['b'] }), NOW), {
+      payloadEmpty: false, total: 3, culprits: ['projects']
+    });
+  })) p++; else f++;
+
+  if (test('describeEmpty: a status filter that rejects every row is named', () => {
+    const list = [sess({ status: 'idle' }), sess({ status: 'idle' })];
+    assert.deepStrictEqual(describeEmpty(list, view({ statuses: ['working'] }), NOW).culprits, ['statuses']);
+  })) p++; else f++;
+
+  if (test('describeEmpty: an activity window that rejects every row is named', () => {
+    const list = [sess({ updatedMs: NOW - TWO_HOURS })];
+    assert.deepStrictEqual(describeEmpty(list, view({ window: '15m' }), NOW).culprits, ['window']);
+  })) p++; else f++;
+
+  if (test('describeEmpty: culprits keep a fixed order, not view-key order', () => {
+    const list = [sess({ project: 'a', updatedMs: NOW - TWO_HOURS })];
+    const v = view({ window: '15m', projects: ['b'] });
+    assert.deepStrictEqual(describeEmpty(list, v, NOW).culprits, ['projects', 'window']);
+  })) p++; else f++;
+
+  if (test('describeEmpty: a predicate that rejects nothing is never named', () => {
+    const list = [sess({ project: 'a', status: 'idle' }), sess({ project: 'a', status: 'idle' })];
+    const v = view({ projects: ['a'], statuses: ['working'] });
+    assert.deepStrictEqual(describeEmpty(list, v, NOW).culprits, ['statuses']);
+  })) p++; else f++;
+
+  if (test('hasActiveFilters: only the three filter facets count, not sort', () => {
+    assert.strictEqual(hasActiveFilters(DEFAULT_VIEW), false);
+    assert.strictEqual(hasActiveFilters(view({ window: '1h' })), true);
+    assert.strictEqual(hasActiveFilters(view({ projects: ['a'] })), true);
+    assert.strictEqual(hasActiveFilters(view({ statuses: ['idle'] })), true);
+    assert.strictEqual(hasActiveFilters(view({ sortKey: 'tokens', sortDir: 'asc' })), false);
+  })) p++; else f++;
+
+  if (test('clearFilters: resets the three facets and preserves sort', () => {
+    const v = view({ projects: ['a'], statuses: ['idle'], window: '1h', sortKey: 'tokens', sortDir: 'asc' });
+    assert.deepStrictEqual(clearFilters(v), {
+      projects: [], statuses: [], window: 'all', sortKey: 'tokens', sortDir: 'asc'
+    });
+  })) p++; else f++;
+
+  if (test('clearFilters: nothing active returns the same view by reference', () => {
+    assert.strictEqual(clearFilters(DEFAULT_VIEW), DEFAULT_VIEW);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

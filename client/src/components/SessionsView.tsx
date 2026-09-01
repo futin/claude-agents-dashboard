@@ -8,7 +8,7 @@ import { usePersistedState } from '../hooks/usePersistedState';
 import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
 import { useSessions } from '../hooks/useSessions';
 import { useSettings } from '../hooks/useSettings';
-import { applyView, pruneProjects, DEFAULT_VIEW, type View } from '../lib/filterSort';
+import { applyView, clearFilters, describeEmpty, pruneProjects, DEFAULT_VIEW, type View } from '../lib/filterSort';
 import { formatInterval } from '../lib/settings';
 
 /** Own chunk — the drawer only loads the first time a chat is opened. */
@@ -48,10 +48,16 @@ export function SessionsView() {
     if (pruned !== view.projects) setView({ ...view, projects: pruned });
   }, [data, view, setView]);
 
-  const shown = useMemo(
-    () => (data ? applyView(data.sessions, view, Date.now()) : null),
-    [data, view]
-  );
+  // One clock for both, so the activity-window predicate cannot decide a row is
+  // out of the window while the explanation says it is in.
+  const { shown, empty } = useMemo(() => {
+    if (!data) return { shown: null, empty: null };
+    const nowMs = Date.now();
+    return {
+      shown: applyView(data.sessions, view, nowMs),
+      empty: describeEmpty(data.sessions, view, nowMs)
+    };
+  }, [data, view]);
 
   const chatSession = chatId && data ? data.sessions.find(s => s.id === chatId) : undefined;
 
@@ -74,7 +80,13 @@ export function SessionsView() {
           />
         </Suspense>
       )}
-      <SessionList sessions={shown} launching={data?.launching} onOpenChat={setChatId} />
+      <SessionList
+        sessions={shown}
+        empty={empty}
+        onClearFilters={() => setView(clearFilters(view))}
+        launching={data?.launching}
+        onOpenChat={setChatId}
+      />
       <div className="foot">
         {connected
           ? `live · refreshing every ${formatInterval(settings.refreshMs)}`

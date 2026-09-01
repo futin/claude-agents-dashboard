@@ -3,6 +3,9 @@ id: bug-2
 title: Empty sessions state always blames the lookback window
 created: 2026-08-27
 tags: ui, sessions, view-persistence
+updated: 2026-09-01T20:07:54Z
+started: 2026-09-01T19:56:30Z
+execute-elapsed: 684
 ---
 
 ## Symptom
@@ -126,3 +129,76 @@ Fixture: sessions with controllable `project`, `status`, `updatedMs`; a fixed `n
 The phantom-row rule stands unchanged: the empty state still renders only when both
 `sessions` and `phantoms` are empty (`SessionList.tsx:66`). Nothing about launching rows
 changes.
+
+## Outcome
+
+2026-09-01 — Fixed as planned. `describeEmpty` / `hasActiveFilters` / `clearFilters` added to
+`client/src/lib/filterSort.ts`; `applyView` now shares one per-facet `keeps()` predicate with
+`describeEmpty`, so the two cannot disagree about which rows survive. `SessionsView` computes a
+single `nowMs` for both. `SessionList` has two empty branches: an empty payload keeps the
+original lookback string, anything else names the count and the culprit filters and offers a
+**Clear filters** button. Doc bullet in `docs/subsystems/view-persistence.md` rewritten; the
+`pruneProjects` docstring no longer describes the old single-message behaviour.
+
+Ten test cases added to `test/filter-sort.test.ts` (the plan's 9, with `hasActiveFilters` and
+`clearFilters` split into three).
+
+**Mutation check** — replacing the culprit computation with "blame every filter that is set"
+fails exactly the two cases meant to catch it, and nothing else:
+
+```
+--- MUTATION 2: blame every filter that is set ---
+  ✗ describeEmpty: an empty payload blames no filter even with filters set
+  ✗ describeEmpty: a predicate that rejects nothing is never named
+Passed: 25  Failed: 2
+--- restored ---
+Passed: 27  Failed: 0
+```
+
+**Unit tests** (`npx tsx test/filter-sort.test.ts`):
+
+```
+  ✓ describeEmpty: an empty payload is the payload, never a filter
+  ✓ describeEmpty: an empty payload blames no filter even with filters set
+  ✓ describeEmpty: a project filter that rejects every row is named
+  ✓ describeEmpty: a status filter that rejects every row is named
+  ✓ describeEmpty: an activity window that rejects every row is named
+  ✓ describeEmpty: culprits keep a fixed order, not view-key order
+  ✓ describeEmpty: a predicate that rejects nothing is never named
+  ✓ hasActiveFilters: only the three filter facets count, not sort
+  ✓ clearFilters: resets the three facets and preserves sort
+  ✓ clearFilters: nothing active returns the same view by reference
+
+Passed: 27  Failed: 0
+```
+
+**Full suite / typecheck / build:**
+
+```
+$ pnpm test
+  18/18 passed
+ALL PASS
+
+$ pnpm typecheck    # tsc --noEmit
+exit:0
+
+$ pnpm build
+✓ built in 1.15s
+exit:0
+```
+
+**Live UI** (dev pair on PORT=4273 WEB_PORT=5273, driven with Playwright, 5 real sessions):
+
+- status filter `waiting` (no session has it) → `All 5 sessions are hidden by the status filter.`
+  plus a `Clear filters` button.
+- adding the 15-min activity window →
+  `All 5 sessions are hidden by the status and activity window filters.`
+- clicking **Clear filters** → all 5 rows return, toolbar back to "All statuses" / "Any time".
+- second dev pair against an empty transcripts root (`HOME=/tmp/bug2-empty-home`, 0 sessions)
+  *with* `statuses: ["question"], window: "15m"` still persisted →
+  `◌No recent sessions in the lookback window.` and no button. The repro's misleading case is
+  gone; the one case the old string was true for still shows it.
+
+Not verified: the button's appearance under the four non-default themes (styled from
+`--steel` / `--hairline` / `--ink2` tokens only, mirroring `.mgmt-bar .tb-dir`, but only
+observed in the default theme), and touch/phone layout.
