@@ -343,6 +343,8 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .tl-axis{display:flex;justify-content:space-between;font-size:9.5px;color:var(--ink3);font-variant-numeric:tabular-nums;font-family:var(--mono);margin-top:4px}
 .empty{text-align:center;padding:60px 20px;color:var(--ink3)}
 .empty .e{font-size:34px;margin-bottom:10px;opacity:.3}
+.empty .clear-filters{margin-top:12px;font-size:11px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:6px 10px;cursor:pointer;transition:border-color .15s,color .15s}
+.empty .clear-filters:hover{color:var(--ink);border-color:var(--hairline2)}
 .foot{margin-top:18px;font-size:10px;color:var(--ink3);text-align:center;font-family:var(--mono)}
 /* scoped to the footer note — a bare .off also matches the origin badge's
    `ra-pill off` and used to tint it red */

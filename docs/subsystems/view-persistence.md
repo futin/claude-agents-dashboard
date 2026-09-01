@@ -16,14 +16,25 @@ override it (see `dashboard.section` below).
 - **Stale project names self-heal** — the `projects` facet is the one field whose valid values
   are *data*, not a fixed enum, so a persisted selection can outlive the sessions it named
   (the project went quiet, or fell out of the `limit`/`lookback` window). Left alone every row
-  fails the filter and `SessionList` reports "No recent sessions in the lookback window" —
-  naming the wrong cause, so it reads as an API/scan failure rather than a filter that is
-  still on. `pruneProjects(selected, sessions)` in `lib/filterSort.ts` (pure, unit-tested)
+  fails the filter and the list empties with no sign that a filter did it.
+  `pruneProjects(selected, sessions)` in `lib/filterSort.ts` (pure, unit-tested)
   drops selected names a payload does not contain; an effect in `SessionsView.tsx` applies it
   on every poll, so losing the last surviving name lands back on "All projects". An **empty
   payload prunes nothing** — no rows is no evidence, and the first poll of a mount arrives
   before any rows do. The tradeoff is deliberate: a filtered project that momentarily drops
   out of the top-`limit` ranking clears the filter rather than showing an empty list.
+- **The empty state names its own cause** — `SessionList` has two empty branches, not one.
+  `describeEmpty(sessions, view, nowMs)` in `lib/filterSort.ts` runs on the *unfiltered*
+  payload and returns `{ payloadEmpty, total, culprits }`, where `culprits` lists which of
+  the three facets (projects → statuses → window, fixed order) rejected at least one row.
+  An empty payload keeps the original "No recent sessions in the lookback window." — the
+  server's `lookbackHours`, true only there; anything else reads "All *n* sessions are hidden
+  by the … filters." with a **Clear filters** button (`clearFilters(view)`, which resets the
+  three facets and keeps the sort). `SessionsView` computes one `nowMs` for `applyView` and
+  `describeEmpty` together, so the window predicate cannot disagree with its own explanation.
+  This is the general case `pruneProjects` deliberately does not cover: a status filter, an
+  activity window, or a selected project that still exists but has nothing inside the window
+  — none of them stale, all of them able to empty the list.
 - **Other persisted keys** — each owned by its own subsystem; indexed here, documented there:
   `dashboard.settings` (theme, density, text scale, refresh rate, scan knobs, landing tab
   — see [settings](settings.md); re-clamped on every read by `clampSettings`, and the
