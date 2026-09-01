@@ -16,7 +16,7 @@ environment variables override `.env`, which overrides the defaults
 |-----|---------|---------|
 | `PORT` | `4173` | Port the API/prod server listens on |
 | `WEB_PORT` | `5174` | Port the Vite dev UI serves on (`pnpm dev` only; prod ignores it). Deliberately not Vite's stock 5173, which another project usually holds. Set it only if 5174 is taken too |
-| `MAX_SESSIONS` | `10` | How many sessions to show, most-recent first. **Per-browser override** in Settings → Sessions shown (sent as `?limit=`, capped at 50) |
+| `MAX_SESSIONS` | `5` | How many sessions to show, most-recent first. **Per-browser override** in Settings → Sessions shown (sent as `?limit=`, capped at 50) |
 | `ACTIVE_WINDOW_MIN` | `5` | A "recent" session is one whose last message is within this many minutes. **Per-browser override** in Settings → Active window (`?active=`, capped at 120) |
 | `LOOKBACK_HOURS` | `24` | Only consider sessions modified within this many hours. **Per-browser override** in Settings → Lookback (`?lookback=`, capped at 168) |
 | `SHOW_USAGE` | `true` | Show the header [usage bars](../subsystems/usage-limits.md). `false` disables the fetch and the keychain read entirely |
