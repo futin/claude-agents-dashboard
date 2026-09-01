@@ -77,6 +77,18 @@ Stop event*; that belongs behind a command someone chose to run, not behind `git
   *and* this checkout's `.env` has an `ANSWER_TOKEN` to copy. Otherwise you get the command
   to run yourself. It is never read from or written to the repo.
 
+  A token file that already exists is now *compared* to `.env` rather than assumed correct:
+  identical is `ok`, different is a `warn` that leaves the file alone and points at
+  `--force`, and an `.env` with no token leaves it alone as before. Neither value is
+  printed, not even a prefix. A per-machine token that deliberately differs is legitimate,
+  so nothing is overwritten without `--force`; before this, presence alone reported `ok`
+  forever and a wrong token file was never questioned by a re-run.
+
+  `.env` is read by `scripts/env-value.ts`, which calls the server's own `parseEnv` — so the
+  installer and the server can no longer disagree about what the token is. That needs
+  `node_modules/.bin/tsx`, so run `pnpm install` first; without it the installer says so
+  outright instead of reporting "no ANSWER_TOKEN" for a token that exists.
+
 ## After installing
 
 Three things the installer cannot do for you:

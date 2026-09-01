@@ -3,6 +3,9 @@ id: bug-6
 title: Installer skips dashboard-token when ANSWER_TOKEN is indented
 created: 2026-08-28
 tags: hooks, notify, remote-answer, install
+updated: 2026-09-01T16:37:33Z
+started: 2026-09-01T16:18:11Z
+execute-elapsed: 1162
 ---
 
 ## Symptom
@@ -179,3 +182,195 @@ Manual, and **must be stated as manual in the PR** — nothing here automates th
 Applied on this machine, not a fix: `printf '%s' "$ANSWER_TOKEN" > ~/.claude/hooks/dashboard-token
 && chmod 600 ~/.claude/hooks/dashboard-token`, plus removing the leading space from the
 `.env` line. Verified by a real `stop` push landing on the ntfy topic.
+
+### Pre-flight decisions (orchestrator, 2026-09-01)
+
+- **Scope: all four parts.** Parts 3 and 4 are not deferred — the observability is what
+  makes the next token mismatch visible, which is the whole reason this bug cost 12 silent
+  hours. Ship 1–4 in one branch.
+- **Never run a non-dry-run `pnpm hooks:install` from this session.** It writes into the
+  user's global `~/.claude/hooks` and merges entries into their `~/.claude/settings.json`,
+  which is outside this worktree and cannot be rolled back by discarding the branch. The
+  manual checks in this item are `-- --dry-run` only; anything requiring a real install is
+  left for the human and must be stated as unverified in the `## Outcome`.
+- Likewise do not write, move or chmod `~/.claude/hooks/dashboard-token`. Exercise the
+  installer's new comparison branch against a temporary `TOKEN_FILE`/`HOME` if the script
+  allows it, or leave it manual and say so.
+
+## Outcome
+
+**2026-09-01 — fixed, all four parts. Verification passed; two things are explicitly
+unverified and need a human (below).**
+
+The diagnosis was re-confirmed against the code as it stands before anything was changed —
+all three rows of the divergence table in `## Cause` reproduce exactly as written:
+
+```
+--- a: installer grep reads: []           --- a: server parseEnv reads: [abc]
+--- b: installer grep reads: [ab]         --- b: server parseEnv reads: [a b]
+--- c: installer grep reads: [one]        --- c: server parseEnv reads: [two]
+```
+
+### What changed
+
+- **1 — one reader.** New `scripts/env-value.ts`: `tsx scripts/env-value.ts <KEY> [--env <path>]`,
+  importing the server's own `parseEnv`. Value on stdout with no trailing newline, winning
+  source on stderr, never the value. Exit 0 / 1 (unset or empty) / 2 (called wrong) — the
+  third code exists so a caller can never again report "no token" for a token that is there.
+  Values are trimmed, mirroring `loadConfig`. `scripts/install-hooks.sh:262`'s
+  `grep | head -1 | cut | tr` is gone; a missing `node_modules/.bin/tsx` prints
+  `TODO run pnpm install first`, and never falls back to a grep or to the "no ANSWER_TOKEN" branch.
+- **2 — an existing token file is compared, not trusted.** Byte-wise (a trailing newline is a
+  real mismatch, and the server would reject it), printing neither value nor any prefix.
+  Identical → `ok … matches .env`; different → `warn`, file untouched, points at `--force`;
+  `.env` empty → `ok … (left alone)`. `--force` overwrites; nothing else does.
+- **3 — a rejected write is audible.** `tokenOk` (`server/api.ts`) now emits
+  `[dashboard] rejected write: <METHOD> <path> (bad or missing token)`, throttled to one line
+  per path per 60s, capped at 256 keys. Method and path only — no token, no header, no prefix
+  of either, and the query string is stripped.
+- **4 — health tells the truth, and the banner uses it.** `tokenRequired` added to `serveHealth`
+  and to `HealthResponse` in `shared/types.ts`. `scripts/remote-decision-hook.sh` gained a third
+  condition: `tokenRequired && !-f ~/.claude/hooks/dashboard-token` → print a one-line "NOT armed"
+  notice naming the file, not the banner. `// false` keeps an older server on the old behaviour.
+- `tsconfig.json` now includes `scripts/` — `env-value.ts` is load-bearing production code
+  called by the installer, and it was outside `pnpm typecheck`. The whole directory
+  (`session-analytics.ts` included) typechecks clean as-is.
+- Docs corrected where the change contradicts them: `docs/subsystems/push-notify.md:139` (the
+  "silent — nothing says so" row this bug *is*), `docs/subsystems/remote-plan.md` (two
+  conditions → three), `docs/subsystems/remote-answer.md` (health shape),
+  `docs/workflows/hooks-setup.md`, `docs/workflows/configuration.md`, `docs/overview.md`.
+
+### Verification
+
+`pnpm test` — 1032 cases, exit 0, zero `✗` across the whole suite:
+
+```
+$ pnpm test | tail -3
+
+  10/10 passed
+ALL PASS
+$ pnpm test > /dev/null 2>&1; echo $?
+0
+$ pnpm test 2>&1 | grep -c "✗"
+0
+$ pnpm test 2>&1 | grep -c "✓"
+1032
+```
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+$ echo $?
+0
+```
+
+New: `test/env-value.test.ts` (10 cases) and `test/api-reject-log.test.ts` (7 cases), plus 2
+`tokenRequired` cases in `test/api-remote-toggle.test.ts`. All were watched failing first —
+`env-value` went 0/10 → 10/10, the health cases 9/11 → 11/11.
+
+**Mutation check on part 3** (a log assertion that passes with the log deleted proves nothing).
+Deleting the `logRejectedWrite(req)` call from `tokenOk`:
+
+```
+### with the log removed ###
+  ✗ a 403 prints one line naming the method and path
+  ✗ the line carries no part of the token, sent or expected
+  ✗ repeats of the same path are throttled to one line
+  ✗ a different path gets its own line — the throttle is per path
+  ✗ a query string is not logged — only the path
+  ✓ an accepted write says nothing
+  ✓ with no ANSWER_TOKEN configured nothing is refused or logged
+  2/7 passed
+### restored ###
+  7/7 passed
+```
+
+The two survivors are the negative cases, which *should* pass either way.
+
+**Installer, `-- --dry-run`, against a throwaway `CLAUDE_CONFIG_DIR` and a copy of `scripts/`
+in a scratch repo** — nothing under the real `~/.claude` was read or written:
+
+```
+───── row 1: ' ANSWER_TOKEN=abc', no token file
+  write    …/hooks/dashboard-token from this checkout's .env ANSWER_TOKEN
+───── row 2: ANSWER_TOKEN="a b", no token file
+  write    …/hooks/dashboard-token from this checkout's .env ANSWER_TOKEN
+───── row 3: duplicated key, no token file
+  write    …/hooks/dashboard-token from this checkout's .env ANSWER_TOKEN
+───── token file MATCHES .env
+  ok       …/hooks/dashboard-token already exists and matches .env          [token file unchanged]
+───── token file DIFFERS from .env
+  warn     …/hooks/dashboard-token differs from this checkout's .env ANSWER_TOKEN.
+           Left alone. If .env is the one you want, re-run with --force, …   [token file unchanged]
+───── token file differs only by a trailing newline
+  warn     … differs …                                                       [token file unchanged]
+───── token file present, .env has no ANSWER_TOKEN
+  ok       …/hooks/dashboard-token already exists (left alone)               [token file unchanged]
+───── no .env at all, no token file
+  TODO     no ANSWER_TOKEN in .env — set one, then: …
+───── token file DIFFERS, with --force
+  write    …/hooks/dashboard-token replaced from .env ANSWER_TOKEN (--force)
+───── no node_modules (fresh checkout, no pnpm install)
+  TODO     run pnpm install first, then re-run — .env cannot be read
+           without …/node_modules/.bin/tsx, and guessing at it is what broke this before.
+```
+
+All three rows print `write`; none reaches the TODO branch. That was the bug.
+
+**A real (non-dry) install, contained entirely in tmpdirs** (`CLAUDE_CONFIG_DIR` pointed at a
+`mktemp -d`; every write target in the script is under it), byte-comparing what the installer
+wrote against what `loadConfig` enforces:
+
+```
+leading space          installer wrote "abc"  | server enforces "abc"  | mode 600 | MATCH
+quoted inner space     installer wrote "a b"  | server enforces "a b"  | mode 600 | MATCH
+duplicate key          installer wrote "two"  | server enforces "two"  | mode 600 | MATCH
+```
+
+**Parts 3 and 4 against a live server** (`PORT=4273 ANSWER_TOKEN=e2e-secret`, isolated cwd):
+
+```
+$ curl -s http://127.0.0.1:4273/api/health | jq '{ok, remoteAnswer, tokenRequired}'
+{ "ok": true, "remoteAnswer": true, "tokenRequired": true }
+health response containing the token: 0 matches
+
+hook WITHOUT the token file:
+REMOTE DECISION MODE is NOT armed: the dashboard requires an auth token and
+…/dashboard-token is missing, so every question, plan and turn-end
+notification this session sends it will be refused. Ask at the terminal as
+usual. To arm it: run `pnpm hooks:install` in the dashboard checkout.
+
+hook WITH the token file:
+REMOTE DECISION MODE — the dashboard is accepting phone answers and this session …
+
+5 unauthenticated POSTs to /api/notify/test → 403 403 403 403 403
+1 unauthenticated POST to /api/remote-answer → 403
+1 authenticated POST to /api/remote-answer   → 200
+
+server log:
+[dashboard] rejected write: POST /api/notify/test (bad or missing token)
+[dashboard] rejected write: POST /api/remote-answer (bad or missing token)
+server log containing the token: 0 matches
+```
+
+Five identical refusals → one line (throttle holds); a second path → its own line; the
+accepted write → nothing.
+
+`grep` for a surviving `.env` grep in `scripts/`: two hits, both comments describing the
+pipeline that was removed. No live code.
+
+### NOT verified — needs a human
+
+- **A real `pnpm hooks:install` against the user's own `~/.claude`.** Deliberately never run:
+  it symlinks into `~/.claude/hooks` and merges `~/.claude/settings.json`, outside this
+  worktree and not undoable by discarding the branch. Every branch above was exercised against
+  a throwaway `CLAUDE_CONFIG_DIR` instead. The real `~/.claude/hooks/dashboard-token` was not
+  read, written or chmod'd.
+- **The end-to-end push.** "Correct token installed → trigger a `stop` → push lands on the ntfy
+  topic, then corrupt one byte → it does not" was not run; it needs a real install and a real
+  ntfy topic. The 403/log/banner halves of that scenario were each proven against the live
+  server above, but not the ntfy delivery itself.
+- The worktree had no `node_modules` and no `client/dist`; `pnpm install` and `pnpm build` were
+  run to get a green suite. `test/api-usage-rates.test.ts`'s "a near-miss path is not the rates
+  endpoint" case asserts the static handler serves `<!DOCTYPE html>`, so it fails in any
+  checkout that has never been built — unrelated to this fix, but worth knowing.

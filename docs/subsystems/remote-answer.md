@@ -100,7 +100,7 @@ Handlers `serveHealth` / `serveQuestionWait` / `serveSessionQuestion` /
 
 | Method | Path | Codes |
 |---|---|---|
-| `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?, idleSecs?, answerSecs?, transcribe?}` (`transcribe` is [dictation](dictation.md)'s engine-availability flag, unrelated to the gates) — the hook's probe (all three gates *and* the wait window off one round trip), the pill's read, and the origin badge's source |
+| `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?, idleSecs?, answerSecs?, tokenRequired?, transcribe?}` (`transcribe` is [dictation](dictation.md)'s engine-availability flag, unrelated to the gates) — the hook's probe (all three gates *and* the wait window off one round trip), the pill's read, and the origin badge's source |
 | `POST` | `/api/remote-answer` | `{enabled}` → 200 `{...state, released}`; 400 non-boolean; 403 bad token; 409 `REMOTE_ANSWER=false`; 405 non-POST |
 | `POST` | `/api/questions/wait` | held → 200 `WaitResult`; 400 malformed / no usable questions; 403 bad token; 404 unknown session or feature off; 405 non-POST |
 | `GET` | `/api/sessions/:id/question` | 200 `SessionQuestion` (`pending: null` when idle); 400 bad id |

@@ -56,6 +56,30 @@ esac
 HEALTH=$(curl -sf -m 1 "$DASH/api/health" 2>/dev/null) || exit 0
 [ "$(printf '%s' "$HEALTH" | jq -r '.remoteAnswer // false')" = "true" ] || exit 0
 
+# Condition 3: if the server enforces ANSWER_TOKEN, the sibling hooks can only
+# reach its write endpoints when the token file exists — and the banner below is
+# a promise about exactly those write endpoints.
+#
+# This condition exists because the banner was once the *only* visible signal
+# and it was wrong: /api/health is untokened, so it answered cheerfully while
+# every ask/plan/stop POST came back 403 and got swallowed by `curl -sf`. The
+# session was told remote answering was armed for twelve hours in which not one
+# question ever reached a phone (backlog bug-6). A banner that cannot be checked
+# against the path it describes is worse than no banner.
+#
+# `// false` matters: an older server has no tokenRequired field, and warning on
+# a server that never said it needs a token would be the same mistake inverted.
+TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"
+if [ "$(printf '%s' "$HEALTH" | jq -r '.tokenRequired // false')" = "true" ] && [ ! -f "$TOKEN_FILE" ]; then
+  cat <<EOF
+REMOTE DECISION MODE is NOT armed: the dashboard requires an auth token and
+$TOKEN_FILE is missing, so every question, plan and turn-end
+notification this session sends it will be refused. Ask at the terminal as
+usual. To arm it: run \`pnpm hooks:install\` in the dashboard checkout.
+EOF
+  exit 0
+fi
+
 # Injected as context for this turn (UserPromptSubmit stdout on exit 0).
 cat <<'EOF'
 REMOTE DECISION MODE — the dashboard is accepting phone answers and this session

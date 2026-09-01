@@ -17,9 +17,12 @@
 #   scripts/install-hooks.sh              install (idempotent — safe to re-run)
 #   scripts/install-hooks.sh --dry-run    print what would change, touch nothing
 #   scripts/install-hooks.sh --uninstall  remove this repo's links + entries
-#   scripts/install-hooks.sh --force      replace a real file sitting on a link path
+#   scripts/install-hooks.sh --force      replace a real file sitting on a link
+#                                         path, and a token file that disagrees
+#                                         with .env (both are left alone without it)
 #
-# Requires: jq (the settings merge), curl (the hooks themselves).
+# Requires: jq (the settings merge), curl (the hooks themselves), and a
+# `pnpm install` — .env is read through node_modules/.bin/tsx, never by grep.
 
 set -u
 
@@ -37,7 +40,7 @@ for arg in "$@"; do
     --dry-run) DRY=true ;;
     --uninstall) UNINSTALL=true ;;
     --force) FORCE=true ;;
-    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;   # the header block above, through Requires
     *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -251,25 +254,72 @@ fi
 # that gates every write endpoint. If this checkout has one in .env we offer to
 # reuse it; otherwise the user is told where it goes rather than left to find
 # out when a hook silently 401s.
+#
+# .env is read by scripts/env-value.ts, NOT by a grep here, and that is the
+# point. This block used to run its own
+# `grep -E '^ANSWER_TOKEN=' | head -1 | cut -d= -f2- | tr -d "\"' \r"`, which
+# disagreed with the server's `parseEnv` on a leading space (saw nothing, and
+# reported "no ANSWER_TOKEN in .env" for a token that was plainly there), on the
+# spaces inside a quoted value, and on a duplicated key. Every disagreement
+# wrote no token file or a wrong one, and the hooks then 403'd in silence for
+# twelve hours (backlog bug-6). One reader, one answer.
 
 say ""
 if [ "$UNINSTALL" != "true" ]; then
   say "token"
-  if [ -f "$TOKEN_FILE" ]; then
-    step "ok        $TOKEN_FILE already exists (left alone)"
+
+  # tsx is the devDependency every pnpm script in this repo already runs
+  # through, so this adds no dependency — but a checkout with no `pnpm install`
+  # has no binary to call. Say that outright. Falling back to a grep, or letting
+  # a missing binary re-enter the "no ANSWER_TOKEN" branch below, would recreate
+  # the exact bug: reporting no token for a token that exists.
+  TSX="$REPO/node_modules/.bin/tsx"
+  envtok=""
+  if [ -x "$TSX" ]; then
+    envtok="$("$TSX" "$REPO/scripts/env-value.ts" ANSWER_TOKEN --env "$REPO/.env" 2> /dev/null)" || envtok=""
+  fi
+
+  if [ ! -x "$TSX" ]; then
+    step "TODO     run pnpm install first, then re-run — .env cannot be read"
+    step "         without $TSX, and guessing at it is what broke this before."
+  elif [ ! -f "$TOKEN_FILE" ] && [ -n "$envtok" ]; then
+    step "write    $TOKEN_FILE from this checkout's .env ANSWER_TOKEN"
+    if [ "$DRY" != "true" ]; then
+      printf '%s' "$envtok" > "$TOKEN_FILE" && chmod 600 "$TOKEN_FILE"
+    fi
+  elif [ ! -f "$TOKEN_FILE" ]; then
+    step "TODO     no ANSWER_TOKEN in .env — set one, then:"
+    step "         printf '%s' \"\$ANSWER_TOKEN\" > $TOKEN_FILE && chmod 600 $TOKEN_FILE"
+  elif [ -z "$envtok" ]; then
+    step "ok       $TOKEN_FILE already exists (left alone)"
   else
-    envtok=""
-    [ -f "$REPO/.env" ] && envtok="$(grep -E '^ANSWER_TOKEN=' "$REPO/.env" | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')"
-    if [ -n "$envtok" ]; then
-      step "write    $TOKEN_FILE from this checkout's .env ANSWER_TOKEN"
+    # The file exists AND .env has a value, so the two can be compared — which
+    # is the other half of bug-6: presence alone used to be reported as `ok`
+    # forever, so a token file that was wrong (copied from another machine, or
+    # written by the old grep) was never once questioned by a re-run.
+    #
+    # Byte-wise: the `; printf x` / `%x` dance keeps the trailing bytes that
+    # `$(cat …)` would strip, and a stray newline at the end of the file is a
+    # real mismatch — the server compares the header string exactly.
+    filetok="$(cat "$TOKEN_FILE"; printf x)"; filetok="${filetok%x}"
+    if [ "$filetok" = "$envtok" ]; then
+      step "ok       $TOKEN_FILE already exists and matches .env"
+    elif [ "$FORCE" = "true" ]; then
+      step "write    $TOKEN_FILE replaced from .env ANSWER_TOKEN (--force)"
       if [ "$DRY" != "true" ]; then
         printf '%s' "$envtok" > "$TOKEN_FILE" && chmod 600 "$TOKEN_FILE"
       fi
     else
-      step "TODO     no ANSWER_TOKEN in .env — set one, then:"
-      step "         printf '%s' \"\$ANSWER_TOKEN\" > $TOKEN_FILE && chmod 600 $TOKEN_FILE"
+      # Never overwritten without --force, and neither value is printed, not
+      # even a prefix. A deliberately different per-machine token is legitimate
+      # — clobbering one would be a worse bug than the one being fixed here.
+      step "warn     $TOKEN_FILE differs from this checkout's .env ANSWER_TOKEN."
+      step "         Left alone. If .env is the one you want, re-run with --force,"
+      step "         or: printf '%s' \"\$ANSWER_TOKEN\" > $TOKEN_FILE && chmod 600 $TOKEN_FILE"
     fi
+    unset filetok
   fi
+  unset envtok
 
   say ""
   say "notes"
