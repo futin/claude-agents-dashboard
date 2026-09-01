@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { testAsync, withServer } from './api-harness.js';
+import { appSessionsRoot, resetArchivedCache } from '../server/lib/archived.js';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
@@ -54,6 +55,23 @@ export async function run(): Promise<number> {
       const projects = reply.json?.projects as Array<{ dirName: string; path: string }>;
       assert.deepEqual(projects.map(p => p.dirName), [PROJECT_DIR]);
       assert.equal(projects[0].path, h.home, "the ref's path comes from the transcript's cwd");
+    });
+  }));
+
+  check(await testAsync('GET /api/management drops a project whose only recent session was archived', async () => {
+    await withServer(ENV, async h => {
+      resetArchivedCache();
+      h.plant(ID);
+      const dir = path.join(appSessionsRoot(h.home), 'install-1', 'account-1');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, `local_${ID}.json`),
+        JSON.stringify({ sessionId: `local_${ID}`, cliSessionId: ID, isArchived: true })
+      );
+      const reply = await h.req('/api/management');
+      assert.equal(reply.status, 200);
+      const dirNames = (reply.json?.projects as { dirName: string }[]).map(p => p.dirName);
+      assert.equal(dirNames.includes(PROJECT_DIR), false, 'archived-only project is not recently active');
     });
   }));
 

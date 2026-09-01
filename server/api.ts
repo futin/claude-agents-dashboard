@@ -8,6 +8,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import nodePath from 'node:path';
 
 import { scanSessions, lastMessageMs, listTranscripts, projectsRoot, sessionSurface } from './lib/scan.js';
+import { archivedSessionIds } from './lib/archived.js';
 import { readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
@@ -126,12 +127,17 @@ export function serveSessions(baseConfig: Config, res: ServerResponse, params?: 
     // permissionWaits likewise: a terminal permission dialog is TUI-only and
     // never reaches the transcript, so the Notification hook is the only way the
     // scan can know a session is parked on one.
+    // archivedIds mirrors the desktop app's own list: "delete" there is an
+    // archive that leaves the transcript on disk, so without this the row keeps
+    // showing until it ages out of the lookback window. Read here, not in
+    // scan.ts, so the scan stays free of the app's store (see archived.ts).
     data = scanSessions(config, {
       skipProcScan: config.skipProcScan,
       pendingIds: pendingSessionIds(),
       planIds: planSessionIds(),
       messageIds: messageSessionIds(),
-      permissionWaits: permissionWaits()
+      permissionWaits: permissionWaits(),
+      archivedIds: archivedSessionIds()
     });
   } catch (e) {
     console.error('[dashboard] scan failed:', (e as Error).message);
@@ -1223,7 +1229,7 @@ export async function serveManagementIndex(config: Config, res: ServerResponse):
   try {
     const [global, projects] = await Promise.all([
       readGlobalScope(),
-      Promise.resolve(listRecentProjects(config))
+      Promise.resolve(listRecentProjects(config, { archivedIds: archivedSessionIds() }))
     ]);
     data = { generatedAt: new Date().toISOString(), global, projects };
   } catch (e) {

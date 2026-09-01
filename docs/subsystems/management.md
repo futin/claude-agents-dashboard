@@ -27,6 +27,11 @@ Read-only v1 — nothing is ever written.
   installPath → skills/agents/commands/rules/hooks.json), items tagged `plugin:<name>`.
   Project = `<cwd>/.claude/*` + root CLAUDE.md, items tagged `project`. Recent projects
   come from transcript cwds (same lookback as sessions), deduped by cwd, newest-first.
+  Sessions the desktop app archived are skipped — `api.ts` passes `archivedIds` into
+  `listRecentProjects`, so a project whose only recent session was deleted in the app stops
+  reading as recently active (see [sessions](sessions.md) §Archived-session filter). The
+  servable-path set (`collectServablePaths`) is deliberately *not* narrowed that way: a file
+  already listed in an open panel must keep serving.
 - **Skill directories:** `readSkillsDir` walks each skill dir at scan time and sets
   `ConfigItem.files` (`{rel, size}[]`, SKILL.md first then rel-sorted) — only when there
   is more than SKILL.md, so a single-file skill's payload is byte-identical to before. No
