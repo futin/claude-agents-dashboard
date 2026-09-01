@@ -178,32 +178,89 @@ function normCwd(p: string): string {
 }
 
 /**
- * Working directories of every running `claude` CLI process, via `lsof`.
+ * Pids of every running `claude` CLI process, from `ps -Ao pid=,comm=` stdout.
+ *
+ * Matches comm against `/(^|\/)claude$/` — the same test `countClaudeProcesses`
+ * uses, so the two can no longer disagree. Comm is everything after the pid and
+ * may contain spaces (`…/Application Support/Claude/…`), so the split is at the
+ * first whitespace run only.
+ */
+export function parsePsClaudePids(out: string): string[] {
+  const pids: string[] = [];
+  for (const line of out.split('\n')) {
+    const m = /^\s*(\d+)\s+(.*\S)\s*$/.exec(line);
+    if (m && /(^|\/)claude$/.test(m[2])) pids.push(m[1]);
+  }
+  return pids;
+}
+
+/** Cwd set from `lsof … -Fn` stdout. Non-`n` lines and a bare `n` are ignored. */
+export function parseLsofCwds(out: string): Set<string> {
+  const set = new Set<string>();
+  for (const line of out.split('\n')) {
+    if (line.startsWith('n') && line.length > 1) set.add(normCwd(line.slice(1)));
+  }
+  return set;
+}
+
+/**
+ * The live-cwd set from both probes' stdout, or `null` to skip the gate.
+ *
+ * Fail open on every uncertain input — a `null` here costs a stalled session a
+ * yellow badge instead of a gray one, while a wrongly empty set would mark
+ * *every* session dead, which is exactly the bug this replaced. So: `ps` failed,
+ * `ps` matched no pid at all (a launcher we no longer recognize), or `lsof`
+ * produced nothing usable all return `null`.
+ */
+export function composeLiveCwds(psOut: string | null, lsofOut: string | null): Set<string> | null {
+  if (psOut === null) return null;
+  if (parsePsClaudePids(psOut).length === 0) return null;
+  if (lsofOut === null) return null;
+  const set = parseLsofCwds(lsofOut);
+  // Pids exist but lsof named no cwd: it answered nothing usable, so fail open
+  // rather than let an empty set condemn every session.
+  return set.size === 0 ? null : set;
+}
+
+/**
+ * Working directories of every running `claude` CLI process, via `ps` + `lsof`.
  * The transcript records a session's `cwd`; if no live process shares it, the
  * session is dead (closed/cleaned) and cannot be actively working.
  *
- * Returns `null` when the probe can't run (no lsof, timeout, error) — callers
- * fail open and skip liveness gating rather than mislabel every session dead.
+ * Pids come from `ps` rather than `lsof -c claude`, which matches the *binary's
+ * filename*: the native installer runs each version as a file named after it
+ * (`~/.local/share/claude/versions/2.1.250`) reached through a `claude` symlink,
+ * so lsof reported it as `2.1.250` and every session under it read dead. `ps`
+ * reports the launcher path, which ends in `claude` for both install flavours.
  *
- * `-c claude` is case-sensitive, so it matches only the lowercase CLI binary,
- * not the capital-`C` `Claude.app` desktop shell. Granularity is per-cwd: two
+ * Returns `null` when the probe can't run — callers fail open and skip liveness
+ * gating rather than mislabel every session dead. Granularity is per-cwd: two
  * sessions in the same directory can't be told apart, so a dead session sharing
  * a directory with a live one still reads live.
  */
 export function liveCwds(): Set<string> | null {
+  let psOut: string | null = null;
   try {
-    const out = execFileSync('lsof', ['-c', 'claude', '-a', '-d', 'cwd', '-Fn'], {
-      encoding: 'utf8',
-      timeout: 2000
-    });
-    const set = new Set<string>();
-    for (const line of out.split('\n')) {
-      if (line.startsWith('n') && line.length > 1) set.add(normCwd(line.slice(1)));
-    }
-    return set;
+    psOut = execFileSync('ps', ['-Ao', 'pid=,comm='], { encoding: 'utf8', timeout: 2000 });
   } catch {
     return null;
   }
+  const pids = parsePsClaudePids(psOut);
+  if (pids.length === 0) return null;
+
+  let lsofOut: string | null = null;
+  try {
+    lsofOut = execFileSync('lsof', ['-p', pids.join(','), '-a', '-d', 'cwd', '-Fn'], {
+      encoding: 'utf8',
+      timeout: 2000
+    });
+  } catch (e) {
+    // lsof warns and exits 1 on processes it can't inspect but still prints the
+    // ones it could; a partial set beats no gate at all.
+    const stdout = (e as { stdout?: string | Buffer }).stdout;
+    lsofOut = typeof stdout === 'string' ? stdout : stdout ? stdout.toString('utf8') : null;
+  }
+  return composeLiveCwds(psOut, lsofOut);
 }
 
 /** Build the ranked session snapshot. */

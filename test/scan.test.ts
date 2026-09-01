@@ -336,6 +336,57 @@ export function run(): number {
     assert.strictEqual(nogate.sessions[0].status, 'working');
   })) p++; else f++;
 
+  if (test('parsePsClaudePids: keeps every launcher whose basename is claude', () => {
+    const psOut = [
+      '  26947 /Users/x/Library/Application Support/Claude/claude-code/2.1.247/claude.app/Contents/MacOS/claude',
+      '  70839 claude',
+      '  75935 /Applications/Claude.app/Contents/MacOS/Claude',
+      '  26946 /Applications/Claude.app/Contents/Helpers/disclaimer',
+      '  99999 /usr/local/bin/claude-wrapper',
+      '  88888 /opt/notclaude',
+      '',
+      '  12345'
+    ].join('\n');
+    assert.deepStrictEqual(scan.parsePsClaudePids(psOut), ['26947', '70839']);
+  })) p++; else f++;
+
+  if (test('parseLsofCwds: collects n-lines, normalizes trailing slash, ignores the rest', () => {
+    const out = 'p123\nfcwd\nn/a/b\np456\nfcwd\nn/c/d/\n';
+    assert.deepStrictEqual(scan.parseLsofCwds(out), new Set(['/a/b', '/c/d']));
+    // a bare `n` carries no path; the length guard must keep it out
+    assert.deepStrictEqual(scan.parseLsofCwds('p1\nfcwd\nn\n'), new Set());
+    assert.deepStrictEqual(scan.parseLsofCwds(''), new Set());
+  })) p++; else f++;
+
+  if (test('composeLiveCwds: fails open on ps failure, zero pids, or lsof failure', () => {
+    const psOut = '  111 claude\n  222 /opt/claude\n';
+    assert.strictEqual(scan.composeLiveCwds(null, 'n/a/b\n'), null);          // ps failed
+    assert.strictEqual(scan.composeLiveCwds('  333 /usr/bin/vim\n', 'n/a/b\n'), null); // no claude pid
+    assert.strictEqual(scan.composeLiveCwds(psOut, null), null);              // lsof failed
+    assert.strictEqual(scan.composeLiveCwds(psOut, 'p111\nfcwd\n'), null);     // lsof named no cwd
+    assert.deepStrictEqual(
+      scan.composeLiveCwds(psOut, 'p111\nfcwd\nn/a/b\np222\nfcwd\nn/c/d\n'),
+      new Set(['/a/b', '/c/d'])
+    );
+  })) p++; else f++;
+
+  if (test('liveness: a worktree session is live on its own cwd, not its parent repo', () => {
+    // bug-12: native-installer sessions never entered the live set, so every
+    // worktree session read idle. Exact per-cwd match is the intended granularity.
+    const now = 1_700_000_000_000;
+    const freshTs = new Date(now - 10 * 1000).toISOString();
+    const specs = [{
+      dirName: '-a-repo-worktrees-bug-4', id: 'wt', mtimeMs: now - 10 * 1000,
+      records: [metaRec('/a/repo/.worktrees/bug-4', 'backlog/bug-4'), at(assistantPending(), freshTs)]
+    }];
+    const own = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 },
+      { root: makeRoot(specs), now, liveCwds: new Set(['/a/repo/.worktrees/bug-4']) });
+    assert.strictEqual(own.sessions[0].status, 'working');
+    const parentOnly = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 },
+      { root: makeRoot(specs), now, liveCwds: new Set(['/a/repo']) });
+    assert.strictEqual(parentOnly.sessions[0].status, 'idle');
+  })) p++; else f++;
+
   if (test('pendingIds: a held remote wait flags the row and turns it blue', () => {
     // The hook registers the wait during PreToolUse, so the transcript still ends
     // on a finished turn — only the store knows a question is open.
