@@ -3,6 +3,9 @@ id: idea-11
 title: Rename phone answers to remote answers in user-facing wording
 created: 2026-08-30
 tags: ui, docs, wording
+updated: 2026-09-01T15:44:09Z
+promoted-to: task-9
+groom-elapsed: 130
 ---
 
 ## Problem
