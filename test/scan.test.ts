@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import * as scan from '../server/lib/scan.js';
-import { parseEnv, toPosInt, loadConfig } from '../server/lib/config.js';
+import { DEFAULTS, parseEnv, toPosInt, loadConfig } from '../server/lib/config.js';
 import { refreshCwd } from '../server/lib/token-refresh.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -85,7 +85,24 @@ export function run(): number {
   if (test('loadConfig applies defaults when no .env', () => {
     const c = loadConfig({ envPath: '/no/such/.env' });
     assert.strictEqual(c.port, 4173);
-    assert.strictEqual(c.maxSessions, 10);
+    assert.strictEqual(c.maxSessions, 5);
+  })) p++; else f++;
+
+  // bug-4: `.env.example` tells you to copy it verbatim, so every line left
+  // active in it must already BE the default — otherwise the copy silently
+  // changes behaviour. This guards the whole class, not just MAX_SESSIONS.
+  if (test('.env.example active lines match DEFAULTS', () => {
+    const text = fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8');
+    const active = parseEnv(text);
+    const keys = Object.keys(active);
+    assert.ok(keys.length > 0, '.env.example has no active settings to check');
+    keys.forEach(k => {
+      assert.ok(k in DEFAULTS, `.env.example sets ${k}, which has no entry in DEFAULTS`);
+      assert.strictEqual(
+        active[k], String((DEFAULTS as Record<string, unknown>)[k]),
+        `.env.example ${k}=${active[k]} disagrees with DEFAULTS.${k}`
+      );
+    });
   })) p++; else f++;
 
   if (test('loadConfig: skipProcScan defaults to Docker detection, SKIP_PROC_SCAN overrides', () => {
