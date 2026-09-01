@@ -107,14 +107,25 @@ the model not to use `AskUserQuestion` for plan approval, which is right at the 
 wrong when you're away.
 
 `scripts/remote-decision-hook.sh` (a `UserPromptSubmit` hook) flips that default exactly
-when it's wrong. On every user prompt it checks two conditions and otherwise stays silent:
+when it's wrong. On every user prompt it checks three conditions and otherwise stays silent:
 
 1. `permission_mode` (on every hook's stdin) is auto-ish — default set
    `auto bypassPermissions dontAsk`, override with `CLAUDE_DASHBOARD_DECISION_MODES`;
 2. `GET /api/health` reports `remoteAnswer: true` — the same field, and so the same
-   env-switch-AND-toggle, that gates `ask-remote-hook.sh`.
+   env-switch-AND-toggle, that gates `ask-remote-hook.sh`;
+3. if that same probe reports `tokenRequired: true`, `~/.claude/hooks/dashboard-token`
+   exists.
 
-When both hold it injects an instruction for that turn: put every decision through
+Condition 3 exists because the banner was once the only visible signal and it was wrong.
+`/api/health` is untokened, so it answers cheerfully while every *write* — the ask, plan
+and stop POSTs the banner is a promise about — comes back 403 and is swallowed by
+`curl -sf`. A session was told remote answering was armed for twelve hours in which no
+question ever reached a phone (backlog bug-6). With the token file missing the hook now
+prints a one-line notice naming the file and pointing at `pnpm hooks:install`, instead of
+the banner. An older server sends no `tokenRequired`, which reads as `false` and keeps the
+old behaviour rather than warning wrongly.
+
+When all hold it injects an instruction for that turn: put every decision through
 `AskUserQuestion` (including skill-driven asks like the brainstorming skill's mode pick),
 never end a turn on a prose question, don't enter plan mode — summarize the plan and ask
 proceed/revise instead — and prefer already-allowed tools, since a permission dialog would

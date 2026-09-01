@@ -60,6 +60,28 @@ export async function run(): Promise<number> {
     });
   }));
 
+  // `/api/health` is the only endpoint the hooks can reach without a token, so
+  // it is also the only place that can warn them one is needed. Before this
+  // field a missing token file was indistinguishable from "feature switched
+  // off" from every surface a person checks — see backlog bug-6.
+  check(await testAsync('GET /api/health reports tokenRequired: true when ANSWER_TOKEN is set', async () => {
+    await withServer(`${ENV}ANSWER_TOKEN=s3cret\n`, async h => {
+      const health = await h.req('/api/health');
+      assert.equal(health.status, 200);
+      assert.equal(health.json?.tokenRequired, true);
+      // The flag says a token is needed; it must never say which.
+      assert.ok(!health.raw.includes('s3cret'), 'health must not leak the token itself');
+    });
+  }));
+
+  check(await testAsync('GET /api/health reports tokenRequired: false with no ANSWER_TOKEN', async () => {
+    await withServer(ENV, async h => {
+      const health = await h.req('/api/health');
+      assert.equal(health.status, 200);
+      assert.equal(health.json?.tokenRequired, false, 'false, not absent — the hook branches on it');
+    });
+  }));
+
   check(await testAsync('POST /api/remote-answer with the right token is 200', async () => {
     await withServer(`${ENV}ANSWER_TOKEN=s3cret\n`, async h => {
       const reply = await h.req('/api/remote-answer', {

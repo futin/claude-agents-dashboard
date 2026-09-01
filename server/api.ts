@@ -423,6 +423,44 @@ function sendBadBody(res: ServerResponse, body: unknown): void {
   sendJson(res, 400, body);
 }
 
+/** How long one rejected path stays quiet after it has been logged once. */
+const REJECT_LOG_WINDOW_MS = 60_000;
+
+/** Last log time per `METHOD /path`. Capped — see `logRejectedWrite`. */
+const rejectLogged = new Map<string, number>();
+
+/** Reset the throttle. Same convention as the `resetStore` exports in `lib/*`. */
+export function resetRejectedWriteLog(): void {
+  rejectLogged.clear();
+}
+
+/**
+ * Say once, on stderr, that a write was refused for its token.
+ *
+ * Silence here is what made backlog bug-6 cost twelve hours: the installer had
+ * written no token file, every hook POST came back 403, and the hooks swallow
+ * that (`curl -sf`, then `exit 0`). Nothing on any surface distinguished a
+ * misconfigured token from a feature nobody had switched on.
+ *
+ * Method and path only. Never the expected token, the received header, or a
+ * prefix of either — a log that carries the credential is a worse bug than the
+ * one it diagnoses — and never the query string, which is the one part of a URL
+ * a caller might have put a secret in.
+ *
+ * Throttled per path because a held `stop` hook retries: an unthrottled line
+ * would bury the output it is supposed to draw attention to.
+ */
+function logRejectedWrite(req: IncomingMessage): void {
+  const key = `${req.method || 'GET'} ${(req.url || '').split('?')[0]}`;
+  const now = Date.now();
+  const last = rejectLogged.get(key);
+  if (last !== undefined && now - last < REJECT_LOG_WINDOW_MS) return;
+  // Paths carry session ids, so the key space is unbounded over a long run.
+  if (rejectLogged.size >= 256) rejectLogged.clear();
+  rejectLogged.set(key, now);
+  console.error(`[dashboard] rejected write: ${key} (bad or missing token)`);
+}
+
 /**
  * Bearer check for the two write endpoints. An unset ANSWER_TOKEN leaves them
  * open — the same posture as every read endpoint here.
@@ -430,7 +468,9 @@ function sendBadBody(res: ServerResponse, body: unknown): void {
 function tokenOk(config: Config, req: IncomingMessage): boolean {
   if (!config.answerToken) return true;
   const header = req.headers.authorization;
-  return typeof header === 'string' && header === `Bearer ${config.answerToken}`;
+  if (typeof header === 'string' && header === `Bearer ${config.answerToken}`) return true;
+  logRejectedWrite(req);
+  return false;
 }
 
 /** True when the id names a transcript we can see. Never joined into a path. */
@@ -456,6 +496,7 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
     idleSecs: settings.idleSecs,
     answerSecs: settings.answerSecs,
     origin: classifyOrigin(req?.socket?.remoteAddress, req?.headers),
+    tokenRequired: config.answerToken !== '',
     transcribe: probeTranscribe(config),
     spawnAvailable: probeSpawn(config),
     spawnMaxPermission: config.spawnMaxPermission

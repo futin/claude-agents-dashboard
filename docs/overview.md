@@ -185,7 +185,8 @@ test/             node-assert tests over backend + client domain logic
 scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   plan-remote-hook.sh, permission-notify-hook.sh,
                   remote-decision-hook.sh, stop-notify-hook.sh, host-credentials.sh,
-                  lan-ip.sh
+                  lan-ip.sh, env-value.ts (the one .env reader the installer and
+                  the server share — never a second grep)
 ```
 
 ## Map

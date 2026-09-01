@@ -17,9 +17,12 @@
 #   scripts/install-hooks.sh              install (idempotent — safe to re-run)
 #   scripts/install-hooks.sh --dry-run    print what would change, touch nothing
 #   scripts/install-hooks.sh --uninstall  remove this repo's links + entries
-#   scripts/install-hooks.sh --force      replace a real file sitting on a link path
+#   scripts/install-hooks.sh --force      replace a real file sitting on a link
+#                                         path, and a token file that disagrees
+#                                         with .env (both are left alone without it)
 #
-# Requires: jq (the settings merge), curl (the hooks themselves).
+# Requires: jq (the settings merge), curl (the hooks themselves), and a
+# `pnpm install` — .env is read through node_modules/.bin/tsx, never by grep.
 
 set -u
 
@@ -37,7 +40,7 @@ for arg in "$@"; do
     --dry-run) DRY=true ;;
     --uninstall) UNINSTALL=true ;;
     --force) FORCE=true ;;
-    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;   # the header block above, through Requires
     *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -251,25 +254,128 @@ fi
 # that gates every write endpoint. If this checkout has one in .env we offer to
 # reuse it; otherwise the user is told where it goes rather than left to find
 # out when a hook silently 401s.
+#
+# .env is read by scripts/env-value.ts, NOT by a grep here, and that is the
+# point. This block used to run its own
+# `grep -E '^ANSWER_TOKEN=' | head -1 | cut -d= -f2- | tr -d "\"' \r"`, which
+# disagreed with the server's `parseEnv` on a leading space (saw nothing, and
+# reported "no ANSWER_TOKEN in .env" for a token that was plainly there), on the
+# spaces inside a quoted value, and on a duplicated key. Every disagreement
+# wrote no token file or a wrong one, and the hooks then 403'd in silence for
+# twelve hours (backlog bug-6). One reader, one answer.
 
 say ""
 if [ "$UNINSTALL" != "true" ]; then
   say "token"
-  if [ -f "$TOKEN_FILE" ]; then
-    step "ok        $TOKEN_FILE already exists (left alone)"
+
+  # tsx is the devDependency every pnpm script in this repo already runs
+  # through, so this adds no dependency — but a checkout with no `pnpm install`
+  # has no binary to call. Say that outright. Falling back to a grep, or letting
+  # a missing binary re-enter the "no ANSWER_TOKEN" branch below, would recreate
+  # the exact bug: reporting no token for a token that exists.
+  #
+  # env-value's stderr is CAPTURED, not discarded, and two separate things
+  # depend on it:
+  #
+  #   1. Which source won. env-value mirrors loadConfig's precedence, so an
+  #      exported ANSWER_TOKEN beats the file. Printing ".env" regardless would
+  #      write the shell's token while claiming it came from the checkout, and
+  #      send anyone reading the `warn` line to edit a .env that may already
+  #      match byte for byte.
+  #   2. Whether it ran at all. node exits 1 for an uncaught error and
+  #      env-value exits 1 for "unset", so the CODE CANNOT SEPARATE THEM. Only
+  #      the `unset` marker on stderr can. Without that check a half-installed
+  #      node_modules — tsx present, so past the -x guard, but failing to
+  #      import — prints "no ANSWER_TOKEN in .env" for a token that is plainly
+  #      there, which is the sentence this whole bug is named after.
+  #
+  # See the stderr contract in scripts/env-value.ts.
+  TSX="$REPO/node_modules/.bin/tsx"
+  envtok=""; envsrc=""; envmsg=""; envrc=0
+  envstate="notsx"
+  if [ -x "$TSX" ]; then
+    # stderr to a temp file so it can be read separately; the VALUE only ever
+    # travels through the command substitution, never through the file.
+    errfile="$(mktemp)"
+    envtok="$("$TSX" "$REPO/scripts/env-value.ts" ANSWER_TOKEN --env "$REPO/.env" 2> "$errfile")"
+    envrc=$?
+    envmsg="$(cat "$errfile")"
+    rm -f "$errfile"
+    envsrc="$(printf '%s\n' "$envmsg" | sed -n 's/^env-value: ANSWER_TOKEN from //p' | tail -1)"
+    if [ "$envrc" -eq 0 ] && [ -n "$envtok" ] && [ -n "$envsrc" ]; then
+      envstate="ok"
+    elif [ "$envrc" -eq 1 ] && printf '%s\n' "$envmsg" | grep -q '^env-value: ANSWER_TOKEN unset'; then
+      envstate="unset"
+      envtok=""
+    else
+      envstate="broken"
+      envtok=""
+    fi
+  fi
+
+  # Name the source that actually won, in every line below that mentions one.
+  if [ "$envsrc" = "process.env" ]; then
+    srclabel="the ANSWER_TOKEN exported in this shell"
   else
-    envtok=""
-    [ -f "$REPO/.env" ] && envtok="$(grep -E '^ANSWER_TOKEN=' "$REPO/.env" | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')"
-    if [ -n "$envtok" ]; then
-      step "write    $TOKEN_FILE from this checkout's .env ANSWER_TOKEN"
+    srclabel="this checkout's .env ANSWER_TOKEN"
+  fi
+
+  if [ "$envstate" = "notsx" ]; then
+    step "TODO     run pnpm install first, then re-run — .env cannot be read"
+    step "         without $TSX, and guessing at it is what broke this before."
+  elif [ "$envstate" = "broken" ]; then
+    # Deliberately NOT the "no ANSWER_TOKEN" branch: the reader failed, so
+    # nothing is known about whether a token exists, and saying "no token" here
+    # is the original bug wearing a new hat.
+    step "TODO     could not read ANSWER_TOKEN — scripts/env-value.ts exited $envrc"
+    step "         without saying the key was unset. This is NOT \"no token set\":"
+    step "         nothing is known either way, and $TOKEN_FILE is left as it is."
+    if [ -n "$envmsg" ]; then
+      step "         it said: $(printf '%s\n' "$envmsg" | head -1)"
+    fi
+    step "         Try: $TSX $REPO/scripts/env-value.ts ANSWER_TOKEN --env $REPO/.env"
+  elif [ ! -f "$TOKEN_FILE" ] && [ "$envstate" = "ok" ]; then
+    step "write    $TOKEN_FILE from $srclabel"
+    if [ "$DRY" != "true" ]; then
+      printf '%s' "$envtok" > "$TOKEN_FILE" && chmod 600 "$TOKEN_FILE"
+    fi
+  elif [ ! -f "$TOKEN_FILE" ]; then
+    step "TODO     no ANSWER_TOKEN in .env — set one, then:"
+    step "         printf '%s' \"\$ANSWER_TOKEN\" > $TOKEN_FILE && chmod 600 $TOKEN_FILE"
+  elif [ "$envstate" != "ok" ]; then
+    step "ok       $TOKEN_FILE already exists (left alone)"
+  else
+    # The file exists AND .env has a value, so the two can be compared — which
+    # is the other half of bug-6: presence alone used to be reported as `ok`
+    # forever, so a token file that was wrong (copied from another machine, or
+    # written by the old grep) was never once questioned by a re-run.
+    #
+    # Byte-wise: the `; printf x` / `%x` dance keeps the trailing bytes that
+    # `$(cat …)` would strip, and a stray newline at the end of the file is a
+    # real mismatch — the server compares the header string exactly.
+    filetok="$(cat "$TOKEN_FILE"; printf x)"; filetok="${filetok%x}"
+    if [ "$filetok" = "$envtok" ]; then
+      step "ok       $TOKEN_FILE already exists and matches $srclabel"
+    elif [ "$FORCE" = "true" ]; then
+      step "write    $TOKEN_FILE replaced from $srclabel (--force)"
       if [ "$DRY" != "true" ]; then
         printf '%s' "$envtok" > "$TOKEN_FILE" && chmod 600 "$TOKEN_FILE"
       fi
     else
-      step "TODO     no ANSWER_TOKEN in .env — set one, then:"
-      step "         printf '%s' \"\$ANSWER_TOKEN\" > $TOKEN_FILE && chmod 600 $TOKEN_FILE"
+      # Never overwritten without --force, and neither value is printed, not
+      # even a prefix. A deliberately different per-machine token is legitimate
+      # — clobbering one would be a worse bug than the one being fixed here.
+      #
+      # $srclabel, not a hardcoded ".env": if the value came from an exported
+      # ANSWER_TOKEN, telling the user to go and edit .env is advice that
+      # changes nothing, since .env may match this file exactly.
+      step "warn     $TOKEN_FILE differs from $srclabel."
+      step "         Left alone. If $srclabel is the one you want, re-run with --force,"
+      step "         or: printf '%s' \"\$ANSWER_TOKEN\" > $TOKEN_FILE && chmod 600 $TOKEN_FILE"
     fi
+    unset filetok
   fi
+  unset envtok envsrc envmsg envrc envstate srclabel
 
   say ""
   say "notes"
