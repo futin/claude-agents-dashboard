@@ -51,6 +51,28 @@ function notifyRec(agentId: string, status: string, iso: string, usage?: { token
   };
 }
 
+/**
+ * The same notification when it lands while the parent is mid-turn: Claude Code
+ * queues it and absorbs it into the running turn, so it is written WITHOUT a
+ * `message` — the payload rides in a top-level `content` string
+ * (`type: "queue-operation"`) or in `attachment.prompt` (`type: "attachment"`).
+ */
+function notifyBody(agentId: string, status: string, usage?: { tokens: number; toolUses: number; durationMs: number }) {
+  const usageXml = usage
+    ? `\n<usage><subagent_tokens>${usage.tokens}</subagent_tokens><tool_uses>${usage.toolUses}</tool_uses><duration_ms>${usage.durationMs}</duration_ms></usage>`
+    : '';
+  return `<task-notification>\n<task-id>${agentId}</task-id>\n<status>${status}</status>${usageXml}\n</task-notification>`;
+}
+function queueOpRec(agentId: string, status: string, iso: string, operation: string, usage?: { tokens: number; toolUses: number; durationMs: number }) {
+  return { type: 'queue-operation', operation, timestamp: iso, sessionId: 's1', content: notifyBody(agentId, status, usage) };
+}
+function attachmentRec(agentId: string, status: string, iso: string, usage?: { tokens: number; toolUses: number; durationMs: number }) {
+  return {
+    type: 'attachment', timestamp: iso,
+    attachment: { type: 'queued_command', commandMode: 'prompt', timestamp: iso, prompt: notifyBody(agentId, status, usage) }
+  };
+}
+
 export function run(): number {
   console.log('\n=== agents.ts ===\n');
   let p = 0, f = 0;
@@ -210,6 +232,69 @@ export function run(): number {
     assert.strictEqual(a.tokens, null);
     assert.strictEqual(a.toolUses, null);
     assert.strictEqual(a.durationMs, null);
+  })) p++; else f++;
+
+  if (test('absorbed mid-turn: queue-operation record with top-level content finishes the agent', () => {
+    const file = fixture([
+      taskRec('toolu_a', 'general-purpose', 'work', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_a', 'aacf84e5d', '2026-07-01T10:00:00.030Z', { structured: true, text: 'launch ok' }),
+      queueOpRec('aacf84e5d', 'completed', '2026-07-01T10:14:32Z', 'enqueue', { tokens: 146111, toolUses: 71, durationMs: 872048 })
+    ]);
+    const a = readAgents(file)![0];
+    assert.strictEqual(a.status, 'done');
+    assert.strictEqual(a.endedAt, '2026-07-01T10:14:32Z');
+    assert.strictEqual(a.tokens, 146111);
+    assert.strictEqual(a.toolUses, 71);
+    assert.strictEqual(a.durationMs, 872048);
+  })) p++; else f++;
+
+  if (test('absorbed mid-turn: attachment.prompt record finishes the agent', () => {
+    const file = fixture([
+      taskRec('toolu_b', 'general-purpose', 'work', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_b', 'bb11', '2026-07-01T10:00:00.030Z', { structured: true, text: 'launch ok' }),
+      attachmentRec('bb11', 'completed', '2026-07-01T10:03:00Z', { tokens: 900, toolUses: 4, durationMs: 179000 })
+    ]);
+    const a = readAgents(file)![0];
+    assert.strictEqual(a.status, 'done');
+    assert.strictEqual(a.endedAt, '2026-07-01T10:03:00Z');
+    assert.strictEqual(a.durationMs, 179000);
+  })) p++; else f++;
+
+  if (test('enqueue + attachment + remove: one resolution, earliest timestamp wins', () => {
+    const file = fixture([
+      taskRec('toolu_c', 'general-purpose', 'work', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_c', 'cc22', '2026-07-01T10:00:00.030Z', { structured: true, text: 'launch ok' }),
+      queueOpRec('cc22', 'completed', '2026-07-01T10:14:50Z', 'enqueue', { tokens: 500, toolUses: 2, durationMs: 890000 }),
+      attachmentRec('cc22', 'completed', '2026-07-01T10:14:55Z', { tokens: 500, toolUses: 2, durationMs: 890000 }),
+      queueOpRec('cc22', 'completed', '2026-07-01T10:14:55Z', 'remove', { tokens: 500, toolUses: 2, durationMs: 890000 })
+    ]);
+    const agents = readAgents(file)!;
+    assert.strictEqual(agents.length, 1);                       // no phantom extra jobs
+    assert.strictEqual(agents[0].status, 'done');
+    assert.strictEqual(agents[0].endedAt, '2026-07-01T10:14:50Z'); // first notify wins
+    assert.strictEqual(agents.filter(x => x.status === 'done').length, 1);
+  })) p++; else f++;
+
+  if (test('absorbed mid-turn but not completed → still running', () => {
+    const file = fixture([
+      taskRec('toolu_d', 'general-purpose', 'work', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_d', 'dd33', '2026-07-01T10:00:00.030Z', { structured: true, text: 'launch ok' }),
+      queueOpRec('dd33', 'running', '2026-07-01T10:05:00Z', 'enqueue')
+    ]);
+    const a = readAgents(file)![0];
+    assert.strictEqual(a.status, 'running');
+    assert.strictEqual(a.endedAt, null);
+  })) p++; else f++;
+
+  if (test('queue-operation carrying no task-notification is ignored', () => {
+    const file = fixture([
+      taskRec('toolu_e', 'general-purpose', 'work', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_e', 'ee44', '2026-07-01T10:00:00.030Z', { structured: true, text: 'launch ok' }),
+      { type: 'queue-operation', operation: 'enqueue', timestamp: '2026-07-01T10:05:00Z', sessionId: 's1', content: 'go check the build' }
+    ]);
+    const agents = readAgents(file)!;
+    assert.strictEqual(agents.length, 1);
+    assert.strictEqual(agents[0].status, 'running');
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

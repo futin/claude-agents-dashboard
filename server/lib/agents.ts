@@ -11,9 +11,12 @@
  *
  *  - Background (async): the immediate `tool_result` is only a launch ack
  *    (`toolUseResult.isAsync` / "Async agent launched … agentId: <hex>"). The
- *    real completion arrives later as a `<task-notification>` user message keyed
- *    by that `<hex>` agentId (not the tool_use_id), carrying
- *    `<status>completed</status>` plus a `<usage>` block with the same metrics.
+ *    real completion arrives later as a `<task-notification>` keyed by that
+ *    `<hex>` agentId (not the tool_use_id), carrying `<status>completed</status>`
+ *    plus a `<usage>` block with the same metrics. That notification is a user
+ *    message only when it lands between turns; landing mid-turn it is absorbed
+ *    into the running turn as message-less `queue-operation` / `attachment`
+ *    records — see `notificationText`.
  *
  * Both are derived from the PARENT transcript alone. The interpretation is split
  * into a pure per-record event parser (`parseRecordEvents`) and a reducer over
@@ -67,6 +70,30 @@ const SUBAGENT_TOKENS_RE = /<subagent_tokens>\s*(\d+)\s*<\/subagent_tokens>/;
 const TOOL_USES_RE = /<tool_uses>\s*(\d+)\s*<\/tool_uses>/;
 const DURATION_MS_RE = /<duration_ms>\s*(\d+)\s*<\/duration_ms>/;
 
+/**
+ * Every place a `<task-notification>` payload can sit, joined for one scan.
+ *
+ * Delivered while the parent is idle it is an ordinary user message. Delivered
+ * while the parent is mid-turn, Claude Code queues it and absorbs it into the
+ * running turn — those records carry NO `message` at all: the payload rides in
+ * a top-level `content` string (`type: "queue-operation"`, enqueue then remove
+ * with `reason: "absorbed_mid_turn"`) and in `attachment.prompt`
+ * (`type: "attachment"`). Reading only `message.content` left such an agent
+ * parked in `byAgentId` forever, reported as running with a duration that never
+ * stopped climbing (bug-11).
+ *
+ * The three records repeat one payload, which costs nothing: `applyEvent` drops
+ * the agentId from `byAgentId` on the first notify, so the repeats are no-ops
+ * and the earliest timestamp — the closest to the real finish — is the one kept.
+ */
+function notificationText(rec: any, content: any): string {
+  let out = contentText(content);
+  if (typeof rec.content === 'string') out += '\n' + rec.content;
+  const prompt = rec.attachment && rec.attachment.prompt;
+  if (typeof prompt === 'string') out += '\n' + prompt;
+  return out;
+}
+
 /** One agent-relevant fact extracted from a transcript record. */
 export type AgentEvent =
   | { kind: 'launch'; id: string; type: string; description: string; ts: string | null }
@@ -90,14 +117,14 @@ function intFromMatch(text: string, re: RegExp): number | null {
  * `readAgents` and the incremental cache.
  */
 export function parseRecordEvents(rec: any): AgentEvent[] {
-  const msg = rec && rec.message;
-  if (!msg) return [];
-  const content = msg.content;
+  if (!rec || typeof rec !== 'object') return [];
+  const content = rec.message ? rec.message.content : undefined;
   const ts = typeof rec.timestamp === 'string' ? rec.timestamp : null;
   const events: AgentEvent[] = [];
 
-  // Background completion: a task-notification user message keyed by agentId.
-  const flat = contentText(content);
+  // Background completion: a task-notification keyed by agentId — and it is not
+  // always a user message, so this scan must run before the `message` guard.
+  const flat = notificationText(rec, content);
   if (flat.includes('<task-notification>')) {
     const idM = flat.match(TASK_ID_RE);
     const stM = flat.match(STATUS_RE);
