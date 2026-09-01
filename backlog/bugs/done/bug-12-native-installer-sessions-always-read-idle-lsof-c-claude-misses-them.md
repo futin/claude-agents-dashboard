@@ -242,8 +242,10 @@ NEW (ps + lsof -p) size=4
 countClaudeProcesses() = 4
 ```
 
-The two native-installer cwds that were missing are now present, and the probe no longer
-disagrees with `countClaudeProcesses()`.
+The two native-installer cwds that were missing are now present. (The set is deduplicated by
+cwd, so its size is not expected to equal `countClaudeProcesses()` in general — several
+sessions can share one directory; the two matched here only because each process sat in its
+own.)
 
 Symptom gone, measured through the real `scanSessions` on live transcripts — the
 native-installer session running in this worktree, mid-turn:
@@ -299,3 +301,49 @@ Not staged or committed — that is the user's call.
 `claude` — that path is designed to fail open and unit-tested at the composer, but never
 exercised against a real such launcher. Also unverified in the browser: only the `scanSessions`
 output was inspected, not the rendered board.
+
+
+## Outcome — review follow-up (2026-09-01)
+
+Code review raised one Important issue against the first pass: the `lsof` catch reused
+`e.stdout` on *any* throw, including the `timeout: 2000` expiry. A timed-out child is killed
+mid-stream, so its stdout is a **truncated** cwd list — and a short live set is exactly what
+marks live sessions dead. `## Fix` step 3 authorised reusing stdout only for a non-zero
+*exit*, and the branch had no test.
+
+Fixed by extracting the decision into a pure exported `usableLsofStdout(err)`
+(`server/lib/scan.ts`), which returns the stdout only when the error carries a numeric
+non-zero `status` **and** no `signal` — lsof warning and exiting 1 on processes it may not
+inspect, having printed the rest. Anything else — killed by timeout, killed by signal, never
+ran (`ENOENT`), or an empty stdout — returns `null` and the gate is skipped. `liveCwds()`'s
+catch is now one line: `lsofOut = usableLsofStdout(e)`.
+
+Two tests cover it. The second one does not fabricate an error object: it runs
+`sh -c 'echo n/a/b; sleep 5'` under a 200ms timeout, asserts the killed child really did write
+stdout first, and then asserts that stdout is discarded — so the error shape is proved against
+node itself.
+
+```
+  ✓ usableLsofStdout: a non-zero exit keeps its stdout, a timeout kill discards it
+  ✓ usableLsofStdout: a real execFileSync timeout is discarded, output and all
+```
+
+Both guards mutation-proved, not just asserted:
+
+- restoring the reviewed bug (deleting both guard lines, reusing stdout on any throw) fails
+  both tests — `'n/a/b\n' !== null`;
+- deleting only `if (e.signal) return null` fails the first test, after adding the case that
+  makes that line load-bearing: `{ status: 1, signal: 'SIGKILL', stdout: 'n/a/b\n' }` → `null`,
+  since a kill reported alongside a status is still a truncation.
+
+Re-verified after the change: `pnpm test` → `18/18 passed` / `ALL PASS`; `pnpm typecheck` →
+`tsc --noEmit`, exit 0, no output; the live probe still recovers the native-installer cwds
+(`OLD size=2` → `NEW size=4`, including this worktree) and this session still reads `working`
+through the real `scanSessions`.
+
+Still not verified, needs a human: a real `lsof` that refuses the pid list on a locked-down or
+non-macOS host (the `ENOENT`/no-status path is unit-tested, never exercised against such a
+host), a real `lsof` slow enough to actually hit the 2s timeout, a future launcher whose `ps`
+comm is not `claude`, and the rendered board in a browser.
+
+Not staged or committed — the orchestrator commits.

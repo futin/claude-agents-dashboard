@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -368,6 +369,33 @@ export function run(): number {
       scan.composeLiveCwds(psOut, 'p111\nfcwd\nn/a/b\np222\nfcwd\nn/c/d\n'),
       new Set(['/a/b', '/c/d'])
     );
+  })) p++; else f++;
+
+  if (test('usableLsofStdout: a non-zero exit keeps its stdout, a timeout kill discards it', () => {
+    // lsof exits 1 on processes it can't inspect but still printed the rest —
+    // that stdout is complete. A timeout kill truncates mid-stream, so its
+    // stdout is a *short* list, and a short live set condemns live sessions.
+    assert.strictEqual(scan.usableLsofStdout({ status: 1, stdout: 'n/a/b\n' }), 'n/a/b\n');
+    assert.strictEqual(scan.usableLsofStdout({ status: 1, stdout: Buffer.from('n/a/b\n') }), 'n/a/b\n');
+    assert.strictEqual(scan.usableLsofStdout({ status: 1, stdout: '' }), null);
+    assert.strictEqual(scan.usableLsofStdout({ status: null, signal: 'SIGTERM', stdout: 'n/a/b\n' }), null);
+    // a kill reported alongside a status is still a kill: truncated, not partial
+    assert.strictEqual(scan.usableLsofStdout({ status: 1, signal: 'SIGKILL', stdout: 'n/a/b\n' }), null);
+    assert.strictEqual(scan.usableLsofStdout({ code: 'ENOENT' }), null);   // lsof not installed
+    assert.strictEqual(scan.usableLsofStdout(undefined), null);
+  })) p++; else f++;
+
+  if (test('usableLsofStdout: a real execFileSync timeout is discarded, output and all', () => {
+    // Proves the error shape assumption against node itself, not a fabricated
+    // object: the child must have written stdout AND then be killed by timeout.
+    let thrown: unknown;
+    try {
+      execFileSync('sh', ['-c', 'echo n/a/b; sleep 5'], { encoding: 'utf8', timeout: 200 });
+      throw new Error('expected the timeout to throw');
+    } catch (e) { thrown = e; }
+    const raw = (thrown as { stdout?: string }).stdout;
+    assert.ok(raw && raw.includes('/a/b'), 'the killed child did write stdout first');
+    assert.strictEqual(scan.usableLsofStdout(thrown), null);
   })) p++; else f++;
 
   if (test('liveness: a worktree session is live on its own cwd, not its parent repo', () => {

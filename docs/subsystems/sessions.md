@@ -201,7 +201,10 @@ shell, not the CLI) still doesn't match. **Granularity is per-cwd** (claude does
 can't be told apart — a dead one there still reads live. Probe is fail-open, returning `null`
 (gate skipped) when `ps` fails, when `ps` matches **no** claude pid at all — an unrecognized
 future launcher must not condemn every session — or when `lsof` yields no cwd. An `lsof` that
-exits non-zero but still printed cwds is used as a partial set. Split into pure
+exits non-zero but still printed cwds is used as a partial set (`usableLsofStdout`) — it warns
+and exits 1 on processes it may not inspect, so that output is complete about a subset. A
+*killed* `lsof` (the 2s timeout, or any signal) is not: its stdout is truncated mid-stream, and
+a short set would mark live sessions dead, so that path fails open too. Split into pure
 `parsePsClaudePids` / `parseLsofCwds` / `composeLiveCwds` so all of that is testable without
 spawning. Injectable via `ScanOptions.liveCwds` for tests; `skipProcScan` also disables it.
 
