@@ -58,7 +58,7 @@ Every gate that can reject the registration runs before `maybeSend`, so you neve
 
 ## 2. The store takes an injected `resolve`, not the response
 
-This is the best decision in the subsystem. [`pending.ts`](../../../../server/lib/pending.ts)
+This is the best decision in the subsystem. [`pending.ts`](../../../../../server/lib/pending.ts)
 imports **no HTTP types at all** — it takes a `(r: WaitResult) => void`:
 
 ```ts
@@ -71,7 +71,7 @@ imports **no HTTP types at all** — it takes a `(r: WaitResult) => void`:
 takes a callback; settling calls it.
 
 **Why:** testability, and reuse. The same shape appears verbatim in
-[`plans.ts`](../../../../server/lib/plans.ts) and [`messages.ts`](../../../../server/lib/messages.ts).
+[`plans.ts`](../../../../../server/lib/plans.ts) and [`messages.ts`](../../../../../server/lib/messages.ts).
 
 **The bad alternative** — store the `ServerResponse` in the entry and call `res.end()` inside
 the store:
@@ -180,10 +180,10 @@ introducing a race. The doc comment is the only guard.
 
 | Store | Held socket? | Verdicts | Distinctive |
 |---|---|---|---|
-| [`pending.ts`](../../../../server/lib/pending.ts) | yes | answered / timeout / dismissed / superseded | `sanitizeQuestions` + `validateAnswer` |
-| [`plans.ts`](../../../../server/lib/plans.ts) | yes | rejected only | accept refused upstream |
-| [`messages.ts`](../../../../server/lib/messages.ts) | yes | + **released** | the 5s idle reaper |
-| [`permissions.ts`](../../../../server/lib/permissions.ts) | **no** | none | display-only, 30min TTL |
+| [`pending.ts`](../../../../../server/lib/pending.ts) | yes | answered / timeout / dismissed / superseded | `sanitizeQuestions` + `validateAnswer` |
+| [`plans.ts`](../../../../../server/lib/plans.ts) | yes | rejected only | accept refused upstream |
+| [`messages.ts`](../../../../../server/lib/messages.ts) | yes | + **released** | the 5s idle reaper |
+| [`permissions.ts`](../../../../../server/lib/permissions.ts) | **no** | none | display-only, 30min TTL |
 
 **Why three modules rather than one generic store:**
 

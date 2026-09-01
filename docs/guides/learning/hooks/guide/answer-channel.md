@@ -79,7 +79,7 @@ takes neither wrapper — `decision` and `reason` at the top level.
 
 **Why the scripts hard-code these rather than sharing a helper:** they were each verified
 against a specific CLI build, and the comments say so —
-[`stop-notify-hook.sh:11-12`](../../../../scripts/stop-notify-hook.sh) records *"the ONLY output
+[`stop-notify-hook.sh:11-12`](../../../../../scripts/stop-notify-hook.sh) records *"the ONLY output
 shape the CLI accepts for a Stop block (verified against 2.1.233)"*. A shared emitter would
 hide which shape was confirmed where, and the shapes have no common structure to factor out
 anyway. Three call sites, three literals, three provenance notes.

@@ -19,7 +19,7 @@ it wins.
 It also uploads your audio to Apple or Google to do that.
 
 That is disqualifying **here specifically**, and the reason is structural rather than
-ideological. From [`.claude/CLAUDE.md`](../../../../.claude/CLAUDE.md):
+ideological. From [`.claude/CLAUDE.md`](../../../../../.claude/CLAUDE.md):
 
 > Backend is zero-runtime-dep by design (only Node built-ins). Keep new deps out of
 > `server/`. It reads from disk and makes exactly **one** kind of outbound call: the ntfy

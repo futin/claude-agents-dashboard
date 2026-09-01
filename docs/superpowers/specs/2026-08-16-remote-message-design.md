@@ -105,7 +105,7 @@ fire on hook-continued turns, so the reason itself must carry the away-mode remi
 ### Auto-release on keyboard return
 
 While the store is non-empty, a 5s interval calls `readIdleSecs()`
-([notify.ts:161](../../server/lib/notify.ts)); when idle < `idleSecs`, every entry
+([notify.ts:161](../../../server/lib/notify.ts)); when idle < `idleSecs`, every entry
 settles as `released` → hooks exit 0 → parked sessions stop within ~5s of you touching
 the keyboard. Guards: unreadable idle (Docker/non-macOS) → never auto-release;
 `idleSecs === 0` → check disabled (matches its "always wait" meaning). The interval is

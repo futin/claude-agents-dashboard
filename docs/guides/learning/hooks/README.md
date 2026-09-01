@@ -51,18 +51,18 @@ are the same mechanism three times.
 
 ## The five scripts
 
-All five live in [`scripts/`](../../../scripts), are symlinked into `~/.claude/hooks/`, and are
+All five live in [`scripts/`](../../../../scripts), are symlinked into `~/.claude/hooks/`, and are
 registered in `~/.claude/settings.json` — **not** in the repo. See
 [Fail-open](./guide/fail-open.md) for why the install deliberately lives outside version
 control.
 
 | Script | Event | Matcher | Blocks? | Purpose |
 |---|---|---|---|---|
-| [`remote-decision-hook.sh`](../../../scripts/remote-decision-hook.sh) | `UserPromptSubmit` | all | no (~1s) | Injects the "route decisions through AskUserQuestion" instruction |
-| [`ask-remote-hook.sh`](../../../scripts/ask-remote-hook.sh) | `PreToolUse` | `AskUserQuestion` | yes, ≤600s | Offer the question to your phone |
-| [`plan-remote-hook.sh`](../../../scripts/plan-remote-hook.sh) | `PermissionRequest` | `ExitPlanMode` | yes, ≤600s | Offer a plan to your phone (reject-only) |
-| [`permission-notify-hook.sh`](../../../scripts/permission-notify-hook.sh) | `PermissionRequest` + `Notification` | all | no (~1s) | Display-only: light up the `allow?` pill |
-| [`stop-notify-hook.sh`](../../../scripts/stop-notify-hook.sh) | `Stop` | all | yes, ≤600s | Hold the finished turn open for a follow-up |
+| [`remote-decision-hook.sh`](../../../../scripts/remote-decision-hook.sh) | `UserPromptSubmit` | all | no (~1s) | Injects the "route decisions through AskUserQuestion" instruction |
+| [`ask-remote-hook.sh`](../../../../scripts/ask-remote-hook.sh) | `PreToolUse` | `AskUserQuestion` | yes, ≤600s | Offer the question to your phone |
+| [`plan-remote-hook.sh`](../../../../scripts/plan-remote-hook.sh) | `PermissionRequest` | `ExitPlanMode` | yes, ≤600s | Offer a plan to your phone (reject-only) |
+| [`permission-notify-hook.sh`](../../../../scripts/permission-notify-hook.sh) | `PermissionRequest` + `Notification` | all | no (~1s) | Display-only: light up the `allow?` pill |
+| [`stop-notify-hook.sh`](../../../../scripts/stop-notify-hook.sh) | `Stop` | all | yes, ≤600s | Hold the finished turn open for a follow-up |
 
 Note what is **absent**: no `PostToolUse`, no `SessionStart`, no `SubagentStop`, no
 `PreCompact`. This project only hooks moments where **a human is about to be asked
@@ -107,7 +107,7 @@ on — but they are separate systems with separate failure modes.
 
 ### "What hooks are used, and where are they wired?"
 
-Five scripts in [`scripts/`](../../../scripts), symlinked into `~/.claude/hooks/`, registered in
+Five scripts in [`scripts/`](../../../../scripts), symlinked into `~/.claude/hooks/`, registered in
 `~/.claude/settings.json`. The table above lists all five with their events and matchers. The
 registration deliberately is **not** in the repo — see
 [Fail-open §7](./guide/fail-open.md#7-the-install-lives-outside-version-control)
@@ -188,29 +188,29 @@ state machine that knows nothing about HTTP.**
 
 **Relevant files**
 
-- [`scripts/ask-remote-hook.sh`](../../../scripts/ask-remote-hook.sh) — the reference
+- [`scripts/ask-remote-hook.sh`](../../../../scripts/ask-remote-hook.sh) — the reference
   implementation of the blocking pattern; read this one first
-- [`scripts/plan-remote-hook.sh`](../../../scripts/plan-remote-hook.sh) — same pattern,
+- [`scripts/plan-remote-hook.sh`](../../../../scripts/plan-remote-hook.sh) — same pattern,
   different output shape, reject-only
-- [`scripts/stop-notify-hook.sh`](../../../scripts/stop-notify-hook.sh) — same pattern plus a
+- [`scripts/stop-notify-hook.sh`](../../../../scripts/stop-notify-hook.sh) — same pattern plus a
   loop and a fallback path
-- [`scripts/permission-notify-hook.sh`](../../../scripts/permission-notify-hook.sh) — the
+- [`scripts/permission-notify-hook.sh`](../../../../scripts/permission-notify-hook.sh) — the
   display-only outlier; deliberately incapable of deciding
-- [`scripts/remote-decision-hook.sh`](../../../scripts/remote-decision-hook.sh) — pure context
+- [`scripts/remote-decision-hook.sh`](../../../../scripts/remote-decision-hook.sh) — pure context
   injection, no HTTP wait
-- [`server/lib/pending.ts`](../../../server/lib/pending.ts) — the state machine the other two
+- [`server/lib/pending.ts`](../../../../server/lib/pending.ts) — the state machine the other two
   wait-stores copy
-- [`server/lib/plans.ts`](../../../server/lib/plans.ts) — same machine, reject-only verdicts
-- [`server/lib/messages.ts`](../../../server/lib/messages.ts) — same machine plus the 5s idle
+- [`server/lib/plans.ts`](../../../../server/lib/plans.ts) — same machine, reject-only verdicts
+- [`server/lib/messages.ts`](../../../../server/lib/messages.ts) — same machine plus the 5s idle
   reaper
-- [`server/lib/permissions.ts`](../../../server/lib/permissions.ts) — flag store, no socket, no
+- [`server/lib/permissions.ts`](../../../../server/lib/permissions.ts) — flag store, no socket, no
   verdict
-- [`server/lib/remoteState.ts`](../../../server/lib/remoteState.ts) — the env gate × UI toggle
+- [`server/lib/remoteState.ts`](../../../../server/lib/remoteState.ts) — the env gate × UI toggle
   product the hooks act on
-- [`server/lib/settings.ts`](../../../server/lib/settings.ts) — the idle/answer values the hooks
+- [`server/lib/settings.ts`](../../../../server/lib/settings.ts) — the idle/answer values the hooks
   read off `/api/health`
-- [`server/lib/notify.ts`](../../../server/lib/notify.ts) — the push policy, and the clearest
+- [`server/lib/notify.ts`](../../../../server/lib/notify.ts) — the push policy, and the clearest
   example of a deliberately inverted fail direction
-- [`server/api.ts`](../../../server/api.ts) — the handlers that hold the sockets
-- [`docs/subsystems/remote-answer.md`](../../../docs/subsystems/remote-answer.md) — the
+- [`server/api.ts`](../../../../server/api.ts) — the handlers that hold the sockets
+- [`docs/subsystems/remote-answer.md`](../../../subsystems/remote-answer.md) — the
   reference doc this guide is the *why* layer for

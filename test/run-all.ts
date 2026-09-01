@@ -57,6 +57,7 @@ import { run as runUsageProfileApi } from './usage-profile-api.test.js';
 import { run as runUsageProfileView } from './usage-profile-view.test.js';
 import { run as runWalkChart } from './walk-chart.test.js';
 import { run as runTokenRefresh } from './token-refresh.test.js';
+import { run as runDocsLinks } from './docs-links.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -117,6 +118,7 @@ failed += runDecodePath();
 failed += runStaticPath();
 failed += runFormat();
 failed += runPanelCollapse();
+failed += runDocsLinks();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

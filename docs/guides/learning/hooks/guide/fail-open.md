@@ -65,7 +65,7 @@ live.
 
 That table spans the set — the `tool_name` row is `plan-remote-hook.sh`'s alone, and the
 non-numeric `idleSecs` row is a default rather than a bail-out.
-[`ask-remote-hook.sh`](../../../../scripts/ask-remote-hook.sh) itself contains **thirteen**
+[`ask-remote-hook.sh`](../../../../../scripts/ask-remote-hook.sh) itself contains **thirteen**
 `exit 0` statements: twelve bail-outs and one success exit after the decision is printed.
 `grep -c 'exit 0' scripts/*-hook.sh` gives 13 / 14 / 12 / 8 / 8 across the five. One path
 through to a decision, a dozen out. The asymmetry *is* the design.
@@ -173,7 +173,7 @@ correct.
 
 ## 7. The install lives outside version control
 
-The scripts are versioned in [`scripts/`](../../../../scripts); the *registration* is in
+The scripts are versioned in [`scripts/`](../../../../../scripts); the *registration* is in
 `~/.claude/settings.json`, which the repo does not ship. The README frames this as the project
 having no config in Claude Code by default — hooks are installed only by the opt-in features
 that need one, and each script's header carries its own four-line install recipe:
@@ -195,7 +195,7 @@ that need one, and each script's header carries its own four-line install recipe
 | `git clone` behaviour | Working dashboard, zero hooks | Blocking hooks in every session, immediately |
 | Blast radius of a bug | Only people who opted in | Anyone who opens the repo |
 | Setup cost | ~4 manual steps per feature | Zero |
-| Discoverability | Needs docs (and has them: [`docs/workflows/`](../../../../docs/workflows)) | Automatic |
+| Discoverability | Needs docs (and has them: [`docs/workflows/`](../../../../workflows)) | Automatic |
 
 Merely opening this repo in Claude Code would otherwise install a hook that can hold a turn
 open for 600 seconds. The trade-off they accepted is a real setup tax — four steps, roughly

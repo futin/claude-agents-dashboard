@@ -150,7 +150,7 @@ export function composeReason(text: string): string {
 `remote-decision-hook.sh` never runs and its injection never happens — this reason string is
 the only vehicle left.
 
-Then [`chat.ts`](../../../../server/lib/chat.ts) mirrors that exact prose in a regex, to unwrap
+Then [`chat.ts`](../../../../../server/lib/chat.ts) mirrors that exact prose in a regex, to unwrap
 the record back into a plain drawer message:
 
 ```ts
@@ -192,7 +192,7 @@ test. The comment is explicit that this is a deliberate fail-closed design:
 ```
 
 Each end carries a pointer to the other — `messages.ts` warns about the regex,
-[`chat.ts:70-71`](../../../../server/lib/chat.ts) notes that *"Both ends are anchored, so any
+[`chat.ts:70-71`](../../../../../server/lib/chat.ts) notes that *"Both ends are anchored, so any
 drift in that prose fails closed."* Both anchored, drift caught by a test, worst case
 cosmetic. That is what makes an otherwise-fragile duplication affordable.
 
