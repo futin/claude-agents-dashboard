@@ -223,6 +223,24 @@ export function composeLiveCwds(psOut: string | null, lsofOut: string | null): S
 }
 
 /**
+ * The stdout of a *failed* `lsof` run, when it can still be trusted.
+ *
+ * A non-zero exit is normal here — lsof warns and exits 1 on processes it may
+ * not inspect, having already printed the ones it could, so that stdout is a
+ * complete answer about a subset. A timeout or signal kill is not: the child was
+ * cut off mid-stream, so its stdout is a *truncated* list, and a truncated live
+ * set marks live sessions dead — the very failure this probe exists to avoid.
+ * Everything but a clean non-zero exit therefore fails open with `null`.
+ */
+export function usableLsofStdout(err: unknown): string | null {
+  const e = (err ?? {}) as { status?: number | null; signal?: string | null; stdout?: string | Buffer };
+  if (typeof e.status !== 'number' || e.status === 0) return null;  // killed, or never ran
+  if (e.signal) return null;
+  const out = typeof e.stdout === 'string' ? e.stdout : e.stdout ? e.stdout.toString('utf8') : '';
+  return out === '' ? null : out;
+}
+
+/**
  * Working directories of every running `claude` CLI process, via `ps` + `lsof`.
  * The transcript records a session's `cwd`; if no live process shares it, the
  * session is dead (closed/cleaned) and cannot be actively working.
@@ -255,10 +273,7 @@ export function liveCwds(): Set<string> | null {
       timeout: 2000
     });
   } catch (e) {
-    // lsof warns and exits 1 on processes it can't inspect but still prints the
-    // ones it could; a partial set beats no gate at all.
-    const stdout = (e as { stdout?: string | Buffer }).stdout;
-    lsofOut = typeof stdout === 'string' ? stdout : stdout ? stdout.toString('utf8') : null;
+    lsofOut = usableLsofStdout(e);
   }
   return composeLiveCwds(psOut, lsofOut);
 }
