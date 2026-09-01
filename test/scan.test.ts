@@ -88,21 +88,41 @@ export function run(): number {
     assert.strictEqual(c.maxSessions, 5);
   })) p++; else f++;
 
-  // bug-4: `.env.example` tells you to copy it verbatim, so every line left
-  // active in it must already BE the default — otherwise the copy silently
-  // changes behaviour. This guards the whole class, not just MAX_SESSIONS.
-  if (test('.env.example active lines match DEFAULTS', () => {
-    const text = fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8');
-    const active = parseEnv(text);
+  // bug-4: a shipped template that restates a default is a second copy of that
+  // default, and copies drift. `.env.example` says to copy it verbatim and
+  // docker-compose.yml ships its `environment:` block as-is, so every literal
+  // either one sets must already BE the default — otherwise using them as
+  // instructed silently changes behaviour. Guards the class, not one knob.
+  const assertMatchesDefaults = (label: string, active: Record<string, string>) => {
     const keys = Object.keys(active);
-    assert.ok(keys.length > 0, '.env.example has no active settings to check');
+    assert.ok(keys.length > 0, `${label} has no active settings to check`);
     keys.forEach(k => {
-      assert.ok(k in DEFAULTS, `.env.example sets ${k}, which has no entry in DEFAULTS`);
+      assert.ok(k in DEFAULTS, `${label} sets ${k}, which has no entry in DEFAULTS`);
       assert.strictEqual(
         active[k], String((DEFAULTS as Record<string, unknown>)[k]),
-        `.env.example ${k}=${active[k]} disagrees with DEFAULTS.${k}`
+        `${label} ${k}=${active[k]} disagrees with DEFAULTS.${k}`
       );
     });
+  };
+
+  if (test('.env.example active lines match DEFAULTS', () => {
+    const text = fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8');
+    assertMatchesDefaults('.env.example', parseEnv(text));
+  })) p++; else f++;
+
+  if (test('docker-compose.yml environment literals match DEFAULTS', () => {
+    const text = fs.readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8');
+    const active: Record<string, string> = {};
+    text.split('\n').forEach(line => {
+      // `- KEY=value` only. Commented lines, bare `- KEY` pass-throughs and
+      // `${...}` interpolations name no literal, so there is nothing to drift.
+      const m = /^\s*-\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+      if (!m || line.trimStart().startsWith('#')) return;
+      const value = m[2].trim();
+      if (value.includes('${') || value === '') return;
+      active[m[1]] = value;
+    });
+    assertMatchesDefaults('docker-compose.yml', active);
   })) p++; else f++;
 
   if (test('loadConfig: skipProcScan defaults to Docker detection, SKIP_PROC_SCAN overrides', () => {

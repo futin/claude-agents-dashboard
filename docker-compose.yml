@@ -5,7 +5,7 @@ services:
       - "4173:4173"
     environment:
       - PORT=4173
-      - MAX_SESSIONS=10
+      - MAX_SESSIONS=5
       # - ACTIVE_WINDOW_MIN=5
       # - LOOKBACK_HOURS=24
       # - SHOW_USAGE=false

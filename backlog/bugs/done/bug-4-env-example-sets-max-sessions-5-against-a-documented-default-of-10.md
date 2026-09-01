@@ -115,3 +115,67 @@ dashboard; the fix is config + docs only.
 item's stated scope (the decision named only `config.ts:92` and `configuration.md:19`), but
 it means a fresh browser still renders 10 rows even though the server default is now 5. Worth
 filing separately.
+
+### Review round — both Important findings fixed (2026-09-01)
+
+Code review returned `fix` with two Important findings. Both were real, and both were the
+same defect this item exists to close, in copies of the default I had not swept:
+
+1. **`docker-compose.yml:8`** — `MAX_SESSIONS=10`. It *agreed* with the default before this
+   commit; changing `DEFAULTS` alone made the shipped compose template the new stale copy.
+   Now `5`.
+2. **`client/src/lib/settings.ts:76`** — `DEFAULT_SETTINGS.maxSessions: 10`. `scanQuery`
+   (line 148) sends it as `?limit=` on *every* poll unconditionally, so a browser with
+   nothing stored overrode the server default rather than inheriting it: the documented `5`
+   would never have been observed by anyone. Now `5`.
+
+This also corrects the "surfaced, not fixed" note above — the client default is fixed, not
+deferred. Nothing needs filing separately.
+
+The guard was generalised rather than duplicated, since the class is "a shipped template
+restates a default and the copy drifts", and `.env.example` was only one instance of it.
+`test/scan.test.ts` now shares one `assertMatchesDefaults(label, active)` helper across two
+cases: `.env.example` (via the real `parseEnv`) and `docker-compose.yml` (its `environment:`
+`- KEY=value` literals, skipping comments, bare pass-throughs and `${...}` interpolations —
+none of those name a literal that can drift). A third case in
+`test/client-settings.test.ts` ties `DEFAULT_SETTINGS.maxSessions` and the `?limit=` a fresh
+browser actually sends to `DEFAULTS.MAX_SESSIONS`, so neither side can move alone. That test
+imports the server's `DEFAULTS` into a client test on purpose, following the existing
+`MODELS matches server/lib/spawn.ts byte-for-byte` precedent — a test-only cross-boundary
+read, no runtime coupling added.
+
+Both new assertions were watched fail before the fix:
+
+```
+$ npx tsx test/scan.test.ts
+  ✗ docker-compose.yml environment literals match DEFAULTS
+    docker-compose.yml MAX_SESSIONS=10 disagrees with DEFAULTS.MAX_SESSIONS
+Passed: 42  Failed: 1
+
+$ npx tsx -e "import('./test/client-settings.test.ts').then(m=>m.run())"
+  ✗ the fresh-browser session cap matches the server default
+    Expected values to be strictly equal:
+  10 passed, 1 failed
+```
+
+After:
+
+```
+$ npx tsx test/scan.test.ts
+Passed: 43  Failed: 0
+
+$ pnpm test
+  ✓ .env.example active lines match DEFAULTS
+  ✓ docker-compose.yml environment literals match DEFAULTS
+  ✓ the fresh-browser session cap matches the server default
+ALL PASS          (1009 passing cases)
+
+$ pnpm typecheck
+> tsc --noEmit
+TC_EXIT=0
+```
+
+**Still not verified.** No container was built or run, so `docker-compose.yml` is proven only
+by the guard test reading it, not by `docker compose up`. No browser was loaded, so the
+fresh-browser `?limit=5` is proven by `scanQuery(DEFAULT_SETTINGS)` in a test rather than
+observed in the UI. Both need a human.

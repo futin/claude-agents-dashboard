@@ -4,6 +4,7 @@ import {
   DEFAULT_SETTINGS, LIMITS, THEMES,
   chatQuery, clampSettings, formatInterval, scanQuery
 } from '../client/src/lib/settings.js';
+import { DEFAULTS } from '../server/lib/config.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -83,6 +84,18 @@ export function run(): number {
     assert.strictEqual(formatInterval(3000), '3s');
     assert.strictEqual(formatInterval(30_000), '30s');
     assert.strictEqual(formatInterval(1500), '1500ms');
+  })) p++; else f++;
+
+  // bug-4: this default is not cosmetic — `scanQuery` sends it as `?limit=` on
+  // every poll, unconditionally, so a browser with nothing stored overrides the
+  // server's own default rather than inheriting it. The two must agree or the
+  // documented server default is never the one anybody sees.
+  if (test('the fresh-browser session cap matches the server default', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.maxSessions, DEFAULTS.MAX_SESSIONS);
+    assert.ok(
+      scanQuery(DEFAULT_SETTINGS).startsWith(`?limit=${DEFAULTS.MAX_SESSIONS}&`),
+      `a fresh browser polls with ${scanQuery(DEFAULT_SETTINGS)}`
+    );
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

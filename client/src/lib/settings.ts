@@ -73,7 +73,7 @@ export const DEFAULT_SETTINGS: Settings = {
   density: 'comfortable',
   fontScale: 100,
   refreshMs: 3000,
-  maxSessions: 10,
+  maxSessions: 5,
   lookbackHours: 24,
   activeWindowMin: 5,
   landing: 'last',
