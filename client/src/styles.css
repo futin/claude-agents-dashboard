@@ -119,7 +119,16 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 /* the accent bar sits on the LEFT edge here — a bottom bar marks position in a
    row, but reads as a divider in a column */
 .rail-link.on{color:var(--ink);background:var(--strip-hi);box-shadow:inset 2px 0 0 var(--cyan),inset 0 1px 0 var(--edge)}
-.main{flex:1;min-width:0;padding:var(--body-pad)}
+/* A phone widens its layout viewport to fit anything that overflows sideways,
+   and `position:fixed` panels are sized against that widened box: the chat
+   drawer's close button and its footer land off the visible screen, with no
+   scroll that reaches them and no scrim to tap, so a deep-linked drawer can only
+   be escaped by reloading (bug-10). Clipping here keeps the document at viewport
+   width whatever a session name or tool id does. `clip` and not `hidden`: it
+   creates no scroll container, so the sticky elements inside still stick, and it
+   has to sit on .main rather than on html, where it does not stop the widening
+   at all (measured). Inner scrollers (.md-pre, .up-tablewrap) keep their own. */
+.main{flex:1;min-width:0;padding:var(--body-pad);overflow-x:clip}
 /* phone: the rail lies down into a scrollable strip above the content, and the
    accent bar goes back to the bottom edge where a row wants it. It stays
    `sticky` — laid down it is a top strip, so it pins to the top edge instead of
@@ -186,7 +195,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .usage .u-fill.mid{background:var(--amber)}
 .usage .u-fill.high{background:var(--red)}
 .usage .u-pct{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink2);min-width:34px;text-align:right;font-family:var(--mono)}
-.usage .u-reset{font-size:10px;color:var(--ink3);white-space:nowrap;flex-shrink:0;font-family:var(--mono)}
+.usage .u-reset{font-size:10px;color:var(--ink3);white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)}
 .usage .u-msg{font-size:11px;color:var(--ink3)}
 /* Time strip: the same bar width, but the axis is the window's clock rather
    than its tokens — elapsed fill, a `now` tick, and the projected-100% tick.
@@ -201,7 +210,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .usage .u-tick.wall-pessimistic{width:1px;background:var(--red);opacity:.45}
 .usage .u-band{position:absolute;top:-2px;height:7px;background:var(--red);opacity:.14}
 .usage .u-time-labels{display:flex;justify-content:space-between;gap:8px;padding-right:42px;font-family:var(--mono);font-size:9px;color:var(--ink3)}
-.usage .u-verdict{white-space:nowrap}
+.usage .u-verdict{white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .usage .u-verdict.wall{color:var(--red)}
 .usage .u-verdict.lasts{color:var(--green)}
 
