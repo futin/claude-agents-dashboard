@@ -189,18 +189,24 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
 
 **Process-liveness gate (overrides the 2×2):** a cleaned/interrupted session's last
 record often has no `end_turn`, so on disk it looks recent + pending = `working` forever
-even though nothing runs. So `scan.ts` `liveCwds()` shells out to
-`lsof -c claude -a -d cwd -Fn` for the set of cwds with a live `claude` CLI process; a
-session whose `projectPath` isn't in that set is forced to `idle`, no matter the
-transcript. `-c claude` is case-sensitive → CLI only, not the capital-`C` `Claude.app`
-shell. **Granularity is per-cwd** (claude doesn't hold the `.jsonl` open and exposes no
-session id in argv/env), so two sessions in the same directory can't be told apart — a
-dead one there still reads live. Probe is fail-open: `null` (no lsof / timeout / error)
-skips the gate. Injectable via `ScanOptions.liveCwds` for tests; `skipProcScan` also
-disables it.
+even though nothing runs. So `scan.ts` `liveCwds()` shells out twice — `ps -Ao pid=,comm=`
+for the pids whose comm ends in `/claude` (or *is* `claude`), then
+`lsof -p <pids> -a -d cwd -Fn` for those pids' cwds; a session whose `projectPath` isn't in
+that set is forced to `idle`, no matter the transcript. The pid list comes from `ps` because
+`lsof -c` matches the *binary's filename*, and the native installer runs a version-named file
+(`~/.local/share/claude/versions/2.1.250`) behind a `claude` symlink — lsof saw `2.1.250`, so
+every session under that installer read dead (bug-12). Capital-`C` `Claude.app` (the desktop
+shell, not the CLI) still doesn't match. **Granularity is per-cwd** (claude doesn't hold the
+`.jsonl` open and exposes no session id in argv/env), so two sessions in the same directory
+can't be told apart — a dead one there still reads live. Probe is fail-open, returning `null`
+(gate skipped) when `ps` fails, when `ps` matches **no** claude pid at all — an unrecognized
+future launcher must not condemn every session — or when `lsof` yields no cwd. An `lsof` that
+exits non-zero but still printed cwds is used as a partial set. Split into pure
+`parsePsClaudePids` / `parseLsofCwds` / `composeLiveCwds` so all of that is testable without
+spawning. Injectable via `ScanOptions.liveCwds` for tests; `skipProcScan` also disables it.
 
 **Docker:** the dashboard container only has its own process namespace —
-`lsof -c claude` inside it can never see the host's real `claude` CLI process, so the
+`ps`/`lsof` inside it can never see the host's real `claude` CLI process, so the
 gate would force every session to `idle` even while genuinely working. `config.ts`
 `isDockerContainer()` detects `/.dockerenv` and defaults `skipProcScan: true` in that
 case (override with `SKIP_PROC_SCAN` env either way); `api.ts` passes

@@ -3,8 +3,10 @@ id: bug-12
 title: Native-installer sessions always read idle: lsof -c claude misses them
 created: 2026-09-01
 tags: server, scan, status
-updated: 2026-09-01T15:51:25Z
+updated: 2026-09-01T19:09:57Z
 groom-elapsed: 95
+started: 2026-09-01T18:59:34Z
+execute-elapsed: 623
 ---
 
 ## Symptom
@@ -202,3 +204,98 @@ Status-chain regression, through `scanSessions` with an injected set (the existi
   refuses the pid list outright (locked-down / non-macOS), and behaviour under a future
   launcher whose `ps` comm is not `claude` — that case is designed to fail open, not proven
   to.
+
+## Outcome
+
+2026-09-01 — Fixed. `liveCwds()` no longer identifies processes by the binary's filename:
+it takes pids from `ps -Ao pid=,comm=` (comm matched against `/(^|\/)claude$/`, the matcher
+`countClaudeProcesses()` already used) and asks `lsof -p <pids> -a -d cwd -Fn` for their cwds.
+Split into three pure exported units — `parsePsClaudePids`, `parseLsofCwds`,
+`composeLiveCwds` — so the logic is testable without spawning; `liveCwds()` is now the thin
+shell that runs the two commands.
+
+Cause re-confirmed live before any change (pid 73008 = this session, native installer):
+
+```
+$ ps -Ao comm= | grep -E '(^|/)claude$' | sort | uniq -c
+   1 /Users/andrejajevtic/.local/bin/claude
+   2 /Users/andrejajevtic/Library/Application Support/Claude/claude-code/2.1.247/claude.app/Contents/MacOS/claude
+   1 claude
+$ lsof -p 73008 -a -d cwd -Fcn
+p73008
+c2.1.250                                    # ← lsof's command name, not "claude"
+fcwd
+n/Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+```
+
+Probe before vs after, run from a scratchpad against the live machine:
+
+```
+OLD (lsof -c claude) size=2
+  old  /Users/andrejajevtic/Documents/custom-projects/backlog-manager
+  old  /Users/andrejajevtic/Documents/custom-projects/backlog-manager/.worktrees/runs-archive
+NEW (ps + lsof -p) size=4
+  new  /Users/andrejajevtic/Documents/custom-projects/backlog-manager
+  new  /Users/andrejajevtic/Documents/custom-projects/backlog-manager/.worktrees/runs-archive
+  new  /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+  new  /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard/.worktrees/bug-12
+countClaudeProcesses() = 4
+```
+
+The two native-installer cwds that were missing are now present, and the probe no longer
+disagrees with `countClaudeProcesses()`.
+
+Symptom gone, measured through the real `scanSessions` on live transcripts — the
+native-installer session running in this worktree, mid-turn:
+
+```
+working     bug-12  /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard/.worktrees/bug-12
+incomplete  claude-agents-dashboard  /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+idle        claude-agents-dashboard  /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+active=1
+```
+
+Red-green proof that the fix is what moved it: the same session re-scanned with the *pre-fix*
+live set injected reads idle again.
+
+```
+OLD-INPUT idle        /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard/.worktrees/bug-12
+OLD-INPUT idle        /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+OLD-INPUT idle        /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+```
+
+`pnpm test` (the three parser/composer tests failed with `scan.parsePsClaudePids is not a
+function` before the implementation existed):
+
+```
+  13 passed, 0 failed
+  ✓ parsePsClaudePids: keeps every launcher whose basename is claude
+  ✓ parseLsofCwds: collects n-lines, normalizes trailing slash, ignores the rest
+  ✓ composeLiveCwds: fails open on ps failure, zero pids, or lsof failure
+  ✓ liveness: a worktree session is live on its own cwd, not its parent repo
+  …
+  18/18 passed
+ALL PASS
+```
+
+`pnpm typecheck` → `tsc --noEmit`, exit 0, no output.
+
+Two deviations from the plan, both deliberate:
+
+- **One extra fail-open case.** The composer also returns `null` when `ps` matched pids but
+  `lsof` named **no** cwd — pids exist, so an empty answer means the probe told us nothing,
+  and an empty set would condemn every session. Covered by a case in the composer test.
+- **`config.ts:174` left as written.** The plan expected it to repeat the case-sensitivity
+  claim; it does not — it already says the gate "shells out to `lsof`/`ps`", which the
+  pid-based probe makes more accurate, not less. `scan.ts`'s doc comment was rewritten, and
+  `docs/subsystems/sessions.md` (§Process-liveness gate + §Docker) now describes the two-step
+  probe and its fail-open cases.
+
+Files changed: `server/lib/scan.ts`, `test/scan.test.ts`, `docs/subsystems/sessions.md`.
+Not staged or committed — that is the user's call.
+
+**Not verified, needs a human:** behaviour where `lsof` refuses the pid list outright
+(locked-down or non-macOS host), and behaviour under a future launcher whose `ps` comm is not
+`claude` — that path is designed to fail open and unit-tested at the composer, but never
+exercised against a real such launcher. Also unverified in the browser: only the `scanSessions`
+output was inspected, not the rendered board.
