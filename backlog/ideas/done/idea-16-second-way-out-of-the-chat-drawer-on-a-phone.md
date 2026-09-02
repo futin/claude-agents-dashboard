@@ -3,6 +3,9 @@ id: idea-16
 title: Second way out of the chat drawer on a phone
 created: 2026-08-31
 tags: ui, chat, mobile
+updated: 2026-09-02T18:44:29Z
+promoted-to: task-14
+groom-elapsed: 100
 ---
 
 ## Problem
