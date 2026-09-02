@@ -3,6 +3,8 @@ id: bug-7
 title: Live sessions read IDLE when lsof cannot see the process or the cwd drifted
 created: 2026-08-28
 tags: sessions, scan, spawn
+updated: 2026-09-02T15:27:18Z
+groom-elapsed: 110
 ---
 
 ## Symptom
@@ -49,56 +51,163 @@ as `…/claude-agents-dashboard/backlog/bugs/open`.
 
 ## Affects
 
-- `server/lib/scan.ts:191` — `liveCwds()` runs `lsof -c claude -a -d cwd -Fn`
-- `server/lib/scan.ts:283` — the `dead` gate: `live !== null && projectPath !== null && !live.has(normCwd(projectPath))`
-- `server/lib/scan.ts:305` — `else if (dead) status = 'idle'`
-- `server/lib/spawn.ts:442` — spawns with `cwd: ref.path`, so a spawned session's *process* cwd is right; only the probe and the transcript reading are wrong
-- `docs/subsystems/sessions.md` — documents per-cwd granularity as the only stated limit of the liveness probe; neither cause below is mentioned
+- `server/lib/transcript.ts:261` — `if (!cwd && typeof rec.cwd === 'string')` inside the
+  **newest-first** scan, so `parsed.cwd` is the *newest* record's cwd
+- `server/lib/transcript.ts:123` — `readTail` is the only read; there is no head read, so a
+  session's launch cwd is not recoverable today
+- `server/lib/scan.ts:346` — `const projectPath = parsed.cwd || null`, the single value that
+  feeds the row label, the Settings project filter *and* the liveness gate
+- `server/lib/scan.ts:362` — the `dead` gate: `live !== null && projectPath !== null && !live.has(normCwd(projectPath))`
+- `server/lib/scan.ts:387` — `else if (dead) status = 'idle'`
+- `server/lib/scan.ts:349` — the `refreshCwd` self-exclusion, which compares the same value
+- `shared/types.ts:42` — `projectPath: string | null`, whose meaning this fix pins down
+- `docs/subsystems/sessions.md:192-209` — the liveness paragraph; `:11-13` — "real path from
+  the transcript's `cwd`"
+- `test/scan.test.ts:401` — "a worktree session is live on its own cwd, not its parent repo",
+  which asserts exact per-cwd matching **on purpose** and must stay green
+
+Line numbers above are as of 2026-09-02 (`main` at `2d1e3d8`); the three `scan.ts` numbers in
+the original capture (191/283/305) predate bug-12.
 
 ## Cause
 
-Two independent causes, either one sufficient on its own. Both verified live, 2026-08-28.
+Two independent causes were captured. **A is already fixed**; B is still live, and the live
+re-measurement below shows B is a different shape than the capture assumed.
 
-**A — `lsof -c claude` matches the kernel process name, and the native installer's binary
-isn't called `claude`.** `~/.local/bin/claude` is a symlink to
-`~/.local/share/claude/versions/2.1.250`, a Mach-O executable whose *filename is the
-version string*. `ucomm` (p_comm) is therefore `2.1.250`, and `lsof -c claude` — a prefix
-match on that name — never sees it. The desktop app's binary
-(`…/claude-code/2.1.247/claude.app/Contents/MacOS/claude`) is literally named `claude`, so
-those sessions pass; that is why the two `backlog-manager` rows were correct in the same
-snapshot. Every native-install session's cwd is silently absent from the live set, the
-`dead` gate fires, and `status` is forced to `idle` regardless of what the transcript says.
-The probe's fail-open contract does not help: it fails open only when `lsof` *errors*, and
-here it exits 0 with a confidently incomplete set.
+**A — FIXED by bug-12, not by this item.** `20e917e fix(scan): identify claude processes by
+pid, not binary filename` (2026-09-01) replaced `lsof -c claude` with `ps -Ao pid=,comm=` →
+`lsof -p <pids> -a -d cwd -Fn`, matching the launcher path's basename instead of p_comm.
+Re-verified live 2026-09-02: the probe now returns all five running pids including
+`~/.local/bin/claude` (pid 31636). The original diagnosis is kept below as the record.
 
-**B — the transcript's `cwd` follows `cd`, the process's does not.** Claude Code stamps
-`cwd` on every record, and a `cd` inside a Bash tool call moves it for the rest of the
-session. `dead` compares that string for exact equality against a set of *process* cwds,
-so the moment a session cd's into a subdirectory its `projectPath` can no longer match any
-live entry — even with cause A fixed, even for a plain terminal session. This also
-mislabels `project`, the row's project pill, and the Settings project filter.
+> `~/.local/bin/claude` is a symlink to `~/.local/share/claude/versions/2.1.250`, a Mach-O
+> executable whose *filename is the version string*. `ucomm` (p_comm) is therefore `2.1.250`,
+> and `lsof -c claude` — a prefix match on that name — never saw it, while the desktop app's
+> binary is literally named `claude` and passed. Every native-install session's cwd was
+> silently absent from the live set, the `dead` gate fired, and `status` was forced to `idle`
+> regardless of the transcript. The probe's fail-open contract did not help: it fails open
+> only when `lsof` *errors*, and there it exited 0 with a confidently incomplete set.
 
-Why it surfaced now rather than earlier: at the moment of the screenshot no other session
-held the repo root as its cwd. Per-cwd granularity (the documented limit) normally *masks*
-both causes — a second session sitting in the same directory makes a mislabelled one read
-live by accident.
+**B — `projectPath` is the newest record's cwd, and the newest cwd is not always the process's
+cwd.** `readTranscript` scans newest-first, so `parsed.cwd` is whatever cwd the *last* record
+carried (`transcript.ts:261`); `scan.ts:346` makes that `projectPath`, and the gate compares it
+for exact string equality against a set of **process** cwds. That comparison has two failure
+directions, not one — and only the first was captured:
+
+- **Shell drift** (the reported repro). A `cd` inside a Bash tool call moves the *transcript's*
+  cwd for the rest of the session; the claude process itself never chdir'd. The launch cwd is
+  the one that matches `lsof`, the newest cwd matches nothing, the gate fires, and the row goes
+  gray while the session works. Verified 2026-09-02 on the exact file named in the repro
+  (`f9388f02-…jsonl`, 218 KB): head record (`type: attachment`) carries
+  `…/custom-projects/claude-agents-dashboard`, newest record carries
+  `…/claude-agents-dashboard/backlog/bugs/open`.
+- **Process drift** (new; the capture missed this). Entering a git worktree mid-session chdir's
+  the claude **process**, so the newest transcript cwd is the correct one and the launch cwd is
+  the stale one. Verified live 2026-09-02: transcript `f4f08da0-…jsonl` has head cwd
+  `…/custom-projects/backlog-manager` and newest cwd
+  `…/backlog-manager/.worktrees/runs-view-redesign`, while `lsof` reports pid 24675's cwd as
+  exactly that worktree path.
+
+So **neither cwd is reliable alone**, which rules out both directions the capture proposed:
+pinning `projectPath` to the first record fixes shell drift and introduces a brand-new false
+IDLE for every process-drift session, and containment matching (live cwd at-or-under
+`projectPath` or vice versa) deliberately breaks `test/scan.test.ts:401` and scales badly
+upward — one claude sitting in `~` would mark every session under it live and make the gate
+useless.
+
+Population measured 2026-09-02 across all 650 transcripts under `~/.claude/projects`:
+
+- 30 (4.6%) have a newest cwd different from their head cwd; **every** one drifts *deeper*, and
+  every drifted tail is a worktree path.
+- 0 of 650 lack a `cwd` in their first 256 KB. Worst case the first cwd-bearing record *ends*
+  at byte 7,811 (p99 7,323, median 5,191) — it is always the head `attachment` record.
+- 445 of 650 exceed the 256 KB tail window, so for most files the launch cwd cannot be
+  recovered from the bytes the tail read already decoded.
+
+Why the bug surfaced when it did: at the moment of the screenshot no other session held the
+repo root as its cwd. Per-cwd granularity (the documented limit) normally *masks* the defect —
+a second session sitting in the same directory makes a mislabelled one read live by accident.
 
 ## Fix
 
-Not settled — needs grooming. Candidate directions, each verified as feasible but not
-chosen:
+Give every session **two** cwd keys and treat either one matching as proof of life. Fixes both
+drift directions without widening the gate to whole subtrees.
 
-- **A.** Stop matching on the command name. Either resolve `config.claudeBin` to its real
-  filename and pass that to `-c` as well, or drop `-c` and filter `lsof -d cwd` output by
-  argv/binary path, or replace the probe with `ps -Ao pid,args` + `lsof -p <pids>` so the
-  match is on the executable path rather than p_comm. Cost matters: the probe runs on
-  every 3s poll with a 2s timeout.
-- **A′.** Track spawned children directly — `server/lib/spawn.ts` already holds the child
-  pid, so a dashboard-spawned session could contribute its own liveness without any probe.
-  Fixes the reported case only; terminal sessions on the native install stay broken.
-- **B.** Compare cwds by containment, not equality (a live cwd at or under the recorded
-  `projectPath`, or vice versa), or pin `projectPath` to the *first* record's cwd rather
-  than the newest so `cd` cannot move it.
+**1. `server/lib/transcript.ts` — expose the launch cwd.**
 
-Both must be fixed for the reported row to go green; each alone leaves the other's repro
-failing.
+- Add a `readHead(filePath, headBytes)` beside `readTail`, same shape and same
+  read-what-exists tolerance.
+- Add `originCwd: string | null` to `ParsedTranscript`: the cwd of the **oldest** record that
+  carries a string `cwd`, i.e. where the session was launched.
+- Resolve it without paying for a second read when one isn't needed: when the tail window
+  already started at byte 0 the oldest line in the tail *is* the first record, so scan the
+  already-decoded lines forward instead of touching the disk. Only a truncated tail
+  (`tail.truncated`) triggers a head read.
+- Head window: **16 KB** — a little over 2× the worst case measured above. If no record in that
+  window carries a `cwd`, `originCwd` is `null` (fail open, see step 2), not a guess.
+- Memoize per file path — a transcript's launch cwd never changes, and the scan re-reads every
+  session every 3 s. Entry holds the resolved value plus the file size it was established at;
+  drop the entry when the file has **shrunk**, which means rotation or truncation. This is the
+  same invalidation rule `title-cache.ts:137-139` already uses, for the same reason.
+- Add test seams mirroring `resetTitleCache` / `titleCacheStats`: a cache reset and a counter of
+  head reads actually performed.
+
+**2. `server/lib/scan.ts` — one label key, two liveness keys.**
+
+- `projectPath` (and therefore `project`, the pill and the Settings filter) becomes
+  `parsed.originCwd ?? parsed.cwd` — the launch directory, which is the session's stable
+  identity and never a fragment like `open` or `bugs`.
+- The `dead` gate matches on **either** key: a session is dead only when the live set is
+  non-null, at least one key is non-null, and *neither* `originCwd` nor `parsed.cwd` (both
+  through `normCwd`) is in the live set. Keep today's fail-open shape: both keys null ⇒ not
+  dead.
+- Still exact equality per key. No containment, no prefix matching — per-cwd granularity stays
+  the documented limit and `test/scan.test.ts:401` stays green unmodified.
+- Leave the `refreshCwd` self-exclusion at `:349` comparing `projectPath`. The token-refresh
+  session never cd's, so its origin and newest cwd are identical and behaviour is unchanged.
+- No new API field. The client reads `project`, never `projectPath` (verified: zero references
+  in `client/src`), so `shared/types.ts:42` needs only its doc comment tightened to say
+  *launch* cwd.
+
+**Assumption flagged, not asked** (the user was away when this was groomed): step 2 changes one
+user-visible label. A session that *entered* a worktree mid-session will show the parent repo in
+its pill and group under the parent repo in the filter, instead of the worktree directory it
+shows today. Sessions **launched** in a worktree — every dashboard/orchestrator spawn, since
+`spawn.ts` passes `cwd: ref.path` — are unaffected, because their origin *is* the worktree. If
+that trade is unwanted, the narrower variant is: leave `projectPath` on `parsed.cwd` and use the
+two-key OR for the gate only. That still fixes the IDLE symptom, and leaves the garbage `open`
+pill from the repro in place.
+
+**3. `docs/subsystems/sessions.md`.** The liveness paragraph (`:192-209`) gains the two-key
+match and *why* both keys are needed — shell drift moves the transcript, process drift moves the
+process — plus the head-read memo. The row-label bullet (`:11-13`) changes from "real path from
+the transcript's `cwd`" to the transcript's *first* `cwd`. Both statements are currently drift.
+
+**4. Test cases.** `test/transcript.test.ts`:
+
+1. Tail-truncated fixture, head cwd `/a/repo`, newest cwd `/a/repo/sub` ⇒ `originCwd === '/a/repo'` and `cwd === '/a/repo/sub'`.
+2. No-drift fixture ⇒ `originCwd === cwd`.
+3. Fixture whose first 16 KB of records carry **no** `cwd` ⇒ `originCwd === null`.
+4. Memo: two `readTranscript` calls on the same path ⇒ head-read count `1`; append records and re-read ⇒ still `1`; rewrite the file **smaller** and re-read ⇒ `2`.
+5. Whole file inside the tail window ⇒ `originCwd` resolved with head-read count `0`.
+
+`test/scan.test.ts` (all four via injected `liveCwds`, fixture: origin `/a/repo`, newest `/a/repo/backlog/bugs/open`, recent + unfinished turn):
+
+6. The reported repro — `liveCwds: new Set(['/a/repo'])` ⇒ `status === 'working'`, `projectPath === '/a/repo'`, `project === 'repo'`. Today: `idle` and `open`.
+7. The process-drift mirror — `liveCwds: new Set(['/a/repo/backlog/bugs/open'])` ⇒ `status === 'working'`.
+8. Genuinely dead and drifted — `liveCwds: new Set(['/a/other'])` ⇒ `status === 'idle'`. Proves the OR didn't turn the gate into a no-op.
+9. Head miss — `originCwd === null`, `liveCwds` holding only the newest cwd ⇒ `status === 'working'` and `projectPath` = the newest cwd. The fail-open path is exactly today's behaviour.
+10. `test/scan.test.ts:401` runs unmodified and green.
+
+**Acceptance bar (mutation).** Remove the origin key from the gate ⇒ case 6 must fail. Remove
+the newest key ⇒ case 7 must fail. If either mutation leaves `pnpm test` green, the tests do not
+prove the fix and are not done. Verify with `pnpm test` and `pnpm typecheck`, and quote the
+output.
+
+`In the browser (playwright MCP tools):` from the worktree run `pnpm build` (a fresh worktree
+has no `client/dist`) then `pnpm dev` on ports 4273/5273, and open
+`http://localhost:5273`. In a Bash tool call run `cd backlog && pwd` so this session's own
+transcript cwd drifts one level below its launch cwd, then reload the Sessions view and find
+this session's row: while its turn is mid-flight the dot must be green **WORKING** and the
+project label must read the launch directory's basename (the worktree dir), not `backlog`.
+Before the fix the same row reads gray **IDLE** with the label `backlog`.
