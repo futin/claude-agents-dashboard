@@ -1,6 +1,6 @@
 #!/bin/bash
 # remote-decision-hook.sh — UserPromptSubmit hook: when the dashboard is
-# accepting phone answers AND this session runs in an auto-ish permission mode,
+# accepting remote answers AND this session runs in an auto-ish permission mode,
 # tell the model to route every decision through AskUserQuestion.
 #
 # Why: a plain-text question ("should I proceed?") is invisible to someone away
@@ -82,7 +82,7 @@ fi
 
 # Injected as context for this turn (UserPromptSubmit stdout on exit 0).
 cat <<'EOF'
-REMOTE DECISION MODE — the dashboard is accepting phone answers and this session
+REMOTE DECISION MODE — the dashboard is accepting remote answers and this session
 runs without permission prompts. The user may be away from the terminal: they can
 answer the AskUserQuestion tool from their phone, but they cannot read a
 plain-text question or approve a plan card. Therefore, for this session:

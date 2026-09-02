@@ -3,6 +3,9 @@ id: task-9
 title: Rename the feature to "remote answers" in every user-facing string
 created: 2026-09-01
 from: idea-11
+started: 2026-09-02T11:59:07Z
+phase: execute
+updated: 2026-09-02T11:59:07Z
 ---
 
 ## Goal
@@ -180,6 +183,15 @@ produce nonsense like "buzzes the remote" and "a remote propped on the desk".
     label is two characters longer than the old one, and the toolbar is the tightest layout in
     the app. If it wraps or clips, the fix is a CSS adjustment in the `ra-pill` block of
     `client/src/styles.css`, not a shorter label; the label was chosen deliberately.
+
+
+**Pre-flight note from the orchestrator (environment fact, not a plan change).**
+Ports **5174 and 4173 are already occupied** by the user's own long-running dashboard
+servers, which serve the *main* working tree — not this worktree. Do not kill, restart or
+reuse them. For test cases 8–10, start this worktree's own dev server on a free port
+(for example `pnpm dev -- --port 5274`) and point the browser at that port instead of
+5174. Verifying against 5174 would screenshot the main tree's build and prove nothing
+about this branch. Report the port you actually used in the `## Outcome`.
 
 ## Done when
 

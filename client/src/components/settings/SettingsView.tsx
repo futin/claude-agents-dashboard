@@ -257,7 +257,7 @@ export default function SettingsView() {
 
       <SettingsGroup title="Remote answers · every device">
         <SettingsRow
-          name="Phone answers"
+          name="Remote answers"
           hint={
             remote.state && !remote.state.available
               ? <>Disabled by <code>REMOTE_ANSWER=false</code> in the server config — a UI toggle can’t override the kill switch.</>
