@@ -3,6 +3,9 @@ id: idea-18
 title: Distinguish a ledger that did not exist yet from a recorder that missed minutes
 created: 2026-09-01
 tags: usage, server, analytics
+updated: 2026-09-02T18:44:44Z
+promoted-to: task-15
+groom-elapsed: 148
 ---
 
 ## Problem
