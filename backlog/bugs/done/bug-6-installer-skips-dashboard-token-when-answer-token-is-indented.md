@@ -125,7 +125,7 @@ Add `tokenRequired: config.answerToken !== ''` to `serveHealth` (server/api.ts:4
 to the `/api/health` shape in `shared/types.ts`. This leaks nothing a 403 does not
 already announce. Then in scripts/remote-decision-hook.sh, after the health probe at
 line 56: if `.tokenRequired` is true and `~/.claude/hooks/dashboard-token` is absent,
-do not print the "dashboard is accepting phone answers" banner — print a one-line
+do not print the "dashboard is accepting remote answers" banner — print a one-line
 notice that the token file is missing instead. The banner's claim then matches the
 write path it is actually describing.
 

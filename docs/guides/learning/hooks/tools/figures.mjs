@@ -171,7 +171,7 @@ function figTurn() {
     [2, 1, 'block+reason, or exit 0']
   ];
   const { width, height, svg } = sequence('turn', parts, msgs, { colW: 152, step: 33 });
-  const t = 'One turn: UserPromptSubmit injects context, PreToolUse holds for a phone answer, Stop holds again at the end';
+  const t = 'One turn: UserPromptSubmit injects context, PreToolUse holds for a remote answer, Stop holds again at the end';
   return {
     title: t,
     caption: 'The two held POSTs are the blocking hooks. Everything else returns in about a second.',

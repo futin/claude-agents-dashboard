@@ -49,7 +49,7 @@ curl -s localhost:4173/api/health
 ```
 
 `{"ok":true,...,"remoteAnswer":true}` means the hook will engage — if `remoteAnswer` is
-false, check the **phone answers** pill in the toolbar and `REMOTE_ANSWER` in your
+false, check the **remote answers** pill in the toolbar and `REMOTE_ANSWER` in your
 config. Then drive the hook itself (`IDLE_SECS=0` forces the away branch, 20s window):
 
 ```bash
