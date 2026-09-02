@@ -585,9 +585,35 @@ behind. Five decisions carry it:
   accepted is under `SPLIT_RANK_TOL` (1e-3 of its own unit length) carries no
   information the fit does not already have — and every other model keeps its
   answer.
+- **A cross-model conditioning floor, because neither other gate looks across
+  models.** `SPLIT_MAX_R2` compares a model's own two columns and says nothing
+  about model A's tokens against model B's; `SPLIT_RANK_TOL` is the *numerical*
+  floor the solve needs, and a residual of 1e-3 is r² ≈ 0.999999, so it only
+  fires on columns collinear to six decimal places. Between them lies a wide
+  band where the solve is severely ill-conditioned, nothing fires, and every
+  model is published `fitted`. Measured at r²(A_tok, B_tok) = 0.99998, two
+  models generated from 0.500 and 1.200 pt/Mtok came back 0.66 and 1.00 — the
+  cross-model ratio wrong by 1.6x, which is exactly the comparison this feature
+  exists to make. So `SPLIT_MIN_INDEPENDENT_SHARE` (0.1, the same variance
+  inflation of 100 the r² ceiling encodes) refuses any model whose least
+  independent column survives less than a tenth of itself once **every other**
+  column is projected out. Symmetric on purpose: measured only against the
+  columns offered earlier, the *first* of a collinear pair is published while
+  only the second is caught — and if the second is dropped from the solve
+  instead, the first silently absorbs its utilization and is published further
+  from the truth than before. `SplitDiagnostic.independentShare` reports it. On
+  this machine's real data every model sits at 0.22-0.999, so the floor is not
+  live today; it is the guard `DOMINANCE` provides for the pooled rate and the
+  two-term fit otherwise had nothing in place of.
 - **Floors and separability.** `SPLIT_FLOORS` is 20 intervals **and** 10
-  cumulative percentage points — twice `CURRENT_FLOORS` on both, for twice the
-  parameters, and nothing cleverer. Separately, a model whose two regressors
+  cumulative percentage points, twice `CURRENT_FLOORS`' numbers for twice the
+  parameters. Note it is **not** twice the evidence: these count every interval
+  the model spent anything in, where `CURRENT_FLOORS` counts only intervals it
+  *owns*, so the gate is looser than the doubling suggests (measured, fable-5
+  clears it at 86 intervals / 100.0 points while its owned evidence is 16 /
+  17.0). That is intended — a joint fit genuinely draws information from
+  co-occurrence, which is the point of reading `mixed` at all — but the two
+  numbers are not comparable. Separately, a model whose two regressors
   have uncentered r² above `SPLIT_MAX_R2` (0.99, a variance inflation of 100) is
   not offered a request column at all — uncentered because a fit with no
   intercept is collinear precisely when one column is a scalar multiple of the
@@ -603,8 +629,9 @@ behind. Five decisions carry it:
   output.
 
 `SplitDiagnostic` reports the reasoning for every model whether it fitted or
-not — `collinear`, `thin-evidence`, `unidentified` or `negative`, plus the raw
-signed coefficients. The raw pair is diagnostic only and nothing surfaces it;
+not — `collinear`, `thin-evidence`, `unidentified` or `negative`, plus its
+`independentShare` and the raw signed coefficients. `unidentified` covers both
+an exactly dependent column and one merely too near the span of the others. The raw pair is diagnostic only and nothing surfaces it;
 `scripts/probe-usage-split.ts` needs it to say *which* term came back
 impossible, because that is the difference between "the model is missing a term"
 and "this data cannot see the term".
@@ -624,6 +651,15 @@ and the thing it was built to explain is still unexplained; that finding belongs
 to `bug-13`, not to a new number on the card. (The logs keep growing, so a
 re-run moves these figures in the last digit or two; the direction is the
 finding, not the decimals.)
+
+⚠️ **But the probe has never seen a live-recorded count.** `--reconstruct`
+dedups `message.id` globally over whole transcripts while the recorder dedups
+per transcript from a byte cursor, and measured on the real transcripts 263 of
+5614 assistant turn ids in the last four days appear in more than one file — so
+the reconstruction under-counts requests by roughly 4.5%, unevenly across ticks.
+Re-run `pnpm probe:usage-split` after a day of real recording and re-confirm the
+refutation against recorded counts before acting on it. The full caveat list is
+in `backlog/tasks/done/task-10-*.md` under *Not verified*.
 
 ### The endpoint and the card
 

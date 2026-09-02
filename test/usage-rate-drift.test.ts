@@ -9,6 +9,7 @@ import {
   RAW_SHIFT_PCT,
   SPLIT_FLOORS,
   SPLIT_MAX_R2,
+  SPLIT_MIN_INDEPENDENT_SHARE,
   SPLIT_RANK_TOL,
   baselineRange,
   currentRange,
@@ -119,6 +120,53 @@ function splitSeries(count: number, model = 'A', kind?: Interval['kind']): Inter
 }
 
 const FIT_FROM = NOW - DAY;
+
+/** A seeded LCG, so every fixture below is the same run to run. */
+function lcg(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4_294_967_296;
+  };
+}
+
+/** The truth `coupledPair` generates its utilization from, per model. */
+const PAIR_TRUTH = {
+  A: { perMTok: 0.5, perRequest: 0.02 },
+  B: { perMTok: 1.2, perRequest: 0.03 }
+};
+
+/**
+ * `count` **mixed** intervals in which two models are always used together,
+ * with B's token column tied to A's by `coupling` — 0 independent, 1 an exact
+ * multiple.
+ *
+ * The noise is what makes this a real test: with exact data even a hopelessly
+ * ill-conditioned system reproduces the coefficients it was generated from, so
+ * a noiseless fixture would prove nothing about conditioning at all.
+ */
+function coupledPair(coupling: number, count = 200): Interval[] {
+  const rand = lcg(20260902);
+  return Array.from({ length: count }, (_, i) => {
+    const aTok = 0.5 + rand() * 2.5;
+    const independent = 0.4 + rand() * 1.6;
+    const bTok = coupling * (0.8 * aTok) + (1 - coupling) * independent;
+    const aReq = 20 + Math.round(rand() * 120);
+    const bReq = 15 + Math.round(rand() * 90);
+    const noise = (rand() - 0.5) * 0.3;
+    const toT = NOW - (i + 1) * MIN;
+    return {
+      fromT: toT - MIN,
+      toT,
+      dUtil: PAIR_TRUTH.A.perMTok * aTok + PAIR_TRUTH.A.perRequest * aReq
+        + PAIR_TRUTH.B.perMTok * bTok + PAIR_TRUTH.B.perRequest * bReq + noise,
+      tok: { A: wtok(aTok * 1_000_000), B: wtok(bTok * 1_000_000) },
+      req: { A: aReq, B: bReq },
+      reqUsable: true,
+      kind: 'mixed'
+    };
+  });
+}
 
 export function run(): number {
   console.log('\n=== usage-rate.ts (rates + drift) ===\n');
@@ -273,6 +321,79 @@ export function run(): number {
     assert.deepStrictEqual(SPLIT_FLOORS, { minIntervals: 20, minUtil: 10 });
     assert.strictEqual(SPLIT_MAX_R2, 0.99);
     assert.strictEqual(SPLIT_RANK_TOL, 1e-3);
+    assert.strictEqual(SPLIT_MIN_INDEPENDENT_SHARE, 0.1);
+  })) p++; else f++;
+
+  if (test('MUTATION: two models used together are refused, not published wrong', () => {
+    // The failure this whole feature exists to avoid: two models always used
+    // together, neither own-r² nor the rank tolerance firing, and a *confident*
+    // cross-model ratio published off the back of an ill-conditioned solve.
+    const ill = coupledPair(0.99);
+    const found = explainSplits(ill, FIT_FROM, NOW);
+    const a = found.find(d => d.model === 'A');
+    const b = found.find(d => d.model === 'B');
+    assert.ok(a && b, 'both models must be diagnosed');
+
+    // Neither existing gate sees this: each model's own token-vs-request r² is
+    // far under the ceiling, and both columns survive the rank pass.
+    assert.ok(a.r2 < SPLIT_MAX_R2, `A own r² was ${a.r2}`);
+    assert.ok(b.r2 < SPLIT_MAX_R2, `B own r² was ${b.r2}`);
+    assert.ok(a.raw && b.raw, 'both were in the solve — this is not rank deficiency');
+
+    // The mutation, run rather than asserted about: `raw` is exactly what a
+    // build with no conditioning guard would have published on these two rows.
+    const aErr = Math.abs(a.raw.pctPerMWeighted - PAIR_TRUTH.A.perMTok) / PAIR_TRUTH.A.perMTok;
+    const bErr = Math.abs(b.raw.pctPerMWeighted - PAIR_TRUTH.B.perMTok) / PAIR_TRUTH.B.perMTok;
+    assert.ok(aErr > 0.25, `A must be badly wrong unguarded, was off ${(aErr * 100).toFixed(0)}%`);
+    assert.ok(bErr > 0.1, `B must be wrong unguarded, was off ${(bErr * 100).toFixed(0)}%`);
+    const trueRatio = PAIR_TRUTH.A.perMTok / PAIR_TRUTH.B.perMTok;
+    const rawRatio = a.raw.pctPerMWeighted / b.raw.pctPerMWeighted;
+    assert.ok(rawRatio / trueRatio > 1.4,
+      `the unguarded cross-model ratio must be materially wrong: ${rawRatio.toFixed(3)} vs ${trueRatio.toFixed(3)}`);
+
+    // The guard: nothing is published, and the reason is named.
+    assert.strictEqual(a.refusal, 'unidentified');
+    assert.strictEqual(b.refusal, 'unidentified');
+    assert.strictEqual(a.fit, null);
+    assert.strictEqual(b.fit, null);
+    assert.strictEqual(fitSplits(ill, FIT_FROM, NOW).size, 0, 'no row may carry a coefficient here');
+    assert.ok(a.independentShare < SPLIT_MIN_INDEPENDENT_SHARE, `A share ${a.independentShare}`);
+    assert.ok(b.independentShare < SPLIT_MIN_INDEPENDENT_SHARE, `B share ${b.independentShare}`);
+  })) p++; else f++;
+
+  if (test('the survivor of a dropped column is refused too, not left absorbing it', () => {
+    // At this coupling the rank pass does drop one of the two token columns —
+    // and whoever is left has quietly absorbed the other model's utilization,
+    // so a guard that only measured columns against *earlier* ones would
+    // publish it. Measured unguarded: 1.46 pt/Mtok against a truth of 0.50.
+    const found = explainSplits(coupledPair(0.999), FIT_FROM, NOW);
+    const dropped = found.filter(d => d.raw === null);
+    assert.strictEqual(dropped.length, 1, 'exactly one model should lose a column to the rank pass');
+    const survivor = found.find(d => d.raw !== null);
+    assert.ok(survivor?.raw);
+    const err = Math.abs(survivor.raw.pctPerMWeighted - PAIR_TRUTH.A.perMTok) / PAIR_TRUTH.A.perMTok;
+    assert.ok(err > 0.5, `the survivor must be badly wrong unguarded, was off ${(err * 100).toFixed(0)}%`);
+    assert.strictEqual(survivor.refusal, 'unidentified', 'and it must be refused all the same');
+    assert.strictEqual(fitSplits(coupledPair(0.999), FIT_FROM, NOW).size, 0);
+  })) p++; else f++;
+
+  if (test('the same fixture without the coupling fits both models', () => {
+    // The complement, so the refusal above is about conditioning and not about
+    // the noise, the interval count or the `mixed` kind.
+    const fine = coupledPair(0);
+    const fits = fitSplits(fine, FIT_FROM, NOW);
+    for (const [model, truth] of Object.entries(PAIR_TRUTH)) {
+      const fit = fits.get(model);
+      assert.ok(fit, `${model} must fit when its columns are independent`);
+      const tokErr = Math.abs(fit.pctPerMWeighted - truth.perMTok) / truth.perMTok;
+      const reqErr = Math.abs(fit.pctPerRequest - truth.perRequest) / truth.perRequest;
+      assert.ok(tokErr < 0.02, `${model} token term off by ${(tokErr * 100).toFixed(2)}%`);
+      assert.ok(reqErr < 0.02, `${model} request term off by ${(reqErr * 100).toFixed(2)}%`);
+    }
+    for (const d of explainSplits(fine, FIT_FROM, NOW)) {
+      assert.ok(d.independentShare > SPLIT_MIN_INDEPENDENT_SHARE * 2,
+        `${d.model} share ${d.independentShare} should clear the floor comfortably`);
+    }
   })) p++; else f++;
 
   if (test('each refusal is named, and named the most informative way', () => {

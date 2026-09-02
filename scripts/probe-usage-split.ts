@@ -34,7 +34,8 @@ import { readRecentSamples, repoRoot } from '../server/lib/usage-history.js';
 import { rawTokens, readLedgerSince, weightedTokens } from '../server/lib/usage-ledger.js';
 import type { LedgerLine } from '../server/lib/usage-ledger.js';
 import {
-  SPLIT_FLOORS, SPLIT_MAX_R2, currentRange, explainSplits, joinIntervals, rateFor
+  SPLIT_FLOORS, SPLIT_MAX_R2, SPLIT_MIN_INDEPENDENT_SHARE,
+  currentRange, explainSplits, joinIntervals, rateFor
 } from '../server/lib/usage-rate.js';
 import type { RateFloors } from '../server/lib/usage-rate.js';
 
@@ -219,9 +220,11 @@ function main(): number {
   // "thin" is not a finding, and which gate refused is the whole diagnosis.
   const diagnostics = explainSplits(intervals, cur.sinceMs, cur.untilMs);
   const splits = new Map(diagnostics.filter((d) => d.fit).map((d) => [d.model, d.fit!]));
-  console.log(`\n  two-term fit (floors ${SPLIT_FLOORS.minIntervals}/${SPLIT_FLOORS.minUtil}, r² ceiling ${SPLIT_MAX_R2}):`);
+  console.log(`\n  two-term fit (floors ${SPLIT_FLOORS.minIntervals}/${SPLIT_FLOORS.minUtil},`
+    + ` r² ceiling ${SPLIT_MAX_R2}, independent share ≥ ${SPLIT_MIN_INDEPENDENT_SHARE}):`);
   for (const d of diagnostics) {
-    const evidence = `r²=${d.r2.toFixed(4)}, ${d.intervals} intervals, ${d.utilSum.toFixed(1)} pts`;
+    const evidence = `r²=${d.r2.toFixed(4)}, share=${d.independentShare.toFixed(4)}`
+      + `, ${d.intervals} intervals, ${d.utilSum.toFixed(1)} pts`;
     if (!d.fit) {
       const raw = d.raw
         ? `, least squares wanted tok=${d.raw.pctPerMWeighted.toFixed(4)} pt/Mtok`

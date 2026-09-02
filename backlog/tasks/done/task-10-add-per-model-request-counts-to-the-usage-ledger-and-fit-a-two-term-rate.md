@@ -381,3 +381,147 @@ thing that makes the card comparable across models.
   ceiling would refuse opus too.
 - **Nothing was committed or staged.** Working tree left as-is: 12 modified files plus
   the new `scripts/probe-usage-split.ts`.
+
+## Outcome — review fix (2026-09-02)
+
+Review verdict was **fix**, one Important finding: `explainSplits` had no cross-model
+conditioning guard, so two models always used together could both be published
+`splitVerdict: 'fitted'` with materially wrong coefficients — and an inverted
+cross-model per-token ratio, which is the exact comparison this task exists to enable.
+
+### Why neither existing guard covered it
+
+- `SPLIT_MAX_R2` (0.99) compares a model's **own** token column against its **own**
+  request column. It says nothing about model A's tokens against model B's.
+- `SPLIT_RANK_TOL` (1e-3) is the *numerical* floor the QR solve needs. A unit-normed
+  residual of 1e-3 is r² ≈ 0.999999, so it only ever fires on columns collinear to six
+  decimal places.
+
+Between them sat a wide band — r² ≈ 0.99 to 0.999999 — where the solve is severely
+ill-conditioned, no gate fires, and every model is reported `fitted`.
+
+### The fix
+
+**New constant `SPLIT_MIN_INDEPENDENT_SHARE = 0.1`** (`server/lib/usage-rate.ts`). A
+model is refused as `unidentified` when its least independent column survives less than
+a tenth of its own length after projecting out **every other** column in the design.
+0.1 is a variance inflation of 100 — the same the r² ceiling is documented as encoding,
+so the three thresholds now agree on what "too dependent" means.
+
+Two supporting changes:
+
+- `project()` factored out of `leastSquares`, and a new `independentShares()` that
+  Gram-Schmidts each column against **all** the others, not just the ones offered
+  earlier. The asymmetry mattered: measured only against earlier columns, the *first*
+  of a collinear pair is published while only the second is caught, and if the second
+  is instead dropped by the rank pass, the first silently absorbs its utilization and
+  is published *further* from the truth. Columns the solve itself dropped stay in the
+  basis for exactly that reason.
+- `SplitDiagnostic.independentShare` reports the measure, so the refusal is legible;
+  `scripts/probe-usage-split.ts` prints it beside r².
+
+`unidentified` now covers both an exactly dependent column and one merely too near the
+span of the others — one refusal reason for one continuum, with `SPLIT_RANK_TOL` left
+as a purely numerical floor. No existing refusal, threshold or test was changed, and
+`rawPerPct` / `weightedPerPct` / `deviationPct` / `verdict` are still the untouched
+`driftRow` path.
+
+### The guard, mutation-proved
+
+Three cases added to `test/usage-rate-drift.test.ts`, on a seeded-LCG fixture of 200
+`mixed` intervals where two models are always used together (truth A = 0.5 pt/Mtok +
+0.02 pt/request, B = 1.2 + 0.03, B's token column coupled to A's, ±0.15 noise on
+`dUtil` — noise is load-bearing, since an exact fixture reproduces its own coefficients
+however ill-conditioned the system is):
+
+- `MUTATION: two models used together are refused, not published wrong` — asserts both
+  models' **own** r² are under the ceiling and both columns survived the rank pass
+  (so this is not rank deficiency), then runs the mutation: `raw` is exactly what an
+  unguarded build would publish, and it is 33% and 17% off truth with the cross-model
+  ratio wrong by 1.6x. Then asserts nothing is published.
+- `the survivor of a dropped column is refused too, not left absorbing it` — at
+  coupling 0.999 the rank pass drops one token column and the survivor comes back
+  1.46 against a truth of 0.50. This is the case a sequential-only guard would have
+  passed.
+- `the same fixture without the coupling fits both models` — the complement, so the
+  refusal is about conditioning and not about the noise, the interval count or the
+  `mixed` kind: both models recover within 2% and every share clears 0.2.
+
+Verified the guard is what carries them: with `SPLIT_MIN_INDEPENDENT_SHARE` temporarily
+set to 0, the first two fail and the complement still passes. Restored afterwards.
+
+### Re-run against real data — the refutation is unchanged
+
+```
+$ npx tsx scripts/probe-usage-split.ts --dir ../.. --reconstruct --days 3
+  → usable for the two-term fit: 418
+
+  one-term joint OLS over the usable set (bug-13's estimator):
+    claude-fable-5: 10.6518 pt/Mtok  = 0.094M weighted/pt
+    claude-opus-5:   2.5059 pt/Mtok  = 0.399M weighted/pt
+
+  two-term fit (floors 20/10, r² ceiling 0.99, independent share ≥ 0.1):
+    claude-fable-5: no split — negative  (r²=0.8761, share=0.3351, 86 intervals, 100.0 pts,
+                    least squares wanted tok=13.1221 pt/Mtok req=-0.05804 pt/request)
+    claude-opus-5:  2.2193 pt/Mtok  +  0.00621 pt/request  (r²=0.8821, share=0.3406,
+                    368 intervals, 380.0 pts)
+      4287 requests → 7.0% of the 380.0 points it appears in
+    claude-haiku-4-5-20251001: no split — thin-evidence  (share=0.2163)
+    claude-opus-4-8:           no split — thin-evidence  (share=0.9989)
+    claude-sonnet-5:           no split — thin-evidence  (share=0.6141)
+
+  ── the ratio task-10 was filed on ──
+      pooled single ratio: 3.77x
+      one-term joint OLS:  4.25x
+      two-term fit:        n/a
+      same fit, sign refusal lifted (diagnostic only): 5.91x
+```
+
+**No over-refusal:** every real model's independent share is 0.22-0.999, far above the
+0.1 floor, so opus-5 still fits and the reported refutation stands. The guard is latent
+on this machine's current data, which is the honest state — it is there for the
+"two models always used together" case that `DOMINANCE` protects the pooled rate from
+and the two-term fit had nothing in place of.
+
+### Gates, re-run after the fix
+
+```
+$ pnpm typecheck
+> claude-agents-dashboard@0.1.0 typecheck
+> tsc --noEmit
+typecheck exit=0
+
+$ pnpm test
+  18/18 passed
+ALL PASS
+test exit=0
+```
+
+1115 passing cases, up from 1112 — the three new ones, nothing removed or loosened.
+
+### Also corrected, both review Minors about my own prose
+
+- `docs/subsystems/usage-limits.md` no longer describes `SPLIT_FLOORS` as "twice
+  `CURRENT_FLOORS` ... for twice the parameters" without qualification: the split
+  floors count every interval a model spent anything in, where `CURRENT_FLOORS` counts
+  only *owned* intervals, so the gate is looser than the doubling implies (fable-5
+  clears it at 86/100.0 while its owned evidence is 16/17.0). Intended, but the two
+  numbers are not comparable and the doc now says so.
+- The doc's refutation paragraph now carries the caveat this item's *Not verified*
+  section had and the doc did not: the reconstruction dedups `message.id` globally
+  where the recorder dedups per transcript, and 263 of 5614 assistant turn ids in the
+  last four days appear in more than one file, so it under-counts requests by ~4.5%
+  unevenly across ticks. Re-confirm against live-recorded counts before acting on it.
+
+### Still not verified
+
+Everything in the *Not verified* list above still stands. Two additions:
+
+- **`SPLIT_MIN_INDEPENDENT_SHARE` = 0.1 is derived, not tuned.** It is the VIF-100
+  point, consistent with `SPLIT_MAX_R2`, and it is unit-tested either side of the
+  boundary — but no sweep established that 0.1 is where *this* data's coefficients stop
+  being trustworthy, and the guard has never fired on real logs.
+- **The guard is latent, so it has never been observed protecting a live number.** Its
+  evidence is the synthetic reproduction and the real-data shares, not a caught
+  production case.
+- **Nothing committed or staged.** Working tree left dirty for the orchestrator.

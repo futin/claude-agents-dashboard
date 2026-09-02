@@ -364,6 +364,32 @@ export const SPLIT_MAX_R2 = 0.99;
  */
 export const SPLIT_RANK_TOL = 1e-3;
 
+/**
+ * How much of a column has to survive projecting out **every other** column
+ * before its coefficient is worth publishing.
+ *
+ * The gap this closes: {@link SPLIT_MAX_R2} compares a model's own two columns
+ * and says nothing about model A's tokens against model B's, while
+ * {@link SPLIT_RANK_TOL} is a *numerical* floor the solve needs — a residual of
+ * 1e-3 is r² ≈ 0.999999, so it only ever fires on columns that are collinear to
+ * six decimal places. Between the two lies a wide band where the solve is
+ * severely ill-conditioned, no gate fires, and every model is published
+ * `fitted`. Measured at r²(A_tok, B_tok) = 0.999957, two models generated from
+ * 0.500 and 1.200 pt/Mtok came back 0.763 and 0.667 — a cross-model ratio of
+ * 0.87x where the truth is 0.42x, **inverted**, with nothing refused.
+ *
+ * That is the exact failure this whole feature exists to avoid, and "two models
+ * always used together" is the case `DOMINANCE` protects the pooled rate from —
+ * the two-term fit drops `DOMINANCE` deliberately, so it owes a guard of its
+ * own. 0.1 is a variance inflation of 100, the same the r² ceiling encodes, and
+ * the check is **symmetric**: measured against all the other columns rather
+ * than only the ones offered earlier, because otherwise the first of a
+ * collinear pair is published while only the second is caught — and if the
+ * second is dropped from the solve instead, the first silently absorbs its
+ * utilization.
+ */
+export const SPLIT_MIN_INDEPENDENT_SHARE = 0.1;
+
 /** Millions of weighted tokens — the token column's unit, so both columns are O(1). */
 const MTOK = 1_000_000;
 
@@ -385,7 +411,11 @@ export type SplitRefusal =
   | 'collinear'
   /** Under {@link SPLIT_FLOORS} — not enough intervals, or not enough movement. */
   | 'thin-evidence'
-  /** Its columns are in the span of the others: this data cannot single it out. */
+  /**
+   * Its columns are in — or too near — the span of the others: this data cannot
+   * single it out. Covers both an exactly dependent column and one whose
+   * independent share is under {@link SPLIT_MIN_INDEPENDENT_SHARE}.
+   */
   | 'unidentified'
   /** Least squares wanted a negative per-token or per-request cost. */
   | 'negative';
@@ -399,6 +429,14 @@ export interface SplitDiagnostic {
   intervals: number;
   /** Cumulative utilization points over those rows. */
   utilSum: number;
+  /**
+   * The least independent of this model's columns, as a share of its own
+   * length, after projecting out every other column in the design — 1 is
+   * orthogonal to everything, 0 is a combination of the others. Compare against
+   * {@link SPLIT_MIN_INDEPENDENT_SHARE}; the square of it is 1 − r² against
+   * their span, so 0.1 is a variance inflation of 100.
+   */
+  independentShare: number;
   /** Null exactly when `fit` is set. */
   refusal: SplitRefusal | null;
   fit: SplitFit | null;
@@ -442,6 +480,53 @@ function usableForSplit(interval: Interval): boolean {
 }
 
 /**
+ * `v` with the orthonormal `basis` projected out: the residual, its length, and
+ * how much of `v` each basis vector accounted for.
+ *
+ * Twice through, because one pass loses orthogonality exactly where these
+ * tolerances have to mean something.
+ */
+function project(v: number[], basis: number[][]): { vector: number[]; norm: number; proj: number[] } {
+  const vector = v.slice();
+  const proj = new Array<number>(basis.length).fill(0);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let k = 0; k < basis.length; k++) {
+      let dot = 0;
+      for (let i = 0; i < vector.length; i++) dot += basis[k][i] * vector[i];
+      proj[k] += dot;
+      for (let i = 0; i < vector.length; i++) vector[i] -= dot * basis[k][i];
+    }
+  }
+  let norm = 0;
+  for (const x of vector) norm += x * x;
+  return { vector, norm: Math.sqrt(norm), proj };
+}
+
+/**
+ * For each unit-normed column, the share of it that survives projecting out
+ * **all** the others — 1 for a column orthogonal to every other, 0 for one
+ * that is a combination of them, and `sqrt(1 - r²)` against their span between.
+ *
+ * Every column is in the basis for every other, including columns the solve
+ * itself dropped: a column that was dropped is precisely the one whose
+ * utilization the surviving columns silently absorb, so its presence is what
+ * makes their coefficients arbitrary.
+ */
+function independentShares(cols: number[][]): number[] {
+  return cols.map((col, j) => {
+    const basis: number[][] = [];
+    for (let k = 0; k < cols.length; k++) {
+      if (k === j) continue;
+      const { vector, norm } = project(cols[k], basis);
+      if (!Number.isFinite(norm) || norm <= SPLIT_RANK_TOL) continue;
+      basis.push(vector.map((x) => x / norm));
+    }
+    const { norm } = project(col, basis);
+    return Number.isFinite(norm) ? norm : 0;
+  });
+}
+
+/**
  * Least squares by modified Gram-Schmidt, dropping every column that the
  * columns before it already explain.
  *
@@ -464,24 +549,9 @@ function leastSquares(cols: number[][], y: number[], tol: number): (number | nul
   const coef: (number | null)[] = cols.map(() => null);
 
   for (let c = 0; c < cols.length; c++) {
-    const v = cols[c].slice();
-    const proj = new Array<number>(q.length).fill(0);
-    // Twice, because one pass loses orthogonality exactly where this tolerance
-    // has to mean something.
-    for (let pass = 0; pass < 2; pass++) {
-      for (let k = 0; k < q.length; k++) {
-        let dot = 0;
-        for (let i = 0; i < v.length; i++) dot += q[k][i] * v[i];
-        proj[k] += dot;
-        for (let i = 0; i < v.length; i++) v[i] -= dot * q[k][i];
-      }
-    }
-    let norm = 0;
-    for (const x of v) norm += x * x;
-    norm = Math.sqrt(norm);
+    const { vector, norm, proj } = project(cols[c], q);
     if (!Number.isFinite(norm) || norm <= tol) continue;
-    for (let i = 0; i < v.length; i++) v[i] /= norm;
-    q.push(v);
+    q.push(vector.map((x) => x / norm));
     r.push([...proj, norm]);
     accepted.push(c);
   }
@@ -525,6 +595,14 @@ function leastSquares(cols: number[][], y: number[], tol: number): (number | nul
  * remain. A model whose request column is collinear past
  * {@link SPLIT_MAX_R2} is not offered one at all, for the same reason.
  *
+ * Being in the solve is not enough to be *published*. A model whose least
+ * independent column survives less than {@link SPLIT_MIN_INDEPENDENT_SHARE} of
+ * itself once every other column is projected out is refused as
+ * `unidentified` — including when the rank pass dropped a *different* model's
+ * column, since whoever remains has quietly absorbed its utilization. The rank
+ * tolerance is a numerical floor for the solve; this is the honesty floor for
+ * the answer, and it is the only one that looks across models.
+ *
  * A negative coefficient is a **refusal, not a clamp**: both costs are
  * physically non-negative, so a negative one means this data cannot separate
  * the terms — and publishing the clamped 0 instead would state "requests are
@@ -556,7 +634,10 @@ export function explainSplits(intervals: Interval[], sinceMs: number, untilMs: n
     }
     // A dead column is not separable from anything, and reads as r² = 1.
     const r2 = sww <= 0 || srr <= 0 ? 1 : (swr * swr) / (sww * srr);
-    return { model, r2, intervals: intervalCount, utilSum, refusal: null, fit: null, raw: null };
+    return {
+      model, r2, intervals: intervalCount, utilSum,
+      independentShare: 0, refusal: null, fit: null, raw: null
+    };
   });
 
   // Token columns first, then the request columns of the models still eligible
@@ -584,6 +665,17 @@ export function explainSplits(intervals: Interval[], sinceMs: number, untilMs: n
     coef.set(`${owner[c].model}:${owner[c].term}`, value / norms[c]);
   });
 
+  // How well conditioned each model's own columns are against everything else
+  // in the design — the guard neither the r² ceiling nor the rank tolerance
+  // covers. A model with no column at all keeps its 0 and is refused below.
+  const shares = independentShares(cols);
+  shares.forEach((share, c) => {
+    const diagnostic = diagnostics[owner[c].model];
+    diagnostic.independentShare = diagnostic.independentShare === 0
+      ? share
+      : Math.min(diagnostic.independentShare, share);
+  });
+
   // Refusals are reported most-informative first, which is not the order they
   // are computed in: a model seen once is collinear *because* it was seen once,
   // and "not enough evidence" is the reason worth reading.
@@ -602,7 +694,10 @@ export function explainSplits(intervals: Interval[], sinceMs: number, untilMs: n
       diagnostic.refusal = 'collinear';
       continue;
     }
-    if (perMTok === undefined || perRequest === undefined) {
+    if (
+      perMTok === undefined || perRequest === undefined
+      || diagnostic.independentShare < SPLIT_MIN_INDEPENDENT_SHARE
+    ) {
       diagnostic.refusal = 'unidentified';
       continue;
     }
