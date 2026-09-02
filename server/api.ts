@@ -16,7 +16,9 @@ import { deriveProfile, profileSnapshot, readRecentSamples } from './lib/usage-h
 import type { ProfileState, UsageSample } from './lib/usage-history.js';
 import { readLedgerSince } from './lib/usage-ledger.js';
 import type { LedgerLine } from './lib/usage-ledger.js';
-import { BASELINE_MS, driftRow, externalShare, joinIntervals } from './lib/usage-rate.js';
+import {
+  BASELINE_MS, currentRange, driftRow, externalShare, fitSplits, joinIntervals
+} from './lib/usage-rate.js';
 import { HOURS_PER_WEEK, confidenceOf, localOffsetMinutes, walkForward } from './lib/usage-forecast.js';
 import {
   claudeHome, collectServablePaths, listRecentProjects, readGlobalScope,
@@ -685,8 +687,23 @@ export function shapeUsageRates(opts: {
     if (typeof interval.kind === 'object') models.add(interval.kind.model);
   }
 
+  // One joint fit for every model, over the same current window the rows
+  // report — so a row's split and its pooled rate never describe different
+  // spans. A model that owns no interval still gets no row, so its fitted
+  // split is simply not surfaced; which model earns a row is unchanged.
+  const cur = currentRange(nowMs);
+  const splits = fitSplits(intervals, cur.sinceMs, cur.untilMs);
+
   const rows: ModelRateRow[] = [...models]
-    .map((model) => driftRow(intervals, model, nowMs))
+    .map((model) => {
+      const split = splits.get(model);
+      return {
+        ...driftRow(intervals, model, nowMs),
+        pctPerMWeighted: split?.pctPerMWeighted ?? null,
+        pctPerRequest: split?.pctPerRequest ?? null,
+        splitVerdict: split === undefined ? ('thin' as const) : ('fitted' as const)
+      };
+    })
     .sort((a, b) => b.utilSum - a.utilSum || a.model.localeCompare(b.model));
 
   // Over the whole fitted horizon, not just the trailing window: it describes

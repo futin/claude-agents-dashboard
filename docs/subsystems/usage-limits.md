@@ -434,9 +434,10 @@ the history log), written from the same fetch-success path that calls
 `recordTick`, so a ledger line and a history sample describe the same instant.
 Each tick reads only the bytes appended to each transcript since the last one
 (a RAM map of per-file offsets over `listTranscripts`), sums `message.usage`
-per model, and appends `{t, prevT, tok}`.
+per model, and appends `{t, prevT, tok, req}` — `tok` weighed in tokens, `req`
+counted in requests.
 
-Five things are deliberate:
+Six things are deliberate:
 
 - **`prevT` is carried explicitly.** It is what makes a recording gap visible;
   a bare `t` could never show that two lines do not abut, and the fitter would
@@ -456,6 +457,16 @@ Five things are deliberate:
 - **The first tick after start writes nothing**, and switching recording off
   drops the offsets so switching it back on reseeds the same way. One lost
   minute, rather than a backlog dumped into a single interval.
+- **`req` is a parallel map, and absent is not zero.** One assistant message is
+  one request, so the count is free — it is what `sumWindow` already discards
+  after summing. It lives beside `tok` rather than as a fifth key inside it
+  because it is not a token type: `weightedTokens` and `scaleCounts` must never
+  see it, and per-model absence has to survive a parse that coerces every
+  missing token *type* to 0. So `parseLedgerLine` deliberately does **not** run
+  it through `num()`: a count that coerced to 0 would claim a measured zero on
+  every line written before counts existed. Absent means *not recorded*, `{}`
+  on a line with spend means recorded and nothing attributable, and a junk or
+  negative count drops that model's key rather than the line.
 
 ### The fitter (`lib/usage-rate.ts`, pure)
 
@@ -469,7 +480,25 @@ with each pair. Then each interval is classified:
 | `Δutil ≤ 0.01` | `idle` | nothing (but it is a measurement, not a hole) |
 | weighted tokens < 5 000 | `external` | the disclosed burn share only |
 | one model holds ≥ 90% of weighted tokens | `{model}` | that model's rate |
-| otherwise | `mixed` | nothing |
+| otherwise | `mixed` | the two-term split fit only |
+
+Every interval also carries `req` (requests per model) and `reqUsable`.
+`reqUsable` is false when **any** contributing ledger line recorded no count
+for a model it recorded spend for — one unrecorded line poisons the whole
+interval's count, because a partial count fitted as if it were whole
+understates the per-request term by an unknown amount. Token totals are
+untouched either way, so an interval can be count-unusable and still fit the
+pooled ratio exactly as it always did. A line with no `req` **and** no spend
+poisons nothing: an event with no tokens is never recorded, so zero tokens is
+zero requests.
+
+**Request counts are pro-rated at the edges as a float, exactly like tokens.**
+A count is an integer event stream, so half a tick's requests is not a thing
+that happened — but attributing a straddling tick's count whole to one side
+would make the two regressors disagree about the same two edge minutes, and it
+is their *ratio* the split fit measures. The fraction is unbiased under the
+same uniform-spend assumption the tokens already make, and bounded by the same
+two ticks per interval.
 
 **The join is overlap-weighted, and that was measured rather than chosen.** The
 two logs sit on different grids: history samples are write-on-change, so an
@@ -485,11 +514,20 @@ edge ticks are split pro rata, which assumes uniform spend inside those two
 minutes; that is the one approximation, it is bounded, and the alternative was
 measuring nothing.
 
-**Dominance, not decomposition.** With a handful of models and one equation per
-interval, a least-squares split is under-determined exactly when it matters (two
-models always used together), and a wrong split is indistinguishable from drift.
-Mixed intervals are discarded; the follow-up is filed if the discard share
-proves high.
+**Dominance, not decomposition — for the *rate*.** With a handful of models and
+one equation per interval, a least-squares split of one interval is
+under-determined exactly when it matters (two models always used together), and
+a wrong split is indistinguishable from drift. So every number the drift
+comparison rests on — `rawPerPct`, `weightedPerPct`, the baselines, the
+deviation and the verdict — still comes from `DOMINANCE`-owned intervals only,
+and `mixed` is still discarded for them.
+
+**`mixed` is no longer discarded by everything, though.** The two-term fit below
+is joint across models, so it needs no ownership at all and reads `mixed` too —
+that is where the information about telling two models apart actually lives (on
+live logs, 50 of 58 `mixed` intervals contained fable, against its 16 owned
+ones). `DOMINANCE` is therefore load-bearing for the rate and the drift verdict,
+and irrelevant to the split.
 
 **Pooled Σtokens / Σutil, not a mean of per-interval ratios.** A mean lets a
 0.02% interval with a noisy numerator count as much as an hour of steady work.
@@ -507,6 +545,86 @@ interval covering 20% is a single unrepeated observation). Verdict order is
 deviate by any amount, so calling that drift would make the badge fire hardest
 exactly when it knows least.
 
+### The two-term fit: tokens and requests, separated
+
+The pooled ratio above is only a *price* if the 5-hour counter is charged purely
+per token. It is not. Anything charged per request lands in the `dUtil`
+denominator with no tokens beside it, so a single ratio has nowhere to put it
+and hands all of it to the token term. Measured on live logs (2026-09-01), the
+opus:fable cost per weighted token came out at 4.2-4.4x against a ~2x list price
+from two estimators with different selection biases — `bug-13` eliminated
+weighting, sample size and the `DOMINANCE` filter as explanations, which left a
+missing term.
+
+`explainSplits` fits `dUtil` against **two** regressors per model — weighted
+tokens (in millions) and request count — jointly over every usable interval, no
+intercept. `fitSplits` is the same thing keeping only the models it will stand
+behind. Five decisions carry it:
+
+- **Which intervals.** `gap` is out (minutes are missing, so the tokens are
+  not all there) and `external` is out (utilization moved on almost no local
+  spend, which is another device — fitting it would price our models for
+  someone else's turns). `mixed` is in, per above. **`idle` is in**, and that is
+  the load-bearing one: utilization is read coarsely, so spend often lands in
+  one interval and its visible rise in the next, and keeping only the intervals
+  where utilization moved is selection on the dependent variable. It inflates
+  every coefficient. The zeros are measurements — this document already says so
+  — and including them is what makes the sum over intervals add back up.
+- **Column order is load-bearing.** Every model's token column is offered to the
+  solver first, then every model's request column. When the rank pass has to
+  drop something it therefore drops a request column, so a model whose split
+  cannot be identified still keeps a column with which to explain its own
+  utilization instead of having that utilization pushed onto whichever models
+  remain.
+- **A rank-revealing solve, not normal equations.** Real designs here are
+  *routinely* rank-deficient and it is not a pathology: a model used in a single
+  interval contributes two columns spanning one dimension. Measured live, one
+  such model (`claude-opus-4-8`, one interval) made the whole joint solve
+  singular and every model reported no split. Modified Gram-Schmidt drops only
+  the offending column — a column whose residual against the columns already
+  accepted is under `SPLIT_RANK_TOL` (1e-3 of its own unit length) carries no
+  information the fit does not already have — and every other model keeps its
+  answer.
+- **Floors and separability.** `SPLIT_FLOORS` is 20 intervals **and** 10
+  cumulative percentage points — twice `CURRENT_FLOORS` on both, for twice the
+  parameters, and nothing cleverer. Separately, a model whose two regressors
+  have uncentered r² above `SPLIT_MAX_R2` (0.99, a variance inflation of 100) is
+  not offered a request column at all — uncentered because a fit with no
+  intercept is collinear precisely when one column is a scalar multiple of the
+  other. Past that ceiling the split is decided by the couple of intervals that
+  happen to break the proportionality, which is a coin toss dressed as a
+  measurement.
+- **A negative coefficient is a refusal, not a clamp.** Both a per-token and a
+  per-request cost are physically non-negative, so a negative one means this
+  data cannot separate the terms. Clamping to 0 would publish "requests are
+  free" as a measurement nobody made; refusing keeps the null meaning "not
+  enough evidence to say", which is what every null here means. Models are
+  refused one at a time and the fit is never re-run on a set chosen by its own
+  output.
+
+`SplitDiagnostic` reports the reasoning for every model whether it fitted or
+not — `collinear`, `thin-evidence`, `unidentified` or `negative`, plus the raw
+signed coefficients. The raw pair is diagnostic only and nothing surfaces it;
+`scripts/probe-usage-split.ts` needs it to say *which* term came back
+impossible, because that is the difference between "the model is missing a term"
+and "this data cannot see the term".
+
+⚠️ **On this machine's data, the per-request hypothesis is refuted.** Run
+`pnpm probe:usage-split -- --dir . --reconstruct --days 3` — it replays the
+transcripts to synthesize counts for ledger lines written before counts existed,
+so the fit can be exercised before a day of live recording exists. Measured
+2026-09-02 over 407 usable intervals: `claude-opus-5` fits at 2.198 pt/Mtok +
+0.00586 pt/request, with the request term explaining only **6.6%** of the 368
+points it appears in and its per-token coefficient falling just 11% from the
+one-term 2.468. `claude-fable-5` is **refused**: least squares wants
+−0.0572 pt/request for it and pushes its per-token cost *up*, from 10.71 to
+13.15. Lift the sign refusal and the opus:fable ratio goes to **5.98x** — the
+gap widens rather than closing on ~2x. So the split fit is correct and honest,
+and the thing it was built to explain is still unexplained; that finding belongs
+to `bug-13`, not to a new number on the card. (The logs keep growing, so a
+re-run moves these figures in the last digit or two; the direction is the
+finding, not the decimals.)
+
 ### The endpoint and the card
 
 `GET /api/usage/rates` (`shapeUsageRates` is the pure part) returns one row per
@@ -515,7 +633,17 @@ model that owns at least one attributable interval, richest evidence first, plus
 arithmetic, and the numbers move on a scale of days — and it fails open to an
 honest empty body exactly like `serveUsageProfile`. A model seen only in mixed,
 external or gap intervals gets **no row**: a row of nulls reads as a broken fit
-rather than as an absence of evidence.
+rather than as an absence of evidence. That rule is unchanged by the split fit,
+which means a model the split *can* estimate but which owns no interval still
+gets no row, and its coefficients are simply not surfaced.
+
+Each row also carries `pctPerMWeighted`, `pctPerRequest` and `splitVerdict`
+from one joint fit over the same current window the row's own rate describes, so
+a row's split and its pooled rate never describe different spans.
+`splitVerdict: 'thin'` covers every refusal — the row does not say which, and
+the probe script is where the reason lives. Every other field on the row is the
+single-ratio number it always was: the split is **additive**, so `bug-13` can
+decide what the card does with it independently.
 
 The **Usage** section is now two sub-tabs — `Forecast | Token value` — through
 the Settings page's `.set-seg` control, persisted per device as `usageTab`.
@@ -573,6 +701,7 @@ state is honest.
     - client/src/lib/usageProfile.ts
     - client/src/lib/walkChart.ts
     - client/src/lib/usageRatesFormat.ts
+    - scripts/probe-usage-split.ts
     - server/api.ts
     - client/src/components/Header.tsx
     - client/src/components/usage/

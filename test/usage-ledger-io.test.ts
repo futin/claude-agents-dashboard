@@ -117,7 +117,8 @@ export function run(): number {
         tok: {
           'opus-5': { in: 11, out: 22, cc: 33, cr: 44 },
           'fable-5': { in: 5, out: 6, cc: 7, cr: 8 }
-        }
+        },
+        req: { 'opus-5': 2, 'fable-5': 1 }
       });
     });
   })) p++; else f++;
@@ -128,7 +129,8 @@ export function run(): number {
       recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
       const lines = fx.ledgerLines();
       assert.strictEqual(lines.length, 1);
-      assert.deepStrictEqual(JSON.parse(lines[0]), { t: T0 + MIN, prevT: T0, tok: {} });
+      assert.deepStrictEqual(JSON.parse(lines[0]), { t: T0 + MIN, prevT: T0, tok: {}, req: {} },
+        'an empty `req` is the tell that counts were recorded and nothing was spent');
     });
   })) p++; else f++;
 
@@ -162,6 +164,8 @@ export function run(): number {
 
       const line = JSON.parse(fx.ledgerLines()[0]);
       assert.deepStrictEqual(line.tok, { 'opus-5': { in: 11, out: 6, cc: 0, cr: 0 } });
+      assert.deepStrictEqual(line.req, { 'opus-5': 2 },
+        'the duplicated message id is one request, not two');
     });
   })) p++; else f++;
 
@@ -201,7 +205,7 @@ export function run(): number {
       recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 4 * MIN });
       const lines = fx.ledgerLines().map(l => JSON.parse(l));
       assert.strictEqual(lines.length, 1);
-      assert.deepStrictEqual(lines[0], { t: T0 + 4 * MIN, prevT: T0 + 3 * MIN, tok: {} });
+      assert.deepStrictEqual(lines[0], { t: T0 + 4 * MIN, prevT: T0 + 3 * MIN, tok: {}, req: {} });
     });
   })) p++; else f++;
 

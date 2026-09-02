@@ -32,6 +32,11 @@ const counts = (weighted: number): TokenCounts => ({ in: weighted, out: 0, cc: 0
 const l = (prevT: number, t: number, tok: Record<string, TokenCounts> = {}): LedgerLine =>
   ({ t, prevT, tok });
 
+/** The same line, with request counts recorded — what a post-upgrade tick looks like. */
+const lr = (
+  prevT: number, t: number, tok: Record<string, TokenCounts>, req: Record<string, number>
+): LedgerLine => ({ t, prevT, tok, req });
+
 export function run(): number {
   console.log('\n=== usage-rate.ts (join + classify) ===\n');
   let p = 0, f = 0;
@@ -143,6 +148,67 @@ export function run(): number {
       [l(0, MIN, { A: counts(8_900), B: counts(1_100) })]
     );
     assert.strictEqual(mixed[0].kind, 'mixed');
+  })) p++; else f++;
+
+  // ── request counts, gathered the same way ──
+
+  if (test('two whole ledger lines sum their counts', () => {
+    const out = joinIntervals(
+      [s(0, 10), s(2 * MIN, 12)],
+      [
+        lr(0, MIN, { A: counts(6_000) }, { A: 3 }),
+        lr(MIN, 2 * MIN, { A: counts(6_000), B: counts(1_000) }, { A: 4, B: 2 })
+      ]
+    );
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].reqUsable, true);
+    assert.deepStrictEqual(out[0].req, { A: 7, B: 2 });
+  })) p++; else f++;
+
+  if (test('a straddling edge tick pro-rates its count as a float, like its tokens', () => {
+    // One two-minute tick of 4 requests, of which the interval covers half.
+    const out = joinIntervals(
+      [s(MIN, 10), s(2 * MIN, 12)],
+      [lr(0, 2 * MIN, { A: counts(20_000) }, { A: 4 })]
+    );
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].reqUsable, true);
+    assert.deepStrictEqual(out[0].req, { A: 2 }, 'half of 4 — pro-rated, not rounded or attributed whole');
+    assert.strictEqual(out[0].tok.A.in, 10_000, 'the tokens are split by the same share');
+  })) p++; else f++;
+
+  if (test('one of three lines without a count poisons the count, not the tokens', () => {
+    const out = joinIntervals(
+      [s(0, 10), s(3 * MIN, 12)],
+      [
+        lr(0, MIN, { A: counts(5_000) }, { A: 3 }),
+        l(MIN, 2 * MIN, { A: counts(5_000) }),               // written before counts existed
+        lr(2 * MIN, 3 * MIN, { A: counts(5_000) }, { A: 5 })
+      ]
+    );
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].reqUsable, false, 'a partial count must never be fitted as if whole');
+    assert.strictEqual(out[0].tok.A.in, 15_000, 'the token totals are exactly what they were before');
+    assert.deepStrictEqual(out[0].kind, { model: 'A' }, 'and the interval still classifies as usual');
+  })) p++; else f++;
+
+  if (test('a line recording a count for one model but not another is still poisoned', () => {
+    const out = joinIntervals(
+      [s(0, 10), s(MIN, 12)],
+      [{ t: MIN, prevT: 0, tok: { A: counts(9_000), B: counts(1_000) }, req: { A: 2 } }]
+    );
+    assert.strictEqual(out[0].reqUsable, false);
+  })) p++; else f++;
+
+  if (test('an empty pre-upgrade tick is zero requests, not an unrecorded count', () => {
+    // Nothing was spent, so nothing was requested — a line with no `req` and no
+    // tokens carries no missing measurement to poison anything with.
+    const out = joinIntervals(
+      [s(0, 10), s(2 * MIN, 12)],
+      [lr(0, MIN, { A: counts(10_000) }, { A: 6 }), l(MIN, 2 * MIN)]
+    );
+    assert.strictEqual(out[0].reqUsable, true);
+    assert.deepStrictEqual(out[0].req, { A: 6 });
   })) p++; else f++;
 
   if (test('samples out of order or coincident are not intervals', () => {
