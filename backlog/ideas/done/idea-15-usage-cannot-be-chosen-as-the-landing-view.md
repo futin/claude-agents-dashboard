@@ -2,6 +2,9 @@
 id: idea-15
 title: Usage cannot be chosen as the landing view
 created: 2026-08-31
+updated: 2026-09-02T18:41:29Z
+promoted-to: task-12
+groom-elapsed: 78
 ---
 
 ## Problem
