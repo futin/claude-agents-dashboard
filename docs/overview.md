@@ -135,9 +135,11 @@ server/
   lib/usage-forecast.ts  forward walk over hour-of-week weights → projected 100%
   lib/usage-history.ts  persisted samples → the learned 168-bucket duty-cycle profile
   lib/usage-ledger.ts  per-minute per-model token ledger: reads new transcript bytes,
-                  appends one line a tick (`.usage-ledger.jsonl`)
+                  appends one line a tick (`.usage-ledger.jsonl`) — tokens and
+                  request counts per model, counts absent on pre-upgrade lines
   lib/usage-rate.ts  joins history × ledger into classified intervals → tokens per 1%
-                  of the 5h window per model, baseline vs trailing, drift verdicts
+                  of the 5h window per model, baseline vs trailing, drift verdicts,
+                  plus the two-term (tokens + requests) split fit and its refusals
   lib/token-refresh.ts  makes the CLI renew an expired OAuth token (auth status,
                   then one haiku turn) so the bars self-heal
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser
@@ -186,7 +188,9 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   plan-remote-hook.sh, permission-notify-hook.sh,
                   remote-decision-hook.sh, stop-notify-hook.sh, host-credentials.sh,
                   lan-ip.sh, env-value.ts (the one .env reader the installer and
-                  the server share — never a second grep)
+                  the server share — never a second grep),
+                  probe-usage-split.ts (`pnpm probe:usage-split`) — runs the
+                  two-term rate fit against this machine's real logs
 ```
 
 ## Map

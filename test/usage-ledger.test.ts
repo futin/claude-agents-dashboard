@@ -45,35 +45,41 @@ export function run(): number {
 
   // ── sumWindow: the half-open (prevT, t] boundary ──
 
-  if (test('sumWindow: (prevT, t] excludes prevT, includes t', () => {
+  if (test('sumWindow: (prevT, t] excludes prevT, includes t — for counts too', () => {
     const events = [
       ev(1000, 'A', tc(1, 0, 0, 0)),     // == prevT → out
       ev(1001, 'A', tc(0, 2, 0, 0)),     // just inside → in
       ev(61_000, 'A', tc(0, 0, 4, 0)),   // == t → in
       ev(61_001, 'A', tc(0, 0, 0, 8))    // just past → out
     ];
-    assert.deepStrictEqual(sumWindow(events, 1000, 61_000), { A: tc(0, 2, 4, 0) });
+    assert.deepStrictEqual(sumWindow(events, 1000, 61_000), {
+      tok: { A: tc(0, 2, 4, 0) },
+      req: { A: 2 }
+    });
   })) p++; else f++;
 
-  if (test('sumWindow: groups by model, sums each type', () => {
+  if (test('sumWindow: groups by model, sums each type, counts one per event', () => {
     const events = [
       ev(10, 'opus-5', tc(1, 2, 3, 4)),
       ev(20, 'opus-5', tc(10, 20, 30, 40)),
       ev(30, 'fable-5', tc(5, 5, 5, 5))
     ];
     assert.deepStrictEqual(sumWindow(events, 0, 100), {
-      'opus-5': tc(11, 22, 33, 44),
-      'fable-5': tc(5, 5, 5, 5)
+      tok: {
+        'opus-5': tc(11, 22, 33, 44),
+        'fable-5': tc(5, 5, 5, 5)
+      },
+      req: { 'opus-5': 2, 'fable-5': 1 }
     });
   })) p++; else f++;
 
   if (test('sumWindow: an empty model string is skipped, not bucketed as ""', () => {
     const events = [ev(10, '', tc(9, 9, 9, 9)), ev(20, 'A', tc(1, 1, 1, 1))];
-    assert.deepStrictEqual(sumWindow(events, 0, 100), { A: tc(1, 1, 1, 1) });
+    assert.deepStrictEqual(sumWindow(events, 0, 100), { tok: { A: tc(1, 1, 1, 1) }, req: { A: 1 } });
   })) p++; else f++;
 
-  if (test('sumWindow: no events in range → {}', () => {
-    assert.deepStrictEqual(sumWindow([ev(5, 'A', tc(1, 1, 1, 1))], 10, 20), {});
+  if (test('sumWindow: no events in range → two empty maps, a measured zero', () => {
+    assert.deepStrictEqual(sumWindow([ev(5, 'A', tc(1, 1, 1, 1))], 10, 20), { tok: {}, req: {} });
   })) p++; else f++;
 
   // ── the line codec ──
@@ -85,6 +91,47 @@ export function run(): number {
       tok: { 'opus-5': tc(12, 34, 56, 78), 'fable-5': tc(0, 0, 0, 0) }
     };
     assert.deepStrictEqual(parseLedgerLine(serializeLedgerLine(line)), line);
+  })) p++; else f++;
+
+  if (test('request counts round-trip intact', () => {
+    const line: LedgerLine = {
+      t: 1_700_000_060_000,
+      prevT: 1_700_000_000_000,
+      tok: { 'opus-5': tc(12, 34, 56, 78), 'fable-5': tc(1, 1, 1, 1) },
+      req: { 'opus-5': 7, 'fable-5': 0 }
+    };
+    const back = parseLedgerLine(serializeLedgerLine(line));
+    assert.deepStrictEqual(back, line);
+    assert.strictEqual(back!.req!['fable-5'], 0, 'a recorded zero survives as zero');
+  })) p++; else f++;
+
+  if (test('a line written before counts existed parses with req absent, not zeroed', () => {
+    const old = JSON.stringify({ t: 2, prevT: 1, tok: { A: { in: 5, out: 0, cc: 0, cr: 0 } } });
+    const parsed = parseLedgerLine(old);
+    assert.ok(parsed);
+    assert.strictEqual(parsed.req, undefined, 'absent must not coerce to {} or to 0');
+    assert.ok(!('req' in parsed), 'and must not appear as a key at all');
+    assert.deepStrictEqual(parsed.tok, { A: tc(5, 0, 0, 0) }, 'its tokens are still usable');
+  })) p++; else f++;
+
+  if (test('junk and negative counts drop that model only; the line stays usable', () => {
+    const parsed = parseLedgerLine(JSON.stringify({
+      t: 2, prevT: 1,
+      tok: { A: { in: 5, out: 0, cc: 0, cr: 0 }, B: { in: 3, out: 0, cc: 0, cr: 0 }, C: { in: 1, out: 0, cc: 0, cr: 0 } },
+      req: { A: 'two', B: -1, C: 4 }
+    }));
+    assert.ok(parsed);
+    assert.strictEqual(parsed.req!.A, undefined, 'a non-numeric count is absent, never 0');
+    assert.strictEqual(parsed.req!.B, undefined, 'a negative count is absent too');
+    assert.strictEqual(parsed.req!.C, 4);
+    assert.deepStrictEqual(parsed.tok.A, tc(5, 0, 0, 0), 'the token counts are untouched');
+  })) p++; else f++;
+
+  if (test('a non-object req is the same as no req at all', () => {
+    const parsed = parseLedgerLine(JSON.stringify({ t: 2, prevT: 1, tok: {}, req: 5 }));
+    assert.strictEqual(parsed!.req, undefined);
+    const arr = parseLedgerLine(JSON.stringify({ t: 2, prevT: 1, tok: {}, req: [1, 2] }));
+    assert.strictEqual(arr!.req, undefined, 'an array is not a map');
   })) p++; else f++;
 
   if (test('serialize: one line, no embedded newline', () => {

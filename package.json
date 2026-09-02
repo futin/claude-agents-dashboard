@@ -12,6 +12,7 @@
     "test": "tsx test/run-all.ts",
     "typecheck": "tsc --noEmit",
     "session-analytics": "tsx scripts/session-analytics.ts",
+    "probe:usage-split": "tsx scripts/probe-usage-split.ts",
     "hooks:install": "bash scripts/install-hooks.sh",
     "hooks:uninstall": "bash scripts/install-hooks.sh --uninstall"
   },

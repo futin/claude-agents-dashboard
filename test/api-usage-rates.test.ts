@@ -57,10 +57,76 @@ function fixtureDir(): string {
   return dir;
 }
 
+/** The coefficients `countedFixtureDir` generates its utilization from. */
+const TRUE_PCT_PER_MTOK = 0.1;
+const TRUE_PCT_PER_REQUEST = 0.005;
+
+/**
+ * 25 one-minute intervals with **request counts recorded**, and utilization
+ * generated from the two coefficients above rather than from a single ratio.
+ *
+ * Tokens walk 1.0 → 3.0 Mtok on a 5-cycle and requests 40 → 140 on an
+ * 11-cycle, so the two regressors are separable; 25 intervals and ~16
+ * cumulative points clear `SPLIT_FLOORS` (20 and 10) as well as the pooled
+ * `CURRENT_FLOORS`, so one fixture exercises both numbers on the same row.
+ */
+function countedFixtureDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rates-counted-'));
+  const samples: string[] = [JSON.stringify({ t: T0, utilization: 10, resetsAt: R })];
+  const ledger: string[] = [];
+  let utilization = 10;
+  for (let i = 0; i < 25; i++) {
+    const mtok = 1 + (i % 5) * 0.5;
+    const reqs = 40 + ((i * 7) % 11) * 10;
+    utilization += TRUE_PCT_PER_MTOK * mtok + TRUE_PCT_PER_REQUEST * reqs;
+    samples.push(JSON.stringify({ t: T0 + (i + 1) * MIN, utilization, resetsAt: R }));
+    ledger.push(JSON.stringify({
+      t: T0 + (i + 1) * MIN,
+      prevT: T0 + i * MIN,
+      // `in` tokens weigh exactly 1, so weighted tokens read off the fixture.
+      tok: { 'opus-5': { in: mtok * 1_000_000, out: 0, cc: 0, cr: 0 } },
+      req: { 'opus-5': reqs }
+    }));
+  }
+  fs.writeFileSync(path.join(dir, '.usage-history.jsonl'), samples.join('\n') + '\n', 'utf8');
+  fs.writeFileSync(path.join(dir, LEDGER_FILE), ledger.join('\n') + '\n', 'utf8');
+  return dir;
+}
+
 export async function run(): Promise<number> {
   console.log('\n=== usage rates endpoint ===\n');
   let p = 0, f = 0;
   const check = (r: boolean): void => { if (r) p++; else f++; };
+
+  check(test('a ledger with counts fits the split, and both terms reach the body', () => {
+    const dir = countedFixtureDir();
+    try {
+      const nowMs = T0 + 26 * MIN;
+      const body = shapeUsageRates({
+        recording: true,
+        samples: readRecentSamples(dir),
+        ledger: readLedgerSince(nowMs - BASELINE_MS, dir),
+        nowMs
+      });
+      assert.strictEqual(body.models.length, 1, JSON.stringify(body.models));
+      const row = body.models[0];
+      assert.strictEqual(row.splitVerdict, 'fitted');
+      const tokErr = Math.abs(row.pctPerMWeighted! - TRUE_PCT_PER_MTOK) / TRUE_PCT_PER_MTOK;
+      const reqErr = Math.abs(row.pctPerRequest! - TRUE_PCT_PER_REQUEST) / TRUE_PCT_PER_REQUEST;
+      assert.ok(tokErr < 0.01, `token term off by ${(tokErr * 100).toFixed(2)}%: ${row.pctPerMWeighted}`);
+      assert.ok(reqErr < 0.01, `request term off by ${(reqErr * 100).toFixed(2)}%: ${row.pctPerRequest}`);
+      assert.ok(row.pctPerMWeighted! >= 0 && row.pctPerRequest! >= 0, 'no negative rate ever reaches the client');
+
+      // The pooled ratio is untouched by the split, and on this fixture it is
+      // exactly the number the split exists to correct: 50M weighted over
+      // ~16.25 points is ~3.1M per point, against the token-only 10M.
+      assert.strictEqual(row.intervals, 25);
+      assert.ok(row.weightedPerPct! < 4_000_000, `pooled was ${row.weightedPerPct}`);
+      assert.strictEqual(row.verdict, 'thin', 'no baseline yet — the split does not change that');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
 
   check(test('recording off → an honest empty body, no error flag', () => {
     const body = shapeUsageRates({ recording: false, samples: [], ledger: [], nowMs: T0 });
@@ -105,6 +171,12 @@ export async function run(): Promise<number> {
       assert.strictEqual(row.verdict, 'thin', 'no baseline mass yet — collecting, not concluding');
       assert.strictEqual(row.baselineWeightedPerPct, null);
       assert.strictEqual(row.deviationPct, null);
+      // The back-compat guard: this fixture's ledger lines predate request
+      // counts, so every number above is the one the single ratio always gave,
+      // and the split reports nothing rather than a zero.
+      assert.strictEqual(row.splitVerdict, 'thin');
+      assert.strictEqual(row.pctPerMWeighted, null);
+      assert.strictEqual(row.pctPerRequest, null);
       assert.strictEqual(body.externalSharePct, 0, 'every point of movement is accounted for');
       assert.strictEqual(new Date(body.generatedAt).toISOString(), body.generatedAt);
     } finally {

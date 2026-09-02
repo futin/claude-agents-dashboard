@@ -36,6 +36,25 @@ export interface LedgerLine {
   prevT: number;
   /** Model id → its counts. Empty means a measured zero, not missing data. */
   tok: Record<string, TokenCounts>;
+  /**
+   * Model id → requests counted in the same window, or **absent** on every
+   * line written before counts were recorded.
+   *
+   * A parallel map rather than a fifth key inside {@link TokenCounts}: the
+   * count is not a token type, so `weightedTokens` / `scaleCounts` must never
+   * see it, and per-model absence has to survive a parse that coerces every
+   * missing token type to 0. `req` absent means *not recorded*; `req: {}` on a
+   * line with spend means recorded and nothing attributable — the two-term fit
+   * in `usage-rate.ts` must be able to tell those apart from a measured zero.
+   */
+  req?: Record<string, number>;
+}
+
+/** What one window of events measured: tokens per model, and the requests behind them. */
+export interface WindowSums {
+  tok: Record<string, TokenCounts>;
+  /** One per event kept — an event is one deduplicated assistant `message.id`. */
+  req: Record<string, number>;
 }
 
 /** One assistant message's usage, as read out of a transcript. */
@@ -90,15 +109,17 @@ export function addCounts(into: TokenCounts, from: TokenCounts): void {
  * dropped rather than bucketed under `''`, which would reach the UI as a model
  * named nothing.
  */
-export function sumWindow(events: UsageEvent[], prevT: number, t: number): Record<string, TokenCounts> {
-  const out: Record<string, TokenCounts> = {};
+export function sumWindow(events: UsageEvent[], prevT: number, t: number): WindowSums {
+  const tok: Record<string, TokenCounts> = {};
+  const req: Record<string, number> = {};
   for (const e of events) {
     if (e.ts <= prevT || e.ts > t) continue;
     if (!e.model) continue;
-    const bucket = out[e.model] ?? (out[e.model] = emptyCounts());
+    const bucket = tok[e.model] ?? (tok[e.model] = emptyCounts());
     addCounts(bucket, e.tok);
+    req[e.model] = (req[e.model] ?? 0) + 1;
   }
-  return out;
+  return { tok, req };
 }
 
 /** One compact JSON object, no trailing newline — the caller adds it. */
@@ -133,7 +154,22 @@ export function parseLedgerLine(line: string): LedgerLine | null {
     const c = counts as Record<string, unknown>;
     tok[model] = { in: num(c.in), out: num(c.out), cc: num(c.cc), cr: num(c.cr) };
   }
-  return { t: raw.t, prevT: raw.prevT, tok };
+
+  // Deliberately not through `num()`: a count that coerced to 0 would claim a
+  // measured zero on every line written before counts existed. Absent stays
+  // absent, per model and for the line as a whole, and a junk or negative
+  // count drops that model's key rather than the line.
+  const rawReq = raw.req;
+  let req: Record<string, number> | undefined;
+  if (rawReq && typeof rawReq === 'object' && !Array.isArray(rawReq)) {
+    req = {};
+    for (const [model, n] of Object.entries(rawReq as Record<string, unknown>)) {
+      if (!model) continue;
+      if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) continue;
+      req[model] = n;
+    }
+  }
+  return { t: raw.t, prevT: raw.prevT, tok, ...(req === undefined ? {} : { req }) };
 }
 
 // ── The I/O shell ────────────────────────────────────────────────────────────
@@ -346,7 +382,8 @@ export function recordLedgerTick(opts?: { dir?: string; root?: string; nowMs?: n
       prevTickMs = nowMs; // seeding tick (or a clock that went backwards)
       return;
     }
-    appendLedgerLine({ t: nowMs, prevT: prevTickMs, tok: sumWindow(events, prevTickMs, nowMs) }, opts?.dir);
+    const { tok, req } = sumWindow(events, prevTickMs, nowMs);
+    appendLedgerLine({ t: nowMs, prevT: prevTickMs, tok, req }, opts?.dir);
     prevTickMs = nowMs;
     rotateLedgerIfNeeded(opts?.dir);
   } catch {

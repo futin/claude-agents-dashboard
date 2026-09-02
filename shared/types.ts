@@ -177,6 +177,17 @@ export interface UsageProfileResponse {
 export type ModelRateVerdict = 'drift' | 'stable' | 'mix-shift' | 'thin';
 
 /**
+ * Whether the two-term (tokens + requests) split is reported for one model.
+ *
+ * Separate from {@link ModelRateVerdict} on purpose: that verdict is about
+ * drift of the single pooled rate and means the same thing it always has.
+ * `thin` here is the only failure mode — no counts recorded yet, too little
+ * evidence, regressors that cannot be told apart, or a fit that came back
+ * physically impossible all reduce to "not enough evidence to separate them".
+ */
+export type ModelSplitVerdict = 'fitted' | 'thin';
+
+/**
  * One model's token-value row in `GET /api/usage/rates`.
  *
  * Every rate is "tokens per one percentage point of the 5-hour window", fitted
@@ -199,6 +210,24 @@ export interface ModelRateRow {
   intervals: number;
   /** Cumulative utilization points behind it. */
   utilSum: number;
+  /**
+   * Utilization points per 1M weighted tokens, from the two-term fit over the
+   * same current window — the token half of the cost, with per-request spend
+   * held out of it. Null whenever `splitVerdict` is `thin`.
+   */
+  pctPerMWeighted: number | null;
+  /**
+   * Utilization points per request, from the same fit — the half a single ratio
+   * has nowhere to put, and hands to the token term instead. Null under the
+   * same condition.
+   */
+  pctPerRequest: number | null;
+  /**
+   * Whether the split above is reported. The fields beside it — every rate,
+   * the deviation and the verdict — are the single-ratio numbers either way,
+   * unchanged by this fit.
+   */
+  splitVerdict: ModelSplitVerdict;
 }
 
 /**
