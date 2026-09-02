@@ -19,6 +19,16 @@ export function formatTok(n: number | null): string {
   return String(Math.round(n));
 }
 
+/**
+ * The raw rate as an aside, named for what it is: a translation that moves with
+ * the model's cache-read habit, not a price. `null` — not `—` — when there is
+ * no raw rate, because a translation of nothing is a line the card should omit.
+ */
+export function rawAsideText(rawPerPct: number | null): string | null {
+  if (rawPerPct === null || !Number.isFinite(rawPerPct)) return null;
+  return `≈ ${formatTok(rawPerPct)} raw at this model's recent mix`;
+}
+
 /** Signed percent, one decimal. The sign is the point, so it is always shown. */
 export function formatDeviation(pct: number | null): string {
   if (pct === null || !Number.isFinite(pct)) return '—';

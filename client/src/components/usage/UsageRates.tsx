@@ -1,16 +1,19 @@
 import type { ModelRateRow } from '../../../../shared/types';
 import { useUsageRates } from '../../hooks/useUsageRates';
 import {
-  evidenceText, formatDeviation, formatSharePct, formatTok, verdictText
+  evidenceText, formatDeviation, formatSharePct, formatTok, rawAsideText, verdictText
 } from '../../lib/usageRatesFormat';
 
 /**
  * Token value per model — what one percent of the 5-hour window actually costs,
  * and whether that price has moved.
  *
- * The raw number leads because it is what a person plans against; the badge
- * underneath judges on the weighted rate. `collecting` is a first-class state,
- * not an empty row — most models sit there for the first fortnight. No `title`
+ * The weighted rate leads because it is the only mix-invariant quantity on the
+ * row, and the one the badge underneath judges: raw tokens per percent are
+ * dominated by how much context a model's sessions replay, so leading with raw
+ * invited a cross-model price reading the figure cannot support. Raw stays, as
+ * an explicitly labelled translation. `collecting` is a first-class state, not
+ * an empty row — most models sit there for the first fortnight. No `title`
  * attributes: this board is read from a phone, where `title` never fires.
  */
 
@@ -23,9 +26,10 @@ const BADGE_CLASS: Record<ModelRateRow['verdict'], string> = {
 
 function Row({ row }: { row: ModelRateRow }) {
   const verdict = verdictText(row.verdict);
-  const baseline = row.baselineRawPerPct === null
+  const baseline = row.baselineWeightedPerPct === null
     ? 'no baseline yet'
-    : `baseline ${formatTok(row.baselineRawPerPct)}`;
+    : `baseline ${formatTok(row.baselineWeightedPerPct)}`;
+  const rawAside = rawAsideText(row.rawPerPct);
 
   return (
     <li className="rates-row">
@@ -35,14 +39,15 @@ function Row({ row }: { row: ModelRateRow }) {
       </div>
       <div className="rates-line">
         <span className="rates-value">
-          {formatTok(row.rawPerPct)}<span className="rates-unit"> / 1%</span>
+          {formatTok(row.weightedPerPct)}<span className="rates-unit"> weighted / 1%</span>
         </span>
         {row.deviationPct !== null && (
           <span className={row.verdict === 'drift' ? 'rates-dev drift' : 'rates-dev'}>
-            {formatDeviation(row.deviationPct)} weighted
+            {formatDeviation(row.deviationPct)} vs baseline
           </span>
         )}
       </div>
+      {rawAside !== null && <div className="rates-raw">{rawAside}</div>}
       <div className="rates-meta">
         {baseline} · {evidenceText(row.intervals, row.utilSum)}
       </div>
@@ -65,10 +70,14 @@ export function UsageRates() {
         <div>
           <h3>TOKEN VALUE PER MODEL</h3>
           <p className="up-sub">
-            Tokens per 1% of the 5-hour limit, measured from what this machine spent
-            against what the window charged for it. Drift is judged on the{' '}
-            <em>type-weighted</em> rate, so a change of token mix never reads as a
-            repricing. Baseline = the trailing 14 days before the last three.
+            <em>Type-weighted</em> tokens per 1% of the 5-hour limit, measured from
+            what this machine spent against what the window charged for it. Weighting
+            is what keeps a change of token mix from reading as a repricing, and drift
+            is judged on this same rate. Each rate is fitted from this machine's own
+            usage, and a model that fires more requests per token carries that
+            per-request window cost inside its token rate — so these are per-model
+            rates, <b>not a price list to compare across models</b>. Baseline = the
+            trailing 14 days before the last three.
           </p>
         </div>
       </div>

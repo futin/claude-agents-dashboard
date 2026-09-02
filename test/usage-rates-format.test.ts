@@ -5,6 +5,7 @@ import {
   formatDeviation,
   formatSharePct,
   formatTok,
+  rawAsideText,
   verdictText
 } from '../client/src/lib/usageRatesFormat.js';
 
@@ -52,6 +53,22 @@ export function run(): number {
     for (const v of ['drift', 'stable', 'mix-shift', 'thin'] as const) {
       assert.ok(verdictText(v).hint.length > 0, `${v} needs a hint`);
     }
+  })) p++; else f++;
+
+  if (test('rawAsideText labels the raw figure as a mix-dependent translation', () => {
+    assert.strictEqual(
+      rawAsideText(1_737_000),
+      "\u2248 1.7M raw at this model's recent mix"
+    );
+    assert.strictEqual(
+      rawAsideText(358_000),
+      "\u2248 358k raw at this model's recent mix"
+    );
+  })) p++; else f++;
+
+  if (test('rawAsideText: a translation of nothing is no line, never a dash', () => {
+    assert.strictEqual(rawAsideText(null), null);
+    assert.strictEqual(rawAsideText(Number.NaN), null);
   })) p++; else f++;
 
   if (test('formatSharePct rounds, and null stays null', () => {

@@ -824,6 +824,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .rates-model{font-family:var(--mono);font-size:12px;color:var(--text);word-break:break-all}
 .rates-value{font-family:var(--display);font-size:20px;font-weight:600;letter-spacing:.02em;color:var(--text)}
 .rates-unit{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--text3)}
+.rates-raw{margin-top:4px;font-family:var(--mono);font-size:11px;color:var(--text3)}
 .rates-dev{font-family:var(--mono);font-size:11px;color:var(--text2)}
 .rates-dev.drift{color:var(--red)}
 .rates-meta{margin-top:6px;font-family:var(--mono);font-size:10.5px;color:var(--text3)}

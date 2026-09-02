@@ -420,12 +420,24 @@ base-price differences are exactly what the fitted per-model rate absorbs.
 Carrying absolute prices would double-count them and put a currency in a
 product that shows none.
 
-**Drift is judged on the weighted rate only.** Weighted tokens per percent are
-mix-invariant *and* effort-invariant — thinking tokens are output tokens, so
-raising effort from `high` to `xhigh` raises consumption and utilization
-together and leaves the rate flat. The raw "1% ≈ N tokens" figure is a courtesy
-translation at the model's recent mix; when raw moves and weighted did not, the
-card says **mix shift**, never drift.
+**Drift is judged on the weighted rate only, and the card leads with it.**
+Weighted tokens per percent are mix-invariant *and* effort-invariant — thinking
+tokens are output tokens, so raising effort from `high` to `xhigh` raises
+consumption and utilization together and leaves the rate flat. That invariance
+is why the headline figure, its baseline and the deviation chip are all the
+weighted rate. The raw "1% ≈ N tokens" figure is a courtesy translation at the
+model's recent mix, kept as a labelled aside beneath the headline (`rawAsideText`
+in `client/src/lib/usageRatesFormat.ts`, omitted entirely when there is no raw
+rate); when raw moves and weighted did not, the card says **mix shift**, never
+drift.
+
+**No rate here is comparable across models.** Each is fitted from this machine's
+own usage against a single ratio, so a model that fires more requests per token
+carries that per-request window cost inside its token rate — the measured
+opus:fable ratio of ~4.2x against a ~2x list-price ratio is that term, not a
+repricing (`task-10` splits it out server-side). The card's subtitle says so in
+as many words; leading with raw made the number read as a price list, which is
+`bug-13`.
 
 ### The ledger (`lib/usage-ledger.ts`)
 
