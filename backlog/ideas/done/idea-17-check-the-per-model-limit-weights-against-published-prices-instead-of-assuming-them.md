@@ -3,6 +3,9 @@ id: idea-17
 title: Check the per-model limit weights against published prices instead of assuming them
 created: 2026-09-01
 tags: usage, analytics, docs
+updated: 2026-09-02T15:42:50Z
+promoted-to: task-11
+groom-elapsed: 151
 ---
 
 ## Problem
