@@ -22,6 +22,13 @@ const LARGE_MARKER = '[1m]';
  */
 const LARGE_WINDOW_MODEL_PATTERNS = [/sonnet/i, /opus/i, /fable/i];
 export const DEFAULT_TAIL_BYTES = 256 * 1024;
+/**
+ * Window for the launch-cwd read. Measured across all 652 transcripts on this
+ * machine the first `cwd`-bearing record (always the head `attachment`) ends by
+ * byte 7,837 — this is a little over 2x that, and a miss fails open rather than
+ * guessing (see {@link ParsedTranscript.originCwd}).
+ */
+export const HEAD_BYTES = 16 * 1024;
 
 /**
  * Tools whose trailing `tool_use` means the session is parked on a human, not
@@ -62,6 +69,17 @@ export interface ParsedTranscript {
   contextPct: number;
   activity: Activity | null;
   cwd: string | null;
+  /**
+   * Where the session was *launched*: the cwd of the oldest record that carries
+   * one. Null when the head window held none (fail open — never a guess).
+   *
+   * Distinct from {@link cwd}, the newest record's, because the two drift apart
+   * in both directions: a `cd` inside a Bash tool call moves the transcript's
+   * cwd while the process stays put, and entering a worktree chdir's the process
+   * so the newest cwd is the accurate one. Neither is reliable alone, so the
+   * liveness gate in `scan.ts` matches on either (bug-7).
+   */
+  originCwd: string | null;
   gitBranch: string | null;
   version: string | null;
   /**
@@ -138,6 +156,95 @@ export function readTail(filePath: string, tailBytes: number): TailResult | null
       try { fs.closeSync(fd); } catch { /* ignore */ }
     }
   }
+}
+
+/** Read the leading `headBytes` of a file as UTF-8, tolerant of big files. */
+export function readHead(filePath: string, headBytes: number): TailResult | null {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const { size } = fs.fstatSync(fd);
+    const length = Math.min(size, headBytes);
+    if (length <= 0) return { text: '', truncated: false, start: 0, size };
+    const buf = Buffer.alloc(length);
+    fs.readSync(fd, buf, 0, length, 0);
+    return { text: buf.toString('utf8'), truncated: length < size, start: 0, size };
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch { /* ignore */ }
+    }
+  }
+}
+
+interface OriginEntry {
+  cwd: string | null;
+  /** File size the answer was established at. */
+  size: number;
+}
+
+/**
+ * A transcript's launch cwd never changes, and the scan re-reads every session
+ * every 3s — so the head read happens once per file, not once per poll.
+ */
+const originCache = new Map<string, OriginEntry>();
+let originHeadReads = 0;
+
+/** Test seam: drop all remembered launch cwds. */
+export function resetOriginCache(): void {
+  originCache.clear();
+  originHeadReads = 0;
+}
+
+/** Test seam: how many times we actually went to disk for a head window. */
+export function originCacheStats(): { entries: number; headReads: number } {
+  return { entries: originCache.size, headReads: originHeadReads };
+}
+
+/** Oldest record carrying a string `cwd`, scanning the given lines forward. */
+function firstCwd(lines: string[], first: number): string | null {
+  for (let i = first; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    let rec: any;
+    try { rec = JSON.parse(line); } catch { continue; }
+    if (typeof rec.cwd === 'string') return rec.cwd;
+  }
+  return null;
+}
+
+/**
+ * Resolve the launch cwd, paying for a second read only when one is needed.
+ *
+ * An untruncated tail already holds the whole file, so its oldest decoded line
+ * *is* the first record — scan what's in memory instead of touching the disk.
+ */
+function resolveOriginCwd(
+  filePath: string,
+  tail: TailResult,
+  lines: string[],
+  first: number
+): string | null {
+  if (!tail.truncated) return firstCwd(lines, first);
+
+  const prev = originCache.get(filePath);
+  if (prev) {
+    // Shrunk ⇒ rotated or truncated; nothing we remembered describes this file.
+    if (tail.size >= prev.size) {
+      originCache.set(filePath, { cwd: prev.cwd, size: tail.size });
+      return prev.cwd;
+    }
+    originCache.delete(filePath);
+  }
+
+  const head = readHead(filePath, HEAD_BYTES);
+  if (!head) return null;                 // unreadable now — remember nothing
+  originHeadReads++;
+  // A partial trailing line can't parse, so no need to trim the window's end.
+  const cwd = firstCwd(head.text.split('\n'), 0);
+  originCache.set(filePath, { cwd, size: tail.size });
+  return cwd;
 }
 
 /** Sum the context-contributing token fields from a record's usage block. */
@@ -309,6 +416,8 @@ export function readTranscript(
     if (tokens && activity && cwd && lastTs && version && newestMessageSeen) break;
   }
 
+  const originCwd = resolveOriginCwd(filePath, tail, lines, first);
+
   const win = resolveWindow(tokens, model);
   const contextPct = win > 0 ? Math.min(100, Math.round((tokens / win) * 1000) / 10) : 0;
 
@@ -320,6 +429,7 @@ export function readTranscript(
     contextPct,
     activity,
     cwd,
+    originCwd,
     gitBranch,
     version,
     entrypoint,

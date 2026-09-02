@@ -343,7 +343,11 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     // and no tokens were spent: a 0% phantom row reading "your turn". Same
     // policy as above — nothing to display → drop it.
     if (parsed.commandOnly) continue;
-    const projectPath = parsed.cwd || null;
+    // The launch cwd, not the newest record's: a `cd` inside a Bash tool call
+    // moves the transcript's cwd for the rest of the session, which would label
+    // the row with a fragment like `open` and group it there in the Settings
+    // filter. Falls back to the newest cwd when the head window held none.
+    const projectPath = parsed.originCwd || parsed.cwd || null;
     // The dashboard's own token-renewal turns run in a dedicated cwd; their
     // transcripts are plumbing, not a session to display.
     if (projectPath && normCwd(projectPath) === normCwd(refreshCwd(options.homeDir))) continue;
@@ -359,7 +363,15 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     // Dead process (cwd not in the live set) → nothing is running and nothing
     // will resume on its own, so the session is idle no matter what the last
     // transcript record implies (interrupted mid-turn, unanswered question…).
-    const dead = live !== null && projectPath !== null && !live.has(normCwd(projectPath));
+    // Two keys, either one matching is proof of life. `lsof` reports the
+    // *process* cwd, and the transcript's newest cwd drifts away from it in
+    // both directions — shell drift moves the transcript (a `cd` in a tool
+    // call), process drift moves the process (entering a worktree) — so
+    // neither key alone is reliable (bug-7). Still exact equality per key: no
+    // containment, so per-cwd granularity stays the documented limit.
+    const liveKeys = [parsed.originCwd, parsed.cwd].filter((k): k is string => !!k);
+    const dead = live !== null && liveKeys.length > 0
+      && !liveKeys.some(k => live.has(normCwd(k)));
     // A held wait outranks even the liveness gate: the hook is holding a socket
     // open right now, which is stronger evidence of a live session than lsof's
     // per-cwd view. It also beats the transcript, which won't show the question

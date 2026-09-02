@@ -39,6 +39,12 @@ export type SessionSurface = 'local' | 'dashboard' | 'cloud';
 export interface Session {
   id: string;
   project: string;
+  /**
+   * Absolute cwd the session was *launched* in — its stable identity, and what
+   * `project` is derived from. Not the newest transcript record's cwd, which a
+   * `cd` inside a tool call drifts away from the process (bug-7). Null only
+   * when no record in the transcript's head window carried one.
+   */
   projectPath: string | null;
   /** User-set custom title from Claude Code (custom-title record); null when unnamed. */
   sessionName: string | null;

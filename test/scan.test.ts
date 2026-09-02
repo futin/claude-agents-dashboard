@@ -718,6 +718,66 @@ export function run(): number {
     assert.strictEqual(scan.lastMessageMs(root, 'sx'), null);
   })) p++; else f++;
 
+  // ---- bug-7: the liveness gate matches on either cwd key -------------------
+
+  // Origin /a/repo, newest /a/repo/backlog/bugs/open: a `cd` inside a Bash tool
+  // call moved the transcript's cwd, never the process's.
+  const driftedSpecs = (now: number) => {
+    const freshTs = new Date(now - 10 * 1000).toISOString();
+    return [{
+      dirName: '-a-repo', id: 'drift', mtimeMs: now - 10 * 1000,
+      records: [
+        metaRec('/a/repo', 'main'),
+        { ...at(assistantPending(), freshTs), cwd: '/a/repo/backlog/bugs/open' }
+      ]
+    }];
+  };
+  const driftScan = (now: number, liveCwds: Set<string>) => scan.scanSessions(
+    { maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 },
+    { root: makeRoot(driftedSpecs(now)), now, liveCwds }
+  ).sessions[0];
+
+  if (test('liveness: shell drift — live on the launch cwd reads working, labelled by launch dir', () => {
+    // bug-7 repro: the process never left /a/repo, so lsof reports only that.
+    const s = driftScan(1_700_000_000_000, new Set(['/a/repo']));
+    assert.strictEqual(s.status, 'working');
+    assert.strictEqual(s.projectPath, '/a/repo');
+    assert.strictEqual(s.project, 'repo');
+  })) p++; else f++;
+
+  if (test('liveness: process drift — live on the newest cwd also reads working', () => {
+    // The mirror case: entering a worktree chdir's the process, so the newest
+    // transcript cwd is the one lsof sees and the launch cwd is stale.
+    const s = driftScan(1_700_000_000_000, new Set(['/a/repo/backlog/bugs/open']));
+    assert.strictEqual(s.status, 'working');
+  })) p++; else f++;
+
+  if (test('liveness: a drifted session with neither cwd live is still idle', () => {
+    // Proves the two-key OR did not turn the dead gate into a no-op.
+    const s = driftScan(1_700_000_000_000, new Set(['/a/other']));
+    assert.strictEqual(s.status, 'idle');
+  })) p++; else f++;
+
+  if (test('liveness: an unresolvable launch cwd falls open to the newest cwd alone', () => {
+    // Head window holds no cwd (the padding is ~19 KB of cwd-less records and
+    // the file is past the 256 KB tail window), so originCwd is null and
+    // behaviour is exactly today's: match on the newest cwd.
+    const now = 1_700_000_000_000;
+    const freshTs = new Date(now - 10 * 1000).toISOString();
+    const pad = (i: number) => ({ type: 'progress', note: 'p' + i + '-' + 'x'.repeat(280) });
+    const root = makeRoot([{
+      dirName: '-a-repo', id: 'nohead', mtimeMs: now - 10 * 1000,
+      records: [
+        ...Array.from({ length: 900 }, (_, i) => pad(i)),
+        { ...at(assistantPending(), freshTs), cwd: '/a/repo/backlog/bugs/open' }
+      ]
+    }]);
+    const s = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 },
+      { root, now, liveCwds: new Set(['/a/repo/backlog/bugs/open']) }).sessions[0];
+    assert.strictEqual(s.status, 'working');
+    assert.strictEqual(s.projectPath, '/a/repo/backlog/bugs/open');
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }

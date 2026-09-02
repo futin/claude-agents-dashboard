@@ -3,8 +3,10 @@ id: bug-7
 title: Live sessions read IDLE when lsof cannot see the process or the cwd drifted
 created: 2026-08-28
 tags: sessions, scan, spawn
-updated: 2026-09-02T15:27:18Z
+updated: 2026-09-02T15:54:20Z
 groom-elapsed: 110
+started: 2026-09-02T15:35:19Z
+execute-elapsed: 1141
 ---
 
 ## Symptom
@@ -211,3 +213,116 @@ transcript cwd drifts one level below its launch cwd, then reload the Sessions v
 this session's row: while its turn is mid-flight the dot must be green **WORKING** and the
 project label must read the launch directory's basename (the worktree dir), not `backlog`.
 Before the fix the same row reads gray **IDLE** with the label `backlog`.
+
+## Outcome
+
+**2026-09-02 — fixed as planned (two cwd keys, one liveness gate), verified live.**
+
+Cause B re-confirmed against `main` at `9e9b77d` before any change: `transcript.ts` scans
+newest-first so `parsed.cwd` is the *newest* record's cwd, and `scan.ts` compared exactly that
+one value against a set of **process** cwds. Re-measured across all 652 transcripts on this
+machine: 30 drift (all deeper), 0 lack a head `cwd`, worst first-`cwd` ends at byte 7,837 — so
+the groom's 16 KB head window is still a little over 2x the worst case.
+
+What shipped, matching the plan's steps 1-4 with the user's answer to the flagged assumption
+(**launch cwd** — the plan's default, not the narrow gate-only variant):
+
+- `server/lib/transcript.ts` — `readHead(filePath, headBytes)` beside `readTail`, `HEAD_BYTES =
+  16 KB`, and `originCwd: string | null` on `ParsedTranscript` (oldest record carrying a `cwd`).
+  An untruncated tail resolves it from the already-decoded lines with **no** disk read; only a
+  truncated tail calls `readHead`, and that answer is memoized per path, dropped only when the
+  file **shrinks** — the same invalidation rule as `title-cache.ts`. Test seams
+  `resetOriginCache()` / `originCacheStats()` mirror `resetTitleCache` / `titleCacheStats`.
+- `server/lib/scan.ts` — `projectPath = parsed.originCwd || parsed.cwd || null` (the label,
+  pill and Settings filter now name the launch directory, never a fragment like `open`), and the
+  `dead` gate matches on **either** key by exact equality: dead only when the live set is
+  non-null, at least one key is non-null, and neither is in the set. Fail-open shape kept.
+- `shared/types.ts` — `Session.projectPath` doc comment pinned to the *launch* cwd. No new API
+  field; the client reads `project`, never `projectPath`.
+- `docs/subsystems/sessions.md` — the row-label bullet now says the transcript's *first* `cwd`,
+  and the liveness paragraph gains the two-key match, both drift directions, the memoized head
+  read and the worktree-label trade-off. The `docs-sync` stamp is deliberately left alone for
+  `/docs-sync` to re-baseline.
+
+### `pnpm typecheck`
+
+```
+> claude-agents-dashboard@0.1.0 typecheck /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+> tsc --noEmit
+```
+
+(no output, exit 0)
+
+### `pnpm test` — 1106 cases, 0 failed
+
+```
+  ✓ originCwd is the oldest cwd, cwd the newest, when the tail is truncated
+  ✓ originCwd equals cwd when the session never drifted
+  ✓ originCwd is null (fail open) when no cwd sits in the head window
+  ✓ originCwd is memoized per path; only a shrunk file re-reads the head
+  ✓ originCwd costs no head read when the whole file is inside the tail window
+Passed: 17  Failed: 0
+
+  ✓ liveness: a worktree session is live on its own cwd, not its parent repo
+  ✓ liveness: shell drift — live on the launch cwd reads working, labelled by launch dir
+  ✓ liveness: process drift — live on the newest cwd also reads working
+  ✓ liveness: a drifted session with neither cwd live is still idle
+  ✓ liveness: an unresolvable launch cwd falls open to the newest cwd alone
+Passed: 53  Failed: 0
+
+ALL PASS
+```
+
+Both test files are purely additive (`git diff --numstat`: `60 0 test/scan.test.ts`,
+`80 0 test/transcript.test.ts`), so plan case 10 holds — `test/scan.test.ts:401` runs
+unmodified and green.
+
+### Acceptance bar (mutation) — met, plus two extra
+
+| mutation | case that must fail | result |
+| --- | --- | --- |
+| `liveKeys = [parsed.cwd]` (drop the origin key) | 6, shell drift | ✗ `liveness: shell drift …` — `Passed: 52 Failed: 1` |
+| `liveKeys = [parsed.originCwd]` (drop the newest key) | 7, process drift | ✗ `liveness: process drift …` — `Passed: 52 Failed: 1` |
+| memo disabled (`prev` forced `undefined`) | 4, memo | ✗ `second read served from the memo` |
+| `projectPath = parsed.cwd` (label reverted) | 6, label half | ✗ `+ '/a/repo/backlog/bugs/open'` vs expected `/a/repo` |
+
+Each mutation was reverted from a backup and the full suite re-run green afterwards.
+
+### Live end-to-end (the plan's browser step, run in the main checkout)
+
+This session's own transcript is 470 KB — past the 256 KB tail window — so it exercises the
+truncated-tail head read for real. `cd backlog && pwd` in a Bash tool call drifted its
+transcript cwd one level below its launch cwd, and the real probe confirmed a clean A/B: the
+launch cwd was in the live set and the drifted cwd was **not**, so only the origin key could
+save the row.
+
+```
+$ lsof -p 24675,30389,32761,60284,70188 -a -d cwd -Fn | grep ^n | sort | uniq -c
+   1 /Users/andrejajevtic/Documents/custom-projects/backlog-manager
+   1 /Users/andrejajevtic/Documents/custom-projects/backlog-manager/.worktrees/runs-view-redesign
+   2 /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+   1 /Users/andrejajevtic/Documents/timify-projects/microservice
+```
+
+`GET /api/sessions` (dev server on 4700/5700, the user's own 4173/5174 left untouched):
+
+```json
+{
+  "id": "606079c7-82fd-47fb-990a-86f723cc6559",
+  "status": "working",
+  "project": "claude-agents-dashboard",
+  "projectPath": "/Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard",
+  "branch": "main",
+  "activity": { "tool": "Bash", "detail": "Query the live API for this session's row" }
+}
+```
+
+The Sessions view rendered that row with a green **WORKING** dot and the pill
+`claude-agents-dashboard`. Pre-fix the same row read gray **IDLE** with the pill `backlog` —
+which is what mutations 1 and 4 above reproduce at the test level.
+
+**Not verified, needs a human:** the process-drift direction was proven only by unit test
+(case 7) and by the population measurement, never by live-driving a session into a worktree
+mid-run and watching its row; and the label trade-off the user accepted (a session that
+*enters* a worktree now shows its parent repo in the pill and groups under it in the Settings
+filter) was not exercised in the browser.

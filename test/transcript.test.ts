@@ -217,6 +217,86 @@ export function run(): number {
     assert.strictEqual(empty.commandOnly, false);
   })) p++; else f++;
 
+  // ---- bug-7: originCwd, the launch cwd -------------------------------------
+
+  // A record big enough to pad a fixture past a window boundary, carrying no cwd.
+  const pad = (i: number) => ({ type: 'progress', note: 'p' + i + '-' + 'x'.repeat(280) });
+
+  if (test('originCwd is the oldest cwd, cwd the newest, when the tail is truncated', () => {
+    tr.resetOriginCache();
+    const file = fixture([
+      { type: 'attachment', cwd: '/a/repo', timestamp: '2026-09-01T10:00:00Z' },
+      ...Array.from({ length: 8 }, (_, i) => pad(i)),
+      { type: 'user', cwd: '/a/repo/sub', message: { role: 'user', content: 'x' }, timestamp: '2026-09-01T10:05:00Z' }
+    ]);
+    const p = tr.readTranscript(file, { tailBytes: 400 })!;
+    assert.strictEqual(p.originCwd, '/a/repo');
+    assert.strictEqual(p.cwd, '/a/repo/sub');
+  })) p++; else f++;
+
+  if (test('originCwd equals cwd when the session never drifted', () => {
+    tr.resetOriginCache();
+    const file = fixture([
+      { type: 'attachment', cwd: '/a/repo', timestamp: '2026-09-01T10:00:00Z' },
+      ...Array.from({ length: 8 }, (_, i) => pad(i)),
+      { type: 'user', cwd: '/a/repo', message: { role: 'user', content: 'x' }, timestamp: '2026-09-01T10:05:00Z' }
+    ]);
+    const p = tr.readTranscript(file, { tailBytes: 400 })!;
+    assert.strictEqual(p.originCwd, '/a/repo');
+    assert.strictEqual(p.cwd, '/a/repo');
+  })) p++; else f++;
+
+  if (test('originCwd is null (fail open) when no cwd sits in the head window', () => {
+    tr.resetOriginCache();
+    // 60 * ~300B = ~18 KB of cwd-less records ahead of the first cwd, so the
+    // 16 KB head window genuinely misses. No guess is made.
+    const file = fixture([
+      ...Array.from({ length: 60 }, (_, i) => pad(i)),
+      { type: 'user', cwd: '/a/repo/sub', message: { role: 'user', content: 'x' }, timestamp: '2026-09-01T10:05:00Z' }
+    ]);
+    const p = tr.readTranscript(file, { tailBytes: 400 })!;
+    assert.strictEqual(p.originCwd, null);
+    assert.strictEqual(p.cwd, '/a/repo/sub');
+  })) p++; else f++;
+
+  if (test('originCwd is memoized per path; only a shrunk file re-reads the head', () => {
+    tr.resetOriginCache();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-oc-'));
+    const file = path.join(dir, 's.jsonl');
+    const line = (r: unknown) => JSON.stringify(r) + '\n';
+    const head = line({ type: 'attachment', cwd: '/a/repo', timestamp: '2026-09-01T10:00:00Z' });
+    const body = (n: number) => Array.from({ length: n }, (_, i) => line(pad(i))).join('');
+    const newest = line({ type: 'user', cwd: '/a/repo/sub', message: { role: 'user', content: 'x' }, timestamp: '2026-09-01T10:05:00Z' });
+
+    fs.writeFileSync(file, head + body(20) + newest);
+    assert.strictEqual(tr.readTranscript(file, { tailBytes: 400 })!.originCwd, '/a/repo');
+    assert.strictEqual(tr.readTranscript(file, { tailBytes: 400 })!.originCwd, '/a/repo');
+    assert.strictEqual(tr.originCacheStats().headReads, 1, 'second read served from the memo');
+
+    // Appends leave the launch cwd untouched, so no second head read.
+    fs.appendFileSync(file, newest);
+    assert.strictEqual(tr.readTranscript(file, { tailBytes: 400 })!.originCwd, '/a/repo');
+    assert.strictEqual(tr.originCacheStats().headReads, 1, 'an append does not invalidate');
+
+    // Smaller than before but still past the tail window: rotation/truncation,
+    // so nothing remembered describes this file any more.
+    fs.writeFileSync(file, head + body(10) + newest);
+    assert.strictEqual(tr.readTranscript(file, { tailBytes: 400 })!.originCwd, '/a/repo');
+    assert.strictEqual(tr.originCacheStats().headReads, 2, 'a shrunk file re-reads the head');
+  })) p++; else f++;
+
+  if (test('originCwd costs no head read when the whole file is inside the tail window', () => {
+    tr.resetOriginCache();
+    const file = fixture([
+      { type: 'attachment', cwd: '/a/repo', timestamp: '2026-09-01T10:00:00Z' },
+      { type: 'user', cwd: '/a/repo/sub', message: { role: 'user', content: 'x' }, timestamp: '2026-09-01T10:05:00Z' }
+    ]);
+    const p = tr.readTranscript(file)!;
+    assert.strictEqual(p.originCwd, '/a/repo');
+    assert.strictEqual(p.cwd, '/a/repo/sub');
+    assert.strictEqual(tr.originCacheStats().headReads, 0);
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }

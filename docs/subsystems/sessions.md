@@ -9,8 +9,9 @@ params, so a changed row count or window takes effect on the next tick.
 
 - **Status dot** — one of four states (below).
 - **Name + git branch** — a named session leads with its custom title and demotes the
-  project to a pill; an unnamed one leads with the project itself (real path from the
-  transcript's `cwd`). Either way the row also carries its `gitBranch`.
+  project to a pill; an unnamed one leads with the project itself (basename of the
+  transcript's *first* `cwd` — where the session was launched, not where its shell has
+  since wandered). Either way the row also carries its `gitBranch`.
 - **Model + CLI version** — what the session is running.
 - **Surface pill** — where the session lives, when that isn't the obvious answer. A headless
   spawn appears in no other list, which is worth saying on the row rather than leaving to be
@@ -191,8 +192,29 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
 record often has no `end_turn`, so on disk it looks recent + pending = `working` forever
 even though nothing runs. So `scan.ts` `liveCwds()` shells out twice — `ps -Ao pid=,comm=`
 for the pids whose comm ends in `/claude` (or *is* `claude`), then
-`lsof -p <pids> -a -d cwd -Fn` for those pids' cwds; a session whose `projectPath` isn't in
-that set is forced to `idle`, no matter the transcript. The pid list comes from `ps` because
+`lsof -p <pids> -a -d cwd -Fn` for those pids' cwds; a session with **neither** cwd key in
+that set is forced to `idle`, no matter the transcript.
+
+**Two cwd keys, either one is proof of life.** `lsof` reports the *process* cwd, and a
+transcript's newest `cwd` drifts away from it in both directions, so neither value is reliable
+alone (bug-7). *Shell drift:* a `cd` inside a Bash tool call moves the cwd stamped on every
+later record while the claude process never chdir'd — the launch cwd is the one `lsof` matches.
+*Process drift:* entering a git worktree mid-session chdir's the process itself — now the
+newest cwd is the accurate one and the launch cwd is stale. So `readTranscript` returns both:
+`cwd` (newest record) and `originCwd` (oldest record carrying one), and the gate matches on
+either, still by **exact** equality per key — no containment matching, or one claude sitting in
+`~` would mark every session beneath it live. `originCwd` costs a second read only when it has
+to: an untruncated tail already holds the whole file, so the oldest decoded line *is* the first
+record. Only a truncated tail triggers `readHead(file, HEAD_BYTES)` (16 KB — a little over 2×
+the worst first-`cwd` offset measured across every transcript on this machine, 7,837 B), and
+that answer is memoized per path and dropped only when the file **shrinks** (rotation or
+truncation) — the same invalidation rule, for the same reason, as `title-cache.ts`. A head
+window holding no `cwd` yields `originCwd: null` and falls open to the newest cwd alone, which
+is exactly the pre-bug-7 behaviour. `projectPath` (and so the row's project pill and the
+Settings project filter) is `originCwd ?? cwd` — the launch directory, which is the session's
+stable identity and never a fragment like `open`. Trade-off: a session that *entered* a
+worktree shows its parent repo, while every session *launched* in one (all dashboard and
+orchestrator spawns) is unaffected. The pid list comes from `ps` because
 `lsof -c` matches the *binary's filename*, and the native installer runs a version-named file
 (`~/.local/share/claude/versions/2.1.250`) behind a `claude` symlink — lsof saw `2.1.250`, so
 every session under that installer read dead (bug-12). Capital-`C` `Claude.app` (the desktop
