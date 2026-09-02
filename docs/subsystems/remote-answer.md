@@ -224,8 +224,11 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
   because the *other* surface can flip it — turning it on from your phone should show up
   on the laptop without a reload. Renders as an inert `<span>` (not a disabled button)
   when `available` is false, so a config kill switch can't look like a stuck control. Its
-  wording is "phone answers", never "instead of the terminal": on only *allows* remote
-  answers, gate 3 still sends desk-time questions to the terminal.
+  wording is "remote answers", never a device word: the answering surface is any browser
+  — laptop, tablet, another tab on this machine — and the switch governs plan send-backs
+  and permission decisions as well as plain replies, so naming one device understates it.
+  And never "instead of the terminal": on only *allows* remote answers, gate 3 still
+  sends desk-time questions to the terminal.
 - **`usePendingQuestion`** polls the question endpoint at the configured refresh rate
   (`useSettings().settings.refreshMs`, same cadence as `useSessionChat`; the response is a
   ~50-byte in-memory lookup). The reset-on-new-question effect is deliberately kept in its

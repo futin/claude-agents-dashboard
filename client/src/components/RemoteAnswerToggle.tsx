@@ -17,7 +17,7 @@ export function RemoteAnswerToggle({ control }: { control: RemoteAnswerControl }
   if (!state.available) {
     return (
       <span className="ra-pill off" title="REMOTE_ANSWER=false in the server config">
-        <span className="ra-dot" />phone answers: disabled
+        <span className="ra-dot" />remote answers: disabled
       </span>
     );
   }
@@ -37,7 +37,7 @@ export function RemoteAnswerToggle({ control }: { control: RemoteAnswerControl }
       title={title}
     >
       <span className="ra-dot" />
-      phone answers: {state.enabled ? 'on' : 'off'}
+      remote answers: {state.enabled ? 'on' : 'off'}
       {state.enabled && !state.persisted && <span className="ra-warn" title="Couldn’t be saved — resets when the server restarts">*</span>}
       {needsToken && <span className="ra-warn">token?</span>}
     </button>

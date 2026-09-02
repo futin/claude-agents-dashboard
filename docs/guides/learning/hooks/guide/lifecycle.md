@@ -66,7 +66,7 @@ The first hook runs before the model sees anything, and its stdout is prepended 
 ```bash
 # scripts/remote-decision-hook.sh:60-68  (abridged here — heredoc truncated at rule 1)
 cat <<'EOF'
-REMOTE DECISION MODE — the dashboard is accepting phone answers and this session
+REMOTE DECISION MODE — the dashboard is accepting remote answers and this session
 runs without permission prompts. The user may be away from the terminal: they can
 answer the AskUserQuestion tool from their phone, but they cannot read a
 plain-text question or approve a plan card. Therefore, for this session:
@@ -78,7 +78,7 @@ EOF
 ```
 
 **Why a hook rather than a line in `CLAUDE.md`.** The instruction is only correct under two
-live conditions — the dashboard is accepting phone answers, *and* this session runs in an
+live conditions — the dashboard is accepting remote answers, *and* this session runs in an
 auto-ish permission mode. Both are re-checked on every prompt, so flipping the dashboard
 toggle takes effect on your next message.
 

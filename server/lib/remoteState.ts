@@ -1,7 +1,7 @@
 /**
  * remoteState.ts — the runtime on/off switch for remote answers.
  *
- * Three gates decide whether a question waits for a phone answer, each with a
+ * Three gates decide whether a question waits for a remote answer, each with a
  * distinct job:
  *
  *   1. `REMOTE_ANSWER` (env)  — is the feature available at all? A hard kill
