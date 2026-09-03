@@ -1,12 +1,14 @@
 import assert from 'node:assert';
 
 import {
+  longestPrefixMatch,
   parseLedgerLine,
   rawTokens,
   serializeLedgerLine,
   sumWindow,
   TYPE_WEIGHTS,
-  weightedTokens
+  weightedTokens,
+  weightsFor
 } from '../server/lib/usage-ledger.js';
 import type { LedgerLine, TokenCounts, UsageEvent } from '../server/lib/usage-ledger.js';
 
@@ -27,8 +29,8 @@ export function run(): number {
   // ── weighting ──
 
   if (test('weightedTokens: the ratio set, on a mixed count', () => {
-    // 1000·1 + 100·5 + 200·1.25 + 10000·0.1
-    assert.strictEqual(weightedTokens(tc(1000, 100, 200, 10_000)), 2750);
+    // 1000·1 + 100·5 + 200·2 + 10000·0.1
+    assert.strictEqual(weightedTokens(tc(1000, 100, 200, 10_000)), 2900);
   })) p++; else f++;
 
   if (test('weightedTokens: all zero → 0', () => {
@@ -40,7 +42,47 @@ export function run(): number {
   })) p++; else f++;
 
   if (test('the ratios are the documented ones', () => {
-    assert.deepStrictEqual(TYPE_WEIGHTS, { in: 1, out: 5, cc: 1.25, cr: 0.1 });
+    assert.deepStrictEqual(TYPE_WEIGHTS, { in: 1, out: 5, cc: 2, cr: 0.1 });
+  })) p++; else f++;
+
+  // ── per-model weight overrides ──
+
+  /** A million cache-read tokens and nothing else — the only type that varies. */
+  const CR_ONLY = tc(0, 0, 0, 1_000_000);
+
+  if (test('weightedTokens: Fable 5.1 prices cache reads at 0.025, not 0.1', () => {
+    assert.strictEqual(weightedTokens(CR_ONLY, 'claude-fable-5-1'), 25_000);
+    assert.strictEqual(weightedTokens(CR_ONLY, 'claude-fable-5'), 100_000);
+    // No model is the unknown-model fallback: the uniform set.
+    assert.strictEqual(weightedTokens(CR_ONLY), 100_000);
+  })) p++; else f++;
+
+  if (test('weightedTokens: Mythos 5.1 carries the same cache-read override', () => {
+    assert.strictEqual(weightedTokens(CR_ONLY, 'claude-mythos-5-1'), 25_000);
+  })) p++; else f++;
+
+  if (test('weightedTokens: longest prefix wins, so a dated 5.1 id is not read as 5', () => {
+    assert.strictEqual(weightedTokens(CR_ONLY, 'claude-fable-5-1-20260701'), 25_000);
+    assert.strictEqual(weightedTokens(CR_ONLY, 'claude-fable-5-20260701'), 100_000);
+  })) p++; else f++;
+
+  if (test('weightedTokens: an override touching cr leaves in/out/cc uniform', () => {
+    const mixed = tc(1000, 100, 200, 0);   // 1000·1 + 100·5 + 200·2
+    assert.strictEqual(weightedTokens(mixed, 'claude-fable-5-1'), 1900);
+    assert.strictEqual(weightedTokens(mixed, 'claude-opus-5'), 1900);
+  })) p++; else f++;
+
+  if (test('weightsFor: the override merges into the uniform set, never replaces it', () => {
+    assert.deepStrictEqual(weightsFor('claude-fable-5-1'), { in: 1, out: 5, cc: 2, cr: 0.025 });
+    assert.deepStrictEqual(weightsFor('claude-opus-5'), TYPE_WEIGHTS);
+    assert.deepStrictEqual(weightsFor(), TYPE_WEIGHTS);
+  })) p++; else f++;
+
+  if (test('longestPrefixMatch: no match, exact match, and the longer of two', () => {
+    const keys = ['claude-fable-5', 'claude-fable-5-1'];
+    assert.strictEqual(longestPrefixMatch(keys, 'claude-opus-5'), undefined);
+    assert.strictEqual(longestPrefixMatch(keys, 'claude-fable-5'), 'claude-fable-5');
+    assert.strictEqual(longestPrefixMatch(keys, 'claude-fable-5-1-20260701'), 'claude-fable-5-1');
   })) p++; else f++;
 
   // ── sumWindow: the half-open (prevT, t] boundary ──

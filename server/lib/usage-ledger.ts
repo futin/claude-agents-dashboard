@@ -69,15 +69,93 @@ export interface UsageEvent {
 /**
  * Cost ratios between token types, normalized to input = 1. Deliberately only
  * the ratios: a fitted per-model rate already absorbs base price differences.
+ *
+ * Checked **2026-09-02** against
+ * `https://platform.claude.com/docs/en/about-claude/pricing`. These are API
+ * list-price ratios used as a *proxy*: Anthropic publishes no per-token-type
+ * weighting for the 5-hour subscription limit, so nothing here is a claim
+ * about how that limit charges — see `docs/subsystems/usage-limits.md`.
+ *
+ * `cc` is the **1-hour** cache-write tier (2x), not the 5-minute one (1.25x),
+ * because that is what this machine writes: measured over 7 days of
+ * transcripts, 99.96% of cache-write tokens carried
+ * `cache_creation.ephemeral_1h_input_tokens`. The ledger records only the flat
+ * `cache_creation_input_tokens`, so the TTL cannot be recovered per line — the
+ * assumption is kept honest by `pnpm check:weights`, which re-measures the 1h
+ * share and fails when it no longer supports this constant.
  */
-export const TYPE_WEIGHTS: Readonly<TokenCounts> = { in: 1, out: 5, cc: 1.25, cr: 0.1 };
+export const TYPE_WEIGHTS: Readonly<TokenCounts> = { in: 1, out: 5, cc: 2, cr: 0.1 };
+
+/**
+ * Per-model departures from {@link TYPE_WEIGHTS}, keyed by model-id **prefix**.
+ *
+ * Fable 5.1 and Mythos 5.1 price cache reads at 0.025x base input rather than
+ * the 0.1x every other current model charges; the pricing page states the
+ * exception explicitly. Only the keys that differ appear — everything else
+ * falls back to the uniform set.
+ */
+export const MODEL_TYPE_WEIGHT_OVERRIDES: Readonly<Record<string, Partial<TokenCounts>>> = {
+  'claude-fable-5-1': { cr: 0.025 },
+  'claude-mythos-5-1': { cr: 0.025 }
+};
+
+/**
+ * Model-id prefixes whose ratios were actually checked on the date above.
+ * A superset of {@link MODEL_TYPE_WEIGHT_OVERRIDES}: the entries with no
+ * override are the ones measured to match the uniform set.
+ *
+ * Not consulted by the weighting — a model outside this list is weighted
+ * uniformly all the same. It exists so `pnpm check:weights` can *say* that a
+ * model's multipliers are unverified instead of silently assuming them.
+ */
+export const CHECKED_MODEL_PREFIXES: readonly string[] = [
+  'claude-fable-5-1',
+  'claude-fable-5',
+  'claude-mythos-5-1',
+  'claude-opus-5',
+  'claude-sonnet-5',
+  'claude-haiku-4-5'
+];
+
+/**
+ * The longest entry of `table` that prefixes `model`, or undefined.
+ *
+ * Longest prefix rather than an exact id because dated snapshots are live
+ * (`claude-haiku-4-5-20251001`), and longest rather than first because a bare
+ * `claude-fable-5` entry would otherwise swallow `claude-fable-5-1`, which
+ * prices cache reads 4x lower. Both entries in the override table are already
+ * the longer prefix, so today the rule guards the *next* entry, not these.
+ */
+export function longestPrefixMatch(keys: Iterable<string>, model: string): string | undefined {
+  let best: string | undefined;
+  for (const key of keys) {
+    if (!model.startsWith(key)) continue;
+    if (best === undefined || key.length > best.length) best = key;
+  }
+  return best;
+}
+
+/**
+ * The weights to use for `model`, uniform set included.
+ *
+ * No model given is the **unknown-model fallback**, not a default to rely on:
+ * it returns the uniform set, which is wrong by 4x on cache reads for Fable and
+ * Mythos 5.1. Every caller that has a model id in scope must pass it.
+ */
+export function weightsFor(model?: string): Readonly<TokenCounts> {
+  if (!model) return TYPE_WEIGHTS;
+  const key = longestPrefixMatch(Object.keys(MODEL_TYPE_WEIGHT_OVERRIDES), model);
+  if (key === undefined) return TYPE_WEIGHTS;
+  return { ...TYPE_WEIGHTS, ...MODEL_TYPE_WEIGHT_OVERRIDES[key] };
+}
 
 /** The mix-invariant total — the quantity every rate and drift verdict is fitted on. */
-export function weightedTokens(tok: TokenCounts): number {
-  return tok.in * TYPE_WEIGHTS.in
-    + tok.out * TYPE_WEIGHTS.out
-    + tok.cc * TYPE_WEIGHTS.cc
-    + tok.cr * TYPE_WEIGHTS.cr;
+export function weightedTokens(tok: TokenCounts, model?: string): number {
+  const w = weightsFor(model);
+  return tok.in * w.in
+    + tok.out * w.out
+    + tok.cc * w.cc
+    + tok.cr * w.cr;
 }
 
 /** The plain count, for the courtesy "1% ≈ N tokens" translation only. */

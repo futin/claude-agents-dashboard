@@ -8,7 +8,8 @@
  * first version of this fitter's join classified **759 of 759** real intervals
  * as `gap` with every test passing (`docs/subsystems/usage-limits.md`). The
  * question this answers is the one `task-10` was filed on — the measured
- * opus:fable cost per weighted token is ~4.2x against a ~2x list price, and a
+ * opus:fable cost per weighted token is ~4.2x where the API list price is
+ * 2.00x (checked 2026-09-02; the limit's own weighting is unpublished), and a
  * missing per-request term is the hypothesis. If separating the terms does not
  * move that ratio down, the hypothesis is wrong and belongs back in `bug-13`.
  *
@@ -206,7 +207,7 @@ function main(): number {
 
   // bug-13's estimator: one regressor per model, no request term, same rows.
   const oneTerm = ols(
-    usable.map((i) => models.map((m) => (i.tok[m] ? weightedTokens(i.tok[m]) / MTOK : 0))),
+    usable.map((i) => models.map((m) => (i.tok[m] ? weightedTokens(i.tok[m], m) / MTOK : 0))),
     usable.map((i) => i.dUtil)
   );
   console.log('\n  one-term joint OLS over the usable set (bug-13’s estimator):');
@@ -278,7 +279,7 @@ function main(): number {
   const rawOf = new Map(diagnostics.map((d) => [d.model, d.raw]));
   console.log(`      same fit, sign refusal lifted (diagnostic only): `
     + ratio((m) => rawOf.get(m)?.pctPerMWeighted));
-  console.log('\n    A two-term ratio that has not fallen toward the ~2x price ratio refutes');
+  console.log('\n    A two-term ratio that has not fallen toward the 2.00x list-price ratio refutes');
   console.log('    the missing-per-request-term hypothesis. Say so rather than reporting');
   console.log('    the new number as an improvement.\n');
   return 0;

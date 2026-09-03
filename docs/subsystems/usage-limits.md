@@ -414,11 +414,42 @@ Design record: `docs/superpowers/specs/2026-08-28-model-token-rates-design.md`.
 ### No dollars, only ratios
 
 API pricing survives here as **ratios between token types** and nothing else:
-`in 1 · out 5 · cache-write 1.25 · cache-read 0.1` (`TYPE_WEIGHTS`). Those
-ratios are uniform across current models, so one set suffices, and per-model
-base-price differences are exactly what the fitted per-model rate absorbs.
-Carrying absolute prices would double-count them and put a currency in a
+`in 1 · out 5 · cache-write 2.0 · cache-read 0.1` (`TYPE_WEIGHTS`). Per-model
+base-price differences are exactly what the fitted per-model rate absorbs, so
+carrying absolute prices would double-count them and put a currency in a
 product that shows none.
+
+Checked **2026-09-02** against
+[the pricing page](https://platform.claude.com/docs/en/about-claude/pricing).
+Two of those four numbers are not what a reader would assume:
+
+- **Cache-write is the 1-hour tier (2.0x), not the 5-minute one (1.25x).** Both
+  tiers exist; the ledger stores only the flat `cache_creation_input_tokens` and
+  cannot tell them apart per line. Which one applies is therefore a measured
+  fact about this machine, not a choice: over 7 days of transcripts, **99.96%**
+  of cache-write tokens carried `cache_creation.ephemeral_1h_input_tokens`
+  (100.00% for every model except `claude-opus-5` at 99.95%).
+- **Cache-read is 0.1x for every model in play *except* Fable 5.1 and Mythos
+  5.1, which price it at 0.025x** — a 4x difference the page states explicitly.
+  That one exception is why the weights are no longer a single uniform set:
+  `MODEL_TYPE_WEIGHT_OVERRIDES` in `usage-ledger.ts` carries per-model
+  departures keyed by model-id **prefix**, matched longest-first so a dated
+  snapshot id resolves to its own family and a shorter entry cannot swallow a
+  longer one. `weightedTokens(tok, model)` applies them; called without a model
+  it falls back to the uniform set, which is the unknown-model fallback and not
+  a default any caller with an id in scope should take.
+
+`in: 1` and `out: 5` were confirmed unchanged — every current model prices
+output at exactly 5x its input.
+
+**`pnpm check:weights` re-checks the part that can rot.** It re-reads the
+transcripts, prints the 1h share and the blended cache-write multiplier per
+model, and **exits 1** when any model with ≥ 1M cache-write tokens in the window
+lands more than 0.05 away from the configured `cc`. It also warns for a model id
+outside `CHECKED_MODEL_PREFIXES` — one whose ratios nobody has priced, being
+weighted with the uniform set on assumption. The list price itself still has to
+be re-read by a human; what the command removes is the need to re-derive the
+*tier*.
 
 **Drift is judged on the weighted rate only, and the card leads with it.**
 Weighted tokens per percent are mix-invariant *and* effort-invariant — thinking
@@ -434,10 +465,52 @@ drift.
 **No rate here is comparable across models.** Each is fitted from this machine's
 own usage against a single ratio, so a model that fires more requests per token
 carries that per-request window cost inside its token rate — the measured
-opus:fable ratio of ~4.2x against a ~2x list-price ratio is that term, not a
-repricing (`task-10` splits it out server-side). The card's subtitle says so in
-as many words; leading with raw made the number read as a price list, which is
-`bug-13`.
+opus:fable ratio of ~4.2x is that term plus whatever else, not a repricing
+(`task-10` splits it out server-side). The card's subtitle says so in as many
+words; leading with raw made the number read as a price list, which is `bug-13`.
+
+**The ~4.2x is not a miss against a target.** The API list-price ratio between
+fable-5 and opus-5 is exactly **2.00x** as of 2026-09-02 — on input, output,
+both cache-write tiers and cache reads alike — but the 5-hour limit's own
+per-model weighting is **not published anywhere**, so 2.00x was never something
+the fit was obliged to reproduce. See *What the weights are, and are not* below.
+
+### What the weights are, and are not
+
+`TYPE_WEIGHTS` is an **API list-price proxy for an unknown weighting**. That
+sentence is the whole of what this repo can honestly claim, and it settles the
+questions `idea-17` opened:
+
+- **Is the 5-hour window's per-model weighting published anywhere?** No. Neither
+  the pricing page nor the models overview mentions subscription usage limits at
+  all — they document API billing, which is a different mechanism. Fitting it
+  from this machine's own logs is the only available source, so the fitted
+  per-model rates are not a *check* on a published number; they are the
+  measurement.
+- **Is a measured 4.20 a defect or the answer?** With no published weighting to
+  miss, it is the answer until something else explains it. Two candidate
+  explanations have since been closed with numbers: a per-request term
+  (`task-10`) and mis-set type weights (this doc, above). What would still
+  distinguish a defect from a finding is a controlled single-model burn — one
+  model, one window, nothing else running.
+- **Do cache reads count toward the limit at the 0.1 ratio they are billed at?**
+  Unknown, and unknowable from here for the same reason. 0.1 is the *billing*
+  ratio, confirmed for opus-5, fable-5, sonnet-5 and haiku-4.5 — and 0.025 for
+  Fable/Mythos 5.1. This is the single biggest lever on every number the Usage
+  tab prints (97.2% of opus's raw tokens on live logs are cache reads), which
+  is exactly why the constant is now sourced and dated rather than assumed.
+  `bug-13`'s sensitivity sweep of that weight up to 1.0 was exploring a value no
+  price list supports.
+- **Should `TYPE_WEIGHTS` become a setting?** No. It is a published fact with a
+  source and a date, not a preference — a knob would let an unchecked value
+  silently override a checked one, and the resulting rates would carry no
+  provenance at all. The mechanism a repricing needs is `pnpm check:weights`:
+  re-verify the fact and edit the constant, rather than making it editable.
+
+What is **not** claimed anywhere: that the 5-hour window charges cache writes at
+2x, cache reads at 0.1x, or output at 5x *at all*. Those are API list prices
+standing in for a weighting nobody outside Anthropic has seen. This makes the
+proxy correct and traceable; it does not make it verified.
 
 ### The ledger (`lib/usage-ledger.ts`)
 
@@ -563,10 +636,18 @@ The pooled ratio above is only a *price* if the 5-hour counter is charged purely
 per token. It is not. Anything charged per request lands in the `dUtil`
 denominator with no tokens beside it, so a single ratio has nowhere to put it
 and hands all of it to the token term. Measured on live logs (2026-09-01), the
-opus:fable cost per weighted token came out at 4.2-4.4x against a ~2x list price
-from two estimators with different selection biases — `bug-13` eliminated
-weighting, sample size and the `DOMINANCE` filter as explanations, which left a
-missing term.
+opus:fable cost per weighted token came out at 4.2-4.4x from two estimators with
+different selection biases, where the API list-price ratio is 2.00x — `bug-13`
+eliminated weighting, sample size and the `DOMINANCE` filter as explanations,
+which left a missing term. The list price is a *reference point* for that gap,
+not a target the fit is failing to hit: the limit's own weighting is unpublished
+(below).
+
+Correcting `cc` from 1.25 to 2.0 did not close the gap either. Recomputed over
+the same 7 days, weighted totals rise 10.7% (opus-5) to 14.9% (fable-5) and the
+opus:fable ratio of weighted-token totals moves **10.184 → 9.816** — 3.6%. With
+`task-10` having refuted the per-request hypothesis and this refuting the
+weighting one, whatever the residual is, it is neither.
 
 `explainSplits` fits `dUtil` against **two** regressors per model — weighted
 tokens (in millions) and request count — jointly over every usable interval, no
@@ -658,7 +739,7 @@ points it appears in and its per-token coefficient falling just 11% from the
 one-term 2.468. `claude-fable-5` is **refused**: least squares wants
 −0.0572 pt/request for it and pushes its per-token cost *up*, from 10.71 to
 13.15. Lift the sign refusal and the opus:fable ratio goes to **5.98x** — the
-gap widens rather than closing on ~2x. So the split fit is correct and honest,
+gap widens rather than closing on the 2.00x list-price ratio. So the split fit is correct and honest,
 and the thing it was built to explain is still unexplained; that finding belongs
 to `bug-13`, not to a new number on the card. (The logs keep growing, so a
 re-run moves these figures in the last digit or two; the direction is the
@@ -700,8 +781,10 @@ stacking would bury the shorter view; only the active sub-view mounts, which
 also means each one's fetch-per-mount hook fires when its tab is opened rather
 than on every visit to the section.
 
-`UsageRates.tsx` leads each row with the **raw** figure (the number you plan
-against) and judges with the **weighted** one, shows every rate beside its
+`UsageRates.tsx` leads each row with the **weighted** figure (the one drift is
+judged on) and carries the raw figure as a labelled aside beneath it — see *No
+dollars, only ratios* above for why that order, and `bug-13` for the version
+that had it the other way round. It shows every rate beside its
 evidence (windows + cumulative points), treats `collecting` as a first-class
 state rather than an empty row, and discloses the external-burn share in a
 footer pill because it is the one systematic bias in the measurement. Every
@@ -750,9 +833,10 @@ state is honest.
     - client/src/lib/walkChart.ts
     - client/src/lib/usageRatesFormat.ts
     - scripts/probe-usage-split.ts
+    - scripts/check-token-weights.ts
     - server/api.ts
     - client/src/components/Header.tsx
     - client/src/components/usage/
   kind: subsystem
-  verified: 70148d40eb360339eef66e57925983ee3d446889
+  verified: 84519e7f39aa5faf2d43acd7097b1730d4dc5645
 -->

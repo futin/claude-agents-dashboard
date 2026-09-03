@@ -55,7 +55,7 @@ export interface Interval {
 
 export function totalWeighted(tok: Record<string, TokenCounts>): number {
   let sum = 0;
-  for (const counts of Object.values(tok)) sum += weightedTokens(counts);
+  for (const [model, counts] of Object.entries(tok)) sum += weightedTokens(counts, model);
   return sum;
 }
 
@@ -70,7 +70,7 @@ export function dominantModel(tok: Record<string, TokenCounts>): string | null {
   const total = totalWeighted(tok);
   if (total <= 0) return null;
   for (const [model, counts] of Object.entries(tok)) {
-    if (weightedTokens(counts) / total >= DOMINANCE) return model;
+    if (weightedTokens(counts, model) / total >= DOMINANCE) return model;
   }
   return null;
 }
@@ -238,8 +238,8 @@ function pool(intervals: Interval[], model: string, sinceMs: number, untilMs: nu
   let weighted = 0, raw = 0, utilSum = 0, count = 0;
   for (const interval of intervals) {
     if (!ownedBy(interval, model, sinceMs, untilMs)) continue;
-    for (const counts of Object.values(interval.tok)) {
-      weighted += weightedTokens(counts);
+    for (const [tokModel, counts] of Object.entries(interval.tok)) {
+      weighted += weightedTokens(counts, tokModel);
       raw += counts.in + counts.out + counts.cc + counts.cr;
     }
     utilSum += interval.dUtil;
@@ -584,8 +584,10 @@ function leastSquares(cols: number[][], y: number[], tol: number): (number | nul
  * charged purely per token. It is not, and anything charged per request lands
  * in the utilization denominator with no tokens beside it, so a single ratio
  * hands all of it to the token term. Measured on live logs the opus:fable
- * per-token ratio came out at ~4.2-4.4x against a ~2x list price, from two
- * estimators with different selection — the residual is the term this fits.
+ * per-token ratio came out at ~4.2-4.4x from two estimators with different
+ * selection, where the API list price is 2.00x (checked 2026-09-02) — the
+ * residual is the term this fits. The limit's own per-model weighting is
+ * unpublished, so 2.00x is a reference point, not a target.
  *
  * The order the columns are offered in is load-bearing. Every model's **token**
  * column goes first, then every model's request column, so when the rank pass
@@ -620,7 +622,7 @@ export function explainSplits(intervals: Interval[], sinceMs: number, untilMs: n
 
   const weighted = models.map((model) => rows.map((interval) => {
     const counts = interval.tok[model];
-    return counts === undefined ? 0 : weightedTokens(counts) / MTOK;
+    return counts === undefined ? 0 : weightedTokens(counts, model) / MTOK;
   }));
   const requests = models.map((model) => rows.map((interval) => interval.req[model] ?? 0));
   const y = rows.map((interval) => interval.dUtil);
