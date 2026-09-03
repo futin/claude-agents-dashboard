@@ -454,3 +454,64 @@ export function readLedgerSince(sinceMs: number, dir?: string): LedgerLine[] {
     }
   }
 }
+
+/**
+ * At or above this size the ledger may already have been rotated, so its first
+ * surviving line is a floor on recording rather than its start.
+ *
+ * `rotateLedgerIfNeeded` trims to `floor(MAX_LEDGER_BYTES / 2)` and the file
+ * then grows back toward the maximum, so a file *under* this size has provably
+ * never been trimmed.
+ */
+export const LEDGER_UNROTATED_MAX_BYTES = MAX_LEDGER_BYTES / 2;
+
+/** Enough for the first line by orders of magnitude; a line is ~100 bytes. */
+const HEAD_CHUNK_BYTES = 65_536;
+
+/**
+ * When recording **provably** began, or null when that cannot be proven.
+ *
+ * The first line covers `(prevT, t]`, so `prevT` is the instant before which
+ * nothing was ever recorded — which is only the start of recording if no
+ * earlier line was ever trimmed away, hence the
+ * {@link LEDGER_UNROTATED_MAX_BYTES} guard. Null when the file is absent,
+ * empty, unparseable at the head, or big enough to have rotated: every caller
+ * then reads its unrecorded intervals as plain downtime, which overstates the
+ * recorder's holes rather than inventing a start.
+ */
+export function ledgerStartMs(dir?: string): number | null {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(ledgerPath(dir), 'r');
+    const { size } = fs.fstatSync(fd);
+    if (size <= 0) return null;
+    if (size >= LEDGER_UNROTATED_MAX_BYTES) return null;
+
+    const length = Math.min(size, HEAD_CHUNK_BYTES);
+    const buf = Buffer.alloc(length);
+    fs.readSync(fd, buf, 0, length, 0);
+
+    let idx = 0;
+    for (;;) {
+      const nl = buf.indexOf(NEWLINE, idx);
+      // Only a newline-terminated line is whole — unless the chunk *is* the
+      // whole file, where the trailing bytes are a complete line.
+      if (nl === -1 && length !== size) return null;
+      const end = nl === -1 ? length : nl;
+      const text = buf.subarray(idx, end).toString('utf8').trim();
+      if (text !== '') {
+        const parsed = parseLedgerLine(text);
+        if (parsed) return parsed.prevT;
+      }
+      if (nl === -1) return null;
+      idx = nl + 1;
+      if (idx >= length) return null;
+    }
+  } catch {
+    return null; // absent / unreadable — no ledger is not an error
+  } finally {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch { /* ignore */ }
+    }
+  }
+}

@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 
 import { rawTokens, weightedTokens } from '../server/lib/usage-ledger.js';
-import type { TokenCounts } from '../server/lib/usage-ledger.js';
+import type { LedgerLine, TokenCounts } from '../server/lib/usage-ledger.js';
 import {
   BASELINE_MS,
   CURRENT_MS,
@@ -12,11 +12,13 @@ import {
   SPLIT_MIN_INDEPENDENT_SHARE,
   SPLIT_RANK_TOL,
   baselineRange,
+  coverageBreakdown,
   currentRange,
   driftRow,
   explainSplits,
   externalShare,
   fitSplits,
+  ledgerBreakMs,
   rateFor
 } from '../server/lib/usage-rate.js';
 import type { Interval, RateFloors } from '../server/lib/usage-rate.js';
@@ -310,6 +312,52 @@ export function run(): number {
     assert.strictEqual(externalShare(intervals, 0, NOW), 0.2);
   })) p++; else f++;
 
+  if (test('all three unpriced kinds are out of the external denominator', () => {
+    // The same fixture, with the one unpriced interval relabelled each way:
+    // our own downtime, the span before recording, and a part-covered window
+    // are all silence about the account, not another device's spend.
+    for (const kind of ['gap', 'pre-ledger', 'partial'] as const) {
+      const intervals = [
+        kinded(NOW - MIN, 2, 'external'),
+        clean(NOW - 2 * MIN, 6, 'A', 6_000_000, 6_000_000),
+        kinded(NOW - 3 * MIN, 2, 'mixed'),
+        kinded(NOW - 4 * MIN, 5, 'idle'),
+        kinded(NOW - 5 * MIN, 5, kind)
+      ];
+      assert.strictEqual(externalShare(intervals, 0, NOW), 0.2, kind);
+    }
+  })) p++; else f++;
+
+  if (test('MUTATION: a huge pre-ledger interval does not move the external share', () => {
+    // With the unpriced predicate widened to admit `pre-ledger`, this lands in
+    // `moved` and drags the share from 0.2 to 0.02 — so the assertion fails
+    // exactly when the predicate stops refusing. Verified by hand.
+    const intervals = [
+      kinded(NOW - MIN, 2, 'external'),
+      clean(NOW - 2 * MIN, 8, 'A', 8_000_000, 8_000_000),
+      kinded(NOW - 3 * MIN, 90, 'pre-ledger')
+    ];
+    assert.strictEqual(externalShare(intervals, 0, NOW), 0.2,
+      'the startup artifact must not be able to shrink a published share');
+  })) p++; else f++;
+
+  if (test('relabelling gap intervals pre-ledger moves no fitted number at all', () => {
+    // The task\'s headline claim, asserted on the whole row rather than on one
+    // field: rate, baseline, deviation, verdict and evidence counters.
+    const withGaps = [
+      ...series({ count: 40, dUtil: 0.5, weightedPerPct: 900_000, rawPerPct: 9_000_000, model: 'A', endT: NOW - 5 * DAY }),
+      ...series({ count: 12, dUtil: 0.5, weightedPerPct: 900_000, rawPerPct: 9_000_000, model: 'A', endT: NOW - MIN }),
+      kinded(NOW - 2 * MIN, 4, 'gap'),
+      kinded(NOW - 6 * DAY, 7, 'gap')
+    ];
+    const relabelled = withGaps.map(i => (i.kind === 'gap' ? { ...i, kind: 'pre-ledger' as const } : i));
+    assert.strictEqual(
+      JSON.stringify(driftRow(relabelled, 'A', NOW)),
+      JSON.stringify(driftRow(withGaps, 'A', NOW))
+    );
+    assert.strictEqual(driftRow(withGaps, 'A', NOW).verdict, 'stable', 'and it is a real verdict, not thin');
+  })) p++; else f++;
+
   if (test('externalShare with nothing that moved is null, not zero', () => {
     assert.strictEqual(externalShare([kinded(NOW - MIN, 0, 'idle')], 0, NOW), null);
     assert.strictEqual(externalShare([], 0, NOW), null);
@@ -475,8 +523,11 @@ export function run(): number {
     assert.ok(Math.abs(fit.pctPerMWeighted - TRUE_PCT_PER_MTOK) / TRUE_PCT_PER_MTOK < 0.05);
   })) p++; else f++;
 
-  if (test('gap and external intervals never feed it', () => {
-    for (const kind of ['gap', 'external'] as const) {
+  if (test('no unpriced kind, and no external interval, ever feeds it', () => {
+    // `usableForSplit` *admits* whatever it does not name, so the two kinds
+    // split out of `gap` had to be added here explicitly — a fixture of
+    // otherwise-perfect `partial` intervals must fit nothing at all.
+    for (const kind of ['gap', 'pre-ledger', 'partial', 'external'] as const) {
       assert.strictEqual(fitSplits(splitSeries(30, 'A', kind), FIT_FROM, NOW).size, 0, kind);
     }
   })) p++; else f++;
@@ -563,6 +614,78 @@ export function run(): number {
   if (test('no usable intervals at all is an empty map, never a throw', () => {
     assert.strictEqual(fitSplits([], 0, NOW).size, 0);
     assert.strictEqual(fitSplits([kinded(NOW - MIN, 1, 'idle')], 0, NOW).size, 0);
+  })) p++; else f++;
+
+  // ── the coverage counters ──
+
+  const line = (prevT: number, t: number): LedgerLine => ({ t, prevT, tok: {} });
+
+  if (test('every kind lands in its own bucket, and the buckets sum to moved', () => {
+    // Distinct powers of two, so a mis-bucketed interval cannot balance out.
+    const intervals = [
+      clean(NOW - MIN, 1, 'A', 1_000_000, 1_000_000),
+      kinded(NOW - 2 * MIN, 2, 'mixed'),
+      kinded(NOW - 3 * MIN, 4, 'external'),
+      kinded(NOW - 4 * MIN, 8, 'pre-ledger'),
+      kinded(NOW - 5 * MIN, 16, 'gap'),
+      kinded(NOW - 6 * MIN, 32, 'partial')
+    ];
+    const b = coverageBreakdown(intervals, 0, NOW);
+    assert.deepStrictEqual(b, {
+      moved: 63, priced: 1, mixed: 2, external: 4, preLedger: 8, gap: 16, partial: 32
+    });
+    assert.strictEqual(b.priced + b.mixed + b.external + b.preLedger + b.gap + b.partial, b.moved);
+  })) p++; else f++;
+
+  if (test('an idle interval is in no bucket and out of the denominator', () => {
+    const b = coverageBreakdown([kinded(NOW - MIN, 0, 'idle')], 0, NOW);
+    assert.deepStrictEqual(b, {
+      moved: 0, priced: 0, mixed: 0, external: 0, preLedger: 0, gap: 0, partial: 0
+    });
+  })) p++; else f++;
+
+  if (test('idle is excluded on its kind, not on its dUtil being zero', () => {
+    // The complement a single zero-dUtil test would miss: an idle interval can
+    // carry movement up to IDLE_EPS, and it must still be out of `moved` —
+    // otherwise every share shrinks by however long the machine sat quiet.
+    const b = coverageBreakdown(
+      [kinded(NOW - MIN, 0.005, 'idle'), kinded(NOW - 2 * MIN, 4, 'gap')],
+      0, NOW
+    );
+    assert.strictEqual(b.moved, 4);
+    assert.strictEqual(b.gap, 4);
+  })) p++; else f++;
+
+  if (test('the window is half-open on toT: sinceMs is in, untilMs is out', () => {
+    const at = (toT: number): Interval[] => [kinded(toT, 3, 'gap')];
+    assert.strictEqual(coverageBreakdown(at(NOW - DAY), NOW - DAY, NOW).gap, 3, 'toT === sinceMs is in');
+    assert.strictEqual(coverageBreakdown(at(NOW), NOW - DAY, NOW).gap, 0, 'toT === untilMs is out');
+    assert.strictEqual(coverageBreakdown(at(NOW - DAY - 1), NOW - DAY, NOW).moved, 0, 'older is out');
+  })) p++; else f++;
+
+  if (test('ledgerBreakMs: lines that abut leave no break', () => {
+    assert.strictEqual(ledgerBreakMs(
+      [line(0, MIN), line(MIN, 2 * MIN), line(2 * MIN, 3 * MIN)], 0, NOW
+    ), 0);
+    assert.strictEqual(ledgerBreakMs([], 0, NOW), 0);
+    assert.strictEqual(ledgerBreakMs([line(0, MIN)], 0, NOW), 0, 'one line has no next');
+  })) p++; else f++;
+
+  if (test('ledgerBreakMs: a five-minute hole is exactly five minutes', () => {
+    assert.strictEqual(ledgerBreakMs(
+      [line(0, MIN), line(6 * MIN, 7 * MIN), line(7 * MIN, 8 * MIN)], 0, NOW
+    ), 5 * MIN);
+  })) p++; else f++;
+
+  if (test('ledgerBreakMs ignores holes outside the window and never counts negative time', () => {
+    const ledger = [line(0, MIN), line(6 * MIN, 7 * MIN)];
+    assert.strictEqual(ledgerBreakMs(ledger, 10 * MIN, NOW), 0, 'wholly before the window');
+    assert.strictEqual(ledgerBreakMs(ledger, 0, MIN), 0, 'wholly after it');
+    assert.strictEqual(ledgerBreakMs(ledger, 3 * MIN, NOW), 3 * MIN, 'a straddling hole is clamped');
+    // Overlapping and out-of-order lines: the second starts *before* the first
+    // ended, which is not negative recording time — it is no break at all.
+    assert.strictEqual(ledgerBreakMs([line(0, 5 * MIN), line(MIN, 6 * MIN)], 0, NOW), 0);
+    assert.strictEqual(ledgerBreakMs([line(5 * MIN, 6 * MIN), line(0, MIN)], 0, NOW), 0);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

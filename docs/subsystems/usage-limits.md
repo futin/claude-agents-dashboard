@@ -488,11 +488,29 @@ with each pair. Then each interval is classified:
 
 | Condition | Kind | Used for |
 |---|---|---|
-| ledger covers < 80% of the span | `gap` | nothing — the server was down |
+| coverage < 80%, and the span ends at or before the provable start of recording | `pre-ledger` | nothing — but nothing is wrong: the ledger did not exist yet, and this ages out of every window on its own |
+| coverage < 80% with **zero** milliseconds covered, after that start | `gap` | nothing — the recorder was down. The only one of the three that reports a fault |
+| coverage < 80% with something covered | `partial` | nothing — the recorder ran but the tokens are incomplete, which is not the same as absent |
 | `Δutil ≤ 0.01` | `idle` | nothing (but it is a measurement, not a hole) |
 | weighted tokens < 5 000 | `external` | the disclosed burn share only |
 | one model holds ≥ 90% of weighted tokens | `{model}` | that model's rate |
 | otherwise | `mixed` | the two-term split fit only |
+
+The first three used to be one kind called `gap`, and splitting them was worth
+doing because **92% of what it reported was a startup artifact**: measured over
+the 17-day baseline, 752 intervals carrying 438.0 utilization points provably
+predate the ledger, 8 intervals carrying 2.0 points are the recorder actually
+being down, and 23 intervals carrying 32.0 points are under-covered spans. The
+card's scariest number — nearly half of everything the 5-hour counter moved is
+unpriced — was mostly the recorder not having existed yet.
+
+All three go through `isUnpriced`, and **every consumer asks through that
+predicate rather than naming a kind**. This is not tidiness: the two sites that
+compared against `'gap'` literally behaved differently under the split.
+`externalShare` fails closed (it names what it skips), but `usableForSplit`
+fails *open* — it returns `kind !== 'gap' && kind !== 'external'`, so a kind
+merely added beside `gap` would have walked straight into the two-term fit
+carrying tokens that are missing by construction.
 
 Every interval also carries `req` (requests per model) and `reqUsable`.
 `reqUsable` is false when **any** contributing ledger line recorded no count
@@ -503,6 +521,50 @@ untouched either way, so an interval can be count-unusable and still fit the
 pooled ratio exactly as it always did. A line with no `req` **and** no spend
 poisons nothing: an event with no tokens is never recorded, so zero tokens is
 zero requests.
+
+#### The coverage breakdown — two measures, and why they are two
+
+The card discloses two different things about recording, and conflating them
+would be the whole bug over again:
+
+- **`coverageBreakdown(intervals, since, until)`** counts *utilization points*
+  per kind over the horizon: `priced`, `mixed`, `external`, `preLedger`, `gap`,
+  `partial`, and `moved` as the sum of every non-`idle` bucket. Idle is in no
+  bucket and out of `moved` for the same reason `externalShare` excludes it —
+  it measures nothing moving, and putting it in the denominator would shrink
+  every share by however long the machine sat quiet. The other six sum to
+  `moved` exactly, so a reader can check the split themselves.
+- **`ledgerBreakMs(ledger, since, until)`** sums the milliseconds between two
+  consecutive ledger lines that do **not** abut. It takes the ledger rather
+  than the intervals on purpose: the server that writes the ledger also writes
+  the history log, so most of these breaks overlap no interval at all and the
+  point buckets cannot see them. Live, the ledger has ~12.4 h of such breaks
+  inside a baseline in which downtime cost 2.0 points — the hours say how much
+  *time* went unrecorded, the points say what it *cost*. Publishing only the
+  hours would read as 12.4 h of lost spend.
+
+**The start of recording is the ledger's first line's `prevT`, guarded by file
+size.** The first line covers `(prevT, t]`, so `prevT` is the instant before
+which nothing was ever recorded — but only if no earlier line was ever trimmed
+away. `rotateLedgerIfNeeded` trims to `floor(MAX_LEDGER_BYTES / 2)` and the file
+then grows back toward the maximum, so a file *under* `LEDGER_UNROTATED_MAX_BYTES`
+(exactly half the maximum, and asserted equal to it) has provably never
+rotated. At or above it `ledgerStartMs` returns `null` and refuses to guess: the
+`pre-ledger` kind then collapses into `gap`, the payload says
+`startProvable: false`, and the card states outright that the start is unknown
+rather than reporting downtime that never happened. An explicit start *marker*
+line was rejected — it would be unparseable to every existing reader and would
+say nothing about the data already on disk, which is the data that raised the
+question. At the current ~85 bytes a line that is ~287 days of continuous
+recording away, but the guard is not decoration: a heavy multi-model line is
+several hundred bytes.
+
+**An interval that straddles the start of recording is `gap`, not
+`pre-ledger`** — the test is on `toT`, not `fromT`. Such an interval is not
+provably unrecorded, so it classifies on its actual coverage. That overstates
+the recorder-down bucket by at most one interval per install; testing `fromT`
+instead would swallow a genuine hole that happens to abut the boundary, which
+is the direction that hides a fault.
 
 **Request counts are pro-rated at the edges as a float, exactly like tokens.**
 A count is an integer event stream, so half a tick's requests is not a thing
@@ -677,7 +739,7 @@ in `backlog/tasks/done/task-10-*.md` under *Not verified*.
 
 `GET /api/usage/rates` (`shapeUsageRates` is the pure part) returns one row per
 model that owns at least one attributable interval, richest evidence first, plus
-`externalSharePct`. Read-only, unpolled — it reads two files and does
+`externalSharePct` and a `coverage` object. Read-only, unpolled — it reads two files and does
 arithmetic, and the numbers move on a scale of days — and it fails open to an
 honest empty body exactly like `serveUsageProfile`. A model seen only in mixed,
 external or gap intervals gets **no row**: a row of nulls reads as a broken fit
@@ -693,6 +755,20 @@ the probe script is where the reason lives. Every other field on the row is the
 single-ratio number it always was: the split is **additive**, so `bug-13` can
 decide what the card does with it independently.
 
+`coverage` (`UsageCoverage`) is the disclosure the three unpriced kinds exist
+for: `movedPct` as the denominator, `pricedPct` for what reached a rate, then
+`mixedPct`, `externalPct`, `preLedgerPct`, `missingPct` and `partialPct`, which
+sum to `movedPct`. The wire name is `missingPct` rather than `gapPct` — the
+field should say what the bucket *means* now that `gap` no longer means all
+three. Two fields are not utilization points: `recorderBreakHours` is hours,
+because it is read by a person, and `startProvable` is false when
+`ledgerStartMs` came back null. Unlike the rates beside them these are
+**counters, not fits** — there are no nulls, a zero is a measured zero, and
+`emptyRates` therefore carries a fully zeroed instance so the field is never
+absent. `coverage` is computed over `[now − BASELINE_MS, ∞)`, deliberately the
+**same horizon `externalSharePct` uses**: two disclosure figures on one card
+that quietly spanned different windows would be a defect, not a nuance.
+
 The **Usage** section is now two sub-tabs — `Forecast | Token value` — through
 the Settings page's `.set-seg` control, persisted per device as `usageTab`.
 `UsageProfile` is a full week of hour cells and runs to about a screen, so
@@ -707,6 +783,19 @@ state rather than an empty row, and discloses the external-burn share in a
 footer pill because it is the one systematic bias in the measurement. Every
 explanation is real text in the row — no `title` attributes, for the reason the
 profile tooltip exists.
+
+A second `.rates-foot` row states the coverage split, formatted by pure
+functions in `usageRatesFormat.ts` (`pricedPillText`, `coverageClauses`) so the
+sentences the card makes are testable without a browser. It **leads with the
+priced share**, then names each refusal that actually cost something, largest
+first — because leading with the refusals made a startup artifact read as a
+fault, which is exactly what the single `gap` counter did. A bucket worth zero
+points prints nothing at all: a row of zeroes reads as a broken measurement.
+Shares under 1% keep one decimal (`formatShareOf`), so the genuinely tiny
+recorder-down bucket cannot render as `0%`; the recorder-down clause always
+names its hours *and* its points together; and with `startProvable: false` the
+pre-ledger clause is replaced by a caveat that the ledger has rotated, so the
+start is unknown and `missingPct` has absorbed whatever predates it.
 
 ⚠️ **Drift detection itself is unproven.** Every pure function is tested and the
 plumbing is verified end to end against live logs, but a `drift` or `stable`

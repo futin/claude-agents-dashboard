@@ -1,10 +1,14 @@
 import assert from 'node:assert';
 
+import type { UsageCoverage } from '../shared/types.js';
 import {
+  coverageClauses,
   evidenceText,
   formatDeviation,
+  formatShareOf,
   formatSharePct,
   formatTok,
+  pricedPillText,
   rawAsideText,
   verdictText
 } from '../client/src/lib/usageRatesFormat.js';
@@ -75,6 +79,69 @@ export function run(): number {
     assert.strictEqual(formatSharePct(12.4), '12%');
     assert.strictEqual(formatSharePct(0), '0%');
     assert.strictEqual(formatSharePct(null), null);
+  })) p++; else f++;
+
+  // ── the coverage footer ──
+
+  /** Every counter zeroed and the start provable — each case moves what it needs. */
+  const cov = (over: Partial<UsageCoverage> = {}): UsageCoverage => ({
+    movedPct: 100, pricedPct: 0, mixedPct: 0, externalPct: 0,
+    preLedgerPct: 0, missingPct: 0, partialPct: 0,
+    recorderBreakHours: 0, startProvable: true, ...over
+  });
+
+  if (test('formatShareOf keeps a decimal under 1%, so a real bucket never reads as 0%', () => {
+    assert.strictEqual(formatShareOf(41.8, 100), '42%');
+    assert.strictEqual(formatShareOf(0.2, 100), '0.2%');
+    assert.strictEqual(formatShareOf(0, 100), '0%');
+    assert.strictEqual(formatShareOf(5, 0), '0%', 'a share of nothing is not a division');
+  })) p++; else f++;
+
+  if (test('a bucket that cost nothing produces no clause at all', () => {
+    const clauses = coverageClauses(cov({ pricedPct: 100 })).join(' | ');
+    assert.ok(!clauses.includes('predates'), clauses);
+    assert.ok(!clauses.includes('part-covered'), clauses);
+    assert.ok(!clauses.includes('recorder down'), clauses);
+    assert.ok(!clauses.includes('90%'), clauses);
+    assert.strictEqual(clauses, '', 'nothing was refused, so the row says nothing');
+  })) p++; else f++;
+
+  if (test('nothing moved → no pill and no clauses, rather than a row of zeroes', () => {
+    assert.strictEqual(pricedPillText(cov({ movedPct: 0 })), null);
+    assert.deepStrictEqual(coverageClauses(cov({ movedPct: 0 })), []);
+  })) p++; else f++;
+
+  if (test('an unprovable start replaces the pre-ledger clause with the rotation caveat', () => {
+    const clauses = coverageClauses(cov({
+      pricedPct: 58, missingPct: 42, recorderBreakHours: 3, startProvable: false
+    }));
+    assert.ok(clauses[0].includes('rotated'), clauses.join(' | '));
+    assert.ok(!clauses.join(' | ').includes('predates recording'),
+      'nothing may be claimed as pre-ledger when the start is unknown');
+  })) p++; else f++;
+
+  if (test('the recorder-down clause names the hours and the points together', () => {
+    // 12.4 h beside no number reads as 12.4 h of lost spend, which is exactly
+    // the misreading this footer exists to prevent.
+    // 12.35 prints as 12.3: `toFixed(1)` rounds the binary double, which sits
+    // a hair below 12.35. Pinned as it actually renders rather than as decimal
+    // arithmetic would like it to.
+    const [clause] = coverageClauses(cov({ pricedPct: 98, missingPct: 2, recorderBreakHours: 12.35 }));
+    assert.ok(clause.includes('12.3 h'), clause);
+    assert.ok(clause.includes('2%'), clause);
+  })) p++; else f++;
+
+  if (test('the live shape from 2026-09-02 reads as a sentence, largest refusal first', () => {
+    const live = cov({
+      movedPct: 1048, pricedPct: 418, preLedgerPct: 438, missingPct: 2,
+      partialPct: 32, recorderBreakHours: 12.35
+    });
+    assert.strictEqual(pricedPillText(live), '40% priced');
+    const clauses = coverageClauses(live);
+    assert.strictEqual(clauses.length, 3, clauses.join(' | '));
+    assert.strictEqual(clauses[0], '42% predates recording — ages out on its own');
+    assert.ok(clauses[1].startsWith('3% from windows'), clauses[1]);
+    assert.strictEqual(clauses[2], 'recorder down 12.3 h — cost 0.2% of what moved');
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

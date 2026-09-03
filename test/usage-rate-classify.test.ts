@@ -82,14 +82,16 @@ export function run(): number {
     assert.deepStrictEqual(out[0].kind, { model: 'A' });
   })) p++; else f++;
 
-  if (test('two of five minutes recorded → gap, never a silent bridge', () => {
+  if (test('two of five minutes recorded → partial, never a silent bridge', () => {
+    // Under-covered but not uncovered: the recorder ran, so this is `partial`
+    // and not the recorder-down `gap` it used to be lumped in with.
     const ledger = [
       l(0, MIN, { A: counts(10_000) }),
       l(4 * MIN, 5 * MIN, { A: counts(10_000) })
     ];
     const out = joinIntervals([s(0, 10), s(5 * MIN, 14)], ledger);
     assert.strictEqual(out.length, 1);
-    assert.strictEqual(out[0].kind, 'gap');
+    assert.strictEqual(out[0].kind, 'partial');
   })) p++; else f++;
 
   if (test('a straddling ledger line contributes its overlapping share, pro rata', () => {
@@ -209,6 +211,62 @@ export function run(): number {
     );
     assert.strictEqual(out[0].reqUsable, true);
     assert.deepStrictEqual(out[0].req, { A: 6 });
+  })) p++; else f++;
+
+  // ── the three unpriced kinds ──
+
+  /** Zero ledger coverage of `[0, MIN]`: the only line sits ten minutes later. */
+  const uncovered = [l(10 * MIN, 11 * MIN, { A: counts(10_000) })];
+
+  if (test('an uncovered span that ends before recording began is pre-ledger', () => {
+    const out = joinIntervals([s(0, 10), s(MIN, 12)], uncovered, 5 * MIN);
+    assert.strictEqual(out[0].kind, 'pre-ledger');
+  })) p++; else f++;
+
+  if (test('the pre-ledger boundary is inclusive: toT exactly at the start still counts', () => {
+    const out = joinIntervals([s(0, 10), s(MIN, 12)], uncovered, MIN);
+    assert.strictEqual(out[0].kind, 'pre-ledger', 'the first line covers (prevT, t], so prevT itself is unrecorded');
+  })) p++; else f++;
+
+  if (test('one millisecond past the start it is the recorder being down', () => {
+    const out = joinIntervals([s(0, 10), s(MIN, 12)], uncovered, MIN - 1);
+    assert.strictEqual(out[0].kind, 'gap');
+  })) p++; else f++;
+
+  if (test('covered but under the threshold, after the start, is partial', () => {
+    // One of two minutes recorded — a coverage of exactly 0.5, well clear of
+    // the 0.8 threshold in both directions.
+    const out = joinIntervals(
+      [s(0, 10), s(2 * MIN, 12)],
+      [l(0, MIN, { A: counts(10_000) })],
+      0
+    );
+    assert.strictEqual(out[0].kind, 'partial');
+  })) p++; else f++;
+
+  if (test('coverage exactly at the threshold classifies on its tokens, not its coverage', () => {
+    // Four of five minutes = 0.8 exactly, and the comparison is `>=`.
+    const out = joinIntervals(
+      [s(0, 10), s(5 * MIN, 14)],
+      [l(0, 4 * MIN, { A: counts(20_000) })],
+      0
+    );
+    assert.deepStrictEqual(out[0].kind, { model: 'A' });
+  })) p++; else f++;
+
+  if (test('an unprovable start collapses pre-ledger into gap, never the other way', () => {
+    const explicit = joinIntervals([s(0, 10), s(MIN, 12)], uncovered, null);
+    assert.strictEqual(explicit[0].kind, 'gap');
+    const defaulted = joinIntervals([s(0, 10), s(MIN, 12)], uncovered);
+    assert.strictEqual(defaulted[0].kind, 'gap', 'the two-argument call must behave the same way');
+  })) p++; else f++;
+
+  if (test('an interval straddling the start of recording is a gap, not pre-ledger', () => {
+    // Begins before recording, ends after it: not provably unrecorded, so it
+    // classifies on its actual coverage. The documented, bounded overstatement
+    // of the recorder-down bucket — at most one interval per install.
+    const out = joinIntervals([s(0, 10), s(2 * MIN, 12)], uncovered, MIN);
+    assert.strictEqual(out[0].kind, 'gap');
   })) p++; else f++;
 
   if (test('samples out of order or coincident are not intervals', () => {

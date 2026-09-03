@@ -31,11 +31,12 @@ import fs from 'node:fs';
 
 import { listTranscripts, projectsRoot } from '../server/lib/scan.js';
 import { readRecentSamples, repoRoot } from '../server/lib/usage-history.js';
-import { rawTokens, readLedgerSince, weightedTokens } from '../server/lib/usage-ledger.js';
+import { ledgerStartMs, rawTokens, readLedgerSince, weightedTokens } from '../server/lib/usage-ledger.js';
 import type { LedgerLine } from '../server/lib/usage-ledger.js';
 import {
   SPLIT_FLOORS, SPLIT_MAX_R2, SPLIT_MIN_INDEPENDENT_SHARE,
-  currentRange, explainSplits, joinIntervals, rateFor
+  coverageBreakdown, currentRange, explainSplits, isUnpriced, joinIntervals,
+  ledgerBreakMs, rateFor
 } from '../server/lib/usage-rate.js';
 import type { RateFloors } from '../server/lib/usage-rate.js';
 
@@ -171,7 +172,11 @@ function main(): number {
     ledger = reconstruct(ledger, sinceMs);
   }
 
-  const intervals = joinIntervals(samples, ledger).filter((i) => i.toT >= sinceMs);
+  // The real start instant, so `pre-ledger` is separated from `gap` here
+  // exactly as the endpoint separates them. Without it every unrecorded
+  // interval reads as downtime — the failure this section exists to catch.
+  const startMs = ledgerStartMs(DIR);
+  const intervals = joinIntervals(samples, ledger, startMs).filter((i) => i.toT >= sinceMs);
   const byKind = new Map<string, number>();
   for (const i of intervals) {
     const key = typeof i.kind === 'object' ? 'owned:' + i.kind.model : i.kind;
@@ -180,9 +185,29 @@ function main(): number {
   console.log(`\n  intervals: ${intervals.length}`);
   for (const [kind, n] of [...byKind].sort((a, b) => b[1] - a[1])) console.log(`    ${kind}: ${n}`);
   const usable = intervals.filter(
-    (i) => i.reqUsable && i.kind !== 'gap' && i.kind !== 'external'
+    (i) => i.reqUsable && !isUnpriced(i.kind) && i.kind !== 'external'
   );
   console.log(`    → usable for the two-term fit: ${usable.length}`);
+
+  // What each refusal actually costs, in the same units the card discloses —
+  // green unit tests have already shipped a join that called 759 of 759 live
+  // intervals `gap`, so the buckets are only believable measured here.
+  const buckets = coverageBreakdown(intervals, sinceMs, Number.POSITIVE_INFINITY);
+  const breakHours = ledgerBreakMs(ledger, sinceMs, Number.POSITIVE_INFINITY) / 3_600_000;
+  console.log(`\n  recording start: ${startMs === null
+    ? 'unprovable (no ledger, or it may have rotated) — pre-ledger collapses into gap'
+    : new Date(startMs).toISOString() + ' (provable)'}`);
+  console.log(`  ledger breaks inside the window: ${breakHours.toFixed(2)} h`);
+  console.log(`  coverage over ${buckets.moved.toFixed(1)} moved points:`);
+  const countOf = (k: string): number => intervals.filter(
+    (i) => (typeof i.kind === 'object' ? 'priced' : i.kind === 'pre-ledger' ? 'preLedger' : i.kind) === k
+  ).length;
+  for (const key of ['priced', 'mixed', 'external', 'preLedger', 'gap', 'partial'] as const) {
+    const points = buckets[key];
+    const pct = buckets.moved > 0 ? (points / buckets.moved) * 100 : 0;
+    console.log(`    ${key}: ${countOf(key)} intervals, ${points.toFixed(1)} pts`
+      + `, ${pct.toFixed(1)}% of moved`);
+  }
   const models = [...new Set(usable.flatMap((i) => Object.keys(i.tok)))].sort();
   if (models.length === 0) {
     // Empty pre-upgrade ticks pass the count check trivially — no spend is no

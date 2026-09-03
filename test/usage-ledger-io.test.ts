@@ -6,6 +6,9 @@ import path from 'node:path';
 import { resetSettings, setSettings } from '../server/lib/settings.js';
 import {
   LEDGER_FILE,
+  LEDGER_UNROTATED_MAX_BYTES,
+  MAX_LEDGER_BYTES,
+  ledgerStartMs,
   readLedgerSince,
   recordLedgerTick,
   resetLedgerRecorder
@@ -229,6 +232,51 @@ export function run(): number {
   if (test('readLedgerSince: a missing file reads as no data, not a throw', () => {
     withFixture(fx => {
       assert.deepStrictEqual(readLedgerSince(0, path.join(fx.dir, 'nope')), []);
+    });
+  })) p++; else f++;
+
+  // ── ledgerStartMs: when recording provably began ──
+
+  if (test('the never-rotated ceiling is exactly half the maximum', () => {
+    // Tied to the constant rather than to a literal: `rotateLedgerIfNeeded`
+    // trims to `floor(MAX_LEDGER_BYTES / 2)`, so moving either alone would
+    // silently make the guard wrong.
+    assert.strictEqual(LEDGER_UNROTATED_MAX_BYTES, MAX_LEDGER_BYTES / 2);
+  })) p++; else f++;
+
+  if (test('ledgerStartMs is the first line\'s prevT, not its t', () => {
+    withFixture(fx => {
+      fs.writeFileSync(fx.ledgerPath,
+        JSON.stringify({ t: T0, prevT: T0 - MIN, tok: {} }) + '\n' +
+        JSON.stringify({ t: T0 + MIN, prevT: T0, tok: {} }) + '\n' +
+        JSON.stringify({ t: T0 + 2 * MIN, prevT: T0 + MIN, tok: {} }) + '\n', 'utf8');
+      assert.strictEqual(ledgerStartMs(fx.dir), T0 - MIN,
+        'the first line covers (prevT, t], so prevT is the instant before recording');
+    });
+  })) p++; else f++;
+
+  if (test('ledgerStartMs: absent, empty and junk-headed files', () => {
+    withFixture(fx => {
+      assert.strictEqual(ledgerStartMs(path.join(fx.dir, 'nope')), null, 'absent');
+      fs.writeFileSync(fx.ledgerPath, '', 'utf8');
+      assert.strictEqual(ledgerStartMs(fx.dir), null, 'empty');
+      fs.writeFileSync(fx.ledgerPath, 'garbage\n{"t":1}\n' +
+        JSON.stringify({ t: T0 + MIN, prevT: T0, tok: {} }) + '\n', 'utf8');
+      assert.strictEqual(ledgerStartMs(fx.dir), T0, 'junk at the head is skipped, exactly as readLedgerSince skips it');
+      fs.writeFileSync(fx.ledgerPath, 'garbage\nmore garbage\n', 'utf8');
+      assert.strictEqual(ledgerStartMs(fx.dir), null, 'nothing parseable at all');
+    });
+  })) p++; else f++;
+
+  if (test('a file big enough to have rotated proves nothing, however good its first line', () => {
+    withFixture(fx => {
+      const first = JSON.stringify({ t: T0, prevT: T0 - MIN, tok: {} }) + '\n';
+      const filler = JSON.stringify({ t: T0 + MIN, prevT: T0, tok: {} }) + '\n';
+      const repeats = Math.ceil(LEDGER_UNROTATED_MAX_BYTES / filler.length);
+      fs.writeFileSync(fx.ledgerPath, first + filler.repeat(repeats), 'utf8');
+      assert.ok(fs.statSync(fx.ledgerPath).size >= LEDGER_UNROTATED_MAX_BYTES);
+      assert.strictEqual(ledgerStartMs(fx.dir), null,
+        'past half the maximum the first surviving line is a floor, not a start');
     });
   })) p++; else f++;
 
