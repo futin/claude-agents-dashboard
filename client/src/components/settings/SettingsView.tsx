@@ -6,7 +6,7 @@ import { useRemoteAnswer } from '../../hooks/useRemoteAnswer';
 import { useServerSettings } from '../../hooks/useServerSettings';
 import { useSettings } from '../../hooks/useSettings';
 import {
-  FONT_SCALES, LIMITS, REFRESH_CHOICES, THEMES,
+  FONT_SCALES, LANDING_OPTIONS, LIMITS, REFRESH_CHOICES, THEMES,
   formatInterval, type Landing, type SpawnDefaultEffort, type SpawnDefaultModel, type ThemeId
 } from '../../lib/settings';
 import { EFFORTS, MODELS } from '../../lib/spawnOptions';
@@ -34,13 +34,6 @@ const NOTIFY_EVENT_ROWS = [
 ];
 
 const ON_OFF = [{ value: 'off' as const, label: 'Off' }, { value: 'on' as const, label: 'On' }];
-
-const LANDINGS: { value: Landing; label: string }[] = [
-  { value: 'last', label: 'Last used' },
-  { value: 'sessions', label: 'Sessions' },
-  { value: 'management', label: 'Management' },
-  { value: 'analytics', label: 'Analytics' }
-];
 
 /**
  * The Settings section.
@@ -149,7 +142,7 @@ export default function SettingsView() {
 
         <SettingsRow name="Opens on" hint="Which section this device lands on when you load the page.">
           <select value={settings.landing} onChange={e => update({ landing: e.target.value as Landing })}>
-            {LANDINGS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+            {LANDING_OPTIONS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
           </select>
         </SettingsRow>
 

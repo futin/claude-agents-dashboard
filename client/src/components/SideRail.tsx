@@ -1,17 +1,4 @@
-export type Section = 'sessions' | 'management' | 'analytics' | 'usage' | 'settings';
-
-const TABS: { id: Section; label: string }[] = [
-  { id: 'sessions', label: 'Sessions' },
-  { id: 'management', label: 'Management' },
-  { id: 'analytics', label: 'Analytics' },
-  { id: 'usage', label: 'Usage' },
-  { id: 'settings', label: 'Settings' }
-];
-
-/** Whether a stored/persisted string still names a section this build has. */
-export function isSection(v: unknown): v is Section {
-  return TABS.some(t => t.id === v);
-}
+import { SECTIONS, type Section } from '../lib/sections';
 
 interface Props {
   section: Section;
@@ -32,7 +19,7 @@ export function SideRail({ section, onChange }: Props) {
         <br />
         Dashboard
       </h1>
-      {TABS.map(t => (
+      {SECTIONS.map(t => (
         <button
           key={t.id}
           className={section === t.id ? 'rail-link on' : 'rail-link'}

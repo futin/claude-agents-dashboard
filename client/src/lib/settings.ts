@@ -18,7 +18,7 @@
  * See `docs/subsystems/settings.md`.
  */
 
-import type { Section } from '../components/SideRail';
+import { SECTIONS, type Section } from './sections';
 import { EFFORTS, MODELS } from './spawnOptions';
 
 export const THEMES = [
@@ -114,8 +114,18 @@ function pickBool(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+/**
+ * What the "Opens on" picker offers, derived from the rail so the picker and
+ * the validator below cannot drift apart — every section you can navigate to
+ * is a section you can land on.
+ */
+export const LANDING_OPTIONS: { value: Landing; label: string }[] = [
+  { value: 'last', label: 'Last used' },
+  ...SECTIONS.map(s => ({ value: s.id as Landing, label: s.label }))
+];
+
 const THEME_IDS = THEMES.map(t => t.id);
-const LANDINGS: Landing[] = ['last', 'sessions', 'management', 'analytics', 'settings'];
+const LANDINGS: Landing[] = LANDING_OPTIONS.map(o => o.value);
 const SPAWN_MODELS: SpawnDefaultModel[] = ['', ...MODELS];
 const SPAWN_EFFORTS: SpawnDefaultEffort[] = ['', ...EFFORTS];
 const USAGE_TABS: UsageTab[] = ['forecast', 'rates'];
