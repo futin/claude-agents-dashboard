@@ -178,7 +178,8 @@ client/src/
   hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
                   useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, usePersistedState,
-                  useSettings, useServerSettings, useDictation, useTranscribeAvailable
+                  useSettings, useServerSettings, useDictation, useTranscribeAvailable,
+                  useBackClose
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
                   deepLink, dictation, spawnOptions, resume, pace, usageProfile,
                   usageRatesFormat, panelCollapse, surface, walkChart

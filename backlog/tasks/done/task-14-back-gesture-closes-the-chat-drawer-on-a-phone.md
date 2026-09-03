@@ -3,6 +3,9 @@ id: task-14
 title: Back gesture closes the chat drawer on a phone
 created: 2026-09-02
 from: idea-16
+updated: 2026-09-03T20:39:37Z
+started: 2026-09-03T20:25:39Z
+execute-elapsed: 838
 ---
 
 ## Goal
@@ -266,3 +269,105 @@ phone-only:
   Android back button or performed Safari's back swipe on a real phone. Playwright's
   `navigate_back` drives the same History API, but the gesture layer is untested
   — say so rather than claiming the phone case is proven.
+
+## Outcome
+
+**2026-09-03 — done as planned.** `client/src/lib/backClose.ts` (pure, host-injected),
+`client/src/hooks/useBackClose.ts` (empty deps, latest-callback ref) and
+`test/back-close.test.ts` (12 cases, registered in `test/run-all.ts`) are new;
+`ChatDrawer.tsx` gained one import and one `useBackClose(onClose)` call beside the
+untouched Escape effect. Docs: `docs/subsystems/chat.md` documents the three exits and
+lists both new files in its `sources:`; `docs/overview.md` §Map names `useBackClose`.
+Neither `verified:` sha was hand-edited. `docs/subsystems/view-persistence.md` was re-read
+and still reads correctly — the pushed entry changes no URL, and the drawer stays in the
+"not persisted" list — so it was left alone as the plan directed.
+
+The deferral proved itself in the browser rather than only in unit tests: dev runs under
+`StrictMode`, and `history.length` went 2 → 3 on open (one entry, not two), so the
+arm→teardown→arm double-invoke did not double-push or self-close.
+
+### Unit tests — `pnpm test`
+
+```
+=== backClose.ts ===
+
+  ✓ arms nothing synchronously
+  ✓ the deferred callback pushes one entry and registers one listener
+  ✓ push comes before listener registration
+  ✓ teardown before the callback runs cancels it
+  ✓ a StrictMode double-invoke arms exactly once
+  ✓ a back press closes the drawer
+  ✓ two back presses close it once
+  ✓ a programmatic close consumes the entry
+  ✓ a programmatic close cannot re-enter onClose
+  ✓ back-then-unmount does not navigate
+  ✓ teardown is idempotent
+  ✓ a throwing pushState leaves the arm inert
+
+  12 passed, 0 failed
+```
+
+Suite tail: `ALL PASS`.
+
+**Case count, +12 exactly.** Summing every module's per-module count: this branch 761.
+The same sum over `git show HEAD:test/run-all.ts` (run as a temp `test/_baseline-run-all.ts`,
+then deleted) is 749, also `ALL PASS`. 761 − 749 = 12.
+
+### Case 9's mutation check — actually run
+
+With `host.back()` and `host.removeEventListener(...)` swapped in the teardown:
+
+```
+  ✗ a programmatic close cannot re-enter onClose
+failures: 1
+```
+
+Reverted; `pnpm test` prints `ALL PASS` again. Worth recording *which* assertion caught it:
+the ordered-log assertion (`removeEventListener` before `back`). The `onClose` count stayed
+0 under the swap because the fake host's `back()` only logs — a real browser's `back()`
+fires the popstate that the still-registered listener would answer. The order assertion is
+therefore the whole guard for this case; do not delete it as redundant.
+
+### typecheck / build
+
+```
+> tsc --noEmit
+exit=0
+```
+```
+dist/assets/index-4mFQav1a.js  389.13 kB │ gzip: 111.41 kB
+✓ built in 1.23s
+```
+
+### Browser checks, viewport 390×844 (playwright MCP, worktree dev on 4273/5273)
+
+**Check 13 — back closes the drawer.** Opened the first row's `chat` control; the snapshot
+carried `dialog "Session chat history"`, and `history.length` 2 → 3 with
+`history.state === {"chatDrawer":true}` and `location.href` unchanged at
+`http://localhost:5273/`. After `browser_navigate_back`: 0 hits for
+`Session chat history`, 5 hits for `Open chat history` — the dashboard's session list is
+still there, not a blank page.
+
+**Check 14 — no dead back press.** `history.length` was 3 before opening, 3 after opening
+(the push truncated the forward entry), and **3 after closing with ✕** — equal, with
+`history.state === null` and `.chat` gone from the DOM, so the entry was spent rather than
+left behind. A further `browser_navigate_back` landed on `about:blank`, i.e. back went to
+where the user came from instead of being swallowed.
+
+Note on that equality: because a forward entry existed, `history.length` reads 3 at all
+three points. `history.state` returning to `null` is the load-bearing evidence that the
+synthetic entry was consumed — the length reading alone would not have distinguished it.
+
+### Not verified — needs a human
+
+- **No real phone was involved.** Nobody pressed an Android hardware/gesture back button
+  and nobody performed Safari's back-swipe. Playwright's `navigate_back` drives the same
+  History API the gesture ends up in, so the state machine is proven; the **gesture layer
+  above it is untested** — iOS's interactive back-swipe in particular can begin and be
+  cancelled, and that path has not been exercised here.
+- `browserHost()` itself has no unit test by design; only the two browser checks above
+  exercised it, in Chromium via Playwright. No WebKit or Firefox run.
+- Safari's `pushState` throttle was not induced — case 12 proves the *handling* against a
+  fake that throws, not that Safari throws where we expect.
+- The accepted case in the plan (reload with the drawer open leaves a stale entry) was not
+  exercised; it is documented as accepted, not fixed.

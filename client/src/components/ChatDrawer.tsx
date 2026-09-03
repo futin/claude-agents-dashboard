@@ -6,6 +6,7 @@ import QuestionPanel from './QuestionPanel';
 import PlanPanel from './PlanPanel';
 import MessagePanel from './MessagePanel';
 import ResumePanel from './ResumePanel';
+import { useBackClose } from '../hooks/useBackClose';
 import { useSessionChat } from '../hooks/useSessionChat';
 import { usePendingQuestion } from '../hooks/usePendingQuestion';
 import { usePendingPlan } from '../hooks/usePendingPlan';
@@ -117,6 +118,10 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Same intent as Escape above, for the input a phone actually has: at <=700px
+  // the drawer is full-width with no scrim to tap, so back is the other exit.
+  useBackClose(onClose);
 
   useLayoutEffect(() => {
     const el = bodyRef.current;
