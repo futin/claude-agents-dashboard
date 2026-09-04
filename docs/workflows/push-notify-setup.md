@@ -151,9 +151,11 @@ Two limits worth knowing before you rely on it:
   link — so desktop notifications with a working deep link are available even if you never set
   up Tailscale.
 
-Tapping a desk banner opens the drawer in the dashboard tab you already have open, and the
-throwaway tab ntfy opens closes itself. If nothing is polling — no dashboard tab, or you are
-on the Management/Usage/Settings section — it lands you on the dashboard in that tab instead.
+**Tapping a desk banner does nothing on purpose.** It is an alert, not a deep link: the tab
+ntfy opens closes itself immediately and you navigate to the session yourself. ntfy offers no
+"inert notification" — without a click target it opens its own topic page and leaves that tab
+behind — so a self-closing page is the closest thing. See
+[the subsystem doc](../subsystems/push-notify.md#tapping-a-desk-push-does-nothing-on-purpose).
 
 ### ⚠️ Without background notifications, the tap opens ntfy — not the dashboard
 
@@ -247,8 +249,8 @@ Read the Test push result first; it distinguishes most of these.
   you. `idleSecs` of 0 disables desk routing outright, and a machine where `ioreg` is
   unreadable (Docker, non-macOS) always routes to the phone.
 - **The desk push arrives but nothing is displayed** — the macOS alerts-helper trap above.
-- **The desk push opens a blank tab that stays open** — the throwaway tab could not close
-  itself. Harmless: the drawer still opened in your real dashboard tab. The page says so.
+- **The desk push opens a blank tab that stays open** — the tab could not close itself. It
+  says "You can close this tab."; nothing else was going to happen anyway.
 - **Tapping the desk push opens ntfy's own page instead of the dashboard** — background
   notifications are off, or an ntfy tab is still open. See the section above; this is the
   most likely failure on a fresh setup and it looks like a dashboard bug.

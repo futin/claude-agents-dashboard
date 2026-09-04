@@ -304,84 +304,35 @@ the settings file moved, and there is no migration.
 it, because `ntfyTopicDesk` is checked before the thunk is touched. `test/notify.test.ts`
 counts the calls; deleting the memoisation takes that count to 2.
 
-## Landing on the tab you already have open
+## Tapping a desk push does nothing, on purpose
 
-The desk push's `Click` is **not** the dashboard route. It is
-`<DASHBOARD_LOCAL_URL>/api/focus?session=<id>`, and the reason is that ntfy cannot be made to
-focus an existing tab:
+The desk push carries `Click: <DASHBOARD_LOCAL_URL>/api/dismiss`, and that page's only job
+is to close the tab it arrived in. **The desk notification is an alert, not a deep link** —
+it tells you a session needs you; you navigate yourself.
 
-- The `Click` header is only honoured when the notification is delivered **by the service
-  worker**, i.e. via real web push. A notification raised by an open ntfy web-app tab carries
-  no `data.message`, and the handler's first branch then focuses ntfy's own page and never
-  looks at `click` — see
-  [the setup guide](../workflows/push-notify-setup.md#-without-background-notifications-the-tap-opens-ntfy--not-the-dashboard).
-  Nothing server-side can detect or work around this.
-- ntfy's service worker hardcodes `openWindow` for a click URL —
-  `else if (r.click) self.clients.openWindow(r.click)`. Its focus-an-existing-tab branch runs
-  only on the *no-click* path.
-- That branch could never help anyway: `clients.matchAll()` is same-origin by spec, so
-  ntfy.sh's worker can never see a tab on this dashboard's origin. Fixing ntfy upstream would
-  change nothing.
+That is a choice, not a limitation, and it is worth knowing why it is not simply "no click
+action". ntfy's service worker always acts on a click:
 
-So the tab ntfy opens is treated as a throwaway:
+- with a `Click` header it `self.clients.openWindow(r.click)`;
+- **without** one it falls to `t?t.focus():…:self.clients.openWindow(o)` where `o` is
+  `https://ntfy.sh/<topic>` — it opens its own topic page and leaves that tab behind.
 
-1. `GET /api/focus` records the session in `lib/focus.ts` — a single slot, latest tap wins.
-2. It answers with a page that calls `window.close()`. Permitted because a
-   `clients.openWindow()` tab has one history entry and no opener, which satisfies Blink's rule
-   (closable when opened by DOM **or** the back/forward list has a single entry). Verified
-   2026-09-04. If an engine refuses, the page degrades to "You can close this tab."
-3. The dashboard tab you already had open claims it on its next `/api/focus/pending` poll
-   and opens the drawer, switching to the Sessions section first if you were elsewhere.
-   **Its URL is untouched** — no `?session=` is appended, which is what distinguishes this
-   from the deep link above.
+Verified against `https://ntfy.sh/sw.js` on 2026-09-04. So an inert notification is not on
+offer; pointing at a self-closing page is the closest thing, and a tap becomes a flash.
 
-**Nothing guesses whether a dashboard is open.** The page asks
-`/api/focus/claimed` whether its own tap got taken, and branches on the answer —
-claimed within 5s means a real dashboard has it, so close; still pending means
-nothing is going to take it, so navigate and become the dashboard.
+The tab can close itself because `clients.openWindow` gives it a single history entry and no
+opener, satisfying Blink's rule (`LocalDOMWindow::close`: closable when opened by DOM **or**
+the back/forward list has one entry). Confirmed in real use. The page falls back to "You can
+close this tab." for an engine that refuses.
 
-That replaced a server-side heuristic (`dashboardOpen()`: "has anything polled in
-the last 90s") which was wrong in the one case that matters. A desk push is sent
-*because* you are not looking at the dashboard — and Chrome throttles a hidden
-tab's timers to once a minute after five minutes and can freeze it outright. The
-heuristic therefore degraded exactly when the feature was used, decided no
-dashboard was open, and redirected the tap into a second tab. Reported from real
-use on 2026-09-04, twice.
-
-**The claim poll is its own endpoint, and that is load-bearing.** It first rode on
-`/api/sessions`, which was wrong: `SessionsView` owns that poll, so opening Management,
-Usage or **Settings** unmounts it and the polling stops dead — 0 requests, measured. A tap
-while you were on another section therefore did nothing at all, and once `POLL_FRESH_MS` had
-elapsed the server stopped believing a dashboard was open and started taking the redirect
-branch, opening a *second* dashboard tab: the exact outcome this design exists to prevent.
-Reported from real use on 2026-09-04, the first time the feature was tried from the Settings
-page it had just been enabled on.
-
-So `useFocusWatch` lives in the app shell and polls on every section, and it is that poll —
-not the session poll — that keeps `dashboardOpen()` honest. There must stay **exactly one**
-consumer: two polls claiming the same slot would race inside a single browser.
-
-The handoff is server-side rather than `BroadcastChannel` because the two tabs may not share
-an origin: under `pnpm dev` the client is on 5174 and the API on 4173.
-
-**When nothing is polling, it redirects instead** — `302` to `/?session=<id>`, so the throwaway
-tab *becomes* the dashboard rather than recording a tap that would only expire unread. That is
-also the path when you are on the Management, Usage or Settings section, since `SessionsView`
-unmounts and its poll stops with it: the feature degrades to a correctly deep-linked new tab
-rather than to nothing happening.
-
-**`/api/focus` is loopback-only, judged on the socket alone** (`classifyAddress`, never
-`classifyOrigin` — see the warning in `lib/origin.ts`). A remote user coming through a
-loopback-terminating proxy such as `pnpm tunnel` does pass, and that residual is accepted: the
-capability is "make an open dashboard tab select a session", nothing is returned and nothing
-persisted, and anyone through that proxy already has the spawn and answer endpoints.
-
-**The desk channel needs no `DASHBOARD_PUBLIC_URL` and no tunnel.** `clickUrl` returns `''`
-without a public URL and the header is dropped; `deskClickUrl` has no such dependency, so
-desktop notifications with a working deep link are available to someone who never sets up
-Tailscale. `DASHBOARD_LOCAL_URL` defaults to `http://localhost:<PORT>`, which is right for
-`pnpm start` and **wrong for `pnpm dev`** — set it to the Vite port there, or the redirect
-branch lands on a port serving no page.
+**A deep link was built here first, worked, and was removed.** `/api/focus` recorded the
+tapped session, the dashboard tab claimed it on a poll and opened that session's drawer, and
+the throwaway tab closed — verified end to end. It cost a store, three endpoints, a client
+poll and its own failure modes (a stale tab that claimed taps and rendered nothing; two
+dashboards racing for one claim), and it still could not bring the dashboard tab to the
+front, because a tab opened by `clients.openWindow` has no user activation and
+`WindowClient.focus()` requires it. It is in git history (`server/lib/focus.ts`) if the
+trade ever looks different.
 
 ## Answering "is it working?"
 

@@ -347,14 +347,15 @@ export async function run(): Promise<number> {
     ...over
   } as Partial<Config>);
 
-  if (await testAsync('at the desk, a push goes to the desk topic and taps land on /api/focus', () =>
+  if (await testAsync('at the desk, a push goes to the desk topic and taps only dismiss', () =>
     inTmpCwd(sent => {
       setSettings({ idleSecs: 60, notify: { enabled: true, events: { stop: true } } });
       setIdleSource(() => 10);
       maybeSend(twoTopic(), 'stop', { sessionId: SID });
       assert.strictEqual(sent.length, 1, 'exclusive — never both topics');
       assert.strictEqual(sent[0].topic, 'desk-topic');
-      assert.strictEqual(sent[0].click, `http://localhost:4173/api/focus?session=${SID}`);
+      assert.strictEqual(sent[0].click, 'http://localhost:4173/api/dismiss',
+        'the desk push carries no deep link — tapping only dismisses');
     }))) p++; else f++;
 
   if (await testAsync('away from the desk, a push goes to the phone topic and the public URL', () =>

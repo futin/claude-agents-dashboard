@@ -69,8 +69,9 @@ export interface Config {
    */
   ntfyTopicDesk: string;
   /**
-   * How a browser **on this machine** reaches the dashboard, used for the desk
-   * push's tap-through link.
+   * How a browser **on this machine** reaches this server, used for the desk
+   * push's tap-through — which points at `/api/dismiss` and does nothing but
+   * close the tab it opened in (see `notify.ts` `deskClickUrl`).
    *
    * Unlike `publicUrl` this *is* defaulted (`http://localhost:<port>`), and the
    * difference is deliberate: an absent `publicUrl` has to stay distinguishable
@@ -78,11 +79,10 @@ export interface Config {
    * `sendTest` warns about it. A desk URL is by construction "this machine", so
    * there is nothing to distinguish — a synthesized default is simply right.
    *
-   * ⚠️ Wrong under `pnpm dev`, where the client is served by Vite on `webPort`
-   * and `port` answers API only. The record-and-close branch of `/api/focus`
-   * works either way (the handoff is server-side, not same-origin), but the
-   * redirect branch would land on a port serving no page — so set
-   * `DASHBOARD_LOCAL_URL=http://localhost:5174` when running dev.
+   * The default is right in dev too: `/api/dismiss` is an API route, so `port`
+   * serves it whether or not Vite is running the UI on `webPort`. (It needed a
+   * dev override while the desk push deep-linked into the dashboard *page*;
+   * that link is gone — tapping a desk push only dismisses.)
    */
   localUrl: string;
   /**

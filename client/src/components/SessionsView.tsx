@@ -7,7 +7,6 @@ import { deepLinkSession } from '../lib/deepLink';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
 import { useSessions } from '../hooks/useSessions';
-import type { FocusClaim } from '../hooks/useFocusWatch';
 import { useSettings } from '../hooks/useSettings';
 import { useWebNotify } from '../hooks/useWebNotify';
 import { applyView, clearFilters, describeEmpty, pruneProjects, DEFAULT_VIEW, type View } from '../lib/filterSort';
@@ -18,23 +17,12 @@ const ChatDrawer = lazy(() => import('./ChatDrawer'));
 /** Own chunk, same reasoning — most sessions never spawn one of these. */
 const SpawnPanel = lazy(() => import('./SpawnPanel'));
 
-export interface SessionsViewProps {
-  /**
-   * A desk notification the user tapped, claimed by the app shell. Owned up
-   * there rather than here precisely because this component stops polling the
-   * moment another section is opened — see `useFocusWatch`.
-   */
-  focus: FocusClaim | null;
-  /** Called once the claim has opened its drawer, so it cannot be applied twice. */
-  onFocusApplied: () => void;
-}
-
 /**
  * The live sessions monitor — the app's original single view. Owns the 3s
  * poll (useSessions), so switching to the Management section unmounts it and
  * stops polling.
  */
-export function SessionsView({ focus, onFocusApplied }: SessionsViewProps) {
+export function SessionsView() {
   const { data, connected } = useSessions();
   const { settings } = useSettings();
   const [view, setView] = usePersistedState<View>('dashboard.view', DEFAULT_VIEW);
@@ -51,23 +39,6 @@ export function SessionsView({ focus, onFocusApplied }: SessionsViewProps) {
   // Rides this view's poll, so it is bound to it: nothing announces while
   // another section is open. See docs/subsystems/push-notify.md.
   useWebNotify(data?.sessions);
-
-  // A tapped desk notification, handed over server-side (see
-  // server/lib/focus.ts). Unlike the `?session=` deep link this arrives at a page
-  // that is already open, so it only opens the drawer — the URL is left alone.
-  //
-  // Keyed on `focus`, which the shell replaces with a new object per claim: the
-  // id alone would not re-open the drawer for a second tap on the same session,
-  // and depending on the whole poll payload would re-fire every tick with a
-  // stale id and make the drawer impossible to close.
-  useEffect(() => {
-    if (!focus) return;
-    setChatId(focus.id);
-    // Hand it back as spent. The shell outlives this component, so a claim left
-    // standing would re-open the drawer on every remount — i.e. every time you
-    // visit another section and come back.
-    onFocusApplied();
-  }, [focus, onFocusApplied]);
 
   // The project facet is persisted, so a selection can outlive the sessions it
   // named: every row then fails the filter and the list claims there are no

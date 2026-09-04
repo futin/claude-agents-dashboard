@@ -19,9 +19,9 @@
  *
  * Which *device* it reaches is a second question, answered by `NTFY_TOPIC_DESK`:
  * with one set, a push raised while you are at the keyboard goes to a topic a
- * browser on this machine is subscribed to instead, and its tap-through points at
- * `/api/focus` (see `focus.ts`) rather than the dashboard route. Exclusive, and
- * off unless that topic is set.
+ * browser on this machine is subscribed to instead. The desk push carries no deep
+ * link — tapping it only dismisses (see {@link deskClickUrl}). Exclusive, and off
+ * unless that topic is set.
  *
  * This is the one part of the backend that talks to the internet. It stays
  * zero-dependency (`node:https`), fire-and-forget, and can never fail or delay
@@ -251,18 +251,22 @@ export function clickUrl(config: Config, sessionId: string): string {
 }
 
 /**
- * The desk push's tap-through, which points at `/api/focus` rather than the
- * dashboard route.
+ * The desk push's tap-through: a page that closes the tab it opened in.
  *
- * ntfy's service worker always `openWindow`s a click URL, so tapping can never
- * land in the tab you already have open — the endpoint is what turns that
- * unavoidable new tab into a throwaway (see `focus.ts`).
+ * **Deliberately not a deep link.** ntfy's service worker always acts on a click
+ * — with a `Click` header it `openWindow`s that URL, and without one it opens its
+ * own topic page and leaves that tab behind, so "no action" is not on the menu.
+ * Pointing at `/api/dismiss` is the closest thing: the tab flashes and vanishes.
+ *
+ * A deep link that opened the session's drawer in an already-open dashboard tab
+ * did work (see git history for `lib/focus.ts`), and was dropped as more
+ * machinery than the feature earned.
  *
  * Never returns '' the way `clickUrl` can: `localUrl` always has a value, so the
  * desk channel needs no `DASHBOARD_PUBLIC_URL` and no tunnel at all.
  */
-export function deskClickUrl(config: Config, sessionId: string): string {
-  return `${config.localUrl}/api/focus?session=${encodeURIComponent(sessionId)}`;
+export function deskClickUrl(config: Config): string {
+  return `${config.localUrl}/api/dismiss`;
 }
 
 /**
@@ -283,7 +287,7 @@ export function routePush(
   readIdle: () => number | null
 ): { topic: string; click: string; desk: boolean } {
   if (config.ntfyTopicDesk && atDesk(readIdle(), thresholdSecs)) {
-    return { topic: config.ntfyTopicDesk, click: deskClickUrl(config, sessionId), desk: true };
+    return { topic: config.ntfyTopicDesk, click: deskClickUrl(config), desk: true };
   }
   return { topic: config.ntfyTopic, click: clickUrl(config, sessionId), desk: false };
 }

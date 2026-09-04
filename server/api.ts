@@ -47,8 +47,7 @@ import { notifyPermission, permissionWaits } from './lib/permissions.js';
 import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getSettings, setSettings } from './lib/settings.js';
-import { classifyAddress, classifyOrigin } from './lib/origin.js';
-import { focusPageHtml, focusPending, requestFocus, takeFocus } from './lib/focus.js';
+import { classifyOrigin } from './lib/origin.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
   MAX_LAUNCHING, adoptLaunched, launch, listLaunching, parseSpawnRequest, probeSpawn, stopLaunch
@@ -513,93 +512,44 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
   });
 }
 
-/**
- * `GET /api/focus/pending` — the tapped-session claim, polled by the app shell.
- *
- * Separate from `/api/sessions` on purpose, and this is the whole reason it
- * exists: `SessionsView` owns the session poll, so opening Management, Usage or
- * **Settings** unmounts it and the polling stops. That made a tapped desk
- * notification do nothing at all while you were on another section, and — once
- * `POLL_FRESH_MS` had elapsed — made `/api/focus` take its redirect branch and
- * open a *second* dashboard tab, which is the exact outcome this feature exists
- * to avoid. Reported from real use on 2026-09-04.
- *
- * The app shell polls this on every section, so `notePoll()` here is also what
- * keeps `dashboardOpen()` honest when the sessions list is not showing.
- *
- * Not loopback-gated: the dashboard reading it may legitimately be a phone.
- */
-export function serveFocusPending(res: ServerResponse): void {
-  const id = takeFocus();
-  sendJson(res, 200, id ? { focusSession: id } : {});
-}
+
 
 /**
- * `GET /api/focus/claimed` — the throwaway page asking whether its tap was taken.
+ * `GET /api/dismiss` — where a tapped desk notification lands, and it does
+ * nothing on purpose.
  *
- * Peek, never consume: the dashboard's own poll is the one consumer. Loopback
- * only, like `serveFocus`, since only that page calls it.
+ * ntfy's service worker always acts on a click: with a `Click` header it
+ * `openWindow`s that URL, and **without** one it opens its own topic page and
+ * leaves that tab behind. There is no "inert notification" option. So the desk
+ * push points here, and here serves a page whose only job is to close the tab it
+ * arrived in — a click becomes a flash and nothing else.
+ *
+ * The tab can close itself because `clients.openWindow` gives it a single history
+ * entry and no opener, which satisfies Blink's rule (`LocalDOMWindow::close`).
+ * Confirmed in real use on 2026-09-04. The message is the fallback for an engine
+ * that refuses.
+ *
+ * Static, no parameters, no state: this replaced a deep-link handoff that opened
+ * the session's drawer in an already-open dashboard tab (see git history for
+ * `lib/focus.ts`). That worked, and was dropped as more machinery than the
+ * feature was worth.
  */
-export function serveFocusClaimed(req: IncomingMessage, res: ServerResponse): void {
-  if (classifyAddress(req.socket?.remoteAddress) !== 'local') {
-    return sendJson(res, 403, { error: 'local only' });
-  }
-  sendJson(res, 200, { pending: focusPending() });
-}
-
-/** A session id is a UUID; anything else is junk. Mirrors `readSessionParam` client-side. */
-const SESSION_ID_RE = /^[0-9a-fA-F-]{8,64}$/;
-
-/**
- * `GET /api/focus` — where a tapped desk notification lands.
- *
- * ntfy's service worker always `openWindow`s a click URL, so this is answered in
- * a brand-new throwaway tab. It records which session you tapped, and the
- * dashboard tab you already had open picks it up on its next poll. See
- * `lib/focus.ts` for why the handoff is server-side.
- *
- * **Loopback-only, judged on the socket alone.** Deliberately `classifyAddress`
- * and not `classifyOrigin`: the latter consults the left-most `X-Forwarded-For`
- * entry once the socket is loopback, and that entry is supplied by the peer — a
- * remote client through `tailscale serve` can prepend its own value, since the
- * proxy appends rather than replaces.
- *
- * The precise cost of using `classifyOrigin` here is not "anyone gets in" — it
- * is that the verdict becomes **steerable by the caller, in both directions**: a
- * proxied client sending nothing is judged by its real tailnet address and
- * refused, while the same client prepending `127.0.0.1` is judged `local` and
- * allowed. Same peer, opposite answers, decided by a header they write.
- * `classifyAddress` reads the socket and nothing else, so every caller through a
- * given path gets the same answer.
- *
- * Known residual, accepted: a remote user through that loopback-terminating
- * proxy passes this guard, because their socket genuinely is loopback. What it
- * buys them is making an open dashboard tab select a session — no data returned,
- * nothing persisted — and anyone through that proxy already has the spawn and
- * answer endpoints, which are orders of magnitude more powerful.
- */
-export function serveFocus(
-  req: IncomingMessage,
-  res: ServerResponse,
-  params: URLSearchParams
-): void {
-  if (classifyAddress(req.socket?.remoteAddress) !== 'local') {
-    return sendJson(res, 403, { error: 'local only' });
-  }
-  const id = params.get('session') || '';
-  // Shape-checked, never existence-checked: answering differently for a real id
-  // would make this unauthenticated endpoint an oracle for which sessions exist.
-  // A well-formed unknown id is recorded and simply never matches a row.
-  if (!SESSION_ID_RE.test(id)) return sendJson(res, 400, { error: 'bad session id' });
-
-  // Always record, always serve the page — there is no server-side branch any
-  // more. The page finds out whether a dashboard actually claimed the tap and
-  // closes or navigates accordingly; guessing that here from "has anything
-  // polled lately" was wrong in the one case that matters (see `focusPending`).
-  requestFocus(id);
+export function serveDismiss(res: ServerResponse): void {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(focusPageHtml(id));
+  res.end(`<!doctype html>
+<meta charset="utf-8">
+<title>Dismissed</title>
+<body style="font:14px system-ui;padding:2rem;color:#888">
+<p id="m">Dismissed.</p>
+<script>
+window.close();
+setTimeout(function () {
+  document.getElementById('m').textContent = 'You can close this tab.';
+}, 600);
+</script>
+`);
 }
+
 
 /**
  * `GET /api/settings` — the settings that aren't per-device (see lib/settings.ts).

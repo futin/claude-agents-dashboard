@@ -1,10 +1,9 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 
 import { SideRail } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
 import { deepLinkSession } from './lib/deepLink';
 import { isSection, type Section } from './lib/sections';
-import { useFocusWatch } from './hooks/useFocusWatch';
 import { usePersistedState } from './hooks/usePersistedState';
 import { SettingsProvider, useSettings } from './hooks/useSettings';
 
@@ -44,16 +43,6 @@ function AppShell() {
     return isSection(want) ? want : 'sessions';
   });
 
-  // A tapped desk notification, watched on every section — see useFocusWatch for
-  // why this cannot live in SessionsView. Switching the section here is the same
-  // move the `?session=` deep link makes in the initializer above: a tap exists
-  // only to put you on that session's chat, so it beats whatever you were
-  // looking at.
-  const { claim: focus, clearClaim } = useFocusWatch();
-  useEffect(() => {
-    if (focus) setSection('sessions');
-  }, [focus]);
-
   const change = (s: Section): void => {
     setSection(s);
     setStored(s);
@@ -69,7 +58,7 @@ function AppShell() {
       <main className="main">
         <div className={wide ? 'wrap wide' : 'wrap'}>
           {section === 'sessions' ? (
-            <SessionsView focus={focus} onFocusApplied={clearClaim} />
+            <SessionsView />
           ) : section === 'management' ? (
             <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
               <ManagementView />
