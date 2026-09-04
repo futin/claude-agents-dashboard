@@ -216,7 +216,7 @@ Worth knowing from this page's side:
 
 | Route | Purpose |
 |---|---|
-| `GET /api/settings` | the non-per-device settings + any detected override, plus `notifyAvailable` (never the topic itself) |
+| `GET /api/settings` | the non-per-device settings + any detected override, plus `notifyAvailable` and `staleEnvKeys` (names only — never the topic or token itself) |
 | `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?}` — any subset); token-guarded like the other writes |
 | `POST /api/notify/test` | fire one push regardless of policy and report the outcome |
 | `GET /api/health` | now also carries `idleSecs` and `answerSecs`, for the hooks |

@@ -341,6 +341,40 @@ dropped packet all look identical. So `POST /api/notify/test` fires one push **r
 policy** and returns what actually happened, including whether taps will open anything. The
 Settings button surfaces that string verbatim.
 
+### The failure a 2xx cannot see: a `.env` edited after startup
+
+`loadConfig` runs once, at startup. Change `NTFY_TOPIC_DESK`, keep the process, and every
+later push goes to the **previous** topic — ntfy accepts it (any topic string is a valid
+topic; there is no registration), `httpsSend` reports 2xx, and `sendTest` truthfully says
+"sent". Your browser is subscribed to the new topic and shows nothing. Every visible signal
+says success.
+
+This happened on **2026-09-04**. The desk push had been verified end to end earlier that day;
+by evening the topic in `.env` had been replaced by hand without a restart. A test push
+reported `sent to https://ntfy.sh (desk topic)`, a banner appeared at the same moment — Claude
+Code's own notification, identical in shape — and the feature was recorded as proven. It was
+diagnosed only by polling ntfy's message cache from outside the app
+(`curl 'https://ntfy.sh/<topic>/json?poll=1&since=all'`), which showed no message at that
+minute on either topic.
+
+`staleEnvKeys()` (`server/lib/config.ts`) closes it. `loadConfig` keeps the parsed `.env` it
+read; the function re-reads the file on demand and returns the **names** of keys whose value
+now differs. Three deliberate limits:
+
+- **Names, never values.** `NTFY_TOPIC`, `NTFY_TOPIC_DESK` and `ANSWER_TOKEN` are credentials
+  and this list ships over the API — same posture as `notifyAvailable`.
+- **Parsed values, not an mtime.** A comment or whitespace edit is not a changed setting, and
+  a warning that cries wolf is ignored on the day it is right.
+- **Keys pinned in `process.env` are skipped.** They beat the file whatever it says, so a
+  restart would not move them and naming them would be false advice.
+
+It surfaces in two places: `GET /api/settings` carries `staleEnvKeys` for the Settings page,
+and `sendTest` appends the push-relevant subset to its own answer — because the string
+someone reads while asking "why did nothing arrive?" is that one.
+
+Detected, not fixed: the server does not reload itself, exactly like `idleOverride`. The
+advice is always "restart".
+
 ## Deferred
 
 **Per-session cooldown.** Four event types across several concurrent sessions could get

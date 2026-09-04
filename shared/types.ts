@@ -581,6 +581,20 @@ export interface ServerSettings {
    * both read and publish to the channel.
    */
   notifyAvailable: boolean;
+  /**
+   * Names of `.env` settings that have been edited since the server started, and
+   * are therefore *not* what it is running on — config is read once, at startup.
+   * Empty when the file matches the process, which is the normal case.
+   *
+   * Names only. Two of the keys most likely to appear here (`NTFY_TOPIC`,
+   * `NTFY_TOPIC_DESK`) are credentials, and this payload is served to any client
+   * that can reach the dashboard. Same posture as `notifyAvailable`: report that
+   * something is configured, never what.
+   *
+   * Detected, not fixed — the app does not reload itself — so the UI's job is to
+   * say "restart to pick this up", like it does for {@link EnvOverride}.
+   */
+  staleEnvKeys: string[];
 }
 
 /** Where an overriding `CLAUDE_DASHBOARD_*` variable was found. */

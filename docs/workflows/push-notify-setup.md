@@ -231,9 +231,15 @@ Read the Test push result first; it distinguishes most of these.
   the only thing here that talks to the internet; a proxy or egress rule can block it.
 - **"`<server>` refused it (HTTP …)"** — ntfy rejected the publish; the message carries its
   first line of explanation. Usually a malformed topic name or a rate limit.
+- **Reports sent, and the result also says "… changed in .env since this server started"** —
+  you edited `.env` and did not restart. Config is read once, at startup, so the push really
+  was sent, to the value the file held *before* your edit. Restart the server. The warning
+  names the keys and never their values.
 - **Reports sent, phone shows nothing** — the phone is subscribed to a *different* string
   (retype it), notifications are muted for the ntfy app at the OS level, or the device is
-  in a battery-saver mode that defers them.
+  in a battery-saver mode that defers them. If the topic was recently changed, check the
+  Settings page for the stale-`.env` warning first: a server on the old topic and a device
+  on the new one produce exactly this symptom, and a 2xx from ntfy either way.
 - **Push arrives, tapping opens nothing** — `DASHBOARD_PUBLIC_URL` is unset or wrong. The
   Test push result names the URL taps will use, or says outright that there isn't one, so
   read it rather than guessing.
@@ -259,8 +265,11 @@ Read the Test push result first; it distinguishes most of these.
 ## Rotating the topic
 
 There is no revocation: a topic is public the moment it is known. To rotate, generate a new
-one, change `NTFY_TOPIC` (or `NTFY_TOPIC_DESK`), restart the server, and re-subscribe the
-device. The two rotate independently, which is the point of not deriving one from the other. The old topic
+one, change `NTFY_TOPIC` (or `NTFY_TOPIC_DESK`), **restart the server**, and re-subscribe the
+device. Skipping the restart is the one mistake this whole feature cannot survive silently —
+the process keeps publishing to the old topic and everything still reports success — so the
+Settings page and the Test push result both call it out when the file and the process
+disagree. The two rotate independently, which is the point of not deriving one from the other. The old topic
 keeps existing on the ntfy server and anyone holding it keeps being able to publish to it —
 so the only thing that matters is that you stop listening to it.
 

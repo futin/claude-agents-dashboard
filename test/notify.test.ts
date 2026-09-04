@@ -10,6 +10,7 @@ import {
 import { DEFAULT_NOTIFY, resetSettings, setSettings } from '../server/lib/settings.js';
 import { resetState } from '../server/lib/remoteState.js';
 import type { NotifyPayload, PredicateContext } from '../server/lib/notify.js';
+import { resetEnvBaseline } from '../server/lib/config.js';
 import type { Config } from '../server/lib/config.js';
 import type { NotifyPolicy } from '../shared/types.js';
 
@@ -71,6 +72,10 @@ async function inTmpCwd(fn: (sent: NotifyPayload[]) => void | Promise<void>): Pr
     resetSettings();
     resetState();
     resetNotify();
+    // Another suite's `loadConfig` on a tmpdir would otherwise leave a baseline
+    // pointing at a directory that is gone, making `staleEnvKeys` report every
+    // key as changed and every "sent" outcome carry a warning.
+    resetEnvBaseline();
     setSender(payload => { sent.push(payload); });
     // Otherwise every delivery test scans the developer's real ~/.claude/projects.
     setLabelResolver(() => 'demo-project');

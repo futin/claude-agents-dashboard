@@ -218,17 +218,76 @@ export function isDockerContainer(): boolean {
 }
 
 /**
+ * What the last {@link loadConfig} read, so {@link staleEnvKeys} can tell an
+ * edited `.env` from the values this process is actually running on.
+ *
+ * Module state rather than a field on `Config`: staleness is not a property of
+ * the snapshot, it is a comparison between the snapshot and the disk *now*, and
+ * the answer changes without the snapshot changing.
+ */
+let envAtLoad: { path: string; values: Record<string, string> } | null = null;
+
+/** Read and parse a .env, treating an unreadable file as an empty one. */
+function readEnvFile(envPath: string): Record<string, string> {
+  try {
+    return parseEnv(fs.readFileSync(envPath, 'utf8'));
+  } catch {
+    return {}; /* no .env — fine */
+  }
+}
+
+/**
+ * Env keys whose value in the `.env` file now differs from what this process
+ * loaded at startup — **names only, never values**. `NTFY_TOPIC`,
+ * `NTFY_TOPIC_DESK` and `ANSWER_TOKEN` are credentials, and this list is served
+ * over the API.
+ *
+ * Config is read once, at startup. Editing `.env` and not restarting therefore
+ * leaves the process running on values nobody can see any more — and the failure
+ * is silent in the worst possible way: on 2026-09-04 a desk push was published,
+ * accepted by ntfy with a 2xx, and reported "sent" by the test button, to the
+ * topic `.env` held *before* it was edited. Nothing was subscribed there. The
+ * banner that arrived was Claude Code's own notification, which looks identical.
+ * See `docs/subsystems/push-notify.md`.
+ *
+ * Keys pinned in `process.env` are skipped: those beat the file whatever it says,
+ * so a restart would not change them and naming them would be false advice.
+ * Comment and whitespace edits are invisible here — `parseEnv` drops them — so
+ * this reports a changed *setting*, not a touched file.
+ *
+ * Empty when nothing has changed, and also when `loadConfig` was never called
+ * (a test double, or a `Config` built by hand): with no baseline there is
+ * nothing to compare against and claiming staleness would be a guess.
+ */
+export function staleEnvKeys(): string[] {
+  if (!envAtLoad) return [];
+  const now = readEnvFile(envAtLoad.path);
+  const keys = new Set([...Object.keys(envAtLoad.values), ...Object.keys(now)]);
+  return [...keys]
+    .filter(key => process.env[key] === undefined && now[key] !== envAtLoad!.values[key])
+    .sort();
+}
+
+/**
+ * Forget the baseline. For tests, which load configs from tmpdirs that are gone
+ * by the time the next suite asks — a dangling baseline would report every key
+ * as changed.
+ */
+export function resetEnvBaseline(): void {
+  envAtLoad = null;
+}
+
+/**
  * Load config from an optional .env file (defaults to <cwd>/.env), overlaid by
  * process.env, over hard defaults.
+ *
+ * Records what it read, so {@link staleEnvKeys} can answer "is this process
+ * still running the file's values?" later.
  */
 export function loadConfig(options: { envPath?: string } = {}): Config {
   const envPath = options.envPath || path.join(process.cwd(), '.env');
-  let fileEnv: Record<string, string> = {};
-  try {
-    fileEnv = parseEnv(fs.readFileSync(envPath, 'utf8'));
-  } catch {
-    /* no .env — fine */
-  }
+  const fileEnv = readEnvFile(envPath);
+  envAtLoad = { path: envPath, values: fileEnv };
 
   const src = (key: string): string | undefined =>
     (process.env[key] !== undefined ? process.env[key] : fileEnv[key]);

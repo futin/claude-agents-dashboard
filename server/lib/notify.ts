@@ -36,6 +36,7 @@ import https from 'node:https';
 import { getState } from './remoteState.js';
 import { scanSessions } from './scan.js';
 import { getSettings } from './settings.js';
+import { staleEnvKeys } from './config.js';
 import type { Config } from './config.js';
 import type { NotifyEvent, NotifyPolicy } from '../../shared/types.js';
 
@@ -393,6 +394,15 @@ export function maybeSend(
 }
 
 /**
+ * Env keys this feature reads. A change to any of them makes the running process
+ * publish somewhere other than where `.env` now says — the failure `staleEnvKeys`
+ * exists to catch, and the reason it is repeated in the test button's answer
+ * rather than only on the Settings page: this string is what someone reads when
+ * they are asking "why did nothing arrive?".
+ */
+const PUSH_ENV_KEYS = ['NTFY_TOPIC', 'NTFY_TOPIC_DESK', 'NTFY_SERVER', 'DASHBOARD_PUBLIC_URL', 'DASHBOARD_LOCAL_URL'];
+
+/**
  * Fire one push regardless of policy and say what happened.
  *
  * Every failure in this feature is invisible from the outside — an off switch, a
@@ -404,6 +414,10 @@ export function maybeSend(
  * would make the one control built to prove delivery incapable of failing. It
  * still cannot prove a phone is *subscribed* — nothing server-side can, so that
  * last step stays the user's eyes on their own device.
+ *
+ * It does now catch the case that looks exactly like a subscription problem and
+ * is not: a `.env` edited after this process read it, leaving the push going to
+ * the previous topic. See {@link staleEnvKeys}.
  */
 export async function sendTest(config: Config): Promise<string> {
   // Still `ntfyTopic` specifically: a desk topic with no phone topic behind it is
@@ -437,10 +451,18 @@ export async function sendTest(config: Config): Promise<string> {
     // The desk branch has no no-URL warning to give: `localUrl` is never empty,
     // and the tap-through is inert by design rather than a link that could be
     // missing (see {@link deskClickUrl}).
-    if (route.desk) return `sent to ${config.ntfyServer} (desk topic) · taps only dismiss`;
-    return config.publicUrl
+    // A 2xx proves ntfy accepted it, not that it went where you think: if the
+    // topic was edited after this process started, it went to the old one and
+    // your browser is subscribed to the new one. Nothing downstream can see that
+    // — only this comparison can.
+    const stale = staleEnvKeys().filter(key => PUSH_ENV_KEYS.includes(key));
+    const warn = stale.length
+      ? ` · ⚠️ ${stale.join(', ')} changed in .env since this server started — it sent to the OLD value; restart to use the new one`
+      : '';
+    if (route.desk) return `sent to ${config.ntfyServer} (desk topic) · taps only dismiss${warn}`;
+    return (config.publicUrl
       ? `sent to ${config.ntfyServer} (phone topic) · taps open ${config.publicUrl}`
-      : `sent to ${config.ntfyServer} (phone topic) · no DASHBOARD_PUBLIC_URL, so taps won't open the dashboard`;
+      : `sent to ${config.ntfyServer} (phone topic) · no DASHBOARD_PUBLIC_URL, so taps won't open the dashboard`) + warn;
   } catch (err) {
     return `send failed: ${err instanceof Error ? err.message : String(err)}`;
   }

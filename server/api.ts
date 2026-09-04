@@ -52,7 +52,7 @@ import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/t
 import {
   MAX_LAUNCHING, adoptLaunched, launch, listLaunching, parseSpawnRequest, probeSpawn, stopLaunch
 } from './lib/spawn.js';
-import { toPosInt, type Config } from './lib/config.js';
+import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
@@ -556,7 +556,13 @@ setTimeout(function () {
  * The topic itself is never returned — it is both the address and the credential.
  */
 export function serveSettingsRead(config: Config, res: ServerResponse): void {
-  sendJson(res, 200, { ...getSettings(), notifyAvailable: config.ntfyTopic !== '' });
+  sendJson(res, 200, {
+    ...getSettings(),
+    notifyAvailable: config.ntfyTopic !== '',
+    // Read per request, not cached: the whole point is to notice a file that
+    // changed after this process read it. One `readFileSync` of a small file.
+    staleEnvKeys: staleEnvKeys()
+  });
 }
 
 /** An empty grid, for the fail-open path and for a never-recorded profile. */
