@@ -3,6 +3,9 @@ id: idea-20
 title: Route ntfy pushes to a desk topic when at the desk
 created: 2026-09-04
 tags: notify, server, remote-access
+updated: 2026-09-04T15:14:11Z
+promoted-to: task-17
+groom-elapsed: 347
 ---
 
 ## Problem
