@@ -40,6 +40,19 @@ export function SessionsView() {
   // another section is open. See docs/subsystems/push-notify.md.
   useWebNotify(data?.sessions);
 
+  // A tapped desk notification, handed over server-side (see
+  // server/lib/focus.ts). Unlike the `?session=` deep link this arrives at a page
+  // that is already open, so it only opens the drawer — the URL is left alone.
+  //
+  // Depends on `data?.focusSession`, deliberately NOT on `data`: the server
+  // consumes the tap so only one poll ever carries it, but an effect keyed on the
+  // whole payload would re-fire every 3s with a stale id and make the drawer
+  // impossible to close.
+  useEffect(() => {
+    const id = data?.focusSession;
+    if (id) setChatId(id);
+  }, [data?.focusSession]);
+
   // The project facet is persisted, so a selection can outlive the sessions it
   // named: every row then fails the filter and the list claims there are no
   // recent sessions at all. Once a payload proves a selected project is gone,

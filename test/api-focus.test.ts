@@ -72,6 +72,37 @@ export async function run(): Promise<number> {
     });
   }));
 
+  /* ------------------------------------------------- the poll payload */
+
+  check(await testAsync('focusSession is absent from a poll with nothing pending', async () => {
+    await withServer(ENV, async h => {
+      resetFocus();
+      const reply = await h.req('/api/sessions');
+      assert.equal(reply.status, 200);
+      assert.ok(
+        !('focusSession' in (reply.json ?? {})),
+        'nothing pending must leave the key absent, not present-and-empty'
+      );
+    });
+  }));
+
+  check(await testAsync('focusSession rides exactly one poll after a tap', async () => {
+    await withServer(ENV, async h => {
+      resetFocus();
+      await h.req('/api/sessions');
+      await h.req(`/api/focus?session=${ID}`);
+
+      const first = await h.req('/api/sessions');
+      assert.equal(first.json?.focusSession, ID);
+
+      const second = await h.req('/api/sessions');
+      assert.ok(
+        !('focusSession' in (second.json ?? {})),
+        'consume-once — a second poll must not reopen the drawer'
+      );
+    });
+  }));
+
   /* ------------------------------------------------- id validation */
 
   check(await testAsync('a missing session id is a 400', async () => {

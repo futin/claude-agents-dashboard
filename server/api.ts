@@ -165,6 +165,11 @@ export function serveSessions(baseConfig: Config, res: ServerResponse, params?: 
   // work?" matters most (see server/lib/spawn.ts).
   adoptLaunched(data.sessions.map(s => s.id));
   data.launching = listLaunching();
+  // A tapped desk notification, claimed by whichever poll gets here first.
+  // Attached on the error snapshot too, for the same reason `launching` is.
+  // `?? undefined` rather than `= null`: nothing pending must leave the key
+  // absent, not present-and-empty.
+  data.focusSession = takeFocus() ?? undefined;
   // Account usage (5h + weekly). Synchronous cache read; refresh happens in the
   // background. Fails open to null so it never blocks or breaks the response.
   if (config.showUsage) {
