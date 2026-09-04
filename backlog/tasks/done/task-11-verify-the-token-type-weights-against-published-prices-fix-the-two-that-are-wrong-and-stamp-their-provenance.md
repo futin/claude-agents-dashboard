@@ -3,6 +3,9 @@ id: task-11
 title: Verify the token-type weights against published prices, fix the two that are wrong, and stamp their provenance
 created: 2026-09-02
 from: idea-17
+updated: 2026-09-03T19:11:39Z
+started: 2026-09-03T18:51:21Z
+execute-elapsed: 1218
 ---
 
 ## Goal
@@ -218,3 +221,99 @@ Browser:
   per-model rates remain the only measurement of the limit's actual weighting, and
   `task-10`'s caveat that the probe has never seen a live-recorded request count still stands
   untouched by this work.
+
+## Outcome
+
+**2026-09-03 — done.** `TYPE_WEIGHTS.cc` is `2` (the 1h cache-write tier), Fable/Mythos 5.1
+carry a `cr: 0.025` override matched by longest model-id prefix, every call site passes its
+model, `pnpm check:weights` makes the tier assumption falsifiable in one command, and
+`docs/subsystems/usage-limits.md` now says what the numbers are a proxy *for*.
+
+Two departures from the plan as written, both deliberate:
+
+- **Step 3's warning is keyed off a new `CHECKED_MODEL_PREFIXES` list, not the override
+  table.** Warning on "absent from the override table" would have warned for `claude-opus-5`,
+  `claude-sonnet-5` and `claude-haiku-4-5` — models that *were* priced on 2026-09-02 and
+  measured to match the uniform set. The checked list is a superset of the override table;
+  case 12 (`claude-nonesuch-9` warns, exit 0) passes either way. The warning is further
+  suppressed for ids with no cache-write and no cache-read tokens, so Claude Code's
+  `<synthetic>` placeholder — not a model anyone can price — does not warn.
+- **Step 5's `verified:` re-baseline is stamped to `84519e7`, the branch HEAD before this
+  work, not to the commit this task lands on** — this skill never commits, so that sha does
+  not exist yet. The stamp is therefore one commit *behind* the sources it describes, which
+  makes `/docs-sync` over-report drift on this doc rather than under-report it. **Needs
+  re-stamping to the landing commit by whoever commits.**
+
+Also fixed in passing, as the plan directed: the ~704 sentence claiming `UsageRates.tsx`
+"leads each row with the **raw** figure", which commit `9e9b77d` had reversed.
+
+### Verification
+
+`pnpm typecheck` — clean, exit 0.
+
+`pnpm test` — exit 0, 1141 cases:
+
+```
+  18/18 passed
+ALL PASS
+```
+
+`pnpm check:weights` — exit 0. This output *is* the evidence `cc: 2` is right on this
+machine, and the record of the 1h share on the day it landed:
+
+```
+token-weight check — last 7 day(s) under /Users/andrejajevtic/.claude/projects
+  transcripts read: 333
+
+  model                              requests    cache-write     1h share   blended cc   configured
+  <synthetic>                             16              0          n/a          n/a       2.0000
+  claude-fable-5                         357      1,633,641      100.00%       2.0000       2.0000
+  claude-fable-5-1                        87        835,455      100.00%       2.0000       2.0000
+  claude-haiku-4-5-20251001               24        215,985      100.00%       2.0000       2.0000
+  claude-opus-4-8                          2         59,763      100.00%       2.0000       2.0000
+  claude-opus-5                         9427     32,051,613       99.94%       1.9995       2.0000
+  claude-sonnet-5                        190      1,711,296      100.00%       2.0000       2.0000
+
+  ! claude-opus-4-8: not in CHECKED_MODEL_PREFIXES — its price ratios have never been checked, so it is being weighted with the uniform set. Price it and add the prefix.
+
+OK — the configured weights still follow from the transcripts.
+```
+
+**Mutation proof (case 3).** With `MODEL_TYPE_WEIGHT_OVERRIDES` emptied to `{}`, the override
+cases fail — five of them, across two files — and pass again once restored:
+
+```
+--- with the override table deleted ---
+  ✗ weightedTokens: Fable 5.1 prices cache reads at 0.025, not 0.1
+  ✗ weightedTokens: Mythos 5.1 carries the same cache-read override
+  ✗ weightedTokens: longest prefix wins, so a dated 5.1 id is not read as 5
+  ✗ weightsFor: the override merges into the uniform set, never replaces it
+  18 passed, 4 failed
+--- drift tests too ---
+  ✗ totalWeighted and dominantModel apply the per-model cache-read weight
+  32 passed, 1 failed
+--- restored ---
+  22 passed, 0 failed
+```
+
+**Browser (case 14).** Dev server on 4273/5273 in this worktree, against a copy of the live
+`.usage-ledger.jsonl` / `.usage-history.jsonl` (both gitignored; the main checkout was not
+touched). **Usage → Token value** renders real rows off the re-weighted ledger:
+`claude-opus-5` at **247k weighted / 1%**, `+37.1% vs baseline`, `drift`, with the raw figure
+as the labelled aside beneath (`≈ 1.5M raw at this model's recent mix`) — the order this task
+corrected the doc to describe. The other four models render the honest `collecting` state.
+No error, no empty body. The temporary dev server was stopped by PID; ports 4273/5273 clear.
+
+### Not verified
+
+- **That the 5-hour window charges cache writes at 2x, cache reads at 0.1x, or output at 5x
+  at all.** These are API list prices standing in for a weighting Anthropic does not publish.
+  This work makes the proxy correct, dated and traceable; it does not make it verified, and
+  `docs/subsystems/usage-limits.md` §*What the weights are, and are not* says so in the doc.
+- **The 4.2x residual remains unexplained.** `task-10` closed the per-request hypothesis;
+  the 10.184 → 9.816 recompute closes the weighting one. Neither was it.
+- **`task-10`'s caveat stands untouched**: the probe has never seen a live-recorded request
+  count.
+- **The published prices themselves were not re-fetched today.** The table in *What grooming
+  already established* was priced on 2026-09-02 and is taken as given here; `pnpm check:weights`
+  re-measures the *tier mix*, not the list price.

@@ -15,11 +15,13 @@ import {
   SPLIT_RANK_TOL,
   baselineRange,
   currentRange,
+  dominantModel,
   driftRow,
   explainSplits,
   externalShare,
   fitSplits,
-  rateFor
+  rateFor,
+  totalWeighted
 } from '../server/lib/usage-rate.js';
 import type { Interval, RateFloors } from '../server/lib/usage-rate.js';
 
@@ -200,6 +202,34 @@ export function run(): number {
     assert.strictEqual(CURRENT_MS, 3 * DAY);
     assert.deepStrictEqual(BASELINE_FLOORS, { minIntervals: 30, minUtil: 15, minDays: 7 });
     assert.deepStrictEqual(CURRENT_FLOORS, { minIntervals: 10, minUtil: 5, minDays: 2 });
+  })) p++; else f++;
+
+  // ── per-model weights reach the fit ──
+
+  if (test('totalWeighted and dominantModel apply the per-model cache-read weight', () => {
+    const tok = {
+      'claude-fable-5-1': { in: 0, out: 0, cc: 0, cr: 1_000_000 },
+      'claude-opus-5': { in: 5_000, out: 0, cc: 0, cr: 0 }
+    };
+    // 1_000_000·0.025 + 5_000·1 — under the uniform 0.1 this would be 105_000.
+    assert.strictEqual(totalWeighted(tok), 30_000);
+    // Fable holds 83.3% of that, under DOMINANCE. Weighted uniformly it would
+    // hold 95.2% and own the interval, so the weights decide the verdict here,
+    // not just the magnitude.
+    assert.strictEqual(dominantModel(tok), null);
+  })) p++; else f++;
+
+  if (test('the 1h cache-write weight reaches the pooled rate', () => {
+    const intervals: Interval[] = [{
+      fromT: NOW - MIN, toT: NOW, dUtil: 1,
+      tok: { 'claude-opus-5': { in: 0, out: 0, cc: 1_000_000, cr: 0 } },
+      req: {}, reqUsable: false, kind: { model: 'claude-opus-5' }
+    }];
+    const rate = rateFor(intervals, 'claude-opus-5', NOW - DAY, NOW + MIN, LOOSE);
+    assert.ok(rate !== null);
+    // cc·2, not the 5-minute tier's cc·1.25 (which would be 1_250_000).
+    assert.strictEqual(rate.weightedPerPct, 2_000_000);
+    assert.strictEqual(rate.rawPerPct, 1_000_000);
   })) p++; else f++;
 
   // ── rateFor: the pooled ratio ──

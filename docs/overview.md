@@ -190,7 +190,9 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   lan-ip.sh, env-value.ts (the one .env reader the installer and
                   the server share — never a second grep),
                   probe-usage-split.ts (`pnpm probe:usage-split`) — runs the
-                  two-term rate fit against this machine's real logs
+                  two-term rate fit against this machine's real logs,
+                  check-token-weights.ts (`pnpm check:weights`) — re-measures the
+                  cache-write TTL mix behind TYPE_WEIGHTS, exits 1 when it drifts
 ```
 
 ## Map
