@@ -15,7 +15,7 @@ import type { SessionAnalyticsLesson } from './sessionAnalyticsLog.js';
 import type { Config } from './config.js';
 import type { Session, SessionSurface, SessionsResponse } from '../../shared/types.js';
 
-interface TranscriptRef {
+export interface TranscriptRef {
   file: string;
   dirName: string;
   id: string;
@@ -141,6 +141,37 @@ export function listTranscripts(root: string): TranscriptRef[] {
 }
 
 /**
+ * Collapse per-file refs to one per session id, keeping the newest file.
+ *
+ * An id does not name a file: Claude Code files each record under the project
+ * dir derived from the cwd at write time, so a session that `cd`s into a git
+ * worktree keeps its id and starts a second `.jsonl` in a second project dir.
+ * `listTranscripts` stays the raw per-file enumeration — the usage ledger and
+ * analytics need every half — and this reduction is the one answer to "which
+ * file *is* this session now".
+ */
+function newestPerId(refs: TranscriptRef[]): TranscriptRef[] {
+  const byId = new Map<string, TranscriptRef>();
+  for (const ref of refs) {
+    const seen = byId.get(ref.id);
+    if (!seen || ref.mtimeMs > seen.mtimeMs) byId.set(ref.id, ref);
+  }
+  return [...byId.values()];
+}
+
+/**
+ * The live transcript for one session id, or undefined when nothing names it.
+ *
+ * Every caller resolving an id to a file to *read* goes through here rather than
+ * `listTranscripts(...).find(...)`: a plain `find` returns whichever half
+ * `readdirSync` yielded first, so a split session's chat drawer or detail pane
+ * could be served the abandoned half of its own transcript.
+ */
+export function findTranscript(root: string, id: string): TranscriptRef | undefined {
+  return newestPerId(listTranscripts(root).filter(t => t.id === id))[0];
+}
+
+/**
  * Newest conversational message in one session's transcript, in ms — or null
  * when the session is unknown, unreadable, or has no stamped message yet.
  *
@@ -160,7 +191,7 @@ export function listTranscripts(root: string): TranscriptRef[] {
  */
 export function lastMessageMs(root: string, sessionId: string): number | null {
   let ref: TranscriptRef | undefined;
-  try { ref = listTranscripts(root).find(t => t.id === sessionId); }
+  try { ref = findTranscript(root, sessionId); }
   catch { return null; }
   if (!ref) return null;
   const parsed = readTranscript(ref.file);
@@ -306,9 +337,14 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   // exist; with none, the loop breaks at maxSessions like before.
   // Archived first, so a deleted session doesn't eat a pool slot either.
   const archived = options.archivedIds || null;
-  const candidates = listTranscripts(root)
-    .filter(t => !archived || !archived.has(t.id))
-    .filter(t => now - t.mtimeMs <= lookbackMs)
+  // Deduped by id *before* the slice: a session split across two project dirs
+  // (see `newestPerId`) would otherwise spend two pool slots on itself and be
+  // pushed as two `Session`s with the same id — one row per half, parsed from
+  // different halves, so reading `working` and `idle` at once.
+  const candidates = newestPerId(
+    listTranscripts(root)
+      .filter(t => !archived || !archived.has(t.id))
+      .filter(t => now - t.mtimeMs <= lookbackMs))
     .sort((a, b) => b.mtimeMs - a.mtimeMs)
     .slice(0, maxSessions * 2);
 

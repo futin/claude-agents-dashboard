@@ -3,6 +3,9 @@ id: bug-15
 title: A session whose transcript split across two project dirs renders twice, then piles up until reload
 created: 2026-09-02
 tags: sessions, scan
+updated: 2026-09-04T21:58:19Z
+started: 2026-09-04T21:41:59Z
+execute-elapsed: 980
 ---
 
 ## Symptom
@@ -123,3 +126,93 @@ In `test/scan.test.ts`, against the existing tmpdir fixture style:
 `GET /api/sessions` has as many unique ids as entries with an 11-way split corpus on
 disk, the sessions list holds a stable row count across polls while a split session is
 being actively written, and the chat drawer for a split session shows its newest turns.
+
+## Outcome
+
+2026-09-04 — Fixed as planned. `newestPerId` (private) collapses per-file refs to one per
+id, keeping the greater `mtimeMs`; `scanSessions` runs it over the filtered refs *before*
+the `maxSessions * 2` slice, and the new exported `findTranscript(root, id)` is built on the
+same reduction. `listTranscripts` is untouched, so the usage ledger and analytics still see
+both halves. Three of the four `find(t => t.id === id)` call sites now go through
+`findTranscript`: `scan.ts` `lastMessageMs`, `api.ts` `serveSessionDetail`,
+`serveSessionChat`, plus `serveSpawn`'s resume lookup. `SessionList`'s `key={s.id}` stayed
+as it is.
+
+**One deviation from the plan:** `api.ts:487` `sessionExists` was left as
+`listTranscripts(...).some(t => t.id === id)`. It is the fifth site the plan counted, but it
+only asks *whether* an id exists, and dedupe cannot change that answer — routing it through
+`findTranscript` would add a Map build for an identical result.
+
+### Regression tests (`test/scan.test.ts`, 4 new cases)
+
+Watched all three guard cases fail first, then pass, then fail again with the reduction
+removed (mutation check — plain `find` + no pre-slice dedupe restored):
+
+```
+  ✗ split transcript: one session per id, parsed from the newer file
+    Expected values to be strictly equal:
+2 !== 1
+  ✗ split transcript: the dupe does not eat another session's display slot
+    Expected values to be strictly deep-equal:
++ actual - expected
+  [ 'split-1', + 'split-1' - 'other-1' ]
+  ✗ findTranscript resolves a split id to its newest file
+    scan.findTranscript is not a function
+```
+
+After the fix, `tsx test/scan.test.ts`:
+
+```
+  ✓ split transcript: one session per id, parsed from the newer file
+  ✓ split transcript: the dupe does not eat another session's display slot
+  ✓ findTranscript resolves a split id to its newest file
+  ✓ listTranscripts still enumerates both halves (the usage ledger depends on it)
+
+Passed: 57  Failed: 0
+```
+
+`pnpm test` → `ALL PASS`; `pnpm typecheck` → clean (no output). Note: `api-usage-rates`
+fails in a fresh worktree until `pnpm build` exists — it did here, `pnpm build` fixed it,
+nothing to do with this change.
+
+### Against the real corpus (739 transcripts, 12 split ids)
+
+`scanSessions({ maxSessions: 40, lookbackHours: 24*365 })` over `~/.claude/projects`:
+
+```
+before: files 739 unique ids 727 split ids 12
+        sessions 40 unique 39
+        dup: 93319dd5-… → [['idle', 1788555743895.95], ['idle', 1788541161405.99]]
+
+after:  files 739 unique ids 727 split ids 12
+        sessions 40 unique 40
+        split ids present in payload: [ '93319dd5-adad-4071-aaae-b72d63b674de' ]
+```
+
+`GET /api/sessions?limit=20` off a prod server on 4273 → `entries 20 unique 20`. The chat
+endpoint for the split id served the live half: last message `2026-09-04T20:43:48.567Z`,
+which is the newer file's last conversational timestamp (the abandoned half ends at
+`16:59:21.092Z`).
+
+Row-count stability across polls, staged on a fixture `HOME` with a split session whose
+newer half got a fresh turn appended before every poll:
+
+```
+poll 0 entries 2 unique 2 | split id count 1 | ids aaaaaaaa,bbbbbbbb
+poll 1 entries 2 unique 2 | split id count 1 | ids aaaaaaaa,bbbbbbbb
+poll 2 entries 2 unique 2 | split id count 1 | ids aaaaaaaa,bbbbbbbb
+poll 3 entries 2 unique 2 | split id count 1 | ids aaaaaaaa,bbbbbbbb
+poll 4 entries 2 unique 2 | split id count 1 | ids aaaaaaaa,bbbbbbbb
+poll 5 entries 2 unique 2 | split id count 1 | ids aaaaaaaa,bbbbbbbb
+```
+
+### Not verified, needs a human
+
+- **The DOM half of the pile-up.** Only the payload invariant was proven, over six polls of
+  an actively-written split session. The orphaned rows were a consequence of duplicate React
+  keys, and the payload no longer carries any — but no browser was driven, so nobody has
+  watched the list hold its row count on screen.
+- **The second defect is latent on this machine, not observable.** For all 12 split ids here,
+  the old `find` happened to hit the newest half anyway (`readdirSync` yields the non-worktree
+  dir first, and that is the live one in every case), so the wrong-half chat drawer is proven
+  only by the fixture test, not live.

@@ -7,7 +7,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import nodePath from 'node:path';
 
-import { scanSessions, lastMessageMs, listTranscripts, projectsRoot, sessionSurface } from './lib/scan.js';
+import { scanSessions, lastMessageMs, listTranscripts, findTranscript, projectsRoot, sessionSurface } from './lib/scan.js';
 import { archivedSessionIds } from './lib/archived.js';
 import { readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
@@ -190,7 +190,7 @@ export function serveSessionDetail(id: string, res: ServerResponse): void {
 
   let detail: SessionDetail;
   try {
-    const ref = listTranscripts(projectsRoot()).find(t => t.id === id);
+    const ref = findTranscript(projectsRoot(), id);
     if (!ref) return fail(404);
     const agents = readAgentsCached(ref.file);
     if (!agents) return fail(404);
@@ -241,7 +241,7 @@ export function serveSessionChat(id: string, params: URLSearchParams, res: Serve
 
   let body: SessionChat;
   try {
-    const ref = listTranscripts(projectsRoot()).find(t => t.id === id);
+    const ref = findTranscript(projectsRoot(), id);
     if (!ref) return fail(404);
     const chat =
       after !== undefined ? readChatAfter(ref.file, after, caps)
@@ -1240,7 +1240,7 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
       const rid = parsed.resumeId;
       // Membership check against the enumerated transcripts, same posture as
       // resolveProject below: the id never becomes a path by joining.
-      const t = listTranscripts(projectsRoot()).find(x => x.id === rid);
+      const t = findTranscript(projectsRoot(), rid);
       if (!t) return sendJson(res, 400, { error: 'unknown session' });
       const tr = readTranscript(t.file);
       // Only headless (`sdk-cli` → the `dashboard` pill) sessions: a terminal
