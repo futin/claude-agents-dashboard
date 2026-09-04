@@ -3,8 +3,10 @@ id: bug-16
 title: A logged-out CLI shows no usage bars and no hint at all
 created: 2026-09-03
 tags: usage, header
-updated: 2026-09-03T18:43:59Z
+updated: 2026-09-04T23:04:25Z
 groom-elapsed: 144
+started: 2026-09-04T22:41:31Z
+execute-elapsed: 1374
 ---
 
 ## Symptom
@@ -193,3 +195,95 @@ May be another consequence of being signed out, may be unrelated. Still unchecke
 grooming session was blocked from reading both `~/.claude/policy-limits.json` and the
 credential file by the sandbox, so it stays a note, not a claim, and it is not part of
 this fix.
+
+## Outcome
+
+**2026-09-05 — fixed as planned.** `signed-out` now exists as its own state from the
+credential parse through to the header. A logged-out CLI renders
+`Usage · signed out — run claude auth login` instead of nothing.
+
+All six planned edits landed, plus the doc. Two things worth recording:
+
+- **Line numbers in the plan had drifted.** `UsageStatus` was at `shared/types.ts:380`
+  (plan said `:318`) and its doc comment at `:1202` (plan said `:1118`). The plan's
+  *behaviour* held exactly; only the coordinates moved.
+- **A whitespace-only token was `ok`, not `missing`.** The plan grouped it with the
+  blank cases as if it were already `missing`; live probing showed
+  `tokenFromCredsBlob('{"claudeAiOauth":{"accessToken":"   "}}')` returned
+  `{ state: 'ok', token: '   ' }`. Target is unchanged (`signed-out` — that token would
+  401 anyway), but it is a change *from* `ok`, so it is now covered by its own test.
+
+`pickTokenState` and `statusForToken` are exported pure functions as specified;
+the `autoRenew` gate is byte-for-byte the literal `t.state === 'expired'` it was, with
+`signed-out` now excluded by name in its comment.
+
+### Verification
+
+The ordering requirement — blank test *before* the expiry test — was mutation-proven,
+not just asserted. Swapping the two lines produces exactly the misclassification the
+plan warned about:
+
+```
+--- mutation: expiry checked before blank ---
+  ✗ tokenFromCredsBlob: blank token with expiresAt 0 → signed-out, not expired
+    Expected values to be strictly deep-equal:
++ actual - expected
+
+  {
++   state: 'expired'
+-   state: 'signed-out'
+```
+
+Full suite, typecheck and build, all fresh:
+
+```
+=== usage.ts ===
+
+  ✓ tokenFromCredsBlob: valid token → ok
+  ✓ tokenFromCredsBlob: past expiresAt → expired
+  ✓ tokenFromCredsBlob: no expiresAt → ok (never skipped)
+  ✓ tokenFromCredsBlob: garbage / missing token → missing
+  ✓ tokenFromCredsBlob: blank token with expiresAt 0 → signed-out, not expired
+  ✓ tokenFromCredsBlob: blank token with a future expiresAt → signed-out
+  ✓ tokenFromCredsBlob: whitespace-only token → signed-out
+  ✓ pickTokenState: signed-out outranks missing, either order
+  ✓ pickTokenState: expired outranks signed-out, either order
+  ✓ pickTokenState: ok wins over everything; empty → missing
+  ✓ statusForToken: every TokenState maps to its own status
+
+Passed: 23  Failed: 0
+
+  18/18 passed
+ALL PASS
+
+$ pnpm typecheck
+> tsc --noEmit
+(exit 0)
+
+$ pnpm build
+✓ built in 1.12s
+```
+
+Browser check (dev server on 4273/5273, `window.fetch` patched to force the status —
+no real logout needed), exactly the plan's procedure:
+
+```
+signed-out forced → { "bars": 0,
+                      "message": "signed out — run claude auth login",
+                      "usageBlockVisibleText": "USAGE\nsigned out — run claude auth login" }
+reload (patch dropped) → { "barsAfterReload": 2, "messageAfterReload": null }
+token-expired forced → { "bars": 0, "message": "token expired" }   (unchanged, no regression)
+```
+
+**Not verified, needs a human:** the fix was never exercised against a genuinely
+logged-out CLI — the host was signed back in by the time this ran (`usageStatus: "ok"`
+live), so the `signed-out` path was proven through the parse function and a patched
+client payload, not end to end from a real `claude auth logout`.
+
+Two notes for whoever picks this up:
+
+- This worktree had no `node_modules` and no `client/dist`; before `pnpm install` and
+  `pnpm build` the suite reported 27 unrelated failures (installer fixtures, plus
+  `a near-miss path is not the rates endpoint`). Those are environmental, not the fix.
+- The `policy-limits.json` observation at the end of the report was **not** investigated
+  — it was explicitly out of scope for this fix and remains unchecked.

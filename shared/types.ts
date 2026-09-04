@@ -377,7 +377,7 @@ export interface UsageLimits {
 }
 
 /** Why the header usage section is (or isn't) populated. */
-export type UsageStatus = 'ok' | 'token-expired' | 'unavailable';
+export type UsageStatus = 'ok' | 'token-expired' | 'signed-out' | 'unavailable';
 
 /** One subagent launched via the `Task` tool, paired from the parent transcript. */
 export interface AgentJob {
@@ -1201,6 +1201,8 @@ export interface SessionsResponse {
   /**
    * Why `usage` is or isn't populated: 'ok' → bars render; 'token-expired' →
    * stored OAuth token is past expiresAt (header shows a hint instead of bars);
+   * 'signed-out' → the stored credential is present but blank, i.e. the CLI is
+   * logged out (header shows a hint naming `claude auth login`);
    * 'unavailable' → any other fail-open cause (no token, network, bad payload).
    * Absent when SHOW_USAGE is off; attached on both success and error snapshots.
    */

@@ -28,10 +28,15 @@ import { recordLedgerTick } from './usage-ledger.js';
 import { getSettings } from './settings.js';
 import { autoRenew } from './token-refresh.js';
 
-/** Outcome of looking for a stored OAuth token. */
+/**
+ * Outcome of looking for a stored OAuth token. `signed-out` is separate from
+ * `missing` because it is the one absent-bars cause the user can fix in one
+ * command — the credential is there, its fields are just blank.
+ */
 export type TokenState =
   | { state: 'ok'; token: string }
   | { state: 'expired' }
+  | { state: 'signed-out' }
   | { state: 'missing' };
 
 const USAGE_PATH = '/api/oauth/usage';
@@ -64,20 +69,21 @@ function baseUrl(): string {
  * container path — a Linux container has no `security` binary to reach the
  * host Keychain, so the host reads it and passes the blob in via env; see
  * scripts/host-credentials.sh), then the macOS keychain, then the
- * `~/.claude/.credentials.json` fallback file. `missing` on any failure.
+ * `~/.claude/.credentials.json` fallback file. Stores that disagree are
+ * resolved by {@link pickTokenState}; an unreadable store contributes nothing.
  * NOTE: the first keychain read by this process triggers a macOS access
  * prompt ("… wants to use your confidential information") — approve once
  * with "Always Allow".
  */
 export function readToken(): TokenState {
-  let sawExpired = false;
+  const seen: TokenState[] = [];
 
   // 0. Env var — the container-passthrough path (host Keychain isn't reachable
   // from inside a Linux container). Empty/unset is normal and falls through.
   if (process.env.CLAUDE_CREDENTIALS_JSON) {
     const t = tokenFromCredsBlob(process.env.CLAUDE_CREDENTIALS_JSON);
     if (t.state === 'ok') return t;
-    if (t.state === 'expired') sawExpired = true;
+    seen.push(t);
   }
 
   // 1. macOS keychain.
@@ -89,7 +95,7 @@ export function readToken(): TokenState {
     ).trim();
     const t = tokenFromCredsBlob(out);
     if (t.state === 'ok') return t;
-    if (t.state === 'expired') sawExpired = true;
+    seen.push(t);
   } catch {
     /* no keychain item / not macOS / access denied — try the file */
   }
@@ -99,12 +105,12 @@ export function readToken(): TokenState {
     const raw = fs.readFileSync(path.join(os.homedir(), '.claude', '.credentials.json'), 'utf8');
     const t = tokenFromCredsBlob(raw);
     if (t.state === 'ok') return t;
-    if (t.state === 'expired') sawExpired = true;
+    seen.push(t);
   } catch {
     /* no file — give up */
   }
 
-  return { state: sawExpired ? 'expired' : 'missing' };
+  return pickTokenState(seen);
 }
 
 /**
@@ -124,9 +130,34 @@ export function tokenFromCredsBlob(blob: string, now = Date.now()): TokenState {
     | { accessToken?: unknown; expiresAt?: unknown }
     | undefined;
   const token = oauth && typeof oauth.accessToken === 'string' ? oauth.accessToken : null;
-  if (!token) return { state: 'missing' };
+  if (token === null) return { state: 'missing' };
+  // Before the expiry test, not after: `claude auth logout` blanks the token
+  // *and* zeroes `expiresAt`, so an expiry-first read would call a logout
+  // `expired` and fire a renewal turn at a credential with no refresh token.
+  if (token.trim() === '') return { state: 'signed-out' };
   if (typeof oauth!.expiresAt === 'number' && oauth!.expiresAt <= now) return { state: 'expired' };
   return { state: 'ok', token };
+}
+
+/**
+ * Resolve the states the credential stores returned into the one this process
+ * reports. Priority: `ok` > `expired` > `signed-out` > `missing`. `expired`
+ * outranks `signed-out` on purpose — an expired token in *any* store renews
+ * itself with no user action, so a blank blob elsewhere must not suppress that.
+ */
+export function pickTokenState(seen: TokenState[]): TokenState {
+  const rank = { ok: 3, expired: 2, 'signed-out': 1, missing: 0 } as const;
+  let best: TokenState = { state: 'missing' };
+  for (const s of seen) if (rank[s.state] > rank[best.state]) best = s;
+  return best;
+}
+
+/** What the client is told about a non-`ok` (or `ok`) token read. */
+export function statusForToken(state: TokenState['state']): UsageStatus {
+  if (state === 'ok') return 'ok';
+  if (state === 'expired') return 'token-expired';
+  if (state === 'signed-out') return 'signed-out';
+  return 'unavailable';
 }
 
 /** One window from the raw `rate_limits` payload → our RateLimit shape. */
@@ -276,13 +307,15 @@ function refreshNow(force = false): Promise<void> {
     try {
       const t = readToken();
       if (t.state !== 'ok') {
-        next = { usage: null, status: t.state === 'expired' ? 'token-expired' : 'unavailable' };
+        next = { usage: null, status: statusForToken(t.state) };
         // A stored token only ever expires — and nothing renews it in a
         // desktop-only workflow, since only a real `claude` CLI process writes
         // the keychain item we read. So ask the CLI to, in the background.
         // This cycle still reports `token-expired`; a later poll picks up the
-        // renewed token. `missing` is deliberately excluded: no spawn can
-        // conjure credentials that were never stored — that needs a login.
+        // renewed token. `missing` and `signed-out` are deliberately excluded:
+        // no spawn can conjure credentials that were never stored, and a
+        // blanked-out one has no refresh token left to renew — both need a
+        // login. Widening this gate spends a `claude -p` turn to learn that.
         if (t.state === 'expired' && autoRefreshEnabled) {
           void autoRenew({
             probe: () => readToken().state === 'ok',

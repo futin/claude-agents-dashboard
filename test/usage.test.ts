@@ -66,6 +66,59 @@ export function run(): number {
     assert.deepStrictEqual(usage.tokenFromCredsBlob('not json', NOW), { state: 'missing' });
     assert.deepStrictEqual(usage.tokenFromCredsBlob('{}', NOW), { state: 'missing' });
     assert.deepStrictEqual(usage.tokenFromCredsBlob(JSON.stringify({ claudeAiOauth: {} }), NOW), { state: 'missing' });
+    // The complement of the signed-out split below: a non-string accessToken is
+    // a malformed store, not a logout, and must not inherit the sign-in hint.
+    assert.deepStrictEqual(usage.tokenFromCredsBlob(JSON.stringify({ claudeAiOauth: { accessToken: 42 } }), NOW), { state: 'missing' });
+  })) p++; else f++;
+
+  // ── signed-out: credentials present but blank ──
+  // `claude auth logout` leaves the blob in place with every field emptied. That
+  // is the one absent-bars cause the user can fix in one command, so it gets its
+  // own state rather than sharing `missing`'s silence.
+
+  if (test('tokenFromCredsBlob: blank token with expiresAt 0 → signed-out, not expired', () => {
+    // The exact blob observed after `claude auth logout`. Classifying it expiry-first
+    // would say `expired` (0 <= NOW) and fire a renewal at a credential with no
+    // refresh token to renew — so the blank test must precede the expiry test.
+    const blob = JSON.stringify({ claudeAiOauth: { accessToken: '', expiresAt: 0 } });
+    assert.deepStrictEqual(usage.tokenFromCredsBlob(blob, NOW), { state: 'signed-out' });
+  })) p++; else f++;
+
+  if (test('tokenFromCredsBlob: blank token with a future expiresAt → signed-out', () => {
+    const blob = JSON.stringify({ claudeAiOauth: { accessToken: '', expiresAt: NOW + 60_000 } });
+    assert.deepStrictEqual(usage.tokenFromCredsBlob(blob, NOW), { state: 'signed-out' });
+  })) p++; else f++;
+
+  if (test('tokenFromCredsBlob: whitespace-only token → signed-out', () => {
+    const blob = JSON.stringify({ claudeAiOauth: { accessToken: '   ' } });
+    assert.deepStrictEqual(usage.tokenFromCredsBlob(blob, NOW), { state: 'signed-out' });
+  })) p++; else f++;
+
+  if (test('pickTokenState: signed-out outranks missing, either order', () => {
+    assert.deepStrictEqual(usage.pickTokenState([{ state: 'missing' }, { state: 'signed-out' }]), { state: 'signed-out' });
+    assert.deepStrictEqual(usage.pickTokenState([{ state: 'signed-out' }, { state: 'missing' }]), { state: 'signed-out' });
+  })) p++; else f++;
+
+  if (test('pickTokenState: expired outranks signed-out, either order', () => {
+    // An expired token in *any* store is renewable with no user action; a blank
+    // blob in another store must not suppress that self-healing path.
+    assert.deepStrictEqual(usage.pickTokenState([{ state: 'signed-out' }, { state: 'expired' }]), { state: 'expired' });
+    assert.deepStrictEqual(usage.pickTokenState([{ state: 'expired' }, { state: 'signed-out' }]), { state: 'expired' });
+  })) p++; else f++;
+
+  if (test('pickTokenState: ok wins over everything; empty → missing', () => {
+    assert.deepStrictEqual(usage.pickTokenState([{ state: 'signed-out' }, { state: 'ok', token: 'tok-1' }]), { state: 'ok', token: 'tok-1' });
+    assert.deepStrictEqual(usage.pickTokenState([{ state: 'missing' }]), { state: 'missing' });
+    assert.deepStrictEqual(usage.pickTokenState([]), { state: 'missing' });
+  })) p++; else f++;
+
+  if (test('statusForToken: every TokenState maps to its own status', () => {
+    assert.strictEqual(usage.statusForToken('ok'), 'ok');
+    assert.strictEqual(usage.statusForToken('expired'), 'token-expired');
+    // Folding signed-out back into token-expired would re-arm autoRenew on a
+    // credential that cannot be renewed. This assertion is that guard.
+    assert.strictEqual(usage.statusForToken('signed-out'), 'signed-out');
+    assert.strictEqual(usage.statusForToken('missing'), 'unavailable');
   })) p++; else f++;
 
   if (test('requestHeaders: carries the token + a claude-code User-Agent', () => {
