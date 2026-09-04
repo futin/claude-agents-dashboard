@@ -239,7 +239,8 @@ at all.
 `listRecentProjects`'s enumerated list (`server/lib/management.ts`) — never
 joined into a filesystem path. An unknown name is a 400, not a lookup that might escape
 somewhere unexpected. The project's `cwd` (read off its own most-recent transcript, not
-user input) becomes the child's working directory; there is no free-text cwd field, on
+user input — its launch cwd, not whatever that session later chdir'd into) becomes the
+child's working directory; there is no free-text cwd field, on
 purpose — it would violate this exact guarantee.
 
 ## The store's charter — deliberately narrow

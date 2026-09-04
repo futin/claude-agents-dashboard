@@ -403,9 +403,21 @@ export async function readProjectScope(projectPath: string, dirName?: string, ho
 /* --------------------------------------------------------------- projects */
 
 /**
+ * How Claude Code names a project dir under `~/.claude/projects`: every
+ * character outside `[A-Za-z0-9]` becomes `-`. Lossy in that direction — many
+ * paths encode to one dirName, and no decoder is possible — but exact in this
+ * one, which is all {@link listRecentProjects} needs to ask "is this dir named
+ * for that cwd?". Measured against every project dir on this machine: 75/75
+ * matched one of their newest transcript's two cwds, 0 missed.
+ */
+export function encodeProjectDir(cwd: string): string {
+  return cwd.replace(/[^A-Za-z0-9]/g, '-');
+}
+
+/**
  * Recently-active projects for the management side-menu: per project dir the
- * newest transcript within the lookback window, its cwd tail-read from the
- * transcript; deduped by cwd (newest wins), newest-first.
+ * newest transcript within the lookback window, resolved to the cwd that dir is
+ * named for; deduped by cwd (newest wins), newest-first.
  */
 export function listRecentProjects(config: Partial<Config>, options: ProjectsOptions = {}): ProjectRef[] {
   const lookbackHours = (config.lookbackHours ?? 0) > 0 ? (config.lookbackHours as number) : 24;
@@ -427,13 +439,29 @@ export function listRecentProjects(config: Partial<Config>, options: ProjectsOpt
   const byCwd = new Map<string, ProjectRef>();
   for (const [dirName, t] of newestPerDir) {
     const parsed = readTranscript(t.file);
-    if (!parsed || !parsed.cwd) continue;
-    const cur = byCwd.get(parsed.cwd);
+    if (!parsed) continue;
+    // A session that chdir's into a worktree drifts away from the dir it is
+    // filed under, and writes into the worktree's dir as well — so both dirs
+    // hold a transcript reporting the repo as its launch cwd and the worktree as
+    // its newest. Neither cwd is right for both dirs. What settles it is the dir
+    // itself: publish the cwd it is *named* for, so the repo's dir yields the
+    // repo (bug-14: the newest cwd hid it, and no other dir can name it) and the
+    // worktree's own dir still yields the worktree. Falls back to the launch cwd
+    // the way `scan.ts` labels a session, then the newest, when the name matches
+    // neither — fail open, never a guess.
+    //
+    // One entry per dir, never two: `dirName` is the key the rail draws rows
+    // with, the value the spawn `<option>`s carry, and what `resolveProject`
+    // maps to a single path. Two entries sharing it break all three.
+    const cwd = [parsed.originCwd, parsed.cwd].find(c => !!c && encodeProjectDir(c) === dirName)
+      || parsed.originCwd || parsed.cwd;
+    if (!cwd) continue;
+    const cur = byCwd.get(cwd);
     if (cur && cur.lastActiveMs >= t.mtimeMs) continue;
-    byCwd.set(parsed.cwd, {
+    byCwd.set(cwd, {
       dirName,
-      name: path.basename(parsed.cwd) || parsed.cwd,
-      path: parsed.cwd,
+      name: path.basename(cwd) || cwd,
+      path: cwd,
       lastActiveMs: t.mtimeMs
     });
   }

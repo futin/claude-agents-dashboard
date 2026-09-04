@@ -27,6 +27,15 @@ Read-only v1 — nothing is ever written.
   installPath → skills/agents/commands/rules/hooks.json), items tagged `plugin:<name>`.
   Project = `<cwd>/.claude/*` + root CLAUDE.md, items tagged `project`. Recent projects
   come from transcript cwds (same lookback as sessions), deduped by cwd, newest-first.
+  Each dir publishes the cwd **it is named for**: of the newest transcript's launch and
+  newest cwds, the one whose `encodeProjectDir` spelling equals the dirName. A session that
+  chdir'd into a worktree drifts away from the dir it is filed under *and* writes into the
+  worktree's dir too, so both dirs hold a transcript reporting the repo as launch cwd and the
+  worktree as newest — neither cwd is right for both. Naming settles it: the repo's dir
+  yields the repo (the newest cwd hid it, and no other dir can name it — bug-14) and the
+  worktree's own dir still yields the worktree. Falls back to launch-then-newest when the
+  name matches neither. One entry per dir, never two: `dirName` is the rail's React key, the
+  spawn `<option>` value and `resolveProject`'s argument, so it has to stay unique.
   Sessions the desktop app archived are skipped — `api.ts` passes `archivedIds` into
   `listRecentProjects`, so a project whose only recent session was deleted in the app stops
   reading as recently active (see [sessions](sessions.md) §Archived-session filter). The
