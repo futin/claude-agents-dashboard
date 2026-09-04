@@ -114,9 +114,13 @@ In `test/scan.test.ts`, against the existing tmpdir fixture style:
 - Two dirs, same session id, distinct mtimes → `scanSessions` returns **one** session for
   that id, and it is the one parsed from the newer file (assert on a field that differs
   between the halves, e.g. `updatedMs` or `status`).
-- The pool arithmetic: with `maxSessions: 1` and a duplicated id whose two files are the
-  two newest transcripts, the second-newest *distinct* session still gets the remaining
-  display slot — the case a pre-slice dedupe fixes and a post-slice one does not.
+- The pool arithmetic. **Corrected after review — the original bullet here was
+  arithmetically impossible:** at `maxSessions: 1` there is no remaining display slot for a
+  second session, so no assertion could tell a pre-slice dedupe from a post-slice one.
+  Discriminating needs a split id holding *the whole pool* — at least `maxSessions * 2`
+  halves. With `maxSessions: 2` (pool of 4), an id split across the four newest files plus
+  an older distinct id: pre-slice dedupe yields both ids, post-slice yields only the split
+  one, because the slice drops the distinct id before the dedupe can free a slot.
 - `findTranscript(root, id)` returns the newer ref for a split id, and `undefined` for an
   unknown id.
 - `listTranscripts` itself still returns **both** files — the guard on the ledger.
@@ -146,7 +150,8 @@ only asks *whether* an id exists, and dedupe cannot change that answer — routi
 ### Regression tests (`test/scan.test.ts`, 4 new cases)
 
 Watched all three guard cases fail first, then pass, then fail again with the reduction
-removed (mutation check — plain `find` + no pre-slice dedupe restored):
+removed entirely (mutation check — plain `find`, no dedupe at all). **That mutation proved
+the dedupe exists, not that it runs before the slice — see the review follow-up below.**
 
 ```
   ✗ split transcript: one session per id, parsed from the newer file
@@ -216,3 +221,77 @@ poll 5 entries 2 unique 2 | split id count 1 | ids aaaaaaaa,bbbbbbbb
   the old `find` happened to hit the newest half anyway (`readdirSync` yields the non-worktree
   dir first, and that is the live one in every case), so the wrong-half chat drawer is proven
   only by the fixture test, not live.
+
+## Review follow-up (2026-09-04)
+
+An independent review of the branch returned **fix** with one Important finding, addressed
+here.
+
+### The pool-slot test did not guard the dedupe's placement
+
+As first written, `split transcript: the dupe does not eat another session's display slot`
+used three files (two halves of `split-1`, one `other-1`) and asserted at `maxSessions: 1`
+and `maxSessions: 2`. Neither assertion could fail with the dedupe moved after the slice:
+at `maxSessions: 1` the display cap alone excludes `other-1`, and at `maxSessions: 2` the
+pool of 4 holds all three files, so slicing changes nothing. The `## Fix` step-1 requirement
+— dedupe *before* the slice — was therefore unguarded, while the test's own comment and this
+Outcome both claimed it was covered. Both claims are now corrected above.
+
+Replaced with `split transcript: the dupe does not eat another session's pool slots`:
+`maxSessions: 2` (pool of 4), `split-1` split across the four newest files, plus an older
+distinct `other-1`. Pre-slice dedupe leaves the pool one distinct id and `other-1` reachable;
+post-slice dedupe slices `other-1` out first and loses the row.
+
+Proved by mutation on the placement itself — `newestPerId` moved to wrap the sliced list:
+
+```
+  const candidates = newestPerId(
+    listTranscripts(root)
+      .filter(t => !archived || !archived.has(t.id))
+      .filter(t => now - t.mtimeMs <= lookbackMs)
+      .sort((a, b) => b.mtimeMs - a.mtimeMs)
+      .slice(0, maxSessions * 2));
+```
+
+```
+  ✗ split transcript: the dupe does not eat another session's pool slots
+    Expected values to be strictly deep-equal:
++ actual - expected
+
+  [
+    'split-1',
+-   'other-1'
+  ]
+
+  ✓ findTranscript resolves a split id to its newest file
+
+Passed: 56  Failed: 1
+```
+
+Restored to the pre-slice placement (`newestPerId(...)` wrapping the *filtered* list, with
+`.sort().slice()` after it):
+
+```
+  ✓ split transcript: one session per id, parsed from the newer file
+  ✓ split transcript: the dupe does not eat another session's pool slots
+  ✓ findTranscript resolves a split id to its newest file
+  ✓ listTranscripts still enumerates both halves (the usage ledger depends on it)
+Passed: 57  Failed: 0
+```
+
+### Follow-up worth filing (pre-existing, not touched here)
+
+`## Fix` above lists `server/lib/analytics.ts:47` among the consumers that legitimately want
+every file. That is true of line 47's `listTranscripts` call, but the resolve two lines down
+is not:
+
+```ts
+transcripts.find(t => t.id.startsWith(entry.idPrefix))
+```
+
+That is a single-file lookup carrying exactly the assumption this bug is about — for a split
+id it returns whichever half `readdirSync` yielded first, not the live one, so a kaizen
+lesson can be joined against the abandoned half. It is a prefix match rather than an
+equality one, so `findTranscript` does not drop in as-is; it needs a newest-per-id reduction
+over the prefix matches. The reviewer flagged it as pre-existing and out of scope for this
+diff, and it stayed out. **Worth a `/backlog-capture` bug of its own.**

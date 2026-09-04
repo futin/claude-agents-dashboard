@@ -803,31 +803,30 @@ export function run(): number {
     assert.strictEqual(s.status, 'working');   // the stale half would read 'incomplete'
   })) p++; else f++;
 
-  if (test('split transcript: the dupe does not eat another session\'s display slot', () => {
-    // maxSessions 1 → pool of 2, and both pool slots are the split id's two files.
-    // A pre-slice dedupe leaves room for the next distinct session; a post-slice
-    // one drops it.
+  if (test('split transcript: the dupe does not eat another session\'s pool slots', () => {
+    // The guard on WHERE the dedupe runs, which needs a split id with at least
+    // `maxSessions * 2` halves — the whole pool. Here maxSessions 2 → pool of 4,
+    // and the four newest files are all `split-1`. Deduping before the slice
+    // leaves the pool one distinct id and `other-1` still reachable; deduping
+    // after it slices `other-1` out of the pool first and loses the row.
     const now = 1_700_000_000_000;
+    const half = (dir: string, ageSec: number) => ({
+      dirName: dir, id: 'split-1', mtimeMs: now - ageSec * 1000,
+      records: [metaRec('/a/repo', 'main'), at(assistantPending(), new Date(now - ageSec * 1000).toISOString())]
+    });
     const root = makeRoot([
-      {
-        dirName: '-a-repo', id: 'split-1', mtimeMs: now - 30 * 1000,
-        records: [metaRec('/a/repo', 'main'), at(assistantPending(), new Date(now - 30 * 1000).toISOString())]
-      },
-      {
-        dirName: '-a-repo--worktrees-x', id: 'split-1', mtimeMs: now - 10 * 1000,
-        records: [metaRec('/a/repo/.worktrees/x', 'wt'), at(assistantPending(), new Date(now - 10 * 1000).toISOString())]
-      },
+      half('-a-repo', 40),
+      half('-a-repo--worktrees-w', 30),
+      half('-a-repo--worktrees-x', 20),
+      half('-a-repo--worktrees-y', 10),
       {
         dirName: '-b-repo', id: 'other-1', mtimeMs: now - 60 * 1000,
         records: [metaRec('/b/repo', 'main'), at(assistantPending(), new Date(now - 60 * 1000).toISOString())]
       }
     ]);
-    const ids = scan.scanSessions({ maxSessions: 1, activeWindowMin: 5, lookbackHours: 24 },
+    const ids = scan.scanSessions({ maxSessions: 2, activeWindowMin: 5, lookbackHours: 24 },
       { root, now, liveCwds: null }).sessions.map(s => s.id);
-    assert.deepStrictEqual(ids, ['split-1']);
-    const both = scan.scanSessions({ maxSessions: 2, activeWindowMin: 5, lookbackHours: 24 },
-      { root, now, liveCwds: null }).sessions.map(s => s.id);
-    assert.deepStrictEqual(both, ['split-1', 'other-1']);
+    assert.deepStrictEqual(ids, ['split-1', 'other-1']);
   })) p++; else f++;
 
   if (test('findTranscript resolves a split id to its newest file', () => {
