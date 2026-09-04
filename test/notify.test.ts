@@ -4,8 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  AUTO_MODES, maybeSend, resetNotify, resolveLabel, sendTest,
-  setLabelResolver, setSender, shouldNotify
+  atDesk, AUTO_MODES, maybeSend, resetNotify, resolveLabel, sendTest,
+  setIdleSource, setLabelResolver, setSender, shouldNotify
 } from '../server/lib/notify.js';
 import { DEFAULT_NOTIFY, resetSettings, setSettings } from '../server/lib/settings.js';
 import { resetState } from '../server/lib/remoteState.js';
@@ -289,6 +289,53 @@ export async function run(): Promise<number> {
     // An un-awaited rejection surfaces a tick later, so give it one before the
     // process gets the chance to die on it.
     await new Promise(r => setTimeout(r, 0));
+  }))) p++; else f++;
+
+  // --- atDesk: the one "are they at the keyboard" rule, shared by backAtDesk,
+  // the requireAfk clause and the desk routing.
+
+  if (test('atDesk is true only below the threshold, exclusive at the boundary', () => {
+    assert.strictEqual(atDesk(10, 60), true);
+    assert.strictEqual(atDesk(60, 60), false, 'equal counts as away, matching backAtDesk');
+    assert.strictEqual(atDesk(61, 60), false);
+  })) p++; else f++;
+
+  if (test('atDesk treats an unreadable idle as away', () => {
+    assert.strictEqual(atDesk(null, 60), false);
+  })) p++; else f++;
+
+  if (test('atDesk treats a zero threshold as away', () => {
+    assert.strictEqual(atDesk(0, 0), false, 'zero disables the idle gate everywhere');
+    assert.strictEqual(atDesk(10, 0), false);
+  })) p++; else f++;
+
+  // Asserted rather than guarded: a negative reading is nonsense the caller
+  // should never produce, and pinning today's answer means a future guard has to
+  // change this line on purpose rather than by accident.
+  if (test('atDesk does not special-case a negative reading', () => {
+    assert.strictEqual(atDesk(-1, 60), true);
+  })) p++; else f++;
+
+  // --- the idle reading is a thunk so an uninterested policy never spawns
+  // `ioreg`, and memoised so an interested one spawns exactly once.
+
+  if (await testAsync('maybeSend never reads idle when no clause wants it', () => inTmpCwd(() => {
+    let calls = 0;
+    setSettings({ idleSecs: 60, notify: { enabled: true, events: { stop: true } } });
+    setIdleSource(() => { calls++; return 300; });
+    maybeSend(conf(), 'stop', { sessionId: SID });
+    assert.strictEqual(calls, 0, 'requireAfk off and no desk topic must cost no ioreg spawn');
+  }))) p++; else f++;
+
+  if (await testAsync('maybeSend reads idle exactly once for requireAfk', () => inTmpCwd(() => {
+    let calls = 0;
+    setSettings({
+      idleSecs: 60,
+      notify: { enabled: true, events: { stop: true }, requireAfk: true }
+    });
+    setIdleSource(() => { calls++; return 300; });
+    maybeSend(conf(), 'stop', { sessionId: SID });
+    assert.strictEqual(calls, 1);
   }))) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

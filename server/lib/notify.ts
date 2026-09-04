@@ -131,6 +131,7 @@ const TAGS: Record<NotifyEvent, string> = {
 
 let sender: Sender | null = null;
 let labelResolver: ((config: Config, sessionId: string) => string) | null = null;
+let idleSource: (() => number | null) | null = null;
 
 /** Test seam: swap the transport so no test opens a socket. `null` restores https. */
 export function setSender(fn: Sender | null): void {
@@ -146,9 +147,23 @@ export function setLabelResolver(fn: ((config: Config, sessionId: string) => str
   labelResolver = fn;
 }
 
+/**
+ * Test seam: swap what `maybeSend` reads idle seconds from, so no test spawns
+ * `ioreg`. `null` restores the real reader.
+ *
+ * Distinct from `setIdleReader` in `idle.ts` despite the near-identical job:
+ * that one overrides `backAtDesk`'s reading for the three wait stores, this one
+ * overrides the push path's. They are separate module state on purpose — a test
+ * that fixes one must not silently move the other.
+ */
+export function setIdleSource(fn: (() => number | null) | null): void {
+  idleSource = fn;
+}
+
 export function resetNotify(): void {
   sender = null;
   labelResolver = null;
+  idleSource = null;
 }
 
 /**
@@ -167,6 +182,28 @@ export function readIdleSecs(): number | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Are they at the keyboard right now? Pure — the reading is the caller's to make.
+ *
+ * Three callers, one rule: `backAtDesk()` (`idle.ts`) releases held waits on it,
+ * `shouldNotify`'s `requireAfk` clause suppresses a push on its inverse, and
+ * `maybeSend` routes to the desk topic on it. It lived inline in the first two
+ * and the third would have been a third copy.
+ *
+ * `thresholdSecs === 0` is false, not "always at the desk": zero disables the
+ * idle gate everywhere else in the app, so it disables these too. A null reading
+ * is false for the same reason `backAtDesk` fails that way — never decide from a
+ * guess.
+ *
+ * ⚠️ Lives here rather than in `idle.ts`, where it reads like it belongs, only
+ * because `idle.ts` already imports `readIdleSecs` from this file and the
+ * reverse edge would make the two mutually importing.
+ */
+export function atDesk(idleSecs: number | null, thresholdSecs: number): boolean {
+  if (thresholdSecs === 0) return false;
+  return idleSecs !== null && idleSecs < thresholdSecs;
 }
 
 /**
@@ -256,11 +293,26 @@ export function maybeSend(
   try {
     if (!config.ntfyTopic) return;
     const settings = getSettings();
+    // Two consumers now want the same reading — the `requireAfk` clause and the
+    // desk routing below — and it costs an `ioreg` spawn (~40ms). Memoised, so
+    // wanting it twice cannot spawn twice; still a thunk, so a policy without
+    // `requireAfk` and a run without a desk topic never spawn at all. That last
+    // property is the whole reason `shouldNotify` takes a thunk rather than a
+    // value, and `test/notify.test.ts` counts the calls to hold it.
+    let idleRead = false;
+    let idleValue: number | null = null;
+    const readIdle = (): number | null => {
+      if (!idleRead) {
+        idleRead = true;
+        idleValue = (idleSource ?? readIdleSecs)();
+      }
+      return idleValue;
+    };
     const passes = shouldNotify(event, settings.notify, {
       remoteAnswer: getState(config).remoteAnswer,
       thresholdSecs: settings.idleSecs,
       permissionMode: ctx.permissionMode,
-      readIdle: readIdleSecs
+      readIdle
     });
     if (!passes) return;
 

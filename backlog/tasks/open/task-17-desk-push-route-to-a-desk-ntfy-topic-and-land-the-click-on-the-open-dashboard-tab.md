@@ -3,6 +3,9 @@ id: task-17
 title: Desk push: route to a desk ntfy topic and land the click on the open dashboard tab
 created: 2026-09-04
 from: idea-20
+started: 2026-09-04T15:29:31Z
+phase: execute
+updated: 2026-09-04T15:29:31Z
 ---
 
 ## Goal
