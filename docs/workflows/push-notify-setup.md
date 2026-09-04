@@ -187,8 +187,16 @@ So both steps matter, and the second is the one everybody forgets:
 2. **Close every ntfy tab.** While one is open it delivers the notifications itself, and
    step 1 alone changes nothing.
 
-A quick way to tell which path you are on without tapping anything: a service-worker
-notification is titled with your **topic**; one raised by the open tab is not.
+**How to tell which path you are on: close every ntfy tab and send a test push.**
+
+- A banner still arrives → web push is working, and the tap will follow the `Click` header.
+- Nothing arrives → background notifications are off. Closing the tab did not enable them;
+  it just removed the only path you had.
+
+Do **not** try to tell them apart by the notification's title. The service worker titles it
+`Ye(message, defaultTitle)` — the topic is only the *fallback*, used when the message has no
+title of its own, and these pushes always set one (`Claude Code`). Both paths therefore look
+identical on screen.
 
 ### ⚠️ macOS shows two identical "Google Chrome" rows, and only one delivers
 
