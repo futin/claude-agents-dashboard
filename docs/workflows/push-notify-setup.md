@@ -134,9 +134,10 @@ never both. The mechanism is in
    `NTFY_TOPIC` by appending `-desk`: leaking one would then leak the other. It is a
    credential exactly like the first.
 2. **Put it in `.env`** as `NTFY_TOPIC_DESK` and restart the server.
-3. **Under `pnpm dev` only**, also set `DASHBOARD_LOCAL_URL=http://localhost:5174`. The
-   default is `http://localhost:<PORT>` (4173), which is right for `pnpm start` but serves no
-   page in dev, where Vite has the UI and 4173 answers API only.
+3. **Leave `DASHBOARD_LOCAL_URL` unset.** The default `http://localhost:<PORT>` (4173) is
+   right under `pnpm dev` and `pnpm start` alike: the tap-through is `/api/dismiss`, an API
+   route, so it does not need Vite's dev port to be serving a page. Set it only for a
+   non-default host or port.
 4. **Subscribe a desktop browser** — open `https://ntfy.sh/<your-desk-topic>`, then in that
    web app's **Settings** tab turn **background notifications on**. Without that, banners
    arrive only while an ntfy tab is open.

@@ -512,8 +512,6 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
   });
 }
 
-
-
 /**
  * `GET /api/dismiss` — where a tapped desk notification lands, and it does
  * nothing on purpose.
@@ -549,7 +547,6 @@ setTimeout(function () {
 </script>
 `);
 }
-
 
 /**
  * `GET /api/settings` — the settings that aren't per-device (see lib/settings.ts).

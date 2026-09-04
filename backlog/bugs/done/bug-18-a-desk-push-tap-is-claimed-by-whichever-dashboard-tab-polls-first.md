@@ -3,6 +3,7 @@ id: bug-18
 title: A desk-push tap is claimed by whichever dashboard tab polls first
 created: 2026-09-04
 tags: notify, focus, remote-access
+updated: 2026-09-04T21:30:00Z
 ---
 
 ## Symptom
@@ -67,3 +68,21 @@ unknown. Two candidates, to be settled in grooming:
 Worth deciding first whether this is a defect at all: "the drawer opened somewhere" may be
 acceptable, in which case the honest fix is documenting it in
 `docs/subsystems/push-notify.md` rather than changing the behaviour.
+
+## Outcome — moot, closed without a behaviour fix (2026-09-04)
+
+Neither candidate was taken. The deep link this bug is about was removed wholesale in
+`c6b806c` (*feat(notify)!: desk pushes alert only*), by request: a desk push is now an
+alert whose tap-through points at `GET /api/dismiss` and closes the tab it opened in. With
+no `focusSession` on the poll there is no single claim left to race for, so the symptom is
+gone by construction.
+
+Everything this bug cites is deleted: `server/lib/focus.ts`, `GET /api/focus`,
+`FocusPendingResponse`, `useFocusWatch`, and the `SessionsView` effect. The race itself is
+still a real hazard for any future consume-once-on-poll channel, and the reasoning is
+preserved here rather than in the code.
+
+**If the deep link comes back**, it returns through `task-18` (dashboard-owned web push),
+which delivers to a specific service-worker subscription rather than to whichever tab polls
+first — so this bug's mechanism does not come back with it. Re-read this file before
+designing that handoff anyway.

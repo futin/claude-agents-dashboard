@@ -411,16 +411,18 @@ export async function sendTest(config: Config): Promise<string> {
   if (!config.ntfyTopic) return 'no NTFY_TOPIC set in .env — nothing to send to';
   try {
     // Routed exactly as a real push would route *right now*, so the button
-    // proves the routing and not merely the transport. `''` as the session id:
-    // this is not a real session, and the desk click URL is only ever eyeballed
-    // in the reply string below.
+    // proves the routing and not merely the transport — `route.click` included,
+    // or the one control built to prove delivery would prove a tap-through the
+    // real pushes do not use. `''` as the session id: this is not a real
+    // session, and the phone branch's `?session=` is then empty, which
+    // `client/src/lib/deepLink.ts` reads as "no deep link" and ignores.
     const route = routePush(config, '', getSettings().idleSecs, idleSource ?? readIdleSecs);
     const result = await deliver(
       {
         title: 'Claude Code',
         body: 'Test push — notifications are working',
         tags: 'robot',
-        click: route.desk ? config.localUrl : config.publicUrl,
+        click: route.click,
         topic: route.topic
       },
       config
@@ -432,8 +434,10 @@ export async function sendTest(config: Config): Promise<string> {
         ? `couldn't reach ${config.ntfyServer}: ${result.detail}`
         : `${config.ntfyServer} refused it (HTTP ${result.status}): ${result.detail} — check NTFY_TOPIC`;
     }
-    // The desk branch has no no-URL warning to give: `localUrl` is never empty.
-    if (route.desk) return `sent to ${config.ntfyServer} (desk topic) · taps open ${config.localUrl}`;
+    // The desk branch has no no-URL warning to give: `localUrl` is never empty,
+    // and the tap-through is inert by design rather than a link that could be
+    // missing (see {@link deskClickUrl}).
+    if (route.desk) return `sent to ${config.ntfyServer} (desk topic) · taps only dismiss`;
     return config.publicUrl
       ? `sent to ${config.ntfyServer} (phone topic) · taps open ${config.publicUrl}`
       : `sent to ${config.ntfyServer} (phone topic) · no DASHBOARD_PUBLIC_URL, so taps won't open the dashboard`;

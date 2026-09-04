@@ -408,19 +408,26 @@ export async function run(): Promise<number> {
     assert.strictEqual(calls, 1, 'two consumers, one ioreg spawn');
   }))) p++; else f++;
 
-  if (await testAsync('sendTest names the desk topic and where its taps land', () =>
-    inTmpCwd(async () => {
+  // The test button's whole claim is that it routes as a real push does, so the
+  // payload is asserted and not only the sentence it reports.
+  if (await testAsync('sendTest sends the desk push the desk topic routes to', () =>
+    inTmpCwd(async sent => {
       setIdleSource(() => 10);
-      setSender(() => { /* fire-and-forget */ });
       const outcome = await sendTest(twoTopic());
+      assert.strictEqual(sent.length, 1);
+      assert.strictEqual(sent[0].topic, 'desk-topic');
+      assert.strictEqual(sent[0].click, 'http://localhost:4173/api/dismiss',
+        'the test push must tap through where a real desk push does — nowhere');
       assert.match(outcome, /desk topic/);
-      assert.match(outcome, /http:\/\/localhost:4173/);
+      assert.match(outcome, /taps only dismiss/);
     }))) p++; else f++;
 
-  if (await testAsync('sendTest names the phone topic when away', () => inTmpCwd(async () => {
+  if (await testAsync('sendTest names the phone topic when away', () => inTmpCwd(async sent => {
     setIdleSource(() => 300);
-    setSender(() => { /* fire-and-forget */ });
     const outcome = await sendTest(twoTopic());
+    assert.strictEqual(sent[0].topic, 'test-topic');
+    assert.match(sent[0].click, /^https:\/\/dash\.example\//,
+      'the phone test push taps through to the dashboard, as a real one does');
     assert.match(outcome, /phone topic/);
     assert.match(outcome, /dash\.example/);
   }))) p++; else f++;

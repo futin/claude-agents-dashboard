@@ -703,15 +703,26 @@ this path from the deep link.
 
 ### Not verified — needs a human
 
-**Test case 12 was not run.** It needs a real ntfy push delivered to a subscribed desktop
-browser and a phone to confirm the other half, and clicking a macOS notification banner is not
-automatable. Specifically unproven end to end:
+**Test case 12 was not run at the time.** It needs a real ntfy push delivered to a subscribed
+desktop browser and a phone to confirm the other half, and clicking a macOS notification banner
+is not automatable. Of the three things it left unproven:
 
-- that a real ntfy web push displays a banner on this Mac at all (the alerts-helper trap in
-  `docs/workflows/push-notify-setup.md` is the first thing to check if it does not);
-- that clicking that banner reaches `/api/focus` — every browser test above reproduced the
-  tab *shape* `clients.openWindow` produces rather than calling it;
-- that the phone stays silent when the desk topic wins, and rings when it does not.
+- that a real ntfy web push displays a banner on this Mac at all — **still open, and the
+  first attempt to close it was a false positive worth recording.** At 21:51 on 2026-09-04
+  `POST /api/notify/test` answered `sent to https://ntfy.sh (desk topic)`, a banner appeared,
+  and it was read as proof. It was not: polling the topic's full ntfy cache shows no message
+  at 21:51 on either topic in `.env`. The 4173 server had been started before `.env`'s
+  `NTFY_TOPIC_DESK` was last edited, so it was publishing to the *previous* desk topic —
+  ntfy answered 2xx, `sendTest` correctly said "sent", and nothing subscribed was listening.
+  The banner seen was Claude Code's own notification, which looks identical. After a restart
+  at 22:12, the 22:14 push **is** in the subscribed topic's cache — publication to the right
+  topic is now proved; that a banner renders from it is not, and needs the user's eyes.
+- ~~that clicking that banner reaches `/api/focus`~~ — **moot.** `/api/focus` was removed in
+  `c6b806c`; the tap now points at `/api/dismiss` and only closes its own tab. Whether that
+  tab really self-closes was confirmed in real use the same day (see `serveDismiss`).
+- that the phone stays silent when the desk topic wins, and rings when it does not — **still
+  unproven.** Only the desk half was exercised; nothing has yet watched both devices across
+  the idle threshold in one run.
 
 Everything below that transport — routing, the endpoint, the handoff, the drawer, the
 self-closing tab — is covered by the tests and the browser run above.
