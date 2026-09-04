@@ -155,6 +155,41 @@ Tapping a desk banner opens the drawer in the dashboard tab you already have ope
 throwaway tab ntfy opens closes itself. If nothing is polling — no dashboard tab, or you are
 on the Management/Usage/Settings section — it lands you on the dashboard in that tab instead.
 
+### ⚠️ Without background notifications, the tap opens ntfy — not the dashboard
+
+**This one silently defeats the whole desk feature, and the symptom looks nothing like the
+cause.** You get the banner, you tap it, and an ntfy tab opens on ntfy.sh's *default page*.
+The dashboard is never reached and no error appears anywhere.
+
+The cause is which of two delivery paths the notification took:
+
+| Path | When | Click behaviour |
+|---|---|---|
+| **Web push → service worker** | background notifications on, ntfy tab closed | honours the `Click` header — opens the dashboard link |
+| **The open ntfy web-app tab** | background notifications off (the default) | focuses an ntfy tab and navigates it to `https://ntfy.sh` |
+
+Verified against `https://ntfy.sh/sw.js` on 2026-09-04. Its `notificationclick` handler
+opens the click URL only after passing an earlier gate:
+
+```js
+if (!e.notification.data?.message)      // no SW payload → focus ntfy, go to its home page
+  i ? i.focus() : a ? (a.focus(), a.navigate(r)) : self.clients.openWindow(r)
+else if (r.click) self.clients.openWindow(r.click)   // the branch we need
+```
+
+Only the service worker's own push path (`Cr`) attaches `data.message`. A notification the
+web-app tab raised has no such payload, so it never reaches the `click` branch — it takes
+the first one and sends you to ntfy's home page.
+
+So both steps matter, and the second is the one everybody forgets:
+
+1. ntfy web app → **Settings** → turn **background notifications on**.
+2. **Close every ntfy tab.** While one is open it delivers the notifications itself, and
+   step 1 alone changes nothing.
+
+A quick way to tell which path you are on without tapping anything: a service-worker
+notification is titled with your **topic**; one raised by the open tab is not.
+
 ### ⚠️ macOS shows two identical "Google Chrome" rows, and only one delivers
 
 System Settings → Notifications lists **two entries called "Google Chrome"** — same name, same
@@ -206,6 +241,9 @@ Read the Test push result first; it distinguishes most of these.
 - **The desk push arrives but nothing is displayed** — the macOS alerts-helper trap above.
 - **The desk push opens a blank tab that stays open** — the throwaway tab could not close
   itself. Harmless: the drawer still opened in your real dashboard tab. The page says so.
+- **Tapping the desk push opens ntfy's own page instead of the dashboard** — background
+  notifications are off, or an ntfy tab is still open. See the section above; this is the
+  most likely failure on a fresh setup and it looks like a dashboard bug.
 
 ## Rotating the topic
 

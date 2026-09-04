@@ -310,6 +310,12 @@ The desk push's `Click` is **not** the dashboard route. It is
 `<DASHBOARD_LOCAL_URL>/api/focus?session=<id>`, and the reason is that ntfy cannot be made to
 focus an existing tab:
 
+- The `Click` header is only honoured when the notification is delivered **by the service
+  worker**, i.e. via real web push. A notification raised by an open ntfy web-app tab carries
+  no `data.message`, and the handler's first branch then focuses ntfy's own page and never
+  looks at `click` — see
+  [the setup guide](../workflows/push-notify-setup.md#-without-background-notifications-the-tap-opens-ntfy--not-the-dashboard).
+  Nothing server-side can detect or work around this.
 - ntfy's service worker hardcodes `openWindow` for a click URL —
   `else if (r.click) self.clients.openWindow(r.click)`. Its focus-an-existing-tab branch runs
   only on the *no-click* path.
