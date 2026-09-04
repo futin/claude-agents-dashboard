@@ -112,6 +112,19 @@ worst case to the window size, not to the transcript size.
   time, prepend detected by a changed first-message uuid). `chatId` is **not** persisted —
   session ids churn (same reasoning as row expansion in
   [view-persistence](view-persistence.md)).
+- **Three ways out, and no dead back press.** ✕ in the drawer header works everywhere; the
+  scrim behind the panel is desktop-only (at `<=700px` `.chat` is full-width, so there is
+  nothing beside it to tap); Escape is desktop-only for the obvious reason. The third exit
+  is the browser's **back** button/swipe — the one a phone actually has. `useBackClose`
+  (over the pure `lib/backClose.ts`) pushes one synthetic history entry when the drawer
+  mounts and closes on the popstate that pops it. The entry carries **no URL change**, so
+  the drawer stays unbookmarkable (see [view-persistence](view-persistence.md)); the push
+  is deferred to a macrotask so StrictMode's arm→teardown→arm cannot let an in-flight
+  `back()` pop the second entry; and every close by another route spends the entry with
+  `back()` first, because an entry left on the stack is a back press that visibly does
+  nothing. If `pushState` throws (Safari's throttle, `file://`) the arm goes inert and the
+  drawer behaves exactly as it did before — teardown must never `back()` in that state.
+
 - The `chat` tab (`.row-chat`) is a **sibling** of the clickable card face (`.row-main`),
   not a child of it — so opening the drawer never has to out-shout the row's own toggle.
   It also carries the row's held states: `answer` / `plan?` / `reply?` / `allow?` are the
@@ -140,6 +153,8 @@ worst case to the window size, not to the transcript size.
     - client/src/components/ChatDrawer.tsx
     - client/src/components/Markdown.tsx
     - client/src/hooks/useSessionChat.ts
+    - client/src/hooks/useBackClose.ts
+    - client/src/lib/backClose.ts
     - client/src/lib/chatFilter.ts
     - client/src/lib/markdown.ts
   kind: subsystem

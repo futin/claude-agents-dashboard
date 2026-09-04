@@ -179,10 +179,11 @@ client/src/
                   useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, usePersistedState,
                   useSettings, useServerSettings, useDictation, useTranscribeAvailable,
-                  useWebNotify (browser banners for headless sessions)
+                  useWebNotify (browser banners for headless sessions), useBackClose
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
                   sections, deepLink, dictation, spawnOptions, resume, pace, usageProfile,
-                  usageRatesFormat, panelCollapse, surface, walkChart, holds, webNotify
+                  usageRatesFormat, panelCollapse, surface, walkChart, holds, webNotify,
+                  backClose
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
