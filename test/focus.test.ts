@@ -1,8 +1,7 @@
 import assert from 'node:assert';
 
 import {
-  dashboardOpen, focusPageHtml, notePoll, requestFocus, resetFocus, takeFocus,
-  FOCUS_TTL_MS, POLL_FRESH_MS
+  focusPageHtml, focusPending, requestFocus, resetFocus, takeFocus, FOCUS_TTL_MS
 } from '../server/lib/focus.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -60,26 +59,39 @@ export async function run(): Promise<number> {
     assert.strictEqual(takeFocus(1), null, 'the stale entry must be gone, not merely unripe');
   })) p++; else f++;
 
-  // This is what makes the redirect branch testable without waiting out 90s: a
-  // fresh process is "no dashboard open" by construction.
-  if (test('nothing has polled a fresh store', () => {
+  // What the throwaway page reads to decide its own fate. A peek must never
+  // consume — the dashboard's poll is the single consumer.
+  if (test('focusPending peeks without consuming', () => {
     resetFocus();
-    assert.strictEqual(dashboardOpen(), false);
+    assert.strictEqual(focusPending(), false, 'nothing tapped yet');
+    requestFocus(SID);
+    assert.strictEqual(focusPending(), true);
+    assert.strictEqual(focusPending(), true, 'peeking twice must not have eaten it');
+    assert.strictEqual(takeFocus(), SID, 'the real consumer still gets it');
+    assert.strictEqual(focusPending(), false, 'and now it is gone');
   })) p++; else f++;
 
-  if (test('a poll counts as open right up to the freshness window', () => {
+  if (test('focusPending reports an expired tap as gone', () => {
     resetFocus();
-    notePoll(0);
-    assert.strictEqual(dashboardOpen(POLL_FRESH_MS - 1), true);
-    assert.strictEqual(dashboardOpen(POLL_FRESH_MS), false, 'the boundary is exclusive');
-    assert.strictEqual(dashboardOpen(POLL_FRESH_MS + 1), false);
+    requestFocus(SID, 0);
+    assert.strictEqual(focusPending(FOCUS_TTL_MS - 1), true);
+    assert.strictEqual(focusPending(FOCUS_TTL_MS), false, 'the boundary is exclusive');
   })) p++; else f++;
 
-  if (test('the throwaway page closes itself and degrades to a message', () => {
-    const html = focusPageHtml();
-    assert.match(html, /window\.close\(\)/);
-    assert.match(html, /You can close this tab\./);
-    assert.doesNotMatch(html, new RegExp(SID), 'the page must carry no session id');
+  if (test('the throwaway page closes when claimed and navigates when not', () => {
+    const html = focusPageHtml(SID);
+    assert.match(html, /window\.close\(\)/, 'claimed -> close');
+    assert.match(html, /location\.replace/, 'unclaimed -> become the dashboard');
+    assert.match(html, /You can close this tab\./, 'and a fallback if close is refused');
+    assert.match(html, /api\/focus\/claimed/, 'it must actually ask');
+    assert.ok(html.includes(SID), 'the id is needed for the navigate branch');
+  })) p++; else f++;
+
+  // Interpolated into a script literal, so a hostile id must not escape it.
+  // `serveFocus` shape-checks first, but this pins the encoding regardless.
+  if (test('the page JSON-encodes the id rather than pasting it', () => {
+    const html = focusPageHtml('</script><script>alert(1)</script>');
+    assert.doesNotMatch(html, /<script>alert\(1\)/, 'must not break out of the string');
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

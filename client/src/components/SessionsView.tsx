@@ -25,6 +25,8 @@ export interface SessionsViewProps {
    * moment another section is opened — see `useFocusWatch`.
    */
   focus: FocusClaim | null;
+  /** Called once the claim has opened its drawer, so it cannot be applied twice. */
+  onFocusApplied: () => void;
 }
 
 /**
@@ -32,7 +34,7 @@ export interface SessionsViewProps {
  * poll (useSessions), so switching to the Management section unmounts it and
  * stops polling.
  */
-export function SessionsView({ focus }: SessionsViewProps) {
+export function SessionsView({ focus, onFocusApplied }: SessionsViewProps) {
   const { data, connected } = useSessions();
   const { settings } = useSettings();
   const [view, setView] = usePersistedState<View>('dashboard.view', DEFAULT_VIEW);
@@ -59,8 +61,13 @@ export function SessionsView({ focus }: SessionsViewProps) {
   // and depending on the whole poll payload would re-fire every tick with a
   // stale id and make the drawer impossible to close.
   useEffect(() => {
-    if (focus) setChatId(focus.id);
-  }, [focus]);
+    if (!focus) return;
+    setChatId(focus.id);
+    // Hand it back as spent. The shell outlives this component, so a claim left
+    // standing would re-open the drawer on every remount — i.e. every time you
+    // visit another section and come back.
+    onFocusApplied();
+  }, [focus, onFocusApplied]);
 
   // The project facet is persisted, so a selection can outlive the sessions it
   // named: every row then fails the filter and the list claims there are no

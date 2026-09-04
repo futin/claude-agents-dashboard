@@ -9,6 +9,7 @@
  *   GET/POST /api/settings      → the non-per-device settings (see lib/settings.ts)
  *   GET  /api/focus             → where a tapped desk push lands (see lib/focus.ts)
  *   GET  /api/focus/pending     → the app shell's claim poll for that tap
+ *   GET  /api/focus/claimed     → the throwaway tab asking whether its tap was taken
  *   everything else             → static files from client/dist (production build)
  *
  * In development you visit the Vite dev server (default :5174), which proxies
@@ -26,7 +27,7 @@ import type { Config } from './lib/config.js';
 import {
   serveSessions, serveSessionDetail, serveSessionChat,
   serveManagementIndex, serveManagementProject, serveManagementFile,
-  serveAnalytics, serveHealth, serveFocus, serveFocusPending, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
+  serveAnalytics, serveHealth, serveFocus, serveFocusClaimed, serveFocusPending, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
@@ -191,6 +192,9 @@ export function createRequestListener(config: Config): http.RequestListener {
     // the pair reads as a group and a future prefix match would.
     if (u.pathname === '/api/focus/pending') {
       return void serveFocusPending(res);
+    }
+    if (u.pathname === '/api/focus/claimed') {
+      return void serveFocusClaimed(req, res);
     }
     if (u.pathname === '/api/focus') {
       return void serveFocus(req, res, u.searchParams);

@@ -329,6 +329,19 @@ So the tab ntfy opens is treated as a throwaway:
    **Its URL is untouched** — no `?session=` is appended, which is what distinguishes this
    from the deep link above.
 
+**Nothing guesses whether a dashboard is open.** The page asks
+`/api/focus/claimed` whether its own tap got taken, and branches on the answer —
+claimed within 5s means a real dashboard has it, so close; still pending means
+nothing is going to take it, so navigate and become the dashboard.
+
+That replaced a server-side heuristic (`dashboardOpen()`: "has anything polled in
+the last 90s") which was wrong in the one case that matters. A desk push is sent
+*because* you are not looking at the dashboard — and Chrome throttles a hidden
+tab's timers to once a minute after five minutes and can freeze it outright. The
+heuristic therefore degraded exactly when the feature was used, decided no
+dashboard was open, and redirected the tap into a second tab. Reported from real
+use on 2026-09-04, twice.
+
 **The claim poll is its own endpoint, and that is load-bearing.** It first rode on
 `/api/sessions`, which was wrong: `SessionsView` owns that poll, so opening Management,
 Usage or **Settings** unmounts it and the polling stops dead — 0 requests, measured. A tap

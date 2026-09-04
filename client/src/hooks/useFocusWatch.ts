@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { FocusPendingResponse } from '../../../shared/types';
 
@@ -29,7 +29,7 @@ const FOCUS_POLL_MS = 3000;
  * every claim so tapping the same session twice still re-opens the drawer, which
  * a bare id could not express.
  */
-export function useFocusWatch(): FocusClaim | null {
+export function useFocusWatch(): { claim: FocusClaim | null; clearClaim: () => void } {
   const [claim, setClaim] = useState<FocusClaim | null>(null);
   const seq = useRef(0);
 
@@ -56,5 +56,11 @@ export function useFocusWatch(): FocusClaim | null {
     };
   }, []);
 
-  return claim;
+  // Cleared by whoever applied it. Without this the claim outlives its use: it
+  // is held in the app shell, which does NOT unmount on a section switch, so
+  // `SessionsView` re-applies the last claim every time it remounts and the
+  // drawer springs back open each time you navigate away and return.
+  const clearClaim = useCallback(() => setClaim(null), []);
+
+  return { claim, clearClaim };
 }

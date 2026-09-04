@@ -48,7 +48,7 @@ import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getSettings, setSettings } from './lib/settings.js';
 import { classifyAddress, classifyOrigin } from './lib/origin.js';
-import { dashboardOpen, focusPageHtml, notePoll, requestFocus, takeFocus } from './lib/focus.js';
+import { focusPageHtml, focusPending, requestFocus, takeFocus } from './lib/focus.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
   MAX_LAUNCHING, adoptLaunched, launch, listLaunching, parseSpawnRequest, probeSpawn, stopLaunch
@@ -118,12 +118,8 @@ function sweepTerminalDecisions(): void {
 
 export function serveSessions(baseConfig: Config, res: ServerResponse, params?: URLSearchParams): void {
   const config = scanOverrides(baseConfig, params);
-  // Before the scan, not after: this poll happened whether or not the scan
-  // throws, and `/api/focus` reads it to decide whether a dashboard tab is
-  // watching (see lib/focus.ts).
-  notePoll();
-  // Before the scan too, and for its own reason: a wait the terminal already
-  // decided must not colour this tick's row blue either.
+  // Before the scan, not after: a wait the terminal already decided must not
+  // colour this tick's row blue either.
   sweepTerminalDecisions();
   let data: SessionsResponse;
   try {
@@ -534,9 +530,21 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
  * Not loopback-gated: the dashboard reading it may legitimately be a phone.
  */
 export function serveFocusPending(res: ServerResponse): void {
-  notePoll();
   const id = takeFocus();
   sendJson(res, 200, id ? { focusSession: id } : {});
+}
+
+/**
+ * `GET /api/focus/claimed` — the throwaway page asking whether its tap was taken.
+ *
+ * Peek, never consume: the dashboard's own poll is the one consumer. Loopback
+ * only, like `serveFocus`, since only that page calls it.
+ */
+export function serveFocusClaimed(req: IncomingMessage, res: ServerResponse): void {
+  if (classifyAddress(req.socket?.remoteAddress) !== 'local') {
+    return sendJson(res, 403, { error: 'local only' });
+  }
+  sendJson(res, 200, { pending: focusPending() });
 }
 
 /** A session id is a UUID; anything else is junk. Mirrors `readSessionParam` client-side. */
@@ -584,24 +592,13 @@ export function serveFocus(
   // A well-formed unknown id is recorded and simply never matches a row.
   if (!SESSION_ID_RE.test(id)) return sendJson(res, 400, { error: 'bad session id' });
 
-  // Nothing is polling — so a recorded focus would only expire unread. Send the
-  // throwaway tab to the dashboard instead, which makes it *become* the
-  // dashboard. This is also the path when the user is on Management/Usage/
-  // Settings: `SessionsView` unmounts and its poll stops, so this degrades to a
-  // correctly deep-linked new tab rather than to nothing happening at all.
-  // Relative on purpose: it keeps whatever origin the tab was opened at.
-  if (!dashboardOpen()) {
-    res.writeHead(302, {
-      Location: `/?session=${encodeURIComponent(id)}`,
-      'Cache-Control': 'no-store'
-    });
-    res.end();
-    return;
-  }
-
+  // Always record, always serve the page — there is no server-side branch any
+  // more. The page finds out whether a dashboard actually claimed the tap and
+  // closes or navigates accordingly; guessing that here from "has anything
+  // polled lately" was wrong in the one case that matters (see `focusPending`).
   requestFocus(id);
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(focusPageHtml());
+  res.end(focusPageHtml(id));
 }
 
 /**

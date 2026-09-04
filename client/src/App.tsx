@@ -49,7 +49,7 @@ function AppShell() {
   // move the `?session=` deep link makes in the initializer above: a tap exists
   // only to put you on that session's chat, so it beats whatever you were
   // looking at.
-  const focus = useFocusWatch();
+  const { claim: focus, clearClaim } = useFocusWatch();
   useEffect(() => {
     if (focus) setSection('sessions');
   }, [focus]);
@@ -69,7 +69,7 @@ function AppShell() {
       <main className="main">
         <div className={wide ? 'wrap wide' : 'wrap'}>
           {section === 'sessions' ? (
-            <SessionsView focus={focus} />
+            <SessionsView focus={focus} onFocusApplied={clearClaim} />
           ) : section === 'management' ? (
             <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
               <ManagementView />

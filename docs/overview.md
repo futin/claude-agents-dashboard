@@ -76,6 +76,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `POST /api/remote-answer` | flip the remote-answer toggle (write path) |
 | `GET /api/focus` | where a tapped desk push lands: records the session for the already-open dashboard tab to claim, answers with a self-closing page — or redirects when nothing is polling. Loopback-only |
 | `GET /api/focus/pending` | the app shell's claim poll for a tapped desk push — consume-once, and the signal that keeps "a dashboard is open" true on every section |
+| `GET /api/focus/claimed` | the throwaway tab asking whether a dashboard claimed its tap — peek, never consume |
 | `GET /api/health` | liveness + remote-answer state + connection origin + the two hook numbers (idle threshold, answer window) |
 | `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, plus `notifyAvailable` (never the ntfy topic itself); write path |
 | `GET /api/management`, `/project`, `/file` | config browser index / scope / file body |

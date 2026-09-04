@@ -14,7 +14,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { testAsync, withServer } from './api-harness.js';
 import { serveFocus } from '../server/api.js';
-import { dashboardOpen, notePoll, resetFocus, takeFocus } from '../server/lib/focus.js';
+import { focusPending, resetFocus, takeFocus } from '../server/lib/focus.js';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
@@ -42,33 +42,42 @@ export async function run(): Promise<number> {
 
   /* ------------------------------------------------- the two branches */
 
-  check(await testAsync('a tap with a dashboard polling is recorded and answered with the closing page', async () => {
+  // There is no server-side branch any more: /api/focus always records and always
+  // serves the page, and the page decides. Guessing here from "has anything
+  // polled lately" was the bug — a hidden tab's timers are throttled by Chrome,
+  // and a desk push is sent precisely when the dashboard is hidden.
+  check(await testAsync('a tap is always recorded and answered with the deciding page', async () => {
     await withServer(ENV, async h => {
       resetFocus();
-      // One real poll, so `dashboardOpen()` is true the way it is in life.
-      await h.req('/api/focus/pending');
-      assert.equal(dashboardOpen(), true, 'the poll above must have registered');
-
       const reply = await h.req(`/api/focus?session=${ID}`);
-      assert.equal(reply.status, 200);
+      assert.equal(reply.status, 200, 'never a redirect, whatever has or has not polled');
       assert.match(String(reply.headers['content-type']), /^text\/html/);
       assert.match(reply.raw, /window\.close\(\)/);
+      assert.match(reply.raw, /location\.replace/, 'the page carries both outcomes');
       assert.equal(reply.headers['cache-control'], 'no-store');
       assert.equal(takeFocus(), ID, 'the tap must be claimable by the next poll');
     });
   }));
 
-  check(await testAsync('a tap with nothing polling redirects instead of recording', async () => {
+  check(await testAsync('a tap with nothing polling is still recorded, not redirected', async () => {
     await withServer(ENV, async h => {
-      // Never poll — a fresh store is "no dashboard open" by construction.
       resetFocus();
       const reply = await h.req(`/api/focus?session=${ID}`);
-      assert.equal(reply.status, 302);
-      assert.equal(reply.headers['location'], `/?session=${ID}`);
-      assert.equal(
-        takeFocus(), null,
-        'the redirect branch must record nothing — a stored tap would only expire unread'
-      );
+      assert.equal(reply.status, 200);
+      assert.equal(takeFocus(), ID, 'the page, not the server, decides what to do about it');
+    });
+  }));
+
+  check(await testAsync('/api/focus/claimed peeks without consuming', async () => {
+    await withServer(ENV, async h => {
+      resetFocus();
+      assert.equal((await h.req('/api/focus/claimed')).json?.pending, false);
+      await h.req(`/api/focus?session=${ID}`);
+      assert.equal((await h.req('/api/focus/claimed')).json?.pending, true);
+      assert.equal((await h.req('/api/focus/claimed')).json?.pending, true, 'peeking must not eat it');
+      assert.equal(focusPending(), true);
+      assert.equal((await h.req('/api/focus/pending')).json?.focusSession, ID);
+      assert.equal((await h.req('/api/focus/claimed')).json?.pending, false, 'claimed by the dashboard');
     });
   }));
 
@@ -124,16 +133,13 @@ export async function run(): Promise<number> {
     });
   }));
 
-  check(await testAsync('the pending poll alone keeps a dashboard counted as open', async () => {
+  check(await testAsync('the shell poll claims a tap even with the sessions list hidden', async () => {
     await withServer(ENV, async h => {
       resetFocus();
-      assert.equal(dashboardOpen(), false, 'a fresh store must start closed');
-      await h.req('/api/focus/pending');
-      assert.equal(
-        dashboardOpen(), true,
-        'polling only this endpoint — as the shell does on Settings — must count'
-      );
-      assert.equal((await h.req(`/api/focus?session=${ID}`)).status, 200, 'so /api/focus records rather than redirects');
+      await h.req(`/api/focus?session=${ID}`);
+      // No /api/sessions call at all — this is the Settings-section case, where
+      // SessionsView is unmounted and its poll has stopped.
+      assert.equal((await h.req('/api/focus/pending')).json?.focusSession, ID);
     });
   }));
 
@@ -157,10 +163,8 @@ export async function run(): Promise<number> {
   check(await testAsync('the id length boundary is 64, not 65', async () => {
     await withServer(ENV, async h => {
       resetFocus();
-      await h.req('/api/focus/pending');
       assert.equal((await h.req(`/api/focus?session=${'a'.repeat(64)}`)).status, 200);
       resetFocus();
-      await h.req('/api/focus/pending');
       assert.equal((await h.req(`/api/focus?session=${'a'.repeat(65)}`)).status, 400);
     });
   }));
@@ -175,7 +179,6 @@ export async function run(): Promise<number> {
 
   check(await testAsync('a non-loopback socket is refused', async () => {
     resetFocus();
-    notePoll();
     const { res, status } = stubRes();
     serveFocus(stubReq('100.101.102.103'), res, new URLSearchParams(`session=${ID}`));
     assert.equal(status(), 403);
@@ -184,7 +187,6 @@ export async function run(): Promise<number> {
 
   check(await testAsync('a tailnet socket claiming to be loopback is still refused', async () => {
     resetFocus();
-    notePoll();
     const { res, status } = stubRes();
     serveFocus(
       stubReq('100.101.102.103', { 'x-forwarded-for': '127.0.0.1' }),
@@ -197,7 +199,6 @@ export async function run(): Promise<number> {
 
   check(await testAsync('a loopback socket is accepted despite a remote forwarded-for', async () => {
     resetFocus();
-    notePoll();
     const { res, status } = stubRes();
     serveFocus(
       stubReq('127.0.0.1', { 'x-forwarded-for': '100.101.102.103' }),
@@ -210,7 +211,6 @@ export async function run(): Promise<number> {
 
   check(await testAsync('an IPv6 loopback socket is accepted', async () => {
     resetFocus();
-    notePoll();
     const { res, status } = stubRes();
     serveFocus(stubReq('::1'), res, new URLSearchParams(`session=${ID}`));
     assert.equal(status(), 200);
