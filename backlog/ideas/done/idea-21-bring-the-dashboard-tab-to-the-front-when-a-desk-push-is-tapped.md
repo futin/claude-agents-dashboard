@@ -4,6 +4,9 @@ title: Bring the dashboard tab to the front when a desk push is tapped
 created: 2026-09-04
 tags: notify, focus, remote-access
 from: task-17
+updated: 2026-09-04T17:53:45Z
+promoted-to: task-18
+groom-elapsed: 569
 ---
 
 ## Problem
