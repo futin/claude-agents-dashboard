@@ -42,9 +42,17 @@ pace, do I run dry before the window resets?*
   attached in `api.ts` (both success and error branches) only when `config.showUsage`.
   Still **zero npm deps** — `https` + `child_process` are Node built-ins.
 - **Status:** `SessionsResponse.usageStatus` says why bars are/aren't shown: `ok`,
-  `token-expired` (stored token past expiresAt), `unavailable` (any other fail-open
+  `token-expired` (stored token past expiresAt), `signed-out` (the credential is present
+  but blank — `claude auth logout` leaves it that way), `unavailable` (any other fail-open
   cause, incl. the endpoint's own 429 rate limit). The client renders bars only on `ok`;
-  `token-expired` shows a plain "token expired" hint (no bars, no action).
+  `token-expired` shows a plain "token expired" hint and `signed-out` shows
+  "signed out — run claude auth login" (no bars, no action button — the dashboard cannot
+  drive an interactive OAuth login). `unavailable` stays silent: most of what lands there
+  (non-macOS host, denied keychain read, network) is not something the reader can act on.
+  The mapping is `statusForToken()` in `lib/usage.ts`, and `pickTokenState()` resolves the
+  three credential stores when they disagree (`ok` > `expired` > `signed-out` > `missing`;
+  `expired` outranks `signed-out` so a blank blob in one store cannot suppress a token
+  that renews itself in another).
 - **Toggle:** `SHOW_USAGE=false` disables the feature entirely (no fetch, no keychain
   read). Default on.
 

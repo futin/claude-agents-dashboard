@@ -1,4 +1,4 @@
-import type { SessionsResponse, RateLimit, UsageLimits } from '../../../shared/types';
+import type { SessionsResponse, RateLimit, UsageLimits, UsageStatus } from '../../../shared/types';
 import { formatResetTime } from '../lib/format';
 import { holdCount } from '../lib/holds';
 import { paceView, FIVE_HOUR_MS, SEVEN_DAY_MS } from '../lib/pace';
@@ -31,23 +31,39 @@ export function Header({ data }: { data: SessionsResponse | null }) {
         <span className="meta">{meta}</span>
       </div>
       <div className="sub">{sub}</div>
-      {data?.usageStatus === 'token-expired'
-        ? <UsageExpired />
+      {(data?.usageStatus && USAGE_MESSAGES[data.usageStatus])
+        ? <UsageMessage text={USAGE_MESSAGES[data.usageStatus]!} />
         : <UsageBars usage={data ? data.usage : null} />}
     </>
   );
 }
 
 /**
- * Shown instead of the bars when the stored OAuth token is expired. The CLI
- * renews its own token the next time it runs; the following 3s poll flips
- * usageStatus back to 'ok' and the bars return on their own.
+ * Statuses that replace the bars with a line of their own. A lookup rather than
+ * a ternary chain, so a fourth status is a row here and nothing else. Anything
+ * absent from this map falls through to the bars — `unavailable` stays silent
+ * because most of what lands there is not something the reader can act on.
+ *
+ * `signed-out` names the fix in **visible text**: `title` never fires on touch
+ * and this board is read on a phone. The dashboard cannot log the user in
+ * itself — OAuth login is an interactive terminal + browser flow — so naming
+ * the command is the whole remedy.
  */
-function UsageExpired() {
+const USAGE_MESSAGES: Partial<Record<UsageStatus, string>> = {
+  'token-expired': 'token expired',
+  'signed-out': 'signed out — run claude auth login'
+};
+
+/**
+ * Shown instead of the bars when the token read explains itself. An expired
+ * token renews on the CLI's next run and the following 3s poll flips
+ * usageStatus back to 'ok'; a signed-out one waits for `claude auth login`.
+ */
+function UsageMessage({ text }: { text: string }) {
   return (
     <div className="usage">
       <span className="u-label">Usage</span>
-      <span className="u-msg">token expired</span>
+      <span className="u-msg">{text}</span>
     </div>
   );
 }
