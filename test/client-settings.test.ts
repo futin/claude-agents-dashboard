@@ -1,9 +1,10 @@
 import assert from 'node:assert';
 
 import {
-  DEFAULT_SETTINGS, LIMITS, THEMES,
+  DEFAULT_SETTINGS, LANDING_OPTIONS, LIMITS, THEMES,
   chatQuery, clampSettings, formatInterval, scanQuery
 } from '../client/src/lib/settings.js';
+import { SECTIONS, isSection } from '../client/src/lib/sections.js';
 import { DEFAULTS } from '../server/lib/config.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -56,6 +57,58 @@ export function run(): number {
     assert.strictEqual(clampSettings({ usageTab: 'rates' }).usageTab, 'rates');
     assert.strictEqual(clampSettings({ usageTab: 'nonsense' }).usageTab, 'forecast');
     assert.strictEqual(clampSettings({ usageTab: 7 }).usageTab, 'forecast');
+  })) p++; else f++;
+
+  // task-12: `landing` had zero coverage while the picker and the validator
+  // each carried their own hand-written list — they disagreed in both
+  // directions ('usage' in neither, 'settings' validating but unpickable).
+  if (test('the landing preference accepts usage, the section it used to drop', () => {
+    assert.strictEqual(clampSettings({ landing: 'usage' }).landing, 'usage');
+  })) p++; else f++;
+
+  if (test('every rail section is an accepted landing', () => {
+    for (const s of SECTIONS) {
+      assert.strictEqual(clampSettings({ landing: s.id }).landing, s.id, s.id);
+    }
+  })) p++; else f++;
+
+  if (test('last used is still accepted and still the default', () => {
+    assert.strictEqual(clampSettings({ landing: 'last' }).landing, 'last');
+    assert.strictEqual(clampSettings({}).landing, 'last');
+    assert.strictEqual(DEFAULT_SETTINGS.landing, 'last');
+  })) p++; else f++;
+
+  if (test('junk and removed sections fall back to last used', () => {
+    assert.strictEqual(clampSettings({ landing: 'guides' }).landing, 'last', 'a removed tab');
+    assert.strictEqual(clampSettings({ landing: 42 }).landing, 'last');
+    assert.strictEqual(clampSettings({ landing: '' }).landing, 'last');
+  })) p++; else f++;
+
+  // Spelled out literally, not derived from SECTIONS: a test that reads the
+  // same array as the code under test passes whatever either one says. This
+  // fails if a section joins the rail without a decision about landing on it.
+  if (test('the picker offers exactly the six intended choices', () => {
+    assert.deepStrictEqual(
+      LANDING_OPTIONS.map(o => o.value),
+      ['last', 'sessions', 'management', 'analytics', 'usage', 'settings']
+    );
+    assert.strictEqual(LANDING_OPTIONS.length, 6);
+  })) p++; else f++;
+
+  if (test('each landing option carries the rail\'s own label', () => {
+    const label = (v: string) => LANDING_OPTIONS.find(o => o.value === v)?.label;
+    assert.strictEqual(label('usage'), 'Usage');
+    assert.strictEqual(label('settings'), 'Settings');
+    assert.strictEqual(label('last'), 'Last used');
+  })) p++; else f++;
+
+  // 'last' returning false is load-bearing: App.tsx leans on it never being
+  // treated as a renderable section.
+  if (test('isSection answers the rail, and last is not a section', () => {
+    for (const s of SECTIONS) assert.ok(isSection(s.id), s.id);
+    for (const v of ['last', 'guides', '', undefined, 42]) {
+      assert.ok(!isSection(v), String(v));
+    }
   })) p++; else f++;
 
   if (test('scanQuery carries all three knobs', () => {

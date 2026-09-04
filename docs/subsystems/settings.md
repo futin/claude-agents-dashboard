@@ -7,8 +7,10 @@ shell export for is editable here and takes effect on the next tick.
 
 There are two backends, and the page's group headings say which is which.
 
-**Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, landing tab,
-chat truncation, refresh rate, row count, lookback, active window. A phone propped on the desk
+**Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, landing tab
+(every section the rail offers, plus Last used — one list, `SECTIONS` in `client/src/lib/sections.ts`,
+from which both the picker's options and `clampSettings`'s accepted set are derived, so the two
+cannot drift apart), chat truncation, refresh rate, row count, lookback, active window. A phone propped on the desk
 wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and
 three seconds. Sharing these would make one device wrong.
 

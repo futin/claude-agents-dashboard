@@ -180,7 +180,7 @@ client/src/
                   usePendingMessage, useRemoteAnswer, useSpawn, usePersistedState,
                   useSettings, useServerSettings, useDictation, useTranscribeAvailable
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
-                  deepLink, dictation, spawnOptions, resume, pace, usageProfile,
+                  sections, deepLink, dictation, spawnOptions, resume, pace, usageProfile,
                   usageRatesFormat, panelCollapse, surface, walkChart
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic

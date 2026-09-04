@@ -3,6 +3,9 @@ id: task-12
 title: Derive the landing-view choices from the rail so Usage and Settings can be selected
 created: 2026-09-02
 from: idea-15
+updated: 2026-09-03T20:10:45Z
+started: 2026-09-03T19:56:19Z
+execute-elapsed: 866
 ---
 
 ## Goal
@@ -167,3 +170,142 @@ All in `test/client-settings.test.ts` (which already imports `clampSettings`,
   `components/`.
 - The three doc lines in step 7 match the code, and `pnpm test`'s `docs-links` case still
   passes.
+
+## Outcome
+
+**2026-09-03 — done as planned.** The rail's list moved to a new `client/src/lib/sections.ts`
+(`Section`, `SECTIONS`, `isSection`), `SideRail.tsx` now consumes it instead of owning it, and
+`lib/settings.ts` derives both the picker's `LANDING_OPTIONS` and the module-private `LANDINGS`
+validator from that one array. `SettingsView.tsx`'s hand-written four-entry list is gone. All
+seven plan steps landed; nothing crossed the API boundary.
+
+Two deviations from the plan, both trivial: `App.tsx` ended up with the `lib/sections` import
+sorted next to `lib/deepLink` rather than beside the component import, matching the file's
+existing grouping; and `LANDING_OPTIONS` was added to `settings.ts` one step before `LANDINGS`
+was derived, so the two defect cases could go red on the real bug rather than on a missing
+export (an absent named export is a link-time error that would have taken the whole test file
+down and proved nothing).
+
+### Red before green
+
+With `LANDINGS` still hardcoded, the two cases that name the defect failed and nothing else did:
+
+```
+  ✗ the landing preference accepts usage, the section it used to drop
+    Expected values to be strictly equal:
+
+'last' !== 'usage'
+
+  ✗ every rail section is an accepted landing
+    usage
+
+'last' !== 'usage'
+
+  16 passed, 2 failed
+```
+
+### `pnpm test` — exit 0
+
+```
+=== client/lib/settings.ts ===
+
+  ✓ anything unusable falls back to the defaults
+  ✓ one bad field cannot discard the rest
+  ✓ numbers are clamped to the offered range
+  ✓ the client caps match the server caps
+  ✓ every advertised theme is a distinct id
+  ✓ the Usage sub-tab defaults to the forecast and rejects anything else
+  ✓ the landing preference accepts usage, the section it used to drop
+  ✓ every rail section is an accepted landing
+  ✓ last used is still accepted and still the default
+  ✓ junk and removed sections fall back to last used
+  ✓ the picker offers exactly the six intended choices
+  ✓ each landing option carries the rail's own label
+  ✓ isSection answers the rail, and last is not a section
+  ✓ scanQuery carries all three knobs
+  ✓ full chat text is off by default and coerces to a boolean
+  ✓ chatQuery adds full=1 only when the toggle is on
+  ✓ intervals read as humans write them
+  ✓ the fresh-browser session cap matches the server default
+
+  18 passed, 0 failed
+```
+
+Whole suite: `TEST EXIT: 0`, `ALL PASS`, 1133 ✓ cases (7 of them new). `=== docs links ===`
+still `4 passed, 0 failed`, so step 7's three doc edits resolve.
+
+### `pnpm typecheck` — exit 0
+
+```
+$ tsc --noEmit
+typecheck exit: 0
+```
+
+No stale importer of the three moved exports anywhere in the tree.
+
+### `pnpm build` — exit 0
+
+```
+dist/assets/SettingsView-RPPsTtqk.js    39.12 kB │ gzip:  6.11 kB
+dist/assets/UsageView-C9yEX8ZF.js       39.29 kB │ gzip:  7.24 kB
+dist/assets/index-DfaLpF2B.js          389.19 kB │ gzip: 111.28 kB
+✓ built in 1.17s
+```
+
+`SettingsView` and `UsageView` are still their own lazy chunks — `sections.ts` folded into the
+eager `index` chunk as the shared leaf it was meant to be, and did not drag a lazy chunk into
+the initial one.
+
+### Mutation check on the drift guard
+
+Dropping `{ id: 'usage', … }` from `SECTIONS` — the exact regression this task exists to
+prevent — turns three of the new cases red:
+
+```
+  ✗ the landing preference accepts usage, the section it used to drop
+  ✗ the picker offers exactly the six intended choices
+  ✗ each landing option carries the rail's own label
+  15 passed, 3 failed
+```
+
+Note that "every rail section is an accepted landing" correctly stayed green under that
+mutation: it derives its expectation from `SECTIONS`, which is precisely why case 5 spells the
+six values out as a literal. Restored: `18 passed, 0 failed`.
+
+### Browser check (case 8)
+
+Run against a dev server started **in this worktree** on `PORT=4273 WEB_PORT=5273` — port 5174
+was already serving the *main* checkout's code, which would have given a false pass. That
+server was left untouched (`5174: 26937`, `4173: 26948` still alive after teardown; only PIDs
+on 5273/4273 were killed).
+
+- The rail still renders all five buttons under `navigation "Sections"` after the move.
+- Settings → **Opens on** listed exactly six options: `Last used, Sessions, Management,
+  Analytics, Usage, Settings`.
+- Chose **Usage**, then reloaded the page (a real `page.goto`, not an in-page click):
+
+  ```json
+  {
+    "landing": "usage",
+    "storedSection": "settings",
+    "railOn": ["Usage"],
+    "ariaCurrent": ["Usage"],
+    "sessionsListPresent": false
+  }
+  ```
+
+  `dashboard.section` was still `settings` from the visit before, so the page opening on Usage
+  is the *landing preference* winning over last-used — not navigation. The Usage view's
+  Forecast / Token value tabs were showing, and the rail's Usage entry carried both `.on` and
+  `aria-current="page"`.
+- **Opens on** was set back to `Last used` afterwards, and the browser was closed.
+
+### Not verified
+
+- Only the derived-list behaviour was exercised in a browser; the other four themes/densities
+  were not re-checked, as no CSS or token changed.
+- The two grooming assumptions still stand unproven *as preferences* rather than as code:
+  landing on **Settings** is now selectable, and a section a future build removes falls back to
+  `Last used` with no dedicated guard. Both behave as designed and are covered by tests, but
+  whether Settings *should* be an offered landing is a product call the user has not made —
+  it is a one-line change to `LANDING_OPTIONS` if not.

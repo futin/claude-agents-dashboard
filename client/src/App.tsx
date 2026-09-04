@@ -1,8 +1,9 @@
 import { lazy, Suspense, useState } from 'react';
 
-import { SideRail, isSection, type Section } from './components/SideRail';
+import { SideRail } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
 import { deepLinkSession } from './lib/deepLink';
+import { isSection, type Section } from './lib/sections';
 import { usePersistedState } from './hooks/usePersistedState';
 import { SettingsProvider, useSettings } from './hooks/useSettings';
 

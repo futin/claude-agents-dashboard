@@ -39,8 +39,8 @@ override it (see `dashboard.section` below).
   `dashboard.settings` (theme, density, text scale, refresh rate, scan knobs, landing tab
   — see [settings](settings.md); re-clamped on every read by `clampSettings`, and the
   one key an inline script in `index.html` also reads, pre-paint, to avoid a theme flash);
-  `dashboard.section` (Sessions | Management | Analytics | Usage | Guides | Settings —
-  the `Section` union in `SideRail.tsx`, switched on in `App.tsx`) — always
+  `dashboard.section` (Sessions | Management | Analytics | Usage | Settings —
+  the `Section` union in `lib/sections.ts`, switched on in `App.tsx`) — always
   *written* on navigation, but only *read* on open when Settings → landing is `last`; any
   other value pins the opening section, resolved in the `useState` initializer so there's no
   flash of the previously-open one. A `?session=` deep link outranks both and forces
