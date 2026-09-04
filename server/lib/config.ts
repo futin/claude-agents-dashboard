@@ -59,6 +59,33 @@ export interface Config {
    */
   publicUrl: string;
   /**
+   * ntfy topic for the **desk** channel — the one a browser on this machine is
+   * subscribed to. Empty (default) means every push goes to `ntfyTopic` exactly
+   * as before; there is no separate on/off flag, the same "unset means off" rule
+   * `ntfyTopic` itself uses.
+   *
+   * Same credential warning as `ntfyTopic`: unauthenticated, so the string is
+   * both the address and the credential, and no endpoint ever returns it.
+   */
+  ntfyTopicDesk: string;
+  /**
+   * How a browser **on this machine** reaches the dashboard, used for the desk
+   * push's tap-through link.
+   *
+   * Unlike `publicUrl` this *is* defaulted (`http://localhost:<port>`), and the
+   * difference is deliberate: an absent `publicUrl` has to stay distinguishable
+   * from a chosen one, because `clickUrl` drops the header without it and
+   * `sendTest` warns about it. A desk URL is by construction "this machine", so
+   * there is nothing to distinguish — a synthesized default is simply right.
+   *
+   * ⚠️ Wrong under `pnpm dev`, where the client is served by Vite on `webPort`
+   * and `port` answers API only. The record-and-close branch of `/api/focus`
+   * works either way (the handoff is server-side, not same-origin), but the
+   * redirect branch would land on a port serving no page — so set
+   * `DASHBOARD_LOCAL_URL=http://localhost:5174` when running dev.
+   */
+  localUrl: string;
+  /**
    * Path to a GGML whisper model. Empty (the default) disables dictation
    * outright, the same way an empty `NTFY_TOPIC` disables pushes — one
    * "unset means off" rule rather than a separate boolean.
@@ -101,6 +128,10 @@ export const DEFAULTS = {
   NTFY_TOPIC: '',
   NTFY_SERVER: 'https://ntfy.sh',
   DASHBOARD_PUBLIC_URL: '',
+  NTFY_TOPIC_DESK: '',
+  // Port-derived, so the real default is applied in `loadConfig` — this literal
+  // is flat and cannot see `port`.
+  DASHBOARD_LOCAL_URL: '',
   WHISPER_MODEL: '',
   WHISPER_BIN: 'whisper-cli',
   FFMPEG_BIN: 'ffmpeg',
@@ -220,6 +251,9 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     // Empty when unset — deliberately NOT defaulted to localhost. See the field's
     // doc comment: a synthesized default is indistinguishable from a real one.
     publicUrl: (src('DASHBOARD_PUBLIC_URL') || DEFAULTS.DASHBOARD_PUBLIC_URL).trim().replace(/\/+$/, ''),
+    ntfyTopicDesk: (src('NTFY_TOPIC_DESK') || DEFAULTS.NTFY_TOPIC_DESK).trim(),
+    localUrl: (src('DASHBOARD_LOCAL_URL') || `http://localhost:${toPosInt(src('PORT'), DEFAULTS.PORT)}`)
+      .trim().replace(/\/+$/, ''),
     whisperModel: (src('WHISPER_MODEL') || DEFAULTS.WHISPER_MODEL).trim(),
     whisperBin: (src('WHISPER_BIN') || DEFAULTS.WHISPER_BIN).trim(),
     ffmpegBin: (src('FFMPEG_BIN') || DEFAULTS.FFMPEG_BIN).trim(),

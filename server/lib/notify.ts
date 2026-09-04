@@ -92,6 +92,14 @@ export interface NotifyPayload {
   tags: string;
   /** Tap-through URL, or '' when no public URL is configured. */
   click: string;
+  /**
+   * Which ntfy topic to publish to. Absent means `config.ntfyTopic` — the phone.
+   *
+   * On the payload rather than as a second `Sender` argument on purpose: that
+   * keeps the `Sender` type unchanged, and `setSender` is the seam every
+   * delivery test uses.
+   */
+  topic?: string;
 }
 
 /**
@@ -237,6 +245,44 @@ export function clickUrl(config: Config, sessionId: string): string {
 }
 
 /**
+ * The desk push's tap-through, which points at `/api/focus` rather than the
+ * dashboard route.
+ *
+ * ntfy's service worker always `openWindow`s a click URL, so tapping can never
+ * land in the tab you already have open — the endpoint is what turns that
+ * unavoidable new tab into a throwaway (see `focus.ts`).
+ *
+ * Never returns '' the way `clickUrl` can: `localUrl` always has a value, so the
+ * desk channel needs no `DASHBOARD_PUBLIC_URL` and no tunnel at all.
+ */
+export function deskClickUrl(config: Config, sessionId: string): string {
+  return `${config.localUrl}/api/focus?session=${encodeURIComponent(sessionId)}`;
+}
+
+/**
+ * Which topic this push goes to, and where tapping it lands.
+ *
+ * Exclusive, not both: `settings.idleSecs` is already tuned for the remote-answer
+ * hooks, and a double-buzz on every alert is a worse default than the rare
+ * missed one. The desk topic mirrors the phone's `NotifyPolicy` events — this is
+ * routing, not a second policy.
+ *
+ * `ntfyTopicDesk` is checked before `readIdle()` so an unset desk topic never
+ * pays for the `ioreg` spawn.
+ */
+export function routePush(
+  config: Config,
+  sessionId: string,
+  thresholdSecs: number,
+  readIdle: () => number | null
+): { topic: string; click: string; desk: boolean } {
+  if (config.ntfyTopicDesk && atDesk(readIdle(), thresholdSecs)) {
+    return { topic: config.ntfyTopicDesk, click: deskClickUrl(config, sessionId), desk: true };
+  }
+  return { topic: config.ntfyTopic, click: clickUrl(config, sessionId), desk: false };
+}
+
+/**
  * The default transport. Resolves with what ntfy actually said and **never
  * rejects**, so fire-and-forget callers stay unable to fail while `sendTest` can
  * still tell a dropped packet from a delivered one.
@@ -244,7 +290,7 @@ export function clickUrl(config: Config, sessionId: string): string {
 function httpsSend(payload: NotifyPayload, config: Config): Promise<SendResult> {
   return new Promise<SendResult>(resolve => {
     try {
-      const url = new URL(`${config.ntfyServer}/${config.ntfyTopic}`);
+      const url = new URL(`${config.ntfyServer}/${payload.topic || config.ntfyTopic}`);
       const headers: Record<string, string> = {
         Title: payload.title,
         Tags: payload.tags,
@@ -316,12 +362,15 @@ export function maybeSend(
     });
     if (!passes) return;
 
+    // Exactly one publish, to exactly one topic — see `routePush`.
+    const route = routePush(config, ctx.sessionId, settings.idleSecs, readIdle);
     const result = deliver(
       {
         title: 'Claude Code',
         body: `${resolveLabel(config, ctx.sessionId)} — ${ctx.phrase ?? PHRASE[event]}`,
         tags: TAGS[event],
-        click: clickUrl(config, ctx.sessionId)
+        click: route.click,
+        topic: route.topic
       },
       config
     );
@@ -347,10 +396,23 @@ export function maybeSend(
  * last step stays the user's eyes on their own device.
  */
 export async function sendTest(config: Config): Promise<string> {
+  // Still `ntfyTopic` specifically: a desk topic with no phone topic behind it is
+  // a misconfiguration, not a supported mode.
   if (!config.ntfyTopic) return 'no NTFY_TOPIC set in .env — nothing to send to';
   try {
+    // Routed exactly as a real push would route *right now*, so the button
+    // proves the routing and not merely the transport. `''` as the session id:
+    // this is not a real session, and the desk click URL is only ever eyeballed
+    // in the reply string below.
+    const route = routePush(config, '', getSettings().idleSecs, idleSource ?? readIdleSecs);
     const result = await deliver(
-      { title: 'Claude Code', body: 'Test push — notifications are working', tags: 'robot', click: config.publicUrl },
+      {
+        title: 'Claude Code',
+        body: 'Test push — notifications are working',
+        tags: 'robot',
+        click: route.desk ? config.localUrl : config.publicUrl,
+        topic: route.topic
+      },
       config
     );
     // A transport that reports nothing is the fire-and-forget contract: the send
@@ -360,9 +422,11 @@ export async function sendTest(config: Config): Promise<string> {
         ? `couldn't reach ${config.ntfyServer}: ${result.detail}`
         : `${config.ntfyServer} refused it (HTTP ${result.status}): ${result.detail} — check NTFY_TOPIC`;
     }
+    // The desk branch has no no-URL warning to give: `localUrl` is never empty.
+    if (route.desk) return `sent to ${config.ntfyServer} (desk topic) · taps open ${config.localUrl}`;
     return config.publicUrl
-      ? `sent to ${config.ntfyServer} · taps open ${config.publicUrl}`
-      : `sent to ${config.ntfyServer} · no DASHBOARD_PUBLIC_URL, so taps won't open the dashboard`;
+      ? `sent to ${config.ntfyServer} (phone topic) · taps open ${config.publicUrl}`
+      : `sent to ${config.ntfyServer} (phone topic) · no DASHBOARD_PUBLIC_URL, so taps won't open the dashboard`;
   } catch (err) {
     return `send failed: ${err instanceof Error ? err.message : String(err)}`;
   }

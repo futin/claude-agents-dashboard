@@ -338,6 +338,100 @@ export async function run(): Promise<number> {
     assert.strictEqual(calls, 1);
   }))) p++; else f++;
 
+  // --- desk routing. Exclusive: exactly one publish, to exactly one topic.
+
+  /** A config with both topics set, so routing has a real choice to make. */
+  const twoTopic = (over: Partial<Config> = {}): Config => conf({
+    ntfyTopicDesk: 'desk-topic',
+    localUrl: 'http://localhost:4173',
+    ...over
+  } as Partial<Config>);
+
+  if (await testAsync('at the desk, a push goes to the desk topic and taps land on /api/focus', () =>
+    inTmpCwd(sent => {
+      setSettings({ idleSecs: 60, notify: { enabled: true, events: { stop: true } } });
+      setIdleSource(() => 10);
+      maybeSend(twoTopic(), 'stop', { sessionId: SID });
+      assert.strictEqual(sent.length, 1, 'exclusive — never both topics');
+      assert.strictEqual(sent[0].topic, 'desk-topic');
+      assert.strictEqual(sent[0].click, `http://localhost:4173/api/focus?session=${SID}`);
+    }))) p++; else f++;
+
+  if (await testAsync('away from the desk, a push goes to the phone topic and the public URL', () =>
+    inTmpCwd(sent => {
+      setSettings({ idleSecs: 60, notify: { enabled: true, events: { stop: true } } });
+      setIdleSource(() => 120);
+      maybeSend(twoTopic(), 'stop', { sessionId: SID });
+      assert.strictEqual(sent.length, 1);
+      assert.strictEqual(sent[0].topic, 'test-topic');
+      assert.strictEqual(sent[0].click, `https://dash.example/?session=${SID}`);
+    }))) p++; else f++;
+
+  if (await testAsync('an unreadable idle routes to the phone', () => inTmpCwd(sent => {
+    setSettings({ idleSecs: 60, notify: { enabled: true, events: { stop: true } } });
+    setIdleSource(() => null);
+    maybeSend(twoTopic(), 'stop', { sessionId: SID });
+    assert.strictEqual(sent[0].topic, 'test-topic', 'cannot tell → the channel that always works');
+  }))) p++; else f++;
+
+  if (await testAsync('a zero idle threshold routes to the phone', () => inTmpCwd(sent => {
+    setSettings({ idleSecs: 0, notify: { enabled: true, events: { stop: true } } });
+    setIdleSource(() => 0);
+    maybeSend(twoTopic(), 'stop', { sessionId: SID });
+    assert.strictEqual(sent[0].topic, 'test-topic', 'zero disables the idle gate everywhere');
+  }))) p++; else f++;
+
+  // The mirror case, and the one that would otherwise ship broken: proving the
+  // desk path works says nothing about the path everyone who never sets a desk
+  // topic is still on.
+  if (await testAsync('with no desk topic, sitting at the desk changes nothing', () =>
+    inTmpCwd(sent => {
+      setSettings({ idleSecs: 60, notify: { enabled: true, events: { stop: true } } });
+      setIdleSource(() => 10);
+      maybeSend(conf(), 'stop', { sessionId: SID });
+      assert.strictEqual(sent.length, 1);
+      assert.strictEqual(sent[0].topic, 'test-topic');
+      assert.strictEqual(sent[0].click, `https://dash.example/?session=${SID}`);
+    }))) p++; else f++;
+
+  // Delete the memoisation in `maybeSend` and this goes to 2 — the requireAfk
+  // clause reads once, then `routePush` reads again.
+  if (await testAsync('routing and requireAfk share one idle reading', () => inTmpCwd(() => {
+    let calls = 0;
+    setSettings({
+      idleSecs: 60,
+      notify: { enabled: true, events: { stop: true }, requireAfk: true }
+    });
+    setIdleSource(() => { calls++; return 300; });
+    maybeSend(twoTopic(), 'stop', { sessionId: SID });
+    assert.strictEqual(calls, 1, 'two consumers, one ioreg spawn');
+  }))) p++; else f++;
+
+  if (await testAsync('sendTest names the desk topic and where its taps land', () =>
+    inTmpCwd(async () => {
+      setIdleSource(() => 10);
+      setSender(() => { /* fire-and-forget */ });
+      const outcome = await sendTest(twoTopic());
+      assert.match(outcome, /desk topic/);
+      assert.match(outcome, /http:\/\/localhost:4173/);
+    }))) p++; else f++;
+
+  if (await testAsync('sendTest names the phone topic when away', () => inTmpCwd(async () => {
+    setIdleSource(() => 300);
+    setSender(() => { /* fire-and-forget */ });
+    const outcome = await sendTest(twoTopic());
+    assert.match(outcome, /phone topic/);
+    assert.match(outcome, /dash\.example/);
+  }))) p++; else f++;
+
+  // A desk topic with no phone topic behind it is a misconfiguration, not a mode.
+  if (await testAsync('sendTest still refuses when only the desk topic is set', () =>
+    inTmpCwd(async () => {
+      setIdleSource(() => 10);
+      const outcome = await sendTest(twoTopic({ ntfyTopic: '' } as Partial<Config>));
+      assert.match(outcome, /no NTFY_TOPIC set/);
+    }))) p++; else f++;
+
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }
