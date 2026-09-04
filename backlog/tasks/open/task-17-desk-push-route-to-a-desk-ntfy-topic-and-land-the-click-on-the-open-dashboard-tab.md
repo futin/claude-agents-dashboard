@@ -16,6 +16,17 @@ number of `ioreg` spawns per push.
 
 ## Plan
 
+> **Who decided this.** The design choice below and every row of the decision table were
+> settled by the grooming session on 2026-09-04, **not by the user** — that session had no
+> `AskUserQuestion` tool (absent from the tool list and from `ToolSearch`), the user was
+> away from the terminal, and the instruction was to deliver a finished plan. So these are
+> reasoned calls made on their behalf, not choices they made. Every one is re-openable;
+> each carries the reason that would reverse it. If you are executing this and a decision
+> reads wrong, say so rather than transcribing it.
+>
+> *(User reviewed and endorsed the design choice on 2026-09-04. The decision table below
+> has still not been individually confirmed.)*
+
 ### Which of idea-20's three designs this is, and why
 
 Design 3 (**localhost focus endpoint**), built on design 1's topic split, with design 3's
