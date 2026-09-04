@@ -778,6 +778,75 @@ export function run(): number {
     assert.strictEqual(s.projectPath, '/a/repo/backlog/bugs/open');
   })) p++; else f++;
 
+  // A session that cd'd into a worktree mid-run keeps its id and starts a second
+  // .jsonl in a second project dir, so an id names two files (bug-15).
+  const splitRoot = (now: number) => makeRoot([
+    {
+      dirName: '-a-repo', id: 'split-1', mtimeMs: now - 40 * 60 * 1000,
+      records: [metaRec('/a/repo', 'main'), at(assistantPending(), new Date(now - 40 * 60 * 1000).toISOString())]
+    },
+    {
+      dirName: '-a-repo--worktrees-x', id: 'split-1', mtimeMs: now - 10 * 1000,
+      records: [metaRec('/a/repo/.worktrees/x', 'wt'), at(assistantPending(), new Date(now - 10 * 1000).toISOString())]
+    }
+  ]);
+
+  if (test('split transcript: one session per id, parsed from the newer file', () => {
+    const now = 1_700_000_000_000;
+    const root = splitRoot(now);
+    const sessions = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 },
+      { root, now, liveCwds: null }).sessions;
+    assert.strictEqual(sessions.filter(s => s.id === 'split-1').length, 1);
+    const s = sessions.find(x => x.id === 'split-1')!;
+    assert.strictEqual(s.updatedMs, now - 10 * 1000);
+    assert.strictEqual(s.gitBranch, 'wt');
+    assert.strictEqual(s.status, 'working');   // the stale half would read 'incomplete'
+  })) p++; else f++;
+
+  if (test('split transcript: the dupe does not eat another session\'s pool slots', () => {
+    // The guard on WHERE the dedupe runs, which needs a split id with at least
+    // `maxSessions * 2` halves — the whole pool. Here maxSessions 2 → pool of 4,
+    // and the four newest files are all `split-1`. Deduping before the slice
+    // leaves the pool one distinct id and `other-1` still reachable; deduping
+    // after it slices `other-1` out of the pool first and loses the row.
+    const now = 1_700_000_000_000;
+    const half = (dir: string, ageSec: number) => ({
+      dirName: dir, id: 'split-1', mtimeMs: now - ageSec * 1000,
+      records: [metaRec('/a/repo', 'main'), at(assistantPending(), new Date(now - ageSec * 1000).toISOString())]
+    });
+    const root = makeRoot([
+      half('-a-repo', 40),
+      half('-a-repo--worktrees-w', 30),
+      half('-a-repo--worktrees-x', 20),
+      half('-a-repo--worktrees-y', 10),
+      {
+        dirName: '-b-repo', id: 'other-1', mtimeMs: now - 60 * 1000,
+        records: [metaRec('/b/repo', 'main'), at(assistantPending(), new Date(now - 60 * 1000).toISOString())]
+      }
+    ]);
+    const ids = scan.scanSessions({ maxSessions: 2, activeWindowMin: 5, lookbackHours: 24 },
+      { root, now, liveCwds: null }).sessions.map(s => s.id);
+    assert.deepStrictEqual(ids, ['split-1', 'other-1']);
+  })) p++; else f++;
+
+  if (test('findTranscript resolves a split id to its newest file', () => {
+    const now = 1_700_000_000_000;
+    const root = splitRoot(now);
+    const ref = scan.findTranscript(root, 'split-1');
+    assert.ok(ref, 'expected a ref for the split id');
+    assert.strictEqual(ref!.dirName, '-a-repo--worktrees-x');
+    assert.strictEqual(ref!.mtimeMs, now - 10 * 1000);
+    assert.strictEqual(scan.findTranscript(root, 'nope'), undefined);
+  })) p++; else f++;
+
+  if (test('listTranscripts still enumerates both halves (the usage ledger depends on it)', () => {
+    const now = 1_700_000_000_000;
+    const root = splitRoot(now);
+    const refs = scan.listTranscripts(root).filter(t => t.id === 'split-1');
+    assert.strictEqual(refs.length, 2);
+    assert.deepStrictEqual(refs.map(t => t.dirName).sort(), ['-a-repo', '-a-repo--worktrees-x']);
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }
