@@ -3,6 +3,9 @@ id: task-17
 title: Desk push: route to a desk ntfy topic and land the click on the open dashboard tab
 created: 2026-09-04
 from: idea-20
+updated: 2026-09-04T16:01:50Z
+started: 2026-09-04T15:29:31Z
+execute-elapsed: 1939
 ---
 
 ## Goal
@@ -628,3 +631,102 @@ Manual / browser, run by the executing session:
   zero `ioreg` spawns when `requireAfk` is off. Test case 2 and case 3's mirror case are the
   proof.
 - Docs updated per Task 7, and `docs/overview.md` lists `server/lib/focus.ts`.
+
+## Outcome
+
+**2026-09-04 — built and verified on `backlog/task-17`. Six commits, Tasks 1–7 all done.**
+
+Design 3 shipped as planned: `NTFY_TOPIC_DESK` routes a push to the desk while the HID idle
+reading says you are at the keyboard, its `Click` points at a new loopback-only
+`GET /api/focus`, and the dashboard tab you already have open claims the tap on its next poll
+and opens the drawer. The throwaway tab ntfy opens closes itself.
+
+`f4a4f93` extract `atDesk`, memoise the idle read · `02607b9` the focus store ·
+`ee5e4bc` `GET /api/focus` · `e0c3996` carry the focus on the poll · `14dd901` desk routing ·
+`3e12cc4` docs
+
+### Verification
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+$ pnpm test
+ALL PASS          (983 cases)
+$ pnpm build
+✓ built in 1.24s
+```
+
+New suites: `focus.ts` 8/8, `/api/focus` 11/11, plus 15 new cases in `notify.ts` (37 total).
+
+**Mutation-proved, not merely green** — each guard was deleted and the named case observed to
+fail, then restored:
+
+| Mutation | Expected to fail | Result |
+|---|---|---|
+| memoisation removed from `maybeSend` | `routing and requireAfk share one idle reading` | failed alone, count went 1 → 2 |
+| `classifyAddress` → `classifyOrigin` in `serveFocus` | a loopback-guard case | failed |
+
+The second mutation is worth recording because it failed via a case I had **not** predicted.
+I expected `a tailnet socket claiming to be loopback is still refused` to catch it; that case
+passes under both functions, because `classifyOrigin` returns early on a non-loopback socket
+and never reads the header. What actually caught it was `a loopback socket is accepted despite
+a remote forwarded-for`. That corrected the rationale: the cost of `classifyOrigin` as a guard
+is not "anyone gets in" but that the verdict becomes **caller-steerable in both directions** —
+an honest proxied client is refused while the same client prepending `127.0.0.1` is admitted.
+The comment in `api.ts` and the warning in `origin.ts` were rewritten to say that instead of
+the overstated version.
+
+**Browser, against the running dev server** (test case 10): a tab opened in the
+`clients.openWindow` shape (`history.length: 1`, no opener) at
+`/api/focus?session=c2113539-…` closed itself; the dashboard tab already open showed
+`aside.chat` with `.chat-title` reading `bl claude-agents-dashboard idea-20`, and its
+`location.search` stayed empty — no `?session=` appended, which is the property separating
+this path from the deep link.
+
+### Deviations from the plan, and why
+
+- **`notePoll()` moved from Task 5 into Task 4.** `/api/focus` cannot tell whether a dashboard
+  is watching without it, so Task 4's own tests could not pass with it deferred.
+- **New `setIdleSource` seam in `notify.ts`.** The plan assumed the routing tests could inject
+  an idle reading; there was no seam on the push path at all. Deliberately separate module
+  state from `idle.ts`'s `setIdleReader`.
+- **`test/api-harness.ts` `Reply` now carries response headers** — needed to assert the
+  redirect's `Location`, which nothing had needed before.
+- **Task 2's spawn-count case was split.** The memoisation has no second consumer until Task 6,
+  so it was unprovable in Task 2 and its proof lives in Task 6's suite.
+- **A regression I introduced and caught in the same task:** folding `backAtDesk`'s
+  zero-threshold check into `atDesk` made it read `ioreg` before checking the threshold — ~40ms
+  spent to reach a foregone answer, against the explicit warning in that function's own doc.
+  The short-circuit was restored ahead of the read.
+- **`lastPollMs` starts at `-Infinity`, not `0`.** A `lastPollMs > 0` guard treated a poll at
+  clock-zero as "never polled"; the freshness test drives from a zero base and caught it.
+
+### Not verified — needs a human
+
+**Test case 12 was not run at the time.** It needs a real ntfy push delivered to a subscribed
+desktop browser and a phone to confirm the other half, and clicking a macOS notification banner
+is not automatable. Of the three things it left unproven:
+
+- that a real ntfy web push displays a banner on this Mac at all — **still open, and the
+  first attempt to close it was a false positive worth recording.** At 21:51 on 2026-09-04
+  `POST /api/notify/test` answered `sent to https://ntfy.sh (desk topic)`, a banner appeared,
+  and it was read as proof. It was not: polling the topic's full ntfy cache shows no message
+  at 21:51 on either topic in `.env`. The 4173 server had been started before `.env`'s
+  `NTFY_TOPIC_DESK` was last edited, so it was publishing to the *previous* desk topic —
+  ntfy answered 2xx, `sendTest` correctly said "sent", and nothing subscribed was listening.
+  The banner seen was Claude Code's own notification, which looks identical. After a restart
+  at 22:12, the 22:14 push **is** in the subscribed topic's cache — publication to the right
+  topic is now proved; that a banner renders from it is not, and needs the user's eyes.
+- ~~that clicking that banner reaches `/api/focus`~~ — **moot.** `/api/focus` was removed in
+  `c6b806c`; the tap now points at `/api/dismiss` and only closes its own tab. Whether that
+  tab really self-closes was confirmed in real use the same day (see `serveDismiss`).
+- that the phone stays silent when the desk topic wins, and rings when it does not — **still
+  unproven.** Only the desk half was exercised; nothing has yet watched both devices across
+  the idle threshold in one run.
+
+Everything below that transport — routing, the endpoint, the handoff, the drawer, the
+self-closing tab — is covered by the tests and the browser run above.
+
+Also unproven: the redirect branch was verified over a real socket in `api-focus.test.ts` but
+**not** in a browser (test case 11). Doing so needs a server nothing is polling, and the dev
+server in this checkout is shared with the user's own session.

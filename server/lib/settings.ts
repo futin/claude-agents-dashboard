@@ -197,9 +197,11 @@ export function getSettings(homeDir?: string): ServerSettings {
     persisted,
     idleOverride: detectIdleOverride(homeDir),
     answerOverride: detectAnswerOverride(homeDir),
-    // Overwritten by the API layer, which is where Config — and therefore
-    // NTFY_TOPIC — is available. This module never reads config.
-    notifyAvailable: false
+    // Both overwritten by the API layer, which is where Config — and therefore
+    // NTFY_TOPIC and the .env baseline — is available. This module never reads
+    // config.
+    notifyAvailable: false,
+    staleEnvKeys: []
   };
 }
 

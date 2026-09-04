@@ -52,6 +52,8 @@ export interface Reply {
   status: number;
   json: Record<string, unknown> | null;
   raw: string;
+  /** Lower-cased response headers. Needed to assert a redirect's `location`. */
+  headers: Record<string, string | string[] | undefined>;
 }
 
 /** A request whose response is deliberately not awaited — see `harness.open`. */
@@ -179,7 +181,7 @@ export function request(base: string, pathname: string, options: RequestOptions 
           const json = (() => {
             try { return JSON.parse(raw) as Record<string, unknown>; } catch { return null; }
           })();
-          settle(() => resolve({ status: res.statusCode || 0, json, raw }));
+          settle(() => resolve({ status: res.statusCode || 0, json, raw, headers: res.headers }));
         });
         res.on('error', e => settle(() => reject(e)));
       }
@@ -212,7 +214,7 @@ export function openRequest(base: string, pathname: string, options: RequestOpti
           const json = (() => {
             try { return JSON.parse(raw) as Record<string, unknown>; } catch { return null; }
           })();
-          resolve({ status: res.statusCode || 0, json, raw });
+          resolve({ status: res.statusCode || 0, json, raw, headers: res.headers });
         });
       }
     );

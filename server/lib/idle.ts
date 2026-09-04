@@ -16,7 +16,7 @@
  * See `docs/subsystems/remote-answer.md`.
  */
 
-import { readIdleSecs } from './notify.js';
+import { atDesk, readIdleSecs } from './notify.js';
 import { getSettings } from './settings.js';
 
 let idleReader: (() => number | null) | null = null;
@@ -44,7 +44,10 @@ export function setIdleReader(fn: (() => number | null) | null): void {
  */
 export function backAtDesk(): boolean {
   const thresholdSecs = getSettings().idleSecs;
+  // Checked before the read, not inside `atDesk`: the reading costs an `ioreg`
+  // spawn and a zero threshold makes the answer false regardless, so asking
+  // would be ~40ms spent on a foregone conclusion. `atDesk` re-checks it anyway
+  // for callers that already hold a reading.
   if (thresholdSecs === 0) return false;
-  const idle = (idleReader ?? readIdleSecs)();
-  return idle !== null && idle < thresholdSecs;
+  return atDesk((idleReader ?? readIdleSecs)(), thresholdSecs);
 }

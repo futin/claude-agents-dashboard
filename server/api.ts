@@ -52,7 +52,7 @@ import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/t
 import {
   MAX_LAUNCHING, adoptLaunched, launch, listLaunching, parseSpawnRequest, probeSpawn, stopLaunch
 } from './lib/spawn.js';
-import { toPosInt, type Config } from './lib/config.js';
+import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
@@ -513,6 +513,42 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
 }
 
 /**
+ * `GET /api/dismiss` — where a tapped desk notification lands, and it does
+ * nothing on purpose.
+ *
+ * ntfy's service worker always acts on a click: with a `Click` header it
+ * `openWindow`s that URL, and **without** one it opens its own topic page and
+ * leaves that tab behind. There is no "inert notification" option. So the desk
+ * push points here, and here serves a page whose only job is to close the tab it
+ * arrived in — a click becomes a flash and nothing else.
+ *
+ * The tab can close itself because `clients.openWindow` gives it a single history
+ * entry and no opener, which satisfies Blink's rule (`LocalDOMWindow::close`).
+ * Confirmed in real use on 2026-09-04. The message is the fallback for an engine
+ * that refuses.
+ *
+ * Static, no parameters, no state: this replaced a deep-link handoff that opened
+ * the session's drawer in an already-open dashboard tab (see git history for
+ * `lib/focus.ts`). That worked, and was dropped as more machinery than the
+ * feature was worth.
+ */
+export function serveDismiss(res: ServerResponse): void {
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(`<!doctype html>
+<meta charset="utf-8">
+<title>Dismissed</title>
+<body style="font:14px system-ui;padding:2rem;color:#888">
+<p id="m">Dismissed.</p>
+<script>
+window.close();
+setTimeout(function () {
+  document.getElementById('m').textContent = 'You can close this tab.';
+}, 600);
+</script>
+`);
+}
+
+/**
  * `GET /api/settings` — the settings that aren't per-device (see lib/settings.ts).
  *
  * `notifyAvailable` is filled here rather than in the store: it is the one field
@@ -520,7 +556,13 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
  * The topic itself is never returned — it is both the address and the credential.
  */
 export function serveSettingsRead(config: Config, res: ServerResponse): void {
-  sendJson(res, 200, { ...getSettings(), notifyAvailable: config.ntfyTopic !== '' });
+  sendJson(res, 200, {
+    ...getSettings(),
+    notifyAvailable: config.ntfyTopic !== '',
+    // Read per request, not cached: the whole point is to notice a file that
+    // changed after this process read it. One `readFileSync` of a small file.
+    staleEnvKeys: staleEnvKeys()
+  });
 }
 
 /** An empty grid, for the fail-open path and for a never-recorded profile. */

@@ -65,6 +65,14 @@ export default function SettingsView() {
   const pushUnconfigured = !!server.state && !server.state.notifyAvailable;
 
   /**
+   * `.env` settings edited after the server started. It is running on the old
+   * values and no other surface says so — a push then goes to the previous topic,
+   * ntfy accepts it, and the only symptom is a notification that never arrives.
+   * Names only; the server never sends the values (they are credentials).
+   */
+  const staleEnv = server.state?.staleEnvKeys ?? [];
+
+  /**
    * Turning "Only when I'm away" off does **not** make `question` and `plan`
    * unconditional, and nothing else on this page would tell you that.
    *
@@ -527,6 +535,18 @@ export default function SettingsView() {
             onChange={v => void server.saveNotify({ requireAutoMode: v === 'on' })}
           />
         </SettingsRow>
+
+        {staleEnv.length > 0 && (
+          <div className="set-warn">
+            <span>⚠</span>
+            <span>
+              <b>{staleEnv.join(', ')}</b> changed in <code>.env</code> after this server started.
+              Config is read once, at startup, so it is still using the old value — a push goes to
+              the previous topic, ntfy accepts it, and nothing arrives. <b>Restart the server</b> to
+              pick the new one up.
+            </span>
+          </div>
+        )}
 
         <SettingsRow
           name="Test push"

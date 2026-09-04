@@ -24,6 +24,11 @@ that only true Web Push would be reliable.
 ntfy sidesteps all of it: a native app already holds the push connection. The dashboard
 only has to decide *when* to publish.
 
+What ntfy did **not** solve was which device rings. Everything above is about reaching the
+phone; at the desk that is the wrong device. That gap is what desk routing below closes — by
+adding a second ntfy topic rather than a second transport, so the desktop path inherits the
+`Click` deep link that already worked on mobile.
+
 Once it landed, the browser layer was **deleted rather than kept as a fallback** — about 530
 lines and 21 tests, including the SSE stream that existed only to feed it. On iOS it did
 nothing; on a Mac it repeated the CLI's own notification on the same screen, so it was
@@ -268,12 +273,107 @@ at where the dashboard lives. On a tailnet-only deployment — the one this was 
 that pointer is unusable without tailnet access. Expose the dashboard publicly and the
 calculus changes.
 
+## Desk routing: which device rings
+
+With an `NTFY_TOPIC_DESK` set, a push raised **while you are at the keyboard** goes to that
+topic instead of `NTFY_TOPIC`. Walk away past Settings → "Away after" and it goes back to the
+phone. Unset — the default — every push behaves exactly as the rest of this document
+describes, including the number of `ioreg` spawns per push.
+
+**Exclusive, never both.** `settings.idleSecs` is already tuned for the remote-answer hooks,
+and a double-buzz on every alert is a worse default than the rare missed one: an alert raised
+while you are at the desk does not reach the phone if you walk away ten seconds later.
+
+The rule is `atDesk(idleSecs, thresholdSecs)` in `notify.ts` — one predicate, three callers:
+`backAtDesk()` releasing held waits, the `requireAfk` clause suppressing a push, and this
+routing. Three cases fall back to the **phone**, all meaning "cannot tell":
+
+| Reading | Routes to | Why |
+|---|---|---|
+| idle ≥ threshold | phone | you are away — the phone is the point |
+| `null` (Docker, non-macOS) | phone | unreadable; the phone works without a browser running |
+| `idleSecs === 0` | phone | zero disables the idle gate everywhere else, so it disables this |
+
+**The desk topic has no `NotifyPolicy` of its own** — it mirrors the phone's events. This is
+routing, not a second policy, so nothing in `NotifyPolicy`, `DEFAULT_NOTIFY`, `mergeNotify` or
+the settings file moved, and there is no migration.
+
+**One `ioreg` per push.** `PredicateContext.readIdle` is a thunk precisely so a policy without
+`requireAfk` never pays ~40ms for a reading it will not use. Routing wants the same reading, so
+`maybeSend` memoises it: two consumers, at most one spawn — and still zero when neither wants
+it, because `ntfyTopicDesk` is checked before the thunk is touched. `test/notify.test.ts`
+counts the calls; deleting the memoisation takes that count to 2.
+
+## Tapping a desk push does nothing, on purpose
+
+The desk push carries `Click: <DASHBOARD_LOCAL_URL>/api/dismiss`, and that page's only job
+is to close the tab it arrived in. **The desk notification is an alert, not a deep link** —
+it tells you a session needs you; you navigate yourself.
+
+That is a choice, not a limitation, and it is worth knowing why it is not simply "no click
+action". ntfy's service worker always acts on a click:
+
+- with a `Click` header it `self.clients.openWindow(r.click)`;
+- **without** one it falls to `t?t.focus():…:self.clients.openWindow(o)` where `o` is
+  `https://ntfy.sh/<topic>` — it opens its own topic page and leaves that tab behind.
+
+Verified against `https://ntfy.sh/sw.js` on 2026-09-04. So an inert notification is not on
+offer; pointing at a self-closing page is the closest thing, and a tap becomes a flash.
+
+The tab can close itself because `clients.openWindow` gives it a single history entry and no
+opener, satisfying Blink's rule (`LocalDOMWindow::close`: closable when opened by DOM **or**
+the back/forward list has one entry). Confirmed in real use. The page falls back to "You can
+close this tab." for an engine that refuses.
+
+**A deep link was built here first, worked, and was removed.** `/api/focus` recorded the
+tapped session, the dashboard tab claimed it on a poll and opened that session's drawer, and
+the throwaway tab closed — verified end to end. It cost a store, three endpoints, a client
+poll and its own failure modes (a stale tab that claimed taps and rendered nothing; two
+dashboards racing for one claim), and it still could not bring the dashboard tab to the
+front, because a tab opened by `clients.openWindow` has no user activation and
+`WindowClient.focus()` requires it. It is in git history (`server/lib/focus.ts`) if the
+trade ever looks different.
+
 ## Answering "is it working?"
 
 Every failure here is invisible from the outside: an off switch, a missing topic and a
 dropped packet all look identical. So `POST /api/notify/test` fires one push **regardless of
 policy** and returns what actually happened, including whether taps will open anything. The
 Settings button surfaces that string verbatim.
+
+### The failure a 2xx cannot see: a `.env` edited after startup
+
+`loadConfig` runs once, at startup. Change `NTFY_TOPIC_DESK`, keep the process, and every
+later push goes to the **previous** topic — ntfy accepts it (any topic string is a valid
+topic; there is no registration), `httpsSend` reports 2xx, and `sendTest` truthfully says
+"sent". Your browser is subscribed to the new topic and shows nothing. Every visible signal
+says success.
+
+This happened on **2026-09-04**. The desk push had been verified end to end earlier that day;
+by evening the topic in `.env` had been replaced by hand without a restart. A test push
+reported `sent to https://ntfy.sh (desk topic)`, a banner appeared at the same moment — Claude
+Code's own notification, identical in shape — and the feature was recorded as proven. It was
+diagnosed only by polling ntfy's message cache from outside the app
+(`curl 'https://ntfy.sh/<topic>/json?poll=1&since=all'`), which showed no message at that
+minute on either topic.
+
+`staleEnvKeys()` (`server/lib/config.ts`) closes it. `loadConfig` keeps the parsed `.env` it
+read; the function re-reads the file on demand and returns the **names** of keys whose value
+now differs. Three deliberate limits:
+
+- **Names, never values.** `NTFY_TOPIC`, `NTFY_TOPIC_DESK` and `ANSWER_TOKEN` are credentials
+  and this list ships over the API — same posture as `notifyAvailable`.
+- **Parsed values, not an mtime.** A comment or whitespace edit is not a changed setting, and
+  a warning that cries wolf is ignored on the day it is right.
+- **Keys pinned in `process.env` are skipped.** They beat the file whatever it says, so a
+  restart would not move them and naming them would be false advice.
+
+It surfaces in two places: `GET /api/settings` carries `staleEnvKeys` for the Settings page,
+and `sendTest` appends the push-relevant subset to its own answer — because the string
+someone reads while asking "why did nothing arrive?" is that one.
+
+Detected, not fixed: the server does not reload itself, exactly like `idleOverride`. The
+advice is always "restart".
 
 ## Deferred
 

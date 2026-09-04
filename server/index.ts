@@ -7,6 +7,7 @@
  *   GET  /api/sessions/:id      → one session's subagent activity
  *   GET  /api/sessions/:id/chat → a page of that session's chat history
  *   GET/POST /api/settings      → the non-per-device settings (see lib/settings.ts)
+ *   GET  /api/dismiss           → a tapped desk push lands here; the page closes itself
  *   everything else             → static files from client/dist (production build)
  *
  * In development you visit the Vite dev server (default :5174), which proxies
@@ -24,7 +25,7 @@ import type { Config } from './lib/config.js';
 import {
   serveSessions, serveSessionDetail, serveSessionChat,
   serveManagementIndex, serveManagementProject, serveManagementFile,
-  serveAnalytics, serveHealth, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
+  serveAnalytics, serveHealth, serveDismiss, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
@@ -182,6 +183,10 @@ export function createRequestListener(config: Config): http.RequestListener {
     }
     if (u.pathname === '/api/health') {
       return void serveHealth(config, res, req);
+    }
+    // Where a tapped desk notification lands, to be dismissed (see api.ts).
+    if (u.pathname === '/api/dismiss') {
+      return void serveDismiss(res);
     }
     // Read on GET, write on POST — the write is guarded like the others below.
     // Only holds settings a separate process must agree on (see lib/settings.ts);
