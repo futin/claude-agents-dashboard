@@ -17,6 +17,12 @@
  * connection; the dashboard only has to decide when to publish. This is now the
  * *only* channel that reaches you when you are not looking at the dashboard.
  *
+ * Which *device* it reaches is a second question, answered by `NTFY_TOPIC_DESK`:
+ * with one set, a push raised while you are at the keyboard goes to a topic a
+ * browser on this machine is subscribed to instead, and its tap-through points at
+ * `/api/focus` (see `focus.ts`) rather than the dashboard route. Exclusive, and
+ * off unless that topic is set.
+ *
  * This is the one part of the backend that talks to the internet. It stays
  * zero-dependency (`node:https`), fire-and-forget, and can never fail or delay
  * the request that triggered it.

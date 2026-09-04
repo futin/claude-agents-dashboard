@@ -24,6 +24,11 @@ that only true Web Push would be reliable.
 ntfy sidesteps all of it: a native app already holds the push connection. The dashboard
 only has to decide *when* to publish.
 
+What ntfy did **not** solve was which device rings. Everything above is about reaching the
+phone; at the desk that is the wrong device. That gap is what desk routing below closes — by
+adding a second ntfy topic rather than a second transport, so the desktop path inherits the
+`Click` deep link that already worked on mobile.
+
 Once it landed, the browser layer was **deleted rather than kept as a fallback** — about 530
 lines and 21 tests, including the SSE stream that existed only to feed it. On iOS it did
 nothing; on a Mac it repeated the CLI's own notification on the same screen, so it was
@@ -267,6 +272,83 @@ address leave the machine, inside the link. Neither is work content, but togethe
 at where the dashboard lives. On a tailnet-only deployment — the one this was built for —
 that pointer is unusable without tailnet access. Expose the dashboard publicly and the
 calculus changes.
+
+## Desk routing: which device rings
+
+With an `NTFY_TOPIC_DESK` set, a push raised **while you are at the keyboard** goes to that
+topic instead of `NTFY_TOPIC`. Walk away past Settings → "Away after" and it goes back to the
+phone. Unset — the default — every push behaves exactly as the rest of this document
+describes, including the number of `ioreg` spawns per push.
+
+**Exclusive, never both.** `settings.idleSecs` is already tuned for the remote-answer hooks,
+and a double-buzz on every alert is a worse default than the rare missed one: an alert raised
+while you are at the desk does not reach the phone if you walk away ten seconds later.
+
+The rule is `atDesk(idleSecs, thresholdSecs)` in `notify.ts` — one predicate, three callers:
+`backAtDesk()` releasing held waits, the `requireAfk` clause suppressing a push, and this
+routing. Three cases fall back to the **phone**, all meaning "cannot tell":
+
+| Reading | Routes to | Why |
+|---|---|---|
+| idle ≥ threshold | phone | you are away — the phone is the point |
+| `null` (Docker, non-macOS) | phone | unreadable; the phone works without a browser running |
+| `idleSecs === 0` | phone | zero disables the idle gate everywhere else, so it disables this |
+
+**The desk topic has no `NotifyPolicy` of its own** — it mirrors the phone's events. This is
+routing, not a second policy, so nothing in `NotifyPolicy`, `DEFAULT_NOTIFY`, `mergeNotify` or
+the settings file moved, and there is no migration.
+
+**One `ioreg` per push.** `PredicateContext.readIdle` is a thunk precisely so a policy without
+`requireAfk` never pays ~40ms for a reading it will not use. Routing wants the same reading, so
+`maybeSend` memoises it: two consumers, at most one spawn — and still zero when neither wants
+it, because `ntfyTopicDesk` is checked before the thunk is touched. `test/notify.test.ts`
+counts the calls; deleting the memoisation takes that count to 2.
+
+## Landing on the tab you already have open
+
+The desk push's `Click` is **not** the dashboard route. It is
+`<DASHBOARD_LOCAL_URL>/api/focus?session=<id>`, and the reason is that ntfy cannot be made to
+focus an existing tab:
+
+- ntfy's service worker hardcodes `openWindow` for a click URL —
+  `else if (r.click) self.clients.openWindow(r.click)`. Its focus-an-existing-tab branch runs
+  only on the *no-click* path.
+- That branch could never help anyway: `clients.matchAll()` is same-origin by spec, so
+  ntfy.sh's worker can never see a tab on this dashboard's origin. Fixing ntfy upstream would
+  change nothing.
+
+So the tab ntfy opens is treated as a throwaway:
+
+1. `GET /api/focus` records the session in `lib/focus.ts` — a single slot, latest tap wins.
+2. It answers with a page that calls `window.close()`. Permitted because a
+   `clients.openWindow()` tab has one history entry and no opener, which satisfies Blink's rule
+   (closable when opened by DOM **or** the back/forward list has a single entry). Verified
+   2026-09-04. If an engine refuses, the page degrades to "You can close this tab."
+3. The dashboard tab you already had open claims it on its next `/api/sessions` poll, via
+   `SessionsResponse.focusSession`, and opens the drawer. **Its URL is untouched** — no
+   `?session=` is appended, which is what distinguishes this from the deep link above.
+
+The handoff is server-side rather than `BroadcastChannel` because the two tabs may not share
+an origin: under `pnpm dev` the client is on 5174 and the API on 4173.
+
+**When nothing is polling, it redirects instead** — `302` to `/?session=<id>`, so the throwaway
+tab *becomes* the dashboard rather than recording a tap that would only expire unread. That is
+also the path when you are on the Management, Usage or Settings section, since `SessionsView`
+unmounts and its poll stops with it: the feature degrades to a correctly deep-linked new tab
+rather than to nothing happening.
+
+**`/api/focus` is loopback-only, judged on the socket alone** (`classifyAddress`, never
+`classifyOrigin` — see the warning in `lib/origin.ts`). A remote user coming through a
+loopback-terminating proxy such as `pnpm tunnel` does pass, and that residual is accepted: the
+capability is "make an open dashboard tab select a session", nothing is returned and nothing
+persisted, and anyone through that proxy already has the spawn and answer endpoints.
+
+**The desk channel needs no `DASHBOARD_PUBLIC_URL` and no tunnel.** `clickUrl` returns `''`
+without a public URL and the header is dropped; `deskClickUrl` has no such dependency, so
+desktop notifications with a working deep link are available to someone who never sets up
+Tailscale. `DASHBOARD_LOCAL_URL` defaults to `http://localhost:<PORT>`, which is right for
+`pnpm start` and **wrong for `pnpm dev`** — set it to the Vite port there, or the redirect
+branch lands on a port serving no page.
 
 ## Answering "is it working?"
 

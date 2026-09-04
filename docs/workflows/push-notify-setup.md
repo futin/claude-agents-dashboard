@@ -122,6 +122,58 @@ string counts as set.
 container even a hand-written `localhost` would resolve to the container's own network
 namespace — so the tailnet hostname is the only useful value.
 
+## Optional: ring this Mac instead when you are at the desk
+
+The steps above reach your phone. At the desk that is the wrong device — so set a second
+topic and subscribe a desktop browser to it. A push raised while you are at the keyboard
+rings here; walk away past Settings → "Away after" and it goes back to the phone. Exclusive,
+never both. The mechanism is in
+[desk routing](../subsystems/push-notify.md#desk-routing-which-device-rings).
+
+1. **Generate a second topic** — `openssl rand -hex 16`. Do **not** derive it from
+   `NTFY_TOPIC` by appending `-desk`: leaking one would then leak the other. It is a
+   credential exactly like the first.
+2. **Put it in `.env`** as `NTFY_TOPIC_DESK` and restart the server.
+3. **Under `pnpm dev` only**, also set `DASHBOARD_LOCAL_URL=http://localhost:5174`. The
+   default is `http://localhost:<PORT>` (4173), which is right for `pnpm start` but serves no
+   page in dev, where Vite has the UI and 4173 answers API only.
+4. **Subscribe a desktop browser** — open `https://ntfy.sh/<your-desk-topic>`, then in that
+   web app's **Settings** tab turn **background notifications on**. Without that, banners
+   arrive only while an ntfy tab is open.
+
+Two limits worth knowing before you rely on it:
+
+- **Desktop Chrome, Firefox, Edge and Opera deliver web push only while the browser is
+  running.** The tab may be closed, the browser may not. Safari 16.1+ on macOS 13+ is the one
+  desktop browser that delivers with the browser closed, so it is the better receiver for an
+  always-on desk channel.
+- **The desk channel needs no `DASHBOARD_PUBLIC_URL` and no tunnel at all**, unlike the phone
+  link — so desktop notifications with a working deep link are available even if you never set
+  up Tailscale.
+
+Tapping a desk banner opens the drawer in the dashboard tab you already have open, and the
+throwaway tab ntfy opens closes itself. If nothing is polling — no dashboard tab, or you are
+on the Management/Usage/Settings section — it lands you on the dashboard in that tab instead.
+
+### ⚠️ macOS shows two identical "Google Chrome" rows, and only one delivers
+
+System Settings → Notifications lists **two entries called "Google Chrome"** — same name, same
+icon, nothing in the UI to tell them apart. They are different bundles:
+
+| Bundle | What it is |
+|---|---|
+| `com.google.Chrome` | Chrome's own UI notifications (downloads, update prompts) |
+| `com.google.Chrome.framework.AlertNotificationService` | the **alerts helper** — what web push from a site actually goes through |
+
+Enable only the first and you get the confusing symptom: the notification arrives, macOS
+records it, and it is never displayed. Enable the alerts helper.
+
+Do **not** try to diagnose this from `com.apple.ncprefs` flags — the values were byte-identical
+before and after the fix that changed the behaviour, so a flags diff proves nothing here. The
+reliable signal is the `presented` column in the Notification Center database
+(`~/Library/Group Containers/group.com.apple.usernoted/db2/db`): a notification that displayed
+has `presented=1`, one that was recorded and swallowed has `presented=0`.
+
 ## Failure modes
 
 Read the Test push result first; it distinguishes most of these.
@@ -146,11 +198,20 @@ Read the Test push result first; it distinguishes most of these.
   idle check sent the question to the terminal instead.
 - **Pushes for sessions you did not expect** — the policy is global, not per project. The
   three AND-layers (remote-answer on, away, auto-mode only) are the way to narrow it.
+- **The desk topic never rings, the phone always does** — read the Test push result: it names
+  which topic it routed to. It routes the way a real push would route *right now*, so if it
+  says "phone topic" while you are sitting at the keyboard, the idle reading disagrees with
+  you. `idleSecs` of 0 disables desk routing outright, and a machine where `ioreg` is
+  unreadable (Docker, non-macOS) always routes to the phone.
+- **The desk push arrives but nothing is displayed** — the macOS alerts-helper trap above.
+- **The desk push opens a blank tab that stays open** — the throwaway tab could not close
+  itself. Harmless: the drawer still opened in your real dashboard tab. The page says so.
 
 ## Rotating the topic
 
 There is no revocation: a topic is public the moment it is known. To rotate, generate a new
-one, change `NTFY_TOPIC`, restart the server, and re-subscribe the phone. The old topic
+one, change `NTFY_TOPIC` (or `NTFY_TOPIC_DESK`), restart the server, and re-subscribe the
+device. The two rotate independently, which is the point of not deriving one from the other. The old topic
 keeps existing on the ntfy server and anyone holding it keeps being able to publish to it —
 so the only thing that matters is that you stop listening to it.
 
