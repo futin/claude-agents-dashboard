@@ -112,6 +112,49 @@ Task sizes below are soft targets, not budgets.
 
 ---
 
+### Task 1 result — RUN 2026-09-04, gate PASSED
+
+**Run during grooming, at the user's request, before any of this plan was executed. The
+rest of Task 1 below is left as written for the record; do not re-run it.**
+
+Two probes, both in Playwright's bundled Chromium.
+
+**Probe 1 — the governing Blink rule, as a clean A/B.** Same page, same origin, same
+script; the only variable is `history.length`.
+
+| Tab shape | `window.close()` |
+|---|---|
+| `history.length: 2`, `opener: null` (Playwright's `about:blank` → navigate) | **refused** — console: `Scripts may close only the windows that were opened by them.` |
+| `history.length: 1`, `opener: null` (blank tab → `location.replace`) | **closed** — tab vanished from the tab list |
+
+The second row is the shape `clients.openWindow()` produces: a fresh top-level browsing
+context, one history entry, no opener. This confirms `LocalDOMWindow::close`'s rule —
+closable when opened by DOM **or** the back/forward list has a single entry — and the first
+row is the mutation-proof half: the close is not simply always permitted.
+
+**Probe 2 — the whole design end to end**, as a ~50-line throwaway (`/tmp/task17-spike/`,
+deleted; nothing in the repo was touched). A "dashboard" page polling every 500ms, plus a
+`/focus?session=<id>` endpoint with both branches:
+
+- Throwaway tab opened in the `clients.openWindow` shape → **closed itself**.
+- The already-open tab's drawer showed `abc12345-…` **via the focus handoff**, within one
+  poll.
+- That tab's URL stayed `http://localhost:8792/` — **no `?session=` appended**. This is the
+  property that separates this path from the `?session=` deep link, and it is asserted in
+  test case 10.
+- No dashboard polling → **`302` to `/?session=<id>`**, recording nothing.
+- `?session=../../etc/passwd` → **`400`**.
+
+**What this does NOT prove** — test case 12 still stands and still needs a human:
+
+- Playwright's Chromium, not the user's Google Chrome. The rule lives in Blink and is
+  shared, and the refusal string matched Chrome's verbatim, but the version is not identical.
+- `clients.openWindow` was never actually called. Its tab shape was reproduced
+  (`length 1`, no opener); the real call needs a `notificationclick` from a genuine push,
+  and clicking a macOS notification banner is not automatable.
+- Nothing about ntfy's transport, the web-push subscription, or whether the banner displays
+  at all (see the alerts-helper trap in Task 7).
+
 ### Task 1 — Gate: can a `clients.openWindow()` tab close itself?
 
 **This task is a spike. It keeps no code, and it decides whether Tasks 3–6 are built as
