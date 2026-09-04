@@ -47,7 +47,8 @@ import { notifyPermission, permissionWaits } from './lib/permissions.js';
 import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getSettings, setSettings } from './lib/settings.js';
-import { classifyOrigin } from './lib/origin.js';
+import { classifyAddress, classifyOrigin } from './lib/origin.js';
+import { dashboardOpen, focusPageHtml, notePoll, requestFocus, takeFocus } from './lib/focus.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
   MAX_LAUNCHING, adoptLaunched, launch, listLaunching, parseSpawnRequest, probeSpawn, stopLaunch
@@ -117,8 +118,12 @@ function sweepTerminalDecisions(): void {
 
 export function serveSessions(baseConfig: Config, res: ServerResponse, params?: URLSearchParams): void {
   const config = scanOverrides(baseConfig, params);
-  // Before the scan, not after: a wait the terminal already decided must not
-  // colour this tick's row blue either.
+  // Before the scan, not after: this poll happened whether or not the scan
+  // throws, and `/api/focus` reads it to decide whether a dashboard tab is
+  // watching (see lib/focus.ts).
+  notePoll();
+  // Before the scan too, and for its own reason: a wait the terminal already
+  // decided must not colour this tick's row blue either.
   sweepTerminalDecisions();
   let data: SessionsResponse;
   try {
@@ -510,6 +515,71 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
     spawnAvailable: probeSpawn(config),
     spawnMaxPermission: config.spawnMaxPermission
   });
+}
+
+/** A session id is a UUID; anything else is junk. Mirrors `readSessionParam` client-side. */
+const SESSION_ID_RE = /^[0-9a-fA-F-]{8,64}$/;
+
+/**
+ * `GET /api/focus` — where a tapped desk notification lands.
+ *
+ * ntfy's service worker always `openWindow`s a click URL, so this is answered in
+ * a brand-new throwaway tab. It records which session you tapped, and the
+ * dashboard tab you already had open picks it up on its next poll. See
+ * `lib/focus.ts` for why the handoff is server-side.
+ *
+ * **Loopback-only, judged on the socket alone.** Deliberately `classifyAddress`
+ * and not `classifyOrigin`: the latter consults the left-most `X-Forwarded-For`
+ * entry once the socket is loopback, and that entry is supplied by the peer — a
+ * remote client through `tailscale serve` can prepend its own value, since the
+ * proxy appends rather than replaces.
+ *
+ * The precise cost of using `classifyOrigin` here is not "anyone gets in" — it
+ * is that the verdict becomes **steerable by the caller, in both directions**: a
+ * proxied client sending nothing is judged by its real tailnet address and
+ * refused, while the same client prepending `127.0.0.1` is judged `local` and
+ * allowed. Same peer, opposite answers, decided by a header they write.
+ * `classifyAddress` reads the socket and nothing else, so every caller through a
+ * given path gets the same answer.
+ *
+ * Known residual, accepted: a remote user through that loopback-terminating
+ * proxy passes this guard, because their socket genuinely is loopback. What it
+ * buys them is making an open dashboard tab select a session — no data returned,
+ * nothing persisted — and anyone through that proxy already has the spawn and
+ * answer endpoints, which are orders of magnitude more powerful.
+ */
+export function serveFocus(
+  req: IncomingMessage,
+  res: ServerResponse,
+  params: URLSearchParams
+): void {
+  if (classifyAddress(req.socket?.remoteAddress) !== 'local') {
+    return sendJson(res, 403, { error: 'local only' });
+  }
+  const id = params.get('session') || '';
+  // Shape-checked, never existence-checked: answering differently for a real id
+  // would make this unauthenticated endpoint an oracle for which sessions exist.
+  // A well-formed unknown id is recorded and simply never matches a row.
+  if (!SESSION_ID_RE.test(id)) return sendJson(res, 400, { error: 'bad session id' });
+
+  // Nothing is polling — so a recorded focus would only expire unread. Send the
+  // throwaway tab to the dashboard instead, which makes it *become* the
+  // dashboard. This is also the path when the user is on Management/Usage/
+  // Settings: `SessionsView` unmounts and its poll stops, so this degrades to a
+  // correctly deep-linked new tab rather than to nothing happening at all.
+  // Relative on purpose: it keeps whatever origin the tab was opened at.
+  if (!dashboardOpen()) {
+    res.writeHead(302, {
+      Location: `/?session=${encodeURIComponent(id)}`,
+      'Cache-Control': 'no-store'
+    });
+    res.end();
+    return;
+  }
+
+  requestFocus(id);
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(focusPageHtml());
 }
 
 /**

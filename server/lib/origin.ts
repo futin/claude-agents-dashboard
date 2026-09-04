@@ -2,10 +2,17 @@
  * origin.ts — classify how a client reached the dashboard: loopback, the local
  * network, a Tailscale tailnet, or somewhere off-network.
  *
- * Display-only. The result rides along on `GET /api/health` and renders as a
- * badge in the toolbar; **nothing in the app makes an access decision from it**.
- * That is what makes the `X-Forwarded-For` branch below acceptable — see
- * `classifyOrigin`.
+ * `classifyOrigin` is display-only. Its result rides along on `GET /api/health`
+ * and renders as a badge in the toolbar; **nothing makes an access decision from
+ * that function**, which is what makes its `X-Forwarded-For` branch acceptable.
+ *
+ * ⚠️ `classifyAddress` is a different matter: `GET /api/focus` gates on it
+ * (`server/api.ts` `serveFocus`). That is deliberate and the two must not be
+ * swapped. `classifyOrigin` consults the left-most forwarded entry, which a peer
+ * behind a loopback-terminating proxy writes itself — so as a guard it returns
+ * whichever verdict the caller asks for, refusing an honest proxied client and
+ * admitting one that prepends `127.0.0.1`. Keep any future access decision on
+ * `classifyAddress`, which reads the socket and nothing else.
  *
  * Pure and zero-dep, like the rest of `server/lib`: no `tailscale` binary, no
  * network, no config. With Tailscale absent the tailnet branches simply never
