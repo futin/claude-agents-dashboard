@@ -3,6 +3,9 @@ id: idea-9
 title: Stop a running spawned session
 created: 2026-08-28
 tags: spawn, server, client
+updated: 2026-09-04T21:15:19Z
+promoted-to: task-19
+groom-elapsed: 222
 ---
 
 ## Problem
