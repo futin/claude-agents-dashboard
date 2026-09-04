@@ -324,9 +324,23 @@ So the tab ntfy opens is treated as a throwaway:
    `clients.openWindow()` tab has one history entry and no opener, which satisfies Blink's rule
    (closable when opened by DOM **or** the back/forward list has a single entry). Verified
    2026-09-04. If an engine refuses, the page degrades to "You can close this tab."
-3. The dashboard tab you already had open claims it on its next `/api/sessions` poll, via
-   `SessionsResponse.focusSession`, and opens the drawer. **Its URL is untouched** — no
-   `?session=` is appended, which is what distinguishes this from the deep link above.
+3. The dashboard tab you already had open claims it on its next `/api/focus/pending` poll
+   and opens the drawer, switching to the Sessions section first if you were elsewhere.
+   **Its URL is untouched** — no `?session=` is appended, which is what distinguishes this
+   from the deep link above.
+
+**The claim poll is its own endpoint, and that is load-bearing.** It first rode on
+`/api/sessions`, which was wrong: `SessionsView` owns that poll, so opening Management,
+Usage or **Settings** unmounts it and the polling stops dead — 0 requests, measured. A tap
+while you were on another section therefore did nothing at all, and once `POLL_FRESH_MS` had
+elapsed the server stopped believing a dashboard was open and started taking the redirect
+branch, opening a *second* dashboard tab: the exact outcome this design exists to prevent.
+Reported from real use on 2026-09-04, the first time the feature was tried from the Settings
+page it had just been enabled on.
+
+So `useFocusWatch` lives in the app shell and polls on every section, and it is that poll —
+not the session poll — that keeps `dashboardOpen()` honest. There must stay **exactly one**
+consumer: two polls claiming the same slot would race inside a single browser.
 
 The handoff is server-side rather than `BroadcastChannel` because the two tabs may not share
 an origin: under `pnpm dev` the client is on 5174 and the API on 4173.

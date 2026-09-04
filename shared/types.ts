@@ -533,6 +533,19 @@ export interface NotifyEventRequest {
   permissionMode?: string;
 }
 
+/**
+ * `GET /api/focus/pending` — a desk notification you tapped, to be opened in the
+ * app that is polling this.
+ *
+ * Consume-once **server-side**, so the field appears on exactly one response and
+ * the client needs no dedupe. Its own endpoint rather than a field on
+ * `/api/sessions` because that poll belongs to `SessionsView` and stops the
+ * moment another section is opened — see `serveFocusPending`.
+ */
+export interface FocusPendingResponse {
+  focusSession?: string;
+}
+
 /** `POST /api/notify/test` — what the Settings button reports back. */
 export interface NotifyTestResponse {
   outcome: string;
@@ -1174,21 +1187,6 @@ export interface SessionsResponse {
    * success and error snapshots — see `serveSessions`.
    */
   launching?: LaunchingSession[];
-  /**
-   * A session the user tapped a desk notification for, to be opened in the tab
-   * receiving this poll (see `server/lib/focus.ts`).
-   *
-   * Consume-once and **server-side**: set on the single poll following a
-   * `GET /api/focus` hit and absent on every other one, so the client needs no
-   * dedupe of its own. Optional so an older client ignores a field it doesn't
-   * know about, and attached on the error snapshot too — a failed scan is
-   * exactly when "did my notification work?" matters most.
-   *
-   * Distinct from the `?session=` deep link (`client/src/lib/deepLink.ts`),
-   * which is a URL the page was *opened* with. This one arrives at a page that
-   * is already open and leaves its URL untouched.
-   */
-  focusSession?: string;
   /**
    * Account rate-limit usage (5-hour + weekly), fetched live from Anthropic.
    * `null` when unavailable (no token, network error); absent when SHOW_USAGE

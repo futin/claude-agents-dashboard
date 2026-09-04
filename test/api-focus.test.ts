@@ -46,7 +46,7 @@ export async function run(): Promise<number> {
     await withServer(ENV, async h => {
       resetFocus();
       // One real poll, so `dashboardOpen()` is true the way it is in life.
-      await h.req('/api/sessions');
+      await h.req('/api/focus/pending');
       assert.equal(dashboardOpen(), true, 'the poll above must have registered');
 
       const reply = await h.req(`/api/focus?session=${ID}`);
@@ -74,10 +74,10 @@ export async function run(): Promise<number> {
 
   /* ------------------------------------------------- the poll payload */
 
-  check(await testAsync('focusSession is absent from a poll with nothing pending', async () => {
+  check(await testAsync('focusSession is absent from a pending poll with nothing tapped', async () => {
     await withServer(ENV, async h => {
       resetFocus();
-      const reply = await h.req('/api/sessions');
+      const reply = await h.req('/api/focus/pending');
       assert.equal(reply.status, 200);
       assert.ok(
         !('focusSession' in (reply.json ?? {})),
@@ -86,20 +86,54 @@ export async function run(): Promise<number> {
     });
   }));
 
-  check(await testAsync('focusSession rides exactly one poll after a tap', async () => {
+  check(await testAsync('focusSession rides exactly one pending poll after a tap', async () => {
     await withServer(ENV, async h => {
       resetFocus();
-      await h.req('/api/sessions');
+      await h.req('/api/focus/pending');
       await h.req(`/api/focus?session=${ID}`);
 
-      const first = await h.req('/api/sessions');
+      const first = await h.req('/api/focus/pending');
       assert.equal(first.json?.focusSession, ID);
 
-      const second = await h.req('/api/sessions');
+      const second = await h.req('/api/focus/pending');
       assert.ok(
         !('focusSession' in (second.json ?? {})),
         'consume-once — a second poll must not reopen the drawer'
       );
+    });
+  }));
+
+  // The regression this endpoint exists for: `/api/sessions` stops the moment
+  // another section is opened, so it must not be what keeps `dashboardOpen()`
+  // true, and it must not carry the claim either.
+  check(await testAsync('the session poll no longer carries or consumes the tap', async () => {
+    await withServer(ENV, async h => {
+      resetFocus();
+      await h.req('/api/focus/pending');
+      await h.req(`/api/focus?session=${ID}`);
+
+      const sessions = await h.req('/api/sessions');
+      assert.ok(
+        !('focusSession' in (sessions.json ?? {})),
+        'two consumers in one browser would race each other'
+      );
+      assert.equal(
+        (await h.req('/api/focus/pending')).json?.focusSession, ID,
+        'the session poll must not have eaten it'
+      );
+    });
+  }));
+
+  check(await testAsync('the pending poll alone keeps a dashboard counted as open', async () => {
+    await withServer(ENV, async h => {
+      resetFocus();
+      assert.equal(dashboardOpen(), false, 'a fresh store must start closed');
+      await h.req('/api/focus/pending');
+      assert.equal(
+        dashboardOpen(), true,
+        'polling only this endpoint — as the shell does on Settings — must count'
+      );
+      assert.equal((await h.req(`/api/focus?session=${ID}`)).status, 200, 'so /api/focus records rather than redirects');
     });
   }));
 
@@ -123,10 +157,10 @@ export async function run(): Promise<number> {
   check(await testAsync('the id length boundary is 64, not 65', async () => {
     await withServer(ENV, async h => {
       resetFocus();
-      await h.req('/api/sessions');
+      await h.req('/api/focus/pending');
       assert.equal((await h.req(`/api/focus?session=${'a'.repeat(64)}`)).status, 200);
       resetFocus();
-      await h.req('/api/sessions');
+      await h.req('/api/focus/pending');
       assert.equal((await h.req(`/api/focus?session=${'a'.repeat(65)}`)).status, 400);
     });
   }));

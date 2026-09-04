@@ -8,6 +8,7 @@
  *   GET  /api/sessions/:id/chat → a page of that session's chat history
  *   GET/POST /api/settings      → the non-per-device settings (see lib/settings.ts)
  *   GET  /api/focus             → where a tapped desk push lands (see lib/focus.ts)
+ *   GET  /api/focus/pending     → the app shell's claim poll for that tap
  *   everything else             → static files from client/dist (production build)
  *
  * In development you visit the Vite dev server (default :5174), which proxies
@@ -25,7 +26,7 @@ import type { Config } from './lib/config.js';
 import {
   serveSessions, serveSessionDetail, serveSessionChat,
   serveManagementIndex, serveManagementProject, serveManagementFile,
-  serveAnalytics, serveHealth, serveFocus, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
+  serveAnalytics, serveHealth, serveFocus, serveFocusPending, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
@@ -186,6 +187,11 @@ export function createRequestListener(config: Config): http.RequestListener {
     }
     // Where a tapped desk notification lands. Loopback-only, and answered in the
     // throwaway tab ntfy opened rather than in the dashboard tab (see lib/focus.ts).
+    // Before '/api/focus'. Both are exact paths so the router does not care, but
+    // the pair reads as a group and a future prefix match would.
+    if (u.pathname === '/api/focus/pending') {
+      return void serveFocusPending(res);
+    }
     if (u.pathname === '/api/focus') {
       return void serveFocus(req, res, u.searchParams);
     }

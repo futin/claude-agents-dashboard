@@ -165,11 +165,6 @@ export function serveSessions(baseConfig: Config, res: ServerResponse, params?: 
   // work?" matters most (see server/lib/spawn.ts).
   adoptLaunched(data.sessions.map(s => s.id));
   data.launching = listLaunching();
-  // A tapped desk notification, claimed by whichever poll gets here first.
-  // Attached on the error snapshot too, for the same reason `launching` is.
-  // `?? undefined` rather than `= null`: nothing pending must leave the key
-  // absent, not present-and-empty.
-  data.focusSession = takeFocus() ?? undefined;
   // Account usage (5h + weekly). Synchronous cache read; refresh happens in the
   // background. Fails open to null so it never blocks or breaks the response.
   if (config.showUsage) {
@@ -520,6 +515,28 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
     spawnAvailable: probeSpawn(config),
     spawnMaxPermission: config.spawnMaxPermission
   });
+}
+
+/**
+ * `GET /api/focus/pending` — the tapped-session claim, polled by the app shell.
+ *
+ * Separate from `/api/sessions` on purpose, and this is the whole reason it
+ * exists: `SessionsView` owns the session poll, so opening Management, Usage or
+ * **Settings** unmounts it and the polling stops. That made a tapped desk
+ * notification do nothing at all while you were on another section, and — once
+ * `POLL_FRESH_MS` had elapsed — made `/api/focus` take its redirect branch and
+ * open a *second* dashboard tab, which is the exact outcome this feature exists
+ * to avoid. Reported from real use on 2026-09-04.
+ *
+ * The app shell polls this on every section, so `notePoll()` here is also what
+ * keeps `dashboardOpen()` honest when the sessions list is not showing.
+ *
+ * Not loopback-gated: the dashboard reading it may legitimately be a phone.
+ */
+export function serveFocusPending(res: ServerResponse): void {
+  notePoll();
+  const id = takeFocus();
+  sendJson(res, 200, id ? { focusSession: id } : {});
 }
 
 /** A session id is a UUID; anything else is junk. Mirrors `readSessionParam` client-side. */
