@@ -3,6 +3,9 @@ id: task-15
 title: Split gap into pre-ledger, recorder-down and partial coverage, and disclose the split
 created: 2026-09-02
 from: idea-18
+updated: 2026-09-03T21:23:54Z
+started: 2026-09-03T20:56:57Z
+execute-elapsed: 1617
 ---
 
 ## Goal
@@ -406,3 +409,133 @@ fixture helpers to reuse).
 - The PR body follows `.github/pull_request_template.md`, and states plainly what was **not**
   verified: the `startProvable: false` path is exercised only by unit fixtures, since no real
   ledger here has ever rotated (287 days of recording away at the current line size).
+
+## Outcome
+
+**2026-09-03 — done.** `gap` is now three kinds (`pre-ledger` / `gap` / `partial`),
+every consumer routes through one exported `isUnpriced` predicate, and the rates payload
+carries a non-optional `coverage` object the card's second footer row reads. No fitted
+rate, baseline, deviation, verdict or `externalSharePct` moved.
+
+Delivered as planned, with three deviations, all noted below.
+
+### Deviations from the plan
+
+1. **Plan test case 9 was wrong about `usage-rate-classify.test.ts:92`.** The plan asserted
+   both existing `'gap'` assertions were zero-coverage cases that pass unchanged. `:92`'s
+   fixture records 2 of 5 minutes — *non-zero* coverage — so under the documented
+   classification order it is `partial`, not `gap`. Followed the classification order and
+   updated that one assertion (and its title) rather than the rule. `:120` is genuinely
+   zero-coverage and passes unchanged.
+2. **`external` is not among the footer clauses.** It already has its own pill on the row
+   above; repeating it would be the same number twice. `mixedPct` is a clause.
+3. **A middot separator between clauses**, found by the browser check: at desktop width the
+   8px flex gap alone let two clauses read as one sentence.
+
+Also added `formatShareOf`, which keeps one decimal below 1% — the recorder-down bucket is
+genuinely 0.2% of moved points and `Math.round` rendered it as `0%`, i.e. as an empty bucket.
+
+### Verification
+
+`pnpm typecheck` — clean, no output:
+
+```
+> claude-agents-dashboard@0.1.0 typecheck
+> tsc --noEmit
+```
+
+`pnpm test` — **1157 cases, 0 failures** (`grep -c '✓'` = 1157, `grep -c '✗'` = 0), up 31
+from the plan's cases (33 added test openers in `git diff`, 2 of which are re-emitted
+existing lines):
+
+```
+  18/18 passed
+ALL PASS
+case count: 1157
+0
+```
+
+**Case 11 was mutation-checked by hand.** Narrowing `isUnpriced` back to
+`return kind === 'gap'` and re-running `test/usage-rate-drift.test.ts`:
+
+```
+  ✗ all three unpriced kinds are out of the external denominator
+  ✗ MUTATION: a huge pre-ledger interval does not move the external share
+    the startup artifact must not be able to shrink a published share
+  ✗ no unpriced kind, and no external interval, ever feeds it
+  38 passed, 3 failed
+```
+
+The predicate was restored immediately; the three assertions pass again.
+
+**Live probe (case 34)** — `npx tsx scripts/probe-usage-split.ts --days 17 --dir <main checkout>`
+(the worktree has no logs of its own; they are gitignored and live in the main checkout):
+
+```
+  samples: 1648   ledger lines: 3335 (1335 carry req)
+
+  intervals: 1587
+    pre-ledger: 752
+    owned:claude-opus-5: 534
+    external: 104
+    mixed: 81
+    idle: 57
+    partial: 23
+    owned:claude-fable-5: 16
+    gap: 8
+    ...
+  recording start: 2026-08-31T07:41:07.602Z (provable)
+  ledger breaks inside the window: 12.36 h
+  coverage over 1290.0 moved points:
+    priced: 562 intervals, 608.0 pts, 47.1% of moved
+    mixed: 81 intervals, 99.0 pts, 7.7% of moved
+    external: 104 intervals, 111.0 pts, 8.6% of moved
+    preLedger: 752 intervals, 438.0 pts, 34.0% of moved
+    gap: 8 intervals, 2.0 pts, 0.2% of moved
+    partial: 23 intervals, 32.0 pts, 2.5% of moved
+```
+
+The recording start resolves **exactly** to the instant this task predicted
+(`2026-08-31T07:41:07.602Z`), `pre-ledger` carries 438.0 points against `gap`'s 2.0, and
+`partial` is 16x `gap` — the failure mode the probe exists to catch (`pre-ledger` 0, or
+every unpriced interval still `gap`) did not occur. Two figures drifted from the Goal
+table, both explained by a day of work since the measurement: moved points 1048 → 1290, so
+pre-ledger is 34.0% rather than 41.8% of a bigger denominator (its 438.0 points are
+unchanged, exactly as "ages out on its own" predicts), and `partial` is 23 intervals rather
+than 22 for the same 32.0 points.
+
+**Live endpoint** — `GET /api/usage/rates` against the real logs:
+
+```json
+"externalSharePct": 13.553113553113553,
+"coverage": {
+  "movedPct": 1291, "pricedPct": 609, "mixedPct": 99, "externalPct": 111,
+  "preLedgerPct": 438, "missingPct": 2, "partialPct": 32,
+  "recorderBreakHours": 12.363546111111111, "startProvable": true
+}
+```
+
+**Browser check (case 33)** — dev server on 5273/4273 (5174/4173 were the user's own; both
+were still listening afterwards), Usage → Token value, real logs copied into the worktree.
+The footer renders:
+
+```
+47% priced   34% predates recording — ages out on its own
+· 8% with no model holding 90% of the tokens
+· 2% from windows the recorder only part-covered
+· recorder down 12.4 h — cost 0.2% of what moved
+```
+
+No bucket renders as `0%`, no `NaN`, and at 560px it wraps one clause per line and still
+reads as prose. The desktop pass is what surfaced deviation 3 above.
+
+### Not verified
+
+- **The `startProvable: false` path is only exercised by unit fixtures.** No ledger here has
+  ever rotated — at ~85 bytes a line that is ~287 days of recording away — so the rotation
+  caveat sentence has never been rendered against real data.
+- **The 16 MB rotation-guard test writes a real file** and asserts `null`; it does not prove
+  behaviour against a ledger that actually *was* trimmed by `rotateLedgerIfNeeded`.
+- Screenshots and the copied `.usage-{history,ledger}.jsonl` / `.dashboard-settings.json`
+  used for the browser check were deleted afterwards; the working tree carries source
+  changes only.

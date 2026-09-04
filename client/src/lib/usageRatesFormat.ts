@@ -5,7 +5,7 @@
  * here rounds a *decision* — the verdict arrives from the server.
  */
 
-import type { ModelRateVerdict } from '../../../shared/types';
+import type { ModelRateVerdict, UsageCoverage } from '../../../shared/types';
 
 /**
  * Tokens, at a magnitude a person can hold in their head. One decimal in the
@@ -90,4 +90,76 @@ export function verdictText(verdict: ModelRateVerdict): { label: string; hint: s
 export function formatSharePct(pct: number | null): string | null {
   if (pct === null || !Number.isFinite(pct)) return null;
   return `${Math.round(pct)}%`;
+}
+
+/**
+ * One bucket's share of everything that moved. One decimal under 1%, because a
+ * real 0.2% rounded to `0%` reads as a bucket that is empty — and the whole
+ * point of the split is that one of these buckets is genuinely tiny.
+ */
+export function formatShareOf(points: number, movedPct: number): string {
+  if (movedPct <= 0 || !Number.isFinite(points / movedPct)) return '0%';
+  const pct = (points / movedPct) * 100;
+  return pct > 0 && pct < 1 ? pct.toFixed(1) + '%' : Math.round(pct) + '%';
+}
+
+/**
+ * The honest headline: how much of the measured movement actually reached a
+ * rate. Null when nothing moved — a share of nothing is not 0%.
+ */
+export function pricedPillText(coverage: UsageCoverage): string | null {
+  if (coverage.movedPct <= 0) return null;
+  return `${formatShareOf(coverage.pricedPct, coverage.movedPct)} priced`;
+}
+
+/**
+ * The refusals, largest first, each named for its cause — and **only** the ones
+ * that cost something: a row of zeroes reads as a fault.
+ *
+ * `external` is deliberately not among them; it has its own pill beside this
+ * row already. When the start of recording cannot be proven the pre-ledger
+ * clause is replaced by a caveat that leads, because it qualifies every other
+ * number here rather than adding to them.
+ */
+export function coverageClauses(coverage: UsageCoverage): string[] {
+  const { movedPct, startProvable } = coverage;
+  if (movedPct <= 0) return [];
+  const share = (points: number): string => formatShareOf(points, movedPct);
+  const out: string[] = [];
+
+  if (!startProvable) {
+    out.push('the ledger has rotated, so the start of recording is unknown — '
+      + 'whatever predates it is counted as recorder downtime below');
+  }
+
+  const ranked: { points: number; text: string }[] = [];
+  if (startProvable && coverage.preLedgerPct > 0) {
+    ranked.push({
+      points: coverage.preLedgerPct,
+      text: `${share(coverage.preLedgerPct)} predates recording — ages out on its own`
+    });
+  }
+  if (coverage.missingPct > 0 || coverage.recorderBreakHours > 0) {
+    // The hours and the points together, always: 12.4 h beside nothing reads
+    // as 12.4 h of lost spend, which is the misreading this task exists to fix.
+    ranked.push({
+      points: coverage.missingPct,
+      text: `recorder down ${coverage.recorderBreakHours.toFixed(1)} h`
+        + ` — cost ${share(coverage.missingPct)} of what moved`
+    });
+  }
+  if (coverage.partialPct > 0) {
+    ranked.push({
+      points: coverage.partialPct,
+      text: `${share(coverage.partialPct)} from windows the recorder only part-covered`
+    });
+  }
+  if (coverage.mixedPct > 0) {
+    ranked.push({
+      points: coverage.mixedPct,
+      text: `${share(coverage.mixedPct)} with no model holding 90% of the tokens`
+    });
+  }
+  ranked.sort((a, b) => b.points - a.points);
+  return [...out, ...ranked.map(r => r.text)];
 }

@@ -14,10 +14,11 @@ import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
 import { deriveProfile, profileSnapshot, readRecentSamples } from './lib/usage-history.js';
 import type { ProfileState, UsageSample } from './lib/usage-history.js';
-import { readLedgerSince } from './lib/usage-ledger.js';
+import { ledgerStartMs, readLedgerSince } from './lib/usage-ledger.js';
 import type { LedgerLine } from './lib/usage-ledger.js';
 import {
-  BASELINE_MS, currentRange, driftRow, externalShare, fitSplits, joinIntervals
+  BASELINE_MS, coverageBreakdown, currentRange, driftRow, externalShare, fitSplits,
+  joinIntervals, ledgerBreakMs
 } from './lib/usage-rate.js';
 import { HOURS_PER_WEEK, confidenceOf, localOffsetMinutes, walkForward } from './lib/usage-forecast.js';
 import {
@@ -651,13 +652,25 @@ export function serveUsageProfile(res: ServerResponse): void {
  */
 export const RATES_HISTORY_BYTES = 4_194_304;
 
-/** An honest empty body — no ledger yet, recording off, or a failed fit. */
+/**
+ * An honest empty body — no ledger yet, recording off, or a failed fit.
+ *
+ * `coverage` is present and zeroed rather than absent: the counters have no
+ * nulls, so "nothing measured" is a row of measured zeros, and an optional
+ * field here would push a null check into the card for a state that cannot
+ * happen. `startProvable` is false because nothing was read to prove it.
+ */
 function emptyRates(nowMs: number, recording: boolean, error?: true): UsageRatesResponse {
   return {
     generatedAt: new Date(nowMs).toISOString(),
     recording,
     models: [],
     externalSharePct: null,
+    coverage: {
+      movedPct: 0, pricedPct: 0, mixedPct: 0, externalPct: 0,
+      preLedgerPct: 0, missingPct: 0, partialPct: 0,
+      recorderBreakHours: 0, startProvable: false
+    },
     ...(error ? { error: true } : {})
   };
 }
@@ -677,11 +690,16 @@ export function shapeUsageRates(opts: {
   samples: UsageSample[];
   ledger: LedgerLine[];
   nowMs: number;
+  /**
+   * When recording provably began, or null when the ledger cannot prove it.
+   * A parameter rather than a read, so this stays pure.
+   */
+  ledgerStartMs: number | null;
 }): UsageRatesResponse {
-  const { recording, samples, ledger, nowMs } = opts;
+  const { recording, samples, ledger, nowMs, ledgerStartMs: startMs } = opts;
   if (!recording) return emptyRates(nowMs, false);
 
-  const intervals = joinIntervals(samples, ledger);
+  const intervals = joinIntervals(samples, ledger, startMs);
   const models = new Set<string>();
   for (const interval of intervals) {
     if (typeof interval.kind === 'object') models.add(interval.kind.model);
@@ -710,11 +728,28 @@ export function shapeUsageRates(opts: {
   // how much of everything behind these numbers had to be thrown away.
   const share = externalShare(intervals, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY);
 
+  // Deliberately the same horizon as `externalSharePct` above: two disclosure
+  // figures on one card that quietly spanned different windows would be a
+  // defect, not a nuance.
+  const buckets = coverageBreakdown(intervals, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY);
+  const breakMs = ledgerBreakMs(ledger, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY);
+
   return {
     generatedAt: new Date(nowMs).toISOString(),
     recording: true,
     models: rows,
-    externalSharePct: share === null ? null : share * 100
+    externalSharePct: share === null ? null : share * 100,
+    coverage: {
+      movedPct: buckets.moved,
+      pricedPct: buckets.priced,
+      mixedPct: buckets.mixed,
+      externalPct: buckets.external,
+      preLedgerPct: buckets.preLedger,
+      missingPct: buckets.gap,
+      partialPct: buckets.partial,
+      recorderBreakHours: breakMs / 3_600_000,
+      startProvable: startMs !== null
+    }
   };
 }
 
@@ -726,8 +761,8 @@ export function shapeUsageRates(opts: {
  * than a 500 — the same posture as `serveUsageProfile`, and for the same
  * reason: this is a disclosure view, and a torn one is worse than an empty one.
  *
- * `dir` is injectable so a test can point both readers at a fixture; production
- * omits it and both resolve from the repo root.
+ * `dir` is injectable so a test can point all three readers at a fixture;
+ * production omits it and they all resolve from the repo root.
  */
 export function serveUsageRates(res: ServerResponse, dir?: string): void {
   const now = Date.now();
@@ -738,6 +773,7 @@ export function serveUsageRates(res: ServerResponse, dir?: string): void {
       recording,
       samples: readRecentSamples(dir, RATES_HISTORY_BYTES),
       ledger: readLedgerSince(now - BASELINE_MS, dir),
+      ledgerStartMs: ledgerStartMs(dir),
       nowMs: now
     }));
   } catch {

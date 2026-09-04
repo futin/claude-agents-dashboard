@@ -267,8 +267,58 @@ export interface UsageRatesResponse {
    * Disclosed because it is the one systematic bias in the measurement.
    */
   externalSharePct: number | null;
+  /**
+   * Which refusals cost what, over the same horizon as `externalSharePct`.
+   * Never absent — an empty body carries a zeroed instance.
+   */
+  coverage: UsageCoverage;
   /** Only set when the fit itself failed; a missing ledger is not an error. */
   error?: boolean;
+}
+
+/**
+ * How much of the measured spend reached a rate, and what each refusal cost.
+ *
+ * Every field but `recorderBreakHours` and `startProvable` is in utilization
+ * percentage **points** — not percentages — so a reader can check that the
+ * buckets sum to `movedPct`. Unlike the rates beside them these are
+ * **counters, not fits**: there are no nulls here and a zero is a measured
+ * zero, not an absence of evidence.
+ *
+ * `pricedPct + mixedPct + externalPct + preLedgerPct + missingPct +
+ * partialPct === movedPct`. Idle intervals are in none of them and out of
+ * `movedPct`: they measure nothing moving.
+ */
+export interface UsageCoverage {
+  /** The denominator: every point the 5-hour counter moved in the horizon. */
+  movedPct: number;
+  /** Points in intervals one model owned — the ones a rate is fitted on. */
+  pricedPct: number;
+  /** No model held 90% of the tokens, so no rate could be attributed. */
+  mixedPct: number;
+  /** Moved on almost no local spend — another device on the same account. */
+  externalPct: number;
+  /** Provably before the ledger existed. Benign: it ages out of the window on its own. */
+  preLedgerPct: number;
+  /** The recorder was down — recording had begun and covered none of the span. */
+  missingPct: number;
+  /** The recorder ran but covered under 80% of the span. */
+  partialPct: number;
+  /**
+   * **Hours**, not points: how long the ledger's own lines failed to abut
+   * inside the horizon. A different measurement from `missingPct` — most such
+   * breaks overlap no interval at all, because the server that writes the
+   * ledger also writes the history log. The hours say how much *time* went
+   * unrecorded, the points say what it cost.
+   */
+  recorderBreakHours: number;
+  /**
+   * Whether the start of recording could be proven from the ledger's first
+   * line. False when there is no ledger or it may have rotated — and then
+   * `preLedgerPct` is 0 and `missingPct` has absorbed it, which the card says
+   * out loud rather than reporting downtime that never happened.
+   */
+  startProvable: boolean;
 }
 
 export interface RateLimit {

@@ -16,7 +16,7 @@ import path from 'node:path';
 
 import { shapeUsageRates } from '../server/api.js';
 import { readRecentSamples } from '../server/lib/usage-history.js';
-import { LEDGER_FILE, readLedgerSince } from '../server/lib/usage-ledger.js';
+import { LEDGER_FILE, ledgerStartMs, readLedgerSince } from '../server/lib/usage-ledger.js';
 import { BASELINE_MS } from '../server/lib/usage-rate.js';
 import { testAsync, withServer } from './api-harness.js';
 
@@ -141,6 +141,7 @@ export async function run(): Promise<number> {
         recording: true,
         samples: readRecentSamples(dir),
         ledger: readLedgerSince(nowMs - BASELINE_MS, dir),
+        ledgerStartMs: ledgerStartMs(dir),
         nowMs
       });
       assert.strictEqual(body.models.length, 1, JSON.stringify(body.models));
@@ -168,8 +169,117 @@ export async function run(): Promise<number> {
     }
   }));
 
+  check(test('the coverage counters are present and zeroed on an empty body', () => {
+    // The response type is the source of truth: `coverage` is never absent, so
+    // the card needs no null check for a state that cannot happen. A zero here
+    // is a measured zero — these are counters, not fits.
+    const zeroed = {
+      movedPct: 0, pricedPct: 0, mixedPct: 0, externalPct: 0,
+      preLedgerPct: 0, missingPct: 0, partialPct: 0,
+      recorderBreakHours: 0, startProvable: false
+    };
+    const off = shapeUsageRates({
+      recording: false, samples: [], ledger: [], ledgerStartMs: null, nowMs: T0
+    });
+    assert.deepStrictEqual(off.coverage, zeroed, 'recording off');
+    const missing = path.join(os.tmpdir(), 'rates-coverage-none-' + T0);
+    const empty = shapeUsageRates({
+      recording: true,
+      samples: readRecentSamples(missing),
+      ledger: readLedgerSince(0, missing),
+      ledgerStartMs: ledgerStartMs(missing),
+      nowMs: T0
+    });
+    assert.deepStrictEqual(empty.coverage, zeroed, 'recording on with nothing on disk');
+  }));
+
+  check(test('a fitted body\'s buckets sum to what moved, and priced matches its rows', () => {
+    const dir = fixtureDir();
+    try {
+      const nowMs = T0 + 11 * MIN;
+      const body = shapeUsageRates({
+        recording: true,
+        samples: readRecentSamples(dir),
+        ledger: readLedgerSince(nowMs - BASELINE_MS, dir),
+        ledgerStartMs: ledgerStartMs(dir),
+        nowMs
+      });
+      const c = body.coverage;
+      assert.strictEqual(
+        c.pricedPct + c.mixedPct + c.externalPct + c.preLedgerPct + c.missingPct + c.partialPct,
+        c.movedPct
+      );
+      // Ten intervals of 0.5 points, every one of them owned by `opus-5`.
+      assert.strictEqual(c.movedPct, 5);
+      assert.strictEqual(c.pricedPct, 5);
+      assert.strictEqual(c.pricedPct, body.models[0].utilSum, 'priced is exactly the points behind the row');
+      // `fixtureDir` writes its two dates as two blocks of abutting lines with
+      // nothing between them, so the day boundary is itself a recorder break —
+      // the one hole in the window, and the whole of the figure.
+      assert.strictEqual(c.recorderBreakHours, (DAY - 5 * MIN) / 3_600_000,
+        'the only hole is the fixture\'s own day boundary');
+      assert.strictEqual(c.startProvable, true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
+
+  check(test('coverage spans the baseline horizon, exactly like externalSharePct', () => {
+    const dir = fixtureDir();
+    try {
+      // Five days on, so every interval is older than the 3-day current window
+      // but well inside the 17-day baseline. Two disclosure figures on one card
+      // must never quietly describe different windows.
+      const nowMs = T0 + 11 * MIN + 5 * 86_400_000;
+      const body = shapeUsageRates({
+        recording: true,
+        samples: readRecentSamples(dir),
+        ledger: readLedgerSince(nowMs - BASELINE_MS, dir),
+        ledgerStartMs: ledgerStartMs(dir),
+        nowMs
+      });
+      assert.strictEqual(body.models[0].intervals, 0, 'nothing is in the current window');
+      assert.strictEqual(body.coverage.movedPct, 5, 'but the disclosure still sees all of it');
+      assert.strictEqual(body.coverage.pricedPct, 5);
+      assert.strictEqual(body.externalSharePct, 0, 'the same horizon as the share beside it');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
+
+  check(test('an unprovable start puts the pre-ledger points into missing, and says so', () => {
+    const dir = fixtureDir();
+    try {
+      // Past both of the fixture's UTC dates, so a ledger starting `now` leaves
+      // every one of its ten intervals before that start. Stopping inside the
+      // first date would split the fixture and test the bucketing on half of it.
+      const nowMs = T0 + DAY + 11 * MIN;
+      const samples = readRecentSamples(dir);
+      // No ledger at all: every interval is uncovered, so the only thing that
+      // decides `pre-ledger` vs `gap` is whether the start could be proven.
+      const provable = shapeUsageRates({
+        recording: true, samples, ledger: [], ledgerStartMs: nowMs, nowMs
+      });
+      assert.strictEqual(provable.coverage.preLedgerPct, 5);
+      assert.strictEqual(provable.coverage.missingPct, 0);
+      assert.strictEqual(provable.coverage.startProvable, true);
+
+      const unprovable = shapeUsageRates({
+        recording: true, samples, ledger: [], ledgerStartMs: null, nowMs
+      });
+      assert.strictEqual(unprovable.coverage.preLedgerPct, 0, 'nothing may be claimed as pre-ledger');
+      assert.strictEqual(unprovable.coverage.missingPct, 5, 'it is absorbed by the conservative bucket');
+      assert.strictEqual(unprovable.coverage.startProvable, false);
+      assert.strictEqual(unprovable.coverage.movedPct, 5, 'and the denominator is unchanged either way');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
+
   check(test('recording off → an honest empty body, no error flag', () => {
-    const body = shapeUsageRates({ recording: false, samples: [], ledger: [], nowMs: T0 });
+    const body = shapeUsageRates({
+      recording: false, samples: [], ledger: [], ledgerStartMs: null, nowMs: T0
+    });
     assert.strictEqual(body.recording, false);
     assert.deepStrictEqual(body.models, []);
     assert.strictEqual(body.externalSharePct, null);
@@ -183,6 +293,7 @@ export async function run(): Promise<number> {
       recording: true,
       samples: readRecentSamples(missing),
       ledger: readLedgerSince(0, missing),
+      ledgerStartMs: ledgerStartMs(missing),
       nowMs: T0
     });
     assert.strictEqual(body.recording, true, 'the recorder is on — say so');
@@ -199,6 +310,7 @@ export async function run(): Promise<number> {
         recording: true,
         samples: readRecentSamples(dir),
         ledger: readLedgerSince(nowMs - BASELINE_MS, dir),
+        ledgerStartMs: ledgerStartMs(dir),
         nowMs
       });
       assert.strictEqual(body.models.length, 1, JSON.stringify(body.models));
@@ -242,6 +354,7 @@ export async function run(): Promise<number> {
         recording: true,
         samples: readRecentSamples(dir),
         ledger: readLedgerSince(nowMs - BASELINE_MS, dir),
+        ledgerStartMs: ledgerStartMs(dir),
         nowMs
       });
       assert.deepStrictEqual(body.models.map(m => m.model), ['opus-5', 'fable-5']);

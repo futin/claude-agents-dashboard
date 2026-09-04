@@ -1,7 +1,8 @@
 import type { ModelRateRow } from '../../../../shared/types';
 import { useUsageRates } from '../../hooks/useUsageRates';
 import {
-  baselineText, evidenceText, formatDeviation, formatSharePct, formatTok, rawAsideText, verdictText
+  baselineText, coverageClauses, evidenceText, formatDeviation, formatSharePct,
+  formatTok, pricedPillText, rawAsideText, verdictText
 } from '../../lib/usageRatesFormat';
 
 /**
@@ -15,6 +16,11 @@ import {
  * an explicitly labelled translation. `collecting` is a first-class state, not
  * an empty row — most models sit there for the first fortnight. No `title`
  * attributes: this board is read from a phone, where `title` never fires.
+ *
+ * The second footer row leads with the **priced** share rather than with the
+ * refusals: most of what the old single `gap` counter reported was spend that
+ * simply predates the recorder, so leading with the refusals made a startup
+ * artifact read as a fault. Buckets that cost nothing print nothing.
  */
 
 const BADGE_CLASS: Record<ModelRateRow['verdict'], string> = {
@@ -61,6 +67,8 @@ export function UsageRates() {
   if (error || !rates) return <div className="up-note">The token rates could not be read.</div>;
 
   const share = formatSharePct(rates.externalSharePct);
+  const priced = pricedPillText(rates.coverage);
+  const clauses = coverageClauses(rates.coverage);
 
   return (
     <div className="up">
@@ -106,6 +114,19 @@ export function UsageRates() {
         <div className="rates-foot">
           <span className="rates-pill">{share} external</span>
           <span>burned outside this machine · excluded from the fit</span>
+        </div>
+      )}
+
+      {priced !== null && (
+        <div className="rates-foot">
+          <span className="rates-pill">{priced}</span>
+          {/* A leading middot from the second clause on: the flex gap alone is
+              8px, which at desktop width let two clauses read as one sentence.
+              Kept inside the clause's own span so a wrap still breaks between
+              clauses rather than inside one. */}
+          {clauses.map((clause, i) => (
+            <span key={clause}>{i === 0 ? clause : `· ${clause}`}</span>
+          ))}
         </div>
       )}
     </div>

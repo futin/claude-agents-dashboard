@@ -23,11 +23,36 @@ export const IDLE_EPS = 0.01;
 /** A percent is ~a million weighted tokens, so a rise backed by less was another device. */
 export const EXTERNAL_WEIGHTED_MAX = 5_000;
 
-/** Below this the recorder missed minutes we would otherwise price — the interval is `gap`. */
+/** Below this the recorder missed minutes we would otherwise price — the interval is unpriced. */
 export const LEDGER_COVERAGE_MIN = 0.8;
 
+/**
+ * The three kinds whose tokens are missing by construction — and they are three
+ * because the reasons differ, not the arithmetic:
+ *
+ * - `pre-ledger` — the span provably predates the ledger. Benign, and it ages
+ *   out of every window on its own; nothing is broken.
+ * - `gap` — recording had begun and covered *none* of the span: the recorder
+ *   was down. This is the only one of the three that reports a fault.
+ * - `partial` — the recorder ran but covered under {@link LEDGER_COVERAGE_MIN}
+ *   of the span, so the tokens are there but incomplete.
+ */
+export type UnpricedKind = 'pre-ledger' | 'gap' | 'partial';
+
 /** What an interval turned out to be. Only `{model}` is ever fitted on; the rest are named separately because they mean different things. */
-export type IntervalKind = 'idle' | 'external' | 'mixed' | 'gap' | { model: string };
+export type IntervalKind = 'idle' | 'external' | 'mixed' | UnpricedKind | { model: string };
+
+/**
+ * Is this a kind no rate may ever be fitted on?
+ *
+ * **Every consumer asks through here rather than naming a kind.** The two sites
+ * that used to compare against `'gap'` literally behaved differently under the
+ * split — one fails closed, the other fails *open* and would have quietly
+ * admitted `pre-ledger` and `partial` intervals into the two-term fit.
+ */
+export function isUnpriced(kind: IntervalKind): boolean {
+  return kind === 'pre-ledger' || kind === 'gap' || kind === 'partial';
+}
 
 /** One consecutive pair of history samples, with the tokens spent between them. */
 export interface Interval {
@@ -122,12 +147,39 @@ function gather(ledger: LedgerLine[], fromT: number, toT: number): {
   return { tok, req, reqUsable, coveredMs };
 }
 
-function classify(dUtil: number, tok: Record<string, TokenCounts>, covered: boolean): IntervalKind {
-  if (!covered) return 'gap';
-  if (dUtil <= IDLE_EPS) return 'idle';
-  if (totalWeighted(tok) < EXTERNAL_WEIGHTED_MAX) return 'external';
-  const model = dominantModel(tok);
-  return model === null ? 'mixed' : { model };
+/**
+ * Which of the six kinds this interval is, coverage first.
+ *
+ * Under-covered spans split three ways, in this order: provably before
+ * recording began, then nothing recorded at all, then something but not enough.
+ * Two boundary choices are deliberate and pinned by tests:
+ *
+ * - The pre-ledger test is on `toT`, not `fromT`. An interval that *straddles*
+ *   the start of recording is not provably unrecorded, so it falls through to
+ *   `gap`/`partial` on its actual coverage. That overstates the recorder-down
+ *   bucket by at most one interval per install; testing `fromT` instead would
+ *   swallow a genuine hole that happens to abut the boundary.
+ * - `ledgerStartMs === null` — no ledger, or one that may have rotated —
+ *   collapses `pre-ledger` into `gap`. The conservative reading, and the honest
+ *   direction to fail in.
+ */
+function classify(
+  dUtil: number,
+  tok: Record<string, TokenCounts>,
+  coveredMs: number,
+  durationMs: number,
+  toT: number,
+  ledgerStartMs: number | null
+): IntervalKind {
+  if (coveredMs / durationMs >= LEDGER_COVERAGE_MIN) {
+    if (dUtil <= IDLE_EPS) return 'idle';
+    if (totalWeighted(tok) < EXTERNAL_WEIGHTED_MAX) return 'external';
+    const model = dominantModel(tok);
+    return model === null ? 'mixed' : { model };
+  }
+  if (ledgerStartMs !== null && toT <= ledgerStartMs) return 'pre-ledger';
+  if (coveredMs <= 0) return 'gap';
+  return 'partial';
 }
 
 /**
@@ -136,8 +188,15 @@ function classify(dUtil: number, tok: Record<string, TokenCounts>, covered: bool
  * A pair survives only inside one window and only rising, and is dropped rather
  * than clamped — a clamped interval contributes tokens with no price. An
  * out-of-order pair is discarded, not sorted: upstream is wrong.
+ *
+ * `ledgerStartMs` is when recording provably began (`ledgerStartMs()` in
+ * `usage-ledger.ts`), and it only ever separates `pre-ledger` from `gap`.
+ * Optional and null by default so a caller with no answer — a probe, a test —
+ * gets the conservative classification rather than a compile error.
  */
-export function joinIntervals(samples: UsageSample[], ledger: LedgerLine[]): Interval[] {
+export function joinIntervals(
+  samples: UsageSample[], ledger: LedgerLine[], ledgerStartMs: number | null = null
+): Interval[] {
   const out: Interval[] = [];
   for (let i = 1; i < samples.length; i++) {
     const from = samples[i - 1];
@@ -149,8 +208,10 @@ export function joinIntervals(samples: UsageSample[], ledger: LedgerLine[]): Int
     if (dUtil < 0) continue;
 
     const { tok, req, reqUsable, coveredMs } = gather(ledger, from.t, to.t);
-    const covered = coveredMs / durationMs >= LEDGER_COVERAGE_MIN;
-    out.push({ fromT: from.t, toT: to.t, dUtil, tok, req, reqUsable, kind: classify(dUtil, tok, covered) });
+    out.push({
+      fromT: from.t, toT: to.t, dUtil, tok, req, reqUsable,
+      kind: classify(dUtil, tok, coveredMs, durationMs, to.t, ledgerStartMs)
+    });
   }
   return out;
 }
@@ -358,21 +419,91 @@ export function driftRow(intervals: Interval[], model: string, nowMs: number): D
 /**
  * Share of the *moved* utilization that this machine cannot account for.
  *
- * `idle` and `gap` are out of the denominator — counting our own downtime as
- * another device's spend would turn a server restart into a claim about the
- * account. Null rather than 0 when nothing moved: "no external burn" and "no
- * evidence either way" are different statements.
+ * `idle` and every unpriced kind are out of the denominator — counting our own
+ * downtime as another device's spend would turn a server restart into a claim
+ * about the account, and counting the span that predates recording would turn
+ * the recorder's own start into one. Null rather than 0 when nothing moved:
+ * "no external burn" and "no evidence either way" are different statements.
  */
 export function externalShare(intervals: Interval[], sinceMs: number, untilMs: number): number | null {
   let external = 0, moved = 0;
   for (const interval of intervals) {
     if (interval.toT < sinceMs || interval.toT > untilMs) continue;
-    if (interval.kind === 'idle' || interval.kind === 'gap') continue;
+    if (interval.kind === 'idle' || isUnpriced(interval.kind)) continue;
     moved += interval.dUtil;
     if (interval.kind === 'external') external += interval.dUtil;
   }
   if (moved <= 0) return null;
   return external / moved;
+}
+
+/** Utilization points per interval kind over one window. Counters, not fits — a zero is a measured zero. */
+export interface CoverageBreakdown {
+  /** Every non-`idle` point in the window: the denominator every share below is read against. */
+  moved: number;
+  /** Points in `{model}`-owned intervals — the only ones that reach a rate. */
+  priced: number;
+  mixed: number;
+  external: number;
+  preLedger: number;
+  /** Recorder down: recording had begun and covered none of the span. */
+  gap: number;
+  partial: number;
+}
+
+/**
+ * Utilization points per bucket over `[sinceMs, untilMs)`, so the card can say
+ * *which* refusal cost what.
+ *
+ * `idle` is in no bucket and out of `moved`, for the same reason
+ * {@link externalShare} excludes it: it is a measurement of nothing moving, and
+ * putting it in the denominator would shrink every share by however long the
+ * machine sat quiet. Every other bucket sums to `moved` exactly, which is what
+ * lets a reader check the split themselves.
+ *
+ * Windowed on `toT` and half-open, matching the fit's own windows.
+ */
+export function coverageBreakdown(
+  intervals: Interval[], sinceMs: number, untilMs: number
+): CoverageBreakdown {
+  const out: CoverageBreakdown = {
+    moved: 0, priced: 0, mixed: 0, external: 0, preLedger: 0, gap: 0, partial: 0
+  };
+  for (const interval of intervals) {
+    if (interval.toT < sinceMs || interval.toT >= untilMs) continue;
+    if (interval.kind === 'idle') continue;
+    out.moved += interval.dUtil;
+    if (typeof interval.kind === 'object') out.priced += interval.dUtil;
+    else if (interval.kind === 'mixed') out.mixed += interval.dUtil;
+    else if (interval.kind === 'external') out.external += interval.dUtil;
+    else if (interval.kind === 'pre-ledger') out.preLedger += interval.dUtil;
+    else if (interval.kind === 'gap') out.gap += interval.dUtil;
+    else out.partial += interval.dUtil;
+  }
+  return out;
+}
+
+/**
+ * Milliseconds inside `[sinceMs, untilMs)` that fall between two ledger lines
+ * which do not abut — how long the recorder was not running.
+ *
+ * A property of the ledger rather than of the join, which is the point: the
+ * server that writes the ledger also writes the history log, so most of these
+ * breaks overlap no interval at all and the point buckets cannot see them. The
+ * two measures answer different questions — these hours say how much of the
+ * *time* went unrecorded, {@link coverageBreakdown} says how much of the
+ * *spend* that cost. A break straddling an edge is clamped to the window, and
+ * out-of-order or overlapping lines contribute nothing rather than negative
+ * time.
+ */
+export function ledgerBreakMs(ledger: LedgerLine[], sinceMs: number, untilMs: number): number {
+  let total = 0;
+  for (let i = 1; i < ledger.length; i++) {
+    const from = Math.max(ledger[i - 1].t, sinceMs);
+    const to = Math.min(ledger[i].prevT, untilMs);
+    if (to > from) total += to - from;
+  }
+  return total;
 }
 
 // ── The two-term fit: tokens and requests, separated ─────────────────────────
@@ -508,7 +639,10 @@ export interface SplitDiagnostic {
 /**
  * Which intervals the two-term fit reads, and it is **not** the pooled ratio's set.
  *
- * - `gap` is out: the recorder missed minutes, so the tokens are not all there.
+ * - `pre-ledger`, `gap` and `partial` are out: the recorder missed minutes — or
+ *   had not started — so the tokens are not all there. All three go through
+ *   {@link isUnpriced}, because this predicate *admits* whatever it does not
+ *   name: a kind added beside `gap` would have walked straight into the fit.
  * - `external` is out: utilization moved on almost no local spend, which is
  *   another device on the account. Fitting it would price our models for
  *   someone else's turns.
@@ -528,7 +662,7 @@ export interface SplitDiagnostic {
  */
 function usableForSplit(interval: Interval): boolean {
   if (!interval.reqUsable) return false;
-  return interval.kind !== 'gap' && interval.kind !== 'external';
+  return !isUnpriced(interval.kind) && interval.kind !== 'external';
 }
 
 /**
