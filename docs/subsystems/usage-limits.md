@@ -549,9 +549,20 @@ floors are what keep it robust — which is why a median was not needed.
 **Baseline** is `[now−17d, now−3d)`; **current** is `[now−3d, …)`, open at the
 top so an interval stamped a moment ahead of the request clock is not dropped at
 the very edge the window watches. Floors: 30 intervals **and** 15 cumulative
-percentage points for the baseline, 10 and 5 for the current window — both,
-because either alone is fooled (200 intervals of 0.02% is a rounding error; one
-interval covering 20% is a single unrepeated observation). Verdict order is
+percentage points **and 7 distinct UTC dates** for the baseline, 10 / 5 / 2 for
+the current window — all three, because each alone is fooled (200 intervals of
+0.02% is a rounding error; one interval covering 20% is a single unrepeated
+observation; 60 intervals from one morning are a single day's habit wearing a
+fortnight's clothes). The day floor counts **distinct dates**, not
+`max(toT) − min(toT)`: a span is cleared by two clusters at either end of the
+window with nothing in between, which is the same lie one day tells in a
+different shape. 7 and 2 are the cheapest pair putting the measured day-to-day
+dispersion of this machine's own rates (cv ≈ 24%, so a 1σ deviation error of
+`√(cv²/7 + cv²/2)` ≈ 19.2%) under the 20% band, and 7 is half the baseline
+window's width, so a verdict needs a baseline at least half-populated. Both day
+counts are reported on the row whatever the verdict — `days` and
+`baselineDays` — since with every baseline rate null they are the only thing
+separating "no baseline yet" from "still forming". Verdict order is
 `thin` → `drift` (weighted deviation > ±20%) → `mix-shift` (raw > ±25%) →
 `stable`, and **thin outranks everything**: a rate fitted on too little data can
 deviate by any amount, so calling that drift would make the badge fire hardest
@@ -702,9 +713,12 @@ than on every visit to the section.
 
 `UsageRates.tsx` leads each row with the **raw** figure (the number you plan
 against) and judges with the **weighted** one, shows every rate beside its
-evidence (windows + cumulative points), treats `collecting` as a first-class
-state rather than an empty row, and discloses the external-burn share in a
-footer pill because it is the one systematic bias in the measurement. Every
+evidence (windows + **recorded days** + cumulative points), states the
+baseline's own day count in the same line (`no baseline yet` /
+`baseline forming · 1 day` / `baseline 163k · 9 days`), treats `collecting` as a
+first-class state rather than an empty row — with a hint naming both day floors,
+so the card says what it is waiting for — and discloses the external-burn share
+in a footer pill because it is the one systematic bias in the measurement. Every
 explanation is real text in the row — no `title` attributes, for the reason the
 profile tooltip exists.
 
@@ -715,6 +729,19 @@ of real recording can confirm it fires when it should and stays quiet when it
 should not. What *is* verified is that ledger lines accumulate once a minute,
 that real intervals classify to a real model, and that every empty and thin
 state is honest.
+
+It has misfired once, and the day floors above are the fix. On 2026-09-03, three
+days into recording, `claude-opus-5` was badged `drift` at +27.8% against a
+"14-day baseline" that was in fact the recorder's first 10.8 hours: 60 intervals
+and 65 points cleared the 30 / 15 floors easily, because those floors counted
+how much evidence the pool held and never how far apart it was spread. Measured
+per day, this machine's own weighted rate varies 173k → 281k (cv ≈ 24%), so a
+one-day pool on **either** side of the comparison clears the 20% band by itself.
+Two residuals are stated rather than fixed: at 7 / 2 the 1σ deviation error is
+19.2% against a 20% band, so a crossing by chance alone is still not rare; and
+the current window is 3 days wide by construction, which makes it the dominant
+noise term whatever the baseline does. Widening the band is a question for more
+than four days of data.
 
 ## Invariants
 

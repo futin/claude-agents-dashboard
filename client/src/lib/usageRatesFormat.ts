@@ -35,10 +35,32 @@ export function formatDeviation(pct: number | null): string {
   return (pct < 0 ? '-' : '+') + Math.abs(pct).toFixed(1) + '%';
 }
 
-/** "10 windows · 5.0 pts" — the evidence a rate rests on, always beside it. */
-export function evidenceText(intervals: number, utilSum: number): string {
+/** "10 windows · 2 days · 5.0 pts" — the evidence a rate rests on, always beside it. */
+export function evidenceText(intervals: number, days: number, utilSum: number): string {
   const windows = `${intervals} window${intervals === 1 ? '' : 's'}`;
-  return `${windows} · ${utilSum.toFixed(1)} pts`;
+  return `${windows} · ${dayCount(days)} · ${utilSum.toFixed(1)} pts`;
+}
+
+/** "1 day" / "9 days". Split out because three call sites read it. */
+function dayCount(days: number): string {
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
+
+/**
+ * What the card says about the baseline, in the three states it has.
+ *
+ * `forming` is the state this function exists for: a baseline can hold days of
+ * evidence and still be refused for not holding enough of them, and with every
+ * baseline rate null there was nothing on screen telling that apart from a
+ * baseline that does not exist yet. That gap is how a one-day baseline came to
+ * be badged as drift without disclosing what it was measured against.
+ */
+export function baselineText(weightedPerPct: number | null, days: number): string {
+  if (days <= 0) return 'no baseline yet';
+  if (weightedPerPct === null || !Number.isFinite(weightedPerPct)) {
+    return `baseline forming · ${dayCount(days)}`;
+  }
+  return `baseline ${formatTok(weightedPerPct)} · ${dayCount(days)}`;
 }
 
 /** Badge copy per verdict. The hint is the sentence the badge cannot fit. */
@@ -57,7 +79,10 @@ export function verdictText(verdict: ModelRateVerdict): { label: string; hint: s
     case 'stable':
       return { label: 'stable', hint: 'the weighted rate is within 20% of its baseline' };
     default:
-      return { label: 'collecting', hint: 'not enough measured windows yet to fit a rate' };
+      return {
+        label: 'collecting',
+        hint: 'a verdict needs 7 separate days behind the baseline and 2 behind the current window'
+      };
   }
 }
 

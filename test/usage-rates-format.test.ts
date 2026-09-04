@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 
 import {
+  baselineText,
   evidenceText,
   formatDeviation,
   formatSharePct,
@@ -40,9 +41,26 @@ export function run(): number {
     assert.strictEqual(formatDeviation(null), '—');
   })) p++; else f++;
 
-  if (test('evidenceText states windows and cumulative movement', () => {
-    assert.strictEqual(evidenceText(10, 5), '10 windows · 5.0 pts');
-    assert.strictEqual(evidenceText(1, 0.25), '1 window · 0.3 pts');
+  if (test('evidenceText states windows, days and cumulative movement', () => {
+    assert.strictEqual(evidenceText(10, 2, 5), '10 windows · 2 days · 5.0 pts');
+    assert.strictEqual(evidenceText(1, 1, 0.25), '1 window · 1 day · 0.3 pts');
+    assert.strictEqual(evidenceText(428, 4, 455), '428 windows · 4 days · 455.0 pts');
+  })) p++; else f++;
+
+  if (test('baselineText tells a forming baseline apart from an absent one', () => {
+    // The disclosure half of bug-17: with every baseline rate null, "no
+    // baseline yet" and "one startup day, refused" read identically on screen.
+    assert.strictEqual(baselineText(null, 0), 'no baseline yet');
+    assert.strictEqual(baselineText(null, 1), 'baseline forming · 1 day');
+    assert.strictEqual(baselineText(null, 6), 'baseline forming · 6 days');
+    assert.strictEqual(baselineText(163_184, 9), 'baseline 163k · 9 days');
+  })) p++; else f++;
+
+  if (test('baselineText: a rate with no days behind it is still no baseline', () => {
+    // Unreachable from the server — a fitted rate always has days — but the
+    // day count is what the copy claims, so it is what decides the wording.
+    assert.strictEqual(baselineText(900_000, 0), 'no baseline yet');
+    assert.strictEqual(baselineText(Number.NaN, 3), 'baseline forming · 3 days');
   })) p++; else f++;
 
   if (test('every verdict has copy, and thin reads as collecting', () => {
@@ -53,6 +71,10 @@ export function run(): number {
     for (const v of ['drift', 'stable', 'mix-shift', 'thin'] as const) {
       assert.ok(verdictText(v).hint.length > 0, `${v} needs a hint`);
     }
+    // The thin hint names both day floors, so the card says what it is waiting
+    // for rather than only that it is waiting.
+    assert.match(verdictText('thin').hint, /7 separate days/);
+    assert.match(verdictText('thin').hint, /2 behind the current window/);
   })) p++; else f++;
 
   if (test('rawAsideText labels the raw figure as a mix-dependent translation', () => {

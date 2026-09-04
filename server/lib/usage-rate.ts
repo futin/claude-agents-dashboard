@@ -176,15 +176,28 @@ export interface RateFloors {
   minIntervals: number;
   /** Cumulative utilization percentage points behind it. */
   minUtil: number;
+  /**
+   * Distinct UTC dates behind it. Required rather than optional: an optional
+   * floor defaults to off, and defaulting to off is the defect this exists for.
+   */
+  minDays: number;
 }
 
 /**
- * Both floors, because either alone is fooled: 200 intervals of 0.02% is a
- * rounding-error rate, one interval covering 20% is unrepeated. Current is
- * looser only because its window is a fifth of the baseline's span.
+ * All three floors, because each alone is fooled: 200 intervals of 0.02% is a
+ * rounding-error rate, one interval covering 20% is unrepeated, and 60
+ * intervals from one morning are a single day's habit wearing a fortnight's
+ * clothes. Current is looser on the first two only because its window is a
+ * fifth of the baseline's span.
+ *
+ * The day floors are 7 and 2 because that is the cheapest pair putting the
+ * measured day-to-day dispersion of this machine's own rates (cv ≈ 24%, so a
+ * 1σ deviation error of `√(cv²/7 + cv²/2)` ≈ 19.2%) under {@link DRIFT_PCT}.
+ * 7 is also half the baseline window's 14-day width, so a verdict now needs a
+ * baseline that is at least half-populated.
  */
-export const BASELINE_FLOORS: RateFloors = { minIntervals: 30, minUtil: 15 };
-export const CURRENT_FLOORS: RateFloors = { minIntervals: 10, minUtil: 5 };
+export const BASELINE_FLOORS: RateFloors = { minIntervals: 30, minUtil: 15, minDays: 7 };
+export const CURRENT_FLOORS: RateFloors = { minIntervals: 10, minUtil: 5, minDays: 2 };
 
 /** One fitted rate, with the evidence it rests on. */
 export interface ModelRate {
@@ -194,6 +207,8 @@ export interface ModelRate {
   rawPerPct: number;
   intervals: number;
   utilSum: number;
+  /** Distinct UTC dates those intervals fall on — the span, not the count. */
+  days: number;
 }
 
 export type ModelRateVerdictKind = 'drift' | 'stable' | 'mix-shift' | 'thin';
@@ -211,6 +226,14 @@ export interface DriftRow {
   /** Evidence in the **current** window — reported even when it is too thin to fit. */
   intervals: number;
   utilSum: number;
+  /** Distinct UTC dates in the current window, on the same terms. */
+  days: number;
+  /**
+   * Distinct UTC dates in the **baseline** window, on the same terms — the one
+   * baseline figure reported whatever the verdict, so a card can say the
+   * baseline is still forming rather than only that it is absent.
+   */
+  baselineDays: number;
 }
 
 /** `[now−17d, now−3d)` — the settled past a change is measured against. */
@@ -227,6 +250,11 @@ export function currentRange(nowMs: number): { sinceMs: number; untilMs: number 
   return { sinceMs: nowMs - CURRENT_MS, untilMs: Number.POSITIVE_INFINITY };
 }
 
+/** `YYYY-MM-DD` in UTC — the key a day count is taken on. */
+function utcDate(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
 /** Is this interval this model's, and inside `[sinceMs, untilMs)`? */
 function ownedBy(interval: Interval, model: string, sinceMs: number, untilMs: number): boolean {
   if (typeof interval.kind !== 'object' || interval.kind.model !== model) return false;
@@ -236,6 +264,10 @@ function ownedBy(interval: Interval, model: string, sinceMs: number, untilMs: nu
 /** The pooled ratio and its evidence, floors not applied. */
 function pool(intervals: Interval[], model: string, sinceMs: number, untilMs: number): ModelRate | null {
   let weighted = 0, raw = 0, utilSum = 0, count = 0;
+  // Distinct UTC dates rather than `max(toT) − min(toT)`: a span is cleared by
+  // two clusters at either end of the window with nothing in between, which is
+  // the same lie one day tells in a different shape.
+  const dates = new Set<string>();
   for (const interval of intervals) {
     if (!ownedBy(interval, model, sinceMs, untilMs)) continue;
     for (const counts of Object.values(interval.tok)) {
@@ -243,10 +275,14 @@ function pool(intervals: Interval[], model: string, sinceMs: number, untilMs: nu
       raw += counts.in + counts.out + counts.cc + counts.cr;
     }
     utilSum += interval.dUtil;
+    dates.add(utcDate(interval.toT));
     count++;
   }
   if (count === 0 || utilSum <= 0) return null;
-  return { weightedPerPct: weighted / utilSum, rawPerPct: raw / utilSum, intervals: count, utilSum };
+  return {
+    weightedPerPct: weighted / utilSum, rawPerPct: raw / utilSum,
+    intervals: count, utilSum, days: dates.size
+  };
 }
 
 /**
@@ -263,6 +299,7 @@ export function rateFor(
   if (fitted === null) return null;
   if (fitted.intervals < floors.minIntervals) return null;
   if (fitted.utilSum < floors.minUtil) return null;
+  if (fitted.days < floors.minDays) return null;
   return fitted;
 }
 
@@ -274,9 +311,12 @@ function deviation(current: number, baseline: number): number {
  * Compare a model's trailing rate against its baseline.
  *
  * Verdict order matters — **thin outranks everything**, or the badge would fire
- * hardest exactly when it knows least. The evidence counters describe the
- * *current* window and are reported whatever the verdict, so the card can say
- * "collecting — 4 windows, 1.2 points" rather than a bare `thin`.
+ * hardest exactly when it knows least. That is what the day floors enforce:
+ * counting intervals says how much evidence a window holds and nothing about
+ * how far apart it is spread, so a floor without one is cleared by a single
+ * morning. The evidence counters are reported whatever the verdict — the
+ * current window's in full, the baseline's day count beside them — so the card
+ * can say "collecting — 4 windows over 2 days" rather than a bare `thin`.
  */
 export function driftRow(intervals: Interval[], model: string, nowMs: number): DriftRow {
   const base = baselineRange(nowMs);
@@ -285,6 +325,9 @@ export function driftRow(intervals: Interval[], model: string, nowMs: number): D
   const baseline = rateFor(intervals, model, base.sinceMs, base.untilMs, BASELINE_FLOORS);
   const current = rateFor(intervals, model, cur.sinceMs, cur.untilMs, CURRENT_FLOORS);
   const evidence = pool(intervals, model, cur.sinceMs, cur.untilMs);
+  // The baseline's own evidence has to survive its refusal exactly as the
+  // current window's already does, or the card can say it went quiet but not why.
+  const baselineEvidence = pool(intervals, model, base.sinceMs, base.untilMs);
 
   const row: DriftRow = {
     model,
@@ -295,7 +338,9 @@ export function driftRow(intervals: Interval[], model: string, nowMs: number): D
     deviationPct: null,
     verdict: 'thin',
     intervals: evidence?.intervals ?? 0,
-    utilSum: evidence?.utilSum ?? 0
+    utilSum: evidence?.utilSum ?? 0,
+    days: evidence?.days ?? 0,
+    baselineDays: baselineEvidence?.days ?? 0
   };
 
   if (current === null || baseline === null) return row;
@@ -339,8 +384,13 @@ export function externalShare(intervals: Interval[], sinceMs: number, untilMs: n
  * Twice the evidence for twice the parameters, and nothing cleverer: the split
  * is only worth reporting when it is not a line drawn through a handful of
  * points, and a floor is the same instrument the pooled ratio already trusts.
+ *
+ * `minDays: 1` is a no-op today and deliberately so — the split publishes no
+ * cross-window verdict, so a one-day span is not what misfires. It is wired
+ * anyway, because a required field nobody reads is a decoration that does
+ * nothing the day a later reader raises it.
  */
-export const SPLIT_FLOORS: RateFloors = { minIntervals: 20, minUtil: 10 };
+export const SPLIT_FLOORS: RateFloors = { minIntervals: 20, minUtil: 10, minDays: 1 };
 
 /**
  * Above this the two regressors are one regressor.
@@ -429,6 +479,8 @@ export interface SplitDiagnostic {
   intervals: number;
   /** Cumulative utilization points over those rows. */
   utilSum: number;
+  /** Distinct UTC dates those rows fall on — checked against {@link SPLIT_FLOORS}. */
+  days: number;
   /**
    * The least independent of this model's columns, as a share of its own
    * length, after projecting out every other column in the design — 1 is
@@ -627,15 +679,16 @@ export function explainSplits(intervals: Interval[], sinceMs: number, untilMs: n
 
   const diagnostics: SplitDiagnostic[] = models.map((model, m) => {
     let sww = 0, srr = 0, swr = 0, intervalCount = 0, utilSum = 0;
+    const dates = new Set<string>();
     for (let i = 0; i < rows.length; i++) {
       const w = weighted[m][i], q = requests[m][i];
       sww += w * w; srr += q * q; swr += w * q;
-      if (w > 0) { intervalCount++; utilSum += y[i]; }
+      if (w > 0) { intervalCount++; utilSum += y[i]; dates.add(utcDate(rows[i].toT)); }
     }
     // A dead column is not separable from anything, and reads as r² = 1.
     const r2 = sww <= 0 || srr <= 0 ? 1 : (swr * swr) / (sww * srr);
     return {
-      model, r2, intervals: intervalCount, utilSum,
+      model, r2, intervals: intervalCount, utilSum, days: dates.size,
       independentShare: 0, refusal: null, fit: null, raw: null
     };
   });
@@ -686,7 +739,11 @@ export function explainSplits(intervals: Interval[], sinceMs: number, untilMs: n
     if (perMTok !== undefined && perRequest !== undefined) {
       diagnostic.raw = { pctPerMWeighted: perMTok, pctPerRequest: perRequest };
     }
-    if (diagnostic.intervals < SPLIT_FLOORS.minIntervals || diagnostic.utilSum < SPLIT_FLOORS.minUtil) {
+    if (
+      diagnostic.intervals < SPLIT_FLOORS.minIntervals
+      || diagnostic.utilSum < SPLIT_FLOORS.minUtil
+      || diagnostic.days < SPLIT_FLOORS.minDays
+    ) {
       diagnostic.refusal = 'thin-evidence';
       continue;
     }

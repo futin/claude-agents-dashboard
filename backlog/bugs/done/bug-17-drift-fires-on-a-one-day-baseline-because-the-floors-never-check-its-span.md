@@ -3,8 +3,10 @@ id: bug-17
 title: Drift fires on a one-day baseline because the floors never check its span
 created: 2026-09-03
 tags: usage, rates
-updated: 2026-09-03T18:47:12Z
+updated: 2026-09-04T11:33:03Z
 groom-elapsed: 493
+started: 2026-09-04T11:15:19Z
+execute-elapsed: 1064
 ---
 
 ## Symptom
@@ -241,3 +243,107 @@ Distinct from `task-15`, which discloses the `gap` split without moving a fitted
 this is about a fitted rate that should not have been judged at all. Related to `idea-14`:
 notifying on the first drift crossing would push exactly this false positive to the phone,
 so that idea should not ship before this bug is fixed *and* the residual above is settled.
+
+## Outcome
+
+**2026-09-04 — fixed.** The floors now count distinct UTC dates, and both windows
+require them. `pool()` returns `days`; `RateFloors` carries a **required** `minDays`;
+`rateFor` refuses on it beside the two refusals already there. `BASELINE_FLOORS` is
+30 / 15 / **7**, `CURRENT_FLOORS` 10 / 5 / **2**, `SPLIT_FLOORS` 20 / 10 / **1** (wired,
+a no-op today, as specified). `driftRow` pools the baseline unfloored so `baselineDays`
+survives the refusal, and both day counts reach the client through `ModelRateRow`. The
+card's meta line now discloses them — `baseline forming · 2 days · 462 windows · 4 days ·
+495.0 pts` — and the `collecting` hint names both floors.
+
+Two deviations from the Fix, both in the tests. `series()` kept its minute step and a new
+`daily({ count, days, … })` helper was added beside it rather than the step being changed:
+a plain day step pushes a 30-interval baseline 34 days back, outside the 14-day window it
+is meant to sit in, and both single-date *and* multi-date fixtures are now needed. `daily`
+distributes round-robin across dates rather than by a step, so a fixture asking for 7
+dates holds exactly 7 whatever its count. And `scripts/probe-usage-split.ts` has one
+`NO_FLOOR` literal, not two — it took `minDays: 0`.
+
+### Verification
+
+`pnpm test` — 867 cases, and the `docs links` suite confirms the doc edits broke no anchor:
+
+```
+=== usage-rate.ts (rates + drift) ===
+  ✓ all three floors bind independently
+  ✓ MUTATION: a one-day baseline is refused however many intervals it holds
+  ✓ days counts distinct UTC dates, not elapsed time
+  ✓ a one-day baseline is thin, and its day count is still reported
+  ✓ a one-day current window is thin too, and the baseline is still reported
+  35 passed, 0 failed
+
+=== usageRatesFormat.ts ===
+  ✓ evidenceText states windows, days and cumulative movement
+  ✓ baselineText tells a forming baseline apart from an absent one
+  ✓ baselineText: a rate with no days behind it is still no baseline
+  10 passed, 0 failed
+
+=== usage rates endpoint ===
+  7 passed, 0 failed
+
+=== docs links ===
+  4 passed, 0 failed
+
+867 cases passed
+0 cases failed
+ALL PASS
+```
+
+`pnpm typecheck` — clean, exit 0. `pnpm build` — `✓ built in 2.41s`.
+
+**Mutation-proved.** Deleting `if (fitted.days < floors.minDays) return null;` from
+`rateFor`:
+
+```
+MUTANT: day refusal deleted
+  ✗ all three floors bind independently
+  ✗ MUTATION: a one-day baseline is refused however many intervals it holds
+  ✗ a one-day baseline is thin, and its day count is still reported
+  ✗ a one-day current window is thin too, and the baseline is still reported
+  31 passed, 4 failed
+```
+
+The guard restored, `ALL PASS`. Before the guard existed the first of those failed with
+`'drift' !== 'thin'` — the badge this bug is about, reproduced in a unit test.
+
+**Live**, `curl -s localhost:5174/api/usage/rates` at 2026-09-04T11:28Z:
+
+```
+claude-opus-5             verdict thin  days  4 baselineDays  2 intervals 462 w/1% 209606 base null dev null
+claude-fable-5-1          verdict thin  days  3 baselineDays  0 intervals  16 w/1%  62230 base null dev null
+claude-fable-5            verdict thin  days  1 baselineDays  2 intervals   5 w/1%   null base null dev null
+claude-haiku-4-5-20251001 verdict thin  days  1 baselineDays  1 intervals   1 w/1%   null base null dev null
+claude-sonnet-5           verdict thin  days  0 baselineDays  1 intervals   0 w/1%   null base null dev null
+```
+
+`baselineDays: 2`, not the `1` this item predicted: a day passed between grooming and
+execution, so `[now−17d, now−3d)` has slid to cover 08-31 *and* 09-01. Still under 7, so
+`thin` holds — which is why the Fix said to confirm against `baselineDays` rather than the
+badge. **`claude-opus-5` no longer reports `drift`, and publishes no baseline rate at all.**
+
+**In the browser** (playwright, `http://localhost:5174` → Usage → *Token value*), every
+row badges `COLLECTING`; no `DRIFT` badge anywhere. `claude-opus-5` reads
+`baseline forming · 2 days · 462 windows · 4 days · 495.0 pts`, and `claude-fable-5-1` —
+which has nothing in the baseline window — reads `no baseline yet`, so the two states are
+distinguishable on screen for the first time.
+
+### Not verified, needs a human
+
+- **That a real verdict fires correctly once 7 dates exist.** The floors are proved to
+  refuse; nothing here proves they *stop* refusing on live data, because the ledger does
+  not yet hold 7 baseline dates. With daily use the first legitimate `claude-opus-5`
+  verdict lands around **2026-09-10** (one day later than this item estimated, the
+  baseline having slid). The item's own ⚠️ in `usage-limits.md` still stands.
+- **Both residuals, unchanged and now recorded in the docs.** At 7 / 2 the measured 1σ is
+  19.2% against a 20% band; and the current window is 3 days wide by construction, making
+  it the dominant noise term whatever the baseline does. `DRIFT_PCT` was left alone.
+- **Legibility of the meta line.** `baseline forming · 2 days · 462 windows · 4 days` says
+  "days" twice with no visual cue for which side each belongs to. It is the copy this item
+  specified, so it shipped as written, but it reads ambiguously cold and may want a
+  follow-on.
+- **The 4173 production server** was left running the pre-fix build; it is the user's
+  process and `pnpm start` does not watch. It needs a restart to pick this up.

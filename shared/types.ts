@@ -217,6 +217,18 @@ export interface ModelRateRow {
   /** Cumulative utilization points behind it. */
   utilSum: number;
   /**
+   * Distinct UTC dates those intervals fall on. Evidence, so it is reported
+   * whatever the verdict — a rate needs days behind it as well as intervals,
+   * and this is the figure that says whether it has them.
+   */
+  days: number;
+  /**
+   * The same count for the **baseline** window, reported whatever the verdict.
+   * The one baseline number that survives a refusal: with every baseline rate
+   * null, this is what separates "no baseline yet" from "still forming".
+   */
+  baselineDays: number;
+  /**
    * Utilization points per 1M weighted tokens, from the two-term fit over the
    * same current window — the token half of the cost, with per-request spend
    * held out of it. Null whenever `splitVerdict` is `thin`.

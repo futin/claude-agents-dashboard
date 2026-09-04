@@ -40,7 +40,7 @@ import {
 import type { RateFloors } from '../server/lib/usage-rate.js';
 
 /** No floor: the probe reports the evidence itself rather than hiding it. */
-const NO_FLOOR: RateFloors = { minIntervals: 1, minUtil: 0 };
+const NO_FLOOR: RateFloors = { minIntervals: 1, minUtil: 0, minDays: 0 };
 const pool = (i: Parameters<typeof rateFor>[0], m: string, from: number, to: number) =>
   rateFor(i, m, from, to, NO_FLOOR);
 

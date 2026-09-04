@@ -26,28 +26,48 @@ function test(name: string, fn: () => void): boolean {
 }
 
 const MIN = 60_000;
-const T0 = Date.parse('2026-08-30T09:00:00.000Z');
-const R = '2026-08-30T13:00:00.000Z';
+const DAY = 86_400_000;
+const T0 = Date.parse('2026-08-29T09:00:00.000Z');
+/**
+ * One reset window per fixture date.
+ *
+ * Both fixtures below span two UTC dates, because `CURRENT_FLOORS.minDays` is
+ * 2 and a minute-scale fixture is one date however many intervals it holds.
+ * They need a `resetsAt` each: `joinIntervals` drops any sample pair that
+ * straddles two windows, so the pairs inside a date survive and the one pair
+ * bridging the two dates is discarded — which is why the day-two block is one
+ * interval shorter than the arithmetic alone would suggest.
+ */
+const RESETS = ['2026-08-29T13:00:00.000Z', '2026-08-30T13:00:00.000Z'];
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
 
+/** The last sample `fixtureDir` writes — five minutes into its second date. */
+const FIXTURE_END = T0 + DAY + 5 * MIN;
+
 /**
- * Ten one-minute intervals of one model, on disk in both logs.
+ * Ten one-minute intervals of one model over two UTC dates, on disk in both logs.
  *
  * 4_500_000 cache-read tokens weigh 450_000 (×0.1) and every interval gains
  * 0.5 utilization points, so the pooled fit is 4_500_000 weighted / 5 points =
  * **900_000 weighted per 1%**, and 45_000_000 raw / 5 = **9_000_000 raw**.
- * Ten intervals and 5 cumulative points is exactly the current floor.
+ * Ten intervals, 5 cumulative points and 2 dates is exactly the current floor
+ * on all three counts — five intervals a date, so the ratio is unchanged from
+ * when this fixture was ten in a row.
  */
 function fixtureDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rates-'));
   const samples: string[] = [];
   const ledger: string[] = [];
-  for (let i = 0; i <= 10; i++) {
-    samples.push(JSON.stringify({ t: T0 + i * MIN, utilization: 10 + i * 0.5, resetsAt: R }));
-    if (i > 0) {
+  let utilization = 10;
+  for (let day = 0; day < 2; day++) {
+    const base = T0 + day * DAY;
+    samples.push(JSON.stringify({ t: base, utilization, resetsAt: RESETS[day] }));
+    for (let i = 1; i <= 5; i++) {
+      utilization += 0.5;
+      samples.push(JSON.stringify({ t: base + i * MIN, utilization, resetsAt: RESETS[day] }));
       ledger.push(JSON.stringify({
-        t: T0 + i * MIN,
-        prevT: T0 + (i - 1) * MIN,
+        t: base + i * MIN,
+        prevT: base + (i - 1) * MIN,
         tok: { 'opus-5': { in: 0, out: 0, cc: 0, cr: 4_500_000 } }
       }));
     }
@@ -61,32 +81,47 @@ function fixtureDir(): string {
 const TRUE_PCT_PER_MTOK = 0.1;
 const TRUE_PCT_PER_REQUEST = 0.005;
 
+/** Intervals per UTC date in `countedFixtureDir`, summing to its 25. */
+const COUNTED_PER_DAY = [13, 12];
+/** The last sample it writes. */
+const COUNTED_END = T0 + DAY + COUNTED_PER_DAY[1] * MIN;
+
 /**
- * 25 one-minute intervals with **request counts recorded**, and utilization
- * generated from the two coefficients above rather than from a single ratio.
+ * 25 one-minute intervals with **request counts recorded**, over two UTC dates,
+ * and utilization generated from the two coefficients above rather than from a
+ * single ratio.
  *
  * Tokens walk 1.0 → 3.0 Mtok on a 5-cycle and requests 40 → 140 on an
- * 11-cycle, so the two regressors are separable; 25 intervals and ~16
- * cumulative points clear `SPLIT_FLOORS` (20 and 10) as well as the pooled
- * `CURRENT_FLOORS`, so one fixture exercises both numbers on the same row.
+ * 11-cycle, so the two regressors are separable; the cycles run continuously
+ * across the date boundary, so splitting the fixture over two dates leaves the
+ * design matrix — and therefore the recovered coefficients — untouched. 25
+ * intervals, ~16 cumulative points and 2 dates clear `SPLIT_FLOORS`
+ * (20 / 10 / 1) as well as the pooled `CURRENT_FLOORS` (10 / 5 / 2), so one
+ * fixture exercises both sets of numbers on the same row.
  */
 function countedFixtureDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rates-counted-'));
-  const samples: string[] = [JSON.stringify({ t: T0, utilization: 10, resetsAt: R })];
+  const samples: string[] = [];
   const ledger: string[] = [];
   let utilization = 10;
-  for (let i = 0; i < 25; i++) {
-    const mtok = 1 + (i % 5) * 0.5;
-    const reqs = 40 + ((i * 7) % 11) * 10;
-    utilization += TRUE_PCT_PER_MTOK * mtok + TRUE_PCT_PER_REQUEST * reqs;
-    samples.push(JSON.stringify({ t: T0 + (i + 1) * MIN, utilization, resetsAt: R }));
-    ledger.push(JSON.stringify({
-      t: T0 + (i + 1) * MIN,
-      prevT: T0 + i * MIN,
-      // `in` tokens weigh exactly 1, so weighted tokens read off the fixture.
-      tok: { 'opus-5': { in: mtok * 1_000_000, out: 0, cc: 0, cr: 0 } },
-      req: { 'opus-5': reqs }
-    }));
+  let i = 0;
+  for (let day = 0; day < COUNTED_PER_DAY.length; day++) {
+    const base = T0 + day * DAY;
+    samples.push(JSON.stringify({ t: base, utilization, resetsAt: RESETS[day] }));
+    for (let j = 1; j <= COUNTED_PER_DAY[day]; j++) {
+      const mtok = 1 + (i % 5) * 0.5;
+      const reqs = 40 + ((i * 7) % 11) * 10;
+      utilization += TRUE_PCT_PER_MTOK * mtok + TRUE_PCT_PER_REQUEST * reqs;
+      samples.push(JSON.stringify({ t: base + j * MIN, utilization, resetsAt: RESETS[day] }));
+      ledger.push(JSON.stringify({
+        t: base + j * MIN,
+        prevT: base + (j - 1) * MIN,
+        // `in` tokens weigh exactly 1, so weighted tokens read off the fixture.
+        tok: { 'opus-5': { in: mtok * 1_000_000, out: 0, cc: 0, cr: 0 } },
+        req: { 'opus-5': reqs }
+      }));
+      i++;
+    }
   }
   fs.writeFileSync(path.join(dir, '.usage-history.jsonl'), samples.join('\n') + '\n', 'utf8');
   fs.writeFileSync(path.join(dir, LEDGER_FILE), ledger.join('\n') + '\n', 'utf8');
@@ -101,7 +136,7 @@ export async function run(): Promise<number> {
   check(test('a ledger with counts fits the split, and both terms reach the body', () => {
     const dir = countedFixtureDir();
     try {
-      const nowMs = T0 + 26 * MIN;
+      const nowMs = COUNTED_END + MIN;
       const body = shapeUsageRates({
         recording: true,
         samples: readRecentSamples(dir),
@@ -121,8 +156,13 @@ export async function run(): Promise<number> {
       // exactly the number the split exists to correct: 50M weighted over
       // ~16.25 points is ~3.1M per point, against the token-only 10M.
       assert.strictEqual(row.intervals, 25);
-      assert.ok(row.weightedPerPct! < 4_000_000, `pooled was ${row.weightedPerPct}`);
+      assert.strictEqual(row.days, 2, 'two dates, or the pooled rate is refused for span');
+      // Non-null first: `null < 4_000_000` is true, so the bound below would
+      // pass on an unfitted rate and assert nothing at all.
+      assert.ok(row.weightedPerPct !== null, 'the pooled rate has to be fitted to be bounded');
+      assert.ok(row.weightedPerPct < 4_000_000, `pooled was ${row.weightedPerPct}`);
       assert.strictEqual(row.verdict, 'thin', 'no baseline yet — the split does not change that');
+      assert.strictEqual(row.baselineDays, 0, 'nothing in the baseline window at all');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -154,7 +194,7 @@ export async function run(): Promise<number> {
   check(test('a fixture above the floors fits one row, with the exact pooled rate', () => {
     const dir = fixtureDir();
     try {
-      const nowMs = T0 + 11 * MIN;
+      const nowMs = FIXTURE_END + MIN;
       const body = shapeUsageRates({
         recording: true,
         samples: readRecentSamples(dir),
@@ -168,8 +208,10 @@ export async function run(): Promise<number> {
       assert.strictEqual(row.rawPerPct, 9_000_000);
       assert.strictEqual(row.intervals, 10);
       assert.strictEqual(row.utilSum, 5);
+      assert.strictEqual(row.days, 2);
       assert.strictEqual(row.verdict, 'thin', 'no baseline mass yet — collecting, not concluding');
       assert.strictEqual(row.baselineWeightedPerPct, null);
+      assert.strictEqual(row.baselineDays, 0);
       assert.strictEqual(row.deviationPct, null);
       // The back-compat guard: this fixture's ledger lines predate request
       // counts, so every number above is the one the single ratio always gave,
@@ -188,11 +230,11 @@ export async function run(): Promise<number> {
     const dir = fixtureDir();
     try {
       // A second model with one interval of its own, appended after the first.
-      const nowMs = T0 + 13 * MIN;
+      const nowMs = FIXTURE_END + 3 * MIN;
       fs.appendFileSync(path.join(dir, '.usage-history.jsonl'),
-        JSON.stringify({ t: T0 + 11 * MIN, utilization: 15.4, resetsAt: R }) + '\n', 'utf8');
+        JSON.stringify({ t: FIXTURE_END + MIN, utilization: 15.4, resetsAt: RESETS[1] }) + '\n', 'utf8');
       fs.appendFileSync(path.join(dir, LEDGER_FILE), JSON.stringify({
-        t: T0 + 11 * MIN, prevT: T0 + 10 * MIN,
+        t: FIXTURE_END + MIN, prevT: FIXTURE_END,
         tok: { 'fable-5': { in: 0, out: 0, cc: 0, cr: 1_000_000 } }
       }) + '\n', 'utf8');
 
@@ -205,6 +247,7 @@ export async function run(): Promise<number> {
       assert.deepStrictEqual(body.models.map(m => m.model), ['opus-5', 'fable-5']);
       assert.strictEqual(body.models[1].weightedPerPct, null, 'one interval is under the floor');
       assert.strictEqual(body.models[1].intervals, 1, 'but the evidence it has is still counted');
+      assert.strictEqual(body.models[1].days, 1, 'and so is the single date behind it');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
