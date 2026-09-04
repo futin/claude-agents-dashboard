@@ -1062,7 +1062,11 @@ export interface ScopeConfig {
 
 /** A recently-active project (management side-menu entry). */
 export interface ProjectRef {
-  /** Encoded ~/.claude/projects dir name — the key for /api/management/project. */
+  /**
+   * Encoded ~/.claude/projects dir name — the key for /api/management/project,
+   * and unique within a `projects[]`: one entry per dir, so the rail can key
+   * rows by it and `resolveProject` maps it to exactly one path.
+   */
   dirName: string;
   /** Basename of path. */
   name: string;

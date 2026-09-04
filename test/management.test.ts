@@ -247,10 +247,10 @@ export async function run(): Promise<number> {
     assert.strictEqual(refs[0].name, path.basename(projA));
   }));
 
-  tally(await test('listRecentProjects: a worktree-chdir\'d newest transcript still publishes its launch repo', async () => {
+  tally(await test('listRecentProjects: a dir whose newest transcript chdir\'d into a worktree publishes the repo, not the worktree', async () => {
     // bug-14. One dir, newest transcript launched at the repo root and chdir'd
     // into a worktree; the older one never left the root. Only the newest is
-    // read, so the root survives only if originCwd is credited alongside cwd.
+    // read, so the repo survives only if the launch cwd is what gets published.
     const NOW = Date.parse('2026-07-12T12:00:00Z');
     const HOUR = 3600_000;
     const repo = makeProject();
@@ -259,14 +259,23 @@ export async function run(): Promise<number> {
       { dirName: '-repo', id: 'wt', cwd: worktree, originCwd: repo, mtimeMs: NOW - 1 * HOUR },
       { dirName: '-repo', id: 'old', cwd: repo, mtimeMs: NOW - 3 * HOUR }
     ]);
-    const paths = mgmt.listRecentProjects({ lookbackHours: 24 }, { root, now: NOW }).map(r => r.path);
-    assert.ok(paths.includes(repo), 'launch repo missing: ' + JSON.stringify(paths));
-    assert.ok(paths.includes(worktree), 'worktree missing: ' + JSON.stringify(paths));
+    const refs = mgmt.listRecentProjects({ lookbackHours: 24 }, { root, now: NOW });
+    assert.deepStrictEqual(refs.map(r => r.path), [repo]);
+  }));
+
+  tally(await test('listRecentProjects: one entry per dirName, so a drifted dir cannot collide with itself', async () => {
+    // dirName is the key the rail uses for React keys and the spawn <option>
+    // values, and /api/management/project resolves it to exactly one path.
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const repo = makeProject();
+    const root = makeProjectsRoot([
+      { dirName: '-repo', id: 'wt', cwd: path.join(repo, '.worktrees', 'X'), originCwd: repo, mtimeMs: NOW - 1000 }
+    ]);
+    const dirNames = mgmt.listRecentProjects({ lookbackHours: 24 }, { root, now: NOW }).map(r => r.dirName);
+    assert.deepStrictEqual(dirNames, [...new Set(dirNames)]);
   }));
 
   tally(await test('resolveProject: a drifted dir resolves to its launch repo, not the worktree', async () => {
-    // Both entries share the dirName, so the one resolveProject picks is what
-    // /api/management/project reads and what a spawn gets as its cwd.
     const NOW = Date.parse('2026-07-12T12:00:00Z');
     const repo = makeProject();
     const root = makeProjectsRoot([
@@ -274,6 +283,62 @@ export async function run(): Promise<number> {
     ]);
     const hit = mgmt.resolveProject({ lookbackHours: 24 }, '-repo', { root, now: NOW });
     assert.strictEqual(hit && hit.path, repo);
+  }));
+
+  // The multi-dir case: the worktree was itself launched in, so it has its own
+  // project dir and an older entry for that same cwd. Each dir must keep its own
+  // path — the repo's dir resolving to the worktree would spawn there, and the
+  // worktree's dir losing its entry drops it off the rail. Which of the two
+  // breaks first depends on the order `readdirSync` hands back the dirs, so both
+  // orders are pinned.
+  for (const [label, ownerDir] of [['after', '-repo-worktrees-X'], ['before', '-a-worktree-owner']]) {
+    tally(await test(`resolveProject: an older dir holding the worktree cwd (sorting ${label} the repo's) keeps both dirs intact`, async () => {
+      const NOW = Date.parse('2026-07-12T12:00:00Z');
+      const HOUR = 3600_000;
+      const repo = makeProject();
+      const worktree = path.join(repo, '.worktrees', 'X');
+      const root = makeProjectsRoot([
+        { dirName: ownerDir, id: 'own', cwd: worktree, mtimeMs: NOW - 5 * HOUR },
+        { dirName: '-repo', id: 'wt', cwd: worktree, originCwd: repo, mtimeMs: NOW - 1 * HOUR }
+      ]);
+      const cfg = { lookbackHours: 24 };
+      const refs = mgmt.listRecentProjects(cfg, { root, now: NOW });
+      assert.deepStrictEqual(refs.map(r => r.path).sort(), [repo, worktree].sort());
+      const repoRef = mgmt.resolveProject(cfg, '-repo', { root, now: NOW });
+      assert.strictEqual(repoRef && repoRef.path, repo);
+      const wtRef = mgmt.resolveProject(cfg, ownerDir, { root, now: NOW });
+      assert.strictEqual(wtRef && wtRef.path, worktree);
+    }));
+  }
+
+  tally(await test('encodeProjectDir matches the ~/.claude/projects naming', async () => {
+    assert.strictEqual(
+      mgmt.encodeProjectDir('/Users/a/p/backlog-manager/.worktrees/merge-mode'),
+      '-Users-a-p-backlog-manager--worktrees-merge-mode'
+    );
+  }));
+
+  tally(await test('listRecentProjects: each dir publishes the cwd it is named for, not the one the session drifted from', async () => {
+    // Observed live: a session launched in the repo and chdir'd into a worktree
+    // writes into BOTH project dirs, and the copy sitting in the worktree's own
+    // dir still reports the repo as its originCwd. Keying off the launch cwd
+    // alone would make that dir publish the repo too, lose the key to the repo's
+    // own newer dir, and drop the worktree off the rail entirely.
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const HOUR = 3600_000;
+    const repo = makeProject();
+    const worktree = path.join(repo, '.worktrees', 'X');
+    const repoDir = mgmt.encodeProjectDir(repo);
+    const wtDir = mgmt.encodeProjectDir(worktree);
+    const root = makeProjectsRoot([
+      { dirName: repoDir, id: 'a', cwd: worktree, originCwd: repo, mtimeMs: NOW - 1 * HOUR },
+      { dirName: wtDir, id: 'b', cwd: worktree, originCwd: repo, mtimeMs: NOW - 2 * HOUR }
+    ]);
+    const cfg = { lookbackHours: 24 };
+    const refs = mgmt.listRecentProjects(cfg, { root, now: NOW });
+    assert.deepStrictEqual(refs.map(r => r.path).sort(), [repo, worktree].sort());
+    assert.strictEqual(mgmt.resolveProject(cfg, repoDir, { root, now: NOW })!.path, repo);
+    assert.strictEqual(mgmt.resolveProject(cfg, wtDir, { root, now: NOW })!.path, worktree);
   }));
 
   tally(await test('listRecentProjects: an unresolvable launch cwd falls open to the newest cwd alone', async () => {

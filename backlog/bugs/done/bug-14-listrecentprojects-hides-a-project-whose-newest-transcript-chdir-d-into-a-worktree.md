@@ -93,88 +93,153 @@ worktree appear in `projects[]`.
 
 ## Outcome
 
-2026-09-04 — Fixed. `listRecentProjects` now credits both of the newest
-transcript's cwds (`server/lib/management.ts:427-450`), the way `scan.ts:372`'s
-liveness gate already did, so a session launched in a repo and chdir'd into its
-worktree publishes the repo *and* the worktree instead of only the worktree. The
-launch cwd is inserted first, which — Map insertion order plus a stable sort —
-is what `resolveProject` returns for that dirName, so `/api/management/project`
-and a spawn's cwd stay on the repo rather than following the drift.
+2026-09-04 — Fixed, then corrected after review. Two passes; the second replaced
+the first pass's approach outright, so only the final shape is described here.
 
-The plan's optional second half ("newest per distinct cwd within the dir") was
-deliberately **not** done. It only buys the residual case where `originCwd` is
-null *and* the newest cwd drifted, and it costs a 256 KB tail read of every
-in-window transcript on every call — including every `/api/management/file`
-request, which goes through `collectServablePaths`. The null-`originCwd`
-fail-open is instead pinned by a test so it can't silently become a crash or a
-phantom entry.
+**What ships.** `listRecentProjects` publishes, per project dir, the cwd that dir
+is *named* for: of the newest transcript's launch cwd (`originCwd`) and newest
+cwd, the one whose `encodeProjectDir` spelling equals the dirName, falling back
+to launch-then-newest when neither matches (`server/lib/management.ts`).
+`encodeProjectDir` is new and exported: Claude Code's own dir naming, every
+character outside `[A-Za-z0-9]` replaced by `-`.
 
-Tests: `test/management.test.ts` — the drift case, the `resolveProject`
-tiebreak, and the fail-open complement. Fixture `makeProjectsRoot` grew an
-optional `originCwd`. Docs: `docs/subsystems/management.md`,
-`docs/subsystems/spawn.md`.
+**Why not the simpler rules.** Both single-key rules are wrong, and each is wrong
+in a way only real data showed:
 
-**Red → green.** Before the fix:
+- *Newest cwd* is the reported bug: a session launched in the repo and chdir'd
+  into a worktree publishes the worktree, and the repo — which no other dir can
+  name — vanishes.
+- *Launch cwd* (what the first pass fell back to) breaks the mirror case. Probed
+  live: `~/.claude/projects/-Users-…-backlog-manager--worktrees-merge-mode`, the
+  **worktree's own** dir, holds a transcript whose `originCwd` is the repo. So a
+  drifted session writes into both dirs, both report the same two cwds, and
+  keying off the launch cwd makes the worktree's dir publish the repo, lose that
+  key to the repo's own newer dir, and drop the worktree off the rail entirely.
+  That was a regression the fixtures could not have caught — `dirName` does not
+  reliably encode the launch cwd, which is what the first pass assumed.
+
+The dir name is the only thing that distinguishes the two, so it is what decides.
+Verified empirically before relying on it: across every project dir on this
+machine, one of the newest transcript's two cwds encodes to the dirName in
+**75/75** cases, 0 misses.
+
+**Review findings, both fixed.**
+
+1. *Duplicate `dirName`.* The first pass emitted two `ProjectRef`s per drifted
+   dir, which duplicates React keys in `ScopeMenu.tsx:22`, highlights both rows,
+   and gives `SpawnPanel.tsx:112` two `<option>`s with the same value. Now one
+   entry per dir, so the key is unique again; `shared/types.ts` says so
+   explicitly rather than leaving it implied. No client change was needed — the
+   components were correct against the contract the server had broken.
+2. *Ordering-dependent `resolveProject`.* The first pass claimed insertion order
+   plus a stable sort put the repo in front. That guarantee was conditional and
+   the reviewer was right to reject it: when an older dir already occupies the
+   drifted cwd's Map slot, the pair shares one mtime and the sort preserves the
+   older slot. Reproduced below. The ordering argument is gone entirely — with
+   one entry per dir there is nothing to tie-break.
+
+**Correction to the previous `## Outcome`.** It asserted that insertion order
+makes `resolveProject` return the launch repo. That was conditional, not
+guaranteed, and it is not how the code works now. The whole section was
+rewritten rather than amended.
+
+**Reproducing finding 2 before fixing it.** Both `readdirSync` orders are now
+pinned, because which half breaks depends on which dir is walked first. With the
+worktree-owning dir sorting *before* the repo's, the reviewer's exact symptom:
 
 ```
-  ✗ listRecentProjects: a worktree-chdir'd newest transcript still publishes its launch repo
-    launch repo missing: ["/var/folders/q9/.../cad-proj-YftWO5/.worktrees/X"]
-  ✗ resolveProject: a drifted dir resolves to its launch repo, not the worktree
-  ✓ listRecentProjects: an unresolvable launch cwd falls open to the newest cwd alone
-management: 24 passed, 2 failed
+  ✗ resolveProject: an older dir holding the worktree cwd (sorting before the repo's) keeps both dirs intact
+    Expected values to be strictly equal:
+    actual:   '/var/folders/…/cad-proj-DgqxiC/.worktrees/X'
+    expected: '/var/folders/…/cad-proj-DgqxiC'
 ```
 
-**Mutation check** — dropping `parsed.cwd` from the pair (`originCwd` only) fails
-both directions, so neither test is decorative:
+Sorting *after*, the same root cause surfaces as the worktree's own dir being
+swallowed (`resolveProject` → `null`) instead.
+
+**Red before green**, second pass:
 
 ```
---- mutant: originCwd only
-  ✗ listRecentProjects: a worktree-chdir'd newest transcript still publishes its launch repo
-  ✗ listRecentProjects: an unresolvable launch cwd falls open to the newest cwd alone
-management: 24 passed, 2 failed
+  ✗ encodeProjectDir matches the ~/.claude/projects naming
+  ✗ listRecentProjects: each dir publishes the cwd it is named for, not the one the session drifted from
+management: 29 passed, 2 failed
+```
+
+**Mutation check** — every branch of the selection is load-bearing:
+
+```
+--- mutant A: newest cwd only (the original bug-14)
+management: 26 passed, 5 failed
+--- mutant B: drop the dir-name match, keep launch-cwd fallback
+  ✗ listRecentProjects: each dir publishes the cwd it is named for, not the one the session drifted from
+management: 30 passed, 1 failed
+--- mutant C: drop the fail-open fallback
+management: 23 passed, 8 failed
 --- restored
-management: 26 passed, 0 failed
+management: 31 passed, 0 failed
 ```
 
 **Full suite + typecheck:**
 
 ```
-$ pnpm test > /tmp/bug14-test.log 2>&1; echo "EXIT=$?"
-EXIT=0
-$ grep -E "^(ALL PASS|FAILED)" /tmp/bug14-test.log
+$ pnpm test > /tmp/bug14-test3.log 2>&1; echo "TEST_EXIT=$?"
+TEST_EXIT=0
+$ grep -E "^(ALL PASS|FAILED)" /tmp/bug14-test3.log
 ALL PASS
-$ grep -c "✗" /tmp/bug14-test.log
+$ grep -c "✗" /tmp/bug14-test3.log
 0
+$ grep "^management:" /tmp/bug14-test3.log
+management: 31 passed, 0 failed
 $ pnpm typecheck; echo "TYPECHECK_EXIT=$?"
 > tsc --noEmit
 TYPECHECK_EXIT=0
 ```
 
-**Reproduced on the real transcripts, not just fixtures.** The reported dir was
-isolated by hardlinking `~/.claude/projects/-Users-…-backlog-manager/*.jsonl`
-(mtimes intact) into a temp root — so nothing else on disk could supply the repo
-path — with `now` pinned one second after its newest drifted transcript, which
-is the state the report describes:
+**Live, on the real transcripts.** The reported dir isolated by hardlinking
+`~/.claude/projects/-Users-…-backlog-manager/*.jsonl` (mtimes intact) into a temp
+root, so nothing else on disk could supply the repo path, with `now` pinned one
+second past its newest drifted transcript:
 
 ```
-drifted newest: 2026-09-04T21:02:23.895Z
-  originCwd: /Users/andrejajevtic/Documents/custom-projects/backlog-manager
-  cwd      : /Users/andrejajevtic/Documents/custom-projects/backlog-manager/.worktrees/merge-mode
-isolated transcripts at or before now: 85
-pre-fix  publishes: [ '/Users/…/backlog-manager/.worktrees/merge-mode' ]
-post-fix publishes: [ '/Users/…/backlog-manager',
-                      '/Users/…/backlog-manager/.worktrees/merge-mode' ]
+drifted newest: 2026-09-04T21:28:19.554Z
+  originCwd: /Users/…/backlog-manager
+  cwd      : /Users/…/backlog-manager/.worktrees/watchdog
+pre-fix  publishes: [ '/Users/…/backlog-manager/.worktrees/watchdog' ]
+post-fix publishes: [ '/Users/…/backlog-manager' ]
 repo visible  pre-fix: false  post-fix: true
 ```
 
-Replaying the report's own 2026-09-02 17:40 timestamp does **not** reproduce it
-any more, and that is not evidence of anything: those transcript files kept
-growing after that moment, so their mtimes have moved past the pinned `now` and
-a different file now reads as the dir's newest. mtime-based history is not
-replayable; the isolated probe above is the faithful version.
+And whole-machine, which is what caught the first pass's regression:
 
-Not verified, needs a human: nothing was exercised through a running server or
-the Management UI — no `GET /api/management` response was inspected, and the
-duplicate-`dirName` pair has not been seen rendered in the side rail (two rows,
-repo and worktree, both opening the repo's scope). Downstream, backlog-manager's
-board was not re-checked against a live dashboard.
+```
+projects: 11  unique dirNames: 11
+  /Users/…/backlog-manager                     ← was hidden before the fix
+  /Users/…/backlog-manager/.worktrees/merge-mode  ← the first pass dropped this
+  …/task-11, …/task-12, …/bug-14, …/task-15, and 5 others
+```
+
+Replaying the report's own 2026-09-02 17:40 timestamp does **not** reproduce the
+bug any more, and that is not evidence of anything: those files kept growing, so
+their mtimes moved past the pinned `now` and a different file now reads as the
+dir's newest. mtime history is not replayable; the isolated probe is the faithful
+version.
+
+**Deliberately not done.**
+
+- The plan's optional second half ("newest per distinct cwd within the dir").
+  With the dir-name rule it buys almost nothing, and it costs a 256 KB tail read
+  of every in-window transcript on every call — including every
+  `/api/management/file` request, which goes through `collectServablePaths`.
+- No decoder for `encodeProjectDir`. The encoding is lossy (many paths collapse
+  to one dirName), so only the encode direction is sound; the code never decodes.
+- No client change. `ScopeMenu` and `SpawnPanel` key correctly off `dirName`
+  once the server stops duplicating it.
+
+**Not verified, needs a human.** Nothing ran through a running server or the
+Management UI — no `GET /api/management` response inspected, no rail or spawn
+dropdown rendered. Downstream, backlog-manager's board was not re-checked against
+a live dashboard. The `75/75` encoding measurement is from this machine only; a
+path containing characters that collide differently under the encoding (two
+sibling dirs differing only in punctuation) would fall through to the fallback
+rather than the name match, which is fail-open but untested against a real
+collision.
