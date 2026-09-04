@@ -7,6 +7,14 @@
  * That is what makes the `X-Forwarded-For` branch below acceptable — see
  * `classifyOrigin`.
  *
+ * ⚠️ If you ever gate access on this module, gate on `classifyAddress`, never on
+ * `classifyOrigin`. The latter consults the left-most forwarded entry, which a
+ * peer behind a loopback-terminating proxy writes itself — so as a guard it
+ * returns whichever verdict the caller asks for, refusing an honest proxied
+ * client and admitting one that prepends `127.0.0.1`. `classifyAddress` reads the
+ * socket and nothing else. (`GET /api/focus` used this; it was removed with the
+ * deep link.)
+ *
  * Pure and zero-dep, like the rest of `server/lib`: no `tailscale` binary, no
  * network, no config. With Tailscale absent the tailnet branches simply never
  * match and every client reads `local` or `lan`.

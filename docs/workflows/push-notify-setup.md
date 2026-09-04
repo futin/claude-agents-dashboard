@@ -122,6 +122,104 @@ string counts as set.
 container even a hand-written `localhost` would resolve to the container's own network
 namespace — so the tailnet hostname is the only useful value.
 
+## Optional: ring this Mac instead when you are at the desk
+
+The steps above reach your phone. At the desk that is the wrong device — so set a second
+topic and subscribe a desktop browser to it. A push raised while you are at the keyboard
+rings here; walk away past Settings → "Away after" and it goes back to the phone. Exclusive,
+never both. The mechanism is in
+[desk routing](../subsystems/push-notify.md#desk-routing-which-device-rings).
+
+1. **Generate a second topic** — `openssl rand -hex 16`. Do **not** derive it from
+   `NTFY_TOPIC` by appending `-desk`: leaking one would then leak the other. It is a
+   credential exactly like the first.
+2. **Put it in `.env`** as `NTFY_TOPIC_DESK` and restart the server.
+3. **Leave `DASHBOARD_LOCAL_URL` unset.** The default `http://localhost:<PORT>` (4173) is
+   right under `pnpm dev` and `pnpm start` alike: the tap-through is `/api/dismiss`, an API
+   route, so it does not need Vite's dev port to be serving a page. Set it only for a
+   non-default host or port.
+4. **Subscribe a desktop browser** — open `https://ntfy.sh/<your-desk-topic>`, then in that
+   web app's **Settings** tab turn **background notifications on**. Without that, banners
+   arrive only while an ntfy tab is open.
+
+Two limits worth knowing before you rely on it:
+
+- **Desktop Chrome, Firefox, Edge and Opera deliver web push only while the browser is
+  running.** The tab may be closed, the browser may not. Safari 16.1+ on macOS 13+ is the one
+  desktop browser that delivers with the browser closed, so it is the better receiver for an
+  always-on desk channel.
+- **The desk channel needs no `DASHBOARD_PUBLIC_URL` and no tunnel at all**, unlike the phone
+  link — so desktop notifications with a working deep link are available even if you never set
+  up Tailscale.
+
+**Tapping a desk banner does nothing on purpose.** It is an alert, not a deep link: the tab
+ntfy opens closes itself immediately and you navigate to the session yourself. ntfy offers no
+"inert notification" — without a click target it opens its own topic page and leaves that tab
+behind — so a self-closing page is the closest thing. See
+[the subsystem doc](../subsystems/push-notify.md#tapping-a-desk-push-does-nothing-on-purpose).
+
+### ⚠️ Without background notifications, the tap opens ntfy — not the dashboard
+
+**This one silently defeats the whole desk feature, and the symptom looks nothing like the
+cause.** You get the banner, you tap it, and an ntfy tab opens on ntfy.sh's *default page*.
+The dashboard is never reached and no error appears anywhere.
+
+The cause is which of two delivery paths the notification took:
+
+| Path | When | Click behaviour |
+|---|---|---|
+| **Web push → service worker** | background notifications on, ntfy tab closed | honours the `Click` header — opens the dashboard link |
+| **The open ntfy web-app tab** | background notifications off (the default) | focuses an ntfy tab and navigates it to `https://ntfy.sh` |
+
+Verified against `https://ntfy.sh/sw.js` on 2026-09-04. Its `notificationclick` handler
+opens the click URL only after passing an earlier gate:
+
+```js
+if (!e.notification.data?.message)      // no SW payload → focus ntfy, go to its home page
+  i ? i.focus() : a ? (a.focus(), a.navigate(r)) : self.clients.openWindow(r)
+else if (r.click) self.clients.openWindow(r.click)   // the branch we need
+```
+
+Only the service worker's own push path (`Cr`) attaches `data.message`. A notification the
+web-app tab raised has no such payload, so it never reaches the `click` branch — it takes
+the first one and sends you to ntfy's home page.
+
+So both steps matter, and the second is the one everybody forgets:
+
+1. ntfy web app → **Settings** → turn **background notifications on**.
+2. **Close every ntfy tab.** While one is open it delivers the notifications itself, and
+   step 1 alone changes nothing.
+
+**How to tell which path you are on: close every ntfy tab and send a test push.**
+
+- A banner still arrives → web push is working, and the tap will follow the `Click` header.
+- Nothing arrives → background notifications are off. Closing the tab did not enable them;
+  it just removed the only path you had.
+
+Do **not** try to tell them apart by the notification's title. The service worker titles it
+`Ye(message, defaultTitle)` — the topic is only the *fallback*, used when the message has no
+title of its own, and these pushes always set one (`Claude Code`). Both paths therefore look
+identical on screen.
+
+### ⚠️ macOS shows two identical "Google Chrome" rows, and only one delivers
+
+System Settings → Notifications lists **two entries called "Google Chrome"** — same name, same
+icon, nothing in the UI to tell them apart. They are different bundles:
+
+| Bundle | What it is |
+|---|---|
+| `com.google.Chrome` | Chrome's own UI notifications (downloads, update prompts) |
+| `com.google.Chrome.framework.AlertNotificationService` | the **alerts helper** — what web push from a site actually goes through |
+
+Enable only the first and you get the confusing symptom: the notification arrives, macOS
+records it, and it is never displayed. Enable the alerts helper.
+
+Do **not** try to diagnose this from `com.apple.ncprefs` flags — the values were byte-identical
+before and after the fix that changed the behaviour, so a flags diff proves nothing here. The
+reliable signal is the `presented` column in the Notification Center database
+(`~/Library/Group Containers/group.com.apple.usernoted/db2/db`): a notification that displayed
+has `presented=1`, one that was recorded and swallowed has `presented=0`.
+
 ## Failure modes
 
 Read the Test push result first; it distinguishes most of these.
@@ -133,9 +231,15 @@ Read the Test push result first; it distinguishes most of these.
   the only thing here that talks to the internet; a proxy or egress rule can block it.
 - **"`<server>` refused it (HTTP …)"** — ntfy rejected the publish; the message carries its
   first line of explanation. Usually a malformed topic name or a rate limit.
+- **Reports sent, and the result also says "… changed in .env since this server started"** —
+  you edited `.env` and did not restart. Config is read once, at startup, so the push really
+  was sent, to the value the file held *before* your edit. Restart the server. The warning
+  names the keys and never their values.
 - **Reports sent, phone shows nothing** — the phone is subscribed to a *different* string
   (retype it), notifications are muted for the ntfy app at the OS level, or the device is
-  in a battery-saver mode that defers them.
+  in a battery-saver mode that defers them. If the topic was recently changed, check the
+  Settings page for the stale-`.env` warning first: a server on the old topic and a device
+  on the new one produce exactly this symptom, and a 2xx from ntfy either way.
 - **Push arrives, tapping opens nothing** — `DASHBOARD_PUBLIC_URL` is unset or wrong. The
   Test push result names the URL taps will use, or says outright that there isn't one, so
   read it rather than guessing.
@@ -146,11 +250,26 @@ Read the Test push result first; it distinguishes most of these.
   idle check sent the question to the terminal instead.
 - **Pushes for sessions you did not expect** — the policy is global, not per project. The
   three AND-layers (remote-answer on, away, auto-mode only) are the way to narrow it.
+- **The desk topic never rings, the phone always does** — read the Test push result: it names
+  which topic it routed to. It routes the way a real push would route *right now*, so if it
+  says "phone topic" while you are sitting at the keyboard, the idle reading disagrees with
+  you. `idleSecs` of 0 disables desk routing outright, and a machine where `ioreg` is
+  unreadable (Docker, non-macOS) always routes to the phone.
+- **The desk push arrives but nothing is displayed** — the macOS alerts-helper trap above.
+- **The desk push opens a blank tab that stays open** — the tab could not close itself. It
+  says "You can close this tab."; nothing else was going to happen anyway.
+- **Tapping the desk push opens ntfy's own page instead of the dashboard** — background
+  notifications are off, or an ntfy tab is still open. See the section above; this is the
+  most likely failure on a fresh setup and it looks like a dashboard bug.
 
 ## Rotating the topic
 
 There is no revocation: a topic is public the moment it is known. To rotate, generate a new
-one, change `NTFY_TOPIC`, restart the server, and re-subscribe the phone. The old topic
+one, change `NTFY_TOPIC` (or `NTFY_TOPIC_DESK`), **restart the server**, and re-subscribe the
+device. Skipping the restart is the one mistake this whole feature cannot survive silently —
+the process keeps publishing to the old topic and everything still reports success — so the
+Settings page and the Test push result both call it out when the file and the process
+disagree. The two rotate independently, which is the point of not deriving one from the other. The old topic
 keeps existing on the ntfy server and anyone holding it keeps being able to publish to it —
 so the only thing that matters is that you stop listening to it.
 

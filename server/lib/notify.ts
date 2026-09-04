@@ -17,6 +17,12 @@
  * connection; the dashboard only has to decide when to publish. This is now the
  * *only* channel that reaches you when you are not looking at the dashboard.
  *
+ * Which *device* it reaches is a second question, answered by `NTFY_TOPIC_DESK`:
+ * with one set, a push raised while you are at the keyboard goes to a topic a
+ * browser on this machine is subscribed to instead. The desk push carries no deep
+ * link — tapping it only dismisses (see {@link deskClickUrl}). Exclusive, and off
+ * unless that topic is set.
+ *
  * This is the one part of the backend that talks to the internet. It stays
  * zero-dependency (`node:https`), fire-and-forget, and can never fail or delay
  * the request that triggered it.
@@ -30,6 +36,7 @@ import https from 'node:https';
 import { getState } from './remoteState.js';
 import { scanSessions } from './scan.js';
 import { getSettings } from './settings.js';
+import { staleEnvKeys } from './config.js';
 import type { Config } from './config.js';
 import type { NotifyEvent, NotifyPolicy } from '../../shared/types.js';
 
@@ -92,6 +99,14 @@ export interface NotifyPayload {
   tags: string;
   /** Tap-through URL, or '' when no public URL is configured. */
   click: string;
+  /**
+   * Which ntfy topic to publish to. Absent means `config.ntfyTopic` — the phone.
+   *
+   * On the payload rather than as a second `Sender` argument on purpose: that
+   * keeps the `Sender` type unchanged, and `setSender` is the seam every
+   * delivery test uses.
+   */
+  topic?: string;
 }
 
 /**
@@ -131,6 +146,7 @@ const TAGS: Record<NotifyEvent, string> = {
 
 let sender: Sender | null = null;
 let labelResolver: ((config: Config, sessionId: string) => string) | null = null;
+let idleSource: (() => number | null) | null = null;
 
 /** Test seam: swap the transport so no test opens a socket. `null` restores https. */
 export function setSender(fn: Sender | null): void {
@@ -146,9 +162,23 @@ export function setLabelResolver(fn: ((config: Config, sessionId: string) => str
   labelResolver = fn;
 }
 
+/**
+ * Test seam: swap what `maybeSend` reads idle seconds from, so no test spawns
+ * `ioreg`. `null` restores the real reader.
+ *
+ * Distinct from `setIdleReader` in `idle.ts` despite the near-identical job:
+ * that one overrides `backAtDesk`'s reading for the three wait stores, this one
+ * overrides the push path's. They are separate module state on purpose — a test
+ * that fixes one must not silently move the other.
+ */
+export function setIdleSource(fn: (() => number | null) | null): void {
+  idleSource = fn;
+}
+
 export function resetNotify(): void {
   sender = null;
   labelResolver = null;
+  idleSource = null;
 }
 
 /**
@@ -167,6 +197,28 @@ export function readIdleSecs(): number | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Are they at the keyboard right now? Pure — the reading is the caller's to make.
+ *
+ * Three callers, one rule: `backAtDesk()` (`idle.ts`) releases held waits on it,
+ * `shouldNotify`'s `requireAfk` clause suppresses a push on its inverse, and
+ * `maybeSend` routes to the desk topic on it. It lived inline in the first two
+ * and the third would have been a third copy.
+ *
+ * `thresholdSecs === 0` is false, not "always at the desk": zero disables the
+ * idle gate everywhere else in the app, so it disables these too. A null reading
+ * is false for the same reason `backAtDesk` fails that way — never decide from a
+ * guess.
+ *
+ * ⚠️ Lives here rather than in `idle.ts`, where it reads like it belongs, only
+ * because `idle.ts` already imports `readIdleSecs` from this file and the
+ * reverse edge would make the two mutually importing.
+ */
+export function atDesk(idleSecs: number | null, thresholdSecs: number): boolean {
+  if (thresholdSecs === 0) return false;
+  return idleSecs !== null && idleSecs < thresholdSecs;
 }
 
 /**
@@ -200,6 +252,48 @@ export function clickUrl(config: Config, sessionId: string): string {
 }
 
 /**
+ * The desk push's tap-through: a page that closes the tab it opened in.
+ *
+ * **Deliberately not a deep link.** ntfy's service worker always acts on a click
+ * — with a `Click` header it `openWindow`s that URL, and without one it opens its
+ * own topic page and leaves that tab behind, so "no action" is not on the menu.
+ * Pointing at `/api/dismiss` is the closest thing: the tab flashes and vanishes.
+ *
+ * A deep link that opened the session's drawer in an already-open dashboard tab
+ * did work (see git history for `lib/focus.ts`), and was dropped as more
+ * machinery than the feature earned.
+ *
+ * Never returns '' the way `clickUrl` can: `localUrl` always has a value, so the
+ * desk channel needs no `DASHBOARD_PUBLIC_URL` and no tunnel at all.
+ */
+export function deskClickUrl(config: Config): string {
+  return `${config.localUrl}/api/dismiss`;
+}
+
+/**
+ * Which topic this push goes to, and where tapping it lands.
+ *
+ * Exclusive, not both: `settings.idleSecs` is already tuned for the remote-answer
+ * hooks, and a double-buzz on every alert is a worse default than the rare
+ * missed one. The desk topic mirrors the phone's `NotifyPolicy` events — this is
+ * routing, not a second policy.
+ *
+ * `ntfyTopicDesk` is checked before `readIdle()` so an unset desk topic never
+ * pays for the `ioreg` spawn.
+ */
+export function routePush(
+  config: Config,
+  sessionId: string,
+  thresholdSecs: number,
+  readIdle: () => number | null
+): { topic: string; click: string; desk: boolean } {
+  if (config.ntfyTopicDesk && atDesk(readIdle(), thresholdSecs)) {
+    return { topic: config.ntfyTopicDesk, click: deskClickUrl(config), desk: true };
+  }
+  return { topic: config.ntfyTopic, click: clickUrl(config, sessionId), desk: false };
+}
+
+/**
  * The default transport. Resolves with what ntfy actually said and **never
  * rejects**, so fire-and-forget callers stay unable to fail while `sendTest` can
  * still tell a dropped packet from a delivered one.
@@ -207,7 +301,7 @@ export function clickUrl(config: Config, sessionId: string): string {
 function httpsSend(payload: NotifyPayload, config: Config): Promise<SendResult> {
   return new Promise<SendResult>(resolve => {
     try {
-      const url = new URL(`${config.ntfyServer}/${config.ntfyTopic}`);
+      const url = new URL(`${config.ntfyServer}/${payload.topic || config.ntfyTopic}`);
       const headers: Record<string, string> = {
         Title: payload.title,
         Tags: payload.tags,
@@ -256,20 +350,38 @@ export function maybeSend(
   try {
     if (!config.ntfyTopic) return;
     const settings = getSettings();
+    // Two consumers now want the same reading — the `requireAfk` clause and the
+    // desk routing below — and it costs an `ioreg` spawn (~40ms). Memoised, so
+    // wanting it twice cannot spawn twice; still a thunk, so a policy without
+    // `requireAfk` and a run without a desk topic never spawn at all. That last
+    // property is the whole reason `shouldNotify` takes a thunk rather than a
+    // value, and `test/notify.test.ts` counts the calls to hold it.
+    let idleRead = false;
+    let idleValue: number | null = null;
+    const readIdle = (): number | null => {
+      if (!idleRead) {
+        idleRead = true;
+        idleValue = (idleSource ?? readIdleSecs)();
+      }
+      return idleValue;
+    };
     const passes = shouldNotify(event, settings.notify, {
       remoteAnswer: getState(config).remoteAnswer,
       thresholdSecs: settings.idleSecs,
       permissionMode: ctx.permissionMode,
-      readIdle: readIdleSecs
+      readIdle
     });
     if (!passes) return;
 
+    // Exactly one publish, to exactly one topic — see `routePush`.
+    const route = routePush(config, ctx.sessionId, settings.idleSecs, readIdle);
     const result = deliver(
       {
         title: 'Claude Code',
         body: `${resolveLabel(config, ctx.sessionId)} — ${ctx.phrase ?? PHRASE[event]}`,
         tags: TAGS[event],
-        click: clickUrl(config, ctx.sessionId)
+        click: route.click,
+        topic: route.topic
       },
       config
     );
@@ -280,6 +392,15 @@ export function maybeSend(
     /* a notification must never break the request that triggered it */
   }
 }
+
+/**
+ * Env keys this feature reads. A change to any of them makes the running process
+ * publish somewhere other than where `.env` now says — the failure `staleEnvKeys`
+ * exists to catch, and the reason it is repeated in the test button's answer
+ * rather than only on the Settings page: this string is what someone reads when
+ * they are asking "why did nothing arrive?".
+ */
+const PUSH_ENV_KEYS = ['NTFY_TOPIC', 'NTFY_TOPIC_DESK', 'NTFY_SERVER', 'DASHBOARD_PUBLIC_URL', 'DASHBOARD_LOCAL_URL'];
 
 /**
  * Fire one push regardless of policy and say what happened.
@@ -293,12 +414,31 @@ export function maybeSend(
  * would make the one control built to prove delivery incapable of failing. It
  * still cannot prove a phone is *subscribed* — nothing server-side can, so that
  * last step stays the user's eyes on their own device.
+ *
+ * It does now catch the case that looks exactly like a subscription problem and
+ * is not: a `.env` edited after this process read it, leaving the push going to
+ * the previous topic. See {@link staleEnvKeys}.
  */
 export async function sendTest(config: Config): Promise<string> {
+  // Still `ntfyTopic` specifically: a desk topic with no phone topic behind it is
+  // a misconfiguration, not a supported mode.
   if (!config.ntfyTopic) return 'no NTFY_TOPIC set in .env — nothing to send to';
   try {
+    // Routed exactly as a real push would route *right now*, so the button
+    // proves the routing and not merely the transport — `route.click` included,
+    // or the one control built to prove delivery would prove a tap-through the
+    // real pushes do not use. `''` as the session id: this is not a real
+    // session, and the phone branch's `?session=` is then empty, which
+    // `client/src/lib/deepLink.ts` reads as "no deep link" and ignores.
+    const route = routePush(config, '', getSettings().idleSecs, idleSource ?? readIdleSecs);
     const result = await deliver(
-      { title: 'Claude Code', body: 'Test push — notifications are working', tags: 'robot', click: config.publicUrl },
+      {
+        title: 'Claude Code',
+        body: 'Test push — notifications are working',
+        tags: 'robot',
+        click: route.click,
+        topic: route.topic
+      },
       config
     );
     // A transport that reports nothing is the fire-and-forget contract: the send
@@ -308,9 +448,21 @@ export async function sendTest(config: Config): Promise<string> {
         ? `couldn't reach ${config.ntfyServer}: ${result.detail}`
         : `${config.ntfyServer} refused it (HTTP ${result.status}): ${result.detail} — check NTFY_TOPIC`;
     }
-    return config.publicUrl
-      ? `sent to ${config.ntfyServer} · taps open ${config.publicUrl}`
-      : `sent to ${config.ntfyServer} · no DASHBOARD_PUBLIC_URL, so taps won't open the dashboard`;
+    // The desk branch has no no-URL warning to give: `localUrl` is never empty,
+    // and the tap-through is inert by design rather than a link that could be
+    // missing (see {@link deskClickUrl}).
+    // A 2xx proves ntfy accepted it, not that it went where you think: if the
+    // topic was edited after this process started, it went to the old one and
+    // your browser is subscribed to the new one. Nothing downstream can see that
+    // — only this comparison can.
+    const stale = staleEnvKeys().filter(key => PUSH_ENV_KEYS.includes(key));
+    const warn = stale.length
+      ? ` · ⚠️ ${stale.join(', ')} changed in .env since this server started — it sent to the OLD value; restart to use the new one`
+      : '';
+    if (route.desk) return `sent to ${config.ntfyServer} (desk topic) · taps only dismiss${warn}`;
+    return (config.publicUrl
+      ? `sent to ${config.ntfyServer} (phone topic) · taps open ${config.publicUrl}`
+      : `sent to ${config.ntfyServer} (phone topic) · no DASHBOARD_PUBLIC_URL, so taps won't open the dashboard`) + warn;
   } catch (err) {
     return `send failed: ${err instanceof Error ? err.message : String(err)}`;
   }
