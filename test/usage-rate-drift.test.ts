@@ -3,7 +3,9 @@ import assert from 'node:assert';
 import { rawTokens, weightedTokens } from '../server/lib/usage-ledger.js';
 import type { TokenCounts } from '../server/lib/usage-ledger.js';
 import {
+  BASELINE_FLOORS,
   BASELINE_MS,
+  CURRENT_FLOORS,
   CURRENT_MS,
   DRIFT_PCT,
   RAW_SHIFT_PCT,
@@ -31,7 +33,7 @@ const DAY = 86_400_000;
 const NOW = Date.parse('2026-08-31T12:00:00.000Z');
 
 /** No floor at all — for the cases that are about windowing, not confidence. */
-const LOOSE: RateFloors = { minIntervals: 1, minUtil: 0 };
+const LOOSE: RateFloors = { minIntervals: 1, minUtil: 0, minDays: 0 };
 
 /**
  * Counts with exactly `weighted` weighted tokens and `raw` raw ones.
@@ -69,6 +71,25 @@ function series(opts: {
   const { count, dUtil, weightedPerPct, rawPerPct, model, endT } = opts;
   return Array.from({ length: count }, (_, i) =>
     clean(endT - i * MIN, dUtil, model, weightedPerPct * dUtil, rawPerPct * dUtil));
+}
+
+/**
+ * `count` clean intervals distributed round-robin over `days` consecutive UTC
+ * dates, the last of them `endT`'s date, minute-spaced within each date.
+ *
+ * Round-robin rather than a fixed per-interval step, because the date count is
+ * the quantity under test: derive it from a step and a fixture meant to hold
+ * exactly 7 dates quietly holds 6 or 8 the moment its count changes.
+ */
+function daily(opts: {
+  count: number; days: number; dUtil: number; weightedPerPct: number; rawPerPct: number;
+  model: string; endT: number;
+}): Interval[] {
+  const { count, days, dUtil, weightedPerPct, rawPerPct, model, endT } = opts;
+  return Array.from({ length: count }, (_, i) => {
+    const toT = endT - (i % days) * DAY - Math.floor(i / days) * MIN;
+    return clean(toT, dUtil, model, weightedPerPct * dUtil, rawPerPct * dUtil);
+  });
 }
 
 const kinded = (toT: number, dUtil: number, kind: Interval['kind']): Interval =>
@@ -177,6 +198,8 @@ export function run(): number {
     assert.strictEqual(RAW_SHIFT_PCT, 25);
     assert.strictEqual(BASELINE_MS, 17 * DAY);
     assert.strictEqual(CURRENT_MS, 3 * DAY);
+    assert.deepStrictEqual(BASELINE_FLOORS, { minIntervals: 30, minUtil: 15, minDays: 7 });
+    assert.deepStrictEqual(CURRENT_FLOORS, { minIntervals: 10, minUtil: 5, minDays: 2 });
   })) p++; else f++;
 
   // ── rateFor: the pooled ratio ──
@@ -206,19 +229,55 @@ export function run(): number {
     assert.strictEqual(rate!.utilSum, 2);
   })) p++; else f++;
 
-  if (test('both floors bind independently', () => {
-    const floors: RateFloors = { minIntervals: 30, minUtil: 15 };
-    const enough = (count: number, dUtil: number) =>
-      rateFor(series({ count, dUtil, weightedPerPct: 900_000, rawPerPct: 2_000_000, model: 'A', endT: NOW }),
-        'A', 0, NOW + MIN, floors);
+  if (test('all three floors bind independently', () => {
+    const floors: RateFloors = { minIntervals: 30, minUtil: 15, minDays: 7 };
+    const RATES = { weightedPerPct: 900_000, rawPerPct: 2_000_000, model: 'A' };
+    const enough = (count: number, dUtil: number, days: number) =>
+      rateFor(daily({ ...RATES, count, dUtil, days, endT: NOW }), 'A', 0, NOW + MIN, floors);
 
-    assert.strictEqual(enough(29, 1), null, '29 intervals is under the count floor');
-    assert.strictEqual(enough(30, 0.4), null, 'utilSum 12 is under the movement floor');
-    assert.ok(enough(30, 0.5), 'both floors met');
+    assert.strictEqual(enough(29, 1, 7), null, '29 intervals is under the count floor');
+    assert.strictEqual(enough(30, 0.4, 7), null, 'utilSum 12 is under the movement floor');
+    assert.strictEqual(enough(30, 0.5, 6), null, '6 dates is under the day floor');
+    assert.ok(enough(30, 0.5, 7), 'all three floors met');
   })) p++; else f++;
 
   if (test('no intervals at all → null, never a divide by zero', () => {
     assert.strictEqual(rateFor([], 'A', 0, NOW, LOOSE), null);
+  })) p++; else f++;
+
+  // ── the day floor: bug-17 ──
+
+  if (test('MUTATION: a one-day baseline is refused however many intervals it holds', () => {
+    // The live numbers behind bug-17: the recorder's first 10.8 hours cleared
+    // 30 intervals / 15 points with room to spare and was judged `drift`
+    // against a 3-day pool. Delete the day check in `rateFor` and the first
+    // assert here goes green while the badge is wrong.
+    const opts = { count: 60, dUtil: 65 / 60, weightedPerPct: 163_184, rawPerPct: 1_126_873, model: 'A' };
+    const oneDay = series({ ...opts, endT: NOW - 4 * DAY });
+    assert.strictEqual(rateFor(oneDay, 'A', 0, NOW, BASELINE_FLOORS), null,
+      '60 intervals on one UTC date is not a 14-day baseline');
+
+    const spread = daily({ ...opts, days: 7, endT: NOW - 4 * DAY });
+    const fitted = rateFor(spread, 'A', 0, NOW, BASELINE_FLOORS);
+    assert.ok(fitted, 'the same evidence across 7 dates is a baseline');
+    assert.strictEqual(fitted.days, 7);
+    assert.strictEqual(fitted.intervals, 60, 'same evidence, only spread further');
+  })) p++; else f++;
+
+  if (test('days counts distinct UTC dates, not elapsed time', () => {
+    // Two minutes apart across midnight is two dates; almost 24 hours inside
+    // one date is one. A `max(toT) − min(toT)` span would get both backwards.
+    const acrossMidnight = [
+      clean(Date.parse('2026-08-20T23:59:00.000Z'), 1, 'A', 1_000_000, 400_000),
+      clean(Date.parse('2026-08-21T00:01:00.000Z'), 1, 'A', 1_000_000, 400_000)
+    ];
+    assert.strictEqual(rateFor(acrossMidnight, 'A', 0, NOW, LOOSE)!.days, 2);
+
+    const oneLongDay = [
+      clean(Date.parse('2026-08-20T00:01:00.000Z'), 1, 'A', 1_000_000, 400_000),
+      clean(Date.parse('2026-08-20T23:59:00.000Z'), 1, 'A', 1_000_000, 400_000)
+    ];
+    assert.strictEqual(rateFor(oneLongDay, 'A', 0, NOW, LOOSE)!.days, 1);
   })) p++; else f++;
 
   // ── the window boundaries ──
@@ -242,8 +301,8 @@ export function run(): number {
   const rows = (opts: {
     baseWeighted: number; baseRaw: number; curWeighted: number; curRaw: number;
   }) => driftRow([
-    ...series({ count: 30, dUtil: 0.5, weightedPerPct: opts.baseWeighted, rawPerPct: opts.baseRaw, model: 'A', endT: NOW - 4 * DAY }),
-    ...series({ count: 10, dUtil: 0.5, weightedPerPct: opts.curWeighted, rawPerPct: opts.curRaw, model: 'A', endT: NOW - MIN })
+    ...daily({ count: 30, days: 7, dUtil: 0.5, weightedPerPct: opts.baseWeighted, rawPerPct: opts.baseRaw, model: 'A', endT: NOW - 4 * DAY }),
+    ...daily({ count: 10, days: 2, dUtil: 0.5, weightedPerPct: opts.curWeighted, rawPerPct: opts.curRaw, model: 'A', endT: NOW - MIN })
   ], 'A', NOW);
 
   if (test('a weighted rate two thirds above baseline is drift', () => {
@@ -275,7 +334,7 @@ export function run(): number {
 
   if (test('too little current data is thin, and the baseline is still reported', () => {
     const row = driftRow([
-      ...series({ count: 30, dUtil: 0.5, weightedPerPct: 900_000, rawPerPct: 2_000_000, model: 'A', endT: NOW - 4 * DAY }),
+      ...daily({ count: 30, days: 7, dUtil: 0.5, weightedPerPct: 900_000, rawPerPct: 2_000_000, model: 'A', endT: NOW - 4 * DAY }),
       ...series({ count: 3, dUtil: 0.5, weightedPerPct: 1_500_000, rawPerPct: 3_000_000, model: 'A', endT: NOW - MIN })
     ], 'A', NOW);
     assert.strictEqual(row.verdict, 'thin');
@@ -288,13 +347,39 @@ export function run(): number {
 
   if (test('no baseline yet is thin, and the current rate is still reported', () => {
     const row = driftRow(
-      series({ count: 10, dUtil: 0.5, weightedPerPct: 1_500_000, rawPerPct: 3_000_000, model: 'A', endT: NOW - MIN }),
+      daily({ count: 10, days: 2, dUtil: 0.5, weightedPerPct: 1_500_000, rawPerPct: 3_000_000, model: 'A', endT: NOW - MIN }),
       'A', NOW
     );
     assert.strictEqual(row.verdict, 'thin');
     assert.strictEqual(row.weightedPerPct, 1_500_000);
     assert.strictEqual(row.baselineWeightedPerPct, null);
     assert.strictEqual(row.deviationPct, null);
+  })) p++; else f++;
+
+  if (test('a one-day baseline is thin, and its day count is still reported', () => {
+    const row = driftRow([
+      ...series({ count: 60, dUtil: 65 / 60, weightedPerPct: 163_184, rawPerPct: 1_126_873, model: 'A', endT: NOW - 4 * DAY }),
+      ...daily({ count: 12, days: 3, dUtil: 0.5, weightedPerPct: 219_654, rawPerPct: 1_468_790, model: 'A', endT: NOW - MIN })
+    ], 'A', NOW);
+    assert.strictEqual(row.verdict, 'thin', 'one startup day is not a baseline');
+    assert.strictEqual(row.deviationPct, null);
+    assert.strictEqual(row.baselineWeightedPerPct, null, 'refused, so never published');
+    assert.strictEqual(row.baselineDays, 1, 'but the card can say why it went quiet');
+    assert.strictEqual(row.days, 3);
+  })) p++; else f++;
+
+  if (test('a one-day current window is thin too, and the baseline is still reported', () => {
+    // The mirror of the case above: the day floor binds on both sides, and the
+    // evidence surviving the refusal is the half a card can act on.
+    const row = driftRow([
+      ...daily({ count: 30, days: 7, dUtil: 0.5, weightedPerPct: 900_000, rawPerPct: 2_000_000, model: 'A', endT: NOW - 4 * DAY }),
+      ...series({ count: 10, dUtil: 0.5, weightedPerPct: 1_500_000, rawPerPct: 3_000_000, model: 'A', endT: NOW - MIN })
+    ], 'A', NOW);
+    assert.strictEqual(row.verdict, 'thin');
+    assert.strictEqual(row.weightedPerPct, null, '10 intervals in one morning is not 3 days');
+    assert.strictEqual(row.days, 1);
+    assert.strictEqual(row.baselineWeightedPerPct, 900_000);
+    assert.strictEqual(row.baselineDays, 7);
   })) p++; else f++;
 
   // ── external share ──
@@ -318,7 +403,7 @@ export function run(): number {
   // ── the two-term fit: tokens and requests, separated ──
 
   if (test('the documented split thresholds', () => {
-    assert.deepStrictEqual(SPLIT_FLOORS, { minIntervals: 20, minUtil: 10 });
+    assert.deepStrictEqual(SPLIT_FLOORS, { minIntervals: 20, minUtil: 10, minDays: 1 });
     assert.strictEqual(SPLIT_MAX_R2, 0.99);
     assert.strictEqual(SPLIT_RANK_TOL, 1e-3);
     assert.strictEqual(SPLIT_MIN_INDEPENDENT_SHARE, 0.1);

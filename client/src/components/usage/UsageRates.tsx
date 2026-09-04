@@ -1,7 +1,7 @@
 import type { ModelRateRow } from '../../../../shared/types';
 import { useUsageRates } from '../../hooks/useUsageRates';
 import {
-  evidenceText, formatDeviation, formatSharePct, formatTok, rawAsideText, verdictText
+  baselineText, evidenceText, formatDeviation, formatSharePct, formatTok, rawAsideText, verdictText
 } from '../../lib/usageRatesFormat';
 
 /**
@@ -26,9 +26,7 @@ const BADGE_CLASS: Record<ModelRateRow['verdict'], string> = {
 
 function Row({ row }: { row: ModelRateRow }) {
   const verdict = verdictText(row.verdict);
-  const baseline = row.baselineWeightedPerPct === null
-    ? 'no baseline yet'
-    : `baseline ${formatTok(row.baselineWeightedPerPct)}`;
+  const baseline = baselineText(row.baselineWeightedPerPct, row.baselineDays);
   const rawAside = rawAsideText(row.rawPerPct);
 
   return (
@@ -49,7 +47,7 @@ function Row({ row }: { row: ModelRateRow }) {
       </div>
       {rawAside !== null && <div className="rates-raw">{rawAside}</div>}
       <div className="rates-meta">
-        {baseline} · {evidenceText(row.intervals, row.utilSum)}
+        {baseline} · {evidenceText(row.intervals, row.days, row.utilSum)}
       </div>
       {row.verdict !== 'stable' && <div className="rates-hint">{verdict.hint}</div>}
     </li>
