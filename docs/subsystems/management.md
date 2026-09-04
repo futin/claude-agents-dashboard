@@ -27,6 +27,10 @@ Read-only v1 — nothing is ever written.
   installPath → skills/agents/commands/rules/hooks.json), items tagged `plugin:<name>`.
   Project = `<cwd>/.claude/*` + root CLAUDE.md, items tagged `project`. Recent projects
   come from transcript cwds (same lookback as sessions), deduped by cwd, newest-first.
+  Each transcript credits *both* of its cwds — the launch one and the newest one — because
+  a session that chdir'd into a worktree keeps writing to its repo's project dir, and the
+  newest cwd alone would publish the worktree and hide the repo (bug-14). `resolveProject`
+  gets the launch cwd, so a spawn lands in the repo rather than wherever it wandered.
   Sessions the desktop app archived are skipped — `api.ts` passes `archivedIds` into
   `listRecentProjects`, so a project whose only recent session was deleted in the app stops
   reading as recently active (see [sessions](sessions.md) §Archived-session filter). The

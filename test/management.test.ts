@@ -30,17 +30,26 @@ function makeProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cad-proj-'));
 }
 
-/** Fake ~/.claude/projects root with one transcript per spec, carrying cwd. */
-function makeProjectsRoot(specs: { dirName: string; id: string; cwd: string | null; mtimeMs: number }[]): string {
+/**
+ * Fake ~/.claude/projects root with one transcript per spec, carrying cwd.
+ * `originCwd` makes the transcript drift: it is written as the launch cwd on
+ * the head record and `cwd` lands on a later one, the way a session that
+ * chdir'd into a worktree records it.
+ */
+function makeProjectsRoot(
+  specs: { dirName: string; id: string; cwd: string | null; originCwd?: string; mtimeMs: number }[]
+): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-mroot-'));
   for (const s of specs) {
     const dir = path.join(root, s.dirName);
     fs.mkdirSync(dir, { recursive: true });
+    const stamp = new Date(s.mtimeMs).toISOString();
     const recs = [
       s.cwd !== null
-        ? { cwd: s.cwd, gitBranch: 'main', version: '2.1.0', timestamp: new Date(s.mtimeMs).toISOString(), type: 'user' }
+        ? { cwd: s.originCwd ?? s.cwd, gitBranch: 'main', version: '2.1.0', timestamp: stamp, type: 'user' }
         : { type: 'user' },
-      { message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 100 } }, timestamp: new Date(s.mtimeMs).toISOString() }
+      ...(s.originCwd && s.cwd !== null ? [{ cwd: s.cwd, type: 'user', timestamp: stamp }] : []),
+      { message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 100 } }, timestamp: stamp }
     ];
     const file = path.join(dir, s.id + '.jsonl');
     fs.writeFileSync(file, recs.map(r => JSON.stringify(r)).join('\n'));
@@ -236,6 +245,55 @@ export async function run(): Promise<number> {
     assert.deepStrictEqual(refs.map(r => r.path), [projA, projB]);
     assert.strictEqual(refs[0].dirName, '-a-new');
     assert.strictEqual(refs[0].name, path.basename(projA));
+  }));
+
+  tally(await test('listRecentProjects: a worktree-chdir\'d newest transcript still publishes its launch repo', async () => {
+    // bug-14. One dir, newest transcript launched at the repo root and chdir'd
+    // into a worktree; the older one never left the root. Only the newest is
+    // read, so the root survives only if originCwd is credited alongside cwd.
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const HOUR = 3600_000;
+    const repo = makeProject();
+    const worktree = path.join(repo, '.worktrees', 'X');
+    const root = makeProjectsRoot([
+      { dirName: '-repo', id: 'wt', cwd: worktree, originCwd: repo, mtimeMs: NOW - 1 * HOUR },
+      { dirName: '-repo', id: 'old', cwd: repo, mtimeMs: NOW - 3 * HOUR }
+    ]);
+    const paths = mgmt.listRecentProjects({ lookbackHours: 24 }, { root, now: NOW }).map(r => r.path);
+    assert.ok(paths.includes(repo), 'launch repo missing: ' + JSON.stringify(paths));
+    assert.ok(paths.includes(worktree), 'worktree missing: ' + JSON.stringify(paths));
+  }));
+
+  tally(await test('resolveProject: a drifted dir resolves to its launch repo, not the worktree', async () => {
+    // Both entries share the dirName, so the one resolveProject picks is what
+    // /api/management/project reads and what a spawn gets as its cwd.
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const repo = makeProject();
+    const root = makeProjectsRoot([
+      { dirName: '-repo', id: 'wt', cwd: path.join(repo, '.worktrees', 'X'), originCwd: repo, mtimeMs: NOW - 1000 }
+    ]);
+    const hit = mgmt.resolveProject({ lookbackHours: 24 }, '-repo', { root, now: NOW });
+    assert.strictEqual(hit && hit.path, repo);
+  }));
+
+  tally(await test('listRecentProjects: an unresolvable launch cwd falls open to the newest cwd alone', async () => {
+    // The complement: originCwd is null by design when the head window holds no
+    // cwd, so the entry is the newest cwd and nothing else — no null path, no
+    // phantom project. Padding puts the file past the 256 KB tail window while
+    // its head carries no cwd record.
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const worktree = path.join(makeProject(), '.worktrees', 'X');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-mroot-'));
+    const file = path.join(root, '-nohead', 'pad.jsonl');
+    const recs = [
+      ...Array.from({ length: 900 }, (_, i) => ({ type: 'progress', note: 'p' + i + '-' + 'x'.repeat(280) })),
+      { cwd: worktree, gitBranch: 'main', version: '2.1.0', timestamp: new Date(NOW).toISOString(), type: 'user' },
+      { message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 100 } }, timestamp: new Date(NOW).toISOString() }
+    ];
+    put(root, '-nohead/pad.jsonl', recs.map(r => JSON.stringify(r)).join('\n'));
+    fs.utimesSync(file, NOW / 1000, NOW / 1000);
+    const refs = mgmt.listRecentProjects({ lookbackHours: 24 }, { root, now: NOW });
+    assert.deepStrictEqual(refs.map(r => r.path), [worktree]);
   }));
 
   tally(await test('resolveProject: known dirName → ref; unknown → null', async () => {

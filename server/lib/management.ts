@@ -404,8 +404,8 @@ export async function readProjectScope(projectPath: string, dirName?: string, ho
 
 /**
  * Recently-active projects for the management side-menu: per project dir the
- * newest transcript within the lookback window, its cwd tail-read from the
- * transcript; deduped by cwd (newest wins), newest-first.
+ * newest transcript within the lookback window, read for *both* its launch cwd
+ * and its newest cwd; deduped by cwd (newest wins), newest-first.
  */
 export function listRecentProjects(config: Partial<Config>, options: ProjectsOptions = {}): ProjectRef[] {
   const lookbackHours = (config.lookbackHours ?? 0) > 0 ? (config.lookbackHours as number) : 24;
@@ -423,19 +423,31 @@ export function listRecentProjects(config: Partial<Config>, options: ProjectsOpt
     if (!cur || t.mtimeMs > cur.mtimeMs) newestPerDir.set(t.dirName, { file: t.file, mtimeMs: t.mtimeMs });
   }
 
-  // Extract cwd; dedupe by cwd keeping the most recent dirName.
+  // Extract cwds; dedupe by cwd keeping the most recent dirName. Both cwds
+  // count, the way `scan.ts`'s liveness gate does (bug-7): a session launched in
+  // a repo and chdir'd into its worktree makes both paths recently active, and
+  // the newest cwd alone would publish only the worktree — leaving the repo
+  // itself invisible, since the one dir that could name it is this one (bug-14).
+  // originCwd is null by design when the head window held no cwd, in which case
+  // the newest cwd is all there is.
   const byCwd = new Map<string, ProjectRef>();
   for (const [dirName, t] of newestPerDir) {
     const parsed = readTranscript(t.file);
-    if (!parsed || !parsed.cwd) continue;
-    const cur = byCwd.get(parsed.cwd);
-    if (cur && cur.lastActiveMs >= t.mtimeMs) continue;
-    byCwd.set(parsed.cwd, {
-      dirName,
-      name: path.basename(parsed.cwd) || parsed.cwd,
-      path: parsed.cwd,
-      lastActiveMs: t.mtimeMs
-    });
+    if (!parsed) continue;
+    // Launch cwd first: the pair carries one mtime, so insertion order is what
+    // the (stable) sort below leaves in front, and that is what `resolveProject`
+    // hands to a spawn as its cwd — the repo, not whatever it wandered into.
+    const cwds = new Set([parsed.originCwd, parsed.cwd].filter((c): c is string => !!c));
+    for (const cwd of cwds) {
+      const cur = byCwd.get(cwd);
+      if (cur && cur.lastActiveMs >= t.mtimeMs) continue;
+      byCwd.set(cwd, {
+        dirName,
+        name: path.basename(cwd) || cwd,
+        path: cwd,
+        lastActiveMs: t.mtimeMs
+      });
+    }
   }
 
   return [...byCwd.values()].sort((a, b) => b.lastActiveMs - a.lastActiveMs);
