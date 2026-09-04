@@ -1,5 +1,6 @@
 import type { SessionsResponse, RateLimit, UsageLimits } from '../../../shared/types';
 import { formatResetTime } from '../lib/format';
+import { holdCount } from '../lib/holds';
 import { paceView, FIVE_HOUR_MS, SEVEN_DAY_MS } from '../lib/pace';
 
 /** Title bar + summary line (generated time, active count, running claude procs). */
@@ -11,7 +12,17 @@ export function Header({ data }: { data: SessionsResponse | null }) {
     const procs = data.runningClaudeProcs == null
       ? ''
       : ` · ${data.runningClaudeProcs} claude proc${data.runningClaudeProcs === 1 ? '' : 's'}`;
-    sub = <><b>{data.totals.active}</b>{` active · top ${data.maxSessions}${procs}`}</>;
+    // Every surface, not just the headless ones the banners cover: this mirrors
+    // the row tabs (answer / plan? / reply? / allow?) one for one, so a count
+    // labelled "need you" can never omit a row that visibly says it needs you.
+    const holds = holdCount(data.sessions);
+    sub = (
+      <>
+        <b>{data.totals.active}</b>{` active · top ${data.maxSessions}${procs}`}
+        {/* No `title`: it is dead on touch, and this board is read on a phone. */}
+        {holds > 0 && <span className="need-you">{holds} need you</span>}
+      </>
+    );
   }
 
   return (

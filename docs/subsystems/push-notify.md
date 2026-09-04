@@ -33,6 +33,62 @@ with no `NTFY_TOPIC` set now gets **no** ping from the dashboard — the CLI's o
 notifications are the desk-side channel, and they fire on the machine running the session,
 so a session in Docker or on a remote host posts nothing to your screen.
 
+## What came back: one narrow browser layer
+
+The deletion above was right about every session it was judging — and it was judging every
+session that existed at the time. A **headless session spawned from the dashboard** (the cyan
+`dashboard` pill, `surface: 'dashboard'`) is the one class with no desk-side channel at all:
+there is no CLI in front of it, so there is no CLI notification to duplicate. That is the whole
+argument, and it is why this layer is scoped to exactly that surface and nothing else —
+`notifyKind` in `client/src/lib/webNotify.ts` returns `null` for every other row before it looks
+at anything else. Settings → **Notify this browser · this device**, off by default.
+
+Three events, not four:
+
+| Hold | Banner | Why |
+|---|---|---|
+| `remoteQuestion` | `<label> — question waiting` | answerable from the drawer |
+| `remotePlan` | `<label> — plan waiting for review` | revisable from the drawer |
+| `remoteReply` | `<label> — finished — reply window open` | the window is open here |
+| `permissionWait` | **never** | a headless run has no TTY, so there is no dialog to answer — a banner would be asking for something impossible (see [spawn](spawn.md)) |
+
+The three bodies are asserted against literals in `test/web-notify.test.ts` precisely because
+they mirror `PHRASE` above: the desk channel and the away channel should read alike, and a
+drift apart should fail a test rather than be discovered by someone holding a phone in one
+hand and a laptop in the other.
+
+**The banner's only styling is its icon.** Title, body, `tag`, `silent` and `icon` are the
+entire surface a Web Notification exposes; the banner itself is drawn by the OS and no CSS
+reaches it. So the icon carries the whole visual signal: a 64×64 canvas disc in the live theme
+token (`--amber` question, `--cyan` plan, `--mustard` reply) with a solid glyph on it — `?`,
+`▸` for the plan going out, `◂` for the reply coming back. Anything hairline vanishes at the
+~20px the OS draws it at. `silent: true` is deliberate and paired with our own single `beep()`
+per batch: one sound per batch whatever the OS would have done, and the beep still fires when
+the banner is blocked.
+
+The header's `N need you` pill is a different thing wearing a similar name: **it counts every
+surface, not just headless ones.** It mirrors the row tabs (`answer` / `plan?` / `reply?` /
+`allow?`) one for one, because a count labelled "need you" that omitted a row visibly saying it
+needs you would be worse than no count. Same precedence ladder, `holdKind` in
+`client/src/lib/holds.ts`, shared with the row tabs so the two cannot drift.
+
+### Where it cannot reach
+
+Written down rather than fixed — each one is a real limit of riding the existing poll, and ntfy
+is the channel that has none of them:
+
+1. **The poll's window.** Only the top `maxSessions` sessions by recency are in the payload at
+   all (default 5). A sixth parked session announces nothing.
+2. **Section-bound.** `SessionsView` owns the poll and unmounts on a section switch, so nothing
+   fires while you sit on Management, Analytics, Usage or Settings. Chosen over lifting the poll
+   to the shell, which would poll every 3s on every section and turn a contained feature into a
+   shell-wide change.
+3. **Hidden tabs are throttled.** A background tab's timers can stretch to ~1/minute, so a
+   banner can be up to a minute late.
+4. **iOS gets nothing**, on purpose. `Notification` does not exist in a WebKit tab, so the whole
+   Settings group is absent there rather than present and dead — a switch that reads On while
+   nothing can fire was the original bug. ntfy is that platform's channel.
+
 ## Why the server sends, not the hooks
 
 Three of the four events already arrive here as hook POSTs, at the moment they happen and

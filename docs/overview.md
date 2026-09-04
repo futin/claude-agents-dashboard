@@ -178,10 +178,11 @@ client/src/
   hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
                   useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, usePersistedState,
-                  useSettings, useServerSettings, useDictation, useTranscribeAvailable
+                  useSettings, useServerSettings, useDictation, useTranscribeAvailable,
+                  useWebNotify (browser banners for headless sessions)
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
                   deepLink, dictation, spawnOptions, resume, pace, usageProfile,
-                  usageRatesFormat, panelCollapse, surface, walkChart
+                  usageRatesFormat, panelCollapse, surface, walkChart, holds, webNotify
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
@@ -212,7 +213,7 @@ that area:
 - [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold, answer window, push policy
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `allow?` tab for terminal permission dialogs
-- [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and why they replaced browser alerts outright
+- [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and the one narrow browser layer that came back for headless sessions
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [docker](workflows/docker.md) — running in containers, dev + prod
 - [hooks-setup](workflows/hooks-setup.md) — `pnpm hooks:install`: all five hooks, one command
