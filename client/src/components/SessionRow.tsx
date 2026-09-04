@@ -2,6 +2,7 @@ import type { Session } from '../../../shared/types';
 import { fmtTok, formatAgo } from '../lib/format';
 import { SessionDetail } from './SessionDetail';
 import { STATUS_LABEL } from '../lib/filterSort';
+import { holdKind, type HoldKind } from '../lib/holds';
 import { surfacePill } from '../lib/surface';
 
 interface Props {
@@ -17,24 +18,23 @@ interface Tab {
   title: string;
 }
 
+const HOLD_TABS: Record<HoldKind, Tab> = {
+  question: { label: 'answer', tone: 'answer', title: 'A question is waiting on you — answer it in the chat drawer' },
+  plan: { label: 'plan?', tone: 'answer', title: 'A plan is waiting — revise it from the chat drawer, or approve it in that terminal' },
+  reply: { label: 'reply?', tone: 'answer', title: 'Turn finished — reply from the chat drawer, or let it stop' },
+  permission: { label: 'allow?', tone: 'permission', title: 'Claude is waiting for permission — answer it in that terminal' }
+};
+
+const NO_HOLD_TAB: Tab = { label: 'chat', tone: '', title: 'Open chat history' };
+
 /** What the right-edge tab says. Every hold a session can be in routes to the
  *  same place — the chat drawer — so they share one control instead of four
- *  9px pills competing with the printed fields in `.r1`. Precedence is the
- *  order below: the nearest thing to a blocked session wins the tab. */
+ *  9px pills competing with the printed fields in `.r1`. Precedence — the
+ *  nearest thing to a blocked session wins the tab — is `holdKind`'s, shared
+ *  with the header count and the browser notifications. */
 function chatTab(s: Session): Tab {
-  if (s.remoteQuestion) {
-    return { label: 'answer', tone: 'answer', title: 'A question is waiting on you — answer it in the chat drawer' };
-  }
-  if (s.remotePlan) {
-    return { label: 'plan?', tone: 'answer', title: 'A plan is waiting — revise it from the chat drawer, or approve it in that terminal' };
-  }
-  if (s.remoteReply) {
-    return { label: 'reply?', tone: 'answer', title: 'Turn finished — reply from the chat drawer, or let it stop' };
-  }
-  if (s.permissionWait) {
-    return { label: 'allow?', tone: 'permission', title: 'Claude is waiting for permission — answer it in that terminal' };
-  }
-  return { label: 'chat', tone: '', title: 'Open chat history' };
+  const kind = holdKind(s);
+  return kind ? HOLD_TABS[kind] : NO_HOLD_TAB;
 }
 
 /** One dashboard row: status dot, project/branch/model, tokens+%, context bar, activity.

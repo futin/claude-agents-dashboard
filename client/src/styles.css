@@ -146,6 +146,7 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .head .meta{font-size:11.5px;color:var(--ink2);margin-left:auto;font-variant-numeric:tabular-nums;font-family:var(--mono);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:3px 8px}
 .sub{font-size:10px;color:var(--ink3);margin-bottom:18px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em}
 .sub b{color:var(--green);font-weight:600}
+.sub .need-you{margin-left:8px;padding:1px 6px;border-radius:2px;font-weight:600;color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,transparent)}
 
 .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:18px}
 .toolbar .tb-spacer{flex:1;min-width:0}

@@ -10,7 +10,8 @@ There are two backends, and the page's group headings say which is which.
 **Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, landing tab
 (every section the rail offers, plus Last used — one list, `SECTIONS` in `client/src/lib/sections.ts`,
 from which both the picker's options and `clampSettings`'s accepted set are derived, so the two
-cannot drift apart), chat truncation, refresh rate, row count, lookback, active window. A phone propped on the desk
+cannot drift apart), chat truncation, refresh rate, row count, lookback, active window, browser
+notifications. A phone propped on the desk
 wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and
 three seconds. Sharing these would make one device wrong.
 
@@ -141,17 +142,49 @@ this stylesheet is px throughout, so a root font-size would do nothing, and `zoo
 one-line option that scales the whole board. Verified against the fixed-position chat drawer at
 110%: the backdrop still covers the viewport and the drawer stays flush right.
 
+## Notify this browser
+
+**Notify this browser · this device** — `notifyBrowser`, one flat boolean in
+`localStorage['dashboard.settings']`, default **false**. Per device because that is what it
+actually is: notification permission is granted per browser, the AudioContext belongs to this
+tab, and only a tab open on Sessions can see the poll it rides.
+
+Two rows: the switch, and a **Test notification** button that fires the real path and reports
+what the browser did with each half (`notification sent` / `notifications blocked for this site
+in browser settings` / `notification permission never granted — turn the switch off and on to
+ask` / `no Notification API in this browser`, plus `sound played` / `sound blocked by the
+browser` / `no audio support`). Same principle as the test push below — every failure mode in a
+notification feature is invisible from the page, so the button says rather than assumes.
+
+Three things this page is responsible for getting right:
+
+- **The whole group is absent where `window.Notification` does not exist** (iOS Safari, and
+  Chrome-on-iOS, which is the same engine). Not disabled — absent. A switch that reads On while
+  nothing can fire is the exact bug that got the old alerts layer deleted; ntfy is that
+  platform's channel.
+- **Turning it on asks for permission from that same click**, along with `unlockAudio()` —
+  both are gesture-gated, and `unlockAudio` goes first and un-awaited, because awaiting it
+  would spend the activation before the permission prompt asks for it.
+- **A denied permission still stores the switch On**, under a `set-warn` block saying only the
+  beep will fire. The beep does not need permission; hiding the refusal would leave the group
+  reading On while being silently half-impossible.
+
+What it covers — headless sessions only, three of the four holds, and the four places it
+cannot reach — is [push-notify](push-notify.md). The header's `N need you` pill is deliberately
+wider than this switch: it counts every surface, and it is not gated on it.
+
 ## Push notifications
 
 **Push notifications · every device** — the heading says the storage: server-backed and
 shared by every browser pointed at this dashboard, unlike the per-device groups above.
 
-This is the app's **only** way of telling you something needs you when you aren't looking at
-the dashboard. An in-browser layer (`Notification` banner + beep + tab-title count, fed by a
-poll diff and an SSE stream on `GET /api/alerts/stream`) used to sit above this group and was
-deleted when this shipped: it could never fire on iOS, and on a Mac it only repeated the CLI's
-own notification. The reasoning, and what that trade costs, is in
-[push-notify](push-notify.md).
+This is the app's **only** way of telling you something needs you with no browser open at
+all. An in-browser layer (`Notification` banner + beep + tab-title count, fed by a poll diff
+and an SSE stream on `GET /api/alerts/stream`) used to sit above this group and was deleted
+when this shipped: it could never fire on iOS, and on a Mac it only repeated the CLI's own
+notification. A narrowed version of it is back directly above — see **Notify this browser**
+below — for the one case that argument never covered. The reasoning, and what that trade
+costs, is in [push-notify](push-notify.md).
 
 Nine rows — a master switch, one per event (question / permission dialog / plan / task
 finished), three optional AND-layers (only-while-accepting-remote-answers, only-when-away,

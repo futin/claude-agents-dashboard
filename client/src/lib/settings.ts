@@ -59,6 +59,12 @@ export interface Settings {
   /** Same as `spawnDefaultModel`, for the effort picker. */
   spawnDefaultEffort: SpawnDefaultEffort;
   /**
+   * Show an OS banner + beep in this browser when a dashboard-spawned session
+   * starts needing you. Per device on purpose: permission is granted per
+   * browser, and the tab has to be open on Sessions for the poll to see it.
+   */
+  notifyBrowser: boolean;
+  /**
    * Which Usage sub-tab is showing. Per device like everything else here: the
    * phone on the desk watches the forecast, the laptop checks token value.
    */
@@ -80,6 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
   chatFullText: false,
   spawnDefaultModel: '',
   spawnDefaultEffort: '',
+  notifyBrowser: false,
   usageTab: 'forecast'
 };
 
@@ -149,6 +156,7 @@ export function clampSettings(raw: unknown): Settings {
     chatFullText: pickBool(s.chatFullText, DEFAULT_SETTINGS.chatFullText),
     spawnDefaultModel: pickOne(s.spawnDefaultModel, SPAWN_MODELS, DEFAULT_SETTINGS.spawnDefaultModel),
     spawnDefaultEffort: pickOne(s.spawnDefaultEffort, SPAWN_EFFORTS, DEFAULT_SETTINGS.spawnDefaultEffort),
+    notifyBrowser: pickBool(s.notifyBrowser, DEFAULT_SETTINGS.notifyBrowser),
     usageTab: pickOne(s.usageTab, USAGE_TABS, DEFAULT_SETTINGS.usageTab)
   };
 }

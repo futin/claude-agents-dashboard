@@ -6,6 +6,10 @@ import { useRemoteAnswer } from '../../hooks/useRemoteAnswer';
 import { useServerSettings } from '../../hooks/useServerSettings';
 import { useSettings } from '../../hooks/useSettings';
 import {
+  fireTestNotification, requestWebNotifyPermission, unlockAudio,
+  webNotifyPermission, webNotifySupported
+} from '../../hooks/useWebNotify';
+import {
   FONT_SCALES, LANDING_OPTIONS, LIMITS, REFRESH_CHOICES, THEMES,
   formatInterval, type Landing, type SpawnDefaultEffort, type SpawnDefaultModel, type ThemeId
 } from '../../lib/settings';
@@ -49,6 +53,8 @@ export default function SettingsView() {
   const [token, setToken] = usePersistedState<string>('dashboard.answerToken', '');
   const [confirmReset, setConfirmReset] = useState(false);
   const [pushTestResult, setPushTestResult] = useState<string | null>(null);
+  const [webTestResult, setWebTestResult] = useState<string | null>(null);
+  const [webPermission, setWebPermission] = useState(() => webNotifyPermission());
   const notify = server.state?.notify;
   /**
    * No `NTFY_TOPIC` on the server, so every switch below would flip, persist and
@@ -78,6 +84,27 @@ export default function SettingsView() {
     !notify.requireAfk &&
     (notify.events.question || notify.events.plan) &&
     (server.state?.idleSecs ?? 0) > 0;
+
+  /**
+   * Both the permission prompt and resuming the AudioContext are gesture-gated,
+   * so they have to ride the click that flipped the switch — `unlockAudio` first
+   * and un-awaited, because awaiting it would spend the activation before the
+   * prompt asks for it. The setting is stored on either way: a denied permission
+   * still leaves the beep, and the warning below says so rather than letting the
+   * switch read On while being silently impossible.
+   */
+  async function toggleWebNotify(on: boolean): Promise<void> {
+    update({ notifyBrowser: on });
+    if (!on) return;
+    void unlockAudio();
+    setWebPermission(await requestWebNotifyPermission());
+  }
+
+  async function sendTestNotification(): Promise<void> {
+    setWebTestResult('sending…');
+    setWebTestResult(await fireTestNotification());
+    setWebPermission(webNotifyPermission());
+  }
 
   /**
    * An off switch, a missing topic and a dropped packet all look identical from
@@ -360,6 +387,47 @@ export default function SettingsView() {
           />
         </SettingsRow>
       </SettingsGroup>
+
+      {/* This device only, and narrow on purpose: a session spawned from the
+          dashboard has no terminal in front of it, so it is the one class with
+          no desk-side channel at all. Absent entirely where `Notification` does
+          not exist (iOS in a tab) — a switch that reads On while nothing can
+          fire was the bug that got the old alerts layer deleted. */}
+      {webNotifySupported() && (
+        <SettingsGroup title="Notify this browser · this device">
+          <SettingsRow
+            name="Notify this browser"
+            hint="An OS banner and one beep when a session launched from here — the ones carrying the dashboard pill — has a question, a plan waiting for review, or an open reply window. Nothing else announces those: there is no terminal in front of them. Only fires while this tab is open on Sessions."
+          >
+            <Segmented
+              value={settings.notifyBrowser ? 'on' : 'off'}
+              options={ON_OFF}
+              onChange={v => void toggleWebNotify(v === 'on')}
+            />
+          </SettingsRow>
+
+          {settings.notifyBrowser && webPermission === 'denied' && (
+            <div className="set-warn">
+              <span>⚠</span>
+              <span>
+                Notifications are blocked for this site in your browser settings, so only the
+                beep will fire. Allow them for this site to get the banner back — the browser
+                won’t ask again while it is blocked.
+              </span>
+            </div>
+          )}
+
+          <SettingsRow
+            name="Test notification"
+            hint={
+              webTestResult ??
+              'Fires one banner and one beep right now, ignoring the switch above, and says what the browser did with each.'
+            }
+          >
+            <button onClick={() => void sendTestNotification()}>Send test notification</button>
+          </SettingsRow>
+        </SettingsGroup>
+      )}
 
       {/* Server-backed, hence "every device": the policy lives on the server and
           the server sends, so nothing here depends on a tab being open. This is

@@ -151,6 +151,20 @@ export function run(): number {
     );
   })) p++; else f++;
 
+  // task-16: the browser-notify switch is per device and off until someone asks
+  // for it — a banner nobody consented to is worse than none.
+  if (test('browser notifications start off', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.notifyBrowser, false);
+  })) p++; else f++;
+
+  if (test('a hand-edited string is not a boolean', () => {
+    assert.strictEqual(clampSettings({ notifyBrowser: 'true' }).notifyBrowser, false);
+  })) p++; else f++;
+
+  if (test('one bad sibling cannot discard the browser-notify switch', () => {
+    assert.strictEqual(clampSettings({ notifyBrowser: true, theme: 'chartreuse' }).notifyBrowser, true);
+  })) p++; else f++;
+
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }

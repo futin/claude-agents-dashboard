@@ -3,6 +3,9 @@ id: task-16
 title: Notify this browser when a headless session needs you
 created: 2026-09-04
 from: idea-19
+updated: 2026-09-04T12:03:17Z
+started: 2026-09-04T11:47:32Z
+execute-elapsed: 945
 ---
 
 ## Goal
@@ -260,3 +263,149 @@ Browser:
   was in the loop, say it is **unverified** rather than implying otherwise.
 - `push-notify.md` and `settings.md` updated, including the four blind spots and the one line
   on why the pill counts every surface while the banner does not. `docs-sync` stamps untouched.
+
+## Outcome
+
+**2026-09-04 — done.** Built on `backlog/task-16` (worktree `.worktrees/task-16`, off `main`
+at 6871291). All six plan sections landed as specified; nothing on the server changed and no
+field was added to `shared/types.ts`.
+
+New: `client/src/lib/holds.ts` (the precedence ladder, extracted from `chatTab`),
+`client/src/lib/webNotify.ts` (the pure announcement rules), `client/src/hooks/useWebNotify.ts`
+(permission, canvas icon, beep, `announce`, `fireTestNotification`, the poll hook),
+`test/web-notify.test.ts`. Changed: `SessionRow` (branches on `holdKind`), `Header` (the
+`N need you` pill), `SessionsView` (mounts the hook), `SettingsView` + `lib/settings.ts` (the
+`notifyBrowser` key and its group), one `.sub .need-you` CSS rule, `push-notify.md`,
+`settings.md`, `overview.md`, `test/run-all.ts`, `test/client-settings.test.ts`.
+
+Glyphs chosen for the icon: `?` question, `▸` plan (going out for review), `◂` reply (coming
+back). Solid shapes rather than thin strokes — anything hairline vanishes at the ~20px the OS
+draws the icon at.
+
+### `pnpm typecheck`
+
+```
+> claude-agents-dashboard@0.1.0 typecheck /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard/.worktrees/task-16
+> tsc --noEmit
+```
+
+Exit 0, no diagnostics.
+
+### `pnpm test` — ALL PASS, 1143 cases
+
+```
+=== holds.ts + webNotify.ts ===
+
+  ✓ the hold ladder runs question → plan → reply → permission
+  ✓ holdCount counts every waiting row, whatever it waits on
+  ✓ a local session announces nothing, however loudly it is waiting
+  ✓ a headless permission wait announces nothing — there is no TTY to answer it in
+  ✓ a headless reply window announces
+  ✓ an empty baseline yields the whole waiting set — skipping it is the caller’s job
+  ✓ a session still waiting on the same thing is not news
+  ✓ a different hold on the same session is news again
+  ✓ a session that was working and is now waiting announces
+  ✓ the label prefers the session name and falls back to the project
+  ✓ the three bodies read the way the ntfy push reads
+  ✓ a repeat inside the TTL is dropped, and the stale key is evicted afterwards
+  ✓ one batch keeps two distinct sessions and drops its own duplicate
+  ✓ the key separates two holds on one session
+
+  14 passed, 0 failed
+```
+
+`client/lib/settings.ts` went 11 → 14 cases (the three `notifyBrowser` cases). Final line:
+`ALL PASS`.
+
+Note for the next worktree: `pnpm test` fails one `api-usage-rates` case
+(`a near-miss path is not the rates endpoint`) until `pnpm build` has produced `client/dist`.
+Not a regression — it is the known fresh-worktree artifact.
+
+### Mutation checks — both guards proved
+
+Deleting `if (s.surface !== 'dashboard') return null;` from `notifyKind`:
+
+```
+  ✗ a local session announces nothing, however loudly it is waiting
+  13 passed, 1 failed
+```
+
+Deleting the `'permission'` → `null` mapping:
+
+```
+  ✗ a headless permission wait announces nothing — there is no TTY to answer it in
+  13 passed, 1 failed
+```
+
+Each guard's removal fails exactly its own case and no other. Both restored; `webNotify.ts`
+diffed byte-identical to the original afterwards.
+
+### `chatTab` unchanged by the extraction
+
+Every quoted `label` / `tone` / `title` was extracted from the pre-change file (`git show
+HEAD:`) and from the new `HOLD_TABS` / `NO_HOLD_TAB` constants and diffed: **identical, 15
+strings**. Read the diff as well — the only edits are the `holdKind` import, moving the five
+returns into two constants, and one sentence of the docstring saying where precedence now
+lives.
+
+### Case 18 — the Settings row (Chromium via Playwright, dev server on **5273**, not 5174)
+
+5174/4173 were already held by the user's own servers, so this ran on `PORT=4273
+WEB_PORT=5273`; both of my listeners were killed by PID afterwards and 5174/4173 confirmed
+still up.
+
+- Group `Notify this browser · this device` present at index 5, immediately above `Push
+  notifications · every device`. Rows: `Notify this browser` (reads **Off**) and `Test
+  notification`.
+- Clicked **On** → reads On, `localStorage` `notifyBrowser: true`.
+- Reloaded → still reads On.
+- Clicked **Test** → `notifications blocked for this site in browser settings · sound played`.
+
+**Deviation from the plan's prediction, and it is the harness, not the code.** Case 18 expected
+permission to stay `default` and the string to read "permission never granted". Playwright's
+Chromium *auto-denies* the permission prompt, so after the On click `Notification.permission`
+was genuinely `'denied'` — and the string correctly named that real state. The `denied` path is
+therefore verified end to end, including the `set-warn` block, which rendered:
+`⚠ Notifications are blocked for this site in your browser settings, so only the beep will
+fire…`. The `default` branch was then exercised directly by overriding the `Notification.permission`
+getter and clicking Test again:
+
+```
+notification permission never granted — turn the switch off and on to ask · sound played
+```
+
+Both branches print a real state; neither ever printed "notification sent" while nothing was sent.
+
+### The group is absent without `Notification`
+
+`delete window.Notification`, then re-rendered Settings by switching sections: the group is
+gone from the list (`Display`, `Live data`, `New sessions`, `Usage forecast`, `Remote answers`,
+`Push notifications`, `Reset`) with no crash and the stored value untouched. **This proves the
+code path, not the platform: no iOS device was in the loop, so real iOS Safari is unverified.**
+
+### Case 19 — the header pill
+
+Live poll, 5 sessions, 0 holds → API count 0, no `.need-you` element, `.sub` read
+`1 active · top 5 · 4 claude procs`. Zero branch correct.
+
+For the non-zero branch, `window.fetch` was patched to flag two sessions in the poll response —
+one `surface: 'local'` with `remoteQuestion`, one `surface: 'dashboard'` with `permissionWait` —
+deliberately on different surfaces. After the next poll the header read exactly `2 need you`,
+and the two rows showed `answer` and `allow?`. That is the pill mirroring the row tabs one for
+one across surfaces, which is the property that distinguishes it from the banner: **a headless
+`permissionWait` is counted by the pill and would never be announced by a banner.**
+
+Light theme checked, since a literal colour there is the failure this repo guards against:
+under `data-theme="daylight"` the pill computes to `rgb(168, 100, 20)` on
+`color(srgb 0.658824 0.392157 0.0784314 / 0.13)` — the daylight `--amber`, so the rule is
+token-only as required. Zero console errors across the whole session, with the switch On and
+permission denied for many polls.
+
+### Not verified — needs a human
+
+- **No real banner was ever displayed.** Permission is auto-denied in Playwright's Chromium,
+  and no genuine headless session entered a hold during the run, so `notifyIcon`'s rendered
+  disc, the `tag` collapsing behaviour and the beep's actual audibility are unproven in
+  practice. The decision logic behind them is unit-tested; the pixels and the sound are not.
+- **iOS**: unverified on device (see above).
+- The four blind spots in the plan are documented in `push-notify.md`, not fixed — by design.

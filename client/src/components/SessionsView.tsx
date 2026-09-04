@@ -8,6 +8,7 @@ import { usePersistedState } from '../hooks/usePersistedState';
 import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
 import { useSessions } from '../hooks/useSessions';
 import { useSettings } from '../hooks/useSettings';
+import { useWebNotify } from '../hooks/useWebNotify';
 import { applyView, clearFilters, describeEmpty, pruneProjects, DEFAULT_VIEW, type View } from '../lib/filterSort';
 import { formatInterval } from '../lib/settings';
 
@@ -35,6 +36,9 @@ export function SessionsView() {
   // "+ New" gate) and the spawn panel (its permission-mode ceiling) read the
   // same snapshot instead of each starting their own.
   const remoteAnswer = useRemoteAnswer();
+  // Rides this view's poll, so it is bound to it: nothing announces while
+  // another section is open. See docs/subsystems/push-notify.md.
+  useWebNotify(data?.sessions);
 
   // The project facet is persisted, so a selection can outlive the sessions it
   // named: every row then fails the filter and the list claims there are no
