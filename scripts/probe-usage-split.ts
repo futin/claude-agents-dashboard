@@ -1,6 +1,6 @@
 /**
- * probe-usage-split.ts — run the two-term rate fit against this machine's real
- * logs, and print what it says about the per-token ratio between two models.
+ * probe-usage-split.ts — run both joint rate fits against this machine's real
+ * logs, and print what they say about the per-token ratio between two models.
  *
  *   tsx scripts/probe-usage-split.ts [--dir <repo root>] [--reconstruct] [--days N]
  *
@@ -32,12 +32,12 @@ import fs from 'node:fs';
 
 import { listTranscripts, projectsRoot } from '../server/lib/scan.js';
 import { readRecentSamples, repoRoot } from '../server/lib/usage-history.js';
-import { ledgerStartMs, rawTokens, readLedgerSince, weightedTokens } from '../server/lib/usage-ledger.js';
+import { ledgerStartMs, rawTokens, readLedgerSince } from '../server/lib/usage-ledger.js';
 import type { LedgerLine } from '../server/lib/usage-ledger.js';
 import {
-  SPLIT_FLOORS, SPLIT_MAX_R2, SPLIT_MIN_INDEPENDENT_SHARE,
-  coverageBreakdown, currentRange, explainSplits, isUnpriced, joinIntervals,
-  ledgerBreakMs, rateFor
+  CURRENT_FLOORS, SPLIT_FLOORS, SPLIT_MAX_R2, SPLIT_MIN_INDEPENDENT_SHARE,
+  coverageBreakdown, currentRange, explainRates, explainSplits, fitDeviation,
+  isUnpriced, joinIntervals, ledgerBreakMs, rateFor
 } from '../server/lib/usage-rate.js';
 import type { RateFloors } from '../server/lib/usage-rate.js';
 
@@ -116,47 +116,6 @@ function reconstruct(ledger: LedgerLine[], sinceMs: number): LedgerLine[] {
   });
 }
 
-/** Ordinary least squares, normal equations, unit-normed columns. No intercept. */
-function ols(X: number[][], y: number[]): number[] | null {
-  const width = X[0]?.length ?? 0;
-  if (width === 0) return null;
-  const norms = new Array<number>(width).fill(0);
-  for (const row of X) for (let c = 0; c < width; c++) norms[c] += row[c] * row[c];
-  for (let c = 0; c < width; c++) {
-    norms[c] = Math.sqrt(norms[c]);
-    if (norms[c] === 0) return null;
-  }
-  const A = Array.from({ length: width }, (_, i) => Array.from({ length: width }, (_, j) => {
-    let acc = 0;
-    for (const row of X) acc += (row[i] / norms[i]) * (row[j] / norms[j]);
-    return acc;
-  }));
-  const b = Array.from({ length: width }, (_, i) => {
-    let acc = 0;
-    for (let r = 0; r < X.length; r++) acc += (X[r][i] / norms[i]) * y[r];
-    return acc;
-  });
-  for (let col = 0; col < width; col++) {
-    let pivot = col;
-    for (let r = col + 1; r < width; r++) if (Math.abs(A[r][col]) > Math.abs(A[pivot][col])) pivot = r;
-    if (Math.abs(A[pivot][col]) < 1e-9) return null;
-    [A[col], A[pivot]] = [A[pivot], A[col]];
-    [b[col], b[pivot]] = [b[pivot], b[col]];
-    for (let r = col + 1; r < width; r++) {
-      const factor = A[r][col] / A[col][col];
-      for (let c = col; c < width; c++) A[r][c] -= factor * A[col][c];
-      b[r] -= factor * b[col];
-    }
-  }
-  const z = new Array<number>(width).fill(0);
-  for (let r = width - 1; r >= 0; r--) {
-    let acc = b[r];
-    for (let c = r + 1; c < width; c++) acc -= A[r][c] * z[c];
-    z[r] = acc / A[r][r];
-  }
-  return z.map((v, c) => v / norms[c]);
-}
-
 function main(): number {
   const nowMs = Date.now();
   const sinceMs = nowMs - DAYS * DAY_MS;
@@ -230,17 +189,32 @@ function main(): number {
       + `  (${fitted.intervals} intervals, ${fitted.utilSum.toFixed(1)} pts)`);
   }
 
-  // bug-13's estimator: one regressor per model, no request term, same rows.
-  const oneTerm = ols(
-    usable.map((i) => models.map((m) => (i.tok[m] ? weightedTokens(i.tok[m], m) / MTOK : 0))),
-    usable.map((i) => i.dUtil)
-  );
-  console.log('\n  one-term joint OLS over the usable set (bug-13’s estimator):');
-  if (oneTerm === null) console.log('    singular');
-  else models.forEach((m, k) => console.log(
-    `    ${m}: ${oneTerm[k].toFixed(4)} pt/Mtok`
-    + (oneTerm[k] > 0 ? `  = ${(1 / oneTerm[k]).toFixed(3)}M weighted/pt` : '')
-  ));
+  // The one-term joint fit, **gated** — what the card actually publishes beside
+  // the pooled rate, refusals and all. An ungated OLS here is how a model the
+  // server refuses gets cited as a measurement, which is a mistake this probe
+  // has already made once.
+  const rateDiagnostics = explainRates(intervals, cur.sinceMs, cur.untilMs);
+  const oneTerm = new Map(rateDiagnostics.filter((d) => d.fit).map((d) => [d.model, d.fit!]));
+  console.log(`\n  one-term joint fit vs the pooled rate (floors ${CURRENT_FLOORS.minIntervals}/`
+    + `${CURRENT_FLOORS.minUtil}/${CURRENT_FLOORS.minDays},`
+    + ` independent share ≥ ${SPLIT_MIN_INDEPENDENT_SHARE}):`);
+  for (const d of rateDiagnostics) {
+    const evidence = `share=${d.independentShare.toFixed(4)}, ${d.intervals} intervals`
+      + `, ${d.utilSum.toFixed(1)} pts, ${d.days} days`;
+    if (!d.fit) {
+      const raw = d.raw === null ? '' : `, least squares wanted ${d.raw.toFixed(4)} pt/Mtok`;
+      console.log(`    ${d.model}: no fitted rate — ${d.refusal}  (${evidence}${raw})`);
+      continue;
+    }
+    const p = pooled.get(d.model);
+    const gap = p === undefined || p <= 0
+      ? 'no pooled rate — this model owns no window'
+      : `pooled ${(p / MTOK).toFixed(4)}M, gap `
+        + `${(fitDeviation(d.fit.weightedPerPct, p) ?? 0).toFixed(1)}%`;
+    console.log(`    ${d.model}: fitted ${(d.fit.weightedPerPct / MTOK).toFixed(4)}M weighted/pt`
+      + `  (${gap})`);
+    console.log(`      ${d.fit.pctPerMWeighted.toFixed(4)} pt/Mtok  (${evidence})`);
+  }
 
   // This branch's estimator, with its reasoning for every model — a bare
   // "thin" is not a finding, and which gate refused is the whole diagnosis.
@@ -295,7 +269,7 @@ function main(): number {
     const w = pooled.get(m);
     return w === undefined || w <= 0 ? undefined : 1 / w;
   })}`);
-  console.log(`      one-term joint OLS:  ${ratio((m) => oneTerm?.[models.indexOf(m)])}`);
+  console.log(`      one-term joint fit:  ${ratio((m) => oneTerm.get(m)?.pctPerMWeighted)}`);
   console.log(`      two-term fit:        ${ratio((m) => splits.get(m)?.pctPerMWeighted)}`);
   // The counterfactual, because "n/a" hides whether the gap would have closed:
   // what the ratio would be if the sign refusal were lifted. Never shippable —

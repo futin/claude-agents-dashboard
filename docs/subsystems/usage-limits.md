@@ -575,7 +575,7 @@ with each pair. Then each interval is classified:
 | `Δutil ≤ 0.01` | `idle` | nothing (but it is a measurement, not a hole) |
 | weighted tokens < 5 000 | `external` | the disclosed burn share only |
 | one model holds ≥ 90% of weighted tokens | `{model}` | that model's rate |
-| otherwise | `mixed` | the two-term split fit only |
+| otherwise | `mixed` | both joint fits — never a pooled rate |
 
 The first three used to be one kind called `gap`, and splitting them was worth
 doing because **92% of what it reported was a startup artifact**: measured over
@@ -675,14 +675,14 @@ under-determined exactly when it matters (two models always used together), and
 a wrong split is indistinguishable from drift. So every number the drift
 comparison rests on — `rawPerPct`, `weightedPerPct`, the baselines, the
 deviation and the verdict — still comes from `DOMINANCE`-owned intervals only,
-and `mixed` is still discarded for them.
+and `mixed` is discarded for them.
 
-**`mixed` is no longer discarded by everything, though.** The two-term fit below
-is joint across models, so it needs no ownership at all and reads `mixed` too —
-that is where the information about telling two models apart actually lives (on
-live logs, 50 of 58 `mixed` intervals contained fable, against its 16 owned
-ones). `DOMINANCE` is therefore load-bearing for the rate and the drift verdict,
-and irrelevant to the split.
+**`mixed` is discarded by no fit at all, though.** Both joint fits below — the
+two-term split and the one-term rate — are joint across models, so they need no
+ownership and read `mixed` too. That is where the information about telling two
+models apart actually lives (on live logs, 50 of 58 `mixed` intervals contained
+fable, against its 16 owned ones). `DOMINANCE` is therefore load-bearing for the
+pooled rate and the drift verdict, and irrelevant to either joint fit.
 
 **Pooled Σtokens / Σutil, not a mean of per-interval ratios.** A mean lets a
 0.02% interval with a noisy numerator count as much as an hour of steady work.
@@ -835,25 +835,107 @@ Re-run `pnpm probe:usage-split` after a day of real recording and re-confirm the
 refutation against recorded counts before acting on it. The full caveat list is
 in `backlog/tasks/done/task-10-*.md` under *Not verified*.
 
+### The one-term joint fit: a rate for every model, mixed windows included
+
+`explainRates` / `fitRates` fit utilization against **one** regressor per model —
+its weighted tokens in millions — jointly across every usable interval, with no
+intercept, reusing the same `project` / `independentShares` / `leastSquares`
+primitives as the two-term fit. `fitRates` is the filtered form; `explainRates`
+reports one `RateDiagnostic` per model whatever the outcome.
+
+Why it exists, and it is not the pooled rate's failure mode:
+
+- The pooled rate needs one model to hold `DOMINANCE` of a window. A model used
+  only as a **subagent beside a driver model** never holds it, owns nothing, and
+  under the old rule got no row on the card at all. That was the concrete
+  user-visible defect, not a theoretical gap.
+- The two estimators disagree by far more than `DRIFT_PCT`. Measured over the
+  17-day baseline on 2026-09-05, at the server's own 3-day fit window:
+  `claude-opus-5` pooled 0.2100M weighted/pt against fitted 0.3160M
+  (**+50.4%**), `claude-fable-5-1` pooled 0.0451M against fitted 0.0817M
+  (**+81.0%**). Over the full 17-day span the fitted rates are `claude-opus-5`
+  0.354M, `claude-sonnet-5` 0.394M, `claude-fable-5` 0.122M, `claude-fable-5-1`
+  0.116M and `claude-haiku-4-5-20251001` 0.303M — a model with **zero** owned
+  intervals in the whole window, which the card could not previously price at all.
+
+**Which intervals** — `usableForRate` admits `{model}`, `mixed` and `idle`, and
+rejects `external` plus everything `isUnpriced` names, for the reasons
+`usableForSplit` gives. It **does not test `reqUsable`**, and that difference is
+deliberate: that flag is a two-term-only requirement, because the split's second
+regressor *is* the request column. A missing request count says nothing about
+the token totals. Copying `usableForSplit` wholesale would have thrown away the
+2000 of 5019 live ledger lines written before the recorder produced counts —
+~40% of the evidence — for nothing. `test/usage-rate-fit.test.ts` names that
+regression in a test title.
+
+**Which gates** — `SPLIT_RANK_TOL` for the solve, and
+`SPLIT_MIN_INDEPENDENT_SHARE` for the answer. The second is the one that
+matters here: with one column per model, cross-model collinearity is the *entire*
+risk, and `independentShares` is the only instrument that looks across models.
+`SPLIT_MAX_R2` is **deliberately not applied** — it compares a model's own two
+regressors against each other, and this fit gives a model one, so it has nothing
+to say. A non-positive coefficient is a refusal, not a clamp, with one edge of
+its own: the published rate is `1M / coefficient`, so a clamped zero would read
+as an *infinite* price rather than a free one.
+
+**Which floors** — `CURRENT_FLOORS` (10 / 5 / 2), not `SPLIT_FLOORS` (20 / 10 / 1).
+`SPLIT_FLOORS` is doubled because the split fits two parameters per model; this
+fits one, the same count the pooled ratio fits, so it earns the same floor. That
+is a decision, and it is written down here because the next reader will
+otherwise assume the higher floor was an oversight. The refusal vocabulary is
+`RateRefusal`: `thin-evidence` → `unidentified` → `negative`, reported
+most-informative first.
+
+**And it is excluded from every drift verdict.** The pooled rate stays the
+headline and stays the quantity `verdict` and `deviationPct` are computed on.
+Three reasons, all of them about not knowing rather than about preference:
+`BASELINE_FLOORS` / `CURRENT_FLOORS` and `DRIFT_PCT` were tuned against the
+*measured* day-to-day dispersion of the pooled ratio (cv ≈ 24%) and nothing has
+measured the fitted rate's; swapping the drift quantity would silently rewrite
+every verdict with no way for a reader to see it happened; and the two-term
+fit's own cross-model ratio came back **refuted** on live data, so a fitted
+number is not automatically the more trustworthy one. `bug-13`'s limit —
+this card must not claim cross-model comparability — applies to the fitted rate
+exactly as it does to the pooled one. Regularising toward the clean-interval
+rate was also considered and rejected: this file answers ill-conditioning by
+refusing, and a prior would make the fitted number partly an echo of the pooled
+number it exists to check independently.
+
 ### The endpoint and the card
 
 `GET /api/usage/rates` (`shapeUsageRates` is the pure part) returns one row per
-model that owns at least one attributable interval, richest evidence first, plus
-`externalSharePct` and a `coverage` object. Read-only, unpolled — it reads two files and does
+model that either owns an attributable interval **or** is identified by the
+one-term joint fit, richest evidence first, plus `externalSharePct` and a
+`coverage` object. Read-only, unpolled — it reads two files and does
 arithmetic, and the numbers move on a scale of days — and it fails open to an
-honest empty body exactly like `serveUsageProfile`. A model seen only in mixed,
-external or gap intervals gets **no row**: a row of nulls reads as a broken fit
-rather than as an absence of evidence. That rule is unchanged by the split fit,
-which means a model the split *can* estimate but which owns no interval still
-gets no row, and its coefficients are simply not surfaced.
+honest empty body exactly like `serveUsageProfile`. A model with **neither**
+still gets no row: a row of nulls reads as a broken fit rather than as an
+absence of evidence.
+
+A fitted-only row is legitimately all-null on the pooled side — no rates,
+`verdict: 'thin'`, and `intervals` / `utilSum` / `days` at zero — with
+`fittedWeightedPerPct` as the only number on it. That is honest and is not
+special-cased anywhere; `driftRow` produces it unaided. The sort key is
+unchanged (`utilSum` desc, then model name), so fitted-only rows land last.
 
 Each row also carries `pctPerMWeighted`, `pctPerRequest` and `splitVerdict`
-from one joint fit over the same current window the row's own rate describes, so
-a row's split and its pooled rate never describe different spans.
-`splitVerdict: 'thin'` covers every refusal — the row does not say which, and
-the probe script is where the reason lives. Every other field on the row is the
-single-ratio number it always was: the split is **additive**, so `bug-13` can
-decide what the card does with it independently.
+from the two-term fit, and `fittedWeightedPerPct`, `fitVerdict` and
+`fitDeviationPct` from the one-term fit. **Both fits run over the same
+`currentRange(nowMs)` window the row's own pooled rate describes**, so a row's
+three numbers never describe different spans. `splitVerdict: 'thin'` and
+`fitVerdict: 'thin'` each cover every refusal of their own fit — the row does
+not say which, and `scripts/probe-usage-split.ts` is where the reasons live.
+`fitDeviationPct` is computed on the server (`fitDeviation`) so the comparison
+lives in one place and the card owns no threshold; it is null when either rate
+is null and null rather than `Infinity` when the pooled rate is not positive.
+Every drift field on the row is the single-ratio number it always was: both
+fits are **additive**.
+
+On the card the fitted rate is a third line under the raw aside
+(`fittedAsideText`, omitted entirely when there is no fitted rate — never a
+dash), and the badge above it is still the pooled rate's verdict. The empty
+state names both routes onto the card, because 90% dominance is no longer the
+only one.
 
 `coverage` (`UsageCoverage`) is the disclosure the three unpriced kinds exist
 for: `movedPct` as the denominator, `pricedPct` for what reached a rate, then

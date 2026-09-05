@@ -5,6 +5,7 @@ import {
   baselineText,
   coverageClauses,
   evidenceText,
+  fittedAsideText,
   formatDeviation,
   formatShareOf,
   formatSharePct,
@@ -95,6 +96,41 @@ export function run(): number {
   if (test('rawAsideText: a translation of nothing is no line, never a dash', () => {
     assert.strictEqual(rawAsideText(null), null);
     assert.strictEqual(rawAsideText(Number.NaN), null);
+  })) p++; else f++;
+
+  if (test('fittedAsideText names the fitted rate and where it was measured', () => {
+    assert.strictEqual(
+      fittedAsideText(357_000, null),
+      'fitted 357k weighted / 1% across mixed-model windows'
+    );
+    assert.strictEqual(
+      fittedAsideText(357_000, 58.3),
+      'fitted 357k weighted / 1% across mixed-model windows · +58.3% vs the rate above'
+    );
+    // Magnitudes come from `formatTok`, so one value in each of its bands.
+    assert.strictEqual(
+      fittedAsideText(1_513_000, -12),
+      'fitted 1.5M weighted / 1% across mixed-model windows · -12.0% vs the rate above'
+    );
+    assert.strictEqual(
+      fittedAsideText(840, null),
+      'fitted 840 weighted / 1% across mixed-model windows'
+    );
+  })) p++; else f++;
+
+  if (test('fittedAsideText: no fitted rate is no line, never a dash', () => {
+    assert.strictEqual(fittedAsideText(null, null), null);
+    assert.strictEqual(fittedAsideText(null, 58.3), null, 'a deviation without a rate is still no line');
+    assert.strictEqual(fittedAsideText(Number.NaN, null), null);
+  })) p++; else f++;
+
+  if (test('fittedAsideText owns no threshold: a huge gap renders like a small one', () => {
+    // The threshold is the server's, and there is no verdict to make here —
+    // asserting that both render identically is what pins that.
+    const small = fittedAsideText(210_000, 0.4)!;
+    const huge = fittedAsideText(210_000, 1064.2)!;
+    assert.strictEqual(small.replace('+0.4%', 'X'), huge.replace('+1064.2%', 'X'));
+    assert.ok(huge.endsWith('· +1064.2% vs the rate above'), huge);
   })) p++; else f++;
 
   if (test('formatSharePct rounds, and null stays null', () => {
