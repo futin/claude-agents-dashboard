@@ -17,8 +17,8 @@ import type { ProfileState, UsageSample } from './lib/usage-history.js';
 import { ledgerStartMs, readLedgerSince } from './lib/usage-ledger.js';
 import type { LedgerLine } from './lib/usage-ledger.js';
 import {
-  BASELINE_MS, coverageBreakdown, currentRange, driftRow, externalShare, fitSplits,
-  joinIntervals, ledgerBreakMs
+  BASELINE_MS, coverageBreakdown, currentRange, driftRow, externalShare, fitDeviation,
+  fitRates, fitSplits, joinIntervals, ledgerBreakMs
 } from './lib/usage-rate.js';
 import { HOURS_PER_WEEK, confidenceOf, localOffsetMinutes, walkForward } from './lib/usage-forecast.js';
 import {
@@ -726,11 +726,17 @@ function emptyRates(nowMs: number, recording: boolean, error?: true): UsageRates
  * Shape one `GET /api/usage/rates` body. Pure — no clock, no disk — so the
  * arithmetic and every honesty rule are testable (test/api-usage-rates.test.ts).
  *
- * One row per model that owns at least one attributable interval, richest
- * evidence first: the model you actually use should not sit under a model you
- * tried once. Models seen only in mixed, external or gap intervals get no row
- * at all — there is nothing to say about them yet, and a row of nulls reads as
- * a broken fit rather than as an absence of evidence.
+ * One row per model that either owns an attributable interval **or** is
+ * identified by the one-term joint fit, richest evidence first: the model you
+ * actually use should not sit under a model you tried once. A model with
+ * neither still gets no row at all — there is nothing to say about it yet, and
+ * a row of nulls reads as a broken fit rather than as an absence of evidence.
+ *
+ * The fitted-only case is the one the second half of that rule exists for: a
+ * model used only as a subagent beside a driver model never holds `DOMINANCE`
+ * of a window, so the pooled rate has nothing for it and the card used to omit
+ * it entirely. Its row's pooled numbers are legitimately all null with a `thin`
+ * verdict and zeroed counters — honest, and not special-cased.
  */
 export function shapeUsageRates(opts: {
   recording: boolean;
@@ -752,21 +758,28 @@ export function shapeUsageRates(opts: {
     if (typeof interval.kind === 'object') models.add(interval.kind.model);
   }
 
-  // One joint fit for every model, over the same current window the rows
-  // report — so a row's split and its pooled rate never describe different
-  // spans. A model that owns no interval still gets no row, so its fitted
-  // split is simply not surfaced; which model earns a row is unchanged.
+  // Both joint fits run over the same current window the pooled rows report,
+  // so a row's three numbers never describe different spans.
   const cur = currentRange(nowMs);
   const splits = fitSplits(intervals, cur.sinceMs, cur.untilMs);
+  const fitted = fitRates(intervals, cur.sinceMs, cur.untilMs);
+  for (const model of fitted.keys()) models.add(model);
 
   const rows: ModelRateRow[] = [...models]
     .map((model) => {
       const split = splits.get(model);
+      const fit = fitted.get(model);
+      const drift = driftRow(intervals, model, nowMs);
       return {
-        ...driftRow(intervals, model, nowMs),
+        ...drift,
         pctPerMWeighted: split?.pctPerMWeighted ?? null,
         pctPerRequest: split?.pctPerRequest ?? null,
-        splitVerdict: split === undefined ? ('thin' as const) : ('fitted' as const)
+        splitVerdict: split === undefined ? ('thin' as const) : ('fitted' as const),
+        fittedWeightedPerPct: fit?.weightedPerPct ?? null,
+        fitVerdict: fit === undefined ? ('thin' as const) : ('fitted' as const),
+        // Against the pooled rate the row already publishes, so the number the
+        // card compares is the number the card shows.
+        fitDeviationPct: fitDeviation(fit?.weightedPerPct ?? null, drift.weightedPerPct)
       };
     })
     .sort((a, b) => b.utilSum - a.utilSum || a.model.localeCompare(b.model));

@@ -3,6 +3,10 @@ id: task-20
 title: Fit per-model rates over mixed intervals and publish them beside the dominance rate
 created: 2026-09-05
 from: idea-13
+updated: 2026-09-05T18:53:29Z
+started: 2026-09-05T18:31:17Z
+execute-elapsed: 1332
+execute-tokens: 235391
 ---
 
 ## Goal
@@ -339,3 +343,294 @@ expected value is exact rather than eyeballed. Assert to a relative tolerance of
   removed, and the pass with it restored.
 - The live probe table (case 14) and the browser read (case 15) are both in the PR, and
   anything not verified is stated as such — this repo's PR rule, not a formality.
+
+## Outcome
+
+**2026-09-05 — done.** The one-term joint fit ships beside the pooled dominance rate. Every
+model now gets a weighted rate fitted over the `mixed` and `idle` windows `DOMINANCE`
+discards, published on its own line under the raw aside, with the signed gap against the
+headline — and excluded from every drift verdict, as the plan's conservative branch decided.
+
+What landed, by boundary:
+
+- **`shared/types.ts`** — `ModelFitVerdict`, plus `fittedWeightedPerPct`, `fitVerdict` and
+  `fitDeviationPct` on `ModelRateRow`, all required.
+- **`server/lib/usage-rate.ts`** — `usableForRate` (no `reqUsable` test), `explainRates`,
+  `fitRates`, `fitDeviation`, `RateFit` / `RateRefusal` / `RateDiagnostic`. Reuses
+  `project` / `independentShares` / `leastSquares`; gates on `SPLIT_RANK_TOL`,
+  `SPLIT_MIN_INDEPENDENT_SHARE`, `CURRENT_FLOORS` and a non-positivity refusal.
+  `SPLIT_MAX_R2` deliberately not applied, with the reason in the JSDoc.
+- **`server/api.ts`** — `shapeUsageRates` widens its row set with every fitted model and
+  fills the three fields over the same `currentRange(nowMs)` window `fitSplits` uses.
+  `driftRow`'s verdict logic is untouched.
+- **`scripts/probe-usage-split.ts`** — the ungated `ols()` section is replaced by gated
+  `explainRates` output; the local `ols()` helper is deleted (no other caller).
+- **Client** — `fittedAsideText` in `usageRatesFormat.ts`, a third line in `UsageRates.tsx`,
+  and both false copy strings rewritten. `styles.css` is **unchanged**: `.rates-raw` fit
+  exactly (same mono/size/token colour/4px offset), so no new class was needed — the plan
+  allowed reuse and the screenshot confirmed the two asides read as distinct lines.
+- **Docs** — new `### The one-term joint fit` section in `usage-limits.md` with the measured
+  gaps and their date; the `mixed` classification row and the "still discarded" narrative
+  corrected; the endpoint section rewritten. `docs/overview.md` §Map updated.
+
+### Deviation from the plan, stated
+
+Step 13 said the `GET /api/usage/rates` row in `docs/overview.md` "gains the fitted-rate
+fields". **That row did not exist** — a pre-existing omission in the endpoint table. I added
+the row rather than skipping the step.
+
+### Verification
+
+`pnpm test` — **1010 cases, ALL PASS** (8 new in `test/usage-rate-fit.test.ts`, 4 new in
+`test/api-usage-rates.test.ts`, 3 new in `test/usage-rates-format.test.ts`; every
+pre-existing case in the latter two untouched):
+
+```
+  18/18 passed
+ALL PASS
+```
+
+`pnpm typecheck` — clean:
+
+```
+> claude-agents-dashboard@0.1.0 typecheck
+> tsc --noEmit
+exit=0
+```
+
+`pnpm build` — clean:
+
+```
+dist/assets/index-DrIGxh27.js   394.25 kB │ gzip: 113.16 kB
+✓ built in 1.29s
+```
+
+**New fitter cases (case 1-8):**
+
+```
+=== usage-rate.ts (one-term joint fit) ===
+
+  ✓ two separable models are recovered exactly, mixed windows included
+  ✓ a model that never dominates a window gets a rate — the case this fit exists for
+  ✓ a collinear pair is refused, and the independence gate is what refuses it
+  ✓ a negative coefficient is refused, not clamped to zero
+  ✓ the floors bite at the documented boundary, days included
+  ✓ external and unpriced intervals are out; idle intervals are in and move the answer
+  ✓ reqUsable: false does not exclude an interval — the copy-usableForSplit regression
+  ✓ the window is half-open on toT: sinceMs is in, untilMs is out
+
+  8 passed, 0 failed
+```
+
+### Case 3's mutation check — the independence gate is load-bearing
+
+With the `diagnostic.independentShare < SPLIT_MIN_INDEPENDENT_SHARE` comparison deleted from
+`explainRates`, the collinear pair test **fails**: model A keeps the coefficient the solve
+handed it and publishes a rate invented by collinearity.
+
+```
+  ✗ a collinear pair is refused, and the independence gate is what refuses it
+    A: {"model":"A","intervals":30,"utilSum":648,"days":3,
+        "independentShare":3.894236168669954e-17,"refusal":null,
+        "fit":{"weightedPerPct":83333.3333333333,"pctPerMWeighted":12.000000000000005,
+               "intervals":30,"utilSum":648},"raw":12.000000000000005}
+    + actual - expected
+    + null
+    - 'unidentified'
+
+  7 passed, 1 failed
+```
+
+Gate restored → 8 passed, 0 failed (above).
+
+### Case 14 — the live probe, `tsx scripts/probe-usage-split.ts --days 17`, 2026-09-05
+
+The probe now reports the **gated** fit. At the server's own 3-day fit window:
+
+```
+  one-term joint fit vs the pooled rate (floors 10/5/2, independent share ≥ 0.1):
+    claude-fable-5-1: fitted 0.0817M weighted/pt  (pooled 0.0451M, gap 81.0%)
+      12.2338 pt/Mtok  (share=0.9925, 86 intervals, 124.0 pts, 4 days)
+    claude-haiku-4-5-20251001: no fitted rate — thin-evidence  (share=0.9996, 6 intervals,
+      2.0 pts, 3 days, least squares wanted -1.8521 pt/Mtok)
+    claude-opus-5: fitted 0.3160M weighted/pt  (pooled 0.2100M, gap 50.4%)
+      3.1648 pt/Mtok  (share=0.9925, 550 intervals, 608.0 pts, 4 days)
+    claude-sonnet-5: no fitted rate — thin-evidence  (share=0.9999, 7 intervals, 7.0 pts,
+      2 days, least squares wanted 3.1947 pt/Mtok)
+```
+
+The Goal table's +58%/+141% figures reproduce in direction and rough magnitude, and the
+bottom rows are refused exactly as step 1 predicted they would be.
+
+**`claude-opus-4-8`: it gets a named refusal — `thin-evidence`.** Two facts, both worth
+recording because the Goal table implies otherwise:
+
+1. It is **not in the fit's window at all**. It appears on exactly **one** ledger line in the
+   entire log, stamped 2026-09-01, four days outside `currentRange`. The Goal table's
+   "0.2420M fitted" came from an ungated OLS over the whole 17-day span with no floors —
+   precisely the citation step 7 exists to prevent.
+2. Run `explainRates` over that same 17-day span and it is refused by name:
+   `claude-opus-4-8: thin-evidence (1 intervals, 1.0 pts, 1 days, share=0.9998, raw=4.1009)`.
+   `raw=4.1009 pt/Mtok` → 244k weighted/pt, which **reproduces the Goal table's 0.2420M** —
+   so the ungated arithmetic was right and the gates correctly refuse to publish it.
+
+At that 17-day horizon the other five all clear the gates: `claude-opus-5` 0.354M,
+`claude-sonnet-5` 0.394M, `claude-haiku-4-5-20251001` 0.303M, `claude-fable-5` 0.122M,
+`claude-fable-5-1` 0.116M — matching the Goal table's OLS closely.
+
+### Case 15 — the browser, real data
+
+Dev server on 5273/5273-API-4273 (the user's own 5174/4173 servers were left running and
+verified up afterwards). Usage → Token value, live logs copied into the worktree root:
+
+- `claude-opus-5` — headline `210k weighted / 1%`, badge `COLLECTING`, and beneath the raw
+  aside: `fitted 315k weighted / 1% across mixed-model windows · +50.5% vs the rate above`.
+- `claude-fable-5-1` — headline `45k`, badge `COLLECTING`,
+  `fitted 82k weighted / 1% across mixed-model windows · +81.1% vs the rate above`.
+- `claude-sonnet-5`, `claude-fable-5`, `claude-haiku-4-5-20251001` — no fitted rate, and
+  **no fitted line rendered at all** (not a dash). The omission rule holds on screen.
+- Both gaps are far beyond ±20% while both badges still read `collecting` **from the pooled
+  rate** — the badge did not move because of the fitted number, which was the point of
+  case 15.
+- The subtitle states the fitted rate is measured across mixed-model windows, that it is
+  "no more comparable across models than the headline", and that drift is judged on the
+  headline alone.
+- **Console: 3 messages, 0 errors, 0 warnings.**
+
+### Not verified — needs a human
+
+- **No fitted-only row was seen on screen.** The case the feature exists for (`claude-opus-4-8`)
+  is proven at the API and unit-test layers (`test/api-usage-rates.test.ts`: a model owning
+  nothing gets a row carrying only its fitted rate), but on this machine's *current* 3-day
+  window no such model exists, so the `—` headline above a lone fitted line was never
+  rendered in a browser. Worth a look the next time a subagent-only model is in window.
+- **The `docs-sync:` `verified:` stamp in `usage-limits.md` was not re-baselined.** Every
+  source this task touched is already listed, but re-baselining needs the commit sha, and
+  this skill does not commit. Run the normal docs-sync flow after the commit lands.
+- **No cross-browser or phone check.** Read in one desktop Chromium viewport only.
+
+### Review fixes (loop 1)
+
+**2026-09-05.** Review verdict `fix`, one Important finding. Report:
+`~/.backlog-manager/orchestrator/…/reviews/task-20-1.md`.
+
+#### The Important finding — misattributed live measurement (`usage-limits.md:858`)
+
+The reviewer is right, and the error was mine. The doc closed its 17-day list with
+"`claude-haiku-4-5-20251001` 0.303M — a model with **zero** owned intervals in the whole
+window". Haiku owns intervals; `claude-opus-4-8` is the zero-owned model.
+
+**Verified against the real logs rather than the Goal table**, per the requirement. Ran
+`explainRates` and `rateFor` over the 17-day window from this machine's own
+`.usage-history.jsonl` / `.usage-ledger.jsonl`, 2026-09-05T19:15Z:
+
+```
+-- every model appearing in the 17d window, with its OWNED interval count --
+  claude-fable-5: owned=16   pooled(17d, no floor)=0.0764M over 16 intervals
+  claude-fable-5-1: owned=28  pooled(17d, no floor)=0.0568M over 28 intervals
+  claude-haiku-4-5-20251001: owned=2   pooled(17d, no floor)=0.0244M over 2 intervals
+  claude-opus-4-8: owned=0    pooled=NONE
+  claude-opus-5: owned=855    pooled(17d, no floor)=0.2272M over 855 intervals
+  claude-sonnet-5: owned=5    pooled(17d, no floor)=0.2102M over 5 intervals
+
+-- explainRates over the SAME 17d window --
+  claude-fable-5: FITTED 0.1219M  (86 int, 100.0 pts, 2 days, raw=8.2059)
+  claude-fable-5-1: FITTED 0.1163M  (101 int, 153.0 pts, 4 days, raw=8.5967)
+  claude-haiku-4-5-20251001: FITTED 0.3002M  (14 int, 8.0 pts, 6 days, raw=3.3312)
+  claude-opus-4-8: thin-evidence  (1 int, 1.0 pts, 1 days, raw=4.1204)
+  claude-opus-5: FITTED 0.3558M  (1012 int, 1096.0 pts, 6 days, raw=2.8103)
+  claude-sonnet-5: FITTED 0.3933M  (26 int, 26.0 pts, 4 days, raw=2.5424)
+```
+
+So: haiku owns **2** intervals and its measured pooled rate is **0.0244M** — reproducing the
+Goal table's figure exactly, which is what the reviewer inferred and it holds. All five
+fitted models own intervals (855 / 5 / 16 / 28 / 2), so all five already had a pooled rate;
+the fit changes their *number*, not whether they have one. `claude-opus-4-8` owns **0**, has
+no pooled rate at any floor, and is refused `thin-evidence` on one interval / 1.0 point /
+1 day.
+
+The doc passage is rewritten: the five fitted rates now carry their owned-interval counts and
+no zero-owned claim, and a new paragraph states opus-4-8's actual disposition — zero owned,
+one ledger line, refused `thin-evidence`, `raw = 4.1204 pt/Mtok` ≈ 0.243M weighted/pt, so the
+arithmetic works and the floors correctly decline to publish one interval as a measurement —
+framed as the fit behaving as designed, with an explicit "do not cite any of the five as the
+zero-owned case". The 17-day rates are restated from this 19:15Z re-measurement; the 3-day
+figures are unchanged, as they still match the probe output pasted above.
+
+Note the reviewer's suggested fix — "attribute the clause to `claude-opus-4-8`" — could not be
+taken literally: the clause sat inside a list of *fitted* rates, and opus-4-8 is refused, so
+moving the name there would have swapped one false claim for another. It got its own
+paragraph instead.
+
+#### Minor items taken (3 of 6)
+
+- **`shared/types.ts`** — `ModelFitVerdict`'s JSDoc said "four refusals" and listed three.
+  `RateRefusal` has three; four is the *split's* count. Corrected, and it now says why the
+  counts differ (the split's `collinear` has no counterpart when a model has one regressor).
+- **`scripts/probe-usage-split.ts`** — the same misattribution class as the Important finding,
+  in the probe. The `pooled` map is keyed by `models`, which derives from the two-term
+  `usable` set and so still requires `reqUsable`; a model owning windows but present only on
+  pre-upgrade ledger lines printed "no pooled rate — this model owns no window", which is
+  false. Now recomputed with `pool()` directly, the window is named in the message, and a
+  printed pooled rate carries the owned-interval count behind it. Confirmed on live data:
+  `claude-opus-5: fitted 0.3152M weighted/pt (pooled 0.2079M over 472 owned, gap 51.6%)`.
+- **`server/lib/usage-rate.ts`** module header — "discards every interval it cannot attribute"
+  was already loose after task-10 and is now looser with three estimators reading three
+  different sets. Rewritten to say the discarded set is a property of the estimator, not of
+  the file.
+
+#### Minor items declined (3 of 6)
+
+- **Tiny-positive coefficient → enormous finite rate.** The reviewer marks it in-spec; the
+  plan settled the guard at zero/non-finite. Changing it is a threshold decision with no
+  measured basis, which is the same trap the whole task's "excluded from drift" argument
+  turns on. Left alone.
+- **`fitDeviationPct` compares against a pooled numerator that includes up to 10% other
+  models' tokens.** Pre-existing asymmetry in `pool()`, and the plan asked for exactly this
+  comparison. A real observation, but fixing it changes the pooled rate itself — out of scope.
+- **`docs-sync: verified:` stamp / `shared/types.ts` absent from `sources:`.** Already
+  disclosed under *Not verified*; the stamp needs the commit sha and the plan said "nothing
+  to add" for the sources list.
+
+#### Verification after the fixes
+
+`pnpm test` — **1010 cases, ALL PASS**:
+
+```
+  18/18 passed
+ALL PASS
+```
+
+```
+=== usage-rate.ts (one-term joint fit) ===
+
+  ✓ two separable models are recovered exactly, mixed windows included
+  ✓ a model that never dominates a window gets a rate — the case this fit exists for
+  ✓ a collinear pair is refused, and the independence gate is what refuses it
+  ✓ a negative coefficient is refused, not clamped to zero
+  ✓ the floors bite at the documented boundary, days included
+  ✓ external and unpriced intervals are out; idle intervals are in and move the answer
+  ✓ reqUsable: false does not exclude an interval — the copy-usableForSplit regression
+  ✓ the window is half-open on toT: sinceMs is in, untilMs is out
+
+  8 passed, 0 failed
+```
+
+`pnpm typecheck`:
+
+```
+> claude-agents-dashboard@0.1.0 typecheck
+> tsc --noEmit
+typecheck exit=0
+```
+
+`pnpm build`:
+
+```
+dist/assets/index-DrIGxh27.js   394.25 kB │ gzip: 113.16 kB
+✓ built in 1.13s
+```
+
+**Not re-verified in this loop:** the browser read. No client behaviour changed — the loop
+touched one doc passage, two JSDoc blocks and a probe-only print path — so the case-15
+evidence above still stands, but nothing was re-opened in a browser to confirm it.

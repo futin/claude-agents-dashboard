@@ -80,6 +80,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/management`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
+| `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, plus the coverage disclosure |
 | anything else | static files from `client/dist` (production only) |
 
 ⚠️ The static catch-all resolves through `resolveStaticPath` in `index.ts`, which confines
@@ -140,7 +141,8 @@ server/
                   request counts per model, counts absent on pre-upgrade lines
   lib/usage-rate.ts  joins history × ledger into classified intervals → tokens per 1%
                   of the 5h window per model, baseline vs trailing, drift verdicts,
-                  plus the two-term (tokens + requests) split fit and its refusals
+                  plus the two-term (tokens + requests) split fit and the one-term
+                  joint fit that prices mixed windows — with the refusals of both
   lib/token-refresh.ts  makes the CLI renew an expired OAuth token (auth status,
                   then one haiku turn) so the bars self-heal
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser
@@ -173,7 +175,9 @@ server/
 client/src/
   App.tsx         shell: side rail (Sessions | Management | Analytics | Usage |
                   Settings) + lazy views
-  components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
+  components/     Header (the status plate: + New, origin badge, remote-answer switch,
+                  counts, clock, usage gauges), Toolbar (filters + sort only),
+                  SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   MicButton, SpawnPanel, ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
@@ -195,8 +199,9 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   remote-decision-hook.sh, stop-notify-hook.sh, host-credentials.sh,
                   lan-ip.sh, env-value.ts (the one .env reader the installer and
                   the server share — never a second grep),
-                  probe-usage-split.ts (`pnpm probe:usage-split`) — runs the
-                  two-term rate fit against this machine's real logs,
+                  probe-usage-split.ts (`pnpm probe:usage-split`) — runs both
+                  joint rate fits against this machine's real logs, gated
+                  exactly as the endpoint gates them,
                   check-token-weights.ts (`pnpm check:weights`) — re-measures the
                   cache-write TTL mix behind TYPE_WEIGHTS, exits 1 when it drifts
 ```

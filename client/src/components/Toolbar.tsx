@@ -6,10 +6,7 @@ import {
   type SortKey,
   type View
 } from '../lib/filterSort';
-import type { RemoteAnswerControl } from '../hooks/useRemoteAnswer';
 import { MultiSelect } from './MultiSelect';
-import { OriginBadge } from './OriginBadge';
-import { RemoteAnswerToggle } from './RemoteAnswerToggle';
 
 const STATUSES: Session['status'][] = ['working', 'question', 'incomplete', 'idle'];
 
@@ -20,38 +17,29 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: 'status', label: 'Status' }
 ];
 
-/** Filter + sort control bar. Multi-select project/status facets; state lives in the parent. */
+/**
+ * Filter + sort control bar. Multi-select project/status facets; state lives in
+ * the parent.
+ *
+ * Nothing here does anything but change which rows you see, and in what order.
+ * The launch button, the connection badge and the remote-answer switch used to
+ * share this row; they are properties of the board rather than of the list, so
+ * they moved up into the status plate (`Header.tsx`).
+ */
 export function Toolbar({
   sessions,
   view,
-  onChange,
-  onOpenSpawn,
-  remoteAnswer
+  onChange
 }: {
   sessions: Session[];
   view: View;
   onChange: (v: View) => void;
-  /** Open the launch panel (its open/closed state lives in SessionsView, next to chatId). */
-  onOpenSpawn: () => void;
-  /**
-   * Owned by `SessionsView` and passed down rather than called here directly —
-   * `SpawnPanel` also needs a field off the same `/api/health` snapshot
-   * (`spawnMaxPermission`), and a second `useRemoteAnswer()` call site would
-   * mean a second, independent poll instead of one poll with more consumers.
-   */
-  remoteAnswer: RemoteAnswerControl;
 }) {
   const projects = distinctProjects(sessions);
   const set = (patch: Partial<View>) => onChange({ ...view, ...patch });
 
   return (
     <div className="toolbar">
-      {remoteAnswer.state?.spawnAvailable && (
-        <button type="button" className="tb-new" onClick={onOpenSpawn}>
-          + New
-        </button>
-      )}
-
       <MultiSelect
         label="projects"
         options={projects.map(p => ({ value: p, label: p }))}
@@ -71,10 +59,6 @@ export function Toolbar({
       </select>
 
       <span className="tb-spacer" />
-
-      <OriginBadge origin={remoteAnswer.state?.origin} />
-
-      <RemoteAnswerToggle control={remoteAnswer} />
 
       <select
         value={view.sortKey}

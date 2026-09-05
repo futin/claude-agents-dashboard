@@ -219,6 +219,21 @@ export type ModelRateVerdict = 'drift' | 'stable' | 'mix-shift' | 'thin';
 export type ModelSplitVerdict = 'fitted' | 'thin';
 
 /**
+ * Whether the one-term joint fit — the rate measured across the windows the
+ * pooled dominance rate discards — is reported for one model.
+ *
+ * Collapses that fit's **three** refusals the same way {@link ModelSplitVerdict}
+ * collapses the split's four: too little evidence, a model this data cannot
+ * single out from the ones it always runs beside, and a physically impossible
+ * coefficient all reduce to "not enough evidence to say". Three and not four
+ * because the split's `collinear` has no counterpart here — it compares a
+ * model's own two regressors, and this fit gives a model one. Which gate refused
+ * stays diagnostic-only (`scripts/probe-usage-split.ts`); the API carries the
+ * verdict, not the reason.
+ */
+export type ModelFitVerdict = 'fitted' | 'thin';
+
+/**
  * One model's token-value row in `GET /api/usage/rates`.
  *
  * Every rate is "tokens per one percentage point of the 5-hour window", fitted
@@ -271,6 +286,33 @@ export interface ModelRateRow {
    * unchanged by this fit.
    */
   splitVerdict: ModelSplitVerdict;
+  /**
+   * Weighted tokens per 1%, fitted **jointly** across every model over the
+   * same current window — including the mixed windows `weightedPerPct` throws
+   * away for want of a dominant model. Null whenever `fitVerdict` is `thin`.
+   *
+   * Published beside the pooled rate rather than instead of it, and no more
+   * comparable across models than the pooled rate is: a model that fires more
+   * requests per token still carries that per-request window cost inside this
+   * number too.
+   */
+  fittedWeightedPerPct: number | null;
+  /**
+   * Whether the fitted rate above is reported. A model can carry this and
+   * nothing else — a model that never dominates a window has no pooled rate,
+   * and this is the only figure the card can show for it.
+   */
+  fitVerdict: ModelFitVerdict;
+  /**
+   * Signed percent of the fitted rate against the pooled one — the disclosure
+   * that the two estimators disagree. Null when either rate is null.
+   *
+   * Computed here rather than in the card so the comparison lives in one
+   * place; the client formats it and owns no threshold. **Not** an input to
+   * `verdict` or `deviationPct`: drift is still judged on the pooled rate
+   * alone, which is the only quantity with a measured baseline dispersion.
+   */
+  fitDeviationPct: number | null;
 }
 
 /**

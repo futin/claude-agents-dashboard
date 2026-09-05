@@ -1,8 +1,8 @@
 import type { ModelRateRow } from '../../../../shared/types';
 import { useUsageRates } from '../../hooks/useUsageRates';
 import {
-  baselineText, coverageClauses, evidenceText, formatDeviation, formatSharePct,
-  formatTok, pricedPillText, rawAsideText, verdictText
+  baselineText, coverageClauses, evidenceText, fittedAsideText, formatDeviation,
+  formatSharePct, formatTok, pricedPillText, rawAsideText, verdictText
 } from '../../lib/usageRatesFormat';
 
 /**
@@ -16,6 +16,14 @@ import {
  * an explicitly labelled translation. `collecting` is a first-class state, not
  * an empty row — most models sit there for the first fortnight. No `title`
  * attributes: this board is read from a phone, where `title` never fires.
+ *
+ * The **fitted** rate is a third line and deliberately does not lead, even
+ * though it reads more of the evidence: it is measured jointly across windows
+ * where several models ran together, and it has no baseline history of its own,
+ * so there is no measured dispersion to set a drift threshold against. The
+ * badge is the pooled rate's verdict and nothing on this row changes that. A
+ * model that owns no window has no headline at all and shows `—` above its
+ * fitted line — that is the whole reason the line exists, and it is honest.
  *
  * The second footer row leads with the **priced** share rather than with the
  * refusals: most of what the old single `gap` counter reported was spend that
@@ -34,6 +42,7 @@ function Row({ row }: { row: ModelRateRow }) {
   const verdict = verdictText(row.verdict);
   const baseline = baselineText(row.baselineWeightedPerPct, row.baselineDays);
   const rawAside = rawAsideText(row.rawPerPct);
+  const fittedAside = fittedAsideText(row.fittedWeightedPerPct, row.fitDeviationPct);
 
   return (
     <li className="rates-row">
@@ -52,6 +61,7 @@ function Row({ row }: { row: ModelRateRow }) {
         )}
       </div>
       {rawAside !== null && <div className="rates-raw">{rawAside}</div>}
+      {fittedAside !== null && <div className="rates-raw">{fittedAside}</div>}
       <div className="rates-meta">
         {baseline} · {evidenceText(row.intervals, row.days, row.utilSum)}
       </div>
@@ -83,7 +93,13 @@ export function UsageRates() {
             usage, and a model that fires more requests per token carries that
             per-request window cost inside its token rate — so these are per-model
             rates, <b>not a price list to compare across models</b>. Baseline = the
-            trailing 14 days before the last three.
+            trailing 14 days before the last three. The <em>fitted</em> line under a
+            row is a second estimate of the same quantity, measured jointly across
+            the windows where several models ran together — the ones the headline
+            rate has to discard. It reads more of the evidence and it is the only
+            figure a model used purely as a subagent ever gets, but it is{' '}
+            <b>no more comparable across models</b> than the headline, it has no
+            baseline history yet, and drift is still judged on the headline alone.
           </p>
         </div>
       </div>
@@ -99,8 +115,9 @@ export function UsageRates() {
       {rates.recording && rates.models.length === 0 && (
         <div className="up-note">
           Nothing measurable yet. A model appears here once it has held at least 90% of
-          the tokens in ten recorded windows — until then every interval is still being
-          collected.
+          the tokens in ten recorded windows, or once ten windows of shared use are
+          enough to tell its cost apart from the models beside it — until then every
+          interval is still being collected.
         </div>
       )}
 

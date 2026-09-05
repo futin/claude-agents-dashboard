@@ -1,6 +1,6 @@
 # Spawning a new session (the fourth write path)
 
-The toolbar's **+ New** button starts a brand-new Claude Code session from the
+The status plate's **+ New** button starts a brand-new Claude Code session from the
 dashboard: pick a recent project, write or dictate a prompt, tap launch. The server
 spawns a detached, headless `claude -p` in that project's directory; the session
 appears in the list a poll or two later (usually under 3s), and from then on it's an
@@ -435,7 +435,7 @@ a `failed` row for `FAIL_TTL_MS`, labelled as an error they never actually hit.
 | `client/src/components/SpawnPanel.tsx` | the launch form — project picker, prompt textarea with the reply composer's own `MicButton` in its action row, name/model/effort/permission selects; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
 | `client/src/hooks/useSpawn.ts` | POSTs the request, the same bearer-token pattern as `useRemoteAnswer`'s toggle |
 | `client/src/lib/spawnOptions.ts` | the client's copy of `MODELS`/`EFFORTS`/`PERMISSION_MODES` (duplicated, not imported — the FE/BE boundary is `shared/types.ts` alone — kept honest by `test/spawn-options.test.ts` asserting byte-for-byte equality against the server's arrays) and `allowedPermissionModes` |
-| Toolbar's `+ New` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
+| The plate's `+ New` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
 | `SessionList`'s phantom row | renders each `launching` entry above the real rows — project, truncated prompt, `starting…` or (for `failed`) the error — and disappears on its own once the real row adopts the id; never interactive |
 | `sessionSurface` (`server/lib/scan.ts`) | maps the transcript's `entrypoint` → `Session.surface`; `sdk-cli` ⇒ `dashboard`, everything else ⇒ `local` |
 | `client/src/components/ResumePanel.tsx` | the resume composer pinned in an ended dashboard session's chat drawer — textarea + mic + *resume session*, POSTing `useSpawn().launch({prompt, resume: id})` |
@@ -551,10 +551,10 @@ rest of the app already takes, aimed at a bigger target:
 - **The remote-answer toggle covers it, like every other write path.**
   `serveSpawn`, `serveSpawnStop` and `serveSessionStop` all answer
   `404 {error: 'remote answers disabled'}` when
-  `getState(config).remoteAnswer` is false — flipping the toolbar pill off, or setting
+  `getState(config).remoteAnswer` is false — flipping the status-plate switch off, or setting
   `REMOTE_ANSWER=false`, turns launching off with it. That is the app's only *runtime*
   kill switch (`CLAUDE_BIN` is restart-scoped), so a switch that excluded the widest write
-  path would have been worse than none: the user reaches for the pill when the posture
+  path would have been worse than none: the user reaches for the switch when the posture
   changes — leaving the house, joining a café network — and infers coverage. It also kept
   the new panel internally coherent, since the `MicButton` inside `SpawnPanel` POSTs
   `/api/transcribe`, which was already gated: with the pill off, the mic 404'd while the
