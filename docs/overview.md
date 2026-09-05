@@ -173,7 +173,9 @@ server/
 client/src/
   App.tsx         shell: side rail (Sessions | Management | Analytics | Usage |
                   Settings) + lazy views
-  components/     Header, Toolbar, SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
+  components/     Header (the status plate: + New, origin badge, remote-answer switch,
+                  counts, clock, usage gauges), Toolbar (filters + sort only),
+                  SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   MicButton, SpawnPanel, ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,

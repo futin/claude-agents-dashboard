@@ -1,10 +1,29 @@
 import type { SessionsResponse, RateLimit, UsageLimits, UsageStatus } from '../../../shared/types';
+import type { RemoteAnswerControl } from '../hooks/useRemoteAnswer';
 import { formatResetTime } from '../lib/format';
 import { holdCount } from '../lib/holds';
 import { paceView, FIVE_HOUR_MS, SEVEN_DAY_MS } from '../lib/pace';
+import { OriginBadge } from './OriginBadge';
+import { RemoteAnswerToggle } from './RemoteAnswerToggle';
 
-/** Title bar + summary line (generated time, active count, running claude procs). */
-export function Header({ data }: { data: SessionsResponse | null }) {
+/**
+ * The status plate: one panel for everything true of the whole board rather
+ * than of the list — the launch button, how this browser reached the server,
+ * whether remote answers are allowed, the counts, the clock, and the account
+ * gauges. Everything that filters or orders the list stays in the Toolbar
+ * below, which is the whole point of the split.
+ */
+export function Header({ data, remoteAnswer, onOpenSpawn }: {
+  data: SessionsResponse | null;
+  /**
+   * Owned by `SessionsView` and passed down rather than called here: the spawn
+   * panel needs `spawnMaxPermission` off the same `/api/health` snapshot, and a
+   * second `useRemoteAnswer()` call site would mean a second poll.
+   */
+  remoteAnswer: RemoteAnswerControl;
+  /** Open the launch panel (its open/closed state lives in SessionsView). */
+  onOpenSpawn: () => void;
+}) {
   const meta = data ? new Date(data.generatedAt).toLocaleTimeString() : '';
 
   let sub: React.ReactNode = '';
@@ -25,16 +44,40 @@ export function Header({ data }: { data: SessionsResponse | null }) {
     );
   }
 
+  const message = data?.usageStatus ? USAGE_MESSAGES[data.usageStatus] : undefined;
+  const bars = usageBars(data?.usage);
+  const showUsage = Boolean(message) || bars.length > 0;
+
+  // Nothing to frame yet — neither poll has answered. Drawing the plate here
+  // would flash an empty bordered strip on every cold load.
+  if (!data && !remoteAnswer.state && !showUsage) return null;
+
   return (
-    <>
-      <div className="head">
+    <div className="plate">
+      <div className="plate-row">
+        {remoteAnswer.state?.spawnAvailable && (
+          <button type="button" className="tb-new" onClick={onOpenSpawn}>
+            + New
+          </button>
+        )}
+        <OriginBadge origin={remoteAnswer.state?.origin} />
+        <RemoteAnswerToggle control={remoteAnswer} />
+        <span className="sub">{sub}</span>
         <span className="meta">{meta}</span>
       </div>
-      <div className="sub">{sub}</div>
-      {(data?.usageStatus && USAGE_MESSAGES[data.usageStatus])
-        ? <UsageMessage text={USAGE_MESSAGES[data.usageStatus]!} />
-        : <UsageBars usage={data ? data.usage : null} />}
-    </>
+      {showUsage && (
+        <>
+          <div className="plate-div" />
+          {message
+            ? <UsageMessage text={message} />
+            : <div className="usage">
+                {bars.map(b => (
+                  <UsageBar key={b.label} label={b.label} rl={b.rl} windowMs={b.windowMs} />
+                ))}
+              </div>}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -55,6 +98,19 @@ const USAGE_MESSAGES: Partial<Record<UsageStatus, string>> = {
 };
 
 /**
+ * The rate-limit bars worth drawing. Returned rather than rendered so the plate
+ * can ask whether there is a usage section *before* it commits to the divider
+ * that separates one — an empty `.usage` under a rule reads as a broken panel.
+ */
+function usageBars(usage: UsageLimits | null | undefined) {
+  if (!usage) return [];
+  return [
+    { label: '5h', rl: usage.fiveHour, windowMs: FIVE_HOUR_MS },
+    { label: 'Week', rl: usage.sevenDay, windowMs: SEVEN_DAY_MS }
+  ].filter((b) => b.rl.utilization != null);
+}
+
+/**
  * Shown instead of the bars when the token read explains itself. An expired
  * token renews on the CLI's next run and the following 3s poll flips
  * usageStatus back to 'ok'; a signed-out one waits for `claude auth login`.
@@ -64,24 +120,6 @@ function UsageMessage({ text }: { text: string }) {
     <div className="usage">
       <span className="u-label">Usage</span>
       <span className="u-msg">{text}</span>
-    </div>
-  );
-}
-
-/** The two account rate-limit bars (5h + weekly). Renders nothing when unavailable. */
-function UsageBars({ usage }: { usage: UsageLimits | null | undefined }) {
-  if (!usage) return null;
-  const bars = [
-    { label: '5h', rl: usage.fiveHour, windowMs: FIVE_HOUR_MS },
-    { label: 'Week', rl: usage.sevenDay, windowMs: SEVEN_DAY_MS }
-  ].filter((b) => b.rl.utilization != null);
-  if (bars.length === 0) return null;
-
-  return (
-    <div className="usage">
-      {bars.map((b) => (
-        <UsageBar key={b.label} label={b.label} rl={b.rl} windowMs={b.windowMs} />
-      ))}
     </div>
   );
 }

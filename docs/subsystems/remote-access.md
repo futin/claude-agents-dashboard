@@ -41,7 +41,7 @@ to someone who isn't on your tailnet.
 
 ## Which route am I on? (the origin badge)
 
-The toolbar shows a small pill — `local`, `LAN`, `tailnet`, or `public` — saying how
+The status plate shows a small pill — `local`, `LAN`, `tailnet`, or `public` — saying how
 *your browser* reached the dashboard. `public` is tinted orange, since it's the one worth
 noticing.
 
