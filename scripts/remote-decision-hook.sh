@@ -20,6 +20,25 @@
 # context. Nothing here blocks a tool call; the hard gates (permission dialogs,
 # the plan card) stay exactly where they were.
 #
+# Rule 1 is CONDITIONAL on the tool actually existing, and the condition is not
+# decoration. The two gates above test the permission mode and the dashboard —
+# neither of which implies AskUserQuestion is in the session's tool list. A
+# headless `claude -p` matches both gates and has no such tool, so the
+# unconditional wording handed those sessions a contradiction: route every
+# decision through a tool you do not have, and never end a turn on a prose
+# question. They resolved it the only way left, by deciding silently and
+# saying so — observed across four worktree sessions in two projects, none of
+# which had any instruction to that effect in CLAUDE.md, a skill or a memory.
+# The banner was the whole cause.
+#
+# The final clause is as load-bearing as the condition. Without it a session
+# that lacks the tool is left with no instruction at all, which is the state
+# that produced the silent deciding in the first place — so the fallback is
+# named explicitly: defer to the running skill's own no-channel path, and
+# absent one, ask in prose. A prose question ends the turn, which is the right
+# outcome for a session with a human behind it and an acceptable one for a
+# session without.
+#
 # Install:
 #   ln -s "$PWD/scripts/remote-decision-hook.sh" ~/.claude/hooks/remote-decision.sh
 # then APPEND to the UserPromptSubmit hooks array in ~/.claude/settings.json:
@@ -89,7 +108,10 @@ plain-text question or approve a plan card. Therefore, for this session:
 1. Put EVERY decision through the AskUserQuestion tool — approach choices,
    "should I proceed?", scope calls, and questions a skill tells you to ask
    (e.g. the brainstorming skill's session-mode pick). Never end a turn on a
-   prose question.
+   prose question WHILE THAT TOOL IS AVAILABLE.
+   If AskUserQuestion is not available in this session, this rule does not
+   apply: follow whatever the running skill says to do without a channel,
+   and if it says nothing, ask in prose rather than deciding silently.
 2. Do not enter plan mode and do not call ExitPlanMode — its approval card can
    only be answered at the terminal. Present a plan as a concise summary (or a
    file) and then ask via AskUserQuestion: proceed, or revise (with an option to
