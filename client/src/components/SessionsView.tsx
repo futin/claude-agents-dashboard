@@ -32,7 +32,7 @@ export function SessionsView() {
   const [chatId, setChatId] = useState<string | null>(() => deepLinkSession());
   // Not persisted either: a one-shot form, not a view setting.
   const [spawnOpen, setSpawnOpen] = useState(false);
-  // One `/api/health` poll, owned here so both the toolbar (badge, switch,
+  // One `/api/health` poll, owned here so both the status plate (badge, switch,
   // "+ New" gate) and the spawn panel (its permission-mode ceiling) read the
   // same snapshot instead of each starting their own.
   const remoteAnswer = useRemoteAnswer();
@@ -67,13 +67,15 @@ export function SessionsView() {
 
   return (
     <>
-      <Header data={data} />
+      <Header
+        data={data}
+        remoteAnswer={remoteAnswer}
+        onOpenSpawn={() => setSpawnOpen(true)}
+      />
       <Toolbar
         sessions={data ? data.sessions : []}
         view={view}
         onChange={setView}
-        onOpenSpawn={() => setSpawnOpen(true)}
-        remoteAnswer={remoteAnswer}
       />
       {spawnOpen && (
         <Suspense fallback={null}>

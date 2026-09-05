@@ -1,14 +1,19 @@
 import type { RemoteAnswerControl } from '../hooks/useRemoteAnswer';
 
 /**
- * Toolbar pill for the remote-answer switch.
+ * The remote-answer switch in the status plate.
  *
  * On, it only *allows* remote answers — the hook still hands a question straight
  * to the terminal while you're at the keyboard, so this reads "when I'm away"
  * rather than "instead of the terminal". Off releases anything already waiting.
  *
- * The hook is owned by the Toolbar and passed in, so the sibling OriginBadge can
- * read the same `/api/health` snapshot instead of starting a second poll.
+ * A switch rather than the old dot pill: it is the one control in the plate you
+ * flip rather than read, and the plate's other occupants (the origin badge, the
+ * counts, the clock) are all read-only. The kill-switch state keeps the pill
+ * styling instead — a switch that cannot move is worse than a plain label.
+ *
+ * The hook is owned by `SessionsView` and passed in, so the sibling OriginBadge
+ * can read the same `/api/health` snapshot instead of starting a second poll.
  */
 export function RemoteAnswerToggle({ control }: { control: RemoteAnswerControl }) {
   const { state, busy, needsToken, toggle } = control;
@@ -30,14 +35,15 @@ export function RemoteAnswerToggle({ control }: { control: RemoteAnswerControl }
 
   return (
     <button
-      className={`ra-pill${state.enabled ? ' on' : ''}`}
+      className={`ra-switch${state.enabled ? ' on' : ''}`}
       onClick={() => void toggle()}
       disabled={busy}
-      aria-pressed={state.enabled}
+      role="switch"
+      aria-checked={state.enabled}
       title={title}
     >
-      <span className="ra-dot" />
-      remote answers: {state.enabled ? 'on' : 'off'}
+      <span>remote answers</span>
+      <span className="ra-track" aria-hidden="true"><i /></span>
       {state.enabled && !state.persisted && <span className="ra-warn" title="Couldn’t be saved — resets when the server restarts">*</span>}
       {needsToken && <span className="ra-warn">token?</span>}
     </button>

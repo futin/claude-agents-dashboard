@@ -24,7 +24,7 @@ take one away. If the dashboard isn't running, the probe gives up in under a sec
   1. `REMOTE_ANSWER` env (`config.remoteAnswer` → `state.available`) — is the feature
      there at all? A hard kill switch; the toggle endpoint 409s while it's false.
   2. The **toggle** (`lib/remoteState.ts` → `state.enabled`) — accepting remote answers
-     right now? Flipped from the toolbar pill or the [Settings tab](settings.md) (both read
+     right now? Flipped from the status-plate switch or the [Settings tab](settings.md) (both read
      the same `/api/health` poll, so they never disagree). Switching it off also releases
      every hold in all three stores — `dismissAll() + dismissAllPlans() +
      dismissAllMessages()` — so waits already held are handed back instead of parked until
@@ -217,10 +217,14 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
 
 ## Client surfaces
 
-- **The pill** (`RemoteAnswerToggle`) sits after `.tb-spacer` in the Toolbar, next to the
-  connection-origin badge. The Toolbar owns the `useRemoteAnswer` call and passes the
-  control in as a prop, so the two pills share one `/api/health` poll instead of starting
-  two (see [remote-access](remote-access.md)). Polled every 15s, not fetched once,
+- **The switch** (`RemoteAnswerToggle`) sits in the status plate (`Header.tsx`), next to
+  the connection-origin badge. `SessionsView` owns the `useRemoteAnswer` call and passes
+  the control down, so the badge, the switch and the launch panel share one
+  `/api/health` poll instead of starting three (see [remote-access](remote-access.md)).
+  It is drawn as a real track-and-knob switch rather than the dot pill the badge still
+  uses, because it is the one control in that plate you flip rather than read; `role=
+  "switch"` + `aria-checked` carry the same distinction to a screen reader. Polled every
+  15s, not fetched once,
   because the *other* surface can flip it — turning it on from your phone should show up
   on the laptop without a reload. Renders as an inert `<span>` (not a disabled button)
   when `available` is false, so a config kill switch can't look like a stuck control. Its

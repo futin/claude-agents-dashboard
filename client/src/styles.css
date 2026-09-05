@@ -140,10 +140,18 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
   .rail-link{flex:none;white-space:nowrap;min-height:38px;display:flex;align-items:center}
   .rail-link.on{box-shadow:inset 0 -2px 0 var(--cyan),inset 0 1px 0 var(--edge)}
 }
-/* facility plate */
-.head{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
-.head h1{font-family:var(--display);font-size:20px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--ink)}
-.head .meta{font-size:11.5px;color:var(--ink2);margin-left:auto;font-variant-numeric:tabular-nums;font-family:var(--mono);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:3px 8px}
+/* facility plate — one panel for everything true of the whole board: what you
+   can start (+ New), how this browser got here, whether remote answers are
+   allowed, the session counts, the clock, and the account gauges. The toolbar
+   below it is then only ever about the list. */
+.plate{background:var(--strip);border:1px solid var(--hairline);border-radius:2px;padding:8px 12px;margin-bottom:14px;box-shadow:inset 0 1px 0 var(--edge)}
+.plate-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.plate-div{height:1px;background:var(--hairline);margin:8px -12px 10px}
+.plate .meta{font-size:11.5px;color:var(--ink2);margin-left:auto;font-variant-numeric:tabular-nums;font-family:var(--mono);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:3px 8px}
+.plate .sub,.plate .usage{margin:0}
+/* The panel's own padding costs the twin gauges 24px, which is enough to make
+   the two reset labels touch on a phone. Give it back rather than restack them. */
+@media (max-width:700px){.plate{padding:8px 10px}.plate-div{margin:8px -10px 10px}}
 .sub{font-size:10px;color:var(--ink3);margin-bottom:18px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em}
 .sub b{color:var(--green);font-weight:600}
 .sub .need-you{margin-left:8px;padding:1px 6px;border-radius:2px;font-weight:600;color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,transparent)}
@@ -171,6 +179,25 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .ra-pill.on .ra-dot{background:var(--cyan)}
 .ra-pill.off{cursor:default}
 .ra-warn{color:var(--amber);font-size:10px}
+/* The toggle itself: a real switch, since it is the one thing in the plate you
+   flip rather than read. Track and knob are tokens, so all five themes hold. */
+.ra-switch{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:4px 10px;cursor:pointer;transition:color .15s,border-color .15s}
+.ra-switch:hover:not(:disabled){color:var(--ink);border-color:var(--hairline2)}
+.ra-switch:disabled{cursor:default}
+.ra-switch.on{color:var(--ink);border-color:var(--cyan)}
+/* Two things this rule got wrong first time round, both worth keeping written
+   down. (1) The off track is --ink3, not the --hairline2 the old status dot
+   used: against a card-coloured knob, hairline2 measures 1.6:1 on daylight, so
+   the knob vanished on the one light theme. ink3 is the dimmest token that
+   still clears 3:1 in all five (worst case 3.28 off, 5.68 on). (2) There is no
+   transition on the background: Chromium keeps painting the previous theme's
+   colour for a transitioned property whose value came from a custom property,
+   so switching theme left the track a step behind. Only the knob animates, and
+   its slide is what reads as a switch anyway. */
+.ra-track{position:relative;width:24px;height:13px;border-radius:7px;background:var(--ink3);flex-shrink:0}
+.ra-switch.on .ra-track{background:var(--cyan)}
+.ra-track i{position:absolute;top:2px;left:2px;width:9px;height:9px;border-radius:50%;background:var(--strip);transition:left .15s}
+.ra-switch.on .ra-track i{left:13px}
 /* connection origin: how this browser reached the dashboard. Display-only. */
 .ra-pill.origin{cursor:default}
 .ra-pill.origin.o-tailnet .ra-dot{background:var(--cyan)}
@@ -179,9 +206,9 @@ body{font-family:var(--font);background:var(--board);color:var(--ink);min-height
 .ra-pill.origin.o-unknown .ra-dot{background:var(--amber)}
 .toolbar .tb-dir{font-size:12px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 9px;cursor:pointer;transition:border-color .15s,color .15s;font-variant-numeric:tabular-nums}
 .toolbar .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
-/* the one write action in the toolbar — filled, so it doesn't read as just
-   another filter pill. Only rendered when the health poll says spawn is
-   configured (see Toolbar.tsx). */
+/* the one write action on the board — filled, so it doesn't read as just
+   another filter pill. Lives at the head of the status plate, and only when the
+   health poll says spawn is configured (see Header.tsx). */
 .tb-new{font-family:var(--display);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--on-accent);background:var(--cyan);border:1px solid var(--cyan);border-radius:2px;padding:5px 11px;cursor:pointer;transition:opacity .15s}
 .tb-new:hover{opacity:.88}
 
