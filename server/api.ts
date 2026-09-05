@@ -50,7 +50,8 @@ import { getSettings, setSettings } from './lib/settings.js';
 import { classifyOrigin } from './lib/origin.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
-  MAX_LAUNCHING, adoptLaunched, launch, listLaunching, parseSpawnRequest, probeSpawn, stopLaunch
+  MAX_LAUNCHING, adoptLaunched, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
+  probeSpawn, stopSession, stopStates
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import type {
@@ -140,7 +141,11 @@ export function serveSessions(baseConfig: Config, res: ServerResponse, params?: 
       planIds: planSessionIds(),
       messageIds: messageSessionIds(),
       permissionWaits: permissionWaits(),
-      archivedIds: archivedSessionIds()
+      archivedIds: archivedSessionIds(),
+      // stopStates is the same injection again, and the only one that is not a
+      // hint about a wait: it says which rows this server can actually signal,
+      // so the Stop control is offered only where it would work.
+      stopStates: stopStates()
     });
   } catch (e) {
     console.error('[dashboard] scan failed:', (e as Error).message);
@@ -1268,6 +1273,15 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
       if (getPending(rid) || getPendingPlan(rid) || getPendingMessage(rid)) {
         return sendJson(res, 409, { error: 'session is still running' });
       }
+      // A held socket is only *one* way to be alive. A session this server
+      // spawned can be mid-tool-call, or lingering after its turn (measured at
+      // 90s+), holding nothing at all — and the row shows `incomplete`, which
+      // the resume composer offers. Launching then would put a second `claude`
+      // on one transcript AND replace the live entry in the store, dropping the
+      // first child's kill handle. The store knows, so ask it.
+      if (hasLiveChild(rid)) {
+        return sendJson(res, 409, { error: 'session is still running' });
+      }
       if (listLaunching().some(e => e.sessionId === rid)) {
         return sendJson(res, 409, { error: 'already resuming' });
       }
@@ -1291,8 +1305,13 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
 
 /**
  * `POST /api/spawn/:id/stop` — SIGTERM a still-`launching` entry's child and
- * drop it from the store immediately (see `stopLaunch`'s own doc comment for
+ * drop it from the store immediately (see `stopSession`'s own doc comment for
  * why a stopped launch can't be told apart from a crashed one downstream).
+ *
+ * Kept, not folded into {@link serveSessionStop}: this route is documented and
+ * may already be scripted against. The two now share one store operation, which
+ * is what "two endpoints behind one button is the wrong seam" actually asked
+ * for — the button only ever calls the newer route.
  *
  * Toggle-gated like `serveSpawn`, so the pill covers the whole feature rather
  * than half of it. Deliberately **not** `async`: it awaits nothing (no body to
@@ -1313,8 +1332,57 @@ export function serveSpawnStop(
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
   if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
   if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
-  if (!stopLaunch(id)) return sendJson(res, 404, { error: 'no live launch' });
-  sendJson(res, 200, { stopped: true });
+  switch (stopSession(id)) {
+    case 'not-found': return sendJson(res, 404, { error: 'no live launch' });
+    // A launch inside its pre-adoption window is killed outright, which is what
+    // this route has always answered. An id that has since become a running
+    // session reaches the graceful path instead and honestly says so, rather
+    // than claiming `stopped` for a SIGTERM that has not landed yet.
+    case 'stopped': return sendJson(res, 200, { stopped: true });
+    default: return sendJson(res, 200, { stopping: true });
+  }
+}
+
+/**
+ * `POST /api/sessions/:id/stop` — stop a session this dashboard spawned, at any
+ * point in its life. The button on the row only ever calls this one; the older
+ * `/api/spawn/:id/stop` above stays for the documented pre-adoption case and now
+ * shares its implementation, so there are two routes but one behaviour.
+ *
+ * Body is optional and usually absent — the common request is a bare POST — so
+ * an empty body means "graceful stop", not 400. Only a body that is present and
+ * unparseable is refused. `force` is honoured on a strict `=== true`, the same
+ * rule `remoteControl` and the dismiss flag follow; anything else (including the
+ * string `"true"`) routes to the graceful path, because a coerced truthy value
+ * is not evidence the caller meant to skip the grace window and SIGKILL.
+ *
+ * Async, unlike `serveSpawnStop`, purely because it reads that body; the guard
+ * order is otherwise identical.
+ */
+export async function serveSessionStop(
+  config: Config, id: string, req: IncomingMessage, res: ServerResponse
+): Promise<void> {
+  if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
+
+  // `readJsonBody` collapses "empty" and "malformed" into the same null, and
+  // those must not answer the same here — so read the raw bytes and branch.
+  const raw = await readBody(req, BODY_CAP);
+  if (!raw.ok) return sendBadBody(res, { error: 'bad body' });
+  let force = false;
+  if (raw.bytes.length > 0) {
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw.bytes.toString('utf8')); }
+    catch { return sendBadBody(res, { error: 'bad body' }); }
+    force = (parsed as { force?: unknown } | null)?.force === true;
+  }
+
+  switch (force ? forceStopSession(id) : stopSession(id)) {
+    case 'not-found': return sendJson(res, 404, { error: 'no live session' });
+    case 'stopped': return sendJson(res, 200, { stopped: true });
+    default: return sendJson(res, 200, { stopping: true });
+  }
 }
 
 /* -------------------------------------------------- management endpoints */

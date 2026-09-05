@@ -184,13 +184,14 @@ client/src/
                   usage/, settings/
   hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
                   useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
-                  usePendingMessage, useRemoteAnswer, useSpawn, usePersistedState,
-                  useSettings, useServerSettings, useDictation, useTranscribeAvailable,
-                  useWebNotify (browser banners for headless sessions), useBackClose
+                  usePendingMessage, useRemoteAnswer, useSpawn, useStopSession,
+                  usePersistedState, useSettings, useServerSettings, useDictation,
+                  useTranscribeAvailable, useWebNotify (browser banners for headless
+                  sessions), useBackClose
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
                   sections, deepLink, dictation, spawnOptions, resume, pace, usageProfile,
                   usageRatesFormat, panelCollapse, surface, walkChart, holds, webNotify,
-                  backClose
+                  backClose, stopControl
 vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
@@ -216,7 +217,7 @@ that area:
 - [remote-plan](subsystems/remote-plan.md) — sending an `ExitPlanMode` plan back for revision (reject-only, by upstream design)
 - [remote-message](subsystems/remote-message.md) — replying into a finished, away-from-keyboard turn (the third write path)
 - [dictation](subsystems/dictation.md) — the reply composer's mic: local whisper transcription, never auto-sent
-- [spawn](subsystems/spawn.md) — starting a new headless session from the dashboard (the fourth write path, and the first one it initiates)
+- [spawn](subsystems/spawn.md) — starting a new headless session from the dashboard (the fourth write path, and the first one it initiates), and stopping one from its row
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
