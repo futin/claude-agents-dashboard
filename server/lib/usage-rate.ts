@@ -2,11 +2,16 @@
  * usage-rate.ts — what one percent of the 5-hour window is worth, per model.
  *
  * Joins `.usage-history.jsonl` (percent) with `.usage-ledger.jsonl` (tokens)
- * into intervals, discards every interval it cannot attribute, and fits a rate
- * per model over what survives. Pure — no clock, no disk, everything injected.
+ * into intervals and fits rates per model over them. Pure — no clock, no disk,
+ * everything injected.
  *
- * The discipline is refusal: which intervals are thrown away and why is the
- * classification table in `docs/subsystems/usage-limits.md`.
+ * Three estimators, each reading a **different** set of those intervals: the
+ * pooled ratio takes only intervals one model owns outright, and the two joint
+ * fits take the mixed and idle ones too. So "which intervals are discarded" has
+ * no single answer — it is a property of the estimator, and the classification
+ * table in `docs/subsystems/usage-limits.md` is where each one's set is written
+ * down. The discipline they share is refusal: publishing nothing rather than a
+ * number the evidence does not carry.
  */
 
 import { sameWindow } from './usage-history.js';
@@ -915,4 +920,227 @@ export function fitSplits(intervals: Interval[], sinceMs: number, untilMs: numbe
     if (diagnostic.fit !== null) out.set(diagnostic.model, diagnostic.fit);
   }
   return out;
+}
+
+/** One model's rate from the one-term joint fit, in both the units the card speaks. */
+export interface RateFit {
+  /**
+   * Weighted tokens per percentage point — the same unit as
+   * {@link ModelRate.weightedPerPct}, so the two estimators sit on one row and
+   * compare directly. Always finite and positive: the reciprocal below is
+   * refused before it can be published as `Infinity`.
+   */
+  weightedPerPct: number;
+  /** Utilization points per 1M weighted tokens — the coefficient as fitted. Never negative. */
+  pctPerMWeighted: number;
+  /** Intervals in which this model spent anything — the evidence, not a published rate. */
+  intervals: number;
+  /** Cumulative utilization points across those intervals. */
+  utilSum: number;
+}
+
+/** Why one model got no fitted rate, in the words the probe and the docs use. */
+export type RateRefusal =
+  /** Under {@link CURRENT_FLOORS} — not enough intervals, movement, or days. */
+  | 'thin-evidence'
+  /**
+   * Its column is in — or too near — the span of the other models': this data
+   * cannot tell it apart from whatever it always runs beside. Covers both an
+   * exactly dependent column and one whose independent share is under
+   * {@link SPLIT_MIN_INDEPENDENT_SHARE}.
+   */
+  | 'unidentified'
+  /** Least squares wanted a non-positive cost per token. */
+  | 'negative';
+
+/** One model's line of the one-term fit's reasoning, reported whatever the outcome. */
+export interface RateDiagnostic {
+  model: string;
+  /** Fitted rows in which this model spent anything. */
+  intervals: number;
+  /** Cumulative utilization points over those rows. */
+  utilSum: number;
+  /** Distinct UTC dates those rows fall on — checked against {@link CURRENT_FLOORS}. */
+  days: number;
+  /**
+   * How much of this model's unit-length column survives projecting out every
+   * other model's — 1 is orthogonal to all of them, 0 is a combination of
+   * them. Compare against {@link SPLIT_MIN_INDEPENDENT_SHARE}.
+   */
+  independentShare: number;
+  /** Null exactly when `fit` is set. */
+  refusal: RateRefusal | null;
+  fit: RateFit | null;
+  /**
+   * What least squares actually returned for this model in `pt/Mtok`, sign and
+   * all, before the floors and the sign refusal — null when its column was
+   * never in the solve.
+   *
+   * **Diagnostic only.** A negative cost is not a measurement; the probe
+   * prints it because "the fit came back impossible" and "the fit never ran"
+   * are different findings.
+   */
+  raw: number | null;
+}
+
+/**
+ * Which intervals the one-term joint fit reads — the same set as the two-term
+ * fit **minus its request-count condition**.
+ *
+ * `{model}`, `mixed` and `idle` are in; `external` and everything
+ * {@link isUnpriced} names are out, for the reasons {@link usableForSplit}
+ * gives — and through `isUnpriced` for the same reason, so a kind added later
+ * beside `gap` cannot walk into the fit.
+ *
+ * **It deliberately does not test `reqUsable`.** That flag is a two-term-only
+ * requirement: a missing request count says nothing about the token totals,
+ * and `usableForSplit` gates on it only because its second regressor *is* the
+ * request column. This fit has one regressor and it is tokens. Copying
+ * `usableForSplit` wholesale would have thrown away the ~40% of live ledger
+ * lines written before the recorder produced counts, for nothing.
+ */
+function usableForRate(interval: Interval): boolean {
+  return !isUnpriced(interval.kind) && interval.kind !== 'external';
+}
+
+/**
+ * Fit utilization against **one** regressor per model — its weighted tokens —
+ * over `[sinceMs, untilMs)`, jointly across every usable interval, and report
+ * the reasoning for each model either way.
+ *
+ * Why this beside the pooled ratio: the pooled rate needs one model to hold
+ * {@link DOMINANCE} of an interval, so every window where two models ran
+ * together is discarded — and a model used only as a subagent beside a driver
+ * model owns nothing at all and gets no rate whatsoever. Fitting all models
+ * jointly needs no ownership: one equation per interval, one unknown per
+ * model, and many intervals. Measured on this machine's logs over 17 days
+ * (2026-09-05) the mixed intervals are only 6.9% of the moved points but carry
+ * most of the information about telling models apart — the two estimators
+ * disagreed by +58% to +141% on the models that cleared these gates.
+ *
+ * The gates are the two-term fit's, minus the one that has nothing to say
+ * here. {@link SPLIT_RANK_TOL} is the numerical floor the solve needs and
+ * {@link SPLIT_MIN_INDEPENDENT_SHARE} is the honesty floor for the answer —
+ * the guard that matters most, because cross-model collinearity is the entire
+ * risk when every column belongs to a different model.
+ * {@link SPLIT_MAX_R2} is **deliberately not applied**: it compares a model's
+ * own two regressors against each other, and this fit gives a model one.
+ *
+ * The floors are {@link CURRENT_FLOORS}, not {@link SPLIT_FLOORS}.
+ * `SPLIT_FLOORS` is doubled because the split fits two parameters per model;
+ * this fits one — the same count the pooled ratio fits — so it earns the same
+ * floor rather than the doubled one. That is a decision, not an oversight.
+ *
+ * A non-positive coefficient is a **refusal, not a clamp**, for the reason
+ * {@link explainSplits} gives, and with one more edge of its own: the rate the
+ * card publishes is `1M / coefficient`, so a clamped zero would not read as
+ * "these tokens are free" but as an infinite price.
+ */
+export function explainRates(intervals: Interval[], sinceMs: number, untilMs: number): RateDiagnostic[] {
+  const rows = intervals.filter(
+    (interval) => interval.toT >= sinceMs && interval.toT < untilMs && usableForRate(interval)
+  );
+  const models = [...new Set(rows.flatMap((interval) => Object.keys(interval.tok)))].sort();
+  if (models.length === 0 || rows.length === 0) return [];
+
+  const weighted = models.map((model) => rows.map((interval) => {
+    const counts = interval.tok[model];
+    return counts === undefined ? 0 : weightedTokens(counts, model) / MTOK;
+  }));
+  const y = rows.map((interval) => interval.dUtil);
+
+  const diagnostics: RateDiagnostic[] = models.map((model, m) => {
+    let intervalCount = 0, utilSum = 0;
+    const dates = new Set<string>();
+    for (let i = 0; i < rows.length; i++) {
+      if (weighted[m][i] <= 0) continue;
+      intervalCount++;
+      utilSum += y[i];
+      dates.add(utcDate(rows[i].toT));
+    }
+    return {
+      model, intervals: intervalCount, utilSum, days: dates.size,
+      independentShare: 0, refusal: null, fit: null, raw: null
+    };
+  });
+
+  // One column per model, each normalized so the rank tolerance stays a share
+  // of the column's own length rather than an absolute token count.
+  const cols: number[][] = [];
+  const owner: number[] = [];
+  const norms: number[] = [];
+  models.forEach((_, m) => {
+    let norm = 0;
+    for (const x of weighted[m]) norm += x * x;
+    norm = Math.sqrt(norm);
+    if (norm <= 0) return; // nothing observed — the rank pass would drop it anyway
+    cols.push(weighted[m].map((x) => x / norm));
+    owner.push(m);
+    norms.push(norm);
+  });
+
+  const scaled = leastSquares(cols, y, SPLIT_RANK_TOL);
+  const coef = new Map<number, number>();
+  scaled.forEach((value, c) => { if (value !== null) coef.set(owner[c], value / norms[c]); });
+
+  // Every column is in the basis for every other, including ones the solve
+  // dropped: a dropped column is precisely the one whose utilization the
+  // survivors silently absorb.
+  independentShares(cols).forEach((share, c) => { diagnostics[owner[c]].independentShare = share; });
+
+  // Most-informative refusal first, which is not the order they are computed
+  // in: a model seen twice is unidentifiable *because* it was seen twice, and
+  // "not enough evidence" is the reason worth reading.
+  for (let m = 0; m < models.length; m++) {
+    const diagnostic = diagnostics[m];
+    const perMTok = coef.get(m);
+    if (perMTok !== undefined) diagnostic.raw = perMTok;
+    if (
+      diagnostic.intervals < CURRENT_FLOORS.minIntervals
+      || diagnostic.utilSum < CURRENT_FLOORS.minUtil
+      || diagnostic.days < CURRENT_FLOORS.minDays
+    ) {
+      diagnostic.refusal = 'thin-evidence';
+      continue;
+    }
+    if (perMTok === undefined || diagnostic.independentShare < SPLIT_MIN_INDEPENDENT_SHARE) {
+      diagnostic.refusal = 'unidentified';
+      continue;
+    }
+    // `<= 0` rather than `< 0`: zero is where the reciprocal below becomes
+    // `Infinity`, and an infinite price is not a measurement either.
+    if (!Number.isFinite(perMTok) || perMTok <= 0) {
+      diagnostic.refusal = 'negative';
+      continue;
+    }
+    diagnostic.fit = {
+      weightedPerPct: MTOK / perMTok,
+      pctPerMWeighted: perMTok,
+      intervals: diagnostic.intervals,
+      utilSum: diagnostic.utilSum
+    };
+  }
+  return diagnostics;
+}
+
+/** Just the models whose fitted rate is worth reporting — see {@link explainRates}. */
+export function fitRates(intervals: Interval[], sinceMs: number, untilMs: number): Map<string, RateFit> {
+  const out = new Map<string, RateFit>();
+  for (const diagnostic of explainRates(intervals, sinceMs, untilMs)) {
+    if (diagnostic.fit !== null) out.set(diagnostic.model, diagnostic.fit);
+  }
+  return out;
+}
+
+/**
+ * Signed percent of the fitted rate against the pooled one — how far the two
+ * estimators disagree, which is the disclosure and never a verdict.
+ *
+ * Null when either rate is missing, and null rather than `Infinity` when the
+ * pooled rate is not positive: a percentage against zero is not a comparison.
+ */
+export function fitDeviation(fitted: number | null, pooled: number | null): number | null {
+  if (fitted === null || pooled === null) return null;
+  if (!Number.isFinite(fitted) || !Number.isFinite(pooled) || pooled <= 0) return null;
+  return deviation(fitted, pooled);
 }

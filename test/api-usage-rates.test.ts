@@ -17,7 +17,7 @@ import path from 'node:path';
 import { shapeUsageRates } from '../server/api.js';
 import { readRecentSamples } from '../server/lib/usage-history.js';
 import { LEDGER_FILE, ledgerStartMs, readLedgerSince } from '../server/lib/usage-ledger.js';
-import { BASELINE_MS } from '../server/lib/usage-rate.js';
+import { BASELINE_MS, fitDeviation } from '../server/lib/usage-rate.js';
 import { testAsync, withServer } from './api-harness.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -128,10 +128,166 @@ function countedFixtureDir(): string {
   return dir;
 }
 
+/** The coefficients `fittedOnlyFixtureDir` generates its utilization from, in pt per 1M weighted. */
+const DRIVER_PCT_PER_MTOK = 0.4;
+const SUBAGENT_PCT_PER_MTOK = 1.6;
+const RARE_PCT_PER_MTOK = 2.5;
+
+/** Intervals per UTC date in `fittedOnlyFixtureDir`, summing to its 25. */
+const FITTED_PER_DAY = [13, 12];
+/** The last sample it writes. */
+const FITTED_END = T0 + DAY + FITTED_PER_DAY[1] * MIN;
+
+/**
+ * A driver model that owns half its windows, and a subagent model that owns none.
+ *
+ * Every odd interval is **mixed**: `opus-5` spends 1.0-3.0 Mtok and `haiku-4-5`
+ * 0.8-1.7 Mtok beside it, so neither ever reaches `DOMINANCE` and `haiku-4-5`
+ * has no pooled rate at any floor. The even intervals are `opus-5` alone, which
+ * is both what gives it a pooled rate and what makes the joint design
+ * identifiable. Utilization is generated exactly from the two coefficients
+ * above, so `opus-5`'s pooled rate and its fitted rate are the same number —
+ * 1M / 0.4 = **2_500_000** — and `haiku-4-5`'s fitted rate is 1M / 1.6 =
+ * **625_000**.
+ *
+ * `rare` adds a third model to two of the mixed intervals: identified in
+ * principle, refused on the evidence floors, and owner of nothing — the model
+ * that must still get no row at all.
+ */
+function fittedOnlyFixtureDir(opts: { rare?: boolean } = {}): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rates-fitted-'));
+  const samples: string[] = [];
+  const ledger: string[] = [];
+  const mtok = (m: number) => ({ in: m * 1_000_000, out: 0, cc: 0, cr: 0 });
+  let utilization = 10;
+  let i = 0;
+  for (let day = 0; day < FITTED_PER_DAY.length; day++) {
+    const base = T0 + day * DAY;
+    samples.push(JSON.stringify({ t: base, utilization, resetsAt: RESETS[day] }));
+    for (let j = 1; j <= FITTED_PER_DAY[day]; j++) {
+      const driver = 1 + (i % 5) * 0.5;
+      const sub = i % 2 === 1 ? 0.8 + (i % 7) * 0.15 : 0;
+      const rare = opts.rare === true && (i === 3 || i === 15) ? 0.6 : 0;
+      utilization += DRIVER_PCT_PER_MTOK * driver
+        + SUBAGENT_PCT_PER_MTOK * sub
+        + RARE_PCT_PER_MTOK * rare;
+      samples.push(JSON.stringify({ t: base + j * MIN, utilization, resetsAt: RESETS[day] }));
+      // `in` tokens weigh exactly 1 for these ids, so weighted tokens read off
+      // the fixture and the dominance shares above are the shares on disk.
+      const tok: Record<string, ReturnType<typeof mtok>> = { 'opus-5': mtok(driver) };
+      if (sub > 0) tok['haiku-4-5'] = mtok(sub);
+      if (rare > 0) tok['sonnet-5'] = mtok(rare);
+      ledger.push(JSON.stringify({ t: base + j * MIN, prevT: base + (j - 1) * MIN, tok }));
+      i++;
+    }
+  }
+  fs.writeFileSync(path.join(dir, '.usage-history.jsonl'), samples.join('\n') + '\n', 'utf8');
+  fs.writeFileSync(path.join(dir, LEDGER_FILE), ledger.join('\n') + '\n', 'utf8');
+  return dir;
+}
+
+/** `shapeUsageRates` over a fixture directory, read through the real file readers. */
+function bodyFor(dir: string, nowMs: number) {
+  return shapeUsageRates({
+    recording: true,
+    samples: readRecentSamples(dir),
+    ledger: readLedgerSince(nowMs - BASELINE_MS, dir),
+    ledgerStartMs: ledgerStartMs(dir),
+    nowMs
+  });
+}
+
+/** Relative closeness, for a coefficient recovered by least squares. */
+function near(actual: number | null, expected: number, what: string): void {
+  assert.ok(actual !== null, `${what}: expected ${expected}, got null`);
+  const err = Math.abs(actual - expected) / Math.abs(expected);
+  assert.ok(err < 1e-6, `${what}: got ${actual}, expected ${expected} (rel err ${err})`);
+}
+
 export async function run(): Promise<number> {
   console.log('\n=== usage rates endpoint ===\n');
   let p = 0, f = 0;
   const check = (r: boolean): void => { if (r) p++; else f++; };
+
+  check(test('a model that owns no window still gets a row, carrying only its fitted rate', () => {
+    const dir = fittedOnlyFixtureDir();
+    try {
+      const body = bodyFor(dir, FITTED_END + MIN);
+      const sub = body.models.find(m => m.model === 'haiku-4-5');
+      assert.ok(sub, 'the subagent model must reach the body: '
+        + JSON.stringify(body.models.map(m => m.model)));
+      // Every pooled number is null and every pooled counter is zero, because
+      // it owns nothing — honest, and not worked around.
+      assert.strictEqual(sub.weightedPerPct, null);
+      assert.strictEqual(sub.rawPerPct, null);
+      assert.strictEqual(sub.verdict, 'thin');
+      assert.strictEqual(sub.intervals, 0);
+      assert.strictEqual(sub.utilSum, 0);
+      assert.strictEqual(sub.days, 0);
+      assert.strictEqual(sub.deviationPct, null);
+      // And the fitted rate is the only number on the row.
+      assert.strictEqual(sub.fitVerdict, 'fitted');
+      near(sub.fittedWeightedPerPct, 625_000, 'the subagent\'s fitted rate');
+      assert.strictEqual(sub.fitDeviationPct, null, 'no pooled rate to compare against');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
+
+  check(test('a model with neither an owned window nor an identified fit gets no row', () => {
+    const dir = fittedOnlyFixtureDir({ rare: true });
+    try {
+      const body = bodyFor(dir, FITTED_END + MIN);
+      const names = body.models.map(m => m.model);
+      assert.ok(!names.includes('sonnet-5'),
+        'two mixed windows is under every floor — there is nothing to say: ' + JSON.stringify(names));
+      assert.deepStrictEqual(names, ['opus-5', 'haiku-4-5'], 'and the other two are unaffected');
+      // The rare model's own spend is in the design, so it does not distort the
+      // two rows that survive: both rates are still the generated truth.
+      near(body.models[0].fittedWeightedPerPct, 2_500_000, 'the driver\'s fitted rate');
+      near(body.models[1].fittedWeightedPerPct, 625_000, 'the subagent\'s fitted rate');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
+
+  check(test('rows stay ordered by evidence, so a fitted-only row sorts last', () => {
+    const dir = fittedOnlyFixtureDir();
+    try {
+      const body = bodyFor(dir, FITTED_END + MIN);
+      // Not alphabetical — `haiku-4-5` sorts before `opus-5` by name and after
+      // it by evidence, so this pins the sort key rather than the tie-break.
+      assert.deepStrictEqual(body.models.map(m => m.model), ['opus-5', 'haiku-4-5']);
+      assert.strictEqual(body.models[1].utilSum, 0, 'a fitted-only row has no pooled evidence at all');
+      assert.ok(body.models[0].utilSum > 0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
+
+  check(test('fitDeviationPct is signed, is null rather than infinite, and never moves the verdict', () => {
+    assert.strictEqual(fitDeviation(300_000, 200_000), 50, 'fitted above pooled is positive');
+    assert.strictEqual(fitDeviation(100_000, 200_000), -50, 'fitted below pooled is negative');
+    assert.strictEqual(fitDeviation(200_000, 200_000), 0);
+    assert.strictEqual(fitDeviation(null, 200_000), null, 'no fitted rate is no comparison');
+    assert.strictEqual(fitDeviation(300_000, null), null, 'and neither is no pooled rate');
+    assert.strictEqual(fitDeviation(300_000, 0), null, 'a percentage against zero is not Infinity');
+    assert.strictEqual(fitDeviation(300_000, -1), null);
+
+    const dir = fittedOnlyFixtureDir();
+    try {
+      const body = bodyFor(dir, FITTED_END + MIN);
+      const driver = body.models[0];
+      // Both estimators see the same generated truth here, so they agree
+      // exactly — and the badge is the pooled rate's verdict either way.
+      near(driver.weightedPerPct, 2_500_000, 'the driver\'s pooled rate');
+      near(driver.fittedWeightedPerPct, 2_500_000, 'the driver\'s fitted rate');
+      assert.ok(Math.abs(driver.fitDeviationPct!) < 1e-6, `the two agree: ${driver.fitDeviationPct}`);
+      assert.strictEqual(driver.verdict, 'thin', 'no baseline yet — the fitted rate cannot change that');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
 
   check(test('a ledger with counts fits the split, and both terms reach the body', () => {
     const dir = countedFixtureDir();

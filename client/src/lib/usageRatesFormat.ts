@@ -29,6 +29,27 @@ export function rawAsideText(rawPerPct: number | null): string | null {
   return `≈ ${formatTok(rawPerPct)} raw at this model's recent mix`;
 }
 
+/**
+ * The jointly-fitted rate as a second aside, under the raw one.
+ *
+ * `null` — not `—` — when there is no fitted rate, the rule
+ * {@link rawAsideText} already established: a line the card omits rather than
+ * a dash claiming a measurement nobody made.
+ *
+ * It **owns no threshold**. The deviation is rendered identically whether the
+ * two estimators agree to a decimal or disagree by a factor of ten, because
+ * deciding what counts as a disagreement is the server's call and there is no
+ * verdict here to make — drift is judged on the headline rate alone.
+ */
+export function fittedAsideText(
+  fittedWeightedPerPct: number | null, fitDeviationPct: number | null
+): string | null {
+  if (fittedWeightedPerPct === null || !Number.isFinite(fittedWeightedPerPct)) return null;
+  const line = `fitted ${formatTok(fittedWeightedPerPct)} weighted / 1% across mixed-model windows`;
+  if (fitDeviationPct === null || !Number.isFinite(fitDeviationPct)) return line;
+  return `${line} · ${formatDeviation(fitDeviationPct)} vs the rate above`;
+}
+
 /** Signed percent, one decimal. The sign is the point, so it is always shown. */
 export function formatDeviation(pct: number | null): string {
   if (pct === null || !Number.isFinite(pct)) return '—';
