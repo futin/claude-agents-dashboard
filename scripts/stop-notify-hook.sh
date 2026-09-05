@@ -94,6 +94,35 @@ notify_fallback() {
 HEALTH=$(curl -sf -m 1 "$DASH/api/health" 2>/dev/null) || exit 0
 [ "$(printf '%s' "$HEALTH" | jq -r '.remoteAnswer // false')" = "true" ] || notify_fallback
 
+# A session an orchestrator run owns never holds. The marker is an env var the
+# run sets on the process it spawns (`BM_ORCH_RUN=<runId>`, backlog-manager
+# bug-20), and it is the one thing that separates these sessions from every
+# other headless one — which is exactly the distinction this hook could not
+# previously draw, because everything it inspects (tty, entrypoint) describes
+# the FRONT END and run-ownership is a property of the CALLER.
+#
+# Two reasons to skip, and either alone would be enough. Nobody is going to
+# reply: the run spawned this process to work one item unattended and is
+# blocking on its exit, so the hold is a pure tax — up to `answerSecs` (600s by
+# default) per item, on top of a `watch` budget of 540s that then needs a whole
+# extra round-trip to catch an exit that had already happened. And the session
+# must not act on a reply even if one came: backlog-manager bug-18 makes
+# "never treat the user as your escalation channel" a hard limit for a
+# dispatched session, so waiting ten minutes to receive an instruction it is
+# required to ignore is waste twice over.
+#
+# `notify_fallback`, deliberately, not a bare `exit 0`: the "this finished"
+# push is still worth sending, and that function is the existing path that
+# sends it. Placed after the remoteAnswer gate so a session that would not have
+# held anyway takes the same route it always did.
+#
+# This is NOT a blanket headless exemption and must not be widened into one. A
+# headless session a person started by hand is reachable on purpose, and the
+# comment above about there being no terminal to type into is still true of it.
+if [ -n "$BM_ORCH_RUN" ]; then
+  notify_fallback
+fi
+
 # Same three-way resolution as ask-remote-hook.sh: explicit env var wins, then
 # the dashboard's Settings (carried on the probe), then the default.
 IDLE_MIN_S="${CLAUDE_DASHBOARD_IDLE_SECS:-$(printf '%s' "$HEALTH" | jq -r '.idleSecs // 60')}"
