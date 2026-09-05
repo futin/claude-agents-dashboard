@@ -35,7 +35,7 @@ import { readRecentSamples, repoRoot } from '../server/lib/usage-history.js';
 import { ledgerStartMs, rawTokens, readLedgerSince } from '../server/lib/usage-ledger.js';
 import type { LedgerLine } from '../server/lib/usage-ledger.js';
 import {
-  CURRENT_FLOORS, SPLIT_FLOORS, SPLIT_MAX_R2, SPLIT_MIN_INDEPENDENT_SHARE,
+  CURRENT_FLOORS, CURRENT_MS, SPLIT_FLOORS, SPLIT_MAX_R2, SPLIT_MIN_INDEPENDENT_SHARE,
   coverageBreakdown, currentRange, explainRates, explainSplits, fitDeviation,
   isUnpriced, joinIntervals, ledgerBreakMs, rateFor
 } from '../server/lib/usage-rate.js';
@@ -206,10 +206,16 @@ function main(): number {
       console.log(`    ${d.model}: no fitted rate — ${d.refusal}  (${evidence}${raw})`);
       continue;
     }
-    const p = pooled.get(d.model);
+    // Recomputed rather than read out of `pooled` above: that map is keyed by
+    // `models`, which comes from the *two-term* usable set and so still
+    // requires `reqUsable`. A model that owns windows but appears only on
+    // pre-upgrade ledger lines is missing from it, and reporting that as "owns
+    // no window" would be a different — and false — statement.
+    const owned = pool(intervals, d.model, cur.sinceMs, cur.untilMs);
+    const p = owned?.weightedPerPct;
     const gap = p === undefined || p <= 0
-      ? 'no pooled rate — this model owns no window'
-      : `pooled ${(p / MTOK).toFixed(4)}M, gap `
+      ? `no pooled rate — this model owns no window in the last ${CURRENT_MS / DAY_MS}d`
+      : `pooled ${(p / MTOK).toFixed(4)}M over ${owned!.intervals} owned, gap `
         + `${(fitDeviation(d.fit.weightedPerPct, p) ?? 0).toFixed(1)}%`;
     console.log(`    ${d.model}: fitted ${(d.fit.weightedPerPct / MTOK).toFixed(4)}M weighted/pt`
       + `  (${gap})`);

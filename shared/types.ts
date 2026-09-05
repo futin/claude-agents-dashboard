@@ -197,10 +197,12 @@ export type ModelSplitVerdict = 'fitted' | 'thin';
  * Whether the one-term joint fit — the rate measured across the windows the
  * pooled dominance rate discards — is reported for one model.
  *
- * Collapses that fit's four refusals the same way {@link ModelSplitVerdict}
- * collapses the split's: too little evidence, a model this data cannot single
- * out from the ones it always runs beside, and a physically impossible
- * coefficient all reduce to "not enough evidence to say". Which gate refused
+ * Collapses that fit's **three** refusals the same way {@link ModelSplitVerdict}
+ * collapses the split's four: too little evidence, a model this data cannot
+ * single out from the ones it always runs beside, and a physically impossible
+ * coefficient all reduce to "not enough evidence to say". Three and not four
+ * because the split's `collinear` has no counterpart here — it compares a
+ * model's own two regressors, and this fit gives a model one. Which gate refused
  * stays diagnostic-only (`scripts/probe-usage-split.ts`); the API carries the
  * verdict, not the reason.
  */

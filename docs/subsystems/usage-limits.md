@@ -853,10 +853,26 @@ Why it exists, and it is not the pooled rate's failure mode:
   17-day baseline on 2026-09-05, at the server's own 3-day fit window:
   `claude-opus-5` pooled 0.2100M weighted/pt against fitted 0.3160M
   (**+50.4%**), `claude-fable-5-1` pooled 0.0451M against fitted 0.0817M
-  (**+81.0%**). Over the full 17-day span the fitted rates are `claude-opus-5`
-  0.354M, `claude-sonnet-5` 0.394M, `claude-fable-5` 0.122M, `claude-fable-5-1`
-  0.116M and `claude-haiku-4-5-20251001` 0.303M — a model with **zero** owned
-  intervals in the whole window, which the card could not previously price at all.
+  (**+81.0%**). Over the full 17-day span five models clear the gates:
+  `claude-opus-5` 0.3558M, `claude-sonnet-5` 0.3933M, `claude-fable-5` 0.1219M,
+  `claude-fable-5-1` 0.1163M and `claude-haiku-4-5-20251001` 0.3002M. All five
+  own intervals over that span — 855, 5, 16, 28 and 2 respectively — so all five
+  already had a pooled rate; what the fit changes for them is the *number*, not
+  whether there is one.
+
+**The headline case — a model that owns nothing — is on this machine and is
+currently refused.** `claude-opus-4-8` owns **zero** intervals over the whole
+17-day window, so `pool()` gives it nothing at any floor and it has never had a
+row on the card. It also does not get one now: it appears on exactly **one**
+ledger line, so `explainRates` refuses it `thin-evidence` (1 interval, 1.0 point,
+1 day) at the 17-day horizon and it is outside the server's 3-day window
+entirely. Its ungated coefficient is `raw = 4.1204 pt/Mtok` ≈ 0.243M
+weighted/pt — the arithmetic works, and the floors correctly decline to publish
+one interval as a measurement. That is the fit behaving as designed, not the
+feature failing: the mechanism that would price a subagent-only model is in
+place and gated, and the first such model to accumulate ten intervals over two
+days will get a row. Do **not** cite any of the five fitted models above as the
+zero-owned case; measured 2026-09-05, none of them is.
 
 **Which intervals** — `usableForRate` admits `{model}`, `mixed` and `idle`, and
 rejects `external` plus everything `isUnpriced` names, for the reasons

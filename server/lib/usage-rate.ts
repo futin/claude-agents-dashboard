@@ -2,11 +2,16 @@
  * usage-rate.ts — what one percent of the 5-hour window is worth, per model.
  *
  * Joins `.usage-history.jsonl` (percent) with `.usage-ledger.jsonl` (tokens)
- * into intervals, discards every interval it cannot attribute, and fits a rate
- * per model over what survives. Pure — no clock, no disk, everything injected.
+ * into intervals and fits rates per model over them. Pure — no clock, no disk,
+ * everything injected.
  *
- * The discipline is refusal: which intervals are thrown away and why is the
- * classification table in `docs/subsystems/usage-limits.md`.
+ * Three estimators, each reading a **different** set of those intervals: the
+ * pooled ratio takes only intervals one model owns outright, and the two joint
+ * fits take the mixed and idle ones too. So "which intervals are discarded" has
+ * no single answer — it is a property of the estimator, and the classification
+ * table in `docs/subsystems/usage-limits.md` is where each one's set is written
+ * down. The discipline they share is refusal: publishing nothing rather than a
+ * number the evidence does not carry.
  */
 
 import { sameWindow } from './usage-history.js';
