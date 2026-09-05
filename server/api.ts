@@ -50,8 +50,8 @@ import { getSettings, setSettings } from './lib/settings.js';
 import { classifyOrigin } from './lib/origin.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
-  MAX_LAUNCHING, adoptLaunched, forceStopSession, launch, listLaunching, parseSpawnRequest, probeSpawn,
-  stopSession, stopStates
+  MAX_LAUNCHING, adoptLaunched, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
+  probeSpawn, stopSession, stopStates
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import type {
@@ -1258,6 +1258,15 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
       // A held question, plan, or reply window means the process is alive —
       // resuming now would put a second writer on the same session.
       if (getPending(rid) || getPendingPlan(rid) || getPendingMessage(rid)) {
+        return sendJson(res, 409, { error: 'session is still running' });
+      }
+      // A held socket is only *one* way to be alive. A session this server
+      // spawned can be mid-tool-call, or lingering after its turn (measured at
+      // 90s+), holding nothing at all — and the row shows `incomplete`, which
+      // the resume composer offers. Launching then would put a second `claude`
+      // on one transcript AND replace the live entry in the store, dropping the
+      // first child's kill handle. The store knows, so ask it.
+      if (hasLiveChild(rid)) {
         return sendJson(res, 409, { error: 'session is still running' });
       }
       if (listLaunching().some(e => e.sessionId === rid)) {

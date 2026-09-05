@@ -319,10 +319,27 @@ A `running` entry is never reported by `listLaunching` (it already has a real ro
 scan — a second one would be a phantom) and is never TTL'd (its handle is the point; it
 leaves when the child exits, not when a clock runs out).
 
+**One id can name two children, so no handler trusts an id alone.** A resume reuses the
+transcript's id on purpose, and the store is keyed by id — it cannot hold two entries for
+one session. Every handler `launch` registers closes over the *id* and re-looks the entry up
+when it fires, so a first child's late `'exit'` would otherwise reach whatever entry that id
+names by then and delete it, taking a live, working session's handle with it. Two guards:
+
+- `serveSpawn` refuses the second launch in the first place — `hasLiveChild(rid)` → 409
+  `session is still running`. A held question/plan/reply socket was never the only way to be
+  alive; a session mid-tool-call, or lingering after its turn, holds nothing at all.
+- `dropIfRunning` and `fail` take the child they were registered for and no-op unless
+  `entry.child === child`. Defence in depth, and it makes every handler immune to id reuse
+  rather than only the path the guard covers.
+
+What the CLI itself does with two writers on one transcript is a separate, open question —
+`bug-19`.
+
 ### One guarded helper does every signal
 
-`signalGroup` is the only thing in the codebase that signals anything, and it refuses unless
-**all four** hold:
+`signalGroup` is the only thing that signals a process *group*, and it refuses unless
+**all four** hold. (It is not the only signal in the codebase: `stopSession`'s `launching`
+branch kills the handle alone — see [The two routes](#the-two-routes).)
 
 | Clause | Why |
 |---|---|
@@ -407,7 +424,7 @@ a `failed` row for `FAIL_TTL_MS`, labelled as an error they never actually hit.
 
 | Piece | What it does |
 |---|---|
-| `server/lib/spawn.ts` | pure `buildSpawnArgs`/`clampPermission`/`parseSpawnRequest`, plus the impure `probeSpawn`/`launch`/`listLaunching`/`adoptLaunched`/`stopSession`/`forceStopSession`/`escalateStop`/`stopStates` and the RAM-only store |
+| `server/lib/spawn.ts` | pure `buildSpawnArgs`/`clampPermission`/`parseSpawnRequest`, plus the impure `probeSpawn`/`launch`/`listLaunching`/`adoptLaunched`/`stopSession`/`forceStopSession`/`escalateStop`/`stopStates`/`hasLiveChild` and the RAM-only store |
 | `POST /api/spawn` | `serveSpawn` — validates, resolves the project, launches, returns `{sessionId}` immediately |
 | `POST /api/spawn/:id/stop` | `serveSpawnStop` — SIGTERM + delete for a `launching` entry; delegates to `stopSession` |
 | `POST /api/sessions/:id/stop` | `serveSessionStop` — the row button's route; graceful by default, `{force:true}` for SIGKILL |
@@ -430,9 +447,10 @@ a `failed` row for `FAIL_TTL_MS`, labelled as an error they never actually hit.
 | Method | Path | Codes |
 |---|---|---|
 | `POST` | `/api/spawn` | 200 `{sessionId}` (`SpawnResponse`); 400 malformed body / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target / resume target with no recorded cwd; 403 bad token; 404 remote answers off *or* feature off; 409 resume of a still-running or already-resuming session; 429 `MAX_LAUNCHING` launches already in flight; 500 spawn threw |
-| `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}`; 400 bad id shape; 403 bad token; 404 remote answers off *or* no live launch for that id |
+| `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}` for a still-`launching` entry, or `{stopping: true}` if that id has since become a running session (it delegates to `stopSession`); 400 bad id shape; 403 bad token; 404 remote answers off *or* no live launch for that id |
+| `POST` | `/api/sessions/:id/stop` | 200 `{stopping: true}` (graceful) or `{stopped: true}` (`{"force": true}`); 400 bad id shape, bad path encoding, *or* a present-but-unparseable body — an absent/empty body is normal; 403 bad token; 404 remote answers off *or* no live session for that id; 405 + `Allow: POST` for any other method |
 
-Both gated by the same `tokenOk` (`api.ts`) the other three write paths use — an
+All three gated by the same `tokenOk` (`api.ts`) the other three write paths use — an
 unset `ANSWER_TOKEN` leaves them open, matching the rest of the app's LAN-trust posture —
 and by the same remote-answer toggle (below).
 
@@ -530,8 +548,9 @@ edge case of it.
 Four things bound it, and none of them is new machinery — they're the same posture the
 rest of the app already takes, aimed at a bigger target:
 
-- **The remote-answer toggle covers it, like every other write path.** Both
-  `serveSpawn` and `serveSpawnStop` answer `404 {error: 'remote answers disabled'}` when
+- **The remote-answer toggle covers it, like every other write path.**
+  `serveSpawn`, `serveSpawnStop` and `serveSessionStop` all answer
+  `404 {error: 'remote answers disabled'}` when
   `getState(config).remoteAnswer` is false — flipping the toolbar pill off, or setting
   `REMOTE_ANSWER=false`, turns launching off with it. That is the app's only *runtime*
   kill switch (`CLAUDE_BIN` is restart-scoped), so a switch that excluded the widest write
@@ -575,7 +594,7 @@ new reason:
   dashboard session from its chat drawer is a different thing, and it now exists — see
   [resume](#resuming-an-ended-session-resume).
 - **A stopped launch and an orphaned one are not symmetric.** See [the stop endpoint's
-  restart hole](#the-stop-endpoint-and-its-restart-hole) above — a detached child
+  restart hole](#stopping-a-spawned-session) above — a detached child
   outlives a server restart by design, but the store that could `stop` it does not.
 
 <!-- docs-sync:

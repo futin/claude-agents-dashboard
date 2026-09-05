@@ -500,3 +500,118 @@ Both probe sessions were confirmed fully reaped afterwards; the temporary worktr
 - `docs/guides/tutor/write-paths/write-paths-2-spawn-deck.html` still teaches `stopLaunch`.
   It is a generated deck, refreshed by `/tutor`, not by hand — left alone deliberately. Every
   reference in live code and in `docs/subsystems/` was migrated.
+
+### Review fixes (loop 1)
+
+**2026-09-05.** Verdict `fix`, three Important findings, all three fixed. Report:
+`~/.backlog-manager/orchestrator/…/reviews/task-19-1.md`.
+
+The two logic findings were one root cause: **an id does not identify a child over time.**
+A resume reuses the transcript's id deliberately, and the store is keyed by id, so a second
+`launch` for a live id replaced the entry (finding 1 — the first child's kill handle
+discarded, its armed escalation leaked) and the first child's later `'exit'` then reached
+whatever entry that id had come to name (finding 2 — deleting or failing a *live* session).
+The reviewer was right that this defeats the exact charter promise this task exists to
+deliver, and right that it is reachable purely from the UI, since `resumeEligible` accepts
+`incomplete` — the status a lingering post-turn session shows.
+
+Fixed on both sides, per the reviewer's own two options — taking both rather than either,
+because they close different halves:
+
+1. **`serveSpawn` refuses the second launch.** New `hasLiveChild(id)` (`spawn.ts`) — the
+   same predicate as "is it stoppable" — added to the resume guard, which now answers 409
+   `session is still running`. A held question/plan/reply socket was never the only way to
+   be alive.
+2. **`dropIfRunning` and `fail` take a child-identity check** (`ownedBy(entry, child)`,
+   no-op unless `entry.child === child`). Defence in depth: it makes every handler
+   `launch` registers immune to id reuse, not just the path the guard covers. `fail`'s
+   `child` is optional because the synchronous-throw path has no child object to compare.
+3. **`launch` clears a replaced entry's escalation timer** before `entries.set`, so no
+   armed SIGKILL can survive with nothing able to reach it.
+
+Finding 3 (docs) fixed, and the five Minor items were cheap so they went too: the
+`/api/spawn/:id/stop` row now states `{stopping: true}` and that it reaches running
+sessions; `POST /api/sessions/:id/stop` has its own row incl. 405 + `Allow: POST`; the dead
+`#the-stop-endpoint-and-its-restart-hole` anchor repointed; §Security posture names
+`serveSessionStop` as the third handler; and the "only thing that signals anything" line no
+longer contradicts the `launching`-branch exception stated later in the same doc.
+
+`bug-19` gained a §"Partly closed by task-19's review loop 1" section, as the review asked —
+recording that the store-level half is fixed here, and that what stays open is the CLI's own
+behaviour with two writers on one transcript (the thing that sets its severity) plus the
+sessions `hasLiveChild` cannot answer for: terminal-started, or spawned before the last
+restart.
+
+#### Regression tests, and their mutation proofs
+
+**Finding 2** — two new store tests in `test/spawn.test.ts`. Both build the real state: C1
+adopted and running, then a resume for the same id giving C2, then C1 dies.
+
+```
+=== RED run: child-identity check removed ===
+  ✗ a dead child's exit does not delete the newer running entry for the same id
+    the live session must keep its handle
++ actual - expected
++ undefined
+- 'ready'
+
+  ✗ a dead child's nonzero exit does not mark the newer entry failed
+    the newer launch must not be failed by an older child
+  'failed' !== 'launching'
+FAILED (2)
+
+=== GREEN run: check restored ===
+  ✓ a dead child's exit does not delete the newer running entry for the same id
+  ✓ a dead child's nonzero exit does not mark the newer entry failed
+ALL PASS
+```
+
+The `undefined` in the first is the finding exactly: the live session's `stopState` gone,
+i.e. the handle dropped by an unrelated older process.
+
+**Finding 1** — one new endpoint test in `test/spawn-endpoint.test.ts`, driving a session to
+the precise state the UI offers resume in (adopted, no held socket, live child) and
+asserting both the 409 and that no second child was spawned.
+
+```
+=== RED run: hasLiveChild guard removed ===
+  ✗ resume of an adopted, still-live session is 409 — a held socket is not the only way to be alive
+    200 == 409
+FAILED (1)
+
+=== GREEN run: guard restored ===
+  ✓ resume of an adopted, still-live session is 409 — a held socket is not the only way to be alive
+ALL PASS
+```
+
+#### Verification
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(clean, no output)
+
+$ pnpm test
+  ✓ no node_modules at all says "run pnpm install", not "no ANSWER_TOKEN"
+  ✓ no branch ever prints the token value
+
+  18/18 passed
+ALL PASS
+```
+
+Case count **1028 → 1031 (+3)**, i.e. **994 → 1031 (+37)** against `main`. Checked for
+mutation residue in `server/`, `client/`, `shared/`: clean.
+
+#### Still not verified, after this loop
+
+- Unchanged from above: the `docs-sync` `verified:` SHA on `docs/subsystems/spawn.md` still
+  points at `1809dcd` and needs a re-stamp once the commit exists; the generated tutor deck
+  still teaches `stopLaunch`.
+- **The new 409 path was not exercised in a browser.** It is covered by the endpoint test
+  through the real handler, but I did not re-run the Playwright flow for it — the earlier
+  manual pass (case 30) predates this change and I did not repeat it.
+- The reviewer's remaining Minor items were deliberately left: `useStopSession` always sends
+  a body (so the bare-POST path has no in-repo caller, though the server behaviour is
+  pinned by test), `escalateStop`'s wall-clock gate vs monotonic timer, and
+  `forceStopSession` leaving `stopRequestedAtMs` unset. None changes the verdict and each is
+  argued in the report.

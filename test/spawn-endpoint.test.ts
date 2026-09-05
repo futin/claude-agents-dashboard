@@ -26,8 +26,8 @@ import { loadConfig } from '../server/lib/config.js';
 import { register as registerMessage, resetStore as resetMessages } from '../server/lib/messages.js';
 import { resetState } from '../server/lib/remoteState.js';
 import {
-  MAX_LAUNCHING, adoptLaunched, launch, listLaunching, resetLaunches, resetSpawnProbe,
-  setGroupKiller, setSpawner
+  LAUNCH_TTL_MS, MAX_LAUNCHING, adoptLaunched, launch, listLaunching, resetLaunches,
+  resetSpawnProbe, setGroupKiller, setSpawner
 } from '../server/lib/spawn.js';
 import { withServer } from './api-harness.js';
 import type { Spawner } from '../server/lib/spawn.js';
@@ -358,6 +358,32 @@ export async function run(): Promise<number> {
       const second = await post((req, res) => void serveSpawn(cfg, req, res), body);
       assert.equal(second.status, 409);
       assert.equal(second.json?.error, 'already resuming');
+    });
+  }));
+
+  check(await testAsync('resume of an adopted, still-live session is 409 — a held socket is not the only way to be alive', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      const children: FakeChild[] = [];
+      setSpawner(fakeSpawner(children));
+      // Drive the session to exactly the state the UI offers resume in: adopted,
+      // holding no question/plan/reply socket, but with a live child — a session
+      // mid-tool-call, or lingering after its turn (measured at 90s+), which the
+      // row shows as `incomplete` and `resumeEligible` accepts.
+      const id = launch(cfg, REF, { prompt: 'a long job', permissionMode: 'auto' }, RES_ID);
+      assert.equal(id, RES_ID);
+      listLaunching(Date.now() + LAUNCH_TTL_MS + 1);   // resumes reach `running` via the TTL
+      assert.equal(children.length, 1);
+
+      const reply = await post(
+        (req, res) => void serveSpawn(cfg, req, res),
+        JSON.stringify({ prompt: 'continue', resume: RES_ID })
+      );
+      assert.equal(reply.status, 409);
+      assert.equal(reply.json?.error, 'session is still running');
+      // The refusal has to actually stop the work: a second child would both put
+      // two writers on one transcript and replace the store entry, dropping the
+      // first child's kill handle.
+      assert.equal(children.length, 1, 'no second child may be spawned');
     });
   }));
 

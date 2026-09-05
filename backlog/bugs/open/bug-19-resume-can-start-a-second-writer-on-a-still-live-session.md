@@ -62,6 +62,26 @@ corruption.
   not the safety boundary." That claim is stronger than the code: the re-check covers
   held sockets, not liveness.
 
+### Partly closed by task-19's review loop 1
+
+The **store-level** half of this is fixed on the task-19 branch, because the review found a
+consequence this bug did not record: launching a second child for a live id also replaced
+the store entry, throwing away the first child's kill handle (a live session silently became
+unstoppable) and letting the first child's eventual `'exit'` delete or fail the *newer*
+entry. Two guards landed there:
+
+- `serveSpawn` now refuses with 409 `session is still running` when `hasLiveChild(rid)` —
+  which closes the repro above for any session **this server spawned and still holds a handle
+  for**.
+- `dropIfRunning`/`fail` take a child-identity check, so a stale handler can never touch a
+  newer entry for the same id.
+
+**What is left, and why this bug stays open.** `hasLiveChild` can only answer for children
+this process spawned: a terminal-started session, or one spawned before the last dashboard
+restart, still answers false, and the guard does not fire. And the question that sets this
+bug's severity is untouched — **what the CLI actually does with two writers on one
+transcript**. Until that is answered, the remaining exposure is unquantified.
+
 ## Cause
 
 unknown

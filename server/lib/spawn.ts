@@ -525,9 +525,10 @@ function childAlive(child: ChildProcess | null): boolean {
  * is what lets the exit handlers use it as a guard: `launching` and `failed`
  * entries fall through to the behaviour they have always had.
  */
-function dropIfRunning(sessionId: string): boolean {
+function dropIfRunning(sessionId: string, child: ChildProcess): boolean {
   const entry = entries.get(sessionId);
   if (!entry || entry.state !== 'running') return false;
+  if (!ownedBy(entry, child)) return false;
   // The child is already gone; an armed SIGKILL has nothing left to reach, and
   // leaving it armed keeps a dead entry's timer alive for the rest of the grace.
   if (entry.escalateTimer) clearTimeout(entry.escalateTimer);
@@ -536,13 +537,38 @@ function dropIfRunning(sessionId: string): boolean {
 }
 
 /**
+ * Does `entry` still belong to `child`?
+ *
+ * Every handler `launch` registers closes over a **session id**, not over the
+ * entry, and re-looks it up when it fires. An id is not unique over time: a
+ * resume reuses the transcript's id deliberately, so a second `launch` for the
+ * same id can replace the entry while the first child is still alive. Without
+ * this check the first child's eventual `'exit'` reaches whatever entry now
+ * holds that id and deletes or fails it — a live session losing its handle
+ * because an unrelated, older process finally died.
+ *
+ * That is precisely the promise the store's charter makes ("hold the live
+ * handle for as long as the child lives"), so the check belongs on every path a
+ * stale handler can reach: this, and {@link fail}.
+ */
+function ownedBy(entry: Entry, child: ChildProcess): boolean {
+  return entry.child === child;
+}
+
+/**
  * Mark an entry failed. A no-op if it is already gone — adopted, or already
  * expired out of the map — so a late `exit`/`error` can never resurrect an
  * entry `adoptLaunched` already removed.
  */
-function fail(sessionId: string, exitCode: number | undefined, error: string): void {
+function fail(sessionId: string, exitCode: number | undefined, error: string, child?: ChildProcess): void {
   const entry = entries.get(sessionId);
   if (!entry) return;
+  // Same id-reuse guard as `dropIfRunning`: a stale handler must not mark a
+  // *newer* entry failed, which would draw a red "launch failed" row for a
+  // launch that is running perfectly well. `child` is omitted only on the
+  // synchronous-throw path, where no child object exists to compare against and
+  // the entry can only be the one just created.
+  if (child && !ownedBy(entry, child)) return;
   entry.state = 'failed';
   entry.exitCode = exitCode;
   entry.error = error;
@@ -584,6 +610,14 @@ export function launch(
     resume: resumeId !== undefined,
     child: null
   };
+  // A resume reuses an existing id, so this `set` can replace a live entry —
+  // the store is keyed by id and cannot hold two children for one. `serveSpawn`
+  // is what stops that happening (it 409s on `hasLiveChild`); this only makes
+  // sure the replaced entry cannot leave an armed SIGKILL behind with nothing
+  // left able to clear it, since `dropIfRunning`/`resetLaunches` reach entries
+  // by id and would never see it again.
+  const replaced = entries.get(sessionId);
+  if (replaced?.escalateTimer) clearTimeout(replaced.escalateTimer);
   entries.set(sessionId, entry);
 
   const args = buildSpawnArgs({ ...input, sessionId, resume: resumeId !== undefined });
@@ -618,7 +652,7 @@ export function launch(
   // on Node 22. Attached before the write/end below on principle, though the
   // error, being async, cannot land synchronously inside them.
   child.stdin?.on('error', err => {
-    fail(sessionId, undefined, errMessage(err));
+    fail(sessionId, undefined, errMessage(err), child);
   });
   child.stdin?.write(input.prompt);
   child.stdin?.end();
@@ -628,7 +662,7 @@ export function launch(
     stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_CAP);
   });
   child.stderr?.on('error', err => {
-    fail(sessionId, undefined, errMessage(err));
+    fail(sessionId, undefined, errMessage(err), child);
   });
   child.on('exit', (code, signal) => {
     // A `running` entry that exits is simply over — delete it, whatever the
@@ -636,12 +670,12 @@ export function launch(
     // a real row for however long it lived; resurrecting it as a red "launch
     // failed" phantom because it ended nonzero (or because the user stopped it,
     // which exits by signal) would be a lie about a launch that plainly worked.
-    if (dropIfRunning(sessionId)) return;
+    if (dropIfRunning(sessionId, child)) return;
     // A clean (code 0) exit is left alone: a fast run can finish before the
     // next scan ever sees it, and the transcript — not the exit — is what
     // matters then. Adoption or the launching-state TTL settle it from here.
     if (code === 0) return;
-    fail(sessionId, code ?? undefined, stderrTail || (signal ? `terminated by signal ${signal}` : `exited with code ${code}`));
+    fail(sessionId, code ?? undefined, stderrTail || (signal ? `terminated by signal ${signal}` : `exited with code ${code}`), child);
   });
   child.on('close', (code, signal) => {
     // Node documents 'exit' as able to fire before a child's stdio has
@@ -662,12 +696,12 @@ export function launch(
     // in a way that produced no 'exit' at all (a spawn that never started), and
     // harmless when 'exit' already dropped the entry — `dropIfRunning` is a
     // no-op for an id that has left the map.
-    if (dropIfRunning(sessionId)) return;
+    if (dropIfRunning(sessionId, child)) return;
     if (!stderrTail || code === null || code <= 0) return;
-    fail(sessionId, code, stderrTail);
+    fail(sessionId, code, stderrTail, child);
   });
   child.on('error', err => {
-    fail(sessionId, undefined, errMessage(err));
+    fail(sessionId, undefined, errMessage(err), child);
   });
 
   child.unref();
@@ -852,6 +886,28 @@ export function stopStates(): ReadonlyMap<string, StopState> {
     out.set(id, entry.stopRequestedAtMs === undefined ? 'ready' : 'stopping');
   }
   return out;
+}
+
+/**
+ * Does this server still hold a live child for `id`?
+ *
+ * The same predicate as "is it stoppable" ({@link stopStates}), exposed for the
+ * one caller that needs it as a *refusal*: `serveSpawn`'s resume guard. That
+ * guard's job is "don't put a second writer on a session that is still running",
+ * and until this existed it could only see sessions holding a question, plan or
+ * reply socket, plus ones still inside their pre-adoption window
+ * (`listLaunching`). It could not see the case this store now knows about — an
+ * adopted session, mid-tool-call or lingering after its turn, holding nothing
+ * but a live process.
+ *
+ * Not the whole of that problem: this can only answer for children *this*
+ * process spawned, so a terminal session, or one spawned before the last
+ * restart, still answers false. What the CLI itself does with two writers on one
+ * transcript is `bug-19`.
+ */
+export function hasLiveChild(id: string): boolean {
+  const entry = entries.get(id);
+  return !!entry && entry.state === 'running' && signalablePid(entry.child) !== null;
 }
 
 /** Test seam: drop every entry, disarming any escalation timers they had armed. */

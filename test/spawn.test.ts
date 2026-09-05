@@ -869,6 +869,53 @@ export function run(): number {
     } finally { setSpawner(null); }
   })) p++; else f++;
 
+  /* ------------------------------- id reuse: a stale handler owns nothing (review loop 1) */
+
+  if (test('a dead child\'s exit does not delete the newer running entry for the same id', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      // C1: an ordinary spawn, adopted, holding a live handle.
+      const id = runningSession(children);
+      // C2: a resume reuses that id deliberately, so the store — keyed by id —
+      // now holds an entry for C2 while C1 is still alive. Both handler sets
+      // close over the same id.
+      launch(cfg(), REF, baseInput({ resume: true }), id);
+      assert.strictEqual(children.length, 2);
+      // Promote C2's entry: a resume reaches `running` via the TTL, never adoption.
+      listLaunching(Date.now() + LAUNCH_TTL_MS + 1);
+      assert.strictEqual(stopStates().get(id), 'ready');
+
+      // C1 finally dies. Its handler closes over the id, not the entry — and the
+      // entry that id now names belongs to C2, which is alive and working.
+      children[0].exitCode = 0;
+      children[0].emit('exit', 0, null);
+
+      // C2 must still be there and still be stoppable. Losing its handle here is
+      // exactly the charter promise ("hold the live handle for as long as the
+      // child lives") being broken by an unrelated, older process.
+      assert.strictEqual(stopStates().get(id), 'ready', 'the live session must keep its handle');
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a dead child\'s nonzero exit does not mark the newer entry failed', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = runningSession(children);
+      launch(cfg(), REF, baseInput({ resume: true }), id);   // C2, still `launching`
+      // C1 crashes. Without the identity guard this reaches C2's entry and paints
+      // a red "launch failed" row for a launch that is running perfectly well.
+      children[0].exitCode = 3;
+      children[0].emit('exit', 3, null);
+      const rows = listLaunching();
+      assert.strictEqual(rows.length, 1);
+      assert.strictEqual(rows[0].state, 'launching', 'the newer launch must not be failed by an older child');
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
   /* -------------------------------------------------- stopping a live session */
 
   if (test('stopSession on a running entry signals the group and keeps the entry', () => {
