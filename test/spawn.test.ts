@@ -6,8 +6,9 @@ import path from 'node:path';
 
 import {
   FAIL_TTL_MS, LAUNCH_TTL_MS, NAME_CAP, PERMISSION_MODES, PROMPT_CAP, PROMPT_PREVIEW_CAP,
-  STDERR_TAIL_CAP, adoptLaunched, buildSpawnArgs, clampPermission, launch, listLaunching,
-  parseSpawnRequest, probeSpawn, resetLaunches, resetSpawnProbe, setSpawner, stopLaunch
+  STDERR_TAIL_CAP, STOP_GRACE_MS, adoptLaunched, buildSpawnArgs, clampPermission, escalateStop,
+  forceStopSession, launch, listLaunching, parseSpawnRequest, probeSpawn, resetLaunches,
+  resetSpawnProbe, setGroupKiller, setSpawner, stopSession, stopStates
 } from '../server/lib/spawn.js';
 import { toPermissionMode } from '../server/lib/config.js';
 import type { Config } from '../server/lib/config.js';
@@ -68,8 +69,45 @@ class FakeChild extends EventEmitter {
   stderr = new EventEmitter();
   killSignals: string[] = [];
   unrefCalled = false;
+  /**
+   * The three fields `signalGroup`'s guard reads. A real child reports a pid
+   * and keeps both codes null until it ends, so those are the defaults; a test
+   * that emits `'exit'` sets `exitCode` first, the way a real child does.
+   * `FAKE_PID` is deliberately > 1 — the pid guard's own tests override it.
+   */
+  pid: number | undefined = FAKE_PID;
+  exitCode: number | null = null;
+  signalCode: string | null = null;
   kill(signal?: string): boolean { this.killSignals.push(signal ?? 'SIGTERM'); return true; }
   unref(): this { this.unrefCalled = true; return this; }
+}
+
+/** A plausible pid for a fake child. Never reaches a real `process.kill` — see `killerSpy`. */
+const FAKE_PID = 4242;
+
+/** One recorded group signal: the pid as `process.kill` would receive it (negated), and the signal. */
+interface KillCall { pid: number; signal: string; }
+
+/**
+ * Install a recording group killer and hand back the calls it saw.
+ *
+ * Every stop test installs one. Without it the fake pids above would reach the
+ * real `process.kill`, which on a developer's machine means signalling whatever
+ * unrelated process happens to own pid 4242.
+ */
+function killerSpy(calls: KillCall[], onCall?: () => void): void {
+  setGroupKiller((pid, signal) => {
+    calls.push({ pid, signal });
+    onCall?.();
+  });
+}
+
+/** Launch one fake session and drive it to `running` via adoption. Returns its id and child. */
+function runningSession(children: FakeChild[]): string {
+  const id = launch(cfg(), REF, baseInput());
+  assert.strictEqual(adoptLaunched([id]), 1);
+  assert.strictEqual(children.length, 1);
+  return id;
 }
 
 interface SpawnCall { command: string; args: string[]; options: Record<string, unknown>; }
@@ -690,37 +728,327 @@ export function run(): number {
     } finally { setSpawner(null); }
   })) p++; else f++;
 
-  if (test('stopLaunch: an unknown id returns false', () => {
+  if (test('stopSession: an unknown id is not-found', () => {
     resetLaunches();
-    assert.strictEqual(stopLaunch('unknown-id'), false);
+    assert.strictEqual(stopSession('unknown-id'), 'not-found');
   })) p++; else f++;
 
-  if (test('stopLaunch: a live entry returns true, SIGTERMs the fake child, and removes the entry', () => {
+  if (test('stopSession: a launching entry is stopped, SIGTERMs the fake child, and is removed', () => {
     resetLaunches();
     const children: FakeChild[] = [];
+    const calls: KillCall[] = [];
     setSpawner(fakeSpawner([], children));
+    killerSpy(calls);
     try {
       const id = launch(cfg(), REF, baseInput());
-      assert.strictEqual(stopLaunch(id), true);
+      assert.strictEqual(stopSession(id), 'stopped');
       assert.deepStrictEqual(children[0].killSignals, ['SIGTERM']);
+      // The *handle*, not the group: a launch this young has no grandchildren
+      // worth the negated-pgid machinery, and this path predates it.
+      assert.strictEqual(calls.length, 0);
       // A launch the user asked to stop vanishes immediately — it must not
       // linger as a `failed` row for FAIL_TTL_MS once the real exit arrives.
       assert.strictEqual(listLaunching().length, 0);
-    } finally { setSpawner(null); }
+    } finally { setSpawner(null); setGroupKiller(null); }
   })) p++; else f++;
 
-  if (test('an exit that arrives after stopLaunch does not resurrect the entry', () => {
+  if (test('an exit that arrives after stopSession does not resurrect the entry', () => {
     resetLaunches();
     const children: FakeChild[] = [];
     setSpawner(fakeSpawner([], children));
     try {
       const id = launch(cfg(), REF, baseInput());
-      assert.strictEqual(stopLaunch(id), true);
+      assert.strictEqual(stopSession(id), 'stopped');
       // The real SIGTERM'd process eventually reports in: code null, signal
       // SIGTERM. fail()'s presence guard must no-op, same as post-adoption.
+      children[0].signalCode = 'SIGTERM';
       children[0].emit('exit', null, 'SIGTERM');
       assert.strictEqual(listLaunching().length, 0);
     } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  /* --------------------------------------------- the entry survives adoption */
+
+  if (test('adoption transitions rather than deletes: the entry becomes stoppable', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = runningSession(children);
+      // No phantom "launching" row for a session the scan is already showing.
+      assert.strictEqual(listLaunching().length, 0);
+      assert.strictEqual(stopStates().get(id), 'ready');
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('adoption happens once: a second call counts 0 and changes nothing', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = runningSession(children);
+      // The dashboard re-scans the same id every 3s thereafter; only the first
+      // one is an adoption.
+      assert.strictEqual(adoptLaunched([id]), 0);
+      assert.strictEqual(stopStates().get(id), 'ready');
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a resume entry is still skipped by adoption, so a launch failure can still render', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      launch(cfg(), REF, baseInput({ resume: true }), UUID);
+      // Its id names a transcript that already existed, so the scan seeing it
+      // proves nothing about the child.
+      assert.strictEqual(adoptLaunched([UUID]), 0);
+      const rows = listLaunching();
+      assert.strictEqual(rows.length, 1);
+      assert.strictEqual(rows[0].state, 'launching');
+      // The documented consequence: not stoppable yet.
+      assert.strictEqual(stopStates().size, 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a resume failure still renders after that skipped adoption', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      launch(cfg(), REF, baseInput({ resume: true }), UUID);
+      assert.strictEqual(adoptLaunched([UUID]), 0);
+      children[0].exitCode = 2;
+      children[0].emit('exit', 2, null);
+      const rows = listLaunching();
+      assert.strictEqual(rows.length, 1);
+      assert.strictEqual(rows[0].state, 'failed');
+      assert.strictEqual(rows[0].resume, true);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('the launch TTL promotes a still-live child instead of dropping its handle', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      launch(cfg(), REF, baseInput({ resume: true }), UUID);
+      // The only route to `running` a resume has — and the reason a resumed
+      // session becomes stoppable exactly one LAUNCH_TTL_MS in.
+      assert.strictEqual(listLaunching(Date.now() + LAUNCH_TTL_MS + 1).length, 0);
+      assert.strictEqual(stopStates().get(UUID), 'ready');
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('the launch TTL still deletes an entry whose child is gone', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      launch(cfg(), REF, baseInput({ resume: true }), UUID);
+      // Code 0 leaves a `launching` entry alone (a fast run can beat the scan),
+      // so the entry is still there — but its child is not.
+      children[0].exitCode = 0;
+      children[0].emit('exit', 0, null);
+      assert.strictEqual(listLaunching(Date.now() + LAUNCH_TTL_MS + 1).length, 0);
+      assert.strictEqual(stopStates().size, 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('a running entry that exits is deleted, not resurrected as a failed phantom', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      runningSession(children);
+      // An hour-old session that ends nonzero is over, not a failed *launch*.
+      children[0].exitCode = 1;
+      children[0].emit('exit', 1, null);
+      assert.strictEqual(listLaunching().length, 0);
+      assert.strictEqual(stopStates().size, 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  /* -------------------------------------------------- stopping a live session */
+
+  if (test('stopSession on a running entry signals the group and keeps the entry', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    const calls: KillCall[] = [];
+    setSpawner(fakeSpawner([], children));
+    killerSpy(calls);
+    try {
+      const id = runningSession(children);
+      assert.strictEqual(stopSession(id), 'stopping');
+      assert.deepStrictEqual(calls, [{ pid: -FAKE_PID, signal: 'SIGTERM' }]);
+      assert.strictEqual(stopStates().get(id), 'stopping');
+      // The entry survives: the escalation still needs its handle.
+      assert.strictEqual(stopStates().size, 1);
+    } finally { setSpawner(null); setGroupKiller(null); }
+  })) p++; else f++;
+
+  if (test('stopSession is idempotent: a double-tap does not re-signal', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    const calls: KillCall[] = [];
+    setSpawner(fakeSpawner([], children));
+    killerSpy(calls);
+    try {
+      const id = runningSession(children);
+      assert.strictEqual(stopSession(id), 'stopping');
+      assert.strictEqual(stopSession(id), 'stopping');
+      assert.strictEqual(calls.length, 1);
+    } finally { setSpawner(null); setGroupKiller(null); }
+  })) p++; else f++;
+
+  if (test('stopSession is not-found for an unknown id and for a failed entry, and signals neither', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    const calls: KillCall[] = [];
+    setSpawner(fakeSpawner([], children));
+    killerSpy(calls);
+    try {
+      assert.strictEqual(stopSession('unknown-id'), 'not-found');
+      const id = launch(cfg(), REF, baseInput());
+      children[0].exitCode = 7;
+      children[0].emit('exit', 7, null);
+      assert.strictEqual(listLaunching()[0].state, 'failed');
+      assert.strictEqual(stopSession(id), 'not-found');
+      assert.strictEqual(calls.length, 0);
+      assert.deepStrictEqual(children[0].killSignals, []);
+    } finally { setSpawner(null); setGroupKiller(null); }
+  })) p++; else f++;
+
+  if (test('escalateStop does nothing one millisecond before the grace elapses', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    const calls: KillCall[] = [];
+    setSpawner(fakeSpawner([], children));
+    killerSpy(calls);
+    try {
+      const id = runningSession(children);
+      const at = 1_000_000;
+      assert.strictEqual(stopSession(id, at), 'stopping');
+      assert.strictEqual(escalateStop(id, at + STOP_GRACE_MS - 1), false);
+      assert.strictEqual(calls.length, 1);   // still only the SIGTERM
+    } finally { setSpawner(null); setGroupKiller(null); }
+  })) p++; else f++;
+
+  if (test('escalateStop SIGKILLs the group exactly on the grace boundary', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    const calls: KillCall[] = [];
+    setSpawner(fakeSpawner([], children));
+    killerSpy(calls);
+    try {
+      const id = runningSession(children);
+      const at = 1_000_000;
+      stopSession(id, at);
+      assert.strictEqual(escalateStop(id, at + STOP_GRACE_MS), true);
+      assert.deepStrictEqual(calls[1], { pid: -FAKE_PID, signal: 'SIGKILL' });
+    } finally { setSpawner(null); setGroupKiller(null); }
+  })) p++; else f++;
+
+  if (test('escalateStop does not fire after the exit handler has dropped the entry', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    const calls: KillCall[] = [];
+    setSpawner(fakeSpawner([], children));
+    killerSpy(calls);
+    try {
+      const id = runningSession(children);
+      const at = 1_000_000;
+      stopSession(id, at);
+      // The child honoured the SIGTERM, as the real CLI does (measured: the
+      // whole group went in ~1.1s). Its `'exit'` deletes the entry, so the
+      // armed timer finds nothing left to escalate.
+      children[0].exitCode = 0;
+      children[0].emit('exit', 0, null);
+      assert.strictEqual(escalateStop(id, at + STOP_GRACE_MS), false);
+      assert.strictEqual(calls.length, 1);   // the SIGTERM, and nothing after it
+    } finally { setSpawner(null); setGroupKiller(null); }
+  })) p++; else f++;
+
+  if (test('a reaped-but-not-yet-dispatched child is never signalled — the liveness clause', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    const calls: KillCall[] = [];
+    setSpawner(fakeSpawner([], children));
+    killerSpy(calls);
+    try {
+      const id = runningSession(children);
+      // Node sets `exitCode` when it reaps the child and dispatches `'exit'`
+      // afterwards, so there is a window where the entry is still `running`
+      // while the process behind it is already gone. That window is the ONLY
+      // way to reach the liveness clause — once `'exit'` has run, the entry is
+      // deleted and every caller stops at the presence check instead. Deliberately
+      // no `emit('exit')` here: this is the pre-dispatch state, not a fake one.
+      children[0].exitCode = 0;
+      // Nothing may be offered, claimed, or signalled for a dead pgid — by then
+      // that group number may belong to an unrelated process.
+      assert.strictEqual(stopStates().size, 0, 'a reaped child is not stoppable');
+      assert.strictEqual(stopSession(id), 'not-found');
+      assert.strictEqual(forceStopSession(id), 'not-found');
+      assert.strictEqual(escalateStop(id, Date.now() + STOP_GRACE_MS), false);
+      assert.strictEqual(calls.length, 0, 'no signal may reach a reaped pgid');
+    } finally { setSpawner(null); setGroupKiller(null); }
+  })) p++; else f++;
+
+  for (const badPid of [0, 1, undefined]) {
+    if (test(`the pid guard refuses to signal a child whose pid is ${String(badPid)}`, () => {
+      resetLaunches();
+      const children: FakeChild[] = [];
+      const calls: KillCall[] = [];
+      setSpawner(fakeSpawner([], children));
+      killerSpy(calls);
+      try {
+        const id = launch(cfg(), REF, baseInput());
+        children[0].pid = badPid;
+        assert.strictEqual(adoptLaunched([id]), 1);
+        const verdict = stopSession(id);
+        // Asserted before the verdict so a regression's failure output names the
+        // pid that would have been signalled. For pid 0 that is `-0`, and
+        // `kill(0, sig)` signals every process in the CALLER's own group — i.e.
+        // this dashboard and the terminal that started it.
+        assert.deepStrictEqual(calls, [], 'nothing may be signalled for an unusable pid');
+        // `not-found`, because a child with no usable pid is exactly as
+        // unstoppable as one this server never held: `stopStates` omits it too.
+        assert.strictEqual(verdict, 'not-found');
+        assert.strictEqual(stopStates().size, 0);
+      } finally { setSpawner(null); setGroupKiller(null); }
+    })) p++; else f++;
+  }
+
+  if (test('a killer that throws ESRCH does not propagate — the process is gone, which is the goal', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    const calls: KillCall[] = [];
+    setSpawner(fakeSpawner([], children));
+    killerSpy(calls, () => { throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' }); });
+    try {
+      const id = runningSession(children);
+      assert.strictEqual(stopSession(id), 'stopping');
+      assert.strictEqual(calls.length, 1);
+    } finally { setSpawner(null); setGroupKiller(null); }
+  })) p++; else f++;
+
+  if (test('forceStopSession SIGKILLs a running group, and refuses a launching entry', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    const calls: KillCall[] = [];
+    setSpawner(fakeSpawner([], children));
+    killerSpy(calls);
+    try {
+      const id = runningSession(children);
+      assert.strictEqual(forceStopSession(id), 'stopped');
+      assert.deepStrictEqual(calls, [{ pid: -FAKE_PID, signal: 'SIGKILL' }]);
+
+      // A launching entry is already an immediate kill; there is nothing to
+      // escalate past, so force has no meaning for it.
+      const other = launch(cfg(), REF, baseInput());
+      assert.strictEqual(forceStopSession(other), 'not-found');
+      assert.strictEqual(calls.length, 1);
+    } finally { setSpawner(null); setGroupKiller(null); }
   })) p++; else f++;
 
   /* -------------------------------------------------------------- the spawn call */
@@ -906,13 +1234,13 @@ export function run(): number {
     }
   })) p++; else f++;
 
-  if (test('stopLaunch still SIGTERMs a launching resume entry', () => {
+  if (test('stopSession still SIGTERMs a launching resume entry', () => {
     resetLaunches();
     const children: FakeChild[] = [];
     setSpawner(fakeSpawner([], children));
     try {
       launch(cfg(), REF, baseInput({ resume: true }), UUID);
-      assert.strictEqual(stopLaunch(UUID), true);
+      assert.strictEqual(stopSession(UUID), 'stopped');
       assert.deepStrictEqual(children[0].killSignals, ['SIGTERM']);
       assert.strictEqual(listLaunching().length, 0);
     } finally { setSpawner(null); }
@@ -920,6 +1248,7 @@ export function run(): number {
 
   resetLaunches();
   resetSpawnProbe();
+  setGroupKiller(null);
 
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;

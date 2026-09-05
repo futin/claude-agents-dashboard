@@ -13,7 +13,7 @@ import { refreshCwd } from './token-refresh.js';
 import { readSessionAnalyticsLog, lessonForSession } from './sessionAnalyticsLog.js';
 import type { SessionAnalyticsLesson } from './sessionAnalyticsLog.js';
 import type { Config } from './config.js';
-import type { Session, SessionSurface, SessionsResponse } from '../../shared/types.js';
+import type { Session, SessionSurface, SessionsResponse, StopState } from '../../shared/types.js';
 
 export interface TranscriptRef {
   file: string;
@@ -63,6 +63,15 @@ interface ScanOptions {
    * hidden, which is also what every tmpdir fixture wants.
    */
   archivedIds?: ReadonlySet<string> | null;
+  /**
+   * Sessions this server spawned and still holds a live child handle for
+   * (`spawn.ts` `stopStates()`), as `sessionId → StopState`, injected by the
+   * handler so this module stays free of the launch store. A Map rather than a
+   * Set because the one field carries two states. Omitted/null ⇒ no row is
+   * flagged, and an id simply absent from it means the session cannot be
+   * stopped — see {@link Session.stopState}.
+   */
+  stopStates?: ReadonlyMap<string, StopState> | null;
 }
 
 /** Default transcripts root. */
@@ -438,6 +447,9 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     else if (recent && !parsed.turnComplete) status = 'working';       // green — machine actively churning
     else if (parsed.turnComplete && !recent) status = 'idle';          // gray — finished and dormant
     else status = 'incomplete';                                        // yellow — your turn (recent+done) OR stalled (stale+pending)
+    // Only present when this server holds a live handle for the id — the field
+    // is deliberately absent, not false, for every other row (see `stopState`).
+    const stopState = options.stopStates?.get(c.id);
     sessions.push({
       id: c.id,
       project,
@@ -455,6 +467,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       remotePlan,
       remoteReply,
       permissionWait,
+      ...(stopState ? { stopState } : {}),
       activity: parsed.activity,
       lastTimestamp: parsed.lastTimestamp,
       updatedMs: c.mtimeMs,

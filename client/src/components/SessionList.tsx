@@ -17,7 +17,7 @@ interface Props {
   /**
    * In-flight `claude -p` launches (server/lib/spawn.ts's RAM-only store),
    * rendered as phantom rows above the real ones. A launch the scan has
-   * adopted (or that `stopLaunch` killed) simply stops appearing on the next
+   * adopted (or that `stopSession` killed) simply stops appearing on the next
    * poll — there is no client-side reconciliation to do here.
    */
   launching?: LaunchingSession[];

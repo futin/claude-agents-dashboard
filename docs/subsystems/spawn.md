@@ -151,7 +151,7 @@ same permission ladder and ceiling, prompt still stdin-only — with these diffe
 exists, so `adoptLaunched` skips it — adoption-on-scan would delete the entry on the first
 poll and swallow any failure before the UI could render it. A resume entry leaves the
 store the ordinary ways instead: `LAUNCH_TTL_MS` (60s) while `launching`, `FAIL_TTL_MS`
-after a failure, or `stopLaunch`. Two visible consequences: a `launching` resume holds one
+after a failure, or `stopSession`. Two visible consequences: a `launching` resume holds one
 of the `MAX_LAUNCHING` slots for up to 60s (so resumes count toward the accident rail,
 which is right — they are real processes), and the client (`SessionList`) hides a
 `launching` resume phantom — the real row is the progress indicator — while still
@@ -251,19 +251,24 @@ real session.** It is explicitly not a session registry — the transcript stays
 single source of truth, the same division that keeps `pending.ts`/`plans.ts`/
 `messages.ts` small.
 
-- **Two states only.** `LaunchingSession.state` is `'launching' | 'failed'` — there is
-  no `'adopted'` value. "Adopted" isn't a state an entry moves through; it's the entry
-  being *deleted*. `serveSessions` calls `adoptLaunched(ids)` with the freshly-scanned
-  session ids before it calls `listLaunching()`, so an id that just showed up on disk is
-  removed from the store in the same response that would otherwise still call it
-  `launching`.
+- **Two *public* states.** `LaunchingSession.state` is `'launching' | 'failed'` — there
+  is still no `'adopted'` value on the wire. Internally the entry now has a third,
+  `'running'`, which adoption transitions it *into* rather than deleting it (see
+  [Stopping a spawned session](#stopping-a-spawned-session)); `listLaunching` skips those
+  entirely and `toPublic` is never called for one, so the shared contract is unchanged.
+  `serveSessions` calls `adoptLaunched(ids)` with the freshly-scanned session ids before
+  it calls `listLaunching()`, so an id that just showed up on disk stops being reported as
+  `launching` in the same response.
 - **No reaper — unlike the other three stores.** `pending.ts`, `plans.ts`, and
   `messages.ts` each run their own timer, because something has to fire even when
   nobody is reading. This store has no timer at all: `listLaunching(now)`
   (`spawn.ts`) evaluates expiry lazily, on the same call the client already makes
-  every 3 seconds. `LAUNCH_TTL_MS` (60s) drops a `launching` entry nothing ever adopted;
-  `FAIL_TTL_MS` (5 min) drops a `failed` one so a phone that never looks doesn't
-  accumulate them. Nothing needs to fire without a reader, so nothing does.
+  every 3 seconds. `LAUNCH_TTL_MS` (60s) ends a `launching` entry nothing ever adopted —
+  *promoting* it to `running` if its child is still alive, deleting it only if the child
+  is gone; `FAIL_TTL_MS` (5 min) drops a `failed` one so a phone that never looks doesn't
+  accumulate them. Nothing needs to fire without a reader, so nothing does. The one
+  exception is the SIGKILL escalation a stop arms — `unref()`ed, and cleared the moment
+  the child exits on its own.
 - **Failure is idempotent and can arrive from four places.** A synchronous throw from
   the spawner, the child's own `'error'` event (e.g. a typo'd `CLAUDE_BIN` — an async
   ENOENT the cached probe can't catch), an `'error'` on the `stdin`/`stderr` streams
@@ -271,8 +276,10 @@ single source of truth, the same division that keeps `pending.ts`/`plans.ts`/
   the whole dashboard process down independently of the child's own handler), and a
   nonzero or signal-killed `'exit'`. All four route through the same `fail()`
   (`spawn.ts`), which no-ops if the entry is already gone — so a failure event
-  arriving after `adoptLaunched` (or after `stopLaunch`) can never resurrect a deleted
-  entry.
+  arriving after a stop can never resurrect a deleted entry. A `running` entry is
+  **deleted before `fail()` is consulted at all**: a session that worked for an hour and
+  then exited nonzero is over, not a launch that failed, and reporting it as one would put
+  a red phantom row on the board for something that plainly worked.
 - **A clean exit is left alone.** Exit code 0 before adoption doesn't mark the entry
   failed — a fast run (a one-line haiku prompt, say) can finish before the next scan
   ever sees it, and at that point the transcript is what matters, not the exit. The
@@ -282,48 +289,130 @@ single source of truth, the same division that keeps `pending.ts`/`plans.ts`/
   stderr. The full, untruncated prompt still reaches the child's stdin — only the
   store's own display copy is cut.
 
-## The stop endpoint, and its restart hole
+## Stopping a spawned session
 
-`POST /api/spawn/:id/stop` (`serveSpawnStop`, `api.ts`) sends `SIGTERM` to the live
-child behind a still-`launching` entry and deletes the entry immediately — it does not
-transition it to `failed`. That's deliberate: `LaunchingSession.state` is a
-shared-contract type the client already consumes, and widening it to a third value just
-to say "you stopped this" would drift that contract for one row's worth of nuance. The
-tradeoff is real: a stop that races the child's own crash shows nothing in the UI rather
-than the crash reason, because there is no way to tell "you stopped it" from "it was
-never here" once the entry is gone. The later `exit`/`close` event for that id finds no
-entry and no-ops through `fail`'s presence guard.
+**A session this dashboard spawned can be stopped from its row, at any point in its life** —
+not just during the ~3s pre-adoption window the original endpoint reached. Expand the row and
+the control is under the panel: `stop session`, then `really stop?`.
 
-**What stop does not reach: grandchildren.** The signal goes to the `claude` process
-itself (`child.kill('SIGTERM')`), not to its process group — so anything that session had
-already started keeps running. Under `auto` that is a live possibility: a `Bash` tool call
-mid-`npm install`, a test run, a dev server it launched. This is what the spec asked for
-("SIGTERM to the stored child") and it is compliant, not a bug — but if you tap stop and
-then find a process still going, that is why. `detached: true` made the child a group
-leader, so the thorough version (`process.kill(-pid, 'SIGTERM')`) is available to whoever
-decides that killing a whole tree from a phone is the behaviour they want; it was not
-specified here, and orphaned grandchildren are the spec's own Risk 3. Ending them is a
-terminal job today.
+### The lifecycle: `launching → running → gone`
 
-⚠️ **The pid lives only in this process's RAM.** It is never written to disk, so after
-a server restart the store's entries — and with them, every live child's pid — are
-gone, even though the real `claude` process may still be running. It was spawned
-`detached` and `unref`'d precisely so a dev-server reload wouldn't kill it (`pnpm dev`
-runs `tsx watch`, which restarts the API on every file save, and a long unattended run
-should survive that). `POST /api/spawn/:id/stop` on that id now 404s. Killing the
-orphaned process at that point is a terminal job (`kill <pid>`), not something this
-endpoint can reach anymore. This is the mirror image of the other stores' restart
-story: there, a restart ends something that was going to end anyway (a held turn just
-stops); here, the restart doesn't end anything — the child correctly keeps running — it
-just costs you the ability to stop it remotely. Named and accepted, not fixed.
+The store keeps the live `ChildProcess` handle for as long as the child lives. That is the
+whole of the widening, and it is what makes a later stop possible at all.
+
+| From | To | Trigger |
+|---|---|---|
+| `launching` | `running` | `adoptLaunched(ids)` sees the id on disk — **non-resume launches only** |
+| `launching` | `running` | `listLaunching(now)` passes `LAUNCH_TTL_MS` **and the child is still alive** |
+| `launching` | deleted | past `LAUNCH_TTL_MS` with the child already gone |
+| `running` | deleted | the child's `'exit'`/`'close'`, whatever the code |
+
+**Two routes in, and the split is load-bearing.** A resume's id names a transcript that
+existed *before* its child did, so seeing it in a scan proves nothing about the process —
+adopting on the first poll would swallow a launch failure the user never got to see. Resume
+entries therefore keep their `adoptLaunched` skip and reach `running` from the TTL end
+instead. **Consequence, accepted and stated: a resumed session is not stoppable for its
+first `LAUNCH_TTL_MS` (60 s).** The TTL route also stops a non-resume launch the scan window
+never happened to show from silently losing its handle.
+
+A `running` entry is never reported by `listLaunching` (it already has a real row from the
+scan — a second one would be a phantom) and is never TTL'd (its handle is the point; it
+leaves when the child exits, not when a clock runs out).
+
+### One guarded helper does every signal
+
+`signalGroup` is the only thing in the codebase that signals anything, and it refuses unless
+**all four** hold:
+
+| Clause | Why |
+|---|---|
+| `typeof pid === 'number'` | an absent pid coerces to 0 — see the next row |
+| **`pid > 1`** | POSIX `kill(0, sig)` signals **every process in the caller's own group** — with a pid of 0 that is this dashboard *and the terminal that started it*. `1` is init. |
+| `exitCode === null` | the child has not already been reaped |
+| `signalCode === null` | …nor already been killed; each code covers a different kind of death, so either alone misreads the other as still-alive |
+
+The pid is negated in exactly one line, so `process.kill(-pid, …)` reaches the CLI *and*
+everything it started. `test/spawn.test.ts` mutation-proves both the `pid > 1` clause and the
+liveness clause: with `pid > 1` removed, the suite goes red showing the killer called with
+`pid: -0`.
+
+The rule the whole feature rests on: **only ever signal a process this server spawned and
+still holds a handle to.** No pid from a request body, no `ps` scan.
+
+### SIGTERM, then SIGKILL after `STOP_GRACE_MS`
+
+`stopSession` records the request, SIGTERMs the group and arms a 5-second escalation to
+SIGKILL. A second tap is idempotent — it re-signals nothing and does not push the deadline
+back. `escalateStop` fires only if the entry still exists, is `running`, was actually asked
+to stop, the grace has elapsed, and the child is still alive.
+
+`STOP_GRACE_MS` is an exported constant, not a config setting, for the reason `LAUNCH_TTL_MS`
+and `MAX_LAUNCHING` are: an env var would drag `.env.example`, `README.md`,
+`docs/workflows/configuration.md` and `config.ts` along for a number nobody tunes. 5 seconds,
+not 30: the grace is not "let real work finish" — the user pressed Stop — it is only "let the
+CLI flush and exit on SIGTERM before we SIGKILL it".
+
+**Measured, not assumed** (2026-09-05, this machine, one real `claude -p` per run):
+
+| Signal to `-pgid` | Group at signal time | Fully reaped in |
+|---|---|---|
+| `SIGTERM` | 6 processes — the CLI, Playwright MCP, 2 codegraph binaries, 2 node | **1101 ms** |
+| `SIGKILL` | 6 processes, same shape | **585 ms** |
+
+So the group negation does reach MCP servers and tool grandchildren, and the CLI honours
+SIGTERM comfortably inside the 5-second grace — the escalation is cover for a hang, not the
+normal path. This closes the "grandchildren survive a stop" gap the pre-adoption endpoint
+documented as the spec's Risk 3.
+
+### `stopState`, and why it is absent rather than false
+
+`stopStates()` is injected into the scan the same way `messageSessionIds()` is, and
+`Session.stopState` is set only for ids it holds. **Absent means not stoppable**, which is
+the honest encoding for three real cases: a terminal-started session (nothing here ever had
+its pid), a resume inside its 60-second window, and anything spawned before the last
+dashboard restart. The UI renders no Stop control in any of them — offering one that could
+not work would be worse than offering none.
+
+Note one poll of latency by construction: `serveSessions` scans *then* adopts, so a freshly
+spawned row carries no `stopState` until the following poll. That ordering exists so a launch
+is never reported as both a `launching` phantom and a real row in one response.
+
+⚠️ **The restart hole stands, and is now surfaced instead of hidden.** The handle lives only
+in this process's RAM. `detached: true` + `unref()` is deliberate — `pnpm dev` runs `tsx
+watch` and restarts the API on every file save, and a long unattended run should survive
+that — so there is **no shutdown reaper**, and killing spawned children on restart would be a
+regression, not a fix. Persisting pids instead was refused: pids are reused, a stale record
+is indistinguishable from a live one, and the failure mode is signalling an innocent process.
+After a restart the row simply carries no `stopState` and shows no button; ending that
+process is a terminal job (`kill <pid>`).
+
+### The two routes
+
+`POST /api/sessions/:id/stop` is what the button calls. `POST /api/spawn/:id/stop` keeps its
+route and its documented behaviour but now delegates to the same `stopSession`, so there are
+two endpoints and one behaviour.
+
+- An **absent or empty body is normal**, not a 400 — the common request is a bare POST. Only
+  a body that is present *and* unparseable is refused.
+- `force` is honoured on a strict `=== true`, the same rule `remoteControl` and the dismiss
+  flag follow. `{"force":"yes"}` takes the graceful path: a coerced truthy value is not
+  evidence the caller meant to skip the grace and SIGKILL.
+- `'not-found'` → 404, `'stopped'` → 200 `{stopped:true}`, `'stopping'` → 200 `{stopping:true}`.
+
+Stopping a still-`launching` entry is unchanged: SIGTERM the *handle* (not the group) and
+delete the entry immediately, so a launch the user stopped vanishes rather than lingering as
+a `failed` row for `FAIL_TTL_MS`, labelled as an error they never actually hit.
 
 ## The pieces
 
 | Piece | What it does |
 |---|---|
-| `server/lib/spawn.ts` | pure `buildSpawnArgs`/`clampPermission`/`parseSpawnRequest`, plus the impure `probeSpawn`/`launch`/`listLaunching`/`adoptLaunched`/`stopLaunch` and the RAM-only store |
+| `server/lib/spawn.ts` | pure `buildSpawnArgs`/`clampPermission`/`parseSpawnRequest`, plus the impure `probeSpawn`/`launch`/`listLaunching`/`adoptLaunched`/`stopSession`/`forceStopSession`/`escalateStop`/`stopStates` and the RAM-only store |
 | `POST /api/spawn` | `serveSpawn` — validates, resolves the project, launches, returns `{sessionId}` immediately |
-| `POST /api/spawn/:id/stop` | `serveSpawnStop` — SIGTERM + delete |
+| `POST /api/spawn/:id/stop` | `serveSpawnStop` — SIGTERM + delete for a `launching` entry; delegates to `stopSession` |
+| `POST /api/sessions/:id/stop` | `serveSessionStop` — the row button's route; graceful by default, `{force:true}` for SIGKILL |
+| `client/src/lib/stopControl.ts` | the pure decision function behind the Stop control: render or not, the label, and which POST it sends |
+| `client/src/hooks/useStopSession.ts` | POSTs the stop, same bearer-token pattern as `useSpawn` |
 | `serveSessions` wiring | calls `adoptLaunched(ids)` then `listLaunching()` before every `/api/sessions` response, so `launching` rides the poll the client already makes |
 | `serveHealth` wiring | publishes `spawnAvailable` (`probeSpawn`) and `spawnMaxPermission` (`config.spawnMaxPermission`) |
 | `client/src/components/SpawnPanel.tsx` | the launch form — project picker, prompt textarea with the reply composer's own `MicButton` in its action row, name/model/effort/permission selects; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
@@ -504,7 +593,9 @@ new reason:
     - client/src/components/SessionList.tsx
     - client/src/components/SessionRow.tsx
     - client/src/hooks/useSpawn.ts
+    - client/src/hooks/useStopSession.ts
     - client/src/lib/resume.ts
+    - client/src/lib/stopControl.ts
     - client/src/lib/spawnOptions.ts
     - client/src/lib/surface.ts
   kind: subsystem

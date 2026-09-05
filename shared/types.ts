@@ -94,6 +94,20 @@ export interface Session {
    * Display-only: nothing can answer that dialog remotely.
    */
   permissionWait: boolean;
+  /**
+   * Whether this session can be stopped from the dashboard, and whether a stop
+   * is already under way — see {@link StopState}.
+   *
+   * **Absent means not stoppable**, and that is the honest encoding rather than
+   * a missing case. Only a session this server spawned *and* still holds a live
+   * `ChildProcess` handle for can be signalled, so the field is absent for a
+   * terminal-started session (nothing here ever had its pid), for a resumed one
+   * inside its first launch-TTL window, and for anything spawned before the last
+   * dashboard restart — the handle died with the old process. The UI renders no
+   * Stop control in any of those cases, which is exactly right: offering one
+   * that could not work would be worse than offering none.
+   */
+  stopState?: StopState;
   activity: Activity | null;
   lastTimestamp: string | null;
   updatedMs: number;
@@ -101,6 +115,17 @@ export interface Session {
   /** The `/kaizen` lesson logged for this session, or null if never inspected. */
   kaizenLesson: string | null;
 }
+
+/**
+ * A spawned session's stoppability. `'ready'` — a live handle is held and no
+ * stop has been asked for. `'stopping'` — SIGTERM has gone to its process
+ * group and the server will escalate to SIGKILL once the grace elapses.
+ *
+ * There is deliberately no `'stopped'`: a session that stopped has no handle
+ * and no live process, so it carries no `stopState` at all (see
+ * {@link Session.stopState}).
+ */
+export type StopState = 'ready' | 'stopping';
 
 export interface Totals {
   shown: number;

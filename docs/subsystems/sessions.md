@@ -74,7 +74,7 @@ Three properties keep them from complicating the rest of this document:
   exists:** a [resume](spawn.md#resuming-an-ended-session-resume) launch reuses an existing
   session id, so its transcript is already on disk and seeing it in a scan proves nothing —
   `adoptLaunched` skips those entries deliberately, or the first poll would delete them and
-  swallow a failure before it could be rendered. They leave the store by TTL, `stopLaunch`,
+  swallow a failure before it could be rendered. They leave the store by TTL, `stopSession`,
   or a failure instead, and `SessionList` drops a `launching` resume phantom (the real row
   below *is* the progress indicator) while still rendering a `failed` one.
 - **They can outnumber the real rows only briefly.** A `launching` entry that nothing

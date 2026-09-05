@@ -1,9 +1,13 @@
+import { useState } from 'react';
+
 import type { Session } from '../../../shared/types';
 import { fmtTok, formatAgo } from '../lib/format';
 import { SessionDetail } from './SessionDetail';
 import { STATUS_LABEL } from '../lib/filterSort';
 import { holdKind, type HoldKind } from '../lib/holds';
+import { stopControl } from '../lib/stopControl';
 import { surfacePill } from '../lib/surface';
+import { useStopSession } from '../hooks/useStopSession';
 
 interface Props {
   s: Session;
@@ -46,6 +50,9 @@ export function SessionRow({ s, selected, onToggle, onOpenChat }: Props) {
   const statusTxt = STATUS_LABEL[s.status];
   const tab = chatTab(s);
   const surface = surfacePill(s.surface);
+  const [confirming, setConfirming] = useState(false);
+  const { stop, pending, error, needsToken } = useStopSession();
+  const ctl = stopControl(s.stopState, confirming);
 
   return (
     <div className={`row ${s.status}${selected ? ' selected' : ''}`}>
@@ -95,6 +102,7 @@ export function SessionRow({ s, selected, onToggle, onOpenChat }: Props) {
               <span style={{ color: 'var(--text3)' }}>no tool activity</span>
             )}
           </span>
+          {ctl.render && ctl.badge && <span className="stop-badge">{ctl.badge}</span>}
           <span className="ago">{formatAgo(s.updatedMs)} ago</span>
         </div>
         {selected && (
@@ -103,6 +111,29 @@ export function SessionRow({ s, selected, onToggle, onOpenChat }: Props) {
               <div className="kaizen-lesson">
                 <span className="ag-pill kaizen">kaizen</span>
                 <span>{s.kaizenLesson}</span>
+              </div>
+            )}
+            {ctl.render && (
+              /* stopPropagation, not a sibling like the chat tab: this control
+                 sits inside `.row-main`, whose own onClick would otherwise
+                 collapse the row out from under the confirm step it just armed. */
+              <div className="stop-ctl" onClick={e => e.stopPropagation()}>
+                <button
+                  className="stop-go"
+                  disabled={pending}
+                  onClick={() => {
+                    if (ctl.arms) return setConfirming(true);
+                    setConfirming(false);
+                    void stop(s.id, ctl.force);
+                  }}
+                >
+                  {ctl.label}
+                </button>
+                {ctl.cancel && (
+                  <button className="stop-cancel" onClick={() => setConfirming(false)}>cancel</button>
+                )}
+                {needsToken && <span className="stop-msg">Needs the dashboard token — set it in Settings.</span>}
+                {!needsToken && error && <span className="stop-msg">{error}</span>}
               </div>
             )}
             <SessionDetail id={s.id} />

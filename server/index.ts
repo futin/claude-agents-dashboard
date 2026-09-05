@@ -30,7 +30,7 @@ import {
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
   serveSettingsRead, serveSettingsWrite, serveNotifyEvent, serveNotifyTest,
-  serveTranscribe, serveSpawn, serveSpawnStop, serveUsageProfile, serveUsageRates
+  serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates
 } from './api.js';
 import { startUsageRecording } from './lib/usage-history.js';
 import { refreshUsageNow, setUsageAutoRefresh } from './lib/usage.js';
@@ -288,6 +288,17 @@ export function createRequestListener(config: Config): http.RequestListener {
       const id = decodePath(planAnswer[1]);
       if (id === null) return badRequest(res);
       return void serveSessionPlanAnswer(config, id, req, res);
+    }
+    // Stop a session this dashboard spawned (server/lib/spawn.ts). Same
+    // route-order rule as its neighbours: it must precede the detail regex
+    // below, whose `[^/?]+` would otherwise swallow `/api/sessions/:id/stop`
+    // and answer it with session detail.
+    const stop = u.pathname.match(/^\/api\/sessions\/([^/]+)\/stop$/);
+    if (stop) {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      const id = decodePath(stop[1]);
+      if (id === null) return badRequest(res);
+      return void serveSessionStop(config, id, req, res);
     }
     const message = u.pathname.match(/^\/api\/sessions\/([^/]+)\/message$/);
     if (message) {
