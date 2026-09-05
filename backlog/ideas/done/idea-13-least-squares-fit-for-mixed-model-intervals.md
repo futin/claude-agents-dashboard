@@ -2,6 +2,10 @@
 id: idea-13
 title: Least-squares fit for mixed-model intervals
 created: 2026-08-31
+updated: 2026-09-05T11:14:20Z
+promoted-to: task-20
+groom-elapsed: 212
+groom-tokens: 36248
 ---
 
 ## Problem
