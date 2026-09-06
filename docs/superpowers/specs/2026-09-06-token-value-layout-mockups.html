@@ -1,0 +1,408 @@
+<title>Token Value Redesign</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --edge:rgba(255,255,255,.05);--hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--amber:#ffb03a;--cyan:#55d0dd;--red:#e0533f;
+  --mono:'IBM Plex Mono','SF Mono',monospace;
+  --font:'Barlow',-apple-system,'Segoe UI',sans-serif;
+  --display:'Barlow Condensed','Barlow',sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--board);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45}
+.page{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
+.lead{max-width:68ch}
+.lead h1{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.02em;margin:0 0 6px;text-wrap:balance}
+.lead p{margin:0 0 6px;color:var(--ink2);font-size:14px}
+.lead .now{margin-top:14px;padding:10px 12px;background:var(--steel);border:1px solid var(--hairline);border-radius:2px;font-size:13px;color:var(--ink2)}
+.lead .now b{color:var(--ink);font-weight:600}
+.vgrid{display:grid;grid-template-columns:1fr;gap:44px;margin-top:40px}
+.variant>.vh{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--hairline)}
+.variant .letter{font-family:var(--display);font-size:30px;font-weight:700;color:var(--cyan);line-height:1}
+.variant h2{font-family:var(--display);font-size:20px;font-weight:600;margin:0;letter-spacing:.02em}
+.variant .tag{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border:1px solid var(--hairline2);border-radius:2px;color:var(--ink2)}
+.variant .tag.rec{color:var(--green);border-color:color-mix(in oklab,var(--green) 45%,var(--hairline2))}
+.variant .tag.yagni{color:var(--ink3)}
+.variant .why{color:var(--ink2);font-size:13px;max-width:72ch;margin:0 0 16px}
+.variant .why b{color:var(--ink);font-weight:600}
+.frames{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+.frame{background:var(--board);border:1px solid var(--hairline2);border-radius:6px;padding:14px;flex:1 1 560px;max-width:680px;min-width:0}
+.frame.phone{flex:0 0 375px;max-width:375px;padding:10px}
+.frame .fl{font-family:var(--mono);font-size:10px;color:var(--ink3);margin:-4px 0 10px;letter-spacing:.04em}
+.tradeoffs{margin:16px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px 20px;font-size:13px;color:var(--ink2)}
+.tradeoffs li{padding-left:14px;position:relative}
+.tradeoffs li::before{content:'';position:absolute;left:0;top:.6em;width:6px;height:6px;border-radius:1px;background:var(--ink3)}
+.tradeoffs li.plus::before{background:var(--green)}
+.tradeoffs li.minus::before{background:var(--amber)}
+
+/* ── the dashboard chrome the mockups sit in ─────────────────────────── */
+.an-bar{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.an-title{font-family:var(--display);font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:.07em}
+.an-hint{font-size:11px;color:var(--ink3)}
+.seg{margin-left:auto;display:inline-flex;border:1px solid var(--hairline);border-radius:2px;overflow:hidden}
+.seg span{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:4px 10px;color:var(--ink3);background:var(--steel)}
+.seg span.on{color:var(--ink);background:var(--strip-hi)}
+.up{margin-top:12px;padding:14px;background:var(--strip);border:1px solid var(--hairline);border-radius:3px;box-shadow:inset 0 1px 0 var(--edge)}
+.up h3{margin:0;font-family:var(--display);font-size:14px;letter-spacing:.08em;font-weight:600}
+.up-sub{margin:4px 0 0;max-width:70ch;font-size:12px;line-height:1.5;color:var(--ink3)}
+.badge{flex:none;font-family:var(--display);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;padding:3px 8px;border-radius:2px;border:1px solid var(--hairline2);color:var(--ink2);background:var(--strip)}
+.badge.thin{color:var(--ink3)}
+.badge.stable{color:var(--green);border-color:color-mix(in oklab,var(--green) 45%,var(--hairline2));background:color-mix(in oklab,var(--green) 12%,var(--strip))}
+.badge.drift{color:var(--red);border-color:color-mix(in oklab,var(--red) 55%,var(--hairline2));background:color-mix(in oklab,var(--red) 14%,var(--strip))}
+.mono{font-family:var(--mono)}
+.nums{font-variant-numeric:tabular-nums}
+
+/* ── shared pieces across A and B ────────────────────────────────────── */
+.status{display:flex;align-items:center;gap:10px 18px;flex-wrap:wrap;margin-top:12px;padding:10px 12px;background:var(--steel);border:1px solid var(--hairline);border-radius:2px}
+.status .q{font-family:var(--display);font-size:15px;font-weight:600;letter-spacing:.02em}
+.status .counts{display:flex;gap:14px;font-family:var(--mono);font-size:11px;color:var(--ink2)}
+.status .counts b{color:var(--ink);font-weight:500}
+.status .counts .dim{color:var(--ink3)}
+.notice{margin-top:8px;padding:8px 12px;font-size:12px;line-height:1.5;color:var(--ink2);border-left:2px solid var(--hairline2);background:var(--strip)}
+.notice b{color:var(--ink);font-weight:600}
+.notice .mono{font-size:11px;color:var(--ink3)}
+
+.rows{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.row{padding:10px 12px;background:var(--steel);border:1px solid var(--hairline);border-radius:3px}
+.row-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.row-h .model{font-family:var(--mono);font-size:12px;word-break:break-all}
+.row-h .badge{margin-left:auto}
+.figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 14px;margin-top:10px}
+.fig{min-width:0;padding:6px 0 4px;border-top:1px solid var(--hairline)}
+.fig .lab{display:flex;align-items:center;gap:5px;font-family:var(--display);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.fig.lead .lab{color:var(--ink2)}
+.fig .val{font-family:var(--display);font-size:20px;font-weight:600;letter-spacing:.02em;margin-top:2px}
+.fig .val small{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--ink3);margin-left:4px}
+.fig .val.dim{color:var(--ink3);font-weight:500}
+.fig .sub{font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:1px}
+.fig .sub .up1{color:var(--ink2)}
+.ev{display:flex;gap:6px 18px;flex-wrap:wrap;margin-top:8px;padding-top:6px;border-top:1px solid var(--hairline);font-family:var(--mono);font-size:10.5px;color:var(--ink3)}
+.ev b{color:var(--ink2);font-weight:500;letter-spacing:.02em}
+.ev .forming{color:var(--amber)}
+.wait{margin-top:8px;padding:9px 12px;background:var(--steel);border:1px dashed var(--hairline2);border-radius:3px;font-size:12px;color:var(--ink2);display:flex;gap:6px 14px;flex-wrap:wrap;align-items:baseline}
+.wait .lab{font-family:var(--display);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);flex:none}
+.wait .mono{font-size:11px;color:var(--ink2)}
+.wait .mono small{color:var(--ink3)}
+
+/* how to read — variant A */
+details.how{margin-top:14px;border:1px solid var(--hairline);border-radius:3px;background:var(--strip)}
+details.how summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:8px 12px;font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
+details.how summary::-webkit-details-marker{display:none}
+details.how summary::before{content:'';width:0;height:0;border:4px solid transparent;border-left:6px solid var(--ink3);transition:transform .15s}
+details.how[open] summary::before{transform:rotate(90deg)}
+details.how summary .n{margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--ink3)}
+dl.gloss{margin:0;padding:4px 12px 12px;display:grid;grid-template-columns:max-content 1fr;gap:8px 16px;font-size:12px;line-height:1.5}
+dl.gloss dt{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);padding-top:2px}
+dl.gloss dd{margin:0;color:var(--ink2);max-width:62ch}
+dl.gloss dd b{color:var(--ink);font-weight:600}
+dl.gloss dd .no{color:var(--amber)}
+
+/* coverage */
+.cov{margin-top:14px;padding-top:12px;border-top:1px solid var(--hairline)}
+.cov-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.cov-h h4{margin:0;font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
+.cov-h .big{margin-left:auto;font-family:var(--display);font-size:18px;font-weight:600}
+.cov-h .big small{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--ink3);margin-left:4px}
+.bar{display:flex;height:10px;margin-top:8px;border-radius:2px;overflow:hidden;background:var(--board);gap:2px}
+.bar i{display:block;height:100%}
+.bar .p{background:var(--cyan);border-radius:2px 0 0 2px}
+.bar .r{background:var(--hairline2);flex:1}
+.cov-list{list-style:none;margin:8px 0 0;padding:0;display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;font-family:var(--mono);font-size:10.5px;color:var(--ink3)}
+.cov-list .v{color:var(--ink2);text-align:right}
+.cov-list .k{color:var(--ink3)}
+.cov-list .k em{font-style:normal;color:var(--ink3)}
+.cov-list li{display:contents}
+.cov-note{margin-top:8px;font-size:11.5px;color:var(--ink3);max-width:62ch;line-height:1.5}
+
+/* variant B: info glyph + popover */
+.i{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid var(--hairline2);font-family:var(--font);font-size:9px;font-weight:600;color:var(--ink3);letter-spacing:0;text-transform:none;cursor:help}
+.i.on{border-color:var(--cyan);color:var(--cyan)}
+.pop{position:relative}
+.tip{position:absolute;left:0;top:calc(100% + 6px);z-index:5;width:250px;padding:8px 10px;background:var(--strip-hi);border:1px solid var(--hairline2);border-radius:3px;box-shadow:0 8px 24px rgba(0,0,0,.45);font-family:var(--font);font-size:11.5px;line-height:1.5;color:var(--ink2);text-transform:none;letter-spacing:0;font-weight:400}
+.tip b{color:var(--ink);font-weight:600}
+.tip::before{content:'';position:absolute;left:10px;top:-5px;width:8px;height:8px;background:var(--strip-hi);border-left:1px solid var(--hairline2);border-top:1px solid var(--hairline2);transform:rotate(45deg)}
+.verdicts{display:flex;gap:8px 14px;flex-wrap:wrap;margin-top:10px;font-size:11.5px;color:var(--ink2)}
+.verdicts .v{display:flex;align-items:baseline;gap:8px}
+
+/* variant C: table */
+.tw{margin-top:12px;overflow-x:auto}
+table.t{width:100%;border-collapse:collapse;font-size:11.5px;min-width:720px}
+table.t th{font-family:var(--display);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);text-align:left;padding:6px 8px;border-bottom:1px solid var(--hairline2);white-space:nowrap}
+table.t th.n,table.t td.n{text-align:right}
+table.t td{padding:8px;border-bottom:1px solid var(--hairline);font-family:var(--mono);font-size:11px;color:var(--ink2);white-space:nowrap}
+table.t td.model{color:var(--ink)}
+table.t td.n.lead{color:var(--ink);font-size:13px;font-family:var(--display);font-weight:600}
+table.t td .dim{color:var(--ink3)}
+table.t tr.quiet td{color:var(--ink3)}
+.colgloss{margin:10px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:4px 16px;font-size:11px;color:var(--ink3);line-height:1.5}
+.colgloss b{font-family:var(--display);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);font-weight:600}
+
+/* the "before" strip */
+.before{margin-top:18px;padding:12px 14px;border:1px solid var(--hairline);border-radius:3px;background:var(--strip);max-width:680px}
+.before .fl{font-family:var(--mono);font-size:10px;color:var(--ink3);letter-spacing:.04em;margin-bottom:8px}
+.before p{margin:0;font-size:11px;line-height:1.5;color:var(--ink3);max-width:70ch}
+.before .m{margin-top:8px;font-family:var(--mono);font-size:10.5px;color:var(--ink3)}
+.before mark{background:color-mix(in oklab,var(--amber) 22%,transparent);color:var(--amber);padding:0 2px;border-radius:1px}
+
+@media (max-width:560px){
+  .figs{grid-template-columns:1fr 1fr}
+  .fig.lead{grid-column:1 / -1}
+  .row-h .badge{margin-left:0}
+}
+.frame.phone .figs{grid-template-columns:1fr 1fr}
+.frame.phone .fig.lead{grid-column:1 / -1}
+.frame.phone .row-h .badge{margin-left:auto}
+.frame.phone .seg span{padding:4px 7px}
+.frame.phone dl.gloss{grid-template-columns:1fr}
+.frame.phone dl.gloss dd{margin-bottom:4px}
+</style>
+
+<div class="page">
+  <div class="lead">
+    <h1>Token Value, three ways</h1>
+    <p>Same data as the live page on 6 Sep. Verdict leads in every variant, as you picked. Every figure carries its own label, the 5× repeated hint appears once, and the 3 models with nothing to show fold into one line.</p>
+    <div class="now"><b>What it looks like today,</b> for reference: a 150-word paragraph before any data, then rows whose meta line reads <span class="mono">baseline forming · 4 days · 585 windows · 4 days · 663.0 pts</span> with the two "4 days" meaning different things. The footer pills say "59% priced" and "12% external" without saying priced <i>what</i>.</div>
+  </div>
+
+  <div class="vgrid">
+
+  <!-- ══════════════════════════════ A ══════════════════════════════ -->
+  <section class="variant">
+    <div class="vh"><span class="letter">A</span><h2>Status board with a glossary drawer</h2><span class="tag rec">Recommended</span></div>
+    <p class="why">The page opens on the <b>question</b> and its answer. Each row is a small card of <b>labelled figures</b>, the weighted rate visually leading. Every definition lives in one collapsible <b>How to read this</b> drawer, closed by default, so the data is first and the explanation is one tap away. Coverage becomes a bar that answers "how much of my spend is measured" with the refusals as a list under it.</p>
+    <div class="frames">
+      <div class="frame">
+        <div class="fl">desktop · 640px</div>
+        <div class="an-bar"><span class="an-title">Usage</span><span class="an-hint">what one percent of the 5-hour window costs, per model</span><span class="seg"><span>Forecast</span><span class="on">Token value</span></span></div>
+        <div class="up">
+          <h3>TOKEN VALUE PER MODEL</h3>
+          <p class="up-sub">How many tokens each model gets out of 1% of your 5-hour limit, and whether that price has moved. Measured on this machine only.</p>
+
+          <div class="status">
+            <span class="q">No model is drifting</span>
+            <span class="counts"><span><b>0</b> drift</span><span><b>0</b> stable</span><span><b>5</b> collecting</span><span class="dim">recording 4 days</span></span>
+          </div>
+          <div class="notice"><b>Verdicts need about two weeks.</b> A model is judged once it has <b>7 separate days</b> behind its baseline and <b>2</b> behind the current window. <span class="mono">Until then: collecting.</span></div>
+
+          <ul class="rows">
+            <li class="row">
+              <div class="row-h"><span class="model">claude-opus-5</span><span class="badge thin">collecting</span></div>
+              <div class="figs">
+                <div class="fig lead"><div class="lab">Weighted rate</div><div class="val">220k<small>tok / 1%</small></div><div class="sub">the figure drift is judged on</div></div>
+                <div class="fig"><div class="lab">Raw tokens</div><div class="val">1.3M<small>/ 1%</small></div><div class="sub">at this model's recent mix</div></div>
+                <div class="fig"><div class="lab">Fitted, mixed windows</div><div class="val">332k<small>/ 1%</small></div><div class="sub"><span class="up1">+50.9%</span> vs weighted</div></div>
+              </div>
+              <div class="ev"><span><b>Current</b> 585 windows · 4 days · 663 pts</span><span><b>Baseline</b> <span class="forming">forming</span> · 4 of 7 days</span></div>
+            </li>
+            <li class="row">
+              <div class="row-h"><span class="model">claude-fable-5-1</span><span class="badge thin">collecting</span></div>
+              <div class="figs">
+                <div class="fig lead"><div class="lab">Weighted rate</div><div class="val">45k<small>tok / 1%</small></div><div class="sub">the figure drift is judged on</div></div>
+                <div class="fig"><div class="lab">Raw tokens</div><div class="val">252k<small>/ 1%</small></div><div class="sub">at this model's recent mix</div></div>
+                <div class="fig"><div class="lab">Fitted, mixed windows</div><div class="val">79k<small>/ 1%</small></div><div class="sub"><span class="up1">+75.5%</span> vs weighted</div></div>
+              </div>
+              <div class="ev"><span><b>Current</b> 25 windows · 3 days · 36 pts</span><span><b>Baseline</b> <span class="forming">forming</span> · 1 of 7 days</span></div>
+            </li>
+          </ul>
+          <div class="wait"><span class="lab">Not enough evidence yet</span><span class="mono">claude-sonnet-5 <small>2 windows</small></span><span class="mono">claude-fable-5 <small>0</small></span><span class="mono">claude-haiku-4-5 <small>0</small></span></div>
+
+          <details class="how" open>
+            <summary>How to read this <span class="n">6 terms</span></summary>
+            <dl class="gloss">
+              <dt>Weighted rate</dt><dd>Tokens per 1% of the limit, with each token type weighted by what it costs the window. Mix-invariant, so a change here is a <b>real repricing</b>. Drift is judged on this and nothing else.</dd>
+              <dt>Raw tokens</dt><dd>The same 1% in plain token counts, at the model's recent mix. Moves when the cache-read habit moves, so it is a translation, not a price.</dd>
+              <dt>Fitted</dt><dd>A second estimate of the weighted rate, measured jointly across the windows where several models ran together. Reads more of the evidence, has no baseline yet. The only figure a subagent-only model ever gets.</dd>
+              <dt>Baseline</dt><dd>The trailing 14 days before the last three. A verdict needs 7 separate days in it.</dd>
+              <dt>Window · pts</dt><dd>One <b>window</b> is one 5-hour limit period that one model owned (≥90% of tokens). <b>pts</b> are the utilization percentage points those windows moved in total.</dd>
+              <dt>Across models</dt><dd><span class="no">Not a price list.</span> A model that fires more requests per token carries that per-request cost inside its rate, so rates compare a model to its own past, not to another model.</dd>
+            </dl>
+          </details>
+
+          <div class="cov">
+            <div class="cov-h"><h4>How much of your spend was measured</h4><span class="big">59%<small>of 1,997 pts moved</small></span></div>
+            <div class="bar"><i class="p" style="width:59%"></i><i class="r"></i></div>
+            <ul class="cov-list">
+              <li><span class="v">22%</span><span class="k">predates recording · ages out on its own</span></li>
+              <li><span class="v">9%</span><span class="k">spent on another device · excluded from the fit</span></li>
+              <li><span class="v">8%</span><span class="k">no single model held 90% of the tokens</span></li>
+              <li><span class="v">2%</span><span class="k">windows the recorder only part-covered</span></li>
+              <li><span class="v">0.3%</span><span class="k">recorder down 19.5 h</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="frame phone">
+        <div class="fl">phone · 375px</div>
+        <div class="an-bar"><span class="an-title">Usage</span><span class="seg"><span>Forecast</span><span class="on">Token value</span></span></div>
+        <div class="up">
+          <h3>TOKEN VALUE PER MODEL</h3>
+          <div class="status"><span class="q">No model is drifting</span><span class="counts"><span><b>0</b> drift</span><span><b>5</b> collecting</span></span></div>
+          <div class="notice"><b>Verdicts need about two weeks.</b> 7 days behind the baseline, 2 behind the current window.</div>
+          <ul class="rows">
+            <li class="row">
+              <div class="row-h"><span class="model">claude-opus-5</span><span class="badge thin">collecting</span></div>
+              <div class="figs">
+                <div class="fig lead"><div class="lab">Weighted rate</div><div class="val">220k<small>tok / 1%</small></div><div class="sub">the figure drift is judged on</div></div>
+                <div class="fig"><div class="lab">Raw</div><div class="val">1.3M<small>/ 1%</small></div></div>
+                <div class="fig"><div class="lab">Fitted</div><div class="val">332k<small>/ 1%</small></div><div class="sub"><span class="up1">+50.9%</span></div></div>
+              </div>
+              <div class="ev"><span><b>Current</b> 585 win · 4 d · 663 pts</span><span><b>Baseline</b> <span class="forming">forming</span> · 4 of 7 d</span></div>
+            </li>
+            <li class="row">
+              <div class="row-h"><span class="model">claude-fable-5-1</span><span class="badge thin">collecting</span></div>
+              <div class="figs">
+                <div class="fig lead"><div class="lab">Weighted rate</div><div class="val">45k<small>tok / 1%</small></div><div class="sub">the figure drift is judged on</div></div>
+                <div class="fig"><div class="lab">Raw</div><div class="val">252k<small>/ 1%</small></div></div>
+                <div class="fig"><div class="lab">Fitted</div><div class="val">79k<small>/ 1%</small></div><div class="sub"><span class="up1">+75.5%</span></div></div>
+              </div>
+              <div class="ev"><span><b>Current</b> 25 win · 3 d · 36 pts</span><span><b>Baseline</b> <span class="forming">forming</span> · 1 of 7 d</span></div>
+            </li>
+          </ul>
+          <div class="wait"><span class="lab">Not enough evidence yet</span><span class="mono">sonnet-5 <small>2</small></span><span class="mono">fable-5 <small>0</small></span><span class="mono">haiku-4-5 <small>0</small></span></div>
+          <details class="how"><summary>How to read this <span class="n">6 terms</span></summary></details>
+          <div class="cov">
+            <div class="cov-h"><h4>Spend measured</h4><span class="big">59%</span></div>
+            <div class="bar"><i class="p" style="width:59%"></i><i class="r"></i></div>
+            <ul class="cov-list">
+              <li><span class="v">22%</span><span class="k">predates recording</span></li>
+              <li><span class="v">9%</span><span class="k">another device</span></li>
+              <li><span class="v">8%</span><span class="k">no model held 90%</span></li>
+              <li><span class="v">2%</span><span class="k">part-covered</span></li>
+              <li><span class="v">0.3%</span><span class="k">recorder down 19.5 h</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="tradeoffs">
+      <li class="plus">Data first, definitions one tap away — and all in one place, so a new reader can learn the six terms in one sitting.</li>
+      <li class="plus">Fits the phone without a table or sideways scroll; the drawer stays closed there.</li>
+      <li class="plus">Reuses existing CSS pieces: the badge, the `.up` card, the `.up-status` line. Mostly new markup, little new style.</li>
+      <li class="minus">A reader who forgets what "fitted" means has to scroll back up to the drawer.</li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════════════════ B ══════════════════════════════ -->
+  <section class="variant">
+    <div class="vh"><span class="letter">B</span><h2>Annotated rows, definitions on tap</h2><span class="tag">Alternative</span></div>
+    <p class="why">No drawer and no intro. Every label carries an <b>ⓘ</b> that opens a small popover with the definition, right where the figure is — a real element that answers hover, tap and keyboard focus, never the <code>title</code> attribute (dead on touch). The verdict legend sits once under the status line. Densest option; explanations are invisible until asked for.</p>
+    <div class="frames">
+      <div class="frame">
+        <div class="fl">desktop · 640px · one popover shown open</div>
+        <div class="an-bar"><span class="an-title">Usage</span><span class="an-hint">what one percent of the 5-hour window costs, per model</span><span class="seg"><span>Forecast</span><span class="on">Token value</span></span></div>
+        <div class="up">
+          <h3>TOKEN VALUE PER MODEL</h3>
+          <div class="status">
+            <span class="q">No model is drifting</span>
+            <span class="counts"><span><b>0</b> drift</span><span><b>0</b> stable</span><span><b>5</b> collecting</span><span class="dim">recording 4 days</span></span>
+          </div>
+          <div class="verdicts">
+            <span class="v"><span class="badge thin">collecting</span><span>needs 7 days behind the baseline, 2 behind the current window</span></span>
+            <span class="v"><span class="badge stable">stable</span><span>within 20% of baseline</span></span>
+            <span class="v"><span class="badge drift">drift</span><span>moved more than 20%</span></span>
+          </div>
+
+          <ul class="rows">
+            <li class="row">
+              <div class="row-h"><span class="model">claude-opus-5</span><span class="badge thin">collecting</span></div>
+              <div class="figs">
+                <div class="fig lead"><div class="lab">Weighted rate <span class="i">i</span></div><div class="val">220k<small>tok / 1%</small></div></div>
+                <div class="fig"><div class="lab">Raw tokens <span class="i">i</span></div><div class="val">1.3M<small>/ 1%</small></div></div>
+                <div class="fig pop"><div class="lab">Fitted <span class="i on">i</span></div><div class="val">332k<small>/ 1%</small></div><div class="sub"><span class="up1">+50.9%</span> vs weighted</div>
+                  <div class="tip"><b>Fitted rate.</b> A second estimate of the weighted rate, measured jointly across the windows where several models ran together — the ones the headline has to discard. Reads more evidence, has no baseline yet, and is not judged for drift.</div>
+                </div>
+              </div>
+              <div class="ev" style="margin-top:78px"><span><b>Current</b> 585 windows · 4 days · 663 pts <span class="i">i</span></span><span><b>Baseline</b> <span class="forming">forming</span> · 4 of 7 days <span class="i">i</span></span></div>
+            </li>
+            <li class="row">
+              <div class="row-h"><span class="model">claude-fable-5-1</span><span class="badge thin">collecting</span></div>
+              <div class="figs">
+                <div class="fig lead"><div class="lab">Weighted rate <span class="i">i</span></div><div class="val">45k<small>tok / 1%</small></div></div>
+                <div class="fig"><div class="lab">Raw tokens <span class="i">i</span></div><div class="val">252k<small>/ 1%</small></div></div>
+                <div class="fig"><div class="lab">Fitted <span class="i">i</span></div><div class="val">79k<small>/ 1%</small></div><div class="sub"><span class="up1">+75.5%</span> vs weighted</div></div>
+              </div>
+              <div class="ev"><span><b>Current</b> 25 windows · 3 days · 36 pts <span class="i">i</span></span><span><b>Baseline</b> <span class="forming">forming</span> · 1 of 7 days <span class="i">i</span></span></div>
+            </li>
+          </ul>
+          <div class="wait"><span class="lab">Not enough evidence yet</span><span class="mono">claude-sonnet-5 <small>2 windows</small></span><span class="mono">claude-fable-5 <small>0</small></span><span class="mono">claude-haiku-4-5 <small>0</small></span></div>
+
+          <div class="cov">
+            <div class="cov-h"><h4>Spend measured <span class="i">i</span></h4><span class="big">59%<small>of 1,997 pts moved</small></span></div>
+            <div class="bar"><i class="p" style="width:59%"></i><i class="r"></i></div>
+            <ul class="cov-list">
+              <li><span class="v">22%</span><span class="k">predates recording</span></li>
+              <li><span class="v">9%</span><span class="k">another device</span></li>
+              <li><span class="v">8%</span><span class="k">no model held 90%</span></li>
+              <li><span class="v">2%</span><span class="k">part-covered windows</span></li>
+              <li><span class="v">0.3%</span><span class="k">recorder down 19.5 h</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="tradeoffs">
+      <li class="plus">Definition appears exactly where the reader is looking, no scrolling.</li>
+      <li class="plus">Shortest page of the three.</li>
+      <li class="minus">Seven ⓘ glyphs per row add visual noise; on a phone each popover covers the figures beside it.</li>
+      <li class="minus">New popover component to build, position and test at 125% text scale — the grid tooltip's coordinate trap applies here too.</li>
+      <li class="minus">Nowhere to learn the whole vocabulary at once.</li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════════════════ C ══════════════════════════════ -->
+  <section class="variant">
+    <div class="vh"><span class="letter">C</span><h2>One ledger table</h2><span class="tag yagni">Shown to reject</span></div>
+    <p class="why">Every model is one row of a single table, headers name every column once, and a column glossary sits under it. The most compact way to compare a model against its own baseline. It is also a desktop layout: at 375px the table scrolls sideways and the verdict, the one thing you asked to lead with, is the first column to leave the screen.</p>
+    <div class="frames">
+      <div class="frame">
+        <div class="fl">desktop · 640px · scrolls sideways</div>
+        <div class="an-bar"><span class="an-title">Usage</span><span class="an-hint">what one percent of the 5-hour window costs, per model</span><span class="seg"><span>Forecast</span><span class="on">Token value</span></span></div>
+        <div class="up">
+          <h3>TOKEN VALUE PER MODEL</h3>
+          <div class="status"><span class="q">No model is drifting</span><span class="counts"><span><b>0</b> drift</span><span><b>5</b> collecting</span><span class="dim">recording 4 days</span></span></div>
+          <div class="tw">
+            <table class="t nums">
+              <thead><tr><th>Model</th><th>Verdict</th><th class="n">Weighted /1%</th><th class="n">Raw /1%</th><th class="n">Fitted /1%</th><th class="n">Δ fit</th><th>Baseline</th><th>Evidence</th></tr></thead>
+              <tbody>
+                <tr><td class="model">claude-opus-5</td><td><span class="badge thin">collecting</span></td><td class="n lead">220k</td><td class="n">1.3M</td><td class="n">332k</td><td class="n">+50.9%</td><td>forming · 4/7 d</td><td>585 win · 4 d · 663 pts</td></tr>
+                <tr><td class="model">claude-fable-5-1</td><td><span class="badge thin">collecting</span></td><td class="n lead">45k</td><td class="n">252k</td><td class="n">79k</td><td class="n">+75.5%</td><td>forming · 1/7 d</td><td>25 win · 3 d · 36 pts</td></tr>
+                <tr class="quiet"><td class="model">claude-sonnet-5</td><td><span class="badge thin">collecting</span></td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td>forming · 1/7 d</td><td>2 win · 1 d · 2 pts</td></tr>
+                <tr class="quiet"><td class="model">claude-fable-5</td><td><span class="badge thin">collecting</span></td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td>forming · 2/7 d</td><td>0 win</td></tr>
+                <tr class="quiet"><td class="model">claude-haiku-4-5-20251001</td><td><span class="badge thin">collecting</span></td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td>forming · 2/7 d</td><td>0 win</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ul class="colgloss">
+            <li><b>Weighted</b> — type-weighted tokens per 1%; drift is judged on this</li>
+            <li><b>Raw</b> — plain token count at the model's recent mix</li>
+            <li><b>Fitted</b> — joint estimate across mixed-model windows</li>
+            <li><b>Δ fit</b> — fitted vs weighted</li>
+            <li><b>Baseline</b> — trailing 14 days before the last 3; needs 7 days</li>
+            <li><b>Evidence</b> — windows one model owned · distinct days · pts moved</li>
+          </ul>
+          <div class="cov">
+            <div class="cov-h"><h4>Spend measured</h4><span class="big">59%<small>of 1,997 pts</small></span></div>
+            <div class="bar"><i class="p" style="width:59%"></i><i class="r"></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="tradeoffs">
+      <li class="plus">Best for scanning many models on a wide screen.</li>
+      <li class="minus">This dashboard is mostly read from a phone; a 720px-wide table there is the wrong shape.</li>
+      <li class="minus">The three empty rows stay as rows.</li>
+    </ul>
+  </section>
+
+  </div>
+
+  <div class="before">
+    <div class="fl">shared in every variant · what changes on the page</div>
+    <p>1 · The intro paragraph shrinks to one sentence; its content moves into labelled definitions. 2 · A status line answers the question first. 3 · The verdict hint prints once, not per row. 4 · Every figure gets a label and a one-line "so what". 5 · The evidence line separates <mark>current</mark> from <mark>baseline</mark> so two "4 days" can't collide. 6 · Models without a rate fold into one line. 7 · Coverage becomes a bar plus a list, with "priced" renamed to "measured".</p>
+    <p class="m">Noticed while building: the live footer pill says 12% external while coverage.externalPct / movedPct is 9.2%. Not a bug — the pill divides by the attributable movement only (priced + mixed + external), the buckets divide by everything that moved. The redesign lists external from the bucket so it sums with the bar.</p>
+  </div>
+</div>
