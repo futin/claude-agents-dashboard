@@ -19,8 +19,9 @@ import type { ProfileState, UsageSample } from './lib/usage-history.js';
 import { ledgerStartMs, readLedgerSince } from './lib/usage-ledger.js';
 import type { LedgerLine } from './lib/usage-ledger.js';
 import {
-  BASELINE_MS, coverageBreakdown, currentRange, driftRow, externalShare, fitDeviation,
-  fitRates, fitSplits, joinIntervals, ledgerBreakMs
+  BASELINE_MS, WEEKLY_FLOORS, coverageBreakdown, currentRange, driftRow, externalShare,
+  fitDeviation, fitRates, fitSplits, joinIntervals, joinWeeklyIntervals, ledgerBreakMs,
+  poolRate, rateFor
 } from './lib/usage-rate.js';
 import { HOURS_PER_WEEK, confidenceOf, localOffsetMinutes, walkForward } from './lib/usage-forecast.js';
 import {
@@ -59,8 +60,8 @@ import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
-  ModelRateRow, RateLimit, SpawnResponse, UsageProfileCell, UsageProfileResponse,
-  UsageRatesResponse, WaitResult
+  ModelRateRow, RateLimit, SpawnResponse, UsageCoverage, UsageProfileCell,
+  UsageProfileResponse, UsageRatesResponse, WaitResult
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -709,20 +710,30 @@ export const RATES_HISTORY_BYTES = 4_194_304;
  * field here would push a null check into the card for a state that cannot
  * happen. `startProvable` is false because nothing was read to prove it.
  */
+function zeroCoverage(): UsageCoverage {
+  return {
+    movedPct: 0, pricedPct: 0, mixedPct: 0, externalPct: 0,
+    preLedgerPct: 0, missingPct: 0, partialPct: 0,
+    recorderBreakHours: 0, startProvable: false
+  };
+}
+
 function emptyRates(nowMs: number, recording: boolean, error?: true): UsageRatesResponse {
   return {
     generatedAt: new Date(nowMs).toISOString(),
     recording,
     models: [],
     externalSharePct: null,
-    coverage: {
-      movedPct: 0, pricedPct: 0, mixedPct: 0, externalPct: 0,
-      preLedgerPct: 0, missingPct: 0, partialPct: 0,
-      recorderBreakHours: 0, startProvable: false
-    },
+    coverage: zeroCoverage(),
+    // `weeklyRecorded` is false because nothing was read to say otherwise — the
+    // same reasoning as `startProvable`, and not a claim that the record is old.
+    weeklyRecorded: false,
+    weeklyCoverage: zeroCoverage(),
+    weeklyExternalSharePct: null,
     ...(error ? { error: true } : {})
   };
 }
+
 
 /**
  * Shape one `GET /api/usage/rates` body. Pure — no clock, no disk — so the
@@ -767,11 +778,33 @@ export function shapeUsageRates(opts: {
   const fitted = fitRates(intervals, cur.sinceMs, cur.untilMs);
   for (const model of fitted.keys()) models.add(model);
 
+  // The weekly set, built once. Paired tick to tick rather than sample to
+  // sample — see `joinWeeklyIntervals`, where the 6.5×–10.4× underestimate that
+  // consecutive pairing produces is measured. Fitted over the *same* 3-day
+  // window as everything above: this card refuses to put two figures spanning
+  // different windows side by side.
+  const weeklyIntervals = joinWeeklyIntervals(samples, ledger, startMs);
+  const weeklyFitted = fitRates(weeklyIntervals, cur.sinceMs, cur.untilMs, WEEKLY_FLOORS);
+  // A model priced only weekly still gets a row, exactly as a fitted-only model
+  // already does.
+  for (const interval of weeklyIntervals) {
+    if (typeof interval.kind === 'object') models.add(interval.kind.model);
+  }
+  for (const model of weeklyFitted.keys()) models.add(model);
+
   const rows: ModelRateRow[] = [...models]
     .map((model) => {
       const split = splits.get(model);
       const fit = fitted.get(model);
       const drift = driftRow(intervals, model, nowMs);
+      const weeklyPooled = rateFor(
+        weeklyIntervals, model, cur.sinceMs, cur.untilMs, WEEKLY_FLOORS
+      );
+      const weeklyFit = weeklyFitted.get(model);
+      // The evidence survives the refusal, as the 5-hour row's already does:
+      // "10 windows over 2 days, still thin" and "nothing at all" are different
+      // statements and the card says which.
+      const weeklyEvidence = poolRate(weeklyIntervals, model, cur.sinceMs, cur.untilMs);
       return {
         ...drift,
         pctPerMWeighted: split?.pctPerMWeighted ?? null,
@@ -781,9 +814,21 @@ export function shapeUsageRates(opts: {
         fitVerdict: fit === undefined ? ('thin' as const) : ('fitted' as const),
         // Against the pooled rate the row already publishes, so the number the
         // card compares is the number the card shows.
-        fitDeviationPct: fitDeviation(fit?.weightedPerPct ?? null, drift.weightedPerPct)
+        fitDeviationPct: fitDeviation(fit?.weightedPerPct ?? null, drift.weightedPerPct),
+        weekly: {
+          weightedPerPct: weeklyPooled?.weightedPerPct ?? null,
+          rawPerPct: weeklyPooled?.rawPerPct ?? null,
+          fittedWeightedPerPct: weeklyFit?.weightedPerPct ?? null,
+          verdict: weeklyPooled === null ? ('thin' as const) : ('fitted' as const),
+          fitVerdict: weeklyFit === undefined ? ('thin' as const) : ('fitted' as const),
+          intervals: weeklyEvidence?.intervals ?? 0,
+          utilSum: weeklyEvidence?.utilSum ?? 0,
+          days: weeklyEvidence?.days ?? 0
+        }
       };
     })
+    // On the **5-hour** `utilSum`, unchanged: a weekly-only model sorts last,
+    // as a fitted-only model already does.
     .sort((a, b) => b.utilSum - a.utilSum || a.model.localeCompare(b.model));
 
   // Over the whole fitted horizon, not just the trailing window: it describes
@@ -795,6 +840,14 @@ export function shapeUsageRates(opts: {
   // defect, not a nuance.
   const buckets = coverageBreakdown(intervals, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY);
   const breakMs = ledgerBreakMs(ledger, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY);
+
+  // Same horizon again for the weekly disclosure figures, for the same reason.
+  const weeklyBuckets = coverageBreakdown(
+    weeklyIntervals, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY
+  );
+  const weeklyShare = externalShare(
+    weeklyIntervals, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY
+  );
 
   return {
     generatedAt: new Date(nowMs).toISOString(),
@@ -811,7 +864,23 @@ export function shapeUsageRates(opts: {
       partialPct: buckets.partial,
       recorderBreakHours: breakMs / 3_600_000,
       startProvable: startMs !== null
-    }
+    },
+    // Read off the samples, not the intervals: a record that carries weekly
+    // readings whose counter simply never moved yields no intervals at all, and
+    // that is a different state from a record written before the field existed.
+    weeklyRecorded: samples.some((sample) => sample.week !== undefined),
+    weeklyCoverage: {
+      movedPct: weeklyBuckets.moved,
+      pricedPct: weeklyBuckets.priced,
+      mixedPct: weeklyBuckets.mixed,
+      externalPct: weeklyBuckets.external,
+      preLedgerPct: weeklyBuckets.preLedger,
+      missingPct: weeklyBuckets.gap,
+      partialPct: weeklyBuckets.partial,
+      recorderBreakHours: breakMs / 3_600_000,
+      startProvable: startMs !== null
+    },
+    weeklyExternalSharePct: weeklyShare === null ? null : weeklyShare * 100
   };
 }
 

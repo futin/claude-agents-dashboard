@@ -3,6 +3,10 @@ id: task-21
 title: Record the weekly window and price one percent of the week per model
 created: 2026-09-06
 from: idea-12
+updated: 2026-09-06T17:48:07Z
+started: 2026-09-06T17:10:24Z
+execute-elapsed: 2263
+execute-tokens: 331927
 ---
 
 ## Goal
@@ -458,3 +462,168 @@ tolerance of 1e-6.
   point bracket comes from a week in which the counter reset twice off-cadence and is
   not a settled figure; and if case 14 ran before a normal week accrued, say that the
   published weekly rates have never been seen against normal-cadence data.
+
+## Outcome
+
+**2026-09-06 — done, with case 14 only partly satisfiable in an unattended run.**
+
+The record now carries the weekly window (`UsageSample.week`, optional), `usage.ts`
+feeds it from `limits.sevenDay`, `shouldWrite` fires on both axes, and
+`joinWeeklyIntervals` pairs tick to tick against the same ledger. `ModelRateRow.weekly`
+is always present, `UsageRatesResponse` gained `weeklyRecorded` / `weeklyCoverage` /
+`weeklyExternalSharePct`, and the card renders a fourth aside naming the week. Profile
+learning was not touched: no diff in `classifyInterval`, `provableIdleSpan`,
+`accumulate` or `foldBucket`, and `grep SEVEN_DAY_MS server/lib/usage-rate.ts` finds
+nothing.
+
+### Verification
+
+```
+$ pnpm test
+  31/31 passed
+ALL PASS
+
+$ pnpm typecheck
+> tsc --noEmit
+exit=0
+
+$ pnpm build
+dist/assets/index-C0UUfgIf.js   396.96 kB │ gzip: 113.69 kB
+✓ built in 1.46s
+exit=0
+```
+
+1387 assertions pass in total. The new file:
+
+```
+=== usage-rate.ts (the weekly window) ===
+
+  ✓ the documented weekly thresholds
+  ✓ tick to tick collapses a flat run; sample to sample loses 32/33 of its tokens
+  ✓ a weekly window change closes the run without emitting across it
+  ✓ a weekly stamp jittering under two minutes is the same window
+  ✓ samples with no week are skipped — they never open, close or split a run
+  ✓ the 2026-09-04 reset: 85 → 0 with the stamp unchanged emits nothing
+  ✓ the same reset with the stamp also moving: identical outcome, via sameWindow
+  ✓ the trailing partial run is not emitted — censoring, not bias
+  ✓ the weekly external threshold is the one in force, and only there
+  ✓ WEEKLY_FLOORS: 9 intervals refuses, 10 over 2 dates at 10.0 points fits
+  ✓ WEEKLY_FLOORS: each floor alone refuses in the mirror direction
+  ✓ WEEKLY_FLOORS.minDays can actually be met inside the fit window
+
+  12 passed, 0 failed
+```
+
+### The two mutation checks, run and recorded
+
+**Case 3 — `week` removed from `parseSample`'s output:**
+
+```
+  ✗ a mixed file reads back in order with the right lines carrying week
+  ✗ a malformed week field is absent, not a thrown parse
+  ✗ MUTATION GUARD: rotation preserves the weekly field on every line
+    a surviving line lost its weekly reading
+```
+
+**Case 7 — the mid-window drop rule removed from `joinWeeklyIntervals`:**
+
+```
+  ✗ the 2026-09-04 reset: 85 → 0 with the stamp unchanged emits nothing
+    Expected values to be strictly deep-equal:
+    + actual - expected
+      [ [ 1788512400000, 1788512460000 ] ,
+    -   [ 1788512520000, 1788512580000 ] ]
+```
+
+The test catches the removal, but **the failure mode is not the one the plan
+predicted**. The plan expected an interval carrying `dUtil = −85` to be emitted. In
+this implementation the drop rule sits *above* the `dUtil <= IDLE_EPS` branch, so
+removing it makes `−85` fall through as "no tick yet": nothing negative is emitted, and
+what is lost instead is the whole run *after* the reset — the anchor stays stuck at 85%
+until the counter climbs back past it. Worse in a quieter way, and the pinned interval
+list is what catches it.
+
+### Case 14 — live probe, incomplete and honestly so
+
+`scripts/probe-usage-split.ts --weekly` works. Against the real logs before any
+recording on this build: `samples carrying a week field: 0 / 2491` — the record predates
+the widening, exactly as designed.
+
+A dev server was then run in this worktree (ports 4273/5273, its own copy of the two
+logs, killed afterwards by recorded pid) so the recorder could write real widened lines:
+
+```
+  ── the weekly window ──
+  samples carrying a week field: 4 / 2495
+  weekly window boundaries observed: 1
+    2026-09-07T08:00:00.330703+00:00   first seen 2026-09-06T17:36:12.459Z
+
+  weekly intervals: 0  (external threshold 45000 weighted)
+    the weekly counter has not ticked inside a recorded window yet.
+```
+
+A real recorded line:
+
+```
+{"t":1788716172459,"utilization":61,"resetsAt":"2026-09-06T20:10:00.330681+00:00",
+ "week":{"utilization":65,"resetsAt":"2026-09-07T08:00:00.330703+00:00"}}
+```
+
+Against the plan's four questions:
+
+- **(a)** 4 of 2495 samples carry `week` after ~15 minutes of live recording. The field
+  is written, parsed and round-tripped against the real endpoint.
+- **(b)** **Zero** weekly intervals. Not because everything landed in `reset` — because
+  the weekly counter did not tick once in fifteen minutes, which at the measured
+  21–28 points/day (one per ~51–69 min) is the expected outcome. Nothing here says the
+  join works on live data; that check is still owed.
+- **(c)** One boundary observed, so **the cadence is not measured**. One thing is
+  confirmed: the published stamp was `2026-09-07T08:00:00.330703Z` at 17:36Z on 09-06,
+  where the task recorded `2026-09-07T07:59:59.840279Z` at 09:03Z the same day — 8.5
+  hours apart, same window, sub-second jitter. The window does not slide, and the
+  `sameWindow` slack is the right instrument for the weekly stamp too.
+- **(d)** No re-derivation of `EXTERNAL_WEIGHTED_MAX_WEEKLY`. It stays **provisional**
+  at 45 000 with its derivation and its 2026-09-06 date in the JSDoc, per the plan's own
+  instruction not to re-derive from inadequate data.
+
+### Case 15 — in the browser
+
+http://localhost:5273 (this worktree's own server, not the user's 5174) → **Usage** →
+**Token value**. Observed: the subtitle names the weekly figure and states it has no
+drift verdict; five 5-hour rows render unchanged — value, `≈ … raw at this model's
+recent mix`, `fitted … across mixed-model windows · +46.8% vs the rate above`, baseline
++ evidence meta, collecting hint — with **no** weekly asides; the footer pills are
+unchanged (`12% external`, `60% priced` + four clauses). **0 console errors** after a
+clean reload.
+
+**One deviation from the plan, driven by that check.** The plan gates the "weekly series
+just started recording" note on `weeklyRecorded === false`. Live, the first widened line
+was written **90 seconds** after the recorder started, so the note disappeared while
+every weekly slot stayed empty — the card was back to looking broken, which is the exact
+state the note exists to explain. The note is now shown while **no row has any weekly
+figure**, and `weeklyRecorded` chooses which sentence: "began recording with this build"
+versus "recording, but the counter has not ticked enough yet". That keeps the two states
+`weeklyRecorded` exists to separate visible, which is what the plan asked of the field.
+
+### Other deviations
+
+- `pool` in `usage-rate.ts` is exported as **`poolRate`**. The weekly evidence trio
+  (`intervals` / `utilSum` / `days`) has to survive a refused rate the way the 5-hour
+  row's already does, and only that function computes it. Three internal call sites
+  renamed; no behaviour change.
+- The API fixture yields **13** owned weekly intervals, not 14: the second date's first
+  tick is what closes the interval bridging the two blocks, and that one is `partial`.
+  The collapse eating it is the behaviour, not a loss — documented in the fixture.
+
+### Not verified
+
+- **The weekly join has never seen a real weekly tick.** Case 14(b) is owed: run
+  `tsx scripts/probe-usage-split.ts --weekly` after a day of recording before trusting
+  any published weekly rate.
+- **The weekly rate's day-to-day dispersion is unmeasured**, so no drift threshold is
+  claimed for it and none was added.
+- **The 1.8–2.8 M per weekly point bracket comes from a week in which the counter reset
+  twice off-cadence.** It is not a settled figure, and both `EXTERNAL_WEIGHTED_MAX_WEEKLY`
+  and the doc's table say so.
+- **The weekly cadence is still unmeasured** — one boundary observed, and the ⚠️ in
+  `docs/subsystems/usage-limits.md` still stands.

@@ -234,6 +234,42 @@ export type ModelSplitVerdict = 'fitted' | 'thin';
 export type ModelFitVerdict = 'fitted' | 'thin';
 
 /**
+ * What one percentage point of the **weekly** limit costs one model.
+ *
+ * The same two estimators as the 5-hour figures beside it — a pooled ratio over
+ * the intervals this model owns outright, and the one-term joint fit — read off
+ * a *different* interval set: weekly ticks paired tick to tick rather than
+ * sample to sample, because the history log writes several lines between two
+ * weekly ticks and consecutive pairing hands almost every tick's tokens to
+ * intervals whose weekly utilization did not move. Measured on this machine's
+ * logs that error is 6.5×–10.4× **low**, with every evidence counter looking
+ * healthy (`docs/subsystems/usage-limits.md`).
+ *
+ * There is deliberately **no drift verdict and no baseline** here: `DRIFT_PCT`
+ * was set from a measured day-to-day dispersion of the 5-hour rates, and no
+ * such measurement exists for the weekly series yet. `verdict` says only
+ * whether the pooled weekly rate is reported at all.
+ */
+export interface ModelWeeklyRate {
+  /** Type-weighted tokens per 1% of the weekly window, pooled. Null when thin. */
+  weightedPerPct: number | null;
+  /** Raw tokens per 1%, the courtesy translation. Null under the same condition. */
+  rawPerPct: number | null;
+  /** The same quantity from the one-term joint fit. Null whenever `fitVerdict` is `thin`. */
+  fittedWeightedPerPct: number | null;
+  /** Whether the pooled weekly rate above is reported. */
+  verdict: ModelFitVerdict;
+  /** Whether the fitted weekly rate above is reported. */
+  fitVerdict: ModelFitVerdict;
+  /** Weekly intervals this model owned in the current window — evidence, shown either way. */
+  intervals: number;
+  /** Cumulative weekly utilization points behind them. */
+  utilSum: number;
+  /** Distinct UTC dates those intervals fall on. */
+  days: number;
+}
+
+/**
  * One model's token-value row in `GET /api/usage/rates`.
  *
  * Every rate is "tokens per one percentage point of the 5-hour window", fitted
@@ -313,6 +349,15 @@ export interface ModelRateRow {
    * alone, which is the only quantity with a measured baseline dispersion.
    */
   fitDeviationPct: number | null;
+  /**
+   * What a point of the **weekly** limit costs this model — the number that
+   * actually constrains a week of work.
+   *
+   * **Always present.** A model with no weekly evidence carries `thin` verdicts,
+   * null rates and zeroed counters, the shape this file already uses for the
+   * 5-hour fit — not an absent key the card has to null-check.
+   */
+  weekly: ModelWeeklyRate;
 }
 
 /**
@@ -339,6 +384,19 @@ export interface UsageRatesResponse {
    * Never absent — an empty body carries a zeroed instance.
    */
   coverage: UsageCoverage;
+  /**
+   * Did **any** sample in the read window carry a weekly reading at all.
+   *
+   * The field that keeps the first fortnight honest: every line written before
+   * the weekly window was recorded is legitimately weekly-less, so this
+   * separates "the record predates the widening" from "the weekly counter has
+   * not moved". The card says which, rather than showing empty slots.
+   */
+  weeklyRecorded: boolean;
+  /** The same refusal breakdown over the **weekly** interval set, same horizon. */
+  weeklyCoverage: UsageCoverage;
+  /** Share of moved weekly utilization this machine cannot account for. */
+  weeklyExternalSharePct: number | null;
   /** Only set when the fit itself failed; a missing ledger is not an error. */
   error?: boolean;
 }

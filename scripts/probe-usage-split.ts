@@ -2,7 +2,7 @@
  * probe-usage-split.ts — run both joint rate fits against this machine's real
  * logs, and print what they say about the per-token ratio between two models.
  *
- *   tsx scripts/probe-usage-split.ts [--dir <repo root>] [--reconstruct] [--days N]
+ *   tsx scripts/probe-usage-split.ts [--dir <repo root>] [--reconstruct] [--days N] [--weekly]
  *
  * Exists because green unit tests are not evidence about live data here: the
  * first version of this fitter's join classified **759 of 759** real intervals
@@ -12,6 +12,15 @@
  * 2.00x (checked 2026-09-02; the limit's own weighting is unpublished), and a
  * missing per-request term is the hypothesis. If separating the terms does not
  * move that ratio down, the hypothesis is wrong and belongs back in `bug-13`.
+ *
+ * `--weekly` adds the same treatment for the **weekly** window: how much of the
+ * record carries a weekly reading at all, every window boundary the record saw
+ * and the wall time between consecutive ones, the weekly interval tally, and the
+ * pooled and fitted weekly rates with their refusals. The boundary list is the
+ * instrument for the cadence question — `docs/subsystems/usage-limits.md`'s ⚠️
+ * has been guessing between 7 days and the 72 hours community reports claim, and
+ * this account saw the counter reset twice inside one nominal week
+ * (2026-09-01 and 2026-09-04). This prints that directly rather than by report.
  *
  * `--reconstruct` replays `~/.claude/projects/**.jsonl` to synthesize the `req`
  * counts for ledger lines written before the recorder produced them, so the
@@ -31,13 +40,15 @@
 import fs from 'node:fs';
 
 import { listTranscripts, projectsRoot } from '../server/lib/scan.js';
-import { readRecentSamples, repoRoot } from '../server/lib/usage-history.js';
+import { readRecentSamples, repoRoot, sameWindow } from '../server/lib/usage-history.js';
+import type { UsageSample } from '../server/lib/usage-history.js';
 import { ledgerStartMs, rawTokens, readLedgerSince } from '../server/lib/usage-ledger.js';
 import type { LedgerLine } from '../server/lib/usage-ledger.js';
 import {
-  CURRENT_FLOORS, CURRENT_MS, SPLIT_FLOORS, SPLIT_MAX_R2, SPLIT_MIN_INDEPENDENT_SHARE,
-  coverageBreakdown, currentRange, explainRates, explainSplits, fitDeviation,
-  isUnpriced, joinIntervals, ledgerBreakMs, rateFor
+  CURRENT_FLOORS, CURRENT_MS, EXTERNAL_WEIGHTED_MAX_WEEKLY, SPLIT_FLOORS, SPLIT_MAX_R2,
+  SPLIT_MIN_INDEPENDENT_SHARE, WEEKLY_FLOORS, coverageBreakdown, currentRange, explainRates,
+  explainSplits, fitDeviation, isUnpriced, joinIntervals, joinWeeklyIntervals, ledgerBreakMs,
+  rateFor
 } from '../server/lib/usage-rate.js';
 import type { RateFloors } from '../server/lib/usage-rate.js';
 
@@ -54,6 +65,7 @@ function arg(name: string): string | undefined {
   return i === -1 ? undefined : process.argv[i + 1];
 }
 const RECONSTRUCT = process.argv.includes('--reconstruct');
+const WEEKLY = process.argv.includes('--weekly');
 const DIR = arg('dir') ?? repoRoot();
 const DAYS = Number(arg('days') ?? 3);
 
@@ -116,6 +128,98 @@ function reconstruct(ledger: LedgerLine[], sinceMs: number): LedgerLine[] {
   });
 }
 
+/**
+ * The weekly half of the report — what `--weekly` exists for.
+ *
+ * Green unit tests are not evidence about live data here (759 of 759 intervals
+ * once classified `gap` with the whole suite passing), and the weekly series has
+ * two extra ways to read as empty that the 5-hour one does not: a record written
+ * before the field existed, and a counter that has not ticked yet. Both are
+ * printed as counts rather than inferred from an empty table.
+ */
+function weeklyReport(
+  samples: UsageSample[], ledger: LedgerLine[], startMs: number | null,
+  nowMs: number, sinceMs: number
+): void {
+  console.log('\n  ── the weekly window ──');
+  const carrying = samples.filter((s) => s.week !== undefined).length;
+  console.log(`  samples carrying a week field: ${carrying} / ${samples.length}`);
+  if (carrying === 0) {
+    console.log('  nothing to join — every line predates the widened record.');
+    return;
+  }
+
+  // Every distinct published boundary, in the order the record saw them, with
+  // the wall time between consecutive stamps. 168 h is what the name implies;
+  // 72 h is what this account actually saw between 2026-09-01 and 2026-09-04.
+  const boundaries: { stamp: string | null; firstSeen: number }[] = [];
+  for (const sample of samples) {
+    const week = sample.week;
+    if (week === undefined) continue;
+    const last = boundaries[boundaries.length - 1];
+    if (last !== undefined && sameWindow(last.stamp, week.resetsAt)) continue;
+    boundaries.push({ stamp: week.resetsAt, firstSeen: sample.t });
+  }
+  console.log(`  weekly window boundaries observed: ${boundaries.length}`);
+  for (let i = 0; i < boundaries.length; i++) {
+    const { stamp, firstSeen } = boundaries[i];
+    const prev = i > 0 ? boundaries[i - 1].stamp : null;
+    const gapH = prev !== null && stamp !== null
+      ? (Date.parse(stamp) - Date.parse(prev)) / 3_600_000
+      : null;
+    console.log(`    ${stamp ?? 'no window reported'}   first seen `
+      + `${new Date(firstSeen).toISOString()}`
+      + (gapH === null ? '' : `   +${gapH.toFixed(1)} h since the previous stamp`));
+  }
+
+  const intervals = joinWeeklyIntervals(samples, ledger, startMs).filter((i) => i.toT >= sinceMs);
+  const byKind = new Map<string, { n: number; pts: number }>();
+  for (const i of intervals) {
+    const key = typeof i.kind === 'object' ? 'owned:' + i.kind.model : i.kind;
+    const acc = byKind.get(key) ?? { n: 0, pts: 0 };
+    acc.n++; acc.pts += i.dUtil;
+    byKind.set(key, acc);
+  }
+  console.log(`\n  weekly intervals: ${intervals.length}`
+    + `  (external threshold ${EXTERNAL_WEIGHTED_MAX_WEEKLY} weighted)`);
+  for (const [kind, { n, pts }] of [...byKind].sort((a, b) => b[1].pts - a[1].pts)) {
+    console.log(`    ${kind}: ${n} intervals, ${pts.toFixed(1)} pts`);
+  }
+  if (intervals.length === 0) {
+    console.log('    the weekly counter has not ticked inside a recorded window yet.');
+    return;
+  }
+
+  const cur = currentRange(nowMs);
+  console.log(`\n  weekly rates over the last ${CURRENT_MS / DAY_MS}d `
+    + `(floors ${WEEKLY_FLOORS.minIntervals}/${WEEKLY_FLOORS.minUtil}/${WEEKLY_FLOORS.minDays}):`);
+  const models = [...new Set(intervals.flatMap((i) => Object.keys(i.tok)))].sort();
+  for (const model of models) {
+    const evidence = pool(intervals, model, cur.sinceMs, cur.untilMs);
+    const gated = rateFor(intervals, model, cur.sinceMs, cur.untilMs, WEEKLY_FLOORS);
+    if (evidence === null) { console.log(`    ${model}: owns no weekly interval`); continue; }
+    const counters = `${evidence.intervals} owned, ${evidence.utilSum.toFixed(1)} pts`
+      + `, ${evidence.days} days`;
+    console.log(`    ${model}: pooled `
+      + (gated === null
+        ? `refused (thin) — measured ${(evidence.weightedPerPct / MTOK).toFixed(3)}M weighted/pt`
+        : `${(gated.weightedPerPct / MTOK).toFixed(3)}M weighted/pt`)
+      + `  (${counters})`);
+  }
+  for (const d of explainRates(intervals, cur.sinceMs, cur.untilMs, WEEKLY_FLOORS)) {
+    const counters = `share=${d.independentShare.toFixed(4)}, ${d.intervals} intervals`
+      + `, ${d.utilSum.toFixed(1)} pts, ${d.days} days`;
+    console.log(`    ${d.model}: fitted `
+      + (d.fit === null
+        ? `none — ${d.refusal}`
+        : `${(d.fit.weightedPerPct / MTOK).toFixed(3)}M weighted/pt`)
+      + `  (${counters})`);
+  }
+  console.log('\n    Against the 1.8–2.8 M per weekly point measured on 2026-09-06 — a week in');
+  console.log('    which the counter reset twice. If this week was abnormal too, say so and');
+  console.log('    leave EXTERNAL_WEIGHTED_MAX_WEEKLY provisional rather than re-deriving.');
+}
+
 function main(): number {
   const nowMs = Date.now();
   const sinceMs = nowMs - DAYS * DAY_MS;
@@ -168,6 +272,11 @@ function main(): number {
     console.log(`    ${key}: ${countOf(key)} intervals, ${points.toFixed(1)} pts`
       + `, ${pct.toFixed(1)}% of moved`);
   }
+  // Before the early return below: the weekly report is about the *history*
+  // record and does not need request counts, so a ledger with none must not
+  // suppress it.
+  if (WEEKLY) weeklyReport(samples, ledger, startMs, nowMs, sinceMs);
+
   const models = [...new Set(usable.flatMap((i) => Object.keys(i.tok)))].sort();
   if (models.length === 0) {
     // Empty pre-upgrade ticks pass the count check trivially — no spend is no

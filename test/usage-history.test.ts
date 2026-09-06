@@ -49,6 +49,16 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const s = (t: number, utilization: number, resetsAt: string | null = R1): UsageSample =>
   ({ t, utilization, resetsAt });
 
+/** The weekly window's two stamps, a nominal week apart. */
+const W1 = '2026-08-31T07:59:59.840279+00:00';
+const W2 = '2026-09-07T07:59:59.840279+00:00';
+
+/** A widened sample: the same 5-hour reading, plus a weekly one. */
+const sw = (
+  t: number, utilization: number, weekUtil: number,
+  weekResets: string | null = W1, resetsAt: string | null = R1
+): UsageSample => ({ t, utilization, resetsAt, week: { utilization: weekUtil, resetsAt: weekResets } });
+
 export function run(): number {
   console.log('\n=== usage-history.ts ===\n');
   let p = 0, f = 0;
@@ -461,6 +471,74 @@ export function run(): number {
     assert.strictEqual(shouldWrite(s(0, 40), s(HEARTBEAT_MS + MIN, 40)), true);
   })) p++; else f++;
 
+  // ── the weekly axis of the record (task-21) ──
+
+  if (test('shouldWrite: a weekly tick writes even when the 5h reading is still', () => {
+    // Without this the tick is only captured at the 15-minute heartbeat, and the
+    // interval it lands in is scoped to whatever that heartbeat bracketed.
+    assert.strictEqual(shouldWrite(sw(0, 40, 20), sw(MIN, 40, 21)), true);
+  })) p++; else f++;
+
+  if (test('shouldWrite: a weekly window change writes at an unchanged utilization', () => {
+    // Otherwise a weekly reset lands up to 15 minutes late and the interval
+    // straddling it is mis-scoped.
+    assert.strictEqual(shouldWrite(sw(0, 40, 20, W1), sw(MIN, 40, 20, W2)), true);
+  })) p++; else f++;
+
+  if (test('shouldWrite: both axes unchanged inside the heartbeat still does not write', () => {
+    assert.strictEqual(shouldWrite(sw(0, 40, 20), sw(MIN, 40, 20)), false);
+  })) p++; else f++;
+
+  if (test('shouldWrite: the pre-widening behaviour is untouched (the mirror)', () => {
+    // A 5h change with no weekly reading on either sample must still write, or
+    // the widening changed how the old record is written.
+    assert.strictEqual(shouldWrite(s(0, 40), s(MIN, 41)), true);
+    assert.strictEqual(shouldWrite(s(0, 40), s(MIN, 40)), false);
+  })) p++; else f++;
+
+  if (test('shouldWrite: the first line to carry a weekly reading is new information', () => {
+    assert.strictEqual(shouldWrite(s(0, 40), sw(MIN, 40, 20)), true);
+  })) p++; else f++;
+
+  if (test('pre-widening lines read back with week undefined, none skipped', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'oldlines-'));
+    fs.writeFileSync(path.join(dir, HISTORY_FILE),
+      [1000, 2000, 3000].map((t) => JSON.stringify(s(t, 10))).join('\n') + '\n');
+    const back = readRecentSamples(dir);
+    assert.strictEqual(back.length, 3, 'a legitimately weekly-less line is not corrupt');
+    for (const sample of back) assert.strictEqual(sample.week, undefined);
+  })) p++; else f++;
+
+  if (test('a mixed file reads back in order with the right lines carrying week', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'mixed-'));
+    fs.writeFileSync(path.join(dir, HISTORY_FILE), [
+      JSON.stringify(s(1000, 10)),
+      JSON.stringify(sw(2000, 11, 20)),
+      JSON.stringify(s(3000, 12)),
+      JSON.stringify(sw(4000, 13, 21, W2))
+    ].join('\n') + '\n');
+    const back = readRecentSamples(dir);
+    assert.deepStrictEqual(back.map((x) => x.t), [1000, 2000, 3000, 4000]);
+    assert.strictEqual(back[0].week, undefined);
+    assert.deepStrictEqual(back[1].week, { utilization: 20, resetsAt: W1 });
+    assert.strictEqual(back[2].week, undefined);
+    assert.deepStrictEqual(back[3].week, { utilization: 21, resetsAt: W2 });
+  })) p++; else f++;
+
+  if (test('a malformed week field is absent, not a thrown parse', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'badweek-'));
+    fs.writeFileSync(path.join(dir, HISTORY_FILE), [
+      '{"t":1000,"utilization":10,"resetsAt":null,"week":"nonsense"}',
+      '{"t":2000,"utilization":11,"resetsAt":null,"week":{"resetsAt":"' + W1 + '"}}',
+      JSON.stringify(sw(3000, 12, 20))
+    ].join('\n') + '\n');
+    const back = readRecentSamples(dir);
+    assert.strictEqual(back.length, 3, 'a bad week must not cost the whole line');
+    assert.strictEqual(back[0].week, undefined);
+    assert.strictEqual(back[1].week, undefined, 'a week with no utilization is no week');
+    assert.deepStrictEqual(back[2].week, { utilization: 20, resetsAt: W1 });
+  })) p++; else f++;
+
   if (test('append then read round-trips samples in order', () => {
     const dir = fs.mkdtempSync(path.join(tmp, 'rt-'));
     appendSample(s(1000, 10), dir);
@@ -562,6 +640,27 @@ export function run(): number {
     const before = fs.statSync(path.join(dir, HISTORY_FILE)).size;
     rotateIfNeeded(dir);
     assert.strictEqual(fs.statSync(path.join(dir, HISTORY_FILE)).size, before);
+  })) p++; else f++;
+
+  if (test('MUTATION GUARD: rotation preserves the weekly field on every line', () => {
+    // `rotateIfNeeded` rewrites the file as `readRecentSamples(...).map(JSON.stringify)`,
+    // so anything `parseSample` drops is destroyed at the next rotation — weeks
+    // of weekly series gone, no error. Remove `week` from `parseSample`'s output
+    // and this test must fail; a round trip that passes without it proves nothing.
+    const dir = fs.mkdtempSync(path.join(tmp, 'rotweek-'));
+    const file = path.join(dir, HISTORY_FILE);
+    const line = JSON.stringify(sw(1, 1, 20)) + '\n';
+    fs.writeFileSync(file, line.repeat(Math.ceil(ROT_CAP / line.length) + 10));
+    fs.appendFileSync(file, JSON.stringify(sw(999_999, 77, 21, W2)) + '\n');
+    rotateIfNeeded(dir, ROT_CAP);
+    assert.ok(fs.statSync(file).size < ROT_CAP, 'still oversized after rotation');
+    const back = readRecentSamples(dir);
+    for (const sample of back) {
+      assert.notStrictEqual(sample.week, undefined, 'a surviving line lost its weekly reading');
+    }
+    const newest = back[back.length - 1];
+    assert.strictEqual(newest.t, 999_999, 'newest line lost in rotation');
+    assert.deepStrictEqual(newest.week, { utilization: 21, resetsAt: W2 });
   })) p++; else f++;
 
   if (test('the profile survives rotation of the raw log', () => {

@@ -2,7 +2,7 @@ import type { ModelRateRow } from '../../../../shared/types';
 import { useUsageRates } from '../../hooks/useUsageRates';
 import {
   baselineText, coverageClauses, evidenceText, fittedAsideText, formatDeviation,
-  formatSharePct, formatTok, pricedPillText, rawAsideText, verdictText
+  formatSharePct, formatTok, pricedPillText, rawAsideText, verdictText, weeklyAsideText
 } from '../../lib/usageRatesFormat';
 
 /**
@@ -43,6 +43,11 @@ function Row({ row }: { row: ModelRateRow }) {
   const baseline = baselineText(row.baselineWeightedPerPct, row.baselineDays);
   const rawAside = rawAsideText(row.rawPerPct);
   const fittedAside = fittedAsideText(row.fittedWeightedPerPct, row.fitDeviationPct);
+  // A fourth aside, under the fitted one. It owns no threshold and makes no
+  // comparison to the 5-hour rate above it — see `weeklyAsideText`.
+  const weeklyAside = weeklyAsideText(
+    row.weekly.weightedPerPct, row.weekly.fittedWeightedPerPct
+  );
 
   return (
     <li className="rates-row">
@@ -62,6 +67,7 @@ function Row({ row }: { row: ModelRateRow }) {
       </div>
       {rawAside !== null && <div className="rates-raw">{rawAside}</div>}
       {fittedAside !== null && <div className="rates-raw">{fittedAside}</div>}
+      {weeklyAside !== null && <div className="rates-raw">{weeklyAside}</div>}
       <div className="rates-meta">
         {baseline} · {evidenceText(row.intervals, row.days, row.utilSum)}
       </div>
@@ -76,6 +82,18 @@ export function UsageRates() {
   if (loading) return <div className="up-note">fitting the token rates…</div>;
   if (error || !rates) return <div className="up-note">The token rates could not be read.</div>;
 
+  // The note stays up until a weekly figure actually appears, not merely until
+  // the first widened line is written. Measured live on 2026-09-06: the record
+  // carried a weekly reading within 90 seconds of the recorder starting, while
+  // every weekly slot stayed empty for the rest of the day — so gating on
+  // `weeklyRecorded` alone would have shown the note for one tick and then left
+  // the card looking broken, which is the state it exists to explain.
+  // `weeklyRecorded` still chooses *which* sentence, because "the record
+  // predates the widening" and "the counter has not moved" are what that field
+  // is for.
+  const anyWeekly = rates.models.some(
+    row => row.weekly.weightedPerPct !== null || row.weekly.fittedWeightedPerPct !== null
+  );
   const share = formatSharePct(rates.externalSharePct);
   const priced = pricedPillText(rates.coverage);
   const clauses = coverageClauses(rates.coverage);
@@ -100,6 +118,11 @@ export function UsageRates() {
             figure a model used purely as a subagent ever gets, but it is{' '}
             <b>no more comparable across models</b> than the headline, it has no
             baseline history yet, and drift is still judged on the headline alone.
+            The <em>weekly limit</em> line prices a point of the <b>weekly</b>
+            {' '}window instead — a different, much larger quantity, and the one that
+            actually constrains a week of work. It carries <b>no drift verdict</b>,
+            because no day-to-day dispersion has been measured for it yet, and it is
+            no more comparable across models than the others.
           </p>
         </div>
       </div>
@@ -118,6 +141,18 @@ export function UsageRates() {
           the tokens in ten recorded windows, or once ten windows of shared use are
           enough to tell its cost apart from the models beside it — until then every
           interval is still being collected.
+        </div>
+      )}
+
+      {rates.recording && !anyWeekly && (
+        <div className="up-note">
+          {rates.weeklyRecorded
+            ? <>The <b>weekly</b> series is recording, but the weekly counter has not
+              ticked enough inside a recorded window to price a point of it yet.</>
+            : <>The <b>weekly</b> series only began recording with this build, so no line
+              of the record carries a weekly reading yet.</>}
+          {' '}The weekly line fills as the counter ticks — roughly 10–30 points a day on
+          recent use, so a first weekly rate within about a day.
         </div>
       )}
 
