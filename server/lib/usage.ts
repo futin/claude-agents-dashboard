@@ -334,10 +334,21 @@ function refreshNow(force = false): Promise<void> {
       if (getSettings().recordUsageHistory) {
         try {
           if (limits && limits.fiveHour.utilization != null) {
+            // The weekly reading rides along on the same line — one log, one
+            // rotation policy, no join between two files written on different
+            // grids. Omitted entirely when the endpoint reported no weekly
+            // utilization: a window it did not report is not a window at 0%.
+            const week = limits.sevenDay.utilization != null
+              ? {
+                  utilization: limits.sevenDay.utilization,
+                  resetsAt: limits.sevenDay.resetsAt
+                }
+              : undefined;
             recordTick({
               t: Date.now(),
               utilization: limits.fiveHour.utilization,
-              resetsAt: limits.fiveHour.resetsAt
+              resetsAt: limits.fiveHour.resetsAt,
+              ...(week ? { week } : {})
             });
           }
           // Beside `recordTick`, not inside it: the ledger measures what this

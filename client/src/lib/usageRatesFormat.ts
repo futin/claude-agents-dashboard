@@ -50,6 +50,34 @@ export function fittedAsideText(
   return `${line} · ${formatDeviation(fitDeviationPct)} vs the rate above`;
 }
 
+/**
+ * What a point of the **weekly** limit costs, as a fourth aside — one line,
+ * carrying whichever of the two estimators actually produced a number.
+ *
+ * `null` — not `—` — when neither did, the rule {@link rawAsideText} set: a line
+ * the card omits rather than a dash claiming a measurement nobody made.
+ *
+ * **Naming the week is the whole point.** Every other figure on the row prices
+ * the 5-hour window, and a weekly rate is ~8–14× larger, so a line that did not
+ * say which window it meant would read as a tenfold drift in the 5-hour rate.
+ * It makes **no comparison to the 5-hour rate**: the two are different
+ * quantities, and a ratio between them would read as a conversion factor the
+ * data does not support — the two clean measurements of it disagree by 57%.
+ */
+export function weeklyAsideText(
+  pooledWeightedPerPct: number | null, fittedWeightedPerPct: number | null
+): string | null {
+  const usable = (n: number | null): number | null =>
+    n !== null && Number.isFinite(n) ? n : null;
+  const pooled = usable(pooledWeightedPerPct);
+  const fitted = usable(fittedWeightedPerPct);
+  if (pooled === null && fitted === null) return null;
+  const parts: string[] = [];
+  if (pooled !== null) parts.push(`pooled ${formatTok(pooled)}`);
+  if (fitted !== null) parts.push(`fitted ${formatTok(fitted)}`);
+  return `weekly limit: ${parts.join(' · ')} weighted / 1%`;
+}
+
 /** Signed percent, one decimal. The sign is the point, so it is always shown. */
 export function formatDeviation(pct: number | null): string {
   if (pct === null || !Number.isFinite(pct)) return '—';

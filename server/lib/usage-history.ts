@@ -34,6 +34,15 @@
  * were recording at all, so a month of server downtime ages nothing while a
  * month of ordinary use with that hour idle ages it at the normal half-life.
  *
+ * **A sample also carries the weekly window, and profile learning must never
+ * read it.** `UsageSample.week` exists only so `usage-rate.ts` can price a point
+ * of the weekly limit; the 5-hour window stays the sole sensor the duty-cycle
+ * profile is learned from, because it is the one that moves in ~10%/h steps
+ * where the weekly crawls in ~1% ones. `classifyInterval`, `provableIdleSpan`,
+ * `accumulate`, `foldBucket` and the classifier ring read `utilization` and
+ * `resetsAt` and nothing else — a diff that has any of them touch `week` is
+ * scope that slipped, not a feature.
+ *
  * See `docs/subsystems/usage-limits.md`.
  */
 
@@ -104,6 +113,19 @@ export interface UsageSample {
   utilization: number;
   /** The window's reset time; a change means a different window. */
   resetsAt: string | null;
+  /**
+   * The **weekly** window at the same instant, when the endpoint reported one.
+   *
+   * **Optional, not nullable, and the distinction is the whole version marker.**
+   * Every line written before this field existed carries no weekly reading at
+   * all, and `undefined` says exactly that where a `null` utilization would
+   * claim a measured zero. A window the endpoint did not report is likewise
+   * absent rather than a window at 0%. Nothing else is needed to tell the two
+   * generations of line apart, which is why there is no `v:` key.
+   *
+   * Read by `usage-rate.ts`'s weekly joiner only — see the module header.
+   */
+  week?: { utilization: number; resetsAt: string | null };
 }
 
 /** One hour-of-week bucket. Indexed 0–167, 0 = Sunday 00:00 local. */
@@ -414,7 +436,33 @@ function profilePath(dir?: string): string {
 }
 
 /**
- * Write-on-change plus a heartbeat.
+ * Movement below this is rounding, on either axis. Matches `IDLE_EPS` in
+ * `usage-rate.ts`, so a sample this file thought unchanged is never fitted on.
+ */
+const WRITE_EPSILON = 0.01;
+
+/**
+ * Did the weekly reading say anything new?
+ *
+ * Both axes matter and for different reasons. Without the utilization test a
+ * weekly tick during a 5-hour-flat stretch is only captured at the 15-minute
+ * heartbeat, and the interval it lands in is scoped to whatever the heartbeat
+ * happened to bracket. Without the window test a weekly reset lands up to 15
+ * minutes late, and the interval straddling it is mis-scoped the same way.
+ *
+ * Appearing or disappearing counts as a change: the first line that carries a
+ * weekly reading is new information, and a window that stopped being reported
+ * is too. In practice neither fires often — the weekly counter rarely moves
+ * while the 5-hour one is still — so this adds almost no lines.
+ */
+function weeklyMoved(prev: UsageSample['week'], next: UsageSample['week']): boolean {
+  if (prev === undefined || next === undefined) return prev !== next;
+  if (Math.abs(next.utilization - prev.utilization) > WRITE_EPSILON) return true;
+  return !sameWindow(prev.resetsAt, next.resetsAt);
+}
+
+/**
+ * Write-on-change plus a heartbeat, on **both** windows.
  *
  * Per-minute density would buy the profile nothing — the gap rule already reads
  * sparse records correctly — and the heartbeat doubles as the liveness marker
@@ -426,8 +474,9 @@ export function shouldWrite(
   heartbeatMs: number = HEARTBEAT_MS
 ): boolean {
   if (prev === null) return true;
-  if (Math.abs(next.utilization - prev.utilization) > 0.01) return true;
+  if (Math.abs(next.utilization - prev.utilization) > WRITE_EPSILON) return true;
   if (!sameWindow(prev.resetsAt, next.resetsAt)) return true;
+  if (weeklyMoved(prev.week, next.week)) return true;
   return next.t - prev.t >= heartbeatMs;
 }
 
@@ -441,16 +490,45 @@ export function appendSample(sample: UsageSample, dir?: string): void {
   }
 }
 
-/** Parse one log line, or null when it isn't a usable sample. */
+/**
+ * The weekly half of one log line, or undefined when the line has none.
+ *
+ * Defensive exactly as `resetsAt` is: present and well-shaped is kept, anything
+ * else is *absent* rather than a thrown parse — a pre-widening line is a valid
+ * line that simply predates the field, not a corrupt one.
+ */
+function parseWeek(raw: unknown): UsageSample['week'] {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const week = raw as Record<string, unknown>;
+  if (typeof week.utilization !== 'number' || !Number.isFinite(week.utilization)) return undefined;
+  return {
+    utilization: week.utilization,
+    resetsAt: typeof week.resetsAt === 'string' ? week.resetsAt : null
+  };
+}
+
+/**
+ * Parse one log line, or null when it isn't a usable sample.
+ *
+ * **Whatever this drops, `rotateIfNeeded` destroys.** Rotation rewrites the file
+ * as `readRecentSamples(...).map(JSON.stringify)`, so a field parsed away here
+ * is silently gone from every surviving line at the next rotation, with no
+ * error and no way back. The round trip is pinned by a test for that reason.
+ */
 function parseSample(line: string): UsageSample | null {
   try {
     const raw = JSON.parse(line) as Record<string, unknown>;
     if (typeof raw?.t !== 'number' || typeof raw?.utilization !== 'number') return null;
-    return {
+    const sample: UsageSample = {
       t: raw.t,
       utilization: raw.utilization,
       resetsAt: typeof raw.resetsAt === 'string' ? raw.resetsAt : null
     };
+    // Set only when it is really there: an own `week: undefined` key is not the
+    // same object as one without the key, and the tests compare whole samples.
+    const week = parseWeek(raw.week);
+    if (week !== undefined) sample.week = week;
+    return sample;
   } catch {
     return null;
   }

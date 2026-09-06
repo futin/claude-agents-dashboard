@@ -28,6 +28,28 @@ export const IDLE_EPS = 0.01;
 /** A percent is ~a million weighted tokens, so a rise backed by less was another device. */
 export const EXTERNAL_WEIGHTED_MAX = 5_000;
 
+/**
+ * The same threshold for a point of the **weekly** window. **Provisional.**
+ *
+ * Derived by holding the proportion the 5-hour constant already has:
+ * {@link EXTERNAL_WEIGHTED_MAX} is 5 000 against this machine's measured 0.192 M
+ * weighted per 5-hour point, i.e. 2.6% of a point's worth, and 2.6% of 1.78 M is
+ * ~46 000 — rounded to 45 000.
+ *
+ * 1.78 M is the **lower** of the two clean weekly estimates measured on
+ * 2026-09-06 (the bracket was 1.8 M–2.8 M weighted per weekly point), and the
+ * lower one on purpose: too high a threshold discards real intervals as another
+ * device's spend, and refusing real data is the more expensive error here
+ * because weekly points are scarce.
+ *
+ * That bracket comes from a week in which Anthropic reset the weekly counter
+ * **twice** off-cadence (2026-09-01 and 2026-09-04), so it is not a settled
+ * figure. Re-derive this constant from the first normal week of recorded weekly
+ * data — and if that week is abnormal too, leave it provisional rather than
+ * re-deriving from a second bad one.
+ */
+export const EXTERNAL_WEIGHTED_MAX_WEEKLY = 45_000;
+
 /** Below this the recorder missed minutes we would otherwise price — the interval is unpriced. */
 export const LEDGER_COVERAGE_MIN = 0.8;
 
@@ -174,11 +196,19 @@ function classify(
   coveredMs: number,
   durationMs: number,
   toT: number,
-  ledgerStartMs: number | null
+  ledgerStartMs: number | null,
+  /**
+   * What a point of *this* window is worth, roughly — the floor under which a
+   * rise was somebody else's device. Defaulted so `joinIntervals` is
+   * behaviourally untouched; the weekly join passes
+   * {@link EXTERNAL_WEIGHTED_MAX_WEEKLY}, which is ~9× larger because a weekly
+   * point is worth ~9× a 5-hour one.
+   */
+  externalMax: number = EXTERNAL_WEIGHTED_MAX
 ): IntervalKind {
   if (coveredMs / durationMs >= LEDGER_COVERAGE_MIN) {
     if (dUtil <= IDLE_EPS) return 'idle';
-    if (totalWeighted(tok) < EXTERNAL_WEIGHTED_MAX) return 'external';
+    if (totalWeighted(tok) < externalMax) return 'external';
     const model = dominantModel(tok);
     return model === null ? 'mixed' : { model };
   }
@@ -217,6 +247,101 @@ export function joinIntervals(
       fromT: from.t, toT: to.t, dUtil, tok, req, reqUsable,
       kind: classify(dUtil, tok, coveredMs, durationMs, to.t, ledgerStartMs)
     });
+  }
+  return out;
+}
+
+/**
+ * The same join over the **weekly** window, paired **tick to tick** — and that
+ * pairing is the whole of this function's reason to exist.
+ *
+ * The history log writes a line whenever the *5-hour* counter moves: about one
+ * line per 7 minutes overall, one per ~3 minutes during active work. Several
+ * such lines land between two weekly ticks, so pairing consecutive samples the
+ * way {@link joinIntervals} does hands almost every tick's tokens to intervals
+ * with `dUtil = 0` — classified `idle`, excluded from the pool — and leaves the
+ * one ticking interval holding a fraction of them. **Measured** by replaying
+ * this machine's real logs with a synthetic weekly series at 8 / 10 / 14
+ * five-hour points per weekly point: consecutive pairing yields 0.265 / 0.241 /
+ * 0.296 M weighted per point where tick-to-tick pairing over identical input
+ * yields 1.726 / 2.153 / 3.092 M. The published rate reads **6.5× to 10.4× too
+ * low**.
+ *
+ * **No evidence floor can catch that.** Both pairings produce the same number of
+ * owned intervals and the same cumulative points; only the token numerator
+ * differs, so every counter the card shows as evidence looks healthy while the
+ * rate is an order of magnitude wrong. Hence the pairing, rather than a floor.
+ *
+ * Four rules on the walk, each load-bearing:
+ *
+ * - A sample with no `week` is **skipped**: it carries no weekly reading, so it
+ *   can neither open, close nor split a run. Every line written before the
+ *   record was widened is such a sample.
+ * - A weekly **window change** closes the run without emitting — utilization is
+ *   cumulative only *within* one window — exactly as `joinIntervals` does on the
+ *   5-hour stamp, and via the same {@link sameWindow} slack.
+ * - A weekly utilization **drop** closes the run without emitting too, whether
+ *   or not the stamp moved. Not defensive coding: this account saw the counter
+ *   zeroed mid-window twice in one week (85% → 0 on 2026-09-04). If Anthropic
+ *   republishes `resetsAt` with the reset, `sameWindow` catches it; if it zeroes
+ *   the counter and leaves the stamp alone, only this rule does. Discarded and
+ *   never clamped — a clamped interval contributes tokens with no price, and a
+ *   negative one would poison the pooled sum.
+ * - The trailing partial run — tokens spent since the last tick, with no tick
+ *   yet — is not emitted. That is censoring, not bias: one interval per window.
+ *
+ * Returns the **same** `Interval` shape, so every downstream estimator — `pool`,
+ * `rateFor`, `explainRates`, `coverageBreakdown`, `externalShare` — is reused
+ * unchanged. Edge-tick pro-rating inside {@link gather} is a *smaller* relative
+ * approximation here than at 5-hour grain: two ~88-second ledger ticks against
+ * an interval of an hour or more.
+ */
+export function joinWeeklyIntervals(
+  samples: UsageSample[], ledger: LedgerLine[], ledgerStartMs: number | null = null
+): Interval[] {
+  const out: Interval[] = [];
+  /** The sample the current run opened at — the last one that *changed* the weekly reading. */
+  let held: UsageSample | null = null;
+  let heldWeek: NonNullable<UsageSample['week']> | null = null;
+
+  for (const sample of samples) {
+    const week = sample.week;
+    if (week === undefined) continue;
+    if (held === null || heldWeek === null) {
+      held = sample;
+      heldWeek = week;
+      continue;
+    }
+    if (!sameWindow(heldWeek.resetsAt, week.resetsAt)) {
+      held = sample;
+      heldWeek = week;
+      continue;
+    }
+    const dUtil = week.utilization - heldWeek.utilization;
+    if (dUtil < -IDLE_EPS) { // the mid-window reset
+      held = sample;
+      heldWeek = week;
+      continue;
+    }
+    // Still inside one tick: the run continues, and its anchor does not move —
+    // that is what collapses a run of flat samples into the interval that ends
+    // at the tick, carrying all of the tokens spent across them.
+    if (dUtil <= IDLE_EPS) continue;
+    const durationMs = sample.t - held.t;
+    // Out of order: upstream is wrong. Skip it rather than anchoring the run to
+    // an earlier instant than the one it already holds.
+    if (durationMs <= 0) continue;
+
+    const { tok, req, reqUsable, coveredMs } = gather(ledger, held.t, sample.t);
+    out.push({
+      fromT: held.t, toT: sample.t, dUtil, tok, req, reqUsable,
+      kind: classify(
+        dUtil, tok, coveredMs, durationMs, sample.t, ledgerStartMs,
+        EXTERNAL_WEIGHTED_MAX_WEEKLY
+      )
+    });
+    held = sample;
+    heldWeek = week;
   }
   return out;
 }
@@ -264,6 +389,27 @@ export interface RateFloors {
  */
 export const BASELINE_FLOORS: RateFloors = { minIntervals: 30, minUtil: 15, minDays: 7 };
 export const CURRENT_FLOORS: RateFloors = { minIntervals: 10, minUtil: 5, minDays: 2 };
+
+/**
+ * What a **weekly** rate needs — {@link CURRENT_FLOORS} with exactly one
+ * deliberate change, and the 5-hour values are not simply reused.
+ *
+ * `minUtil` is 5 → **10**. Quantization is not what forces it: the pooled ratio
+ * is `Σtokens / Σ dUtil`, and inside one window instance the ~1-point rounding
+ * in `Σ dUtil` telescopes to `u_end − u_start`, a total error of ≤ 1 point
+ * however many intervals it spans. 10 points bounds that at ≤ 10% and is
+ * ~18–28 M weighted tokens on the measured bracket — a real measurement rather
+ * than a rounding artefact.
+ *
+ * `minDays` stays 2 and **must never exceed the fit window's span in days**
+ * ({@link CURRENT_MS}, 3): a floor that cannot be met is a column that never
+ * fills. The weekly fit deliberately runs over the same 3-day
+ * {@link currentRange} the 5-hour column reports — this card refuses to put two
+ * figures spanning different windows side by side, and 3 days carries ample
+ * weekly evidence (40–85 points on recent use; ~42 even at the ~14 points/day a
+ * 7-day window capped at 100% allows).
+ */
+export const WEEKLY_FLOORS: RateFloors = { minIntervals: 10, minUtil: 10, minDays: 2 };
 
 /** One fitted rate, with the evidence it rests on. */
 export interface ModelRate {
@@ -328,7 +474,7 @@ function ownedBy(interval: Interval, model: string, sinceMs: number, untilMs: nu
 }
 
 /** The pooled ratio and its evidence, floors not applied. */
-function pool(intervals: Interval[], model: string, sinceMs: number, untilMs: number): ModelRate | null {
+export function poolRate(intervals: Interval[], model: string, sinceMs: number, untilMs: number): ModelRate | null {
   let weighted = 0, raw = 0, utilSum = 0, count = 0;
   // Distinct UTC dates rather than `max(toT) − min(toT)`: a span is cleared by
   // two clusters at either end of the window with nothing in between, which is
@@ -361,7 +507,7 @@ function pool(intervals: Interval[], model: string, sinceMs: number, untilMs: nu
 export function rateFor(
   intervals: Interval[], model: string, sinceMs: number, untilMs: number, floors: RateFloors
 ): ModelRate | null {
-  const fitted = pool(intervals, model, sinceMs, untilMs);
+  const fitted = poolRate(intervals, model, sinceMs, untilMs);
   if (fitted === null) return null;
   if (fitted.intervals < floors.minIntervals) return null;
   if (fitted.utilSum < floors.minUtil) return null;
@@ -390,10 +536,10 @@ export function driftRow(intervals: Interval[], model: string, nowMs: number): D
 
   const baseline = rateFor(intervals, model, base.sinceMs, base.untilMs, BASELINE_FLOORS);
   const current = rateFor(intervals, model, cur.sinceMs, cur.untilMs, CURRENT_FLOORS);
-  const evidence = pool(intervals, model, cur.sinceMs, cur.untilMs);
+  const evidence = poolRate(intervals, model, cur.sinceMs, cur.untilMs);
   // The baseline's own evidence has to survive its refusal exactly as the
   // current window's already does, or the card can say it went quiet but not why.
-  const baselineEvidence = pool(intervals, model, base.sinceMs, base.untilMs);
+  const baselineEvidence = poolRate(intervals, model, base.sinceMs, base.untilMs);
 
   const row: DriftRow = {
     model,
@@ -1036,7 +1182,15 @@ function usableForRate(interval: Interval): boolean {
  * card publishes is `1M / coefficient`, so a clamped zero would not read as
  * "these tokens are free" but as an infinite price.
  */
-export function explainRates(intervals: Interval[], sinceMs: number, untilMs: number): RateDiagnostic[] {
+export function explainRates(
+  intervals: Interval[], sinceMs: number, untilMs: number,
+  /**
+   * A parameter rather than the hardcoded {@link CURRENT_FLOORS} it used to
+   * read, so the weekly fit can pass {@link WEEKLY_FLOORS}. Defaulted, so every
+   * existing caller is behaviourally unchanged.
+   */
+  floors: RateFloors = CURRENT_FLOORS
+): RateDiagnostic[] {
   const rows = intervals.filter(
     (interval) => interval.toT >= sinceMs && interval.toT < untilMs && usableForRate(interval)
   );
@@ -1096,9 +1250,9 @@ export function explainRates(intervals: Interval[], sinceMs: number, untilMs: nu
     const perMTok = coef.get(m);
     if (perMTok !== undefined) diagnostic.raw = perMTok;
     if (
-      diagnostic.intervals < CURRENT_FLOORS.minIntervals
-      || diagnostic.utilSum < CURRENT_FLOORS.minUtil
-      || diagnostic.days < CURRENT_FLOORS.minDays
+      diagnostic.intervals < floors.minIntervals
+      || diagnostic.utilSum < floors.minUtil
+      || diagnostic.days < floors.minDays
     ) {
       diagnostic.refusal = 'thin-evidence';
       continue;
@@ -1124,9 +1278,12 @@ export function explainRates(intervals: Interval[], sinceMs: number, untilMs: nu
 }
 
 /** Just the models whose fitted rate is worth reporting — see {@link explainRates}. */
-export function fitRates(intervals: Interval[], sinceMs: number, untilMs: number): Map<string, RateFit> {
+export function fitRates(
+  intervals: Interval[], sinceMs: number, untilMs: number,
+  floors: RateFloors = CURRENT_FLOORS
+): Map<string, RateFit> {
   const out = new Map<string, RateFit>();
-  for (const diagnostic of explainRates(intervals, sinceMs, untilMs)) {
+  for (const diagnostic of explainRates(intervals, sinceMs, untilMs, floors)) {
     if (diagnostic.fit !== null) out.set(diagnostic.model, diagnostic.fit);
   }
   return out;

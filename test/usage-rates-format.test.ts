@@ -12,7 +12,8 @@ import {
   formatTok,
   pricedPillText,
   rawAsideText,
-  verdictText
+  verdictText,
+  weeklyAsideText
 } from '../client/src/lib/usageRatesFormat.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -122,6 +123,39 @@ export function run(): number {
     assert.strictEqual(fittedAsideText(null, null), null);
     assert.strictEqual(fittedAsideText(null, 58.3), null, 'a deviation without a rate is still no line');
     assert.strictEqual(fittedAsideText(Number.NaN, null), null);
+  })) p++; else f++;
+
+  if (test('weeklyAsideText: one line, naming the week, each estimator labelled', () => {
+    // A weekly rate is ~8–14× a 5-hour one, so a line that did not say which
+    // window it priced would read as a tenfold drift in the row above it.
+    assert.strictEqual(
+      weeklyAsideText(2_000_000, null),
+      'weekly limit: pooled 2.0M weighted / 1%'
+    );
+    assert.strictEqual(
+      weeklyAsideText(null, 2_400_000),
+      'weekly limit: fitted 2.4M weighted / 1%'
+    );
+    assert.strictEqual(
+      weeklyAsideText(2_000_000, 2_400_000),
+      'weekly limit: pooled 2.0M · fitted 2.4M weighted / 1%'
+    );
+  })) p++; else f++;
+
+  if (test('weeklyAsideText: no weekly rate is no line, never a dash', () => {
+    assert.strictEqual(weeklyAsideText(null, null), null);
+    assert.strictEqual(weeklyAsideText(Number.NaN, Number.NaN), null);
+    assert.strictEqual(weeklyAsideText(Number.NaN, 2_400_000),
+      'weekly limit: fitted 2.4M weighted / 1%');
+  })) p++; else f++;
+
+  if (test('weeklyAsideText makes no comparison to the 5-hour rate', () => {
+    // The two are different quantities and the two clean measurements of the
+    // ratio between them disagree by 57%, so a conversion factor would be a
+    // claim the data does not carry.
+    const line = weeklyAsideText(2_000_000, 2_400_000)!;
+    assert.ok(!line.includes('vs'), line);
+    assert.ok(!line.includes('%,') && !line.includes('+') && !line.includes('×'), line);
   })) p++; else f++;
 
   if (test('fittedAsideText owns no threshold: a huge gap renders like a small one', () => {

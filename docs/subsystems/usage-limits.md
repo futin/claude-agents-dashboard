@@ -150,6 +150,22 @@ document the weekly reset mechanism and community reports conflict (some observe
 `projectedExhaustAt` to `resetsAt` — but the weekly strip's *position* would be wrong if
 the window isn't 7 days. The 5h window is the verified one.
 
+**Those conflicting reports now have a first-hand observation on this account.**
+2026-09-06, user-reported: Anthropic reset the weekly counter **twice inside one nominal
+week** — Tuesday 2026-09-01 from ~50% to 0, and Friday 2026-09-04 from ~85% to 0 — and the
+account consumed **over 200%** of a nominal week's allowance as a result. The live window
+at 2026-09-06T09:03Z stood at 44% with a published `resetsAt` of
+`2026-09-07T07:59:59.840279+00:00`, a Monday. Read as boundaries at 07:59:59Z on 09-01 /
+09-04 / 09-07 that is a **72-hour** cadence, exactly what the community reports claim. The
+window does **not slide** — the stamp was not `now + 7 d` — it steps, just not always on
+the cadence its name implies. `scripts/probe-usage-split.ts --weekly` prints every
+boundary the record saw and the gap between them, which is how to settle this from
+recorded data rather than by report.
+
+A third dependency on the assumption was **considered and deliberately not added**: the
+weekly token rate below reads only the *stamp*, never a length. See *The weekly window:
+what a point of the week costs*.
+
 A **second** thing now depends on that assumption: the duty-cycle walk's horizon. It steps
 from now to `resetsAt`, so if the weekly window is not 7 days the walk covers the wrong
 span — too few hours (an over-pessimistic projection) or too many (an over-optimistic
@@ -917,6 +933,135 @@ rate was also considered and rejected: this file answers ill-conditioning by
 refusing, and a prior would make the fitted number partly an echo of the pooled
 number it exists to check independently.
 
+### The weekly window: what a point of the *week* costs
+
+The 5-hour rate is not the number that constrains a week of work. Until
+`task-21` there was nothing to fit a weekly one from: `.usage-history.jsonl`
+carried `{t, utilization, resetsAt}` for the **5-hour** window only, because
+that window is the sensor the duty-cycle profile learns from, and `usage.ts`
+dropped `limits.sevenDay` on the floor. Widening the record — not the fitting —
+was the prerequisite.
+
+**One log, one optional field.** `UsageSample` gained an optional
+`week?: { utilization, resetsAt }`, written on the same line by the same
+recorder. A second file would need a second rotation policy, a second write path
+and a join by time between two files written on different grids. The field is
+**optional, not nullable**: a line that lacks it is legitimately weekly-less
+rather than corrupt, so its absence *is* the version marker and no `v:` key is
+needed. A window the endpoint did not report is omitted for the same reason — it
+is not a window at 0%.
+
+`shouldWrite` now fires on either axis: a weekly utilization move past the same
+0.01 epsilon, **or** a weekly window change. Without the first, a weekly tick
+during a 5-hour-flat stretch is only captured at the 15-minute heartbeat and the
+interval it lands in is scoped to whatever that heartbeat bracketed; without the
+second, a weekly reset lands up to 15 minutes late. In practice this adds almost
+no lines. `rotateIfNeeded` is the trap the round trip is pinned against: it
+rewrites the file as `readRecentSamples(...).map(JSON.stringify)`, so anything
+`parseSample` drops is destroyed at the next rotation, silently and for good.
+
+**Profile learning stays 5-hour-only.** `classifyInterval`, `provableIdleSpan`,
+`accumulate`, `foldBucket` and the classifier ring must never read `week`.
+
+#### Tick-to-tick pairing, and the 6.5×–10.4× error it avoids
+
+`joinWeeklyIntervals` pairs **tick to tick**, not sample to sample, and that is
+the whole reason it exists rather than reusing `joinIntervals`. The log writes a
+line whenever the *5-hour* counter moves — about one per 7 minutes overall, one
+per ~3 minutes during active work — so several lines land between two weekly
+ticks. Pairing consecutive samples hands almost every tick's tokens to intervals
+with `dUtil = 0`, which classify `idle` and are excluded from the pool, leaving
+the ticking interval holding a fraction of them.
+
+**Measured, not argued.** Replaying this machine's real logs with a synthetic
+weekly series at K = 8 / 10 / 14 five-hour points per weekly point, consecutive
+pairing yields 0.265 / 0.241 / 0.296 M weighted per point where tick-to-tick
+over identical input yields 1.726 / 2.153 / 3.092 M — the published rate reads
+**6.5× to 10.4× too low**. Tick-to-tick recovers 235–240 M of the span's
+weighted tokens; consecutive pairing captures 22–37 M.
+
+**No evidence floor can catch this.** Both pairings produce the *same* number of
+owned intervals (139 vs 139 at K = 8, 76 vs 73 at K = 14) and the same
+cumulative points; only the token numerator differs. Every counter the card
+shows as evidence would look healthy while the rate was an order of magnitude
+wrong — which is why this is a pairing rule and not a threshold.
+
+The walk's other three rules:
+
+| situation | what happens | why |
+|---|---|---|
+| sample with no `week` | skipped entirely | it carries no weekly reading, so it can neither open, close nor split a run |
+| weekly window change (`sameWindow` false) | run closes, nothing emitted | utilization is cumulative only *within* one window |
+| weekly utilization **drop** | run closes, nothing emitted | the mid-window reset, below. Discarded, never clamped: a clamped interval contributes tokens with no price, and a negative `dUtil` poisons the pooled sum |
+| trailing run with no tick yet | not emitted | censoring, not bias — one interval at the end of the window |
+
+The drop rule is not defensive coding. This account saw the weekly counter
+zeroed **twice inside one nominal week** — 2026-09-01 from ~50% and 2026-09-04
+from ~85% — and consumed over 200% of a nominal week's allowance as a result. If
+Anthropic republishes `resetsAt` with the reset, `sameWindow` catches it; if it
+zeroes the counter and leaves the stamp alone, only the drop rule does.
+
+#### The weekly constants, and what is still provisional
+
+- **`EXTERNAL_WEIGHTED_MAX_WEEKLY = 45_000`** — `classify` takes the threshold
+  as a parameter defaulted to the 5-hour `EXTERNAL_WEIGHTED_MAX`, so
+  `joinIntervals` is behaviourally untouched. 45 000 holds the proportion the
+  5-hour constant already has: 5 000 is 2.6% of this machine's measured 0.192 M
+  weighted per 5-hour point, and 2.6% of 1.78 M is ~46 000. Derived from the
+  **lower** end of the bracket on purpose — too high a threshold discards real
+  intervals as another device's spend, and weekly points are scarce.
+- **`WEEKLY_FLOORS = { minIntervals: 10, minUtil: 10, minDays: 2 }`** — a copy
+  of `CURRENT_FLOORS` with one change, `minUtil` 5 → 10. Quantization is *not*
+  what forces it: over one window instance the ~1-point rounding in `Σ dUtil`
+  telescopes to `u_end − u_start`, a total error of ≤ 1 point however many
+  intervals it spans. 10 points bounds that at ≤ 10% and is ~18–28 M weighted
+  tokens — a measurement rather than a rounding artefact. `minDays` stays 2 and
+  must never exceed the fit window's span in days.
+- **The fit window is `currentRange` — the same 3 days the 5-hour column
+  reports.** No new window constant. This card refuses to put two figures
+  spanning different windows side by side, and 3 days carries ample weekly
+  evidence: 40–85 points on recent use, and ~42 even at the ~14 points/day a
+  7-day window capped at 100% allows.
+- `explainRates` / `fitRates` take the floors as an optional trailing parameter
+  defaulted to `CURRENT_FLOORS`; the weekly fit passes `WEEKLY_FLOORS`.
+
+**The measured bracket, 2026-09-06 — provisional.** Only the two window
+instances fully covered by the ledger are priced:
+
+| window instance | span | weekly pts | weighted tokens | weighted / weekly pt | ratio to a 5h point |
+|---|---|---|---|---|---|
+| Tue 09-01 08:00Z → Fri 09-04 08:00Z | 3.00 d | 85 | 151.51 M | **1.782 M** | 8.2× |
+| Fri 09-04 08:00Z → 09-06 09:15Z | 2.05 d | 44 | 123.16 M | **2.799 M** | 14.4× |
+
+So a weekly point is worth somewhere between **~1.8 M and ~2.8 M** weighted
+tokens, 8× to 14× a 5-hour point, and this week's data cannot narrow it further:
+the two estimates disagree by 57%, under a boundary reading that may itself be
+wrong. Every figure here is provisional and should be re-derived from the first
+normal week of *recorded* weekly data via
+`tsx scripts/probe-usage-split.ts --weekly` — which prints the sample coverage,
+the interval tally, and every window boundary it saw with the wall time between
+consecutive stamps. If that week is abnormal too, say so and leave the constants
+alone rather than re-deriving from a second bad week.
+
+**No third dependency on the weekly window's length was added, deliberately.**
+The rate is weighted tokens per Δutil *inside* one window; the only thing it
+needs from `resetsAt` is whether two samples sit in the same window, which
+`sameWindow` answers by comparing stamps. `grep` for `SEVEN_DAY_MS` in
+`usage-rate.ts` finds nothing, and nothing here may import or define a weekly
+window length — the ⚠️ above already tracks two dependencies on that assumption.
+The worry that a *sliding* window would advance `resetsAt` continuously and
+classify every weekly interval as a reset is settled: at 2026-09-06T09:03Z the
+published stamp was `2026-09-07T07:59:59`, not `now + 7 d`. It steps — just not
+on the cadence the name implies.
+
+**What is deliberately absent:** no weekly drift verdict and no weekly baseline
+(`DRIFT_PCT` was set from a *measured* dispersion of the 5-hour rates; no such
+measurement exists for the weekly series, and a week with two resets in it is
+not the week to measure it in), and no weekly two-term split (a
+one-to-several-hour interval carrying thousands of requests averages the
+request:token variation away, so the design would be rank-deficient and
+`explainRates`' independence gate would refuse it anyway).
+
 ### The endpoint and the card
 
 `GET /api/usage/rates` (`shapeUsageRates` is the pure part) returns one row per
@@ -952,6 +1097,34 @@ On the card the fitted rate is a third line under the raw aside
 dash), and the badge above it is still the pooled rate's verdict. The empty
 state names both routes onto the card, because 90% dominance is no longer the
 only one.
+
+Every row also carries a `weekly` object (`ModelWeeklyRate`), **always present**
+— a thin weekly reading is `thin` verdicts, null rates and zeroed counters, the
+shape this file already uses for the 5-hour fit, not an absent key the card has
+to null-check. A model priced only weekly gets a row on those terms, exactly as
+a fitted-only model does, and still sorts on the **5-hour** `utilSum`, so it
+lands last. Three top-level fields sit beside it: `weeklyCoverage` and
+`weeklyExternalSharePct` over the weekly interval set on the same horizon as
+their 5-hour counterparts, and `weeklyRecorded` — did *any* sample in the read
+window carry a `week` field at all. That last one is what keeps the first
+fortnight honest: it separates "the record predates the widening" from "the
+weekly counter has not moved", two states that would otherwise render
+identically as empty slots. While it is false the card says the weekly series
+began recording with this build and roughly when to expect a first figure.
+
+`weeklyAsideText` renders the weekly figure as a **fourth** aside under the
+fitted line, naming the week explicitly — a weekly rate is 8–14× a 5-hour one,
+so a line that did not say which window it priced would read as a tenfold drift
+in the row above. It makes **no comparison to the 5-hour rate**: the two are
+different quantities, and the two clean measurements of the ratio between them
+disagree by 57%, so a conversion factor would be a claim the data does not
+carry. Expect roughly one `partial` weekly interval per night on a laptop that
+sleeps, and more of them than at 5-hour grain — the intervals are ~10× longer
+and so ~10× more likely to contain a recorder break. `LEDGER_COVERAGE_MIN`
+stays at 0.8 and that is correct, not a false negative: a collapsed weekly
+interval spanning an overnight sleep genuinely has no ledger for most of its
+span, so we cannot know whether another device spent inside it. It is disclosed
+through `weeklyCoverage` rather than hidden by loosening the floor.
 
 `coverage` (`UsageCoverage`) is the disclosure the three unpriced kinds exist
 for: `movedPct` as the denominator, `pricedPct` for what reached a rate, then

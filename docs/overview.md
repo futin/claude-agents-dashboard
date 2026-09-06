@@ -135,14 +135,19 @@ server/
   lib/usage.ts    account 5h/weekly limits from Anthropic (OAuth)
   lib/usage-pace.ts  utilization sample ring → burn rate + projected 100% per window
   lib/usage-forecast.ts  forward walk over hour-of-week weights → projected 100%
-  lib/usage-history.ts  persisted samples → the learned 168-bucket duty-cycle profile
+  lib/usage-history.ts  persisted samples → the learned 168-bucket duty-cycle profile;
+                  each sample also carries an optional `week` reading (weekly
+                  utilization + resetsAt) that profile learning never reads
   lib/usage-ledger.ts  per-minute per-model token ledger: reads new transcript bytes,
                   appends one line a tick (`.usage-ledger.jsonl`) — tokens and
                   request counts per model, counts absent on pre-upgrade lines
   lib/usage-rate.ts  joins history × ledger into classified intervals → tokens per 1%
                   of the 5h window per model, baseline vs trailing, drift verdicts,
                   plus the two-term (tokens + requests) split fit and the one-term
-                  joint fit that prices mixed windows — with the refusals of both
+                  joint fit that prices mixed windows — with the refusals of both;
+                  plus `joinWeeklyIntervals` (tick-to-tick pairing over the
+                  weekly window), `WEEKLY_FLOORS`, `EXTERNAL_WEIGHTED_MAX_WEEKLY`
+                  and the exported `poolRate`
   lib/token-refresh.ts  makes the CLI renew an expired OAuth token (auth status,
                   then one haiku turn) so the bars self-heal
   lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser
@@ -203,7 +208,9 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   the server share — never a second grep),
                   probe-usage-split.ts (`pnpm probe:usage-split`) — runs both
                   joint rate fits against this machine's real logs, gated
-                  exactly as the endpoint gates them,
+                  exactly as the endpoint gates them; `--weekly` adds the weekly
+                  window: sample coverage, every window boundary observed with
+                  the gap between them, the weekly interval tally and rates,
                   check-token-weights.ts (`pnpm check:weights`) — re-measures the
                   cache-write TTL mix behind TYPE_WEIGHTS, exits 1 when it drifts
 ```

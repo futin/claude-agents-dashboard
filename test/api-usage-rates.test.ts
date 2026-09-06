@@ -39,6 +39,8 @@ const T0 = Date.parse('2026-08-29T09:00:00.000Z');
  * interval shorter than the arithmetic alone would suggest.
  */
 const RESETS = ['2026-08-29T13:00:00.000Z', '2026-08-30T13:00:00.000Z'];
+/** One weekly window across every weekly fixture below — none of them spans a reset. */
+const WEEK_RESETS = '2026-09-07T07:59:59.840279+00:00';
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
 
 /** The last sample `fixtureDir` writes — five minutes into its second date. */
@@ -54,17 +56,24 @@ const FIXTURE_END = T0 + DAY + 5 * MIN;
  * on all three counts — five intervals a date, so the ratio is unchanged from
  * when this fixture was ten in a row.
  */
-function fixtureDir(): string {
+function fixtureDir(opts: { stillWeek?: boolean } = {}): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rates-'));
   const samples: string[] = [];
   const ledger: string[] = [];
+  // `stillWeek` adds a weekly reading that never moves — the state that must
+  // not look like a record written before the weekly field existed.
+  const week = opts.stillWeek === true
+    ? { week: { utilization: 20, resetsAt: WEEK_RESETS } }
+    : {};
   let utilization = 10;
   for (let day = 0; day < 2; day++) {
     const base = T0 + day * DAY;
-    samples.push(JSON.stringify({ t: base, utilization, resetsAt: RESETS[day] }));
+    samples.push(JSON.stringify({ t: base, utilization, resetsAt: RESETS[day], ...week }));
     for (let i = 1; i <= 5; i++) {
       utilization += 0.5;
-      samples.push(JSON.stringify({ t: base + i * MIN, utilization, resetsAt: RESETS[day] }));
+      samples.push(JSON.stringify({
+        t: base + i * MIN, utilization, resetsAt: RESETS[day], ...week
+      }));
       ledger.push(JSON.stringify({
         t: base + i * MIN,
         prevT: base + (i - 1) * MIN,
@@ -179,6 +188,79 @@ function fittedOnlyFixtureDir(opts: { rare?: boolean } = {}): string {
       if (rare > 0) tok['sonnet-5'] = mtok(rare);
       ledger.push(JSON.stringify({ t: base + j * MIN, prevT: base + (j - 1) * MIN, tok }));
       i++;
+    }
+  }
+  fs.writeFileSync(path.join(dir, '.usage-history.jsonl'), samples.join('\n') + '\n', 'utf8');
+  fs.writeFileSync(path.join(dir, LEDGER_FILE), ledger.join('\n') + '\n', 'utf8');
+  return dir;
+}
+
+/** Weekly ticks per UTC date in `weeklyOnlyFixtureDir`. */
+const WEEKLY_TICKS = 7;
+/** Where its second date's block starts — 21:00Z, twelve hours after `T0`. */
+const WEEKLY_BLOCK_OFFSET = 12 * 60 * MIN;
+/** The last sample it writes. */
+const WEEKLY_END = T0 + DAY + WEEKLY_BLOCK_OFFSET + WEEKLY_TICKS * MIN;
+
+/**
+ * A model priced **only** weekly, beside one priced only at 5-hour grain.
+ *
+ * Two blocks per UTC date that never overlap in time:
+ *
+ * - `opus-5` at 09:00Z, on **pre-widening** lines with no weekly reading at all.
+ *   The weekly joiner skips those samples entirely, so its spend falls outside
+ *   every weekly interval and it owns nothing weekly.
+ * - `fable-5` at 21:00Z, on widened lines whose **5-hour** utilization is flat
+ *   while the weekly counter ticks a point a minute. Every 5-hour interval there
+ *   is `idle` — no model owns an interval that did not move — so `fable-5` gets
+ *   no pooled 5-hour rate, no fit (its rows carry zero utilization), and would
+ *   have had no row at all before the weekly set joined the union.
+ *
+ * 13 weekly intervals of 1 point and 100_000 weighted each, over 2 UTC dates:
+ * above `WEEKLY_FLOORS` on all three counts, for a weekly pooled rate of
+ * **100_000 weighted per 1%**. The interval bridging the two dates spans a day
+ * with minutes of ledger behind it, so it lands in `partial` and is priced by
+ * nobody — which is the overnight case the weekly grain sees far more of, and
+ * which is why 13 rather than 14: the second date's first tick is what closes
+ * that bridging interval.
+ */
+function weeklyOnlyFixtureDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rates-weekly-'));
+  const samples: string[] = [];
+  const ledger: string[] = [];
+  let fiveHour = 10;
+  let weekly = 30;
+  for (let day = 0; day < 2; day++) {
+    const base = T0 + day * DAY;
+    // ── 09:00Z: the 5-hour-only model, on pre-widening lines ──
+    samples.push(JSON.stringify({ t: base, utilization: fiveHour, resetsAt: RESETS[day] }));
+    for (let i = 1; i <= 5; i++) {
+      fiveHour += 0.5;
+      samples.push(JSON.stringify({
+        t: base + i * MIN, utilization: fiveHour, resetsAt: RESETS[day]
+      }));
+      ledger.push(JSON.stringify({
+        t: base + i * MIN, prevT: base + (i - 1) * MIN,
+        tok: { 'opus-5': { in: 0, out: 0, cc: 0, cr: 4_500_000 } }
+      }));
+    }
+    // ── 21:00Z: the weekly-only model. The 5-hour reading does not move. ──
+    const wBase = base + WEEKLY_BLOCK_OFFSET;
+    samples.push(JSON.stringify({
+      t: wBase, utilization: fiveHour, resetsAt: RESETS[day],
+      week: { utilization: weekly, resetsAt: WEEK_RESETS }
+    }));
+    for (let i = 1; i <= WEEKLY_TICKS; i++) {
+      weekly += 1;
+      samples.push(JSON.stringify({
+        t: wBase + i * MIN, utilization: fiveHour, resetsAt: RESETS[day],
+        week: { utilization: weekly, resetsAt: WEEK_RESETS }
+      }));
+      ledger.push(JSON.stringify({
+        t: wBase + i * MIN, prevT: wBase + (i - 1) * MIN,
+        // `in` tokens weigh exactly 1, so the weighted total reads off the fixture.
+        tok: { 'fable-5': { in: 100_000, out: 0, cc: 0, cr: 0 } }
+      }));
     }
   }
   fs.writeFileSync(path.join(dir, '.usage-history.jsonl'), samples.join('\n') + '\n', 'utf8');
@@ -517,6 +599,82 @@ export async function run(): Promise<number> {
       assert.strictEqual(body.models[1].weightedPerPct, null, 'one interval is under the floor');
       assert.strictEqual(body.models[1].intervals, 1, 'but the evidence it has is still counted');
       assert.strictEqual(body.models[1].days, 1, 'and so is the single date behind it');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
+
+  // ── the weekly window (task-21) ──
+
+  check(test('weeklyRecorded separates a record that predates the field from a still counter', () => {
+    const old = fixtureDir();
+    const still = fixtureDir({ stillWeek: true });
+    try {
+      const nowMs = FIXTURE_END + MIN;
+      const before = bodyFor(old, nowMs);
+      assert.strictEqual(before.weeklyRecorded, false, 'no line carries a weekly reading');
+      assert.strictEqual(before.weeklyCoverage.movedPct, 0);
+      assert.strictEqual(before.weeklyExternalSharePct, null);
+
+      const flat = bodyFor(still, nowMs);
+      assert.strictEqual(flat.weeklyRecorded, true, 'the readings are there — the counter is still');
+      assert.strictEqual(flat.weeklyCoverage.movedPct, 0, 'a still counter yields no interval');
+      assert.strictEqual(flat.models[0].weekly.verdict, 'thin');
+      assert.strictEqual(flat.models[0].weekly.weightedPerPct, null);
+      // These two states must not look alike in the body: one says "wait for the
+      // counter", the other says "this record predates the widening".
+      assert.notStrictEqual(before.weeklyRecorded, flat.weeklyRecorded);
+    } finally {
+      fs.rmSync(old, { recursive: true, force: true });
+      fs.rmSync(still, { recursive: true, force: true });
+    }
+  }));
+
+  check(test('a model priced only weekly gets a row, and sorts last', () => {
+    const dir = weeklyOnlyFixtureDir();
+    try {
+      const body = bodyFor(dir, WEEKLY_END + MIN);
+      assert.deepStrictEqual(body.models.map(m => m.model), ['opus-5', 'fable-5'],
+        'sorting is on the 5-hour utilSum, so the weekly-only model is last');
+      const row = body.models[1];
+      // Every 5-hour number is honestly absent: it owns no window that moved.
+      assert.strictEqual(row.weightedPerPct, null);
+      assert.strictEqual(row.rawPerPct, null);
+      assert.strictEqual(row.verdict, 'thin');
+      assert.strictEqual(row.fitVerdict, 'thin');
+      assert.strictEqual(row.fittedWeightedPerPct, null);
+      assert.strictEqual(row.intervals, 0);
+      assert.strictEqual(row.utilSum, 0);
+      // And the weekly half is the only thing the card can show for it.
+      assert.strictEqual(row.weekly.verdict, 'fitted');
+      assert.strictEqual(row.weekly.weightedPerPct, 100_000);
+      assert.strictEqual(row.weekly.rawPerPct, 100_000);
+      // One short of `2 * WEEKLY_TICKS`: the second date's first tick is the one
+      // that closes the interval bridging the two blocks, and that interval is
+      // `partial`. The collapse eats it — which is the behaviour, not a loss.
+      assert.strictEqual(row.weekly.intervals, 2 * WEEKLY_TICKS - 1);
+      assert.strictEqual(row.weekly.utilSum, 2 * WEEKLY_TICKS - 1);
+      assert.strictEqual(row.weekly.days, 2);
+      assert.strictEqual(body.weeklyRecorded, true);
+      assert.ok(body.weeklyCoverage.partialPct > 0,
+        'the interval bridging the two dates is the overnight case, priced by nobody');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
+
+  check(test('every row carries a weekly object, thin rather than absent', () => {
+    const dir = fixtureDir();
+    try {
+      const body = bodyFor(dir, FIXTURE_END + MIN);
+      assert.ok(body.models.length > 0);
+      for (const row of body.models) {
+        assert.ok('weekly' in row, `${row.model} has no weekly key at all`);
+        assert.deepStrictEqual(row.weekly, {
+          weightedPerPct: null, rawPerPct: null, fittedWeightedPerPct: null,
+          verdict: 'thin', fitVerdict: 'thin', intervals: 0, utilSum: 0, days: 0
+        }, 'a thin weekly reading is the shape, not an absent key');
+      }
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
