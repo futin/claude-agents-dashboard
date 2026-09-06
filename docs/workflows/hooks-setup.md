@@ -150,6 +150,7 @@ warning on any non-Darwin host rather than letting you discover it as silence.
     - scripts/plan-remote-hook.sh
     - scripts/permission-notify-hook.sh
     - scripts/remote-decision-hook.sh
+    - scripts/kill-guard-hook.sh
     - package.json
   kind: workflow
 -->
