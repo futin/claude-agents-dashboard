@@ -47,6 +47,13 @@ export function run(): number {
     assert.strictEqual(resumeEligible(s, NO_HOLDS, undefined), false);
   })) p++; else f++;
 
+  if (test('a live child (stopState present) suppresses the composer — a second writer on one transcript', () => {
+    const s = { surface: 'dashboard', status: 'incomplete' } as const;
+    assert.strictEqual(resumeEligible({ ...s, stopState: 'ready' }, NO_HOLDS, true), false);
+    assert.strictEqual(resumeEligible({ ...s, stopState: 'stopping' }, NO_HOLDS, true), false);
+    assert.strictEqual(resumeEligible({ ...s, status: 'idle', stopState: 'ready' }, NO_HOLDS, true), false);
+  })) p++; else f++;
+
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }

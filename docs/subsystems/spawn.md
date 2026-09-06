@@ -104,6 +104,32 @@ launch store watches the child the same way, and an account or org that refuses 
 registration surfaces it as the CLI's own startup error through the ordinary
 `failed`-entry path.
 
+## Two writers on one transcript (2.1.259)
+
+Everything the resume guard above does rests on one measured fact: **the CLI has no lock of
+its own.** Measured 2026-09-05 against 2.1.259, two probe sessions, same method as the
+2.1.233 mechanics.
+
+- A second `claude -p --resume <id>` against a *live* id starts normally, appends to the
+  same `<id>.jsonl`, prints its result and exits 0. No refusal, no lock, no new transcript.
+- **During the post-turn linger this is benign**: the second writer's records chain onto
+  the first's last uuid, one valid linear chain, and the first writes nothing more.
+- **Mid-turn it forks the chain.** With the first process running sequential tool calls,
+  one record ends up with two `parentUuid` children and both processes keep appending to
+  the one file in write order, so the branches physically interleave. The CLI also injects
+  its own `"Continue from where you left off."` prompt when the transcript it loaded ends
+  on a `tool_use` with no result.
+- **No byte-level corruption.** Appends are whole-line; nothing is torn or overwritten.
+- **The damage is silent branch loss.** A later `--resume` chains onto the last record in
+  *file* order and loads only that branch: the other branch's whole exchange stays in the
+  file and is gone from the conversation forever.
+- **And the dashboard then disagrees with the CLI about what the conversation is.** No
+  reader here follows `parentUuid` (`isSidechain` is the only chain field anything touches
+  — `server/lib/analyze.ts`, `server/lib/chat.ts`), so the chat drawer renders both
+  branches as one linear thread and the token figures sum two divergent contexts.
+
+Fixing this is a guard, not a repair — there is nothing to un-fork afterwards.
+
 ## Resuming an ended session (`resume`)
 
 The spawn path's first extension, and the one its own accepted-limits list predicted: a
@@ -138,11 +164,25 @@ same permission ladder and ceiling, prompt still stdin-only — with these diffe
   `sdk-cli`): a terminal session is terminal-owned, and resuming one here could race a
   still-open interactive session on the same transcript. 400 `only dashboard sessions can
   be resumed`.
-- **Alive sessions 409.** A held question, plan, or reply window means the process is
-  still running (`session is still running`); a resume already in flight for that id is
-  `already resuming`. The client-side gate (`resumeEligible`, `client/src/lib/resume.ts`)
-  hides the composer in those states too — plus while `working` — but the server checks
-  are the boundary, the gate is UX.
+- **Alive sessions 409.** Three questions, because a held socket is only one way to be
+  alive and none of the three answers the whole set (`session is still running` for all of
+  them; a resume already in flight for that id is `already resuming` instead):
+  1. a held question, plan, or reply window (`getPending*`);
+  2. `hasLiveChild(rid)` — the launch store, **exact but scoped to children this process
+     spawned**: a post-turn `claude -p` lingers (measured 90s+) holding no socket at all,
+     and the store still knows it is up;
+  3. `liveSessionIds()` (`server/lib/scan.ts`) — a `ps -Ao pid=,args=` scan for
+     `--session-id <id>` / `--resume <id>`, **inexact but unscoped**: the fallback for a
+     session started from a terminal, from a second dashboard, or before the last restart,
+     none of which the store can see. It returns `null` when `ps` cannot run, and a `null`
+     never refuses — the opposite direction from `liveCwds`' fail-open, which only costs a
+     badge colour. Neither check can see a session whose argv carries no id at all.
+
+  The client-side gate (`resumeEligible`, `client/src/lib/resume.ts`) hides the composer
+  while anything is held, while `working`, and whenever `Session.stopState` is present
+  (i.e. this server holds a live child) — but the server checks are the boundary, the gate
+  is UX. `incomplete` stays eligible on purpose: it is the ordinary "your turn" state and
+  the reason the feature exists.
 - **`name` and `--remote-control` are forced off** on a resume: renaming or
   account-registering a *resumed* session are unverified CLI combos, so they are never
   sent. `model`/`effort`/`permissionMode` pass through as usual.
@@ -332,8 +372,9 @@ names by then and delete it, taking a live, working session's handle with it. Tw
   `entry.child === child`. Defence in depth, and it makes every handler immune to id reuse
   rather than only the path the guard covers.
 
-What the CLI itself does with two writers on one transcript is a separate, open question —
-`bug-19`.
+What the CLI itself does with two writers on one transcript is measured above — it does
+*not* refuse, so these guards are the only thing standing there
+([two writers](#two-writers-on-one-transcript-21259)).
 
 ### One guarded helper does every signal
 

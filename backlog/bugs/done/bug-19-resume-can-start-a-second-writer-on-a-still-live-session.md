@@ -3,9 +3,12 @@ id: bug-19
 title: Resume can start a second writer on a still-live session
 created: 2026-09-05
 tags: spawn, resume
-updated: 2026-09-05T21:16:11Z
+updated: 2026-09-06T16:58:43Z
 groom-elapsed: 1249
 groom-tokens: 91900
+started: 2026-09-06T16:38:37Z
+execute-elapsed: 1206
+execute-tokens: 119114
 ---
 
 ## Symptom
@@ -243,3 +246,107 @@ confirm the composer **is** offered. This repo has no `.mcp.json` of its own —
 Playwright server comes from the user-global plugin install — so if the executing session
 has no `browser_*` tools, say so explicitly and fall back to the `POST /api/spawn` check
 above rather than reporting the browser step as done.
+
+## Outcome
+
+**2026-09-06 — fixed.** All four parts of the plan landed on `backlog/bug-19`. The guard is
+now two-layered: the launch store answers exactly for children this process spawned, and a
+`ps` argv scan answers for everyone else's — a terminal session, a second dashboard, or
+anything spawned before the last restart. The client gate stops offering the composer while
+this server holds a live child, and `incomplete` stays eligible as the plan required.
+
+**What changed**
+
+- `server/lib/scan.ts` — `parsePsSessionIds(out)` (pure, both flag spellings, `=` form too,
+  match must end on whitespace so `--resume a/b` yields nothing rather than `a`),
+  `liveSessionIds()` over `ps -Ao pid=,args=` with the same 2s timeout as `liveCwds`, and
+  `setPsRunner()` as the test seam mirroring `setSpawner`. `null` on a failed probe means
+  *cannot answer*, never *alive* — the opposite direction from `liveCwds`' fail-open, and
+  the doc comment says so at the definition.
+- `server/api.ts` — the probe check sits immediately after the `hasLiveChild` 409, answering
+  the same `session is still running` body, store first because it is free and exact. The
+  `serveSpawn` doc comment now lists all three liveness checks and what each cannot see.
+- `client/src/lib/resume.ts` — `resumeEligible` takes `stopState` and returns false when it
+  is set; the "the server re-checks liveness on POST" sentence now says *what* the re-check
+  covers instead of overclaiming.
+- `docs/subsystems/spawn.md` — new §*Two writers on one transcript (2.1.259)* recording the
+  measurement this bug's grooming made (no lock, benign during the linger, forks and
+  interleaves mid-turn, silent branch loss afterwards, and the drawer disagreeing with the
+  CLI about what the conversation is); the *Alive sessions 409* bullet rewritten as the
+  three checks and their asymmetry. `docs/overview.md`'s scan.ts line now reads
+  "liveness gates (cwd, session id)".
+- Tests: `test/scan.test.ts` (+3), `test/resume-eligible.test.ts` (+1),
+  `test/spawn-endpoint.test.ts` (+3, including the two complements — a probe naming *other*
+  ids must still let this one through, and a probe that cannot run must not refuse).
+
+**Verification**
+
+Suite and typecheck, this tree, after the fix:
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(exit 0)
+
+$ pnpm test
+  ...
+  31/31 passed
+ALL PASS
+$ pnpm test | grep -c '^  ✓'
+1360
+```
+
+Mutation-proved, not just green — deleting the two new guard lines (`liveSessionIds()` in
+`server/api.ts`, `if (session.stopState) return false;` in `resume.ts`) fails exactly the
+two tests written for them and nothing else:
+
+```
+  ✗ resume of a live session this server never spawned is 409 — the ps probe, not the store
+  ✗ a live child (stopState present) suppresses the composer — a second writer on one transcript
+FAILED (2)
+```
+
+**Live check against a real `ps`** — the plan's out-of-suite step, run without spawning a
+real `claude`: a throwaway `HOME` holding one `sdk-cli` transcript, the real server on
+:4273, `CLAUDE_BIN` pointed at a stub. A decoy process whose argv carries
+`claude -p --resume <id>` (pid recorded, killed by that pid afterwards):
+
+```
+$ ps -Ao pid=,args= | grep -- "--resume $UUID"
+56701 /bin/sh -c sleep 120; : claude -p --resume 7f3a1c20-1111-4111-8111-abcdefabcdef
+
+$ curl -i -X POST :4273/api/spawn -d '{"resume":"<id>","prompt":"x"}'
+HTTP/1.1 409 Conflict
+{"error":"session is still running"}
+
+# decoy killed by its recorded pid, then:
+HTTP/1.1 200 OK
+{"sessionId":"7f3a1c20-1111-4111-8111-abcdefabcdef"}
+```
+
+Then the store half, end to end with a stub binary that writes a transcript and lingers:
+once the resume entry reached `running`, `GET /api/sessions` carried `stopState=ready` on
+an `idle` row — the exact state the composer used to be offered in — and a second resume
+was refused:
+
+```
+7f3a1c20-1111-4111-8111-abcdefabcdef status=idle surface=dashboard stopState=ready
+57564 /bin/sh /tmp/bug19-fakeclaude.sh -p --resume 7f3a1c20-... --permission-mode auto
+HTTP/1.1 409 Conflict
+{"error":"session is still running"}
+```
+
+When the stub's linger ran out, the row lost its `stopState` and the same resume answered
+200 — so the gate opens again on its own, which is the behaviour that keeps the feature
+usable. Throwaway home, stub binary and both processes were removed; :5174 (the user's
+dashboard) was confirmed still up afterwards.
+
+**Not verified, needs a human.** The browser leg of the plan — open the drawer in the real
+UI and see the composer absent while the stop control shows, present after it goes — was
+not run. It requires a real spawned `claude` session with a live child, and this was an
+unattended orchestrator run; the stub above proves the server emits `stopState` in that
+state and the unit test proves the gate refuses it, but nobody watched the drawer render.
+Also unverified: the argv scan against a *real* `claude` command line (the live check used
+a stub whose argv has the same shape), and `docs/subsystems/spawn.md`'s `docs-sync`
+`verified:` stamp was left at its old sha — this session cannot commit, so there is no sha
+to re-baseline against.

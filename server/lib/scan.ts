@@ -325,6 +325,79 @@ export function liveCwds(): Set<string> | null {
   return composeLiveCwds(psOut, lsofOut);
 }
 
+/**
+ * Session ids carried by live `claude` command lines, from `ps -Ao pid=,args=`
+ * stdout. Pure; {@link liveSessionIds} runs the probe.
+ *
+ * Both flag spellings are collected — `--session-id <id>` (a fresh headless
+ * launch names its own id) and `--resume <id>` — and a hand-typed `--flag=<id>`
+ * is the same live process, so `=` counts too. The id charset mirrors
+ * `RESUME_ID_RE` in `spawn.ts`, and the match must end on whitespace or the end
+ * of the line: an id with an out-of-charset character (`--resume a/b`) is not
+ * this repo's id shape, and a prefix of it (`a`) would be a different session.
+ *
+ * A line only counts if it mentions `claude` at all. That is a substring test,
+ * not the launcher-basename test {@link parsePsClaudePids} does, because `args=`
+ * carries the whole command line: an argv-based match can therefore false-
+ * positive on some unrelated command mentioning both. Deliberate — a false
+ * positive costs one refused resume, a false negative costs a second writer.
+ */
+export function parsePsSessionIds(out: string): Set<string> {
+  const ids = new Set<string>();
+  for (const line of out.split('\n')) {
+    if (!line.includes('claude')) continue;
+    for (const m of line.matchAll(/--(?:session-id|resume)[ =]([A-Za-z0-9._-]+)(?=\s|$)/g)) {
+      ids.add(m[1]);
+    }
+  }
+  return ids;
+}
+
+/** Test seam for {@link liveSessionIds}: what actually runs `ps`. */
+export type PsRunner = () => string;
+
+let psRunner: PsRunner | null = null;
+
+/**
+ * Test seam: swap the `ps` runner. `null` restores the real `execFileSync`.
+ * Mirrors `setSpawner` in `spawn.ts` — no test shells out for real, and none
+ * depends on what happens to be running on the machine.
+ */
+export function setPsRunner(fn: PsRunner | null): void {
+  psRunner = fn;
+}
+
+/**
+ * Every session id a live `claude` process names in its argv, or `null` when
+ * the probe could not run.
+ *
+ * The per-session-id answer {@link liveCwds} cannot give: it resolves to a
+ * *directory*, so two sessions in one repo are indistinguishable. `serveSpawn`'s
+ * resume guard needs the id, and needs it for children this process never
+ * spawned — a session started from a terminal, from a second dashboard, or
+ * before the last restart, none of which the launch store can see.
+ *
+ * **`null` means the opposite of what it means in `liveCwds`.** There, failing
+ * open costs a badge colour; here it means the guard cannot fire, so the
+ * store-based check stands alone and a legal resume is never refused on a
+ * probe that never ran. Keep this probe as simple as it looks.
+ *
+ * A second `ps` fork rather than teaching `liveCwds`' one to serve both: that
+ * one parses `comm=`, and the launcher path can contain spaces
+ * (`…/Application Support/…`), so a merged format reintroduces exactly the
+ * parsing ambiguity its comment warns about — for one saved fork per poll.
+ */
+export function liveSessionIds(): Set<string> | null {
+  try {
+    const out = psRunner
+      ? psRunner()
+      : execFileSync('ps', ['-Ao', 'pid=,args='], { encoding: 'utf8', timeout: 2000, maxBuffer: 8 * 1024 * 1024 });
+    return parsePsSessionIds(out);
+  } catch {
+    return null;
+  }
+}
+
 /** Build the ranked session snapshot. */
 export function scanSessions(config: Partial<Config>, options: ScanOptions = {}): SessionsResponse {
   const cfg = config || {};

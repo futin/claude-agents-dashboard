@@ -128,7 +128,7 @@ server/
   lib/config.ts   .env loader — process.env > .env > defaults
   lib/transcript.ts  tail-reads a transcript → tokens/model/window/activity
   lib/title-cache.ts  remembers a custom title once it sinks below the tail window
-  lib/scan.ts     enumerates + ranks sessions; status machine; liveness gate
+  lib/scan.ts     enumerates + ranks sessions; status machine; liveness gates (cwd, session id)
   lib/agents.ts   whole-file subagent parser → AgentJob[]
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts
   lib/chat.ts     byte-offset paged chat history
