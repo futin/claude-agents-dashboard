@@ -1,18 +1,23 @@
 import assert from 'node:assert';
 
-import type { UsageCoverage } from '../shared/types.js';
+import type { ModelRateRow, ModelRateVerdict, UsageCoverage } from '../shared/types.js';
 import {
   baselineText,
-  coverageClauses,
+  coverageCaveat,
+  coverageRows,
+  evidenceParts,
   evidenceText,
-  fittedAsideText,
+  figureTip,
   formatDeviation,
   formatShareOf,
-  formatSharePct,
   formatTok,
-  pricedPillText,
-  rawAsideText,
+  hasFigures,
+  measuredShare,
+  movedLabel,
+  RATES_GLOSSARY,
+  statusLine,
   verdictText,
+  waitingText,
   weeklyAsideText
 } from '../client/src/lib/usageRatesFormat.js';
 
@@ -83,51 +88,9 @@ export function run(): number {
     assert.match(verdictText('thin').hint, /2 behind the current window/);
   })) p++; else f++;
 
-  if (test('rawAsideText labels the raw figure as a mix-dependent translation', () => {
-    assert.strictEqual(
-      rawAsideText(1_737_000),
-      "\u2248 1.7M raw at this model's recent mix"
-    );
-    assert.strictEqual(
-      rawAsideText(358_000),
-      "\u2248 358k raw at this model's recent mix"
-    );
-  })) p++; else f++;
-
-  if (test('rawAsideText: a translation of nothing is no line, never a dash', () => {
-    assert.strictEqual(rawAsideText(null), null);
-    assert.strictEqual(rawAsideText(Number.NaN), null);
-  })) p++; else f++;
-
-  if (test('fittedAsideText names the fitted rate and where it was measured', () => {
-    assert.strictEqual(
-      fittedAsideText(357_000, null),
-      'fitted 357k weighted / 1% across mixed-model windows'
-    );
-    assert.strictEqual(
-      fittedAsideText(357_000, 58.3),
-      'fitted 357k weighted / 1% across mixed-model windows · +58.3% vs the rate above'
-    );
-    // Magnitudes come from `formatTok`, so one value in each of its bands.
-    assert.strictEqual(
-      fittedAsideText(1_513_000, -12),
-      'fitted 1.5M weighted / 1% across mixed-model windows · -12.0% vs the rate above'
-    );
-    assert.strictEqual(
-      fittedAsideText(840, null),
-      'fitted 840 weighted / 1% across mixed-model windows'
-    );
-  })) p++; else f++;
-
-  if (test('fittedAsideText: no fitted rate is no line, never a dash', () => {
-    assert.strictEqual(fittedAsideText(null, null), null);
-    assert.strictEqual(fittedAsideText(null, 58.3), null, 'a deviation without a rate is still no line');
-    assert.strictEqual(fittedAsideText(Number.NaN, null), null);
-  })) p++; else f++;
-
   if (test('weeklyAsideText: one line, naming the week, each estimator labelled', () => {
     // A weekly rate is ~8–14× a 5-hour one, so a line that did not say which
-    // window it priced would read as a tenfold drift in the row above it.
+    // window it priced would read as a tenfold drift in the tiles above it.
     assert.strictEqual(
       weeklyAsideText(2_000_000, null),
       'weekly limit: pooled 2.0M weighted / 1%'
@@ -158,28 +121,132 @@ export function run(): number {
     assert.ok(!line.includes('%,') && !line.includes('+') && !line.includes('×'), line);
   })) p++; else f++;
 
-  if (test('fittedAsideText owns no threshold: a huge gap renders like a small one', () => {
-    // The threshold is the server's, and there is no verdict to make here —
-    // asserting that both render identically is what pins that.
-    const small = fittedAsideText(210_000, 0.4)!;
-    const huge = fittedAsideText(210_000, 1064.2)!;
-    assert.strictEqual(small.replace('+0.4%', 'X'), huge.replace('+1064.2%', 'X'));
-    assert.ok(huge.endsWith('· +1064.2% vs the rate above'), huge);
+  // ── the status strip, the rows and the fold line ──
+
+  /**
+   * The live 2026-09-06 opus row, every other field zeroed. Each case moves
+   * only what it is about.
+   */
+  const rowOf = (over: Partial<ModelRateRow> = {}): ModelRateRow => ({
+    model: 'claude-opus-5',
+    rawPerPct: 1_332_086,
+    weightedPerPct: 220_077,
+    baselineRawPerPct: null,
+    baselineWeightedPerPct: null,
+    deviationPct: null,
+    verdict: 'thin',
+    intervals: 585,
+    utilSum: 663,
+    days: 4,
+    baselineDays: 4,
+    pctPerMWeighted: null,
+    pctPerRequest: null,
+    splitVerdict: 'thin',
+    fittedWeightedPerPct: 332_070,
+    fitVerdict: 'fitted',
+    fitDeviationPct: 50.888,
+    weekly: {
+      weightedPerPct: null, rawPerPct: null, fittedWeightedPerPct: null,
+      verdict: 'thin', fitVerdict: 'thin', intervals: 0, utilSum: 0, days: 0
+    },
+    ...over
+  });
+  const verdicts = (...vs: ModelRateVerdict[]): ModelRateRow[] =>
+    vs.map((verdict, i) => rowOf({ verdict, model: `m${i}` }));
+
+  if (test('statusLine: no models is no claim at all, not "none drifting"', () => {
+    assert.strictEqual(statusLine([]), null);
   })) p++; else f++;
 
-  if (test('formatSharePct rounds, and null stays null', () => {
-    assert.strictEqual(formatSharePct(12.4), '12%');
-    assert.strictEqual(formatSharePct(0), '0%');
-    assert.strictEqual(formatSharePct(null), null);
+  if (test('statusLine: five collecting models are not drifting', () => {
+    const s = statusLine(verdicts('thin', 'thin', 'thin', 'thin', 'thin'))!;
+    assert.strictEqual(s.headline, 'No model is drifting');
+    assert.deepStrictEqual(s.counts, [{ label: 'collecting', n: 5 }]);
   })) p++; else f++;
 
-  // ── the coverage footer ──
+  if (test('statusLine counts every verdict in a fixed order, zeroes omitted', () => {
+    const s = statusLine(verdicts('drift', 'stable', 'thin'))!;
+    assert.strictEqual(s.headline, '1 model is drifting');
+    assert.deepStrictEqual(s.counts, [
+      { label: 'drift', n: 1 }, { label: 'stable', n: 1 }, { label: 'collecting', n: 1 }
+    ]);
+  })) p++; else f++;
+
+  if (test('statusLine agrees with itself in the plural', () => {
+    assert.strictEqual(statusLine(verdicts('drift', 'drift'))!.headline, '2 models are drifting');
+  })) p++; else f++;
+
+  if (test('statusLine: a mix shift is not drift and never enters the headline', () => {
+    // The opposite claim, in fact: the mix moved and the price did not.
+    const s = statusLine(verdicts('mix-shift', 'stable', 'stable'))!;
+    assert.strictEqual(s.headline, 'No model is drifting');
+    assert.deepStrictEqual(s.counts, [{ label: 'mix shift', n: 1 }, { label: 'stable', n: 2 }]);
+  })) p++; else f++;
+
+  if (test('hasFigures: any one rate keeps a row, all three missing folds it', () => {
+    assert.strictEqual(hasFigures(rowOf({
+      weightedPerPct: null, rawPerPct: null, fittedWeightedPerPct: null
+    })), false);
+    assert.strictEqual(hasFigures(rowOf({
+      weightedPerPct: null, rawPerPct: null
+    })), true, 'a fitted-only model has something to show');
+    assert.strictEqual(hasFigures(rowOf({
+      weightedPerPct: null, fittedWeightedPerPct: null
+    })), true);
+    assert.strictEqual(hasFigures(rowOf({
+      weightedPerPct: Number.NaN, rawPerPct: null, fittedWeightedPerPct: null
+    })), false, 'NaN is not a figure');
+  })) p++; else f++;
+
+  if (test('evidenceParts splits the line the two "4 days" collided on', () => {
+    const ev = evidenceParts(rowOf());
+    assert.strictEqual(ev.current, '585 windows · 4 days · 663.0 pts');
+    assert.strictEqual(ev.baseline, 'forming · 4 of 7 days');
+  })) p++; else f++;
+
+  if (test('evidenceParts: no baseline days at all is "none yet"', () => {
+    assert.strictEqual(evidenceParts(rowOf({ baselineDays: 0 })).baseline, 'none yet');
+  })) p++; else f++;
+
+  if (test('evidenceParts states a baseline that exists', () => {
+    assert.strictEqual(
+      evidenceParts(rowOf({ baselineWeightedPerPct: 163_000, baselineDays: 9 })).baseline,
+      '163k · 9 days'
+    );
+  })) p++; else f++;
+
+  if (test('evidenceParts stops naming the floor once the baseline is past it', () => {
+    // Still forming at 9 days means refused for some *other* reason, and
+    // "9 of 7 days" would be nonsense.
+    assert.strictEqual(evidenceParts(rowOf({ baselineDays: 9 })).baseline, 'forming · 9 days');
+  })) p++; else f++;
+
+  if (test('evidenceParts: the singulars', () => {
+    const ev = evidenceParts(rowOf({ intervals: 1, days: 1, utilSum: 2, baselineDays: 1 }));
+    assert.strictEqual(ev.current, '1 window · 1 day · 2.0 pts');
+    assert.strictEqual(ev.baseline, 'forming · 1 of 7 days');
+  })) p++; else f++;
+
+  if (test('waitingText names the model and how far it has got', () => {
+    const m = { model: 'claude-sonnet-5' };
+    assert.strictEqual(waitingText(rowOf({ ...m, intervals: 2 })), 'claude-sonnet-5 · 2 windows');
+    assert.strictEqual(waitingText(rowOf({ ...m, intervals: 1 })), 'claude-sonnet-5 · 1 window');
+    assert.strictEqual(waitingText(rowOf({ ...m, intervals: 0 })), 'claude-sonnet-5 · 0 windows');
+  })) p++; else f++;
+
+  // ── the coverage bar ──
 
   /** Every counter zeroed and the start provable — each case moves what it needs. */
   const cov = (over: Partial<UsageCoverage> = {}): UsageCoverage => ({
     movedPct: 100, pricedPct: 0, mixedPct: 0, externalPct: 0,
     preLedgerPct: 0, missingPct: 0, partialPct: 0,
     recorderBreakHours: 0, startProvable: true, ...over
+  });
+
+  /** The live 2026-09-06 coverage, the shape the layout was designed against. */
+  const LIVE = cov({
+    movedPct: 1997, pricedPct: 1171, mixedPct: 152, externalPct: 183,
+    preLedgerPct: 438, missingPct: 5, partialPct: 48, recorderBreakHours: 19.4519
   });
 
   if (test('formatShareOf keeps a decimal under 1%, so a real bucket never reads as 0%', () => {
@@ -189,51 +256,65 @@ export function run(): number {
     assert.strictEqual(formatShareOf(5, 0), '0%', 'a share of nothing is not a division');
   })) p++; else f++;
 
-  if (test('a bucket that cost nothing produces no clause at all', () => {
-    const clauses = coverageClauses(cov({ pricedPct: 100 })).join(' | ');
-    assert.ok(!clauses.includes('predates'), clauses);
-    assert.ok(!clauses.includes('part-covered'), clauses);
-    assert.ok(!clauses.includes('recorder down'), clauses);
-    assert.ok(!clauses.includes('90%'), clauses);
-    assert.strictEqual(clauses, '', 'nothing was refused, so the row says nothing');
+  if (test('measuredShare is the bar headline, and null when nothing moved', () => {
+    assert.strictEqual(measuredShare(LIVE), '59%');
+    assert.strictEqual(measuredShare(cov({ movedPct: 0 })), null,
+      'a share of nothing is not 0% — the whole block is omitted');
   })) p++; else f++;
 
-  if (test('nothing moved → no pill and no clauses, rather than a row of zeroes', () => {
-    assert.strictEqual(pricedPillText(cov({ movedPct: 0 })), null);
-    assert.deepStrictEqual(coverageClauses(cov({ movedPct: 0 })), []);
+  if (test('movedLabel names the denominator in whole points, thousands separated', () => {
+    assert.strictEqual(movedLabel(LIVE), 'of 1,997 pts moved');
+    assert.strictEqual(movedLabel(cov({ movedPct: 850.4 })), 'of 850 pts moved');
   })) p++; else f++;
 
-  if (test('an unprovable start replaces the pre-ledger clause with the rotation caveat', () => {
-    const clauses = coverageClauses(cov({
-      pricedPct: 58, missingPct: 42, recorderBreakHours: 3, startProvable: false
-    }));
-    assert.ok(clauses[0].includes('rotated'), clauses.join(' | '));
-    assert.ok(!clauses.join(' | ').includes('predates recording'),
-      'nothing may be claimed as pre-ledger when the start is unknown');
+  if (test('the live coverage lists every refusal, largest first', () => {
+    // External is read from the *bucket*, never from `externalSharePct`: that
+    // field divides by the attributable movement (12%), these divide by
+    // everything that moved (9%), and only the bucket sums with the bar.
+    assert.deepStrictEqual(coverageRows(LIVE), [
+      { value: '22%', label: 'predates recording · ages out on its own' },
+      { value: '9%', label: 'spent on another device · excluded from the fit' },
+      { value: '8%', label: 'no single model held 90% of the tokens' },
+      { value: '2%', label: 'windows the recorder only part-covered' },
+      { value: '0.3%', label: 'recorder down 19.5 h' }
+    ]);
   })) p++; else f++;
 
-  if (test('the recorder-down clause names the hours and the points together', () => {
-    // 12.4 h beside no number reads as 12.4 h of lost spend, which is exactly
-    // the misreading this footer exists to prevent.
-    // 12.35 prints as 12.3: `toFixed(1)` rounds the binary double, which sits
-    // a hair below 12.35. Pinned as it actually renders rather than as decimal
-    // arithmetic would like it to.
-    const [clause] = coverageClauses(cov({ pricedPct: 98, missingPct: 2, recorderBreakHours: 12.35 }));
-    assert.ok(clause.includes('12.3 h'), clause);
-    assert.ok(clause.includes('2%'), clause);
+  if (test('a bucket that cost nothing produces no row at all', () => {
+    assert.deepStrictEqual(coverageRows(cov({ pricedPct: 100 })), [],
+      'nothing was refused, so the list says nothing');
+    assert.deepStrictEqual(coverageRows(cov({ movedPct: 0 })), []);
   })) p++; else f++;
 
-  if (test('the live shape from 2026-09-02 reads as a sentence, largest refusal first', () => {
-    const live = cov({
-      movedPct: 1048, pricedPct: 418, preLedgerPct: 438, missingPct: 2,
-      partialPct: 32, recorderBreakHours: 12.35
-    });
-    assert.strictEqual(pricedPillText(live), '40% priced');
-    const clauses = coverageClauses(live);
-    assert.strictEqual(clauses.length, 3, clauses.join(' | '));
-    assert.strictEqual(clauses[0], '42% predates recording — ages out on its own');
-    assert.ok(clauses[1].startsWith('3% from windows'), clauses[1]);
-    assert.strictEqual(clauses[2], 'recorder down 12.3 h — cost 0.2% of what moved');
+  if (test('recorder downtime is listed on hours alone, and says 0% honestly', () => {
+    // Most breaks overlap no interval at all: time was lost and nothing was
+    // spent in it, which is exactly what "0% · recorder down 2.0 h" states.
+    assert.deepStrictEqual(coverageRows(cov({ missingPct: 0, recorderBreakHours: 2 })), [
+      { value: '0%', label: 'recorder down 2.0 h' }
+    ]);
+  })) p++; else f++;
+
+  if (test('an unprovable start drops the pre-ledger row and leads with the caveat', () => {
+    const rotated = cov({ preLedgerPct: 400, missingPct: 42, startProvable: false });
+    const labels = coverageRows(rotated).map(r => r.label).join(' | ');
+    assert.ok(!labels.includes('predates'), labels);
+    assert.match(coverageCaveat(rotated)!, /rotated/);
+    assert.strictEqual(coverageCaveat(cov({ startProvable: true })), null);
+  })) p++; else f++;
+
+  // ── the glossary ──
+
+  if (test('the glossary is the single copy of every definition the card shows', () => {
+    assert.deepStrictEqual(
+      RATES_GLOSSARY.map(g => g.key),
+      ['weighted', 'raw', 'fitted', 'baseline', 'window', 'across']
+    );
+    for (const g of RATES_GLOSSARY) {
+      assert.ok(g.term.length > 0 && g.text.length > 0, `${g.key} needs a term and a definition`);
+    }
+    // The ⓘ panel quotes the drawer verbatim, so there is one string to keep true.
+    assert.strictEqual(figureTip('fitted'), RATES_GLOSSARY.find(g => g.key === 'fitted')!.text);
+    assert.strictEqual(figureTip('weighted'), RATES_GLOSSARY[0].text);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

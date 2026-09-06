@@ -855,18 +855,64 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 /* Token value per model. Every colour here is a theme token or a `color-mix`
    over one — the five themes are pure token overrides, and one literal breaks
    the light one. */
+
+/* The status strip: the question the card answers, and its answer. */
+.rates-status{display:flex;align-items:baseline;gap:8px 14px;flex-wrap:wrap;margin-top:14px}
+.rates-q{font-family:var(--display);font-size:15px;font-weight:600;letter-spacing:.02em;color:var(--text)}
+.rates-counts{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--text2)}
+.rates-counts b{color:var(--text);font-weight:500}
+
+/* The collecting hint, hoisted out of the rows: one fact about the measurement,
+   not five identical sentences reading as five separate findings. */
+.rates-notice{margin-top:8px;padding:8px 12px;font-size:12px;line-height:1.5;color:var(--text2);
+  border-left:2px solid var(--border2);background:var(--surface)}
+.rates-notice b{color:var(--text);font-weight:600}
+
 .rates-list{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
 .rates-row{padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:3px}
-.rates-line{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.rates-line + .rates-line{margin-top:6px}
+.rates-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .rates-model{font-family:var(--mono);font-size:12px;color:var(--text);word-break:break-all}
+
+/* Three labelled tiles. `minmax(0,1fr)` and not `1fr`: a long value would
+   otherwise blow the track out past the card rather than shrink. */
+.rates-figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 14px;margin-top:10px}
+.rates-fig{min-width:0;padding:6px 0 4px;border-top:1px solid var(--border)}
+.rates-lab{display:flex;align-items:center;gap:5px;font-family:var(--display);font-size:10px;
+  font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
+.rates-fig.lead .rates-lab{color:var(--text2)}
 .rates-value{font-family:var(--display);font-size:20px;font-weight:600;letter-spacing:.02em;color:var(--text)}
-.rates-unit{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--text3)}
-.rates-raw{margin-top:4px;font-family:var(--mono);font-size:11px;color:var(--text3)}
-.rates-dev{font-family:var(--mono);font-size:11px;color:var(--text2)}
+.rates-fig .rates-value{margin-top:2px}
+.rates-unit{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--text3);margin-left:4px}
+.rates-sub{margin-top:1px;font-family:var(--mono);font-size:10.5px;color:var(--text3)}
+.rates-dev{font-family:var(--mono);font-size:10.5px;color:var(--text2)}
 .rates-dev.drift{color:var(--red)}
-.rates-meta{margin-top:6px;font-family:var(--mono);font-size:10.5px;color:var(--text3)}
-.rates-hint{margin-top:4px;max-width:60ch;font-size:11.5px;line-height:1.5;color:var(--text2)}
+
+/* The ⓘ that opens a definition. A real button, never a `title` attribute:
+   this board is read from a phone, where `title` never fires. 22px of hit area
+   around a 14px glyph, so a thumb can land on it. */
+.rates-i{display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:14px;height:14px;padding:0;border-radius:50%;border:1px solid var(--border2);
+  background:transparent;color:var(--text3);font-family:var(--font);font-size:9px;font-weight:600;
+  line-height:1;letter-spacing:0;text-transform:none;cursor:pointer;position:relative}
+.rates-i::after{content:'';position:absolute;left:-4px;top:-4px;right:-4px;bottom:-4px}
+.rates-i:hover,.rates-i[aria-expanded="true"]{border-color:var(--accent);color:var(--accent)}
+.rates-i:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
+
+/* The evidence, split in two — the fix for a line where two identical "4 days"
+   meant two different windows. `forming` is the one word being waited on. */
+.rates-ev{display:flex;gap:6px 18px;flex-wrap:wrap;margin-top:8px;padding-top:6px;
+  border-top:1px solid var(--border);font-family:var(--mono);font-size:10.5px;color:var(--text3)}
+.rates-ev b{color:var(--text2);font-weight:500;letter-spacing:.02em}
+.rates-forming{color:var(--amber)}
+.rates-weekly{margin-top:4px;font-family:var(--mono);font-size:10.5px;color:var(--text3)}
+.rates-hint{margin-top:6px;max-width:60ch;font-size:11.5px;line-height:1.5;color:var(--text2)}
+
+/* The fold line: models with nothing to show at all. Dashed, because it is a
+   waiting state and not a card — three rows of dashes read as a fault. */
+.rates-wait{display:flex;align-items:baseline;gap:6px 14px;flex-wrap:wrap;margin-top:8px;
+  padding:9px 12px;background:var(--surface2);border:1px dashed var(--border2);border-radius:3px;
+  font-family:var(--mono);font-size:11px;color:var(--text2)}
+.rates-wait .rates-lab{flex:none}
 
 /* The badge carries the verdict, and `thin` is deliberately the quiet one —
    collecting is the normal first-fortnight state and must not read as a fault. */
@@ -881,16 +927,64 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
   background:color-mix(in oklab,var(--amber) 13%,var(--surface))}
 .rates-badge.thin{color:var(--text3)}
 
-.rates-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;
-  font-family:var(--mono);font-size:10.5px;color:var(--text3)}
-.rates-pill{padding:3px 8px;border-radius:999px;color:var(--text2);
-  background:var(--surface2);border:1px solid var(--border)}
+/* The glossary drawer, closed by default: the data first, the explanation one
+   tap away. The default disclosure triangle is replaced so the marker can carry
+   the display face the rest of the card uses. */
+.rates-how{margin-top:14px;border:1px solid var(--border);border-radius:3px;background:var(--surface)}
+.rates-how summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;
+  padding:8px 12px;font-family:var(--display);font-size:11px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--text2)}
+.rates-how summary::-webkit-details-marker{display:none}
+.rates-how summary::before{content:'';flex:none;width:0;height:0;border:4px solid transparent;
+  border-left:6px solid var(--text3);transition:transform .15s}
+.rates-how[open] summary::before{transform:rotate(90deg)}
+.rates-how summary:focus-visible{outline:1px solid var(--accent);outline-offset:-2px}
+.rates-n{margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:400;
+  letter-spacing:0;text-transform:none;color:var(--text3)}
+/* `display:contents` on the wrapper: React needs one keyed element per entry,
+   the two-column grid needs the dt and dd to be its own children. */
+.rates-gloss{margin:0;padding:4px 12px 12px;display:grid;grid-template-columns:max-content 1fr;
+  gap:8px 16px;font-size:12px;line-height:1.5}
+.rates-gloss > div{display:contents}
+.rates-gloss dt{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--text);padding-top:2px}
+.rates-gloss dd{margin:0;max-width:62ch;color:var(--text2)}
 
-/* Phone: the badge stops sharing a line with a long model id, and the numbers
-   keep a 38px-ish touch rhythm rather than crowding. */
+/* Coverage as a two-segment bar. Two and not six on purpose: the question is
+   binary — how much was measured — and the dataviz palette validator fails this
+   board's own status hues on lightness, chroma and CVD separation, so a six-hue
+   categorical bar would need a colour literal this file forbids. The refusal
+   reasons are text, where identity does not depend on hue. */
+.rates-cov{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.rates-covhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.rates-covhead h4{margin:0;font-family:var(--display);font-size:11px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--text2)}
+.rates-big{margin-left:auto;font-family:var(--display);font-size:18px;font-weight:600;color:var(--text)}
+.rates-bar{display:flex;gap:2px;height:10px;margin-top:8px;border-radius:2px;
+  overflow:hidden;background:var(--bg)}
+.rates-bar i{display:block;height:100%}
+.rates-bar .measured{background:var(--accent);border-radius:2px 0 0 2px}
+.rates-bar .rest{flex:1;background:var(--border2)}
+.rates-covnote{margin:8px 0 0;max-width:62ch;font-size:11.5px;line-height:1.5;color:var(--text3)}
+.rates-covlist{list-style:none;margin:8px 0 0;padding:0;display:grid;
+  grid-template-columns:max-content 1fr;gap:3px 12px;
+  font-family:var(--mono);font-size:10.5px;color:var(--text3)}
+.rates-covlist li{display:contents}
+.rates-covlist .v{color:var(--text2);text-align:right}
+
+/* Phone: the tiles go two-up with the lead spanning both — a 3-column grid at
+   375px puts a 20px figure in a 90px track — the glossary drops to one column,
+   and the badge stops sharing a line with a long model id. */
 @media (max-width:560px){
   .rates-badge{margin-left:0}
   .rates-row{padding:12px}
+  .rates-figs{grid-template-columns:1fr 1fr}
+  .rates-fig.lead{grid-column:1 / -1}
+  .rates-gloss{grid-template-columns:1fr}
+  .rates-gloss dd{margin-bottom:4px}
+}
+@media (prefers-reduced-motion:reduce){
+  .rates-how summary::before{transition:none}
 }
 
 .up-walk{margin-top:16px}

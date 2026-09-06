@@ -3,6 +3,10 @@ id: task-22
 title: Token value tab: verdict-first layout with labelled figures, glossary drawer and coverage bar
 created: 2026-09-06
 tags: ui, usage, token-value
+updated: 2026-09-06T20:24:24Z
+started: 2026-09-06T18:54:46Z
+execute-elapsed: 5378
+execute-tokens: 657417
 ---
 
 ## Goal
@@ -309,3 +313,128 @@ true`):
   say so in the PR under *not verified*; the format tests are what covers them.
 - `usage-limits.md` and `overview.md` updated and re-stamped; the Forecast follow-up
   exists as an open idea.
+
+## Outcome
+
+**2026-09-06 — done.** The Token value tab is the variant-A status board: one-sentence
+lead, status strip, the collecting hint hoisted out of the rows, labelled figure tiles with
+ⓘ panels, the evidence line split in two, a fold line for models with nothing to show, a
+closed-by-default glossary drawer, and coverage as a two-segment bar. No file under
+`server/` or `shared/` is in the diff (`git diff --stat -- server shared` is empty), and no
+number the card prints was changed — only where and how it is said.
+
+### Files
+
+| file | change |
+|---|---|
+| `client/src/lib/usageRatesFormat.ts` | added `statusLine`, `hasFigures`, `evidenceParts`, `waitingText`, `measuredShare`, `movedLabel`, `coverageRows`, `coverageCaveat`, `RATES_GLOSSARY`, `figureTip`; deleted `rawAsideText`, `fittedAsideText`, `pricedPillText`, `coverageClauses`, `formatSharePct` |
+| `client/src/hooks/useFloatingTip.ts` | **new** — the tooltip mechanics moved out of `UsageProfile.tsx` verbatim, plus `pinHandlers` (click-to-pin) |
+| `client/src/components/usage/UsageRates.tsx` | rewritten as the seven blocks |
+| `client/src/components/usage/UsageProfile.tsx` | lost the tooltip block, gained one hook call |
+| `client/src/styles.css` | rates block rewritten; `.rates-raw/-meta/-foot/-pill/-line` gone |
+| `test/usage-rates-format.test.ts` | 21 cases → 30 |
+| `docs/subsystems/usage-limits.md`, `docs/overview.md` | rewritten for the new layout |
+
+### Verification
+
+`pnpm typecheck` — exit 0, no output.
+
+`pnpm test` — exit 0:
+
+```
+=== usageRatesFormat.ts ===
+  ✓ statusLine: no models is no claim at all, not "none drifting"
+  ✓ statusLine: five collecting models are not drifting
+  ✓ statusLine counts every verdict in a fixed order, zeroes omitted
+  ✓ statusLine agrees with itself in the plural
+  ✓ statusLine: a mix shift is not drift and never enters the headline
+  ✓ hasFigures: any one rate keeps a row, all three missing folds it
+  ✓ evidenceParts splits the line the two "4 days" collided on
+  ✓ evidenceParts: no baseline days at all is "none yet"
+  ✓ evidenceParts states a baseline that exists
+  ✓ evidenceParts stops naming the floor once the baseline is past it
+  ✓ evidenceParts: the singulars
+  ✓ waitingText names the model and how far it has got
+  ✓ measuredShare is the bar headline, and null when nothing moved
+  ✓ movedLabel names the denominator in whole points, thousands separated
+  ✓ the live coverage lists every refusal, largest first
+  ✓ a bucket that cost nothing produces no row at all
+  ✓ recorder downtime is listed on hours alone, and says 0% honestly
+  ✓ an unprovable start drops the pre-ledger row and leads with the caveat
+  ✓ the glossary is the single copy of every definition the card shows
+
+  30 passed, 0 failed
+
+  31/31 passed
+ALL PASS
+```
+
+1395 assertions across the suite.
+
+**In a real browser.** A worktree dev server on 4273/5273 (started and killed by recorded
+pid; the user's 5174 was untouched and still listening afterwards), fed a copy of this
+machine's live ledger so the card had the five-model / `recording: true` shape it was
+designed against. Deleted afterwards.
+
+- **640px and 375px** match variant A in structure. At 375px the lead tile spans both
+  columns, raw and fitted sit two-up, the glossary drops to one column and nothing scrolls
+  sideways.
+- **The ⓘ panel**: hover shows it beside the pointer (measured `dx +14 / dy −14`); click
+  pins it (`aria-expanded="true"`, cyan border); a pinned panel **follows its button on
+  scroll** (button and panel both moved exactly −120px); hovering a *different* ⓘ while
+  pinned leaves it alone (verified with a real mouse, not a synthetic event); a second
+  click, `Escape`, and a press outside all unpin; clicking another ⓘ moves the pin.
+- **At 125% text scale** the panel lands **on** the pointer — `dx 17 / dy −18` visual px,
+  i.e. the intended 14px offset × 1.25, not 25% down-right of it. The `--font-scale` divide
+  survived the move into the hook.
+- **The Forecast tab's tooltip still behaves as before.** Compared against the pre-change
+  build running on 5174: at the same starting scroll position both produce identical
+  numbers (focus → `opacity 1`, `top 339.594px` at `cellTop 354`; scroll → follows exactly
+  −60px). An earlier reading suggesting a regression was an artifact of my own probe — the
+  two builds had the cell in different scroll positions — and did not reproduce under
+  controlled conditions.
+- **All five themes** render both bar segments and the `forming` word.
+
+### Deviations from the plan, and why
+
+1. **`weeklyAsideText` was kept.** The plan was written before task-21 merged, so it lists
+   neither keeping nor deleting the weekly-limit line. Since the redesign's own rule is
+   that it "keeps every statement the card makes today", the weekly figure stays — as one
+   line under the tiles rather than a fourth tile, because it prices a ~8–14× larger window
+   and a tile row reads as one comparable set. The `!anyWeekly` note block was kept for the
+   same reason. The glossary stays at six entries, as specified.
+2. **The 7-day floor is a local constant, not imported from the server.** The plan
+   preferred importing `BASELINE_FLOORS` "if the server exports it" — it does. But
+   `.claude/CLAUDE.md` says the only thing crossing the FE/BE boundary is the typed JSON in
+   `shared/types.ts`, and a client module importing server code would be a runtime coupling
+   for one integer. `BASELINE_DAY_FLOOR` in `usageRatesFormat.ts` feeds both the `thin` hint
+   and `evidenceParts`, with the reason written at the constant.
+3. **The collecting notice does not re-cut the hint string.** The plan's example copy
+   ("A model is judged once it has…") would need a regex over `verdictText('thin').hint`.
+   The lead is phrased around the hint instead — *"Collecting is the normal first fortnight
+   — a verdict needs 7 separate days behind the baseline and 2 behind the current window."*
+   — so the copy has one owner and cannot be mangled the day the floors change.
+
+### Not verified — needs a human
+
+- **Drift, stable and mix-shift rows.** Every model on this machine is `thin`; those
+  verdicts cannot be produced from live data this fortnight. The format tests cover the
+  copy (`statusLine`, the `.rates-dev.drift` red deviation, the in-row hint) but no drift
+  row has been seen rendered.
+- **Coverage states other than the live one.** `startProvable: false` (the rotated-ledger
+  caveat) and `movedPct <= 0` (the whole block omitted) are unit-tested, never rendered.
+- **Touch.** The tap-to-open sequence is reasoned from the pointer event order and verified
+  with mouse gestures; no real phone was used.
+- **Two contrast readings in the `daylight` theme**, measured but deliberately not changed:
+  the `forming` word sits at **4.03:1** against the row (AA wants 4.5), and the bar's two
+  segments separate at **2.31:1** (with a 2px gap between them). Both come from the shared
+  `--amber` / `--accent` / `--border2` tokens behaving as they do everywhere else —
+  `color:var(--amber)` is small text at a dozen other sites in `styles.css`, some at 10px.
+  Retuning a theme token is a wider decision than this relayout.
+- **`docs/subsystems/usage-limits.md` is NOT re-stamped.** The plan says to re-stamp after
+  the code commit, and this session never commits — the orchestrator does. The stamp still
+  reads `84519e7f…`, which correctly reports the doc as needing review rather than falsely
+  claiming it was verified against a commit that did not exist when it was written.
+  **Re-stamp it to the merge commit.**
+- The Forecast follow-up idea was filed at groom time (`idea-22`); this session did not
+  re-check it.

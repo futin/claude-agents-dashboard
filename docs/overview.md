@@ -190,7 +190,8 @@ client/src/
   hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
                   useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, useStopSession,
-                  usePersistedState, useSettings, useServerSettings, useDictation,
+                  usePersistedState, useSettings, useServerSettings, useDictation, useFloatingTip
+                  (the one hover/pin explanation panel, shared by both Usage tabs),
                   useTranscribeAvailable, useWebNotify (browser banners for headless
                   sessions), useBackClose
   lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
