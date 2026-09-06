@@ -111,8 +111,8 @@ That's the whole basic setup. Everything below is optional.
 
 ## Optional setup
 
-- **All five hooks, one command** — `pnpm hooks:install` symlinks them into `~/.claude` and
-  merges the six settings entries, idempotently, with `--dry-run` and `--uninstall`:
+- **All six hooks, one command** — `pnpm hooks:install` symlinks them into `~/.claude` and
+  merges the seven settings entries, idempotently, with `--dry-run` and `--uninstall`:
   [setup](docs/workflows/hooks-setup.md). Everything below that mentions a hook is what it
   automates; you still choose the token, the topic, and whether remote answering is on.
 - **Phone / away-from-home access** — nothing to configure in the app; see
