@@ -2,6 +2,10 @@
 id: idea-12
 title: Weekly-window token rates
 created: 2026-08-31
+updated: 2026-09-06T09:11:03Z
+promoted-to: task-21
+groom-elapsed: 343
+groom-tokens: 58775
 ---
 
 ## Problem
