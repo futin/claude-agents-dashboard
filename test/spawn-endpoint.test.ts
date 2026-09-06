@@ -29,6 +29,7 @@ import {
   LAUNCH_TTL_MS, MAX_LAUNCHING, adoptLaunched, launch, listLaunching, resetLaunches,
   resetSpawnProbe, setGroupKiller, setSpawner
 } from '../server/lib/spawn.js';
+import { setPsRunner } from '../server/lib/scan.js';
 import { withServer } from './api-harness.js';
 import type { Spawner } from '../server/lib/spawn.js';
 import type { ChildProcess } from 'node:child_process';
@@ -384,6 +385,57 @@ export async function run(): Promise<number> {
       // two writers on one transcript and replace the store entry, dropping the
       // first child's kill handle.
       assert.equal(children.length, 1, 'no second child may be spawned');
+    });
+  }));
+
+  check(await testAsync('resume of a live session this server never spawned is 409 — the ps probe, not the store', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      const children: FakeChild[] = [];
+      setSpawner(fakeSpawner(children));
+      // The empty store is load-bearing: `hasLiveChild` answers false for a
+      // session spawned before the last restart or by any other launcher, so a
+      // 409 here can only have come from the argv probe.
+      assert.equal(listLaunching().length, 0, 'the store must know nothing about this id');
+      setPsRunner(() => `  4242 /usr/local/bin/claude -p --resume ${RES_ID}\n`);
+      try {
+        const reply = await post(
+          (req, res) => void serveSpawn(cfg, req, res),
+          JSON.stringify({ prompt: 'continue', resume: RES_ID })
+        );
+        assert.equal(reply.status, 409);
+        assert.equal(reply.json?.error, 'session is still running');
+        assert.equal(children.length, 0, 'no second child may be spawned');
+      } finally { setPsRunner(null); }
+    });
+  }));
+
+  check(await testAsync('a probe naming other sessions still lets this one resume — "always refuse" is not a fix', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      setSpawner(fakeSpawner());
+      setPsRunner(() => '  4242 /usr/local/bin/claude -p --resume 99999999-9999-4999-8999-999999999999\n');
+      try {
+        const reply = await post(
+          (req, res) => void serveSpawn(cfg, req, res),
+          JSON.stringify({ prompt: 'continue', resume: RES_ID })
+        );
+        assert.equal(reply.status, 200);
+        assert.equal((reply.json as { sessionId?: string })?.sessionId, RES_ID);
+      } finally { setPsRunner(null); }
+    });
+  }));
+
+  check(await testAsync('a probe that cannot run does not refuse a legal resume — null means "no answer", not "alive"', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      setSpawner(fakeSpawner());
+      setPsRunner(() => { throw new Error('ps: command not found'); });
+      try {
+        const reply = await post(
+          (req, res) => void serveSpawn(cfg, req, res),
+          JSON.stringify({ prompt: 'continue', resume: RES_ID })
+        );
+        assert.equal(reply.status, 200);
+        assert.equal((reply.json as { sessionId?: string })?.sessionId, RES_ID);
+      } finally { setPsRunner(null); }
     });
   }));
 

@@ -847,6 +847,35 @@ export function run(): number {
     assert.deepStrictEqual(refs.map(t => t.dirName).sort(), ['-a-repo', '-a-repo--worktrees-x']);
   })) p++; else f++;
 
+  if (test('parsePsSessionIds: both flag spellings, claude lines only, charset-delimited', () => {
+    const psOut = [
+      '  111 /usr/local/bin/claude -p --session-id 11111111-1111-4111-8111-111111111111 --print',
+      '  222 /usr/local/bin/claude -p --resume 22222222-2222-4222-8222-222222222222',
+      '  333 /Users/x/Library/Application Support/Claude/claude-code/2.1.259/claude --session-id=33333333-3333-4333-8333-333333333333',
+      '  444 /usr/bin/tail -f --resume 44444444-4444-4444-8444-444444444444',
+      '  555 claude --resume a/b',
+      ''
+    ].join('\n');
+    assert.deepStrictEqual(scan.parsePsSessionIds(psOut), new Set([
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+      '33333333-3333-4333-8333-333333333333'
+    ]));
+    assert.deepStrictEqual(scan.parsePsSessionIds(''), new Set());
+  })) p++; else f++;
+
+  if (test('liveSessionIds: a failing ps returns null — an unanswerable probe must never refuse', () => {
+    scan.setPsRunner(() => { throw new Error('ps: command not found'); });
+    try { assert.strictEqual(scan.liveSessionIds(), null); }
+    finally { scan.setPsRunner(null); }
+  })) p++; else f++;
+
+  if (test('liveSessionIds: a working ps returns the ids its stdout names', () => {
+    scan.setPsRunner(() => '  111 /usr/local/bin/claude -p --resume abc-1\n  222 /usr/bin/vim notes\n');
+    try { assert.deepStrictEqual(scan.liveSessionIds(), new Set(['abc-1'])); }
+    finally { scan.setPsRunner(null); }
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }

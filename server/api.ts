@@ -7,7 +7,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import nodePath from 'node:path';
 
-import { scanSessions, lastMessageMs, listTranscripts, findTranscript, projectsRoot, sessionSurface } from './lib/scan.js';
+import {
+  scanSessions, lastMessageMs, listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionSurface
+} from './lib/scan.js';
 import { archivedSessionIds } from './lib/archived.js';
 import { readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
@@ -1222,7 +1224,12 @@ export async function serveNotifyTest(
  * reasoning `serveManagementProject` documents for its `dirName` query param),
  * the latter through an exact-id match against the enumerated transcripts.
  * Resume additionally requires the target to be a `dashboard`-surface
- * (`sdk-cli`) session with no live hold — see docs/subsystems/spawn.md.
+ * (`sdk-cli`) session that is not still running. Three checks answer that, and
+ * none of them covers the whole set: a held question/plan/reply socket, the
+ * launch store (`hasLiveChild` — exact, but only for children *this* process
+ * spawned), and a `ps` argv scan (`liveSessionIds` — inexact, but the only one
+ * that can see a session started from a terminal, by a second dashboard, or
+ * before the last restart). See docs/subsystems/spawn.md.
  */
 export async function serveSpawn(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
@@ -1280,6 +1287,16 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
       // on one transcript AND replace the live entry in the store, dropping the
       // first child's kill handle. The store knows, so ask it.
       if (hasLiveChild(rid)) {
+        return sendJson(res, 409, { error: 'session is still running' });
+      }
+      // And the store can only answer for children *this* process spawned. A
+      // session started from a terminal, by a second dashboard, or before the
+      // last restart still reads `dashboard` and still offers resume, so the
+      // fallback is the argv itself: `--session-id` / `--resume` carry the id.
+      // Ordered second because the store is free and exact while this costs a
+      // `ps`. A `null` probe means "could not answer" — never a refusal.
+      const live = liveSessionIds();
+      if (live?.has(rid)) {
         return sendJson(res, 409, { error: 'session is still running' });
       }
       if (listLaunching().some(e => e.sessionId === rid)) {
