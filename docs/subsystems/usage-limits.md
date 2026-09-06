@@ -481,10 +481,9 @@ tokens are output tokens, so raising effort from `high` to `xhigh` raises
 consumption and utilization together and leaves the rate flat. That invariance
 is why the headline figure, its baseline and the deviation chip are all the
 weighted rate. The raw "1% ≈ N tokens" figure is a courtesy translation at the
-model's recent mix, kept as a labelled aside beneath the headline (`rawAsideText`
-in `client/src/lib/usageRatesFormat.ts`, omitted entirely when there is no raw
-rate); when raw moves and weighted did not, the card says **mix shift**, never
-drift.
+model's recent mix, kept as its own labelled tile (`RAW TOKENS`) beside the
+headline one, and omitted entirely when there is no raw rate; when raw moves and
+weighted did not, the card says **mix shift**, never drift.
 
 **No rate here is comparable across models.** Each is fitted from this machine's
 own usage against a single ratio, so a model that fires more requests per token
@@ -1092,11 +1091,10 @@ is null and null rather than `Infinity` when the pooled rate is not positive.
 Every drift field on the row is the single-ratio number it always was: both
 fits are **additive**.
 
-On the card the fitted rate is a third line under the raw aside
-(`fittedAsideText`, omitted entirely when there is no fitted rate — never a
-dash), and the badge above it is still the pooled rate's verdict. The empty
-state names both routes onto the card, because 90% dominance is no longer the
-only one.
+On the card the fitted rate is a third tile beside the raw one (omitted
+entirely when there is no fitted rate — never a dash), and the badge above it is
+still the pooled rate's verdict. The empty state names both routes onto the card,
+because 90% dominance is no longer the only one.
 
 Every row also carries a `weekly` object (`ModelWeeklyRate`), **always present**
 — a thin weekly reading is `thin` verdicts, null rates and zeroed counters, the
@@ -1112,8 +1110,9 @@ weekly counter has not moved", two states that would otherwise render
 identically as empty slots. While it is false the card says the weekly series
 began recording with this build and roughly when to expect a first figure.
 
-`weeklyAsideText` renders the weekly figure as a **fourth** aside under the
-fitted line, naming the week explicitly — a weekly rate is 8–14× a 5-hour one,
+`weeklyAsideText` renders the weekly figure as one line under the tiles rather
+than as a fourth tile — the tile row reads as one comparable set and this prices
+a different window — naming the week explicitly — a weekly rate is 8–14× a 5-hour one,
 so a line that did not say which window it priced would read as a tenfold drift
 in the row above. It makes **no comparison to the 5-hour rate**: the two are
 different quantities, and the two clean measurements of the ratio between them
@@ -1147,31 +1146,105 @@ stacking would bury the shorter view; only the active sub-view mounts, which
 also means each one's fetch-per-mount hook fires when its tab is opened rather
 than on every visit to the section.
 
-`UsageRates.tsx` leads each row with the **weighted** figure (the one drift is
-judged on) and carries the raw figure as a labelled aside beneath it — see *No
-dollars, only ratios* above for why that order, and `bug-13` for the version
-that had it the other way round. It shows every rate beside its
-evidence (windows + **recorded days** + cumulative points), states the
-baseline's own day count in the same line (`no baseline yet` /
-`baseline forming · 1 day` / `baseline 163k · 9 days`), treats `collecting` as a
-first-class state rather than an empty row — with a hint naming both day floors,
-so the card says what it is waiting for — and discloses the external-burn share
-in a footer pill because it is the one systematic bias in the measurement. Every
-explanation is real text in the row — no `title` attributes, for the reason the
-profile tooltip exists.
+`UsageRates.tsx` is a **status board**, in seven blocks top to bottom. What it
+says is exactly what it said before the 2026-09-06 relayout; *where* it says it
+is the change. The layout was chosen from three mocked variants against that
+day's live data (`docs/superpowers/specs/2026-09-06-token-value-layout-mockups.html`);
+the one-table variant was rejected because at 375px a 720px table scrolls the
+verdict column off screen first, and this board is mostly read from a phone.
 
-A second `.rates-foot` row states the coverage split, formatted by pure
-functions in `usageRatesFormat.ts` (`pricedPillText`, `coverageClauses`) so the
-sentences the card makes are testable without a browser. It **leads with the
-priced share**, then names each refusal that actually cost something, largest
-first — because leading with the refusals made a startup artifact read as a
-fault, which is exactly what the single `gap` counter did. A bucket worth zero
-points prints nothing at all: a row of zeroes reads as a broken measurement.
-Shares under 1% keep one decimal (`formatShareOf`), so the genuinely tiny
-recorder-down bucket cannot render as `0%`; the recorder-down clause always
-names its hours *and* its points together; and with `startProvable: false` the
-pre-ledger clause is replaced by a caveat that the ledger has rotated, so the
-start is unknown and `missingPct` has absorbed whatever predates it.
+1. **A one-sentence lead**, replacing the 150-word caveat paragraph. Everything
+   that paragraph explained now lives in the drawer, once each.
+2. **A status strip** (`statusLine`): the question and its answer — `No model is
+   drifting` or `N models are drifting` — with a per-verdict count beside it in a
+   fixed order, zeroes omitted. **Mix shift never enters the headline**: it says
+   the token mix moved and the price did not, which is the opposite of what the
+   headline watches for. It still gets a count.
+3. **The collecting hint once**, in a `.rates-notice` above the list, whenever
+   any row is `thin` — it is a fact about the measurement, not about one model,
+   and five identical sentences read as five separate findings. Drift and
+   mix-shift hints stay in their own row, because those *are* about one model;
+   `stable` carries no sentence at all.
+4. **Model rows** — the header (model id + verdict badge) unchanged, then up to
+   three **labelled tiles**: `WEIGHTED RATE` leading visually, `RAW TOKENS` and
+   `FITTED, MIXED WINDOWS` when those rates exist. Each label carries a **ⓘ**
+   opening that term's definition in the floating panel — a real button and never
+   a `title` attribute, for the reason the profile tooltip exists. Under the
+   tiles, the weekly line, then the **evidence split in two**: `Current 585
+   windows · 4 days · 663.0 pts` and `Baseline forming · 4 of 7 days`. That split
+   is the fix for a line that read `baseline forming · 4 days · 585 windows · 4
+   days · 663.0 pts`, where two identical "4 days" meant two different windows
+   and nothing said which. `evidenceParts` names the 7-day floor only while the
+   baseline is under it: still forming at 9 days means refused for some *other*
+   reason, and "9 of 7" would be nonsense.
+5. **A fold line** for rows `hasFigures` refuses — `claude-sonnet-5 · 2 windows`
+   — instead of three rows of dashes. A dash is honest for one missing figure
+   beside two present ones and pure noise for a whole row.
+6. **The `How to read this` drawer**, a closed-by-default `<details>` over
+   `RATES_GLOSSARY`'s six entries. The ⓘ panels read the *same* strings through
+   `figureTip`, so drawer and panel cannot drift apart.
+7. **Coverage as a bar** (`measuredShare`, `movedLabel`, `coverageRows`,
+   `coverageCaveat`), replacing the two footer pills that never said priced
+   *what*. "Priced" becomes "measured" in the reader's words.
+
+The bar is **two segments and not six**. The dataviz palette validator was run on
+this board's own status hues (`#55d0dd,#ffb03a,#cf6f9e,#66738c,#e0533f` against
+the midnight strip) and fails them on the lightness band, the chroma floor and
+adjacent-pair CVD separation — and `styles.css` forbids a new colour literal
+below the token block, so a six-hue categorical bar could not be built honestly
+here. The question the bar answers is binary anyway; the refusal *reasons* are
+text, where identity does not depend on hue.
+
+It **leads with the measured share**, then names each refusal that actually cost
+something, largest first — because leading with the refusals made a startup
+artifact read as a fault, which is exactly what the single `gap` counter did. A
+bucket worth zero points prints nothing: a row of zeroes reads as a broken
+measurement. Shares under 1% keep one decimal (`formatShareOf`), so the genuinely
+tiny recorder-down bucket cannot render as `0%`. Recorder downtime is listed
+whenever *either* `missingPct` or `recorderBreakHours` is non-zero, so `0% ·
+recorder down 2.0 h` can appear — the correct statement, not a rounding artifact:
+most breaks overlap no interval at all, so time was lost and nothing was spent in
+it. With `startProvable: false` the pre-ledger row is dropped and
+`coverageCaveat` leads instead, because the caveat qualifies every row rather
+than adding to them.
+
+**The external row reads the bucket, not `externalSharePct`.** The card used to
+print `12% external` from `externalSharePct` beside a `59% priced` pill computed
+from the buckets, and the two disagreed: `externalSharePct` divides by the
+*attributable* movement (183 / 1506 = 12.15%), the coverage buckets divide by
+everything that moved (183 / 1997 = 9.2%). That was a different denominator and
+never a defect, but only the bucket sums with the bar above it, so the list reads
+`coverage.externalPct`. `externalSharePct` stays in the response — removing an
+API field is a separate decision — and the card stops reading it.
+
+Every string the card says is a pure function in
+`client/src/lib/usageRatesFormat.ts`, so the statements are testable without a
+browser (`test/usage-rates-format.test.ts`, 30 cases). The functions return
+*parts* — a headline and its counts, a current clause and a baseline clause —
+rather than pre-joined sentences, because the component needs to pick `forming`
+out for its own emphasis; the copy still lives in the lib. The 7-day floor is a
+named constant there and is deliberately **not** imported from
+`BASELINE_FLOORS`: the only thing crossing the FE/BE boundary in this repo is the
+typed JSON in `shared/types.ts`, and a client module importing server code would
+be a runtime coupling for one integer. If the server moves off 7, that constant
+is what has to follow.
+
+The floating panel itself is `client/src/hooks/useFloatingTip.ts`, shared with
+the Forecast tab's heatmap and walk chart, which is why it moved out of
+`UsageProfile.tsx`. It writes the panel's text and position **directly** — a
+pointermove that re-rendered 168 heatmap cells to move one box would be absurd —
+and divides pointer coordinates by `--font-scale`, because `.shell{zoom}` puts a
+`position:fixed` panel in a zoomed coordinate space while `clientX/Y` stays in
+visual viewport pixels (at 100% the two coincide and the bug is invisible; at
+125% the panel lands 25% down-right of the pointer). It exposes two bundles:
+`tipHandlers` is hover-only, for a grid of marks a pointer sweeps across;
+`pinHandlers` adds **click-to-pin** for the ⓘ, because on touch the sequence is
+pointerenter → pointerleave → click, so hover alone shows the panel on
+touch-down and hides it on lift, far too fast to read a definition. A pinned
+panel follows its button on scroll rather than hiding (the same claim a
+keyboard-focused mark has), ignores hover, and closes on a second click,
+`Escape`, a press outside it, or blur. `aria-expanded` is set on the DOM node by
+hand: pinning must not re-render the rows.
 
 ⚠️ **Drift detection itself is unproven.** Every pure function is tested and the
 plumbing is verified end to end against live logs, but a `drift` or `stable`

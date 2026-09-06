@@ -1,34 +1,54 @@
 import type { ModelRateRow } from '../../../../shared/types';
+import type { PinHandlers } from '../../hooks/useFloatingTip';
+import { useFloatingTip } from '../../hooks/useFloatingTip';
 import { useUsageRates } from '../../hooks/useUsageRates';
 import {
-  baselineText, coverageClauses, evidenceText, fittedAsideText, formatDeviation,
-  formatSharePct, formatTok, pricedPillText, rawAsideText, verdictText, weeklyAsideText
+  coverageCaveat, coverageRows, evidenceParts, figureTip, formatDeviation, formatTok,
+  hasFigures, measuredShare, movedLabel, RATES_GLOSSARY, statusLine, verdictText,
+  waitingText, weeklyAsideText
 } from '../../lib/usageRatesFormat';
 
 /**
  * Token value per model — what one percent of the 5-hour window actually costs,
  * and whether that price has moved.
  *
- * The weighted rate leads because it is the only mix-invariant quantity on the
- * row, and the one the badge underneath judges: raw tokens per percent are
- * dominated by how much context a model's sessions replay, so leading with raw
- * invited a cross-model price reading the figure cannot support. Raw stays, as
- * an explicitly labelled translation. `collecting` is a first-class state, not
- * an empty row — most models sit there for the first fortnight. No `title`
- * attributes: this board is read from a phone, where `title` never fires.
+ * A **status board**: the page opens on the question and its answer, then one
+ * card of labelled figures per model, then the definitions. What it says is
+ * exactly what it said before the relayout; where it says it is the change.
  *
- * The **fitted** rate is a third line and deliberately does not lead, even
+ * The weighted rate leads because it is the only mix-invariant quantity on the
+ * row, and the one the badge judges: raw tokens per percent are dominated by
+ * how much context a model's sessions replay, so leading with raw invited a
+ * cross-model price reading the figure cannot support. Raw stays, as an
+ * explicitly labelled tile. `collecting` is a first-class state, not an empty
+ * row — most models sit there for the first fortnight. No `title` attributes:
+ * this board is read from a phone, where `title` never fires, so every ⓘ opens
+ * the real floating panel `useFloatingTip` owns.
+ *
+ * The **fitted** rate is a third tile and deliberately does not lead, even
  * though it reads more of the evidence: it is measured jointly across windows
  * where several models ran together, and it has no baseline history of its own,
  * so there is no measured dispersion to set a drift threshold against. The
  * badge is the pooled rate's verdict and nothing on this row changes that. A
- * model that owns no window has no headline at all and shows `—` above its
- * fitted line — that is the whole reason the line exists, and it is honest.
+ * model that owns no window has no headline at all and shows `—` in the lead
+ * tile beside its fitted one — that is the whole reason the tile exists, and it
+ * is honest.
  *
- * The second footer row leads with the **priced** share rather than with the
- * refusals: most of what the old single `gap` counter reported was spend that
- * simply predates the recorder, so leading with the refusals made a startup
- * artifact read as a fault. Buckets that cost nothing print nothing.
+ * **The collecting hint is hoisted out of the rows.** It is a fact about the
+ * measurement, not about any one model, and printing it once per row made five
+ * identical sentences read as five separate findings. Drift and mix-shift hints
+ * stay in their row: those *are* facts about one model.
+ *
+ * **Coverage is a two-segment bar, not a six-hue one.** The question it answers
+ * is binary — how much of the spend was measured — and the dataviz palette
+ * validator fails this board's own status hues on the lightness band, the chroma
+ * floor and adjacent-pair CVD separation, so a six-hue categorical bar could not
+ * be built here without a new colour literal `styles.css` forbids. The refusal
+ * *reasons* are text, where identity does not depend on hue. It leads with the
+ * measured share rather than the refusals: most of what the old single `gap`
+ * counter reported was spend that simply predates the recorder, so leading with
+ * the refusals made a startup artifact read as a fault. Buckets that cost
+ * nothing print nothing.
  */
 
 const BADGE_CLASS: Record<ModelRateRow['verdict'], string> = {
@@ -38,16 +58,59 @@ const BADGE_CLASS: Record<ModelRateRow['verdict'], string> = {
   thin: 'rates-badge thin'
 };
 
-function Row({ row }: { row: ModelRateRow }) {
-  const verdict = verdictText(row.verdict);
-  const baseline = baselineText(row.baselineWeightedPerPct, row.baselineDays);
-  const rawAside = rawAsideText(row.rawPerPct);
-  const fittedAside = fittedAsideText(row.fittedWeightedPerPct, row.fitDeviationPct);
-  // A fourth aside, under the fitted one. It owns no threshold and makes no
-  // comparison to the 5-hour rate above it — see `weeklyAsideText`.
-  const weeklyAside = weeklyAsideText(
-    row.weekly.weightedPerPct, row.weekly.fittedWeightedPerPct
+/** One labelled figure, its ⓘ, and whatever the card can say underneath it. */
+function Fig({ label, term, lead, value, unit, sub, pin }: {
+  label: string;
+  term: typeof RATES_GLOSSARY[number]['key'];
+  lead?: boolean;
+  value: string;
+  unit: string;
+  sub?: React.ReactNode;
+  pin: (text: string) => PinHandlers;
+}) {
+  return (
+    <div className={lead ? 'rates-fig lead' : 'rates-fig'}>
+      <div className="rates-lab">
+        {label}
+        <button
+          type="button"
+          className="rates-i"
+          aria-label={`What is the ${label.toLowerCase()}?`}
+          aria-expanded="false"
+          {...pin(figureTip(term))}
+        >i</button>
+      </div>
+      <div className="rates-value">
+        {value}<span className="rates-unit">{unit}</span>
+      </div>
+      {sub !== undefined && sub !== null && <div className="rates-sub">{sub}</div>}
+    </div>
   );
+}
+
+/**
+ * The baseline clause, with `forming` picked out — it is the one word on the
+ * evidence line the reader is waiting on, and the only reason the clause is not
+ * printed as flat text.
+ */
+function BaselineClause({ text }: { text: string }) {
+  if (!text.startsWith('forming')) return <>{text}</>;
+  return <><span className="rates-forming">forming</span>{text.slice('forming'.length)}</>;
+}
+
+function Row({ row, pin }: { row: ModelRateRow; pin: (text: string) => PinHandlers }) {
+  const verdict = verdictText(row.verdict);
+  const ev = evidenceParts(row);
+  // The weekly figure stays one line under the tiles rather than becoming a
+  // fourth tile: it prices a *different*, ~8–14× larger window, and a tile row
+  // reads as one comparable set. It owns no threshold — see `weeklyAsideText`.
+  const weekly = weeklyAsideText(row.weekly.weightedPerPct, row.weekly.fittedWeightedPerPct);
+  const showRaw = row.rawPerPct !== null && Number.isFinite(row.rawPerPct);
+  const showFitted =
+    row.fittedWeightedPerPct !== null && Number.isFinite(row.fittedWeightedPerPct);
+  // Only the two verdicts that are about *this* model. `thin` is hoisted to a
+  // single notice above the list, and `stable` needs no sentence at all.
+  const hint = row.verdict === 'drift' || row.verdict === 'mix-shift' ? verdict.hint : null;
 
   return (
     <li className="rates-row">
@@ -55,29 +118,62 @@ function Row({ row }: { row: ModelRateRow }) {
         <span className="rates-model">{row.model}</span>
         <span className={BADGE_CLASS[row.verdict]}>{verdict.label}</span>
       </div>
-      <div className="rates-line">
-        <span className="rates-value">
-          {formatTok(row.weightedPerPct)}<span className="rates-unit"> weighted / 1%</span>
-        </span>
-        {row.deviationPct !== null && (
-          <span className={row.verdict === 'drift' ? 'rates-dev drift' : 'rates-dev'}>
-            {formatDeviation(row.deviationPct)} vs baseline
-          </span>
+
+      <div className="rates-figs">
+        <Fig
+          lead
+          label="Weighted rate"
+          term="weighted"
+          value={formatTok(row.weightedPerPct)}
+          unit="tok / 1%"
+          pin={pin}
+          sub={row.deviationPct !== null && (
+            <>
+              <span className={row.verdict === 'drift' ? 'rates-dev drift' : 'rates-dev'}>
+                {formatDeviation(row.deviationPct)}
+              </span>{' '}vs baseline
+            </>
+          )}
+        />
+        {showRaw && (
+          <Fig
+            label="Raw tokens"
+            term="raw"
+            value={formatTok(row.rawPerPct)}
+            unit="/ 1%"
+            pin={pin}
+          />
+        )}
+        {showFitted && (
+          <Fig
+            label="Fitted, mixed windows"
+            term="fitted"
+            value={formatTok(row.fittedWeightedPerPct)}
+            unit="/ 1%"
+            pin={pin}
+            sub={row.fitDeviationPct !== null && (
+              <>
+                <span className="rates-dev">{formatDeviation(row.fitDeviationPct)}</span>
+                {' '}vs weighted
+              </>
+            )}
+          />
         )}
       </div>
-      {rawAside !== null && <div className="rates-raw">{rawAside}</div>}
-      {fittedAside !== null && <div className="rates-raw">{fittedAside}</div>}
-      {weeklyAside !== null && <div className="rates-raw">{weeklyAside}</div>}
-      <div className="rates-meta">
-        {baseline} · {evidenceText(row.intervals, row.days, row.utilSum)}
+
+      <div className="rates-ev">
+        <span><b>Current</b> {ev.current}</span>
+        <span><b>Baseline</b> <BaselineClause text={ev.baseline} /></span>
       </div>
-      {row.verdict !== 'stable' && <div className="rates-hint">{verdict.hint}</div>}
+      {weekly !== null && <div className="rates-weekly">{weekly}</div>}
+      {hint !== null && <div className="rates-hint">{hint}</div>}
     </li>
   );
 }
 
 export function UsageRates() {
   const { rates, loading, error } = useUsageRates();
+  const { tipRef, pinHandlers } = useFloatingTip();
 
   if (loading) return <div className="up-note">fitting the token rates…</div>;
   if (error || !rates) return <div className="up-note">The token rates could not be read.</div>;
@@ -94,35 +190,27 @@ export function UsageRates() {
   const anyWeekly = rates.models.some(
     row => row.weekly.weightedPerPct !== null || row.weekly.fittedWeightedPerPct !== null
   );
-  const share = formatSharePct(rates.externalSharePct);
-  const priced = pricedPillText(rates.coverage);
-  const clauses = coverageClauses(rates.coverage);
+  const status = statusLine(rates.models);
+  const shown = rates.models.filter(hasFigures);
+  const waiting = rates.models.filter(row => !hasFigures(row));
+  const collecting = rates.models.some(row => row.verdict === 'thin');
+  const measured = measuredShare(rates.coverage);
+  const covRows = coverageRows(rates.coverage);
+  const caveat = coverageCaveat(rates.coverage);
+  // Geometry, not a statement: the same share `measured` prints, as a width.
+  const measuredPct = rates.coverage.movedPct > 0
+    ? Math.max(0, Math.min(100, (rates.coverage.pricedPct / rates.coverage.movedPct) * 100))
+    : 0;
 
   return (
     <div className="up">
+      <div className="up-tip" ref={tipRef} role="tooltip" aria-hidden="true" />
       <div className="up-head">
         <div>
           <h3>TOKEN VALUE PER MODEL</h3>
           <p className="up-sub">
-            <em>Type-weighted</em> tokens per 1% of the 5-hour limit, measured from
-            what this machine spent against what the window charged for it. Weighting
-            is what keeps a change of token mix from reading as a repricing, and drift
-            is judged on this same rate. Each rate is fitted from this machine's own
-            usage, and a model that fires more requests per token carries that
-            per-request window cost inside its token rate — so these are per-model
-            rates, <b>not a price list to compare across models</b>. Baseline = the
-            trailing 14 days before the last three. The <em>fitted</em> line under a
-            row is a second estimate of the same quantity, measured jointly across
-            the windows where several models ran together — the ones the headline
-            rate has to discard. It reads more of the evidence and it is the only
-            figure a model used purely as a subagent ever gets, but it is{' '}
-            <b>no more comparable across models</b> than the headline, it has no
-            baseline history yet, and drift is still judged on the headline alone.
-            The <em>weekly limit</em> line prices a point of the <b>weekly</b>
-            {' '}window instead — a different, much larger quantity, and the one that
-            actually constrains a week of work. It carries <b>no drift verdict</b>,
-            because no day-to-day dispersion has been measured for it yet, and it is
-            no more comparable across models than the others.
+            How many tokens each model gets out of 1% of your 5-hour limit, and whether
+            that price has moved. Measured on this machine only.
           </p>
         </div>
       </div>
@@ -156,29 +244,78 @@ export function UsageRates() {
         </div>
       )}
 
-      {rates.models.length > 0 && (
-        <ul className="rates-list">
-          {rates.models.map(row => <Row key={row.model} row={row} />)}
-        </ul>
-      )}
-
-      {share !== null && (
-        <div className="rates-foot">
-          <span className="rates-pill">{share} external</span>
-          <span>burned outside this machine · excluded from the fit</span>
+      {status !== null && (
+        <div className="rates-status">
+          <span className="rates-q">{status.headline}</span>
+          <span className="rates-counts">
+            {status.counts.map(c => (
+              <span key={c.label}><b>{c.n}</b> {c.label}</span>
+            ))}
+          </span>
         </div>
       )}
 
-      {priced !== null && (
-        <div className="rates-foot">
-          <span className="rates-pill">{priced}</span>
-          {/* A leading middot from the second clause on: the flex gap alone is
-              8px, which at desktop width let two clauses read as one sentence.
-              Kept inside the clause's own span so a wrap still breaks between
-              clauses rather than inside one. */}
-          {clauses.map((clause, i) => (
-            <span key={clause}>{i === 0 ? clause : `· ${clause}`}</span>
-          ))}
+      {collecting && (
+        <div className="rates-notice">
+          {/* The hint verbatim, never re-cut: it is the sentence `verdictText`
+              owns, and a lead phrased around it is cheaper than string surgery
+              that would silently mangle the copy the day the floors change. */}
+          <b>Collecting is the normal first fortnight</b> — {verdictText('thin').hint}.
+        </div>
+      )}
+
+      {shown.length > 0 && (
+        <ul className="rates-list">
+          {shown.map(row => <Row key={row.model} row={row} pin={pinHandlers} />)}
+        </ul>
+      )}
+
+      {waiting.length > 0 && (
+        <div className="rates-wait">
+          <span className="rates-lab">Not enough evidence yet</span>
+          {waiting.map(row => <span key={row.model}>{waitingText(row)}</span>)}
+        </div>
+      )}
+
+      {rates.models.length > 0 && (
+        <details className="rates-how">
+          <summary>
+            How to read this <span className="rates-n">{RATES_GLOSSARY.length} terms</span>
+          </summary>
+          <dl className="rates-gloss">
+            {RATES_GLOSSARY.map(g => (
+              <div key={g.key}>
+                <dt>{g.term}</dt>
+                <dd>{g.text}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
+
+      {measured !== null && (
+        <div className="rates-cov">
+          <div className="rates-covhead">
+            <h4>How much of your spend was measured</h4>
+            <span className="rates-big">
+              {measured}<span className="rates-unit">{movedLabel(rates.coverage)}</span>
+            </span>
+          </div>
+          <div className="rates-bar" role="presentation">
+            <i className="measured" style={{ width: `${measuredPct}%` }} />
+            <i className="rest" />
+          </div>
+          {caveat !== null && <p className="rates-covnote">{caveat}</p>}
+          {covRows.length > 0 && (
+            <ul className="rates-covlist">
+              {covRows.map(r => (
+                <li key={r.label}>
+                  <span className="v">{r.value}</span>
+                  <span className="k">{r.label}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>

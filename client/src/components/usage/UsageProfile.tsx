@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 import type { ForecastConfidence, UsageProfileCell, UsageProfileResponse } from '../../../../shared/types';
+import type { TipHandlers } from '../../hooks/useFloatingTip';
+import { useFloatingTip } from '../../hooks/useFloatingTip';
 import { useUsageProfile } from '../../hooks/useUsageProfile';
 import {
   cellTitle, DAYS, earliestWeightMs, fmtObserved, nextWeekStartMs, profileProgress, TRUST_FLOOR_MIN
@@ -132,20 +134,6 @@ function RecordingStatus({ cells, recording }: { cells: UsageProfileCell[]; reco
   );
 }
 
-/**
- * The handler bundle {@link UsageProfile.tipHandlers} hands a hoverable mark.
- *
- * Typed against `Element`, not `HTMLElement`: the same bundle is spread onto the
- * heatmap's `<div>` cells and the strip's `<rect>` hit columns.
- */
-interface TipHandlers {
-  onPointerEnter: (e: React.PointerEvent) => void;
-  onPointerMove: (e: React.PointerEvent) => void;
-  onPointerLeave: () => void;
-  onPointerCancel: () => void;
-  onFocus: (e: React.FocusEvent<Element>) => void;
-  onBlur: () => void;
-}
 
 /**
  * The forward walk, as a cumulative climb to a 100% ceiling.
@@ -298,102 +286,7 @@ export function UsageProfile() {
   const { profile, loading, error } = useUsageProfile();
   const [showTable, setShowTable] = useState(false);
 
-  // Written to directly rather than through state: a pointermove that re-rendered
-  // 168 cells to move one box would be absurd.
-  const tipRef = useRef<HTMLDivElement>(null);
-  /** The mark a *keyboard*-shown tooltip belongs to; null when pointer-shown. */
-  const anchorRef = useRef<Element | null>(null);
-
-  const placeTip = useCallback((x: number, y: number) => {
-    const tip = tipRef.current;
-    if (!tip) return;
-    // Measure from the origin, never from wherever the panel was last left.
-    // It is `position: fixed` with no `right`, so the viewport edge caps its
-    // available width: measured while sitting near the right edge it reports a
-    // *narrower* box than it will occupy once moved, and the clamp below then
-    // lets it hang off the screen by the difference.
-    tip.style.left = '0px';
-    tip.style.top = '0px';
-    const w = tip.offsetWidth;
-    // `.shell{zoom:var(--font-scale)}` puts this fixed-positioned panel in a
-    // *zoomed* coordinate space: its left/top are multiplied by the text scale,
-    // while clientX/Y (and getBoundingClientRect) stay in visual viewport px.
-    // At scale 100% the two spaces coincide and the bug is invisible; at 125%
-    // the panel lands 25% further down-right than the pointer, an error that
-    // grows with page position. Divide the visual coords (and the viewport
-    // width the clamp compares against) back into the panel's own space.
-    const z = parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue('--font-scale')
-    ) || 1;
-    const vx = x / z, vy = y / z;
-    tip.style.left =
-      Math.max(8, Math.min(vx + 14, window.innerWidth / z - w - 8)) + 'px';
-    // Beside the pointer at a constant offset — never above it, and with no
-    // vertical clamp. The panel used to sit above the mark and clamp against
-    // the viewport, but a clamp has an engage point, and crossing it reads as
-    // the panel drifting around the pointer mid-sweep: walking down the grid,
-    // the tip held still near the top edge and then started moving. A constant
-    // offset keeps the pointer→panel distance identical on every cell. The
-    // price is that the last ~60px above the bottom edge can shave the panel's
-    // final lines — accepted; that is the very trade the clamp reversed.
-    tip.style.top = (vy - 14) + 'px';
-  }, []);
-
-  const showTip = useCallback((text: string, x: number, y: number) => {
-    const tip = tipRef.current;
-    if (!tip) return;
-    tip.textContent = text;   // never innerHTML; the CSS keeps the newlines
-    tip.style.opacity = '1';
-    placeTip(x, y);
-  }, [placeTip]);
-
-  const hideTip = useCallback(() => {
-    const tip = tipRef.current;
-    if (tip) tip.style.opacity = '0';
-  }, []);
-
-  // A shown tooltip is positioned in viewport coordinates, so a scroll would
-  // strand it — the panel holding still while the mark slides out from under it.
-  // `capture` because the scroller is an ancestor, not the window.
-  //
-  // A *keyboard*-shown tooltip follows its mark instead of hiding: tabbing to an
-  // off-screen cell makes the browser scroll it into view, and hiding on that
-  // scroll would blank the tooltip the focus had just opened.
-  useEffect(() => {
-    const onScroll = () => {
-      const anchor = anchorRef.current;
-      if (anchor && document.activeElement === anchor) {
-        const r = anchor.getBoundingClientRect();
-        placeTip(r.right, r.top);
-        return;
-      }
-      hideTip();
-    };
-    window.addEventListener('scroll', onScroll, { passive: true, capture: true });
-    window.addEventListener('resize', hideTip);
-    return () => {
-      window.removeEventListener('scroll', onScroll, { capture: true } as EventListenerOptions);
-      window.removeEventListener('resize', hideTip);
-    };
-  }, [hideTip, placeTip]);
-
-  /** Hover / press / focus handlers for one hoverable mark. */
-  const tipHandlers = useCallback((text: string) => ({
-    onPointerEnter: (e: React.PointerEvent) => {
-      anchorRef.current = null;          // pointer-shown: a scroll should hide it
-      showTip(text, e.clientX, e.clientY);
-    },
-    onPointerMove: (e: React.PointerEvent) => placeTip(e.clientX, e.clientY),
-    onPointerLeave: hideTip,
-    onPointerCancel: hideTip,
-    // Keyboard: anchor to the mark itself, since there is no pointer.
-    onFocus: (e: React.FocusEvent<Element>) => {
-      anchorRef.current = e.currentTarget;
-      const r = e.currentTarget.getBoundingClientRect();
-      showTip(text, r.right, r.top);
-    },
-    onBlur: () => { anchorRef.current = null; hideTip(); }
-  }), [showTip, placeTip, hideTip]);
+  const { tipRef, tipHandlers } = useFloatingTip();
 
   if (loading) return <div className="up-note">reading the usage profile…</div>;
   if (error || !profile) return <div className="up-note">The usage profile could not be read.</div>;
