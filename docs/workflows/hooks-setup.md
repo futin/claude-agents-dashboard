@@ -1,4 +1,4 @@
-# Installing the hooks, all five at once
+# Installing the hooks, all six at once
 
 `pnpm hooks:install` wires this repo's hooks into your own `~/.claude`. It replaces the
 symlink-plus-settings-entry recipe that each of the five hook docs still carries, and it is
@@ -23,7 +23,7 @@ eating the flags.)
 
 ## What it does
 
-**Five symlinks** into `~/.claude/hooks/` — links, never copies, so `git pull` updates the
+**Six symlinks** into `~/.claude/hooks/` — links, never copies, so `git pull` updates the
 hooks in place:
 
 | Repo script | Installed as |
@@ -33,21 +33,45 @@ hooks in place:
 | `scripts/permission-notify-hook.sh` | `permission-notify.sh` |
 | `scripts/stop-notify-hook.sh` | `stop-notify.sh` |
 | `scripts/remote-decision-hook.sh` | `remote-decision.sh` |
+| `scripts/kill-guard-hook.sh` | `kill-guard.sh` |
 
-**Six entries** in `~/.claude/settings.json`:
+**Seven entries** in `~/.claude/settings.json`:
 
 | Event | Matcher | Hook | Timeout |
 |---|---|---|---|
 | `PreToolUse` | `AskUserQuestion` | `ask-remote.sh` | 630 |
+| `PreToolUse` | `Bash` | `kill-guard.sh` | 5 |
 | `PermissionRequest` | `ExitPlanMode` | `plan-remote.sh` | 630 |
 | `PermissionRequest` | — | `permission-notify.sh` | 5 |
 | `Notification` | — | `permission-notify.sh` | 5 |
 | `Stop` | — | `stop-notify.sh` | 630 |
 | `UserPromptSubmit` | — | `remote-decision.sh` | 5 |
 
-Six entries, five scripts: `permission-notify.sh` is registered twice on purpose —
+Seven entries, six scripts: `permission-notify.sh` is registered twice on purpose —
 `PermissionRequest` is the live signal, `Notification` the legacy fallback
 ([permission-notify](../subsystems/permission-notify.md)).
+
+### The odd one out: `kill-guard.sh`
+
+Every other hook here exists to get something to your phone. This one exists to keep the
+dashboard alive. It refuses a Bash call that runs `pkill` or `killall` unless the pattern
+is anchored to an absolute path inside the session's own directory, and its refusal names
+the two shapes that are allowed instead — a pid you recorded, or `pkill -f "$PWD/…"`.
+
+It is in this installer because of 2026-09-06. An unattended session in a sibling repo
+tore down two preview servers it had started itself, by pattern rather than by pid. The
+pattern matched this repo's `pnpm dev` as well, taking Vite on 5174 and the API on 4173
+with it, and the dashboard stayed down for 6.5 hours. That was not survivable collateral:
+backlog-manager's orchestrator watchdog resumes a dead run through `POST /api/spawn`, so
+the run had destroyed the one process that could have restarted it, and both of its resume
+attempts failed with `dashboard unreachable`. One line later the same session killed its
+own API correctly, by the pid it held — so a rule in a `CLAUDE.md` was never the missing
+piece. A refusal is.
+
+`CLAUDE_KILL_GUARD=off` in a session's environment disables it — an env var rather than a
+flag file, so that switching it off stays something a human did on purpose rather than
+something a session can arrange for itself and forget to undo. Without `jq` it exits
+silently and allows the call, like every other hook here.
 
 The 630s timeouts are load-bearing, not padding: a held hook must outlive the dashboard's
 answer window (≤600s) or the CLI kills it mid-hold.
@@ -126,6 +150,7 @@ warning on any non-Darwin host rather than letting you discover it as silence.
     - scripts/plan-remote-hook.sh
     - scripts/permission-notify-hook.sh
     - scripts/remote-decision-hook.sh
+    - scripts/kill-guard-hook.sh
     - package.json
   kind: workflow
 -->

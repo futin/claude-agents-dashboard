@@ -1,14 +1,17 @@
 #!/bin/bash
-# install-hooks.sh — wire this repo's five Claude Code hooks into the user's
+# install-hooks.sh — wire this repo's six Claude Code hooks into the user's
 # own ~/.claude, so a teammate gets remote answers, remote plans, remote
-# replies, permission notices and the away-mode injection with one command
-# instead of six symlinks and six settings entries copied out of five docs.
+# replies, permission notices, the away-mode injection and the broad-kill guard
+# with one command instead of six symlinks and seven settings entries copied out
+# of five docs.
 #
 # Registration is USER-GLOBAL on purpose, and that is the whole reason this is
 # an installer rather than a checked-in `.claude/settings.json`. The dashboard
 # scans every project under ~/.claude/projects, so a session in any repo is
 # worth a reply window; project-scoped hooks would fire only for sessions
-# started in this one and silently drop the rest.
+# started in this one and silently drop the rest. kill-guard makes the same
+# argument from the opposite end: the session that kills this repo's dev server
+# is running somewhere else, so a guard installed only here guards nothing.
 #
 # Symlinks, never copies: `git pull` then updates the hooks in place, which is
 # the property the five setup docs have always relied on.
@@ -40,7 +43,7 @@ for arg in "$@"; do
     --dry-run) DRY=true ;;
     --uninstall) UNINSTALL=true ;;
     --force) FORCE=true ;;
-    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;   # the header block above, through Requires
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;   # the header block above, through Requires
     *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -61,6 +64,7 @@ plan-remote-hook.sh|plan-remote.sh
 permission-notify-hook.sh|permission-notify.sh
 stop-notify-hook.sh|stop-notify.sh
 remote-decision-hook.sh|remote-decision.sh
+kill-guard-hook.sh|kill-guard.sh
 "
 
 # One row per settings entry: <event>|<matcher>|<installed name>|<timeout>.
@@ -68,8 +72,15 @@ remote-decision-hook.sh|remote-decision.sh
 # window (≤600s), or the CLI kills the hook mid-hold. permission-notify appears
 # twice because PermissionRequest is the live signal and Notification is the
 # legacy fallback — both are wanted, and they are separate registrations.
+#
+# kill-guard is the odd one out: every other hook here exists to get a question
+# to the user's phone, while that one exists to keep this repo's own dev server
+# alive when a session in some OTHER repo reaches for `pkill`. It is installed
+# by the same command for the same reason all of them are user-global — the
+# sessions it has to answer for are, by definition, not running here.
 ENTRIES="
 PreToolUse|AskUserQuestion|ask-remote.sh|630
+PreToolUse|Bash|kill-guard.sh|5
 PermissionRequest|ExitPlanMode|plan-remote.sh|630
 PermissionRequest||permission-notify.sh|5
 Notification||permission-notify.sh|5

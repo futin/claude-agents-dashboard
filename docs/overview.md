@@ -196,7 +196,9 @@ vite.config.ts    dev proxy /api → backend; reuses the server config loader
 test/             node-assert tests over backend + client domain logic
 scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   plan-remote-hook.sh, permission-notify-hook.sh,
-                  remote-decision-hook.sh, stop-notify-hook.sh, host-credentials.sh,
+                  remote-decision-hook.sh, stop-notify-hook.sh,
+                  kill-guard-hook.sh (refuses broad pkill/killall — see
+                  workflows/hooks-setup.md), host-credentials.sh,
                   lan-ip.sh, env-value.ts (the one .env reader the installer and
                   the server share — never a second grep),
                   probe-usage-split.ts (`pnpm probe:usage-split`) — runs both

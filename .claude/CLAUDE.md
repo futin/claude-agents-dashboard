@@ -26,10 +26,11 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
 - `pnpm start` — prod: built client + API on http://localhost:4173 (`NODE_ENV=production`).
 - `pnpm test` — `test/run-all.ts` via tsx; prints the case count.
 - `pnpm typecheck` — `tsc --noEmit`.
-- `pnpm hooks:install` — symlinks the five hook scripts into `~/.claude/hooks`, merges the
-  six `settings.json` entries. Idempotent; `-- --dry-run` / `-- --uninstall` / `-- --force`.
+- `pnpm hooks:install` — symlinks the six hook scripts into `~/.claude/hooks`, merges the
+  seven `settings.json` entries. Idempotent; `-- --dry-run` / `-- --uninstall` / `-- --force`.
   Registration is user-global **on purpose** — project-scoped hooks would answer only
-  sessions started in this repo (`docs/workflows/hooks-setup.md`).
+  sessions started in this repo, and `kill-guard.sh` would guard only the repo that isn't
+  running the `pkill` (`docs/workflows/hooks-setup.md`).
 - `pnpm tunnel` — optional HTTPS over the tailnet (`tailscale serve --bg 5174`); keep the
   port matching what you actually serve.
 
