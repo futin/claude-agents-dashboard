@@ -159,5 +159,5 @@ worst case to the window size, not to the transcript size.
     - client/src/lib/chatFilter.ts
     - client/src/lib/markdown.ts
   kind: subsystem
-  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
+  verified: f436519f31ef4120521792db7658e2bc5431f0e9
 -->
