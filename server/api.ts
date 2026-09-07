@@ -325,7 +325,7 @@ export function readBody(req: IncomingMessage, cap: number): Promise<ReadBody> {
 /**
  * Buffer and parse a JSON request body. null on overflow, bad JSON, or abort:
  * every caller answers 400 to all three, so `readBody`'s distinction is
- * collapsed here rather than re-branched at ten call sites.
+ * collapsed here rather than re-branched at every call site.
  */
 export async function readJsonBody(req: IncomingMessage, cap = BODY_CAP): Promise<unknown | null> {
   const body = await readBody(req, cap);
@@ -368,7 +368,7 @@ function send413(res: ServerResponse, body: unknown): void {
 /**
  * `POST /api/transcribe` — a recorded clip in, one line of text out.
  *
- * Gated like the four write paths even though it writes no session state: it
+ * Gated like the other write paths even though it writes no session state: it
  * spawns processes and writes files on this machine, which is firmly the write
  * side of the line this codebase draws. Token comes before the engine probe so
  * an unauthenticated caller gets no further than 403 on a path that spawns

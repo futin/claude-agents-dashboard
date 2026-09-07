@@ -541,9 +541,9 @@ export default function SettingsView() {
             <span>⚠</span>
             <span>
               <b>{staleEnv.join(', ')}</b> changed in <code>.env</code> after this server started.
-              Config is read once, at startup, so it is still using the old value — a push goes to
-              the previous topic, ntfy accepts it, and nothing arrives. <b>Restart the server</b> to
-              pick the new one up.
+              Config is read once, at startup, so it is still using the old value. A changed topic
+              is the quiet case: the push goes to the previous topic, ntfy accepts it, and nothing
+              arrives. <b>Restart the server</b> to pick the new value up.
             </span>
           </div>
         )}

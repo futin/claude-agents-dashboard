@@ -126,7 +126,7 @@ export function classifyAddress(addr: string | undefined): ConnectionOrigin {
  * Classify a request by its socket address, falling back to `X-Forwarded-For`
  * **only when the socket is loopback**.
  *
- * That fallback is what makes `pnpm tunnel` (`tailscale serve --bg 4173`) report
+ * That fallback is what makes `pnpm tunnel` (`tailscale serve --bg 5174`) report
  * `tailnet` instead of `local`: the serve proxy runs on the host, so the socket
  * is 127.0.0.1 and the peer's real tailnet address survives only in the header.
  * The Vite dev proxy (`xfwd: true`) is the same shape.
