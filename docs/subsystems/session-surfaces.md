@@ -26,7 +26,7 @@ reason D exists at all.
 | Desktop app sidebar | A + E — it merges the account's **cloud** sessions into the list (verified: a phone-created cloud session appears; its id is absent from the app's local registry, so this is a rendered merge, not an import). **Not D** — a live, phone-visible RC session shows nowhere in the app | A full UI; E as a cloud thread | ✅ |
 | Phone Claude app | D (while alive), E | D and E, full chat UI | ✅ |
 | claude.ai web | E; D *untested* | E | ✅ |
-| This dashboard | A, B, C, D (anything with a transcript on disk) | any of them via the turn-end reply window (away-only), 8 replies per stretch; **C/D also via [resume](spawn.md#resuming-an-ended-session-resume)** once the turn is over — no away gate, no reply cap | ⚠️ composer, not a thread UI |
+| This dashboard | A, B, C, D (any transcript on disk the list doesn't skip — archived-in-the-app and slash-command-only ones are dropped, [sessions](sessions.md#phantom-rows-a-session-that-doesnt-exist-yet)) | any of them via the turn-end reply window (away-only), 8 replies per stretch; **C/D also via [resume](spawn.md#resuming-an-ended-session-resume)** once the turn is over — no away gate, no reply cap | ⚠️ composer, not a thread UI |
 | Terminal `claude --resume <id>` | any local transcript (A–D) | full TUI with complete history | ✅ |
 | Another local session (`ListAgents`/`SendMessage`) | any *live* local session, incl. one held in its reply window | enqueue a message; the reply comes back cross-session | n/a (agent-to-agent) |
 
@@ -140,8 +140,12 @@ before believing it:
 The join is worth four titles out of 722 and loses 62, because the registry only
 holds desktop-app sessions — terminal sessions and dashboard spawns are never in
 it. Its other fields are no better: `"effort"` and `"permissionMode"` are both
-already present in the 256 KB tail `transcript.ts` decodes anyway. Nothing here
-is a source; it is a partial mirror of what the transcript already says.
+already present in the 256 KB tail `transcript.ts` decodes anyway. As a
+*metadata* source, then, it is only a partial mirror of what the transcript
+already says. The one field the transcript cannot mirror is `isArchived` — the
+app's "delete" — and that one *is* now read: `scan.ts` takes an `archivedIds`
+set and filters those transcripts out of its candidate pool
+([sessions](sessions.md#phantom-rows-a-session-that-doesnt-exist-yet)).
 
 ## The two boundaries that will not move from this repo
 
@@ -279,5 +283,5 @@ visible to the dashboard.
     - client/src/components/SessionRow.tsx
     - client/src/components/ChatDrawer.tsx
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

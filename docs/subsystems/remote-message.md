@@ -64,7 +64,7 @@ same session with your follow-up.
 
 | Piece | What it does |
 |---|---|
-| `scripts/stop-notify-hook.sh` | Extended in place, not duplicated — a second hook would race the notify POST and double-push. Away + remote answers on → holds; otherwise the pre-feature `notify_fallback` path (`POST /api/notify/event`), byte-for-byte unchanged. Failed wait POST (non-2xx) also falls back to plain notify POST. Headless sessions (no controlling TTY — `ps -o tty=` prints `??`; the dashboard's own `-p` launches — **and** not a front-end named in the interactive-entrypoint allowlist) skip the at-desk gate and hold regardless of idle, sending `headless: true` in the wait body |
+| `scripts/stop-notify-hook.sh` | Extended in place, not duplicated — a second hook would race the notify POST and double-push. Away + remote answers on → holds; otherwise the pre-feature `notify_fallback` path (`POST /api/notify/event`), byte-for-byte unchanged. Failed wait POST (non-2xx) also falls back to plain notify POST. Headless sessions (no controlling TTY — `ps -o tty=` prints `??`; the dashboard's own `-p` launches — **and** not a front-end named in the interactive-entrypoint allowlist) skip the at-desk gate and hold regardless of idle, sending `headless: true` in the wait body. Sessions an orchestrator run owns (`BM_ORCH_RUN` set in the environment) never hold at all: the check sits just after the `remoteAnswer` gate and takes `notify_fallback`, so the finished-turn push still goes out — the run spawned the process to work one item unattended and is blocking on its exit, so nobody is going to reply. Keyed on that env var rather than widened into a blanket headless exemption: a headless session a person started by hand is reachable on purpose |
 | `POST /api/messages/wait` | `serveMessageWait` — held open until an answer, a dismiss, the deadline, an idle release, or a supersede |
 | `GET /api/sessions/:id/message` | `serveSessionMessage` — what the browser polls, at the configured refresh rate (`usePendingMessage` reads `refreshMs` from `useSettings`, exactly as `usePendingPlan`/`usePendingQuestion` do) |
 | `POST /api/sessions/:id/message-answer` | `serveSessionMessageAnswer` — `{messageId, text}` or `{messageId, dismiss: true}`. Token-gated |
@@ -134,7 +134,9 @@ you can type the follow-up in the terminal instead — but a [dashboard-spawned]
 its window would orphan the session mid-conversation. The hook detects the missing
 controlling TTY (`??` from `ps -o tty=`, verified both ways: a detached spawn reads `??`,
 a pty session reads its tty name) and sends `headless: true`; unreadable TTY output fails
-to "terminal", so a session is never exempted on a guess.
+to "terminal", so a session is never exempted on a guess. One headless case never reaches
+the sweep at all: an orchestrator-owned session (`BM_ORCH_RUN`) is turned away hook-side
+before the hold opens, so what the exemption covers is only headless holds that exist.
 
 ⚠️ **A missing TTY is not the same thing as a missing place to type,** and the TTY test
 alone got that wrong for a whole front-end. The desktop app runs the CLI with no pty
@@ -264,5 +266,5 @@ state, reset on a new `messageId`, never persisted.
     - client/src/hooks/usePendingMessage.ts
     - client/src/components/SessionRow.tsx
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

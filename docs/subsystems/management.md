@@ -21,7 +21,7 @@ Read-only v1 — nothing is ever written.
 - **Endpoints:** `GET /api/management` (ManagementIndex: global ScopeConfig + recent
   ProjectRefs), `GET /api/management/project?dir=<dirName>` (one project's ScopeConfig),
   `GET /api/management/file?path=<abs>` (FileContent). Handlers in `api.ts`, scanner in
-  `lib/management.ts`, frontmatter metadata via `lib/frontmatter.ts`.
+  `lib/management.ts`, frontmatter metadata via `shared/frontmatter.ts`.
 - **Scopes:** global = `~/.claude/{skills,agents,commands,rules,hooks,CLAUDE.md,settings*}`
   **plus every installed plugin's subtree** (`plugins/installed_plugins.json` →
   installPath → skills/agents/commands/rules/hooks.json), items tagged `plugin:<name>`.
@@ -74,10 +74,10 @@ Read-only v1 — nothing is ever written.
 <!-- docs-sync:
   sources:
     - server/lib/management.ts
-    - server/lib/frontmatter.ts
+    - shared/frontmatter.ts
     - server/api.ts
     - client/src/components/management/
     - client/src/lib/managementEntries.ts
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

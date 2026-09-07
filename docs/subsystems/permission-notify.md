@@ -60,7 +60,7 @@ back with feedback" is a real instruction, not merely a refusal.
 | `POST /api/permissions/notify` | `servePermissionNotify` in `api.ts` — `tokenOk` 403, `ID_RE` 400, unknown session 404, else `notifyPermission()` followed by `maybeSend(config, 'permission', …)`. The route notifies inline rather than through `/api/notify/event`, because the hook is already POSTing here (see [push-notify](push-notify.md)) |
 | `server/lib/permissions.ts` | RAM-only `Map<sessionId, {notifiedAt, message, timer}>`. No held socket, no resolve — a notify is a fact, not a wait |
 | `scan.ts` `ScanOptions.permissionWaits` | injected `sessionId → notifiedAt`; sets `Session.permissionWait` and forces `status: 'question'` |
-| `SessionRow` tab + `PermissionBanner` | the row's chat tab in mustard `allow?` — last in `chatTab()`'s precedence, so `remoteQuestion`, `remotePlan` and `remoteReply` all label it first (see [sessions](sessions.md#the-tab-is-also-where-a-session-says-it-needs-a-human)) — and the pinned drawer strip |
+| `SessionRow` tab + `PermissionBanner` | the row's chat tab in mustard `allow?` — `chatTab()` now looks the label up by `holdKind(s)` (`client/src/lib/holds.ts`), which returns `permission` last, so `remoteQuestion`, `remotePlan` and `remoteReply` all label it first (see [sessions](sessions.md#the-tab-is-also-where-a-session-says-it-needs-a-human)). That precedence lives in `holds.ts` rather than in the row because the header's "need you" count and the browser-notification gate read the same answer — and the pinned drawer strip |
 
 ## ⚠️ Clearing is the scan's job, not the store's
 
@@ -95,7 +95,7 @@ reads `idle`, not a permanent blue dot. Below `remoteQuestion`, `remotePlan` and
 
 ## Install (manual, user-consented)
 
-`pnpm hooks:install` does both registrations below, plus the other four hooks
+`pnpm hooks:install` does both registrations below, plus the other five hooks
 ([hooks-setup](../workflows/hooks-setup.md)). It is still user-consented: a command you run,
 not something a clone wires for you. By hand:
 
@@ -185,5 +185,5 @@ silencing an unrelated prompt.
     - client/src/components/PermissionBanner.tsx
     - client/src/components/SessionRow.tsx
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

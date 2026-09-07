@@ -112,6 +112,12 @@ dictates" without any change of its own.
   real tailnet address survives only in that header — without the fallback every tunnel
   user would read `local`. Spoofing is a non-issue by construction: only something
   already on the machine can send it, and it drives a badge with no policy attached.
+  **⚠️ That holds only while nothing gates on it.** A peer behind a
+  loopback-terminating proxy writes the left-most forwarded entry itself, so as a
+  guard `classifyOrigin` returns whichever verdict the caller asks for — refusing an
+  honest proxied client and admitting one that prepends `127.0.0.1`. Any future gate
+  must read `classifyAddress` (socket only), never `classifyOrigin`
+  (`server/lib/origin.ts`).
 - **⚠️ The dev proxy needs `xfwd: true`** (`vite.config.ts`). Vite reaches the API over
   loopback, so without it every `pnpm dev` client — including a phone on the LAN —
   classifies as `local`.
@@ -138,5 +144,5 @@ dictates" without any change of its own.
     - server/api.ts
     - package.json
   kind: subsystem
-  verified: 69dc049345a08127684ec8813ccd31aaedf4ea84
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

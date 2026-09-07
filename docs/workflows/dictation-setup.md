@@ -41,7 +41,9 @@ WHISPER_MODEL=/Users/<you>/.whisper/ggml-base.en.bin
 `WHISPER_BIN` (default `whisper-cli`) and `FFMPEG_BIN` (default `ffmpeg`) exist for a
 non-PATH install of either binary — point them at an absolute path if `brew`'s symlink
 isn't what you want resolved. **Restart the server** — like every other `.env`-only flag
-here, this is read once at startup, not polled from Settings.
+here, this is read once at startup, not polled from Settings. Forget to, and the Settings
+tab names the changed keys in a warning banner (`staleEnvKeys` on `GET /api/settings`,
+names only — never values); it can only tell you a restart is pending, not apply them.
 
 ⚠️ Before turning this on somewhere other devices can reach: this endpoint has no auth
 beyond the same `ANSWER_TOKEN` every other write path uses, and it defaults to empty
@@ -93,5 +95,5 @@ server restart.
     - server/lib/transcribe.ts
     - server/api.ts
   kind: workflow
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

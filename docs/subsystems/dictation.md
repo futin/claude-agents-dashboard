@@ -128,7 +128,7 @@ one is a reason to ever wire the mic straight to send.
 |---|---|
 | 200 | `{text: string}` — possibly `''` when nothing was heard; the client shows "nothing heard" inline, not an error |
 | 400 | empty body; upload aborted mid-read; or a `Content-Type` outside the mime allowlist (echoed back in the error message) |
-| 403 | bad or missing token — `tokenOk`, the same check as the other four write paths |
+| 403 | bad or missing token — `tokenOk`, the same check as every other write path. The refusal is no longer silent: `tokenOk` prints one `rejected write: POST /api/transcribe` line on stderr, throttled to once per method+path per minute, carrying the method and path only — never the token, a prefix of it, or the query string |
 | 404 | feature off: `remoteAnswer` is false, or `probeTranscribe` is false (no model configured, or no working binary) |
 | 405 | non-`POST` |
 | 413 | body over `AUDIO_CAP` (8MB) — caught from an honest `Content-Length` before a byte is read, or from the running byte count otherwise |
@@ -166,8 +166,11 @@ read. Gating `transcribe` behind the token would not make the capability more pr
 would just break the mic for exactly the people who bothered to set `ANSWER_TOKEN`, because
 `useRemoteAnswer` and `useTranscribeAvailable` both fetch `/api/health` with no
 `Authorization` header — a token-configured browser would probe, get refused, and never
-render the button at all. The bit sits beside three other booleans that already leak
-nothing more sensitive than "a feature is turned on"; it doesn't leak anything new in kind.
+render the button at all. The bit sits beside other booleans that already leak nothing more
+sensitive than "a feature is turned on"; it doesn't leak anything new in kind. `spawnAvailable`
+is one; so is `tokenRequired`, added so a hook with no token file can tell "a token is
+needed" from "the feature is off" — it announces only *that* a token is required, never
+which, which is the same thing a 403 already announces.
 
 What the token *does* gate is a spawn per request. `serveTranscribe` checks `remoteAnswer` →
 `tokenOk` → `probeTranscribe` → `isTranscribing()` → mime → body, in that order, so an
@@ -214,7 +217,7 @@ limits](#accepted-limits) for where it can wedge.
 ## Security posture
 
 ⚠️ **Read this as an operator warning, not a reassurance.** `ANSWER_TOKEN` gates
-`/api/transcribe` exactly as it gates the four existing write paths — and it defaults to
+`/api/transcribe` exactly as it gates every other write path — and it defaults to
 **empty, which means open**. With `WHISPER_MODEL` configured and no token set, **any peer
 that can reach the dashboard on any interface it's bound to can cause `ffmpeg` and
 `whisper-cli` to run on this machine.** That is real, and it is bounded by exactly four
@@ -268,5 +271,5 @@ mitigations above are what stand in the token's place if you choose not to set o
     - client/src/lib/dictation.ts
     - client/src/components/MessagePanel.tsx
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

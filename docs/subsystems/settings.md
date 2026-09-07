@@ -11,7 +11,9 @@ There are two backends, and the page's group headings say which is which.
 (every section the rail offers, plus Last used — one list, `SECTIONS` in `client/src/lib/sections.ts`,
 from which both the picker's options and `clampSettings`'s accepted set are derived, so the two
 cannot drift apart), chat truncation, refresh rate, row count, lookback, active window, browser
-notifications. A phone propped on the desk
+notifications, the launch panel's default model and default effort (`''` = send no flag and let
+the `claude` CLI choose; either way a launch can still override it), and which Usage sub-tab
+opens (`forecast` | `rates`). A phone propped on the desk
 wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and
 three seconds. Sharing these would make one device wrong.
 
@@ -245,5 +247,5 @@ a value the rows never reflect.
     - server/lib/settings.ts
     - client/index.html
   kind: subsystem
-  verified: 11b8ed0d0aeb05c5da91b89eee51d283aa092355
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

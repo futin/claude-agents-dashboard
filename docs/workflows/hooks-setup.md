@@ -54,9 +54,12 @@ Seven entries, six scripts: `permission-notify.sh` is registered twice on purpos
 ### The odd one out: `kill-guard.sh`
 
 Every other hook here exists to get something to your phone. This one exists to keep the
-dashboard alive. It refuses a Bash call that runs `pkill` or `killall` unless the pattern
-is anchored to an absolute path inside the session's own directory, and its refusal names
-the two shapes that are allowed instead — a pid you recorded, or `pkill -f "$PWD/…"`.
+dashboard alive. It refuses a Bash call that runs `pkill` or `killall` — unless it is a
+`pkill` whose every pattern is anchored to an absolute path inside the session's own
+directory, the one shape that cannot match a process outside this working tree. The
+exemption is `pkill`-only; `killall` is refused in every form, since it kills every
+process of that name by definition. Its refusal names the two shapes that are allowed
+instead — a pid you recorded, or `pkill -f "$PWD/…"`.
 
 It is in this installer because of 2026-09-06. An unattended session in a sibling repo
 tore down two preview servers it had started itself, by pattern rather than by pid. The
@@ -153,4 +156,5 @@ warning on any non-Darwin host rather than letting you discover it as silence.
     - scripts/kill-guard-hook.sh
     - package.json
   kind: workflow
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

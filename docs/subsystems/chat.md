@@ -139,8 +139,9 @@ worst case to the window size, not to the transcript size.
   that fragment is dropped. A newline-less final line that parses as JSON *is* a complete
   record and is consumed; if it doesn't parse, `cursor` stops before it and the next poll
   re-reads it. Same rules — and same oracle-equivalence test style — as `agents-cache.ts`.
-- **⚠️ Path safety:** the id is validated with `ID_RE` and resolved against
-  `listTranscripts(projectsRoot())` — **never joined into a path** (same philosophy as
+- **⚠️ Path safety:** the id is validated with `ID_RE` and resolved through
+  `findTranscript(projectsRoot(), id)` — a `listTranscripts` scan filtered by id, so the
+  file path only ever comes from the scan and is **never joined into a path** (same philosophy as
   `serveSessionDetail` / the management file endpoint).
 - **⚠️ Route order:** the detail regex `/^\/api\/sessions\/([^/?]+)/` in `index.ts` also
   matches `/api/sessions/:id/chat` and would answer it with agents — the chat match
@@ -158,5 +159,5 @@ worst case to the window size, not to the transcript size.
     - client/src/lib/chatFilter.ts
     - client/src/lib/markdown.ts
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

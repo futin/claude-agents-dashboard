@@ -43,7 +43,10 @@ override it (see `dashboard.section` below).
   the `Section` union in `lib/sections.ts`, switched on in `App.tsx`) — always
   *written* on navigation, but only *read* on open when Settings → landing is `last`; any
   other value pins the opening section, resolved in the `useState` initializer so there's no
-  flash of the previously-open one. A `?session=` deep link outranks both and forces
+  flash of the previously-open one. Whichever of the two wins is passed through `isSection`
+  first, so a value naming a section this build no longer has (the removed Guides tab) lands
+  on `sessions` rather than falling through `App.tsx`'s chain to Settings.
+  A `?session=` deep link outranks both and forces
   `sessions` (see the URL-param note below);
   `dashboard.chatFilter` (the chat drawer's all/text/you filter — see [chat](chat.md); validated
   with `isChatFilter` on read, so a stale value falls back to `all`);
@@ -74,5 +77,5 @@ override it (see `dashboard.section` below).
     - client/src/components/Toolbar.tsx
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

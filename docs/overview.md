@@ -13,7 +13,9 @@ opt-in features that need one ([remote answers](subsystems/remote-answer.md),
 [remote plan verdicts](subsystems/remote-plan.md), the
 [`allow?` tab](subsystems/permission-notify.md), and the `Stop` hook that backs both the
 finished-turn [push](subsystems/push-notify.md) and
-[remote messages](subsystems/remote-message.md)).
+[remote messages](subsystems/remote-message.md)). One hook ships alongside them but feeds
+nothing here: `kill-guard.sh`, a `PreToolUse`/`Bash` guard that refuses unanchored
+`pkill`/`killall` — see [hooks-setup](workflows/hooks-setup.md).
 
 ## Data flow
 
@@ -31,9 +33,13 @@ via `tsx`, dev and prod alike).
 ## Principles
 
 - **Read-only charter.** The app never writes to `~/.claude` or the transcripts. The
-  deliberate exceptions are the answer POST endpoints (RAM-only stores); two gitignored,
-  repo-local files, `.remote-answer.json` (see [remote answers](subsystems/remote-answer.md))
-  and `.dashboard-settings.json` (see [settings](subsystems/settings.md)); and, going
+  deliberate exceptions are the answer POST endpoints (RAM-only stores); a handful of
+  gitignored, repo-local files — `.remote-answer.json` (see
+  [remote answers](subsystems/remote-answer.md)), `.dashboard-settings.json` (see
+  [settings](subsystems/settings.md)), and the usage-recording set
+  `.usage-history.jsonl` / `.usage-ledger.jsonl` / `.usage-profile.json`, written only while
+  the Settings tab's recording switch is on (off by default — see
+  [usage limits](subsystems/usage-limits.md)); and, going
   further than any of those, [spawning a new `claude -p` process](subsystems/spawn.md) on
   this machine — off by default (empty `CLAUDE_BIN`), and the one exception that reaches
   outside the dashboard's own state, since what it writes is a whole new session's
@@ -70,6 +76,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `POST /api/transcribe` | a recorded clip in, transcribed text out — feeds the reply composer's mic (write path) |
 | `POST /api/spawn` | start a new headless `claude -p` session in a recent project, or `resume` an ended `dashboard` one by id (write path, the one the dashboard initiates rather than answers) |
 | `POST /api/spawn/:id/stop` | SIGTERM a still-launching session's child (write path) |
+| `POST /api/sessions/:id/stop` | stop a dashboard-spawned session at any point in its life — graceful by default, `{"force":true}` to skip the grace window; the row's button only ever calls this one (write path) |
 | `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) |
 | `POST /api/notify/event` | the Stop hook's push trigger — the other three events notify from the endpoint they already POST to |
 | `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said |
@@ -94,8 +101,8 @@ prod — the "production only" in the table above is about what is *useful* ther
 what the route will answer.
 
 ⚠️ Route order in `index.ts` is load-bearing: the `:id` detail regex would swallow
-`/api/sessions/:id/chat|question|answer|plan|plan-answer|message|message-answer`, so all of
-those matches sit above it.
+`/api/sessions/:id/chat|question|answer|plan|plan-answer|stop|message|message-answer`, so
+all of those matches sit above it.
 
 ⚠️ Every `:id` route decodes its segment through `decodePath` in `index.ts`, never
 `decodeURIComponent` directly. A malformed escape (a lone `%ZZ`) throws a `URIError`
@@ -122,6 +129,8 @@ Both servers bind all interfaces, so LAN/tailnet access works with zero app conf
 ```
 shared/types.ts   the API contract (SessionsResponse, Session, ManagementIndex,
                   SessionAnalysis, AnalyticsReport, …)
+shared/frontmatter.ts  zero-dep YAML-frontmatter subset parser — shared because
+                  both sides parse it (lib/management.ts and MarkdownViewer.tsx)
 server/
   index.ts        HTTP entry + routing; static-serves client/dist in prod
   api.ts          all /api handlers (+ error fallbacks)
@@ -129,6 +138,11 @@ server/
   lib/transcript.ts  tail-reads a transcript → tokens/model/window/activity
   lib/title-cache.ts  remembers a custom title once it sinks below the tail window
   lib/scan.ts     enumerates + ranks sessions; status machine; liveness gates (cwd, session id)
+  lib/archived.ts reads the desktop app's own session records (macOS Application
+                  Support) for the `isArchived` flag, joined to transcripts by
+                  `cliSessionId` — the only place that touches that store; the id
+                  set is passed *into* `scanSessions`/`listRecentProjects` so they
+                  stay pure. Fails open (no store → nothing hidden)
   lib/agents.ts   whole-file subagent parser → AgentJob[]
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts
   lib/chat.ts     byte-offset paged chat history
@@ -150,7 +164,6 @@ server/
                   and the exported `poolRate`
   lib/token-refresh.ts  makes the CLI renew an expired OAuth token (auth status,
                   then one haiku turn) so the bars self-heal
-  lib/frontmatter.ts  zero-dep YAML-frontmatter subset parser
   lib/management.ts   config scanner + servable-path security set
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
@@ -175,26 +188,32 @@ server/
   lib/transcribe.ts  ffmpeg → whisper-cli pipeline behind POST /api/transcribe: mime
                   allowlist, cached engine probe, single-flight guard, typed failures
   lib/spawn.ts    launches a detached, headless `claude -p` session, or resumes an ended
-                  one — the fourth write path, and the first the dashboard initiates
+                  one — the fourth write path, and the first the dashboard initiates;
+                  also owns stopping one (graceful SIGTERM, grace window, escalation)
                   (see docs/subsystems/spawn.md)
 client/src/
   App.tsx         shell: side rail (Sessions | Management | Analytics | Usage |
                   Settings) + lazy views
-  components/     Header (the status plate: + New, origin badge, remote-answer switch,
-                  counts, clock, usage gauges), Toolbar (filters + sort only),
-                  SessionList/Row, ChatDrawer, QuestionPanel, PlanPanel,
+  components/     SideRail (section switcher), SessionsView (the monitor — owns the 3s
+                  poll, so leaving the section stops it), Header (the status plate:
+                  + New, origin badge, remote-answer switch, counts, clock, usage
+                  gauges), Toolbar (filters + sort only), MultiSelect (its facet
+                  control), SessionList/Row, SessionDetail (the subagent timeline),
+                  ChatDrawer, QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   MicButton, SpawnPanel, ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
                   usage/, settings/
-  hooks/          useSessions (the main poll), useSessionChat, useManagement, useAnalytics,
+  hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
+                  useManagement, useAnalytics,
                   useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, useStopSession,
                   usePersistedState, useSettings, useServerSettings, useDictation, useFloatingTip
                   (the one hover/pin explanation panel, shared by both Usage tabs),
                   useTranscribeAvailable, useWebNotify (browser banners for headless
                   sessions), useBackClose
-  lib/            filterSort, chatFilter, markdown, managementEntries, format, settings,
+  lib/            filterSort, analyticsFilterSort, chatFilter, markdown, managementEntries,
+                  format, settings,
                   sections, deepLink, dictation, spawnOptions, resume, pace, usageProfile,
                   usageRatesFormat, panelCollapse, surface, walkChart, holds, webNotify,
                   backClose, stopControl
@@ -207,6 +226,9 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   workflows/hooks-setup.md), host-credentials.sh,
                   lan-ip.sh, env-value.ts (the one .env reader the installer and
                   the server share — never a second grep),
+                  session-analytics.ts (`pnpm session-analytics`) — prints one
+                  session's SessionAnalysis as JSON without the server running,
+                  which is how `/kaizen` gets exact numbers,
                   probe-usage-split.ts (`pnpm probe:usage-split`) — runs both
                   joint rate fits against this machine's real logs, gated
                   exactly as the endpoint gates them; `--weekly` adds the weekly
@@ -228,17 +250,18 @@ that area:
 - [remote-message](subsystems/remote-message.md) — replying into a finished, away-from-keyboard turn (the third write path)
 - [dictation](subsystems/dictation.md) — the reply composer's mic: local whisper transcription, never auto-sent
 - [spawn](subsystems/spawn.md) — starting a new headless session from the dashboard (the fourth write path, and the first one it initiates), and stopping one from its row
+- [session-surfaces](subsystems/session-surfaces.md) — where a session lives, and where you can continue it (also where `Session.surface` is specified)
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
-- [usage-limits](subsystems/usage-limits.md) — header account usage bars
+- [usage-limits](subsystems/usage-limits.md) — header account usage bars, and the Usage tab behind them: pace, the duty-cycle forecast, and token value per model
 - [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold, answer window, push policy
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `allow?` tab for terminal permission dialogs
 - [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and the one narrow browser layer that came back for headless sessions
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [docker](workflows/docker.md) — running in containers, dev + prod
-- [hooks-setup](workflows/hooks-setup.md) — `pnpm hooks:install`: all five hooks, one command
+- [hooks-setup](workflows/hooks-setup.md) — `pnpm hooks:install`: all six hooks (seven `settings.json` entries — permission-notify registers twice), one command
 - [remote-answer-setup](workflows/remote-answer-setup.md) — per-machine hook install
 - [push-notify-setup](workflows/push-notify-setup.md) — ntfy topic, phone subscription, Stop hook
 - [dictation-setup](workflows/dictation-setup.md) — installing whisper.cpp and a model, and the HTTPS tunnel phone use needs
@@ -253,5 +276,5 @@ that area:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

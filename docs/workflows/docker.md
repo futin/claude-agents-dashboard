@@ -52,6 +52,13 @@ Two things a container can't reach on its own:
   fails, `/api/health` reports `spawnAvailable: false`, and the toolbar's `+ New` button never
   renders. Same designed no-binary behavior as dictation above, and the same fix: run the
   server on the host. See [spawn](../subsystems/spawn.md).
+- **Automatic OAuth token renewal is out for the same reason.** It renews by making the CLI
+  do it — `claude auth status`, then one cheap `claude -p … --model haiku` turn
+  (`server/lib/token-refresh.ts`) — so in these images both steps hit ENOENT, the outcome
+  comes back `cliMissing`, and the auto-refresh gate disables itself for the rest of the
+  process's life; the usage bars fall back to the plain "token expired" hint.
+  `USAGE_AUTO_REFRESH=false` turns the attempt off explicitly, which in a container only
+  saves the one failed try.
 - **Push notifications need their three variables passed in explicitly.** `.env` is in
   `.dockerignore` and the runtime stage copies only `server/`, `shared/` and the built
   client, so `loadConfig()` finds no file in the production image. Both compose files
@@ -63,6 +70,12 @@ Two things a container can't reach on its own:
   default, and a `localhost` value would resolve inside the container's own network
   namespace — so the tailnet hostname is the only useful one here. See
   [push-notify-setup](push-notify-setup.md#docker).
+- **The desk channel is not wired into either compose file.** `config.ts` reads a fourth
+  push variable, `NTFY_TOPIC_DESK`, and neither `environment:` list mentions it — so the
+  production image cannot be given a desk topic at all, and every push goes to `NTFY_TOPIC`,
+  which is exactly what an empty desk topic does anywhere. The dev image escapes this
+  because it bind-mounts the repo, so `loadConfig()` reads `.env` itself and picks up
+  whatever is in the file.
 
 <!-- docs-sync:
   sources:
@@ -73,5 +86,5 @@ Two things a container can't reach on its own:
     - scripts/lan-ip.sh
     - server/lib/config.ts
   kind: workflow
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

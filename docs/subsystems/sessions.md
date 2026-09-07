@@ -33,12 +33,20 @@ params, so a changed row count or window takes effect on the next tick.
   this session's [chat drawer](chat.md). The card splits in two for it: `.row-main` carries
   the padding and the expand-on-click, the tab is its sibling, so opening the drawer no
   longer has to out-shout a row toggle it sits inside.
+- **Stop control** — a `stopping…` badge beside the activity line, plus a two-stage
+  `stop session` → `really stop?` pair (and `force stop` once stopping) in the expanded
+  body. It renders only for a row carrying `Session.stopState`, i.e. one this server still
+  holds a child handle for; `lib/stopControl.ts` decides every branch. Absent for every
+  other row, deliberately — see
+  [spawn](spawn.md#stopstate-and-why-it-is-absent-rather-than-false).
 
 ### The tab is also where a session says it needs a human
 
 Every hold routes to the same place — the drawer — so they share the one control rather
-than competing as separate pills among the printed fields. `chatTab()` picks the label from
-the first match in this order, so the nearest thing to a blocked session wins:
+than competing as separate pills among the printed fields. `chatTab()` maps `lib/holds.ts`'s
+`holdKind` to a label, so the nearest thing to a blocked session wins — and that precedence
+now lives in one place, shared with the header's hold count and the browser notifications
+instead of being restated per reader:
 
 | `Session` flag | Label | Tone |
 | --- | --- | --- |
@@ -261,6 +269,11 @@ command run at the *end* of a real session leaves usage on an older assistant re
 that session keeps its row; and a fresh session where you typed a real prompt the assistant
 hasn't answered yet also has zero tokens but real content, so it keeps its green row too.
 
+The same "nothing to display" policy drops the dashboard's own token-renewal turns: a
+transcript whose `projectPath` is `token-refresh.ts`'s `refreshCwd()`
+(`~/.claude/dashboard-refresh`, the dedicated cwd those runs use) is skipped — see
+[usage-limits](usage-limits.md).
+
 **Archived-session filter:** "delete" in the Claude Code desktop app's session list is an
 **archive** — it flips `isArchived` in the app's own record and never touches the
 transcript, so the row used to survive every 3s poll and only vanish once it aged out of
@@ -300,6 +313,17 @@ chat panels (a panel already open would 404 for no gain).
 loop breaks at `maxSessions`. Without that, a dropped transcript cost a display slot: two
 `/login` phantoms on a `maxSessions: 5` config rendered 3 rows. With no phantoms present the
 loop still breaks at the cap, so the common case parses exactly as many transcripts as before.
+Archived ids are dropped before the sort, so a deleted session doesn't eat a pool slot either.
+
+**One row per session id, not per file.** An id does not name a file: records are filed under
+the project dir derived from the cwd at write time, so a session that `cd`s into a git worktree
+keeps its id and starts a *second* `.jsonl` in a second project dir. `scan.ts` `newestPerId`
+collapses the candidates to one ref per id (newest file wins) **before** the slice — otherwise
+one session spends two pool slots on itself and is pushed as two `Session`s with the same id,
+each parsed from a different half, so it can read `working` and `idle` at once. `listTranscripts`
+stays the raw per-file enumeration (the usage ledger and analytics need every half), and
+`findTranscript` is the same reduction for the single-id lookups that resolve an id to a file to
+read — a plain `find` would serve the abandoned half to the detail or [chat](chat.md) panel.
 
 **Signals** come from the **newest message record** (newest tail record with
 `message.role` of `user`/`assistant`): `transcript.ts` exposes `turnComplete` (default
@@ -353,5 +377,5 @@ Client-side controls above the list: project, status, activity window, and sort
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

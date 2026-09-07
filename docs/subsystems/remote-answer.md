@@ -126,7 +126,10 @@ guaranteed reaper, which is also the stale-answer guard: a late submit finds not
 404. A `cancel` with a stale `questionId` is a no-op, so a late socket close can't evict
 a newer wait. Node is single-threaded and `answer` validates-deletes-resolves
 synchronously, so two tabs racing means the first wins and the second gets a clean 404 —
-no locking.
+no locking. Every settle that is **not** `answered` also calls `noteTerminalHandoff`
+(`lib/permissions.ts`): the terminal dialog is about to take over and will report itself as
+a permission event seconds later, and that record suppresses the push for it — a prompt you
+chose to walk over and answer is not news (see [push-notify](push-notify.md)).
 
 **The sweep is the *only* signal that the terminal card won** — it is not belt-and-braces
 for the socket-close path. The question card renders *concurrently* with the hook, and when
@@ -161,7 +164,9 @@ already decide this?" versus "is the user back?".
 - **The policy is shared, the sweep is not.** `lib/idle.ts` owns `backAtDesk()` — the
   threshold read, the `ioreg` reading, the `setIdleReader` test seam, and both fail
   directions (unreadable idle → stay held, never guess; `idleSecs === 0` → the idle gate is
-  off everywhere else, so it's off here too). Each store keeps its own `sweepIdle()`,
+  off everywhere else, so it's off here too). The comparison itself is `notify.ts`'s
+  `atDesk`, shared with callers that already hold an idle reading; the zero-threshold check
+  runs *before* the read, so that case never spawns `ioreg`. Each store keeps its own `sweepIdle()`,
   because *what* is releasable and *which* status it settles as differ. This layout is the
   fix for the bug itself: the sweep first lived only in `messages.ts`, and questions and
   plans were simply never given one.
@@ -210,7 +215,11 @@ gates **both** POSTs with `Authorization: Bearer`; the `GET question` route stay
 since it reveals no more than the transcript already does. The hook reads the token from
 `~/.claude/hooks/dashboard-token` (user-created — a server-generated file would fight the
 read-only Docker mount; `chmod 600`); the browser persists it as `dashboard.answerToken`
-and asks for it once. HTTP + a static token is a tripwire, not real auth.
+and asks for it once. A refused write logs one stderr line — `rejected write: <METHOD>
+<path> (bad or missing token)`, method and path only, never the token, the header or the
+query string, and throttled to once per path per minute — because the hooks swallow a 403
+(`curl -sf` then `exit 0`), so nothing otherwise distinguished a missing token file from a
+feature nobody had switched on. HTTP + a static token is a tripwire, not real auth.
 `REMOTE_ANSWER=false` turns the feature off server-side. Over a tailnet the network
 itself is the perimeter, so `ANSWER_TOKEN` can stay empty unless you share the tailnet —
 behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md)).
@@ -248,7 +257,8 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
   `PreToolUse`, before the `tool_use` record is written). So `serveSessions` passes
   `pendingSessionIds()` into `scanSessions` as `pendingIds`: a flagged session gets
   `status: 'question'` plus `Session.remoteQuestion`, and `SessionRow` puts its chat tab into
-  a pulsing amber `answer` — first in `chatTab()`'s precedence, so a question outranks every
+  a pulsing amber `answer` — first in the `holdKind` precedence (`lib/holds.ts`) that
+  `chatTab()` reads, so a question outranks every
   other hold (see [sessions](sessions.md#the-tab-is-also-where-a-session-says-it-needs-a-human)). The store is still RAM-only and still read-only
   here — the scan only reads the key set, and gets a copied `Set`, never the store's own.
   `scan.ts` does not import `pending.ts` (injection keeps it pure and testable).
@@ -288,5 +298,5 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
     - client/src/hooks/useRemoteAnswer.ts
     - client/src/components/SessionRow.tsx
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

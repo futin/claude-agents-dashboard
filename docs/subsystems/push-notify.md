@@ -104,7 +104,7 @@ with exactly the granularity the user picks events at:
 | `question` | `POST /api/questions/wait` | `serveQuestionWait`, after the wait registers |
 | `plan` | `POST /api/plans/wait` | `servePlanWait`, after the wait registers |
 | `permission` | `POST /api/permissions/notify` | `servePermissionNotify` |
-| `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on (headless sessions take the hold route at the desk too) |
+| `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on (headless sessions take the hold route at the desk too, unless an orchestrator run owns them) |
 
 All four are token-gated (`tokenOk`), so a hook that cannot read the token file reaches
 none of them — see the last row of [Fail directions](#fail-directions).
@@ -165,7 +165,13 @@ is **not** simply "no controlling TTY": the desktop app runs the CLI with no pty
 puts a composer in front of you, so the hook exempts it by entrypoint
 (`CLAUDE_CODE_ENTRYPOINT=claude-desktop`) and the TTY verdict stands for everything else.
 Only entrypoints measured to be interactive are listed, so an unfamiliar one still fails
-closed to headless. Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
+closed to headless. The counter-exception is a session an **orchestrator run owns** —
+`BM_ORCH_RUN` set in its environment: the hook calls `notify_fallback` for it before the
+idle check runs, so it never holds. Run-ownership is a property of the *caller*, which is
+why an env var has to carry it — the tty and entrypoint the hook inspects both describe the
+front end, and by those tests every one of these sessions is simply headless. Deliberately
+not a blanket headless exemption: a headless session a person started by hand is reachable
+on purpose and still holds. Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
 (and so which phrase and suppression rule apply), not whether `stop` pushes at all — see
 [remote-message](remote-message.md).
 
@@ -396,5 +402,5 @@ server write path. ntfy makes it unnecessary for now.
     - client/src/lib/deepLink.ts
     - client/src/components/settings/SettingsView.tsx
   kind: subsystem
-  verified: 69dc049345a08127684ec8813ccd31aaedf4ea84
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

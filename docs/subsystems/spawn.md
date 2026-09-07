@@ -158,7 +158,9 @@ same permission ladder and ceiling, prompt still stdin-only — with these diffe
   the cosmetic fields' drop-don't-reject rule: silently ignoring it would start a fresh
   session somewhere the user never asked for.
 - **Membership check against enumerated transcripts, never a path.** The id is matched
-  against `listTranscripts(projectsRoot())` (`unknown session` otherwise), and the child's
+  through `findTranscript(projectsRoot(), rid)` (`server/lib/scan.ts` — `listTranscripts`
+  filtered to that id, newest file winning, so a session split across two project dirs
+  resolves to the half it is actually writing); `unknown session` otherwise. The child's
   cwd is the *transcript's own* `cwd` — `body.project` is ignored.
 - **`dashboard`-surface only** (`sessionSurface(entrypoint) === 'dashboard'`, i.e.
   `sdk-cli`): a terminal session is terminal-owned, and resuming one here could race a
@@ -473,7 +475,7 @@ a `failed` row for `FAIL_TTL_MS`, labelled as an error they never actually hit.
 | `client/src/hooks/useStopSession.ts` | POSTs the stop, same bearer-token pattern as `useSpawn` |
 | `serveSessions` wiring | calls `adoptLaunched(ids)` then `listLaunching()` before every `/api/sessions` response, so `launching` rides the poll the client already makes |
 | `serveHealth` wiring | publishes `spawnAvailable` (`probeSpawn`) and `spawnMaxPermission` (`config.spawnMaxPermission`) |
-| `client/src/components/SpawnPanel.tsx` | the launch form — project picker, prompt textarea with the reply composer's own `MicButton` in its action row, name/model/effort/permission selects; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
+| `client/src/components/SpawnPanel.tsx` | the launch form — project picker, prompt textarea with the reply composer's own `MicButton` in its action row, name/model/effort/permission selects (model and effort start at the per-device Settings defaults, `spawnDefaultModel`/`spawnDefaultEffort` in `client/src/lib/settings.ts`, where `''` still means "send no flag and let the CLI decide"); own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
 | `client/src/hooks/useSpawn.ts` | POSTs the request, the same bearer-token pattern as `useRemoteAnswer`'s toggle |
 | `client/src/lib/spawnOptions.ts` | the client's copy of `MODELS`/`EFFORTS`/`PERMISSION_MODES` (duplicated, not imported — the FE/BE boundary is `shared/types.ts` alone — kept honest by `test/spawn-options.test.ts` asserting byte-for-byte equality against the server's arrays) and `allowedPermissionModes` |
 | The plate's `+ New` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
@@ -553,10 +555,11 @@ handler ever ran.
 
 The fix is a single `decodePath(raw): string | null` helper (`index.ts`, try/catch
 around `decodeURIComponent`, `400 {error: 'bad path encoding'}` on failure) — but it was
-applied at **all nine** sites in `index.ts` that pull an id out of a URL, not just the
+applied at **every** site in `index.ts` that pulls an id out of a URL, not just the
 one this feature added: `/api/spawn/:id/stop` plus the eight pre-existing
 `question`/`answer`/`plan`/`plan-answer`/`message`/`message-answer`/`chat`/detail routes
-under `/api/sessions/:id`. Eight of those nine predate this feature entirely. Writing
+under `/api/sessions/:id`. Eight of those predate this feature entirely (and the row
+button's `/api/sessions/:id/stop` decodes through the same helper). Writing
 the helper for the one route this branch added and leaving eight identical crash
 vectors in place would not have been a defensible scope boundary — every one of them was
 reachable by the same unauthenticated crash, so this branch carries a security fix
@@ -659,5 +662,5 @@ new reason:
     - client/src/lib/spawnOptions.ts
     - client/src/lib/surface.ts
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

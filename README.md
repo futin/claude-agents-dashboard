@@ -70,16 +70,18 @@ That's the whole basic setup. Everything below is optional.
   the ntfy push the only outbound call. The transcript lands in the textarea as editable
   text; **send** stays a deliberate tap. Off until you install the engine, and needs HTTPS
   (`pnpm tunnel`) to record at all from a phone.
-- **[New session](docs/subsystems/spawn.md)** — the toolbar's **+ New** button starts a
+- **[New session](docs/subsystems/spawn.md)** — the header's **+ New** button starts a
   brand-new session from the dashboard: pick a recent project, write or dictate the prompt,
   tap launch. The server spawns a detached, headless `claude -p` in that project's
   directory and the row shows up a poll later, ordinary from then on. The fourth write
   path, and the first one the dashboard *initiates* rather than answers. A session started
   this way is also not a dead end once its turn is over: its chat drawer offers a **resume**
   composer that relaunches the same session id, so the same transcript continues and the
-  same row wakes up. Off by default
-  (empty `CLAUDE_BIN`); how much a launch can do unattended is bounded by the
-  `SPAWN_MAX_PERMISSION` ceiling on the host, never by the browser.
+  same row wakes up. And it can be ended from the dashboard too: while the server still
+  holds a handle on the child, the expanded row carries a two-tap **stop** control
+  (`stop session` → `really stop?`, with `force stop` if the graceful signal doesn't
+  land). Off by default (empty `CLAUDE_BIN`); how much a launch can do unattended is
+  bounded by the `SPAWN_MAX_PERMISSION` ceiling on the host, never by the browser.
 - **[Management tab](docs/subsystems/management.md)** — read-only browser for all Claude
   config on the machine: skills, agents, commands, rules, hooks, settings, plugins, per
   scope. A skill that ships more than `SKILL.md` opens its whole directory in a file rail
@@ -95,19 +97,31 @@ That's the whole basic setup. Everything below is optional.
 - **[Usage tab](docs/subsystems/usage-limits.md#the-inspector)** — the duty-cycle
   inspector behind that forecast: a 24×7 hour-of-week heatmap of the learned weights plus
   the forward walk to the weekly reset, so the projection can be checked rather than
-  trusted. Read-only, and it never exposes raw samples or file paths.
+  trusted. Read-only, and it never exposes raw samples or file paths. Its second sub-tab,
+  **[Token value](docs/subsystems/usage-limits.md#token-value-per-model-the-exchange-rate-and-its-drift)**,
+  answers what a percent *is*: tokens per 1% of the 5-hour window per model (with the
+  weekly limit's equivalent alongside), measured on this machine because the budget is
+  never published, with a verdict on whether that price has drifted. Ratios between token
+  types only — no currency anywhere.
 - **[Push notifications](docs/subsystems/push-notify.md)** — the server publishes to an
   [ntfy](https://ntfy.sh) topic when a session needs you (question, plan, permission
   dialog, finished turn); tapping the push opens that session's chat. Off by default, and
   the only channel that reaches you with the browser closed — which is why the old
   in-browser alert layer was deleted rather than kept: WebKit has no `Notification` API in
-  a tab, so it could never fire on an iPhone.
-- **[Settings tab](docs/subsystems/settings.md)** — themes, density and text scale, refresh
-  rate, the scan knobs, the push-notification policy, usage-history recording, and the
-  remote-answer idle threshold and answer window — all editable in the app, no `.env` edit
-  or rebuild.
+  a tab, so it could never fire on an iPhone. Set a second `NTFY_TOPIC_DESK` and the
+  pushes that fire while you're actually at the keyboard go to that topic instead, so this
+  machine rings and the phone stays quiet; that one carries no deep link — tapping it only
+  dismisses. In a browser that *does* have the `Notification` API, Settings' **Notify this
+  browser** adds an OS banner and one beep for the sessions the dashboard launched itself,
+  per device and only while that tab is open on Sessions.
+- **[Settings tab](docs/subsystems/settings.md)** — themes, density and text scale, which
+  section the app lands on, refresh rate, the scan knobs, the default model and effort for
+  the launch panel, the browser-notification switch, the push-notification policy,
+  usage-history recording, and the remote-answer idle threshold and answer window — all
+  editable in the app, no `.env` edit or rebuild. It also names any `.env` key edited
+  since the server started, because those are read once, at startup.
 - **[Phone access & origin badge](docs/subsystems/remote-access.md)** — reach the
-  dashboard over LAN, Tailscale, or a tunnel; a toolbar pill shows which route you're on.
+  dashboard over LAN, Tailscale, or a tunnel; a header pill shows which route you're on.
 
 ## Optional setup
 
@@ -115,6 +129,9 @@ That's the whole basic setup. Everything below is optional.
   merges the seven settings entries, idempotently, with `--dry-run` and `--uninstall`:
   [setup](docs/workflows/hooks-setup.md). Everything below that mentions a hook is what it
   automates; you still choose the token, the topic, and whether remote answering is on.
+  One of the six is not a dashboard feature at all: `kill-guard.sh` refuses a broad
+  `pkill`/`killall` from a Bash tool call, which is what once took this repo's own dev
+  server down from a session running somewhere else.
 - **Phone / away-from-home access** — nothing to configure in the app; see
   [remote access](docs/subsystems/remote-access.md) for LAN, Tailscale, and tunnel options.
 - **Remote answers hook** — 4 steps, ~2 minutes:
@@ -144,7 +161,8 @@ That's the whole basic setup. Everything below is optional.
 [`docs/overview.md`](docs/overview.md) is the entry point — domains, data flow, HTTP
 surface, repo layout, and the map of every doc. Per-subsystem deep dives (mechanism +
 invariants) live in [`docs/subsystems/`](docs/subsystems/); runnable procedures
-(configuration, Docker, the remote-answers hook, push-notification and dictation setup) in
+(configuration, Docker, the hook installer, the remote-answers hook, push-notification and
+dictation setup) in
 [`docs/workflows/`](docs/workflows/).
 
 ## Not included (yet)
@@ -159,5 +177,5 @@ invariants) live in [`docs/subsystems/`](docs/subsystems/); runnable procedures
     - scripts/
     - package.json
   kind: readme
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

@@ -51,7 +51,7 @@ that you edited `.env` rather than `.env.example`.
 arrive on hooks you may already have; this one has nothing to ride on, because a finished
 turn registers nothing with the dashboard.
 
-> `pnpm hooks:install` installs this hook along with the other four —
+> `pnpm hooks:install` installs this hook along with the other five —
 > see [hooks-setup](hooks-setup.md).
 
 ```bash
@@ -71,13 +71,19 @@ ask/plan hooks hold a question or plan. The CLI kills a hook at its configured
 `timeout`, so a missing or too-low value kills the hold mid-wait — the session just stops
 early (there is no dialog to fall back to, unlike a killed ask/plan hook), and a reply typed
 after that lands on a 404. At the desk, or with the feature off, the hook still just POSTs and
-exits in under a second — this cost is paid only by the *away* path.
+exits in under a second — this cost is paid only by the *away* path. A session an
+orchestrator run spawned (`BM_ORCH_RUN` set in its environment) never holds either: it sends
+the *task finished* push and exits, because nobody is going to answer a session that was
+dispatched to work one item unattended.
 
 **6. Verify.** Settings → **Test push**. It fires one push *ignoring every switch above*
 and reports what actually happened, because an off switch, a missing topic and a dropped
-packet are indistinguishable from the page. Then **tap the notification** — that is the
-only way to prove `DASHBOARD_PUBLIC_URL` is right, and it should land you in that session's
-chat.
+packet are indistinguishable from the page. It routes exactly the way a real push would
+route right now, and the result line names which topic it went to. Then **tap the
+notification** — that is the only way to prove `DASHBOARD_PUBLIC_URL` is right, and it
+should open the dashboard. Not a session's chat: the test push is not a real session, so its
+link carries an empty `?session=` that the page ignores. A desk-routed test push has no
+tap-through to prove — tapping it only dismisses.
 
 ## Which events need which hook
 
@@ -287,5 +293,5 @@ Assume a leaked topic reveals both.
     - .env.example
     - docker-compose.yml
   kind: workflow
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

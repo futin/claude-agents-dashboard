@@ -87,6 +87,12 @@ remote as a held question.
   as `dismissed` once `lastMessageMs` shows the transcript has grown past its `askedAt`.
   Identical to the question store's sweep (see
   [remote-answer](remote-answer.md#state-machine) for why that test uses `lastMessageTs`).
+- **Every settlement but `rejected` is a handoff to the terminal.** `rejected` is this
+  store's "acted on remotely"; `dismissed`, `released`, a timeout and a supersede all give
+  the plan back to its card, which then reports itself as a permission event. So `settle()`
+  records `permissions.ts`'s `noteTerminalHandoff(sessionId)` for those — the same handoff
+  the question store records — and the push layer reads it to avoid buzzing about a dialog
+  the dashboard handed over itself.
 - **So does coming back to the keyboard.** `plans.ts` runs the same 5s `sweepIdle()` reaper
   as `pending.ts`, over the same shared `lib/idle.ts` `backAtDesk()` policy, settling held
   plans as `released` so the plan card appears within ~5s of your first keystroke. Read
@@ -130,6 +136,17 @@ When all hold it injects an instruction for that turn: put every decision throug
 never end a turn on a prose question, don't enter plan mode — summarize the plan and ask
 proceed/revise instead — and prefer already-allowed tools, since a permission dialog would
 park the session.
+
+That first rule is now explicitly conditional on the tool being available, **and** carries
+a named fallback. Neither gate implies `AskUserQuestion` is in the session's tool list — a
+headless `claude -p` matches both and has no such tool, so the old unconditional wording
+handed those sessions a contradiction (route every decision through a tool you don't have,
+and never end a turn on a prose question) and they resolved it by deciding silently and
+saying so. The instruction now says: while the tool is unavailable the rule does not apply
+— follow whatever the running skill says to do without a channel, and if it says nothing,
+ask in prose rather than deciding silently. The fallback clause is as load-bearing as the
+condition, because a session left with no instruction at all is the state that produced the
+silent deciding.
 
 Approving work this way in auto mode grants nothing new — the session already edits and
 runs without asking; the POST only picks *which* pre-authorized path it takes. The
@@ -178,5 +195,5 @@ same failure mode, and the same one setting as
     - client/src/hooks/usePendingPlan.ts
     - client/src/components/SessionRow.tsx
   kind: subsystem
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

@@ -10,6 +10,11 @@ Copy `.env.example` to `.env` and edit. Everything is optional. Precedence: real
 environment variables override `.env`, which overrides the defaults
 (`server/lib/config.ts` `DEFAULTS`).
 
+Config is read once, at startup, so an edited `.env` needs a restart to take effect.
+`staleEnvKeys()` compares the file against what this process loaded and the Settings
+tab names the keys that changed since — names only, never values, because some of them
+are credentials.
+
 ## Server (`.env` or environment)
 
 | Var | Default | Meaning |
@@ -29,6 +34,8 @@ environment variables override `.env`, which overrides the defaults
 | `NTFY_TOPIC` | _(empty)_ | ntfy topic for [push notifications](../subsystems/push-notify.md). Empty disables pushes outright. **Treat it as a secret** — the string is both the address and the credential, so anyone who learns it can publish to your phone as well as read it. Never returned by any endpoint. Step-by-step: [push-notify-setup](push-notify-setup.md) |
 | `NTFY_SERVER` | `https://ntfy.sh` | Base URL of the ntfy server. Override for a self-hosted instance |
 | `DASHBOARD_PUBLIC_URL` | _(empty)_ | How your **phone** reaches the dashboard, used for the notification's tap-through link. Cannot be inferred (a push has no `Host` header to read) — set it to your tailnet hostname. Unset, pushes still arrive but carry no `Click` header, so tapping one opens nothing; the Test push button says so rather than reporting a guess |
+| `NTFY_TOPIC_DESK` | _(empty)_ | Optional second ntfy topic for the **desk** channel — the browser on this machine. Set it and a push raised while you are at the keyboard rings there instead of your phone; once you are idle past Settings → Away after (`settings.idleSecs`, the same threshold the remote-answer hooks use) it goes to the phone again. Exclusive, never both, and `0` for that threshold disables the desk branch rather than pinning it on. Empty (the default) means every push routes to `NTFY_TOPIC` exactly as before; a desk topic with no `NTFY_TOPIC` behind it is a misconfiguration, not a supported mode — the Test push button refuses it and real pushes stay off. **Treat it as a secret too** — unauthenticated like `NTFY_TOPIC`, so the string is both the address and the credential. Generate it (`openssl rand -hex 16`) rather than deriving it from `NTFY_TOPIC`, or leaking one leaks the other. Never returned by any endpoint |
+| `DASHBOARD_LOCAL_URL` | `http://localhost:<PORT>` | How a browser **on this machine** reaches this server, used for the desk push's tap-through — which points at `/api/dismiss` and does nothing but close the tab it opened in. Unlike `DASHBOARD_PUBLIC_URL` this *is* defaulted, deliberately: a desk URL is by construction "this machine", so there is nothing to distinguish an absent value from a chosen one. The default holds in dev too, because `/api/dismiss` is an API route rather than a page, so `PORT` serves it whether or not Vite is running the UI. The desk channel needs no `DASHBOARD_PUBLIC_URL` and no tunnel — this link never leaves the machine. Set it only for a non-default host or port |
 | `WHISPER_MODEL` | _(empty)_ | Path to a GGML whisper model. **Empty disables [dictation](../subsystems/dictation.md) outright** — the same "unset means off" rule `NTFY_TOPIC` uses for pushes. Setting it arms `POST /api/transcribe`, an endpoint that spawns processes on this machine, gated only by the same `ANSWER_TOKEN` above (empty there means this is open too — see [dictation's security posture](../subsystems/dictation.md#security-posture) before setting this where other devices can reach it). Step-by-step: [dictation-setup](dictation-setup.md) |
 | `WHISPER_BIN` | `whisper-cli` | The whisper.cpp CLI, resolved from `PATH`. Override with an absolute path for a non-`PATH` install |
 | `FFMPEG_BIN` | `ffmpeg` | Transcodes the browser's recording (AAC or Opus) to the 16kHz mono WAV whisper.cpp requires. Resolved from `PATH`; override with an absolute path for a non-`PATH` install |
@@ -75,5 +82,5 @@ you set one. Full setup in [remote-answers.md](../subsystems/remote-answer.md).
     - scripts/ask-remote-hook.sh
     - .env.example
   kind: workflow
-  verified: 69dc049345a08127684ec8813ccd31aaedf4ea84
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

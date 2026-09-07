@@ -85,8 +85,11 @@ The argv stays deliberately minimal — `-p ok --model haiku`, nothing newer. Fl
 buy nothing measurable would only add CLI-version coupling to the one path whose job is to
 work when things are already broken.
 
-`missing` is deliberately not covered. No spawn conjures credentials that were never
-stored — that needs a login.
+`missing` and `signed-out` are deliberately not covered. No spawn conjures credentials
+that were never stored, and a blanked-out one has no refresh token left to renew — both
+need a login. That is also why `tokenFromCredsBlob` tests for a blank token *before* the
+expiry test: `claude auth logout` zeroes `expiresAt` too, so an expiry-first read would
+call a logout `expired` and spend a `claude -p` turn to learn otherwise.
 
 **Backoff** (`shouldAutoRefresh`, pure): 5 min after the first failure, doubling, capped at
 an hour. The common failure is *structural* — logged out, no `claude` on PATH under a
@@ -877,7 +880,7 @@ Why it exists, and it is not the pooled rate's failure mode:
 
 **The headline case — a model that owns nothing — is on this machine and is
 currently refused.** `claude-opus-4-8` owns **zero** intervals over the whole
-17-day window, so `pool()` gives it nothing at any floor and it has never had a
+17-day window, so `poolRate()` gives it nothing at any floor and it has never had a
 row on the card. It also does not get one now: it appears on exactly **one**
 ledger line, so `explainRates` refuses it `thin-evidence` (1 interval, 1.0 point,
 1 day) at the 17-day horizon and it is outside the server's 3-day window
@@ -1107,8 +1110,14 @@ their 5-hour counterparts, and `weeklyRecorded` — did *any* sample in the read
 window carry a `week` field at all. That last one is what keeps the first
 fortnight honest: it separates "the record predates the widening" from "the
 weekly counter has not moved", two states that would otherwise render
-identically as empty slots. While it is false the card says the weekly series
-began recording with this build and roughly when to expect a first figure.
+identically as empty slots. The note saying which is shown whenever **no row carries
+a weekly figure at all** rather than while `weeklyRecorded` is false — measured on
+2026-09-06 the record carried a weekly reading within 90 seconds of the recorder
+starting while every weekly slot stayed empty for the rest of the day, so gating
+on the field alone would have shown the note for one tick and then left the card
+looking broken. The field chooses *which* sentence — the record predates the
+widening, or the counter has not ticked enough inside a recorded window — and
+both end with roughly when to expect a first figure.
 
 `weeklyAsideText` renders the weekly figure as one line under the tiles rather
 than as a fourth tile — the tile row reads as one comparable set and this prices
@@ -1170,10 +1179,10 @@ verdict column off screen first, and this board is mostly read from a phone.
    `FITTED, MIXED WINDOWS` when those rates exist. Each label carries a **ⓘ**
    opening that term's definition in the floating panel — a real button and never
    a `title` attribute, for the reason the profile tooltip exists. Under the
-   tiles, the weekly line, then the **evidence split in two**: `Current 585
-   windows · 4 days · 663.0 pts` and `Baseline forming · 4 of 7 days`. That split
-   is the fix for a line that read `baseline forming · 4 days · 585 windows · 4
-   days · 663.0 pts`, where two identical "4 days" meant two different windows
+   tiles, the **evidence split in two** — `Current 585 windows · 4 days · 663.0
+   pts` and `Baseline forming · 4 of 7 days` — and the weekly line under that.
+   That split is the fix for a line that read `baseline forming · 4 days · 585
+   windows · 4 days · 663.0 pts`, where two identical "4 days" meant two different windows
    and nothing said which. `evidenceParts` names the 7-day floor only while the
    baseline is under it: still forming at 9 days means refused for some *other*
    reason, and "9 of 7" would be nonsense.
@@ -1219,7 +1228,7 @@ API field is a separate decision — and the card stops reading it.
 
 Every string the card says is a pure function in
 `client/src/lib/usageRatesFormat.ts`, so the statements are testable without a
-browser (`test/usage-rates-format.test.ts`, 30 cases). The functions return
+browser (`test/usage-rates-format.test.ts`; `pnpm test` prints the case count). The functions return
 *parts* — a headline and its counts, a current clause and a baseline clause —
 rather than pre-joined sentences, because the component needs to pick `forming`
 out for its own emphasis; the copy still lives in the lib. The 7-day floor is a
@@ -1306,5 +1315,5 @@ than four days of data.
     - client/src/components/Header.tsx
     - client/src/components/usage/
   kind: subsystem
-  verified: 84519e7f39aa5faf2d43acd7097b1730d4dc5645
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

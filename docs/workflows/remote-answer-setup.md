@@ -15,7 +15,7 @@ phone over LAN or Tailscale (see [remote-access](../subsystems/remote-access.md)
 **2. Link the hook**, from the repo root. A symlink rather than a copy, so `git pull`
 keeps it current:
 
-> `pnpm hooks:install` does this step and the next one for all five hooks at once —
+> `pnpm hooks:install` does this step and the next one for all six hooks at once —
 > see [hooks-setup](hooks-setup.md). The manual recipe below is what it automates.
 
 ```bash
@@ -50,7 +50,9 @@ curl -s localhost:4173/api/health
 
 `{"ok":true,...,"remoteAnswer":true}` means the hook will engage — if `remoteAnswer` is
 false, check the **remote answers** pill in the toolbar and `REMOTE_ANSWER` in your
-config. Then drive the hook itself (`IDLE_SECS=0` forces the away branch, 20s window):
+config. The same probe carries `tokenRequired`, true whenever the server has an
+`ANSWER_TOKEN` set, so you can see that a token file is expected without waiting for
+a 403. Then drive the hook itself (`IDLE_SECS=0` forces the away branch, 20s window):
 
 ```bash
 echo '{"session_id":"SID","tool_input":{"questions":[{"question":"Works?","header":"Test","options":[{"label":"Yes"},{"label":"No"}]}]}}' | CLAUDECODE=1 CLAUDE_DASHBOARD_IDLE_SECS=0 CLAUDE_DASHBOARD_ANSWER_TIMEOUT=20 bash ~/.claude/hooks/ask-remote.sh
@@ -83,12 +85,18 @@ without waiting for a real question.
   the wait window; the CLI kills the hook first (see the warning in step 3).
 - **403 from the POSTs** — `ANSWER_TOKEN` is set server-side but missing/wrong in
   `~/.claude/hooks/dashboard-token` or the browser prompt (see the security section of
-  [remote-answer](../subsystems/remote-answer.md)).
+  [remote-answer](../subsystems/remote-answer.md)). The hook swallows the 403, but the
+  server no longer does: it prints `[dashboard] rejected write: POST
+  /api/questions/wait (bad or missing token)` on its own stderr — method and path only,
+  never the token, and at most once a minute per path. If the token file *looks* right,
+  check you didn't edit `ANSWER_TOKEN` in `.env` without restarting — the process still
+  runs the value it read at startup, and `GET /api/settings` names such keys in
+  `staleEnvKeys` (the Settings tab shows them).
 
 <!-- docs-sync:
   sources:
     - scripts/ask-remote-hook.sh
     - server/api.ts
   kind: workflow
-  verified: 1809dcd9a7eb2be002de750150f12d33bc62df6b
+  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->
