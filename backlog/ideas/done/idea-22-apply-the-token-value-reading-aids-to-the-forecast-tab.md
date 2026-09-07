@@ -3,6 +3,10 @@ id: idea-22
 title: Apply the Token value reading aids to the Forecast tab
 created: 2026-09-06
 tags: ui, usage, forecast
+promoted-to: task-23
+updated: 2026-09-07T05:34:08Z
+groom-elapsed: 399
+groom-tokens: 116032
 ---
 
 ## Problem
