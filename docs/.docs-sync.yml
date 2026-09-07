@@ -68,6 +68,8 @@ docs:
   - path: docs/workflows/dictation-setup.md
     kind: workflow
     note: Dictation — setup
+  - path: docs/workflows/hooks-setup.md
+    kind: workflow
   - path: README.md
     kind: readme
   - path: .claude/CLAUDE.md
@@ -88,3 +90,5 @@ out-of-scope:
     reason: vendored skills, maintained upstream
   - path: .github/pull_request_template.md
     reason: PR body template — a form, not reference prose; no code to drift against
+  - path: audits/
+    reason: whole-repo audit reports — records of a moment, like docs/superpowers/
