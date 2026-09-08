@@ -7,6 +7,7 @@ import {
   hasFigures, measuredShare, movedLabel, RATES_GLOSSARY, statusLine, verdictText,
   waitingText, weeklyAsideText
 } from '../../lib/usageRatesFormat';
+import { HowToRead, InfoDot } from './ReadingAids';
 
 /**
  * Token value per model — what one percent of the 5-hour window actually costs,
@@ -72,13 +73,7 @@ function Fig({ label, term, lead, value, unit, sub, pin }: {
     <div className={lead ? 'rates-fig lead' : 'rates-fig'}>
       <div className="rates-lab">
         {label}
-        <button
-          type="button"
-          className="rates-i"
-          aria-label={`What is the ${label.toLowerCase()}?`}
-          aria-expanded="false"
-          {...pin(figureTip(term))}
-        >i</button>
+        <InfoDot label={label.toLowerCase()} text={figureTip(term)} pin={pin} />
       </div>
       <div className="rates-value">
         {value}<span className="rates-unit">{unit}</span>
@@ -277,21 +272,7 @@ export function UsageRates() {
         </div>
       )}
 
-      {rates.models.length > 0 && (
-        <details className="rates-how">
-          <summary>
-            How to read this <span className="rates-n">{RATES_GLOSSARY.length} terms</span>
-          </summary>
-          <dl className="rates-gloss">
-            {RATES_GLOSSARY.map(g => (
-              <div key={g.key}>
-                <dt>{g.term}</dt>
-                <dd>{g.text}</dd>
-              </div>
-            ))}
-          </dl>
-        </details>
-      )}
+      {rates.models.length > 0 && <HowToRead terms={RATES_GLOSSARY} />}
 
       {measured !== null && (
         <div className="rates-cov">

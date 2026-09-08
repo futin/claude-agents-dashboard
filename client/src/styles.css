@@ -845,7 +845,6 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .up-swatches{display:flex;gap:2px}
 .up-swatches .up-cell{width:14px;height:14px;aspect-ratio:auto}
 .up-legend-none{width:14px;height:14px;aspect-ratio:auto;margin-left:10px}
-.up-legend .up-conf{width:100%;color:var(--text2)}
 
 /* Usage sub-tabs. The switch sits at the far end of the section bar, which is
    `align-items:baseline` — the control has no text baseline of its own, so it
@@ -854,7 +853,15 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 
 /* Token value per model. Every colour here is a theme token or a `color-mix`
    over one — the five themes are pure token overrides, and one literal breaks
-   the light one. */
+   the light one.
+
+   The `rates-*` prefix is now the **shared reading-aids vocabulary** of both
+   Usage tabs, not this one's private namespace: `.rates-status` / `.rates-q` /
+   `.rates-counts` carry the Forecast tab's verdict line too, and `.rates-i` /
+   `.rates-how` / `.rates-n` / `.rates-gloss` are rendered from
+   `components/usage/ReadingAids.tsx` for both. Renaming them would touch both
+   tabs and this file for nothing a reader can see, and class names are kept
+   stable here on purpose — so the prefix stays and this comment explains it. */
 
 /* The status strip: the question the card answers, and its answer. */
 .rates-status{display:flex;align-items:baseline;gap:8px 14px;flex-wrap:wrap;margin-top:14px}
