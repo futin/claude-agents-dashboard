@@ -3,6 +3,10 @@ id: task-23
 title: Forecast tab: verdict-first status line, one-sentence lead and a shared How to read this drawer
 created: 2026-09-07
 from: idea-22
+updated: 2026-09-08T11:48:32Z
+started: 2026-09-08T11:12:43Z
+execute-elapsed: 2149
+execute-tokens: 210907
 ---
 
 ## Goal
@@ -331,3 +335,258 @@ building a `ForecastStep` (`t`, `gain`, `cum`, `weight`, `learned`) and a `walkO
 - State in the PR what was not verified. Known candidates: `confidence: 'ok'` cannot be
   produced from live data on this machine yet (the headline for it is unit-tested only), and
   the `walkAbsent` states need a doctored profile to render.
+
+## Outcome
+
+**2026-09-08 — done.** The Forecast tab now reads the way the Token value tab does: a
+one-sentence lead, a status line whose headline is the confidence verdict with the 100%
+answer beside it, the recording counters demoted to evidence under it, and a
+closed-by-default `How to read this` drawer holding all seven definitions, each also
+reachable from an ⓘ. `InfoDot` and `HowToRead` were extracted into
+`client/src/components/usage/ReadingAids.tsx` and both tabs now render them.
+
+Built as planned, with three deviations, all stated below rather than worked around.
+
+### Verification
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(no output — clean)
+
+$ pnpm test
+  38 passed, 0 failed      ← usageProfile.ts (inspector status line), was 28
+  ...
+  31/31 passed
+ALL PASS
+```
+
+Total case count 1398 → 1408, exactly +10 as the plan required.
+
+Scope held: `git diff HEAD --stat -- server shared client/src/lib/walkChart.ts` is empty.
+
+### Browser pass
+
+Ran against this worktree's Vite (5273) proxied to a stub (4273) that forwards to the live
+API but injects a synthetic 118-hour walk — the live account is idle, so its real response
+is `walkAbsent: no-rate` with an empty walk, and the crossing clause, the chart and the hit
+columns cannot be exercised against it. Both processes were killed by recorded pid
+afterwards; the user's dashboard on 5174/4173 was untouched (confirmed still listening).
+
+- **Reading order** — `.up` children in DOM order: `up-tip, up-head, rates-status,
+  up-status, up-grid, up-legend, up-walk, rates-how`. Lead is the single sentence. Headline
+  `The forecast is running on your week` (live `confidence: ok` — see Unproven, this turned
+  out to be provable after all), timing `the week hits 100% Fri 16:00`, counters beneath.
+- **Crossing has one home** — `.rates-counts` reads `the week hits 100% Fri 16:00` and the
+  chart's `.up-crosslab` reads `Fri 16:00`; `.up-walkmeta` carries the label and its ⓘ only.
+- **Token-value DOM unchanged by the extraction** — compared `outerHTML` of
+  `.rates-fig .rates-lab` and the whole `details.rates-how` subtree via `browser_evaluate`
+  on the *unmodified* main checkout serving 5174 versus this branch on 5273. **Byte-identical
+  in both cases.** (Confirmed 5174's checkout is on `main` and its `UsageRates.tsx` matches
+  this branch's `HEAD` version, i.e. it is a genuine "before".)
+- **Pin behaviour** — clicking the headline ⓘ sets `aria-expanded="true"`, panel opacity 1,
+  panel text is the `confidence` definition; clicking again returns `false` / opacity 0.
+- **Drawer** — closed on load (`open` absent), `7 terms`, the seven `<dt>` in plan order.
+  Its `Solid vs dashed` definition prints `7%`, the same mean as the legend's `falls back to
+  the 7% weekly mean`.
+- **Hover-only bundle survives** — real Playwright hover on a heatmap cell opened
+  `Tue 03:00 · every week`; on a walk hit column, `Thu 10:00 / +1.4% this hour / …`. (A
+  first hit-column hover read opacity 0: `.hover()` scrolled the chart into view and the
+  hook's documented hide-on-scroll for pointer-shown tips fired. Hovering the neighbouring
+  column with no scroll shows opacity 1. Pre-existing behaviour, not a regression.)
+- **375×812** — `document.documentElement.scrollWidth === 375 === innerWidth`, no sideways
+  scroll; the timing clause wraps onto its own line and stays inside the viewport; the
+  status→counters gap measures 10px, so no CSS override was needed.
+- **Five themes** — contrast of the headline / drawer summary / ⓘ glyph against the card
+  surface: midnight 12.61 / 7.00 / 3.32, graphite 12.80 / 6.85 / 3.28, amber 12.50 / 7.04 /
+  3.63, nightshift 12.98 / 7.33 / 3.58, daylight 15.44 / 7.17 / 3.62. `daylight` is the best
+  of the five here, not the worst. No theme token was retuned and no colour literal added.
+- Screenshots (640 full page, 375 full page, drawer open) are at
+  `/tmp/task23-scratch/shots/` — kept out of the repo deliberately, since a `.playwright-mcp/`
+  directory does not belong in a commit.
+
+Contract sweep: 2 sites updated (docs/subsystems/usage-limits.md, docs/overview.md)
+
+One site left standing on purpose: `docs/guides/tutor/usage/usage-3-inspector.html:988`
+still says `RecordingStatus`. It is a generated tutor deck, `docs/guides/` is guide-manager
+territory, and the deck cites `UsageProfile.tsx` in its own stamp — so it will flag as stale
+and be regenerated by `/tutor`. Hand-patching one `<p>` would leave the rest of that lesson
+(quoted code blocks, `UsageProfile.tsx:16-20` line citations) inconsistent with the file it
+claims to quote, which is worse than leaving it whole and stale.
+
+Red proof: 10 tests went red with the change reverted
+
+Nine surgical mutations, each applied to a file copy of `client/src/lib/usageProfile.ts`
+and reverted from that copy (never `git stash` — the stack is shared with other worktrees).
+Baseline 38/0 unmutated; every one of the 10 new cases is pinned by at least one:
+
+| mutation | result |
+|---|---|
+| headline: all three verdicts identical | 1 failed |
+| timing: drop the empty-walk guard | 2 failed |
+| timing: coasts branch prints the crossing text | 1 failed |
+| timing: crossing clause reworded | 1 failed |
+| glossary: mean hardcoded instead of live | 1 failed |
+| glossary: floor + ceiling re-typed as literals | 1 failed |
+| glossary: ok gate clause dropped | 1 failed |
+| glossary: first two terms swapped in order | 2 failed |
+| profileTip: returns the term, not the text | 1 failed |
+
+### Deviations from the plan, for the PR body
+
+1. **`ForecastStatus` takes a `globalMean` prop** the plan did not list. Its `confidence` ⓘ
+   quotes `profileTip('confidence', globalMean)`, and `profileTip` is a builder that needs
+   the live mean. The alternative — having the parent pre-compute that one string — would
+   have made this the only ⓘ on the tab wired differently from the other six.
+2. **The walk's meta label and its ⓘ are one `<span>`, not two flex children.**
+   `.up-walkmeta` is `justify-content:space-between`, so a bare trailing ⓘ would have been
+   flung to the far end of the row. Wrapping keeps it beside the label with no CSS change.
+3. **The plan said this module had 25 cases; it had 28.** The +10 delta it specified is
+   what was checked and met (1398 → 1408 overall).
+
+Two smaller calls worth a reviewer's eye: the `confidence` glossary entry composes the
+three `CONFIDENCE_TEXT` strings verbatim but prefixes `none —` and `ok —` (the `thin`
+string already names itself, so prefixing it would have stuttered); and the glossary strings
+carry no markdown emphasis, since `<dd>` and the tip panel both render them as plain text.
+
+### Still needed, not done here
+
+- **The `docs-sync` stamp on `docs/subsystems/usage-limits.md` needs re-baselining** to the
+  merge commit. An execute session does not commit, so `verified:` still reads
+  `f436519f31ef4120521792db7658e2bc5431f0e9`. Same handoff `task-22` made. Its `sources:`
+  list already covers `client/src/lib/usageProfile.ts` and `client/src/components/usage/`,
+  so no new source line is needed.
+- **`docs/guides/tutor/usage/usage-3-inspector.html` wants a `/tutor` refresh** (see above).
+
+### Unproven
+
+- The `walkAbsent` states (`recording-off`, `no-rate`, `no-window`) were not re-rendered;
+  the walk panel's absent path is untouched by this diff but was only seen indirectly (the
+  live API returns `no-rate`, which is why the stub exists).
+- `confidence: 'none'` and `'thin'` headlines are unit-tested only — the live profile is at
+  `ok`, and only `ok` was seen rendered. (The plan predicted the opposite: it expected `ok`
+  to be the unreachable one. It is now reachable on this machine.)
+- The ⓘ pin was exercised through a synthetic `click`, not a real touch sequence; touch
+  behaviour rests on `useFloatingTip`, which this diff does not change.
+- No screenshot comparison of the token-value tab was taken — the DOM comparison above is
+  stronger for the question asked (has the markup changed), but it says nothing about
+  rendered pixels.
+
+## Fix loop — review round 1
+
+**2026-09-08 — one Important finding, fixed.** Review verdict `fix`; report at
+`~/.backlog-manager/orchestrator/…/reviews/task-23-1.md`. The finding is real and its
+diagnosis is exact.
+
+### What was wrong
+
+`client/src/hooks/useFloatingTip.ts` — `tipHandlers` had none of the
+`if (pinnedRef.current) return;` guards `pinHandlers` carries. This branch is the first to
+spread **both** bundles onto one panel (hover on 168 grid cells and 118 hit columns, pin on
+seven ⓘ sitting among them), so a pointer on its way anywhere overwrote a pinned definition
+and then hid it, while `pinnedRef` and `aria-expanded="true"` survived — leaving the ⓘ
+accent-highlighted with no panel, a screen reader told a collapsed control was expanded,
+and the next click on that ⓘ taking the toggle-*off* branch and appearing to do nothing.
+
+My original browser pass verified only that hover still works once the tab gained pins. The
+reverse — a pin surviving a hover — is the direction that was broken, and I did not test it.
+
+### What changed
+
+`client/src/hooks/useFloatingTip.ts` (+26/−4) — the four pointer handlers in `tipHandlers`
+(`onPointerEnter`, `onPointerMove`, `onPointerLeave`, `onPointerCancel`) now return early
+while a pin is held, mirroring `pinHandlers`. Plus a JSDoc paragraph on why a pin outranks a
+hover, and why `onFocus` is deliberately **not** guarded: reaching a mark by keyboard means
+the pin's own `onBlur` already fired `hide()`, so no pin remains to outrank.
+
+`docs/subsystems/usage-limits.md` — the paragraph at §The token-value board already claimed
+a pinned panel "ignores hover". That was only true *within* `pinHandlers` before this fix;
+it now says **"from either bundle"** and states why that scope is load-bearing here.
+
+Nothing else touched. The plan's §3 assumed the hook untouched; the defect exists only
+because this branch made the two bundles co-tenants, which is where the guard belongs — the
+reviewer reached the same conclusion.
+
+### Verification
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(no output — clean)
+
+$ pnpm test
+  38 passed, 0 failed      ← usageProfile.ts (inspector status line)
+  31/31 passed
+ALL PASS
+```
+
+Total still 1408 cases. `git diff HEAD --stat -- server shared client/src/lib/walkChart.ts`
+still empty.
+
+**Not unit-testable at this repo's level, and this is not a dodge.** `test/` is node-assert
+over pure functions; there is no jsdom, no `@testing-library`, no renderer in
+`devDependencies`. The one DOM-adjacent test (`test/web-notify-client.test.ts`) works only
+because `useWebNotify.ts` exports plain non-hook functions beside the hook and the test stubs
+globals. `useFloatingTip` exports **only** the hook, whose guard lives inside a `useCallback`
+over a `useRef` — unreachable without a renderer. Extracting it to make it testable would be
+a redesign well outside "fix that finding and nothing else". So it was verified in the
+browser, both directions, plus a browser-level red proof.
+
+### Browser proof, worktree ports, killed by pid
+
+Same rig as the first pass (Vite 5273 → stub 4273 → live API 4173, synthetic 118-hour walk).
+
+**Fix in place — the report's four steps, with real mouse input:**
+
+| step | result |
+|---|---|
+| 1. click the headline ⓘ | `aria-expanded=true`, opacity 1, confidence definition shown |
+| 2. hover a heatmap cell | definition **survives**, opacity 1, still expanded |
+| 3. hover a walk hit column, then leave | definition **survives**, opacity 1, still expanded |
+| 4. click the same ⓘ | closes properly — `aria-expanded=false`, opacity 0 |
+
+**Not-broken check, nothing pinned:** heatmap cell hover opens `Tue 03:00 · every week`
+(opacity 1); walk hit column opens `Thu 12:00` (opacity 1); leaving still hides. The
+hover-only bundle is unaffected when no pin is held.
+
+**Red proof (browser-level).** Reverted only `tipHandlers`' four guards — scoped with a
+script to that function, after a first attempt with `perl -pi` wrongly stripped
+`pinHandlers`' guards too and would have proved a doubly-broken state; caught by counting the
+guards in each bundle before trusting the run. With the reverted build, all three reported
+consequences reproduce:
+
+- step 2: `definitionSurvived: false` — the panel now reads `Tue 03:00 · every week`
+- step 3: opacity `0` **and** `aria-expanded` still `"true"`, button computed colour and
+  border both `rgb(85, 208, 221)` (the accent) rather than `--text3` — the highlighted ⓘ with
+  no panel
+- step 4: `panelOpened: false` — the click is a no-op, exactly as reported
+
+Restoring the fix returns every step to the table above.
+
+**Token-value tab unchanged, verified not assumed.** `UsageRates` spreads `pinHandlers`
+only; counted `0` non-ⓘ `[tabindex]` marks on that tab, so `tipHandlers` is never
+constructed there and the guard is unreachable by construction. Pin/unpin still
+`true`/opacity 1 → `false`/opacity 0 with the correct definition text; drawer still
+`6 terms`, closed by default.
+
+### Minor findings from the report — not actioned, by instruction
+
+The dispatch said fix the Important finding and nothing else, so the eight Minor findings
+stand. Three are worth the merger's attention because they are small and real:
+
+- `client/src/styles.css:1000` — `.up-hit{color:var(--red)}` is now dead code; its only
+  renderer was the walkmeta crossing span this branch deleted.
+- The crossing clause lost its red emphasis in the move (`.up-hit` → `.rates-counts`). The
+  chart's red rule and cross line still carry the alarm, so it reads deliberate — but it was
+  a real change I did not declare as a deviation. Declaring it now.
+- `test/usage-profile-view.test.ts:314-318` asserts `includes(String(TRUST_FLOOR_MIN))` /
+  `includes(String(Y_MAX))`, which cannot distinguish a constant read from a same-valued
+  literal. My mutation row *"floor + ceiling re-typed as literals → 1 failed"* only holds
+  because that mutation also changed the numbers (60→45, 130→999). The reviewer is right
+  that the claim is stronger than the assertion supports; the plan specified the assertion
+  this way.
+
+The other five (the unpinned malformed-ISO branch, `weight`'s unpinned live mean, the
+double em-dash in the composed `confidence` string, the new "60 minutes per week" clause in
+`cell`, and the live confidence token no longer appearing on the tab) are accurately
+described in the report and need no correction from me.

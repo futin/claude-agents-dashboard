@@ -5,13 +5,18 @@ import {
   DAY_ORDER,
   DAYS,
   earliestWeightMs,
+  forecastHeadline,
+  forecastTiming,
   nextOccurrenceMs,
+  profileGlossary,
   profileProgress,
+  profileTip,
   nextWeekStartMs,
   fmtObserved,
   TRUST_FLOOR_MIN
 } from '../client/src/lib/usageProfile.js';
-import type { UsageProfileCell } from '../shared/types.js';
+import { Y_MAX } from '../client/src/lib/walkChart.js';
+import type { ForecastStep, UsageProfileCell } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -26,6 +31,13 @@ function grid(over: Record<number, Partial<UsageProfileCell>> = {}): UsageProfil
   return Array.from({ length: 168 }, (_, hourOfWeek) =>
     cell({ hourOfWeek, ...(over[hourOfWeek] ?? {}) }));
 }
+
+const step = (over: Partial<ForecastStep> = {}): ForecastStep =>
+  ({ t: new Date(2026, 8, 7, 9, 0, 0).toISOString(), gain: 1, cum: 10, weight: 0.5,
+    learned: true, ...over });
+
+/** `n` steps — `forecastTiming` only reads the walk's length. */
+const walkOf = (n: number): ForecastStep[] => Array.from({ length: n }, () => step());
 
 export function run(): number {
   console.log('\n=== usageProfile.ts (inspector status line) ===\n');
@@ -255,6 +267,75 @@ export function run(): number {
 
   if (test('earliestWeightMs: nothing recorded means nothing to date', () => {
     assert.strictEqual(earliestWeightMs(grid(), new Date(2026, 7, 31, 21, 40, 0).getTime()), null);
+  })) p++; else f++;
+
+  if (test('forecastHeadline: one distinct verdict per confidence, none of them a sentence', () => {
+    const all = (['none', 'thin', 'ok'] as const).map(forecastHeadline);
+    assert.strictEqual(new Set(all).size, 3, 'two states share a verdict');
+    for (const h of all) {
+      assert.ok(h.length > 0, 'an empty verdict');
+      assert.ok(!h.endsWith('.'), `"${h}" ends in a period`);
+    }
+    // `none` has to name what the forecast actually is when nothing is learned.
+    assert.ok(forecastHeadline('none').includes('flat-rate'));
+  })) p++; else f++;
+
+  if (test('forecastTiming: a crossing time reads as the week hitting 100%', () => {
+    // Built from local components, like the fmtWalkHour cases: the label is
+    // local time, so a fixed UTC string would move with the runner's timezone.
+    const thu = new Date(2026, 8, 10, 14, 0, 0);   // Thu 10 Sep 2026, 14:00 local
+    assert.strictEqual(forecastTiming(walkOf(3), thu.toISOString()),
+      'the week hits 100% Thu 14:00');
+  })) p++; else f++;
+
+  if (test('forecastTiming: no crossing on a real walk coasts to the reset', () => {
+    assert.strictEqual(forecastTiming(walkOf(3), null), 'the week coasts to the reset');
+  })) p++; else f++;
+
+  if (test('forecastTiming: an empty walk has no timing sentence at all', () => {
+    // Nothing to project from — `absentText` in the walk panel says why.
+    assert.strictEqual(forecastTiming([], null), null);
+  })) p++; else f++;
+
+  if (test('forecastTiming: a crossing time with no walk is never printed', () => {
+    // The combination should not reach the client, and inventing a crossing for
+    // a walk that does not exist is the one wrong answer here.
+    assert.strictEqual(forecastTiming([], new Date(2026, 8, 10, 14, 0, 0).toISOString()), null);
+  })) p++; else f++;
+
+  if (test('profileGlossary: the seven terms, in the order the tab reads them', () => {
+    const g = profileGlossary(0.42);
+    assert.deepStrictEqual(g.map(e => e.key),
+      ['cell', 'weight', 'evidence', 'confidence', 'ink', 'ceiling', 'walk']);
+    for (const e of g) {
+      assert.ok(e.term.length > 0, `${e.key} has no term`);
+      assert.ok(e.text.length >= 40, `${e.key}'s definition is too thin: "${e.text}"`);
+    }
+  })) p++; else f++;
+
+  if (test('profileGlossary: the weekly mean is live, which is why it is a builder', () => {
+    assert.ok(profileGlossary(0.42).find(e => e.key === 'ink')!.text.includes('42%'));
+    assert.ok(profileGlossary(0.07).find(e => e.key === 'ink')!.text.includes('7%'));
+  })) p++; else f++;
+
+  if (test('profileGlossary: the two model constants are read, never re-typed', () => {
+    const g = profileGlossary(0.42);
+    assert.ok(g.find(e => e.key === 'evidence')!.text.includes(String(TRUST_FLOOR_MIN)));
+    assert.ok(g.find(e => e.key === 'ceiling')!.text.includes(String(Y_MAX)));
+  })) p++; else f++;
+
+  if (test('profileGlossary: every confidence state is documented, with the ok gate', () => {
+    const text = profileGlossary(0.42).find(e => e.key === 'confidence')!.text;
+    for (const state of ['none', 'thin', 'ok']) {
+      assert.ok(text.includes(state), `confidence does not mention ${state}`);
+    }
+    assert.ok(text.includes('120'), 'the ok gate is not stated');
+  })) p++; else f++;
+
+  if (test('profileTip: an ⓘ prints the drawer\'s own string, not a second copy', () => {
+    const g = profileGlossary(0.42);
+    assert.strictEqual(profileTip('ink', 0.42), g.find(e => e.key === 'ink')!.text);
+    assert.strictEqual(profileTip('cell', 0.42), g[0].text);
   })) p++; else f++;
 
   console.log('\n  ' + p + ' passed, ' + f + ' failed');

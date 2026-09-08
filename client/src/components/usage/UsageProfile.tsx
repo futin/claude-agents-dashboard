@@ -1,17 +1,18 @@
 import { useState } from 'react';
 
 import type { ForecastConfidence, UsageProfileCell, UsageProfileResponse } from '../../../../shared/types';
-import type { TipHandlers } from '../../hooks/useFloatingTip';
+import type { PinHandlers, TipHandlers } from '../../hooks/useFloatingTip';
 import { useFloatingTip } from '../../hooks/useFloatingTip';
 import { useUsageProfile } from '../../hooks/useUsageProfile';
 import {
-  cellTitle, DAY_ORDER, DAYS, earliestWeightMs, fmtObserved, nextWeekStartMs, profileProgress,
-  TRUST_FLOOR_MIN
+  cellTitle, DAY_ORDER, DAYS, earliestWeightMs, fmtObserved, forecastHeadline, forecastTiming,
+  nextWeekStartMs, profileGlossary, profileProgress, profileTip, TRUST_FLOOR_MIN
 } from '../../lib/usageProfile';
 import {
   absentText, areaPath, crossingX, dayTicks, fmtWalkHour, hitRect, hourOfWeekLocal,
-  pctX, pctY, pointsAttr, splitRuns, stepTitle, VIEW_H, walkPoints, walkWidth, Y_MAX, yOf
+  pctX, pctY, pointsAttr, splitRuns, stepTitle, VIEW_H, walkPoints, walkWidth, yOf
 } from '../../lib/walkChart';
+import { HowToRead, InfoDot } from './ReadingAids';
 
 /**
  * The duty-cycle profile inspector — a 24×7 hour-of-week heatmap over the
@@ -67,6 +68,23 @@ import {
  *   hiding it. Labelling every 6th hour also removes it, but then an hour can
  *   only be identified by counting rows.
  *
+ * **The reading order, and the reading aids.** The tab opens on one sentence,
+ * then on a status line that answers its own question before any figure — the
+ * same shape the token-value tab beside it uses. The headline is the
+ * *confidence verdict*, not the crossing time: the crossing is a number, and
+ * whether to believe it is the question the reader actually has. The crossing
+ * sentence then has exactly one home — the status line — where it used to be
+ * split between the walk's meta row and nothing else; the chart still labels
+ * the crossing itself, but that is a mark on a curve, not a claim in prose.
+ * Every definition the tab used to scatter across the lead paragraph, the
+ * legend and the walk's note now lives in `profileGlossary`, printed once in
+ * the `How to read this` drawer and quoted verbatim by each ⓘ.
+ *
+ * The `rates-*` class names those aids use are **shared vocabulary**, not the
+ * token-value tab's private prefix — see `ReadingAids.tsx`. The drawer is
+ * rendered unconditionally, unlike the rates one: a reader with an empty grid
+ * is exactly the reader who needs the definitions.
+ *
  * Reference: `docs/guides/mockups/usage-profile-heatmap-mockups.html`, variant C.
  */
 
@@ -88,21 +106,29 @@ function stepOf(weight: number): string {
   return 'q5';
 }
 
-const CONFIDENCE_TEXT: Record<ForecastConfidence, string> = {
-  none: 'no learned hours yet — the forecast is still the flat-rate one',
-  thin: 'thin — expected for the first couple of weeks; the shape is still moving',
-  ok: 'enough evidence to lead with'
-};
-
 /**
- * What the profile has so far, and which gate it is waiting on.
+ * The tab's answer to its own question, and the evidence under it.
  *
- * Without this the inspector's first week is 168 identical hatched cells and no
- * sign that recording works — which reads as broken rather than as early. The
- * grid itself stays honest (evidence is texture, never a colour step); this says
- * in words what the texture cannot.
+ * The headline is the trust verdict and the clause beside it is the 100%
+ * answer — the two things the reader came for, and until now the two furthest
+ * apart items on the page (a `<small>` at the end of the legend, and a span in
+ * the chart's meta row). The counters below answer a *different* question —
+ * "is recording working" — so they stay, as the evidence under the verdict
+ * rather than as the lead. Without them the inspector's first week is 168
+ * identical hatched cells and no sign that recording works, which reads as
+ * broken rather than as early; the grid itself stays honest (evidence is
+ * texture, never a colour step) and this says in words what the texture cannot.
  */
-function RecordingStatus({ cells, recording }: { cells: UsageProfileCell[]; recording: boolean }) {
+function ForecastStatus({ cells, recording, confidence, walk, exhaustAt, globalMean, pin }: {
+  cells: UsageProfileCell[];
+  recording: boolean;
+  confidence: ForecastConfidence;
+  walk: UsageProfileResponse['walk'];
+  exhaustAt: string | null;
+  /** Only so the ⓘ can quote the glossary, which is built against the live mean. */
+  globalMean: number;
+  pin: (text: string) => PinHandlers;
+}) {
   const { touched, totalMin, atFloor, trusted } = profileProgress(cells);
   if (!recording && touched === 0) return null;   // the `.up-off` block says it all
 
@@ -114,24 +140,36 @@ function RecordingStatus({ cells, recording }: { cells: UsageProfileCell[]; reco
   const first = new Date(earliestWeightMs(cells, now) ?? nextWeekStartMs(now));
   const when = first.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 
+  const timing = forecastTiming(walk, exhaustAt);
+
   return (
-    <div className="up-status">
-      <span>{touched} of 168 hours observed</span>
-      <span>{fmtObserved(totalMin)} recorded</span>
-      {trusted > 0 ? (
-        <span>{trusted} carrying a weight</span>
-      ) : atFloor > 0 ? (
-        <span className="up-status-wait">
-          {atFloor} {atFloor === 1 ? 'hour has' : 'hours have'} enough evidence — the first weight
-          appears on {when}, when that hour comes round in a new week
+    <>
+      <div className="rates-status">
+        <span className="rates-q">
+          {forecastHeadline(confidence)}{' '}
+          <InfoDot label="confidence" text={profileTip('confidence', globalMean)} pin={pin} />
         </span>
-      ) : (
-        <span className="up-status-wait">
-          no weights yet — an hour needs {TRUST_FLOOR_MIN} min of evidence and one week to
-          fold; the earliest a weight can appear is {when}
-        </span>
-      )}
-    </div>
+        {timing !== null && <span className="rates-counts">{timing}</span>}
+      </div>
+
+      <div className="up-status">
+        <span>{touched} of 168 hours observed</span>
+        <span>{fmtObserved(totalMin)} recorded</span>
+        {trusted > 0 ? (
+          <span>{trusted} carrying a weight</span>
+        ) : atFloor > 0 ? (
+          <span className="up-status-wait">
+            {atFloor} {atFloor === 1 ? 'hour has' : 'hours have'} enough evidence — the first weight
+            appears on {when}, when that hour comes round in a new week
+          </span>
+        ) : (
+          <span className="up-status-wait">
+            no weights yet — an hour needs {TRUST_FLOOR_MIN} min of evidence and one week to
+            fold; the earliest a weight can appear is {when}
+          </span>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -167,13 +205,15 @@ function RecordingStatus({ cells, recording }: { cells: UsageProfileCell[]; reco
  *   line itself is a mouse-only affordance; `title` never fires on touch. Both
  *   matter more than usual here — this is read from a phone.
  */
-function WalkStrip({ walk, exhaustAt, walkAbsent, globalMean, cells, tipHandlers }: {
+function WalkStrip({ walk, exhaustAt, walkAbsent, globalMean, cells, tipHandlers, pin }: {
   walk: UsageProfileResponse['walk'];
+  /** Still read, by the crossing label on the chart — the *sentence* about it moved. */
   exhaustAt: string | null;
   walkAbsent: UsageProfileResponse['walkAbsent'];
   globalMean: number;
   cells: UsageProfileCell[];
   tipHandlers: (text: string) => TipHandlers;
+  pin: (text: string) => PinHandlers;
 }) {
   const n = walk.length;
   const w = walkWidth(n);
@@ -185,13 +225,14 @@ function WalkStrip({ walk, exhaustAt, walkAbsent, globalMean, cells, tipHandlers
 
   return (
     <div className="up-walk">
+      {/* One flex child, not two: the crossing sentence moved to the status
+          line, and `justify-content:space-between` would otherwise fling a lone
+          trailing ⓘ to the far end of the row. */}
       <div className="up-walkmeta">
-        <span>the walk behind the current weekly projection</span>
-        {n > 0 && (
-          <span className={exhaustAt ? 'up-hit' : undefined}>
-            {exhaustAt ? `hits 100% ${fmtWalkHour(exhaustAt)}` : 'coasts to the reset'}
-          </span>
-        )}
+        <span>
+          the walk behind the current weekly projection{' '}
+          <InfoDot label="walk" text={profileTip('walk', globalMean)} pin={pin} />
+        </span>
       </div>
 
       {n === 0 ? (
@@ -273,9 +314,13 @@ function WalkStrip({ walk, exhaustAt, walkAbsent, globalMean, cells, tipHandlers
             <span className="up-key"><i className="up-key-solid" /> solid</span> hours are walked
             with a measured weight;{' '}
             <span className="up-key"><i className="up-key-dash" /> dashed</span> hours have no
-            evidence for that hour of the week yet and fall back to the{' '}
-            {Math.round(globalMean * 100)}% weekly mean — the same height, a weaker claim. The
-            scale stops at {Y_MAX}%: past the ceiling, everything is equally over.
+            evidence for that hour of the week yet.{' '}
+            <InfoDot
+              label="solid and dashed line"
+              text={profileTip('ink', globalMean)}
+              pin={pin}
+            />{' '}
+            <InfoDot label="100% ceiling" text={profileTip('ceiling', globalMean)} pin={pin} />
           </p>
         </>
       )}
@@ -287,7 +332,10 @@ export function UsageProfile() {
   const { profile, loading, error } = useUsageProfile();
   const [showTable, setShowTable] = useState(false);
 
-  const { tipRef, tipHandlers } = useFloatingTip();
+  // Both bundles off the one panel: hover-only for the 168 grid cells and the
+  // walk's hit columns, click-to-pin for the ⓘ glyphs, which have to stay open
+  // long enough to read a definition.
+  const { tipRef, tipHandlers, pinHandlers } = useFloatingTip();
 
   if (loading) return <div className="up-note">reading the usage profile…</div>;
   if (error || !profile) return <div className="up-note">The usage profile could not be read.</div>;
@@ -300,12 +348,16 @@ export function UsageProfile() {
       <div className="up-tip" ref={tipRef} role="tooltip" aria-hidden="true" />
       <div className="up-head">
         <div>
-          <h3>LEARNED HOURS</h3>
+          <h3>
+            LEARNED HOURS{' '}
+            <InfoDot
+              label="hour of the week"
+              text={profileTip('cell', globalMean)}
+              pin={pinHandlers}
+            />
+          </h3>
           <p className="up-sub">
-            The 168 hour-of-week weights the weekly forecast walks over. Each cell is{' '}
-            <em>one hour of the week</em> — Monday 09:00 is a different cell from Tuesday
-            09:00, and nothing is averaged across days. What accumulates across{' '}
-            <em>weeks</em> is the evidence.
+            The 168 hour-of-week weights the weekly forecast walks over.
           </p>
         </div>
         <button
@@ -327,7 +379,15 @@ export function UsageProfile() {
         </div>
       )}
 
-      <RecordingStatus cells={cells} recording={recording} />
+      <ForecastStatus
+        cells={cells}
+        recording={recording}
+        confidence={confidence}
+        walk={walk}
+        exhaustAt={exhaustAt}
+        globalMean={globalMean}
+        pin={pinHandlers}
+      />
 
       {showTable ? (
         <div className="up-tablewrap">
@@ -387,11 +447,12 @@ export function UsageProfile() {
           <div className="up-cell q4" /><div className="up-cell q5" />
         </div>
         <small>always</small>
+        <InfoDot label="weight" text={profileTip('weight', globalMean)} pin={pinHandlers} />
         <div className="up-cell unknown up-legend-none" />
         <small>
           no evidence yet — falls back to the {Math.round(globalMean * 100)}% weekly mean
         </small>
-        <small className="up-conf">confidence: {confidence} — {CONFIDENCE_TEXT[confidence]}</small>
+        <InfoDot label="evidence" text={profileTip('evidence', globalMean)} pin={pinHandlers} />
       </div>
 
       <WalkStrip
@@ -401,7 +462,12 @@ export function UsageProfile() {
         globalMean={globalMean}
         cells={cells}
         tipHandlers={tipHandlers}
+        pin={pinHandlers}
       />
+
+      {/* Unconditional, unlike the rates drawer: a reader looking at an empty
+          grid is exactly the reader who needs these definitions. */}
+      <HowToRead terms={profileGlossary(globalMean)} />
     </div>
   );
 }

@@ -408,13 +408,46 @@ Two things the grid alone cannot do:
     `null` whenever the walk is non-empty. The old `walk.length > 0` render gate made the
     whole panel appear and disappear with no text saying why, which reads as a broken
     feature rather than as an idle account.
-- **A status line says where the profile is up to** (`RecordingStatus`, over the pure
-  helpers in `client/src/lib/usageProfile.ts`): hours observed of 168, total time recorded,
-  and either how many hours carry a weight or which gate is still pending — the
-  `TRUST_FLOOR_MIN` evidence floor, then the week roll-over that folds it. Without it the
-  first week is 168 identical hatched cells with no sign that recording works, which reads
-  as broken rather than as early. The grid stays honest either way (evidence is texture,
-  never a colour step); this states in words what the texture cannot.
+- **The tab answers its own question before any figure** (`ForecastStatus`, over the pure
+  helpers in `client/src/lib/usageProfile.ts`). The page opens on one sentence — *the 168
+  hour-of-week weights the weekly forecast walks over* — and then on a status line whose
+  headline is the **confidence verdict** (`forecastHeadline`), with the 100% answer beside
+  it as one clause (`forecastTiming`: *the week hits 100% Thu 14:00*, or *the week coasts
+  to the reset*, or nothing at all when the walk is empty — there is no projection to time,
+  and `walkAbsent` already says why). The verdict leads rather than the crossing because
+  the crossing is a *number* and whether to believe it is the question; and the crossing
+  sentence now has exactly **one** home, having previously been split between the walk's
+  meta row and nowhere else. The chart still marks the crossing itself (`.up-crosslab`),
+  which is a mark on a curve, not a second claim in prose.
+
+  Under the headline, unchanged, sit the recording counters: hours observed of 168, total
+  time recorded, and either how many hours carry a weight or which gate is still pending —
+  the `TRUST_FLOOR_MIN` evidence floor, then the week roll-over that folds it. They answer
+  a *different* question ("is recording working"), so they are the evidence under the
+  verdict rather than the lead. Without them the first week is 168 identical hatched cells
+  with no sign that recording works, which reads as broken rather than as early. The grid
+  stays honest either way (evidence is texture, never a colour step); this states in words
+  what the texture cannot.
+- **Every definition the tab makes lives in one glossary** (`profileGlossary` in the same
+  module — a *builder*, not a constant, because two of its seven terms quote the live
+  weekly mean, and the drawer and the legend must not print two different means). Seven
+  terms: hour of the week, weight, evidence, confidence, solid vs dashed, the 100% ceiling,
+  the walk. The trust floor, the chart's `Y_MAX` and the `TRUSTED_OK` gate are read from
+  the constants that own them rather than re-typed. They are printed twice, from one
+  string: once in a closed-by-default `How to read this` drawer at the foot of the tab, and
+  once per ⓘ (`profileTip`) beside the heading, the headline, the legend's ramp and hatched
+  swatch, the walk's meta label and its solid/dashed key. So the lead paragraph, the legend
+  and the walk's note each shrank to the one statement they are actually making, and the
+  definitions they used to carry are one click away instead of read-whether-you-need-them.
+
+  Both aids are `client/src/components/usage/ReadingAids.tsx` — `InfoDot` and `HowToRead`,
+  shared with the token-value tab, extracted at the second consumer exactly as
+  `useFloatingTip` was. Not for the JSX: the ⓘ renders `aria-expanded="false"` **once** and
+  the hook thereafter mutates it on the DOM node by hand (pinning must not re-render the
+  rows), so a hand-copied button that gets that attribute wrong breaks pinning silently.
+  The `rates-*` class names those two render are the aids' **shared vocabulary** across
+  both Usage tabs, not the token-value tab's private prefix; they are deliberately not
+  renamed, since class names are kept stable here.
 
 It is a section of its own rather than a block inside Analytics: that tab is about
 *sessions* (the `/kaizen` report cards) and this is about the *account* — they share no
@@ -1254,8 +1287,13 @@ visual viewport pixels (at 100% the two coincide and the bug is invisible; at
 pointerenter → pointerleave → click, so hover alone shows the panel on
 touch-down and hides it on lift, far too fast to read a definition. A pinned
 panel follows its button on scroll rather than hiding (the same claim a
-keyboard-focused mark has), ignores hover, and closes on a second click,
-`Escape`, a press outside it, or blur. `aria-expanded` is set on the DOM node by
+keyboard-focused mark has), ignores hover **from either bundle**, and closes on
+a second click, `Escape`, a press outside it, or blur. That "either bundle" is
+load-bearing on the Forecast tab, the first consumer to spread both onto one
+panel: the ⓘ sit among 168 grid cells and 118 hit columns, so without the guard
+the pointer on its way anywhere would overwrite a definition mid-sentence and
+then hide it, leaving `aria-expanded="true"` on a button with no panel under it
+and turning the next click on it into a no-op. `aria-expanded` is set on the DOM node by
 hand: pinning must not re-render the rows.
 
 ⚠️ **Drift detection itself is unproven.** Every pure function is tested and the
