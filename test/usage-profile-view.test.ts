@@ -2,6 +2,8 @@ import assert from 'node:assert';
 
 import {
   cellTitle,
+  DAY_ORDER,
+  DAYS,
   earliestWeightMs,
   nextOccurrenceMs,
   profileProgress,
@@ -58,6 +60,28 @@ export function run(): number {
     const r = profileProgress(g);
     assert.strictEqual(r.atFloor, 1);
     assert.strictEqual(r.trusted, 0, 'a null weight is never trusted, however much evidence');
+  })) p++; else f++;
+
+  // ── DAY_ORDER: the columns are Monday-first over Sunday-indexed buckets ──
+
+  if (test('DAY_ORDER renders Monday first and Sunday last', () => {
+    assert.deepStrictEqual(DAY_ORDER.map(d => DAYS[d]),
+      ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+  })) p++; else f++;
+
+  if (test('DAY_ORDER is a permutation of all seven bucket indices', () => {
+    // A column dropped or duplicated would silently hide or double an hour of
+    // the week, and the grid gives no sign of it — every cell still renders.
+    assert.deepStrictEqual([...DAY_ORDER].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6]);
+  })) p++; else f++;
+
+  if (test('a DAY_ORDER column still labels its own bucket', () => {
+    // The permutation is display-only: cellTitle takes the DATA index, so the
+    // 7th column must title itself Sunday, not Saturday.
+    const cells = grid({});
+    const last = DAY_ORDER[6];
+    assert.ok(cellTitle(cells[last * 24 + 9], last, 9).startsWith('Sun 09:00'));
+    assert.ok(cellTitle(cells[DAY_ORDER[0] * 24 + 9], DAY_ORDER[0], 9).startsWith('Mon 09:00'));
   })) p++; else f++;
 
   // ── nextWeekStartMs: local midnight of the coming Monday ──

@@ -338,7 +338,10 @@ current projection — **never raw samples and never file paths**, the same post
 the projection, so the inspector cannot drift from what it discloses.
 `client/src/components/usage/UsageProfile.tsx` renders it in its own **Usage** rail
 section (`UsageView.tsx`, own lazy chunk): 24 rows × 7 columns (the axis needing 24 slots
-runs the direction a phone has — at 375px the whole week fits with no horizontal scroll), a
+runs the direction a phone has — at 375px the whole week fits with no horizontal scroll),
+columns Monday-first via `DAY_ORDER` over Sunday-indexed buckets (`hourOfWeek` is
+`getDay() * 24 + hour`, so the permutation is display-only and `cellTitle` still takes the
+data index — Monday-first is the week the ISO fold and the weekly reset both use), a
 sequential one-hue ramp derived with `color-mix` so all five themes hold, texture rather
 than a sixth colour step for no-evidence cells, a bare cell for a *measured* zero (never
 working an hour is a different statement from working 15% of it), and a required table view

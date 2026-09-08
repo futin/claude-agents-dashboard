@@ -13,9 +13,9 @@ export type Section = 'sessions' | 'management' | 'analytics' | 'usage' | 'setti
 /** The rail's own order — it is also the order the landing picker offers. */
 export const SECTIONS: { id: Section; label: string }[] = [
   { id: 'sessions', label: 'Sessions' },
+  { id: 'usage', label: 'Usage' },
   { id: 'management', label: 'Management' },
   { id: 'analytics', label: 'Analytics' },
-  { id: 'usage', label: 'Usage' },
   { id: 'settings', label: 'Settings' }
 ];
 

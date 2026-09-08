@@ -90,7 +90,7 @@ export function run(): number {
   if (test('the picker offers exactly the six intended choices', () => {
     assert.deepStrictEqual(
       LANDING_OPTIONS.map(o => o.value),
-      ['last', 'sessions', 'management', 'analytics', 'usage', 'settings']
+      ['last', 'sessions', 'usage', 'management', 'analytics', 'settings']
     );
     assert.strictEqual(LANDING_OPTIONS.length, 6);
   })) p++; else f++;

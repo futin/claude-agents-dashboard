@@ -5,7 +5,8 @@ import type { TipHandlers } from '../../hooks/useFloatingTip';
 import { useFloatingTip } from '../../hooks/useFloatingTip';
 import { useUsageProfile } from '../../hooks/useUsageProfile';
 import {
-  cellTitle, DAYS, earliestWeightMs, fmtObserved, nextWeekStartMs, profileProgress, TRUST_FLOOR_MIN
+  cellTitle, DAY_ORDER, DAYS, earliestWeightMs, fmtObserved, nextWeekStartMs, profileProgress,
+  TRUST_FLOOR_MIN
 } from '../../lib/usageProfile';
 import {
   absentText, areaPath, crossingX, dayTicks, fmtWalkHour, hitRect, hourOfWeekLocal,
@@ -334,17 +335,17 @@ export function UsageProfile() {
             <thead>
               <tr>
                 <th scope="col">Hour</th>
-                {DAYS.map(d => <th key={d} scope="col">{d}</th>)}
+                {DAY_ORDER.map(day => <th key={day} scope="col">{DAYS[day]}</th>)}
               </tr>
             </thead>
             <tbody>
               {Array.from({ length: 24 }, (_, hour) => (
                 <tr key={hour}>
                   <th scope="row">{String(hour).padStart(2, '0')}:00</th>
-                  {DAYS.map((d, day) => {
+                  {DAY_ORDER.map(day => {
                     const c = at(day, hour);
                     return (
-                      <td key={d} className={c.weight == null ? 'up-td-none' : undefined}>
+                      <td key={day} className={c.weight == null ? 'up-td-none' : undefined}>
                         {c.weight == null ? '—' : `${Math.round(c.weight * 100)}%`}
                       </td>
                     );
@@ -357,15 +358,15 @@ export function UsageProfile() {
       ) : (
         <div className="up-grid" style={{ gridTemplateColumns: '40px repeat(7,1fr)' }}>
           <div />
-          {DAYS.map(d => <div key={d} className="up-axis">{d}</div>)}
+          {DAY_ORDER.map(day => <div key={day} className="up-axis">{DAYS[day]}</div>)}
           {Array.from({ length: 24 }, (_, hour) => (
             <div key={hour} className="up-hourrow" style={{ display: 'contents' }}>
               <div className="up-axis left">{String(hour).padStart(2, '0')}:00</div>
-              {DAYS.map((d, day) => {
+              {DAY_ORDER.map(day => {
                 const c = at(day, hour);
                 return (
                   <div
-                    key={d}
+                    key={day}
                     className={`up-cell ${c.weight == null ? 'unknown' : stepOf(c.weight)}`.trim()}
                     tabIndex={0}
                     aria-label={cellTitle(c, day, hour).replace(/\n/g, ' — ')}

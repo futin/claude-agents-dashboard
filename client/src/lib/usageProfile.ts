@@ -133,8 +133,23 @@ export function fmtObserved(totalMin: number): string {
   return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
 }
 
-/** Column headings, and the day half of a cell's label. Sunday-first, matching `hourOfWeek`. */
+/**
+ * The day half of a cell's label, indexed the way `hourOfWeek` is — Sunday
+ * first, because the bucket index is `getDay() * 24 + hour`. This is the *data*
+ * order, not the display order: render columns through {@link DAY_ORDER}.
+ */
 export const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * Display order of the seven columns, as indices into {@link DAYS}.
+ *
+ * Monday-first, which is what the week the forecast folds on actually starts
+ * on: the ISO week, the weekly usage reset and every "next Monday" this module
+ * dates all agree, and a Sunday-first grid put the odd day out at the front.
+ * The buckets stay Sunday-indexed — only the columns are permuted, so
+ * `cellTitle(cell, day, hour)` still takes the *data* index.
+ */
+export const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 /**
  * The tooltip for one heatmap cell.

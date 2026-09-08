@@ -192,7 +192,7 @@ server/
                   also owns stopping one (graceful SIGTERM, grace window, escalation)
                   (see docs/subsystems/spawn.md)
 client/src/
-  App.tsx         shell: side rail (Sessions | Management | Analytics | Usage |
+  App.tsx         shell: side rail (Sessions | Usage | Management | Analytics |
                   Settings) + lazy views
   components/     SideRail (section switcher), SessionsView (the monitor — owns the 3s
                   poll, so leaving the section stops it), Header (the status plate:
