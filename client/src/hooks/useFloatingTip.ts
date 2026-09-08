@@ -167,15 +167,37 @@ export function useFloatingTip(): {
     };
   }, [hide]);
 
-  /** Hover / press / focus handlers for one hoverable mark. */
+  /**
+   * Hover / press / focus handlers for one hoverable mark.
+   *
+   * **A pin outranks a hover, on every pointer gesture.** The two bundles share
+   * one panel, and the Forecast tab is the first consumer to spread both — hover
+   * on 168 grid cells and 118 hit columns, pin on seven ⓘ that sit among them.
+   * Unguarded, the pointer on its way to anywhere overwrites a definition the
+   * reader deliberately opened and then hides it on the way out, while
+   * `pinnedRef` and the button's `aria-expanded="true"` survive: the ⓘ stays
+   * accent-highlighted with no panel under it, a screen reader is told a
+   * collapsed control is expanded, and the next click on that same ⓘ takes the
+   * toggle-*off* branch and appears to do nothing. So these four return early
+   * exactly as {@link PinHandlers}' do. A pin is dropped by a click, Escape, or
+   * a press outside — deliberate acts, never an incidental sweep.
+   *
+   * Focus is deliberately *not* guarded: reaching a mark by keyboard means the
+   * pin's own `onBlur` has already fired `hide()`, so there is no pin left to
+   * outrank by the time this runs.
+   */
   const tipHandlers = useCallback((text: string): TipHandlers => ({
     onPointerEnter: (e: React.PointerEvent) => {
+      if (pinnedRef.current) return;
       anchorRef.current = null;          // pointer-shown: a scroll should hide it
       showTip(text, e.clientX, e.clientY);
     },
-    onPointerMove: (e: React.PointerEvent) => placeTip(e.clientX, e.clientY),
-    onPointerLeave: hideTip,
-    onPointerCancel: hideTip,
+    onPointerMove: (e: React.PointerEvent) => {
+      if (pinnedRef.current) return;
+      placeTip(e.clientX, e.clientY);
+    },
+    onPointerLeave: () => { if (!pinnedRef.current) hideTip(); },
+    onPointerCancel: () => { if (!pinnedRef.current) hideTip(); },
     // Keyboard: anchor to the mark itself, since there is no pointer.
     onFocus: (e: React.FocusEvent<Element>) => {
       anchorRef.current = e.currentTarget;

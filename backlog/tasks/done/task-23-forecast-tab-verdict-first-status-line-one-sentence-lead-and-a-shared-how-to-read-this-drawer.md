@@ -471,3 +471,122 @@ carry no markdown emphasis, since `<dd>` and the tip panel both render them as p
 - No screenshot comparison of the token-value tab was taken — the DOM comparison above is
   stronger for the question asked (has the markup changed), but it says nothing about
   rendered pixels.
+
+## Fix loop — review round 1
+
+**2026-09-08 — one Important finding, fixed.** Review verdict `fix`; report at
+`~/.backlog-manager/orchestrator/…/reviews/task-23-1.md`. The finding is real and its
+diagnosis is exact.
+
+### What was wrong
+
+`client/src/hooks/useFloatingTip.ts` — `tipHandlers` had none of the
+`if (pinnedRef.current) return;` guards `pinHandlers` carries. This branch is the first to
+spread **both** bundles onto one panel (hover on 168 grid cells and 118 hit columns, pin on
+seven ⓘ sitting among them), so a pointer on its way anywhere overwrote a pinned definition
+and then hid it, while `pinnedRef` and `aria-expanded="true"` survived — leaving the ⓘ
+accent-highlighted with no panel, a screen reader told a collapsed control was expanded,
+and the next click on that ⓘ taking the toggle-*off* branch and appearing to do nothing.
+
+My original browser pass verified only that hover still works once the tab gained pins. The
+reverse — a pin surviving a hover — is the direction that was broken, and I did not test it.
+
+### What changed
+
+`client/src/hooks/useFloatingTip.ts` (+26/−4) — the four pointer handlers in `tipHandlers`
+(`onPointerEnter`, `onPointerMove`, `onPointerLeave`, `onPointerCancel`) now return early
+while a pin is held, mirroring `pinHandlers`. Plus a JSDoc paragraph on why a pin outranks a
+hover, and why `onFocus` is deliberately **not** guarded: reaching a mark by keyboard means
+the pin's own `onBlur` already fired `hide()`, so no pin remains to outrank.
+
+`docs/subsystems/usage-limits.md` — the paragraph at §The token-value board already claimed
+a pinned panel "ignores hover". That was only true *within* `pinHandlers` before this fix;
+it now says **"from either bundle"** and states why that scope is load-bearing here.
+
+Nothing else touched. The plan's §3 assumed the hook untouched; the defect exists only
+because this branch made the two bundles co-tenants, which is where the guard belongs — the
+reviewer reached the same conclusion.
+
+### Verification
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(no output — clean)
+
+$ pnpm test
+  38 passed, 0 failed      ← usageProfile.ts (inspector status line)
+  31/31 passed
+ALL PASS
+```
+
+Total still 1408 cases. `git diff HEAD --stat -- server shared client/src/lib/walkChart.ts`
+still empty.
+
+**Not unit-testable at this repo's level, and this is not a dodge.** `test/` is node-assert
+over pure functions; there is no jsdom, no `@testing-library`, no renderer in
+`devDependencies`. The one DOM-adjacent test (`test/web-notify-client.test.ts`) works only
+because `useWebNotify.ts` exports plain non-hook functions beside the hook and the test stubs
+globals. `useFloatingTip` exports **only** the hook, whose guard lives inside a `useCallback`
+over a `useRef` — unreachable without a renderer. Extracting it to make it testable would be
+a redesign well outside "fix that finding and nothing else". So it was verified in the
+browser, both directions, plus a browser-level red proof.
+
+### Browser proof, worktree ports, killed by pid
+
+Same rig as the first pass (Vite 5273 → stub 4273 → live API 4173, synthetic 118-hour walk).
+
+**Fix in place — the report's four steps, with real mouse input:**
+
+| step | result |
+|---|---|
+| 1. click the headline ⓘ | `aria-expanded=true`, opacity 1, confidence definition shown |
+| 2. hover a heatmap cell | definition **survives**, opacity 1, still expanded |
+| 3. hover a walk hit column, then leave | definition **survives**, opacity 1, still expanded |
+| 4. click the same ⓘ | closes properly — `aria-expanded=false`, opacity 0 |
+
+**Not-broken check, nothing pinned:** heatmap cell hover opens `Tue 03:00 · every week`
+(opacity 1); walk hit column opens `Thu 12:00` (opacity 1); leaving still hides. The
+hover-only bundle is unaffected when no pin is held.
+
+**Red proof (browser-level).** Reverted only `tipHandlers`' four guards — scoped with a
+script to that function, after a first attempt with `perl -pi` wrongly stripped
+`pinHandlers`' guards too and would have proved a doubly-broken state; caught by counting the
+guards in each bundle before trusting the run. With the reverted build, all three reported
+consequences reproduce:
+
+- step 2: `definitionSurvived: false` — the panel now reads `Tue 03:00 · every week`
+- step 3: opacity `0` **and** `aria-expanded` still `"true"`, button computed colour and
+  border both `rgb(85, 208, 221)` (the accent) rather than `--text3` — the highlighted ⓘ with
+  no panel
+- step 4: `panelOpened: false` — the click is a no-op, exactly as reported
+
+Restoring the fix returns every step to the table above.
+
+**Token-value tab unchanged, verified not assumed.** `UsageRates` spreads `pinHandlers`
+only; counted `0` non-ⓘ `[tabindex]` marks on that tab, so `tipHandlers` is never
+constructed there and the guard is unreachable by construction. Pin/unpin still
+`true`/opacity 1 → `false`/opacity 0 with the correct definition text; drawer still
+`6 terms`, closed by default.
+
+### Minor findings from the report — not actioned, by instruction
+
+The dispatch said fix the Important finding and nothing else, so the eight Minor findings
+stand. Three are worth the merger's attention because they are small and real:
+
+- `client/src/styles.css:1000` — `.up-hit{color:var(--red)}` is now dead code; its only
+  renderer was the walkmeta crossing span this branch deleted.
+- The crossing clause lost its red emphasis in the move (`.up-hit` → `.rates-counts`). The
+  chart's red rule and cross line still carry the alarm, so it reads deliberate — but it was
+  a real change I did not declare as a deviation. Declaring it now.
+- `test/usage-profile-view.test.ts:314-318` asserts `includes(String(TRUST_FLOOR_MIN))` /
+  `includes(String(Y_MAX))`, which cannot distinguish a constant read from a same-valued
+  literal. My mutation row *"floor + ceiling re-typed as literals → 1 failed"* only holds
+  because that mutation also changed the numbers (60→45, 130→999). The reviewer is right
+  that the claim is stronger than the assertion supports; the plan specified the assertion
+  this way.
+
+The other five (the unpinned malformed-ISO branch, `weight`'s unpinned live mean, the
+double em-dash in the composed `confidence` string, the new "60 minutes per week" clause in
+`cell`, and the live confidence token no longer appearing on the tab) are accurately
+described in the report and need no correction from me.

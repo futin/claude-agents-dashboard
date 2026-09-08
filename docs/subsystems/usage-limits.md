@@ -1287,8 +1287,13 @@ visual viewport pixels (at 100% the two coincide and the bug is invisible; at
 pointerenter → pointerleave → click, so hover alone shows the panel on
 touch-down and hides it on lift, far too fast to read a definition. A pinned
 panel follows its button on scroll rather than hiding (the same claim a
-keyboard-focused mark has), ignores hover, and closes on a second click,
-`Escape`, a press outside it, or blur. `aria-expanded` is set on the DOM node by
+keyboard-focused mark has), ignores hover **from either bundle**, and closes on
+a second click, `Escape`, a press outside it, or blur. That "either bundle" is
+load-bearing on the Forecast tab, the first consumer to spread both onto one
+panel: the ⓘ sit among 168 grid cells and 118 hit columns, so without the guard
+the pointer on its way anywhere would overwrite a definition mid-sentence and
+then hide it, leaving `aria-expanded="true"` on a button with no panel under it
+and turning the next click on it into a no-op. `aria-expanded` is set on the DOM node by
 hand: pinning must not re-render the rows.
 
 ⚠️ **Drift detection itself is unproven.** Every pure function is tested and the
