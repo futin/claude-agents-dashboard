@@ -32,8 +32,14 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
   Registration is user-global **on purpose** — project-scoped hooks would answer only
   sessions started in this repo, and `kill-guard.sh` would guard only the repo that isn't
   running the `pkill` (`docs/workflows/hooks-setup.md`).
-- `pnpm tunnel` — optional HTTPS over the tailnet (`tailscale serve --bg 5174`); keep the
-  port matching what you actually serve.
+- `pnpm tailnet` (`pnpm tunnel` is the same script) — publish to the tailnet via
+  `tailscale serve`. HTTPS on 443 by default (dictation needs the secure context),
+  `-- --http` for the matching-port shape; `pnpm tailnet:local` is that shape without
+  the `--`, and subcommands compose (`pnpm tailnet:local down`). Always fronts
+  `WEB_PORT`, read from `.env`
+  through `loadConfig`: there is nothing to keep in sync, no second target, and **no port
+  literal belongs in `scripts/tailnet.ts`** — `test/tailnet.test.ts` asserts that against
+  the source text.
 
 Both servers bind all interfaces, so localhost / LAN / Tailscale / any tunnel work with zero
 config — see `docs/subsystems/remote-access.md` before touching any of it.

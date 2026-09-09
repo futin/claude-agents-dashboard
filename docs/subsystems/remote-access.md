@@ -68,27 +68,112 @@ single-port public tunnel. **This is the mode to use while iterating**: prod (`:
 static-serves the built `client/dist`, so every change needs a `pnpm build` *and* a
 `pnpm start` restart, while dev hot-reloads and needs neither.
 
-> ⚠️ **`allowedHosts: ['.ts.net']` in `vite.config.ts` is what makes dev-over-tailnet
-> work.** Vite ≥5.4.12 rejects any `Host` header that isn't localhost or a bare IP (a
-> DNS-rebinding guard), so a MagicDNS name 403s with *"Blocked request. This host is not
-> allowed."* — LAN access never hit this because a LAN URL is an IP. The leading dot
+> ⚠️ **`allowedHosts` in `vite.config.ts` is what makes dev-over-tailnet work.** Vite
+> ≥5.4.12 rejects any `Host` header that isn't localhost or a bare IP (a DNS-rebinding
+> guard), so a MagicDNS name 403s with *"Blocked request. This host is not allowed."* —
+> LAN access never hit this because a LAN URL is an IP. The leading dot on `.ts.net`
 > allows subdomains and scopes the exemption to tailnet hostnames instead of disabling
-> the check (`allowedHosts: true`). Delete that line and phone-over-tailnet dev breaks
+> the check (`allowedHosts: true`). Delete that entry and phone-over-tailnet dev breaks
 > with a 403, not a hang.
+>
+> **A suffix rule is not enough on its own.** `tailscale serve --http` advertises this
+> node under *two* names — the fully-qualified `<host>.<tailnet>.ts.net`, which `.ts.net`
+> matches, and the bare single-label short name `http://<host>:<port>`, which has no dot
+> and so matches nothing. The short name is the first URL `tailscale serve` prints, so it
+> is the one that gets bookmarked, and it 403s on a socket that is otherwise healthy —
+> which reads as a broken proxy target and sends you auditing the serve registration
+> instead of the Host header. `magicDnsShortName()` in `vite.config.ts` therefore asks
+> `tailscale status --json` for `Self.DNSName` and allows its first label too. It is
+> best-effort: no Tailscale, no MagicDNS, a logged-out node or a hung CLI all add nothing
+> and leave dev as it was. It cannot use `os.hostname()` — a node's tailnet name is set in
+> the admin console and routinely differs from the machine's own hostname.
+>
+> **The proxy target stays `127.0.0.1`, not `localhost`.** A literal address needs no
+> resolver and cannot land on `::1` while the dev server holds only the IPv4 wildcard.
+> `test/tailnet.test.ts` asserts the emitted command against `http://127.0.0.1:<port>`.
 
-### Optional HTTPS (`pnpm tunnel`)
+### Publishing to the tailnet (`pnpm tailnet`)
 
-`pnpm tunnel` runs `tailscale serve --bg 5174`: Tailscale fronts that local port on 443
-with a real TLS certificate, so the phone bookmark is just
-`https://<host>.<tailnet>.ts.net` — no port, no cert warnings. ⚠️ The script's port is
-fixed while what it should front depends on `.env` — prod `PORT` (default 4173) or a dev
-`WEB_PORT` override (`5174` today); keep them in sync. Requires **HTTPS certificates
-enabled once** in the tailnet admin console (DNS page). `--bg` persists across reboots;
-`tailscale serve reset` stops it. Optional for browsing — the plain port URL works with no
-serve step at all — but no longer optional for one feature: [dictation](dictation.md)'s
-`getUserMedia` call refuses to run outside a secure context, so a plain-http tailnet URL or
-LAN IP can never record. This step went from "nicer bookmark" to "the only way a phone
-dictates" without any change of its own.
+`scripts/tailnet.ts` registers a `tailscale serve` from this node's tailnet address to the
+local port the dashboard actually holds. All three script names run it; `tunnel` is the
+older one, kept because the tooltip on the disabled mic button names it, and
+`tailnet:local` is `tailnet` with `--http` already applied.
+
+```bash
+pnpm tailnet                # HTTPS on 443 → WEB_PORT
+pnpm tailnet -- --http      # plain HTTP, tailnet port == WEB_PORT
+pnpm tailnet:local          # the same --http shape, no `--` needed
+pnpm tailnet status
+pnpm tailnet down           # and `pnpm tailnet:local down`
+pnpm tailnet -- --dry-run   # print the tailscale command, run nothing
+```
+
+`parseArgs` accepts `[up|down|status] [--http|--https] [--dry-run]` in any order, so every
+subcommand composes with the `:local` entry point: `pnpm tailnet:local status`,
+`pnpm tailnet:local down`, `pnpm tailnet:local --dry-run`.
+
+**HTTPS on 443 is the default.** Tailscale fronts the local port with a real TLS
+certificate, so the phone bookmark is just `https://<host>.<tailnet>.ts.net` — no port, no
+cert warnings. Requires **HTTPS certificates enabled once** in the tailnet admin console
+(DNS page); the script prints that as one of its remedies if the serve is refused. `--bg`
+persists across reboots; `pnpm tailnet down` (or `tailscale serve reset`, which also clears
+every other project's) stops it.
+
+**`--http` is the escape hatch**, and it mirrors the number: the tailnet listener and the
+loopback target carry the same port. Reach for it when HTTPS cannot serve — a tailnet that
+never enabled certificates, or another project on this node already holding 443. It is not
+a weaker perimeter (the hop is WireGuard-encrypted end to end, and the HTTP exists only
+between tailscaled and a loopback socket) but it *is* not a secure context, so dictation
+renders disabled on it. The script says so after registering.
+
+**`WEB_PORT` is the only target, and there is no `prod` option.** The tailnet route exists
+to be iterated against, and `WEB_PORT` is the Vite UI, which hot-reloads. Prod (`PORT`)
+static-serves the built `client/dist`, so nothing you change appears there until
+`pnpm build` plus a `pnpm start` restart — `client/dist` is gitignored, so pulling never
+refreshes it either, which used to be the usual reason the origin badge went missing
+through the tunnel while dev showed it fine. Offering a second target would also put a
+second number back into a script whose entire point is that there is only ever one. To
+front prod, type the `tailscale serve` yourself and own the copy of the port that creates.
+
+Optional for browsing — the plain port URL works with no serve step at all — but no longer
+optional for one feature: [dictation](dictation.md)'s `getUserMedia` call refuses to run
+outside a secure context, so a plain-http tailnet URL or LAN IP can never record. This step
+went from "nicer bookmark" to "the only way a phone dictates" without any change of its own.
+
+**Never Funnel.** Every read endpoint here is open — full transcripts, chat history,
+`/api/management/file` config bodies — and with `CLAUDE_BIN` set, [spawn](spawn.md) starts
+a real Claude Code session on this machine. The tailnet *is* the perimeter;
+`tailscale funnel` is the one command that removes it. `test/tailnet.test.ts` asserts the
+word never appears in the script.
+
+#### Why a script and not the one-liner it replaced
+
+`pnpm tunnel` used to be literally `tailscale serve --bg 5174`. A serve registration stores
+a **copy** of the port inside tailscaled — outside this repo, outside git, surviving
+reboots — while the port the dashboard holds comes out of `.env` through `loadConfig`. This
+machine's `.env` already sits on a non-default `WEB_PORT`, so the two had drifted, and the
+symptom is a bare 502 from Tailscale on the phone, which reads as a Tailscale fault rather
+than a stale mapping. This section used to carry a "keep them in sync" warning as the only
+defence.
+
+Now the number lives in exactly one place — `.env`, read by the same `loadConfig` the server
+and `vite.config.ts` read — and the script asks for it. `test/tailnet.test.ts` asserts
+against the script's own source text that no dashboard port literal appears in it at all;
+443 is allowed, as the named `HTTPS_LISTEN_PORT`, because it is a Tailscale listener number
+and not a dashboard port.
+
+Ported from backlog-manager's `scripts/tailnet.mjs`, which exists for the same reason one
+variable over. Two things differ deliberately: that repo has its own `.env` reader because
+its port is read by docker compose, where this one reuses `loadConfig`; and it serves plain
+HTTP only, because it has no dictation to keep in a secure context.
+
+#### HTTPS slots are per node, not per account
+
+Each *node* gets its own MagicDNS name and its own certificate — `<host>.<tailnet>.ts.net`.
+The limit worth knowing is per node: `tailscale serve --https` accepts only **443, 8443 and
+10000**, and paths can subdivide one of them (`--set-path=/x`). So this machine has three
+HTTPS slots in total, shared across every project on it. `tailscale serve status` lists
+what is registered.
 
 ### Phone usage
 
@@ -107,7 +192,7 @@ dictates" without any change of its own.
   `fd7a:115c:a1e0::/48` sits *inside* the generic ULA space `fc00::/7`, so the tailnet
   check must run before the LAN check or every tailnet client reads `lan`. IPv4 tailnet
   is the CGNAT range `100.64.0.0/10`.
-- **⚠️ `X-Forwarded-For` is honoured only from a loopback socket.** `pnpm tunnel`
+- **⚠️ `X-Forwarded-For` is honoured only from a loopback socket.** `pnpm tailnet`
   (`tailscale serve`) proxies on the host, so the socket is `127.0.0.1` and the peer's
   real tailnet address survives only in that header — without the fallback every tunnel
   user would read `local`. Spoofing is a non-issue by construction: only something
@@ -124,12 +209,12 @@ dictates" without any change of its own.
 
 ## Gotchas
 
-- **`pnpm tunnel` fronts one fixed port — check it matches what you run.** Today that's
-  `5174` (a dev `WEB_PORT`); it used to be prod `4173`. When it fronts prod, remember
-  prod serves the *built* client: no code change appears until `pnpm build` + a
-  `pnpm start` restart — the usual reason the origin badge is missing through the tunnel
-  while dev shows it fine (`client/dist` is gitignored, so pulling never refreshes it).
-  Fronting the dev port avoids that while iterating.
+- **`pnpm tailnet` no longer needs its port kept in sync** — it reads `WEB_PORT` from
+  `.env` through `loadConfig`, and fronts nothing else. Registering against a port nothing
+  is listening on is allowed and warned about, not refused — the registration persists,
+  and the phone sees a 502 until `pnpm dev` starts. If you edited `WEB_PORT` without
+  restarting `pnpm dev`, that is exactly the state you are in: config is read once, at
+  startup.
 - **The host must be awake.** Tailscale doesn't wake a sleeping machine; disable sleep
   (or use `caffeinate`) if you rely on away-from-home access.
 - **Docker runs are unaffected** — Tailscale runs on the host and forwards to the
@@ -143,6 +228,7 @@ dictates" without any change of its own.
     - vite.config.ts
     - server/api.ts
     - package.json
+    - scripts/tailnet.ts
   kind: subsystem
   verified: f436519f31ef4120521792db7658e2bc5431f0e9
 -->

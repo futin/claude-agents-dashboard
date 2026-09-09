@@ -217,7 +217,10 @@ client/src/
                   sections, deepLink, dictation, spawnOptions, resume, pace, usageProfile,
                   usageRatesFormat, panelCollapse, surface, walkChart, holds, webNotify,
                   backClose, stopControl
-vite.config.ts    dev proxy /api → backend; reuses the server config loader
+vite.config.ts    dev proxy /api → backend; reuses the server config loader;
+                  allowedHosts = `.ts.net` + this node's bare MagicDNS short
+                  name (probed via `tailscale status --json`), without which
+                  the short-name tailnet URL 403s (subsystems/remote-access.md)
 test/             node-assert tests over backend + client domain logic
 scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   plan-remote-hook.sh, permission-notify-hook.sh,
@@ -226,6 +229,12 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   workflows/hooks-setup.md), host-credentials.sh,
                   lan-ip.sh, env-value.ts (the one .env reader the installer and
                   the server share — never a second grep),
+                  tailnet.ts (`pnpm tailnet`, also `pnpm tunnel`, plus
+                  `pnpm tailnet:local` = the same with `--http` preapplied) —
+                  registers a `tailscale serve` onto this node, HTTPS/443 by
+                  default or `--http` at the matching port, always fronting WEB_PORT as
+                  loadConfig reports it; holds no port literal of its own
+                  (subsystems/remote-access.md),
                   session-analytics.ts (`pnpm session-analytics`) — prints one
                   session's SessionAnalysis as JSON without the server running,
                   which is how `/kaizen` gets exact numbers,

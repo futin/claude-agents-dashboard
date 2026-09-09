@@ -23,9 +23,10 @@ composer shows a `transcribing…` spinner rather than words appearing live.
 `getUserMedia` — the API `MediaRecorder` is built on — refuses to run outside a [secure
 context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts): HTTPS, or
 `localhost`. That makes dictation impossible over a plain-http tailnet URL or a LAN IP,
-which is exactly the shape of a phone visit to this dashboard. Before this feature, `pnpm
-tunnel` ([remote-access](remote-access.md#optional-https-pnpm-tunnel)) was a nicety — no
-port number in the bookmark, no cert warning. Now it's the only route that lets a phone
+which is exactly the shape of a phone visit to this dashboard. Before this feature,
+publishing an HTTPS serve
+([remote-access](remote-access.md#publishing-to-the-tailnet-pnpm-tailnet)) was a nicety —
+no port number in the bookmark, no cert warning. Now it's the only route that lets a phone
 dictate at all.
 
 `MicButton` renders one of three ways, and the middle one is the deliberate part:

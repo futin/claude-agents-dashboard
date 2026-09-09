@@ -64,7 +64,7 @@ pnpm tunnel
 context, so a plain-http tailnet URL or LAN IP can never record, full stop. This step used
 to be a nicety (no port number in the bookmark, no cert warning); dictation is the first
 feature that makes it load-bearing. Full setup:
-[remote-access](../subsystems/remote-access.md#optional-https-pnpm-tunnel).
+[remote-access](../subsystems/remote-access.md#publishing-to-the-tailnet-pnpm-tailnet).
 
 ## Choosing a different model
 
