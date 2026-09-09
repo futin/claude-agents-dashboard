@@ -5,6 +5,7 @@ node_modules/
 client/dist/
 .idea/
 .claude/launch.json
+.claude/settings.local.json
 .ua/.trash-*/
 .remote-answer.json
 .dashboard-settings.json
