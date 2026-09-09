@@ -203,7 +203,8 @@ client/src/
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   MicButton, SpawnPanel, ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
-                  usage/, settings/
+                  usage/ (incl. ReadingAids — the ⓘ button and the "How to read
+                  this" glossary drawer, rendered by both Usage tabs), settings/
   hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
                   useManagement, useAnalytics,
                   useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
