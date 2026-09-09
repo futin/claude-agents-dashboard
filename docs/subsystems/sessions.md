@@ -304,9 +304,14 @@ The filter is applied at the **call sites**, not inside `listTranscripts()`: `ap
 `archivedIds: archivedSessionIds()` into `scanSessions` and into `listRecentProjects`
 ([management](management.md)), the same injected-Set pattern as `pendingIds`. The other
 `listTranscripts` callers deliberately keep seeing archived transcripts — `analytics.ts`
-`listReports` (a kaizen entry must still resolve its transcript), `usage-ledger.ts` (token
-history is not rewritten by a delete), and the `api.ts` id lookups behind the transcript and
-chat panels (a panel already open would 404 for no gain).
+`listReports` (a kaizen entry must still resolve its transcript) and the `api.ts` id lookups
+behind the transcript and chat panels (a panel already open would 404 for no gain).
+`usage-ledger.ts` is unfiltered for the same kind of reason — token history is not rewritten
+by a delete — but it no longer calls `listTranscripts` at all: it reads `scan.ts`
+`listUsageTranscripts`, the top-level files *plus* each session's
+`<sessionId>/subagents/*.jsonl`, which is where subagent spend now lives (see
+[usage limits](usage-limits.md)). That enumeration wraps this one and takes no
+`archivedIds` either.
 
 **Candidate pool vs. row cap:** both filters can only be decided *after* parsing, so
 `scan.ts` over-fetches — the recency sort takes `maxSessions * 2` candidates and the build
@@ -321,7 +326,8 @@ keeps its id and starts a *second* `.jsonl` in a second project dir. `scan.ts` `
 collapses the candidates to one ref per id (newest file wins) **before** the slice — otherwise
 one session spends two pool slots on itself and is pushed as two `Session`s with the same id,
 each parsed from a different half, so it can read `working` and `idle` at once. `listTranscripts`
-stays the raw per-file enumeration (the usage ledger and analytics need every half), and
+stays the raw per-file enumeration — `analytics.ts` needs every half, and so does the usage
+ledger, which gets them through the `listUsageTranscripts` wrapper — and
 `findTranscript` is the same reduction for the single-id lookups that resolve an id to a file to
 read — a plain `find` would serve the abandoned half to the detail or [chat](chat.md) panel.
 

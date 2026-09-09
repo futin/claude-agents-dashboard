@@ -206,3 +206,48 @@ Red proof detail, for the reviewer:
   passes on unfixed code by design — it pins the *choice* of a second enumerator. It was
   mutation-proved instead: widening `listTranscripts` to walk `subagents/` turns it red
   (60/62). A file copy was used for every revert, never `git stash`.
+
+### Review follow-up (2026-09-09)
+
+Two Important review findings, both at `docs/subsystems/sessions.md` — a contract-sweep
+miss, not a code defect. That section is the record of which enumerator each consumer reads
+and which filters that enumerator inherits, and the diff had made two of its statements
+false:
+
+- **`sessions.md:306`** listed `usage-ledger.ts` among "the other `listTranscripts`
+  callers" that deliberately keep seeing archived transcripts. The ledger now imports
+  `listUsageTranscripts` and calls `listTranscripts` nowhere. Rewritten: the caller list is
+  now `analytics.ts` `listReports` plus the `api.ts` id lookups, and the ledger gets its own
+  sentence naming `listUsageTranscripts`, the nested `<sessionId>/subagents/*.jsonl` files,
+  and the fact that the wrapper takes no `archivedIds` either — so the unfiltered claim
+  stays true and is now attributed to the right function.
+- **`sessions.md:328`** said "`listTranscripts` stays the raw per-file enumeration (the
+  usage ledger and analytics need every half)". Rewritten to attribute every-half to
+  `analytics.ts` directly and to the ledger *through the `listUsageTranscripts` wrapper*,
+  which is what actually holds now.
+
+The sweep was re-run over the whole repository for this class of miss
+(`grep -rn listTranscripts docs/ .claude/CLAUDE.md`). The remaining sites are all about
+resolving one id to one file, or about analytics, and are still accurate:
+`docs/subsystems/chat.md:143`, `docs/overview.md:55`, `docs/subsystems/remote-answer.md:193`,
+`docs/subsystems/analytics.md:42`, `docs/subsystems/spawn.md:161`,
+`docs/learning-notes/kaizen-and-analytics.md:204`.
+`docs/learning-notes/session-and-agent-tracking.md:107` still says `listTranscripts` "walks
+every `.jsonl` under the projects root" — imprecise before this diff as well (it was always
+one level deep), and that file already carries the dated correction added above it.
+
+Docs only; no source file changed in this pass.
+
+```
+$ pnpm test
+  18 passed, 0 failed
+ALL PASS
+   (1429 individual cases printed ✓; 18 = suites)
+
+$ pnpm typecheck
+> tsc --noEmit
+   exit 0
+```
+
+Contract sweep: 1 site updated (docs/subsystems/sessions.md, both statements)
+Red proof: skipped — documentation-only change, no behaviour to revert
