@@ -79,8 +79,11 @@ sync result block, and the `<subagent_tokens>` / `<tool_uses>` / `<duration_ms>`
 tags inside async `<task-notification>` blocks. These are kept **out** of `totals`
 and reported in `subagentTotals` instead (`kaizen.mjs:277`).
 
-**Why separate?** This threads between two bad alternatives. Subagent turns carry
-`isSidechain: true`:
+**Why separate?** This threads between two bad alternatives. Subagent turns used
+to be replayed into the parent transcript carrying `isSidechain: true` (as of
+2026-09-09 the CLI writes them to `<sessionId>/subagents/agent-*.jsonl` instead,
+and the parent holds none — so the skip below is a guard for older transcripts,
+and `subagentTotals` is the only path subagent tokens have into this report):
 
 - Count them in the main totals → **double-count** (they are already summarized
   back into the parent turn).

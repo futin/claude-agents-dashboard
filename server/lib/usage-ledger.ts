@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { listTranscripts, projectsRoot } from './scan.js';
+import { listUsageTranscripts, projectsRoot } from './scan.js';
 import { getSettings } from './settings.js';
 import { repoRoot } from './usage-history.js';
 
@@ -308,8 +308,13 @@ function numField(value: unknown): number {
  * Read one transcript record into an event, or null when it carries no spend.
  *
  * Mirrors `analyze.ts` for the same on-disk shape with one deliberate
- * difference: **sidechain (subagent) turns are counted here.** This ledger asks
- * what the *account* spent, and a subagent turn spends like any other.
+ * difference: **subagent turns are counted here.** This ledger asks what the
+ * *account* spent, and a subagent turn spends like any other. Those turns are
+ * written to `<sessionId>/subagents/agent-*.jsonl` and no longer replay in the
+ * parent transcript as `isSidechain: true` records, so reaching them is
+ * `listUsageTranscripts`' job (`scan.ts`) rather than a filter here; a nested
+ * record is read exactly like a top-level one, and the `isSidechain` flag it
+ * still carries is ignored.
  */
 function eventFromRecord(raw: unknown, cursor: FileCursor): UsageEvent | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -354,7 +359,7 @@ function eventFromRecord(raw: unknown, cursor: FileCursor): UsageEvent | null {
  */
 function collectEvents(root: string): UsageEvent[] {
   const events: UsageEvent[] = [];
-  for (const ref of listTranscripts(root)) {
+  for (const ref of listUsageTranscripts(root)) {
     let size: number;
     try {
       size = fs.statSync(ref.file).size;

@@ -137,7 +137,10 @@ server/
   lib/config.ts   .env loader — process.env > .env > defaults
   lib/transcript.ts  tail-reads a transcript → tokens/model/window/activity
   lib/title-cache.ts  remembers a custom title once it sinks below the tail window
-  lib/scan.ts     enumerates + ranks sessions; status machine; liveness gates (cwd, session id)
+  lib/scan.ts     enumerates + ranks sessions; status machine; liveness gates (cwd, session id);
+                  `listUsageTranscripts` is the second enumeration — top-level files plus
+                  `<sessionId>/subagents/*.jsonl` — read by the usage ledger only, since a
+                  subagent file must never become a session row
   lib/archived.ts reads the desktop app's own session records (macOS Application
                   Support) for the `isArchived` flag, joined to transcripts by
                   `cliSessionId` — the only place that touches that store; the id

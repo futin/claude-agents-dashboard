@@ -839,12 +839,44 @@ export function run(): number {
     assert.strictEqual(scan.findTranscript(root, 'nope'), undefined);
   })) p++; else f++;
 
-  if (test('listTranscripts still enumerates both halves (the usage ledger depends on it)', () => {
+  if (test('listTranscripts still enumerates both halves (analytics and the usage enumeration depend on it)', () => {
     const now = 1_700_000_000_000;
     const root = splitRoot(now);
     const refs = scan.listTranscripts(root).filter(t => t.id === 'split-1');
     assert.strictEqual(refs.length, 2);
     assert.deepStrictEqual(refs.map(t => t.dirName).sort(), ['-a-repo', '-a-repo--worktrees-x']);
+  })) p++; else f++;
+
+  const nestedRoot = (now: number) => {
+    const root = makeRoot([{
+      dirName: '-a-repo', id: 'sess-1', mtimeMs: now - 10 * 1000,
+      records: [metaRec('/a/repo', 'main'), at(assistantPending(), new Date(now - 10 * 1000).toISOString())]
+    }]);
+    const dir = path.join(root, '-a-repo', 'sess-1', 'subagents');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'agent-abc.jsonl'), JSON.stringify(usageRec(5)) + '\n');
+    return root;
+  };
+
+  if (test('listUsageTranscripts adds the nested <session>/subagents files, flagged with their parent id', () => {
+    const now = 1_700_000_000_000;
+    const root = nestedRoot(now);
+    const refs = scan.listUsageTranscripts(root);
+    assert.deepStrictEqual(refs.map(t => t.id).sort(), ['agent-abc', 'sess-1']);
+    const agent = refs.find(t => t.id === 'agent-abc')!;
+    assert.strictEqual(agent.parentId, 'sess-1');
+    assert.strictEqual(agent.dirName, '-a-repo');
+    assert.strictEqual(agent.file, path.join(root, '-a-repo', 'sess-1', 'subagents', 'agent-abc.jsonl'));
+    assert.strictEqual(refs.find(t => t.id === 'sess-1')!.parentId, null);
+  })) p++; else f++;
+
+  if (test('a nested subagent transcript is never a session: listTranscripts and scanSessions ignore it', () => {
+    const now = 1_700_000_000_000;
+    const root = nestedRoot(now);
+    assert.deepStrictEqual(scan.listTranscripts(root).map(t => t.id), ['sess-1']);
+    const ids = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 },
+      { root, now, liveCwds: null }).sessions.map(s => s.id);
+    assert.deepStrictEqual(ids, ['sess-1']);
   })) p++; else f++;
 
   if (test('parsePsSessionIds: both flag spellings, claude lines only, charset-delimited', () => {

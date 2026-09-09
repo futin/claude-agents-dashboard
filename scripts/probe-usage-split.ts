@@ -39,7 +39,7 @@
 
 import fs from 'node:fs';
 
-import { listTranscripts, projectsRoot } from '../server/lib/scan.js';
+import { listUsageTranscripts, projectsRoot } from '../server/lib/scan.js';
 import { readRecentSamples, repoRoot, sameWindow } from '../server/lib/usage-history.js';
 import type { UsageSample } from '../server/lib/usage-history.js';
 import { ledgerStartMs, rawTokens, readLedgerSince } from '../server/lib/usage-ledger.js';
@@ -74,7 +74,7 @@ function transcriptEvents(sinceMs: number): { ts: number; model: string }[] {
   const events: { ts: number; model: string }[] = [];
   const seen = new Set<string>();
   let files = 0, skipped = 0;
-  for (const ref of listTranscripts(projectsRoot())) {
+  for (const ref of listUsageTranscripts(projectsRoot())) {
     try {
       if (fs.statSync(ref.file).mtimeMs < sinceMs) { skipped++; continue; }
     } catch { continue; }

@@ -92,6 +92,14 @@ runs inside the parent session's `claude` process and writes into the parent's
 transcript. That's why everything is derived from the parent transcript alone,
 and why there's no per-subagent `.jsonl` or `lsof` entry.
 
+**Correction (2026-09-09).** The CLI does now write a per-subagent transcript:
+`<projectDir>/<sessionId>/subagents/agent-*.jsonl`, one file per subagent, and it
+no longer replays those turns into the parent as `isSidechain: true` records. The
+subagent *timeline* is still derived from the parent transcript alone, as
+described above — `agents.ts` reads no nested file. What changed is spend: the
+usage ledger reads the nested files through `listUsageTranscripts`, because their
+tokens exist nowhere else (see `docs/subsystems/usage-limits.md`).
+
 ## Enumerating and ranking sessions (`server/lib/scan.ts`)
 
 `scanSessions` ties it together:

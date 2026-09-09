@@ -3,6 +3,10 @@ id: bug-22
 title: Usage ledger never reads subagent transcripts under <session>/subagents/
 created: 2026-09-09
 tags: usage, ledger, rates
+updated: 2026-09-09T20:42:32Z
+started: 2026-09-09T20:27:24Z
+execute-elapsed: 908
+execute-tokens: 113928
 ---
 
 ## Symptom
@@ -105,3 +109,100 @@ Candidate (groom to confirm):
 
 The historical ledger cannot be repaired in place — old ticks stay undercounted. Accept
 that; the drift windows age out in 17 days.
+
+## Outcome
+
+2026-09-09 — Fixed. The cause held against the code as it stands: `listTranscripts`
+(`server/lib/scan.ts`) reads one level deep, and the CLI's subagent transcripts sit at
+`<projectDir>/<sessionId>/subagents/agent-*.jsonl`. Confirmed on this machine's live data
+before changing anything: one such nested file exists, it holds 29 assistant records with
+`message.usage` (`claude-sonnet-5`), and it is the *only* file under `~/.claude/projects`
+containing `isSidechain` at all — the parent transcripts carry none, exactly as the bug
+reports.
+
+What changed, following the Fix as written:
+
+1. `scan.ts` gained `listUsageTranscripts(root)` returning `UsageTranscriptRef[]` — the
+   top-level files (`parentId: null`) plus the nested subagent files (`parentId` = the
+   session dir). Kept as a *second* enumeration rather than a wider `listTranscripts`,
+   which is what the Fix preferred: `listTranscripts`' callers treat one file as one
+   session, so a nested file reaching them would become an extra session row, an extra
+   analytics report and a resolvable `/api/sessions/:id`. `listTranscripts` is byte-for-byte
+   equivalent to before (refactored only to share `statRef`/`jsonlNames`).
+2. `usage-ledger.ts` `collectEvents` reads `listUsageTranscripts`. Nothing else in the
+   ledger changed — it keys events by `message.model`, and the per-file cursor map already
+   handles a file appearing mid-run, which is how a `subagents/` dir shows up.
+3. The two stale comments are reworded to the on-disk layout (`usage-ledger.ts` ~311,
+   `analyze.ts` 16 and 128).
+4. `scripts/check-token-weights.ts` and `scripts/probe-usage-split.ts` also switched to
+   `listUsageTranscripts` (one line each). Not strictly demanded by the Fix, but
+   `--reconstruct` exists to reproduce the ledger, and leaving it on the old enumerator
+   would have made it compare unlike things against a ledger that now sees more.
+
+Deliberately NOT done, with reasons:
+
+- **`analyze.ts` behaviour is unchanged.** Investigating it refuted the Affects claim that
+  "Analytics per-session totals now exclude subagent spend entirely": subagent tokens
+  reach that report through `subagentTotals`, which `agents.ts` parses from the
+  `<subagent_tokens>` tags in the parent transcript's Task result — not from usage records.
+  The `isSidechain` skip at `analyze.ts:128` is now a guard for older transcripts only.
+  Only the comments were false, and they are fixed. No follow-up item needed.
+- **Historical ledger ticks stay undercounted** — the Fix accepts this; the tokens they
+  never read are not recoverable per tick.
+- **The ~93% top-level recovery loss** was left alone, as the Cause section instructs.
+- **The numbers in `docs/subsystems/usage-limits.md` could not be re-measured here.**
+  This machine has no `.usage-ledger.jsonl` (recording has never been on in this checkout)
+  and only 31 transcripts, so there is no ledger data to re-derive the 4.2x ratio, the
+  `EXTERNAL_WEIGHTED_MAX` derivation or the 09-06 boost probe from. Instead of leaving them
+  reading as current, both blocks now carry an explicit provenance warning naming the fix,
+  the direction of the bias and the command to re-run. Re-baselining needs a day of
+  post-fix recording and is a separate measurement.
+
+Verification:
+
+```
+$ pnpm test
+  18 passed, 0 failed
+ALL PASS
+   (1429 individual cases printed ✓; 18 = suites)
+
+$ pnpm typecheck
+> tsc --noEmit
+   exit 0
+```
+
+Live enumeration probe against the real `~/.claude/projects` (not a fixture):
+
+```
+top-level: 31 usage enumeration: 32
+nested: agent-a5094a80ba5102782 parent: e9f8759d-601a-4379-88de-49da5de97b12 dir: -home-futin-ubuntu-custom-projects-guide-manager
+```
+
+`recordLedgerTick` was deliberately NOT run against the live tree — it writes
+`.usage-ledger.jsonl` into the repo root, and this session must not create state files.
+The tick path is covered by the fixture test instead.
+
+Contract sweep: 8 sites updated (docs/subsystems/usage-limits.md, docs/overview.md,
+docs/learning-notes/session-and-agent-tracking.md, docs/learning-notes/kaizen-and-analytics.md,
+docs/learning-notes/kaizen-and-analytics-diagrams.md, test/scan.test.ts stale test name,
+scripts/check-token-weights.ts, scripts/probe-usage-split.ts)
+Red proof: 3 tests went red with the change reverted
+
+Left standing on purpose: `docs/superpowers/specs/2026-08-28-model-token-rates-design.md:57`
+still names `listTranscripts` for the ledger — specs under `docs/superpowers/` are records of
+a moment by repo convention, not maintained contracts. The remaining `isSidechain` sites
+(`server/lib/chat.ts:135`, `docs/subsystems/chat.md:33`, `docs/subsystems/spawn.md:127`,
+`server/lib/scan.ts` `lastMessageMs` note) are still accurate: they describe filtering such
+records wherever they do appear, which this change does not alter.
+
+Red proof detail, for the reviewer:
+
+- `listUsageTranscripts adds the nested <session>/subagents files, flagged with their parent id`
+  and `a subagent transcript under <session>/subagents is counted in the tick` both failed
+  before the fix existed (`scan.listUsageTranscripts is not a function`; the tick held
+  `opus-5` only), and both fail again with the nested enumeration reverted to
+  `listTranscripts(root).map(ref => ({...ref, parentId: null}))` — 61/62 and 14/15.
+- `a nested subagent transcript is never a session: listTranscripts and scanSessions ignore it`
+  passes on unfixed code by design — it pins the *choice* of a second enumerator. It was
+  mutation-proved instead: widening `listTranscripts` to walk `subagents/` turns it red
+  (60/62). A file copy was used for every revert, never `git stash`.
