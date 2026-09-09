@@ -184,6 +184,28 @@ export function run(): number {
     });
   })) p++; else f++;
 
+  if (test('a subagent transcript under <session>/subagents is counted in the tick', () => {
+    withFixture(fx => {
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+      // The nested dir appears mid-session, after the seeding tick — which is
+      // how it really shows up: the first `Task` call creates it.
+      const nested = path.join(fx.root, '-Users-x-proj', 'sess-1', 'subagents');
+      fs.mkdirSync(nested, { recursive: true });
+      const agent = path.join(nested, 'agent-a1b2.jsonl');
+      fs.writeFileSync(agent,
+        assistantLine(T0 + 20_000, 'sonnet-5', 'a1', { in: 7, out: 1, cc: 0, cr: 0 }, { isSidechain: true }) + '\n', 'utf8');
+      fs.appendFileSync(fx.transcript, assistantLine(T0 + 10_000, 'opus-5', 'm1', { in: 10, out: 0, cc: 0, cr: 0 }) + '\n');
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
+
+      const line = JSON.parse(fx.ledgerLines()[0]);
+      assert.deepStrictEqual(line.tok, {
+        'opus-5': { in: 10, out: 0, cc: 0, cr: 0 },
+        'sonnet-5': { in: 7, out: 1, cc: 0, cr: 0 }
+      }, 'subagent turns live only in the nested file — the parent never replays them');
+      assert.deepStrictEqual(line.req, { 'opus-5': 1, 'sonnet-5': 1 });
+    });
+  })) p++; else f++;
+
   if (test('recording off → nothing is written at all', () => {
     withFixture(fx => {
       recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });

@@ -147,7 +147,10 @@ Reading it: `combined` (billable + cacheRead = 12.1M) is a *context-pressure*
 signal, never "what this cost" — leading with it over-reports a long session
 ~10×. Whole-session ≈ `combined` + `subagentTotals.tokens`.
 
-Why subagent tokens are skipped, then re-added:
+Why subagent tokens are skipped, then re-added (the `isSidechain: true` branch is
+historical as of 2026-09-09 — the CLI now writes subagent turns to
+`<sessionId>/subagents/agent-*.jsonl` and the parent transcript holds none, so the
+skip only ever fires on older transcripts):
 
 ```mermaid
 flowchart LR

@@ -115,6 +115,35 @@ export function sessionSurface(entrypoint: string | null | undefined): SessionSu
   return entrypoint === HEADLESS_ENTRYPOINT ? 'dashboard' : 'local';
 }
 
+/** The per-session directory the CLI writes subagent transcripts into. */
+const SUBAGENT_DIR = 'subagents';
+
+/** One transcript file as a ref, or null when it is gone or not a file. */
+function statRef(full: string, dirName: string): TranscriptRef | null {
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(full);
+  } catch {
+    return null;
+  }
+  if (!stat.isFile()) return null;
+  return {
+    file: full,
+    dirName,
+    id: path.basename(full).replace(/\.jsonl$/, ''),
+    mtimeMs: stat.mtimeMs
+  };
+}
+
+/** Directory entry names ending `.jsonl`, or [] when the dir is unreadable. */
+function jsonlNames(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir).filter(name => name.endsWith('.jsonl'));
+  } catch {
+    return [];
+  }
+}
+
 /** List every `.jsonl` transcript with its mtime, across all project dirs. */
 export function listTranscripts(root: string): TranscriptRef[] {
   const results: TranscriptRef[] = [];
@@ -127,23 +156,61 @@ export function listTranscripts(root: string): TranscriptRef[] {
   for (const d of dirs) {
     if (!d.isDirectory()) continue;
     const dir = path.join(root, d.name);
-    let files: string[];
+    for (const name of jsonlNames(dir)) {
+      const ref = statRef(path.join(dir, name), d.name);
+      if (ref) results.push(ref);
+    }
+  }
+  return results;
+}
+
+/** A transcript that carries spend, and whose session it belongs to. */
+export interface UsageTranscriptRef extends TranscriptRef {
+  /**
+   * The session that launched this subagent, for a
+   * `<sessionId>/subagents/*.jsonl` file — null for a top-level transcript.
+   */
+  parentId: string | null;
+}
+
+/**
+ * Every transcript that carries *spend*: the top-level files plus the nested
+ * `<projectDir>/<sessionId>/subagents/agent-*.jsonl` ones the CLI writes for
+ * each subagent a session launches.
+ *
+ * Deliberately a second enumeration rather than a wider {@link listTranscripts}:
+ * that one's callers treat one file as one session, so a subagent file reaching
+ * them would become an extra session row, an extra analytics report and a
+ * resolvable `/api/sessions/:id`. Only the usage ledger asks the question a
+ * subagent file answers — what the *account* spent, where a subagent turn spends
+ * like any other — so only it reads this list.
+ *
+ * The nesting depth is exactly one session dir plus `subagents/`, matching what
+ * the CLI writes; nothing deeper is walked.
+ */
+export function listUsageTranscripts(root: string): UsageTranscriptRef[] {
+  const results: UsageTranscriptRef[] = listTranscripts(root).map(ref => ({ ...ref, parentId: null }));
+  let dirs: fs.Dirent[];
+  try {
+    dirs = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+  for (const d of dirs) {
+    if (!d.isDirectory()) continue;
+    let sessions: fs.Dirent[];
     try {
-      files = fs.readdirSync(dir);
+      sessions = fs.readdirSync(path.join(root, d.name), { withFileTypes: true });
     } catch {
       continue;
     }
-    for (const name of files) {
-      if (!name.endsWith('.jsonl')) continue;
-      const full = path.join(dir, name);
-      let stat: fs.Stats;
-      try {
-        stat = fs.statSync(full);
-      } catch {
-        continue;
+    for (const s of sessions) {
+      if (!s.isDirectory()) continue;
+      const agentDir = path.join(root, d.name, s.name, SUBAGENT_DIR);
+      for (const name of jsonlNames(agentDir)) {
+        const ref = statRef(path.join(agentDir, name), d.name);
+        if (ref) results.push({ ...ref, parentId: s.name });
       }
-      if (!stat.isFile()) continue;
-      results.push({ file: full, dirName: d.name, id: name.replace(/\.jsonl$/, ''), mtimeMs: stat.mtimeMs });
     }
   }
   return results;

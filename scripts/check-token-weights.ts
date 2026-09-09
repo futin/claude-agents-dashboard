@@ -23,7 +23,7 @@
 
 import fs from 'node:fs';
 
-import { listTranscripts, projectsRoot } from '../server/lib/scan.js';
+import { listUsageTranscripts, projectsRoot } from '../server/lib/scan.js';
 import { CHECKED_MODEL_PREFIXES, longestPrefixMatch, weightsFor } from '../server/lib/usage-ledger.js';
 
 const DAY_MS = 86_400_000;
@@ -79,7 +79,7 @@ function collect(root: string, sinceMs: number): { stats: Map<string, ModelStats
   const stats = new Map<string, ModelStats>();
   const seen = new Set<string>();
   let files = 0;
-  for (const ref of listTranscripts(root)) {
+  for (const ref of listUsageTranscripts(root)) {
     try {
       if (fs.statSync(ref.file).mtimeMs < sinceMs) continue;
     } catch { continue; }

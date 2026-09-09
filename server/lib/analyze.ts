@@ -13,10 +13,13 @@
  *    are exact; per-tool tokens are only an even split of a turn's output_tokens
  *    across its tool calls (`approxOutputTokens`).
  *
- * Subagent turns replay in the parent transcript as `isSidechain:true` records
- * with their own usage; those are skipped here so they don't double-count against
- * `bySubagent` (sourced from readAgents). Whole-session total ≈
- * totals.combined + subagentTotals.tokens.
+ * Subagent turns are NOT in this file: the CLI writes them to the session's own
+ * `<sessionId>/subagents/agent-*.jsonl` (the usage ledger reads those — see
+ * `scan.ts` `listUsageTranscripts`). Their tokens arrive instead through
+ * `bySubagent`/`subagentTotals`, which readAgents parses out of the Task result
+ * notification. Whole-session total ≈ totals.combined + subagentTotals.tokens.
+ * An `isSidechain:true` record is still skipped below, for the older transcripts
+ * that did replay one.
  *
  * ONE TURN IS NOT ONE RECORD. Claude Code writes one record per content block —
  * a turn that thinks, talks and fires two tools is four records — and every one
@@ -123,8 +126,8 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
     }
     if (!cwd && typeof rec.cwd === 'string') cwd = rec.cwd;
 
-    // Subagent-internal turns replay here with their own usage; counting them
-    // would double against bySubagent (readAgents). Skip for main-agent facts.
+    // Only older transcripts replay a subagent turn here; counting one would
+    // double against bySubagent (readAgents). Skip for main-agent facts.
     if (rec.isSidechain === true) continue;
 
     const msg = rec.message;

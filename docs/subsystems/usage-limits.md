@@ -580,7 +580,7 @@ One line per tick to `.usage-ledger.jsonl` (repo root, gitignored, sibling of
 the history log), written from the same fetch-success path that calls
 `recordTick`, so a ledger line and a history sample describe the same instant.
 Each tick reads only the bytes appended to each transcript since the last one
-(a RAM map of per-file offsets over `listTranscripts`), sums `message.usage`
+(a RAM map of per-file offsets over `listUsageTranscripts`), sums `message.usage`
 per model, and appends `{t, prevT, tok, req}` — `tok` weighed in tokens, `req`
 counted in requests.
 
@@ -596,11 +596,17 @@ Six things are deliberate:
   we read it ends mid-line; re-reading that fragment next tick is the only way
   it is ever seen whole. A file shorter than its offset was rotated, so its
   cursor restarts at 0 and the window rule drops what it already covered.
-- **Sidechain turns are counted**, unlike in `analyze.ts` — which skips them so
-  a session's main-agent totals don't double against `bySubagent`. This ledger
-  asks what the *account* spent, and a subagent turn spends like any other. Turn
-  ids are remembered per file (a bounded ring) because the records of one turn
-  share a `message.id` and each carries a copy of the same usage block.
+- **Subagent turns are counted**, unlike in `analyze.ts` — which reports them
+  separately as `subagentTotals` so a session's main-agent totals don't double
+  against `bySubagent`. This ledger asks what the *account* spent, and a subagent
+  turn spends like any other. Reaching them is why the ledger reads
+  `listUsageTranscripts` rather than `listTranscripts`: the CLI writes each
+  subagent to `<projectDir>/<sessionId>/subagents/agent-*.jsonl` and does **not**
+  replay those turns into the parent transcript, so the top-level enumeration —
+  the one every session-shaped consumer needs, since a subagent file must never
+  become a session row — cannot see them. Turn ids are remembered per file (a
+  bounded ring) because the records of one turn share a `message.id` and each
+  carries a copy of the same usage block.
 - **The first tick after start writes nothing**, and switching recording off
   drops the offsets so switching it back on reseeds the same way. One lost
   minute, rather than a backlog dumped into a single interval.
@@ -614,6 +620,22 @@ Six things are deliberate:
   every line written before counts existed. Absent means *not recorded*, `{}`
   on a line with spend means recorded and nothing attributable, and a junk or
   negative count drops that model's key rather than the line.
+
+#### Every measured number in this document predates the nested-transcript fix
+
+Until 2026-09-09 the ledger enumerated top-level transcripts only, so every tick
+written before then undercounts the account's real spend by whatever share of it
+ran in subagents (measured at 22–35% per day across 09-05..09-08, and up to 66%
+of opus tokens on the noisiest day). Ticks written from the fix onward include
+nested subagent transcripts.
+
+So the figures quoted here — the ~4.2x opus:fable weighted ratio, the
+`EXTERNAL_WEIGHTED_MAX` derivation, the 09-06 boost probe, and every published
+rate level — are **biased low, not re-measured**. They stand as the record of
+what was measurable when they were taken. Re-derive each one from ledger data
+recorded after the fix; the old ledger cannot be repaired in place, because the
+subagent tokens it never read are not recoverable per-tick. A rebuild from disk
+puts the size of the miss at roughly +38% on the pooled opus-5 rate.
 
 ### The fitter (`lib/usage-rate.ts`, pure)
 
@@ -888,6 +910,14 @@ the reconstruction under-counts requests by roughly 4.5%, unevenly across ticks.
 Re-run `pnpm probe:usage-split` after a day of real recording and re-confirm the
 refutation against recorded counts before acting on it. The full caveat list is
 in `backlog/tasks/done/task-10-*.md` under *Not verified*.
+
+⚠️ **And every figure in these two blocks was measured before `bug-22`.** The
+probe's `--reconstruct` replay and `pnpm check:weights` both read the transcripts
+through the ledger's enumerator, which until 2026-09-09 skipped every nested
+subagent file — so the 2026-09-02 fit, the 5.98x lifted ratio, the 4.5%
+request under-count and the cache-write tier verdict were all derived from
+top-level turns only. Both commands now read `listUsageTranscripts`, so a re-run
+sees the subagent turns too. Re-run before acting on any of these numbers.
 
 ### The one-term joint fit: a rate for every model, mixed windows included
 
