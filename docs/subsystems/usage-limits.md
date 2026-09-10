@@ -1200,6 +1200,21 @@ interval spanning an overnight sleep genuinely has no ledger for most of its
 span, so we cannot know whether another device spent inside it. It is disclosed
 through `weeklyCoverage` rather than hidden by loosening the floor.
 
+Every row also carries **`daily`** (`ModelDayRate[]`): one cell per UTC date of
+the 17-day horizon the verdict is fitted over, oldest first, from `dailyRates`
+(pure). Each is `poolRate` over that date **clipped to the horizon** — the first
+date starts where the baseline range does, so the strip never counts an interval
+the fit did not — with the figure carried whatever the evidence and a `state`
+saying what the cell may claim: `pre-ledger` (the date ended before
+`ledgerStartMs`; never with the start unprovable, the same rule the coverage
+buckets follow), `none` (no owned window), `thin` (owned windows under
+`CURRENT_FLOORS.minUtil`, 5 pts — with the ~1-point rounding in `Σ dUtil` a
+3-point day is a ±33% number, and colouring it would put a rounding artefact on
+the strip in the same red as a real move), or `rated`. `deviationPct` is against
+the row's own `baselineWeightedPerPct`, so the cells and the badge judge against
+one figure; without a baseline every deviation is null. Always present, and no
+new disk read: it is the same interval set the row is fitted from.
+
 `coverage` (`UsageCoverage`) is the disclosure the three unpriced kinds exist
 for: `movedPct` as the denominator, `pricedPct` for what reached a rate, then
 `mixedPct`, `externalPct`, `preLedgerPct`, `missingPct` and `partialPct`, which
@@ -1245,7 +1260,8 @@ verdict column off screen first, and this board is mostly read from a phone.
    `FITTED, MIXED WINDOWS` when those rates exist. Each label carries a **ⓘ**
    opening that term's definition in the floating panel — a real button and never
    a `title` attribute, for the reason the profile tooltip exists. Under the
-   tiles, the **evidence split in two** — `Current 585 windows · 4 days · 663.0
+   tiles, the **day strip** (its own section below), then the **evidence split in
+   two** — `Current 585 windows · 4 days · 663.0
    pts` and `Baseline forming · 4 of 7 days` — and the weekly line under that.
    That split is the fix for a line that read `baseline forming · 4 days · 585
    windows · 4 days · 663.0 pts`, where two identical "4 days" meant two different windows
@@ -1292,6 +1308,57 @@ never a defect, but only the bucket sums with the bar above it, so the list read
 `coverage.externalPct`. `externalSharePct` stays in the response — removing an
 API field is a separate decision — and the card stops reading it.
 
+### The day strip
+
+The card said `drift −38%` and showed two numbers; nothing on it showed the days
+those numbers were pooled from, so a reader could not tell a fortnight moving
+from one loud afternoon. Under each row's tiles is one square per UTC day of the
+horizon (`DayStrip` in `UsageRates.tsx`), chosen from three mocked variants
+against the 2026-09-10 live data
+(`docs/superpowers/specs/2026-09-10-token-value-day-strip-mockups.html`).
+
+**Colour is polarity, not magnitude.** A cell is that day's weighted rate
+against *this model's* baseline, stepped at the verdict's own ±20% band and at
+±40% (`dayStep`): fewer tokens per 1% — pricier — runs `--red`, more runs
+`--cyan`, within the band is a neutral grey. A cell outside the band therefore
+means "this day alone would have been called drift", and the boundaries fall
+exactly as `driftRow`'s do (`|dev| > 20`, so exactly 20 is within). The literal
+port of the desktop app's grid — one hue, darker = more tokens — was mocked and
+rejected: that grid counts *how much* was used, a magnitude, while this card asks
+*which side of the baseline* a day fell on, and a magnitude ramp needs the
+baseline figure in the reader's head. The two poles were run through the dataviz
+validator against both the midnight and daylight surfaces (pole separation
+ΔE 14.5 protan / 24.5 normal; each arm lightness-monotonic), and every fill is a
+`color-mix` over a token, so the five themes hold.
+
+**Texture carries the three "no colour" states**, as the profile grid's does:
+hatched with a dashed border is `thin`, a bare cell is `none`, a dotted border is
+`pre-ledger`. A `thin` day still carries its figures in the panel, with the reason
+it is not coloured.
+
+**The dashed amber rule is the current window's true start** (`cutFraction`),
+`CURRENT_DAYS` before `generatedAt`. It cuts *through* a day cell because the
+window does — the day it cuts belongs to both windows, which is why the evidence
+line can say `4 days` for a 3-day window, and the rule is where that sentence
+becomes visible.
+
+**No strip without a baseline** (`showsDays`). Without one every rated cell
+would be the same unjudged grey, and a row of grey under a `collecting` badge
+reads as a broken chart rather than one with nothing to say yet; the evidence
+line already says the baseline is forming. Rows on the fold line have no strip
+either — they have no row.
+
+The cells spread `useFloatingTip`'s hover bundle (`tipHandlers`), with `tabIndex`
+and an `aria-label` of the same text, exactly as the profile grid does; at ~17px
+on a phone the panel is the readout, not the cell. `dayTip` writes it: the date
+first (`(UTC)`, and `today so far` on the last cell), then the rate, the
+comparison when there is a baseline, the evidence, and for a thin day why it is
+not coloured. The strip mirrors three server constants under the same rule as
+`BASELINE_DAY_FLOOR` — `DRIFT_BAND_PCT` (20), `DAY_FLOOR_PTS` (5),
+`CURRENT_DAYS` (3) — each naming the server constant it follows. The legend
+prints once under the list, from those constants, and a seventh glossary entry
+(`daily`) defines the strip; the ⓘ on its label reads the same string.
+
 Every string the card says is a pure function in
 `client/src/lib/usageRatesFormat.ts`, so the statements are testable without a
 browser (`test/usage-rates-format.test.ts`; `pnpm test` prints the case count). The functions return
@@ -1308,7 +1375,11 @@ The floating panel itself is `client/src/hooks/useFloatingTip.ts`, shared with
 the Forecast tab's heatmap and walk chart, which is why it moved out of
 `UsageProfile.tsx`. It writes the panel's text and position **directly** — a
 pointermove that re-rendered 168 heatmap cells to move one box would be absurd —
-and divides pointer coordinates by `--font-scale`, because `.shell{zoom}` puts a
+and **locks the panel's width to what it measured at the origin** before moving
+it — a fixed box with `left` and no `right` shrink-wraps to the room left of the
+viewport edge, so a panel measured at 149px and placed 160px from the edge
+re-wrapped its longest line, which is exactly where the day strip's
+current-window cells sit — and divides pointer coordinates by `--font-scale`, because `.shell{zoom}` puts a
 `position:fixed` panel in a zoomed coordinate space while `clientX/Y` stays in
 visual viewport pixels (at 100% the two coincide and the bug is invisible; at
 125% the panel lands 25% down-right of the pointer). It exposes two bundles:

@@ -1,10 +1,14 @@
 import assert from 'node:assert';
 
-import type { ModelRateRow, ModelRateVerdict, UsageCoverage } from '../shared/types.js';
+import type { ModelDayRate, ModelRateRow, ModelRateVerdict, UsageCoverage } from '../shared/types.js';
 import {
   baselineText,
   coverageCaveat,
   coverageRows,
+  cutFraction,
+  dayLabel,
+  dayStep,
+  dayTip,
   evidenceParts,
   evidenceText,
   figureTip,
@@ -15,6 +19,7 @@ import {
   measuredShare,
   movedLabel,
   RATES_GLOSSARY,
+  showsDays,
   statusLine,
   verdictText,
   waitingText,
@@ -149,6 +154,7 @@ export function run(): number {
       weightedPerPct: null, rawPerPct: null, fittedWeightedPerPct: null,
       verdict: 'thin', fitVerdict: 'thin', intervals: 0, utilSum: 0, days: 0
     },
+    daily: [],
     ...over
   });
   const verdicts = (...vs: ModelRateVerdict[]): ModelRateRow[] =>
@@ -307,7 +313,7 @@ export function run(): number {
   if (test('the glossary is the single copy of every definition the card shows', () => {
     assert.deepStrictEqual(
       RATES_GLOSSARY.map(g => g.key),
-      ['weighted', 'raw', 'fitted', 'baseline', 'window', 'across']
+      ['weighted', 'raw', 'fitted', 'baseline', 'daily', 'window', 'across']
     );
     for (const g of RATES_GLOSSARY) {
       assert.ok(g.term.length > 0 && g.text.length > 0, `${g.key} needs a term and a definition`);
@@ -315,6 +321,103 @@ export function run(): number {
     // The ⓘ panel quotes the drawer verbatim, so there is one string to keep true.
     assert.strictEqual(figureTip('fitted'), RATES_GLOSSARY.find(g => g.key === 'fitted')!.text);
     assert.strictEqual(figureTip('weighted'), RATES_GLOSSARY[0].text);
+  })) p++; else f++;
+
+  // ── the day strip ──────────────────────────────────────────────────────
+
+  const day = (over: Partial<ModelDayRate>): ModelDayRate => ({
+    date: '2026-09-08', weightedPerPct: 137_344, rawPerPct: 848_000, intervals: 131,
+    utilSum: 151, deviationPct: -39.9, state: 'rated', ...over
+  });
+  const rowWith = (over: Partial<ModelRateRow>): ModelRateRow => ({
+    model: 'claude-opus-5', rawPerPct: 875_000, weightedPerPct: 141_000,
+    baselineRawPerPct: 1_300_000, baselineWeightedPerPct: 228_461, deviationPct: -38.1,
+    verdict: 'drift', intervals: 257, utilSum: 301, days: 4, baselineDays: 8,
+    pctPerMWeighted: null, pctPerRequest: null, splitVerdict: 'thin',
+    fittedWeightedPerPct: 281_000, fitVerdict: 'fitted', fitDeviationPct: 99,
+    weekly: {
+      weightedPerPct: null, rawPerPct: null, fittedWeightedPerPct: null,
+      verdict: 'thin', fitVerdict: 'thin', intervals: 0, utilSum: 0, days: 0
+    },
+    daily: [day({})],
+    ...over
+  });
+
+  if (test("dayStep: the ±20% band is the verdict's, and the boundaries fall the same way", () => {
+    // `driftRow` calls drift on `|dev| > 20`, so exactly 20 is within — here too.
+    assert.strictEqual(dayStep(0), 'within');
+    assert.strictEqual(dayStep(20), 'within');
+    assert.strictEqual(dayStep(-20), 'within');
+    assert.strictEqual(dayStep(20.001), 'above');
+    assert.strictEqual(dayStep(-20.001), 'below');
+    assert.strictEqual(dayStep(40), 'above');
+    assert.strictEqual(dayStep(-40), 'below');
+    assert.strictEqual(dayStep(40.001), 'far-above');
+    assert.strictEqual(dayStep(-40.001), 'far-below');
+    assert.strictEqual(dayStep(null), 'unjudged');
+    assert.strictEqual(dayStep(Number.NaN), 'unjudged');
+  })) p++; else f++;
+
+  if (test('dayLabel: month and day, no year, UTC', () => {
+    assert.strictEqual(dayLabel('2026-09-08'), 'Sep 8');
+    assert.strictEqual(dayLabel('2026-08-24'), 'Aug 24');
+    assert.strictEqual(dayLabel('2026-12-31'), 'Dec 31');
+  })) p++; else f++;
+
+  if (test('dayTip: a rated day states rate, deviation and evidence, one per line', () => {
+    assert.strictEqual(
+      dayTip(day({}), '2026-09-10'),
+      'Sep 8 (UTC)\n137k weighted tok / 1%\n-39.9% vs baseline\n131 windows · 151.0 pts'
+    );
+  })) p++; else f++;
+
+  if (test('dayTip: today says so, a single window is singular, no baseline drops the comparison', () => {
+    const today = day({ date: '2026-09-10', deviationPct: null, intervals: 1, utilSum: 7, weightedPerPct: 60_000 });
+    assert.strictEqual(
+      dayTip(today, '2026-09-10'),
+      'Sep 10 (UTC) · today so far\n60k weighted tok / 1%\n1 window · 7.0 pts'
+    );
+  })) p++; else f++;
+
+  if (test('dayTip: a thin day carries its figures and says why it is not coloured', () => {
+    const thin = day({ date: '2026-09-10', state: 'thin', intervals: 3, utilSum: 3, weightedPerPct: 396_000, deviationPct: 73.3 });
+    assert.strictEqual(
+      dayTip(thin, '2026-09-11'),
+      'Sep 10 (UTC)\n396k weighted tok / 1%\n+73.3% vs baseline\n3 windows · 3.0 pts\nunder 5 pts — not coloured'
+    );
+  })) p++; else f++;
+
+  if (test('dayTip: none and pre-ledger are one sentence each, no figures', () => {
+    const blank = { weightedPerPct: null, rawPerPct: null, intervals: 0, utilSum: 0, deviationPct: null } as const;
+    assert.strictEqual(
+      dayTip(day({ date: '2026-09-01', state: 'none', ...blank }), '2026-09-10'),
+      'Sep 1 (UTC)\nno windows this model owned'
+    );
+    assert.strictEqual(
+      dayTip(day({ date: '2026-08-27', state: 'pre-ledger', ...blank }), '2026-09-10'),
+      'Aug 27 (UTC)\nbefore recording began'
+    );
+  })) p++; else f++;
+
+  if (test('cutFraction: the −3d boundary at its true position along the strip', () => {
+    const daily = Array.from({ length: 18 }, (_, i) =>
+      day({ date: new Date(Date.UTC(2026, 7, 24 + i)).toISOString().slice(0, 10) }));
+    // 24 Aug 00:00 → 11 Sep 00:00 is 18 days; the cut is 7 Sep 11:30 = 14 d 11.5 h in.
+    const frac = cutFraction(daily, '2026-09-10T11:30:00.000Z')!;
+    assert.ok(Math.abs(frac - 347.5 / 432) < 1e-6, String(frac));
+    assert.strictEqual(cutFraction([], '2026-09-10T11:30:00.000Z'), null);
+  })) p++; else f++;
+
+  if (test('showsDays: only a row with a baseline draws the strip', () => {
+    assert.strictEqual(showsDays(rowWith({})), true);
+    assert.strictEqual(showsDays(rowWith({ baselineWeightedPerPct: null })), false);
+    assert.strictEqual(showsDays(rowWith({ daily: [] })), false);
+  })) p++; else f++;
+
+  if (test('the glossary defines the strip, and the ⓘ reads the same string', () => {
+    const entry = RATES_GLOSSARY.find(g => g.key === 'daily');
+    assert.ok(entry !== undefined && entry.text.length > 0);
+    assert.strictEqual(figureTip('daily'), entry!.text);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

@@ -18,6 +18,7 @@ import { sameWindow } from './usage-history.js';
 import type { UsageSample } from './usage-history.js';
 import { addCounts, emptyCounts, scaleCounts, weightedTokens } from './usage-ledger.js';
 import type { LedgerLine, TokenCounts } from './usage-ledger.js';
+import type { ModelDayRate, ModelDayState } from '../../shared/types.js';
 
 /** Weighted share of an interval one model must hold to own it. */
 export const DOMINANCE = 0.9;
@@ -565,6 +566,58 @@ export function driftRow(intervals: Interval[], model: string, nowMs: number): D
     : Math.abs(rawDev) > RAW_SHIFT_PCT ? 'mix-shift'
       : 'stable';
   return row;
+}
+
+/**
+ * One model's token value, one UTC date at a time, over the same 17-day horizon
+ * the verdict is fitted over — the days behind {@link driftRow}'s two numbers.
+ *
+ * Each cell is {@link poolRate} over that date **clipped to the horizon**: the
+ * first date starts where the baseline range does, not at its own midnight, so
+ * the strip never counts an interval the fit did not. No floors are applied to
+ * the figure — a day carries whatever it pooled — but a day under the current
+ * window's utilization floor is marked `thin`, because with the ~1-point
+ * rounding in `Σ dUtil` a 3-point day is a ±33% number, and colouring it would
+ * put a rounding artefact on the strip in the same red as a real move. The
+ * floor is {@link CURRENT_FLOORS}' own, not a new number.
+ *
+ * A date that ended before the ledger provably began is `pre-ledger`: nothing
+ * was measured, nothing is wrong, and it ages out on its own. With the start
+ * unprovable nothing is called that — the same rule `coverageBreakdown` follows.
+ *
+ * Deviation is against the baseline the caller hands in, so the cells and the
+ * badge judge against one and the same figure; without a baseline every
+ * deviation is null and the strip shows the days without judging them.
+ */
+export function dailyRates(
+  intervals: Interval[], model: string, nowMs: number,
+  ledgerStartMs: number | null, baselineWeightedPerPct: number | null
+): ModelDayRate[] {
+  const sinceMs = nowMs - BASELINE_MS;
+  const firstDay = Math.floor(sinceMs / DAY_MS) * DAY_MS;
+  const lastDay = Math.floor(nowMs / DAY_MS) * DAY_MS;
+  const judged = baselineWeightedPerPct !== null && baselineWeightedPerPct > 0;
+  const out: ModelDayRate[] = [];
+  for (let day = firstDay; day <= lastDay; day += DAY_MS) {
+    const pooled = poolRate(intervals, model, Math.max(day, sinceMs), day + DAY_MS);
+    let state: ModelDayState;
+    if (ledgerStartMs !== null && day + DAY_MS <= ledgerStartMs) state = 'pre-ledger';
+    else if (pooled === null) state = 'none';
+    else if (pooled.utilSum < CURRENT_FLOORS.minUtil) state = 'thin';
+    else state = 'rated';
+    out.push({
+      date: utcDate(day),
+      weightedPerPct: pooled?.weightedPerPct ?? null,
+      rawPerPct: pooled?.rawPerPct ?? null,
+      intervals: pooled?.intervals ?? 0,
+      utilSum: pooled?.utilSum ?? 0,
+      deviationPct: pooled !== null && judged
+        ? deviation(pooled.weightedPerPct, baselineWeightedPerPct)
+        : null,
+      state
+    });
+  }
+  return out;
 }
 
 /**
