@@ -270,6 +270,47 @@ export interface ModelWeeklyRate {
 }
 
 /**
+ * Why a day cell on the token-value strip carries the figures it does, or none.
+ *
+ * - `pre-ledger` — the day ended before recording provably began. Nothing was
+ *   measured and nothing is wrong; it ages out of the strip on its own.
+ * - `none` — recording was on and this model owned no window that day.
+ * - `thin` — owned windows, but under the current window's utilization floor,
+ *   so the figures are carried and the cell is not coloured.
+ * - `rated` — enough to colour.
+ */
+export type ModelDayState = 'pre-ledger' | 'none' | 'thin' | 'rated';
+
+/**
+ * One UTC day of one model's token value — a cell on the strip under the tiles.
+ *
+ * The same pooled ratio as the row's own rate, taken over one date of the same
+ * 17-day horizon the verdict is fitted over, and no other span: the strip shows
+ * the evidence the verdict rests on, so a reader can see whether "drift" is a
+ * fortnight moving or one loud afternoon. Days are UTC dates because that is
+ * the key the row's `days` counts are already taken on.
+ */
+export interface ModelDayRate {
+  /** `YYYY-MM-DD`, UTC. */
+  date: string;
+  /** Type-weighted tokens per 1% that day. Null when `state` is `pre-ledger` or `none`. */
+  weightedPerPct: number | null;
+  /** Raw tokens per 1%, the courtesy translation. Null under the same condition. */
+  rawPerPct: number | null;
+  /** Windows this model owned that day — evidence, carried whatever the state. */
+  intervals: number;
+  /** Utilization points those windows moved. */
+  utilSum: number;
+  /**
+   * Signed percent of the day's weighted rate against the row's baseline.
+   * Null without a baseline or without a rate — the strip then shows the days
+   * and judges none of them.
+   */
+  deviationPct: number | null;
+  state: ModelDayState;
+}
+
+/**
  * One model's token-value row in `GET /api/usage/rates`.
  *
  * Every rate is "tokens per one percentage point of the 5-hour window", fitted
@@ -358,6 +399,12 @@ export interface ModelRateRow {
    * 5-hour fit — not an absent key the card has to null-check.
    */
   weekly: ModelWeeklyRate;
+  /**
+   * One cell per UTC date of the 17-day horizon, oldest first — the days the
+   * row's current and baseline rates were pooled from. Always present; a row
+   * with no owned window carries a strip of `none` days.
+   */
+  daily: ModelDayRate[];
 }
 
 /**

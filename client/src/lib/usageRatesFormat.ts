@@ -13,7 +13,7 @@
  * still lives here.
  */
 
-import type { ModelRateRow, ModelRateVerdict, UsageCoverage } from '../../../shared/types';
+import type { ModelDayRate, ModelRateRow, ModelRateVerdict, UsageCoverage } from '../../../shared/types';
 
 /**
  * The day floors a verdict needs, stated once and read by two strings — the
@@ -28,6 +28,22 @@ import type { ModelRateRow, ModelRateVerdict, UsageCoverage } from '../../../sha
  */
 const BASELINE_DAY_FLOOR = 7;
 const CURRENT_DAY_FLOOR = 2;
+
+/**
+ * The three other constants the day strip mirrors from the server, under the
+ * same rule as the two above — one integer each is not worth a runtime import
+ * across the boundary, and each names the server constant it has to follow.
+ *
+ * `DRIFT_BAND_PCT` is `DRIFT_PCT`: the cells step at the band the verdict is
+ * called on, so a cell outside it means "this day alone would have been called
+ * drift". `DAY_FLOOR_PTS` is `CURRENT_FLOORS.minUtil`, the floor under which
+ * the server marks a day `thin`; the tip names it. `CURRENT_DAYS` is
+ * `CURRENT_MS` in days — where the strip draws the current window's start.
+ */
+export const DRIFT_BAND_PCT = 20;
+export const DAY_FLOOR_PTS = 5;
+const CURRENT_DAYS = 3;
+const DAY_MS = 86_400_000;
 
 /**
  * Tokens, at a magnitude a person can hold in their head. One decimal in the
@@ -293,13 +309,98 @@ export function coverageCaveat(coverage: UsageCoverage): string | null {
 }
 
 /**
+ * Which colour step a day cell takes — polarity against the model's baseline,
+ * not magnitude.
+ *
+ * Two hues and a neutral middle rather than one ramp, because the question the
+ * strip answers is "which side of the baseline did this day land on", and a
+ * single-hue ramp of the rate itself needs the baseline figure in the reader's
+ * head. Stepped at the verdict's own band and twice it, with the boundaries
+ * falling exactly as `driftRow`'s do: `|dev| > 20` is drift there, so exactly
+ * 20 is `within` here. `unjudged` is a rated day with no baseline to judge
+ * against — the strip that would show it is not drawn (see {@link showsDays}),
+ * but the function stays total.
+ */
+export type DayStep = 'far-below' | 'below' | 'within' | 'above' | 'far-above' | 'unjudged';
+
+export function dayStep(deviationPct: number | null): DayStep {
+  if (deviationPct === null || !Number.isFinite(deviationPct)) return 'unjudged';
+  if (deviationPct > 2 * DRIFT_BAND_PCT) return 'far-above';
+  if (deviationPct > DRIFT_BAND_PCT) return 'above';
+  if (deviationPct < -2 * DRIFT_BAND_PCT) return 'far-below';
+  if (deviationPct < -DRIFT_BAND_PCT) return 'below';
+  return 'within';
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** `2026-09-08` → `Sep 8`. UTC, like the date it is given. */
+export function dayLabel(date: string): string {
+  const d = new Date(date + 'T00:00:00Z');
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+/**
+ * What a day cell says when hovered, focused or pressed — the readout, since
+ * an 18-cell strip on a phone is too small to carry a figure in the cell.
+ *
+ * One fact per line, `pre-line` rendered: the date first and always, then the
+ * rate, the comparison when there is a baseline, the evidence, and for a thin
+ * day the reason it carries a figure but no colour. `today` is the UTC date of
+ * `generatedAt`, so the last cell can say it is still filling.
+ */
+export function dayTip(day: ModelDayRate, today: string): string {
+  const when = `${dayLabel(day.date)} (UTC)${day.date === today ? ' · today so far' : ''}`;
+  if (day.state === 'pre-ledger') return `${when}\nbefore recording began`;
+  if (day.state === 'none' || day.weightedPerPct === null) {
+    return `${when}\nno windows this model owned`;
+  }
+  const lines = [when, `${formatTok(day.weightedPerPct)} weighted tok / 1%`];
+  if (day.deviationPct !== null && Number.isFinite(day.deviationPct)) {
+    lines.push(`${formatDeviation(day.deviationPct)} vs baseline`);
+  }
+  lines.push(`${day.intervals} window${day.intervals === 1 ? '' : 's'} · ${day.utilSum.toFixed(1)} pts`);
+  if (day.state === 'thin') lines.push(`under ${DAY_FLOOR_PTS} pts — not coloured`);
+  return lines.join('\n');
+}
+
+/**
+ * Where along the strip the current window begins, as a fraction of its width.
+ *
+ * The window starts `CURRENT_DAYS` before `generatedAt`, which is almost never
+ * a midnight — so the rule cuts *through* a day cell, at its true position.
+ * That is the honest geometry: the day it cuts belongs to both windows, and it
+ * is why the evidence line can say "4 days" for a 3-day window. Null for an
+ * empty strip. Clamped, so a clock oddity draws a rule at an edge rather than
+ * off the strip.
+ */
+export function cutFraction(daily: ModelDayRate[], generatedAt: string): number | null {
+  if (daily.length === 0) return null;
+  const start = Date.parse(daily[0].date + 'T00:00:00Z');
+  const cut = Date.parse(generatedAt) - CURRENT_DAYS * DAY_MS;
+  if (!Number.isFinite(start) || !Number.isFinite(cut)) return null;
+  return Math.max(0, Math.min(1, (cut - start) / (daily.length * DAY_MS)));
+}
+
+/**
+ * Does this row draw its strip? Only with a baseline: without one every cell
+ * would be the same unjudged grey, and a row of grey under a `collecting` badge
+ * reads as a broken chart rather than as a chart with nothing to say yet. The
+ * evidence line already says the baseline is forming.
+ */
+export function showsDays(row: ModelRateRow): boolean {
+  const base = row.baselineWeightedPerPct;
+  return base !== null && Number.isFinite(base) && row.daily.length > 0;
+}
+
+/**
  * Every definition the card owns, in one place, read by two renderers: the
  * `How to read this` drawer prints all six, and the ⓘ beside a figure label
  * opens the matching one. One copy of each string, so the drawer and the panel
  * cannot drift apart.
  */
 export const RATES_GLOSSARY: readonly {
-  key: 'weighted' | 'raw' | 'fitted' | 'baseline' | 'window' | 'across';
+  key: 'weighted' | 'raw' | 'fitted' | 'baseline' | 'daily' | 'window' | 'across';
   term: string;
   text: string;
 }[] = [
@@ -328,6 +429,16 @@ export const RATES_GLOSSARY: readonly {
     term: 'Baseline',
     text: `The trailing 14 days before the last three. A verdict needs ${BASELINE_DAY_FLOOR} `
       + 'separate days in it.'
+  },
+  {
+    key: 'daily',
+    term: 'By day',
+    text: `One cell per UTC day of the 17 the verdict is fitted over, coloured by how far that `
+      + "day's weighted rate sits from the model's baseline: red is fewer tokens per 1% "
+      + `(pricier), cyan is more (cheaper), grey is within the ±${DRIFT_BAND_PCT}% band the `
+      + `verdict uses. Hatched days moved under ${DAY_FLOOR_PTS} pts and are shown but not `
+      + 'coloured; dotted days predate recording. The dashed rule is the exact start of the '
+      + `${CURRENT_DAYS}-day current window — it cuts through a day because the window does.`
   },
   {
     key: 'window',

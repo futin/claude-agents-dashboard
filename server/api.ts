@@ -19,7 +19,7 @@ import type { ProfileState, UsageSample } from './lib/usage-history.js';
 import { ledgerStartMs, readLedgerSince } from './lib/usage-ledger.js';
 import type { LedgerLine } from './lib/usage-ledger.js';
 import {
-  BASELINE_MS, WEEKLY_FLOORS, coverageBreakdown, currentRange, driftRow, externalShare,
+  BASELINE_MS, WEEKLY_FLOORS, coverageBreakdown, currentRange, dailyRates, driftRow, externalShare,
   fitDeviation, fitRates, fitSplits, joinIntervals, joinWeeklyIntervals, ledgerBreakMs,
   poolRate, rateFor
 } from './lib/usage-rate.js';
@@ -824,7 +824,11 @@ export function shapeUsageRates(opts: {
           intervals: weeklyEvidence?.intervals ?? 0,
           utilSum: weeklyEvidence?.utilSum ?? 0,
           days: weeklyEvidence?.days ?? 0
-        }
+        },
+        // The days the two figures above were pooled from, judged against the
+        // same baseline the badge is — so the cells and the verdict cannot
+        // disagree about what a day was compared to.
+        daily: dailyRates(intervals, model, nowMs, startMs, drift.baselineWeightedPerPct)
       };
     })
     // On the **5-hour** `utilSum`, unchanged: a weekly-only model sorts last,

@@ -576,6 +576,42 @@ export async function run(): Promise<number> {
     }
   }));
 
+  check(test('every row carries a daily strip over the horizon, its dates stated as they are', () => {
+    const dir = fixtureDir();
+    try {
+      const nowMs = FIXTURE_END + MIN;
+      const body = shapeUsageRates({
+        recording: true,
+        samples: readRecentSamples(dir),
+        ledger: readLedgerSince(nowMs - BASELINE_MS, dir),
+        ledgerStartMs: ledgerStartMs(dir),
+        nowMs
+      });
+      const daily = body.models[0].daily;
+      // 13 Aug 09:06 → 30 Aug 09:06 touches 18 UTC dates.
+      assert.strictEqual(daily.length, 18, JSON.stringify(daily.map(d => d.date)));
+      assert.strictEqual(daily[0].date, '2026-08-13');
+      assert.strictEqual(daily[17].date, '2026-08-30');
+      // The fixture's two dates: five intervals × 0.5 pts each — under the
+      // 5-point floor, so thin, but the figure is the exact pooled rate.
+      for (const date of ['2026-08-29', '2026-08-30']) {
+        const cell = daily.find(d => d.date === date)!;
+        assert.strictEqual(cell.state, 'thin', date);
+        assert.strictEqual(cell.intervals, 5);
+        assert.strictEqual(cell.utilSum, 2.5);
+        assert.strictEqual(cell.weightedPerPct, 900_000);
+        assert.strictEqual(cell.rawPerPct, 9_000_000);
+        assert.strictEqual(cell.deviationPct, null, 'no baseline on this fixture');
+      }
+      // Before the first ledger line the days are pre-ledger, never "none".
+      assert.strictEqual(daily.find(d => d.date === '2026-08-28')!.state, 'pre-ledger');
+      assert.strictEqual(daily[0].state, 'pre-ledger');
+      assert.ok(daily.every(d => d.state !== 'none'), 'the fixture leaves no recorded-but-empty date');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
+
   check(test('rows are ordered by evidence, richest first', () => {
     const dir = fixtureDir();
     try {

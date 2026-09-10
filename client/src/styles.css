@@ -914,6 +914,47 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .rates-weekly{margin-top:4px;font-family:var(--mono);font-size:10.5px;color:var(--text3)}
 .rates-hint{margin-top:6px;max-width:60ch;font-size:11.5px;line-height:1.5;color:var(--text2)}
 
+/* The day strip: one cell per UTC day of the 17-day horizon, coloured by which
+   side of the model's baseline that day landed on. Two hues and a neutral
+   middle — polarity, not magnitude — stepped at the verdict's ±20% band and
+   twice it; every fill is a color-mix over a token, so the five themes hold.
+   Texture and border style carry the three "no colour" states exactly as the
+   profile grid does: hatched = measured but under the floor, bare = owned
+   nothing, dotted = predates recording. The cells are ~17px on a phone, so the
+   floating panel is the readout; the dashed rule is the current window's true
+   start, and it cuts through a cell because the window starts mid-day. */
+.rates-days{margin-top:8px;padding-top:6px;border-top:1px solid var(--border)}
+.rates-days-r{margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:400;
+  letter-spacing:0;text-transform:none;color:var(--text3)}
+.rates-daygrid{position:relative;display:grid;gap:2px;margin-top:6px}
+.rates-day{position:relative;aspect-ratio:1;min-width:0;border:1px solid var(--border);
+  border-radius:2px;background:transparent}
+.rates-day:hover{outline:2px solid var(--accent);outline-offset:0;z-index:2}
+.rates-day:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+.rates-day.pre-ledger{border-style:dotted}
+.rates-day.thin{background:repeating-linear-gradient(135deg,var(--border) 0 2px,transparent 2px 5px);
+  border-style:dashed}
+.rates-day.far-below{background:color-mix(in oklab,var(--red) 75%,var(--surface2))}
+.rates-day.below{background:color-mix(in oklab,var(--red) 40%,var(--surface2))}
+.rates-day.within{background:color-mix(in oklab,var(--text3) 30%,var(--surface2))}
+.rates-day.above{background:color-mix(in oklab,var(--cyan) 40%,var(--surface2))}
+.rates-day.far-above{background:color-mix(in oklab,var(--cyan) 75%,var(--surface2))}
+.rates-cut{position:absolute;top:-3px;bottom:-3px;width:0;border-left:1px dashed var(--amber);
+  pointer-events:none;z-index:3}
+.rates-cut span{position:absolute;top:100%;left:0;margin-top:2px;font-family:var(--mono);
+  font-size:9px;color:var(--amber);white-space:nowrap;transform:translateX(-50%)}
+.rates-dayaxis{display:flex;justify-content:space-between;gap:8px;margin-top:14px;
+  font-family:var(--mono);font-size:9.5px;color:var(--text3)}
+.rates-dayaxis-mid{color:var(--text2)}
+.rates-dayleg{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin-top:10px;
+  font-family:var(--mono);font-size:10px;color:var(--text3)}
+.rates-dayleg small{font-size:10px}
+.rates-dayleg-k{color:var(--text2)}
+/* A swatch and its word wrap as one unit, or the word lands on the next line alone. */
+.rates-dayleg-item{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.rates-daysw{display:flex;gap:2px}
+.rates-daysw .rates-day{display:block;width:14px;height:14px;aspect-ratio:auto}
+
 /* The fold line: models with nothing to show at all. Dashed, because it is a
    waiting state and not a card — three rows of dashes read as a fault. */
 .rates-wait{display:flex;align-items:baseline;gap:6px 14px;flex-wrap:wrap;margin-top:8px;
