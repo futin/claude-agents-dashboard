@@ -130,7 +130,12 @@ body{font-family:var(--font);font-variant-numeric:tabular-nums;background:var(--
    typeface. Pre-formatted blocks keep their whitespace, not their figure width. */
 code,kbd,samp,pre{font-family:inherit}
 .wrap{max-width:820px;margin:0}
-.wrap.wide{max-width:1280px}
+/* `.wide` is an app shell: at ≥1201px it is pinned to the viewport and its
+   panes scroll (see the management block). `.broad` is only the width — a
+   page that scrolls normally but needs the room for two columns (Settings).
+   Putting Settings on `.wide` pinned `.main` to the viewport and let the
+   cards run out of the board onto the white body. */
+.wrap.wide,.wrap.broad{max-width:1280px}
 
 /* rack selector — the section rail down the left edge. Sticky and full-height
    so its right rule runs the length of the board. The height is divided by

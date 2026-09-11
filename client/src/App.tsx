@@ -48,16 +48,18 @@ function AppShell() {
     setStored(s);
   };
 
-  // The three-pane management view, the analytics cards and the two-column
-  // settings pages need the room; sessions is single-column and reads better
-  // narrow.
-  const wide = section === 'management' || section === 'analytics' || section === 'settings';
+  // The three-pane management view and the analytics cards are app shells —
+  // `wide` pins them to the viewport and their panes scroll. Settings wants
+  // the same width for its two columns but scrolls as a page, so it gets
+  // `broad`: width only. Sessions is single-column and reads better narrow.
+  const wide = section === 'management' || section === 'analytics';
+  const wrap = wide ? 'wrap wide' : section === 'settings' ? 'wrap broad' : 'wrap';
 
   return (
     <div className="shell">
       <SideRail section={section} onChange={change} />
       <main className="main">
-        <div className={wide ? 'wrap wide' : 'wrap'}>
+        <div className={wrap}>
           {section === 'sessions' ? (
             <SessionsView />
           ) : section === 'management' ? (
