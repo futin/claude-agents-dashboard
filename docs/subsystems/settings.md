@@ -5,15 +5,25 @@ shell export for is editable here and takes effect on the next tick.
 
 ## Where each setting lives, and why
 
-There are two backends, and the page's group headings say which is which.
+There are two backends, and the section is two pages — **Local** and **Shared** — one per
+backend, so the page *is* the scope and no card mixes the two. Which page is showing is
+picked from the rail's tree under Settings on desktop and from a pill switch in the page
+band on the phone: the same swap Usage makes for Forecast / Token value, two `display`
+rules apart (`.rail-sub` / `.set-tabs`), both writing `settingsTab`. Each page is a band
+(title, a scope pill, one line) over sub-category cards: Local has Display, Live data,
+New sessions, Notify this browser, Connection and Reset; Shared has Push notifications,
+Remote answers and Usage forecast.
 
 **Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, landing tab
 (every section the rail offers, plus Last used — one list, `SECTIONS` in `client/src/lib/sections.ts`,
 from which both the picker's options and `clampSettings`'s accepted set are derived, so the two
 cannot drift apart), chat truncation, refresh rate, row count, lookback, active window, browser
 notifications, the launch panel's default model and default effort (`''` = send no flag and let
-the `claude` CLI choose; either way a launch can still override it), and which Usage sub-tab
-opens (`forecast` | `rates`). A phone propped on the desk
+the `claude` CLI choose; either way a launch can still override it), which Usage sub-tab
+opens (`forecast` | `rates`), and which Settings page is showing (`settingsTab`: `local` |
+`shared`). The answer token is per browser too (`dashboard.answerToken`, its own key), which
+is why it sits under **Local › Connection** and not beside the remote-answer switch it
+unlocks — a Shared page carrying it would break the promise the two pages make. A phone propped on the desk
 wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and
 three seconds. Sharing these would make one device wrong.
 
@@ -146,7 +156,7 @@ one-line option that scales the whole board. Verified against the fixed-position
 
 ## Notify this browser
 
-**Notify this browser · this device** — `notifyBrowser`, one flat boolean in
+**Local › Notify this browser** — `notifyBrowser`, one flat boolean in
 `localStorage['dashboard.settings']`, default **false**. Per device because that is what it
 actually is: notification permission is granted per browser, the AudioContext belongs to this
 tab, and only a tab open on Sessions can see the poll it rides.
@@ -177,8 +187,8 @@ wider than this switch: it counts every surface, and it is not gated on it.
 
 ## Push notifications
 
-**Push notifications · every device** — the heading says the storage: server-backed and
-shared by every browser pointed at this dashboard, unlike the per-device groups above.
+**Shared › Push notifications** — the page says the storage: server-backed and shared by
+every browser pointed at this dashboard, unlike everything on the Local page.
 
 This is the app's **only** way of telling you something needs you with no browser open at
 all. An in-browser layer (`Notification` banner + beep + tab-title count, fed by a poll diff

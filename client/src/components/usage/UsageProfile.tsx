@@ -349,7 +349,7 @@ export function UsageProfile() {
       <div className="up-head">
         <div>
           <h3>
-            LEARNED HOURS{' '}
+            Learned hours{' '}
             <InfoDot
               label="hour of the week"
               text={profileTip('cell', globalMean)}

@@ -48,9 +48,10 @@ function AppShell() {
     setStored(s);
   };
 
-  // The three-pane management view and the analytics cards need the room;
-  // sessions and settings are single-column and read better narrow.
-  const wide = section === 'management' || section === 'analytics';
+  // The three-pane management view, the analytics cards and the two-column
+  // settings pages need the room; sessions is single-column and reads better
+  // narrow.
+  const wide = section === 'management' || section === 'analytics' || section === 'settings';
 
   return (
     <div className="shell">

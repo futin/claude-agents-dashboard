@@ -1,34 +1,80 @@
 import type { ReactNode } from 'react';
 
-/** One labelled setting: name + explanation on the left, the control on the right. */
+import type { SettingsScope } from '../../lib/settings';
+
+/**
+ * One labelled setting: name + explanation on the left, the control on the
+ * right. `below` is for a control too wide for the right-hand slot — the theme
+ * swatches — which then spans the row under the label instead.
+ */
 export function SettingsRow({
-  name, hint, children
-}: { name: string; hint?: ReactNode; children: ReactNode }) {
+  name, hint, below, children
+}: { name: string; hint?: ReactNode; below?: ReactNode; children?: ReactNode }) {
   return (
     <div className="set-row">
       <div className="set-label">
         <span className="set-name">{name}</span>
         {hint && <span className="set-hint">{hint}</span>}
+        {below}
       </div>
-      <div className="set-control">{children}</div>
+      {children && <div className="set-control">{children}</div>}
     </div>
   );
 }
 
-/** A group of rows under a section heading. */
-export function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * A sub-category of settings as one card: title + one-line subtitle, then the
+ * rows. The card is the reference design's pattern (DESIGN.md §7, "title +
+ * subtitle pair"), so `sub` is required — a card with a bare title reads as
+ * unfinished there.
+ */
+export function SettingsGroup({ title, sub, children }: { title: string; sub: string; children: ReactNode }) {
   return (
     <section className="set-group">
-      <div className="mdetail-label">{title}</div>
-      {children}
+      <div className="set-group-title">{title}</div>
+      <div className="set-group-sub">{sub}</div>
+      <div className="set-rows">{children}</div>
     </section>
   );
 }
 
 /**
- * Segmented picker. Used instead of a `<select>` wherever there are three or
+ * The page header of a Settings page — on the app ground, not in a card: the
+ * scope as the title, a pill saying what that scope means in storage terms,
+ * one line under. `tabs` is the phone's copy of the rail's tree (see
+ * `.set-tabs` in styles.css), mounted always and shown only there.
+ */
+export function SettingsBand({
+  scope, title, sub, tabs
+}: { scope: SettingsScope; title: string; sub: string; tabs?: ReactNode }) {
+  return (
+    <div className="set-band">
+      <div>
+        <div className="set-band-title">
+          {title}
+          <ScopePill scope={scope} />
+        </div>
+        <div className="set-band-sub">{sub}</div>
+      </div>
+      {tabs && <div className="set-tabs">{tabs}</div>}
+    </div>
+  );
+}
+
+/** Where a scope's settings live, in the user's terms — the one word the two pages differ by. */
+function ScopePill({ scope }: { scope: SettingsScope }) {
+  return (
+    <span className={scope === 'shared' ? 'set-scope shared' : 'set-scope'}>
+      <i aria-hidden="true" />
+      {scope === 'shared' ? 'every device' : 'this browser'}
+    </span>
+  );
+}
+
+/**
+ * Segmented picker. Used instead of a `<select>` wherever there are two to
  * four options and seeing them all at once is worth the width — density, text
- * scale, on/off.
+ * scale, on/off — and, on the phone, as the sub-view switch of a section.
  */
 export function Segmented<T extends string | number>({
   value, options, onChange, disabled

@@ -59,6 +59,19 @@ export function run(): number {
     assert.strictEqual(clampSettings({ usageTab: 7 }).usageTab, 'forecast');
   })) p++; else f++;
 
+  // The Settings section is two pages, Local and Shared, picked the same way
+  // the Usage sub-views are — so the field mirrors `usageTab` in every respect.
+  if (test('the Settings scope defaults to local and rejects anything else', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.settingsTab, 'local');
+    assert.strictEqual(clampSettings({ settingsTab: 'shared' }).settingsTab, 'shared');
+    assert.strictEqual(clampSettings({ settingsTab: 'nonsense' }).settingsTab, 'local');
+    assert.strictEqual(clampSettings({ settingsTab: 7 }).settingsTab, 'local');
+  })) p++; else f++;
+
+  if (test('one bad sibling cannot discard the Settings scope', () => {
+    assert.strictEqual(clampSettings({ settingsTab: 'shared', theme: 'chartreuse' }).settingsTab, 'shared');
+  })) p++; else f++;
+
   // task-12: `landing` had zero coverage while the picker and the validator
   // each carried their own hand-written list — they disagreed in both
   // directions ('usage' in neither, 'settings' validating but unpickable).

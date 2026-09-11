@@ -65,7 +65,7 @@ override it (see `dashboard.section` below).
   [launch panel](spawn.md) (`SessionsView.tsx` `spawnOpen` — a one-shot form, not a view
   setting) stay ephemeral — session IDs churn, so restored expansions and drawers would
   mostly be stale.
-- **Clearing them all** — Settings → Reset this device removes every key listed above
+- **Clearing them all** — Settings → Local › Reset this browser removes every key listed above
   (`OWNED_KEYS` in `hooks/useSettings.tsx`) and restores the defaults. It touches nothing on the
   server and nothing in `~/.claude`. Add a key here and it belongs in that list too.
 

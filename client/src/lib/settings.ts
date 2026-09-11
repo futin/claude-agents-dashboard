@@ -26,13 +26,19 @@ export const THEMES = [
   { id: 'graphite', label: 'Graphite', hint: 'neutral dark, no blue cast' },
   { id: 'amber', label: 'Amber CRT', hint: 'black glass and amber phosphor' },
   { id: 'nightshift', label: 'Nightshift', hint: 'deep green radar scope' },
-  { id: 'daylight', label: 'Daylight Strip', hint: 'light manila paper, dark ink' }
+  { id: 'daylight', label: 'Daylight', hint: 'the reference light board — warm grey, white cards, green ramp' }
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]['id'];
 export type Density = 'comfortable' | 'compact';
 /** Which sub-view the Usage section opens on. */
 export type UsageTab = 'forecast' | 'rates';
+/**
+ * Which page the Settings section shows: `local` is this browser's storage,
+ * `shared` is the server's file. The scope of the *settings on the page*, not
+ * of this field — which is per device like every other key here.
+ */
+export type SettingsScope = 'local' | 'shared';
 /** Which section opens on load. `last` restores whatever you were on. */
 export type Landing = Section | 'last';
 
@@ -69,6 +75,8 @@ export interface Settings {
    * phone on the desk watches the forecast, the laptop checks token value.
    */
   usageTab: UsageTab;
+  /** Which Settings page is showing. Mirrors `usageTab` in every respect. */
+  settingsTab: SettingsScope;
 }
 
 export type SpawnDefaultModel = '' | (typeof MODELS)[number];
@@ -87,7 +95,8 @@ export const DEFAULT_SETTINGS: Settings = {
   spawnDefaultModel: '',
   spawnDefaultEffort: '',
   notifyBrowser: false,
-  usageTab: 'forecast'
+  usageTab: 'forecast',
+  settingsTab: 'local'
 };
 
 /**
@@ -136,6 +145,7 @@ const LANDINGS: Landing[] = LANDING_OPTIONS.map(o => o.value);
 const SPAWN_MODELS: SpawnDefaultModel[] = ['', ...MODELS];
 const SPAWN_EFFORTS: SpawnDefaultEffort[] = ['', ...EFFORTS];
 const USAGE_TABS: UsageTab[] = ['forecast', 'rates'];
+const SETTINGS_SCOPES: SettingsScope[] = ['local', 'shared'];
 
 /**
  * Coerce anything (a stored blob from an older release, a hand-edited
@@ -157,7 +167,8 @@ export function clampSettings(raw: unknown): Settings {
     spawnDefaultModel: pickOne(s.spawnDefaultModel, SPAWN_MODELS, DEFAULT_SETTINGS.spawnDefaultModel),
     spawnDefaultEffort: pickOne(s.spawnDefaultEffort, SPAWN_EFFORTS, DEFAULT_SETTINGS.spawnDefaultEffort),
     notifyBrowser: pickBool(s.notifyBrowser, DEFAULT_SETTINGS.notifyBrowser),
-    usageTab: pickOne(s.usageTab, USAGE_TABS, DEFAULT_SETTINGS.usageTab)
+    usageTab: pickOne(s.usageTab, USAGE_TABS, DEFAULT_SETTINGS.usageTab),
+    settingsTab: pickOne(s.settingsTab, SETTINGS_SCOPES, DEFAULT_SETTINGS.settingsTab)
   };
 }
 

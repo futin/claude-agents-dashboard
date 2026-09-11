@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Claude Dashboard</title>
+<!-- The UI face. Hanken Grotesk is the free stand-in for the geometric grotesque
+     the reference design is drawn in (.claude/DESIGN.md §1); every weight the
+     sheet uses is requested here and nothing else is. `display=swap` so a slow
+     or blocked font never holds the first paint — the stack in --font falls
+     back to the platform sans, which is what an offline tailnet load gets. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b1210'/%3E%3Ctext x='16' y='22.5' font-family='Menlo,monospace' font-size='16' font-weight='700' fill='%2355d0dd' text-anchor='middle'%3E%3E_%3C/text%3E%3C/svg%3E">
 <script>
 // Stamp the saved theme before first paint. Without this every load renders in

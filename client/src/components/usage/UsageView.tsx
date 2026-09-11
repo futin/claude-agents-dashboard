@@ -13,7 +13,7 @@ import { UsageRates } from './UsageRates';
  * share no data, no endpoint and no cadence — Analytics re-reads transcripts,
  * this reads a profile that moves once a week.
  *
- * **Sub-tabs rather than a stack.** `UsageProfile` is a full week of hour cells
+ * **Sub-views rather than a stack.** `UsageProfile` is a full week of hour cells
  * and runs to about a screen on its own, so putting the rates card under it
  * would bury the shorter, denser view behind a scroll. Only the active sub-view
  * mounts, which also means each one's single-fetch-per-mount hook fires exactly
@@ -22,6 +22,15 @@ import { UsageRates } from './UsageRates';
  * The choice persists per device through the same localStorage settings the
  * rest of the app uses: the phone on the desk tends to sit on one of these and
  * the laptop on the other.
+ *
+ * **The switch is the phone's copy of the rail's tree.** These are two views of
+ * the section, which makes them navigation, so on a desktop rail they are the
+ * tree under Usage (`SideRail`) and this switch is hidden. Below 700px the rail
+ * lies down into a horizontal strip that cannot draw a tree, so the tree goes
+ * away and this comes back. The swap is two `display` rules in `styles.css`
+ * (`.usage-tabs` / `.rail-sub`), not a media query in JS: both controls are
+ * always mounted and always write the same setting, so neither can end up
+ * being the one that silently disappeared.
  *
  * Default export → its own lazy chunk, like every section but Sessions.
  */
@@ -45,6 +54,7 @@ export default function UsageView() {
       <div className="an-bar">
         <div className="an-title">Usage</div>
         <span className="an-hint">{HINTS[tab]}</span>
+        {/* Phone only — see the note above; the rail's tree is the desktop half. */}
         <div className="usage-tabs">
           <Segmented value={tab} options={TABS} onChange={(v) => update({ usageTab: v })} />
         </div>

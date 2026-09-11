@@ -202,7 +202,7 @@ export function UsageRates() {
       <div className="up-tip" ref={tipRef} role="tooltip" aria-hidden="true" />
       <div className="up-head">
         <div>
-          <h3>TOKEN VALUE PER MODEL</h3>
+          <h3>Token value per model</h3>
           <p className="up-sub">
             How many tokens each model gets out of 1% of your 5-hour limit, and whether
             that price has moved. Measured on this machine only.
