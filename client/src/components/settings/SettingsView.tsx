@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { NumberField, Segmented, SettingsBand, SettingsGroup, SettingsRow } from './SettingsRow';
+import { NumberField, Segmented, Select, SettingsBand, SettingsGroup, SettingsRow } from './SettingsRow';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import { useRemoteAnswer } from '../../hooks/useRemoteAnswer';
 import { useServerSettings } from '../../hooks/useServerSettings';
@@ -464,9 +464,9 @@ export default function SettingsView() {
             </SettingsRow>
 
             <SettingsRow name="Opens on" hint="Which section this browser lands on when you load the page.">
-              <select value={settings.landing} onChange={e => update({ landing: e.target.value as Landing })}>
+              <Select value={settings.landing} onChange={e => update({ landing: e.target.value as Landing })}>
                 {LANDING_OPTIONS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
-              </select>
+              </Select>
             </SettingsRow>
 
             <SettingsRow
@@ -486,26 +486,26 @@ export default function SettingsView() {
               name="Default model"
               hint="Preselected in the launch panel's model picker. “CLI default” sends no --model flag, letting Claude Code pick. You can still override it per launch."
             >
-              <select
+              <Select
                 value={settings.spawnDefaultModel}
                 onChange={e => update({ spawnDefaultModel: e.target.value as SpawnDefaultModel })}
               >
                 <option value="">CLI default</option>
                 {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+              </Select>
             </SettingsRow>
 
             <SettingsRow
               name="Default effort"
               hint="Preselected in the launch panel's effort picker. “CLI default” sends no --effort flag."
             >
-              <select
+              <Select
                 value={settings.spawnDefaultEffort}
                 onChange={e => update({ spawnDefaultEffort: e.target.value as SpawnDefaultEffort })}
               >
                 <option value="">CLI default</option>
                 {EFFORTS.map(f => <option key={f} value={f}>{f}</option>)}
-              </select>
+              </Select>
             </SettingsRow>
           </SettingsGroup>
 
@@ -534,14 +534,14 @@ export default function SettingsView() {
               name="Refresh rate"
               hint="How often the sessions list, subagent detail and open chat re-read the transcripts. Faster costs more disk reads, not tokens."
             >
-              <select
+              <Select
                 value={settings.refreshMs}
                 onChange={e => update({ refreshMs: Number(e.target.value) })}
               >
                 {REFRESH_CHOICES.map(ms => (
                   <option key={ms} value={ms}>every {formatInterval(ms)}</option>
                 ))}
-              </select>
+              </Select>
             </SettingsRow>
 
             <SettingsRow

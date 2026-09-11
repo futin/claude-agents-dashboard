@@ -837,11 +837,22 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 /* One 36px control family — select · number · text · plain button. Direct
    children only: the segmented switch's own buttons are styled below. */
 .set-control select,.set-control input[type=number],.set-control input[type=text],.set-control>button{height:36px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;padding:0 12px}
-.set-control select{min-width:150px}
 .set-control select:focus,.set-control input:focus{outline:none;border-color:var(--cyan)}
-.set-control input[type=number]{width:96px;font-weight:600}
 .set-control input[type=text]{width:220px;font-weight:400}
 .set-control input::placeholder{color:var(--ink3)}
+/* Select: the native control indents its text and parks the arrow in its own
+   gutter, so both offsets are taken over — `appearance:none`, 12px of text
+   inset, and a chevron the wrapper draws from ink (no SVG, no literal). */
+.set-select{position:relative;display:inline-flex;min-width:150px}
+.set-control .set-select select{appearance:none;-webkit-appearance:none;width:100%;padding:0 34px 0 12px;cursor:pointer}
+.set-select::after{content:"";position:absolute;right:15px;top:50%;width:6px;height:6px;border-right:1.5px solid var(--ink2);border-bottom:1.5px solid var(--ink2);transform:translateY(-70%) rotate(45deg);pointer-events:none}
+/* Number: the unit lives inside the box, so the box is the wrapper and the
+   input inside it is bare. No spinner — the unit sits where it would go. */
+.set-field{display:inline-flex;align-items:center;gap:8px;height:36px;width:120px;padding:0 12px;background:var(--strip);border:1px solid var(--hairline2);border-radius:12px}
+.set-field:focus-within{border-color:var(--cyan)}
+.set-control .set-field input[type=number]{flex:1;min-width:0;width:auto;height:auto;padding:0;border:0;border-radius:0;background:none;font-weight:600;-moz-appearance:textfield;appearance:textfield}
+.set-field input::-webkit-outer-spin-button,.set-field input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.set-field .set-unit{margin-left:auto}
 .set-control>button{cursor:pointer;transition:color .15s,background .15s,border-color .15s}
 .set-control>button:hover:not(:disabled){border-color:var(--ink3)}
 .set-control>button:disabled{cursor:default;opacity:.4}
@@ -883,7 +894,8 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
   .set-group{padding:20px}
   .set-row{align-items:flex-start;flex-direction:column;gap:10px}
   .set-control{width:100%;flex-wrap:wrap}
-  .set-control select,.set-control input[type=number],.set-control input[type=text]{flex:1;min-height:40px}
+  .set-control input[type=text],.set-select,.set-field{flex:1;width:auto}
+  .set-control input[type=text],.set-control .set-select select,.set-field{min-height:40px}
   .set-seg{display:flex;width:100%}.set-seg button{flex:1;min-height:34px}
   .set-themes{grid-template-columns:repeat(2,1fr)}
 }

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, SelectHTMLAttributes } from 'react';
 
 import type { SettingsScope } from '../../lib/settings';
 
@@ -102,12 +102,30 @@ export function Segmented<T extends string | number>({
   );
 }
 
-/** A bounded integer input. Commits on blur so half-typed numbers never clamp mid-keystroke. */
+/**
+ * A `<select>` in the board's control family. The wrapper exists for the
+ * chevron: a native select cannot carry a pseudo-element, and a background
+ * SVG would need a literal colour, which the theme system forbids — so the
+ * span's `::after` draws it from `--ink2` and the select goes `appearance:none`.
+ */
+export function Select({ children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <span className="set-select">
+      <select {...props}>{children}</select>
+    </span>
+  );
+}
+
+/**
+ * A bounded integer input. Commits on blur so half-typed numbers never clamp
+ * mid-keystroke. The unit sits inside the box, so the box is the wrapper and
+ * the input inside it is borderless.
+ */
 export function NumberField({
   value, min, max, unit, onCommit
 }: { value: number; min: number; max: number; unit?: string; onCommit: (v: number) => void }) {
   return (
-    <>
+    <span className="set-field">
       <input
         type="number"
         defaultValue={value}
@@ -118,6 +136,6 @@ export function NumberField({
         onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
       />
       {unit && <span className="set-unit">{unit}</span>}
-    </>
+    </span>
   );
 }
