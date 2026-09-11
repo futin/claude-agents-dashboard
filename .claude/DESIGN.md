@@ -220,7 +220,7 @@ token rather than a literal.
 ### 8.2 Settings — the first reference-design cards on the board
 
 Settings is the first section drawn in §5's card language rather than the strip
-chrome: white `--strip` cards, 16 px radius, one `--hairline`, **no shadow**, 24 px
+chrome: white `--strip` cards, 16 px radius, **no stroke and no shadow** — contrast against the ground does the separating — 24 px
 padding, each carrying §7's title + one-line subtitle pair. Rows inside are boxless —
 16 px of vertical padding and a hairline rule between, never a bordered strip — and
 every control is one 36 px family (select / number / text / button: 12 px radius,
