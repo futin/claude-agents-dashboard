@@ -5,6 +5,7 @@ import { SessionsView } from './components/SessionsView';
 import { deepLinkSession } from './lib/deepLink';
 import { isSection, type Section } from './lib/sections';
 import { usePersistedState } from './hooks/usePersistedState';
+import { ManagementScopeProvider } from './hooks/useManagementScope';
 import { SettingsProvider, useSettings } from './hooks/useSettings';
 
 // Lazy: these chunks load only when their section is opened, so the sessions
@@ -48,39 +49,51 @@ function AppShell() {
     setStored(s);
   };
 
-  // The three-pane management view and the analytics cards are app shells —
-  // `wide` pins them to the viewport and their panes scroll. Settings wants
-  // the same width for its two columns but scrolls as a page, so it gets
-  // `broad`: width only. Sessions is single-column and reads better narrow.
-  const wide = section === 'management' || section === 'analytics';
-  const wrap = wide ? 'wrap wide' : section === 'settings' ? 'wrap broad' : 'wrap';
+  // The analytics cards are an app shell — `wide` pins them to the viewport and
+  // the tab scrolls. Settings, Sessions and Usage want the same width for their
+  // columns but scroll as a page, so they get `broad`: width only. Usage on the
+  // plain 820px `.wrap` read as a different app from Sessions sitting next to it
+  // in the rail. `wide-mgmt` is that same width and opts Management *out* of the
+  // pinning: its three columns size to their content and the page body is the
+  // single scroller, so a long file is read by scrolling the page.
+  const broad = section === 'settings' || section === 'sessions' || section === 'usage';
+  const wrap = section === 'management' ? 'wrap wide wide-mgmt'
+    : section === 'analytics' ? 'wrap wide'
+    : broad ? 'wrap broad' : 'wrap';
 
+  // Management's scope is a rail destination now (DESIGN.md §8.5), so the rail
+  // and the page share one state and one `/api/management` fetch. `active` is
+  // unconditional because the phone menu draws every tree from the first paint,
+  // Management's among them: the scan happens once on load instead of on
+  // entering the section, and ↻ in the band is what re-runs it.
   return (
-    <div className="shell">
-      <SideRail section={section} onChange={change} />
-      <main className="main">
-        <div className={wrap}>
-          {section === 'sessions' ? (
-            <SessionsView />
-          ) : section === 'management' ? (
-            <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
-              <ManagementView />
-            </Suspense>
-          ) : section === 'analytics' ? (
-            <Suspense fallback={<div className="an-empty">loading…</div>}>
-              <AnalyticsView />
-            </Suspense>
-          ) : section === 'usage' ? (
-            <Suspense fallback={<div className="an-empty">loading…</div>}>
-              <UsageView />
-            </Suspense>
-          ) : (
-            <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
-              <SettingsView />
-            </Suspense>
-          )}
-        </div>
-      </main>
-    </div>
+    <ManagementScopeProvider active>
+      <div className="shell">
+        <SideRail section={section} onChange={change} />
+        <main className="main">
+          <div className={wrap}>
+            {section === 'sessions' ? (
+              <SessionsView />
+            ) : section === 'management' ? (
+              <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
+                <ManagementView />
+              </Suspense>
+            ) : section === 'analytics' ? (
+              <Suspense fallback={<div className="an-empty">loading…</div>}>
+                <AnalyticsView />
+              </Suspense>
+            ) : section === 'usage' ? (
+              <Suspense fallback={<div className="an-empty">loading…</div>}>
+                <UsageView />
+              </Suspense>
+            ) : (
+              <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
+                <SettingsView />
+              </Suspense>
+            )}
+          </div>
+        </main>
+      </div>
+    </ManagementScopeProvider>
   );
 }

@@ -10,8 +10,9 @@ import {
   webNotifyPermission, webNotifySupported
 } from '../../hooks/useWebNotify';
 import {
-  FONT_SCALES, LANDING_OPTIONS, LIMITS, REFRESH_CHOICES, THEMES,
-  formatInterval, type Landing, type SettingsScope, type SpawnDefaultEffort, type SpawnDefaultModel, type ThemeId
+  FONT_SCALES, LANDING_OPTIONS, LAYOUT_OPTIONS, LIMITS, REFRESH_CHOICES, THEMES,
+  formatInterval, type ContentWidth, type DefaultLayout, type Landing,
+  type SpawnDefaultEffort, type SpawnDefaultModel, type ThemeId
 } from '../../lib/settings';
 import { EFFORTS, MODELS } from '../../lib/spawnOptions';
 
@@ -39,10 +40,10 @@ const NOTIFY_EVENT_ROWS = [
 
 const ON_OFF = [{ value: 'off' as const, label: 'Off' }, { value: 'on' as const, label: 'On' }];
 
-/** The two pages, in rail order — the phone's pill switch draws the same list. */
-const SCOPES: { value: SettingsScope; label: string }[] = [
-  { value: 'local', label: 'Local' },
-  { value: 'shared', label: 'Shared' }
+/** Two options, so a segmented pair rather than a select — both fit on the row. */
+const WIDTHS: { value: ContentWidth; label: string }[] = [
+  { value: 'fixed', label: 'Fixed' },
+  { value: 'full', label: 'Fullscreen' }
 ];
 
 /**
@@ -147,16 +148,14 @@ export default function SettingsView() {
     }
   }
 
-  const tabs = <Segmented value={scope} options={SCOPES} onChange={settingsTab => update({ settingsTab })} />;
 
   if (scope === 'shared') {
     return (
       <div className="set">
         <SettingsBand
           scope="shared"
-          title="Shared"
+          title="Settings · Shared"
           sub="Stored by the dashboard server. One change here shows up on every device, and steers the hooks that run outside any browser."
-          tabs={tabs}
         />
 
         {/* Hand-balanced: the nine push rows on their own, the two shorter
@@ -415,9 +414,8 @@ export default function SettingsView() {
     <div className="set">
       <SettingsBand
         scope="local"
-        title="Local"
+        title="Settings · Local"
         sub="Kept in this browser's storage and never sent anywhere. A phone on the desk and the laptop each keep their own — set these again on the next device."
-        tabs={tabs}
       />
 
       <div className="set-cols">
@@ -463,9 +461,32 @@ export default function SettingsView() {
               />
             </SettingsRow>
 
+            <SettingsRow
+              name="Content width"
+              hint="Fixed keeps the drawn measure — 820px, or 1280px where a section has two columns. Fullscreen drops the cap and lets every section span the window."
+            >
+              <Segmented
+                value={settings.contentWidth}
+                options={WIDTHS}
+                onChange={contentWidth => update({ contentWidth })}
+              />
+            </SettingsRow>
+
             <SettingsRow name="Opens on" hint="Which section this browser lands on when you load the page.">
               <Select value={settings.landing} onChange={e => update({ landing: e.target.value as Landing })}>
                 {LANDING_OPTIONS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </Select>
+            </SettingsRow>
+
+            <SettingsRow
+              name="Default session view"
+              hint="Which of the five shapes the Sessions list opens in. Last used reopens whatever the toolbar's switcher was left on; pick a shape instead and every load comes back to it, however you switched around in between."
+            >
+              <Select
+                value={settings.defaultLayout}
+                onChange={e => update({ defaultLayout: e.target.value as DefaultLayout })}
+              >
+                {LAYOUT_OPTIONS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
               </Select>
             </SettingsRow>
 

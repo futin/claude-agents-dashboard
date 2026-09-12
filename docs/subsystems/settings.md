@@ -7,14 +7,16 @@ shell export for is editable here and takes effect on the next tick.
 
 There are two backends, and the section is two pages — **Local** and **Shared** — one per
 backend, so the page *is* the scope and no card mixes the two. Which page is showing is
-picked from the rail's tree under Settings on desktop and from a pill switch in the page
-band on the phone: the same swap Usage makes for Forecast / Token value, two `display`
-rules apart (`.rail-sub` / `.set-tabs`), both writing `settingsTab`. Each page is a band
+picked from the tree under Settings in the nav — the rail on desktop, the menu on the
+phone, where every tree stands open (`.rail-sub`). The page band used to carry a
+phone-only pill switch of its own; it is gone, so `settingsTab` has exactly one control
+at any width, as Usage's Forecast / Token value does. Each page is a band
 (title, a scope pill, one line) over sub-category cards: Local has Display, Live data,
 New sessions, Notify this browser, Connection and Reset; Shared has Push notifications,
 Remote answers and Usage forecast.
 
-**Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, landing tab
+**Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, content
+width, the default session view, landing tab
 (every section the rail offers, plus Last used — one list, `SECTIONS` in `client/src/lib/sections.ts`,
 from which both the picker's options and `clampSettings`'s accepted set are derived, so the two
 cannot drift apart), chat truncation, refresh rate, row count, lookback, active window, browser
@@ -117,6 +119,45 @@ overlapping saves can't have the first response clear the second's indicator.
 
 Hooks installed by **symlink** (the documented install) pick the new script up automatically.
 A copied hook must be re-copied.
+
+## Content width and the default session view
+
+Two Display rows that change what the *board* does rather than what this page does.
+
+**Content width** (`contentWidth`, `fixed` | `full`, default `fixed`) is stamped as
+`data-width` on `<html>` next to `data-theme` and `data-density`, so it is one CSS block
+(`:root[data-width="full"] .wrap{max-width:none}`) and no component re-renders when it
+flips. `fixed` is the drawn measure — 820px, or the 1280px `.wide`/`.broad` sections get;
+`full` drops the cap and every section spans the window, keeping its own internal layout
+(the sessions aside stays 320px, the list column takes the rest). It rides the same
+pre-paint stamp in `client/index.html` as the theme, for the same reason: applied at mount
+instead, a fullscreen board would visibly snap out from the fixed measure on every load.
+
+**Default session view** (`defaultLayout`, `last` or one of the five `LAYOUTS`, default
+**`last`**) is the shape the sessions list *opens* in. The shape used to be a field of the
+persisted `View`, which meant one click in the toolbar's switcher was the shape every
+future load opened in; it is a setting now, and the switcher's own choice is remembered
+under its own key (`dashboard.layout`) which only the `last` sentinel reads back. It is the
+exact pair **Opens on** makes with `dashboard.section` two rows above, down to the default:
+two sibling rows that behaved differently would read as a bug.
+
+`resolveLayout(defaultLayout, stored)` in `client/src/lib/settings.ts` is the whole rule,
+pure and unit-tested: a concrete shape wins outright, `last` replays the stored shape, and
+`last` with nothing (or junk) stored lands on `DEFAULT_LAYOUT` — the same fail-open
+`isSection` gives `landing`. `SessionsView` calls it in the `useState` initializer, so
+there is no flash of the wrong shape.
+
+⚠️ **The switcher writes `dashboard.layout` even while a concrete shape is pinned.** That
+is the point, not an oversight: switching the setting back to `Last used` then resumes from
+the shape you were actually using rather than from a value frozen when you pinned one.
+
+⚠️ **`LAYOUTS` is the switcher's button list, and `last` is not in it.** The picker's
+options are a *separate derived list* — `LAYOUT_OPTIONS` = `last` prepended to `LAYOUTS`,
+the same shape `LANDING_OPTIONS` has — and `clampSettings`'s accepted set derives from
+*that*. So the picker and the validator still cannot drift from the switcher, and the
+toolbar stays five buttons. Adding `'last'` to `LAYOUTS` would ship a sixth button that
+draws nothing; a test asserts both lists literally. See
+[view-persistence](view-persistence.md).
 
 ## Themes
 
@@ -251,6 +292,7 @@ a value the rows never reflect.
 <!-- docs-sync:
   sources:
     - client/src/lib/settings.ts
+    - client/src/lib/filterSort.ts
     - client/src/hooks/useSettings.tsx
     - client/src/hooks/useServerSettings.ts
     - client/src/components/settings/

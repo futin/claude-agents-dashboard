@@ -1,11 +1,30 @@
 import assert from 'node:assert';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
-  DEFAULT_SETTINGS, LANDING_OPTIONS, LIMITS, THEMES,
-  chatQuery, clampSettings, formatInterval, scanQuery
+  DEFAULT_SETTINGS, LANDING_OPTIONS, LAYOUT_OPTIONS, LIMITS, THEMES,
+  chatQuery, clampSettings, formatInterval, resolveLayout, scanQuery
 } from '../client/src/lib/settings.js';
+import { DEFAULT_LAYOUT, LAYOUTS } from '../client/src/lib/filterSort.js';
 import { SECTIONS, isSection } from '../client/src/lib/sections.js';
 import { DEFAULTS } from '../server/lib/config.js';
+import { OWNED_KEYS } from '../client/src/hooks/useSettings.js';
+
+const CLIENT_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'client', 'src');
+
+/** Every `usePersistedState` key the client actually writes, read off the source. */
+function persistedKeys(dir: string, found = new Set<string>()): Set<string> {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, e.name);
+    if (e.isDirectory()) { persistedKeys(path, found); continue; }
+    if (!/\.tsx?$/.test(e.name)) continue;
+    const src = readFileSync(path, 'utf8');
+    for (const m of src.matchAll(/usePersistedState\s*(?:<[^>]*>)?\s*\(\s*'([^']+)'/g)) found.add(m[1]);
+  }
+  return found;
+}
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -66,6 +85,92 @@ export function run(): number {
     assert.strictEqual(clampSettings({ settingsTab: 'shared' }).settingsTab, 'shared');
     assert.strictEqual(clampSettings({ settingsTab: 'nonsense' }).settingsTab, 'local');
     assert.strictEqual(clampSettings({ settingsTab: 7 }).settingsTab, 'local');
+  })) p++; else f++;
+
+  // The shape the sessions list opens in. It used to live in the persisted
+  // `dashboard.view`, which made the toolbar's choice sticky forever; it is a
+  // setting now, with a `last` sentinel that opts back into the switcher's own
+  // remembered shape — the same pair `landing` / `dashboard.section` make.
+  if (test('the default session view defaults to last used, like Opens on', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.defaultLayout, 'last', 'sibling of `landing`, same default');
+    assert.strictEqual(clampSettings({ defaultLayout: 'last' }).defaultLayout, 'last');
+    assert.strictEqual(clampSettings({}).defaultLayout, 'last');
+  })) p++; else f++;
+
+  if (test('the default session view rejects anything the switcher cannot draw', () => {
+    assert.strictEqual(clampSettings({ defaultLayout: 'triage' }).defaultLayout, 'triage');
+    assert.strictEqual(clampSettings({ defaultLayout: 'rows' }).defaultLayout, 'last', 'a shape no build draws');
+    assert.strictEqual(clampSettings({ defaultLayout: 3 }).defaultLayout, 'last');
+    assert.strictEqual(clampSettings({ defaultLayout: 42 }).defaultLayout, 'last');
+    assert.strictEqual(clampSettings({ defaultLayout: null }).defaultLayout, 'last');
+    assert.strictEqual(clampSettings({ defaultLayout: { key: 'board' } }).defaultLayout, 'last');
+    assert.strictEqual(clampSettings({ defaultLayout: '' }).defaultLayout, 'last');
+  })) p++; else f++;
+
+  if (test('one bad sibling cannot discard the default session view', () => {
+    const s = clampSettings({ defaultLayout: 'tiles', theme: 'chartreuse', landing: 42 });
+    assert.strictEqual(s.defaultLayout, 'tiles');
+    assert.strictEqual(s.theme, DEFAULT_SETTINGS.theme);
+    assert.strictEqual(clampSettings({ defaultLayout: 'rows', maxSessions: 7 }).maxSessions, 7);
+  })) p++; else f++;
+
+  // No regression for a value stored by the current release, where the field
+  // could only ever be one of the five.
+  if (test('every shape the switcher offers is an accepted default', () => {
+    for (const l of LAYOUTS) {
+      assert.strictEqual(clampSettings({ defaultLayout: l.key }).defaultLayout, l.key, l.key);
+    }
+  })) p++; else f++;
+
+  // Spelled out literally, not derived from LAYOUTS — a test reading the same
+  // array as the code under test passes whatever either one says.
+  if (test('the view picker offers last used first, then the switcher\'s five', () => {
+    assert.deepStrictEqual(
+      LAYOUT_OPTIONS.map(o => o.value),
+      ['last', 'board', 'list', 'split', 'tiles', 'triage']
+    );
+    assert.strictEqual(LAYOUT_OPTIONS.length, 6);
+    assert.strictEqual(LAYOUT_OPTIONS[0].label, 'Last used');
+  })) p++; else f++;
+
+  // ⚠️ The regression this whole shape exists to prevent: `last` is a *setting*
+  // value, and LAYOUTS is the toolbar's button list. Growing it would ship a
+  // sixth switcher button that draws nothing.
+  if (test('LAYOUTS stays the five switcher buttons and never gains `last`', () => {
+    assert.deepStrictEqual(LAYOUTS.map(l => l.key), ['board', 'list', 'split', 'tiles', 'triage']);
+    assert.strictEqual(LAYOUTS.length, 5);
+    assert.ok(!LAYOUTS.some(l => (l.key as string) === 'last'), 'no sixth toolbar button');
+  })) p++; else f++;
+
+  // The pure resolver the board seeds its shape from.
+  if (test('resolveLayout: last used replays the stored shape', () => {
+    for (const l of LAYOUTS) {
+      assert.strictEqual(resolveLayout('last', l.key), l.key, l.key);
+    }
+  })) p++; else f++;
+
+  if (test('resolveLayout: a concrete default wins whatever is stored', () => {
+    assert.strictEqual(resolveLayout('tiles', 'triage'), 'tiles');
+    assert.strictEqual(resolveLayout('tiles', 'board'), 'tiles');
+    assert.strictEqual(resolveLayout('tiles', undefined), 'tiles');
+    assert.strictEqual(resolveLayout('tiles', 'nonsense'), 'tiles');
+  })) p++; else f++;
+
+  if (test('resolveLayout: last used with nothing stored lands on the board', () => {
+    assert.strictEqual(DEFAULT_LAYOUT, 'board');
+    assert.strictEqual(resolveLayout('last', undefined), 'board');
+    assert.strictEqual(resolveLayout('last', null), 'board');
+    assert.strictEqual(resolveLayout('last', 'rows'), 'board', 'a hand-edited key');
+    assert.strictEqual(resolveLayout('last', 'last'), 'board', 'the sentinel is never a shape');
+  })) p++; else f++;
+
+  // `fixed` is the drawn measure, so it has to be the default: `full` changes
+  // the width of every section at once.
+  if (test('content width defaults to fixed and rejects anything else', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.contentWidth, 'fixed');
+    assert.strictEqual(clampSettings({ contentWidth: 'full' }).contentWidth, 'full');
+    assert.strictEqual(clampSettings({ contentWidth: 'wide' }).contentWidth, 'fixed');
+    assert.strictEqual(clampSettings({ contentWidth: true }).contentWidth, 'fixed');
   })) p++; else f++;
 
   if (test('one bad sibling cannot discard the Settings scope', () => {
@@ -176,6 +281,21 @@ export function run(): number {
 
   if (test('one bad sibling cannot discard the browser-notify switch', () => {
     assert.strictEqual(clampSettings({ notifyBrowser: true, theme: 'chartreuse' }).notifyBrowser, true);
+  })) p++; else f++;
+
+  if (test('Reset clears every persisted view-state key the client writes', () => {
+    // Scanned off the source rather than listed here, so a key added in a new
+    // component fails this test instead of quietly surviving Reset — which is
+    // how `dashboard.layout` and then `management.type` each got missed.
+    const keys = persistedKeys(CLIENT_SRC);
+    assert.ok(keys.has('dashboard.layout') && keys.has('management.type'), 'the scan found the keys');
+    // The settings blob is reset by writing the defaults, not by removal; the
+    // answer token is a credential and Reset is not a sign-out.
+    const exempt = new Set(['dashboard.settings', 'dashboard.answerToken']);
+    const missed = [...keys].filter(k => !exempt.has(k) && !OWNED_KEYS.includes(k));
+    assert.deepStrictEqual(missed, [], 'keys Reset would leave behind');
+    const stale = OWNED_KEYS.filter(k => !keys.has(k));
+    assert.deepStrictEqual(stale, [], 'keys nothing writes any more');
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

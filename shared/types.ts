@@ -202,6 +202,27 @@ export interface UsageProfileResponse {
    * vanishes reads as a broken feature.
    */
   walkAbsent: null | 'recording-off' | 'no-rate' | 'no-window';
+  /**
+   * Where the weekly window stands right now, 0–100, or null when the account
+   * limits have not been read.
+   *
+   * Reported rather than left for the client to recover as
+   * `walk[0].cum - walk[0].gain`: that identity holds only while there *is* a
+   * walk, and the figure is the first thing the forecast page states — it has
+   * to survive every reason the walk is absent.
+   */
+  utilizationPct: number | null;
+  /** ISO 8601 end of the weekly window. Null under the same condition. */
+  resetsAt: string | null;
+  /**
+   * Share of the remaining window's hours the profile expects to be active,
+   * 0–1 — the walk's own `weightedMs / totalMs`. Null whenever there is no walk.
+   *
+   * The server already computes it to project with; recovering it in the client
+   * would mean re-deriving each slice's length from timestamp deltas, and the
+   * final slice is short by however much the reset is not on the hour.
+   */
+  dutyCycle: number | null;
 }
 
 /** What the drift comparison concluded for one model. */

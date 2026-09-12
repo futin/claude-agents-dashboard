@@ -72,12 +72,26 @@ function Message({ m }: { m: ChatMessage }) {
 }
 
 /**
- * Full-height drawer showing a session's chat history: the newest page on open,
+ * A centred modal showing a session's chat history: the newest page on open,
  * live-tailed every 3s, "load older" walking backwards through the transcript.
+ *
+ * Layout is the sidecar of `.claude/DESIGN.md` §8.6 — a 290px left column
+ * carrying the session's facts (context gauge, project, branch, model, surface,
+ * messages loaded, current tool), with the All / Text / You filter down in the
+ * foot beside the count it changes. The modal floats over the
+ * scrim with air on every side, so the scrim is a real exit at every width
+ * (below 700px it goes full-screen, where a 1080px modal with margins cannot
+ * fit and the scrim is gone again — back and ✕ are the exits there).
  *
  * Scroll behaviour: an append only auto-scrolls when the reader was already at
  * the bottom (so reading history isn't yanked away); a prepend restores the
  * previous position by the height the new page added.
+ *
+ * A pinned wait panel FLOATS over the transcript rather than pushing it: the
+ * body and `.chat-pinned` are siblings in `.chat-stack`, and the pinned layer
+ * is absolutely positioned against its bottom edge. The transcript's height is
+ * therefore identical with and without a panel — a question arriving mid-read
+ * never reflows the sentence being read.
  */
 export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   session: Session; onClose: () => void;
@@ -156,97 +170,145 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   return (
     <div className="chat-back" onClick={onClose}>
       <aside className="chat" onClick={e => e.stopPropagation()} role="dialog" aria-label="Session chat history">
+        {/* The head keeps the session's name, the project pill and the close
+            control. Everything else it used to carry — branch, model, surface,
+            the live context reading — moved into the sidecar below, where it
+            has room to be read rather than ellipsised. */}
         <div className="chat-head">
           <span className="chat-title">{session.sessionName || session.project}</span>
           {session.sessionName && <span className="proj-pill">{session.project}</span>}
-          {/* title: the pill ellipsises on a narrow drawer, so keep the full ref reachable */}
-          {session.gitBranch && <span className="branch" title={session.gitBranch}>{session.gitBranch}</span>}
-          <span className="chat-model">{session.model}</span>
-          {/* repeated from the row on purpose: a drawer opened straight from a
-              tapped push (`?session=<id>`) never showed the list, so this is
-              the first place the reader learns the session lives only here. */}
-          {surfaceInfo && (
-            <span className={`ag-pill surface ${session.surface}`} title={surfaceInfo.title}>{surfaceInfo.label}</span>
-          )}
           <span className="spacer" />
-          {/* live context, straight off the same 3s poll that feeds the row —
-              no extra read. A drawer opened from a tapped push never showed
-              the list, so this is the only place that reader sees how full the
-              session is. */}
-          <span className="tok" title={`${session.tokens.toLocaleString()} of ${session.contextWindow.toLocaleString()} context tokens`}>
-            {fmtTok(session.tokens)} / {session.contextWindowLabel}
-          </span>
-          <span className="pct" style={{ color: ctxWarn ? 'var(--orange)' : 'var(--text)' }}>{ctxPct}%</span>
           <button className="chat-x" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
-        <div className="chat-filter" role="group" aria-label="Message filter">
-          {CHAT_FILTERS.map(f => (
-            <button
-              key={f.key}
-              className={`cf-btn${mode === f.key ? ' on' : ''}`}
-              title={f.title}
-              aria-pressed={mode === f.key}
-              onClick={() => setFilter(f.key)}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="chat-body" ref={bodyRef} onScroll={onScroll}>
-          {hasMore && (
-            <button className="chat-older" onClick={onOlder} disabled={loadingOlder}>
-              {loadingOlder ? 'loading…' : 'load older'}
-            </button>
-          )}
-          {loading ? (
-            <div className="chat-empty">Loading chat…</div>
-          ) : error ? (
-            <div className="chat-empty">Couldn’t read this session’s transcript.</div>
-          ) : messages.length === 0 ? (
-            <div className="chat-empty">No messages in this transcript yet.</div>
-          ) : shown.length === 0 ? (
-            <div className="chat-empty">
-              Nothing matches this filter in the {messages.length} messages loaded
-              {hasMore ? ' — load older, or switch back to “all”.' : '.'}
+        <div className="chat-split">
+          <div className="chat-side">
+            {/* live context, straight off the same 3s poll that feeds the row —
+                no extra read. A drawer opened from a tapped push never showed
+                the list, so this is the only place that reader sees how full
+                the session is. Same 70% amber threshold the row uses. */}
+            <div className="kv">
+              <div className="k">Context</div>
+              <div className="v">
+                <span className={`metric${ctxWarn ? ' warn' : ''}`}>{ctxPct}%</span>
+                <span className="u">
+                  <span className="tok" title={`${session.tokens.toLocaleString()} of ${session.contextWindow.toLocaleString()} context tokens`}>
+                    {fmtTok(session.tokens)} / {session.contextWindowLabel}
+                  </span>
+                </span>
+              </div>
+              <div className="track">
+                <div className={`fill${ctxWarn ? ' warn' : ''}`} style={{ width: `${Math.min(ctxPct, 100)}%` }} />
+              </div>
             </div>
-          ) : (
-            shown.map(m => <Message key={m.uuid} m={m} />)
-          )}
-        </div>
 
-        {/* Terminal permission dialog — a sign, not a control (it can only be
-            answered there). Sits above the question panel; the two can't both
-            be live, since a permission prompt blocks the session. */}
-        {session.permissionWait && <PermissionBanner session={session} />}
+            <div className="chat-facts">
+              <div className="f"><span>Project</span><b title={session.projectPath || session.project}>{session.project}</b></div>
+              {/* the value ellipsises in a 290px column, so keep the full ref reachable */}
+              {session.gitBranch && (
+                <div className="f"><span>Branch</span><b title={session.gitBranch}>{session.gitBranch}</b></div>
+              )}
+              <div className="f"><span>Model</span><b>{session.model}</b></div>
+              {/* repeated from the row on purpose: a drawer opened straight from
+                  a tapped push (`?session=<id>`) never showed the list, so this
+                  is the first place the reader learns the session lives only
+                  here. */}
+              {surfaceInfo && (
+                <div className="f"><span>Surface</span><b title={surfaceInfo.title}>{surfaceInfo.label}</b></div>
+              )}
+              <div className="f"><span>Messages</span><b>{messages.length} loaded</b></div>
+              <div className="f">
+                <span>Now</span>
+                <b title={session.activity ? `${session.activity.tool}${session.activity.detail ? ' ' + session.activity.detail : ''}` : undefined}>
+                  {session.activity ? session.activity.tool : '—'}
+                </b>
+              </div>
+            </div>
+          </div>
 
-        {/* An action bar, not a message: the question itself already renders in
-            the transcript above. Pinned so it stays reachable while scrolling. */}
-        <QuestionPanel state={question} />
+          <div className="chat-col">
+            <div className="chat-stack">
+              <div className="chat-body" ref={bodyRef} onScroll={onScroll}>
+                {hasMore && (
+                  <button className="chat-older" onClick={onOlder} disabled={loadingOlder}>
+                    {loadingOlder ? 'loading…' : 'load older'}
+                  </button>
+                )}
+                {loading ? (
+                  <div className="chat-empty">Loading chat…</div>
+                ) : error ? (
+                  <div className="chat-empty">Couldn’t read this session’s transcript.</div>
+                ) : messages.length === 0 ? (
+                  <div className="chat-empty">No messages in this transcript yet.</div>
+                ) : shown.length === 0 ? (
+                  <div className="chat-empty">
+                    Nothing matches this filter in the {messages.length} messages loaded
+                    {hasMore ? ' — load older, or switch back to “all”.' : '.'}
+                  </div>
+                ) : (
+                  shown.map(m => <Message key={m.uuid} m={m} />)
+                )}
+              </div>
 
-        {/* Same deal for a proposed plan. The two stores are one-entry-per-
-            session and a session can only be parked on one thing at a time, so
-            in practice only one of these ever renders. */}
-        <PlanPanel state={plan} />
+              {/* One absolutely-positioned layer for every pinned thing, rather
+                  than five: the panels keep stacking in normal flow inside it
+                  (MessagePanel's "gone" note over ResumePanel is the hand-off
+                  spawn.md documents), and the layer — not each panel — is what
+                  caps at the stack's height and scrolls from there. */}
+              <div className="chat-pinned">
+                {/* Terminal permission dialog — a sign, not a control (it can only be
+                    answered there). Sits above the question panel; the two can't both
+                    be live, since a permission prompt blocks the session. */}
+                {session.permissionWait && <PermissionBanner session={session} />}
 
-        {/* And for a turn-end reply window. One-entry-per-session per store and
-            a session parks on one thing at a time, so at most one of the three
-            panels renders. */}
-        <MessagePanel state={message} />
+                {/* An action bar, not a message: the question itself already renders in
+                    the transcript above. Pinned so it stays reachable while scrolling. */}
+                <QuestionPanel state={question} />
 
-        {/* The opposite case: a dashboard session whose turn is OVER — window
-            expired, released, or capped out. Sends `resume` through the spawn
-            path; the same transcript (same id) continues, so this drawer
-            live-tails the answer. Can render under MessagePanel's "gone" note,
-            which is the natural hand-off. */}
-        {canResume && <ResumePanel session={session} />}
+                {/* Same deal for a proposed plan. The two stores are one-entry-per-
+                    session and a session can only be parked on one thing at a time, so
+                    in practice only one of these ever renders. */}
+                <PlanPanel state={plan} />
 
-        <div className="chat-foot">
-          <span>live · refreshing every {formatInterval(refreshMs)}</span>
-          <span className="chat-count">
-            {mode === 'all' ? `${messages.length} shown` : `${shown.length} of ${messages.length} shown`}
-          </span>
+                {/* And for a turn-end reply window. One-entry-per-session per store and
+                    a session parks on one thing at a time, so at most one of the three
+                    panels renders. */}
+                <MessagePanel state={message} />
+
+                {/* The opposite case: a dashboard session whose turn is OVER — window
+                    expired, released, or capped out. Sends `resume` through the spawn
+                    path; the same transcript (same id) continues, so this drawer
+                    live-tails the answer. Can render under MessagePanel's "gone" note,
+                    which is the natural hand-off. */}
+                {canResume && <ResumePanel session={session} />}
+              </div>
+            </div>
+
+            {/* The filter narrows the transcript, so it sits with the count it
+                changes rather than in the facts column — control and readout on
+                one line, and no chrome row spent on it. Still the board's
+                segmented switch (the same `.seg` the sessions toolbar uses),
+                sized down to foot scale. */}
+            <div className="chat-foot">
+              <span className="chat-live"><i /> live · refreshing every {formatInterval(refreshMs)}</span>
+              <span className="chat-count">
+                {mode === 'all' ? `${messages.length} shown` : `${shown.length} of ${messages.length} shown`}
+              </span>
+              <div className="seg" role="group" aria-label="Message filter">
+                {CHAT_FILTERS.map(f => (
+                  <button
+                    key={f.key}
+                    className={mode === f.key ? 'on' : ''}
+                    title={f.title}
+                    aria-pressed={mode === f.key}
+                    onClick={() => setFilter(f.key)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </aside>
     </div>

@@ -1,82 +1,27 @@
 import type { SessionsResponse, RateLimit, UsageLimits, UsageStatus } from '../../../shared/types';
-import type { RemoteAnswerControl } from '../hooks/useRemoteAnswer';
 import { formatResetTime } from '../lib/format';
-import { holdCount } from '../lib/holds';
 import { paceView, FIVE_HOUR_MS, SEVEN_DAY_MS } from '../lib/pace';
-import { OriginBadge } from './OriginBadge';
-import { RemoteAnswerToggle } from './RemoteAnswerToggle';
 
 /**
- * The status plate: one panel for everything true of the whole board rather
- * than of the list — the launch button, how this browser reached the server,
- * whether remote answers are allowed, the counts, the clock, and the account
- * gauges. Everything that filters or orders the list stays in the Toolbar
- * below, which is the whole point of the split.
+ * The Account card in the sessions aside: the two rate-limit gauges (5h, Week)
+ * with their time strips — the status plate's gauges, on a card of their own.
+ * Renders nothing while there is nothing to draw (SHOW_USAGE off, or no poll
+ * yet), so the aside never frames an empty card.
  */
-export function Header({ data, remoteAnswer, onOpenSpawn }: {
-  data: SessionsResponse | null;
-  /**
-   * Owned by `SessionsView` and passed down rather than called here: the spawn
-   * panel needs `spawnMaxPermission` off the same `/api/health` snapshot, and a
-   * second `useRemoteAnswer()` call site would mean a second poll.
-   */
-  remoteAnswer: RemoteAnswerControl;
-  /** Open the launch panel (its open/closed state lives in SessionsView). */
-  onOpenSpawn: () => void;
-}) {
-  const meta = data ? new Date(data.generatedAt).toLocaleTimeString() : '';
-
-  let sub: React.ReactNode = '';
-  if (data) {
-    const procs = data.runningClaudeProcs == null
-      ? ''
-      : ` · ${data.runningClaudeProcs} claude proc${data.runningClaudeProcs === 1 ? '' : 's'}`;
-    // Every surface, not just the headless ones the banners cover: this mirrors
-    // the row tabs (answer / plan? / reply? / allow?) one for one, so a count
-    // labelled "need you" can never omit a row that visibly says it needs you.
-    const holds = holdCount(data.sessions);
-    sub = (
-      <>
-        <b>{data.totals.active}</b>{` active · top ${data.maxSessions}${procs}`}
-        {/* No `title`: it is dead on touch, and this board is read on a phone. */}
-        {holds > 0 && <span className="need-you">{holds} need you</span>}
-      </>
-    );
-  }
-
+export function AsideAccount({ data }: { data: SessionsResponse | null }) {
   const message = data?.usageStatus ? USAGE_MESSAGES[data.usageStatus] : undefined;
   const bars = usageBars(data?.usage);
-  const showUsage = Boolean(message) || bars.length > 0;
-
-  // Nothing to frame yet — neither poll has answered. Drawing the plate here
-  // would flash an empty bordered strip on every cold load.
-  if (!data && !remoteAnswer.state && !showUsage) return null;
+  if (!message && bars.length === 0) return null;
 
   return (
-    <div className="plate">
-      <div className="plate-row">
-        {remoteAnswer.state?.spawnAvailable && (
-          <button type="button" className="tb-new" onClick={onOpenSpawn}>
-            + New
-          </button>
-        )}
-        <OriginBadge origin={remoteAnswer.state?.origin} />
-        <RemoteAnswerToggle control={remoteAnswer} />
-        <span className="sub">{sub}</span>
-        <span className="meta">{meta}</span>
-      </div>
-      {showUsage && (
-        <>
-          <div className="plate-div" />
-          {message
-            ? <UsageMessage text={message} />
-            : <div className="usage">
-                {bars.map(b => (
-                  <UsageBar key={b.label} label={b.label} rl={b.rl} windowMs={b.windowMs} />
-                ))}
-              </div>}
-        </>
-      )}
+    <div className="s-card">
+      <div className="ct">Account</div>
+      <div className="cs">Both rate windows, from the account usage endpoint</div>
+      {message
+        ? <div className="usage"><span className="u-msg">{message}</span></div>
+        : <div className="usage">
+            {bars.map(b => <UsageBar key={b.label} label={b.label} rl={b.rl} windowMs={b.windowMs} />)}
+          </div>}
     </div>
   );
 }
@@ -97,31 +42,13 @@ const USAGE_MESSAGES: Partial<Record<UsageStatus, string>> = {
   'signed-out': 'signed out — run claude auth login'
 };
 
-/**
- * The rate-limit bars worth drawing. Returned rather than rendered so the plate
- * can ask whether there is a usage section *before* it commits to the divider
- * that separates one — an empty `.usage` under a rule reads as a broken panel.
- */
+/** The rate-limit bars worth drawing — those with a utilization reading. */
 function usageBars(usage: UsageLimits | null | undefined) {
   if (!usage) return [];
   return [
     { label: '5h', rl: usage.fiveHour, windowMs: FIVE_HOUR_MS },
     { label: 'Week', rl: usage.sevenDay, windowMs: SEVEN_DAY_MS }
   ].filter((b) => b.rl.utilization != null);
-}
-
-/**
- * Shown instead of the bars when the token read explains itself. An expired
- * token renews on the CLI's next run and the following 3s poll flips
- * usageStatus back to 'ok'; a signed-out one waits for `claude auth login`.
- */
-function UsageMessage({ text }: { text: string }) {
-  return (
-    <div className="usage">
-      <span className="u-label">Usage</span>
-      <span className="u-msg">{text}</span>
-    </div>
-  );
 }
 
 function UsageBar({ label, rl, windowMs }: { label: string; rl: RateLimit; windowMs: number }) {
@@ -131,8 +58,6 @@ function UsageBar({ label, rl, windowMs }: { label: string; rl: RateLimit; windo
   const title = rl.resetsAt
     ? `Window started ${formatResetTime(new Date(view!.startMs).toISOString())} · fully resets to 0% at ${formatResetTime(rl.resetsAt)}` +
       (view?.rateText ? ` · burning ${view.rateText}` : '') +
-      // The mechanics stay stated in words, as they always have been here: the
-      // band is the only place the duty cycle shows up otherwise.
       (rl.dutyCycle != null ? ` · working ~${Math.round(rl.dutyCycle * 100)}% of the hours left` : '')
     : undefined;
   return (
@@ -149,7 +74,7 @@ function UsageBar({ label, rl, windowMs }: { label: string; rl: RateLimit; windo
         <div className="u-bar">
           <div className={`u-fill ${level}`.trim()} style={{ width: `${pct}%` }} />
         </div>
-        <span className="u-pct">{pct}%</span>
+        <span className={`u-pct ${level}`.trim()}>{pct}%</span>
       </div>
       {view && <TimeStrip view={view} resetsAt={rl.resetsAt as string} />}
     </div>

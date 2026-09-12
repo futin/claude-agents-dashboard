@@ -1,11 +1,53 @@
 # Sessions — live monitor, status machine, subagent detail
 
-The default section: one row per Claude Code session, refreshed on the interval the Settings
+The default section: every Claude Code session, refreshed on the interval the Settings
 page sets (3s by default), sorted most-recent-first. Everything is derived from the
 transcript files on disk. `useSessions` also carries the per-device scan knobs as query
 params, so a changed row count or window takes effect on the next tick.
 
-## Per-session rows
+## The page
+
+Two columns on the broad wrap (`SessionsView.tsx`): the list, in one of five **views**, and
+a 320px **aside** of two cards. Below 1100px the aside moves above the list as a two-card
+row; on a phone the cards stack.
+
+- **Aside · Account** (`AsideAccount.tsx`) — the two rate-limit gauges and their time
+  strips (see [usage limits](usage-limits.md)); the `token-expired` / `signed-out` line
+  replaces them. Absent entirely when there is nothing to draw.
+- **Aside · Board** (`AsideBoard.tsx`) — everything true of the whole board rather than of
+  the list: the clock, the [origin badge](remote-access.md), the counts (active, need you,
+  rows shown, `claude` processes), the [remote-answers switch](remote-answer.md), and the
+  one write action, **New session** ([spawn](spawn.md)). Nothing here filters or orders
+  the list — that is the toolbar's job, which is the whole point of the split.
+- **Toolbar** (`Toolbar.tsx`) — one row: the labelled view switcher on the left; on the
+  right one shared track with the filter button, the `Sort: <key> (asc|desc)` label and the
+  sort button. Both buttons open a popover (`Popover.tsx`: outside click and Escape close
+  it, only one open at a time). The filter button is raised only while a filter is set, and
+  then carries a count badge — the raised state means "something is hidden", not "this is a
+  button". See §Filter + sort toolbar.
+- **The five views** (`components/sessions/`) draw the same filtered, sorted array:
+  - **Board** — three columns by what the session wants from you, *Needs you* · *Working*
+    · *Quiet*, from `lib/triage.ts`'s `triageGroups`: a hold (or a terminal question)
+    outranks the status, so a working session with a permission dialog open sits under
+    *Needs you*. A card per session; the open one shows the expanded body inline.
+  - **List** — one table; the open row expands underneath itself across every column.
+  - **Split** — a compact list and one inspector (title, meta, Context and Now tiles, then
+    the expanded body). The first row is inspected until one is clicked.
+  - **Tiles** — every session a metric card with its context percentage as the figure; the
+    open tile spans two columns.
+  - **Triage** — *Needs you* as hero cards with the hold named and one action (the chat
+    drawer), then compact *Working* and *Idle* lists. Nothing expands here.
+
+  Which of the five is showing is **not** persisted: `SessionsView` seeds a plain
+  `useState` from Settings › Local › Display → **Default session view**
+  (`defaultLayout`, default `board`), and the switcher changes it for as long as the page
+  is open. A reload lands back on the setting — trying a shape out costs nothing and never
+  silently becomes what every future load opens in. Which cards are open is not persisted
+  either (see [view-persistence](view-persistence.md)).
+
+## What a session shows
+
+The atoms in `sessions/atoms.tsx`, in every view that has room for them:
 
 - **Status dot** — one of four states (below).
 - **Name + git branch** — a named session leads with its custom title and demotes the
@@ -29,24 +71,24 @@ params, so a changed row count or window takes effect on the next tick.
 - **Activity line** — the most recent tool call (e.g. `Edit server.ts`,
   `Task Explore: map the codebase`).
 - **Relative time** — since the last conversational message.
-- **Chat tab** — a full-height slab down the row's right edge (`.row-chat`), the way into
-  this session's [chat drawer](chat.md). The card splits in two for it: `.row-main` carries
-  the padding and the expand-on-click, the tab is its sibling, so opening the drawer no
-  longer has to out-shout a row toggle it sits inside.
+- **Chat button** — the one way into this session's [chat drawer](chat.md), and the place
+  it names a hold. It stops the click from reaching the card it sits in, so opening the
+  drawer never also toggles the row.
 - **Stop control** — a `stopping…` badge beside the activity line, plus a two-stage
   `stop session` → `really stop?` pair (and `force stop` once stopping) in the expanded
-  body. It renders only for a row carrying `Session.stopState`, i.e. one this server still
-  holds a child handle for; `lib/stopControl.ts` decides every branch. Absent for every
-  other row, deliberately — see
+  body (`sessions/Expanded.tsx`, shared by every view that opens a session). It renders
+  only for a session carrying `Session.stopState`, i.e. one this server still holds a
+  child handle for; `lib/stopControl.ts` decides every branch. Absent for every other
+  row, deliberately — see
   [spawn](spawn.md#stopstate-and-why-it-is-absent-rather-than-false).
 
-### The tab is also where a session says it needs a human
+### The chat button is also where a session says it needs a human
 
 Every hold routes to the same place — the drawer — so they share the one control rather
-than competing as separate pills among the printed fields. `chatTab()` maps `lib/holds.ts`'s
-`holdKind` to a label, so the nearest thing to a blocked session wins — and that precedence
-now lives in one place, shared with the header's hold count and the browser notifications
-instead of being restated per reader:
+than competing as separate pills among the printed fields. `chatTab()` in `lib/holds.ts`
+maps `holdKind` to a label, so the nearest thing to a blocked session wins — and that
+precedence lives in one place, shared with the Board card's hold count, the triage
+grouping and the browser notifications instead of being restated per reader:
 
 | `Session` flag | Label | Tone |
 | --- | --- | --- |
@@ -54,21 +96,22 @@ instead of being restated per reader:
 | `remotePlan` | `plan?` | amber, pulsing |
 | `remoteReply` | `reply?` | amber, pulsing |
 | `permissionWait` | `allow?` | mustard, pulsing — answerable only in that terminal |
-| none | `chat` | steel |
+| none | `chat` | outlined, no tint |
 
 Mustard rather than amber for the last one keeps the "needs you, but not here" case visually
-apart from the three you can act on from the phone. The label is `position: sticky` inside
-the tab, so it rides the top of the viewport instead of drifting off with an expanded card's
-subagent panel.
+apart from the three you can act on from the phone.
 
 ### Phantom rows: a session that doesn't exist yet
 
-Above the real rows, `SessionList` also renders `SessionsResponse.launching` — sessions
-[spawn](spawn.md) has started but whose transcript hasn't appeared on disk yet. They are a
-different kind of thing from every other row here: nothing about them comes from a
-transcript, because there isn't one. Each carries only what the launch request knew —
-project name, a 120-character prompt preview — plus a state word: cyan `starting…`, or red
-`failed` with the child's stderr tail (or a synthesized reason) as the activity line.
+Every view also renders `SessionsResponse.launching` — sessions [spawn](spawn.md) has
+started but whose transcript hasn't appeared on disk yet — at the head of its list (the
+Working column, on the board). They are a different kind of thing from every other row
+here: nothing about them comes from a transcript, because there isn't one. Each carries
+only what the launch request knew — project name, a 120-character prompt preview — plus a
+state word: an ink `starting…` (the dot pulses in ink, since green already means working),
+or red `failed` with the child's stderr tail (or a synthesized reason) as the activity line.
+Where the view draws cards, a phantom is a dashed one — the design's drop-target outline,
+for a session that does not exist yet.
 
 Three properties keep them from complicating the rest of this document:
 
@@ -83,8 +126,8 @@ Three properties keep them from complicating the rest of this document:
   session id, so its transcript is already on disk and seeing it in a scan proves nothing —
   `adoptLaunched` skips those entries deliberately, or the first poll would delete them and
   swallow a failure before it could be rendered. They leave the store by TTL, `stopSession`,
-  or a failure instead, and `SessionList` drops a `launching` resume phantom (the real row
-  below *is* the progress indicator) while still rendering a `failed` one.
+  or a failure instead, and `SessionsView` drops a `launching` resume phantom (the real row
+  *is* the progress indicator) while still rendering a `failed` one.
 - **They can outnumber the real rows only briefly.** A `launching` entry that nothing
   adopts is dropped after 60s; a `failed` one after 5 minutes. Both live in RAM only (the
   store in `server/lib/spawn.ts`), so a server restart clears them.
@@ -339,7 +382,8 @@ true; false unless that record is an assistant with `end_turn`), `waitingOnQuest
 
 ## Expandable subagent detail
 
-Click a row to expand it: the dashboard fetches `GET /api/sessions/:id` and lists the
+Click a card, row or tile to open it (or pick it in the split view): the dashboard fetches
+`GET /api/sessions/:id` and lists the
 subagents that session launched via the `Task` tool — type, description, running/done,
 duration, tokens, tool-use count — under a `N running · N finished · N agents` summary.
 Served by an incremental byte-offset cache (`agents.ts` / `agents-cache.ts`) so repeat
@@ -360,11 +404,22 @@ start timestamp still gets a row, just no bar.
 
 ## Filter + sort toolbar
 
-Client-side controls above the list: project, status, activity window, and sort
-(recency / tokens / name / status, asc/desc). The selection is persisted to
-`localStorage` (`dashboard.view`) so it survives refresh and tab-close — see
-[view-persistence](view-persistence.md). Row expansion is deliberately not persisted
-(session IDs churn).
+Client-side controls above the list. The filter and sort halves write the one persisted
+`View` (`dashboard.view` — see [view-persistence](view-persistence.md)); the switcher does
+not, and is the one control here that survives nothing:
+
+- **View switcher** — Board · List · Split · Tiles · Triage. Owned by `SessionsView` as
+  ephemeral state (`layout` / `onLayout` props), seeded from the `defaultLayout` setting.
+- **Filter popover** — *Project* (pills; "All projects" clears), *Status* (multi-pick
+  pills with the status dot; none picked = all), *Active in the last* (the
+  `ACTIVITY_WINDOWS` pill switch), and **Clear all**, disabled when nothing is set.
+  `filterCount` counts a facet once however many values it holds, and is the badge on
+  the raised filter button.
+- **Sort popover** — the four keys (recency / tokens / name / status) with a tick on the
+  current one and a one-line hint (`SORT_HINT`), then Ascending / Descending. The track's
+  label reads `Sort: Recency (desc)`.
+
+Which cards are open is deliberately not persisted (session IDs churn).
 
 <!-- docs-sync:
   sources:
@@ -376,9 +431,14 @@ Client-side controls above the list: project, status, activity window, and sort
     - server/lib/agents-cache.ts
     - server/lib/title-cache.ts
     - client/src/components/SessionsView.tsx
-    - client/src/components/SessionList.tsx
-    - client/src/components/SessionRow.tsx
+    - client/src/components/Toolbar.tsx
+    - client/src/components/AsideBoard.tsx
+    - client/src/components/sessions/atoms.tsx
+    - client/src/components/sessions/BoardView.tsx
+    - client/src/components/sessions/TriageView.tsx
     - client/src/components/SessionDetail.tsx
+    - client/src/lib/triage.ts
+    - client/src/lib/holds.ts
     - client/src/hooks/useSessions.ts
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts

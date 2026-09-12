@@ -3,7 +3,7 @@
  * sends.
  *
  * Every branch of a two-stage destructive control lives here rather than in
- * `SessionRow`, so the component stays declarative and this stays testable
+ * `sessions/Expanded.tsx`, so the component stays declarative and this stays testable
  * without a DOM — the same split `panelCollapse.ts` and `holds.ts` already use
  * (this repo's client tests import `client/src/lib/*` and never render).
  */

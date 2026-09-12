@@ -136,13 +136,21 @@ code,kbd,samp,pre{font-family:inherit}
    Putting Settings on `.wide` pinned `.main` to the viewport and let the
    cards run out of the board onto the white body. */
 .wrap.wide,.wrap.broad{max-width:1280px}
+/* Content width = full (Settings › Display). One block, because the measure is
+   the only thing that changes: every section keeps its own layout and simply
+   stops being capped, so the board spans the window. Stamped as `data-width` on
+   <html> by useSettings (and pre-paint by the inline script in index.html), the
+   same mechanism as the theme — nothing re-renders when it flips. */
+:root[data-width="full"] .wrap,
+:root[data-width="full"] .wrap.wide,
+:root[data-width="full"] .wrap.broad{max-width:none}
 
 /* rack selector — the section rail down the left edge. Sticky and full-height
    so its right rule runs the length of the board. The height is divided by
    --font-scale because .shell{zoom} (line 96) makes 100vh resolve against the
    unzoomed viewport: at text scale 110% a plain 100vh rail overhangs by 10%. */
 .shell{display:flex}
-.rail{flex:0 0 280px;display:flex;flex-direction:column;gap:8px;align-self:flex-start;position:sticky;top:0;z-index:5;height:calc(100vh / var(--font-scale,1));overflow-y:auto;padding:32px 20px;background:var(--strip)}
+.rail{flex:0 0 240px;display:flex;flex-direction:column;gap:4px;align-self:flex-start;position:sticky;top:0;z-index:5;height:calc(100vh / var(--font-scale,1));overflow-y:auto;padding:24px;background:var(--strip)}
 /* the app's wordmark, in the rail rather than the page — a kicker over the name,
    20/700 over 11px, the dot outside the pair and centred against it. Sizes are
    the mock's (docs/guides/mockups/redesign-mock.html, `.brand`). */
@@ -152,40 +160,52 @@ code,kbd,samp,pre{font-family:inherit}
    `.foot` line, which says it in words. */
 .rail-dot{flex:none;width:10px;height:10px;border-radius:999px;background:var(--green)}
 .rail-kicker{display:block;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3);margin-bottom:3px}
-/* Nav rows: 40px tall, 16px padding-x, 16px radius, sentence case at 16/500, a
-   20px icon 12px from its label — the row is the hit target, so the fill and
+/* Nav rows: 36px tall, 16px padding-x, 16px radius, sentence case at 14/500, a
+   16px icon 12px from its label — the row is the hit target, so the fill and
    the radius belong to it rather than to the label (DESIGN.md §3, §7). Every
-   figure here is the mock's `.nav-item` bar two: the rail is 20px narrower than
-   its 300px, and the row 4px shorter than its 44px — the strip below 700px
+   figure here is the mock's `.nav-item` bar two: the rail is 60px narrower than
+   its 300px, and the row 8px shorter than its 44px — the phone menu below 700px
    keeps the full 44, where the row is a thumb target rather than a pointer
    one. */
 .rail-group{position:relative;display:flex;flex-direction:column}
-.rail-link{position:relative;display:flex;align-items:center;gap:12px;min-height:40px;font-family:var(--font);font-size:16px;font-weight:500;letter-spacing:0;text-align:left;color:var(--ink2);background:none;border:0;border-radius:16px;padding:0 16px;cursor:pointer;transition:color .15s,background .15s}
+.rail-link{position:relative;display:flex;align-items:center;gap:12px;min-height:36px;font-family:var(--font);font-size:14px;font-weight:500;letter-spacing:0;text-align:left;color:var(--ink2);background:none;border:0;border-radius:16px;padding:0 16px;cursor:pointer;transition:color .15s,background .15s}
 /* Hover darkens the label and nothing else. The subtle fill is what marks the
    *active* row, so lending it to hover made a pointer look like a selection —
    on a rail with one row already filled, two filled rows is a question. */
 .rail-link:hover{color:var(--ink)}
 /* Icons name the section and never signal state, so they hold ink at every
    weight of the row — only the label greys out (DESIGN.md §6). */
-.rail-ic{flex:none;width:20px;height:20px;color:var(--ink)}
+.rail-ic{flex:none;width:16px;height:16px;color:var(--ink)}
 /* Active is marked by a 3px ink bar at the left edge plus the subtle fill — not
    by a colour change in the text (DESIGN.md §5). The bar is a short centred
    mark rather than the full height of the row: against a 16px radius a
    full-height inset reads as a stripe hanging off the pill. */
 .rail-link.on{color:var(--ink);font-weight:500;background:var(--strip-hi)}
-.rail-link.on::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:22px;border-radius:999px;background:var(--ink)}
+.rail-link.on::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:16px;border-radius:999px;background:var(--ink)}
 /* Sub-views of the open section, as the tree the design hangs off a nav row.
    Type and ticks are the mock's `.subnav`; the indent is not. The mock hangs
-   the rule at 36px — the icon's right edge — and this one hangs it at 26px, the
-   icon's **centreline** (row padding 16 + half of a 20px icon), so it drops out
+   the rule at 36px — the icon's right edge — and this one hangs it at 24px, the
+   icon's **centreline** (row padding 16 + half of a 16px icon), so it drops out
    of the glyph above it rather than floating in the gutter between icon and
-   label. Each sub-label then starts at 48px, exactly where the section labels
+   label. The stem and its 12px tick are two background layers on the row rather
+   than a border on the tree plus a pseudo-element: the row is ellipsised, so
+   `overflow:hidden` clipped any `::before` drawn outside it, and layering the
+   stem per row is what lets the last one stop at its own centre — an `|_` that
+   ends on the last item instead of running past it. Each sub-label starts at
+   44px, exactly where the section labels
    do, which is what makes the tick read as a branch off the row rather than as
    an indent of its own. Rendered only while that section is open
    (SideRail.tsx), so the rule never trails a row you are not on. */
-.rail-sub{display:flex;flex-direction:column;margin:2px 0 2px 26px;padding-left:22px;border-left:1px solid var(--hairline2)}
-.rail-sublink{position:relative;font-family:var(--font);font-size:14px;font-weight:400;text-align:left;color:var(--ink2);background:none;border:0;padding:7px 0;cursor:pointer;transition:color .15s}
-.rail-sublink::before{content:"";position:absolute;left:-22px;top:50%;width:12px;height:1px;background:var(--hairline2)}
+.rail-sub{display:flex;flex-direction:column;margin:2px 0 2px 24px}
+/* Every tree is in the DOM; on the rail only the open section's is drawn. The
+   phone menu opens all of them (the rule is lifted in the phone block below) —
+   there the menu is a moment you came to on purpose, not a column you read past
+   all day. */
+.rail-group:not(.here) .rail-sub{display:none}
+/* Ellipsised: Usage's and Settings' labels are two words, but Management's
+   tree is a list of scanned project names and one of them will not fit. */
+.rail-sublink{position:relative;font-family:var(--font);font-size:14px;font-weight:400;text-align:left;color:var(--ink2);background-color:transparent;border:0;padding:7px 0 7px 20px;cursor:pointer;transition:color .15s;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background-image:linear-gradient(var(--hairline2),var(--hairline2)),linear-gradient(var(--hairline2),var(--hairline2));background-repeat:no-repeat;background-size:1px 100%,12px 1px;background-position:0 0,0 50%}
+.rail-sublink:last-child{background-size:1px 50%,12px 1px}
 .rail-sublink:hover{color:var(--ink)}
 .rail-sublink.on{color:var(--ink);font-weight:500}
 /* Settings sits under a rule: it is about the board, the four above it are
@@ -205,53 +225,469 @@ code,kbd,samp,pre{font-family:inherit}
    into the rail. Only that one corner — the other three run to the edges of the
    window, so rounding them would open a gap the board has no use for. */
 .main{flex:1;min-width:0;margin-top:24px;padding:var(--body-pad);background:var(--board);border-top-left-radius:24px;overflow-x:clip}
-/* phone: the rail lies down into a scrollable strip above the content, and the
-   accent bar goes back to the bottom edge where a row wants it. It stays
-   `sticky` — laid down it is a top strip, so it pins to the top edge instead of
-   the left one, but it must not scroll out of reach on a long sessions list. */
+/* ── phone navigation ─────────────────────────────────────────────────────
+   Below 700px the rail does not lie down — it drops down. A top bar carries the
+   wordmark left and ☰ right, and the *same* `.rail` element becomes the panel
+   that opens under it. One nav, repositioned: the trees (`.rail-sub`) come with
+   it, which is what retired the page-band copies of those switches.
+
+   `.nav` is `display:contents` above 700px, so the rail stays the flex child of
+   `.shell` it has always been and this wrapper costs the desktop nothing. */
+.nav{display:contents}
+.mnav,.mnav-scrim{display:none}
 @media (max-width:700px){
   .shell{flex-direction:column}
-  .rail{flex:none;width:auto;height:auto;align-self:stretch;flex-direction:row;gap:4px;padding:8px 10px;overflow-x:auto;overflow-y:hidden;border-bottom:1px solid var(--hairline)}
+  /* The rail is gone from the page ground below 700px, so the ground is no
+     longer the rail's strip: it is the board `.main` paints. Set on <body> and
+     not on `.shell`, because the canvas takes its colour from the body — which
+     is what the phone paints into an over-scroll bounce, behind the bar and
+     under a page shorter than the screen. Leaving it at --strip put a white
+     band there in the light theme. */
+  body{background:var(--board)}
+  /* The sticky box is the wrapper, not the bar: the panel is absolutely
+     positioned against it, so bar and menu pin to the top edge together and the
+     menu cannot drift off its anchor mid-scroll. */
+  .nav{display:block;position:sticky;top:0;z-index:30;transition:transform .22s ease}
+  /* Auto-hide: down the page it slides out of the way, up it comes back
+     (`useHideOnScroll`). Never while the menu is open — the hook pins it — so
+     the scrim below is never inside a transformed box, where `fixed` would
+     resolve against this element instead of the viewport. */
+  .nav.hid{transform:translateY(-100%)}
+  .mnav{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--strip);border-bottom:1px solid var(--hairline)}
+  /* the rail's 20px wordmark is a page heading; in a bar it is a label, so it
+     drops to 16px and the dot with it */
+  .mnav-brand{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:.01em;line-height:1.1;color:var(--ink);min-width:0}
+  .mnav-brand .rail-dot{width:8px;height:8px}
+  .mnav-brand .rail-kicker{font-size:10px;margin-bottom:2px}
+  /* 44px square: the one control on the bar is a thumb target (§3). Ink, no
+     fill — the fill in this design marks a selection, and a menu button is
+     never selected. */
+  .mnav-burger{flex:none;margin-left:auto;display:flex;align-items:center;justify-content:center;width:44px;height:44px;color:var(--ink);background:none;border:0;border-radius:12px;cursor:pointer}
+  .mnav-burger:active{background:var(--strip-hi)}
+  /* Under the panel, not over it: the scrim dims the board so a tap anywhere
+     off the menu shuts it. `fixed` for the same reason the chat drawer uses it
+     — a phone's layout viewport is wider than its screen. */
+  .mnav-scrim{display:block;position:fixed;inset:0;z-index:-1;background:var(--scrim)}
+  /* The menu itself: the rail, hung off the bottom edge of the bar. Capped at
+     the screen and scrollable, because Management's tree is a list of scanned
+     projects and has no fixed length. The /var(--font-scale) is the same
+     correction the desktop rail's height makes — `.shell{zoom}` resolves vh
+     against the unzoomed viewport. */
+  .rail{display:none;position:absolute;left:0;right:0;top:100%;flex:none;width:auto;height:auto;max-height:calc(100vh / var(--font-scale,1) - 60px);align-self:stretch;gap:2px;padding:8px 10px 14px;overflow-y:auto;overflow-x:hidden;background:var(--strip);border-bottom:1px solid var(--hairline);box-shadow:0 12px 24px var(--shadow2)}
+  .rail.open{display:flex}
   /* laid down there is no corner to tuck into and no room to spare: the panel
-     runs full width straight under the strip */
+     runs full width straight under the bar */
   .main{margin-top:0;border-top-left-radius:0}
+  /* the bar carries the wordmark now */
   .rail-brand{display:none}
-  /* laid down, a section and its sub-views stack: the group keeps the column
-     direction it has in the rail, so the two chips sit under their section
-     rather than pushing the sections after it off the strip */
-  .rail-group{flex:none;align-items:flex-start;gap:4px}
-  .rail-link{flex:none;white-space:nowrap;min-height:44px;display:flex;align-items:center}
-  /* laid down, the mark goes back to the bottom edge, where a row wants it */
-  .rail-link.on::before{left:16px;right:16px;top:auto;bottom:0;width:auto;height:3px;transform:none}
-  /* A tree cannot hang off a horizontal strip — and a strip that grows a second
-     row when Usage is open pushes the board down on the smallest screen there
-     is. So the phone drops the tree and the Usage section bar shows the pill
-     switch instead (`.usage-tabs` below); exactly one control is visible at any
-     width, both driving `settings.usageTab`. */
-  .rail-sub{display:none}
-  .rail-div{display:none}
+  /* a menu row is a thumb target, not a pointer one */
+  .rail-link{min-height:44px}
+  /* every tree stands open: one tap from the menu to any sub-view, from
+     wherever you are */
+  .rail-group:not(.here) .rail-sub{display:flex}
 }
-/* facility plate — one panel for everything true of the whole board: what you
-   can start (+ New), how this browser got here, whether remote answers are
-   allowed, the session counts, the clock, and the account gauges. The toolbar
-   below it is then only ever about the list. */
-.plate{background:var(--strip);border:1px solid var(--hairline);border-radius:2px;padding:8px 12px;margin-bottom:14px;box-shadow:inset 0 1px 0 var(--edge)}
-.plate-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.plate-div{height:1px;background:var(--hairline);margin:8px -12px 10px}
-.plate .meta{font-size:13px;color:var(--ink2);margin-left:auto;font-variant-numeric:tabular-nums;background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:3px 8px}
-.plate .sub,.plate .usage{margin:0}
-/* The panel's own padding costs the twin gauges 24px, which is enough to make
-   the two reset labels touch on a phone. Give it back rather than restack them. */
-@media (max-width:700px){.plate{padding:8px 10px}.plate-div{margin:8px -10px 10px}}
-.sub{font-size:11px;color:var(--ink3);margin-bottom:18px;font-weight:500}
-.sub b{color:var(--green);font-weight:600}
-.sub .need-you{margin-left:8px;padding:1px 6px;border-radius:2px;font-weight:600;color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,transparent)}
+/* ── Sessions page ─────────────────────────────────────────────────────────
+   Two columns on the broad wrap: the list in one of five shapes, and a 320px
+   aside carrying the Account gauges and the Board facts. Cards follow
+   DESIGN.md §8.2 — `--strip`, 16px radius, no stroke, no shadow; the ground
+   does the separating. Mock: docs/guides/mockups/redesign-mock.html #sessions.
+   State rides on the element itself (`.sdot.working`, `.spill.question`)
+   rather than on an ancestor row, because the same session sits in a card, a
+   table cell, a list row and a tile. */
+.sessions{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+.s-main,.s-aside,.s-body{display:flex;flex-direction:column;gap:16px;min-width:0}
+/* the aside is first in the DOM (it reads first on a phone and to a screen
+   reader — the gauges before the list, as the plate did) and second on a
+   desktop, where it takes the narrow column */
+.s-aside{order:1}
+.s-card{background:var(--strip);border-radius:16px;padding:24px;min-width:0}
+.s-card.sm{padding:20px}
+.sessions .ct{font-size:19px;font-weight:500;letter-spacing:-.01em;line-height:1.3;color:var(--ink)}
+.sessions .cs{font-size:13px;color:var(--ink2);margin-top:4px}
+.sessions .cap{font-size:11px;color:var(--ink2);margin-top:6px}
 
-.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+/* the aside · Board card */
+.board-sub{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.board-sub .clock{font-variant-numeric:tabular-nums}
+.facts{display:grid;gap:12px;margin-top:20px;font-size:13px;color:var(--ink2)}
+.fact{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.fact b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.fact b.need{color:var(--amber)}
+.s-aside .ra-switch{width:100%;justify-content:space-between;margin-top:20px}
+.s-aside .ra-pill.off:not(.origin){margin-top:20px}
+/* the one write action on the board — filled ink, so it never reads as a filter */
+.newbtn{width:100%;height:36px;margin-top:10px;border:0;border-radius:12px;background:var(--ink);color:var(--strip);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;transition:opacity .15s}
+.newbtn:hover{opacity:.88}
+/* connection origin (OriginBadge): a small pill, display-only */
+.ra-pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;font-size:11px;font-weight:500;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:999px}
+.ra-pill .ra-dot{width:6px;height:6px;border-radius:50%;background:var(--ink3);flex-shrink:0}
+.ra-pill.origin.o-tailnet .ra-dot{background:var(--cyan)}
+.ra-pill.origin.o-lan .ra-dot,.ra-pill.origin.o-local .ra-dot{background:var(--green)}
+.ra-pill.origin.o-unknown{color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,transparent)}
+.ra-pill.origin.o-unknown .ra-dot{background:var(--amber)}
+.ra-warn{color:var(--amber);font-size:11px}
+/* remote-answer switch: on = allowed while you're away, not instead of the
+   terminal. One of the 36px control family (§8.2). Two things this rule got
+   wrong first time round, kept written down: (1) the off track is --ink3, not
+   --hairline2 — against a paper knob hairline2 measures 1.6:1 on daylight and
+   the knob vanished; (2) no transition on the background — Chromium keeps
+   painting the previous theme's colour for a transitioned property whose value
+   came from a custom property. Only the knob animates. */
+.ra-switch{display:inline-flex;align-items:center;gap:9px;height:36px;padding:0 12px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:border-color .15s}
+.ra-switch:hover:not(:disabled){border-color:var(--ink3)}
+.ra-switch:disabled{cursor:default}
+.ra-track{position:relative;width:26px;height:14px;border-radius:7px;background:var(--ink3);flex-shrink:0}
+.ra-switch.on .ra-track{background:var(--ink)}
+.ra-track i{position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--strip);transition:left .15s}
+.ra-switch.on .ra-track i{left:14px}
+
+/* the aside · Account card: twin gauges on the 10px track, then the time strip.
+   `--u-pct-w` is the right-hand reserve the percentage, the time-strip spacer
+   and the time labels all measure against — three rows, one number, so their
+   right edges cannot drift apart. 36px is the widest `100%` across the whole
+   `--font` fallback chain (Hanken Grotesk 33.9px … sans-serif 35.8px) and no
+   wider: tabular-nums keeps the digits from shuffling below that. */
+.usage{--u-pct-w:36px;--u-gap:8px;display:flex;flex-direction:column;gap:24px;margin-top:20px}
+.usage .u{display:flex;flex-direction:column;gap:0;min-width:0}
+.usage .u-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:13px}
+.usage .u-label{font-weight:500;color:var(--ink);flex-shrink:0}
+.usage .u-reset{font-size:12px;color:var(--ink2);white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.usage .u-row{display:flex;align-items:center;gap:var(--u-gap);margin-top:8px}
+.usage .u-bar{flex:1;height:10px;border-radius:8px;background:var(--steel);overflow:hidden}
+.usage .u-fill{height:100%;border-radius:8px;background:var(--green);transition:width .5s ease}
+.usage .u-fill.mid{background:var(--amber)}
+.usage .u-fill.high{background:var(--red)}
+.usage .u-pct{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);min-width:var(--u-pct-w);text-align:right}
+.usage .u-pct.mid{color:var(--amber)}
+.usage .u-pct.high{color:var(--red)}
+.usage .u-msg{font-size:13px;color:var(--ink2)}
+/* Time strip: the same bar width, but the axis is the window's clock rather
+   than its tokens — elapsed fill, a `now` tick, and the projected-100% tick.
+   Reading them together answers "do I run dry before the reset?". */
+.usage .u-time-row{display:flex;align-items:center;gap:var(--u-gap);margin-top:12px}
+.usage .u-time{flex:1;position:relative;height:3px;border-radius:999px;background:var(--steel)}
+.usage .u-time-fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:var(--hairline2);transition:width .5s ease}
+.usage .u-time-spacer{flex:0 0 var(--u-pct-w)}
+.usage .u-tick{position:absolute;top:-3px;height:9px}
+.usage .u-tick.now{width:1px;background:var(--ink)}
+.usage .u-tick.wall{width:2px;background:var(--red)}
+.usage .u-tick.wall-pessimistic{width:1px;background:var(--red);opacity:.45}
+.usage .u-band{position:absolute;top:-3px;height:9px;background:var(--red);opacity:.14}
+.usage .u-time-labels{display:flex;justify-content:space-between;gap:8px;padding-right:calc(var(--u-pct-w) + var(--u-gap));margin-top:6px;font-size:11px;color:var(--ink3)}
+.usage .u-verdict{white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.usage .u-verdict.wall{color:var(--red)}
+.usage .u-verdict.lasts{color:var(--green)}
+
+/* ── toolbar: one row. The labelled view switcher left; one shared track right
+   with the filter button, the sort label and the sort button. Nothing here does
+   anything but change which rows you see, in what order, and in what shape. */
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:10px}
 .toolbar .tb-spacer{flex:1;min-width:0}
-.toolbar select{font-size:12px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 8px;cursor:pointer;transition:border-color .15s,color .15s}
-.toolbar select:hover{color:var(--ink);border-color:var(--hairline2)}
-.toolbar select:focus{outline:none;border-color:var(--cyan)}
+/* the segmented track. On the app ground it is --hairline2, not --strip-hi:
+   those two are two points apart on daylight and the track vanished (the
+   scope-pill lesson from §8.2 — nothing on the ground uses --strip-hi as its
+   only separator). Inside a popover, on paper, the recessed --steel is right. */
+.seg{display:inline-flex;align-items:center;background:var(--hairline2);border-radius:12px;padding:3px}
+.seg>button{font-family:var(--font);font-size:13px;font-weight:500;white-space:nowrap;color:var(--ink2);background:none;border:0;border-radius:9px;padding:7px 12px;cursor:pointer;transition:color .15s,background .15s}
+.seg>button:hover{color:var(--ink)}
+.seg>button.on{color:var(--ink);background:var(--strip);box-shadow:0 1px 2px var(--shadow)}
+.ctlwrap{position:relative}
+.seg .ictl{position:relative;padding:0;width:34px;height:30px;display:grid;place-items:center}
+.seg .ictl svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.seg .ictl.open{color:var(--ink)}
+/* the count badge on a raised filter button: ink on paper, so it reads on every theme */
+.seg .ictl .n{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--ink);color:var(--strip);font-size:10px;font-weight:500;display:grid;place-items:center;font-variant-numeric:tabular-nums}
+.seg .vsep{width:1px;height:18px;margin:0 2px 0 6px;background:var(--ink3);opacity:.45;flex:none}
+.sortlab{font-size:13px;color:var(--ink2);padding:0 2px 0 8px;white-space:nowrap}
+.sortlab b{color:var(--ink);font-weight:500}
+/* the popover: the one floating surface besides the shell (§5) */
+.pop{position:absolute;top:calc(100% + 8px);right:0;width:300px;z-index:20;text-align:left;background:var(--strip);border:1px solid var(--hairline);border-radius:12px;box-shadow:0 8px 24px var(--shadow2);padding:16px}
+.pop-h{display:flex;align-items:baseline;gap:8px;font-size:14px;font-weight:500;color:var(--ink);margin-bottom:12px}
+.pop-h .clear{margin-left:auto;border:0;background:none;padding:0;font-family:var(--font);font-size:12px;color:var(--ink2);cursor:pointer}
+.pop-h .clear:disabled{color:var(--ink3);cursor:default}
+.pop-k{font-size:12px;color:var(--ink2);margin:14px 0 8px}
+.pop-k:first-of-type{margin-top:0}
+.pop-k .hint{color:var(--ink3)}
+.picks{display:flex;flex-wrap:wrap;gap:6px}
+.pick{height:28px;padding:0 10px;border:1px solid var(--hairline2);border-radius:12px;background:var(--strip);font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);display:inline-flex;align-items:center;gap:6px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .15s,border-color .15s}
+.pick:hover{color:var(--ink);border-color:var(--ink3)}
+.pick.on{background:var(--ink);border-color:var(--ink);color:var(--strip)}
+.pick .sdot{width:7px;height:7px}
+.pick.on .sdot{box-shadow:none;animation:none}
+/* the pill switch inside a popover: recessed steel, paper option */
+.pop .sw{display:flex;background:var(--steel);border-radius:12px;padding:3px}
+.pop .sw button{flex:1;font-family:var(--font);font-size:13px;font-weight:500;white-space:nowrap;color:var(--ink2);background:none;border:0;border-radius:9px;padding:6px 0;cursor:pointer;transition:color .15s,background .15s}
+.pop .sw button:hover{color:var(--ink)}
+.pop .sw button.on{color:var(--ink);background:var(--strip);box-shadow:0 1px 2px var(--shadow)}
+.opt{display:flex;align-items:center;gap:10px;width:100%;height:36px;padding:0 10px;border:0;background:none;border-radius:8px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink2);text-align:left;cursor:pointer}
+.opt:hover{background:var(--strip-hi)}
+.opt.on{color:var(--ink)}
+.opt .hint{font-size:11px;font-weight:400;color:var(--ink3)}
+.opt .tick{margin-left:auto;width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;visibility:hidden;flex:none}
+.opt.on .tick{visibility:visible}
+.pop-div{height:1px;background:var(--hairline);margin:12px 0}
+
+/* ── row atoms ─────────────────────────────────────────────────────────────── */
+.sdot{width:9px;height:9px;border-radius:50%;background:var(--hairline2);display:inline-block;flex:none}
+.sdot.working{background:var(--green);box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 50%,transparent);animation:pulse 1.8s infinite}
+.sdot.question{background:var(--amber)}
+.sdot.incomplete{background:var(--mustard)}
+.sdot.launching{background:var(--ink);box-shadow:0 0 0 0 color-mix(in srgb,var(--ink) 35%,transparent);animation:pulse-ink 1.8s infinite}
+.sdot.failed{background:var(--red)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes pulse-ink{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ink) 35%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+/* the status word as a tinted pill */
+.spill{font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;background:var(--strip-hi);color:var(--ink2);white-space:nowrap;flex:none}
+.spill.working{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.spill.question{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.spill.incomplete{background:color-mix(in srgb,var(--mustard) 22%,transparent);color:var(--ink)}
+.spill.launching{background:var(--ink);color:var(--strip)}
+.spill.failed{background:color-mix(in srgb,var(--red) 14%,transparent);color:var(--red)}
+.sname{font-size:15px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;color:var(--ink)}
+/* pills: project (when a title leads), branch (outlined), surface + kaizen.
+   Shared with the chat drawer's head, which is why they keep their names. */
+.proj-pill{font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:var(--strip-hi);color:var(--ink2);white-space:nowrap}
+.branch{font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;border:1px solid var(--hairline2);color:var(--ink2);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.model{font-size:11px;font-weight:500;color:var(--ink3);white-space:nowrap}
+.ag-pill{flex-shrink:0;font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;white-space:nowrap}
+.ag-pill.running{color:var(--green);background:color-mix(in srgb,var(--green) 18%,transparent)}
+.ag-pill.done{color:var(--ink2);background:var(--strip-hi)}
+.ag-pill.kaizen{color:var(--green);background:color-mix(in srgb,var(--green) 18%,transparent)}
+/* where the session lives (client/src/lib/surface.ts): magenta borrows the Task
+   accent so a launched session stands apart from the pills around it; a future
+   cloud session is deliberately the quieter tint */
+.ag-pill.surface.dashboard{color:var(--magenta);background:color-mix(in srgb,var(--magenta) 14%,transparent)}
+.ag-pill.surface.cloud{color:var(--ink2);background:var(--strip-hi)}
+.r1{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap;row-gap:6px}
+/* the flex spacer several rows and heads share (chat head, panel chrome, analytics bar) */
+.spacer{flex:1}
+.tok{font-size:13px;color:var(--ink2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pct{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+.pct.warn{color:var(--amber)}
+.sessions .metric{font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
+.sessions .metric.warn{color:var(--amber)}
+/* the context gauge: 8px bar on rows, 10px track on the metric tiles */
+.bar{height:8px;border-radius:8px;background:var(--steel);overflow:hidden}
+.track{height:10px;border-radius:8px;background:var(--steel);overflow:hidden}
+.bar .fill,.track .fill{height:100%;border-radius:8px;background:var(--green);transition:width .5s ease}
+.bar .fill.warn,.track .fill.warn{background:var(--amber)}
+.act-line{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);min-width:0}
+.act-line .act{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.act-line .act .tool{font-weight:500;color:var(--ink)}
+.act-line .act .tool.task{color:var(--magenta)}
+.act-line .act.none{color:var(--ink3)}
+.act-line .ago{margin-left:auto;flex:none;color:var(--ink3);font-variant-numeric:tabular-nums}
+/* Real text, not a `title` — a tooltip never appears on touch, and the phone is
+   the surface the stop control exists for. */
+.stop-badge{flex-shrink:0;font-size:12px;color:var(--amber)}
+/* the chat button — the way into a session's drawer, and where it names a
+   hold. Tinted amber when you can act from here, mustard when only that
+   terminal can, so the two kinds of "needs you" stay apart down a whole column. */
+.cbtn{height:30px;padding:0 10px;border:1px solid var(--hairline2);background:var(--strip);border-radius:12px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;flex:none;cursor:pointer;transition:color .15s,border-color .15s}
+.cbtn:hover{color:var(--ink);border-color:var(--ink3)}
+.cbtn .rc-mark{font-size:10px}
+.cbtn.answer{background:color-mix(in srgb,var(--amber) 14%,transparent);border-color:transparent;color:var(--amber);animation:qpulse 1.6s ease-in-out infinite}
+.cbtn.permission{background:color-mix(in srgb,var(--mustard) 20%,transparent);border-color:transparent;color:var(--mustard);animation:qpulse 1.6s ease-in-out infinite}
+.cbtn.answer:hover,.cbtn.permission:hover{color:var(--ink)}
+.cbtn.wide{flex:1}
+@keyframes qpulse{0%,100%{opacity:1}50%{opacity:.55}}
+
+/* ── the open body: kaizen lesson, stop control, subagent timeline ─────────── */
+.expanded{margin-top:14px;padding-top:14px;border-top:1px solid var(--hairline);cursor:default}
+.kaizen-lesson{display:flex;align-items:flex-start;gap:8px;font-size:13px;line-height:1.5;color:var(--ink2);margin-bottom:14px}
+.kaizen-lesson .ag-pill{margin-top:1px}
+/* Stop control: open-body only, so a destructive action is never one stray
+   tap on a phone. Two stages (arm, then confirm) mirroring Settings' reset. */
+.stop-ctl{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.stop-go,.stop-cancel{height:32px;padding:0 12px;border-radius:12px;background:var(--strip);border:1px solid var(--hairline2);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer}
+.stop-go{color:var(--red)}
+.stop-go:disabled{opacity:.5;cursor:default}
+.stop-cancel{color:var(--ink2)}
+.stop-msg{font-size:12px;color:var(--red)}
+.detail{min-width:0}
+.detail-sum{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);font-variant-numeric:tabular-nums;margin-bottom:12px}
+.detail-sum .ds-run{color:var(--green);font-weight:600}
+.detail-sum .ds-done{color:var(--ink);font-weight:600}
+.detail-sum .ds-total{margin-left:auto;color:var(--ink3)}
+.detail-empty{font-size:13px;color:var(--ink3);padding:2px 0}
+.agents{display:flex;flex-direction:column;gap:10px}
+.agent{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink2);min-width:0}
+.ag-type{flex-shrink:0;color:var(--magenta);font-weight:500}
+.ag-desc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.ag-dur{margin-left:auto;flex-shrink:0;color:var(--ink3);font-size:12px;font-variant-numeric:tabular-nums}
+/* Per-agent timeline: start→finish bar on the session's shared time axis */
+.agent-block{display:flex;flex-direction:column;gap:5px}
+.tl-track{position:relative;height:6px;border-radius:4px;background:var(--steel)}
+.tl-bar{position:absolute;top:0;height:100%;min-width:3px;border-radius:4px;background:var(--hairline2)}
+.tl-bar.running{background:var(--green);animation:tlpulse 1.8s ease-in-out infinite}
+@keyframes tlpulse{0%,100%{opacity:.85}50%{opacity:.5}}
+.tl-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums;margin-top:8px}
+
+/* ── Board: three columns by what the session wants from you ──────────────── */
+.board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
+.bcol{display:flex;flex-direction:column;gap:10px;min-width:0}
+.col-h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--ink2);padding:0 4px 4px}
+.col-h .n{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--strip);color:var(--ink2);font-variant-numeric:tabular-nums}
+.col-h.ask .n{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.col-h.run .n{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.bcard{background:var(--strip);border-radius:16px;padding:16px;min-width:0;transition:box-shadow .15s}
+.bcard.selected{box-shadow:0 0 0 1px var(--ink)}
+.bcard.launching{background:transparent;border:1px dashed var(--hairline2)}
+.bcard.launching.failed{border-color:var(--red)}
+.bmain{cursor:pointer}
+.bcard .bar{margin-top:12px}
+.bmeta{display:flex;justify-content:space-between;align-items:baseline;margin-top:8px}
+.bcard .act-line{margin-top:10px}
+.bcard .ag-desc{font-size:12px}
+.bfoot{margin-top:14px;display:flex;gap:8px}
+
+/* ── List: one table, the open row expands underneath itself ──────────────── */
+.ledger{padding:0;overflow:hidden}
+.ledger table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+.ledger th{font-size:12px;font-weight:400;color:var(--ink2);text-align:left;padding:14px 12px;border-bottom:1px solid var(--hairline);white-space:nowrap}
+.ledger td{padding:14px 12px;border-top:1px solid var(--hairline);vertical-align:middle;overflow:hidden}
+.ledger tbody tr:first-child td{border-top:0}
+.ledger th:first-child,.ledger td:first-child{padding-left:20px}
+.ledger th:last-child,.ledger td:last-child{padding-right:20px}
+.ledger .c-dot{width:41px}.ledger .c-model{width:90px}.ledger .c-ctx{width:200px}.ledger .c-last{width:80px}.ledger .c-do{width:104px}
+.ledger tbody tr:not(.launching):not(.expand){cursor:pointer}
+.ledger tbody tr:not(.launching):not(.expand):hover td{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
+.ledger tr.selected td{background:var(--strip-hi);border-top-color:transparent}
+.ledger tr.expand td{padding:0 20px 18px 45px;border-top:0;background:var(--strip-hi)}
+.ledger tr.expand+tr td{border-top-color:transparent}
+.ledger tr.expand .expanded{margin-top:0;padding-top:0;border-top:0}
+.ledger .name{font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ledger .name .ag-pill{margin-left:6px;vertical-align:1px}
+.ledger .sub{font-size:12px;color:var(--ink2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ledger td.model{font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ledger .ctx{display:flex;align-items:center;gap:10px}
+.ledger .ctx .bar{flex:1}
+.ledger .ctx .pct{min-width:38px;text-align:right}
+.ledger .ctx+.tok{display:block;font-size:11px;color:var(--ink3);margin-top:5px}
+.ledger td.activity .act-line{max-width:100%}
+.ledger .when{color:var(--ink3);font-size:12px;white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
+.ledger td.do{text-align:right;white-space:nowrap}
+.ledger .dash{color:var(--ink3)}
+
+/* ── Split: a compact list, one inspector ─────────────────────────────────── */
+.split{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
+.list{padding:0;overflow:hidden}
+.list-h{display:flex;align-items:center;gap:8px;padding:14px 20px;border-bottom:1px solid var(--hairline)}
+.list-h .ct{font-size:16px}
+.lrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:10px;align-items:center;padding:14px 20px;border-top:1px solid var(--hairline);cursor:pointer;min-width:0;transition:background .15s}
+.list-h+.lrow{border-top:0}
+.lrow:hover{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
+.lrow.selected{background:var(--strip-hi);box-shadow:inset 3px 0 0 var(--ink)}
+.lrow.launching{cursor:default}
+.lrow .nm{display:flex;align-items:center;gap:8px;min-width:0;font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--ink)}
+.lrow .nm .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lrow .pct{font-size:13px}
+.lrow .act-line{grid-column:2/4;margin-top:6px}
+.lrow .act-line .spill{padding:1px 7px}
+.lrow .bar{grid-column:2/4;height:4px;margin-top:10px}
+.lrow .prompt{grid-column:2/4;font-size:12px;color:var(--ink2);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inspect{min-width:0}
+.ins-head{display:flex;align-items:flex-start;gap:8px}
+.ins-head .who2{flex:1;min-width:0}
+.ins-meta{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;row-gap:6px}
+.ins-ctx{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:20px}
+.kv{background:var(--strip-hi);border-radius:12px;padding:14px 16px;min-width:0}
+.kv .k{font-size:12px;color:var(--ink2)}
+.kv .v{display:flex;align-items:baseline;gap:8px;margin-top:4px}
+.kv .v .metric{font-size:24px}
+.kv .v .u .tok{font-size:12px}
+.kv .track{margin-top:12px}
+.kv .now{font-size:14px;font-weight:500;color:var(--ink);margin-top:8px;display:flex;align-items:center;gap:8px;min-width:0;line-height:1.4}
+.kv .now .act{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kv .now .act .tool{color:var(--ink2);font-weight:400}
+.kv .cap{margin-top:10px}
+.inspect .expanded{margin-top:20px}
+
+/* ── Tiles: every session a metric card; the open one spans two ───────────── */
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
+.tile{cursor:pointer;transition:box-shadow .15s}
+.tile.selected{box-shadow:0 0 0 1px var(--ink);grid-column:span 2}
+.tile.launching{background:transparent;border:1px dashed var(--hairline2);cursor:default}
+.tile.launching.failed{border-color:var(--red)}
+.tile-h{display:flex;align-items:center;gap:8px}
+.tile-h .nm{font-size:15px;font-weight:500;letter-spacing:-.01em;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile-sub{margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-height:20px}
+.tile-metric{display:flex;align-items:baseline;gap:8px;margin-top:16px}
+.tile-metric .of{font-size:12px;color:var(--ink2)}
+.tile .track{margin-top:12px}
+.tile .act-line{margin-top:14px}
+.tile .prompt{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:14px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+
+/* ── Triage: what needs you first, then the working and idle lists ────────── */
+.sec-h{display:flex;align-items:baseline;gap:10px;padding:4px 4px 0;flex-wrap:wrap}
+.sec-h .cs{margin-top:0}
+.sec-h+.need,.sec-h+.quiet{margin-top:-6px}
+.need{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;padding:20px 24px 20px 28px;position:relative;overflow:hidden}
+.need::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--amber);animation:qpulse 1.6s ease-in-out infinite}
+.need.permission::before{background:var(--mustard)}
+.need-who{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);flex-wrap:wrap;row-gap:6px}
+.need-who b{color:var(--ink);font-weight:500;font-size:15px;letter-spacing:-.01em}
+.need-who .pct{font-size:12px}
+.need .q{margin-top:10px;font-size:16px;font-weight:500;letter-spacing:-.01em;line-height:1.35;color:var(--ink);min-width:0}
+.need .q .kind{display:block;color:var(--ink2);font-weight:400;font-size:12px;margin-bottom:4px;letter-spacing:0}
+.need .q .act{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.need .q .act .tool{color:var(--ink2);font-weight:400}
+.acts{display:flex;flex-direction:column;gap:8px;min-width:140px}
+.act-go{height:40px;padding:0 16px;border:0;border-radius:12px;background:var(--ink);color:var(--strip);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;text-transform:capitalize;transition:opacity .15s}
+.act-go:hover{opacity:.88}
+.quiet{padding:0;overflow:hidden}
+.qrow{display:flex;align-items:center;gap:10px;padding:14px 20px;border-top:1px solid var(--hairline);font-size:13px;min-width:0}
+.qrow:first-child{border-top:0}
+.qrow .nm{font-weight:500;font-size:14px;letter-spacing:-.01em;color:var(--ink);white-space:nowrap}
+.qrow .act-line{flex:1;min-width:140px}
+.qrow .ctx{margin-left:auto;display:flex;align-items:center;gap:10px;flex:none}
+.qrow .ctx .bar{width:80px}
+.qrow .ctx .pct{min-width:38px;text-align:right}
+.qrow .when{flex:none;font-size:12px;color:var(--ink3);min-width:52px;text-align:right;font-variant-numeric:tabular-nums}
+.qrow .prompt{flex:1;font-size:12px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── empty, loading, footer ────────────────────────────────────────────────── */
+.empty{text-align:center;padding:60px 20px;color:var(--ink3);font-size:13px}
+.empty .e{font-size:34px;margin-bottom:10px;opacity:.3}
+.empty .clear-filters{margin-top:12px;height:32px;padding:0 12px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:border-color .15s,color .15s}
+.empty .clear-filters:hover{color:var(--ink);border-color:var(--ink3)}
+.foot{font-size:11px;color:var(--ink3);text-align:center}
+/* scoped to the footer note — a bare .off also matches the origin badge's
+   `ra-pill off` and used to tint it red */
+.foot .off{color:var(--red)}
+
+/* below the broad wrap's comfort the aside moves above the list as a two-card
+   row; on a phone the two cards stack */
+@media (max-width:1100px){
+  .sessions{grid-template-columns:1fr}
+  .s-aside{order:-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+  .board{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .split{grid-template-columns:280px minmax(0,1fr)}
+}
+@media (max-width:700px){
+  .s-aside{grid-template-columns:1fr}
+  .s-card{padding:20px}
+  .board,.tiles{grid-template-columns:1fr}
+  .tile.selected{grid-column:auto}
+  .split{grid-template-columns:1fr}
+  .ledger .c-model,.ledger td.model,.ledger th:nth-child(3){display:none}
+  .ledger .c-ctx{width:120px}
+  .toolbar .seg.view{width:100%}
+  .toolbar .seg.view>button{flex:1;padding:7px 0}
+  .ctlwrap{margin-left:auto}
+  .pop{width:min(300px,calc(100vw - 48px))}
+  .need{grid-template-columns:1fr;padding-left:24px}
+  .acts{flex-direction:row}
+}
+
+/* Analytics' filter bar still draws the older select + checkbox-popover
+   controls (MultiSelect.tsx); scoped here so the sessions toolbar above, which
+   shares the `.toolbar` row, does not inherit them. */
+.analytics .toolbar{margin-bottom:18px}
+.analytics .toolbar select{font-size:12px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 8px;cursor:pointer;transition:border-color .15s,color .15s}
+.analytics .toolbar select:hover{color:var(--ink);border-color:var(--hairline2)}
+.analytics .toolbar select:focus{outline:none;border-color:var(--cyan)}
 .tb-multi-wrap{position:relative}
 .tb-multi{font-size:12px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 8px;cursor:pointer;transition:border-color .15s,color .15s;white-space:nowrap}
 .tb-multi:hover{color:var(--ink);border-color:var(--hairline2)}
@@ -261,315 +697,194 @@ code,kbd,samp,pre{font-family:inherit}
 .tb-pop-row:hover{color:var(--ink);background:var(--strip-hi)}
 .tb-pop-row input{cursor:pointer;margin:0}
 .tb-pop-empty{font-size:12px;color:var(--ink2);padding:4px 6px}
-/* remote-answer switch: on = allowed while you're away, not instead of the terminal */
-.ra-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink3);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 10px;cursor:pointer;transition:color .15s,border-color .15s}
-.ra-pill:hover:not(:disabled){color:var(--ink2);border-color:var(--hairline2)}
-.ra-pill:disabled{cursor:default}
-.ra-pill.on{color:var(--ink);border-color:var(--cyan)}
-.ra-pill .ra-dot{width:6px;height:6px;border-radius:50%;background:var(--hairline2);flex-shrink:0}
-.ra-pill.on .ra-dot{background:var(--cyan)}
-.ra-pill.off{cursor:default}
-.ra-warn{color:var(--amber);font-size:11px}
-/* The toggle itself: a real switch, since it is the one thing in the plate you
-   flip rather than read. Track and knob are tokens, so all five themes hold. */
-.ra-switch{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:4px 10px;cursor:pointer;transition:color .15s,border-color .15s}
-.ra-switch:hover:not(:disabled){color:var(--ink);border-color:var(--hairline2)}
-.ra-switch:disabled{cursor:default}
-.ra-switch.on{color:var(--ink);border-color:var(--cyan)}
-/* Two things this rule got wrong first time round, both worth keeping written
-   down. (1) The off track is --ink3, not the --hairline2 the old status dot
-   used: against a card-coloured knob, hairline2 measures 1.6:1 on daylight, so
-   the knob vanished on the one light theme. ink3 is the dimmest token that
-   still clears 3:1 in all five (worst case 3.28 off, 5.68 on). (2) There is no
-   transition on the background: Chromium keeps painting the previous theme's
-   colour for a transitioned property whose value came from a custom property,
-   so switching theme left the track a step behind. Only the knob animates, and
-   its slide is what reads as a switch anyway. */
-.ra-track{position:relative;width:24px;height:13px;border-radius:7px;background:var(--ink3);flex-shrink:0}
-.ra-switch.on .ra-track{background:var(--cyan)}
-.ra-track i{position:absolute;top:2px;left:2px;width:9px;height:9px;border-radius:50%;background:var(--strip);transition:left .15s}
-.ra-switch.on .ra-track i{left:13px}
-/* connection origin: how this browser reached the dashboard. Display-only. */
-.ra-pill.origin{cursor:default}
-.ra-pill.origin.o-tailnet .ra-dot{background:var(--cyan)}
-.ra-pill.origin.o-lan .ra-dot{background:var(--green)}
-.ra-pill.origin.o-unknown{color:var(--amber);border-color:var(--amber)}
-.ra-pill.origin.o-unknown .ra-dot{background:var(--amber)}
-.toolbar .tb-dir{font-size:13px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 9px;cursor:pointer;transition:border-color .15s,color .15s;font-variant-numeric:tabular-nums}
-.toolbar .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
-/* the one write action on the board — filled, so it doesn't read as just
-   another filter pill. Lives at the head of the status plate, and only when the
-   health poll says spawn is configured (see Header.tsx). */
-.tb-new{font-size:13px;font-weight:500;color:var(--on-accent);background:var(--cyan);border:1px solid var(--cyan);border-radius:2px;padding:5px 11px;cursor:pointer;transition:opacity .15s}
-.tb-new:hover{opacity:.88}
+.analytics .toolbar .tb-dir{font-size:13px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 9px;cursor:pointer;transition:border-color .15s,color .15s;font-variant-numeric:tabular-nums}
+.analytics .toolbar .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
 
-/* twin gauges: 5H / WEEK */
-.usage{display:flex;gap:18px;margin:-6px 0 18px}
-.usage .u{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1;max-width:280px}
-.usage .u-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
-.usage .u-label{font-size:11px;font-weight:500;color:var(--ink3);flex-shrink:0}
-.usage .u-row{display:flex;align-items:center;gap:8px}
-.usage .u-bar{flex:1;height:4px;background:repeating-linear-gradient(90deg,transparent 0 23px,var(--edge) 23px 24px),var(--steel);overflow:hidden}
-.usage .u-fill{height:100%;background:var(--green);transition:width .5s ease}
-.usage .u-fill.mid{background:var(--amber)}
-.usage .u-fill.high{background:var(--red)}
-.usage .u-pct{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink2);min-width:34px;text-align:right}
-.usage .u-reset{font-size:11px;color:var(--ink3);white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.usage .u-msg{font-size:12px;color:var(--ink3)}
-/* Time strip: the same bar width, but the axis is the window's clock rather
-   than its tokens — elapsed fill, a `now` tick, and the projected-100% tick.
-   Reading them together answers "do I run dry before the reset?". */
-.usage .u-time-row{display:flex;align-items:center;gap:8px;margin-top:3px}
-.usage .u-time{flex:1;position:relative;height:3px;background:var(--steel)}
-.usage .u-time-fill{position:absolute;left:0;top:0;height:100%;background:var(--hairline2);transition:width .5s ease}
-.usage .u-time-spacer{min-width:34px}
-.usage .u-tick{position:absolute;top:-2px;height:7px}
-.usage .u-tick.now{width:1px;background:var(--cyan)}
-.usage .u-tick.wall{width:2px;background:var(--red)}
-.usage .u-tick.wall-pessimistic{width:1px;background:var(--red);opacity:.45}
-.usage .u-band{position:absolute;top:-2px;height:7px;background:var(--red);opacity:.14}
-.usage .u-time-labels{display:flex;justify-content:space-between;gap:8px;padding-right:42px;font-size:11px;color:var(--ink3)}
-.usage .u-verdict{white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.usage .u-verdict.wall{color:var(--red)}
-.usage .u-verdict.lasts{color:var(--green)}
-
-.rows{display:flex;flex-direction:column;gap:var(--rows-gap)}
-/* a session is a flight strip: square paper card in a colored holder edge.
-   The card splits in two: the printed face (.row-main) and the tear-off tab
-   down the right edge (.row-chat). Padding lives on the face, so the tab
-   reaches the card's own edges. */
-.row{
-  background:var(--strip);border:1px solid var(--hairline);border-left:7px solid var(--hairline2);border-radius:2px;display:flex;align-items:stretch;
-  box-shadow:inset 0 1px 0 var(--edge),0 1px 2px var(--shadow);
-  transition:border-color .15s,transform .15s,box-shadow .15s;
-  animation:slot-in .18s ease-out;
+/* ── Management ───────────────────────────────────────────────────────────
+   DESIGN.md §8.5: the scope is a rail destination, not a pane, so what is left
+   is three columns — type, item, file. Drawn in §8.2's card language: a band on
+   the `--board` ground, then borderless `--strip` cards at 16px radius, the
+   item column shaped exactly like a preferences card. Every colour is a theme
+   token — the five themes are pure `[data-theme]` overrides and one literal
+   breaks the light one. `--strip-hi` is the design's `--bg-subtle` here: it is
+   used *on a card*, never as a separator on the ground (§8.3). */
+/* The band is two rows, not one row with a two-line left half: the title and ↻
+   centre on each other, and the line runs the full width beneath them. */
+.mgmt-bar{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
+.mgmt-bandrow{display:flex;align-items:center;gap:12px}
+.mgmt-title{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
+.mgmt-sub{font-size:13px;color:var(--ink2);line-height:1.45;max-width:92ch}
+.mgmt-bar .off{flex:none;font-size:12px;color:var(--amber)}
+/* the 36px control family §8.2 put every Settings control on */
+.mgmt-bar .tb-dir{margin-left:auto;flex:none;height:36px;font-family:var(--font);font-size:13px;font-weight:500;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;padding:0 14px;cursor:pointer;transition:border-color .15s,color .15s}
+.mgmt-bar .tb-dir:hover{color:var(--ink);border-color:var(--ink3)}
+/* Columns 1 and 2 are FIXED. A second column that is wide until you pick
+   something and narrow after is a column that jumps out from under the row you
+   just clicked; the third has to arrive beside the other two. */
+.mgmt{display:grid;grid-template-columns:190px 420px minmax(0,1fr);gap:16px;align-items:start}
+.mgmt.pair{grid-template-columns:190px 420px}
+/* Three columns need ~1330px of viewport before the file column stops being
+   worth having. Below that it drops to a full-width row under the other two —
+   which is also what keeps the item column the same width open or closed. */
+@media (max-width:1330px){
+  .mgmt,.mgmt.pair{grid-template-columns:190px minmax(0,1fr)}
+  .mdetail{grid-column:1/-1}
 }
-.row-main{flex:1;min-width:0;padding:var(--row-pad);cursor:pointer}
-@keyframes slot-in{from{transform:translateY(-3px);opacity:.5}to{transform:none;opacity:1}}
-.row:hover{border-color:var(--hairline2);transform:translateY(-1px);box-shadow:inset 0 1px 0 var(--edge),0 2px 6px var(--shadow2)}
-.row.selected{box-shadow:0 0 0 1px var(--cyan),inset 0 1px 0 var(--edge)}
-.row.working{border-left-color:var(--green)}
-.row.incomplete{border-left-color:var(--mustard)}
-/* the cocked strip — tilted in the rack: this one needs the controller */
-.row.question{
-  border-left-color:var(--amber);transform:rotate(-.55deg) translateX(6px);
-  box-shadow:inset 0 1px 0 var(--edge),0 3px 8px var(--shadow2);
+@media (max-width:700px){
+  .mgmt,.mgmt.pair{grid-template-columns:minmax(0,1fr)}
+  .mdetail{grid-column:auto}
 }
-.row.question:hover{transform:rotate(-.55deg) translateX(6px)}
-/* the tab: full card height down the right edge, the one way into this
-   session's chat — and the one place a session says it needs a human. All four
-   holds (question / plan / reply / permission) open that same drawer, so they
-   are this one slab rather than four 9.5px pills lost among the printed fields.
-   Colored, it reads down a whole rack; a pill did not. */
-/* vertical padding rides the density token so the label lines up with `.r1`;
-   the sides are cut back to 7px — at the token's 14px, `answer` fills the
-   content box to the pixel and clips on the next text scale up */
-.row-chat{
-  flex:0 0 58px;display:flex;justify-content:center;align-items:flex-start;padding:var(--row-pad);padding-inline:7px;
-  background:var(--steel);color:var(--ink3);border:0;border-left:1px solid var(--hairline);border-radius:0 1px 1px 0;
-  cursor:pointer;transition:color .15s,background .15s,border-color .15s;
-}
-.row-chat:hover{color:var(--cyan);background:var(--strip-hi);border-left-color:var(--cyan)}
-/* an expanded card runs hundreds of px tall — the label rides the top of the
-   viewport instead of drifting off with the subagent panel */
-.rc-in{position:sticky;top:10px;display:flex;flex-direction:column;align-items:center;gap:3px}
-.rc-label{font-size:11px;font-weight:500;white-space:nowrap}
-.rc-mark{font-size:11px;line-height:1;color:var(--ink3);transition:color .15s}
-.row-chat:hover .rc-mark{color:var(--cyan)}
-/* held: amber, the same stamp language as the cocked strip it belongs to */
-.row-chat.answer{color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--strip));border-left-color:var(--amber);animation:qpulse 1.6s ease-in-out infinite}
-.row-chat.answer:hover{color:var(--ink);background:color-mix(in srgb,var(--amber) 28%,var(--strip))}
-/* permission dialog open in the terminal — mustard, not amber: it needs a human
-   like the answer tab, but it can only be answered over there */
-.row-chat.permission{color:var(--mustard);background:color-mix(in srgb,var(--mustard) 12%,var(--strip));border-left-color:var(--mustard);animation:qpulse 1.6s ease-in-out infinite}
-.row-chat.permission:hover{color:var(--ink);background:color-mix(in srgb,var(--mustard) 28%,var(--strip))}
-.row-chat.answer .rc-mark,.row-chat.permission .rc-mark{color:inherit}
-@keyframes qpulse{0%,100%{opacity:1}50%{opacity:.55}}
-.row .r1{display:flex;align-items:center;gap:10px}
-.caret{flex-shrink:0;color:var(--ink3);font-size:11px;width:10px;text-align:center;transition:transform .15s,color .15s}
-.caret.open{transform:rotate(90deg);color:var(--ink2)}
-.row:hover .caret{color:var(--ink2)}
-.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;background:var(--ink3)}
-.working .dot{background:var(--green);box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 50%,transparent);animation:pulse 1.8s infinite}
-.question .dot{background:var(--amber)}
-.incomplete .dot{background:var(--mustard)}
-@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
-/* Phantom rows for an in-flight `claude -p` launch (server/lib/spawn.ts's
-   RAM-only store — see SessionList's LaunchingRow). Same flight-strip chrome
-   as a real row; cyan while starting, since amber already means "working" and
-   mustard "incomplete" — cyan is the one color left in the ladder, and it
-   doubles as the accent SpawnPanel uses. Never interactive: no caret, no chat
-   tab, no hover lift. Failed re-uses every `.launching` rule below (the class
-   is additive, not a replacement) and only overrides the color to red. */
-.row.launching .row-main{cursor:default}
-.row.launching:hover{transform:none;box-shadow:inset 0 1px 0 var(--edge),0 1px 2px var(--shadow)}
-.row.launching{border-left-color:var(--cyan)}
-.row.launching .dot{background:var(--cyan);box-shadow:0 0 0 0 color-mix(in srgb,var(--cyan) 50%,transparent);animation:pulse-cyan 1.8s infinite}
-@keyframes pulse-cyan{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--cyan) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
-.row.launching .r2{margin-top:8px}
-.row.launching .r2 .status{color:var(--cyan)}
-.row.launching.failed{border-left-color:var(--red)}
-.row.launching.failed .dot{background:var(--red);animation:none;box-shadow:none}
-.row.launching.failed .r2 .status{color:var(--red)}
-.row.launching.failed .r2 .act{color:var(--red)}
-.proj{font-size:15px;font-weight:500;letter-spacing:-.01em}
-.session-name{font-size:15px;font-weight:500;letter-spacing:-.01em}
-/* printed form boxes: hairline border, no fill, teleprinter mono */
-.proj-pill{font-size:11px;font-weight:500;color:var(--ink2);border:1px solid var(--hairline2);padding:1px 6px;border-radius:2px}
-.branch{font-size:11px;color:var(--ink2);border:1px solid var(--hairline);padding:1px 6px;border-radius:2px}
-.model{font-size:11px;color:var(--ink3);font-weight:500}
-.spacer{flex:1}
-.tok{font-size:13px;color:var(--ink2);font-variant-numeric:tabular-nums}
-.pct{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;min-width:44px;text-align:right}
-/* printed gauge: flat threshold fill on a ticked track — no gradients */
-.bar{height:4px;background:repeating-linear-gradient(90deg,transparent 0 23px,var(--edge) 23px 24px),var(--steel);overflow:hidden;margin:var(--bar-margin)}
-.bar .fill{height:100%;background:var(--green);transition:width .5s ease}
-.bar .fill.warn{background:var(--amber)}
-.r2{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
-.r2 .act{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.r2 .act .tool{color:var(--cyan);font-weight:600}
-.r2 .act .tool.task{color:var(--magenta)}
-/* status word as a stamped label */
-.r2 .status{font-weight:500;font-size:11px;border:1px solid currentColor;border-radius:2px;padding:0 6px 1px}
-.working .r2 .status{color:var(--green)}
-.question .r2 .status{color:var(--amber)}
-.incomplete .r2 .status{color:var(--mustard)}
-.idle .r2 .status{color:var(--ink3)}
-.r2 .ago{margin-left:auto;color:var(--ink3);font-variant-numeric:tabular-nums;flex-shrink:0}
-/* Expanded subagent panel */
-.detail{margin-top:11px;padding-top:11px;border-top:1px solid var(--hairline)}
-.detail-sum{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);font-variant-numeric:tabular-nums;margin-bottom:9px}
-.detail-sum .ds-run{color:var(--green);font-weight:600}
-.detail-sum .ds-done{color:var(--ink2);font-weight:600}
-.detail-sum .ds-total{margin-left:auto;color:var(--ink3)}
-.detail-empty{font-size:13px;color:var(--ink3);padding:2px 0}
-.agents{display:flex;flex-direction:column;gap:5px}
-.agent{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink2)}
-.ag-pill{flex-shrink:0;font-size:11px;font-weight:500;padding:1px 6px;border-radius:2px}
-.ag-pill.running{color:var(--green);background:color-mix(in srgb,var(--green) 13%,transparent)}
-.ag-pill.done{color:var(--ink3);background:var(--steel)}
-.ag-pill.kaizen{color:var(--magenta);background:color-mix(in srgb,var(--magenta) 13%,transparent)}
-/* where the session lives (client/src/lib/surface.ts). Cyan borrows the spawn
-   panel's own accent, so a launched session carries the colour of the surface
-   that launched it; a future cloud session is deliberately the quieter steel. */
-.ag-pill.surface.dashboard{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 13%,transparent)}
-.ag-pill.surface.cloud{color:var(--ink3);background:var(--steel)}
-.kaizen-lesson{display:flex;align-items:flex-start;gap:8px;margin-top:11px;padding-top:11px;border-top:1px solid var(--hairline);font-size:13px;line-height:1.5;color:var(--ink2)}
-.kaizen-lesson .ag-pill{margin-top:1px}
-/* Stop control: expanded-row only, so a destructive action is never one stray
-   tap on a phone. Two stages (arm, then confirm) mirroring Settings' reset. */
-.stop-ctl{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:11px;padding-top:11px;border-top:1px solid var(--hairline)}
-.stop-go{font-size:13px;padding:5px 11px;color:var(--red);border:1px solid var(--red);background:transparent;cursor:pointer;font-family:inherit;font-weight:500}
-.stop-go:disabled{opacity:.5;cursor:default}
-.stop-cancel{font-size:13px;padding:5px 11px;color:var(--ink2);border:1px solid var(--hairline);background:transparent;cursor:pointer;font-family:inherit;font-weight:500}
-.stop-msg{font-size:12px;color:var(--red)}
-/* Real text in .r2, not a `title` — a tooltip never appears on touch, and the
-   phone is the surface this whole control exists for. */
-.stop-badge{flex-shrink:0;font-size:12px;color:var(--amber)}
-.ag-type{flex-shrink:0;color:var(--magenta);font-weight:600}
-.ag-desc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ag-dur{margin-left:auto;flex-shrink:0;color:var(--ink3);font-variant-numeric:tabular-nums}
-/* Per-agent timeline: start→finish bar on the session's shared time axis */
-.agent-block{display:flex;flex-direction:column;gap:3px}
-.tl-track{position:relative;height:5px;background:var(--steel)}
-.tl-bar{position:absolute;top:0;height:100%;min-width:3px;background:var(--ink3)}
-.tl-bar.running{background:var(--green);animation:tlpulse 1.8s ease-in-out infinite}
-@keyframes tlpulse{0%,100%{opacity:.85}50%{opacity:.5}}
-.tl-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums;margin-top:4px}
-.empty{text-align:center;padding:60px 20px;color:var(--ink3)}
-.empty .e{font-size:34px;margin-bottom:10px;opacity:.3}
-.empty .clear-filters{margin-top:12px;font-size:13px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:6px 10px;cursor:pointer;transition:border-color .15s,color .15s;font-weight:500}
-.empty .clear-filters:hover{color:var(--ink);border-color:var(--hairline2)}
-.foot{margin-top:18px;font-size:11px;color:var(--ink3);text-align:center}
-/* scoped to the footer note — a bare .off also matches the origin badge's
-   `ra-pill off` and used to tint it red */
-.foot .off{color:var(--red)}
-
-/* Management section (three-pane) */
-.mgmt-bar{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-.mgmt-bar .mgmt-title{font-size:19px;font-weight:500;letter-spacing:-.01em;line-height:1.3}
-.mgmt-bar .tb-dir{margin-left:auto;font-size:12px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 9px;cursor:pointer;transition:border-color .15s,color .15s}
-.mgmt-bar .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
-.mgmt{display:grid;grid-template-columns:200px 300px minmax(0,1fr);gap:14px;align-items:start}
-@media (max-width:1200px){.mgmt{grid-template-columns:200px minmax(0,1fr)}.mdetail{grid-column:1/-1}}
-@media (max-width:700px){.mgmt{grid-template-columns:1fr}.mdetail{grid-column:auto}}
-.mgmt-menu{display:flex;flex-direction:column;gap:4px}
-.mgmt-menu-item{display:flex;flex-direction:column;gap:1px;padding:7px 10px;border:1px solid var(--hairline);border-radius:2px;background:var(--strip);cursor:pointer;transition:border-color .15s;min-width:0;box-shadow:inset 0 1px 0 var(--edge)}
-.mgmt-menu-item:hover{border-color:var(--hairline2)}
-.mgmt-menu-item.on{box-shadow:0 0 0 1px var(--cyan),inset 0 1px 0 var(--edge)}
-.mgmt-menu-name{font-size:14px;font-weight:500}
-.mgmt-menu-path{font-size:11px;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mgmt-list{display:flex;flex-direction:column;gap:10px;min-width:0}
-.mgmt-filter{font-family:var(--font);font-size:12px;color:var(--ink);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:6px 9px;width:100%}
+/* Column 1 — the type. 16px padding, which is the only number the "you are
+   here" mark differs by between the two list columns. */
+.mgmt-pane{background:var(--strip);border-radius:16px;padding:16px;min-width:0}
+.mgmt-kick{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);padding:0 12px 10px}
+.mgmt-type{position:relative;display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-family:var(--font);font-size:14px;font-weight:500;color:var(--ink2);background:none;border:0;padding:10px 12px;cursor:pointer;transition:color .15s}
+.mgmt-type:hover{color:var(--ink)}
+/* The fill bleeds to the card's edge (the pane's own padding) so the row reads
+   as the row and not as a box floating inside it, and the ink bar is a
+   PSEUDO-ELEMENT: an inset shadow gets clipped into a crescent by a radius. */
+.mgmt-type.on{color:var(--ink);background:var(--strip-hi);box-shadow:-16px 0 0 var(--strip-hi),16px 0 0 var(--strip-hi)}
+.mgmt-type.on::before{content:"";position:absolute;left:-16px;top:0;bottom:0;width:3px;background:var(--ink)}
+.mgmt-type .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Borderless: the fill alone carries the pill, and against the picked row's
+   --strip-hi the lighter --strip fill is already the whole difference. A ring
+   around a two-character number was one line of ink more than it needed. */
+.mgmt-type .c{margin-left:auto;flex:none;font-size:11px;font-weight:500;color:var(--ink3);background:var(--board);border:0;border-radius:999px;padding:1px 8px}
+.mgmt-type.on .c{background:var(--strip);color:var(--ink2)}
+/* Column 2 — one type's items as a Settings card (§8.2): category title, a
+   one-line subtitle, the filter, then boxless rows a hairline separates. */
+.mgmt-list{background:var(--strip);border-radius:16px;padding:24px;min-width:0}
+.mgmt-ct{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
+.mgmt-cs{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:4px}
+.mgmt-rows{margin-top:8px}
+/* The same 36px control family §8.2 put every Settings control on */
+.mgmt-filter{width:100%;height:36px;margin-top:14px;font-family:var(--font);font-size:13px;font-weight:400;color:var(--ink);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;padding:0 12px}
 .mgmt-filter:focus{outline:none;border-color:var(--cyan)}
 .mgmt-filter::placeholder{color:var(--ink3)}
-.mgroup{display:flex;flex-direction:column;gap:4px}
-.mgroup-h{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:var(--ink3);padding:7px 6px;border-radius:2px;cursor:pointer;user-select:none;transition:background .12s,color .12s}
-.mgroup-h:hover{color:var(--ink2);background:var(--strip)}
-.mitem{padding:10px 12px;border:1px solid var(--hairline);border-radius:2px;background:var(--strip);cursor:pointer;transition:border-color .15s;min-width:0;box-shadow:inset 0 1px 0 var(--edge)}
-.mitem:hover{border-color:var(--hairline2)}
-.mitem.on{box-shadow:0 0 0 1px var(--cyan),inset 0 1px 0 var(--edge)}
-.mitem-top{display:flex;align-items:center;gap:8px;min-width:0}
-.mitem-name{font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.msrc{margin-left:auto;flex-shrink:0;font-size:11px;font-weight:500;color:var(--ink3);border:1px solid var(--hairline);padding:1px 6px;border-radius:2px}
+.mitem{position:relative;display:flex;align-items:flex-start;gap:16px;width:100%;min-width:0;text-align:left;font-family:var(--font);background:none;border:0;border-top:1px solid var(--hairline);padding:14px 0;cursor:pointer}
+.mgmt-rows>:first-child{border-top:0}
+.mitem-label{display:block;flex:1;min-width:0}
+/* Name and badges share the first line; the description runs the full width
+   beneath them. Wrapping, so a long name pushes the badges down rather than
+   squeezing them. */
+.mitem-top{display:flex;align-items:baseline;gap:8px;min-width:0;flex-wrap:wrap}
+.mitem-name{display:block;min-width:0;font-size:15px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.35;overflow-wrap:anywhere}
+.mitem .mitem-desc{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mitem-desc{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:3px;overflow-wrap:anywhere}
+/* No `margin-left:auto`: a badge belongs beside the name it qualifies, and a
+   row can carry several of them in a run (a hook's matcher, then its source). */
+.msrc{flex-shrink:0;font-size:11px;font-weight:500;color:var(--ink3);border:1px solid var(--hairline2);padding:1px 8px;border-radius:999px}
 .msrc.plugin{color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
-.mitem-desc{font-size:12px;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
-.mdetail{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hairline);border-radius:2px;background:var(--strip);min-width:0;box-shadow:inset 0 1px 0 var(--edge)}
-.mdetail-head{display:flex;align-items:center;gap:8px}
-.mdetail-head .mitem-name{font-size:16px;font-weight:500}
-.mdetail .mitem-desc{white-space:normal}
-.mdetail-path{font-size:11px;color:var(--ink3);word-break:break-all}
-.mgmt-file{font-size:12px;line-height:1.5;color:var(--ink2);background:var(--board);border:1px solid var(--hairline);border-radius:2px;padding:10px;max-height:70vh;overflow:auto;white-space:pre-wrap;word-break:break-word}
-.mgmt-trunc{font-size:11px;color:var(--amber)}
-.mgmt-empty{font-size:12px;color:var(--ink3);padding:4px 2px}
-/* Sub-group headers (plugin name / hook event) inside a type group */
-.msub-h{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink2);padding:8px 8px;margin-top:2px;border-radius:2px;background:var(--strip);cursor:pointer;user-select:none;transition:background .12s,color .12s}
-.msub-h:hover{color:var(--ink);background:var(--strip-hi)}
+/* The same "you are here" mark as column 1, at the card's 24px padding */
+.mitem.on{background:var(--strip-hi)}
+.mitem.on,.mitem.on+.mitem,.mitem.on+.msub-h{border-top-color:transparent}
+.mitem.on{box-shadow:-24px 0 0 var(--strip-hi),24px 0 0 var(--strip-hi)}
+.mitem.on::before{content:"";position:absolute;left:-24px;top:0;bottom:0;width:3px;background:var(--ink)}
+/* Sub-group headers (plugin name / hook event) between the item rows. The
+   padding is SYMMETRIC: a header hugging the group below it reads fine while
+   items follow it, but plugin groups start collapsed, so in practice you get a
+   run of headers where every label sits hard against the rule beneath it and
+   floats under the one above. The type scale steps DOWN from the item name —
+   this is the shelf, not a thing on it — and the count recedes one more. */
+.msub-h{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-family:var(--font);font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--ink2);background:none;border:0;border-top:1px solid var(--hairline);padding:13px 0;cursor:pointer;user-select:none;transition:color .15s}
+.msub-h:hover{color:var(--ink)}
+.msub-c{font-size:13px;font-weight:400;color:var(--ink3)}
 .msub-caret{display:inline-block;font-size:11px;color:var(--ink3);transition:transform .12s}
 .msub-caret.open{transform:rotate(90deg)}
-/* Detail pane: frontmatter table, section labels, type chip */
-.mgmt-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px;padding:8px 10px;border:1px solid var(--hairline);border-radius:2px;background:var(--steel)}
-.mgmt-kv-key{color:var(--ink3);font-size:11px}
-.mgmt-kv-val{color:var(--ink2);word-break:break-word}
-.mdetail-label{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--ink3);margin-top:4px}
-.mdetail-label .tb-dir{font-size:11px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:3px 7px;cursor:pointer;text-transform:none;letter-spacing:0;font-family:var(--font)}
-.mdetail-label .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
-.mdetail-type{font-size:11px;font-weight:500;color:var(--ink3)}
-/* Skill directory: a file rail beside the viewer. Only skills with more than
-   SKILL.md get this layout; single-file items keep the plain path + viewer. */
-.skill-body{display:grid;grid-template-columns:212px minmax(0,1fr);gap:10px;align-items:start;margin-top:4px}
-.skill-file{display:flex;flex-direction:column;gap:6px;min-width:0}
-.frail{background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:6px;display:flex;flex-direction:column;gap:2px;min-width:0}
-.frail-h{font-size:11px;font-weight:500;color:var(--ink3);padding:4px 6px 5px}
-.fdir{font-size:11px;color:var(--ink3);padding:6px 7px 3px;word-break:break-all}
-.ffile{display:flex;align-items:center;gap:7px;font-size:12px;text-align:left;color:var(--ink2);background:none;border:1px solid transparent;border-radius:2px;padding:5px 7px;cursor:pointer;min-width:0;transition:background .12s,color .12s}
+/* Column 3 — the file. Drawn only when something is selected, so there is no
+   "select an item to inspect it" empty state to style. */
+.mdetail{display:flex;flex-direction:column;gap:6px;padding:24px;border-radius:16px;background:var(--strip);min-width:0}
+.mdetail-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px}
+.mdetail-head .mitem-name{font-size:19px}
+.mdetail .mitem-desc{margin-top:6px;max-width:76ch}
+/* The path is a LABEL plus wrapping text, not a filled block: a surface is how
+   this pane says "here is a thing to read", and an absolute path is the one
+   string on the card nobody reads twice. Selectable, and it wraps — these are
+   long. */
+.mdetail-path{font-size:13px;color:var(--ink2);margin-top:8px;overflow-wrap:anywhere}
+.mdetail-pathlab{color:var(--ink3);margin-right:6px}
+.mgmt-file{font-size:13px;line-height:1.65;color:var(--ink2);background:var(--steel);border-radius:12px;padding:16px;margin-top:4px;white-space:pre-wrap;word-break:break-word}
+.mgmt-trunc{font-size:13px;color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,transparent);border-radius:4px;padding:7px 10px;margin-top:8px}
+.mgmt-empty{font-size:13px;color:var(--ink3);padding:6px 2px}
+/* Detail pane: frontmatter lines, section labels, type chip */
+/* What is LEFT of the frontmatter once `name` and `description` are dropped in
+   FileBlock: those two are the card's own title and summary, so printing them
+   here opened the pane by saying the same thing twice. Same label + text
+   family as the path line. */
+.mgmt-kv{display:flex;flex-direction:column;gap:4px;font-size:13px;margin-top:8px}
+.mgmt-kv-key{color:var(--ink3);font-size:13px;margin-right:6px}
+.mgmt-kv-val{color:var(--ink2);overflow-wrap:anywhere}
+.mdetail-label{display:flex;align-items:center;gap:10px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3);margin-top:20px}
+/* The one rule on the card, over FILE / FILES: everything above it describes
+   the item, everything below it IS the item. The other section labels stay
+   bare — a rule per section would turn the card back into a stack of boxes. */
+.mdetail-label.rule{border-top:1px solid var(--hairline);padding-top:20px}
+.mdetail-type{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3)}
+/* 13px floor for the whole inspector: at 11px the kickers, the path, the file
+   sizes and the source badge had drifted into a second, smaller type system
+   that the eye read as chrome rather than as content. */
+.mdetail .msrc{font-size:13px}
+/* One file as a foldable block, the same furniture PlanPanel gives a plan: an
+   11px kicker, the file's own name as the title, a `read all` fold on the
+   right, and the opening lines clipped under a fade. The whole clipped box is
+   the control. EXPANDED IT TAKES NO max-height — the document body is this
+   page's single scroller, so a long file is read by scrolling the page. */
+.mfileblock{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.mfilehead{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap}
+.mfile-title{min-width:0;font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* the Code / Preview pill switch rides at the right, the fold last of all */
+.mfile-seg{margin-left:auto;flex:none}
+.mfile-seg button{font-size:13px;padding:4px 10px}
+.mfile-seg+.mfile-fold{margin-left:0}
+.mfile-fold{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink2);background:none;border:0;padding:0;cursor:pointer;transition:color .15s}
+.mfile-fold:hover{color:var(--ink)}
+.mfile-fold .cv{font-size:9px;color:var(--ink3)}
+/* The file sits on the card's OWN surface behind a hairline, not on a filled
+   grey well: a well reads as a thing set into the page, and this is the one
+   thing on the card you came to read. The border is all the containment it
+   needs. */
+.mfile-box{position:relative;display:block;width:100%;text-align:left;background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;padding:16px;cursor:pointer}
+/* one surface, two renderings: the pre and the rendered markdown both sit
+   flush inside the box rather than each drawing a second box of their own */
+.mfile-box .mgmt-file{background:none;border-radius:0;padding:0;margin-top:0}
+/* The 13px floor reaches INTO the rendered markdown too. `.md-*` is shared
+   with the chat drawer, where 12px is right for a transcript quoting a file —
+   here the file IS the page, so the floor is scoped to this box rather than
+   raised globally. */
+.mfile-box .md{font-size:13px}
+.mfile-box .md-code,.mfile-box .md-pre,.mfile-box .md-table,.mfile-box .md-path{font-size:13px}
+.mfile-box.plain{cursor:auto}
+.mfile-box.clip{max-height:200px;overflow:hidden}
+.mfile-box.clip::after{content:"";position:absolute;left:0;right:0;bottom:0;height:64px;background:linear-gradient(to bottom,transparent,var(--strip))}
+/* Skill directory: the file strip runs the FULL WIDTH above the viewer. It
+   used to be a 190px column beside it, which at a 420px pane left the file a
+   gutter — and the strip is a table of contents, so it belongs over the thing
+   it indexes, not beside it. Only skills with more than SKILL.md draw it.
+
+   ONE FILE PER LINE: wrapped into a chip strip the names lost their left edge,
+   so a directory of same-prefixed files could not be scanned down. */
+.skill-body{display:flex;flex-direction:column;min-width:0}
+.frail{background:var(--steel);border-radius:12px;padding:8px;display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:0;margin-top:8px}
+.fdir{font-size:13px;color:var(--ink3);padding:8px 8px 3px;overflow-wrap:anywhere}
+.ffile{display:flex;align-items:center;gap:8px;width:100%;font-size:13px;text-align:left;color:var(--ink2);background:none;border:1px solid transparent;border-radius:8px;padding:6px 8px;cursor:pointer;min-width:0;transition:background .12s,color .12s}
+.ffile.ind{padding-left:18px}
 .ffile:hover{background:var(--strip);color:var(--ink)}
 .ffile:focus-visible{outline:none;border-color:var(--cyan)}
-.ffile.on{color:var(--ink);background:var(--strip-hi);border-color:var(--hairline2);box-shadow:0 0 0 1px var(--cyan)}
-.ffile.ind{padding-left:18px}
+/* picked = a lifted paper chip, not a bordered one: the border was a second
+   way of saying what the lift already says, and it fought the pill switch */
+.ffile.on{color:var(--ink);font-weight:500;background:var(--strip);border-color:transparent;box-shadow:0 1px 2px var(--shadow)}
 .ffile-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ffile .fsize{margin-left:auto;flex-shrink:0;font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums}
-/* Phones: same breakpoint where .mgmt collapses to one column — the rail can't
-   hold its own column there, so it becomes a wrapping chip strip */
-@media (max-width:700px){
-  .skill-body{grid-template-columns:minmax(0,1fr)}
-  .frail{flex-direction:row;flex-wrap:wrap;align-items:center;gap:5px}
-  .frail-h,.fdir{padding:2px 4px}
-  .ffile{border:1px solid var(--hairline);background:var(--strip)}
-  .ffile.ind{padding-left:7px}
-  .ffile .fsize{margin-left:4px}
-}
-/* Desktop: management is an app shell — page never scrolls, each pane does */
+.ffile .fsize{margin-left:auto;flex-shrink:0;font-size:13px;color:var(--ink3);font-variant-numeric:tabular-nums}
+/* Desktop: analytics is an app shell — the page never scrolls, the tab does */
 @media (min-width:1201px){
   /* Same 100vh-under-zoom correction as the rail: divide by --font-scale, and
      subtract .main's own padding from a token rather than a literal so compact
      density lands on the viewport too. Getting this wrong scrolls the page,
-     which is exactly what the pane scrollers exist to avoid. */
-  .wrap.wide{display:flex;flex-direction:column;height:calc(100vh / var(--font-scale,1) - 2 * var(--body-pad))}
-  .wrap.wide .mgmt{flex:1;min-height:0;align-items:stretch}
-  .mgmt-menu,.mgmt-list,.mdetail{overflow-y:auto;min-height:0}
-  .mgmt-list .mgmt-filter{position:sticky;top:0;z-index:1;flex-shrink:0;box-shadow:0 0 0 5px var(--board)}
-  .mdetail .mgmt-file{max-height:none;overflow:visible} /* the pane is the scroller */
+     which is exactly what the pane scrollers exist to avoid.
+     `:not(.wide-mgmt)` keeps Management out of it: its three columns size to
+     their content and the page body is the single scroller, so a long file is
+     read by scrolling the page rather than a pane inside a pane. */
+  .wrap.wide:not(.wide-mgmt){display:flex;flex-direction:column;height:calc(100vh / var(--font-scale,1) - 2 * var(--body-pad))}
   .wrap.wide .analytics{flex:1;min-height:0;overflow-y:auto} /* the tab is the scroller */
 }
 
@@ -617,45 +932,90 @@ code,kbd,samp,pre{font-family:inherit}
 .an-review code{text-transform:none;letter-spacing:0;color:inherit}
 @media (max-width:700px){.an-cols{grid-template-columns:1fr}}
 
-/* ---------------------------------------------- chat-history drawer
-   (the way in is `.row-chat`, up in the strip block) */
-.chat-back{position:fixed;inset:0;background:var(--scrim);display:flex;justify-content:flex-end;z-index:50}
-.chat{display:flex;flex-direction:column;width:min(720px,100%);min-width:0;height:100%;background:var(--board);border-left:1px solid var(--hairline2);animation:chat-in .16s ease-out}
-@keyframes chat-in{from{transform:translateX(16px);opacity:.4}to{transform:none;opacity:1}}
-.chat-head{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--hairline);flex-shrink:0;overflow:hidden;background:var(--strip);box-shadow:inset 0 1px 0 var(--edge)}
-/* the title absorbs the free space so the pills, model and ✕ stay pinned right
-   and reachable at any width (the mobile drawer has no backdrop to tap) */
-.chat-title{flex:1;min-width:0;font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* the pills DO shrink: a 70-char branch name at flex-shrink:0 is wider than a
-   phone drawer, and it shoved the ✕ outside the head's overflow:hidden — the
-   drawer became impossible to close. Capped + ellipsised instead. */
-.chat-head .proj-pill,.chat-head .branch{flex-shrink:1;min-width:0;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chat-model{font-size:12px;color:var(--ink3);flex-shrink:0}
-/* the head is a single flex row on a phone-width drawer too: the context
-   readout never gives up width — the project/branch pills ellipsise instead. */
-.chat-head .tok,.chat-head .pct{flex-shrink:0}
-.chat-head .pct{min-width:0}
-.chat-x{font-size:13px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:4px 8px;cursor:pointer;flex-shrink:0;transition:color .15s,border-color .15s}
-.chat-x:hover{color:var(--ink);border-color:var(--hairline2)}
-.chat-filter{display:flex;gap:5px;padding:8px 16px;border-bottom:1px solid var(--hairline);flex-shrink:0}
-.cf-btn{font-size:13px;font-weight:500;color:var(--ink3);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:3px 10px;cursor:pointer;transition:color .15s,border-color .15s}
-.cf-btn:hover{color:var(--ink2);border-color:var(--hairline2)}
-.cf-btn.on{color:var(--ink);border-color:var(--cyan);box-shadow:inset 0 -2px 0 var(--cyan)}
-.chat-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:14px 16px;display:flex;flex-direction:column;gap:13px}
-.chat-older{align-self:center;font-size:13px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:4px 12px;cursor:pointer;transition:color .15s,border-color .15s;font-weight:500}
-.chat-older:hover:not(:disabled){color:var(--ink);border-color:var(--hairline2)}
+/* ---------------------------------------------- chat — the history modal
+   (the way in is `.cbtn`, up in the row-atoms block)
+
+   The drawer stopped being a full-height panel pinned to the right edge and
+   became a modal with air on every side (.claude/DESIGN.md §8.6, mock `#chat`),
+   so the scrim is a real exit at every width rather than desktop-only. Inside
+   it is the sidecar: a 290px column carrying the session's facts and the
+   message filter, which leaves the transcript a clean top edge and one job.
+   ✕, Escape and the browser's back are unchanged.
+
+   Every colour here is a token — the five themes are pure `[data-theme]`
+   overrides and one literal breaks the light one. */
+.chat-back{position:fixed;inset:0;z-index:50;background:var(--scrim);display:grid;place-items:center;padding:40px 24px}
+/* The modal is allowed the shell's lift, because on this board it IS the shell
+   floating over the scrim (§5 floats exactly two things). Nothing inside it
+   gets a second shadow — see `.chat-pinned`. */
+.chat{width:1080px;max-width:100%;max-height:min(820px,100%);min-width:0;display:flex;flex-direction:column;background:var(--strip);border-radius:24px;box-shadow:0 24px 64px var(--shadow2);overflow:hidden;animation:chat-in .16s ease-out}
+@keyframes chat-in{from{transform:translateY(10px);opacity:.4}to{transform:none;opacity:1}}
+/* The head keeps the name, the project pill and ✕. Branch, model, surface and
+   the live context reading moved into the sidecar — nothing was dropped, they
+   just stopped competing for one row's width. */
+.chat-head{display:flex;align-items:center;gap:10px;padding:20px 24px;border-bottom:1px solid var(--hairline);flex:none;min-width:0}
+.chat-title{flex:0 1 auto;min-width:0;font-size:17px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* the pill DOES shrink: a long project name at flex-shrink:0 shoved the ✕ out
+   of reach on a phone-width head, and the drawer became impossible to close */
+.chat-head .proj-pill{flex-shrink:1;min-width:0;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-x{width:32px;height:32px;flex:none;display:grid;place-items:center;font-family:var(--font);font-size:12px;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
+.chat-x:hover{color:var(--ink);border-color:var(--ink3)}
+
+/* the sidecar: facts left, transcript right */
+.chat-split{display:grid;grid-template-columns:290px minmax(0,1fr);flex:1;min-height:0}
+.chat-side{display:flex;flex-direction:column;gap:18px;padding:22px;min-width:0;overflow:auto;background:var(--strip-hi);border-right:1px solid var(--hairline)}
+/* On a --strip-hi column a --strip-hi card vanishes (the §8.2 scope-pill lesson,
+   met again), so the context block takes paper instead. */
+.chat-side .kv{background:var(--strip)}
+.chat .metric{font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
+/* the same 70% threshold the row uses — one context reading, two places */
+.chat .metric.warn{color:var(--amber)}
+.chat-facts{display:grid;gap:10px;font-size:12px;color:var(--ink2)}
+.chat-facts .f{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-width:0}
+.chat-facts .f b{min-width:0;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-col{display:flex;flex-direction:column;min-width:0;min-height:0}
+
+/* The transcript and the pinned layer are SIBLINGS in a relative stack that
+   fills the column, so a wait panel floats over the transcript instead of
+   pushing it: the body's height is identical whether a panel is pinned or not,
+   and a question arriving mid-read never reflows the sentence being read. */
+.chat-stack{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+.chat-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:20px;background:var(--strip);
+  /* ChatDrawer restores the reader's position itself after a "load older"
+     prepend (scrollTop += the height the page added). Chrome's scroll anchoring
+     silently does the SAME correction first, so with it on the restore lands
+     twice and the transcript jumps a whole page. Measured: with anchoring the
+     anchor element drifts ~1400px, with this rule it drifts 0. */
+  overflow-anchor:none;
+  /* the bottom pad is constant, panel or no panel — a floating panel hides the
+     newest messages, so the tail always keeps room to be scrolled clear of it */
+  padding:20px 24px 40px}
+.chat-older{align-self:center;flex:none;height:30px;padding:0 16px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;cursor:pointer;transition:color .15s,border-color .15s}
+.chat-older:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
 .chat-older:disabled{cursor:default;color:var(--ink3)}
-.chat-empty{font-size:13px;color:var(--ink3);padding:6px 0}
-.cmsg{border-left:2px solid var(--hairline2);padding-left:11px}
-/* a user turn is a strip: paper block, cyan rule */
-.cmsg.user{border-left-color:var(--cyan);background:var(--strip);border-radius:0 2px 2px 0;padding:7px 10px 7px 11px;box-shadow:inset 0 1px 0 var(--edge)}
-.cmsg-head{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
-.cmsg-role{font-size:11px;font-weight:500;color:var(--ink3)}
-.cmsg.user .cmsg-role{color:var(--cyan)}
+.chat-empty{font-size:13px;line-height:1.6;color:var(--ink3);text-align:center;padding:40px 20px}
+/* One absolutely-positioned layer for every pinned thing rather than five, so
+   the panels keep stacking in normal flow inside it (MessagePanel's "gone" note
+   over ResumePanel is the documented hand-off) and the LAYER is what caps and
+   scrolls. As tall as its own content — no fixed fraction.
+   The +1px is not a fudge: at exactly 100% the topmost panel's own hairline
+   lands a pixel under the head's bottom one and the two read as a doubled
+   border with a sliver of paper trapped between; +1px puts them on each other.
+   And no shadow: §5 floats exactly two things on this board and a panel inside
+   the modal is neither — the panel's 1px hairline is the whole separation. */
+.chat-pinned{position:absolute;left:0;right:0;bottom:0;z-index:2;max-height:calc(100% + 1px);overflow-y:auto;overscroll-behavior:contain}
+
+/* ── one message ──────────────────────────────────────────────────────────── */
+.cmsg{min-width:0}
+.cmsg-head{display:flex;align-items:baseline;gap:8px}
+.cmsg-role{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink2)}
+.cmsg.user .cmsg-role{color:var(--green)}
 .cmsg-ts{font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums}
-.cmsg-text{font-size:13px;line-height:1.55;color:var(--ink2);overflow-wrap:anywhere;min-width:0}
-.cmsg.user .cmsg-text{color:var(--ink)}
-.cmsg-cut{display:block;margin-top:3px;font-size:12px;color:var(--ink3);font-style:italic}
+.cmsg-text{font-size:14px;line-height:1.6;color:var(--ink);overflow-wrap:anywhere;min-width:0;margin-top:7px}
+/* a user turn is a card on the transcript's own paper: same white, and the
+   1px hairline is the whole separation — there is no tint under it */
+.cmsg.user .cmsg-text{background:var(--strip);border:1px solid var(--hairline);border-radius:12px;padding:13px 15px}
+.cmsg-cut{display:inline-block;margin-top:4px;font-size:11px;color:var(--ink3)}
 
 /* rendered markdown inside a message (see client/src/lib/markdown.ts) */
 .md{display:flex;flex-direction:column;gap:7px}
@@ -664,8 +1024,13 @@ code,kbd,samp,pre{font-family:inherit}
 .md-p,.md-quote,.md-list li{white-space:pre-wrap}
 .md-h{font-weight:600;color:var(--ink);letter-spacing:-.01em;margin-top:3px}
 .md-h1{font-size:15px}.md-h2{font-size:14px}.md-h3,.md-h4{font-size:13px;color:var(--ink2)}
-.md-code{font-size:12px;color:var(--cyan);background:var(--steel);border-radius:2px;padding:1px 4px}
-.md-pre{font-size:12px;line-height:1.5;color:var(--ink2);background:var(--board);border:1px solid var(--hairline);border-radius:2px;padding:9px 11px;overflow-x:auto}
+.md-code{font-size:12px;color:var(--ink);background:var(--steel);border-radius:4px;padding:1px 5px}
+/* A fenced block is the same recessed well .mgmt-file is, scaled for a message:
+   --steel paper, 12px corner, no stroke — the well is already darker than the
+   card it sits on, so a border would be a second separator doing the same job.
+   Wide code scrolls inside the box; the transcript never scrolls sideways. */
+.md-pre{font-size:12px;line-height:1.65;color:var(--ink);background:var(--steel);border-radius:12px;padding:12px 14px;overflow-x:auto}
+.md-pre code{font-size:inherit;color:inherit;background:none;padding:0}
 .md-link{color:var(--cyan);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--cyan) 40%,transparent)}
 .md-link:hover{border-bottom-color:var(--cyan)}
 /* repo-relative link target: label only, full path on hover (nothing to navigate to) */
@@ -674,129 +1039,247 @@ code,kbd,samp,pre{font-family:inherit}
 .md-list li::marker{color:var(--ink3)}
 .md-quote{border-left:2px solid var(--hairline2);padding-left:9px;color:var(--ink3)}
 .md-hr{border-top:1px solid var(--hairline);margin:2px 0}
+/* Ledger rules, not a grid: horizontal rules only, no cell boxes and no fill
+   behind the header — the same table language the board's own tables use
+   (.mg-table / .dt in the mock). The edge cells sit flush so a table lines up
+   with the paragraph above it instead of floating inset. */
 .md-table-wrap{overflow-x:auto;max-width:100%}
-.md-table{border-collapse:collapse;font-size:12px}
-.md-table th,.md-table td{border:1px solid var(--hairline);padding:4px 8px;vertical-align:top}
-.md-table th{color:var(--ink);font-weight:600;background:var(--steel);white-space:nowrap}
-.md-table td{color:var(--ink2)}
-.cmsg-tool{font-size:12px;color:var(--ink3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cmsg-tool .tool{color:var(--cyan);font-weight:600}
+.md-table{border-collapse:collapse;font-size:13px}
+.md-table th{text-align:left;font-size:11px;font-weight:500;color:var(--ink2);padding:0 12px 8px;border-bottom:1px solid var(--hairline2);white-space:nowrap}
+.md-table td{color:var(--ink2);padding:9px 12px;border-top:1px solid var(--hairline);vertical-align:top}
+.md-table tbody tr:first-child td{border-top:0}
+.md-table th:first-child,.md-table td:first-child{padding-left:0}
+.md-table th:last-child,.md-table td:last-child{padding-right:0}
+.md-table td:first-child{color:var(--ink)}
+
+.cmsg-tool{font-size:12px;color:var(--ink2);margin-top:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmsg-tool .tool{font-weight:500;color:var(--ink)}
 .cmsg-tool .tool.task{color:var(--magenta)}
 /* full tool body (proposed plan / asked question) — like .cmsg-tool but a real block */
-.cmsg-plan{margin-top:6px;min-width:0}
-.cmsg-plan>summary{font-size:12px;color:var(--ink3);cursor:pointer;user-select:none}
-.cmsg-plan>summary .tool{color:var(--cyan);font-weight:600}
-.cmsg-plan>.cmsg-text{margin-top:5px;padding:8px 10px;background:var(--steel);border:1px solid var(--hairline);border-radius:2px}
-/* pending-question action bar — amber: where the cocked strip gets answered.
-   Pinned above the footer so it stays reachable while scrolling history */
-.qpanel{flex-shrink:0;border-top:1px solid color-mix(in srgb,var(--amber) 45%,transparent);background:color-mix(in srgb,var(--amber) 6%,var(--board));padding:10px 16px;display:flex;flex-direction:column;gap:9px;max-height:56vh;overflow-y:auto}
-.qpanel.sent,.qpanel.gone{padding:8px 16px}
-/* Minimised wait panel — one row, and no vh cap, so the height goes straight
-   back to the chat body above it: the whole point is reading the transcript
-   before answering. Row is the hit target, not the caret alone (phone). */
-.qpanel.min{flex-direction:row;align-items:baseline;gap:8px;padding:8px 16px;max-height:none;overflow:visible}
-.qp-minrow{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
-.qp-min{font-size:13px;line-height:1;color:var(--ink3);background:none;border:0;padding:1px 3px;cursor:pointer}
-button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var(--ink)}
+.cmsg-plan{margin-top:9px;min-width:0;background:var(--strip);border:1px solid var(--hairline);border-radius:12px;padding:12px 14px}
+.cmsg-plan>summary{font-size:12px;color:var(--ink2);cursor:pointer;user-select:none;list-style:none}
+.cmsg-plan>summary::-webkit-details-marker{display:none}
+.cmsg-plan>summary::before{content:"▾ ";color:var(--ink3)}
+.cmsg-plan:not([open])>summary::before{content:"▸ "}
+.cmsg-plan>summary .tool{font-weight:500;color:var(--ink)}
+.cmsg-plan>.cmsg-text{font-size:13px}
+
+/* ── the pinned wait panels ───────────────────────────────────────────────────
+   One family: question, plan, reply window, resume — and the permission banner,
+   which is a sign rather than a control. Paper with a 1px hairline on top, and
+   nothing else: that hairline is the whole separation from the transcript. */
+.qpanel{display:flex;flex-direction:column;gap:12px;padding:18px 24px;background:var(--strip);border-top:1px solid var(--hairline)}
 /* A textarea is by far the most compressible thing in a flex column: once the
-   panel reaches its max-height the browser shrinks the children toward their
-   min-content size instead of scrolling, so `rows` stops meaning anything and
-   the prompt box collapses to a sliver. Pin every child at its natural height
-   and let .qpanel's own overflow-y do the scrolling. */
+   pinned layer reaches its cap the browser would shrink the children toward
+   their min-content size instead of scrolling, so `rows` would stop meaning
+   anything and the prompt box collapse to a sliver. */
 .qpanel>*{flex-shrink:0}
-.qp-head{display:flex;align-items:baseline;gap:8px}
-.qp-badge{font-size:11px;font-weight:500;color:var(--amber);border:1px solid var(--amber);border-radius:2px;padding:0 6px 1px}
-.qp-hint,.qp-note{font-size:12px;color:var(--ink3)}
-.qp-q{display:flex;flex-direction:column;gap:6px}
-.qp-qtext{font-size:13px;line-height:1.45;color:var(--ink)}
-.qp-chip{font-size:11px;font-weight:500;color:var(--amber);margin-right:6px}
-.qp-multi{font-size:11px;color:var(--ink3);margin-left:6px}
-.qp-opts{display:flex;flex-wrap:wrap;gap:6px}
-.qp-opt{display:flex;align-items:baseline;gap:6px;text-align:left;font-family:var(--font);font-size:13px;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline);border-radius:2px;padding:7px 11px;cursor:pointer;transition:color .15s,border-color .15s,background .15s;box-shadow:inset 0 1px 0 var(--edge)}
-.qp-opt:hover:not(:disabled){color:var(--ink);border-color:var(--hairline2)}
-.qp-opt.on{color:var(--ink);border-color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--strip))}
+/* Minimised wait panel — one row. The whole row is the hit target, not the
+   caret alone (on a phone a caret-sized target is a miss waiting to happen). */
+.qpanel.min{flex-direction:row;align-items:center;gap:10px;padding:12px 24px}
+.qp-head{display:flex;align-items:center;gap:10px}
+.qp-minrow{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+/* the badge names the kind of wait, and its tint is the board's existing
+   meaning for it: amber "you can act from here", magenta the Task/plan accent,
+   green a turn that finished cleanly, neutral for a session that has ended */
+.qp-badge{flex:none;font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.qpanel.plan .qp-badge{background:color-mix(in srgb,var(--magenta) 16%,transparent);color:var(--magenta)}
+.qpanel.msg .qp-badge{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.qpanel.resume .qp-badge{background:var(--strip-hi);color:var(--ink2)}
+.qp-hint{font-size:12px;color:var(--ink2)}
+.qp-note{font-size:13px;color:var(--ink2)}
+.qpanel.sent .qp-note{color:var(--green)}
+.qp-min{width:28px;height:28px;flex:none;display:grid;place-items:center;font-family:var(--font);font-size:11px;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:8px;cursor:pointer;transition:color .15s,border-color .15s}
+button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var(--ink)}
+
+/* The question body is the terminal's own AskUserQuestion dialog: the question
+   as the heading, then one full-width row per option — a 15/500 label over a
+   13px description — with `Other` carrying its field inside the same block, and
+   the two actions right-aligned under them. Rows rather than a chip wrap,
+   because that is the layout the reader already answers at the keyboard; a
+   phone gets a full-width target for free. */
+.qp-q{display:flex;flex-direction:column;gap:9px}
+.qp-qtext{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:1.35;color:var(--ink)}
+.qp-chip{font-size:11px;font-weight:500;color:var(--ink2);background:var(--strip-hi);border-radius:8px;padding:2px 7px}
+.qp-multi{font-size:11px;font-weight:400;color:var(--ink3)}
+.qp-opts{display:flex;flex-direction:column;gap:8px}
+.qp-opt{width:100%;display:flex;align-items:flex-start;gap:10px;text-align:left;font-family:var(--font);color:var(--ink);background:var(--strip-hi);border:1px solid transparent;border-radius:12px;padding:13px 16px;cursor:pointer;transition:border-color .15s,background .15s}
+.qp-opt:hover:not(:disabled){border-color:var(--hairline2)}
+.qp-opt.on{background:var(--strip);border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
 .qp-opt:disabled{cursor:default;opacity:.55}
-.qp-opt.other{font-style:italic}
-.qp-box{font-size:12px;color:var(--amber)}
-.qp-label{font-weight:600}
-.qp-desc{font-size:12px;color:var(--ink3);max-width:34ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.qp-other{font-family:var(--font);font-size:13px;color:var(--ink);background:var(--board);border:1px solid var(--hairline);border-radius:2px;padding:7px 10px;width:100%;max-width:420px}
-.qp-other:focus{outline:none;border-color:var(--amber)}
-.qp-token{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
-.qp-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.qp-send{font-size:13px;font-weight:500;color:var(--on-accent);background:var(--amber);border:1px solid var(--amber);border-radius:2px;padding:7px 15px;cursor:pointer;transition:opacity .15s}
-.qp-send:disabled{cursor:default;opacity:.4}
-.qp-term{font-family:var(--font);font-size:13px;color:var(--ink3);background:none;border:1px solid var(--hairline);border-radius:2px;padding:7px 12px;cursor:pointer;transition:color .15s,border-color .15s;font-weight:500}
-.qp-term:hover:not(:disabled){color:var(--ink2);border-color:var(--hairline2)}
-/* dictation mic — fixed square in the actions row. Deliberately excluded from
-   the mobile flex:1 rule below, so it never stretches to a third of the row. */
-.qp-mic{font-family:var(--font);font-size:13px;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline);border-radius:2px;padding:7px 11px;min-width:44px;cursor:pointer;transition:color .15s,border-color .15s,background .15s}
-.qp-mic:hover:not(:disabled){color:var(--ink);border-color:var(--hairline2)}
+.qp-t{flex:1;min-width:0}
+.qp-label{display:block;font-size:15px;font-weight:500;letter-spacing:-.01em;line-height:1.35;color:var(--ink)}
+.qp-desc{display:block;font-size:13px;line-height:1.45;color:var(--ink2);margin-top:2px}
+/* The right margin carries ONE mark, and which one says how the question is
+   answered: a pick-one question shows the number its terminal dialog answers
+   to, a pick-any question a box that fills when it is ticked. Never both, and
+   never a second box on the left — one row, one mark. */
+.qp-key{flex:none;min-width:20px;height:20px;padding:0 5px;display:grid;place-items:center;font-size:11px;color:var(--ink3);background:var(--strip);border:1px solid var(--hairline);border-radius:4px;font-variant-numeric:tabular-nums}
+.qp-opt.on .qp-key{background:var(--strip-hi)}
+.qp-check{flex:none;width:18px;height:18px;margin-top:1px;display:grid;place-items:center;font-size:11px;line-height:1;color:transparent;background:var(--strip);border:1.5px solid var(--hairline2);border-radius:4px}
+.qp-opt.on .qp-check,.qp-otherbox.on .qp-check{background:var(--ink);border-color:var(--ink);color:var(--strip)}
+/* `Other` and its field are ONE block, the way the dialog draws them — and the
+   BLOCK wears the picked state, so it reads exactly like any other picked row
+   rather than a row with a stray input hanging off the list. */
+.qp-otherbox{display:flex;flex-direction:column;background:var(--strip-hi);border:1px solid transparent;border-radius:12px}
+.qp-otherbox .qp-opt{background:transparent;border-color:transparent;box-shadow:none}
+.qp-otherbox.on{background:var(--strip);border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.qp-otherbox.on .qp-other{background:var(--strip-hi);border-color:transparent}
+.qp-otherbox .qp-other{margin:0 16px 14px;width:auto}
+.qp-other,.qp-feedback{width:100%;font-family:var(--font);font-size:13px;color:var(--ink);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;padding:10px 12px;resize:vertical}
+.qp-other{height:36px;padding:0 12px}
+.qp-other:focus,.qp-feedback:focus{outline:none;border-color:var(--ink3)}
+.qp-token{display:flex;align-items:center;flex-wrap:wrap;gap:10px;background:var(--strip-hi);border-radius:12px;padding:12px 14px}
+.qp-token .qp-other{width:180px}
+
+/* The plan is the panel's subject, so it is never behind a blind toggle (the
+   `show plan` button was shaped like an option row, so it read as an answer —
+   and once the panel floats it hid the only copy of the plan the reader could
+   reach). A titled block instead: an 11px kicker, the plan's OWN first heading
+   as the title, a `read all` fold, and the opening lines clipped under a fade.
+   The whole clipped box is the control. Expanded it takes NO max-height of its
+   own — the panel grows with it and `.chat-pinned` is what scrolls at the cap. */
+.qp-planblock{display:flex;flex-direction:column;gap:8px}
+.qp-planhead{display:flex;align-items:baseline;gap:10px;min-width:0}
+.qp-kick{flex:none;font-size:11px;letter-spacing:.02em;color:var(--ink3)}
+.qp-plantitle{min-width:0;font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qp-fold{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink2);background:none;border:0;padding:0;cursor:pointer;transition:color .15s}
+.qp-fold:hover{color:var(--ink)}
+.qp-fold .cv{font-size:9px;color:var(--ink3)}
+.qp-plan{position:relative;display:block;width:100%;text-align:left;background:var(--strip-hi);border:0;border-radius:12px;padding:14px 16px;cursor:pointer}
+.qp-plan.clip{max-height:104px;overflow:hidden}
+.qp-plan.clip::after{content:"";position:absolute;left:0;right:0;bottom:0;height:56px;background:linear-gradient(to bottom,transparent,var(--strip-hi))}
+.qp-plan .cmsg-text{font-size:13px;margin-top:0}
+
+/* the dialog's footer: the hand-off, then the send as the only ink button */
+.qp-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.qp-actions.right{justify-content:flex-end}
+.qp-send{height:36px;padding:0 16px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--strip);background:var(--ink);border:0;border-radius:12px;cursor:pointer;transition:opacity .15s}
+.qp-send:hover:not(:disabled){opacity:.88}
+.qp-send:disabled{cursor:default;background:var(--hairline2);color:var(--ink3)}
+.qp-term{height:36px;padding:0 14px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
+.qp-term:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
+/* dictation mic — a fixed square in the actions row. Deliberately excluded from
+   the phone's flex:1 rule below, so it never stretches to a third of the row. */
+.qp-mic{width:36px;height:36px;flex:none;display:grid;place-items:center;font-family:var(--font);font-size:13px;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s,background .15s}
+.qp-mic:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
 .qp-mic:disabled{cursor:default;opacity:.45}
-.qp-mic.rec{color:var(--on-accent);background:var(--amber);border-color:var(--amber);animation:qpulse 1.4s ease-in-out infinite}
-/* plan panel — reuses .qpanel chrome; only the plan body and the feedback box
-   are its own. The plan is long-form markdown, so it scrolls inside itself
-   rather than pushing the actions off-screen. */
-.qp-plan{max-height:34vh;overflow-y:auto;margin-top:8px;padding:9px 11px;border:1px solid var(--hairline);border-radius:2px;background:var(--board);font-size:13px}
-.qp-feedback{font-family:var(--font);font-size:13px;color:var(--ink);background:var(--board);border:1px solid var(--hairline);border-radius:2px;padding:7px 10px;width:100%;resize:vertical}
-.qp-feedback:focus{outline:none;border-color:var(--amber)}
-/* permission banner — a sign, not a control: mustard, no buttons, one line.
-   Pinned like .qpanel so it survives scrolling the history */
-.pbanner{flex-shrink:0;display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;border-top:1px solid color-mix(in srgb,var(--mustard) 45%,transparent);background:color-mix(in srgb,var(--mustard) 6%,var(--board));padding:9px 16px;font-size:13px;color:var(--ink2)}
-.pb-badge{font-size:11px;font-weight:500;color:var(--mustard);border:1px solid var(--mustard);border-radius:2px;padding:0 6px 1px}
+.qp-mic.rec{color:var(--on-accent);background:var(--red);border-color:transparent;animation:qpulse 1.4s ease-in-out infinite}
+
+/* permission banner — a sign, not a control: mustard (the tone the row's
+   `allow?` button already uses for "only that terminal can answer this"), no
+   buttons, one line. Pinned like .qpanel so it survives scrolling the history. */
+.pbanner{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:13px 24px;font-size:13px;color:var(--ink2);background:color-mix(in srgb,var(--mustard) 10%,var(--strip));border-top:1px solid var(--hairline)}
+.pb-badge{flex:none;font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:color-mix(in srgb,var(--mustard) 26%,transparent);color:var(--mustard)}
 .pb-text{min-width:0;overflow-wrap:anywhere}
-.pb-text .tool{color:var(--cyan);font-weight:600}
-.pb-note{font-size:12px;color:var(--ink3);margin-left:auto}
-.chat-foot{display:flex;align-items:baseline;gap:10px;padding:9px 16px;border-top:1px solid var(--hairline);font-size:12px;color:var(--ink3);flex-shrink:0}
+.pb-text .tool{font-weight:500;color:var(--ink)}
+.pb-note{margin-left:auto;font-size:12px;color:var(--mustard)}
+
+/* foot — the live line, then the count, then the message filter at the right
+   edge. The filter narrows the transcript, so it belongs against its own
+   readout rather than in the facts column; it is still the board's segmented
+   switch (the same `.seg` the sessions toolbar uses, on its --hairline2 ground
+   track), sized down to foot scale. */
+.chat-foot{display:flex;align-items:center;gap:12px;padding:10px 24px;border-top:1px solid var(--hairline);font-size:12px;color:var(--ink2);flex:none}
+.chat-live{display:flex;align-items:center;gap:8px}
+.chat-live i{width:7px;height:7px;flex:none;border-radius:999px;background:var(--green)}
 .chat-count{margin-left:auto;font-variant-numeric:tabular-nums}
+.chat-foot .seg{flex:none}
+.chat-foot .seg>button{padding:4px 10px;font-size:11px}
 
-/* Spawn panel (SpawnPanel.tsx) — reuses .qpanel's chrome (it's the same pinned
-   family as MessagePanel/QuestionPanel) but tints cyan instead of amber: amber
-   means "a session is waiting on you", and this panel is the opposite of a
-   hold — a compose surface you opened on purpose. Cyan doubles as the
-   "starting…" phantom row's color, so the whole feature reads as one thread. */
-.qpanel.spawn{border-top:1px solid color-mix(in srgb,var(--cyan) 45%,transparent);background:color-mix(in srgb,var(--cyan) 6%,var(--board))}
-/* ...and this is the one qpanel that does NOT live inside the fixed-height
-   chat drawer — it sits in page flow under the toolbar. A vh cap there buys
-   nothing and costs a nested scroller: on a phone the stacked config row
-   alone overruns 62vh, so the prompt box ends up half outside the panel's own
-   scroll window. Let the panel be as tall as it needs and let the page scroll. */
-.qpanel.spawn{max-height:none;overflow:visible}
-.qpanel.spawn .qp-badge{color:var(--cyan);border-color:var(--cyan)}
-.qpanel.spawn .qp-send{background:var(--cyan);border-color:var(--cyan)}
-.qpanel.spawn .qp-other:focus,.qpanel.spawn .qp-feedback:focus,.qpanel.spawn .qp-select:focus{border-color:var(--cyan)}
-/* close ✕, reusing the drawer's button look outside the drawer */
-.sp-x{margin-left:auto}
-/* project / name / model / effort / permission selects — same look as the
-   toolbar's, just under the qp- namespace so they sit inside a qpanel */
-.qp-select{font-size:12px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 8px;cursor:pointer;transition:border-color .15s,color .15s}
-.qp-select:hover{color:var(--ink);border-color:var(--hairline2)}
-.qp-select:focus{outline:none;border-color:var(--amber)}
-.qp-select:disabled{cursor:default;opacity:.55}
-/* name/model/effort/permission ride one row; each field is label-over-control.
-   Full width when a .sp-field is a direct child of .qpanel (the project
-   picker) comes for free from .qpanel's own flex-column stretch — no extra
-   rule needed here. */
-.sp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
-.sp-field{display:flex;flex-direction:column;gap:3px}
-.sp-label{font-size:11px;color:var(--ink3);font-weight:500}
-.sp-check input{width:16px;height:16px;margin:5px 0 0;accent-color:var(--cyan)}
-.sp-name{width:160px}
+/* Spawn modal (SpawnPanel.tsx) — the launch form floated like the chat modal
+   (.claude/DESIGN.md §8.7, mock `#spawn`) rather than pinned into the Sessions
+   column: a launch is a compose surface opened on purpose, not a hold the board
+   is answering. Same shell as `.chat` — scrim, air on every side, the shell's
+   lift, full-screen below 700px — at a narrower 620px, because inside it is one
+   column read top to bottom: project, prompt, name, then model / effort /
+   permission, then remote control.
+
+   The chrome is cyan, not amber: amber means "a session is waiting on you", and
+   cyan doubles as the "starting…" phantom row's colour, so the whole feature
+   reads as one thread. Every colour here is a token — the five themes are pure
+   `[data-theme]` overrides and one literal breaks the light one. */
+.spawn-back{position:fixed;inset:0;z-index:50;background:var(--scrim);display:grid;place-items:center;padding:40px 24px}
+.spawn{width:620px;max-width:100%;max-height:min(820px,100%);min-width:0;display:flex;flex-direction:column;background:var(--strip);border-radius:24px;box-shadow:0 24px 64px var(--shadow2);overflow:hidden;animation:chat-in .16s ease-out}
+.spawn-head{display:flex;align-items:center;gap:10px;padding:20px 24px;border-bottom:1px solid var(--hairline);flex:none;min-width:0}
+.spawn-head .qp-badge{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 16%,transparent)}
+.spawn-head .qp-hint{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.spawn-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:18px;padding:22px 24px}
+.spawn-foot{display:flex;align-items:center;gap:8px;padding:14px 24px;border-top:1px solid var(--hairline);flex:none}
+/* `:not(:disabled)` so the disabled fill still wins: a disabled launch that kept
+   the accent fill would read as pressable with only the label greyed out */
+.spawn .qp-send:not(:disabled){background:var(--cyan)}
+.spawn .qp-other:focus,.spawn .qp-feedback:focus,.spawn .sp-select select:focus{outline:none;border-color:var(--cyan)}
+
+/* one field: an 11px label over its control */
+.sp-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.sp-label{font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+/* the flags ride one line — three equal columns, so a long permission label
+   never squeezes the two beside it */
+.sp-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+/* the 36px control family Settings established, under the spawn namespace:
+   a bare select with the chevron drawn by the wrapper */
+.sp-select{position:relative;display:inline-flex;width:100%}
+.sp-select select{appearance:none;-webkit-appearance:none;width:100%;height:36px;padding:0 34px 0 12px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:border-color .15s}
+.sp-select select:hover:not(:disabled){border-color:var(--ink3)}
+.sp-select select:disabled{cursor:default;opacity:.55}
+.sp-select::after{content:"";position:absolute;right:15px;top:50%;width:6px;height:6px;border-right:1.5px solid var(--ink2);border-bottom:1.5px solid var(--ink2);transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.sp-count{align-self:flex-end;font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums}
+.sp-note{font-size:12px;line-height:1.45;color:var(--ink3)}
 .sp-error{color:var(--red)}
+/* the remote-control row is a Settings row in miniature — name and reason on
+   the left, the board's pill switch on the right (DESIGN.md §8.2's boolean, so
+   this modal introduces no second shape for on/off) */
+.sp-toggle{display:flex;align-items:center;gap:16px;padding:12px 14px;background:var(--steel);border-radius:12px}
+.sp-toggle-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sp-toggle-name{font-size:13px;font-weight:500;color:var(--ink)}
+.sp-toggle-hint{font-size:11px;line-height:1.45;color:var(--ink2)}
+.sp-toggle .set-seg{flex:none}
+.sp-toggle .set-seg button{padding:5px 12px;font-size:12px}
 
-@media (max-width:700px){.chat{width:100%;border-left:none}.chat-body{padding:12px}.chat-head{padding:11px 12px}.chat-filter{padding:7px 12px}.chat-head .proj-pill,.chat-model{display:none}
-  /* phone: full-width taps, and drop the option blurb that would wrap badly */
-  .qpanel{padding:10px 12px;max-height:62vh}.qp-opts{flex-direction:column}
-  /* thumb-sized rows: ~42px tall, full width */
-  .qp-opt{width:100%;padding:12px;min-height:42px;align-items:center}.qp-desc{display:none}
-  .qp-send,.qp-term{flex:1;padding:12px;min-height:42px}
-  .qp-mic{min-height:42px}
-  .qp-plan{max-height:40vh}
-  /* spawn panel: stack the config row instead of squeezing four selects
-     onto one line, and give every control a thumb-sized tap target */
-  .sp-row{flex-direction:column;align-items:stretch}
-  .sp-name{width:100%}
-  .qp-select{min-height:42px}}
+@media (max-width:700px){
+  /* A 1080px modal with margins does not fit a phone, so the presentation goes
+     back to full-screen — which also takes the scrim away again, leaving ✕ and
+     the browser's back as the exits there (docs/subsystems/chat.md). */
+  .chat-back{padding:0}
+  .chat{width:100%;max-width:none;height:100%;max-height:100%;border-radius:0;box-shadow:none}
+  .chat-head{padding:13px 14px;gap:8px}
+  .chat-title{font-size:15px}
+  /* the only exit left once the scrim is gone — give it a thumb, not a pointer */
+  .chat-x{width:40px;height:40px}
+  /* The sidecar lies down into a band over the transcript: the gauge, then the
+     facts as a wrapping meta line — nothing is dropped, they just stop being a
+     column — then the filter. */
+  .chat-split{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+  .chat-side{gap:12px;padding:12px 14px;overflow:visible;border-right:0;border-bottom:1px solid var(--hairline)}
+  .chat-side .kv{padding:11px 13px}
+  .chat-facts{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11px}
+  .chat-facts .f{justify-content:flex-start;gap:6px;max-width:100%}
+  .chat-body{padding:14px 14px 40px;gap:16px}
+  .qpanel,.qpanel.min,.pbanner{padding:14px}
+  /* three items do not fit a phone-width line: the live reading and the count
+     keep the first row, the filter takes the second at full width. */
+  .chat-foot{padding:9px 14px;flex-wrap:wrap;row-gap:8px}
+  .chat-foot .seg{width:100%}
+  .chat-foot .seg>button{flex:1;min-height:32px;text-align:center}
+  /* thumb-sized: the option rows are already full-width, the actions are not */
+  .qp-send,.qp-term{flex:1;min-height:44px}
+  .qp-mic{width:44px;height:44px}
+  /* the launch modal goes full-screen with the chat one, for the same reason:
+     620px with margins does not fit a phone, and the scrim it loses was never
+     the only exit (✕ and the browser's back stay). */
+  .spawn-back{padding:0}
+  .spawn{width:100%;max-width:none;height:100%;max-height:100%;border-radius:0;box-shadow:none}
+  .spawn-head{padding:13px 14px;gap:8px}
+  .spawn-body{padding:14px;gap:14px}
+  .spawn-foot{padding:10px 14px}
+  /* stack the three flags rather than squeezing them onto one line, and give
+     every control a thumb-sized tap target */
+  .sp-row{grid-template-columns:minmax(0,1fr)}
+  .sp-select select{min-height:42px}
+  .sp-toggle{flex-direction:column;align-items:stretch;gap:10px}
+  .sp-toggle .set-seg button{flex:1;min-height:40px}
+}
 
 /* ---------------------------------------------- Settings section
    Two pages, Local and Shared, drawn in the reference design's card language
@@ -808,7 +1291,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    themes are pure overrides. */
 .set{display:flex;flex-direction:column;gap:16px}
 /* the page header is not a card: title, a scope pill, one line under */
-.set-band{display:flex;align-items:flex-start;gap:16px;padding:8px 4px 0}
+.set-band{display:flex;align-items:flex-start;gap:16px}
 .set-band-title{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
 .set-band-sub{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:4px;max-width:92ch}
 /* The pill sits on the ground, where a --strip-hi fill is two points from the
@@ -817,10 +1300,6 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .set-scope i{width:6px;height:6px;border-radius:999px;background:var(--ink2)}
 .set-scope.shared{background:color-mix(in srgb,var(--green) 22%,transparent);color:var(--green)}
 .set-scope.shared i{background:currentColor}
-/* Phone-only copy of the rail's tree — the same swap `.usage-tabs` makes, and
-   for the same reason: a strip cannot draw a tree, so exactly one control is
-   visible at any width and both write `settings.settingsTab`. */
-.set-tabs{display:none;margin-left:auto;align-self:center}
 .set-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
 .set-col{display:flex;flex-direction:column;gap:16px;min-width:0}
 .set-group{background:var(--strip);border-radius:16px;padding:24px}
@@ -888,9 +1367,6 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
   .set-cols{grid-template-columns:1fr}
 }
 @media (max-width:700px){
-  .set-band{flex-wrap:wrap}
-  .set-tabs{display:block;width:100%;margin-left:0}
-  .set-tabs .set-seg{display:flex}
   .set-group{padding:20px}
   .set-row{align-items:flex-start;flex-direction:column;gap:10px}
   .set-control{width:100%;flex-wrap:wrap}
@@ -903,16 +1379,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 /* ---------------------------------------------- quality floor */
 :where(button,select,input,textarea,summary,[role=button]):focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
 @media (prefers-reduced-motion:reduce){
-  .working .dot,.row.launching .dot,.row-chat.answer,.row-chat.permission,.tl-bar.running,.row,.chat{animation:none}
-}
-/* phone: strip fields wrap instead of clipping; model rides in the drawer anyway
-   (same call as hiding .chat-model there) */
-@media (max-width:700px){
-  .row .r1{flex-wrap:wrap;row-gap:6px}
-  .row .model{display:none}
-  .tok{margin-left:auto}
-  /* the tab is the row's thumb target — narrower than desktop, still full height */
-  .row-chat{flex:0 0 52px}
+  .sdot,.cbtn,.need::before,.tl-bar,.chat{animation:none}
 }
 
 /* ---------------------------------------------- touch: no focus auto-zoom
@@ -937,328 +1404,276 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
   .set-control input[type=number],.set-control input[type=text]{font-size:max(16px,calc(16px / var(--font-scale,1)))}
 }
 
-/* ── Usage profile inspector (Analytics tab) ─────────────────────────────
+/* ── Usage: forecast + token value ───────────────────────────────────────
+   Both tabs are drawn in §8.2's card language — the header is a band on the
+   `--board` ground, the content sits on borderless `--strip` sheets, and the
+   figure strip is one sheet the ground divides into five.
+
+   Every colour here is a theme token or a `color-mix` over one: the five themes
+   are pure `[data-theme]` overrides, and one literal breaks the light one. The
+   data colours carry meaning and are not interchangeable — green is headroom,
+   red is a measured overrun, amber is a guessed one, and `--cyan` stays the
+   interactive accent and never appears as data. */
+.usage-section{display:flex;flex-direction:column;gap:16px}
+.up{display:flex;flex-direction:column;gap:16px}
+
+/* the page band: title and one line under it — the sub-view switch is the
+   rail/menu tree, at every width (`.rail-sub`) */
+.usg-band{display:flex;align-items:flex-start;gap:16px}
+.usg-title{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
+.usg-sub{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:4px;max-width:92ch}
+
+/* ── the figure strip ────────────────────────────────────────────────────
+   One card the ground divides, not five cards with gaps: the five figures are
+   one reading, and five surfaces would invite five unrelated ones. The divider
+   is 2px of `--board` for the same reason the sheets are borderless — contrast
+   against the ground does the separating (§8.2). */
+.statstrip{
+  display:grid;grid-template-columns:repeat(5,1fr);
+  background:var(--strip);border-radius:16px;overflow:hidden;
+}
+.statstrip>div{padding:18px 20px;min-width:0}
+.statstrip>div+div{border-left:2px solid var(--board)}
+.statstrip .k{font-size:12px;color:var(--ink2);display:flex;align-items:center;gap:8px}
+.statstrip .v{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:6px;line-height:1.1;color:var(--ink);overflow-wrap:anywhere}
+.statstrip .v.warn{color:var(--amber)}
+.statstrip .v .u{font-size:14px;font-weight:400;color:var(--ink2)}
+.statstrip .s{font-size:11px;color:var(--ink3);margin-top:5px}
+
+/* ── a sheet ─────────────────────────────────────────────────────────────
+   §8.2's card: paper, 16px radius, 24px of padding, no stroke and no
+   shadow. `.ct`/`.cs` are §7's title + one-line subtitle pair. */
+.sheet{background:var(--strip);border-radius:16px;padding:22px 24px}
+.sheet .ct{font-size:16px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
+.sheet .ct.sub{font-size:15px}
+.sheet .cs{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:4px;max-width:92ch}
+.sheet-div{height:1px;background:var(--hairline);margin:24px 0}
+.row-head{display:flex;align-items:flex-start;gap:12px}
+.row-head .sp{flex:1}
+.row-head>div{min-width:0}
+/* the slot the design puts a filter chip in (§7) — here a label or a toggle */
+.chip{
+  display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;flex:none;
+  font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink2);
+  background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:default;
+}
+button.chip{cursor:pointer;transition:color .15s,border-color .15s}
+button.chip:hover{color:var(--ink);border-color:var(--ink3)}
+button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
+/* a page-level sentence: an absent walk, a caveat, a hint under a table */
+.note{font-size:12px;color:var(--ink2);line-height:1.5;margin:14px 0 0;max-width:92ch}
+.note b{color:var(--ink);font-weight:600}
+
+/* ── data tables ─────────────────────────────────────────────────────────
+   One rule between rows and one heavier one under the head; no cell borders,
+   no zebra. Figures are right-aligned and ride the `tabular-nums` on <body>. */
+.dt{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;color:var(--ink)}
+.dt th{
+  text-align:left;font-size:11px;font-weight:500;color:var(--ink2);
+  padding:0 10px 8px;border-bottom:1px solid var(--hairline2);white-space:nowrap;
+}
+.dt th.n,.dt td.n{text-align:right}
+.dt td{padding:10px;border-bottom:1px solid var(--hairline);white-space:nowrap}
+.dt tbody tr:last-child td{border-bottom:0}
+.dt td:first-child,.dt th:first-child{padding-left:0}
+.dt td:last-child,.dt th:last-child{padding-right:0}
+.dt td.name{font-weight:500;white-space:normal;overflow-wrap:anywhere}
+.dt td.mut{color:var(--ink2);white-space:normal}
+.dt td .cs{display:inline;font-size:11px;color:var(--ink3);margin:0}
+.dt td.over{color:var(--amber);font-weight:600}
+.dt tr.tot td{border-top:1px solid var(--hairline2);border-bottom:0;font-weight:600;padding-top:12px}
+.dt .bar{display:block;height:6px;border-radius:4px;background:var(--green)}
+/* assumed, not measured: the same mark the walk's dashed run wears */
+.dt .bar.assumed{background:color-mix(in oklab,var(--green) 35%,var(--steel))}
+.dt .bar.hatch{
+  background:var(--steel);
+  background-image:repeating-linear-gradient(45deg,var(--hairline2) 0 1px,transparent 1px 5px);
+}
+.dt .barcell{width:120px}
+.dt .dev{font-weight:500;color:var(--green)}
+.dt .dev.bad{color:var(--amber)}
+.dt th .idot{vertical-align:1px;margin-left:6px}
+.up-tablewrap{overflow-x:auto}
+
+/* the verdict pill: four states, each a tint of the colour that state means */
+.tag-v{
+  display:inline-block;font-size:11px;font-weight:500;border-radius:999px;padding:3px 9px;
+  background:var(--steel);color:var(--ink2);white-space:nowrap;
+}
+.tag-v.stable{background:color-mix(in srgb,var(--green) 20%,transparent);color:var(--green)}
+.tag-v.drift{background:color-mix(in srgb,var(--amber) 20%,transparent);color:var(--amber)}
+.tag-v.mix{background:color-mix(in srgb,var(--mustard) 18%,transparent);color:var(--mustard)}
+
+/* ── the ⓘ and its floating panel ────────────────────────────────────────
+   Neutral, not accented: on the forecast page green is the weight ramp's
+   meaning, and a reading aid borrowing a data colour reads as another step of
+   the scale. Pinned is an ink border — the accent never marks state (§5). */
+.idot{
+  width:16px;height:16px;flex:none;border-radius:999px;border:1px solid var(--hairline2);
+  background:var(--strip);font-family:var(--font);font-size:10px;font-weight:600;color:var(--ink2);
+  display:inline-grid;place-items:center;vertical-align:2px;cursor:help;padding:0;line-height:1;
+  position:relative;transition:color .15s,border-color .15s,background .15s;
+}
+.idot::after{content:'';position:absolute;left:-4px;top:-4px;right:-4px;bottom:-4px}
+.idot:hover{color:var(--ink);border-color:var(--ink3)}
+.idot[aria-expanded="true"]{background:var(--strip-hi);border-color:var(--ink);color:var(--ink)}
+.idot:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.ct .idot{margin-left:8px}
+
+/* The one floating surface on the board (§5): paper, 12px radius, the 0 8px 24px
+   lift. Shown and hidden by **opacity**, which is the knob `useFloatingTip`
+   writes — `aria-hidden` stays `true` for the whole life of the node, because
+   this is a pointer affordance whose text is always also on an `aria-label`, so
+   a `display` rule keyed on that attribute hides the panel permanently. */
+.up-tip{
+  position:fixed;left:0;top:0;z-index:60;max-width:420px;pointer-events:none;
+  background:var(--strip);border:1px solid var(--hairline);border-radius:12px;
+  box-shadow:0 8px 24px var(--shadow2);padding:12px 16px;
+  font-size:13px;line-height:1.5;color:var(--ink);white-space:pre-line;
+  opacity:0;transition:opacity .12s ease;
+}
+@media (prefers-reduced-motion:reduce){.up-tip{transition:none}}
+
+/* ── the definitions sheet ───────────────────────────────────────────────
+   Printed, not folded: a reader who has just met six ⓘ glyphs is exactly the
+   reader who should not have to find a drawer to read them all. */
+.terms{columns:2;column-gap:32px;margin:14px 0 0}
+.terms>div{break-inside:avoid;padding:10px 0;border-bottom:1px solid var(--hairline)}
+.terms dt{font-size:13px;font-weight:500;color:var(--ink)}
+.terms dd{font-size:12px;color:var(--ink2);line-height:1.5;margin:3px 0 0}
+
+/* ── the recording-off notice ────────────────────────────────────────────*/
+.up-off{
+  display:flex;gap:10px;font-size:13px;line-height:1.5;color:var(--ink2);
+  border-radius:16px;background:color-mix(in srgb,var(--amber) 12%,transparent);padding:16px 20px;
+}
+.up-off b{color:var(--ink);font-weight:500}
+
+/* ── the headroom chart ──────────────────────────────────────────────────
+   The walk drawn as what is *left* of the weekly window rather than what is
+   spent: it drains to empty at the crossing, and the gap between the zero rule
+   and the line past it is time the window cannot pay for — red where the
+   weights are measured, amber and hatched where the walk is guessing. Overlay
+   labels are HTML, not SVG text: the chart stretches with
+   `preserveAspectRatio="none"`, which would squash a glyph with it. */
+.walk{margin-top:18px}
+.walkwrap{position:relative;height:220px}
+.hrchart{width:100%;height:100%;display:block}
+.hrchart line,.hrchart polyline{vector-effect:non-scaling-stroke;fill:none}
+.wk-day{stroke:var(--hairline);stroke-width:1}
+.hr-area{fill:color-mix(in oklab,var(--green) 18%,transparent);stroke:none}
+/* the deficit, in two halves: red under the measured run, amber and hatched
+   under the run walked at the weekly mean — the hatch being this board's mark
+   for "no evidence", the same one an unmeasured hour cell wears */
+.hr-debt{fill:color-mix(in oklab,var(--amber) 28%,transparent);stroke:none}
+.hr-debt.measured{fill:color-mix(in oklab,var(--red) 22%,transparent)}
+.hr-line{stroke:var(--green);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.hr-line.debt{stroke:var(--red)}
+/* the dashed run takes the colour of the fill under it: past the evidence the
+   deficit is a guess, and amber is what this board calls a guessed overrun */
+.hr-line.assumed{stroke-dasharray:5 4;stroke-width:1.6}
+.hr-line.debt.assumed{stroke:var(--amber)}
+.hr-zero{stroke:var(--ink);stroke-width:1.2}
+.up-hit-col{
+  fill:transparent;stroke:none;cursor:crosshair;
+  transition:fill-opacity .1s;
+}
+.up-hit-col:hover{fill:var(--cyan);fill-opacity:.14}
+.up-hit-col:focus-visible{fill:var(--cyan);fill-opacity:.3;outline:none}
+.ylab{
+  position:absolute;left:-2px;transform:translateY(-50%);white-space:nowrap;
+  font-size:10px;color:var(--ink3);background:var(--strip);padding:0 4px;
+}
+.ylab.debt{color:var(--red)}
+.crossdot{
+  position:absolute;width:9px;height:9px;border-radius:999px;
+  background:var(--red);border:2px solid var(--strip);transform:translate(-50%,-50%);
+}
+.crosstag{
+  position:absolute;transform:translate(-50%,-140%);white-space:nowrap;
+  font-size:11px;font-weight:500;color:var(--red);
+  background:var(--strip);border-radius:4px;padding:1px 6px;box-shadow:0 1px 2px var(--shadow);
+}
+.walkdays{position:relative;height:18px;margin-top:6px;font-size:11px;color:var(--ink2)}
+.walkdays span{position:absolute;transform:translateX(-50%)}
+.walkdays .now{left:0;transform:none;color:var(--ink3)}
+
+/* ── the legends ─────────────────────────────────────────────────────────
+   The ramp's five steps between never and always, then the hatch, which is a
+   third state rather than a sixth step; and the walk's four inks. */
+.uplegend{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin-top:16px;font-size:12px;color:var(--ink2);
+}
+.uplegend small{font-size:12px}
+/* a swatch and its words are one item, so a wrap never strands a lone swatch */
+.uplegend .key{display:inline-flex;align-items:center;gap:6px}
+.uplegend .ramp-sw{display:inline-flex;gap:3px}
+.uplegend .up-cell{width:16px;height:16px;aspect-ratio:auto;flex:none}
+.uplegend .gap{width:20px}
+.uplegend .rule{width:18px;height:0;flex:none;border-top:2.5px solid var(--green)}
+.uplegend .rule.dash{border-top-style:dashed}
+.uplegend .rule.brick{
+  width:14px;height:14px;flex:none;border:0;border-radius:2px;
+  background:color-mix(in oklab,var(--amber) 45%,var(--strip));
+}
+.uplegend .rule.brick.red{background:color-mix(in oklab,var(--red) 32%,var(--strip))}
+
+/* ── the learned week ────────────────────────────────────────────────────
    A sequential one-hue ramp, derived with color-mix so all five themes hold —
    five hand-picked hex values per theme would be 25 nobody can validate, and
    would break the no-hardcoded-color rule. Evidence is texture, never a sixth
-   colour step: an untrusted cell has no value, not a low one. */
-.usage-section{display:flex;flex-direction:column}
-.up{margin-top:12px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:3px}
-.up-head{display:flex;align-items:flex-start;gap:12px}
-.up-head h3{margin:0;font-size:19px;letter-spacing:-.01em;color:var(--text);font-weight:500;line-height:1.3}
-.up-sub{margin:4px 0 0;max-width:70ch;font-size:13px;line-height:1.5;color:var(--text3)}
-.up-toggle{
-  margin-left:auto;flex:none;font-size:12px;color:var(--text2);
-  background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:4px 8px;cursor:pointer;
-}
-.up-toggle:hover{border-color:var(--border2);color:var(--text)}
-.up-off{
-  margin-top:10px;padding:8px 10px;font-size:13px;line-height:1.5;color:var(--text2);
-  background:var(--surface2);border-left:2px solid var(--orange);border-radius:2px;
-}
-.up-note{
-  margin:8px 0 0;padding-left:12px;max-width:70ch;font-size:13px;line-height:1.5;
-  color:var(--text3);border-left:2px solid var(--border2);
-}
+   colour step: an untrusted cell has no value, not a low one.
 
-/* Square cells, as the mockup has them, one size down. `max-width` is the single
-   knob: the columns are `1fr` and the cells are square, so width sets the cell
-   size and therefore the total height. The mockup's variant C is 320px → 38.84px
-   cells → 992px tall (measured off the mockup, not eyeballed); 250px gives ~28px
-   cells and ~730px, which keeps the calendar reading while bringing the week
-   within about a screen. */
-/* The "is this thing on?" line. Without it the first week of the grid is 168
-   identical hatched cells and no evidence that recording works. */
-.up-status{
-  display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:10px;
-  font-size:11px;line-height:1.5;color:var(--text3);
-}
-.up-status-wait{color:var(--text2)}
-.up-grid{display:grid;gap:2px;margin-top:12px;max-width:250px}
-.up-axis{font-size:12px;line-height:1;color:var(--text3);text-align:center;align-self:center}
+   Drawn twice and shown once: `wide` is 7 rows of 24 hours, which reads across
+   a sheet; `tall` is the transpose, for a phone that has no room for 24
+   columns. `display:none` on the hidden one also takes its 168 cells out of
+   the tab order, so only one grid is ever reachable. */
+.hmx{margin-top:18px}
+.hmx.wide{display:grid;grid-template-columns:34px 1fr;gap:6px;font-size:10px}
+.hmx.wide .hrs{grid-column:2;display:grid;grid-template-columns:repeat(24,1fr);gap:3px;color:var(--ink3);text-align:center;margin-bottom:5px}
+.hmx.wide .lab{display:grid;grid-template-rows:repeat(7,1fr);gap:3px;font-size:11px;font-weight:500;color:var(--ink2);align-items:center}
+.hmx.wide .gx{display:grid;grid-template-columns:repeat(24,1fr);gap:3px}
+.hmx.wide .up-cell{aspect-ratio:auto;height:22px}
+.hmx.tall{display:none;gap:2px;max-width:250px}
+.up-axis{font-size:12px;line-height:1;color:var(--ink3);text-align:center;align-self:center}
 .up-axis.left{text-align:right;padding-right:6px}
 .up-cell{position:relative;border:1px solid var(--hairline);border-radius:2px;aspect-ratio:1;min-width:0}
-.up-cell:hover{outline:2px solid var(--accent);outline-offset:0;z-index:2}
-/* The floating tooltip. `title` was the wrong mechanism: it never fires on
-   touch, and this board is read from a phone. `pre-line` is what lets the
-   content be set with textContent rather than any innerHTML. */
-.up-tip{
-  position:fixed;left:0;top:0;z-index:40;max-width:240px;padding:6px 8px;
-  font-size:11px;line-height:1.45;white-space:pre-line;
-  color:var(--text);background:var(--surface2);border:1px solid var(--border2);
-  border-radius:3px;box-shadow:0 4px 12px var(--shadow2);
-  opacity:0;pointer-events:none;transition:opacity .12s ease;
-}
+.up-cell:hover{outline:2px solid var(--cyan);outline-offset:0;z-index:2}
+.up-cell:focus-visible{outline:2px solid var(--cyan);outline-offset:1px;z-index:2}
 .up-cell.q1{background:color-mix(in oklab,var(--cyan) 20%,var(--strip))}
 .up-cell.q2{background:color-mix(in oklab,var(--cyan) 40%,var(--strip))}
 .up-cell.q3{background:color-mix(in oklab,var(--cyan) 60%,var(--strip))}
 .up-cell.q4{background:color-mix(in oklab,var(--cyan) 80%,var(--strip))}
 .up-cell.q5{background:var(--cyan)}
 .up-cell.unknown{background:repeating-linear-gradient(135deg,var(--hairline) 0 2px,transparent 2px 5px);border-style:dashed}
-.up-cell:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+.up-table th[scope="row"]{
+  text-align:right;font-size:11px;font-weight:400;color:var(--ink3);
+  padding:10px 10px 10px 0;border-bottom:1px solid var(--hairline);white-space:nowrap;
+}
 
-.up-legend{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:12px}
-.up-legend small{font-size:11px;color:var(--text3)}
-.up-swatches{display:flex;gap:2px}
-.up-swatches .up-cell{width:14px;height:14px;aspect-ratio:auto}
-.up-legend-none{width:14px;height:14px;aspect-ratio:auto;margin-left:10px}
-
-/* Usage sub-tabs. The switch sits at the far end of the section bar, which is
-   `align-items:baseline` — the control has no text baseline of its own, so it
-   is pinned to the centre explicitly rather than drifting with the title. The
-   pill itself is `.set-seg`, the board's one segmented control.
-
-   **Phone only.** On a desktop rail the two sub-views are the tree under Usage
-   (`.rail-sub`), and a second switch here would be two controls for one piece
-   of state. The phone strip cannot draw a tree, so the switch comes back there
-   and the tree goes away — the swap is these two `display` rules and nothing
-   else, so neither control can be the one that silently disappears. */
-.usage-tabs{display:none;margin-left:auto;align-self:center}
+/* ── narrow ──────────────────────────────────────────────────────────────*/
+@media (max-width:1100px){
+  .statstrip{grid-template-columns:repeat(3,1fr)}
+  /* the ground draws the seams in both directions once the strip wraps */
+  .statstrip>div{border-top:2px solid var(--board)}
+  .statstrip>div:nth-child(-n+3){border-top:0}
+  .statstrip>div:nth-child(3n+1){border-left:0}
+  .terms{columns:1}
+}
 @media (max-width:700px){
-  .usage-tabs{display:block}
+  .sheet{padding:20px}
+  .statstrip{grid-template-columns:repeat(2,1fr)}
+  .statstrip>div:nth-child(-n+3){border-top:2px solid var(--board)}
+  .statstrip>div:nth-child(-n+2){border-top:0}
+  .statstrip>div:nth-child(3n+1){border-left:2px solid var(--board)}
+  .statstrip>div:nth-child(odd){border-left:0}
+  /* the transpose: 24 columns do not fit a thumb's width */
+  .hmx.wide{display:none}
+  .hmx.tall{display:grid}
+  .row-head{flex-wrap:wrap}
+  .walkwrap{height:180px}
+  /* every table on these pages is wider than a phone; each scrolls in its own
+     box rather than letting the page scroll sideways */
+  .sheet .dt{display:block;overflow-x:auto;white-space:nowrap}
 }
-
-/* Token value per model. Every colour here is a theme token or a `color-mix`
-   over one — the five themes are pure token overrides, and one literal breaks
-   the light one.
-
-   The `rates-*` prefix is now the **shared reading-aids vocabulary** of both
-   Usage tabs, not this one's private namespace: `.rates-status` / `.rates-q` /
-   `.rates-counts` carry the Forecast tab's verdict line too, and `.rates-i` /
-   `.rates-how` / `.rates-n` / `.rates-gloss` are rendered from
-   `components/usage/ReadingAids.tsx` for both. Renaming them would touch both
-   tabs and this file for nothing a reader can see, and class names are kept
-   stable here on purpose — so the prefix stays and this comment explains it. */
-
-/* The status strip: the question the card answers, and its answer. */
-.rates-status{display:flex;align-items:baseline;gap:8px 14px;flex-wrap:wrap;margin-top:14px}
-.rates-q{font-size:19px;font-weight:500;letter-spacing:-.01em;color:var(--text);line-height:1.3}
-.rates-counts{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text2)}
-.rates-counts b{color:var(--text);font-weight:500}
-
-/* The collecting hint, hoisted out of the rows: one fact about the measurement,
-   not five identical sentences reading as five separate findings. */
-.rates-notice{
-  margin-top:8px;padding:8px 12px;font-size:13px;line-height:1.5;color:var(--text2);
-  border-left:2px solid var(--border2);background:var(--surface);
-}
-.rates-notice b{color:var(--text);font-weight:600}
-
-.rates-list{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
-.rates-row{padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:3px}
-.rates-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.rates-model{font-size:13px;color:var(--text);word-break:break-all}
-
-/* Three labelled tiles. `minmax(0,1fr)` and not `1fr`: a long value would
-   otherwise blow the track out past the card rather than shrink. */
-.rates-figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 14px;margin-top:10px}
-.rates-fig{min-width:0;padding:6px 0 4px;border-top:1px solid var(--border)}
-.rates-lab{
-  display:flex;align-items:center;gap:5px;font-size:11px;
-  font-weight:600;color:var(--text3);
-}
-.rates-fig.lead .rates-lab{color:var(--text2)}
-.rates-value{font-size:30px;font-weight:700;letter-spacing:-.02em;color:var(--text);line-height:1.1}
-.rates-fig .rates-value{margin-top:2px}
-.rates-unit{font-size:12px;font-weight:400;color:var(--text3);margin-left:4px}
-.rates-sub{margin-top:1px;font-size:12px;color:var(--text3)}
-.rates-dev{font-size:12px;color:var(--text2)}
-.rates-dev.drift{color:var(--red)}
-
-/* The ⓘ that opens a definition. A real button, never a `title` attribute:
-   this board is read from a phone, where `title` never fires. 22px of hit area
-   around a 14px glyph, so a thumb can land on it. */
-.rates-i{
-  display:inline-flex;align-items:center;justify-content:center;flex:none;
-  width:14px;height:14px;padding:0;border-radius:50%;border:1px solid var(--border2);
-  background:transparent;color:var(--text3);font-family:var(--font);font-size:11px;font-weight:600;
-  line-height:1;letter-spacing:0;text-transform:none;cursor:pointer;position:relative;
-}
-.rates-i::after{content:'';position:absolute;left:-4px;top:-4px;right:-4px;bottom:-4px}
-.rates-i:hover,.rates-i[aria-expanded="true"]{border-color:var(--accent);color:var(--accent)}
-.rates-i:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
-
-/* The evidence, split in two — the fix for a line where two identical "4 days"
-   meant two different windows. `forming` is the one word being waited on. */
-.rates-ev{
-  display:flex;gap:6px 18px;flex-wrap:wrap;margin-top:8px;padding-top:6px;
-  border-top:1px solid var(--border);font-size:12px;color:var(--text3);
-}
-.rates-ev b{color:var(--text2);font-weight:500;letter-spacing:.02em}
-.rates-forming{color:var(--amber)}
-.rates-weekly{margin-top:4px;font-size:12px;color:var(--text3)}
-.rates-hint{margin-top:6px;max-width:60ch;font-size:13px;line-height:1.5;color:var(--text2)}
-
-/* The fold line: models with nothing to show at all. Dashed, because it is a
-   waiting state and not a card — three rows of dashes read as a fault. */
-.rates-wait{
-  display:flex;align-items:baseline;gap:6px 14px;flex-wrap:wrap;margin-top:8px;
-  padding:9px 12px;background:var(--surface2);border:1px dashed var(--border2);border-radius:3px;
-  font-size:12px;color:var(--text2);
-}
-.rates-wait .rates-lab{flex:none}
-
-/* The badge carries the verdict, and `thin` is deliberately the quiet one —
-   collecting is the normal first-fortnight state and must not read as a fault. */
-.rates-badge{
-  margin-left:auto;flex:none;font-size:12px;font-weight:600;
-  padding:3px 8px;border-radius:2px;
-  border:1px solid var(--border2);color:var(--text2);background:var(--surface);
-}
-.rates-badge.drift{
-  color:var(--red);border-color:color-mix(in oklab,var(--red) 55%,var(--border2));
-  background:color-mix(in oklab,var(--red) 14%,var(--surface));
-}
-.rates-badge.stable{
-  color:var(--green);border-color:color-mix(in oklab,var(--green) 45%,var(--border2));
-  background:color-mix(in oklab,var(--green) 12%,var(--surface));
-}
-.rates-badge.mix{
-  color:var(--amber);border-color:color-mix(in oklab,var(--amber) 50%,var(--border2));
-  background:color-mix(in oklab,var(--amber) 13%,var(--surface));
-}
-.rates-badge.thin{color:var(--text3)}
-
-/* The glossary drawer, closed by default: the data first, the explanation one
-   tap away. The default disclosure triangle is replaced so the marker can carry
-   the display face the rest of the card uses. */
-.rates-how{margin-top:14px;border:1px solid var(--border);border-radius:3px;background:var(--surface)}
-.rates-how summary{
-  cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;
-  padding:8px 12px;font-size:12px;font-weight:600;
-  color:var(--text2);
-}
-.rates-how summary::-webkit-details-marker{display:none}
-.rates-how summary::before{
-  content:'';flex:none;width:0;height:0;border:4px solid transparent;
-  border-left:6px solid var(--text3);transition:transform .15s;
-}
-.rates-how[open] summary::before{transform:rotate(90deg)}
-.rates-how summary:focus-visible{outline:1px solid var(--accent);outline-offset:-2px}
-.rates-n{
-  margin-left:auto;font-size:11px;font-weight:400;
-  letter-spacing:0;text-transform:none;color:var(--text3);
-}
-/* `display:contents` on the wrapper: React needs one keyed element per entry,
-   the two-column grid needs the dt and dd to be its own children. */
-.rates-gloss{
-  margin:0;padding:4px 12px 12px;display:grid;grid-template-columns:max-content 1fr;
-  gap:8px 16px;font-size:13px;line-height:1.5;
-}
-.rates-gloss > div{display:contents}
-.rates-gloss dt{
-  font-size:13px;font-weight:500;
-  color:var(--text);padding-top:2px;letter-spacing:0;
-}
-.rates-gloss dd{margin:0;max-width:62ch;color:var(--text2)}
-
-/* Coverage as a two-segment bar. Two and not six on purpose: the question is
-   binary — how much was measured — and the dataviz palette validator fails this
-   board's own status hues on lightness, chroma and CVD separation, so a six-hue
-   categorical bar would need a colour literal this file forbids. The refusal
-   reasons are text, where identity does not depend on hue. */
-.rates-cov{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
-.rates-covhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.rates-covhead h4{
-  margin:0;font-size:15px;font-weight:500;
-  color:var(--text2);letter-spacing:0;
-}
-.rates-big{margin-left:auto;font-size:24px;font-weight:700;color:var(--text);letter-spacing:-.02em;line-height:1.1}
-.rates-bar{
-  display:flex;gap:2px;height:10px;margin-top:8px;border-radius:2px;
-  overflow:hidden;background:var(--bg);
-}
-.rates-bar i{display:block;height:100%}
-.rates-bar .measured{background:var(--accent);border-radius:2px 0 0 2px}
-.rates-bar .rest{flex:1;background:var(--border2)}
-.rates-covnote{margin:8px 0 0;max-width:62ch;font-size:13px;line-height:1.5;color:var(--text3)}
-.rates-covlist{
-  list-style:none;margin:8px 0 0;padding:0;display:grid;
-  grid-template-columns:max-content 1fr;gap:3px 12px;
-  font-size:12px;color:var(--text3);
-}
-.rates-covlist li{display:contents}
-.rates-covlist .v{color:var(--text2);text-align:right}
-
-/* Phone: the tiles go two-up with the lead spanning both — a 3-column grid at
-   375px puts a 20px figure in a 90px track — the glossary drops to one column,
-   and the badge stops sharing a line with a long model id. */
-@media (max-width:560px){
-  .rates-badge{margin-left:0}
-  .rates-row{padding:12px}
-  .rates-figs{grid-template-columns:1fr 1fr}
-  .rates-fig.lead{grid-column:1 / -1}
-  .rates-gloss{grid-template-columns:1fr}
-  .rates-gloss dd{margin-bottom:4px}
-}
-@media (prefers-reduced-motion:reduce){
-  .rates-how summary::before{transition:none}
-}
-
-.up-walk{margin-top:16px}
-.up-walkmeta{
-  display:flex;justify-content:space-between;gap:8px;
-  font-size:11px;color:var(--text3);
-}
-.up-hit{color:var(--red)}
-
-/* The cumulative walk chart. One viewBox stretched with preserveAspectRatio:none,
-   so every stroke below carries vector-effect:non-scaling-stroke — that pair is
-   what removes the per-element device-pixel rounding the old bar strip had. */
-.up-chartwrap{position:relative;margin-top:6px}
-.up-chart{display:block;width:100%;height:96px;overflow:visible}
-.up-chart line,.up-chart polyline{vector-effect:non-scaling-stroke;fill:none}
-/* Drawn *over* the area fill, not under it: at the alpha a full-height wash can
-   afford, a tint beneath the fill is invisible. Deliberately faint — the
-   over-window is usually two thirds of the walk, and a strong field there
-   buries the shape the solid/dashed split just exposed. */
-.up-dead{fill:var(--red);opacity:.08}
-.up-daytick{stroke:var(--hairline);stroke-width:1}
-.up-ceiling{stroke:var(--red);stroke-width:1;stroke-dasharray:4 3;opacity:.7}
-.up-area{fill:color-mix(in oklab,var(--cyan) 12%,transparent);stroke:none}
-.up-line{stroke:var(--cyan);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
-/* Same height, weaker claim: an assumed hour keeps its contribution and loses
-   its ink. Dashed rather than faded so it survives the light theme. */
-.up-line.assumed{stroke-dasharray:3 3;opacity:.75}
-.up-cross{stroke:var(--red);stroke-width:1.5}
-/* Never an outline on a hit column, in any state. The column is ~5px wide at
-   phone width, so a focus ring is *thicker than the thing it rings* — and
-   several engines (Safari most visibly) draw theirs as a filled rounded halo,
-   which renders as a fat opaque bar taller than the chart. The wash below is
-   the focus indicator instead: it is exactly one hour wide, by construction. */
-.up-hit-col{
-  fill:transparent;stroke:none;cursor:crosshair;outline:none;
-  -webkit-tap-highlight-color:transparent;
-}
-.up-hit-col:hover{fill:var(--accent);fill-opacity:.14}
-.up-hit-col:focus-visible{fill:var(--accent);fill-opacity:.3;outline:none}
-
-.up-ceillab,.up-crosslab{
-  position:absolute;font-size:11px;
-  line-height:1;color:var(--red);pointer-events:none;white-space:nowrap;
-}
-/* `top` comes from the same yOf() the rule is drawn with — never a CSS copy of
-   the y scale, which would drift the label off the line the moment Y_MAX moved. */
-.up-ceillab{right:0;transform:translateY(-100%);margin-top:-2px}
-.up-crosslab{top:0;transform:translateX(-50%);padding:0 3px;background:var(--surface);border-radius:2px}
-
-.up-days{position:relative;height:13px;margin-top:2px}
-.up-daylab{
-  position:absolute;top:0;transform:translateX(-50%);
-  font-size:11px;line-height:1;color:var(--text3);white-space:nowrap;
-}
-.up-nowlab{
-  position:absolute;left:0;top:0;font-size:11px;line-height:1;
-  color:var(--text2);pointer-events:none;white-space:nowrap;
-}
-
-.up-key{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
-.up-key i{display:inline-block;width:14px;height:0}
-.up-key-solid{border-top:2px solid var(--cyan)}
-.up-key-dash{border-top:2px dashed var(--cyan);opacity:.75}
-
-.up-tablewrap{margin-top:12px;overflow-x:auto}
-.up-table{border-collapse:collapse;font-size:11px;color:var(--text2)}
-.up-table th,.up-table td{border:1px solid var(--border);padding:2px 6px;text-align:right;white-space:nowrap}
-.up-table thead th{color:var(--text3);font-weight:400}
-.up-table td.up-td-none{color:var(--text3)}

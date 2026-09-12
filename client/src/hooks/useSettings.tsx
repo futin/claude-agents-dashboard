@@ -13,10 +13,17 @@ interface SettingsControl {
 
 const SettingsContext = createContext<SettingsControl | null>(null);
 
-/** View-state keys the Reset button clears alongside the settings themselves. */
-const OWNED_KEYS = [
-  'dashboard.view', 'dashboard.section', 'dashboard.chatFilter',
-  'dashboard.analyticsView', 'management.scope', 'management.collapsed'
+/**
+ * View-state keys the Reset button clears alongside the settings themselves.
+ *
+ * Every `usePersistedState` key in the app except `dashboard.answerToken`,
+ * which is a credential rather than a view state: Reset is a "put the board
+ * back the way it shipped" button, not a sign-out, and clearing the token would
+ * silently disarm every write path (see remote-answer.md).
+ */
+export const OWNED_KEYS = [
+  'dashboard.view', 'dashboard.layout', 'dashboard.section', 'dashboard.chatFilter',
+  'dashboard.analyticsView', 'management.scope', 'management.type', 'management.collapsed'
 ];
 
 /**
@@ -49,16 +56,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setStored(DEFAULT_SETTINGS);
   }, [setStored]);
 
-  // Theme and density are pure CSS: everything downstream keys off these two
-  // attributes, so no component re-renders when they change. The same attribute
-  // is stamped pre-paint by the inline script in index.html — this effect keeps
-  // it in step afterwards.
+  // Theme, density and width are pure CSS: everything downstream keys off these
+  // attributes, so no component re-renders when they change. The same attributes
+  // are stamped pre-paint by the inline script in index.html — this effect keeps
+  // them in step afterwards.
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = settings.theme;
     root.dataset.density = settings.density;
+    root.dataset.width = settings.contentWidth;
     root.style.setProperty('--font-scale', String(settings.fontScale / 100));
-  }, [settings.theme, settings.density, settings.fontScale]);
+  }, [settings.theme, settings.density, settings.contentWidth, settings.fontScale]);
 
   const value = useMemo(() => ({ settings, update, reset }), [settings, update, reset]);
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

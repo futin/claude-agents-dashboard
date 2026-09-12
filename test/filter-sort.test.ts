@@ -6,9 +6,17 @@ import {
   clearFilters,
   describeEmpty,
   distinctProjects,
+  filterCount,
   hasActiveFilters,
+  isLayout,
   pruneProjects,
+  DEFAULT_LAYOUT,
   DEFAULT_VIEW,
+  LAYOUTS,
+  SORT_HINT,
+  SORT_LABEL,
+  type Layout,
+  type SortKey,
   type View
 } from '../client/src/lib/filterSort.js';
 
@@ -246,6 +254,53 @@ export function run(): number {
 
   if (test('clearFilters: nothing active returns the same view by reference', () => {
     assert.strictEqual(clearFilters(DEFAULT_VIEW), DEFAULT_VIEW);
+  })) p++; else f++;
+
+  // The shape is NOT a facet of the persisted view any more — it is seeded from
+  // Settings › Display (`defaultLayout`) and lives for as long as the page does,
+  // so nothing in `View` may carry it.
+  if (test('the view carries no layout: the shape is a setting, not a filter', () => {
+    assert.ok(!('layout' in DEFAULT_VIEW), 'DEFAULT_VIEW must not persist a layout');
+    assert.deepStrictEqual(
+      Object.keys(DEFAULT_VIEW).sort(),
+      ['projects', 'sortDir', 'sortKey', 'statuses', 'window']
+    );
+  })) p++; else f++;
+
+  if (test('layout: the five come in switcher order, each labelled', () => {
+    assert.deepStrictEqual(LAYOUTS.map(l => l.key), ['board', 'list', 'split', 'tiles', 'triage']);
+    for (const l of LAYOUTS) assert.ok(l.label.length > 0, l.key + ' has a label');
+    // The Settings picker prepends a `last` sentinel to this list; it must
+    // never be prepended *into* it, or the toolbar grows a sixth button.
+    assert.ok(!LAYOUTS.some(l => (l.key as string) === 'last'), 'LAYOUTS is the switcher, not the picker');
+    assert.ok(LAYOUTS.some(l => l.key === DEFAULT_LAYOUT), 'the fallback shape is drawable');
+  })) p++; else f++;
+
+  if (test('isLayout: guards a stale stored value', () => {
+    const all: Layout[] = ['board', 'list', 'split', 'tiles', 'triage'];
+    for (const l of all) assert.strictEqual(isLayout(l), true);
+    assert.strictEqual(isLayout('rows'), false);
+    assert.strictEqual(isLayout(undefined), false);
+    assert.strictEqual(isLayout(3), false);
+  })) p++; else f++;
+
+  if (test('filterCount: one per facet, however many values it holds', () => {
+    assert.strictEqual(filterCount(DEFAULT_VIEW), 0);
+    assert.strictEqual(filterCount(view({ projects: ['a'] })), 1);
+    assert.strictEqual(filterCount(view({ projects: ['a'], statuses: ['idle'] })), 2);
+    assert.strictEqual(filterCount(view({ window: '1h' })), 1);
+    assert.strictEqual(filterCount(view({ projects: ['a'], statuses: ['idle'], window: '1h' })), 3);
+    assert.strictEqual(filterCount(view({ statuses: ['idle', 'working'] })), 1);
+    assert.strictEqual(filterCount(view({ sortKey: 'tokens', sortDir: 'asc' })), 0);
+  })) p++; else f++;
+
+  if (test('SORT_LABEL / SORT_HINT: every sort key prints', () => {
+    const keys: SortKey[] = ['recency', 'tokens', 'name', 'status'];
+    for (const k of keys) {
+      assert.ok(SORT_LABEL[k].length > 0, k + ' label');
+      assert.ok(SORT_HINT[k].length > 0, k + ' hint');
+    }
+    assert.strictEqual(SORT_LABEL.recency, 'Recency');
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

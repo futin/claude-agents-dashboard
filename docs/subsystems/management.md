@@ -1,20 +1,53 @@
 # Management — read-only config browser
 
 A **Management** section (top-level `SideRail` in `App.tsx`, persisted as
-`dashboard.section`) shows all Claude config on the machine in a three-pane layout.
-Read-only v1 — nothing is ever written.
+`dashboard.section`) shows all Claude config on the machine. Read-only v1 — nothing is
+ever written.
 
-- **Left — scope menu:** Global (`~/.claude`) plus every recently-active project.
-- **Middle — item list:** skills, agents, commands, rules, hooks, memory (CLAUDE.md),
-  settings, and installed plugins for the selected scope, grouped by type and filterable.
-  Every item is tagged with its source: `user`, `project`, or `plugin:<name>` — installed
-  plugins are fully expanded, so plugin-provided skills/hooks/agents/rules show up too.
-  The filter matches an item's name and description, and for a skill its **file names**
-  too, so searching a reference doc finds the skill that ships it.
-- **Right — detail pane:** the selected item's metadata and file content (SKILL.md, hook
-  script, settings.json, …). A **skill that ships more than SKILL.md** gets a file rail
-  beside the viewer — the whole skill directory (references, scripts, agents, docs), any
-  file of which opens in place. Single-file skills keep the plain path + viewer.
+**The scope is a rail destination, not a pane** (`.claude/DESIGN.md` §8.5): Global
+(`~/.claude`) and every recently-active project sit in the sidebar as Management's
+sub-nav, the same tree Usage and Settings draw, and only while the section is open. The
+page keeps the persisted state (`management.scope`) and still resolves a stale value to
+`global` during render — only the control moved. The **band** names it as
+`Management · <scope>` with the scope's path in a *neutral* `.set-scope` pill (the green
+fill means "every device" on Settings and would lie here), the ↻ on the same line, and
+the one-line subtitle the full width beneath.
+
+What is left is three levels, so the page is **three columns**:
+
+- **Column 1 — type:** one row per kind (Skills, Agents, Commands, Rules, Hooks, Memory,
+  Settings, Plugins) with its count as a pill. Only kinds with at least one entry appear,
+  and the counts are the *filter's* counts. Which type is showing is persisted
+  (`management.type`) and resolved during render, so a filter that empties the picked type
+  falls back to the first type still standing rather than drawing an empty card.
+- **Column 2 — item, as a Settings card (§8.2):** the type is the category title, the
+  subtitle counts what the filter left, then the filter box, then one row per item — name
+  over its description, source badge on the right, a hairline between. Every item is tagged
+  `user`, `project`, or `plugin:<name>`; installed plugins are fully expanded, so
+  plugin-provided skills/hooks/agents/rules show up too. The filter matches an item's name
+  and description, and for a skill its **file names** too, so searching a reference doc
+  finds the skill that ships it. **Source sub-groups survive as collapsible labelled rows**
+  between the items — flattening them away would lose the one split that tells a user's
+  skill from a plugin's. Their padding is symmetric on purpose: plugin groups start
+  collapsed, so in practice you get a run of headers, and a header that hugs the group
+  below it then floats under the rule above.
+- **Column 3 — file, drawn only when something is selected:** the item's metadata and file
+  content (SKILL.md, hook script, settings.json, …). A **skill that ships more than
+  SKILL.md** gets a file rail beside the viewer — the whole skill directory (references,
+  scripts, agents, docs), any file of which opens in place. Single-file skills keep the
+  plain path + viewer. Clicking the open item again closes the column.
+
+Columns 1 and 2 are **fixed** (190px / 420px): a column that is wide until you pick
+something and narrow after jumps out from under the row you just clicked. Below 1330px the
+file column drops to a full-width row under the other two; below 700px everything is one
+column. Every column sizes to its content and the page body is the only scroller — no pane
+is pinned to the viewport, so a long file is read by scrolling the page. The scope has no
+control in the band at any width: it is a nav destination, so it is the tree under
+Management — on the desktop rail, and in the phone menu, which draws every tree open.
+
+Two things the three-pane version had are **gone on purpose**: the type-group collapse
+control (the type is a column now, not a collapsible header) and the
+`select an item to inspect it` empty state (a third of the page spent saying nothing).
 
 ## Mechanism
 
@@ -46,12 +79,21 @@ Read-only v1 — nothing is ever written.
   is more than SKILL.md, so a single-file skill's payload is byte-identical to before. No
   file bodies are read during the scan; the rail fetches one on click through the same
   `/api/management/file`. Caps: depth 4 rel-segments, 200 files per skill.
-- **No polling:** config changes over days. Index fetched on section mount / manual ↻;
-  project scopes + file bodies fetched lazily on click and cached in ref-held Maps.
+- **No polling:** config changes over days. Index fetched on entering the section / manual
+  ↻; project scopes + file bodies fetched lazily on click and cached in ref-held Maps.
   Switching to Management unmounts SessionsView → the 3s poll stops.
 - **Client:** ManagementView is a `React.lazy` default export (own chunk; sessions bundle
   unchanged). Entry normalization is pure (`lib/managementEntries.ts`, unit-tested).
-  Stale persisted scope / dead selection resolve during render — no effects.
+  Stale persisted scope / type / dead selection resolve during render — no effects.
+- **⚠️ One index fetch, two consumers.** The rail's scope tree needs `projects[]` from
+  `GET /api/management`, which the lazy chunk used to own. `hooks/useManagementScope.tsx`
+  hoists the scope state *and* that one fetch into a context above both `SideRail` and
+  `main` (`App.tsx`), so the index is fetched exactly once and the rail and the page can
+  never disagree about the scope. Only `hooks/useManagement.ts` — three fetch hooks, no
+  components — moves into the main bundle with it; the management chunk itself stays lazy.
+  The provider's `active` prop (`section === 'management'`) is what keeps a Sessions
+  visitor from triggering a config scan, and the rail renders no rows at all while the
+  section is closed.
 
 ## Invariants
 
@@ -77,6 +119,8 @@ Read-only v1 — nothing is ever written.
     - shared/frontmatter.ts
     - server/api.ts
     - client/src/components/management/
+    - client/src/hooks/useManagement.ts
+    - client/src/hooks/useManagementScope.tsx
     - client/src/lib/managementEntries.ts
   kind: subsystem
   verified: f436519f31ef4120521792db7658e2bc5431f0e9

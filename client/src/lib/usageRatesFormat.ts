@@ -14,6 +14,7 @@
  */
 
 import type { ModelRateRow, ModelRateVerdict, UsageCoverage } from '../../../shared/types';
+import type { StatTile } from './usageProfile';
 
 /**
  * The day floors a verdict needs, stated once and read by two strings — the
@@ -216,9 +217,14 @@ export function measuredShare(coverage: UsageCoverage): string | null {
   return formatShareOf(coverage.pricedPct, coverage.movedPct);
 }
 
-/** The denominator, in the reader's words. `en-US` explicitly, so tests pin it. */
+/** The denominator as a bare figure. `en-US` explicitly, so tests pin it. */
+export function movedTotal(coverage: UsageCoverage): string {
+  return Math.round(coverage.movedPct).toLocaleString('en-US');
+}
+
+/** The denominator, in the reader's words. */
 export function movedLabel(coverage: UsageCoverage): string {
-  return `of ${Math.round(coverage.movedPct).toLocaleString('en-US')} pts moved`;
+  return `of ${movedTotal(coverage)} pts moved`;
 }
 
 /**
@@ -348,4 +354,128 @@ export const RATES_GLOSSARY: readonly {
 /** The definition behind one figure's ⓘ — the same string the drawer prints. */
 export function figureTip(key: typeof RATES_GLOSSARY[number]['key']): string {
   return RATES_GLOSSARY.find(g => g.key === key)!.text;
+}
+
+/**
+ * This model's share of the spend a rate was actually fitted on.
+ *
+ * The denominator is the *priced* total — the sum of the rows' own `utilSum` —
+ * not everything that moved. Those are different questions, and this column is
+ * answering "of the evidence behind these rates, how much is this model's",
+ * which is the one that makes the bars in the column read as a single
+ * breakdown summing to the priced share underneath them.
+ *
+ * Null, not 0, when there is nothing priced: a share of nothing is not zero.
+ */
+export function pricedShare(row: ModelRateRow, models: ModelRateRow[]): number | null {
+  const total = models.reduce((n, m) => n + Math.max(0, m.utilSum), 0);
+  if (!(total > 0)) return null;
+  return Math.min(100, Math.max(0, (Math.max(0, row.utilSum) / total) * 100));
+}
+
+/** A share as the table prints it. `—` for the null the column is honest about. */
+export function formatShare(pct: number | null): string {
+  if (pct === null || !Number.isFinite(pct)) return '—';
+  return pct > 0 && pct < 1 ? pct.toFixed(1) + '%' : Math.round(pct) + '%';
+}
+
+/** The verdict pill's modifier class — the table's four states. */
+export function verdictClass(verdict: ModelRateVerdict): string {
+  switch (verdict) {
+    case 'stable': return 'tag-v stable';
+    case 'drift': return 'tag-v drift';
+    case 'mix-shift': return 'tag-v mix';
+    default: return 'tag-v';
+  }
+}
+
+/**
+ * The token-value page's five figures: how many models are priced, how many
+ * have moved, how many are still collecting, how much of the spend reached a
+ * rate at all, and how many windows are behind the whole thing.
+ *
+ * Counts of *models* on the left, points and windows on the right — the strip
+ * reads left to right as "what the fit concluded, then what it read".
+ */
+export function ratesStats(models: ModelRateRow[], coverage: UsageCoverage): StatTile[] {
+  const n = (v: ModelRateVerdict) => models.filter(m => m.verdict === v).length;
+  const drifting = n('drift');
+  const windows = models.reduce((sum, m) => sum + m.intervals, 0);
+  const measured = measuredShare(coverage);
+  return [
+    {
+      key: 'priced',
+      label: 'Priced',
+      value: String(n('stable') + drifting + n('mix-shift')),
+      sub: drifting === 0 ? 'no rate has moved' : 'not all of them holding'
+    },
+    {
+      key: 'drifting',
+      label: 'Drifting',
+      value: String(drifting),
+      warn: drifting > 0,
+      sub: drifting === 0 ? 'every rate within its baseline' : 'moved past the baseline spread'
+    },
+    {
+      key: 'collecting',
+      label: 'Collecting',
+      value: String(n('thin')),
+      sub: n('thin') === 0 ? 'nothing waiting on evidence' : 'not enough windows yet'
+    },
+    {
+      key: 'coverage',
+      label: 'Coverage',
+      value: measured ?? '—',
+      sub: coverage.movedPct > 0 ? movedLabel(coverage) : 'nothing has moved yet'
+    },
+    {
+      key: 'ledger',
+      label: 'Ledger',
+      value: String(windows),
+      sub: windows === 1 ? 'recorded window' : 'recorded windows'
+    }
+  ];
+}
+
+/**
+ * The evidence ledger's span column: what the current fit read, without
+ * repeating the window count standing in the cell beside it.
+ */
+export function spanText(row: ModelRateRow): string {
+  return `${dayCount(row.days)} · ${row.utilSum.toFixed(0)} pts`;
+}
+
+/**
+ * The ledger's reading for one model — a fact about *this* row, never the
+ * hoisted one.
+ *
+ * `collecting` is the case that forces the distinction. Its hint is a statement
+ * about the measurement, identical on every row, and printing it per row is
+ * what made five rows read as five separate findings; the page states it once,
+ * above the table. What belongs here instead is the row's own distance from the
+ * gates — which floor it is short of, in its own numbers. Drift and mix-shift
+ * hints stay: those *are* facts about one model.
+ */
+export function ledgerReading(row: ModelRateRow): string {
+  if (row.verdict !== 'thin') {
+    const weekly = weeklyAsideText(row.weekly.weightedPerPct, row.weekly.fittedWeightedPerPct);
+    return weekly === null ? verdictText(row.verdict).hint
+      : `${verdictText(row.verdict).hint}. ${weekly}`;
+  }
+  // Both gates, with this row's own counts — the baseline first, because it is
+  // the one that takes a fortnight and therefore the one still unmet at the end.
+  const parts: string[] = [];
+  if (row.baselineDays < BASELINE_DAY_FLOOR) {
+    parts.push(`${row.baselineDays} of ${BASELINE_DAY_FLOOR} baseline days`);
+  }
+  if (row.days < CURRENT_DAY_FLOOR) {
+    parts.push(`${row.days} of ${CURRENT_DAY_FLOOR} current days`);
+  }
+  if (parts.length === 0) {
+    // Past both day floors and still collecting: the refusal is the window
+    // count or a fit that could not tell this model from the ones beside it.
+    return `${row.intervals} window${row.intervals === 1 ? '' : 's'}, not yet enough to `
+      + 'separate this model from the ones it runs beside';
+  }
+  return `waiting on ${parts.join(' and ')}`;
 }

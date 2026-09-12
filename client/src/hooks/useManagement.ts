@@ -15,10 +15,17 @@ export interface IndexState {
   error: boolean;
 }
 
-export function useManagementIndex(refreshKey: number): IndexState {
+/**
+ * `active` is the Management section being open. The index now feeds the
+ * *rail's* scope tree as well as the page, so the hook is mounted for the whole
+ * app life (see hooks/useManagementScope.tsx) — without the flag every visitor
+ * to Sessions would fetch a config scan they never look at.
+ */
+export function useManagementIndex(refreshKey: number, active = true): IndexState {
   const [state, setState] = useState<IndexState>({ index: null, loading: true, error: false });
 
   useEffect(() => {
+    if (!active) return;
     let alive = true;
     setState(prev => ({ index: prev.index, loading: true, error: false }));
     fetch('/api/management')
@@ -30,7 +37,7 @@ export function useManagementIndex(refreshKey: number): IndexState {
         if (alive) setState(prev => ({ index: prev.index, loading: false, error: true }));
       });
     return () => { alive = false; };
-  }, [refreshKey]);
+  }, [refreshKey, active]);
 
   return state;
 }

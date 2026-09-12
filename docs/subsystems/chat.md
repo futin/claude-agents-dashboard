@@ -1,16 +1,31 @@
-# Chat — history tail and the drawer
+# Chat — history tail and the modal
 
-The `chat` tab down the right edge of a session row opens a **full-height drawer** with that session's
+The `chat` tab down the right edge of a session row opens a **centred modal** with that session's
 conversation: newest page on open, live-tailed at the configured refresh rate, "load older"
 walking backwards through the whole transcript. Read-only, like everything else in the app.
-The header carries that session's live context reading — `tokens / window` and the percent,
-tinted orange at the same 70% threshold the list row uses, off the same 3s poll rather than
-a second read. It is there because a drawer opened straight from a tapped push
-([deep link](push-notify.md)) never showed the list, so this is the only place that reader
-sees how full the session is.
-This drawer is also where [remote answers](remote-answer.md) surface: a pending question
-renders as an action bar pinned above the footer, a proposed plan does the same through
-`PlanPanel` (see [remote-plan](remote-plan.md)), and a turn-end reply window through
+It floats over the scrim with air on every side — 1080px wide, capped at 820px tall, rounded
+at the shell radius — so the scrim is a real exit at every width above 700px. Below that it
+is full-screen, because a 1080px modal with margins does not fit a phone.
+
+**Two columns inside it** ([DESIGN.md](../../.claude/DESIGN.md) §8.6, mock `#chat`). The head
+carries the session name, the project pill and ✕. A 290px **sidecar** on the subtle ground
+carries everything the head used to: the live context reading as a metric block (percent,
+`tokens / window`, a track, amber at the same 70% threshold the list row uses), then a facts
+list — project, branch, model, surface, messages loaded, current tool. The context reading
+is off the same 3s poll rather than a second read, and it is there because a modal opened
+straight from a tapped push ([deep link](push-notify.md)) never showed the list, so this is
+the only place that reader sees how full the session is.
+
+The **All / Text / You** filter is not in that column: it narrows the transcript, so it sits
+in the **foot** at the right edge, just past the `n of m shown` count it changes — control
+and readout on one line, and no chrome row spent on either. Still the board's segmented
+switch (`.seg`), sized down to foot scale; on a phone the foot wraps and the switch takes the
+second row full width. Head / a rail over the transcript / a popover button / a floating pill
+were the other four placements drawn in the mock.
+
+This modal is also where [remote answers](remote-answer.md) surface: a pending question
+renders as a panel pinned over the transcript's bottom edge, a proposed plan does the same
+through `PlanPanel` (see [remote-plan](remote-plan.md)), and a turn-end reply window through
 `MessagePanel` (see [remote-message](remote-message.md)). All three stores hold one entry
 per session and a session can only be parked on one thing at a time, so in practice at most
 one of the three ever renders. A fourth pinned panel is not a hold at all: an ended
@@ -18,6 +33,25 @@ one of the three ever renders. A fourth pinned panel is not a hold at all: an en
 [spawn](spawn.md#resuming-an-ended-session-resume)), which renders precisely when none of
 the three do — nothing pending and the turn over — so it can appear under `MessagePanel`'s
 "gone" note as the hand-off.
+
+**A pinned panel floats over the transcript; it does not push it.** The transcript body and a
+single `.chat-pinned` layer are siblings in `.chat-stack`, a relative box that fills the
+column, and the layer is absolutely positioned against its bottom edge. Consequences, all of
+them load-bearing:
+
+- The transcript's height is **identical** whether a panel is pinned or not, so a question
+  arriving mid-read never reflows the sentence being read. Measured: 703.2px in both states.
+- The layer is as tall as its own content — no fixed fraction — and stops at the height of
+  the stack, scrolling inside itself from there. The cap is `calc(100% + 1px)`, not `100%`:
+  at exactly 100% the topmost panel's own hairline lands a pixel *under* the head's bottom
+  one and the two read as a doubled border with a sliver of paper trapped between.
+- **No shadow.** §5 floats exactly two things on this board — the chart tooltip and the app
+  shell — and a panel inside the modal is neither; its 1px `--hairline` is the whole
+  separation. (The modal itself does take the shell's lift: over the scrim, it *is* the shell.)
+- The transcript carries a constant 40px of bottom padding so its tail can be scrolled clear
+  of the panel.
+- One layer rather than five, so the panels keep stacking in normal flow inside it and the
+  layer — not each panel — is what caps and scrolls.
 
 ## What's shown
 
@@ -78,8 +112,11 @@ worst case to the window size, not to the transcript size.
 - **No cache.** Unlike `agents-cache.ts` there's no accumulated reducer state to keep, so
   every call is already `O(window)` or `O(appended bytes)`. Measured on an 805 KB
   transcript: tail page ≈ 10 KB, idle poll ≈ 110 bytes.
-- **Filter (`lib/chatFilter.ts`, pure + unit-tested):** a row of three buttons under the
-  drawer header — `all` / `text` / `you`. A transcript is mostly tool traffic (dozens of
+- **Filter (`lib/chatFilter.ts`, pure + unit-tested):** the board's segmented switch — the
+  same `.seg` the sessions toolbar picks a view with — sitting full-width at the foot of the
+  sidecar: `all` / `text` / `you`. It wears `.seg`'s own track (`--hairline2`) rather than a
+  subtle fill, because on the sidecar's `--strip-hi` ground a subtle track vanishes (the §8.2
+  scope-pill lesson). A transcript is mostly tool traffic (dozens of
   near-identical `Edit <path>` lines), so `text` drops messages with no text at all
   (tool-only turns) and `you` keeps only user prompts. **Client-side on purpose:**
   switching is instant and keeps every page already loaded — a server-side `?text=` param
@@ -109,13 +146,18 @@ worst case to the window size, not to the transcript size.
   before the first page lands — `?after=0` would ship the whole file. Scroll: an append
   auto-scrolls only when the reader was already within 40px of the bottom; a prepend
   restores position by the height the new page added (`scrollHeight` captured at click
-  time, prepend detected by a changed first-message uuid). `chatId` is **not** persisted —
-  session ids churn (same reasoning as row expansion in
+  time, prepend detected by a changed first-message uuid). ⚠️ That restore needs
+  `overflow-anchor:none` on `.chat-body`: Chrome's **scroll anchoring** performs the same
+  correction on its own, so with it on the adjustment lands twice and the transcript jumps a
+  whole page on every "load older" (measured: ~1400px of drift, 0 with the rule). `chatId` is
+  **not** persisted — session ids churn (same reasoning as row expansion in
   [view-persistence](view-persistence.md)).
-- **Three ways out, and no dead back press.** ✕ in the drawer header works everywhere; the
-  scrim behind the panel is desktop-only (at `<=700px` `.chat` is full-width, so there is
-  nothing beside it to tap); Escape is desktop-only for the obvious reason. The third exit
-  is the browser's **back** button/swipe — the one a phone actually has. `useBackClose`
+- **Four ways out, and no dead back press.** ✕ in the head works everywhere; **Escape**
+  likewise; and the **scrim** is now a real exit at every width above 700px, because the
+  modal floats with air on every side rather than filling one edge. At `<=700px` the modal
+  is full-screen, so there is no scrim left to tap and ✕ (40px there, a thumb rather than a
+  pointer) and back are the exits. The fourth is the browser's **back** button/swipe — the
+  one a phone actually has. `useBackClose`
   (over the pure `lib/backClose.ts`) pushes one synthetic history entry when the drawer
   mounts and closes on the popstate that pops it. The entry carries **no URL change**, so
   the drawer stays unbookmarkable (see [view-persistence](view-persistence.md)); the push
@@ -129,6 +171,40 @@ worst case to the window size, not to the transcript size.
   not a child of it — so opening the drawer never has to out-shout the row's own toggle.
   It also carries the row's held states: `answer` / `plan?` / `reply?` / `allow?` are the
   same one control with a different label and tone, since all four open this drawer.
+
+## The pinned panels' own shapes
+
+All five share `PanelChrome`'s head (badge · hint · minimise caret) and the `.qpanel`
+paper-plus-hairline body; the badge's tint names the kind of wait, in the tone the row's own
+chat button already uses for it — amber "you can act from here" (question), the Task/plan
+magenta (plan), green for a turn that finished cleanly (reply window), neutral for a session
+that has ended (resume), and mustard for the permission banner, which is a sign rather than a
+control since nothing outside that terminal can answer it.
+
+- **`QuestionPanel` is the terminal's AskUserQuestion dialog, not a chip wrap.** The question
+  is the heading; each option is a full-width row — 15/500 label over a 13px description —
+  and the picked row takes an ink border plus ring and a paper fill. Each row carries
+  **exactly one mark**, in the right margin, and which one says how the question is answered:
+  a pick-one question shows the keyboard number its terminal dialog answers to (`.qp-key`), a
+  pick-any question a box that is empty until picked and ink-filled with a check
+  (`.qp-check`). Never both, and never a second box on the left. `Other` is the last row,
+  numbered or ticked like the rest, carrying its free-text field inside the same
+  `.qp-otherbox` block — and the **block** wears the picked state, so it reads identically to
+  any other picked row. The two actions are right-aligned beneath, the terminal hand-off
+  first and the send as the only ink button, disabled until every question is answered.
+  Rows because that is the layout the reader already answers at the keyboard, and because a
+  full-width row is the phone target for free.
+- **`PlanPanel` has no `show plan` button.** It was shaped like an option row, so it read as
+  an answer — and once the panel floats over the transcript it hid the only copy of the plan
+  the reader could reach. It is a titled block: an 11px `plan` kicker, the plan's **own first
+  markdown heading** as the title (derived by `splitPlan()`, which also strips that heading
+  from the body so it is not printed twice — never a second label typed here, which would
+  drift from it), and a `read all ▾` fold on the right, over a `--strip-hi` box clipped at
+  104px under a gradient fade. The whole clipped box is the control (a `div role="button"`,
+  not a `<button>`: a plan's markdown carries links, and an `<a>` inside a `<button>` is both
+  invalid and unreachable — a click on an anchor is let through). Expanded, the box takes
+  **no `max-height` of its own**: the panel grows with it under the float rule, and the
+  pinned layer — not the plan — is what scrolls at the cap.
 
 ## Invariants
 
@@ -152,6 +228,12 @@ worst case to the window size, not to the transcript size.
     - server/lib/chat.ts
     - server/api.ts
     - client/src/components/ChatDrawer.tsx
+    - client/src/components/PanelChrome.tsx
+    - client/src/components/QuestionPanel.tsx
+    - client/src/components/PlanPanel.tsx
+    - client/src/components/MessagePanel.tsx
+    - client/src/components/ResumePanel.tsx
+    - client/src/components/PermissionBanner.tsx
     - client/src/components/Markdown.tsx
     - client/src/hooks/useSessionChat.ts
     - client/src/hooks/useBackClose.ts

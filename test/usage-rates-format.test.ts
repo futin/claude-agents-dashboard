@@ -14,7 +14,14 @@ import {
   hasFigures,
   measuredShare,
   movedLabel,
+  movedTotal,
+  ledgerReading,
+  spanText,
+  pricedShare,
   RATES_GLOSSARY,
+  ratesStats,
+  formatShare,
+  verdictClass,
   statusLine,
   verdictText,
   waitingText,
@@ -315,6 +322,111 @@ export function run(): number {
     // The ⓘ panel quotes the drawer verbatim, so there is one string to keep true.
     assert.strictEqual(figureTip('fitted'), RATES_GLOSSARY.find(g => g.key === 'fitted')!.text);
     assert.strictEqual(figureTip('weighted'), RATES_GLOSSARY[0].text);
+  })) p++; else f++;
+
+  // ── the table's own columns ──
+
+  if (test("pricedShare: a model's slice of the evidence, summing to 100 across the rows", () => {
+    const rows = [
+      rowOf({ model: 'a', utilSum: 600 }),
+      rowOf({ model: 'b', utilSum: 300 }),
+      rowOf({ model: 'c', utilSum: 100 })
+    ];
+    const shares = rows.map(r => pricedShare(r, rows));
+    assert.deepStrictEqual(shares, [60, 30, 10]);
+    assert.strictEqual(shares.reduce((n, v) => n + (v ?? 0), 0), 100);
+  })) p++; else f++;
+
+  if (test('pricedShare: nothing priced is null, not 0 — a share of nothing is not zero', () => {
+    const rows = [rowOf({ utilSum: 0 })];
+    assert.strictEqual(pricedShare(rows[0], rows), null);
+    assert.strictEqual(pricedShare(rowOf({ utilSum: 5 }), []), null);
+    // A negative counter cannot pull a bar backwards out of its cell.
+    const odd = [rowOf({ model: 'a', utilSum: -5 }), rowOf({ model: 'b', utilSum: 10 })];
+    assert.deepStrictEqual(odd.map(r => pricedShare(r, odd)), [0, 100]);
+  })) p++; else f++;
+
+  if (test('formatShare keeps the sub-1% decimal the bar cannot show', () => {
+    assert.strictEqual(formatShare(94), '94%');
+    assert.strictEqual(formatShare(0.4), '0.4%');
+    assert.strictEqual(formatShare(null), '—');
+    assert.strictEqual(formatShare(Number.NaN), '—');
+  })) p++; else f++;
+
+  if (test('verdictClass: four states, three of them tinted, all distinct', () => {
+    const all = (['stable', 'drift', 'mix-shift', 'thin'] as ModelRateVerdict[]).map(verdictClass);
+    assert.strictEqual(new Set(all).size, 4);
+    for (const c of all) assert.ok(c.startsWith('tag-v'), c);
+    assert.strictEqual(verdictClass('thin'), 'tag-v', 'collecting is the bare pill');
+  })) p++; else f++;
+
+  // ── the figure strip ──
+
+  if (test('ratesStats: the five figures, in the order the page reads them', () => {
+    const models = verdicts('stable', 'drift', 'mix-shift', 'thin', 'thin');
+    const tiles = ratesStats(models, LIVE);
+    assert.deepStrictEqual(tiles.map(t => t.key),
+      ['priced', 'drifting', 'collecting', 'coverage', 'ledger']);
+    assert.strictEqual(tiles[0].value, '3', 'stable + drift + mix-shift are priced');
+    assert.strictEqual(tiles[1].value, '1');
+    assert.strictEqual(tiles[1].warn, true);
+    assert.strictEqual(tiles[2].value, '2');
+    assert.strictEqual(tiles[3].value, measuredShare(LIVE));
+    assert.strictEqual(tiles[3].sub, movedLabel(LIVE));
+    assert.strictEqual(tiles[4].value, String(models.length * 585), 'windows, summed');
+  })) p++; else f++;
+
+  if (test('ratesStats: nothing drifting is not a warning, and nothing moved is a dash', () => {
+    const calm = ratesStats(verdicts('stable', 'stable'), cov({ movedPct: 0 }));
+    assert.strictEqual(calm[1].value, '0');
+    assert.strictEqual(calm[1].warn, false);
+    assert.strictEqual(calm[3].value, '—', 'a share of nothing is not 0%');
+    const empty = ratesStats([], cov({ movedPct: 0 }));
+    assert.deepStrictEqual(empty.map(t => t.value), ['0', '0', '0', '—', '0']);
+  })) p++; else f++;
+
+  // ── the evidence ledger ──
+
+  if (test('spanText names the days and points, never the windows beside it', () => {
+    assert.strictEqual(spanText(rowOf({ intervals: 44, days: 1, utilSum: 59 })), '1 day · 59 pts');
+    assert.strictEqual(spanText(rowOf({ days: 9, utilSum: 663 })), '9 days · 663 pts');
+  })) p++; else f++;
+
+  if (test('ledgerReading: collecting names this row\'s own unmet gates, not the hoisted hint', () => {
+    // The hint is identical on every collecting row — printing it per row is
+    // what made five rows read as five findings, and the page states it once.
+    const hint = verdictText('thin').hint;
+    const early = ledgerReading(rowOf({ verdict: 'thin', days: 1, baselineDays: 0 }));
+    assert.notStrictEqual(early, hint);
+    assert.ok(early.includes('0 of 7 baseline days'), early);
+    assert.ok(early.includes('1 of 2 current days'), early);
+
+    const halfway = ledgerReading(rowOf({ verdict: 'thin', days: 4, baselineDays: 3 }));
+    assert.ok(halfway.includes('3 of 7 baseline days'), halfway);
+    assert.ok(!halfway.includes('current days'), 'a met gate is not listed: ' + halfway);
+  })) p++; else f++;
+
+  if (test('ledgerReading: past both day floors and still thin, the refusal is the fit', () => {
+    const text = ledgerReading(rowOf({ verdict: 'thin', days: 9, baselineDays: 12, intervals: 6 }));
+    assert.ok(text.includes('6 windows'), text);
+    assert.ok(text.includes('separate this model'), text);
+  })) p++; else f++;
+
+  if (test('ledgerReading: a judged row keeps its own hint, and its weekly line when it has one', () => {
+    const drift = ledgerReading(rowOf({ verdict: 'drift' }));
+    assert.strictEqual(drift, verdictText('drift').hint, 'no weekly figure, no weekly clause');
+    const withWeekly = ledgerReading(rowOf({
+      verdict: 'stable',
+      weekly: { weightedPerPct: 5600, rawPerPct: null, fittedWeightedPerPct: null,
+        verdict: 'fitted', fitVerdict: 'thin', intervals: 3, utilSum: 4, days: 2 }
+    }));
+    assert.ok(withWeekly.startsWith(verdictText('stable').hint), withWeekly);
+    assert.ok(withWeekly.includes('weekly limit'), withWeekly);
+  })) p++; else f++;
+
+  if (test('movedTotal is the bare denominator movedLabel wraps', () => {
+    assert.strictEqual(movedTotal(cov({ movedPct: 1412.4 })), '1,412');
+    assert.strictEqual(movedLabel(cov({ movedPct: 1412.4 })), 'of 1,412 pts moved');
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

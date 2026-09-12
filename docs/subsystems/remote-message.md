@@ -70,7 +70,7 @@ same session with your follow-up.
 | `POST /api/sessions/:id/message-answer` | `serveSessionMessageAnswer` — `{messageId, text}` or `{messageId, dismiss: true}`. Token-gated |
 | `server/lib/messages.ts` | RAM-only store; same state machine as `pending.ts`/`plans.ts` with an injected `resolve`, plus the idle-release reaper below |
 | `scan.ts` `ScanOptions.messageIds` | sets `Session.remoteReply` and forces `status: 'question'` (blue) |
-| `SessionRow` tab + `MessagePanel` | the `reply?` label on the row's right-edge tab (same `row-chat answer` tone as `answer`/`plan?`, just different text) and the pinned drawer composer |
+| chat button + `MessagePanel` | the `reply?` label on the row's chat button (same amber `answer` tone as `answer`/`plan?`, just different text) and the pinned drawer composer |
 | `MicButton` | optional mic in the composer's action row — records, transcribes locally, and hands text back for you to edit before you tap send; see [dictation](dictation.md) |
 | `chat.ts` `REMOTE_MESSAGE_RE` | unwraps the delivered follow-up back out of `composeReason` so it shows in the drawer as an ordinary user message — see below |
 
@@ -264,7 +264,8 @@ state, reset on a new `messageId`, never persisted.
     - client/src/components/PanelChrome.tsx
     - client/src/lib/panelCollapse.ts
     - client/src/hooks/usePendingMessage.ts
-    - client/src/components/SessionRow.tsx
+    - client/src/components/sessions/atoms.tsx
+    - client/src/lib/holds.ts
   kind: subsystem
   verified: f436519f31ef4120521792db7658e2bc5431f0e9
 -->

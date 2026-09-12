@@ -12,9 +12,9 @@ import type { ChatMessage } from '../../../shared/types';
 export type ChatFilter = 'all' | 'text' | 'prompts';
 
 export const CHAT_FILTERS: { key: ChatFilter; label: string; title: string }[] = [
-  { key: 'all', label: 'all', title: 'Every message, including tool-only turns' },
-  { key: 'text', label: 'text', title: 'Only messages that say something (tool-only turns hidden)' },
-  { key: 'prompts', label: 'you', title: 'Only your prompts' }
+  { key: 'all', label: 'All', title: 'Every message, including tool-only turns' },
+  { key: 'text', label: 'Text', title: 'Only messages that say something (tool-only turns hidden)' },
+  { key: 'prompts', label: 'You', title: 'Only your prompts' }
 ];
 
 /** True when `f` is a known filter — guards a stale persisted value. */

@@ -1,9 +1,11 @@
 import assert from 'node:assert';
 
 import {
-  absentText, areaPath, crossingX, dayTicks, hitRect, pctX, pctY, pointsAttr,
-  splitRuns, stepTitle, VIEW_H, walkPoints, walkWidth, Y_MAX, yOf
+  absentText, crossingX, dayTicks, DEBT_CAP, headroomOf, headroomScale, headSegments, hitRect,
+  joinPoints, maxDebt, pctX, pctY, pointsAttr, segAreaPath, stepTitle, VIEW_H, walkWidth,
+  yHead, zeroY
 } from '../client/src/lib/walkChart.js';
+import type { HeadSeg } from '../client/src/lib/walkChart.js';
 import type { ForecastStep, UsageProfileCell } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -28,73 +30,139 @@ const cell = (over: Partial<UsageProfileCell> = {}): UsageProfileCell =>
   ({ hourOfWeek: 0, weight: null, observedMin: 0, staleWeeks: 0, ...over });
 
 export function run(): number {
-  console.log('\n=== walkChart.ts (forward-walk strip geometry) ===\n');
+  console.log('\n=== walkChart.ts (headroom chart geometry) ===\n');
   let p = 0, f = 0;
 
-  // ── the run splitter ──
+  // ── the segmenter ──
 
-  if (test('splitRuns: all-assumed and all-measured are each exactly one run', () => {
-    assert.strictEqual(splitRuns(walkOf([false, false, false, false])).length, 1);
-    assert.strictEqual(splitRuns(walkOf([true, true, true])).length, 1);
-    const only = splitRuns(walkOf([false, false, false, false]))[0];
-    assert.strictEqual(only.learned, false);
-    assert.strictEqual(only.points.length, 4, 'one run keeps every point');
+  /** `headSegments` over a scale derived from the same walk. */
+  const segsOf = (w: ForecastStep[], startHead = 100 - (w[0]?.cum ?? 0) + (w[0]?.gain ?? 0)) =>
+    headSegments(w, headroomScale(w, startHead));
+  const kinds = (segs: HeadSeg[]) => segs.map(s => `${s.below ? 'd' : 'u'}${s.learned ? 'L' : '-'}`);
+
+  if (test('headSegments: all-assumed and all-measured are each exactly one segment', () => {
+    assert.deepStrictEqual(kinds(segsOf(walkOf([false, false, false, false]))), ['u-']);
+    assert.deepStrictEqual(kinds(segsOf(walkOf([true, true, true]))), ['uL']);
+    assert.strictEqual(segsOf(walkOf([false, false, false, false]))[0].points.length, 4);
   })) p++; else f++;
 
-  if (test('splitRuns: alternating flags give N runs, each starting on the previous run\'s last point', () => {
-    const runs = splitRuns(walkOf([true, false, true, false, false]));
-    assert.strictEqual(runs.length, 4);
-    assert.deepStrictEqual(runs.map(r => r.learned), [true, false, true, false]);
-    for (let i = 1; i < runs.length; i++) {
-      const prevLast = runs[i - 1].points[runs[i - 1].points.length - 1];
+  if (test('headSegments: alternating flags split, each starting on the previous last point', () => {
+    const segs = segsOf(walkOf([true, false, true, false, false]));
+    assert.deepStrictEqual(kinds(segs), ['uL', 'u-', 'uL', 'u-']);
+    for (let i = 1; i < segs.length; i++) {
+      const prevLast = segs[i - 1].points[segs[i - 1].points.length - 1];
       // The shared boundary point is the whole reason the splitter exists: a
       // gap here is a one-hour hole in the line at every encoding change.
-      assert.deepStrictEqual(runs[i].points[0], prevLast, 'boundary ' + i);
+      assert.deepStrictEqual(segs[i].points[0], prevLast, 'boundary ' + i);
     }
   })) p++; else f++;
 
-  if (test('splitRuns: a single-step walk is one run of one point, and an empty walk is no runs', () => {
-    const runs = splitRuns(walkOf([true]));
-    assert.strictEqual(runs.length, 1);
-    assert.strictEqual(runs[0].points.length, 1);
-    assert.deepStrictEqual(splitRuns([]), []);
+  if (test('headSegments: a single-step walk is one segment of one point, empty is none', () => {
+    const segs = segsOf(walkOf([true]));
+    assert.strictEqual(segs.length, 1);
+    assert.strictEqual(segs[0].points.length, 1);
+    assert.deepStrictEqual(headSegments([], headroomScale([], 40)), []);
   })) p++; else f++;
 
-  if (test('splitRuns: every point of the walk is still drawn, in order', () => {
-    const w = walkOf([true, true, false, true, false, false]);
-    const runs = splitRuns(w);
-    const xs = runs.flatMap(r => r.points.map(pt => pt.x));
-    // Shared boundaries duplicate, so dedupe before comparing to the walk.
-    assert.deepStrictEqual([...new Set(xs)].sort((a, b) => a - b), walkPoints(w).map(pt => pt.x));
+  if (test('headSegments: the crossing gets its own point, exactly on the zero rule', () => {
+    // From 45, +10 an hour: the 5th point stands at 105, so the curve crosses
+    // empty halfway along the segment before it — x = 4.5.
+    const w = walkOf(new Array(7).fill(true), { gain: 10, from: 45 });
+    const scale = headroomScale(w, 55);
+    const segs = headSegments(w, scale);
+    assert.deepStrictEqual(kinds(segs), ['uL', 'dL'], 'above the rule, then below it');
+    const boundary = segs[0].points[segs[0].points.length - 1];
+    assert.strictEqual(boundary.x, 4.5, 'the boundary sits where crossingX says');
+    assert.ok(Math.abs(boundary.y - zeroY(scale)) < 1e-9, 'and exactly on the rule');
+    assert.deepStrictEqual(segs[1].points[0], boundary, 'the debt run starts on it');
+  })) p++; else f++;
+
+  if (test('headSegments: the debt run splits at an evidence flip, so the fills can differ', () => {
+    const w = walkOf([true, true, true, true, true, false, false], { gain: 20, from: 20 });
+    // cum: 40 60 80 100 120 140 160 — empty is reached at point 3.
+    const segs = segsOf(w, 80);
+    assert.deepStrictEqual(kinds(segs), ['uL', 'dL', 'd-']);
+  })) p++; else f++;
+
+  if (test('headSegments: every walked hour is still drawn, in order', () => {
+    const w = walkOf([true, true, false, true, false, false], { gain: 22, from: 10 });
+    const xs = segsOf(w, 90).flatMap(s => s.points.map(pt => pt.x));
+    for (let i = 1; i < xs.length; i++) assert.ok(xs[i] >= xs[i - 1], 'x went backwards');
+    // Shared boundaries and the synthetic crossing duplicate, so dedupe first.
+    const drawn = [...new Set(xs)].filter(x => Number.isInteger(x));
+    assert.deepStrictEqual(drawn, w.map((_, i) => i));
+  })) p++; else f++;
+
+  if (test('joinPoints: concatenates the above-rule segments with no duplicated boundary', () => {
+    const w = walkOf([true, false, true], { gain: 5, from: 0 });
+    const pts = joinPoints(segsOf(w, 100));
+    assert.deepStrictEqual(pts.map(pt => pt.x), [0, 1, 2]);
+    assert.deepStrictEqual(joinPoints([]), []);
   })) p++; else f++;
 
   // ── the y scale ──
 
-  if (test('yOf: exact at 0 and at 100', () => {
-    assert.strictEqual(yOf(0), VIEW_H, '0% sits on the baseline');
-    assert.strictEqual(yOf(100), VIEW_H - (100 / Y_MAX) * VIEW_H);
-    assert.strictEqual(yOf(Y_MAX), 0, 'the top of the domain is the top of the box');
+  if (test('headroomScale: with no crossing the domain stops at the rule', () => {
+    const w = walkOf([true, true, true], { gain: 1, from: 0 });
+    const s = headroomScale(w, 40);
+    assert.strictEqual(s.lo, 0, 'no deficit, so nothing below the rule');
+    assert.ok(s.hi > 40, 'and a little air above the start');
+    assert.strictEqual(s.clamped, false);
   })) p++; else f++;
 
-  if (test('yOf: clamps far past the ceiling — never NaN, never a negative height', () => {
-    // 294.7% is the live figure from the flat-profile week that motivated the
-    // fixed domain; it must draw, not disappear or invert.
-    for (const v of [294.7, 1e9, -50, Number.NaN, Number.POSITIVE_INFINITY]) {
-      const y = yOf(v);
+  if (test('headroomScale: the debt band is the deficit, floored so it stays visible', () => {
+    // A 1-point overrun out of 40 points of headroom would be a hairline.
+    const shallow = walkOf(new Array(41).fill(true), { gain: 1, from: 60 });
+    const s = headroomScale(shallow, 40);
+    assert.ok(-s.lo > 1, 'a shallow deficit is opened out to the floor');
+    assert.ok(Math.abs(-s.lo - 40 * 0.12) < 1e-9);
+  })) p++; else f++;
+
+  if (test('headroomScale: a runaway deficit clamps at the cap and says so', () => {
+    // 195 points short on 40 points of headroom — the live flat-profile week.
+    const w = walkOf(new Array(60).fill(false), { gain: 4, from: 60 });
+    const s = headroomScale(w, 40);
+    assert.strictEqual(s.clamped, true, 'the reader is told the plot is cut');
+    assert.ok(Math.abs(-s.lo - 40 * DEBT_CAP) < 1e-9, 'the band never exceeds the headroom');
+    assert.ok(maxDebt(w) > -s.lo, 'and the real deficit is deeper than what is drawn');
+  })) p++; else f++;
+
+  if (test('yHead: the rule, the top and the floor land where they should', () => {
+    const s = headroomScale(walkOf(new Array(40).fill(true), { gain: 3, from: 40 }), 60);
+    assert.strictEqual(yHead(s.hi, s), 0, 'the top of the domain is the top of the box');
+    assert.strictEqual(yHead(s.lo, s), VIEW_H, 'and the bottom is the bottom');
+    assert.strictEqual(zeroY(s), yHead(0, s));
+    assert.ok(zeroY(s) > 0 && zeroY(s) < VIEW_H, 'the rule is inside the box, not on an edge');
+  })) p++; else f++;
+
+  if (test('yHead: never NaN, never outside the box, however absurd the input', () => {
+    const s = headroomScale(walkOf([true], { gain: 1, from: 0 }), 40);
+    for (const v of [1e9, -1e9, Number.NaN, Number.POSITIVE_INFINITY, -294.7]) {
+      const y = yHead(v, s);
       assert.ok(Number.isFinite(y), String(v) + ' produced ' + y);
       assert.ok(y >= 0 && y <= VIEW_H, String(v) + ' escaped the box: ' + y);
     }
-    assert.strictEqual(yOf(294.7), 0);
-    assert.strictEqual(yOf(-50), VIEW_H);
   })) p++; else f++;
 
-  if (test('yOf: non-increasing across the whole domain', () => {
-    let prev = yOf(-10);
-    for (let cum = -10; cum <= 300; cum += 0.5) {
-      const y = yOf(cum);
-      assert.ok(y <= prev + 1e-12, 'y rose at cum=' + cum);
+  if (test('yHead: non-increasing in headroom across the whole domain', () => {
+    const s = headroomScale(walkOf(new Array(30).fill(true), { gain: 4, from: 50 }), 50);
+    let prev = yHead(-200, s);
+    for (let v = -200; v <= 200; v += 0.5) {
+      const y = yHead(v, s);
+      assert.ok(y <= prev + 1e-12, 'y rose at head=' + v);
       prev = y;
     }
+  })) p++; else f++;
+
+  if (test('yHead: a degenerate scale falls to the baseline rather than dividing by zero', () => {
+    assert.strictEqual(yHead(5, { hi: 0, lo: 0, clamped: false }), VIEW_H);
+  })) p++; else f++;
+
+  if (test('headroomOf / maxDebt read the walk the way the curve draws it', () => {
+    assert.strictEqual(headroomOf({ t: '', gain: 1, cum: 61, weight: 1, learned: true }), 39);
+    assert.strictEqual(maxDebt(walkOf([true, true], { gain: 1, from: 0 })), 0);
+    const over = walkOf(new Array(30).fill(true), { gain: 5, from: 0 });
+    assert.strictEqual(Math.round(maxDebt(over)), 50);
   })) p++; else f++;
 
   // ── the coordinate space ──
@@ -135,12 +203,18 @@ export function run(): number {
     assert.strictEqual(pctY(0), 0);
   })) p++; else f++;
 
-  if (test('pointsAttr and areaPath: an empty walk produces no path, never "NaN"', () => {
+  if (test('pointsAttr and segAreaPath: an empty walk produces no path, never "NaN"', () => {
+    const w = walkOf([true, false], { gain: 5, from: 0 });
+    const s = headroomScale(w, 100);
     assert.strictEqual(pointsAttr([]), '');
-    assert.strictEqual(areaPath([]), '');
-    const d = areaPath(walkPoints(walkOf([true, false])));
+    assert.strictEqual(segAreaPath([], s), '');
+    const d = segAreaPath(joinPoints(headSegments(w, s)), s);
     assert.ok(!d.includes('NaN'), d);
     assert.ok(d.startsWith('M') && d.endsWith('Z'), d);
+    // The fill closes to the rule, not to the floor: it is the gap that is the
+    // quantity, never the column of time under it.
+    const zero = String(Math.round(zeroY(s) * 1000) / 1000);
+    assert.ok(d.startsWith('M0,' + zero), d);
   })) p++; else f++;
 
   // ── the crossing ──
@@ -152,12 +226,12 @@ export function run(): number {
     assert.strictEqual(crossingX(w), 4.5);
   })) p++; else f++;
 
-  if (test('crossingX: null when the walk coasts under the ceiling', () => {
+  if (test('crossingX: null when the walk coasts to its reset with headroom left', () => {
     assert.strictEqual(crossingX(walkOf([true, true, true], { gain: 1, from: 0 })), null);
     assert.strictEqual(crossingX([]), null);
   })) p++; else f++;
 
-  if (test('crossingX: a window already spent puts the rule at the left edge', () => {
+  if (test('crossingX: a window already spent puts the crossing at the left edge', () => {
     const w = walkOf([false, false], { gain: 1, from: 120 });
     assert.strictEqual(crossingX(w), 0);
   })) p++; else f++;
@@ -222,11 +296,10 @@ export function run(): number {
       t: '2026-08-30T14:00:00Z', gain: 2.146, cum: 70.4, weight: 1, learned: false
     };
     const text = stepTitle(s, cell({ observedMin: 0 }));
-    assert.ok(text.includes('+2.1% this hour'), text);
-    assert.ok(text.includes('70% consumed'), text);
+    assert.ok(text.includes('−2.1 pts this hour'), text);
+    assert.ok(text.includes('29.6 pts left'), text);
     assert.ok(text.includes('weight 100% — assumed (no evidence)'), text);
     assert.ok(!text.includes('measured'), text);
-    assert.ok(!text.includes('past 100%'), text);
   })) p++; else f++;
 
   if (test('stepTitle: a measured hour reports its weeks, from observedMin / 60', () => {
@@ -237,21 +310,21 @@ export function run(): number {
     assert.ok(stepTitle(s, cell({ observedMin: 60 })).includes('measured, 1 week'), 'singular');
   })) p++; else f++;
 
-  if (test('stepTitle: an hour past the ceiling says so', () => {
+  if (test('stepTitle: an hour past empty counts what is owed, not what is left', () => {
     const s: ForecastStep = {
       t: '2026-08-30T09:00:00Z', gain: 2, cum: 148.2, weight: 1, learned: false
     };
     const text = stepTitle(s, undefined);
-    assert.ok(text.includes('past 100%'), text);
-    assert.ok(text.includes('148% consumed'), text);
+    assert.ok(text.includes('48.2 pts past empty'), text);
+    assert.ok(!text.includes('left'), text);
   })) p++; else f++;
 
-  if (test('stepTitle: the ceiling line appears exactly at 100, not just above it', () => {
+  if (test('stepTitle: the flip happens exactly at empty, not just past it', () => {
     const at100: ForecastStep = {
       t: '2026-08-30T09:00:00Z', gain: 1, cum: 100, weight: 1, learned: false
     };
-    assert.ok(stepTitle(at100, undefined).includes('past 100%'));
-    assert.ok(!stepTitle({ ...at100, cum: 99.4 }, undefined).includes('past 100%'));
+    assert.ok(stepTitle(at100, undefined).includes('0.0 pts left'), 'zero is still "left"');
+    assert.ok(stepTitle({ ...at100, cum: 100.4 }, undefined).includes('0.4 pts past empty'));
   })) p++; else f++;
 
   if (test('stepTitle: a missing cell degrades to zero weeks instead of throwing', () => {

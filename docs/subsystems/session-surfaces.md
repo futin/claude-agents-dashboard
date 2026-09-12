@@ -65,9 +65,9 @@ Three details that are load-bearing:
   launch store deliberately drops at adoption ([spawn](spawn.md)) — so this reads the
   disk instead of growing a fifth store.
 
-The pill renders in the list row and again in the chat drawer's header
-(`client/src/lib/surface.ts` holds the one copy of its tooltip): a drawer opened
-straight from a tapped push (`?session=<id>`) never showed the list, so the header is
+The pill renders in the list row and again in the chat modal's sidecar facts
+(`client/src/lib/surface.ts` holds the one copy of its tooltip): a modal opened
+straight from a tapped push (`?session=<id>`) never showed the list, so the sidecar is
 the first place that reader learns the session lives only here.
 
 ## Why `cloud` stays empty, and what it would cost to fill (probed 2026-08-20)
@@ -280,7 +280,8 @@ visible to the dashboard.
     - server/lib/transcript.ts
     - shared/types.ts
     - client/src/lib/surface.ts
-    - client/src/components/SessionRow.tsx
+    - client/src/components/sessions/atoms.tsx
+    - client/src/lib/holds.ts
     - client/src/components/ChatDrawer.tsx
   kind: subsystem
   verified: 0da757e27d2847eb57fca181bf516a3e9c130caa

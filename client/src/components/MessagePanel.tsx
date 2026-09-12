@@ -71,6 +71,7 @@ export default function MessagePanel({ state }: { state: PendingMessageState }) 
       <MinimisedPanel
         badge="turn finished"
         summary={collapsedSummary({ kind: 'message', secsLeft: left })}
+        tone="msg"
         onExpand={() => setMinimised(false)}
       />
     );
@@ -79,7 +80,7 @@ export default function MessagePanel({ state }: { state: PendingMessageState }) 
   const busy = phase === 'submitting';
 
   return (
-    <div className="qpanel">
+    <div className="qpanel msg">
       <PanelHead
         badge="turn finished"
         hint={`reply to continue it · closes in ${fmtLeft(left)}`}

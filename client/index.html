@@ -24,6 +24,7 @@ try {
   var r = document.documentElement;
   if (s.theme) r.dataset.theme = s.theme;
   if (s.density) r.dataset.density = s.density;
+  if (s.contentWidth) r.dataset.width = s.contentWidth;
   if (s.fontScale) r.style.setProperty('--font-scale', String(s.fontScale / 100));
 } catch (e) {}
 </script>

@@ -41,12 +41,12 @@ export function SettingsGroup({ title, sub, children }: { title: string; sub: st
 /**
  * The page header of a Settings page — on the app ground, not in a card: the
  * scope as the title, a pill saying what that scope means in storage terms,
- * one line under. `tabs` is the phone's copy of the rail's tree (see
- * `.set-tabs` in styles.css), mounted always and shown only there.
+ * one line under. The Local/Shared switch is not here — it is the nav's tree,
+ * at every width (`SideRail`).
  */
 export function SettingsBand({
-  scope, title, sub, tabs
-}: { scope: SettingsScope; title: string; sub: string; tabs?: ReactNode }) {
+  scope, title, sub
+}: { scope: SettingsScope; title: string; sub: string }) {
   return (
     <div className="set-band">
       <div>
@@ -56,7 +56,6 @@ export function SettingsBand({
         </div>
         <div className="set-band-sub">{sub}</div>
       </div>
-      {tabs && <div className="set-tabs">{tabs}</div>}
     </div>
   );
 }

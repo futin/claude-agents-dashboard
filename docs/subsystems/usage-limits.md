@@ -336,22 +336,39 @@ part) returns the 168 cells, the fallback mean, the confidence, and the walk beh
 current projection — **never raw samples and never file paths**, the same posture as
 `NTFY_TOPIC` never leaving the server. It re-runs the *same* `walkForward` that produced
 the projection, so the inspector cannot drift from what it discloses.
+Since the re-skin pass it also carries the window's **own** two facts — `utilizationPct` and
+`resetsAt` — and the walk's `dutyCycle`. All three were already in scope at the call site
+or already returned by `walkForward`, and all three are stated by the page before any
+projection, so they follow the *limits* being readable rather than the profile being
+usable: `utilizationPct` and `resetsAt` survive every reason the walk is absent, and
+`dutyCycle` is null (never 0, which would read as a measured "never active") when there is
+no walk. The client could recover the first from `walk[0].cum - walk[0].gain`, but only
+while there *is* a walk; the third would mean re-deriving every slice's length from
+timestamp deltas, and the final slice is short by however much the reset is not on the
+hour.
+
 `client/src/components/usage/UsageProfile.tsx` renders it in its own **Usage** rail
-section (`UsageView.tsx`, own lazy chunk): 24 rows × 7 columns (the axis needing 24 slots
-runs the direction a phone has — at 375px the whole week fits with no horizontal scroll),
-columns Monday-first via `DAY_ORDER` over Sunday-indexed buckets (`hourOfWeek` is
+section (`UsageView.tsx`, own lazy chunk), laid out as §8.4 of `.claude/DESIGN.md`
+describes: a figure strip, then the walk as a picture *and* as rows, then the learned week,
+then every definition the page used.
+
+The week is **drawn twice and shown once**. Wide it is 7 rows of 24 hours, which reads
+across a sheet; under 700px the transpose swaps back, because 24 columns in a thumb's
+width is not a grid anyone can read and the axis needing 24 slots should run the direction
+a phone has. Both grids are in the markup and one `display` rule picks between them, so
+neither can be the one that silently broke — and `display:none` takes the hidden grid's
+168 cells out of the tab order (measured: 336 cells with `tabindex=0`, 168 reachable).
+Days are Monday-first via `DAY_ORDER` over Sunday-indexed buckets (`hourOfWeek` is
 `getDay() * 24 + hour`, so the permutation is display-only and `cellTitle` still takes the
-data index — Monday-first is the week the ISO fold and the weekly reset both use), a
-sequential one-hue ramp derived with `color-mix` so all five themes hold, texture rather
-than a sixth colour step for no-evidence cells, a bare cell for a *measured* zero (never
-working an hour is a different statement from working 15% of it), and a required table view
-because the lowest ramp steps fall under 3:1 against the card surface. Cells are square
-(`aspect-ratio: 1`), which is what makes the grid read as a calendar rather than a bar chart
-on its side, and `max-width` on `.up-grid` is the single knob for the whole thing: `1fr`
-columns plus square cells means width sets cell size and therefore height. Every hour row
-carries its own label — labelling alternate rows put the only vertical rhythm cue at twice
-the row pitch, so the eye chunked rows into pairs and read each pair boundary as a wider
-gap (measured at DPR 2 the geometry was exactly even; the artefact was Gestalt, not layout).
+data index — Monday-first is the week the ISO fold and the weekly reset both use). The
+ramp is a sequential one-hue scale derived with `color-mix` so all five themes hold,
+texture rather than a sixth colour step for no-evidence cells, and a bare cell for a
+*measured* zero — never working an hour is a different statement from working 15% of it.
+
+The numbers view is **required, not a nicety**: the two lowest ramp steps fall under 3:1
+against the sheet, which obligates a non-colour path to the same weights. The mock has no
+such control, and it is kept anyway — as a chip in the sheet's row-head, the slot the
+design puts a filter chip in (§7).
 
 Two things the grid alone cannot do:
 
@@ -374,80 +391,117 @@ Two things the grid alone cannot do:
   `--font-scale` before writing them. It hides on scroll when pointer-shown, and *follows* its mark when
   keyboard-shown, since tabbing to an off-screen cell scrolls it into view and hiding then
   would blank the tooltip the focus had just opened.
-- **The forward walk is drawn as a cumulative climb to a 100% ceiling**
-  (`WalkStrip` in the same file, over the pure geometry in
+- **The forward walk is drawn as headroom, draining to empty and then past it**
+  (`HeadroomChart` in the same file, over the pure geometry in
   `client/src/lib/walkChart.ts`). The walk carries four numbers per hour — the slice, the
-  weight, the per-hour gain, and the running total — and the strip plots the *fourth*:
-  the panel exists to answer "when does the weekly window hit 100%", and a curve puts that
-  answer at an intersection instead of asking the reader to integrate 117 bars. Three
-  things are load-bearing:
-  - **Solid = measured, dashed = assumed, and the height is identical either way.** Not a
-    reversal of the encoding, a split of it. The forecast genuinely counts an unlearned
-    hour at `globalMean`, and that pessimistic edge is deliberate; only the ink says which
-    hours are a measurement. This needs a per-step bit the walk did not carry, so
-    `ForecastStep` gained `cum`, `weight` and `learned` — `learned` separately from
-    `weight` because a measured `1.0` and a fallback `1.0` are the same number and
-    different statements, and `cum` server-side because the response has no `utilization`
-    to seed a client running-sum from and `exhaustAt` comes off the same partial sums.
-    With `confidence: none` the whole line is dashed, which is the honest picture. A
-    single `<polyline>` cannot be half dashed, so `splitRuns` cuts the walk into runs of
-    equal `learned` with **adjacent runs sharing their boundary point** — otherwise the
-    line has a one-hour hole at every encoding change.
+  weight, the per-hour gain, and the running total — and the chart plots `100 − cum`: what
+  is *left* of the weekly window rather than what is spent. The question the panel exists
+  to answer is "when does the window run out", and a draining line puts that answer where
+  the curve meets a rule at zero rather than at an intersection with a ceiling drawn
+  somewhere up in the box. It also makes the area past the crossing a quantity in its own
+  right instead of dead space: the gap between the rule and the line is work the window
+  cannot pay for. Four things are load-bearing:
+  - **Ink says evidence; position says quantity.** Solid is a measured weight, dashed is
+    the weekly mean standing in — above the rule and below it alike. Not a reversal of the
+    encoding, a split of it: the forecast genuinely counts an unlearned hour at
+    `globalMean`, and that pessimistic edge is deliberate; only the ink says which hours
+    are a measurement. This needs a per-step bit the walk did not carry, so `ForecastStep`
+    gained `cum`, `weight` and `learned` — `learned` separately from `weight` because a
+    measured `1.0` and a fallback `1.0` are the same number and different statements, and
+    `cum` server-side because the response has no `utilization` to seed a client
+    running-sum from and `exhaustAt` comes off the same partial sums. With
+    `confidence: none` the whole line is dashed, which is the honest picture. Below the
+    rule the same split colours the *fill*: red under a measured run, amber under one
+    walked at the mean — the deficit you can predict and the deficit that is a guess.
+  - **One `<polyline>` cannot be half dashed, and `headSegments` is why.** It cuts the
+    walk into runs of constant (side of zero, evidence state), with **adjacent runs
+    sharing their boundary point** — otherwise the line has a one-hour hole at every
+    change. It also inserts a synthetic point at `crossingX`, classified `below`, so the
+    run above the rule *ends* exactly on the rule and every millimetre under it is drawn
+    in the deficit's ink. The rule, the dot, the tag and the fill boundary then sit on one
+    x by construction rather than by three agreeing calculations. The headroom fill is one
+    shape (`joinPoints`) rather than one per evidence run — `cum` never decreases, so the
+    above-zero part is always a prefix — because abutting fills leave a hairline seam at
+    every flip, and only the *line* changes ink there.
   - **One `viewBox`, `preserveAspectRatio="none"`, `vector-effect: non-scaling-stroke`.**
-    The strip used to be 118 flex children with fractional CSS widths, and the compositor
+    The chart used to be 118 flex children with fractional CSS widths, and the compositor
     rounded each one's two painted edges to device pixels independently — a ±1px swing
     between neighbours (25% of the bar width at 640px) that no CSS tuning can remove,
     because the rounding is per element. One coordinate space scaled uniformly removes it
     structurally. Labels are HTML overlays positioned by percentage, since
-    `preserveAspectRatio="none"` stretches glyphs too. The y domain is fixed at
-    `0 … 130%`, never auto-scaled to the endpoint: a week ending at 294.7% would squash
-    the 100% rule into the bottom third, and everything above the ceiling is equally over.
+    `preserveAspectRatio="none"` stretches glyphs too.
+  - **The y domain is derived, not fixed, and the debt band is capped.** The top is the
+    headroom at `now` plus 6% of air, so the curve starts just under the top edge in every
+    week rather than at a height that varies with how much is already gone — which is
+    *more* comparable across weeks than the old fixed `0 … 130%`, not less. The bottom is
+    the deficit, floored at 12% of the headroom so a one-point overrun is still visible and
+    capped at 100% of it so a week ending 195 points short cannot squash the drain into a
+    sliver. Past the cap `headroomScale` returns `clamped: true` and the sheet prints a
+    sentence saying the line is sitting on the floor, rather than flattening quietly.
   - **"Nothing to draw" is a sentence, not an unmounted section.** `walkAbsent` names
     which precondition failed — `recording-off`, `no-rate` (the RAM-only pace ring reads 0
     when idle, so this fires within minutes of going quiet), or `no-window` — and is
-    `null` whenever the walk is non-empty. The old `walk.length > 0` render gate made the
+    `null` whenever the walk is non-empty. A `walk.length > 0` render gate would make the
     whole panel appear and disappear with no text saying why, which reads as a broken
     feature rather than as an idle account.
-- **The tab answers its own question before any figure** (`ForecastStatus`, over the pure
-  helpers in `client/src/lib/usageProfile.ts`). The page opens on one sentence — *the 168
-  hour-of-week weights the weekly forecast walks over* — and then on a status line whose
-  headline is the **confidence verdict** (`forecastHeadline`), with the 100% answer beside
-  it as one clause (`forecastTiming`: *the week hits 100% Thu 14:00*, or *the week coasts
-  to the reset*, or nothing at all when the walk is empty — there is no projection to time,
-  and `walkAbsent` already says why). The verdict leads rather than the crossing because
-  the crossing is a *number* and whether to believe it is the question; and the crossing
-  sentence now has exactly **one** home, having previously been split between the walk's
-  meta row and nowhere else. The chart still marks the crossing itself (`.up-crosslab`),
-  which is a mark on a curve, not a second claim in prose.
+- **The same walk is printed as rows, off the same array** (`client/src/lib/walkRows.ts`,
+  under the chart behind a `sheet-div`). One local day per row: hours, the hours the
+  profile expects to be *active* (Σ weight × hours — the duty cycle's own unit), where the
+  weights came from, points spent, points left, a bar that drains against the starting
+  headroom, and a note. The picture and the rows cannot disagree because there is no second
+  derivation and no second fetch. Two details are arithmetic, not formatting:
+  - **Slices, not hours.** The walk's first entry covers only the rest of the current clock
+    hour and its last only the part of an hour before the reset, so a row's `hours` is the
+    summed slice length rather than a count of entries. That is why `resetsAt` is a
+    parameter — without it the final slice has no end and the last day's duty cycle would
+    be computed over a full hour that does not exist.
+  - **The crossing hour is not itself called unpayable.** `unpayableHours` counts the
+    hours that fall *wholly* after the crossing: part of the crossing hour is paid for, and
+    the crossing time printed beside it already says where inside that hour the window ran
+    out.
 
-  Under the headline, unchanged, sit the recording counters: hours observed of 168, total
-  time recorded, and either how many hours carry a weight or which gate is still pending —
-  the `TRUST_FLOOR_MIN` evidence floor, then the week roll-over that folds it. They answer
-  a *different* question ("is recording working"), so they are the evidence under the
-  verdict rather than the lead. Without them the first week is 168 identical hatched cells
-  with no sign that recording works, which reads as broken rather than as early. The grid
-  stays honest either way (evidence is texture, never a colour step); this states in words
-  what the texture cannot.
+  Rows are grouped by the browser's local *date*, so a DST day is still exactly one row and
+  no hour is lost or double-counted (pinned in `test/walk-rows.test.ts` across a 23-hour
+  and a 25-hour day). A day past the crossing that spends nothing prints no deficit figure:
+  repeating the number above it would read as a second finding.
+- **Five figures before any picture** (`forecastStats` in
+  `client/src/lib/usageProfile.ts`, drawn by `StatStrip` in `usage/Sheet.tsx`). Where the
+  window stands and when it resets; when it is projected to run out and how far off that
+  is; how hard the rest of the week is expected to be worked; how much of the week has been
+  observed; and whether to believe any of it. Data, not JSX, so both tabs' strips are
+  testable and both are drawn by one component; a tile naming a glossary `term` gets that
+  term's ⓘ beside its label, and the strip never writes a definition of its own.
+
+  Two rules the tiles follow. A missing input is a **dash**, never a fabricated zero — but
+  a counted zero (`0` hours observed) is a real zero and prints as one. And the *measured*
+  figure and the *forecast* figure warn separately: the window tile warns from 80 points,
+  the crossing tile warns whenever there is a crossing at all. Marking the measured figure
+  with the projection's verdict would make a quiet week look spent.
+
+  The strip is one card the ground divides into five, not five cards with gaps: the five
+  figures are one reading, and five surfaces invite five unrelated ones.
 - **Every definition the tab makes lives in one glossary** (`profileGlossary` in the same
   module — a *builder*, not a constant, because two of its seven terms quote the live
-  weekly mean, and the drawer and the legend must not print two different means). Seven
-  terms: hour of the week, weight, evidence, confidence, solid vs dashed, the 100% ceiling,
-  the walk. The trust floor, the chart's `Y_MAX` and the `TRUSTED_OK` gate are read from
-  the constants that own them rather than re-typed. They are printed twice, from one
-  string: once in a closed-by-default `How to read this` drawer at the foot of the tab, and
-  once per ⓘ (`profileTip`) beside the heading, the headline, the legend's ramp and hatched
-  swatch, the walk's meta label and its solid/dashed key. So the lead paragraph, the legend
-  and the walk's note each shrank to the one statement they are actually making, and the
-  definitions they used to carry are one click away instead of read-whether-you-need-them.
+  weekly mean, and the sheet and the legend must not print two different means). Seven
+  terms: hour of the week, weight, evidence, confidence, solid vs dashed, empty and what is
+  borrowed past it, the walk. `TRUST_FLOOR_MIN` and the `TRUSTED_OK` gate are read from the
+  constants that own them rather than re-typed. The `ceiling` term keeps its key and lost
+  its figure: the plot's floor is a *ratio* now, so a number there would name a scale the
+  chart never draws — `test/usage-profile-view.test.ts` asserts that text carries no
+  percentage at all.
 
-  Both aids are `client/src/components/usage/ReadingAids.tsx` — `InfoDot` and `HowToRead`,
-  shared with the token-value tab, extracted at the second consumer exactly as
-  `useFloatingTip` was. Not for the JSX: the ⓘ renders `aria-expanded="false"` **once** and
-  the hook thereafter mutates it on the DOM node by hand (pinning must not re-render the
-  rows), so a hand-copied button that gets that attribute wrong breaks pinning silently.
-  The `rates-*` class names those two render are the aids' **shared vocabulary** across
-  both Usage tabs, not the token-value tab's private prefix; they are deliberately not
-  renamed, since class names are kept stable here.
+  They are printed twice, from one string: once in a **Definitions sheet** at the foot of
+  the page, and once per ⓘ (`profileTip`) beside each heading, the strip's confidence tile,
+  the legend's ramp and hatched swatch, and the walk's two ink keys. The sheet replaced a
+  closed-by-default `<details>` drawer: this is a disclosure view, and a reader who has
+  just met six ⓘ glyphs is exactly the reader who should not have to find a fold to read
+  them all.
+
+  The ⓘ itself is `client/src/components/usage/ReadingAids.tsx` — `InfoDot`, shared with
+  the token-value tab, extracted at the second consumer exactly as `useFloatingTip` was.
+  Not for the JSX: it renders `aria-expanded="false"` **once** and the hook thereafter
+  mutates it on the DOM node by hand (pinning must not re-render the rows), so a
+  hand-copied button that gets that attribute wrong breaks pinning silently.
 
 It is a section of its own rather than a block inside Analytics: that tab is about
 *sessions* (the `/kaizen` report cards) and this is about the *account* — they share no
@@ -1216,64 +1270,75 @@ that quietly spanned different windows would be a defect, not a nuance.
 
 The **Usage** section is now two sub-tabs — `Forecast | Token value` — through
 the Settings page's `.set-seg` control, persisted per device as `usageTab`.
-`UsageProfile` is a full week of hour cells and runs to about a screen, so
-stacking would bury the shorter view; only the active sub-view mounts, which
-also means each one's fetch-per-mount hook fires when its tab is opened rather
-than on every visit to the section.
+Each tab runs to several sheets on its own, so stacking would bury whichever one you did
+not come for; only the active sub-view mounts, which also means each one's fetch-per-mount
+hook fires when its tab is opened rather than on every visit to the section.
 
-`UsageRates.tsx` is a **status board**, in seven blocks top to bottom. What it
-says is exactly what it said before the 2026-09-06 relayout; *where* it says it
-is the change. The layout was chosen from three mocked variants against that
-day's live data (`docs/superpowers/specs/2026-09-06-token-value-layout-mockups.html`);
-the one-table variant was rejected because at 375px a 720px table scrolls the
-verdict column off screen first, and this board is mostly read from a phone.
+`UsageRates.tsx` is a **ledger**, in four sheets top to bottom (§8.4 of
+`.claude/DESIGN.md`). It says what the 2026-09-06 status board said; the change is that
+every figure on the page is now one model's value for a column every other model also has,
+which is the definition of a table. The card stack that preceded it made five comparable
+rates read as five independent findings and cost a scroll to compare any two of them.
 
-1. **A one-sentence lead**, replacing the 150-word caveat paragraph. Everything
-   that paragraph explained now lives in the drawer, once each.
-2. **A status strip** (`statusLine`): the question and its answer — `No model is
-   drifting` or `N models are drifting` — with a per-verdict count beside it in a
-   fixed order, zeroes omitted. **Mix shift never enters the headline**: it says
-   the token mix moved and the price did not, which is the opposite of what the
-   headline watches for. It still gets a count.
-3. **The collecting hint once**, in a `.rates-notice` above the list, whenever
-   any row is `thin` — it is a fact about the measurement, not about one model,
-   and five identical sentences read as five separate findings. Drift and
-   mix-shift hints stay in their own row, because those *are* about one model;
-   `stable` carries no sentence at all.
-4. **Model rows** — the header (model id + verdict badge) unchanged, then up to
-   three **labelled tiles**: `WEIGHTED RATE` leading visually, `RAW TOKENS` and
-   `FITTED, MIXED WINDOWS` when those rates exist. Each label carries a **ⓘ**
-   opening that term's definition in the floating panel — a real button and never
-   a `title` attribute, for the reason the profile tooltip exists. Under the
-   tiles, the **evidence split in two** — `Current 585 windows · 4 days · 663.0
-   pts` and `Baseline forming · 4 of 7 days` — and the weekly line under that.
-   That split is the fix for a line that read `baseline forming · 4 days · 585
-   windows · 4 days · 663.0 pts`, where two identical "4 days" meant two different windows
-   and nothing said which. `evidenceParts` names the 7-day floor only while the
-   baseline is under it: still forming at 9 days means refused for some *other*
-   reason, and "9 of 7" would be nonsense.
-5. **A fold line** for rows `hasFigures` refuses — `claude-sonnet-5 · 2 windows`
-   — instead of three rows of dashes. A dash is honest for one missing figure
-   beside two present ones and pure noise for a whole row.
-6. **The `How to read this` drawer**, a closed-by-default `<details>` over
-   `RATES_GLOSSARY`'s six entries. The ⓘ panels read the *same* strings through
-   `figureTip`, so drawer and panel cannot drift apart.
-7. **Coverage as a bar** (`measuredShare`, `movedLabel`, `coverageRows`,
-   `coverageCaveat`), replacing the two footer pills that never said priced
-   *what*. "Priced" becomes "measured" in the reader's words.
+The one-table shape was rejected once before, in the 2026-09-06 mockups
+(`docs/superpowers/specs/2026-09-06-token-value-layout-mockups.html`), because at 375px a
+720px table scrolls the verdict column off screen first. That objection is answered rather
+than overruled: under 700px each `.dt` becomes its own `overflow-x` box, so the table
+scrolls sideways *inside its sheet* and the page body does not (verified: `body.scrollWidth
+=== window.innerWidth` at 375px). The verdict still leaves the viewport when you scroll the
+table — but the strip above it has already said how many models are drifting, and that is
+the figure the phone reader came for.
 
-The bar is **two segments and not six**. The dataviz palette validator was run on
-this board's own status hues (`#55d0dd,#ffb03a,#cf6f9e,#66738c,#e0533f` against
+1. **A figure strip** (`ratesStats`): priced, drifting, collecting, coverage, ledger.
+   Counts of *models* on the left, points and windows on the right, so the strip reads left
+   to right as "what the fit concluded, then what it read". `Drifting` is the only tile
+   that warns. **Mix shift is not drift** and is counted under `Priced`: it says the token
+   mix moved and the price did not, which is the opposite of what a drift count watches
+   for.
+2. **Token value per model** — Model, Verdict, Weighted, Raw, Fitted, Δ baseline, Windows,
+   Share, and a bar. **Weighted leads** because it is the only mix-invariant quantity on
+   the row and the one the verdict judges: raw tokens per percent are dominated by how much
+   context a model's sessions replay, so leading with raw invites a cross-model price
+   reading the figure cannot support. **Fitted deliberately does not lead** even though it
+   reads more of the evidence — it is measured jointly across windows where several models
+   ran together, has no baseline history of its own, and so has no measured dispersion to
+   set a drift threshold against. A model that owns no window shows `—` under Weighted
+   beside a fitted figure, which is the whole reason that column exists.
+
+   `collecting` is a **first-class row**, not an omission. The old board folded those rows
+   onto a `hasFigures` fold line; in a table a dash is a legible cell, and a model that has
+   vanished is indistinguishable from a model that was never seen. The collecting *hint*
+   is still hoisted to one note under the table — it is a fact about the measurement, and
+   five identical sentences read as five findings.
+
+   **Share is of the priced points** (`pricedShare`): `utilSum` over the sum of the rows'
+   own `utilSum`, so the column sums to 100% and the bars read as one breakdown with the
+   `Priced share` total row underneath them. Not of everything that moved — that would sum
+   to the priced share and make each bar answer a question the column is not asking. Null,
+   never 0, when nothing is priced.
+3. **The evidence ledger** — what each rate was fitted on, and against what. The `Reading`
+   column is where the `thin` hint used to be repeated verbatim on every collecting row;
+   `ledgerReading` prints the row's own distance from the gates instead (`waiting on 0 of 7
+   baseline days and 1 of 2 current days`), and a met gate is not listed. Drift and
+   mix-shift keep their hints, because those *are* facts about one model, and a row with a
+   weekly figure carries `weeklyAsideText` after it. `spanText` drops the window count the
+   cell beside it already shows.
+4. **Where the unpriced points went** (`coverageRows`, `coverageCaveat`), and then the
+   **Definitions sheet** over `RATES_GLOSSARY`'s six entries — printed, not folded, exactly
+   as on the forecast page. The ⓘ panels read the *same* strings through `figureTip`, so
+   the sheet and the panel cannot drift apart.
+
+The refusals are a **table of reasons, not a six-hue bar**. The dataviz palette validator
+was run on this board's own status hues (`#55d0dd,#ffb03a,#cf6f9e,#66738c,#e0533f` against
 the midnight strip) and fails them on the lightness band, the chroma floor and
-adjacent-pair CVD separation — and `styles.css` forbids a new colour literal
-below the token block, so a six-hue categorical bar could not be built honestly
-here. The question the bar answers is binary anyway; the refusal *reasons* are
-text, where identity does not depend on hue.
+adjacent-pair CVD separation — and `styles.css` forbids a new colour literal below the
+token block, so a six-hue categorical encoding could not be built honestly here. Text is
+where identity does not depend on hue. The measured share leads, in the strip, and each
+refusal that actually cost something follows, largest first — leading with the refusals
+made a startup artifact read as a fault, which is exactly what the single `gap` counter
+did.
 
-It **leads with the measured share**, then names each refusal that actually cost
-something, largest first — because leading with the refusals made a startup
-artifact read as a fault, which is exactly what the single `gap` counter did. A
-bucket worth zero points prints nothing: a row of zeroes reads as a broken
+A bucket worth zero points prints nothing: a row of zeroes reads as a broken
 measurement. Shares under 1% keep one decimal (`formatShareOf`), so the genuinely
 tiny recorder-down bucket cannot render as `0%`. Recorder downtime is listed
 whenever *either* `missingPct` or `recorderBreakHours` is non-zero, so `0% ·
@@ -1288,16 +1353,17 @@ print `12% external` from `externalSharePct` beside a `59% priced` pill computed
 from the buckets, and the two disagreed: `externalSharePct` divides by the
 *attributable* movement (183 / 1506 = 12.15%), the coverage buckets divide by
 everything that moved (183 / 1997 = 9.2%). That was a different denominator and
-never a defect, but only the bucket sums with the bar above it, so the list reads
-`coverage.externalPct`. `externalSharePct` stays in the response — removing an
-API field is a separate decision — and the card stops reading it.
+never a defect, but only the bucket sums with the coverage figure in the strip above
+it, so the list reads `coverage.externalPct`. `externalSharePct` stays in the
+response — removing an API field is a separate decision — and the page stops
+reading it.
 
-Every string the card says is a pure function in
+Every string the page says is a pure function in
 `client/src/lib/usageRatesFormat.ts`, so the statements are testable without a
 browser (`test/usage-rates-format.test.ts`; `pnpm test` prints the case count). The functions return
 *parts* — a headline and its counts, a current clause and a baseline clause —
-rather than pre-joined sentences, because the component needs to pick `forming`
-out for its own emphasis; the copy still lives in the lib. The 7-day floor is a
+rather than pre-joined sentences, so a component can set one clause apart from
+another; the copy still lives in the lib. The 7-day floor is a
 named constant there and is deliberately **not** imported from
 `BASELINE_FLOORS`: the only thing crossing the FE/BE boundary in this repo is the
 typed JSON in `shared/types.ts`, and a client module importing server code would
@@ -1383,7 +1449,7 @@ than four days of data.
     - scripts/probe-usage-split.ts
     - scripts/check-token-weights.ts
     - server/api.ts
-    - client/src/components/Header.tsx
+    - client/src/components/AsideAccount.tsx
     - client/src/components/usage/
   kind: subsystem
   verified: f436519f31ef4120521792db7658e2bc5431f0e9

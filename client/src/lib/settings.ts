@@ -18,6 +18,7 @@
  * See `docs/subsystems/settings.md`.
  */
 
+import { DEFAULT_LAYOUT, LAYOUTS, isLayout, type Layout } from './filterSort';
 import { SECTIONS, type Section } from './sections';
 import { EFFORTS, MODELS } from './spawnOptions';
 
@@ -41,6 +42,22 @@ export type UsageTab = 'forecast' | 'rates';
 export type SettingsScope = 'local' | 'shared';
 /** Which section opens on load. `last` restores whatever you were on. */
 export type Landing = Section | 'last';
+/**
+ * Which shape the sessions list opens in. `last` restores whatever the
+ * switcher was left on — the exact shape `Landing` has, for the exact reason.
+ *
+ * NOT the same union as `Layout`: `Layout` is the switcher's own list, and a
+ * sixth member there would be a sixth button on the toolbar. The sentinel is
+ * only ever a *setting* value; `resolveLayout` below turns it back into a
+ * drawable `Layout`.
+ */
+export type DefaultLayout = Layout | 'last';
+/**
+ * How wide the page runs. `fixed` keeps the reading measure the board was
+ * drawn to (820px, 1280px for the two-column sections); `full` drops the cap
+ * and lets every section span the window.
+ */
+export type ContentWidth = 'fixed' | 'full';
 
 export interface Settings {
   theme: ThemeId;
@@ -77,6 +94,23 @@ export interface Settings {
   usageTab: UsageTab;
   /** Which Settings page is showing. Mirrors `usageTab` in every respect. */
   settingsTab: SettingsScope;
+  /**
+   * Which of the five shapes the sessions list opens in, or `last` to reopen
+   * whichever one the switcher was left on. A concrete shape pins every load
+   * to it, so trying Triage out for a minute costs nothing; `last` is the
+   * opposite bargain and the default, mirroring `landing` above.
+   *
+   * The switcher writes `dashboard.layout` either way — so flipping this back
+   * to `last` resumes from the shape you were actually using, not from a value
+   * frozen when you last pinned one. Resolution: `resolveLayout`.
+   */
+  defaultLayout: DefaultLayout;
+  /**
+   * Page width. `fixed` is the drawn measure; `full` removes the cap from every
+   * section. Applied as `data-width` on <html> (like theme and density), so it
+   * is one CSS block and no component re-renders when it changes.
+   */
+  contentWidth: ContentWidth;
 }
 
 export type SpawnDefaultModel = '' | (typeof MODELS)[number];
@@ -96,7 +130,9 @@ export const DEFAULT_SETTINGS: Settings = {
   spawnDefaultEffort: '',
   notifyBrowser: false,
   usageTab: 'forecast',
-  settingsTab: 'local'
+  settingsTab: 'local',
+  defaultLayout: 'last',
+  contentWidth: 'fixed'
 };
 
 /**
@@ -140,12 +176,29 @@ export const LANDING_OPTIONS: { value: Landing; label: string }[] = [
   ...SECTIONS.map(s => ({ value: s.id as Landing, label: s.label }))
 ];
 
+/**
+ * What the "Default session view" picker offers. `last` first, then the
+ * switcher's own five in switcher order — the same shape `LANDING_OPTIONS`
+ * has, and derived the same way so the picker and the validator below cannot
+ * drift from the switcher.
+ *
+ * ⚠️ Built by *prepending* to `LAYOUTS` rather than by growing it: `LAYOUTS` is
+ * the toolbar's button list, and `last` is not a shape anything can draw.
+ */
+export const LAYOUT_OPTIONS: { value: DefaultLayout; label: string }[] = [
+  { value: 'last', label: 'Last used' },
+  ...LAYOUTS.map(l => ({ value: l.key as DefaultLayout, label: l.label }))
+];
+
 const THEME_IDS = THEMES.map(t => t.id);
 const LANDINGS: Landing[] = LANDING_OPTIONS.map(o => o.value);
 const SPAWN_MODELS: SpawnDefaultModel[] = ['', ...MODELS];
 const SPAWN_EFFORTS: SpawnDefaultEffort[] = ['', ...EFFORTS];
 const USAGE_TABS: UsageTab[] = ['forecast', 'rates'];
 const SETTINGS_SCOPES: SettingsScope[] = ['local', 'shared'];
+/** Derived from the picker, so the offered set and the accepted set cannot drift. */
+const LAYOUT_IDS: DefaultLayout[] = LAYOUT_OPTIONS.map(o => o.value);
+const CONTENT_WIDTHS: ContentWidth[] = ['fixed', 'full'];
 
 /**
  * Coerce anything (a stored blob from an older release, a hand-edited
@@ -168,8 +221,24 @@ export function clampSettings(raw: unknown): Settings {
     spawnDefaultEffort: pickOne(s.spawnDefaultEffort, SPAWN_EFFORTS, DEFAULT_SETTINGS.spawnDefaultEffort),
     notifyBrowser: pickBool(s.notifyBrowser, DEFAULT_SETTINGS.notifyBrowser),
     usageTab: pickOne(s.usageTab, USAGE_TABS, DEFAULT_SETTINGS.usageTab),
-    settingsTab: pickOne(s.settingsTab, SETTINGS_SCOPES, DEFAULT_SETTINGS.settingsTab)
+    settingsTab: pickOne(s.settingsTab, SETTINGS_SCOPES, DEFAULT_SETTINGS.settingsTab),
+    defaultLayout: pickOne(s.defaultLayout, LAYOUT_IDS, DEFAULT_SETTINGS.defaultLayout),
+    contentWidth: pickOne(s.contentWidth, CONTENT_WIDTHS, DEFAULT_SETTINGS.contentWidth)
   };
+}
+
+/**
+ * The shape the sessions list should open in, given the setting and whatever
+ * the switcher last stored. Pure, so it is testable without a render.
+ *
+ * A concrete `defaultLayout` wins outright and `stored` is not even looked at
+ * — it is still *written*, so flipping the setting back to `last` resumes from
+ * the real last shape. `last` with nothing (or junk) stored lands on
+ * `DEFAULT_LAYOUT`, the same fail-open `isSection` gives `landing`.
+ */
+export function resolveLayout(defaultLayout: DefaultLayout, stored: unknown): Layout {
+  if (defaultLayout !== 'last') return defaultLayout;
+  return isLayout(stored) ? stored : DEFAULT_LAYOUT;
 }
 
 /** The scan knobs as the query string `GET /api/sessions` takes. */

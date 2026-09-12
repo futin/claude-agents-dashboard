@@ -1,6 +1,6 @@
 import type { Session } from '../../../shared/types';
 
-/** Human labels for each status. Shared by SessionRow and the Toolbar. */
+/** Human labels for each status. Shared by the session views and the Toolbar. */
 export const STATUS_LABEL: Record<Session['status'], string> = {
   working: 'working',
   idle: 'idle',
@@ -38,6 +38,54 @@ export const ACTIVITY_WINDOWS: ActivityWindow[] = [
 
 export type SortKey = 'recency' | 'tokens' | 'name' | 'status';
 export type SortDir = 'asc' | 'desc';
+
+/** What the sort popover prints for each key, and the toolbar's `Sort: …` label. */
+export const SORT_LABEL: Record<SortKey, string> = {
+  recency: 'Recency',
+  tokens: 'Tokens',
+  name: 'Name',
+  status: 'Status'
+};
+
+/** One-line hint under each sort key in the popover — what the order means. */
+export const SORT_HINT: Record<SortKey, string> = {
+  recency: 'last activity',
+  tokens: 'context used',
+  name: 'project, A → Z',
+  status: 'waiting → working → pending → idle'
+};
+
+/**
+ * The five shapes the same filtered, sorted list can take. The view switcher
+ * lists them in this order; the mock's default is the board.
+ *
+ * Deliberately NOT part of `View` below: the shape is not a filter, and it is
+ * not persisted with one. Which shape the page opens in is the per-device
+ * `defaultLayout` setting (`lib/settings.ts`); the switcher's own choice is
+ * remembered under its own key (`dashboard.layout`), which `defaultLayout:
+ * 'last'` reads and any other value ignores — exactly how `landing` and
+ * `dashboard.section` pair up. See docs/subsystems/view-persistence.md.
+ */
+export type Layout = 'board' | 'list' | 'split' | 'tiles' | 'triage';
+
+export const LAYOUTS: { key: Layout; label: string }[] = [
+  { key: 'board', label: 'Board' },
+  { key: 'list', label: 'List' },
+  { key: 'split', label: 'Split' },
+  { key: 'tiles', label: 'Tiles' },
+  { key: 'triage', label: 'Triage' }
+];
+
+/**
+ * The shape a fresh browser opens in, and the fallback when `defaultLayout` is
+ * `last` but nothing has been stored yet. The board is the mock's default and
+ * the switcher's first entry.
+ */
+export const DEFAULT_LAYOUT: Layout = 'board';
+
+export function isLayout(v: unknown): v is Layout {
+  return LAYOUTS.some(l => l.key === v);
+}
 
 export interface View {
   /** Selected project names; empty = all projects. */
@@ -156,7 +204,16 @@ export function describeEmpty(sessions: Session[], view: View, nowMs: number): E
 
 /** Whether any facet is hiding rows right now. Sort key/dir do not count. */
 export function hasActiveFilters(view: View): boolean {
-  return Boolean(view.projects.length || view.statuses.length || view.window !== 'all');
+  return filterCount(view) > 0;
+}
+
+/**
+ * How many of the three facets are set — the badge on the toolbar's filter
+ * button. A facet counts once however many values it holds: two statuses are
+ * one filter, not two.
+ */
+export function filterCount(view: View): number {
+  return (view.projects.length ? 1 : 0) + (view.statuses.length ? 1 : 0) + (view.window !== 'all' ? 1 : 0);
 }
 
 /**

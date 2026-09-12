@@ -1,6 +1,6 @@
-import { Segmented } from '../settings/SettingsRow';
 import { useSettings } from '../../hooks/useSettings';
 import type { UsageTab } from '../../lib/settings';
+import { Band } from './Sheet';
 import { UsageProfile } from './UsageProfile';
 import { UsageRates } from './UsageRates';
 
@@ -13,24 +13,21 @@ import { UsageRates } from './UsageRates';
  * share no data, no endpoint and no cadence — Analytics re-reads transcripts,
  * this reads a profile that moves once a week.
  *
- * **Sub-views rather than a stack.** `UsageProfile` is a full week of hour cells
- * and runs to about a screen on its own, so putting the rates card under it
- * would bury the shorter, denser view behind a scroll. Only the active sub-view
- * mounts, which also means each one's single-fetch-per-mount hook fires exactly
- * when its tab is opened — not on every visit to the section.
+ * **Sub-views rather than a stack.** Each tab runs to several sheets on its own,
+ * so stacking them would bury whichever one you did not come for behind a
+ * scroll. Only the active sub-view mounts, which also means each one's
+ * single-fetch-per-mount hook fires exactly when its tab is opened — not on
+ * every visit to the section.
  *
  * The choice persists per device through the same localStorage settings the
  * rest of the app uses: the phone on the desk tends to sit on one of these and
  * the laptop on the other.
  *
- * **The switch is the phone's copy of the rail's tree.** These are two views of
- * the section, which makes them navigation, so on a desktop rail they are the
- * tree under Usage (`SideRail`) and this switch is hidden. Below 700px the rail
- * lies down into a horizontal strip that cannot draw a tree, so the tree goes
- * away and this comes back. The swap is two `display` rules in `styles.css`
- * (`.usage-tabs` / `.rail-sub`), not a media query in JS: both controls are
- * always mounted and always write the same setting, so neither can end up
- * being the one that silently disappeared.
+ * **The switch lives in the nav, not on the page.** These are two views of the
+ * section, which makes them navigation: they are the tree under Usage in
+ * `SideRail`, on the desktop rail and in the phone menu alike. The page used to
+ * carry a phone-only copy of it, from when the phone nav was a horizontal strip
+ * that could not draw a tree; the menu draws one, so there is one control.
  *
  * Default export → its own lazy chunk, like every section but Sessions.
  */
@@ -40,25 +37,19 @@ const TABS: { value: UsageTab; label: string }[] = [
   { value: 'rates', label: 'Token value' }
 ];
 
-const HINTS: Record<UsageTab, string> = {
-  forecast: 'the duty cycle behind the weekly projection in the header',
-  rates: 'what one percent of the 5-hour window costs, per model'
+const SUBS: Record<UsageTab, string> = {
+  forecast: 'The duty cycle behind the weekly projection in the header · recorded on this '
+    + 'machine, folded weekly',
+  rates: 'What one percent of the 5-hour window costs, per model · measured on this machine only'
 };
 
 export default function UsageView() {
-  const { settings, update } = useSettings();
+  const { settings } = useSettings();
   const tab = settings.usageTab;
 
   return (
     <div className="usage-section">
-      <div className="an-bar">
-        <div className="an-title">Usage</div>
-        <span className="an-hint">{HINTS[tab]}</span>
-        {/* Phone only — see the note above; the rail's tree is the desktop half. */}
-        <div className="usage-tabs">
-          <Segmented value={tab} options={TABS} onChange={(v) => update({ usageTab: v })} />
-        </div>
-      </div>
+      <Band title={`Usage · ${TABS.find(t => t.value === tab)!.label}`} sub={SUBS[tab]} />
       {tab === 'forecast' ? <UsageProfile /> : <UsageRates />}
     </div>
   );
