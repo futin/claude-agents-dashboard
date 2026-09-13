@@ -3,13 +3,13 @@ import { useCallback, useRef, useState } from 'react';
 import type { Session } from '../../../shared/types';
 import {
   ACTIVITY_WINDOWS,
-  LAYOUTS,
   SORT_HINT,
   SORT_LABEL,
   STATUS_LABEL,
   clearFilters,
   distinctProjects,
   filterCount,
+  layoutsFor,
   type Layout,
   type SortKey,
   type View
@@ -31,7 +31,7 @@ type Open = 'filter' | 'sort' | null;
  * Nothing here does anything but change which rows you see, in what order, and
  * in what shape. What is true of the whole board lives in the aside cards.
  */
-export function Toolbar({ sessions, view, onChange, layout, onLayout }: {
+export function Toolbar({ sessions, view, onChange, layout, onLayout, narrow }: {
   sessions: Session[];
   view: View;
   onChange: (v: View) => void;
@@ -39,6 +39,10 @@ export function Toolbar({ sessions, view, onChange, layout, onLayout }: {
       it is seeded from Settings › Display and never persisted. */
   layout: Layout;
   onLayout: (l: Layout) => void;
+  /** Phone measure: the switcher drops the two shapes that width cannot draw
+      (`layoutsFor`). Filtered in the markup rather than hidden in CSS — a
+      `display:none` button is still a tab stop and still clickable by script. */
+  narrow: boolean;
 }) {
   const [open, setOpen] = useState<Open>(null);
   const wrap = useRef<HTMLDivElement>(null);
@@ -53,7 +57,7 @@ export function Toolbar({ sessions, view, onChange, layout, onLayout }: {
   return (
     <div className="toolbar">
       <div className="seg view" role="tablist" aria-label="View">
-        {LAYOUTS.map(l => (
+        {layoutsFor(narrow).map(l => (
           <button
             key={l.key}
             type="button"
@@ -121,7 +125,7 @@ export function Toolbar({ sessions, view, onChange, layout, onLayout }: {
             <div className="sw">
               {ACTIVITY_WINDOWS.map(w => (
                 <button key={w.key} type="button" className={view.window === w.key ? 'on' : ''} onClick={() => set({ window: w.key })}>
-                  {w.key === 'all' ? 'any time' : w.label.replace(/^Last /, '')}
+                  {w.short}
                 </button>
               ))}
             </div>

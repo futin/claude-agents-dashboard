@@ -91,7 +91,33 @@ export function Act({ s }: { s: Session }) {
 }
 
 /**
- * Status pill · activity · (stopping…) · ago. The `stopping…` badge is visible
+ * The tool *name* alone — what a collapsed row can actually hold. The argument
+ * is the half a one-line ellipsis always ate ("Bash npm run bui…" says nothing
+ * about what is running), so it waits in the open body as {@link ActFull},
+ * where there is width to wrap it.
+ */
+export function ToolChip({ s }: { s: Session }) {
+  if (!s.activity) return <span className="act none">no tool activity</span>;
+  return (
+    <span className="act">
+      <span className={`tool${s.activity.tool === 'Task' ? ' task' : ''}`}>{s.activity.tool}</span>
+    </span>
+  );
+}
+
+/** The same tool call with its argument, wrapped rather than cut — open body only. */
+export function ActFull({ s }: { s: Session }) {
+  if (!s.activity) return <div className="act-full none">no tool activity</div>;
+  return (
+    <div className="act-full">
+      <span className={`tool${s.activity.tool === 'Task' ? ' task' : ''}`}>{s.activity.tool}</span>
+      {s.activity.detail && <span className="arg">{s.activity.detail}</span>}
+    </div>
+  );
+}
+
+/**
+ * Status pill, tool name, (stopping…), ago. The `stopping…` badge is visible
  * text, never a `title` — a tooltip is dead on touch, and the phone is the
  * surface the stop control exists for.
  */
@@ -100,8 +126,7 @@ export function ActLine({ s, ago = true }: { s: Session; ago?: boolean }) {
   return (
     <div className="act-line">
       <StatusPill s={s} />
-      <span aria-hidden="true">·</span>
-      <Act s={s} />
+      <ToolChip s={s} />
       {ctl.render && ctl.badge && <span className="stop-badge">{ctl.badge}</span>}
       {ago && <span className="ago">{formatAgo(s.updatedMs)} ago</span>}
     </div>

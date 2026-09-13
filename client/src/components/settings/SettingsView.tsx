@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { NumberField, Segmented, Select, SettingsBand, SettingsGroup, SettingsRow } from './SettingsRow';
+import { useNarrow } from '../../hooks/useNarrow';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import { useRemoteAnswer } from '../../hooks/useRemoteAnswer';
 import { useServerSettings } from '../../hooks/useServerSettings';
@@ -10,8 +11,9 @@ import {
   webNotifyPermission, webNotifySupported
 } from '../../hooks/useWebNotify';
 import {
-  FONT_SCALES, LANDING_OPTIONS, LAYOUT_OPTIONS, LIMITS, REFRESH_CHOICES, THEMES,
-  formatInterval, type ContentWidth, type DefaultLayout, type Landing,
+  FONT_SCALES, LANDING_OPTIONS, LIMITS, REFRESH_CHOICES, THEMES,
+  formatInterval, layoutForWidth, layoutOptions,
+  type ContentWidth, type DefaultLayout, type Landing,
   type SpawnDefaultEffort, type SpawnDefaultModel, type ThemeId
 } from '../../lib/settings';
 import { EFFORTS, MODELS } from '../../lib/spawnOptions';
@@ -72,6 +74,18 @@ export default function SettingsView() {
   const [webPermission, setWebPermission] = useState(() => webNotifyPermission());
   const notify = server.state?.notify;
   const scope = settings.settingsTab;
+  /**
+   * The phone measure drops List and Split from the view picker, and rewrites
+   * the setting when it is already one of them — a `<select>` whose value is
+   * not among its options renders blank, and a blank control is worse than a
+   * moved default. The write is the trade the picker makes openly: this is a
+   * per-device setting, and on this device those two shapes do not exist.
+   */
+  const narrow = useNarrow();
+  useEffect(() => {
+    const fit = layoutForWidth(settings.defaultLayout, narrow);
+    if (fit !== settings.defaultLayout) update({ defaultLayout: fit });
+  }, [narrow, settings.defaultLayout, update]);
   /**
    * No `NTFY_TOPIC` on the server, so every switch below would flip, persist and
    * send nothing. Gated rather than hidden: the rows are how you find out the
@@ -480,13 +494,15 @@ export default function SettingsView() {
 
             <SettingsRow
               name="Default session view"
-              hint="Which of the five shapes the Sessions list opens in. Last used reopens whatever the toolbar's switcher was left on; pick a shape instead and every load comes back to it, however you switched around in between."
+              hint={narrow
+                ? 'Which shape the Sessions list opens in. Last used reopens whatever the toolbar\'s switcher was left on; pick a shape instead and every load comes back to it, however you switched around in between. List and Split are not offered at this width — neither fits a phone.'
+                : 'Which of the five shapes the Sessions list opens in. Last used reopens whatever the toolbar\'s switcher was left on; pick a shape instead and every load comes back to it, however you switched around in between.'}
             >
               <Select
                 value={settings.defaultLayout}
                 onChange={e => update({ defaultLayout: e.target.value as DefaultLayout })}
               >
-                {LAYOUT_OPTIONS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                {layoutOptions(narrow).map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
               </Select>
             </SettingsRow>
 

@@ -23,7 +23,7 @@ export function run(): number {
     const view = stopControl('ready', false);
     assert.strictEqual(view.render, true);
     if (!view.render) return;
-    assert.strictEqual(view.label, 'stop session');
+    assert.strictEqual(view.label, 'Stop session');
     assert.strictEqual(view.arms, true);
     assert.strictEqual(view.cancel, false);
     assert.strictEqual(view.badge, null);
@@ -33,7 +33,7 @@ export function run(): number {
     const view = stopControl('ready', true);
     assert.strictEqual(view.render, true);
     if (!view.render) return;
-    assert.strictEqual(view.label, 'really stop?');
+    assert.strictEqual(view.label, 'Really stop?');
     assert.strictEqual(view.arms, false, 'the second tap must actually send');
     assert.strictEqual(view.cancel, true, 'a destructive confirm needs a way out');
     // The graceful path in both ready states — force is never reachable from here.
@@ -48,7 +48,7 @@ export function run(): number {
       // Real text, because a `title` attribute never appears on touch — and the
       // phone is the surface this control exists for.
       assert.strictEqual(view.badge, 'stopping…');
-      assert.strictEqual(view.label, 'force stop');
+      assert.strictEqual(view.label, 'Force stop');
       assert.strictEqual(view.force, true);
       assert.strictEqual(view.arms, false);
       // `confirming` is ignored here on purpose: the graceful stop was already

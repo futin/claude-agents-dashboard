@@ -7,12 +7,15 @@ import {
   describeEmpty,
   distinctProjects,
   filterCount,
+  drawableLayout,
   hasActiveFilters,
   isLayout,
+  layoutsFor,
   pruneProjects,
   DEFAULT_LAYOUT,
   DEFAULT_VIEW,
   LAYOUTS,
+  WIDE_ONLY_LAYOUTS,
   SORT_HINT,
   SORT_LABEL,
   type Layout,
@@ -274,6 +277,32 @@ export function run(): number {
     // never be prepended *into* it, or the toolbar grows a sixth button.
     assert.ok(!LAYOUTS.some(l => (l.key as string) === 'last'), 'LAYOUTS is the switcher, not the picker');
     assert.ok(LAYOUTS.some(l => l.key === DEFAULT_LAYOUT), 'the fallback shape is drawable');
+  })) p++; else f++;
+
+  // The phone measure: List is a seven-column table and Split is two panes, so
+  // neither is offered under 700px. Spelled out literally rather than derived
+  // from WIDE_ONLY_LAYOUTS — a test reading the same array as the code passes
+  // whatever that array happens to say.
+  if (test('layoutsFor: a narrow width keeps board, tiles and triage', () => {
+    assert.deepStrictEqual(layoutsFor(true).map(l => l.key), ['board', 'tiles', 'triage']);
+    assert.deepStrictEqual(layoutsFor(false), LAYOUTS, 'a wide width is the whole switcher');
+    assert.deepStrictEqual([...WIDE_ONLY_LAYOUTS], ['list', 'split']);
+    assert.ok(layoutsFor(true).some(l => l.key === DEFAULT_LAYOUT), 'the fallback shape survives');
+  })) p++; else f++;
+
+  if (test('drawableLayout: a narrow width draws the board for list and split', () => {
+    assert.strictEqual(drawableLayout('list', true), 'board');
+    assert.strictEqual(drawableLayout('split', true), 'board');
+    for (const l of ['board', 'tiles', 'triage'] as Layout[]) {
+      assert.strictEqual(drawableLayout(l, true), l, l + ' is drawn as itself');
+    }
+  })) p++; else f++;
+
+  // ⚠️ The whole point of coercing the *render* rather than the choice: the
+  // switcher's memory keeps saying `split`, so widening the window returns to
+  // it without the user picking it again.
+  if (test('drawableLayout: a wide width is the identity, and never edits the choice', () => {
+    for (const l of LAYOUTS) assert.strictEqual(drawableLayout(l.key, false), l.key, l.key);
   })) p++; else f++;
 
   if (test('isLayout: guards a stale stored value', () => {

@@ -55,9 +55,9 @@ export type StopControlView =
 export function stopControl(stopState: StopState | undefined, confirming: boolean): StopControlView {
   if (!stopState) return { render: false };
   if (stopState === 'stopping') {
-    return { render: true, label: 'force stop', arms: false, force: true, cancel: false, badge: 'stopping…' };
+    return { render: true, label: 'Force stop', arms: false, force: true, cancel: false, badge: 'stopping…' };
   }
   return confirming
-    ? { render: true, label: 'really stop?', arms: false, force: false, cancel: true, badge: null }
-    : { render: true, label: 'stop session', arms: true, force: false, cancel: false, badge: null };
+    ? { render: true, label: 'Really stop?', arms: false, force: false, cancel: true, badge: null }
+    : { render: true, label: 'Stop session', arms: true, force: false, cancel: false, badge: null };
 }

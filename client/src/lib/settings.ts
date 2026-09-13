@@ -18,7 +18,9 @@
  * See `docs/subsystems/settings.md`.
  */
 
-import { DEFAULT_LAYOUT, LAYOUTS, isLayout, type Layout } from './filterSort';
+import {
+  DEFAULT_LAYOUT, WIDE_ONLY_LAYOUTS, isLayout, layoutsFor, type Layout
+} from './filterSort';
 import { SECTIONS, type Section } from './sections';
 import { EFFORTS, MODELS } from './spawnOptions';
 
@@ -177,18 +179,39 @@ export const LANDING_OPTIONS: { value: Landing; label: string }[] = [
 ];
 
 /**
- * What the "Default session view" picker offers. `last` first, then the
- * switcher's own five in switcher order — the same shape `LANDING_OPTIONS`
- * has, and derived the same way so the picker and the validator below cannot
- * drift from the switcher.
+ * What the "Default session view" picker offers at this width: `last` first,
+ * then whichever of the switcher's shapes that width draws, in switcher order
+ * — the same shape `LANDING_OPTIONS` has, and derived the same way so the
+ * picker and the validator below cannot drift from the switcher.
  *
- * ⚠️ Built by *prepending* to `LAYOUTS` rather than by growing it: `LAYOUTS` is
- * the toolbar's button list, and `last` is not a shape anything can draw.
+ * ⚠️ Built by *prepending* to the switcher's list rather than by growing it:
+ * `LAYOUTS` is the toolbar's button list, and `last` is not a shape anything
+ * can draw.
  */
-export const LAYOUT_OPTIONS: { value: DefaultLayout; label: string }[] = [
-  { value: 'last', label: 'Last used' },
-  ...LAYOUTS.map(l => ({ value: l.key as DefaultLayout, label: l.label }))
-];
+export function layoutOptions(narrow: boolean): { value: DefaultLayout; label: string }[] {
+  return [
+    { value: 'last', label: 'Last used' },
+    ...layoutsFor(narrow).map(l => ({ value: l.key as DefaultLayout, label: l.label }))
+  ];
+}
+
+/** The full picker — the desktop one, and the set `clampSettings` accepts. */
+export const LAYOUT_OPTIONS: { value: DefaultLayout; label: string }[] = layoutOptions(false);
+
+/**
+ * The setting a narrow browser may hold, rewriting `list`/`split` to the board.
+ *
+ * Unlike the switcher's own coercion (`drawableLayout`, which only changes what
+ * is drawn), this one is meant to be *written* back: the picker on a phone does
+ * not offer those two, and a select showing a value it cannot offer is a
+ * control that lies. The cost is stated plainly — a phone visit moves the
+ * setting for every device, because this setting is per-device anyway.
+ */
+export function layoutForWidth(defaultLayout: DefaultLayout, narrow: boolean): DefaultLayout {
+  return narrow && isLayout(defaultLayout) && WIDE_ONLY_LAYOUTS.includes(defaultLayout)
+    ? DEFAULT_LAYOUT
+    : defaultLayout;
+}
 
 const THEME_IDS = THEMES.map(t => t.id);
 const LANDINGS: Landing[] = LANDING_OPTIONS.map(o => o.value);

@@ -63,7 +63,10 @@ function UsageBar({ label, rl, windowMs }: { label: string; rl: RateLimit; windo
   return (
     <div className="u" title={title}>
       <div className="u-top">
-        <span className="u-label">{label}</span>
+        <span className="u-name">
+          <span className="u-label">{label}:</span>
+          <span className={`u-pct ${level}`.trim()}>{pct}%</span>
+        </span>
         {rl.resetsAt && (
           <span className="u-reset">
             {view?.rateText ? `${view.rateText} · ` : ''}resets {formatResetTime(rl.resetsAt)}
@@ -74,7 +77,6 @@ function UsageBar({ label, rl, windowMs }: { label: string; rl: RateLimit; windo
         <div className="u-bar">
           <div className={`u-fill ${level}`.trim()} style={{ width: `${pct}%` }} />
         </div>
-        <span className={`u-pct ${level}`.trim()}>{pct}%</span>
       </div>
       {view && <TimeStrip view={view} resetsAt={rl.resetsAt as string} />}
     </div>
@@ -115,7 +117,6 @@ function TimeStrip({ view, resetsAt }: { view: NonNullable<ReturnType<typeof pac
             <div className="u-tick wall-pessimistic" style={{ left: `${view.wallPctPessimistic}%` }} />
           )}
         </div>
-        <span className="u-time-spacer" />
       </div>
       <div className="u-time-labels">
         <span>{formatResetTime(new Date(view.startMs).toISOString())}</span>

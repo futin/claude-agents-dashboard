@@ -307,12 +307,17 @@ code,kbd,samp,pre{font-family:inherit}
 .sessions .cap{font-size:11px;color:var(--ink2);margin-top:6px}
 
 /* the aside · Board card */
-.board-sub{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.board-sub .clock{font-variant-numeric:tabular-nums}
-.facts{display:grid;gap:12px;margin-top:20px;font-size:13px;color:var(--ink2)}
+.board-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.board-h .clock{font-size:13px;color:var(--ink2);font-variant-numeric:tabular-nums;flex:none}
+/* `.sessions .cs` also matches this row — out-specify it or the margin is dead. */
+.sessions .cs.board-sub{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:20px}
+/* Card-width hairline, after the switch only. */
+.board-rule{height:1px;background:var(--hairline);margin:18px 0}
+.board-rule+.newbtn{margin-top:0}
+.facts{display:grid;gap:12px;margin-top:12px;font-size:13px;color:var(--ink2)}
 .fact{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .fact b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
-.fact b.need{color:var(--amber)}
+.fact b.hot{color:var(--amber)}
 .s-aside .ra-switch{width:100%;justify-content:space-between;margin-top:20px}
 .s-aside .ra-pill.off:not(.origin){margin-top:20px}
 /* the one write action on the board — filled ink, so it never reads as a filter */
@@ -342,38 +347,36 @@ code,kbd,samp,pre{font-family:inherit}
 .ra-switch.on .ra-track i{left:14px}
 
 /* the aside · Account card: twin gauges on the 10px track, then the time strip.
-   `--u-pct-w` is the right-hand reserve the percentage, the time-strip spacer
-   and the time labels all measure against — three rows, one number, so their
-   right edges cannot drift apart. 36px is the widest `100%` across the whole
-   `--font` fallback chain (Hanken Grotesk 33.9px … sans-serif 35.8px) and no
-   wider: tabular-nums keeps the digits from shuffling below that. */
-.usage{--u-pct-w:36px;--u-gap:8px;display:flex;flex-direction:column;gap:24px;margin-top:20px}
+   The percentage sits beside the window name on the header row, so both tracks
+   run the full width of the card and nothing reserves a right-hand gutter —
+   tabular-nums on `.u-pct` keeps the digits from shuffling as it ticks. */
+.usage{display:flex;flex-direction:column;gap:24px;margin-top:20px}
 .usage .u{display:flex;flex-direction:column;gap:0;min-width:0}
 .usage .u-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:13px}
+.usage .u-name{display:flex;align-items:baseline;gap:5px;flex-shrink:0}
 .usage .u-label{font-weight:500;color:var(--ink);flex-shrink:0}
 .usage .u-reset{font-size:12px;color:var(--ink2);white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.usage .u-row{display:flex;align-items:center;gap:var(--u-gap);margin-top:8px}
+.usage .u-row{display:flex;align-items:center;margin-top:8px}
 .usage .u-bar{flex:1;height:10px;border-radius:8px;background:var(--steel);overflow:hidden}
 .usage .u-fill{height:100%;border-radius:8px;background:var(--green);transition:width .5s ease}
 .usage .u-fill.mid{background:var(--amber)}
 .usage .u-fill.high{background:var(--red)}
-.usage .u-pct{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);min-width:var(--u-pct-w);text-align:right}
+.usage .u-pct{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink)}
 .usage .u-pct.mid{color:var(--amber)}
 .usage .u-pct.high{color:var(--red)}
 .usage .u-msg{font-size:13px;color:var(--ink2)}
 /* Time strip: the same bar width, but the axis is the window's clock rather
    than its tokens — elapsed fill, a `now` tick, and the projected-100% tick.
    Reading them together answers "do I run dry before the reset?". */
-.usage .u-time-row{display:flex;align-items:center;gap:var(--u-gap);margin-top:12px}
+.usage .u-time-row{display:flex;align-items:center;margin-top:12px}
 .usage .u-time{flex:1;position:relative;height:3px;border-radius:999px;background:var(--steel)}
 .usage .u-time-fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:var(--hairline2);transition:width .5s ease}
-.usage .u-time-spacer{flex:0 0 var(--u-pct-w)}
 .usage .u-tick{position:absolute;top:-3px;height:9px}
 .usage .u-tick.now{width:1px;background:var(--ink)}
 .usage .u-tick.wall{width:2px;background:var(--red)}
 .usage .u-tick.wall-pessimistic{width:1px;background:var(--red);opacity:.45}
 .usage .u-band{position:absolute;top:-3px;height:9px;background:var(--red);opacity:.14}
-.usage .u-time-labels{display:flex;justify-content:space-between;gap:8px;padding-right:calc(var(--u-pct-w) + var(--u-gap));margin-top:6px;font-size:11px;color:var(--ink3)}
+.usage .u-time-labels{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:11px;color:var(--ink3)}
 .usage .u-verdict{white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .usage .u-verdict.wall{color:var(--red)}
 .usage .u-verdict.lasts{color:var(--green)}
@@ -430,12 +433,14 @@ code,kbd,samp,pre{font-family:inherit}
 /* ── row atoms ─────────────────────────────────────────────────────────────── */
 .sdot{width:9px;height:9px;border-radius:50%;background:var(--hairline2);display:inline-block;flex:none}
 .sdot.working{background:var(--green);box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 50%,transparent);animation:pulse 1.8s infinite}
-.sdot.question{background:var(--amber)}
-.sdot.incomplete{background:var(--mustard)}
+.sdot.question{background:var(--amber);box-shadow:0 0 0 0 color-mix(in srgb,var(--amber) 50%,transparent);animation:pulse-amber 1.8s infinite}
+.sdot.incomplete{background:var(--mustard);box-shadow:0 0 0 0 color-mix(in srgb,var(--mustard) 50%,transparent);animation:pulse-mustard 1.8s infinite}
 .sdot.launching{background:var(--ink);box-shadow:0 0 0 0 color-mix(in srgb,var(--ink) 35%,transparent);animation:pulse-ink 1.8s infinite}
 .sdot.failed{background:var(--red)}
 @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes pulse-ink{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ink) 35%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes pulse-amber{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--amber) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes pulse-mustard{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--mustard) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 /* the status word as a tinted pill */
 .spill{font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;background:var(--strip-hi);color:var(--ink2);white-space:nowrap;flex:none}
 .spill.working{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
@@ -443,7 +448,9 @@ code,kbd,samp,pre{font-family:inherit}
 .spill.incomplete{background:color-mix(in srgb,var(--mustard) 22%,transparent);color:var(--ink)}
 .spill.launching{background:var(--ink);color:var(--strip)}
 .spill.failed{background:color-mix(in srgb,var(--red) 14%,transparent);color:var(--red)}
-.sname{font-size:15px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;color:var(--ink)}
+/* A long session name clips with an ellipsis rather than pushing out of the
+   card: nowrap alone cannot shrink inside `.r1`, so min-width:0 unlocks it. */
+.sname{font-size:15px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;color:var(--ink);min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 /* pills: project (when a title leads), branch (outlined), surface + kaizen.
    Shared with the chat drawer's head, which is why they keep their names. */
 .proj-pill{font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:var(--strip-hi);color:var(--ink2);white-space:nowrap}
@@ -459,6 +466,10 @@ code,kbd,samp,pre{font-family:inherit}
 .ag-pill.surface.dashboard{color:var(--magenta);background:color-mix(in srgb,var(--magenta) 14%,transparent)}
 .ag-pill.surface.cloud{color:var(--ink2);background:var(--strip-hi)}
 .r1{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap;row-gap:6px}
+/* Dot + name are one flex item so they can never land on separate rows: a
+   100% basis claims the whole first row (the pills wrap under it, where they
+   already sat) and the name ellipses inside it instead of pushing the dot off. */
+.r1-lead{flex:1 1 100%;display:flex;align-items:center;gap:10px;min-width:0}
 /* the flex spacer several rows and heads share (chat head, panel chrome, analytics bar) */
 .spacer{flex:1}
 .tok{font-size:13px;color:var(--ink2);font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -476,6 +487,15 @@ code,kbd,samp,pre{font-family:inherit}
 .act-line .act .tool{font-weight:500;color:var(--ink)}
 .act-line .act .tool.task{color:var(--magenta)}
 .act-line .act.none{color:var(--ink3)}
+/* The open body's answer to "what is it running": the argument the collapsed
+   row had to ellipsize, wrapped over as many lines as it takes. `break-word`,
+   never `anywhere` — a path or a URL moves to the next line whole and is only
+   cut mid-token when it cannot fit on a line of its own. */
+.act-full{font-size:13px;line-height:1.5;color:var(--ink2);padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--hairline);overflow-wrap:break-word}
+.act-full .tool{font-weight:500;color:var(--ink)}
+.act-full .tool.task{color:var(--magenta)}
+.act-full .arg{margin-left:6px}
+.act-full.none{color:var(--ink3)}
 .act-line .ago{margin-left:auto;flex:none;color:var(--ink3);font-variant-numeric:tabular-nums}
 /* Real text, not a `title` — a tooltip never appears on touch, and the phone is
    the surface the stop control exists for. */
@@ -509,6 +529,9 @@ code,kbd,samp,pre{font-family:inherit}
 .detail-sum .ds-run{color:var(--green);font-weight:600}
 .detail-sum .ds-done{color:var(--ink);font-weight:600}
 .detail-sum .ds-total{margin-left:auto;color:var(--ink3)}
+/* `0 agents` is the whole answer when there are none — no empty-state line
+   follows it, so the summary must not leave a gap under itself. */
+.detail-sum:last-child{margin-bottom:0}
 .detail-empty{font-size:13px;color:var(--ink3);padding:2px 0}
 .agents{display:flex;flex-direction:column;gap:10px}
 .agent{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink2);min-width:0}
@@ -531,8 +554,14 @@ code,kbd,samp,pre{font-family:inherit}
 .col-h.ask .n{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
 .col-h.run .n{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
 .bcard{background:var(--strip);border-radius:16px;padding:16px;min-width:0;transition:box-shadow .15s}
-.bcard.selected{box-shadow:0 0 0 1px var(--ink)}
+/* 2px ink ring — same weight as the selected Settings theme card
+   (`.set-theme.on`, 1px border + 1px ring). A ring costs no layout. */
+.bcard.selected{box-shadow:0 0 0 2px var(--ink)}
 .bcard.launching{background:transparent;border:1px dashed var(--hairline2)}
+/* Empty column: a ghost of a card holds the column's width and tells you the
+   lane is empty rather than cut off. Ink at 4% so it reads on all five themes
+   — a literal grey would invert on the light one. */
+.bempty{height:76px;border-radius:16px;background:color-mix(in srgb,var(--ink) 4%,transparent)}
 .bcard.launching.failed{border-color:var(--red)}
 .bmain{cursor:pointer}
 .bcard .bar{margin-top:12px}
@@ -549,13 +578,16 @@ code,kbd,samp,pre{font-family:inherit}
 .ledger tbody tr:first-child td{border-top:0}
 .ledger th:first-child,.ledger td:first-child{padding-left:20px}
 .ledger th:last-child,.ledger td:last-child{padding-right:20px}
-.ledger .c-dot{width:41px}.ledger .c-model{width:90px}.ledger .c-ctx{width:200px}.ledger .c-last{width:80px}.ledger .c-do{width:104px}
+.ledger .c-dot{width:41px}.ledger .c-model{width:90px}.ledger .c-ctx{width:200px}.ledger .c-state{width:84px}.ledger .c-act{width:150px}.ledger .c-last{width:80px}.ledger .c-do{width:104px}
 .ledger tbody tr:not(.launching):not(.expand){cursor:pointer}
-.ledger tbody tr:not(.launching):not(.expand):hover td{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
-.ledger tr.selected td{background:var(--strip-hi);border-top-color:transparent}
+.ledger tbody tr:not(.launching):not(.expand):not(.selected):hover td{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
+/* Open row + its body read as one block: same fill through the hover, one
+   accent down the left edge, a rule between the head and the content. */
+.ledger tr.selected td{background:var(--strip-hi);border-top-color:transparent;padding-bottom:12px}
 .ledger tr.expand td{padding:0 20px 18px 45px;border-top:0;background:var(--strip-hi)}
+.ledger tr.selected td:first-child,.ledger tr.expand td{box-shadow:inset 3px 0 0 var(--ink)}
 .ledger tr.expand+tr td{border-top-color:transparent}
-.ledger tr.expand .expanded{margin-top:0;padding-top:0;border-top:0}
+.ledger tr.expand .expanded{margin-top:0;padding-top:14px;border-top:1px solid var(--hairline2)}
 .ledger .name{font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ledger .name .ag-pill{margin-left:6px;vertical-align:1px}
 .ledger .sub{font-size:12px;color:var(--ink2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -564,6 +596,10 @@ code,kbd,samp,pre{font-family:inherit}
 .ledger .ctx .bar{flex:1}
 .ledger .ctx .pct{min-width:38px;text-align:right}
 .ledger .ctx+.tok{display:block;font-size:11px;color:var(--ink3);margin-top:5px}
+/* State and tool are two columns, not one line: every pill centres on the same
+   axis and every tool name starts at the same left edge. */
+.ledger th.state,.ledger td.state{text-align:center}
+.ledger td.state .spill{display:inline-block}
 .ledger td.activity .act-line{max-width:100%}
 .ledger .when{color:var(--ink3);font-size:12px;white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
 .ledger td.do{text-align:right;white-space:nowrap}
@@ -597,16 +633,16 @@ code,kbd,samp,pre{font-family:inherit}
 .kv .v .metric{font-size:24px}
 .kv .v .u .tok{font-size:12px}
 .kv .track{margin-top:12px}
-.kv .now{font-size:14px;font-weight:500;color:var(--ink);margin-top:8px;display:flex;align-items:center;gap:8px;min-width:0;line-height:1.4}
-.kv .now .act{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.kv .now .act .tool{color:var(--ink2);font-weight:400}
+.kv .now{font-size:14px;font-weight:500;color:var(--ink);margin-top:8px;display:flex;align-items:flex-start;gap:8px;min-width:0;line-height:1.4}
+.kv .now .act{min-width:0;overflow-wrap:break-word}
+.kv .now .act.none{font-weight:400;color:var(--ink3)}
 .kv .cap{margin-top:10px}
 .inspect .expanded{margin-top:20px}
 
 /* ── Tiles: every session a metric card; the open one spans two ───────────── */
 .tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
 .tile{cursor:pointer;transition:box-shadow .15s}
-.tile.selected{box-shadow:0 0 0 1px var(--ink);grid-column:span 2}
+.tile.selected{box-shadow:0 0 0 2px var(--ink);grid-column:span 2}
 .tile.launching{background:transparent;border:1px dashed var(--hairline2);cursor:default}
 .tile.launching.failed{border-color:var(--red)}
 .tile-h{display:flex;align-items:center;gap:8px}
@@ -621,21 +657,19 @@ code,kbd,samp,pre{font-family:inherit}
 /* ── Triage: what needs you first, then the working and idle lists ────────── */
 .sec-h{display:flex;align-items:baseline;gap:10px;padding:4px 4px 0;flex-wrap:wrap}
 .sec-h .cs{margin-top:0}
-.sec-h+.need,.sec-h+.quiet{margin-top:-6px}
-.need{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;padding:20px 24px 20px 28px;position:relative;overflow:hidden}
-.need::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--amber);animation:qpulse 1.6s ease-in-out infinite}
-.need.permission::before{background:var(--mustard)}
-.need-who{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);flex-wrap:wrap;row-gap:6px}
-.need-who b{color:var(--ink);font-weight:500;font-size:15px;letter-spacing:-.01em}
-.need-who .pct{font-size:12px}
+.sec-h+.need,.sec-h+.s-card.quiet{margin-top:-6px}
+.need{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;padding:20px 24px;overflow:hidden}
+.need-who{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;row-gap:6px;font-size:12px;color:var(--ink2)}
+.need-who b{color:var(--ink);font-weight:500;font-size:15px;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.need-meta{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--ink2);flex-wrap:wrap;row-gap:6px}
+.need-meta .pct{font-size:12px}
 .need .q{margin-top:10px;font-size:16px;font-weight:500;letter-spacing:-.01em;line-height:1.35;color:var(--ink);min-width:0}
 .need .q .kind{display:block;color:var(--ink2);font-weight:400;font-size:12px;margin-bottom:4px;letter-spacing:0}
 .need .q .act{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .need .q .act .tool{color:var(--ink2);font-weight:400}
-.acts{display:flex;flex-direction:column;gap:8px;min-width:140px}
-.act-go{height:40px;padding:0 16px;border:0;border-radius:12px;background:var(--ink);color:var(--strip);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;text-transform:capitalize;transition:opacity .15s}
-.act-go:hover{opacity:.88}
-.quiet{padding:0;overflow:hidden}
+.acts{display:flex;flex-direction:column;gap:8px}
+/* `.s-card`-scoped: bare `.quiet` also matches the board's Quiet column head. */
+.s-card.quiet{padding:0;overflow:hidden}
 .qrow{display:flex;align-items:center;gap:10px;padding:14px 20px;border-top:1px solid var(--hairline);font-size:13px;min-width:0}
 .qrow:first-child{border-top:0}
 .qrow .nm{font-weight:500;font-size:14px;letter-spacing:-.01em;color:var(--ink);white-space:nowrap}
@@ -656,14 +690,35 @@ code,kbd,samp,pre{font-family:inherit}
    `ra-pill off` and used to tint it red */
 .foot .off{color:var(--red)}
 
-/* below the broad wrap's comfort the aside moves above the list as a two-card
-   row; on a phone the two cards stack */
-@media (max-width:1100px){
+/* The desktop breakpoint. 1568px is the exact width at which the board stops
+   being fixed-width and starts shrinking: 240px rail + 2×24px `.main` padding
+   + the 1280px `.wrap.broad` measure. Above it the layout never moves, so it is
+   "desktop"; at it the aside leaves the right column and rides above the list
+   as a two-card row, and the list takes the full measure. On a phone (700px)
+   the two aside cards stack.
+
+   Two knock-on caveats, both pre-existing and both deliberate:
+   • `[data-density="compact"]` trims --body-pad to 14px, so its true crossover
+     is 1548px — a media query cannot read a custom property, and 20px of early
+     flip is cheaper than a second breakpoint.
+   • `.shell{zoom:var(--font-scale)}` makes the query resolve against the
+     unzoomed viewport, so above 100% text scale the flip lands slightly late.
+   Content width = full (`[data-width="full"]`) has no fixed measure at all; it
+   keeps this breakpoint rather than growing one of its own. */
+@media (max-width:1568px){
   .sessions{grid-template-columns:1fr}
   .s-aside{order:-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
-  .board{grid-template-columns:repeat(2,minmax(0,1fr))}
   .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
   .split{grid-template-columns:280px minmax(0,1fr)}
+}
+/* Board is the exception to the 1568 breakpoint. Its three columns are named
+   buckets — Needs you / Working / Quiet — so wrapping one onto a second row
+   breaks the read, not just the fit. Once the aside is gone the list owns the
+   whole 1280px measure, which is three comfortable ~416px columns, so Board
+   holds its shape until the measure itself runs out at 1100. Must stay above
+   the 700px block, which folds it to one column at equal specificity. */
+@media (max-width:1100px){
+  .board{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (max-width:700px){
   .s-aside{grid-template-columns:1fr}
@@ -673,11 +728,20 @@ code,kbd,samp,pre{font-family:inherit}
   .split{grid-template-columns:1fr}
   .ledger .c-model,.ledger td.model,.ledger th:nth-child(3){display:none}
   .ledger .c-ctx{width:120px}
-  .toolbar .seg.view{width:100%}
-  .toolbar .seg.view>button{flex:1;padding:7px 0}
-  .ctlwrap{margin-left:auto}
+  /* One row on the phone. The switcher is down to the three shapes this width
+     draws (`layoutsFor`), so the words fit and the glyph row the toolbar used
+     to swap in is gone — five icons were a legend to learn, three words are
+     not. The sort readout drops, which is what buys the filter/sort track a
+     place beside the switcher instead of a second row under it. The sort
+     *button* stays — the popover it opens prints the current key with a tick,
+     so the readout was the only thing repeating itself. */
+  .toolbar{flex-wrap:nowrap}
+  .toolbar .seg.view>button{padding:7px 10px}
+  .toolbar .sortlab{display:none}
+  .toolbar .seg .vsep{margin:0 2px}
+  .ctlwrap{margin-left:auto;flex:none}
   .pop{width:min(300px,calc(100vw - 48px))}
-  .need{grid-template-columns:1fr;padding-left:24px}
+  .need{grid-template-columns:1fr}
   .acts{flex-direction:row}
 }
 
@@ -733,6 +797,18 @@ code,kbd,samp,pre{font-family:inherit}
 @media (max-width:700px){
   .mgmt,.mgmt.pair{grid-template-columns:minmax(0,1fr)}
   .mdetail{grid-column:auto}
+  /* the phone's nav bar is sticky, so the scroll-to-column-3 above has to stop
+     short of it or it lands the card's own heading under the bar */
+  .mdetail{scroll-margin-top:64px}
+  /* Title and pill stack: a path is most of a screen wide on its own, and
+     beside a title it left the ↻ two characters of room. */
+  .mgmt-title{display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-width:0}
+  .mgmt-title .set-scope{margin-left:0;vertical-align:0;max-width:100%}
+  /* ↻ is a maintenance control on a read-only page, not the reason you came:
+     off the 36px family and onto the compact one, where the band's two rows
+     cost the screen less. */
+  .mgmt-bar .tb-dir{height:30px;font-size:12px;padding:0 11px}
+  .mgmt-bandrow{align-items:flex-start}
 }
 /* Column 1 — the type. 16px padding, which is the only number the "you are
    here" mark differs by between the two list columns. */
@@ -1234,7 +1310,10 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .sp-toggle-text{display:flex;flex-direction:column;gap:2px;min-width:0}
 .sp-toggle-name{font-size:13px;font-weight:500;color:var(--ink)}
 .sp-toggle-hint{font-size:11px;line-height:1.45;color:var(--ink2)}
-.sp-toggle .set-seg{flex:none}
+/* The row's card is already --steel, so the seg's own --steel track vanished
+   into it (the same two-points-apart lesson as `.seg` on the app ground): on
+   this card the track drops to --hairline2, the next step darker. */
+.sp-toggle .set-seg{flex:none;background:var(--hairline2);border-color:var(--hairline2)}
 .sp-toggle .set-seg button{padding:5px 12px;font-size:12px}
 
 @media (max-width:700px){
@@ -1251,10 +1330,22 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
      facts as a wrapping meta line — nothing is dropped, they just stop being a
      column — then the filter. */
   .chat-split{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
-  .chat-side{gap:12px;padding:12px 14px;overflow:visible;border-right:0;border-bottom:1px solid var(--hairline)}
-  .chat-side .kv{padding:11px 13px}
-  .chat-facts{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11px}
+  /* paper, not the desktop column's --strip-hi: as a band it reads as part of
+     the transcript, and the hairline is separation enough. */
+  .chat-side{gap:10px;padding:10px 14px;overflow:visible;background:var(--strip);border-right:0;border-bottom:1px solid var(--hairline)}
+  /* The gauge stops being a card too: label, reading and raw count on one
+     baseline, the track a hairline under them. A phone spends that height on
+     the transcript, which is what the drawer is for. */
+  .chat-side .kv{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px;padding:0;background:none;border-radius:0}
+  .chat-side .kv .k{font-size:11px}
+  .chat-side .kv .v{margin-top:0}
+  .chat-side .kv .v .metric{font-size:16px}
+  .chat-side .kv .track{flex-basis:100%;height:4px;margin-top:6px}
+  .chat-facts{display:flex;flex-wrap:wrap;gap:3px 14px;font-size:11px}
   .chat-facts .f{justify-content:flex-start;gap:6px;max-width:100%}
+  /* Project, Messages and Now: the head pill, the foot count and the last turn
+     of the transcript already carry them on a phone. */
+  .chat-facts .f.wide{display:none}
   .chat-body{padding:14px 14px 40px;gap:16px}
   .qpanel,.qpanel.min,.pbanner{padding:14px}
   /* three items do not fit a phone-width line: the live reading and the count
@@ -1297,7 +1388,11 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 /* The pill sits on the ground, where a --strip-hi fill is two points from the
    board and vanishes — so Local is a plain paper pill and Shared a green tint. */
 .set-scope{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:11px;font-weight:500;background:var(--strip);color:var(--ink);vertical-align:3px;margin-left:8px}
-.set-scope i{width:6px;height:6px;border-radius:999px;background:var(--ink2)}
+.set-scope i{width:6px;height:6px;border-radius:999px;flex:none;background:var(--ink2)}
+/* A path is the one thing in this pill that can be longer than the screen. It
+   is its own element so it, and not the dot beside it, is what gets clipped —
+   an anonymous flex item cannot carry `text-overflow`. */
+.set-scope .p{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .set-scope.shared{background:color-mix(in srgb,var(--green) 22%,transparent);color:var(--green)}
 .set-scope.shared i{background:currentColor}
 .set-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
@@ -1354,7 +1449,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .set-theme:hover{border-color:var(--ink3)}
 .set-theme.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
 .set-swatch{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;height:28px}
-.set-swatch i{border-radius:3px}
+.set-swatch i{border-radius:8px}
 .set-theme-name{font-size:12px;font-weight:500;color:var(--ink2);line-height:1.25}
 .set-theme.on .set-theme-name{color:var(--ink)}
 /* a warning that something outside the app overrides a setting */
@@ -1362,11 +1457,14 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .set-warn b{color:var(--ink);font-weight:500}
 .set-warn code{overflow-wrap:anywhere}
 .set-saving{font-size:11px;color:var(--ink3)}
-/* below the wide wrap's comfort the two columns fold into one */
-@media (max-width:1100px){
-  .set-cols{grid-template-columns:1fr}
-}
+/* Settings skips the desktop breakpoint (~line 687). Unlike the Sessions aside,
+   the two columns here are not a wide-screen luxury — they are the page's
+   shape, and a settings list is short rows whose content is the control at the
+   end, not a measure that needs width. So it holds `1fr 1fr` all the way down
+   to the phone, and folds only there: at 375px two columns are ~155px each and
+   the prose under every heading breaks to three words a line. */
 @media (max-width:700px){
+  .set-cols{grid-template-columns:1fr}
   .set-group{padding:20px}
   .set-row{align-items:flex-start;flex-direction:column;gap:10px}
   .set-control{width:100%;flex-wrap:wrap}
@@ -1379,7 +1477,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 /* ---------------------------------------------- quality floor */
 :where(button,select,input,textarea,summary,[role=button]):focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
 @media (prefers-reduced-motion:reduce){
-  .sdot,.cbtn,.need::before,.tl-bar,.chat{animation:none}
+  .sdot,.cbtn,.tl-bar,.chat{animation:none}
 }
 
 /* ---------------------------------------------- touch: no focus auto-zoom
@@ -1450,6 +1548,10 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .sheet-div{height:1px;background:var(--hairline);margin:24px 0}
 .row-head{display:flex;align-items:flex-start;gap:12px}
 .row-head .sp{flex:1}
+/* a switch in the right-hand slot sits on the chip's 30px family, not the
+   toolbar's 36px one — the slot's other occupant is a chip */
+.row-head .seg{flex:none;padding:2px}
+.row-head .seg>button{padding:5px 12px}
 .row-head>div{min-width:0}
 /* the slot the design puts a filter chip in (§7) — here a label or a toggle */
 .chip{
@@ -1539,6 +1641,9 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
    reader who should not have to find a drawer to read them all. */
 .terms{columns:2;column-gap:32px;margin:14px 0 0}
 .terms>div{break-inside:avoid;padding:10px 0;border-bottom:1px solid var(--hairline)}
+/* the last term has nothing under it to be separated from, and the rule then
+   reads as the sheet's own edge drawn in the wrong place */
+.terms>div:last-child{border-bottom:0}
 .terms dt{font-size:13px;font-weight:500;color:var(--ink)}
 .terms dd{font-size:12px;color:var(--ink2);line-height:1.5;margin:3px 0 0}
 
@@ -1579,7 +1684,14 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   transition:fill-opacity .1s;
 }
 .up-hit-col:hover{fill:var(--cyan);fill-opacity:.14}
-.up-hit-col:focus-visible{fill:var(--cyan);fill-opacity:.3;outline:none}
+/* The focus ring is suppressed on `:focus`, not only on `:focus-visible`, and
+   the indicator is a fill instead. An `outline` on a child of a
+   `preserveAspectRatio="none"` viewBox is laid out in *user* units and then
+   stretched with the x axis, so the UA's `auto 5px` ring on a 1-unit-wide
+   column came back as a ~40px slab in the ring colour — the solid blue bar
+   this chart grew after a click. A fill cannot be scaled into a lie. */
+.up-hit-col:focus{outline:none}
+.up-hit-col:focus-visible{fill:var(--cyan);fill-opacity:.3}
 .ylab{
   position:absolute;left:-2px;transform:translateY(-50%);white-space:nowrap;
   font-size:10px;color:var(--ink3);background:var(--strip);padding:0 4px;
@@ -1635,9 +1747,14 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .hmx.wide .lab{display:grid;grid-template-rows:repeat(7,1fr);gap:3px;font-size:11px;font-weight:500;color:var(--ink2);align-items:center}
 .hmx.wide .gx{display:grid;grid-template-columns:repeat(24,1fr);gap:3px}
 .hmx.wide .up-cell{aspect-ratio:auto;height:22px}
-.hmx.tall{display:none;gap:2px;max-width:250px}
+/* The transpose takes the sheet's whole measure, and its cells are rectangles
+   rather than squares — same as the wide grid, which fixes a cell's height and
+   lets the column breathe. Squares capped at 250px left a third of the phone
+   blank and made 168 cells smaller than a fingertip for no gain. */
+.hmx.tall{display:none;grid-template-columns:22px repeat(7,minmax(0,1fr));gap:3px}
+.hmx.tall .up-cell{aspect-ratio:auto;height:20px}
 .up-axis{font-size:12px;line-height:1;color:var(--ink3);text-align:center;align-self:center}
-.up-axis.left{text-align:right;padding-right:6px}
+.up-axis.left{font-size:10px;text-align:right;padding-right:2px}
 .up-cell{position:relative;border:1px solid var(--hairline);border-radius:2px;aspect-ratio:1;min-width:0}
 .up-cell:hover{outline:2px solid var(--cyan);outline-offset:0;z-index:2}
 .up-cell:focus-visible{outline:2px solid var(--cyan);outline-offset:1px;z-index:2}
@@ -1652,8 +1769,10 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   padding:10px 10px 10px 0;border-bottom:1px solid var(--hairline);white-space:nowrap;
 }
 
-/* ── narrow ──────────────────────────────────────────────────────────────*/
-@media (max-width:1100px){
+/* ── narrow ──────────────────────────────────────────────────────────────
+   The desktop breakpoint (see the Sessions block, ~line 687). Usage is on the
+   same `.wrap.broad` measure, so it folds where that measure starts shrinking. */
+@media (max-width:1568px){
   .statstrip{grid-template-columns:repeat(3,1fr)}
   /* the ground draws the seams in both directions once the strip wraps */
   .statstrip>div{border-top:2px solid var(--board)}
@@ -1663,17 +1782,83 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 }
 @media (max-width:700px){
   .sheet{padding:20px}
+  /* Two columns, and an odd last tile spans both — a five-figure strip that
+     leaves the tenth cell empty draws a seam into blank paper, which reads as a
+     missing figure. Spanning closes the block instead. Written against
+     `:nth-child(even)`/`:nth-child(-n+2)` rather than the wide grid's `3n`
+     rules: those are the three-column seams and are wrong at two. */
+  /* Every rule here is a `:nth-child`, deliberately — the plainer forms lose to
+     rules already set above. `>div{border-left:0}` loses to the wide strip's
+     `>div+div` seam (same class, one fewer type selector), and
+     `>div{border-top:2px}` loses to the three-column block's
+     `:nth-child(-n+3){border-top:0}`. Written plainly, tile 3 came out with a
+     stray column seam and no row seam: a card offset from the one above it. */
   .statstrip{grid-template-columns:repeat(2,1fr)}
-  .statstrip>div:nth-child(-n+3){border-top:2px solid var(--board)}
+  .statstrip>div:nth-child(n+3){border-top:2px solid var(--board)}
   .statstrip>div:nth-child(-n+2){border-top:0}
-  .statstrip>div:nth-child(3n+1){border-left:2px solid var(--board)}
   .statstrip>div:nth-child(odd){border-left:0}
+  .statstrip>div:nth-child(even){border-left:2px solid var(--board)}
+  .statstrip>div:last-child:nth-child(odd){grid-column:1/-1}
   /* the transpose: 24 columns do not fit a thumb's width */
   .hmx.wide{display:none}
   .hmx.tall{display:grid}
   .row-head{flex-wrap:wrap}
   .walkwrap{height:180px}
+  /* Triage's Working and Idle rows keep the three things a scan needs — the
+     status dot, the name and the one action — and drop the branch pill, the
+     activity line, the context gauge and the age. Eight items on a 375px row
+     did not wrap (`.qrow` is a nowrap flex line by design, so the gauge stays
+     on the baseline); they ran off the card, taking the button with them. The
+     name takes the freed width and ellipsises, so a long one is still the
+     thing you read. */
+  .qrow>*:not(.nm):not(.sdot):not(.cbtn):not(.spill){display:none}
+  .qrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .qrow .cbtn{margin-left:auto}
+  /* `now` and the first midnight tick are a few hours apart and collide at this
+     measure, so the day row keeps the weekday names and drops the word. The
+     left edge is already read as now — the tooltip names the hour and the
+     y-labels sit on the same origin — and the weekdays are what the row is
+     scanned for. */
+  .walkdays .now{display:none}
+  /* The legend stacks. Wrapped as a row it broke into ragged part-lines with a
+     swatch or an ⓘ stranded at the end of one, so the phone gets one key per
+     row and the 20px spacer between the two pairs — which only ever separated
+     them *along* a line — goes away. */
+  .uplegend{flex-direction:column;align-items:flex-start;gap:9px}
+  .uplegend .gap{display:none}
+  .uplegend .key{align-items:flex-start}
+  .uplegend .key .rule{margin-top:7px}
+  .uplegend .key .rule.brick{margin-top:1px}
+  .uplegend .key .idot{margin-top:1px}
   /* every table on these pages is wider than a phone; each scrolls in its own
      box rather than letting the page scroll sideways */
   .sheet .dt{display:block;overflow-x:auto;white-space:nowrap}
+  /* …except the ledgers, which unroll into one block per row. Nine columns of
+     token rates is a sideways scroll where every reading needs the Model column
+     that has already scrolled off — so the header row is dropped and each cell
+     carries its own label from `data-l`. One block per model, read top to
+     bottom, is the same data with the key beside the value.
+
+     `data-l` and not `::before{content:attr(headers)}` or a duplicated label
+     span: the column heads carry ⓘ glyphs, so there is no plain-text heading to
+     mirror, and a second copy in the markup is a second thing to keep in sync. */
+  .sheet .dt.stack{display:block;overflow:visible;white-space:normal;margin-top:8px}
+  .dt.stack thead{display:none}
+  .dt.stack tbody{display:block}
+  .dt.stack tr{display:block;padding:14px 0;border-bottom:1px solid var(--hairline)}
+  .dt.stack tbody tr:last-child{border-bottom:0}
+  .dt.stack td{
+    display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+    padding:3px 0;border:0;white-space:normal;text-align:right;
+  }
+  .dt.stack td::before{content:attr(data-l);flex:none;font-size:12px;color:var(--ink2);text-align:left}
+  .dt.stack td:not([data-l])::before{content:none}
+  /* the model name is the block's heading, not one of its pairs */
+  .dt.stack td.name{display:block;text-align:left;font-size:14px;font-weight:600;padding-bottom:6px}
+  /* an unlabelled empty cell is a column that only exists in the wide table */
+  .dt.stack td:empty{display:none}
+  .dt.stack td.barcell{display:block;width:auto;padding-top:10px}
+  /* the totals block keeps its rule, and its cells stop re-drawing one */
+  .dt.stack tr.tot{border-top:1px solid var(--hairline2);border-bottom:0}
+  .dt.stack tr.tot td{border-top:0;padding-top:3px;font-weight:600}
 }

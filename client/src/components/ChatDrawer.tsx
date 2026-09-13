@@ -202,8 +202,12 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
               </div>
             </div>
 
+            {/* Three of these are phone-hidden (`.f.wide`): Project repeats the
+                head's pill, Messages and Now are already on screen — the count
+                in the foot, the live tool in the transcript's last turn. They
+                stay in the DOM for the desktop column, which has the room. */}
             <div className="chat-facts">
-              <div className="f"><span>Project</span><b title={session.projectPath || session.project}>{session.project}</b></div>
+              <div className="f wide"><span>Project</span><b title={session.projectPath || session.project}>{session.project}</b></div>
               {/* the value ellipsises in a 290px column, so keep the full ref reachable */}
               {session.gitBranch && (
                 <div className="f"><span>Branch</span><b title={session.gitBranch}>{session.gitBranch}</b></div>
@@ -216,8 +220,8 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
               {surfaceInfo && (
                 <div className="f"><span>Surface</span><b title={surfaceInfo.title}>{surfaceInfo.label}</b></div>
               )}
-              <div className="f"><span>Messages</span><b>{messages.length} loaded</b></div>
-              <div className="f">
+              <div className="f wide"><span>Messages</span><b>{messages.length} loaded</b></div>
+              <div className="f wide">
                 <span>Now</span>
                 <b title={session.activity ? `${session.activity.tool}${session.activity.detail ? ' ' + session.activity.detail : ''}` : undefined}>
                   {session.activity ? session.activity.tool : '—'}

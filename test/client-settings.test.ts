@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
   DEFAULT_SETTINGS, LANDING_OPTIONS, LAYOUT_OPTIONS, LIMITS, THEMES,
-  chatQuery, clampSettings, formatInterval, resolveLayout, scanQuery
+  chatQuery, clampSettings, formatInterval, layoutForWidth, layoutOptions,
+  resolveLayout, scanQuery, type DefaultLayout
 } from '../client/src/lib/settings.js';
 import { DEFAULT_LAYOUT, LAYOUTS } from '../client/src/lib/filterSort.js';
 import { SECTIONS, isSection } from '../client/src/lib/sections.js';
@@ -131,6 +132,34 @@ export function run(): number {
     );
     assert.strictEqual(LAYOUT_OPTIONS.length, 6);
     assert.strictEqual(LAYOUT_OPTIONS[0].label, 'Last used');
+  })) p++; else f++;
+
+  // The phone picker. `last` survives the narrowing — it is not a shape, and it
+  // resolves through `drawableLayout` like any other.
+  if (test('the view picker on a phone drops List and Split', () => {
+    assert.deepStrictEqual(
+      layoutOptions(true).map(o => o.value),
+      ['last', 'board', 'tiles', 'triage']
+    );
+    assert.deepStrictEqual(layoutOptions(false), LAYOUT_OPTIONS, 'wide is the full picker');
+    assert.strictEqual(layoutOptions(true)[0].label, 'Last used');
+  })) p++; else f++;
+
+  // Unlike the switcher's coercion, this one is written back: a `<select>` with
+  // a value none of its options carry renders blank.
+  if (test('layoutForWidth: a phone rewrites a list/split default to the board', () => {
+    assert.strictEqual(layoutForWidth('list', true), 'board');
+    assert.strictEqual(layoutForWidth('split', true), 'board');
+    assert.strictEqual(layoutForWidth('last', true), 'last', 'the sentinel is not a shape');
+    for (const l of ['board', 'tiles', 'triage'] as DefaultLayout[]) {
+      assert.strictEqual(layoutForWidth(l, true), l, l + ' is offered on a phone');
+    }
+  })) p++; else f++;
+
+  if (test('layoutForWidth: a wide width leaves every setting alone', () => {
+    for (const o of LAYOUT_OPTIONS) {
+      assert.strictEqual(layoutForWidth(o.value, false), o.value, String(o.value));
+    }
   })) p++; else f++;
 
   // ⚠️ The regression this whole shape exists to prevent: `last` is a *setting*

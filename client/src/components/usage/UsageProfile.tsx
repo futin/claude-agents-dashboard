@@ -250,15 +250,21 @@ function HeadroomChart({ walk, exhaustAt, startHead, cells, scale, tipHandlers }
 function WalkLegend({ tip }: { tip: (key: ProfileTerm, label: string) => React.ReactNode }) {
   return (
     <div className="uplegend">
-      {/* Each swatch and its words are one flex item: split across a wrap, a
-          lone swatch at the end of a line reads as a sixth state. */}
+      {/* Each swatch, its words and — on the last key of a pair — the ⓘ for
+          both are one flex item. Split across a wrap, a lone swatch reads as a
+          sixth state and a lone ⓘ reads as a key with nothing in it, which is
+          what the phone got when the glyph was a sibling of the pair. */}
       <span className="key"><i className="rule" />solid — points still to spend, on a measured weight</span>
-      <span className="key"><i className="rule dash" />dashed — no evidence for that hour of the week yet</span>
-      {tip('ink', 'solid and dashed line')}
+      <span className="key">
+        <i className="rule dash" />dashed — no evidence for that hour of the week yet
+        {tip('ink', 'solid and dashed line')}
+      </span>
       <span className="gap" />
       <span className="key"><i className="rule brick red" />borrowed on measured hours</span>
-      <span className="key"><i className="rule brick" />borrowed on hours at the weekly mean</span>
-      {tip('ceiling', 'empty line')}
+      <span className="key">
+        <i className="rule brick" />borrowed on hours at the weekly mean
+        {tip('ceiling', 'empty line')}
+      </span>
     </div>
   );
 }
@@ -267,7 +273,7 @@ function WalkLegend({ tip }: { tip: (key: ProfileTerm, label: string) => React.R
 function WalkTableRows({ table, globalMean }: { table: WalkTable; globalMean: number }) {
   const { rows, totals, startHead } = table;
   return (
-    <table className="dt">
+    <table className="dt stack">
       <thead>
         <tr>
           <th scope="col">Day</th>
@@ -286,18 +292,18 @@ function WalkTableRows({ table, globalMean }: { table: WalkTable; globalMean: nu
             <td className="name">
               {r.label}{r.isNow && <span className="cs"> · now</span>}
             </td>
-            <td className="n">{hrs(r.hours)}</td>
-            <td className="n">{r.activeHours.toFixed(1)}</td>
-            <td>{weightSource(r, globalMean)}</td>
-            <td className="n">{pts(r.spent)}</td>
-            <td className={r.endHead < 0 ? 'n over' : 'n'}>{left(r.endHead)}</td>
+            <td data-l="Hours" className="n">{hrs(r.hours)}</td>
+            <td data-l="Active h" className="n">{r.activeHours.toFixed(1)}</td>
+            <td data-l="Weight source">{weightSource(r, globalMean)}</td>
+            <td data-l="Spent" className="n">{pts(r.spent)}</td>
+            <td data-l="Left" className={r.endHead < 0 ? 'n over' : 'n'}>{left(r.endHead)}</td>
             <td className="barcell">
               <i
                 className={r.learned === 0 ? 'bar assumed' : 'bar'}
                 style={{ width: `${headBarPct(r.endHead, startHead)}%` }}
               />
             </td>
-            <td className="mut">
+            <td data-l="Note" className="mut">
               {/* The deficit is only reported on a day that *deepened* it: a
                   day past the crossing that spends nothing repeats the figure
                   above it, and a column of the same number three times reads
@@ -310,18 +316,18 @@ function WalkTableRows({ table, globalMean }: { table: WalkTable; globalMean: nu
           </tr>
         ))}
         <tr className="tot">
-          <td>To the reset</td>
-          <td className="n">{hrs(totals.hours)}</td>
-          <td className="n">{totals.activeHours.toFixed(1)}</td>
-          <td>
+          <td className="name">To the reset</td>
+          <td data-l="Hours" className="n">{hrs(totals.hours)}</td>
+          <td data-l="Active h" className="n">{totals.activeHours.toFixed(1)}</td>
+          <td data-l="Weight source">
             {totals.learned} measured · {totals.slices - totals.learned} at the mean
           </td>
-          <td className="n">{pts(totals.spent)}</td>
-          <td className={totals.endHead < 0 ? 'n over' : 'n'}>{left(totals.endHead)}</td>
+          <td data-l="Spent" className="n">{pts(totals.spent)}</td>
+          <td data-l="Left" className={totals.endHead < 0 ? 'n over' : 'n'}>{left(totals.endHead)}</td>
           <td className="barcell">
             <i className="bar hatch" style={{ width: '100%' }} />
           </td>
-          <td className="mut">
+          <td data-l="Note" className="mut">
             {/* Keyed off `crossed`, not off the unpayable counter: a crossing
                 inside the last slice leaves no whole hour after it, and keying
                 off the counter made this cell say the window coasts while the
@@ -383,12 +389,15 @@ function HourGrid({ wide, cells, tipHandlers }: {
     );
   }
   return (
-    <div className="hmx tall" style={{ gridTemplateColumns: '40px repeat(7,1fr)' }}>
+    <div className="hmx tall">
       <div />
       {DAY_ORDER.map(day => <div key={day} className="up-axis">{DAYS[day]}</div>)}
       {Array.from({ length: 24 }, (_, hour) => (
         <div key={hour} style={{ display: 'contents' }}>
-          <div className="up-axis left">{String(hour).padStart(2, '0')}:00</div>
+          {/* The hour alone, as the wide grid prints it: every cell in this
+              column ends `:00`, so the minutes were 48 glyphs saying nothing
+              and they cost the grid the width they took. */}
+          <div className="up-axis left">{String(hour).padStart(2, '0')}</div>
           {DAY_ORDER.map(day => cell(day, hour))}
         </div>
       ))}
@@ -512,14 +521,30 @@ export function UsageProfile() {
           sub={'168 hour-of-week weights · an empty cell is a measured idle hour, a hatched '
             + 'one has no evidence yet'}
           right={
-            <button
-              type="button"
-              className="chip"
-              aria-pressed={showNumbers}
-              onClick={() => setShowNumbers(v => !v)}
-            >
-              {showNumbers ? 'Show grid' : 'Show numbers'}
-            </button>
+            /* Both options visible, the active one filled — the `Show …` chip
+               named the state you were *leaving*, which is the one reading a
+               toggle can't afford when the two views are the same data. The
+               numbers view is required rather than a nicety (the two lowest
+               ramp steps fall below 3:1), so it is shown as a peer, not as a
+               fallback behind a press. */
+            <div className="seg" role="group" aria-label="Week display">
+              <button
+                type="button"
+                className={showNumbers ? '' : 'on'}
+                aria-pressed={!showNumbers}
+                onClick={() => setShowNumbers(false)}
+              >
+                Grid
+              </button>
+              <button
+                type="button"
+                className={showNumbers ? 'on' : ''}
+                aria-pressed={showNumbers}
+                onClick={() => setShowNumbers(true)}
+              >
+                Numbers
+              </button>
+            </div>
           }
         />
 

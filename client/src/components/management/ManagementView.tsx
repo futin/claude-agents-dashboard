@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { DetailPane } from './DetailPane';
 import { ItemList } from './ItemList';
@@ -26,6 +26,7 @@ export default function ManagementView() {
   const { index, loading, error, projects, scope, refreshKey, refresh } = useManagementScope();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  const grid = useRef<HTMLDivElement>(null);
   // Which type the columns are showing — persisted like the section's other
   // state, resolved below so a filter that empties it cannot strand the page.
   const [typeSel, setTypeSel] = usePersistedState<string>('management.type', 'Skills');
@@ -63,6 +64,17 @@ export default function ManagementView() {
     return null;
   }, [allGroups, selectedKey]);
 
+  // Stacked on the phone, column 3 opens *below* both lists — far enough down
+  // that picking an item looks like it did nothing. Bring it up. Deselecting
+  // (clicking the open row again) unmounts the column, so there is nothing to
+  // scroll to and `?.` is the whole guard; above 700px the three columns are
+  // side by side and the scroll would be a jump for no reason.
+  useEffect(() => {
+    if (selectedKey === null) return;
+    if (!window.matchMedia('(max-width:700px)').matches) return;
+    grid.current?.querySelector('.mdetail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [selectedKey]);
+
   if (loading && index === null) return <div className="mgmt-empty">loading config…</div>;
   if (index === null) return <div className="mgmt-empty off">couldn't load management data</div>;
 
@@ -77,8 +89,12 @@ export default function ManagementView() {
       <div className="mgmt-bar">
         <div className="mgmt-bandrow">
           <span className="mgmt-title">
-            Management · {here.name}
-            <span className="set-scope"><i aria-hidden="true" />{here.path}</span>
+            {/* Name and path are two spans, not a text node plus a pill: on the
+                phone the title is a flex column so the pill drops to its own
+                line, and the path needs an element of its own to be the one
+                that ellipsises when it is longer than the screen. */}
+            <span className="n">Management · {here.name}</span>
+            <span className="set-scope"><i aria-hidden="true" /><span className="p">{here.path}</span></span>
           </span>
           {error ? <span className="off">scan failed — showing last snapshot</span> : null}
           <button className="tb-dir" onClick={refresh}>↻ refresh</button>
@@ -89,7 +105,7 @@ export default function ManagementView() {
           this section does not poll.
         </div>
       </div>
-      <div className={selected !== null ? 'mgmt' : 'mgmt pair'}>
+      <div className={selected !== null ? 'mgmt' : 'mgmt pair'} ref={grid}>
         <TypeColumn groups={groups} selected={type} onSelect={setTypeSel} />
         {config === null ? (
           <div className="mgmt-list"><div className="mgmt-empty">loading scope…</div></div>

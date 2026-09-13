@@ -85,6 +85,22 @@ override it (see `dashboard.section` below).
   own button list. The picker's options are the separate derived `LAYOUT_OPTIONS`
   (`'last'` prepended to `LAYOUTS`, the shape `LANDING_OPTIONS` has), so the switcher stays
   five buttons while the picker and the validator still cannot drift from it.
+- **The phone draws three of the five.** List is a seven-column table and Split is a
+  two-pane master/detail, and neither survives a 375px measure, so under 700px
+  (`hooks/useNarrow.ts`, mirroring the narrow block in `styles.css`) the switcher offers
+  board, tiles and triage only. Two *different* coercions, deliberately:
+  - `drawableLayout(layout, narrow)` (`lib/filterSort.ts`) changes only what is **drawn**.
+    `dashboard.layout` goes on saying `split` while a narrow window draws the board, so
+    widening the window — or opening the same board on the laptop — comes straight back to
+    the shape you were using, with nothing to re-pick.
+  - `layoutForWidth(defaultLayout, narrow)` (`lib/settings.ts`) is **written back**, by an
+    effect in `SettingsView`. The picker on a phone lists `layoutOptions(true)`, and a
+    `<select>` holding a value none of its options carry renders blank — so a `list`/`split`
+    default becomes `board` on that device. The setting is per-device already, which is what
+    makes the rewrite affordable.
+  Both are pure and unit-tested (`test/filter-sort.test.ts`, `test/client-settings.test.ts`);
+  `clampSettings` stays width-agnostic and keeps accepting all six picker values, so a blob
+  written on a laptop still validates on a phone.
 - **Not persisted:** which cards are open (`SessionsView.tsx` `expanded`) and the split
   view's inspected session (`splitId`), the open chat drawer (`SessionsView.tsx` `chatId`, seeded from the deep link above), and the
   [launch panel](spawn.md) (`SessionsView.tsx` `spawnOpen` — a one-shot form, not a view

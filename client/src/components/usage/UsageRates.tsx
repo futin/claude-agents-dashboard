@@ -57,21 +57,21 @@ function RateRow({ row, share }: { row: ModelRateRow; share: number | null }) {
   return (
     <tr>
       <td className="name">{row.model}</td>
-      <td><span className={verdictClass(row.verdict)}>{verdictText(row.verdict).label}</span></td>
-      <td className={row.weightedPerPct === null ? 'n mut' : 'n'}>
+      <td data-l="Verdict"><span className={verdictClass(row.verdict)}>{verdictText(row.verdict).label}</span></td>
+      <td data-l="Weighted" className={row.weightedPerPct === null ? 'n mut' : 'n'}>
         {formatTok(row.weightedPerPct)}
       </td>
-      <td className={row.rawPerPct === null ? 'n mut' : 'n'}>{formatTok(row.rawPerPct)}</td>
-      <td className={showFitted ? 'n' : 'n mut'}>{formatTok(row.fittedWeightedPerPct)}</td>
-      <td className="n">
+      <td data-l="Raw" className={row.rawPerPct === null ? 'n mut' : 'n'}>{formatTok(row.rawPerPct)}</td>
+      <td data-l="Fitted" className={showFitted ? 'n' : 'n mut'}>{formatTok(row.fittedWeightedPerPct)}</td>
+      <td data-l="Δ baseline" className="n">
         {row.deviationPct === null
           ? <span className="mut">—</span>
           : <span className={row.verdict === 'drift' ? 'dev bad' : 'dev'}>
             {formatDeviation(row.deviationPct)}
           </span>}
       </td>
-      <td className="n">{row.intervals}</td>
-      <td className="n">{formatShare(share)}</td>
+      <td data-l="Windows" className="n">{row.intervals}</td>
+      <td data-l="Share" className="n">{formatShare(share)}</td>
       <td className="barcell">
         <i
           className={row.weightedPerPct === null ? 'bar assumed' : 'bar'}
@@ -145,7 +145,7 @@ export function UsageRates() {
           </p>
         ) : (
           <>
-            <table className="dt">
+            <table className="dt stack">
               <thead>
                 <tr>
                   <th scope="col">Model</th>
@@ -164,15 +164,15 @@ export function UsageRates() {
                   <RateRow key={row.model} row={row} share={pricedShare(row, models)} />
                 ))}
                 <tr className="tot">
-                  <td>Priced share</td>
+                  <td className="name">Priced share</td>
                   <td />
-                  <td className="n">{pricedPts}</td>
+                  <td data-l="Priced" className="n">{pricedPts}</td>
                   <td className="n mut" colSpan={2}>
                     points of {movedTotal(rates.coverage)} explained
                   </td>
                   <td className="n" />
-                  <td className="n">{windows}</td>
-                  <td className="n">{measured ?? '—'}</td>
+                  <td data-l="Windows" className="n">{windows}</td>
+                  <td data-l="Share" className="n">{measured ?? '—'}</td>
                   <td className="barcell">
                     <i
                       className="bar hatch"
@@ -197,7 +197,7 @@ export function UsageRates() {
             title="Evidence ledger"
             sub="What each rate was fitted on, and against what"
           />
-          <table className="dt">
+          <table className="dt stack">
             <thead>
               <tr>
                 <th scope="col">Model</th>
@@ -211,15 +211,15 @@ export function UsageRates() {
               {models.map(row => (
                 <tr key={row.model}>
                   <td className="name">{row.model}</td>
-                  <td className="n">{row.intervals}</td>
-                  <td className="mut">{spanText(row)}</td>
-                  <td className="mut">
+                  <td data-l="Current windows" className="n">{row.intervals}</td>
+                  <td data-l="Span" className="mut">{spanText(row)}</td>
+                  <td data-l="Baseline" className="mut">
                     {row.baselineDays <= 0
                       ? 'not established'
                       : `${row.baselineDays} day${row.baselineDays === 1 ? '' : 's'}`
                       + (row.baselineWeightedPerPct === null ? ' · forming' : '')}
                   </td>
-                  <td className="mut">{ledgerReading(row)}</td>
+                  <td data-l="Reading" className="mut">{ledgerReading(row)}</td>
                 </tr>
               ))}
             </tbody>
@@ -249,15 +249,15 @@ export function UsageRates() {
           <table className="dt">
             <thead>
               <tr>
-                <th scope="col" className="n">Share</th>
                 <th scope="col">Refused because</th>
+                <th scope="col" className="n">Share</th>
               </tr>
             </thead>
             <tbody>
               {covRows.map(r => (
                 <tr key={r.label}>
-                  <td className="n">{r.value}</td>
                   <td className="mut">{r.label}</td>
+                  <td className="n">{r.value}</td>
                 </tr>
               ))}
             </tbody>

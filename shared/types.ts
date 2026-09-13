@@ -8,6 +8,11 @@
 /** The session's most-recent tool call. */
 export interface Activity {
   tool: string;
+  /**
+   * The tool's argument (`describeTool` in transcript.ts) — file path, pattern,
+   * command — capped at 200 chars. The collapsed rows show `tool` alone; this
+   * is what the open body wraps, so it is sent long enough to be read.
+   */
   detail: string;
 }
 

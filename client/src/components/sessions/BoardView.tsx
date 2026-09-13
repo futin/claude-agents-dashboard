@@ -1,6 +1,6 @@
 import type { LaunchingSession, Session } from '../../../../shared/types';
 import { triageGroups } from '../../lib/triage';
-import { ActLine, Bar, ChatButton, Dot, LaunchPill, Pct, Tags, Tok, keyActivate, launchState } from './atoms';
+import { ActLine, Bar, ChatButton, Dot, LaunchPill, Pct, Tags, Title, Tok, keyActivate, launchState } from './atoms';
 import { Expanded } from './Expanded';
 import type { ViewProps } from './views';
 
@@ -26,6 +26,7 @@ export function BoardView({ sessions, launching, expanded, onToggle, onOpenChat 
           {c.items.map(s => (
             <Card key={s.id} s={s} open={expanded.has(s.id)} onToggle={() => onToggle(s.id)} onOpenChat={() => onOpenChat(s.id)} />
           ))}
+          {c.items.length + (c.phantoms?.length ?? 0) === 0 && <div className="bempty" aria-hidden="true" />}
         </div>
       ))}
     </div>
@@ -36,7 +37,7 @@ function Card({ s, open, onToggle, onOpenChat }: { s: Session; open: boolean; on
   return (
     <div className={`bcard ${s.status}${open ? ' selected' : ''}`}>
       <div className="bmain" onClick={onToggle} onKeyDown={keyActivate(onToggle)} tabIndex={0} role="button" aria-expanded={open}>
-        <div className="r1"><Dot status={s.status} /><Tags s={s} /></div>
+        <div className="r1"><span className="r1-lead"><Dot status={s.status} /><Title s={s} /></span><Tags s={s} withTitle={false} /></div>
         <Bar s={s} />
         <div className="bmeta"><Tok s={s} /><Pct s={s} /></div>
         <ActLine s={s} />
@@ -51,7 +52,7 @@ function LaunchCard({ entry }: { entry: LaunchingSession }) {
   const { text, failed } = launchState(entry);
   return (
     <div className={`bcard launching${failed ? ' failed' : ''}`}>
-      <div className="r1"><Dot status={failed ? 'failed' : 'launching'} /><span className="sname">{entry.projectName}</span></div>
+      <div className="r1"><span className="r1-lead"><Dot status={failed ? 'failed' : 'launching'} /><span className="sname">{entry.projectName}</span></span></div>
       <div className="act-line"><LaunchPill entry={entry} /><span className="act" title={text}>{text}</span></div>
     </div>
   );

@@ -2,7 +2,8 @@ import { Fragment } from 'react';
 
 import type { LaunchingSession, Session } from '../../../../shared/types';
 import { formatAgo } from '../../lib/format';
-import { ActLine, Bar, ChatButton, Dot, LaunchPill, Pct, Tok, keyActivate, launchState } from './atoms';
+import { Bar, ChatButton, Dot, LaunchPill, Pct, StatusPill, Tok, ToolChip, keyActivate, launchState } from './atoms';
+import { stopControl } from '../../lib/stopControl';
 import { surfacePill } from '../../lib/surface';
 import { Expanded } from './Expanded';
 import type { ViewProps } from './views';
@@ -16,11 +17,11 @@ export function ListView({ sessions, launching, expanded, onToggle, onOpenChat }
     <div className="s-card ledger">
       <table>
         <colgroup>
-          <col className="c-dot" /><col /><col className="c-model" /><col className="c-ctx" /><col /><col className="c-last" /><col className="c-do" />
+          <col className="c-dot" /><col /><col className="c-model" /><col className="c-ctx" /><col className="c-state" /><col className="c-act" /><col className="c-last" /><col className="c-do" />
         </colgroup>
         <thead>
           <tr>
-            <th /><th>Session</th><th>Model</th><th>Context</th><th>Activity</th><th className="when">Last</th><th />
+            <th /><th>Session</th><th>Model</th><th>Context</th><th className="state">State</th><th>Activity</th><th className="when">Last</th><th />
           </tr>
         </thead>
         <tbody>
@@ -31,7 +32,7 @@ export function ListView({ sessions, launching, expanded, onToggle, onOpenChat }
               <Fragment key={s.id}>
                 <Row s={s} open={open} onToggle={() => onToggle(s.id)} onOpenChat={() => onOpenChat(s.id)} />
                 {open && (
-                  <tr className="expand"><td colSpan={7}><Expanded s={s} /></td></tr>
+                  <tr className="expand"><td colSpan={8}><Expanded s={s} /></td></tr>
                 )}
               </Fragment>
             );
@@ -44,6 +45,7 @@ export function ListView({ sessions, launching, expanded, onToggle, onOpenChat }
 
 function Row({ s, open, onToggle, onOpenChat }: { s: Session; open: boolean; onToggle: () => void; onOpenChat: () => void }) {
   const surface = surfacePill(s.surface);
+  const ctl = stopControl(s.stopState, false);
   const sub = [s.sessionName ? s.project : null, s.gitBranch].filter(Boolean).join(' · ');
   return (
     <tr className={`${s.status}${open ? ' selected' : ''}`} onClick={onToggle} onKeyDown={keyActivate(onToggle)} tabIndex={0} aria-expanded={open}>
@@ -61,7 +63,13 @@ function Row({ s, open, onToggle, onOpenChat }: { s: Session; open: boolean; onT
         <div className="ctx"><Bar s={s} /><Pct s={s} /></div>
         <Tok s={s} />
       </td>
-      <td className="activity"><ActLine s={s} ago={false} /></td>
+      <td className="state"><StatusPill s={s} /></td>
+      <td className="activity">
+        <div className="act-line">
+          <ToolChip s={s} />
+          {ctl.render && ctl.badge && <span className="stop-badge">{ctl.badge}</span>}
+        </div>
+      </td>
       <td className="when">{formatAgo(s.updatedMs)} ago</td>
       <td className="do"><ChatButton s={s} onOpenChat={onOpenChat} /></td>
     </tr>
@@ -76,7 +84,8 @@ function LaunchRow({ entry }: { entry: LaunchingSession }) {
       <td><div className="name">{entry.projectName}</div><div className="sub">claude -p · not interactive</div></td>
       <td className="model"><span className="dash">—</span></td>
       <td><span className="dash">—</span></td>
-      <td className="activity"><div className="act-line"><LaunchPill entry={entry} /><span className="act" title={text}>{text}</span></div></td>
+      <td className="state"><LaunchPill entry={entry} /></td>
+      <td className="activity"><div className="act-line"><span className="act" title={text}>{text}</span></div></td>
       <td className="when"><span className="dash">—</span></td>
       <td className="do"><span className="dash">—</span></td>
     </tr>

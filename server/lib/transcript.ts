@@ -275,6 +275,15 @@ export function windowLabel(win: number): string {
   return String(win);
 }
 
+/**
+ * The cut applied to every free-form argument below. It is a transport bound,
+ * not a display one: the board's collapsed rows show the tool *name* only and
+ * the open body wraps whatever arrives, so anything shorter than this is the
+ * client being handed a truncation it never asked for — an 80-char cut ate the
+ * tail of most absolute paths and any shell command worth reading.
+ */
+const DETAIL_MAX = 200;
+
 /** Short human label describing what a tool_use block is doing. */
 export function describeTool(block: any): string {
   const input = (block && block.input) || {};
@@ -282,20 +291,20 @@ export function describeTool(block: any): string {
     case 'Task':
       return [input.subagent_type, input.description].filter(Boolean).join(': ');
     case 'Bash':
-      return String(input.description || input.command || '').slice(0, 80);
+      return String(input.description || input.command || '').slice(0, DETAIL_MAX);
     case 'Read':
     case 'Edit':
     case 'Write':
     case 'NotebookEdit':
-      return String(input.file_path || input.notebook_path || '').slice(0, 80);
+      return String(input.file_path || input.notebook_path || '').slice(0, DETAIL_MAX);
     case 'Grep':
     case 'Glob':
-      return String(input.pattern || '').slice(0, 80);
+      return String(input.pattern || '').slice(0, DETAIL_MAX);
     case 'Skill':
       return String(input.skill || '');
     default: {
       const first = Object.values(input).find(v => typeof v === 'string');
-      return first ? String(first).slice(0, 80) : '';
+      return first ? String(first).slice(0, DETAIL_MAX) : '';
     }
   }
 }

@@ -43,13 +43,13 @@ export interface ChatTab {
 }
 
 const HOLD_TABS: Record<HoldKind, ChatTab> = {
-  question: { label: 'answer', tone: 'answer', title: 'A question is waiting on you — answer it in the chat drawer' },
-  plan: { label: 'plan?', tone: 'answer', title: 'A plan is waiting — revise it from the chat drawer, or approve it in that terminal' },
-  reply: { label: 'reply?', tone: 'answer', title: 'Turn finished — reply from the chat drawer, or let it stop' },
-  permission: { label: 'allow?', tone: 'permission', title: 'Claude is waiting for permission — answer it in that terminal' }
+  question: { label: 'Answer', tone: 'answer', title: 'A question is waiting on you — answer it in the chat drawer' },
+  plan: { label: 'Plan?', tone: 'answer', title: 'A plan is waiting — revise it from the chat drawer, or approve it in that terminal' },
+  reply: { label: 'Reply?', tone: 'answer', title: 'Turn finished — reply from the chat drawer, or let it stop' },
+  permission: { label: 'Allow?', tone: 'permission', title: 'Claude is waiting for permission — answer it in that terminal' }
 };
 
-const NO_HOLD_TAB: ChatTab = { label: 'chat', tone: '', title: 'Open chat history' };
+const NO_HOLD_TAB: ChatTab = { label: 'Chat', tone: '', title: 'Open chat history' };
 
 /**
  * The one control every view draws for a session — the way into its chat

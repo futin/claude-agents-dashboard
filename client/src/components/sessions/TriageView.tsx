@@ -54,7 +54,6 @@ export function TriageView({ sessions, launching, onOpenChat }: {
  */
 function Need({ s, onOpenChat }: { s: Session; onOpenChat: () => void }) {
   const tab = chatTab(s);
-  const primary = tab.tone ? tab.label.replace(/\?$/, '') : 'open chat';
   return (
     <div className={`s-card need ${tab.tone || 'answer'}`}>
       <div>
@@ -62,7 +61,8 @@ function Need({ s, onOpenChat }: { s: Session; onOpenChat: () => void }) {
           <Dot status={s.status} />
           <b>{s.sessionName || s.project}</b>
           <Tags s={s} withTitle={false} />
-          <span aria-hidden="true">·</span>
+        </div>
+        <div className="need-meta">
           <span><Tok s={s} /> · <Pct s={s} /></span>
           <span aria-hidden="true">·</span>
           <span>{formatAgo(s.updatedMs)} ago</span>
@@ -73,7 +73,7 @@ function Need({ s, onOpenChat }: { s: Session; onOpenChat: () => void }) {
         </div>
       </div>
       <div className="acts">
-        <button type="button" className="act-go" onClick={onOpenChat}>{primary}</button>
+        <ChatButton s={s} onOpenChat={onOpenChat} />
       </div>
     </div>
   );

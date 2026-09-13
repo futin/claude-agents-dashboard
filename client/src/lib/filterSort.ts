@@ -23,17 +23,19 @@ export const STATUS_ORDER: Record<Session['status'], number> = {
 export interface ActivityWindow {
   key: string;
   label: string;
+  /** Compact label for the toolbar switch. */
+  short: string;
   /** Max age in ms; undefined = no bound ("Any time"). */
   ms?: number;
 }
 
 /** Activity-recency filter options. `all` = no bound. */
 export const ACTIVITY_WINDOWS: ActivityWindow[] = [
-  { key: 'all', label: 'Any time' },
-  { key: '15m', label: 'Last 15 min', ms: 15 * 60_000 },
-  { key: '1h', label: 'Last 1 hour', ms: 60 * 60_000 },
-  { key: '6h', label: 'Last 6 hours', ms: 6 * 60 * 60_000 },
-  { key: '24h', label: 'Last 24 hours', ms: 24 * 60 * 60_000 }
+  { key: 'all', label: 'Any time', short: 'All' },
+  { key: '15m', label: 'Last 15 min', short: '15min', ms: 15 * 60_000 },
+  { key: '1h', label: 'Last 1 hour', short: '1h', ms: 60 * 60_000 },
+  { key: '6h', label: 'Last 6 hours', short: '6h', ms: 6 * 60 * 60_000 },
+  { key: '24h', label: 'Last 24 hours', short: '24h', ms: 24 * 60 * 60_000 }
 ];
 
 export type SortKey = 'recency' | 'tokens' | 'name' | 'status';
@@ -85,6 +87,36 @@ export const DEFAULT_LAYOUT: Layout = 'board';
 
 export function isLayout(v: unknown): v is Layout {
   return LAYOUTS.some(l => l.key === v);
+}
+
+/**
+ * The shapes a phone is not offered.
+ *
+ * List is a seven-column table and Split is a two-pane master/detail; neither
+ * survives a 375px measure — the table scrolls sideways past the columns that
+ * carry the reading, and the split's detail pane has no room to be a pane. The
+ * three that remain (board, tiles, triage) are single-column stacks by design.
+ *
+ * Withheld rather than degraded: a shape that has to be reinvented at one
+ * breakpoint is a second shape wearing the first one's name.
+ */
+export const WIDE_ONLY_LAYOUTS: readonly Layout[] = ['list', 'split'];
+
+/** The switcher's buttons at this width — all five, or the three that fit. */
+export function layoutsFor(narrow: boolean): { key: Layout; label: string }[] {
+  return narrow ? LAYOUTS.filter(l => !WIDE_ONLY_LAYOUTS.includes(l.key)) : LAYOUTS;
+}
+
+/**
+ * The shape actually drawn at this width.
+ *
+ * The choice itself is left alone — `dashboard.layout` goes on saying `split`
+ * while a narrow window draws the board, so widening it (or opening the same
+ * page on the laptop) comes back to the shape you were using. Only the render
+ * is coerced.
+ */
+export function drawableLayout(layout: Layout, narrow: boolean): Layout {
+  return narrow && WIDE_ONLY_LAYOUTS.includes(layout) ? DEFAULT_LAYOUT : layout;
 }
 
 export interface View {

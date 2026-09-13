@@ -221,7 +221,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
           {/* the board's boolean is the pill switch, the same one Settings draws */}
           <div className="sp-toggle">
             <span className="sp-toggle-text">
-              <span className="sp-toggle-name">remote control</span>
+              <span className="sp-toggle-name">Remote control</span>
               <span className="sp-toggle-hint">
                 Register the session with your account so the Claude phone app can see and
                 drive it. It still runs on this machine.
@@ -260,7 +260,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
                 onChange={e => setTokenDraft(e.target.value)}
               />
               <button type="button" className="qp-send" onClick={() => setToken(tokenDraft.trim())}>
-                save
+                Save
               </button>
             </div>
           )}
@@ -272,10 +272,10 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
           <MicButton disabled={pending} onText={t => setPrompt(cur => appendTranscript(cur, t))} />
           <span className="spacer" />
           <button type="button" className="qp-term" disabled={pending} onClick={close}>
-            cancel
+            Cancel
           </button>
           <button type="button" className="qp-send" disabled={!canLaunch} onClick={() => void doLaunch()}>
-            {pending ? 'launching…' : 'launch'}
+            {pending ? 'Launching…' : 'Launch'}
           </button>
         </div>
       </div>

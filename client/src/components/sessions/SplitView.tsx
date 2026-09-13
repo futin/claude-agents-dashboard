@@ -1,6 +1,6 @@
 import type { LaunchingSession, Session } from '../../../../shared/types';
 import { formatAgo } from '../../lib/format';
-import { Act, ActLine, Bar, ChatButton, Dot, LaunchPill, Pct, StatusPill, Tags, Tok, keyActivate, launchState } from './atoms';
+import { ActLine, Bar, ChatButton, Dot, LaunchPill, Pct, StatusPill, Tags, Tok, ToolChip, keyActivate, launchState } from './atoms';
 import { Expanded } from './Expanded';
 
 /**
@@ -73,7 +73,7 @@ function Inspector({ s, onOpenChat }: { s: Session; onOpenChat: () => void }) {
         </div>
         <div className="kv">
           <div className="k">Now · {formatAgo(s.updatedMs)} ago</div>
-          <div className="now"><Act s={s} /></div>
+          <div className="now"><ToolChip s={s} /></div>
           {s.version && <div className="cap">Claude Code {s.version}</div>}
         </div>
       </div>

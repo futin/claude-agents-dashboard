@@ -100,31 +100,31 @@ export function run(): number {
 
   if (test('chatTab: a held question says answer in the answer tone', () => {
     const t = chatTab(sess({ remoteQuestion: true }));
-    assert.strictEqual(t.label, 'answer');
+    assert.strictEqual(t.label, 'Answer');
     assert.strictEqual(t.tone, 'answer');
   })) p++; else f++;
 
   if (test('chatTab: a permission dialog says allow? in its own tone', () => {
     const t = chatTab(sess({ permissionWait: true }));
-    assert.strictEqual(t.label, 'allow?');
+    assert.strictEqual(t.label, 'Allow?');
     assert.strictEqual(t.tone, 'permission');
   })) p++; else f++;
 
   if (test('chatTab: plan and reply share the answer tone', () => {
-    assert.strictEqual(chatTab(sess({ remotePlan: true })).label, 'plan?');
+    assert.strictEqual(chatTab(sess({ remotePlan: true })).label, 'Plan?');
     assert.strictEqual(chatTab(sess({ remotePlan: true })).tone, 'answer');
-    assert.strictEqual(chatTab(sess({ remoteReply: true })).label, 'reply?');
+    assert.strictEqual(chatTab(sess({ remoteReply: true })).label, 'Reply?');
   })) p++; else f++;
 
   if (test('chatTab: no hold is the plain chat button', () => {
     const t = chatTab(sess({}));
-    assert.strictEqual(t.label, 'chat');
+    assert.strictEqual(t.label, 'Chat');
     assert.strictEqual(t.tone, '');
     assert.ok(t.title.length > 0);
   })) p++; else f++;
 
   if (test('chatTab: a question outranks a permission dialog when both are set', () => {
-    assert.strictEqual(chatTab(sess({ remoteQuestion: true, permissionWait: true })).label, 'answer');
+    assert.strictEqual(chatTab(sess({ remoteQuestion: true, permissionWait: true })).label, 'Answer');
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

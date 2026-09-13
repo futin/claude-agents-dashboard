@@ -48,6 +48,15 @@ export function run(): number {
     assert.strictEqual(tr.describeTool({ name: 'Grep', input: { pattern: 'foo' } }), 'foo');
   })) p++; else f++;
 
+  // The open body wraps this text, so the cut has to leave enough of a path or
+  // a command to recognise it by — 200, not the 80 that ate most of both.
+  if (test('describeTool caps a long argument at 200 chars', () => {
+    const long = '/src/' + 'a'.repeat(400);
+    assert.strictEqual(tr.describeTool({ name: 'Read', input: { file_path: long } }).length, 200);
+    assert.strictEqual(tr.describeTool({ name: 'Bash', input: { command: 'x'.repeat(400) } }), 'x'.repeat(200));
+    assert.strictEqual(tr.describeTool({ name: 'WebFetch', input: { url: 'u'.repeat(400) } }).length, 200);
+  })) p++; else f++;
+
   if (test('readTranscript extracts tokens, model, activity, meta', () => {
     const file = fixture([
       { cwd: '/Users/me/proj', gitBranch: 'main', version: '2.1.0', timestamp: '2026-07-01T09:00:00Z', type: 'user' },

@@ -10,12 +10,13 @@ import { SplitView } from './sessions/SplitView';
 import { TilesView } from './sessions/TilesView';
 import { TriageView } from './sessions/TriageView';
 import { deepLinkSession } from '../lib/deepLink';
+import { useNarrow } from '../hooks/useNarrow';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
 import { useSessions } from '../hooks/useSessions';
 import { useSettings } from '../hooks/useSettings';
 import { useWebNotify } from '../hooks/useWebNotify';
-import { applyView, clearFilters, describeEmpty, pruneProjects, DEFAULT_LAYOUT, DEFAULT_VIEW, type Layout, type View } from '../lib/filterSort';
+import { applyView, clearFilters, describeEmpty, drawableLayout, pruneProjects, DEFAULT_LAYOUT, DEFAULT_VIEW, type Layout, type View } from '../lib/filterSort';
 import { formatInterval, resolveLayout } from '../lib/settings';
 
 /** Own chunk — the drawer only loads the first time a chat is opened. */
@@ -48,6 +49,12 @@ export function SessionsView() {
     setLayout(l);
     setStoredLayout(l);
   };
+  // A phone draws the board where the choice says list or split — those two
+  // need a desktop measure (`drawableLayout`). Only the *drawing* is coerced:
+  // `layout` and its stored key keep the real choice, so widening the window
+  // comes straight back to it without the user re-picking.
+  const narrow = useNarrow();
+  const drawn = drawableLayout(layout, narrow);
   // Not persisted: session ids churn, so a restored selection would be stale
   // (see docs/subsystems/view-persistence.md). `expanded` is the set of rows
   // drawn open in the board, list and tiles; `splitId` is the split view's one
@@ -112,10 +119,10 @@ export function SessionsView() {
     body = <EmptyState loading={shown === null} empty={empty} onClearFilters={() => setView(clearFilters(view))} />;
   } else {
     const common = { sessions: shown, launching: phantoms, expanded, onToggle: toggle, onOpenChat: setChatId };
-    body = layout === 'list' ? <ListView {...common} />
-      : layout === 'split' ? <SplitView sessions={shown} launching={phantoms} selectedId={splitId} onSelect={setSplitId} onOpenChat={setChatId} />
-      : layout === 'tiles' ? <TilesView {...common} />
-      : layout === 'triage' ? <TriageView sessions={shown} launching={phantoms} onOpenChat={setChatId} />
+    body = drawn === 'list' ? <ListView {...common} />
+      : drawn === 'split' ? <SplitView sessions={shown} launching={phantoms} selectedId={splitId} onSelect={setSplitId} onOpenChat={setChatId} />
+      : drawn === 'tiles' ? <TilesView {...common} />
+      : drawn === 'triage' ? <TriageView sessions={shown} launching={phantoms} onOpenChat={setChatId} />
       : <BoardView {...common} />;
   }
 
@@ -130,8 +137,9 @@ export function SessionsView() {
           sessions={data ? data.sessions : []}
           view={view}
           onChange={setView}
-          layout={layout}
+          layout={drawn}
           onLayout={changeLayout}
+          narrow={narrow}
         />
         {spawnOpen && (
           <Suspense fallback={null}>

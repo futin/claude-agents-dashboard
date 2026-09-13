@@ -1,6 +1,6 @@
 import type { SessionsResponse } from '../../../shared/types';
 import type { RemoteAnswerControl } from '../hooks/useRemoteAnswer';
-import { holdCount } from '../lib/holds';
+import { triageGroups } from '../lib/triage';
 import { OriginBadge } from './OriginBadge';
 import { RemoteAnswerToggle } from './RemoteAnswerToggle';
 
@@ -27,30 +27,35 @@ export function AsideBoard({ data, remoteAnswer, onOpenSpawn }: {
   if (!data && !remoteAnswer.state) return null;
 
   const clock = data ? new Date(data.generatedAt).toLocaleTimeString() : '';
-  // Every surface, not just the headless ones the banners cover: this mirrors
-  // the row buttons (answer / plan? / reply? / allow?) one for one, so a count
-  // labelled "need you" can never omit a row that visibly says it needs you.
-  const holds = data ? holdCount(data.sessions) : 0;
+  // The same predicate the board's "Needs you" column sorts on, so the count
+  // and the column can never disagree: every remote hold, plus a terminal
+  // question the hook did not hold. A count labelled "need you" must not omit
+  // a row that visibly says it needs you.
+  const holds = data ? triageGroups(data.sessions).needs.length : 0;
 
   return (
     <div className="s-card">
-      <div className="ct">Board</div>
-      <div className="cs board-sub">
+      <div className="board-h">
+        <div className="ct">Board</div>
         {clock && <span className="clock">{clock}</span>}
+      </div>
+      <div className="cs">Board-wide counts, and how this browser reached the server</div>
+      <div className="cs board-sub">
         <OriginBadge origin={remoteAnswer.state?.origin} />
       </div>
       {data && (
         <div className="facts">
-          <div className="fact"><span>Active sessions</span><b>{data.totals.active}</b></div>
+          <div className="fact"><span>Active sessions:</span><b>{data.totals.active}</b></div>
           {/* No `title`: it is dead on touch, and this board is read on a phone. */}
-          <div className="fact"><span>Need you</span><b className={holds ? 'need' : ''}>{holds}</b></div>
-          <div className="fact"><span>Rows shown</span><b>top {data.maxSessions}</b></div>
+          <div className="fact"><span>Need you:</span><b className={holds ? 'hot' : ''}>{holds}</b></div>
+          <div className="fact"><span>Rows shown:</span><b>Top {data.maxSessions}</b></div>
           {data.runningClaudeProcs != null && (
-            <div className="fact"><span>claude processes</span><b>{data.runningClaudeProcs}</b></div>
+            <div className="fact"><span>Claude processes:</span><b>{data.runningClaudeProcs}</b></div>
           )}
         </div>
       )}
       <RemoteAnswerToggle control={remoteAnswer} />
+      <div className="board-rule" />
       {remoteAnswer.state?.spawnAvailable && (
         <button type="button" className="newbtn" onClick={onOpenSpawn}>+ New session</button>
       )}

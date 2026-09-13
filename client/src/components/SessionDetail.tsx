@@ -59,9 +59,8 @@ export function SessionDetail({ id }: { id: string }) {
         <span className="ds-done">{detail.finished} finished</span>
         <span className="ds-total">{detail.agents.length} agents</span>
       </div>
-      {detail.agents.length === 0 ? (
-        <div className="detail-empty">No agents launched this session.</div>
-      ) : (
+      {/* No empty-state line: the `0 agents` in the summary above already says it. */}
+      {detail.agents.length > 0 && (
         <>
           <div className="agents">
             {detail.agents.map(a => {
