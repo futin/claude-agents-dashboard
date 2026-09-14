@@ -112,7 +112,12 @@
    zoomed element rather than a grandchild of the scroll root. Everything the
    app renders lives inside `.shell`, so the scaling reach is unchanged. */
 .shell{zoom:var(--font-scale,1)}
-:root{--row-pad:11px 14px;--rows-gap:7px;--bar-margin:9px 0 8px;--body-pad:24px}
+/* --mnav-h is the phone bar's height. A token and not a padding sum because
+   the sessions strip pins against it — `top`, the negative margin that takes
+   the strip full-bleed, and `useStuckStrip`'s threshold all resolve through
+   this one name. 44px burger + 8px either side, which is what the bar
+   measured before it was given a height. */
+:root{--row-pad:11px 14px;--rows-gap:7px;--bar-margin:9px 0 8px;--body-pad:24px;--mnav-h:60px}
 /* Must follow the :root defaults — both selectors match <html> at the same
    specificity, so source order is what decides. */
 [data-density="compact"]{--row-pad:7px 11px;--rows-gap:4px;--bar-margin:6px 0 5px;--body-pad:14px}
@@ -253,7 +258,7 @@ code,kbd,samp,pre{font-family:inherit}
      the scrim below is never inside a transformed box, where `fixed` would
      resolve against this element instead of the viewport. */
   .nav.hid{transform:translateY(-100%)}
-  .mnav{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--strip);border-bottom:1px solid var(--hairline)}
+  .mnav{display:flex;align-items:center;gap:12px;height:var(--mnav-h);padding:0 14px;background:var(--strip);border-bottom:1px solid var(--hairline)}
   /* the rail's 20px wordmark is a page heading; in a bar it is a label, so it
      drops to 16px and the dot with it */
   .mnav-brand{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:.01em;line-height:1.1;color:var(--ink);min-width:0}
@@ -294,7 +299,7 @@ code,kbd,samp,pre{font-family:inherit}
    State rides on the element itself (`.sdot.working`, `.spill.question`)
    rather than on an ancestor row, because the same session sits in a card, a
    table cell, a list row and a tile. */
-.sessions{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+.sessions{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
 .s-main,.s-aside,.s-body{display:flex;flex-direction:column;gap:16px;min-width:0}
 /* the aside is first in the DOM (it reads first on a phone and to a screen
    reader — the gauges before the list, as the plate did) and second on a
@@ -318,11 +323,73 @@ code,kbd,samp,pre{font-family:inherit}
 .fact{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .fact b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
 .fact b.hot{color:var(--amber)}
-.s-aside .ra-switch{width:100%;justify-content:space-between;margin-top:20px}
-.s-aside .ra-pill.off:not(.origin){margin-top:20px}
+.s-aside .ra-switch,.s-strip-panel .ra-switch{width:100%;justify-content:space-between;margin-top:20px}
+.s-aside .ra-pill.off:not(.origin),.s-strip-panel .ra-pill.off:not(.origin){margin-top:20px}
 /* the one write action on the board — filled ink, so it never reads as a filter */
 .newbtn{width:100%;height:36px;margin-top:10px;border:0;border-radius:12px;background:var(--ink);color:var(--strip);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;transition:opacity .15s}
 .newbtn:hover{opacity:.88}
+
+/* ── Sessions aside · the phone strip ──────────────────────────────────────
+   Below 700px `AsideStrip` replaces the two aside cards outright (swapped in
+   the markup, not hidden here). One bar: the rate percentages and a caret on
+   the left, the "needs you" count + clock and a caret on the right, the launch
+   square last. Either half opens a panel carrying the card body it summarises.
+
+   Never drawn above 700px — the component is not rendered there — so these
+   rules need no media query of their own, and `--mnav-h` is the only thing they
+   take from the phone layout.
+
+   Pinned, it goes full-bleed: `--body-pad` cancelled, radius to 0, the card's
+   lift down to a hairline, so a stuck bar belongs to the nav above it rather
+   than floating over the list. The shape transitions on the nav's .22s curve so
+   the widening lands with the motion rather than ahead of it. Whether it is
+   stuck is decided in JS against a sentinel, never against this element: see
+   client/src/lib/stickyStrip.ts. */
+/* Out of flow on purpose: in the grid it was a zero-height ROW, and the
+   16px gap after it landed above the strip — a 40px top inset against a
+   24px one at the sides. Absolute at the top of `.sessions`, which is the
+   strip's own flow position (it is the first in-flow child, and `.sessions`
+   has no padding), so it marks the same spot and occupies nothing. */
+.s-strip-mark{position:absolute;top:0;left:0;width:0;height:0}
+.s-strip{position:sticky;top:var(--mnav-h);z-index:20;background:var(--strip);border-radius:16px;box-shadow:0 6px 16px var(--shadow);transition:transform .22s ease,margin .22s ease,border-radius .22s ease,box-shadow .22s ease}
+/* Riding the bar. It parks under the bar's resting height and is lifted by
+   exactly that much when the bar goes, so the two are always edge to edge.
+   `transform` and NOT `top`: the bar itself animates a transform, which the
+   compositor runs off the main thread, while `top` is a layout property that
+   needs a layout + paint every frame. Under a real finger the main thread is
+   busy scrolling, so the `top` version arrived late and opened a gap under the
+   bar — the same curve on paper, visibly behind it in the hand. Only while
+   stuck: unpinned there is nothing to lift, and the bar can hide before the
+   strip has reached it (`useHideOnScroll` has no run-up). */
+.nav.hid~.main .s-strip.stuck{transform:translateY(calc(var(--mnav-h) * -1))}
+.s-strip.stuck{margin:0 calc(var(--body-pad) * -1);border-radius:0;box-shadow:0 1px 0 var(--hairline),0 8px 16px -8px var(--shadow)}
+.s-strip-row{display:flex;align-items:center;gap:6px;min-height:48px;padding:7px 10px 7px 12px}
+/* Each half is a tap target, not a label: the fill on :active is the only
+   feedback a phone gets, since there is no hover to lean on. */
+.s-strip-tap{flex:none;display:flex;align-items:center;gap:8px;min-width:0;padding:6px 4px;border:0;border-radius:10px;background:none;font-family:var(--font);color:inherit;cursor:pointer}
+/* Named apart from `.board`, which is the board view's grid. */
+.s-strip-tap.s-tap-board{margin-left:auto}
+.s-strip-tap:active{background:var(--strip-hi)}
+.s-mini{display:inline-flex;align-items:baseline;gap:5px;font-size:13px;white-space:nowrap}
+.s-mini .k{color:var(--ink2)}
+.s-mini .v{font-weight:600;color:var(--ink)}
+.s-mini .v.mid{color:var(--amber)}
+.s-mini .v.high{color:var(--red)}
+.s-strip-sep{flex:none;width:1px;height:20px;background:var(--hairline)}
+.s-strip-badge{flex:none;white-space:nowrap;font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.s-strip-clock{font-size:13px;color:var(--ink2);white-space:nowrap}
+/* The launch action, promoted out of the Board card: on a phone the board's
+   one write action should not be two taps and a scroll away. Filled ink, like
+   the `.newbtn` it stands in for. */
+.s-plus{flex:none;width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:10px;background:var(--ink);color:var(--strip);cursor:pointer}
+.s-plus svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round}
+.s-plus:active{opacity:.88}
+.s-caret{flex:none;width:12px;height:12px;stroke:var(--ink3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .18s ease}
+.s-strip-tap.open .s-caret{transform:rotate(180deg);stroke:var(--ink)}
+/* The title the collapsed bar has no room for arrives with the panel, so an
+   open half reads as the card it is rather than as a loose body. */
+.s-strip-panel{padding:0 20px 20px;border-top:1px solid var(--hairline)}
+.s-strip-panel .ct{padding-top:16px}
 /* connection origin (OriginBadge): a small pill, display-only */
 .ra-pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;font-size:11px;font-weight:500;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:999px}
 .ra-pill .ra-dot{width:6px;height:6px;border-radius:50%;background:var(--ink3);flex-shrink:0}
@@ -1478,6 +1545,8 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 :where(button,select,input,textarea,summary,[role=button]):focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
 @media (prefers-reduced-motion:reduce){
   .sdot,.cbtn,.tl-bar,.chat{animation:none}
+  /* The strip still pins and still goes full-bleed — it just stops sliding. */
+  .s-strip,.s-caret{transition:none}
 }
 
 /* ---------------------------------------------- touch: no focus auto-zoom

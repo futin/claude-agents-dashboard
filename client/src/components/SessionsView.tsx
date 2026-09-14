@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 
 import { AsideAccount } from './AsideAccount';
 import { AsideBoard } from './AsideBoard';
+import { AsideStrip } from './sessions/AsideStrip';
 import { Toolbar } from './Toolbar';
 import { BoardView } from './sessions/BoardView';
 import { EmptyState } from './sessions/EmptyState';
@@ -31,7 +32,8 @@ const SpawnPanel = lazy(() => import('./SpawnPanel'));
  *
  * Two columns: the list in whichever of the five shapes the toolbar picked, and
  * a 320px aside with the Account gauges and the Board facts. Below 1100px the
- * aside moves above the toolbar (styles.css).
+ * aside moves above the toolbar (styles.css); below 700px the two cards are
+ * replaced outright by `AsideStrip`, one pinned bar carrying their summaries.
  */
 export function SessionsView() {
   const { data, connected } = useSessions();
@@ -128,10 +130,18 @@ export function SessionsView() {
 
   return (
     <div className="sessions">
-      <aside className="s-aside">
-        <AsideAccount data={data} />
-        <AsideBoard data={data} remoteAnswer={remoteAnswer} onOpenSpawn={() => setSpawnOpen(true)} />
-      </aside>
+      {/* Swapped in the markup and not hidden in CSS, for the reason the
+          toolbar's switcher filters its shapes: a `display:none` control is
+          still a tab stop and still clickable by script, and this would be two
+          sets of the same controls in the page at once. */}
+      {narrow ? (
+        <AsideStrip data={data} remoteAnswer={remoteAnswer} onOpenSpawn={() => setSpawnOpen(true)} />
+      ) : (
+        <aside className="s-aside">
+          <AsideAccount data={data} />
+          <AsideBoard data={data} remoteAnswer={remoteAnswer} onOpenSpawn={() => setSpawnOpen(true)} />
+        </aside>
+      )}
       <div className="s-main">
         <Toolbar
           sessions={data ? data.sessions : []}

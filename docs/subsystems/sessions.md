@@ -8,8 +8,9 @@ params, so a changed row count or window takes effect on the next tick.
 ## The page
 
 Two columns on the broad wrap (`SessionsView.tsx`): the list, in one of five **views**, and
-a 320px **aside** of two cards. Below 1100px the aside moves above the list as a two-card
-row; on a phone the cards stack.
+a 320px **aside** of two cards. Below 1568px the aside moves above the list as a two-card
+row; **below 700px the two cards are replaced outright** by one pinned bar — see
+§The phone strip.
 
 - **Aside · Account** (`AsideAccount.tsx`) — the two rate-limit gauges and their time
   strips (see [usage limits](usage-limits.md)); the `token-expired` / `signed-out` line
@@ -19,6 +20,8 @@ row; on a phone the cards stack.
   rows shown, `claude` processes), the [remote-answers switch](remote-answer.md), and the
   one write action, **New session** ([spawn](spawn.md)). Nothing here filters or orders
   the list — that is the toolbar's job, which is the whole point of the split.
+- **Aside · the phone strip** (`sessions/AsideStrip.tsx`) — the same two cards below 700px,
+  collapsed into one bar. See §The phone strip.
 - **Toolbar** (`Toolbar.tsx`) — one row: the labelled view switcher on the left; on the
   right one shared track with the filter button, the `Sort: <key> (asc|desc)` label and the
   sort button. Both buttons open a popover (`Popover.tsx`: outside click and Escape close
@@ -421,6 +424,71 @@ not, and is the one control here that survives nothing:
 
 Which cards are open is deliberately not persisted (session IDs churn).
 
+## The phone strip
+
+Below 700px the aside's two cards cost about 600px of screen before the first session row —
+so `AsideStrip.tsx` replaces them with one 48px bar that pins under the nav. The list then
+starts roughly a thumb from the top.
+
+The bar is two taps and a button:
+
+| Half | Collapsed | Open |
+|---|---|---|
+| left | the rate-window percentages (`5h 42%  Wk 68%`), coloured on the gauge's own ramp | `AccountBody` — the Account card's gauges and time strips, under an **Account** title |
+| right | the *needs you* count as an amber pill, and the clock | `BoardBody` — the Board card's facts and the remote-answers switch, under a **Board** title |
+| — | the square **+**, always on the bar | opens the [spawn](spawn.md) panel |
+
+Three things are deliberate:
+
+- **The panels are the cards' own bodies**, not a second drawing of them. `AsideAccount.tsx`
+  and `AsideBoard.tsx` export `AccountBody` / `BoardBody` (plus `hasAccount` / `hasBoard`,
+  so neither shape frames an empty box on a cold load); the desktop card is a title and a
+  wrapper around the same element. A field added to the card is on the phone for free.
+- **`BoardBody` takes `launch={false}` here.** The strip's square **+** never scrolls away,
+  so repeating **New session** inside the panel would be one action with two controls.
+- **One panel at a time.** They are two halves of one bar; both down is taller than the
+  screen with the list nowhere in sight.
+
+### Pinned: full-bleed, and travelling with the nav
+
+Pinned, the bar goes edge to edge — `--body-pad` cancelled by a negative margin, radius to
+0, the card's lift down to a hairline — so it reads as part of the nav rather than as a card
+floating over the list. At rest it is an ordinary card on the board.
+
+Where it pins never moves: `top: var(--mnav-h)`, the bar's resting height. When the bar
+auto-hides, `.nav.hid ~ .main .s-strip.stuck` lifts the strip by exactly that much, so the
+two are always edge to edge. `--mnav-h` is why the phone bar has an explicit height rather
+than a padding sum — the pin, the lift and `useStuckStrip`'s threshold all resolve through
+that one token.
+
+**The lift is a `transform`, not a moving `top`.** Animating `top` matched the bar frame for
+frame under scripted scrolling (`60/60 · 44/44 · 25/25 · 0/0`) and still lagged it visibly
+in the hand: the bar animates a transform, which the compositor runs off the main thread,
+while `top` is a layout property needing a layout and a paint every frame — and the main
+thread is the busy one during a scroll. Same curve on paper, a gap under the bar in
+practice.
+
+That fixed pin is also what keeps the *pinned/not* test simple: `lib/stickyStrip.ts` reads a
+zero-height **sentinel** parked at the strip's unpinned position and compares it against
+`--mnav-h`, with a 2px hysteresis band so a sub-pixel layout cannot flip the class on a
+motionless page. `useStuckStrip.ts` wires that to a frame-coalesced `scroll` listener on
+`window` — below 700px nothing in the app is a scroll container, so the document is what
+moves.
+
+### Why the nav bar waits for `--body-pad`
+
+The two events have to coincide. The strip pins once its own inset above the bar has
+scrolled away — `--body-pad`, so **24px** of scroll (14 on compact density). If the bar left
+earlier it would be gone while the strip was still flowing, leaving a band of empty board
+where the bar had been, and the strip would only snap up and go full-bleed once you scrolled
+the rest of the inset. So `useHideOnScroll` now holds the bar until `--body-pad` has actually
+passed under it, which is also the more defensible rule on its own terms: before that, no
+*content* has gone under the bar for it to be in the way of. Coming back has no floor — up
+is always immediate.
+
+Measured at the same scroll position in all three configurations: default `24 / 24`, compact
+`14 / 14`, and 125% text scale `24 CSS px = 30 scroll px / 30`.
+
 <!-- docs-sync:
   sources:
     - server/lib/scan.ts
@@ -432,7 +500,12 @@ Which cards are open is deliberately not persisted (session IDs churn).
     - server/lib/title-cache.ts
     - client/src/components/SessionsView.tsx
     - client/src/components/Toolbar.tsx
+    - client/src/components/AsideAccount.tsx
     - client/src/components/AsideBoard.tsx
+    - client/src/components/sessions/AsideStrip.tsx
+    - client/src/lib/stickyStrip.ts
+    - client/src/hooks/useStuckStrip.ts
+    - client/src/hooks/useHideOnScroll.ts
     - client/src/components/sessions/atoms.tsx
     - client/src/components/sessions/BoardView.tsx
     - client/src/components/sessions/TriageView.tsx

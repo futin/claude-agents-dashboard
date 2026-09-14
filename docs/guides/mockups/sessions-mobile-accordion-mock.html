@@ -1,0 +1,509 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sessions · mobile aside accordions — 3 mocks</title>
+<style>
+/* ── tokens: verbatim from client/src/styles.css ───────────────────────── */
+:root,[data-theme="midnight"]{
+  color-scheme:dark;
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --edge:rgba(255,255,255,.05);--hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--amber:#ffb03a;--mustard:#d1ba52;--cyan:#55d0dd;
+  --red:#e0533f;--magenta:#cf6f9e;--on-accent:#0c1220;
+  --scrim:rgba(4,8,16,.66);--shadow:rgba(0,0,0,.4);--shadow2:rgba(0,0,0,.5);
+  --font:'Hanken Grotesk','Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+[data-theme="daylight"]{
+  color-scheme:light;
+  --board:#f4f4f3;--steel:#ededec;--strip:#ffffff;--strip-hi:#f2f2f1;
+  --edge:rgba(0,0,0,.03);--hairline:#eaeae8;--hairline2:#dcdcda;
+  --ink:#131313;--ink2:#6e6e6e;--ink3:#a0a0a0;
+  --green:#5fa92c;--amber:#c4761f;--mustard:#9a8712;--cyan:#3f8f14;
+  --red:#b03b28;--magenta:#6b52a8;--on-accent:#ffffff;
+  --scrim:rgba(19,19,19,.28);--shadow:rgba(0,0,0,.06);--shadow2:rgba(0,0,0,.1);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);font-variant-numeric:tabular-nums;background:var(--board);color:var(--ink);line-height:1.4;-webkit-font-smoothing:antialiased}
+
+/* ── mock harness (not part of the app) ───────────────────────────────── */
+.pagehead{padding:28px 24px 0;max-width:1400px;margin:0 auto}
+.pagehead h1{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.pagehead p{font-size:13px;color:var(--ink2);margin-top:6px;max-width:78ch}
+.ctl{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap}
+.ctl button{height:32px;padding:0 12px;border-radius:10px;border:1px solid var(--hairline2);background:var(--strip);color:var(--ink2);font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer}
+.ctl button.on{background:var(--ink);border-color:var(--ink);color:var(--strip)}
+.rack{display:flex;gap:28px;padding:24px;overflow-x:auto;align-items:flex-start;max-width:1400px;margin:0 auto}
+.col{flex:none;width:390px}
+.col h2{font-size:15px;font-weight:600;margin-bottom:2px}
+.col h2.dim{color:var(--ink3);font-weight:500}
+.col h2 .tag{font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green);vertical-align:2px;margin-left:6px}
+.col .note{font-size:12px;color:var(--ink2);margin-bottom:12px;min-height:48px}
+.phone{width:390px;height:760px;overflow-y:auto;overflow-x:hidden;border-radius:26px;border:1px solid var(--hairline2);background:var(--board);position:relative;box-shadow:0 18px 40px var(--shadow2)}
+.phone::-webkit-scrollbar{width:0}
+
+/* ── the app, at a phone measure ──────────────────────────────────────── */
+.mnav{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--strip);border-bottom:1px solid var(--hairline);position:sticky;top:0;z-index:30;transition:transform .22s ease}
+/* useHideOnScroll: down the page the bar slides out of the way. */
+.mnav.hid{transform:translateY(-100%)}
+.mnav-brand{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:.01em;line-height:1.1;color:var(--ink)}
+.rail-kicker{display:block;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3);margin-bottom:2px}
+.rail-dot{width:8px;height:8px;border-radius:999px;background:var(--green);flex:none}
+.mnav-burger{margin-left:auto;width:44px;height:44px;display:grid;place-items:center;color:var(--ink);background:none;border:0;border-radius:12px}
+.main{--body-pad:14px;padding:var(--body-pad);background:var(--board)}
+.sessions{display:flex;flex-direction:column;gap:16px}
+.s-aside,.s-main,.s-body{display:flex;flex-direction:column;gap:16px;min-width:0}
+.s-card{background:var(--strip);border-radius:16px;padding:20px;min-width:0}
+.sessions .ct{font-size:19px;font-weight:500;letter-spacing:-.01em;line-height:1.3;color:var(--ink)}
+.sessions .cs{font-size:13px;color:var(--ink2);margin-top:4px}
+.board-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.board-h .clock{font-size:13px;color:var(--ink2);flex:none}
+.sessions .cs.board-sub{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:20px}
+.board-rule{height:1px;background:var(--hairline);margin:18px 0}
+.facts{display:grid;gap:12px;margin-top:12px;font-size:13px;color:var(--ink2)}
+.fact{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.fact b{color:var(--ink);font-weight:600}
+.fact b.hot{color:var(--amber)}
+.newbtn{width:100%;height:36px;margin-top:10px;border:0;border-radius:12px;background:var(--ink);color:var(--strip);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer}
+.ra-pill{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:500;padding:4px 10px;border-radius:12px;background:var(--strip-hi);color:var(--ink2)}
+.ra-pill .ra-dot{width:7px;height:7px;border-radius:999px;background:var(--green)}
+.ra-switch{display:flex;align-items:center;gap:10px;width:100%;justify-content:space-between;margin-top:20px;background:none;border:0;padding:0;font-family:var(--font);font-size:13px;color:var(--ink2);cursor:pointer}
+.ra-track{width:34px;height:20px;border-radius:999px;background:var(--steel);position:relative;flex:none}
+.ra-track i{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:999px;background:var(--ink3)}
+.ra-switch.on .ra-track{background:var(--green)}
+.ra-switch.on .ra-track i{left:17px;background:var(--on-accent)}
+/* usage gauges */
+.usage{display:grid;gap:18px;margin-top:16px}
+.usage .u-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:13px}
+.usage .u-name{display:flex;align-items:baseline;gap:5px}
+.usage .u-label{font-weight:500;color:var(--ink)}
+.usage .u-reset{font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.usage .u-row{display:flex;align-items:center;margin-top:8px}
+.usage .u-bar{flex:1;height:10px;border-radius:8px;background:var(--steel);overflow:hidden}
+.usage .u-fill{height:100%;border-radius:8px;background:var(--green)}
+.usage .u-fill.mid{background:var(--amber)}.usage .u-fill.high{background:var(--red)}
+.usage .u-pct{font-size:13px;font-weight:600;color:var(--ink)}
+.usage .u-pct.mid{color:var(--amber)}.usage .u-pct.high{color:var(--red)}
+.usage .u-time-row{display:flex;margin-top:12px}
+.usage .u-time{flex:1;position:relative;height:3px;border-radius:999px;background:var(--steel)}
+.usage .u-time-fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:var(--hairline2)}
+.usage .u-tick{position:absolute;top:-3px;height:9px}
+.usage .u-tick.now{width:1px;background:var(--ink)}
+.usage .u-tick.wall{width:2px;background:var(--red)}
+.usage .u-time-labels{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:11px;color:var(--ink3)}
+.usage .u-verdict.lasts{color:var(--green)}
+.usage .u-verdict.wall{color:var(--red)}
+/* toolbar */
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
+.seg{display:inline-flex;align-items:center;background:var(--hairline2);border-radius:12px;padding:3px}
+.seg>button{font-family:var(--font);font-size:13px;font-weight:500;white-space:nowrap;color:var(--ink2);background:none;border:0;border-radius:9px;padding:7px 10px}
+.seg>button.on{color:var(--ink);background:var(--strip);box-shadow:0 1px 2px var(--shadow)}
+.ctlwrap{margin-left:auto;flex:none}
+.seg .ictl{width:34px;height:30px;display:grid;place-items:center;color:var(--ink2);position:relative}
+.seg .ictl svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.seg .vsep{width:1px;height:18px;margin:0 2px 0 6px;background:var(--ink3);opacity:.45}
+/* board cards */
+.board{display:grid;grid-template-columns:1fr;gap:16px}
+.bcol{display:flex;flex-direction:column;gap:10px}
+.col-h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--ink2);padding:0 4px 4px}
+.col-h .n{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--strip);color:var(--ink2)}
+.col-h.ask .n{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.col-h.run .n{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.bcard{background:var(--strip);border-radius:16px;padding:16px}
+.r1{display:flex;align-items:center;gap:10px;flex-wrap:wrap;row-gap:6px}
+.r1-lead{flex:1 1 100%;display:flex;align-items:center;gap:10px;min-width:0}
+.sdot{width:9px;height:9px;border-radius:50%;background:var(--hairline2);flex:none}
+.sdot.working{background:var(--green)}.sdot.question{background:var(--amber)}
+.sname{font-size:15px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.proj-pill{font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:var(--strip-hi);color:var(--ink2)}
+.branch{font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;border:1px solid var(--hairline2);color:var(--ink2)}
+.bar{height:8px;border-radius:8px;background:var(--steel);overflow:hidden;margin-top:12px}
+.bar .fill{height:100%;border-radius:8px;background:var(--green)}
+.bar .fill.warn{background:var(--amber)}
+.bmeta{display:flex;justify-content:space-between;align-items:baseline;margin-top:8px}
+.tok{font-size:13px;color:var(--ink2)}
+.pct{font-size:14px;font-weight:600}
+.pct.warn{color:var(--amber)}
+.act-line{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);margin-top:10px;min-width:0}
+.act-line .act{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.act-line .act .tool{font-weight:500;color:var(--ink)}
+.act-line .ago{margin-left:auto;flex:none;color:var(--ink3)}
+.bfoot{margin-top:14px}
+.chatbtn{width:100%;height:34px;border-radius:12px;border:1px solid var(--hairline2);background:none;color:var(--ink2);font-family:var(--font);font-size:12px;font-weight:500}
+.foot{font-size:11px;color:var(--ink3);padding:4px 2px 24px}
+
+/* ── NEW: the accordion aside ─────────────────────────────────────────── */
+/* Shared header row: 44px thumb target, title left, summary + chevron right. */
+.acc-h{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;background:none;border:0;padding:0;font-family:var(--font);color:inherit;text-align:left;cursor:pointer}
+.acc-h .ct{flex:none}
+.acc-sum{margin-left:auto;display:flex;align-items:center;gap:12px;min-width:0}
+.chev{flex:none;width:16px;height:16px;stroke:var(--ink3);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:transform .18s ease}
+.open>.acc-h .chev,.open .acc-h .chev{transform:rotate(180deg)}
+/* collapsed readouts */
+.mini{display:inline-flex;align-items:baseline;gap:5px;font-size:13px}
+.mini .k{color:var(--ink2);font-weight:400}
+.mini .v{font-weight:600;color:var(--ink)}
+.mini .v.mid{color:var(--amber)}.mini .v.high{color:var(--red)}
+.minibar{width:34px;height:5px;border-radius:999px;background:var(--steel);overflow:hidden;align-self:center}
+.minibar i{display:block;height:100%;border-radius:999px;background:var(--green)}
+.minibar i.mid{background:var(--amber)}.minibar i.high{background:var(--red)}
+/* the square + */
+.plus{flex:none;width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:var(--ink);color:var(--strip);border:0;font-size:19px;font-weight:500;line-height:1;cursor:pointer}
+.plus.ghost{background:none;border:1px solid var(--hairline2);color:var(--ink)}
+/* body reveal */
+.acc-b{display:none}
+.open .acc-b{display:block}
+.acc-b>.cs:first-child{margin-top:2px}
+
+/* variant B: the two accordions share one card */
+.acc-pair{background:var(--strip);border-radius:16px;padding:6px 20px}
+.acc-pair>.sec+.sec{border-top:1px solid var(--hairline)}
+.acc-pair>.sec{padding:8px 0}
+.acc-pair>.sec.open{padding-bottom:20px}
+
+/* variant C: one sticky strip, both panels drop out of it */
+/* At rest the strip is a card on the board like every other card. Once it
+   pins under the nav it goes full-bleed: the 14px --body-pad is cancelled with
+   a negative margin, the radius drops to 0 and the shadow becomes a hairline,
+   so a stuck strip reads as part of the bar above it rather than as a card
+   floating over the list. */
+/* The pinned offset is the nav's height, and it transitions on the nav's own
+   curve (.22s ease) so the two move as one piece: the bar slides out, the
+   strip rides up behind it into the space it left, and comes back down with
+   it. Without this the offset snapped 61->0 while the bar was still in
+   flight and the strip appeared to jump the bar. */
+.strip{position:sticky;top:var(--nav-h,60px);z-index:20;background:var(--strip);border-radius:16px;box-shadow:0 6px 16px var(--shadow);transition:top .22s ease,margin .22s ease,border-radius .22s ease,box-shadow .22s ease}
+.strip.stuck{margin:0 calc(var(--body-pad,14px) * -1);border-radius:0;box-shadow:0 1px 0 var(--hairline),0 8px 16px -8px var(--shadow)}
+.strip-row{display:flex;align-items:center;gap:6px;padding:7px 10px 7px 12px;min-height:48px}
+.strip-tap{flex:none;display:flex;align-items:center;gap:8px;background:none;border:0;padding:6px 4px;font-family:var(--font);color:inherit;cursor:pointer;border-radius:10px}
+.strip-tap:active{background:var(--strip-hi)}
+.strip-sep{width:1px;height:20px;background:var(--hairline);flex:none;margin:0 2px}
+.strip-clock{font-size:13px;color:var(--ink2);white-space:nowrap}
+.strip-badge{flex:none;white-space:nowrap;font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.strip-panel{display:none;padding:0 20px 20px;border-top:1px solid var(--hairline)}
+.strip-panel.on{display:block}
+/* The title the collapsed strip has no room for: it arrives with the panel,
+   so an open panel reads as the card it is rather than as a loose body. */
+.panel-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:16px}
+.strip-panel .cs:first-of-type{margin-top:4px}
+.strip .caret{width:12px;height:12px;stroke:var(--ink3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .18s ease}
+.strip-tap.open .caret{transform:rotate(180deg);stroke:var(--ink)}
+</style>
+
+<div class="pagehead">
+  <h1>Sessions on a phone — Account &amp; Board as accordions</h1>
+  <p>C is the picked shape; A and B are kept for reference. Three shapes for the same idea: the two aside cards collapse to a summary row so the session list starts near the top of the screen. Tap a header to expand — the open state is the card exactly as it is today. Each frame is a real 390×760 scroll viewport — what you see is what fits before you scroll.</p>
+  <div class="ctl">
+    <button id="t-mid" class="on">Midnight</button>
+    <button id="t-day">Daylight</button>
+    <span style="width:12px"></span>
+    <button id="ex-all">Expand all</button>
+    <button id="col-all" class="on">Collapse all</button>
+  </div>
+</div>
+
+<div class="rack">
+
+  <!-- ════════ C ════════ -->
+  <div class="col">
+    <h2>C · One sticky strip <span class="tag">picked</span></h2>
+    <div class="note">Both collapse into a single 48&nbsp;px bar that sticks under the nav: gauges left, clock&nbsp;+ <b>+</b> right. Tap either half to drop its panel — the panel prints its own <b>Account</b>&nbsp;/&nbsp;<b>Board</b> title, which the strip has no room for. List starts 139&nbsp;px down; the <b>+</b> never scrolls away.<br><b>Scroll the frame:</b> once the strip pins it goes full-bleed — page padding cancelled, radius to 0, shadow down to a hairline. The nav auto-hides going down (as it already does), so the strip rises to the top edge and comes back under the bar on the way up.</div>
+    <div class="phone" data-mock="c">
+      <div class="mnav">
+        <div class="mnav-brand"><span class="rail-dot"></span><span><span class="rail-kicker">Claude</span>Agents</span></div>
+        <button class="mnav-burger">☰</button>
+      </div>
+      <div class="main"><div class="sessions">
+        <div class="strip">
+          <div class="strip-row">
+            <button class="strip-tap" data-toggle-c="acct">
+              <span class="mini"><span class="k">5h</span><span class="v">42%</span></span>
+              <span class="mini"><span class="k">Wk</span><span class="v mid">68%</span></span>
+              <svg class="caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <span class="strip-sep"></span>
+            <button class="strip-tap" data-toggle-c="board" style="margin-left:auto">
+              <span class="strip-badge">2 ask</span>
+              <span class="strip-clock">14:32</span>
+              <svg class="caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <button class="plus" data-stop>+</button>
+          </div>
+          <div class="strip-panel" data-panel="acct">
+            <div class="panel-h"><div class="ct">Account</div></div>
+            ACCOUNT_BODY
+          </div>
+          <div class="strip-panel" data-panel="board">
+            <div class="panel-h"><div class="ct">Board</div></div>
+            BOARD_BODY_C
+          </div>
+        </div>
+        <div class="s-main">TOOLBAR_AND_LIST</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ════════ A ════════ -->
+  <div class="col">
+    <h2 class="dim">A · Two cards, two accordions</h2>
+    <div class="note">Closest to today: the same two cards, each with a 44&nbsp;px tap header. Summary values sit where the card title's right edge already is.</div>
+    <div class="phone" data-mock="a">
+      <div class="mnav">
+        <div class="mnav-brand"><span class="rail-dot"></span><span><span class="rail-kicker">Claude</span>Agents</span></div>
+        <button class="mnav-burger">☰</button>
+      </div>
+      <div class="main"><div class="sessions">
+        <div class="s-aside">
+
+          <div class="s-card sec" data-sec>
+            <button class="acc-h" data-toggle>
+              <div class="ct">Account</div>
+              <span class="acc-sum">
+                <span class="mini"><span class="k">5h</span><span class="v">42%</span></span>
+                <span class="mini"><span class="k">Week</span><span class="v mid">68%</span></span>
+                <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+              </span>
+            </button>
+            <div class="acc-b">ACCOUNT_BODY</div>
+          </div>
+
+          <div class="s-card sec" data-sec>
+            <button class="acc-h" data-toggle>
+              <div class="ct">Board</div>
+              <span class="acc-sum">
+                <span class="clock">14:32:08</span>
+                <span class="plus" role="button" data-stop>+</span>
+                <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+              </span>
+            </button>
+            <div class="acc-b">BOARD_BODY</div>
+          </div>
+
+        </div>
+        <div class="s-main">TOOLBAR_AND_LIST</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ════════ B ════════ -->
+  <div class="col">
+    <h2 class="dim">B · One card, two rows</h2>
+    <div class="note">Both accordions live in a single card split by a hairline. Saves the 16&nbsp;px gutter and one card's worth of padding — ~40&nbsp;px more list above the fold than A.</div>
+    <div class="phone" data-mock="b">
+      <div class="mnav">
+        <div class="mnav-brand"><span class="rail-dot"></span><span><span class="rail-kicker">Claude</span>Agents</span></div>
+        <button class="mnav-burger">☰</button>
+      </div>
+      <div class="main"><div class="sessions">
+        <div class="s-aside">
+          <div class="acc-pair">
+
+            <div class="sec" data-sec>
+              <button class="acc-h" data-toggle>
+                <div class="ct">Account</div>
+                <span class="acc-sum">
+                  <span class="mini"><span class="k">5h</span><span class="v">42%</span></span>
+                  <span class="minibar"><i style="width:42%"></i></span>
+                  <span class="mini"><span class="k">Wk</span><span class="v mid">68%</span></span>
+                  <span class="minibar"><i class="mid" style="width:68%"></i></span>
+                  <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+                </span>
+              </button>
+              <div class="acc-b">ACCOUNT_BODY</div>
+            </div>
+
+            <div class="sec" data-sec>
+              <button class="acc-h" data-toggle>
+                <div class="ct">Board</div>
+                <span class="acc-sum">
+                  <span class="clock">14:32:08</span>
+                  <span class="plus ghost" role="button" data-stop>+</span>
+                  <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+                </span>
+              </button>
+              <div class="acc-b">BOARD_BODY</div>
+            </div>
+
+          </div>
+        </div>
+        <div class="s-main">TOOLBAR_AND_LIST</div>
+      </div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ── shared fragments, stamped into each mock ──────────────────────────── */
+const ACCOUNT_BODY = `
+  <div class="cs">Both rate windows, from the account usage endpoint</div>
+  <div class="usage">
+    <div class="u">
+      <div class="u-top">
+        <span class="u-name"><span class="u-label">5h:</span><span class="u-pct">42%</span></span>
+        <span class="u-reset">1.4%/h · resets 17:00</span>
+      </div>
+      <div class="u-row"><div class="u-bar"><div class="u-fill" style="width:42%"></div></div></div>
+      <div class="u-time-row"><div class="u-time">
+        <div class="u-time-fill" style="width:52%"></div>
+        <div class="u-tick now" style="left:52%"></div>
+        <div class="u-tick wall" style="left:88%"></div>
+      </div></div>
+      <div class="u-time-labels"><span>12:00</span><span class="u-verdict lasts">lasts → 17:00</span></div>
+    </div>
+    <div class="u">
+      <div class="u-top">
+        <span class="u-name"><span class="u-label">Week:</span><span class="u-pct mid">68%</span></span>
+        <span class="u-reset">0.5%/h · resets Mon 09:00</span>
+      </div>
+      <div class="u-row"><div class="u-bar"><div class="u-fill mid" style="width:68%"></div></div></div>
+      <div class="u-time-row"><div class="u-time">
+        <div class="u-time-fill" style="width:61%"></div>
+        <div class="u-tick now" style="left:61%"></div>
+        <div class="u-tick wall" style="left:79%"></div>
+      </div></div>
+      <div class="u-time-labels"><span>Mon 09:00</span><span class="u-verdict wall">wall Sat 11:20 ▮ reset Mon 09:00</span></div>
+    </div>
+  </div>`;
+
+const BOARD_FACTS = `
+  <div class="cs">Board-wide counts, and how this browser reached the server</div>
+  <div class="cs board-sub"><span class="ra-pill"><span class="ra-dot"></span>tailscale · https</span></div>
+  <div class="facts">
+    <div class="fact"><span>Active sessions:</span><b>4</b></div>
+    <div class="fact"><span>Need you:</span><b class="hot">2</b></div>
+    <div class="fact"><span>Rows shown:</span><b>Top 40</b></div>
+    <div class="fact"><span>Claude processes:</span><b>5</b></div>
+  </div>
+  <button class="ra-switch on"><span>Remote answers</span><span class="ra-track"><i></i></span></button>`;
+
+/* A and B carry the launcher inside the card, so they keep the labelled button.
+   C does not: its square + is on the strip and never scrolls away, so a second
+   New session control in the panel would be the same action twice. */
+const BOARD_BODY = BOARD_FACTS + `
+  <div class="board-rule"></div>
+  <button class="newbtn">+ New session</button>`;
+const BOARD_BODY_C = BOARD_FACTS;
+
+const CARD = (o) => `
+  <div class="bcard">
+    <div class="r1"><span class="r1-lead"><span class="sdot ${o.st}"></span><span class="sname">${o.name}</span></span>
+      <span class="proj-pill">${o.proj}</span><span class="branch">${o.branch}</span></div>
+    <div class="bar"><div class="fill ${o.warn?'warn':''}" style="width:${o.pct}%"></div></div>
+    <div class="bmeta"><span class="tok">${o.tok}</span><span class="pct ${o.warn?'warn':''}">${o.pct}%</span></div>
+    <div class="act-line"><span class="act"><span class="tool">${o.tool}</span> ${o.arg}</span><span class="ago">${o.ago}</span></div>
+    <div class="bfoot"><button class="chatbtn">Open chat</button></div>
+  </div>`;
+
+const TOOLBAR_AND_LIST = `
+  <div class="toolbar">
+    <div class="seg view"><button class="on">Board</button><button>Tiles</button><button>Triage</button></div>
+    <div class="ctlwrap"><div class="seg">
+      <span class="ictl"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg></span>
+      <span class="vsep"></span>
+      <span class="ictl"><svg viewBox="0 0 24 24"><path d="M4 7h10M4 12h7M4 17h4M17 6v12M17 18l3-3M17 18l-3-3"/></svg></span>
+    </div></div>
+  </div>
+  <div class="s-body"><div class="board">
+    <div class="bcol">
+      <div class="col-h ask">Needs you<span class="n">2</span></div>
+      ${CARD({st:'question',name:'redesign · aside',proj:'dashboard',branch:'redesign',pct:74,warn:true,tok:'148k / 200k',tool:'AskUserQuestion',arg:'which shape?',ago:'2m'})}
+      ${CARD({st:'question',name:'timify-web',proj:'timify',branch:'feat/forms',pct:38,tok:'76k / 200k',tool:'ExitPlanMode',arg:'plan ready',ago:'11m'})}
+    </div>
+    <div class="bcol">
+      <div class="col-h run">Working<span class="n">2</span></div>
+      ${CARD({st:'working',name:'scan tail-read',proj:'dashboard',branch:'main',pct:21,tok:'42k / 200k',tool:'Bash',arg:'pnpm test',ago:'4s'})}
+      ${CARD({st:'working',name:'guide register',proj:'guide-manager',branch:'main',pct:55,tok:'110k / 200k',tool:'Edit',arg:'bin/register.js',ago:'18s'})}
+    </div>
+    <div class="bcol">
+      <div class="col-h">Quiet<span class="n">1</span></div>
+      ${CARD({st:'',name:'usage ledger',proj:'dashboard',branch:'main',pct:12,tok:'24k / 200k',tool:'—',arg:'idle',ago:'2h'})}
+    </div>
+  </div></div>
+  <div class="foot">live · refreshing every 3s</div>`;
+
+document.querySelectorAll('.phone').forEach(p => {
+  p.innerHTML = p.innerHTML
+    .replace(/ACCOUNT_BODY/g, ACCOUNT_BODY)
+    .replace(/BOARD_BODY_C/g, BOARD_BODY_C)
+    .replace(/BOARD_BODY/g, BOARD_BODY)
+    .replace(/TOOLBAR_AND_LIST/g, TOOLBAR_AND_LIST);
+});
+
+/* accordion behaviour (A + B) */
+document.addEventListener('click', e => {
+  const stop = e.target.closest('[data-stop]');
+  if (stop) { e.stopPropagation(); e.preventDefault(); return; }
+  const t = e.target.closest('[data-toggle]');
+  if (t) { t.closest('[data-sec]').classList.toggle('open'); return; }
+  const c = e.target.closest('[data-toggle-c]');
+  if (c) {
+    const strip = c.closest('.strip');
+    const want = c.dataset.toggleC;
+    const opening = !strip.querySelector(`.strip-panel[data-panel="${want}"]`).classList.contains('on');
+    strip.querySelectorAll('.strip-panel').forEach(pn => pn.classList.toggle('on', opening && pn.dataset.panel === want));
+    strip.querySelectorAll('.strip-tap').forEach(tp => tp.classList.toggle('open', opening && tp.dataset.toggleC === want));
+  }
+});
+
+/* The strip pins under the phone's nav bar, so its sticky offset is that bar's
+   measured height rather than a literal. Each frame is its own scroll
+   container, so each gets its own listener. */
+document.querySelectorAll('.phone').forEach(ph => {
+  const strip = ph.querySelector('.strip');
+  if (!strip) return;
+  const nav = ph.querySelector('.mnav');
+  let last = 0;
+  // The strip's resting offset down the page, measured once at the top where
+  // nothing is pinned yet. `stuck` is decided against THIS and the scroll
+  // position — never against the strip's live rect. The live rect is mid-flight
+  // for 220ms every time the bar hides, and testing it there dropped `stuck`
+  // while the strip was still travelling: full-bleed, back to a card, then
+  // full-bleed again in the space of one hide.
+  const flowTop = strip.getBoundingClientRect().top - (ph.getBoundingClientRect().top + ph.clientTop);
+  const navFull = nav.getBoundingClientRect().height;
+  const sync = () => {
+    const y = ph.scrollTop;
+    // The app's nav auto-hides going down the page and comes back going up
+    // (useHideOnScroll). Mirrored here because it decides where the strip
+    // pins: with the bar gone the strip has to rise to the top edge, or it
+    // leaves a band of board above itself. 6px of travel before it reacts,
+    // so a jittery finger does not flap the bar.
+    if (Math.abs(y - last) > 6) {
+      nav.classList.toggle('hid', y > last && y > 80);
+      last = y;
+    }
+    const navH = nav.classList.contains('hid') ? 0 : navFull;
+    strip.style.setProperty('--nav-h', navH + 'px');
+    // Pure scroll math, so the shape cannot change while the strip is only
+    // moving. 0.5px of slack against a fractional layout.
+    strip.classList.toggle('stuck', y >= flowTop - navH - 0.5);
+  };
+  ph.addEventListener('scroll', sync, { passive: true });
+  sync();
+});
+
+/* harness controls */
+const set = (th) => {
+  document.documentElement.dataset.theme = th;
+  document.getElementById('t-mid').classList.toggle('on', th === 'midnight');
+  document.getElementById('t-day').classList.toggle('on', th === 'daylight');
+};
+document.getElementById('t-mid').onclick = () => set('midnight');
+document.getElementById('t-day').onclick = () => set('daylight');
+document.getElementById('ex-all').onclick = () => {
+  document.querySelectorAll('[data-sec]').forEach(s => s.classList.add('open'));
+  document.querySelectorAll('.strip-panel').forEach(p => p.classList.add('on'));
+  document.querySelectorAll('.strip-tap').forEach(t => t.classList.add('open'));
+  document.getElementById('ex-all').classList.add('on');
+  document.getElementById('col-all').classList.remove('on');
+};
+document.getElementById('col-all').onclick = () => {
+  document.querySelectorAll('[data-sec]').forEach(s => s.classList.remove('open'));
+  document.querySelectorAll('.strip-panel').forEach(p => p.classList.remove('on'));
+  document.querySelectorAll('.strip-tap').forEach(t => t.classList.remove('open'));
+  document.getElementById('col-all').classList.add('on');
+  document.getElementById('ex-all').classList.remove('on');
+};
+set('midnight');
+</script>

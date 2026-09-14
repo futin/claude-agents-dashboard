@@ -22,23 +22,59 @@ export function AsideBoard({ data, remoteAnswer, onOpenSpawn }: {
   /** Open the launch panel (its open/closed state lives in SessionsView). */
   onOpenSpawn: () => void;
 }) {
-  // Nothing to frame yet — neither poll has answered. Drawing the card here
-  // would flash an empty one on every cold load.
-  if (!data && !remoteAnswer.state) return null;
-
-  const clock = data ? new Date(data.generatedAt).toLocaleTimeString() : '';
-  // The same predicate the board's "Needs you" column sorts on, so the count
-  // and the column can never disagree: every remote hold, plus a terminal
-  // question the hook did not hold. A count labelled "need you" must not omit
-  // a row that visibly says it needs you.
-  const holds = data ? triageGroups(data.sessions).needs.length : 0;
+  if (!hasBoard(data, remoteAnswer)) return null;
 
   return (
     <div className="s-card">
       <div className="board-h">
         <div className="ct">Board</div>
-        {clock && <span className="clock">{clock}</span>}
+        {data && <span className="clock">{boardClock(data)}</span>}
       </div>
+      <BoardBody data={data} remoteAnswer={remoteAnswer} onOpenSpawn={onOpenSpawn} />
+    </div>
+  );
+}
+
+/**
+ * Nothing to frame yet — neither poll has answered. Drawing the card would
+ * flash an empty one on every cold load, and the phone strip has the same
+ * problem, so both ask here.
+ */
+export function hasBoard(data: SessionsResponse | null, remoteAnswer: RemoteAnswerControl): boolean {
+  return Boolean(data || remoteAnswer.state);
+}
+
+/** The clock the card's head and the strip's collapsed row both print. */
+export const boardClock = (data: SessionsResponse): string =>
+  new Date(data.generatedAt).toLocaleTimeString();
+
+/**
+ * The same predicate the board's "Needs you" column sorts on, so the count and
+ * the column can never disagree: every remote hold, plus a terminal question
+ * the hook did not hold. A count labelled "need you" must not omit a row that
+ * visibly says it needs you.
+ */
+export const boardHolds = (data: SessionsResponse | null): number =>
+  data ? triageGroups(data.sessions).needs.length : 0;
+
+/**
+ * Everything under the title. Shared with the phone strip's panel, which opens
+ * onto exactly this rather than a second drawing of it.
+ *
+ * `launch` is the one difference between the two. The card carries **New
+ * session** because the card is the only place to start one from; the strip
+ * carries a square `+` that never scrolls away, so repeating the action inside
+ * its panel would be the same control twice.
+ */
+export function BoardBody({ data, remoteAnswer, onOpenSpawn, launch = true }: {
+  data: SessionsResponse | null;
+  remoteAnswer: RemoteAnswerControl;
+  onOpenSpawn: () => void;
+  launch?: boolean;
+}) {
+  const holds = boardHolds(data);
+  return (
+    <>
       <div className="cs">Board-wide counts, and how this browser reached the server</div>
       <div className="cs board-sub">
         <OriginBadge origin={remoteAnswer.state?.origin} />
@@ -55,10 +91,10 @@ export function AsideBoard({ data, remoteAnswer, onOpenSpawn }: {
         </div>
       )}
       <RemoteAnswerToggle control={remoteAnswer} />
-      <div className="board-rule" />
-      {remoteAnswer.state?.spawnAvailable && (
+      {launch && <div className="board-rule" />}
+      {launch && remoteAnswer.state?.spawnAvailable && (
         <button type="button" className="newbtn" onClick={onOpenSpawn}>+ New session</button>
       )}
-    </div>
+    </>
   );
 }

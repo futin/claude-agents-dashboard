@@ -9,21 +9,57 @@ import { paceView, FIVE_HOUR_MS, SEVEN_DAY_MS } from '../lib/pace';
  * yet), so the aside never frames an empty card.
  */
 export function AsideAccount({ data }: { data: SessionsResponse | null }) {
-  const message = data?.usageStatus ? USAGE_MESSAGES[data.usageStatus] : undefined;
-  const bars = usageBars(data?.usage);
-  if (!message && bars.length === 0) return null;
-
+  if (!hasAccount(data)) return null;
   return (
     <div className="s-card">
       <div className="ct">Account</div>
+      <AccountBody data={data} />
+    </div>
+  );
+}
+
+/**
+ * Is there anything to draw? The card and the phone strip's panel ask the same
+ * question, so neither frames an empty box on a cold load or with SHOW_USAGE
+ * off.
+ */
+export function hasAccount(data: SessionsResponse | null): boolean {
+  const message = data?.usageStatus ? USAGE_MESSAGES[data.usageStatus] : undefined;
+  return Boolean(message) || usageBars(data?.usage).length > 0;
+}
+
+/**
+ * Everything under the title. Split out so the phone's strip panel renders the
+ * *same* gauges as the desktop card rather than a second drawing of them — the
+ * strip's collapsed row carries only the two percentages, and this is what it
+ * opens onto.
+ */
+export function AccountBody({ data }: { data: SessionsResponse | null }) {
+  const message = data?.usageStatus ? USAGE_MESSAGES[data.usageStatus] : undefined;
+  const bars = usageBars(data?.usage);
+  return (
+    <>
       <div className="cs">Both rate windows, from the account usage endpoint</div>
       {message
         ? <div className="usage"><span className="u-msg">{message}</span></div>
         : <div className="usage">
             {bars.map(b => <UsageBar key={b.label} label={b.label} rl={b.rl} windowMs={b.windowMs} />)}
           </div>}
-    </div>
+    </>
   );
+}
+
+/**
+ * The two readings the collapsed strip prints, in the order the gauges are
+ * drawn: `5h` then `Week`, each with the level the bar would use. Derived from
+ * the same `usageBars` the card draws, so a window missing a utilization
+ * reading is missing from both.
+ */
+export function accountSummary(data: SessionsResponse | null): { label: string; pct: number; level: Level }[] {
+  return usageBars(data?.usage).map(b => {
+    const pct = clampPct(b.rl.utilization as number);
+    return { label: b.label, pct, level: level(pct) };
+  });
 }
 
 /**
@@ -51,9 +87,15 @@ function usageBars(usage: UsageLimits | null | undefined) {
   ].filter((b) => b.rl.utilization != null);
 }
 
+/** '' · mid · high — the ramp the fill, the figure and the strip all colour by. */
+export type Level = '' | 'mid' | 'high';
+
+const clampPct = (u: number): number => Math.max(0, Math.min(100, Math.round(u)));
+const level = (pct: number): Level => (pct >= 90 ? 'high' : pct >= 60 ? 'mid' : '');
+
 function UsageBar({ label, rl, windowMs }: { label: string; rl: RateLimit; windowMs: number }) {
-  const pct = Math.max(0, Math.min(100, Math.round(rl.utilization as number)));
-  const level = pct >= 90 ? 'high' : pct >= 60 ? 'mid' : '';
+  const pct = clampPct(rl.utilization as number);
+  const lvl = level(pct);
   const view = paceView(rl, windowMs);
   const title = rl.resetsAt
     ? `Window started ${formatResetTime(new Date(view!.startMs).toISOString())} · fully resets to 0% at ${formatResetTime(rl.resetsAt)}` +
@@ -65,7 +107,7 @@ function UsageBar({ label, rl, windowMs }: { label: string; rl: RateLimit; windo
       <div className="u-top">
         <span className="u-name">
           <span className="u-label">{label}:</span>
-          <span className={`u-pct ${level}`.trim()}>{pct}%</span>
+          <span className={`u-pct ${lvl}`.trim()}>{pct}%</span>
         </span>
         {rl.resetsAt && (
           <span className="u-reset">
@@ -75,7 +117,7 @@ function UsageBar({ label, rl, windowMs }: { label: string; rl: RateLimit; windo
       </div>
       <div className="u-row">
         <div className="u-bar">
-          <div className={`u-fill ${level}`.trim()} style={{ width: `${pct}%` }} />
+          <div className={`u-fill ${lvl}`.trim()} style={{ width: `${pct}%` }} />
         </div>
       </div>
       {view && <TimeStrip view={view} resetsAt={rl.resetsAt as string} />}

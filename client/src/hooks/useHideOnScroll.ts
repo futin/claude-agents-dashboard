@@ -3,9 +3,16 @@ import { useEffect, useRef, useState } from 'react';
 /**
  * True while the reader is scrolling *down* the page — what the phone's top bar
  * reads as "get out of the way". Back to false on the first upward move. It
- * goes on the first few pixels of the gesture rather than after a run-up: the
- * bar is in the way from the first line you scroll past, so waiting for a
- * distance only makes it linger.
+ * goes on the first pixels of the gesture rather than after a run-up: the bar
+ * is in the way from the first line you scroll past, so waiting for a distance
+ * only makes it linger.
+ *
+ * The one exception is the page's own top inset. Until `--body-pad` has gone
+ * under the bar there is no *content* under it yet, so hiding it only opens a
+ * band of empty board — and on the sessions page it opened a real gap: the
+ * strip pins once that inset has scrolled away, so a bar that left earlier was
+ * gone while the strip was still flowing. Coming back has no floor; up is
+ * always immediate.
  *
  * `frozen` pins it open: the menu hangs off the bar, so a bar that slides away
  * under an open panel takes the panel's anchor with it.
@@ -26,6 +33,13 @@ export function useHideOnScroll(frozen: boolean): boolean {
       return;
     }
     last.current = Math.max(0, window.scrollY);
+    // The inset, in the same space `scrollY` reports: `.shell{zoom}` renders
+    // the token at `--font-scale` times its CSS px, and the root scroller is
+    // outside that zoom — the correction `useFloatingTip` makes, multiplying
+    // rather than dividing because this goes the other way.
+    const root = getComputedStyle(document.documentElement);
+    const z = parseFloat(root.getPropertyValue('--font-scale')) || 1;
+    const floor = (parseFloat(root.getPropertyValue('--body-pad')) || 0) * z;
     const onScroll = (): void => {
       // iOS rubber-banding reports a negative scrollY past the top; clamped, so
       // the release upward isn't read as a downward move.
@@ -36,10 +50,9 @@ export function useHideOnScroll(frozen: boolean): boolean {
       // toggle it. Small enough that a real flick reads as one straight away.
       if (Math.abs(dy) < 3) return;
       last.current = y;
-      // No floor on `y`: hiding starts with the gesture. Except *at* the top,
-      // where there is nothing scrolled past yet and the bar has nothing to get
-      // out of the way of.
-      setHidden(dy > 0 && y > 0);
+      // Hiding starts with the gesture, once the page's top inset has actually
+      // passed under the bar (see the note above).
+      setHidden(dy > 0 && y > floor);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
