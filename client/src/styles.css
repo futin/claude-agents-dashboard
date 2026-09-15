@@ -912,6 +912,29 @@ code,kbd,samp,pre{font-family:inherit}
   .split{grid-template-columns:320px minmax(0,1fr)}
 }
 
+/* ── 3xl: wide desktop opens, full-width only ─────────────────────────────
+   1537 is the 2xl lock one px up — capped mode holds at the 1248px measure
+   above 1536 by design, so both rules here are scoped to
+   `[data-width="full"]` and carry no weight in capped mode. The aside grows
+   320 → 380 (via `.sessions`'s own column track, `.s-aside` takes no width
+   of its own) and the tile grid gains a fourth column. `.board` gets nothing:
+   its three buckets simply widen with `.wrap`, and `.bcol`'s auto-fill grid
+   handles card wrapping on its own (see the 4xl block below). */
+@media (min-width:1537px){
+  :root[data-width="full"] .sessions{grid-template-columns:minmax(0,1fr) 380px}
+  :root[data-width="full"] .tiles{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+
+/* ── 4xl: ultra-wide, full-width only ─────────────────────────────────────
+   1921. Same full-mode-only scoping as 3xl. The aside does not grow again —
+   380px is its ceiling — so only the tile grid gains a fifth column here.
+   `.board` and `.bcol` still get nothing: a bucket crosses 570px on its own
+   at this width, and `.bcol`'s `auto-fill`/`minmax(280px,1fr)` grid responds
+   by fitting two cards per line with no query of its own. */
+@media (min-width:1921px){
+  :root[data-width="full"] .tiles{grid-template-columns:repeat(5,minmax(0,1fr))}
+}
+
 /* Analytics draws the same `.toolbar` row as the sessions board — the same
    filter/sort track, the same popovers — so it needs nothing of its own but
    the space under it. */
