@@ -662,10 +662,19 @@ code,kbd,samp,pre{font-family:inherit}
 @keyframes tlpulse{0%,100%{opacity:.85}50%{opacity:.5}}
 .tl-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums;margin-top:8px}
 
-/* ── Board: three columns by what the session wants from you ──────────────── */
-.board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
-.bcol{display:flex;flex-direction:column;gap:10px;min-width:0}
-.col-h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--ink2);padding:0 4px 4px}
+/* ── Board: three named buckets, stacked until xl ──────────────────────────
+   Buckets are Needs you / Working / Quiet — named categories, not a
+   column count that adapts to width. Below xl they stack full-width, one
+   per row, so all three labels stay readable; from xl they sit side by
+   side. `.bcol` is an intrinsic grid: it wraps its own cards via
+   auto-fill, so the stack/3-up shape above needs no matching card-wrap
+   query of its own. */
+.board{display:grid;grid-template-columns:1fr;gap:16px;align-items:start}
+@media (min-width:1280px){
+  .board{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+.bcol{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;align-content:start;min-width:0}
+.col-h{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--ink2);padding:0 4px 4px}
 .col-h .n{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--strip);color:var(--ink2);font-variant-numeric:tabular-nums}
 .col-h.ask .n{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
 .col-h.run .n{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
@@ -677,7 +686,7 @@ code,kbd,samp,pre{font-family:inherit}
 /* Empty column: a ghost of a card holds the column's width and tells you the
    lane is empty rather than cut off. Ink at 4% so it reads on all five themes
    — a literal grey would invert on the light one. */
-.bempty{height:76px;border-radius:16px;background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.bempty{grid-column:1/-1;height:76px;border-radius:16px;background:color-mix(in srgb,var(--ink) 4%,transparent)}
 .bcard.launching.failed{border-color:var(--red)}
 .bmain{cursor:pointer}
 .bcard .bar{margin-top:12px}
@@ -833,19 +842,10 @@ code,kbd,samp,pre{font-family:inherit}
   .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
   .split{grid-template-columns:280px minmax(0,1fr)}
 }
-/* Board is the exception to the 1568 breakpoint. Its three columns are named
-   buckets — Needs you / Working / Quiet — so wrapping one onto a second row
-   breaks the read, not just the fit. Once the aside is gone the list owns the
-   whole 1248px measure, which is three comfortable ~405px columns, so Board
-   holds its shape until the measure itself runs out at 1100. Must stay above
-   the 700px block, which folds it to one column at equal specificity. */
-@media (max-width:1100px){
-  .board{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
 @media (max-width:700px){
   .s-aside{grid-template-columns:1fr}
   .s-card{padding:20px}
-  .board,.tiles{grid-template-columns:1fr}
+  .tiles{grid-template-columns:1fr}
   .tile.selected{grid-column:auto}
   .split{grid-template-columns:1fr}
   .ledger .c-model,.ledger td.model,.ledger th:nth-child(3){display:none}
