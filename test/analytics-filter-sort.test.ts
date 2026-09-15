@@ -2,7 +2,9 @@ import assert from 'node:assert';
 
 import type { AnalyticsReport, SessionAnalysis } from '../shared/types.js';
 import {
+  analyticsFilterCount,
   applyAnalyticsView,
+  clearAnalyticsFilters,
   distinctProjects,
   distinctModels,
   DEFAULT_ANALYTICS_VIEW,
@@ -138,6 +140,30 @@ export function run(): number {
       rep({ id: '3', project: 'b', models: ['opus'], loggedAt: '2023-11-19' })
     ], view({ projects: ['a'], models: ['opus'] }), NOW);
     assert.deepStrictEqual(out.map(r => r.sessionId), ['1']);
+  })) p++; else f++;
+
+  // ── the toolbar's two pure helpers ────────────────────────────────────
+  if (test('filter count is per facet, not per value', () => {
+    assert.strictEqual(analyticsFilterCount(DEFAULT_ANALYTICS_VIEW), 0);
+    assert.strictEqual(analyticsFilterCount(view({ projects: ['a', 'b', 'c'] })), 1);
+    assert.strictEqual(analyticsFilterCount(view({ models: ['opus'] })), 1);
+    assert.strictEqual(analyticsFilterCount(view({ window: '7d' })), 1);
+    assert.strictEqual(analyticsFilterCount(view({ projects: ['a'], models: ['opus'], window: '30d' })), 3);
+  })) p++; else f++;
+
+  if (test('clearing drops the three facets and keeps the sort', () => {
+    const before = view({ projects: ['a'], models: ['opus'], window: '7d', sortKey: 'tokens', sortDir: 'asc' });
+    const after = clearAnalyticsFilters(before);
+    assert.deepStrictEqual(after.projects, []);
+    assert.deepStrictEqual(after.models, []);
+    assert.strictEqual(after.window, 'all');
+    assert.strictEqual(after.sortKey, 'tokens');
+    assert.strictEqual(after.sortDir, 'asc');
+  })) p++; else f++;
+
+  if (test('clearing an unfiltered view returns it by reference', () => {
+    const v = view({ sortKey: 'project' });
+    assert.strictEqual(clearAnalyticsFilters(v), v);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

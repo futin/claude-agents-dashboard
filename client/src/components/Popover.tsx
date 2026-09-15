@@ -4,8 +4,8 @@ import { useEffect, type ReactNode, type RefObject } from 'react';
  * Close on a pointer-down outside `ref`, or on Escape. The outside test is
  * against the *anchor* wrapper rather than the popover itself, so a click on
  * the button that opened it toggles instead of closing-then-reopening. The
- * same handling `MultiSelect` had, lifted out so the two toolbar popovers
- * share it.
+ * The handling the old `MultiSelect` had, lifted out so every toolbar popover
+ * — sessions and analytics — shares it.
  */
 export function useDismiss(ref: RefObject<HTMLElement>, open: boolean, onClose: () => void): void {
   useEffect(() => {

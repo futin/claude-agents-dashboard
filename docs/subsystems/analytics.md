@@ -7,23 +7,42 @@ a session appears here only because `/kaizen` logged it. The dashboard never wri
 log; it only reads it. The `/kaizen` skill is **vendored** at `.claude/skills/kaizen/` so
 collaborators can populate the tab against their own global log.
 
-## What a card shows
+## The shape: the Sessions split, with a different subject
+
+The tab **is** the Sessions split view — `.split`, the `.list` card with its `.list-h`
+and `.lrow` rows, and the `.inspect` card beside it, shared verbatim down to the CSS.
+Only the subject differs, so the row's lead dot carries what became of the lesson where
+Sessions carries a session's state, and the figure column is billable tokens where
+Sessions shows context used. Selection replaces expansion: exactly one report is open,
+and it falls through to the first row so the inspector is never blank while there is
+something to show. (Four other shapes were drawn as artboards first — a stack of
+collapsing cards, a ledger table, tiles, a lesson-first digest — in
+`docs/guides/mockups/redesign-mock.html`, which records why this one won.)
+
+**A row** is the dot, the project, the billable total, then a second line carrying the
+status badge, the 8-char session id and the date `/kaizen` logged it. A report with no
+analysis shows `—` for the figure and `transcript gone` in place of the id.
+
+**The inspector** shows:
 
 - **The numbers** — a **live re-run** of the deterministic analyzer on every open
   (`server/lib/analyze.ts` `analyzeSession()` → `SessionAnalysis`): billable tokens (the
   real cost signal), total context tokens, subagent count + tokens, turn count,
-  tool-error/retry counts, then the priciest tools and subagents.
+  tool-error/retry counts, then the priciest tools and subagents. The five figures are a
+  strip of one value each — the subagent count and the retry count ride in their
+  **labels**, because the inspector is narrower than a full-width card and a two-part
+  value wraps there and drops its label out of line with the other four.
 - **Research & suggestions** — the one-line lesson `/kaizen` wrote for that session. The
   server does **no** LLM calls and invents no advice; the qualitative judgment is
   entirely `/kaizen`'s.
 - **Status badge** (`.an-status`) — `actioned` / `promoted` / `dropped` / `open`: did you
   ever act on the lesson? `/kaizen` records that by appending a `status` line to the same
-  log; no line means still open.
+  log; no line means still open. The same fact leads the row as `.an-dot`.
 
 Workflow: run `/kaizen` in a Claude Code session → it appends a lesson → the session
-appears in the tab (↻ to pull it in). If the transcript has since been deleted, the card
-falls back to lesson-only (no live numbers) and `project` falls back to the log line's
-project tag.
+appears in the tab (↻ to pull it in). If the transcript has since been deleted, the
+inspector falls back to lesson-only (no live numbers) and `project` falls back to the log
+line's project tag.
 
 ## Mechanism
 
@@ -55,11 +74,16 @@ project tag.
 
 ## Filter + sort
 
-The tab mirrors the Sessions toolbar rather than inventing its own — `AnalyticsToolbar`
-reuses the same `MultiSelect` widget and `.toolbar` CSS. Facets are **project**, **model**
-(a report matches if *any* of its models is selected), a **logged-at window**, and a sort
-key (recency / tokens / project) with a direction toggle. An empty facet array means "no
-filter", not "match nothing".
+The tab draws the Sessions toolbar, not a second design of one: the same `.toolbar` row,
+the same filter/sort track, and the same `Popover` dismiss primitive. It carries no view
+switcher — the section has one shape — so the left of the row states how much of the log
+is in front of you (`n of m sessions`). Facets are **project**, **model** (a report
+matches if *any* of its models is selected), a **logged-at window**, and a sort key
+(recency / tokens / project) with a direction toggle. An empty facet array means "no
+filter", not "match nothing". `analyticsFilterCount` counts **per facet, not per value** —
+the button says "something is hidden", not how much — and `clearAnalyticsFilters` resets
+the three facets while keeping the sort, returning the view by reference when nothing is
+active. Both are pure and unit-tested beside `applyAnalyticsView`.
 
 `applyAnalyticsView` in `lib/analyticsFilterSort.ts` is pure — filter, then sort, no
 mutation — and unit-tested in `test/analytics-filter-sort.test.ts`. Two deliberate
@@ -71,12 +95,12 @@ Windows are **day-granular** (`Any time` / 7 / 30 / 90 days) because `loggedAt` 
 `YYYY-MM-DD` date with no time-of-day — the Sessions view's "15 min / 1 hour" windows have
 nothing to bite on here.
 
-Cards are **collapsed by default** and expand on click. The toolbar selection persists to
-`localStorage` under `dashboard.analyticsView` (see
-[view-persistence](view-persistence.md)); which cards are expanded is deliberately
-ephemeral, matching Sessions row-expansion. All of it is client-side over the payload
-`GET /api/analytics` already returned — no backend change, so the read-only invariant
-above still holds.
+The toolbar selection persists to `localStorage` under `dashboard.analyticsView` (see
+[view-persistence](view-persistence.md)); **which report is open is deliberately not
+persisted** — session ids churn, so a restored selection would be stale, and the
+fall-through to the first row makes one unnecessary. Same rule as the Sessions split's
+`splitId`. All of it is client-side over the payload `GET /api/analytics` already
+returned — no backend change, so the read-only invariant above still holds.
 
 ## Invariants
 

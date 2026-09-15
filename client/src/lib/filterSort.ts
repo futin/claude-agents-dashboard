@@ -155,8 +155,8 @@ export function distinctProjects(sessions: Session[]): string[] {
  * - An empty payload prunes nothing. No sessions is no evidence, not evidence
  *   of absence, and the very first poll of a mount arrives before any rows do.
  * - Names still present survive; only the absent ones go. Pruning the last
- *   survivor yields `[]`, which MultiSelect and applyView both read as
- *   "All projects".
+ *   survivor yields `[]`, which the toolbar's picks and applyView both read
+ *   as "All projects".
  * - Nothing to prune returns `selected` itself, so a caller can compare by
  *   reference instead of deep-equality to decide whether to write state.
  */

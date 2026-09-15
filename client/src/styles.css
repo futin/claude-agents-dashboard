@@ -638,7 +638,7 @@ code,kbd,samp,pre{font-family:inherit}
 .bfoot{margin-top:14px;display:flex;gap:8px}
 
 /* ── List: one table, the open row expands underneath itself ──────────────── */
-.ledger{padding:0;overflow:hidden}
+.ledger{padding:0 0 16px;overflow:hidden}
 .ledger table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
 .ledger th{font-size:12px;font-weight:400;color:var(--ink2);text-align:left;padding:14px 12px;border-bottom:1px solid var(--hairline);white-space:nowrap}
 .ledger td{padding:14px 12px;border-top:1px solid var(--hairline);vertical-align:middle;overflow:hidden}
@@ -674,7 +674,10 @@ code,kbd,samp,pre{font-family:inherit}
 
 /* ── Split: a compact list, one inspector ─────────────────────────────────── */
 .split{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
-.list{padding:0;overflow:hidden}
+/* Rows run to the card's left and right edges, but not to its bottom one:
+   the last row needs the same air under it that the head has above the first.
+   Same for the ledger's last table row. */
+.list{padding:0 0 16px;overflow:hidden}
 .list-h{display:flex;align-items:center;gap:8px;padding:14px 20px;border-bottom:1px solid var(--hairline)}
 .list-h .ct{font-size:16px}
 .lrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:10px;align-items:center;padding:14px 20px;border-top:1px solid var(--hairline);cursor:pointer;min-width:0;transition:background .15s}
@@ -812,24 +815,10 @@ code,kbd,samp,pre{font-family:inherit}
   .acts{flex-direction:row}
 }
 
-/* Analytics' filter bar still draws the older select + checkbox-popover
-   controls (MultiSelect.tsx); scoped here so the sessions toolbar above, which
-   shares the `.toolbar` row, does not inherit them. */
-.analytics .toolbar{margin-bottom:18px}
-.analytics .toolbar select{font-size:12px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 8px;cursor:pointer;transition:border-color .15s,color .15s}
-.analytics .toolbar select:hover{color:var(--ink);border-color:var(--hairline2)}
-.analytics .toolbar select:focus{outline:none;border-color:var(--cyan)}
-.tb-multi-wrap{position:relative}
-.tb-multi{font-size:12px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 8px;cursor:pointer;transition:border-color .15s,color .15s;white-space:nowrap}
-.tb-multi:hover{color:var(--ink);border-color:var(--hairline2)}
-.tb-multi:focus{outline:none;border-color:var(--cyan)}
-.tb-pop{position:absolute;top:calc(100% + 4px);left:0;z-index:20;min-width:100%;max-height:260px;overflow-y:auto;background:var(--strip);border:1px solid var(--hairline2);border-radius:2px;padding:4px;box-shadow:0 6px 20px var(--shadow2)}
-.tb-pop-row{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);padding:4px 6px;border-radius:2px;cursor:pointer;white-space:nowrap}
-.tb-pop-row:hover{color:var(--ink);background:var(--strip-hi)}
-.tb-pop-row input{cursor:pointer;margin:0}
-.tb-pop-empty{font-size:12px;color:var(--ink2);padding:4px 6px}
-.analytics .toolbar .tb-dir{font-size:13px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:5px 9px;cursor:pointer;transition:border-color .15s,color .15s;font-variant-numeric:tabular-nums}
-.analytics .toolbar .tb-dir:hover{color:var(--ink);border-color:var(--hairline2)}
+/* Analytics draws the same `.toolbar` row as the sessions board — the same
+   filter/sort track, the same popovers — so it needs nothing of its own but
+   the space under it. */
+.analytics .toolbar{margin-bottom:6px}
 
 /* ── Management ───────────────────────────────────────────────────────────
    DESIGN.md §8.5: the scope is a rail destination, not a pane, so what is left
@@ -1031,49 +1020,84 @@ code,kbd,samp,pre{font-family:inherit}
   .wrap.wide .analytics{flex:1;min-height:0;overflow-y:auto} /* the tab is the scroller */
 }
 
-/* Analytics section — the logbook */
+/* Analytics section — the logbook, drawn as the Sessions split
+
+   The section IS that view with a different subject: `.split`, the `.list`
+   card with its `.list-h` and `.lrow` rows, and the `.inspect` card beside it,
+   all shared verbatim. Only what Analytics has and Sessions does not lives
+   here — the section bar, the lesson's fate in its two shapes, and the report
+   the inspector holds. */
 .analytics{display:flex;flex-direction:column;gap:12px}
 .an-bar{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .an-title{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
 .an-hint{font-size:13px;color:var(--ink3)}
 .an-hint code,.an-empty code{font-size:12px;color:var(--cyan)}
-.an-refresh{font-family:var(--font);font-size:14px;line-height:1;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:2px;padding:4px 9px;cursor:pointer;align-self:center}
-.an-refresh:hover{color:var(--ink);border-color:var(--hairline2)}
-.an-empty{font-size:12px;color:var(--ink3);padding:20px 2px;text-align:center}
-.an-list{display:flex;flex-direction:column;gap:12px}
-.an-card{background:var(--strip);border:1px solid var(--hairline);border-radius:2px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;transition:border-color .15s;box-shadow:inset 0 1px 0 var(--edge)}
-.an-card:hover{border-color:var(--hairline2)}
-.an-card.selected{box-shadow:0 0 0 1px var(--cyan),inset 0 1px 0 var(--edge)}
-.an-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer}
-.an-head .caret{flex-shrink:0}
-.an-tok{font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
-.an-proj{font-size:15px;font-weight:500;color:var(--ink)}
-.an-model{font-size:11px;color:var(--ink3);font-weight:500}
-.an-id{font-size:11px;color:var(--ink3)}
+.an-refresh{font-family:var(--font);font-size:14px;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;width:32px;height:32px;cursor:pointer;align-self:center;transition:color .15s,border-color .15s}
+.an-refresh:hover{color:var(--ink);border-color:var(--ink3)}
+.an-empty{font-size:13px;color:var(--ink3);background:var(--strip);border-radius:16px;padding:40px 24px;text-align:center}
+.an-clear{font-family:var(--font);font-size:13px;color:var(--cyan);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+.an-review{font-size:11px;font-weight:500;color:var(--amber);border:1px solid var(--amber);border-radius:12px;padding:2px 9px;align-self:center}
+.an-review code{text-transform:none;letter-spacing:0;color:inherit}
+
+/* What became of the lesson, twice over: the row leads with it as the dot
+   Sessions uses for a session's state, and everywhere with room it is spelled
+   out. Open is the quiet one — it is the default, and a loud default would
+   make every fresh entry shout. */
+.an-dot{width:9px;height:9px;border-radius:50%;background:var(--hairline2);display:inline-block;flex:none}
+.an-dot.actioned{background:var(--green)}
+/* ink, not the accent: Daylight's --cyan is a green (#3f8f14) a shade off
+   --green, so an accent-tinted `promoted` was unreadable next to `actioned`.
+   Filled ink separates them in every theme, and it is the strongest mark on
+   the board — which is what a lesson raised to global config has earned. */
+.an-dot.promoted{background:var(--ink)}
+.an-dot.dropped{background:var(--ink3)}
+.an-status{flex:none;font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;background:var(--strip-hi);color:var(--ink2);white-space:nowrap}
+.an-status.actioned{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.an-status.promoted{background:var(--ink);color:var(--strip)}
+.an-status.open{color:var(--ink3)}
+/* the row's second line is dense — match what `.spill` gets there */
+.lrow .act-line .an-status{padding:1px 7px}
+
+/* the log row: billable where a session shows context used, and the id, the
+   elapsed span and the logged date on the line under it */
+.an-id{font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums}
 .an-when{font-size:12px;color:var(--ink3);font-variant-numeric:tabular-nums}
-.an-metrics{display:flex;gap:20px;flex-wrap:wrap;padding:4px 0;border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline)}
-.an-metric{display:flex;flex-direction:column;gap:2px;padding:6px 0}
-.an-metric-v{font-size:24px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.1}
-.an-metric.lead .an-metric-v{color:var(--green)}
+
+/* the report the inspector holds. The figures sit in one strip separated by
+   the board showing through, the way the Usage stat strip is built — five
+   cells, one figure each, nothing wrapping. */
+.an-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-top:20px}
+.an-metric{padding:12px 14px;min-width:0}
+.an-metric+.an-metric{border-left:2px solid var(--board)}
+.an-metric:first-child{padding-left:0}
+.an-metric-v{font-size:19px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.1;white-space:nowrap}
+.an-metric.lead .an-metric-v{font-size:25px;color:var(--green)}
 .an-metric-v.warn{color:var(--amber)}
-.an-metric-l{font-size:11px;font-weight:500;color:var(--ink3)}
-.an-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.an-col-h{font-size:12px;font-weight:500;color:var(--ink3);margin-bottom:6px;display:flex;align-items:baseline;gap:6px}
-.an-approx{font-size:11px;color:var(--ink3);text-transform:none;letter-spacing:0;font-style:italic;font-family:var(--font);font-weight:400}
-.an-line{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px;padding:2px 0}
+.an-metric-l{font-size:11px;font-weight:500;color:var(--ink3);margin-top:5px;white-space:nowrap}
+.an-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}
+.an-col{background:var(--strip-hi);border-radius:12px;padding:14px 16px;min-width:0}
+/* the same tracked label Management's third column uses (`.mdetail-label`),
+   one step down in size because these two sit inside cards rather than over
+   the pane */
+.an-col-h{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3);margin-bottom:8px;display:flex;align-items:baseline;gap:6px}
+.an-approx{font-size:11px;color:var(--ink3);font-style:italic;font-weight:400;text-transform:none;letter-spacing:0}
+.an-line{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px;padding:4px 0}
+.an-line+.an-line{border-top:1px solid var(--hairline)}
 .an-line-name{color:var(--ink2)}
 .an-line-meta{color:var(--ink3);font-variant-numeric:tabular-nums;font-size:12px;flex-shrink:0}
 .an-line.muted,.an-lesson-body.muted{color:var(--ink3)}
-.an-lesson-body{font-size:13px;line-height:1.5;color:var(--ink2)}
+.an-gone{font-size:12px;color:var(--ink3);background:var(--strip-hi);border-radius:12px;padding:10px 14px;margin-top:20px}
+/* the lesson is the thing the section exists to show, so it is set in ink
+   rather than the secondary grey the ledgers beside it use */
+.an-lesson{margin-top:0}
+.an-lesson-body{font-size:13px;line-height:1.5;color:var(--ink);max-width:74ch;margin-top:10px}
+.an-lesson-body.muted{font-size:12px;margin-top:8px}
 .an-lesson-body code{font-size:12px;color:var(--cyan)}
-/* lesson fate: stamped like strip annotations */
-.an-status{flex-shrink:0;font-size:11px;font-weight:500;border:1px solid var(--hairline);border-radius:2px;padding:0 7px 1px;color:var(--ink3)}
-.an-status.actioned{color:var(--green);border-color:var(--green)}
-.an-status.promoted{color:var(--cyan);border-color:var(--cyan)}
-.an-status.open{color:var(--ink3)}
-.an-review{font-size:11px;font-weight:500;color:var(--amber);border:1px solid var(--amber);border-radius:2px;padding:0 7px 1px;align-self:center}
-.an-review code{text-transform:none;letter-spacing:0;color:inherit}
-@media (max-width:700px){.an-cols{grid-template-columns:1fr}}
+/* Below the split's own fold the inspector has the full measure back, but the
+   strip still has to survive the phone: two rows of figures beats five columns
+   of clipped ones. */
+@media (max-width:900px){.an-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.an-metric:nth-child(4){border-left:0;padding-left:0}}
+@media (max-width:700px){.an-cols{grid-template-columns:1fr}.an-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.an-metric:nth-child(odd){border-left:0;padding-left:0}}
 
 /* ---------------------------------------------- chat — the history modal
    (the way in is `.cbtn`, up in the row-atoms block)
@@ -1561,9 +1585,11 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    below 16px when the scale is above 1.
 
    TEXT-ENTRY FIELDS ONLY. A <select> was in this list and it is the one control
-   that must not be: it sits in the toolbar filter row next to .tb-multi (10.5px)
-   and .tb-dir (12px), so flooring it at 16px made one filter ~50% larger than
-   its neighbours and the row read as broken type. A select also does not need
+   that must not be: it sat in a filter row beside 10.5–13px controls, so
+   flooring it at 16px made one filter ~50% larger than its neighbours and the
+   row read as broken type. (Those rows are popovers now, and nothing in the
+   app is a bare <select> in one — but the rule stands for the next one.) A
+   select also does not need
    the floor — tapping one opens a native picker sheet rather than putting a
    caret in the page, which is the thing that triggers the zoom. */
 @media (pointer:coarse){

@@ -100,6 +100,27 @@
    and launched states. Its badge is cyan: amber means "a session is waiting on
    you", and a launch is the opposite of a hold.
 
+   Analytics is the /kaizen log given a page, and it has landed on the SPLIT —
+   the log as a `.card.list` of `.lrow`s on the left, one report held open in a
+   `.card.inspect` beside it. It is deliberately the Sessions split view's own
+   markup and CSS rather than a second list design: the two sections differ in
+   subject, not in shape, so the row's dot carries the lesson's status where
+   Sessions carries a session's, the figure column is billable tokens where
+   Sessions shows the context percentage, and the list header carries no chips
+   because the toolbar above owns filter and sort — exactly as in `.combo`.
+   (Four other shapes were drawn and dropped: a stack of cards collapsed until
+   asked, a ledger giving every figure its own column, tiles with the figures
+   on the face and the report behind them, and a digest leading with the lesson
+   and demoting the numbers to a footnote. The card stack is the live tab's
+   current shape; it lost because a lesson worth reading is worth reading
+   beside its numbers, not after two clicks.)
+
+   The page carries the whole read-only section: the review-due chip, ↻, the
+   project / model / logged-window filters, the three sort keys and their
+   direction, the five figures, the priciest tools and subagents, the lesson
+   with its status badge and outcome line, the transcript-is-gone fallback, and
+   the loading / failed / empty-log / nothing-matches bodies.
+
    Every token below is lifted verbatim from that document, so this file
    doubles as the token source for the real `styles.css` theme when the
    re-skin lands. Nothing here is wired to the API: all figures are plausible
@@ -1417,6 +1438,91 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .ns-err{display:flex;align-items:center;gap:9px;background:#FCE7E3;color:#B03B28;border-radius:var(--r-md);padding:10px 13px;font-size:12px}
 .ns-err b{font-weight:600}
 .ns-ok{display:flex;align-items:center;gap:9px;background:var(--green-200);color:var(--green-600);border-radius:var(--r-md);padding:10px 13px;font-size:12px;font-weight:500}
+/* ── analytics page ──────────────────────────────────────────────────────
+   The section IS the Sessions split with a different subject — `.split`, the
+   `.card.list` with its `.list-h` and `.lrow` rows, and the `.card.inspect`
+   beside it — so almost none of its CSS is here. What is below is only what
+   Analytics has and Sessions does not: the section band, the lesson's status
+   in its two shapes, and the report the inspector holds. ───────────────── */
+.an-band{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.an-band .sp{flex:1}
+.an-hint{font-size:12px;color:var(--text-secondary)}
+.an-hint code,.an-lesson-body code,.an-empty code{
+  font-family:inherit;font-weight:500;color:var(--text-primary);
+  background:var(--bg-subtle);border-radius:var(--r-xs);padding:1px 5px;
+}
+.an-review{
+  font-size:11px;font-weight:500;border-radius:var(--r-full);padding:5px 11px;
+  background:var(--orange-300);color:var(--text-primary);cursor:help;
+}
+.an-review code{background:var(--bg-surface)}
+.an-refresh{
+  border:1px solid var(--border-strong);background:var(--bg-surface);border-radius:var(--r-full);
+  width:30px;height:30px;font-size:14px;color:var(--text-secondary);line-height:1;
+}
+
+/* What became of the lesson, twice: the row states it as the dot Sessions
+   uses for a session's state, and everywhere with room it is a pill. Open is
+   the quiet one — it is the default, and a loud default would make every
+   fresh entry shout. */
+.ldot.s-actioned{background:var(--green-500)}
+.ldot.s-promoted{background:var(--ink-inverse)}
+.ldot.s-dropped{background:var(--bg-track)}
+.an-status{font-size:11px;font-weight:500;border-radius:var(--r-full);padding:3px 9px;white-space:nowrap}
+.an-status.open{background:var(--bg-subtle);color:var(--text-tertiary)}
+.an-status.actioned{background:var(--green-200);color:var(--green-600)}
+.an-status.promoted{background:var(--ink-inverse);color:var(--text-on-dark)}
+.an-status.dropped{background:var(--bg-track);color:var(--text-secondary)}
+.lrow .an-status{padding:1px 7px}
+
+.an-model{
+  font-size:11px;font-weight:500;color:var(--text-secondary);
+  background:var(--bg-subtle);border-radius:var(--r-full);padding:3px 9px;
+}
+.an-id{font-size:12px;color:var(--text-tertiary)}
+.an-when{font-size:12px;color:var(--text-secondary);white-space:nowrap}
+.inspect .ins-meta .an-id,.inspect .ins-meta .an-when{font-size:12px}
+
+/* the report the inspector holds: five figures, the two ledgers under them,
+   then the lesson /kaizen wrote */
+.an-metrics{display:grid;grid-template-columns:repeat(5,1fr);margin-top:20px}
+.an-metrics > div{padding:14px 16px}
+.an-metrics > div + div{border-left:2px solid var(--bg-app)}
+.an-metrics > div:first-child{padding-left:0}
+/* one figure per cell and never two lines: the strip sits in the inspector,
+   which is narrower than a full-width card, and a wrapped value drops its
+   label out of line with the other four */
+.an-metric-v{font-size:19px;font-weight:700;letter-spacing:-.02em;line-height:1.1;white-space:nowrap}
+.an-metric.lead .an-metric-v{font-size:25px}
+.an-metric-l{white-space:nowrap}
+.an-metric-v.warn{color:var(--orange-400)}
+.an-metric-l{font-size:11px;color:var(--text-secondary);margin-top:5px}
+
+.an-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.an-col{background:var(--bg-app);border-radius:var(--r-md);padding:14px 16px}
+.an-col-h{
+  display:flex;align-items:baseline;gap:8px;font-size:11px;font-weight:500;
+  text-transform:uppercase;letter-spacing:.06em;color:var(--text-secondary);margin-bottom:8px;
+}
+.an-approx{text-transform:none;letter-spacing:0;font-weight:400;color:var(--text-tertiary)}
+.an-line{display:flex;align-items:baseline;gap:10px;font-size:13px;padding:5px 0}
+.an-line + .an-line{border-top:1px solid var(--border)}
+.an-line-name{font-weight:500}
+.an-line-meta{margin-left:auto;font-size:12px;color:var(--text-secondary);white-space:nowrap}
+.an-line.muted{color:var(--text-tertiary)}
+
+.an-lesson{margin-top:16px}
+.an-lesson-body{font-size:14px;line-height:1.55;max-width:74ch}
+.an-lesson-body.muted{font-size:12px;color:var(--text-secondary);margin-top:8px}
+.an-gone{
+  font-size:12px;color:var(--text-secondary);background:var(--bg-app);
+  border-radius:var(--r-md);padding:10px 14px;margin-top:20px;
+}
+.an-empty{
+  background:var(--bg-surface);border-radius:var(--r-lg);box-shadow:var(--lift-card);
+  padding:40px 24px;text-align:center;font-size:14px;color:var(--text-secondary);
+}
+.inspect .an-empty{box-shadow:none;padding:32px 0}
 
 /* page switching */
 .page{display:none;flex-direction:column;gap:16px}
@@ -1432,6 +1538,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
   <button data-go="set-local" aria-pressed="false">Settings · Local</button>
   <button data-go="set-shared" aria-pressed="false">Settings · Shared</button>
   <button data-go="mgmt" aria-pressed="false">Management</button>
+  <button data-go="analytics" aria-pressed="false">Analytics</button>
   <button data-go="chat" aria-pressed="false">Chat modal</button>
   <button data-go="spawn" aria-pressed="false">New session</button>
 </div>
@@ -1465,7 +1572,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
            tree's first level is a destination, not a pane. Filled and driven
            by the MANAGEMENT block in the <script>. -->
       <div class="subnav" id="subnav-mgmt" style="display:none"></div>
-      <button class="nav-item">
+      <button class="nav-item" id="nav-analytics" data-go="analytics">
         <svg class="ic" viewBox="0 0 20 20"><path d="M3 15l4-5 3 3 4-6 3 4"/></svg>
         Analytics
       </button>
@@ -1891,6 +1998,16 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
          empty states. Rendered by the MANAGEMENT block in the <script>. -->
     <section class="page" id="p-mgmt"></section>
 
+    <!-- ═══ PAGE: ANALYTICS ══════════════════════════════════════════════
+         The /kaizen post-mortems as the Sessions split view with a different
+         subject: the log as a .card.list of .lrow rows, one report open in the
+         .card.inspect beside it. (Four other shapes — a card stack, a ledger
+         table, tiles and a lesson-first digest — were drawn and dropped.) The
+         bar at the top drives the states a live fetch would drive: whether a
+         sweep is due, the load in flight, the load failed, an empty log.
+         Rendered by the ANALYTICS block in the <script>. -->
+    <section class="page" id="p-analytics"></section>
+
     <!-- ═══ PAGE: CHAT MODAL ═════════════════════════════════════════════
          The history drawer floated as a modal, five ways, over a dimmed
          board. The bar at the top drives the states a live session would
@@ -1918,7 +2035,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
    A page id is the artboard: `sessions`, `forecast`, `rates`, `set-local`,
    `set-shared`. The mock bar picks the section and the pill inside the Usage
    pages switches its two tabs, the same tree the rail draws. */
-const PAGES = ['sessions', 'forecast', 'rates', 'set-local', 'set-shared', 'mgmt', 'chat', 'spawn'];
+const PAGES = ['sessions', 'forecast', 'rates', 'set-local', 'set-shared', 'mgmt', 'analytics', 'chat', 'spawn'];
 
 function go(page){
   if (page === 'usage') page = lastUsage;
@@ -1936,6 +2053,7 @@ function go(page){
     b.setAttribute('aria-pressed', String(b.dataset.go === page || (usage && b.dataset.go === 'usage'))));
   document.getElementById('nav-sessions').classList.toggle('on', sessions || page === 'chat' || page === 'spawn');
   document.getElementById('nav-mgmt').classList.toggle('on', mgmt);
+  document.getElementById('nav-analytics').classList.toggle('on', page === 'analytics');
   document.getElementById('subnav-mgmt').style.display = mgmt ? 'flex' : 'none';
   document.getElementById('nav-usage').classList.toggle('on', usage);
   document.getElementById('subnav').style.display = usage ? 'flex' : 'none';
@@ -3831,6 +3949,359 @@ unpersisted, since session ids churn.`;
     }
     const btn = root.querySelector('[data-slaunch]');
     if (btn) btn.disabled = !canLaunch();
+  });
+
+  render();
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ANALYTICS — one log of /kaizen post-mortems, as the Sessions split.
+
+   The fixture below mirrors `GET /api/analytics`: for each of the last N
+   sessions the `/kaizen` skill wrote into ~/.claude/session-analytics-log.md,
+   the server pairs that line's lesson with a LIVE re-run of the deterministic
+   analyzer (`analyzeSession`), so a card carries both the judgment and the
+   numbers. `analysis: null` is the transcript-is-gone case and is in the
+   fixture on purpose. Read-only: the section has no write path at all — ↻ is
+   the only verb on the page.
+
+   Everything the live section can do is wired here and shared by all five
+   artboards: the review-due chip, refresh, the project / model / logged-window
+   filters, the three sort keys with their direction, collapsed-by-default
+   cards that expand, the five figures, the priciest tools and subagents, the
+   lesson with its status badge and outcome line, the lesson-only fallback, and
+   the four bodies that are not a list — loading, error, an empty log and a
+   filter that matches nothing.
+
+   The layout is the Sessions split's own atoms — `.split`, `.card.list`,
+   `.list-h`, `.lrow`, `.card.inspect` — so this block contributes almost no
+   CSS of its own. Four other shapes were compared as artboards first; see the
+   header at the top of this file for what they were and why this one won.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function () {
+  const root = document.getElementById('p-analytics');
+  if (!root) return;
+
+  /* ── fixture ─────────────────────────────────────────────────────────── */
+  /* `tools` and `agents` are already priciest-first, the order the endpoint
+     returns them in; the card shows the top three of each. */
+  const R = (o) => ({ models: [], status: null, analysis: null, ...o });
+  const A = (o) => ({ tools: [], agents: [], ...o });
+
+  const REPORTS = [
+    R({
+      id: 'd04e9b52-6f1a-4c7e-9a20-1b9d33c07711', project: 'claude-agents-dashboard',
+      models: ['opus-5'], loggedAt: '2026-09-14',
+      lesson: 'Review subagents replayed their full report through the controller every turn. Tell every review dispatch to write the report to a file and return only the verdict plus Critical/Important findings — the table is the answer, a restated summary doubles what replays.',
+      analysis: A({
+        billable: 212_400, combined: 1_420_000, agents: 6, agentTok: 486_000,
+        turns: 118, avgTurn: 12_030, maxTurn: 61_400, toolErrors: 3, retries: 1, corrections: 2,
+        durationMs: 9_660_000,
+        tools: [['Bash', 61_200, 94, 2], ['Read', 38_400, 52, 0], ['Task', 31_800, 6, 0], ['Edit', 18_900, 27, 1], ['Grep', 9_100, 33, 0]],
+        agentsList: [['general-purpose', 214_000, 41], ['Explore', 162_000, 28], ['Plan', 110_000, 17]]
+      })
+    }),
+    R({
+      id: '7af31c04-2b88-49d1-8f03-5c2ea41d9b60', project: 'timify-web',
+      models: ['sonnet-5'], loggedAt: '2026-09-12',
+      status: { status: 'actioned', date: '2026-09-13', note: 'added to project CLAUDE.md' },
+      lesson: 'Four rounds of read-then-edit on the same file because the first read was a 40-line window. Read the whole component once when the change touches more than one handler.',
+      analysis: A({
+        billable: 96_300, combined: 604_000, agents: 2, agentTok: 88_000,
+        turns: 61, avgTurn: 9_900, maxTurn: 34_200, toolErrors: 0, retries: 0, corrections: 1,
+        durationMs: 3_240_000,
+        tools: [['Read', 27_400, 38, 0], ['Edit', 21_600, 24, 0], ['Bash', 12_100, 19, 0]],
+        agentsList: [['Explore', 61_000, 14], ['general-purpose', 27_000, 9]]
+      })
+    }),
+    R({
+      id: 'b118e6d3-90ac-4f52-b6e1-7d0c48a2f135', project: 'claude-agents-dashboard',
+      models: ['opus-5', 'haiku-4-5'], loggedAt: '2026-09-09',
+      status: { status: 'promoted', date: '2026-09-11', note: 'raised to ~/.claude/CLAUDE.md after the fourth project' },
+      lesson: 'Subagent prose was 48% of the spend — 1.89M tokens, most of it reviewers restating findings the file already held. Cap every Explore/Plan dispatch at ~15 lines of file:line table with no closing recap.',
+      analysis: A({
+        billable: 1_890_000, combined: 4_110_000, agents: 14, agentTok: 1_310_000,
+        turns: 203, avgTurn: 20_200, maxTurn: 118_600, toolErrors: 11, retries: 4, corrections: 5,
+        durationMs: 18_900_000,
+        tools: [['Task', 402_000, 14, 1], ['Bash', 188_000, 161, 7], ['Read', 96_400, 88, 2], ['Write', 41_000, 19, 1]],
+        agentsList: [['general-purpose', 604_000, 96], ['Explore', 388_000, 61], ['Plan', 201_000, 22]]
+      })
+    }),
+    R({
+      id: '29c4a7f1-4ed0-4b19-a7c2-0f6b8d21e4aa', project: 'guide-manager',
+      models: ['sonnet-5'], loggedAt: '2026-08-30',
+      status: { status: 'dropped', date: '2026-09-02', note: 'the check cost more than the bug it caught' },
+      lesson: 'Proposed running the whole test suite after every edit. Measured over the session it added 11 minutes for one caught typo — the targeted file test was enough.',
+      analysis: A({
+        billable: 74_100, combined: 410_000, agents: 1, agentTok: 23_000,
+        turns: 44, avgTurn: 9_300, maxTurn: 28_800, toolErrors: 1, retries: 1, corrections: 0,
+        durationMs: 2_460_000,
+        tools: [['Bash', 33_800, 57, 1], ['Read', 14_200, 21, 0], ['Edit', 8_600, 11, 0]],
+        agentsList: [['Explore', 23_000, 7]]
+      })
+    }),
+    R({
+      /* the transcript has been deleted since /kaizen logged it: the lesson
+         survives in the log, the live numbers cannot be re-run. */
+      id: '5e60b2aa-1c34-4d77-9f88-3ab5e0c91d02', project: 'infra-terraform',
+      models: [], loggedAt: '2026-08-21',
+      lesson: 'Terraform plan output was pasted into the prompt three times unchanged. Write it to a file once and reference the path — the diff is what the next turn needs, not the whole plan.'
+    }),
+    R({
+      id: 'c3d902fe-77b1-4a06-92cd-8e4f1b60a973', project: 'timify-web',
+      models: ['opus-5'], loggedAt: '2026-07-28',
+      status: { status: 'actioned', date: '2026-07-29', note: 'added to the frontend skill' },
+      lesson: 'Rebuilt a list component that already existed two directories over. Grep the component barrel for the noun before scaffolding anything new.',
+      analysis: A({
+        billable: 158_200, combined: 990_000, agents: 4, agentTok: 201_000,
+        turns: 87, avgTurn: 11_400, maxTurn: 44_100, toolErrors: 2, retries: 1, corrections: 3,
+        durationMs: 6_120_000,
+        tools: [['Read', 52_300, 71, 0], ['Bash', 39_900, 63, 2], ['Edit', 27_400, 34, 0], ['Task', 22_100, 4, 0]],
+        agentsList: [['general-purpose', 121_000, 26], ['Explore', 48_000, 12], ['Plan', 32_000, 8]]
+      })
+    }),
+    R({
+      id: '9b41f7a0-58e2-4b31-84cf-6d1a92c7f008', project: 'claude-agents-dashboard',
+      models: ['sonnet-5', 'opus-5'], loggedAt: '2026-06-01',
+      lesson: 'A short session that went straight to the subsystem doc before touching code. Nothing to fix — banked as the shape to repeat.',
+      analysis: A({
+        billable: 41_600, combined: 287_000, agents: 0, agentTok: 0,
+        turns: 29, avgTurn: 9_900, maxTurn: 21_300, toolErrors: 0, retries: 0, corrections: 0,
+        durationMs: 1_380_000,
+        tools: [['Read', 16_800, 22, 0], ['Bash', 7_400, 12, 0]],
+        agentsList: []
+      })
+    })
+  ];
+
+  const KEEP = REPORTS.length;          // the server's ANALYTICS_KEEP for this fixture
+  const LAST_REVIEW = '2026-08-18';     // > 7 days ago, so the review chip is due
+
+  /* ── state ───────────────────────────────────────────────────────────── */
+  const S = {
+    body: 'list',                       // list | loading | error | nolog
+    reviewDue: true,
+    sel: REPORTS[0].id,                 // the one report the inspector holds open
+    pop: null,                          // 'filter' | 'sort' | null
+    F: { projects: new Set(), models: new Set(), win: 'all' },
+    SORT: { key: 'recency', dir: 'desc' }
+  };
+
+  /* ── the pure filter + sort, mirroring applyAnalyticsView ────────────── */
+  const NOW = Date.parse('2026-09-15');
+  const WINDOWS = [['all', 'Any time'], ['7d', 'Last 7 days', 7], ['30d', 'Last 30 days', 30], ['90d', 'Last 90 days', 90]];
+  const SORTS = [['recency', 'Recency', 'when it was logged'], ['tokens', 'Tokens', 'billable, gone transcript = 0'], ['project', 'Project', 'A → Z']];
+  const projects = () => Array.from(new Set(REPORTS.map(r => r.project))).sort();
+  const models = () => Array.from(new Set(REPORTS.flatMap(r => r.models))).sort();
+  const billable = (r) => r.analysis ? r.analysis.billable : 0;
+
+  function shown() {
+    const w = WINDOWS.find(x => x[0] === S.F.win);
+    const min = w && w[2] !== undefined ? NOW - w[2] * 86400000 : undefined;
+    const keep = REPORTS.filter(r => {
+      if (S.F.projects.size && !S.F.projects.has(r.project)) return false;
+      if (S.F.models.size && !r.models.some(m => S.F.models.has(m))) return false;
+      if (min !== undefined && Date.parse(r.loggedAt) < min) return false;
+      return true;
+    });
+    const dir = S.SORT.dir === 'asc' ? 1 : -1;
+    return keep.slice().sort((a, b) => dir * (
+      S.SORT.key === 'tokens' ? billable(a) - billable(b)
+        : S.SORT.key === 'project' ? a.project.localeCompare(b.project)
+          : a.loggedAt.localeCompare(b.loggedAt)));
+  }
+
+  /* ── formatting ──────────────────────────────────────────────────────── */
+  const tk = (n) => n >= 1_000_000 ? (n / 1_000_000).toFixed(2) + 'M'
+    : n >= 1000 ? Math.round(n / 1000) + 'k' : String(n);
+  const dur = (ms) => {
+    const m = Math.round(ms / 60000);
+    return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`;
+  };
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const short = (r) => r.id.slice(0, 8);
+
+  /* ── shared atoms: every artboard draws the same report, differently ─── */
+  const MARK = { actioned: '✓', promoted: '↑', dropped: '·' };
+  const status = (r) => r.status
+    ? `<span class="an-status ${r.status.status}" title="${esc(r.status.note || '')} — ${r.status.date}">${MARK[r.status.status]} ${r.status.status}</span>`
+    : '<span class="an-status open" title="No status line yet — still open.">○ open</span>';
+  const modelTags = (r) => r.models.map(m => `<span class="an-model">${m}</span>`).join('');
+
+  const metrics = (a) => `<div class="an-metrics">
+      <div class="an-metric lead"><div class="an-metric-v">${tk(a.billable)}</div><div class="an-metric-l">billable</div></div>
+      <div class="an-metric"><div class="an-metric-v">${tk(a.combined)}</div><div class="an-metric-l">context</div></div>
+      <div class="an-metric"><div class="an-metric-v">${tk(a.agentTok)}</div><div class="an-metric-l">subagents · ${a.agents}</div></div>
+      <div class="an-metric"><div class="an-metric-v">${a.turns}</div><div class="an-metric-l">turns</div></div>
+      <div class="an-metric"><div class="an-metric-v${a.toolErrors ? ' warn' : ''}">${a.toolErrors}</div><div class="an-metric-l">errors · ${a.retries} retry</div></div>
+    </div>`;
+
+  const cols = (a) => `<div class="an-cols">
+      <div class="an-col">
+        <div class="an-col-h">Top tools <span class="an-approx">approx tokens</span></div>
+        ${a.tools.length ? a.tools.slice(0, 3).map(([t, tok, n, e]) =>
+          `<div class="an-line"><span class="an-line-name">${t}</span><span class="an-line-meta">${tk(tok)} · ${n}×${e ? ` · ${e} err` : ''}</span></div>`).join('')
+        : '<div class="an-line muted">none</div>'}
+      </div>
+      <div class="an-col">
+        <div class="an-col-h">Top subagents</div>
+        ${a.agentsList.length ? a.agentsList.slice(0, 3).map(([t, tok, n]) =>
+          `<div class="an-line"><span class="an-line-name">${t}</span><span class="an-line-meta">${tk(tok)} · ${n}⚒</span></div>`).join('')
+        : '<div class="an-line muted">none launched</div>'}
+      </div>
+    </div>`;
+
+  const lesson = (r) => `<div class="an-lesson">
+      <div class="an-col-h">Research &amp; suggestions</div>
+      <p class="an-lesson-body">${esc(r.lesson)}</p>
+      ${r.status ? `<p class="an-lesson-body muted">${r.status.status} ${r.status.date}${r.status.note ? ` — ${esc(r.status.note)}` : ''}</p>` : ''}
+    </div>`;
+
+  /* the opened report, whole. The transcript-gone case keeps the lesson and
+     says why the figures are missing rather than dropping the card. */
+  const detail = (r) => r.analysis
+    ? metrics(r.analysis) + cols(r.analysis) + lesson(r)
+    : `<div class="an-gone">Transcript no longer on disk — showing the logged lesson only.</div>` + lesson(r);
+
+  /* ── page chrome ─────────────────────────────────────────────────────── */
+  const band = () => `<div class="band">
+      <div class="an-band">
+        <div class="ct">Analytics</div>
+        <span class="an-hint">last ${KEEP} sessions logged by <code>/kaizen</code></span>
+        <span class="sp"></span>
+        ${S.reviewDue && S.body === 'list' ? `<span class="an-review" title="Last swept ${LAST_REVIEW} — lessons have accumulated since.">review due — run <code>/kaizen review</code></span>` : ''}
+        <button class="an-refresh" data-anrefresh title="Reload">↻</button>
+      </div>
+      <div class="cs">Each session the <code>/kaizen</code> skill logged, pairing its one-line lesson with a live re-run of the deterministic analyzer. Read-only — the dashboard never writes the log, and the list only changes when <code>/kaizen</code> runs, so this section does not poll.</div>
+    </div>`;
+
+  const filterCount = () => S.F.projects.size + S.F.models.size + (S.F.win !== 'all' ? 1 : 0);
+  const tick = '<svg class="tick" viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9"/></svg>';
+  const popFilter = () => `<div class="pop" data-pop-box="filter">
+      <div class="pop-h">Filters<button class="clear" data-anclear ${filterCount() ? '' : 'disabled'}>Clear all</button></div>
+      <div class="pop-k">Project <span class="hint" style="color:var(--text-tertiary)">· none picked = all</span></div>
+      <div class="picks">${projects().map(p =>
+        `<button class="pick${S.F.projects.has(p) ? ' on' : ''}" data-anproj="${p}">${p}</button>`).join('')}</div>
+      <div class="pop-k">Model <span class="hint" style="color:var(--text-tertiary)">· matches if any model does</span></div>
+      <div class="picks">${models().map(m =>
+        `<button class="pick${S.F.models.has(m) ? ' on' : ''}" data-anmodel="${m}">${m}</button>`).join('')}</div>
+      <div class="pop-k">Logged <span class="hint" style="color:var(--text-tertiary)">· the log carries a date, not a time</span></div>
+      <div class="sw">${WINDOWS.map(([k, l]) => `<button class="${S.F.win === k ? 'on' : ''}" data-anwin="${k}">${l.replace('Last ', '')}</button>`).join('')}</div>
+    </div>`;
+  const popSort = () => `<div class="pop" data-pop-box="sort">
+      <div class="pop-h">Sort by</div>
+      ${SORTS.map(([k, l, h]) => `<button class="opt${S.SORT.key === k ? ' on' : ''}" data-ankey="${k}">${l}<span class="hint">${h}</span>${tick}</button>`).join('')}
+      <div class="pop-div"></div>
+      <div class="sw">${[['asc', 'Ascending'], ['desc', 'Descending']].map(([d, l]) =>
+        `<button class="${S.SORT.dir === d ? 'on' : ''}" data-andir="${d}">${l}</button>`).join('')}</div>
+    </div>`;
+
+  /* one toolbar, identical on all five artboards: the count of what is shown
+     on the left, and the same filter / sort track the Sessions board uses. */
+  const toolbar = () => {
+    const n = filterCount(), list = shown();
+    return `<div class="toolbar">
+      <span class="an-hint">${list.length} of ${REPORTS.length} sessions</span>
+      <span class="tb-spacer"></span>
+      <div class="ctlwrap"><div class="seg ctl">
+        <button class="ictl${n ? ' on' : ''}${S.pop === 'filter' ? ' open' : ''}" data-anpop="filter" title="Filters" aria-expanded="${S.pop === 'filter'}">
+          <svg viewBox="0 0 20 20"><path d="M3 4h14l-5.5 6.5V16l-3-1.5v-4z"/></svg>${n ? `<span class="n">${n}</span>` : ''}</button>
+        <i class="vsep"></i>
+        <span class="sortlab">Sort: <b>${SORTS.find(s => s[0] === S.SORT.key)[1]}</b> (${S.SORT.dir})</span>
+        <button class="ictl${S.pop === 'sort' ? ' open' : ''}" data-anpop="sort" title="Change sort" aria-expanded="${S.pop === 'sort'}">
+          <svg viewBox="0 0 20 20"><path d="M6 4v12M6 16l-2.5-2.5M6 16l2.5-2.5M14 16V4M14 4l-2.5 2.5M14 4l2.5 2.5"/></svg></button>
+      </div>${S.pop === 'filter' ? popFilter() : ''}${S.pop === 'sort' ? popSort() : ''}</div>
+    </div>`;
+  };
+
+  /* ── B · split: the log on the left, one report held open on the right ─
+     Built out of the Sessions split's own atoms — `.split`, `.card.list`,
+     `.list-h`, `.lrow` with its dot / name / figure / second line — so the two
+     sections read as the same component with a different subject. The row's
+     dot carries what the lesson's status carries, the figure column is the
+     billable total instead of a context percentage, and the second line is the
+     id, the elapsed time and the date the /kaizen run was logged. The list
+     header carries no chips: the toolbar above owns filter and sort, exactly
+     as it does on the Sessions board. */
+  const split = (list) => {
+    const r = list.find(x => x.id === S.sel);
+    const row = (x) => `<div class="lrow${x.id === S.sel ? ' selected' : ''}" data-ansel="${x.id}">
+        <span class="ldot ${x.status ? 's-' + x.status.status : ''}"></span>
+        <span class="nm"><span class="t">${x.project}</span>${x.models.map(m => `<span class="tagpill">${m}</span>`).join('')}</span>
+        <span class="pct">${x.analysis ? tk(x.analysis.billable) : '—'}</span>
+        <span class="act-line">
+          ${status(x)}
+          <span class="act">${short(x)}${x.analysis ? ` · ${dur(x.analysis.durationMs)}` : ' · transcript gone'}</span>
+          <span class="ago">${x.loggedAt}</span>
+        </span>
+      </div>`;
+    const inspector = r
+      ? `<div class="card inspect">
+          <div class="ins-head">
+            <div class="who2">
+              <div class="ct">${r.project}</div>
+              <div class="ins-meta">${status(r)}${modelTags(r)}<span class="an-id">${short(r)}</span>
+                <span class="an-when">logged ${r.loggedAt}${r.analysis ? ` · ${dur(r.analysis.durationMs)}` : ''}</span></div>
+            </div>
+          </div>
+          ${detail(r)}
+        </div>`
+      : '<div class="card inspect"><div class="an-empty">Pick a session on the left.</div></div>';
+    return `<div class="split">
+      <div class="card list">
+        <div class="list-h"><span class="ct">Logged sessions</span><span class="tagpill">${list.length}</span></div>
+        ${list.map(row).join('')}
+      </div>${inspector}</div>`;
+  };
+
+  /* ── body: the split, or one of the four things that are not a list ──── */
+  const body = () => {
+    if (S.body === 'loading') return '<div class="an-empty">Loading…</div>';
+    if (S.body === 'error') return '<div class="an-empty">Could not load reports.</div>';
+    if (S.body === 'nolog') return '<div class="an-empty">No sessions logged yet. Run <code>/kaizen</code> on a session to record one.</div>';
+    const list = shown();
+    if (!list.length) return toolbar() + '<div class="an-empty">No reports match the current filters.</div>';
+    return toolbar() + split(list);
+  };
+
+  /* ── chrome + render ─────────────────────────────────────────────────── */
+  const varbar = () => `<div class="varbar">
+      <span class="tag">Analytics · state</span>
+      <button data-anstate="review" aria-pressed="${S.reviewDue}">review due</button>
+      <button data-anstate="loading" aria-pressed="${S.body === 'loading'}">loading</button>
+      <button data-anstate="error" aria-pressed="${S.body === 'error'}">error</button>
+      <button data-anstate="nolog" aria-pressed="${S.body === 'nolog'}">empty log</button>
+    </div>`;
+
+  function render() { root.innerHTML = varbar() + band() + body(); }
+
+  root.addEventListener('click', (ev) => {
+    const hit = (s) => ev.target.closest(s);
+    let el;
+    if ((el = hit('[data-anstate]'))) {
+      const k = el.dataset.anstate;
+      if (k === 'review') S.reviewDue = !S.reviewDue;
+      else S.body = S.body === k ? 'list' : k;
+    }
+    else if (hit('[data-anrefresh]')) { S.body = 'list'; }   // the only verb the section has
+    else if ((el = hit('[data-anpop]'))) { S.pop = S.pop === el.dataset.anpop ? null : el.dataset.anpop; }
+    else if ((el = hit('[data-anproj]'))) { const p = el.dataset.anproj; S.F.projects.has(p) ? S.F.projects.delete(p) : S.F.projects.add(p); }
+    else if ((el = hit('[data-anmodel]'))) { const m = el.dataset.anmodel; S.F.models.has(m) ? S.F.models.delete(m) : S.F.models.add(m); }
+    else if ((el = hit('[data-anwin]'))) { S.F.win = el.dataset.anwin; }
+    else if (hit('[data-anclear]')) { S.F.projects.clear(); S.F.models.clear(); S.F.win = 'all'; }
+    else if ((el = hit('[data-ankey]'))) { S.SORT.key = el.dataset.ankey; }
+    else if ((el = hit('[data-andir]'))) { S.SORT.dir = el.dataset.andir; }
+    else if ((el = hit('[data-ansel]'))) { S.sel = el.dataset.ansel; }
+    else return;
+    /* a filter change can hide the report the inspector is holding open */
+    const list = shown();
+    if (!list.some(r => r.id === S.sel)) S.sel = list.length ? list[0].id : null;
+    render();
+  });
+
+  /* a click anywhere else closes an open popover, as on the Sessions board */
+  document.addEventListener('click', (e) => {
+    if (S.pop && !e.target.closest('.pop, [data-anpop]')) { S.pop = null; render(); }
   });
 
   render();

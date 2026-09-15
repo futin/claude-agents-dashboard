@@ -24,6 +24,20 @@ export const ANALYTICS_WINDOWS: AnalyticsWindow[] = [
 
 export type AnSortKey = 'recency' | 'tokens' | 'project';
 
+/** Sort-key label in the toolbar's popover and its `Sort: <b>…</b>` readout. */
+export const AN_SORT_LABEL: Record<AnSortKey, string> = {
+  recency: 'Recency',
+  tokens: 'Tokens',
+  project: 'Project'
+};
+
+/** One-line hint under each sort key — what the order actually means. */
+export const AN_SORT_HINT: Record<AnSortKey, string> = {
+  recency: 'when /kaizen logged it',
+  tokens: 'billable; a gone transcript sorts as 0',
+  project: 'A → Z'
+};
+
 export interface AnalyticsView {
   /** Selected project names; empty = all projects. */
   projects: string[];
@@ -43,6 +57,25 @@ export const DEFAULT_ANALYTICS_VIEW: AnalyticsView = {
   sortKey: 'recency',
   sortDir: 'desc'
 };
+
+/**
+ * How many facets are narrowing the list — the number on the toolbar's filter
+ * button. Each facet counts once however many values it holds, matching the
+ * Sessions toolbar: the button says "something is hidden", not "how much".
+ */
+export function analyticsFilterCount(view: AnalyticsView): number {
+  return (view.projects.length ? 1 : 0) + (view.models.length ? 1 : 0) + (view.window !== 'all' ? 1 : 0);
+}
+
+/**
+ * Reset the three filter facets, keeping the sort. Returns `view` itself when
+ * nothing is active, so a caller can compare by reference — the same
+ * convention `clearFilters` follows on the Sessions side.
+ */
+export function clearAnalyticsFilters(view: AnalyticsView): AnalyticsView {
+  if (analyticsFilterCount(view) === 0) return view;
+  return { ...view, projects: [], models: [], window: 'all' };
+}
 
 /** Sorted unique project names present in the report list. */
 export function distinctProjects(reports: AnalyticsReport[]): string[] {
