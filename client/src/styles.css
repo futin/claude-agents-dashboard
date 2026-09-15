@@ -166,7 +166,7 @@ body{font-family:var(--font);font-variant-numeric:tabular-nums;background:var(--
    typeface. Pre-formatted blocks keep their whitespace, not their figure width. */
 code,kbd,samp,pre{font-family:inherit}
 .wrap{max-width:820px;margin:0}
-/* `.wide` is an app shell: at ≥1201px it is pinned to the viewport and its
+/* `.wide` is an app shell: at `xl` (1280) it is pinned to the viewport and its
    panes scroll (see the management block). `.broad` is only the width — a
    page that scrolls normally but needs the room for two columns (Settings).
    Putting Settings on `.wide` pinned `.main` to the viewport and let the
@@ -1095,7 +1095,7 @@ code,kbd,samp,pre{font-family:inherit}
 .ffile-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ffile .fsize{margin-left:auto;flex-shrink:0;font-size:13px;color:var(--ink3);font-variant-numeric:tabular-nums}
 /* Desktop: analytics is an app shell — the page never scrolls, the tab does */
-@media (min-width:1201px){
+@media (min-width:1280px){
   /* Same 100vh-under-zoom correction as the rail: divide by --font-scale, and
      subtract .main's own padding from a token rather than a literal so compact
      density lands on the viewport too. Getting this wrong scrolls the page,
@@ -1168,17 +1168,30 @@ code,kbd,samp,pre{font-family:inherit}
 .an-when{font-size:12px;color:var(--ink3);font-variant-numeric:tabular-nums}
 
 /* the report the inspector holds. The figures sit in one strip separated by
-   the board showing through, the way the Usage stat strip is built — five
-   cells, one figure each, nothing wrapping. */
-.an-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-top:20px}
+   the board showing through, the way the Usage stat strip is built — three
+   cells to a row until `lg` gives the strip room to stand as one row of five. */
+.an-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:20px}
 .an-metric{padding:12px 14px;min-width:0}
 .an-metric+.an-metric{border-left:2px solid var(--board)}
 .an-metric:first-child{padding-left:0}
+/* Seams for the 3-across shape (base, and still the shape at `md`): the strip
+   wraps into two rows, so the 4th cell — the second row's own left edge —
+   sheds the column rule it would otherwise inherit from `.an-metric+.an-metric`,
+   the second row draws a rule of its own along its top, and the 5th cell (the
+   odd one out) spans both columns the folded row leaves it rather than sitting
+   under one and leaving a hole. `lg` below undoes all three once the strip
+   goes back to a single row of five. */
+.an-metric:nth-child(4){border-left:0;padding-left:0}
+.an-metric:nth-child(n+4){border-top:2px solid var(--board)}
+.an-metric:nth-child(5){grid-column:span 2}
 .an-metric-v{font-size:19px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.1;white-space:nowrap}
 .an-metric.lead .an-metric-v{font-size:25px;color:var(--green)}
 .an-metric-v.warn{color:var(--amber)}
 .an-metric-l{font-size:11px;font-weight:500;color:var(--ink3);margin-top:5px;white-space:nowrap}
-.an-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}
+/* One column below `md`: two 16px-gapped columns are tight before the
+   tablet width, and both cards can afford to drop to a single column rather
+   than clip what they hold. */
+.an-cols{display:grid;grid-template-columns:1fr;gap:16px;margin-top:16px}
 .an-col{background:var(--strip-hi);border-radius:12px;padding:14px 16px;min-width:0}
 /* the same tracked label Management's third column uses (`.mdetail-label`),
    one step down in size because these two sit inside cards rather than over
@@ -1197,15 +1210,21 @@ code,kbd,samp,pre{font-family:inherit}
 .an-lesson-body{font-size:13px;line-height:1.5;color:var(--ink);max-width:74ch;margin-top:10px}
 .an-lesson-body.muted{font-size:12px;margin-top:8px}
 .an-lesson-body code{font-size:12px;font-weight:500;color:var(--ink);background:var(--strip-hi);border-radius:4px;padding:1px 5px}
-/* Below the split's own fold the inspector has the full measure back, but the
-   strip still has to survive the phone: two rows of figures beats five columns
-   of clipped ones. Three to a row at every narrow width, and the second row is
-   ruled off the first — every cell is fenced on the side it meets a neighbour,
-   not only on the sides that share a line. The rule is the join itself, with no
-   air either side of it, and the fifth figure takes the two cells the folded
-   row leaves it rather than sitting under one and leaving a hole. */
-@media (max-width:900px){.an-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.an-metric:nth-child(4){border-left:0;padding-left:0}.an-metric:nth-child(n+4){border-top:2px solid var(--board)}.an-metric:nth-child(5){grid-column:span 2}}
-@media (max-width:700px){.an-cols{grid-template-columns:1fr}}
+@media (min-width:768px){
+  .an-cols{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* Five to a row, not three: below this the strip is two rows deep (see the
+   seam comment above the base rules), and above it every cell has enough
+   width — 147px each at 1024 — to stand alone in one row. The three seam
+   rules undo exactly what the base ones set: the 4th cell gets its column
+   rule back, the second-row top rule goes away because there is no longer a
+   second row, and the 5th cell drops its two-column span. */
+@media (min-width:1024px){
+  .an-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .an-metric:nth-child(4){border-left:2px solid var(--board);padding-left:14px}
+  .an-metric:nth-child(n+4){border-top:0}
+  .an-metric:nth-child(5){grid-column:auto}
+}
 
 /* The log as tiles — the section's second shape, and the only one a phone
    draws. Grid, card and open-spans-two are `.tiles` / `.tile` shared verbatim
