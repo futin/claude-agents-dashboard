@@ -150,11 +150,17 @@
 /* tabular-nums board-wide: the numerals are set in the same face as the text
    (there is no separate figure face in this design), so the columns of tokens,
    percentages and clock times only line up if the figures are fixed-width. */
-/* The page is the rail's surface, not the board's: the rail merges into it and
-   `.main` becomes the tinted panel tucked into the corner below-right of it.
-   Two tones, the same two as before — only which of them is the ground has
-   changed, so every card inside `.main` still sits lighter than its panel. */
-body{font-family:var(--font);font-variant-numeric:tabular-nums;background:var(--strip);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;line-height:1.4}
+/* The ground, and it changes hands at `sm`. Below `sm` the rail is not on the
+   page ground at all — it is a panel hung off the bar — so the ground is the
+   board `.main` paints. It is set on <body> and NOT on `.shell` because the
+   canvas takes its colour from the body, which is what a phone paints into an
+   over-scroll bounce, behind the bar and under a page shorter than the screen;
+   leaving it at --strip put a white band there in the light theme. From `sm`
+   the page is the rail's surface again (--strip, restored in the shell block
+   below): the rail merges into it and `.main` becomes the tinted panel tucked
+   into the corner below-right of it. Two tones either way, so every card inside
+   `.main` still sits lighter than its panel. */
+body{font-family:var(--font);font-variant-numeric:tabular-nums;background:var(--board);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;line-height:1.4}
 /* No second face anywhere (.claude/DESIGN.md §1), so the UA's monospace default
    for code/pre must go too: a code span is marked by its fill and ink, not by a
    typeface. Pre-formatted blocks keep their whitespace, not their figure width. */
@@ -164,8 +170,11 @@ code,kbd,samp,pre{font-family:inherit}
    panes scroll (see the management block). `.broad` is only the width — a
    page that scrolls normally but needs the room for two columns (Settings).
    Putting Settings on `.wide` pinned `.main` to the viewport and let the
-   cards run out of the board onto the white body. */
-.wrap.wide,.wrap.broad{max-width:1280px}
+   cards run out of the board onto the white body.
+   1248 and not a round figure: it is the term the 2xl lock is derived from —
+   rail 240 + --body-pad 24×2 + 1248 = 1536, the ladder block above. Changing
+   it moves the lock, so the two numbers are read together or not at all. */
+.wrap.wide,.wrap.broad{max-width:1248px}
 /* Content width = full (Settings › Display). One block, because the measure is
    the only thing that changes: every section keeps its own layout and simply
    stops being capped, so the board spans the window. Stamped as `data-width` on
@@ -175,16 +184,26 @@ code,kbd,samp,pre{font-family:inherit}
 :root[data-width="full"] .wrap.wide,
 :root[data-width="full"] .wrap.broad{max-width:none}
 
-/* rack selector — the section rail down the left edge. Sticky and full-height
-   so its right rule runs the length of the board. The height is divided by
-   --font-scale because .shell{zoom} (line 96) makes 100vh resolve against the
-   unzoomed viewport: at text scale 110% a plain 100vh rail overhangs by 10%. */
-.shell{display:flex}
-.rail{flex:0 0 240px;display:flex;flex-direction:column;gap:4px;align-self:flex-start;position:sticky;top:0;z-index:5;height:calc(100vh / var(--font-scale,1));overflow-y:auto;padding:24px;background:var(--strip)}
+/* Bar over board below `sm`; rail beside board from `sm` (the shell block). */
+.shell{display:flex;flex-direction:column}
+/* rack selector, in its two shapes. Below `sm` the rail does not lie down — it
+   drops down: this same element is the menu panel hung off the bottom edge of
+   the phone bar, absolutely positioned against `.nav` and hidden until `.open`.
+   Capped at the screen and scrollable, because Management's tree is a list of
+   scanned projects and has no fixed length. From `sm` it is the section rail
+   down the left edge, sticky and full-height so its right rule runs the length
+   of the board.
+   Both heights divide by --font-scale for the same reason: `.shell{zoom}`
+   (above) makes 100vh resolve against the unzoomed viewport, so at text scale
+   110% a plain 100vh rail overhangs by 10%. */
+.rail{display:none;position:absolute;left:0;right:0;top:100%;z-index:5;flex:none;flex-direction:column;width:auto;height:auto;max-height:calc(100vh / var(--font-scale,1) - 60px);align-self:stretch;gap:2px;padding:8px 10px 14px;overflow-y:auto;overflow-x:hidden;background:var(--strip);border-bottom:1px solid var(--hairline);box-shadow:0 12px 24px var(--shadow2)}
+.rail.open{display:flex}
 /* the app's wordmark, in the rail rather than the page — a kicker over the name,
    20/700 over 11px, the dot outside the pair and centred against it. Sizes are
-   the mock's (docs/guides/mockups/redesign-mock.html, `.brand`). */
-.rail-brand{display:flex;align-items:center;gap:9px;font-size:20px;font-weight:700;letter-spacing:.01em;line-height:1;color:var(--ink);padding:0 12px 24px}
+   the mock's (docs/guides/mockups/redesign-mock.html, `.brand`). Drawn from
+   `sm` up only: below it the phone bar carries the wordmark (`.mnav-brand`),
+   and two of them is two <h1>s. */
+.rail-brand{display:none;align-items:center;gap:9px;font-size:20px;font-weight:700;letter-spacing:.01em;line-height:1;color:var(--ink);padding:0 12px 24px}
 /* The one dot in the rail: a board that is live, in the colour `working` uses
    on a row. It is decoration, not status — the connection verdict is the
    `.foot` line, which says it in words. */
@@ -194,11 +213,11 @@ code,kbd,samp,pre{font-family:inherit}
    16px icon 12px from its label — the row is the hit target, so the fill and
    the radius belong to it rather than to the label (DESIGN.md §3, §7). Every
    figure here is the mock's `.nav-item` bar two: the rail is 60px narrower than
-   its 300px, and the row 8px shorter than its 44px — the phone menu below 700px
-   keeps the full 44, where the row is a thumb target rather than a pointer
-   one. */
+   its 300px, and the row 8px shorter than its 44px — which is the base height
+   here, because below `sm` this row is in the phone menu, where it is a thumb
+   target rather than a pointer one. The 36 arrives with the rail at `sm`. */
 .rail-group{position:relative;display:flex;flex-direction:column}
-.rail-link{position:relative;display:flex;align-items:center;gap:12px;min-height:36px;font-family:var(--font);font-size:14px;font-weight:500;letter-spacing:0;text-align:left;color:var(--ink2);background:none;border:0;border-radius:16px;padding:0 16px;cursor:pointer;transition:color .15s,background .15s}
+.rail-link{position:relative;display:flex;align-items:center;gap:12px;min-height:44px;font-family:var(--font);font-size:14px;font-weight:500;letter-spacing:0;text-align:left;color:var(--ink2);background:none;border:0;border-radius:16px;padding:0 16px;cursor:pointer;transition:color .15s,background .15s}
 /* Hover darkens the label and nothing else. The subtle fill is what marks the
    *active* row, so lending it to hover made a pointer look like a selection —
    on a rail with one row already filled, two filled rows is a question. */
@@ -227,11 +246,11 @@ code,kbd,samp,pre{font-family:inherit}
    an indent of its own. Rendered only while that section is open
    (SideRail.tsx), so the rule never trails a row you are not on. */
 .rail-sub{display:flex;flex-direction:column;margin:2px 0 2px 24px}
-/* Every tree is in the DOM; on the rail only the open section's is drawn. The
-   phone menu opens all of them (the rule is lifted in the phone block below) —
-   there the menu is a moment you came to on purpose, not a column you read past
-   all day. */
-.rail-group:not(.here) .rail-sub{display:none}
+/* Every tree is in the DOM. The phone menu opens all of them — there the menu is
+   a moment you came to on purpose, not a column you read past all day — so open
+   is the base, and the rail closes them again at `sm`, where only the section
+   you are in draws its tree. */
+.rail-group:not(.here) .rail-sub{display:flex}
 /* Ellipsised: Usage's and Settings' labels are two words, but Management's
    tree is a list of scanned project names and one of them will not fit. */
 .rail-sublink{position:relative;font-family:var(--font);font-size:14px;font-weight:400;text-align:left;color:var(--ink2);background-color:transparent;border:0;padding:7px 0 7px 20px;cursor:pointer;transition:color .15s;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background-image:linear-gradient(var(--hairline2),var(--hairline2)),linear-gradient(var(--hairline2),var(--hairline2));background-repeat:no-repeat;background-size:1px 100%,12px 1px;background-position:0 0,0 50%}
@@ -251,70 +270,75 @@ code,kbd,samp,pre{font-family:inherit}
    creates no scroll container, so the sticky elements inside still stick, and it
    has to sit on .main rather than on html, where it does not stop the widening
    at all (measured). Inner scrollers (.md-pre, .up-tablewrap) keep their own. */
-/* …and the panel itself: 24px of page above it, its top-left corner rounded
-   into the rail. Only that one corner — the other three run to the edges of the
-   window, so rounding them would open a gap the board has no use for. */
-.main{flex:1;min-width:0;margin-top:24px;padding:var(--body-pad);background:var(--board);border-top-left-radius:24px;overflow-x:clip}
+/* …and the panel itself. Below `sm` it is laid down under the bar: there is no
+   corner to tuck into and no room to spare, so it runs full width straight
+   under it — no margin, no radius. From `sm` the rail returns and the board
+   tucks into it: 24px of page above, its top-left corner rounded into the rail.
+   Only that one corner — the other three run to the edges of the window, so
+   rounding them would open a gap the board has no use for. */
+.main{flex:1;min-width:0;margin-top:0;padding:var(--body-pad);background:var(--board);border-top-left-radius:0;overflow-x:clip}
 /* ── phone navigation ─────────────────────────────────────────────────────
-   Below 700px the rail does not lie down — it drops down. A top bar carries the
-   wordmark left and ☰ right, and the *same* `.rail` element becomes the panel
+   The base tier is the phone, so this is the nav the stylesheet declares first
+   and the rail beside the board is the variant. A top bar carries the wordmark
+   left and ☰ right, and the *same* `.rail` element (above) becomes the panel
    that opens under it. One nav, repositioned: the trees (`.rail-sub`) come with
    it, which is what retired the page-band copies of those switches.
 
-   `.nav` is `display:contents` above 700px, so the rail stays the flex child of
-   `.shell` it has always been and this wrapper costs the desktop nothing. */
-.nav{display:contents}
-.mnav,.mnav-scrim{display:none}
-@media (max-width:700px){
-  .shell{flex-direction:column}
-  /* The rail is gone from the page ground below 700px, so the ground is no
-     longer the rail's strip: it is the board `.main` paints. Set on <body> and
-     not on `.shell`, because the canvas takes its colour from the body — which
-     is what the phone paints into an over-scroll bounce, behind the bar and
-     under a page shorter than the screen. Leaving it at --strip put a white
-     band there in the light theme. */
-  body{background:var(--board)}
-  /* The sticky box is the wrapper, not the bar: the panel is absolutely
-     positioned against it, so bar and menu pin to the top edge together and the
-     menu cannot drift off its anchor mid-scroll. */
-  .nav{display:block;position:sticky;top:0;z-index:30;transition:transform .22s ease}
-  /* Auto-hide: down the page it slides out of the way, up it comes back
-     (`useHideOnScroll`). Never while the menu is open — the hook pins it — so
-     the scrim below is never inside a transformed box, where `fixed` would
-     resolve against this element instead of the viewport. */
-  .nav.hid{transform:translateY(-100%)}
-  .mnav{display:flex;align-items:center;gap:12px;height:var(--mnav-h);padding:0 14px;background:var(--strip);border-bottom:1px solid var(--hairline)}
-  /* the rail's 20px wordmark is a page heading; in a bar it is a label, so it
-     drops to 16px and the dot with it */
-  .mnav-brand{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:.01em;line-height:1.1;color:var(--ink);min-width:0}
-  .mnav-brand .rail-dot{width:8px;height:8px}
-  .mnav-brand .rail-kicker{font-size:10px;margin-bottom:2px}
-  /* 44px square: the one control on the bar is a thumb target (§3). Ink, no
-     fill — the fill in this design marks a selection, and a menu button is
-     never selected. */
-  .mnav-burger{flex:none;margin-left:auto;display:flex;align-items:center;justify-content:center;width:44px;height:44px;color:var(--ink);background:none;border:0;border-radius:12px;cursor:pointer}
-  .mnav-burger:active{background:var(--strip-hi)}
-  /* Under the panel, not over it: the scrim dims the board so a tap anywhere
-     off the menu shuts it. `fixed` for the same reason the chat drawer uses it
-     — a phone's layout viewport is wider than its screen. */
-  .mnav-scrim{display:block;position:fixed;inset:0;z-index:-1;background:var(--scrim)}
-  /* The menu itself: the rail, hung off the bottom edge of the bar. Capped at
-     the screen and scrollable, because Management's tree is a list of scanned
-     projects and has no fixed length. The /var(--font-scale) is the same
-     correction the desktop rail's height makes — `.shell{zoom}` resolves vh
-     against the unzoomed viewport. */
-  .rail{display:none;position:absolute;left:0;right:0;top:100%;flex:none;width:auto;height:auto;max-height:calc(100vh / var(--font-scale,1) - 60px);align-self:stretch;gap:2px;padding:8px 10px 14px;overflow-y:auto;overflow-x:hidden;background:var(--strip);border-bottom:1px solid var(--hairline);box-shadow:0 12px 24px var(--shadow2)}
-  .rail.open{display:flex}
-  /* laid down there is no corner to tuck into and no room to spare: the panel
-     runs full width straight under the bar */
-  .main{margin-top:0;border-top-left-radius:0}
-  /* the bar carries the wordmark now */
-  .rail-brand{display:none}
-  /* a menu row is a thumb target, not a pointer one */
-  .rail-link{min-height:44px}
-  /* every tree stands open: one tap from the menu to any sub-view, from
-     wherever you are */
-  .rail-group:not(.here) .rail-sub{display:flex}
+   The sticky box is the wrapper, not the bar: the panel is absolutely
+   positioned against it, so bar and menu pin to the top edge together and the
+   menu cannot drift off its anchor mid-scroll. From `sm` the wrapper goes
+   `display:contents`, so the rail is back to being the flex child of `.shell`
+   it has always been and this element costs the desktop nothing. */
+.nav{display:block;position:sticky;top:0;z-index:30;transition:transform .22s ease}
+/* Auto-hide: down the page it slides out of the way, up it comes back
+   (`useHideOnScroll`). Never while the menu is open — the hook pins it — so the
+   scrim below is never inside a transformed box, where `fixed` would resolve
+   against this element instead of the viewport. */
+.nav.hid{transform:translateY(-100%)}
+.mnav{display:flex;align-items:center;gap:12px;height:var(--mnav-h);padding:0 14px;background:var(--strip);border-bottom:1px solid var(--hairline)}
+/* the rail's 20px wordmark is a page heading; in a bar it is a label, so it
+   drops to 16px and the dot with it */
+.mnav-brand{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:.01em;line-height:1.1;color:var(--ink);min-width:0}
+.mnav-brand .rail-dot{width:8px;height:8px}
+.mnav-brand .rail-kicker{font-size:10px;margin-bottom:2px}
+/* 44px square: the one control on the bar is a thumb target (§3). Ink, no fill
+   — the fill in this design marks a selection, and a menu button is never
+   selected. */
+.mnav-burger{flex:none;margin-left:auto;display:flex;align-items:center;justify-content:center;width:44px;height:44px;color:var(--ink);background:none;border:0;border-radius:12px;cursor:pointer}
+.mnav-burger:active{background:var(--strip-hi)}
+/* Under the panel, not over it: the scrim dims the board so a tap anywhere off
+   the menu shuts it. `fixed` for the same reason the chat drawer uses it — a
+   phone's layout viewport is wider than its screen. */
+.mnav-scrim{display:block;position:fixed;inset:0;z-index:-1;background:var(--scrim)}
+
+/* ── the shell, from `sm` ─────────────────────────────────────────────────
+   640 is the *shell* boundary: the width at which the rail comes back to the
+   left edge, the bar and its burger go away, and the board stops being
+   full-bleed. Every rule here is the desktop half of a pair whose phone half is
+   a base declaration above — this block is the only place the rail-and-board
+   layout is written down, and nothing else belongs in it. Density is a separate
+   question with a separate answer: column counts, dropped table columns and
+   controls that stop fitting all turn at `md`, not here.
+
+   `.nav` goes `display:contents` and so generates no box at all, which already
+   makes its sticky position, z-index and `.hid` transform inert. They are reset
+   explicitly anyway — "it happens to generate no box" is too quiet a reason for
+   four declarations to stop mattering. */
+@media (min-width:640px){
+  .shell{flex-direction:row}
+  body{background:var(--strip)}
+  .nav{display:contents;position:static;z-index:auto}
+  .nav.hid{transform:none}
+  .mnav,.mnav-scrim{display:none}
+  .rail{display:flex;position:sticky;left:auto;right:auto;top:0;flex:0 0 240px;height:calc(100vh / var(--font-scale,1));max-height:none;align-self:flex-start;gap:4px;padding:24px;overflow-x:visible;border-bottom:0;box-shadow:none}
+  /* the rail carries the wordmark again, and the bar's copy is gone with it */
+  .rail-brand{display:flex}
+  /* the board tucks back into the rail's corner */
+  .main{margin-top:24px;border-top-left-radius:24px}
+  /* a pointer row, not a thumb one */
+  .rail-link{min-height:36px}
+  /* and only the section you are in draws its tree */
+  .rail-group:not(.here) .rail-sub{display:none}
 }
 /* ── Sessions page ─────────────────────────────────────────────────────────
    Two columns on the broad wrap: the list in one of five shapes, and a 320px
@@ -785,19 +809,22 @@ code,kbd,samp,pre{font-family:inherit}
    `ra-pill off` and used to tint it red */
 .foot .off{color:var(--red)}
 
-/* The desktop breakpoint. 1568px is the exact width at which the board stops
+/* The lock. 1536px — tier 2xl — is the exact width at which the board stops
    being fixed-width and starts shrinking: 240px rail + 2×24px `.main` padding
-   + the 1280px `.wrap.broad` measure. Above it the layout never moves, so it is
-   "desktop"; at it the aside leaves the right column and rides above the list
-   as a two-card row, and the list takes the full measure. On a phone (700px)
-   the two aside cards stack.
+   + the 1248px `.wrap.broad` measure. Above it the layout never moves, which is
+   what makes 1537 (3xl) the width where wide desktop opens; at the lock the
+   aside leaves the right column and rides above the list as a two-card row, and
+   the list takes the full measure. On a phone the two aside cards stack.
+
+   The query below still carries the pre-ladder 1568 literal: it moves onto the
+   ladder with the sessions layout it governs, not with the measure.
 
    Two knock-on caveats, both pre-existing and both deliberate:
    • `[data-density="compact"]` trims --body-pad to 14px, so its true crossover
-     is 1548px — a media query cannot read a custom property, and 20px of early
-     flip is cheaper than a second breakpoint.
-   • `.shell{zoom:var(--font-scale)}` makes the query resolve against the
-     unzoomed viewport, so above 100% text scale the flip lands slightly late.
+     sits 20px early — a media query cannot read a custom property, and 20px of
+     early flip is cheaper than a second breakpoint.
+   • `.shell{zoom:var(--font-scale)}` makes every query resolve against the
+     unzoomed viewport, so above 100% text scale each tier lands slightly late.
    Content width = full (`[data-width="full"]`) has no fixed measure at all; it
    keeps this breakpoint rather than growing one of its own. */
 @media (max-width:1568px){
@@ -809,7 +836,7 @@ code,kbd,samp,pre{font-family:inherit}
 /* Board is the exception to the 1568 breakpoint. Its three columns are named
    buckets — Needs you / Working / Quiet — so wrapping one onto a second row
    breaks the read, not just the fit. Once the aside is gone the list owns the
-   whole 1280px measure, which is three comfortable ~416px columns, so Board
+   whole 1248px measure, which is three comfortable ~405px columns, so Board
    holds its shape until the measure itself runs out at 1100. Must stay above
    the 700px block, which folds it to one column at equal specificity. */
 @media (max-width:1100px){
