@@ -37,7 +37,17 @@ with `min-width`.
 | `3xl` | 1537 | Structural gains in full mode; capped holds at 1248 |
 | `4xl` | 1921 | Structural gains in full mode; capped holds at 1248 |
 
-Seven width queries, down from 13 blocks.
+Seven tiers, replacing six ad-hoc widths across 13 desktop-first blocks.
+
+**CORRECTION (post-implementation):** an earlier draft of this line said "seven width
+queries, down from 13 blocks". The tier COUNT is seven, but the resulting file holds
+fourteen `min-width` blocks, not seven — tier blocks are section-local, placed after each
+section's own base rules rather than pooled one-per-tier. That convention was adopted
+mid-implementation after appending to a shared earlier block silently broke the ladder
+twice: a section whose base rule sits later in the file wins over an earlier tier block at
+every width. More blocks is the correct trade. Never state a block or query count as a
+property of this design — it changes whenever a section is added, which is why the guard
+test asserts on the set of tier VALUES and never on a count.
 
 ### The lock is re-derived
 
