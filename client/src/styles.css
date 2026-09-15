@@ -1585,60 +1585,115 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .sp-toggle .set-seg{flex:none;background:var(--hairline2);border-color:var(--hairline2)}
 .sp-toggle .set-seg button{padding:5px 12px;font-size:12px}
 
-@media (max-width:700px){
-  /* A 1080px modal with margins does not fit a phone, so the presentation goes
-     back to full-screen — which also takes the scrim away again, leaving ✕ and
-     the browser's back as the exits there (docs/subsystems/chat.md). */
-  .chat-back{padding:0}
-  .chat{width:100%;max-width:none;height:100%;max-height:100%;border-radius:0;box-shadow:none}
-  .chat-head{padding:13px 14px;gap:8px}
-  .chat-title{font-size:15px}
-  /* the only exit left once the scrim is gone — give it a thumb, not a pointer */
-  .chat-x{width:40px;height:40px}
-  /* The sidecar lies down into a band over the transcript: the gauge, then the
-     facts as a wrapping meta line — nothing is dropped, they just stop being a
-     column — then the filter. */
-  .chat-split{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
-  /* paper, not the desktop column's --strip-hi: as a band it reads as part of
-     the transcript, and the hairline is separation enough. */
-  .chat-side{gap:10px;padding:10px 14px;overflow:visible;background:var(--strip);border-right:0;border-bottom:1px solid var(--hairline)}
-  /* The gauge stops being a card too: label, reading and raw count on one
-     baseline, the track a hairline under them. A phone spends that height on
-     the transcript, which is what the drawer is for. */
-  .chat-side .kv{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px;padding:0;background:none;border-radius:0}
-  .chat-side .kv .k{font-size:11px}
-  .chat-side .kv .v{margin-top:0}
-  .chat-side .kv .v .metric{font-size:16px}
-  .chat-side .kv .track{flex-basis:100%;height:4px;margin-top:6px}
-  .chat-facts{display:flex;flex-wrap:wrap;gap:3px 14px;font-size:11px}
-  .chat-facts .f{justify-content:flex-start;gap:6px;max-width:100%}
-  /* Project, Messages and Now: the head pill, the foot count and the last turn
-     of the transcript already carry them on a phone. */
-  .chat-facts .f.wide{display:none}
-  .chat-body{padding:14px 14px 40px;gap:16px}
-  .qpanel,.qpanel.min,.pbanner{padding:14px}
-  /* three items do not fit a phone-width line: the live reading and the count
-     keep the first row, the filter takes the second at full width. */
-  .chat-foot{padding:9px 14px;flex-wrap:wrap;row-gap:8px}
-  .chat-foot .seg{width:100%}
-  .chat-foot .seg>button{flex:1;min-height:32px;text-align:center}
-  /* thumb-sized: the option rows are already full-width, the actions are not */
-  .qp-send,.qp-term{flex:1;min-height:44px}
-  .qp-mic{width:44px;height:44px}
-  /* the launch modal goes full-screen with the chat one, for the same reason:
-     620px with margins does not fit a phone, and the scrim it loses was never
-     the only exit (✕ and the browser's back stay). */
-  .spawn-back{padding:0}
-  .spawn{width:100%;max-width:none;height:100%;max-height:100%;border-radius:0;box-shadow:none}
-  .spawn-head{padding:13px 14px;gap:8px}
-  .spawn-body{padding:14px;gap:14px}
-  .spawn-foot{padding:10px 14px}
-  /* stack the three flags rather than squeezing them onto one line, and give
-     every control a thumb-sized tap target */
-  .sp-row{grid-template-columns:minmax(0,1fr)}
-  .sp-select select{min-height:42px}
-  .sp-toggle{flex-direction:column;align-items:stretch;gap:10px}
-  .sp-toggle .set-seg button{flex:1;min-height:40px}
+/* A 1080px modal with margins does not fit a phone, so the presentation goes
+   back to full-screen — which also takes the scrim away again, leaving ✕ and
+   the browser's back as the exits there (docs/subsystems/chat.md). Phone is
+   the base tier now; `md` below rebuilds the desktop shape. */
+.chat-back{padding:0}
+.chat{width:100%;max-width:none;height:100%;max-height:100%;border-radius:0;box-shadow:none}
+.chat-head{padding:13px 14px;gap:8px}
+.chat-title{font-size:15px}
+/* the only exit left once the scrim is gone — give it a thumb, not a pointer */
+.chat-x{width:40px;height:40px}
+/* The sidecar lies down into a band over the transcript: the gauge, then the
+   facts as a wrapping meta line — nothing is dropped, they just stop being a
+   column — then the filter. */
+.chat-split{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+/* paper, not the desktop column's --strip-hi: as a band it reads as part of
+   the transcript, and the hairline is separation enough. */
+.chat-side{gap:10px;padding:10px 14px;overflow:visible;background:var(--strip);border-right:0;border-bottom:1px solid var(--hairline)}
+/* The gauge stops being a card too: label, reading and raw count on one
+   baseline, the track a hairline under them. A phone spends that height on
+   the transcript, which is what the drawer is for. */
+.chat-side .kv{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px;padding:0;background:none;border-radius:0}
+.chat-side .kv .k{font-size:11px}
+.chat-side .kv .v{margin-top:0}
+.chat-side .kv .v .metric{font-size:16px}
+.chat-side .kv .track{flex-basis:100%;height:4px;margin-top:6px}
+.chat-facts{display:flex;flex-wrap:wrap;gap:3px 14px;font-size:11px}
+.chat-facts .f{justify-content:flex-start;gap:6px;max-width:100%}
+/* Project, Messages and Now: the head pill, the foot count and the last turn
+   of the transcript already carry them on a phone. */
+.chat-facts .f.wide{display:none}
+.chat-body{padding:14px 14px 40px;gap:16px}
+.qpanel,.qpanel.min,.pbanner{padding:14px}
+/* three items do not fit a phone-width line: the live reading and the count
+   keep the first row, the filter takes the second at full width. */
+.chat-foot{padding:9px 14px;flex-wrap:wrap;row-gap:8px}
+.chat-foot .seg{width:100%}
+.chat-foot .seg>button{flex:1;min-height:32px;text-align:center}
+/* thumb-sized: the option rows are already full-width, the actions are not */
+.qp-send,.qp-term{flex:1;min-height:44px}
+.qp-mic{width:44px;height:44px}
+/* the launch modal goes full-screen with the chat one, for the same reason:
+   620px with margins does not fit a phone, and the scrim it loses was never
+   the only exit (✕ and the browser's back stay). */
+.spawn-back{padding:0}
+.spawn{width:100%;max-width:none;height:100%;max-height:100%;border-radius:0;box-shadow:none}
+.spawn-head{padding:13px 14px;gap:8px}
+.spawn-body{padding:14px;gap:14px}
+.spawn-foot{padding:10px 14px}
+/* stack the three flags rather than squeezing them onto one line, and give
+   every control a thumb-sized tap target */
+.sp-row{grid-template-columns:minmax(0,1fr)}
+.sp-select select{min-height:42px}
+.sp-toggle{flex-direction:column;align-items:stretch;gap:10px}
+.sp-toggle .set-seg button{flex:1;min-height:40px}
+
+/* Density boundary: the modals get their measured desktop shapes back here —
+   fixed sizes, the two-pane sidecar, the scrim's margins — and every property
+   below stays exactly put through xl/2xl/3xl/4xl. `.chat` and `.spawn` never
+   gain a wide-tier rule of their own: a modal is a focused reading surface,
+   not something that should track the display width (confirmed at 1920/2560
+   in both content-width settings). Every restored value here was read back
+   off the actual desktop computed style before this block existed — not
+   guessed — because a wrong-but-plausible restore is exactly the failure
+   mode this migration has hit twice already. */
+@media (min-width:768px){
+  .chat-back{padding:40px 24px}
+  .chat{width:1080px;max-width:100%;height:auto;max-height:min(820px,100%);border-radius:24px;box-shadow:0 24px 64px var(--shadow2)}
+  .chat-head{padding:20px 24px;gap:10px}
+  .chat-title{font-size:17px}
+  .chat-x{width:32px;height:32px}
+  /* rebuild the two-pane sidecar: fixed rail beside the fluid transcript,
+     one row — not the phone's stacked band-over-transcript rows */
+  .chat-split{grid-template-columns:290px minmax(0,1fr);grid-template-rows:none}
+  .chat-side{gap:18px;padding:22px;overflow:auto;background:var(--strip-hi);border-right:1px solid var(--hairline);border-bottom:0}
+  /* the gauge goes back to being a card — `.kv`'s own block shape — instead
+     of the phone's wrapping baseline row; `display` needs the explicit
+     `block` here, not `flex`, or `.k`/`.v`/`.track` stay laid out sideways */
+  .chat-side .kv{display:block;padding:14px 16px;background:var(--strip);border-radius:12px}
+  .chat-side .kv .k{font-size:12px}
+  .chat-side .kv .v{margin-top:4px}
+  .chat-side .kv .v .metric{font-size:24px}
+  .chat-side .kv .track{flex-basis:auto;height:10px;margin-top:12px}
+  .chat-facts{display:grid;gap:10px;font-size:12px}
+  .chat-facts .f{justify-content:space-between;gap:12px;max-width:none}
+  .chat-facts .f.wide{display:flex}
+  .chat-body{padding:20px 24px 40px;gap:20px}
+  .qpanel{padding:18px 24px}
+  .qpanel.min{padding:12px 24px}
+  .pbanner{padding:13px 24px}
+  .chat-foot{padding:10px 24px;flex-wrap:nowrap;row-gap:12px}
+  .chat-foot .seg{width:auto}
+  .chat-foot .seg>button{flex:0 1 auto;min-height:auto;text-align:center}
+  .qp-send,.qp-term{flex:0 1 auto;min-height:auto}
+  .qp-mic{width:36px;height:36px}
+  .spawn-back{padding:40px 24px}
+  .spawn{width:620px;max-width:100%;height:auto;max-height:min(820px,100%);border-radius:24px;box-shadow:0 24px 64px var(--shadow2)}
+  .spawn-head{padding:20px 24px;gap:10px}
+  .spawn-body{padding:22px 24px;gap:18px}
+  .spawn-foot{padding:14px 24px}
+  .sp-row{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .sp-select select{min-height:auto}
+  .sp-toggle{flex-direction:row;align-items:center;gap:16px}
+  /* `.set-seg button`'s own md rule further down (Settings section) only
+     reaches plain `.set-seg` toggles — this compound selector is more
+     specific and, without a line here, would stay pinned at the phone's
+     flex:1/40px past 768px instead of falling through to that rule's
+     flex:0 1 auto/auto, which is what this element actually measured at
+     desktop before any of this migration touched it. */
+  .sp-toggle .set-seg button{flex:0 1 auto;min-height:auto}
 }
 
 /* ---------------------------------------------- Settings section
