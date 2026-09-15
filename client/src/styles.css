@@ -348,13 +348,13 @@ code,kbd,samp,pre{font-family:inherit}
    State rides on the element itself (`.sdot.working`, `.spill.question`)
    rather than on an ancestor row, because the same session sits in a card, a
    table cell, a list row and a tile. */
-.sessions{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+.sessions{position:relative;display:grid;grid-template-columns:1fr;gap:16px;align-items:start}
 .s-main,.s-aside,.s-body{display:flex;flex-direction:column;gap:16px;min-width:0}
 /* the aside is first in the DOM (it reads first on a phone and to a screen
    reader — the gauges before the list, as the plate did) and second on a
    desktop, where it takes the narrow column */
-.s-aside{order:1}
-.s-card{background:var(--strip);border-radius:16px;padding:24px;min-width:0}
+.s-aside{order:-1;display:grid;grid-template-columns:1fr;align-items:start}
+.s-card{background:var(--strip);border-radius:16px;padding:20px;min-width:0}
 .s-card.sm{padding:20px}
 .sessions .ct{font-size:19px;font-weight:500;letter-spacing:-.01em;line-height:1.3;color:var(--ink)}
 .sessions .cs{font-size:13px;color:var(--ink2);margin-top:4px}
@@ -500,8 +500,18 @@ code,kbd,samp,pre{font-family:inherit}
 /* ── toolbar: one row. The labelled view switcher left; one shared track right
    with the filter button, the sort label and the sort button. Nothing here does
    anything but change which rows you see, in what order, and in what shape. */
-.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:10px}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;row-gap:10px}
 .toolbar .tb-spacer{flex:1;min-width:0}
+/* One row on the phone and tablet portrait. The switcher is down to the three
+   shapes this width draws (`layoutsFor`), so the words fit and the glyph row
+   the toolbar used to swap in is gone — five icons were a legend to learn,
+   three words are not. The sort readout drops, which is what buys the
+   filter/sort track a place beside the switcher instead of a second row under
+   it. The sort *button* stays — the popover it opens prints the current key
+   with a tick, so the readout was the only thing repeating itself. */
+.toolbar .seg.view>button{padding:7px 10px}
+.toolbar .sortlab{display:none}
+.toolbar .seg .vsep{margin:0 2px}
 /* the segmented track. On the app ground it is --hairline2, not --strip-hi:
    those two are two points apart on daylight and the track vanished (the
    scope-pill lesson from §8.2 — nothing on the ground uses --strip-hi as its
@@ -510,7 +520,7 @@ code,kbd,samp,pre{font-family:inherit}
 .seg>button{font-family:var(--font);font-size:13px;font-weight:500;white-space:nowrap;color:var(--ink2);background:none;border:0;border-radius:9px;padding:7px 12px;cursor:pointer;transition:color .15s,background .15s}
 .seg>button:hover{color:var(--ink)}
 .seg>button.on{color:var(--ink);background:var(--strip);box-shadow:0 1px 2px var(--shadow)}
-.ctlwrap{position:relative}
+.ctlwrap{position:relative;margin-left:auto;flex:none}
 .seg .ictl{position:relative;padding:0;width:34px;height:30px;display:grid;place-items:center}
 .seg .ictl svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .seg .ictl.open{color:var(--ink)}
@@ -520,7 +530,7 @@ code,kbd,samp,pre{font-family:inherit}
 .sortlab{font-size:13px;color:var(--ink2);padding:0 2px 0 8px;white-space:nowrap}
 .sortlab b{color:var(--ink);font-weight:500}
 /* the popover: the one floating surface besides the shell (§5) */
-.pop{position:absolute;top:calc(100% + 8px);right:0;width:300px;z-index:20;text-align:left;background:var(--strip);border:1px solid var(--hairline);border-radius:12px;box-shadow:0 8px 24px var(--shadow2);padding:16px}
+.pop{position:absolute;top:calc(100% + 8px);right:0;width:min(300px,calc(100vw - 48px));z-index:20;text-align:left;background:var(--strip);border:1px solid var(--hairline);border-radius:12px;box-shadow:0 8px 24px var(--shadow2);padding:16px}
 .pop-h{display:flex;align-items:baseline;gap:8px;font-size:14px;font-weight:500;color:var(--ink);margin-bottom:12px}
 .pop-h .clear{margin-left:auto;border:0;background:none;padding:0;font-family:var(--font);font-size:12px;color:var(--ink2);cursor:pointer}
 .pop-h .clear:disabled{color:var(--ink3);cursor:default}
@@ -703,7 +713,12 @@ code,kbd,samp,pre{font-family:inherit}
 .ledger tbody tr:first-child td{border-top:0}
 .ledger th:first-child,.ledger td:first-child{padding-left:20px}
 .ledger th:last-child,.ledger td:last-child{padding-right:20px}
-.ledger .c-dot{width:41px}.ledger .c-model{width:90px}.ledger .c-ctx{width:200px}.ledger .c-state{width:84px}.ledger .c-act{width:150px}.ledger .c-last{width:80px}.ledger .c-do{width:104px}
+.ledger .c-dot{width:41px}.ledger .c-model{width:90px}.ledger .c-ctx{width:120px}.ledger .c-state{width:84px}.ledger .c-act{width:150px}.ledger .c-last{width:80px}.ledger .c-do{width:104px}
+/* Model column is a tablet-portrait-and-up luxury: at md the ctx bar gets its
+   full 200px back alongside it. Table is `table-layout:fixed`, so a `col`
+   width and a hidden `th`/`td` must always agree or the columns misalign
+   rather than error. */
+.ledger .c-model,.ledger td.model,.ledger th:nth-child(3){display:none}
 .ledger tbody tr:not(.launching):not(.expand){cursor:pointer}
 .ledger tbody tr:not(.launching):not(.expand):not(.selected):hover td{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
 /* Open row + its body read as one block: same fill through the hover, one
@@ -731,7 +746,7 @@ code,kbd,samp,pre{font-family:inherit}
 .ledger .dash{color:var(--ink3)}
 
 /* ── Split: a compact list, one inspector ─────────────────────────────────── */
-.split{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
+.split{display:grid;grid-template-columns:1fr;gap:16px;align-items:start}
 /* Rows run to the card's left and right edges, but not to its bottom one:
    the last row needs the same air under it that the head has above the first.
    Same for the ledger's last table row. */
@@ -768,9 +783,11 @@ code,kbd,samp,pre{font-family:inherit}
 .inspect .expanded{margin-top:20px}
 
 /* ── Tiles: every session a metric card; the open one spans two ───────────── */
-.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
+.tiles{display:grid;grid-template-columns:1fr;gap:16px;align-items:start}
 .tile{cursor:pointer;transition:box-shadow .15s}
-.tile.selected{box-shadow:0 0 0 2px var(--ink);grid-column:span 2}
+/* One column below `md`: a spanning tile would overflow a single-column grid,
+   so the span only turns on once `.tiles` is at least two columns wide. */
+.tile.selected{box-shadow:0 0 0 2px var(--ink);grid-column:auto}
 .tile.launching{background:transparent;border:1px dashed var(--hairline2);cursor:default}
 .tile.launching.failed{border-color:var(--red)}
 .tile-h{display:flex;align-items:center;gap:8px}
@@ -786,7 +803,7 @@ code,kbd,samp,pre{font-family:inherit}
 .sec-h{display:flex;align-items:baseline;gap:10px;padding:4px 4px 0;flex-wrap:wrap}
 .sec-h .cs{margin-top:0}
 .sec-h+.need,.sec-h+.s-card.quiet{margin-top:-6px}
-.need{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;padding:20px 24px;overflow:hidden}
+.need{display:grid;grid-template-columns:1fr;gap:20px;align-items:center;padding:20px 24px;overflow:hidden}
 .need-who{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;row-gap:6px;font-size:12px;color:var(--ink2)}
 .need-who b{color:var(--ink);font-weight:500;font-size:15px;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .need-meta{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--ink2);flex-wrap:wrap;row-gap:6px}
@@ -795,7 +812,7 @@ code,kbd,samp,pre{font-family:inherit}
 .need .q .kind{display:block;color:var(--ink2);font-weight:400;font-size:12px;margin-bottom:4px;letter-spacing:0}
 .need .q .act{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .need .q .act .tool{color:var(--ink2);font-weight:400}
-.acts{display:flex;flex-direction:column;gap:8px}
+.acts{display:flex;flex-direction:row;gap:8px}
 /* `.s-card`-scoped: bare `.quiet` also matches the board's Quiet column head. */
 .s-card.quiet{padding:0;overflow:hidden}
 .qrow{display:flex;align-items:center;gap:10px;padding:14px 20px;border-top:1px solid var(--hairline);font-size:13px;min-width:0}
@@ -818,15 +835,42 @@ code,kbd,samp,pre{font-family:inherit}
    `ra-pill off` and used to tint it red */
 .foot .off{color:var(--red)}
 
+/* ── md: density and control-fitting turn ─────────────────────────────────
+   768 is the tablet-portrait line: column counts, the table's model column
+   and the toolbar's control-fitting all turn here together, per the 640/768
+   principle — 640 stays a pure shell boundary and carries none of this. */
+@media (min-width:768px){
+  .s-aside{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .s-card{padding:24px}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tile.selected{grid-column:span 2}
+  .split{grid-template-columns:280px minmax(0,1fr)}
+  .ledger .c-model{display:table-column}
+  .ledger td.model,.ledger th:nth-child(3){display:table-cell}
+  .ledger .c-ctx{width:200px}
+  .toolbar{flex-wrap:wrap}
+  .toolbar .seg.view>button{padding:7px 12px}
+  .toolbar .sortlab{display:inline}
+  .toolbar .seg .vsep{margin:0 2px 0 6px}
+  .ctlwrap{margin-left:0;flex:0 1 auto}
+  .pop{width:300px}
+  .need{grid-template-columns:minmax(0,1fr) auto}
+  .acts{flex-direction:column}
+}
+
+/* Three-up from `xl`: two tiers of column growth (`md` for the phone/tablet
+   boundary, this one for laptop-and-up) before the aside returns at `2xl`
+   and narrows the measure again. */
+@media (min-width:1280px){
+  .tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+
 /* The lock. 1536px — tier 2xl — is the exact width at which the board stops
    being fixed-width and starts shrinking: 240px rail + 2×24px `.main` padding
    + the 1248px `.wrap.broad` measure. Above it the layout never moves, which is
    what makes 1537 (3xl) the width where wide desktop opens; at the lock the
    aside leaves the right column and rides above the list as a two-card row, and
    the list takes the full measure. On a phone the two aside cards stack.
-
-   The query below still carries the pre-ladder 1568 literal: it moves onto the
-   ladder with the sessions layout it governs, not with the measure.
 
    Two knock-on caveats, both pre-existing and both deliberate:
    • `[data-density="compact"]` trims --body-pad to 14px, so its true crossover
@@ -836,35 +880,10 @@ code,kbd,samp,pre{font-family:inherit}
      unzoomed viewport, so above 100% text scale each tier lands slightly late.
    Content width = full (`[data-width="full"]`) has no fixed measure at all; it
    keeps this breakpoint rather than growing one of its own. */
-@media (max-width:1568px){
-  .sessions{grid-template-columns:1fr}
-  .s-aside{order:-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
-  .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .split{grid-template-columns:280px minmax(0,1fr)}
-}
-@media (max-width:700px){
-  .s-aside{grid-template-columns:1fr}
-  .s-card{padding:20px}
-  .tiles{grid-template-columns:1fr}
-  .tile.selected{grid-column:auto}
-  .split{grid-template-columns:1fr}
-  .ledger .c-model,.ledger td.model,.ledger th:nth-child(3){display:none}
-  .ledger .c-ctx{width:120px}
-  /* One row on the phone. The switcher is down to the three shapes this width
-     draws (`layoutsFor`), so the words fit and the glyph row the toolbar used
-     to swap in is gone — five icons were a legend to learn, three words are
-     not. The sort readout drops, which is what buys the filter/sort track a
-     place beside the switcher instead of a second row under it. The sort
-     *button* stays — the popover it opens prints the current key with a tick,
-     so the readout was the only thing repeating itself. */
-  .toolbar{flex-wrap:nowrap}
-  .toolbar .seg.view>button{padding:7px 10px}
-  .toolbar .sortlab{display:none}
-  .toolbar .seg .vsep{margin:0 2px}
-  .ctlwrap{margin-left:auto;flex:none}
-  .pop{width:min(300px,calc(100vw - 48px))}
-  .need{grid-template-columns:1fr}
-  .acts{flex-direction:row}
+@media (min-width:1536px){
+  .sessions{grid-template-columns:minmax(0,1fr) 320px}
+  .s-aside{order:1;display:flex;flex-direction:column}
+  .split{grid-template-columns:320px minmax(0,1fr)}
 }
 
 /* Analytics draws the same `.toolbar` row as the sessions board — the same
