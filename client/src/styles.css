@@ -1772,11 +1772,33 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    is 2px of `--board` for the same reason the sheets are borderless — contrast
    against the ground does the separating (§8.2). */
 .statstrip{
-  display:grid;grid-template-columns:repeat(5,1fr);
+  display:grid;grid-template-columns:repeat(2,1fr);
   background:var(--strip);border-radius:16px;overflow:hidden;
 }
 .statstrip>div{padding:18px 20px;min-width:0}
-.statstrip>div+div{border-left:2px solid var(--board)}
+/* The seams, derived from the column count alone. The strip is one card the
+   ground divides, so a seam is a border on a cell rather than a gap in the
+   grid, and for C columns the rule is only ever:
+     • left seam on every cell but the first in its row — `:nth-child(Cn+1)`
+       goes bare, `:not(:nth-child(Cn+1))` carries it;
+     • top seam on every cell but those in the first row — `:nth-child(-n+C)`
+       goes bare, `:nth-child(n+C+1)` carries it.
+   Each pair partitions the cells, so every cell takes exactly one declaration
+   per property per tier and `md`/`2xl` below simply restate both pairs at
+   their own C. Equal specificity throughout, later tier wins on source order,
+   no cascade contest to win. Do NOT collapse either pair into a plain
+   `.statstrip>div` rule: that is one pseudo-class weaker than these and would
+   lose to the tier it is meant to reset — which is how tile 3 once came out
+   with a stray column seam and no row seam, offset from the tile above it. */
+.statstrip>div:nth-child(2n+1){border-left:0}
+.statstrip>div:not(:nth-child(2n+1)){border-left:2px solid var(--board)}
+.statstrip>div:nth-child(-n+2){border-top:0}
+.statstrip>div:nth-child(n+3){border-top:2px solid var(--board)}
+/* An odd last tile spans both columns. A five-figure strip that leaves the
+   sixth cell empty draws a seam into blank paper, which reads as a missing
+   figure; spanning closes the block instead. Cancelled at `md`, where the
+   count is no longer two. */
+.statstrip>div:last-child:nth-child(2n+1){grid-column:1/-1}
 .statstrip .k{font-size:12px;color:var(--ink2);display:flex;align-items:center;gap:8px}
 .statstrip .v{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:6px;line-height:1.1;color:var(--ink);overflow-wrap:anywhere}
 .statstrip .v.warn{color:var(--amber)}
@@ -1784,9 +1806,11 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .statstrip .s{font-size:11px;color:var(--ink3);margin-top:5px}
 
 /* ── a sheet ─────────────────────────────────────────────────────────────
-   §8.2's card: paper, 16px radius, 24px of padding, no stroke and no
-   shadow. `.ct`/`.cs` are §7's title + one-line subtitle pair. */
-.sheet{background:var(--strip);border-radius:16px;padding:22px 24px}
+   §8.2's card: paper, 16px radius, no stroke and no shadow. `.ct`/`.cs` are
+   §7's title + one-line subtitle pair. The padding is the design's 24px from
+   `md` up; below it the phone keeps 20px on all four sides, which is what
+   leaves a readable measure inside a 375px screen. */
+.sheet{background:var(--strip);border-radius:16px;padding:20px}
 .sheet .ct{font-size:16px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
 .sheet .ct.sub{font-size:15px}
 .sheet .cs{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:4px;max-width:92ch}
@@ -1884,7 +1908,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 /* ── the definitions sheet ───────────────────────────────────────────────
    Printed, not folded: a reader who has just met six ⓘ glyphs is exactly the
    reader who should not have to find a drawer to read them all. */
-.terms{columns:2;column-gap:32px;margin:14px 0 0}
+.terms{columns:1;column-gap:32px;margin:14px 0 0}
 .terms>div{break-inside:avoid;padding:10px 0;border-bottom:1px solid var(--hairline)}
 /* the last term has nothing under it to be separated from, and the rule then
    reads as the sheet's own edge drawn in the wrong place */
@@ -2014,36 +2038,39 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   padding:10px 10px 10px 0;border-bottom:1px solid var(--hairline);white-space:nowrap;
 }
 
-/* ── narrow ──────────────────────────────────────────────────────────────
-   The desktop breakpoint (see the Sessions block, ~line 687). Usage is on the
-   same `.wrap.broad` measure, so it folds where that measure starts shrinking. */
-@media (max-width:1568px){
+/* ── md: the density turn ─────────────────────────────────────────────────
+   768 is the density boundary — 640 stays a pure shell boundary and carries
+   none of this. The strip goes three-across and the sheet takes its full
+   padding back. Both seam pairs are restated at C=3: they partition the cells,
+   so they replace the two-column seams outright rather than patching them. */
+@media (min-width:768px){
+  .sheet{padding:22px 24px}
   .statstrip{grid-template-columns:repeat(3,1fr)}
-  /* the ground draws the seams in both directions once the strip wraps */
-  .statstrip>div{border-top:2px solid var(--board)}
-  .statstrip>div:nth-child(-n+3){border-top:0}
   .statstrip>div:nth-child(3n+1){border-left:0}
-  .terms{columns:1}
+  .statstrip>div:not(:nth-child(3n+1)){border-left:2px solid var(--board)}
+  .statstrip>div:nth-child(-n+3){border-top:0}
+  .statstrip>div:nth-child(n+4){border-top:2px solid var(--board)}
+  /* the two-column span means nothing at three — the tile goes back in its cell */
+  .statstrip>div:last-child:nth-child(2n+1){grid-column:auto}
+}
+
+/* ── 2xl: the strip opens to its full five ────────────────────────────────
+   1536 is the lock (rail 240 + 2×24 of `.main` padding + the 1248px measure),
+   the last width at which the board sits at its natural size. The strip caps
+   here: its seams are pinned to explicit column counts, so it can never become
+   an `auto-fill` track list, and there is no 3xl or 4xl rule — above the lock
+   the five cells simply get wider. The definitions list takes its second
+   column at the same width, for the same reason: this is where the measure
+   stops being the constraint. */
+@media (min-width:1536px){
+  .statstrip{grid-template-columns:repeat(5,1fr)}
+  .statstrip>div:nth-child(5n+1){border-left:0}
+  .statstrip>div:not(:nth-child(5n+1)){border-left:2px solid var(--board)}
+  .statstrip>div:nth-child(-n+5){border-top:0}
+  .statstrip>div:nth-child(n+6){border-top:2px solid var(--board)}
+  .terms{columns:2}
 }
 @media (max-width:700px){
-  .sheet{padding:20px}
-  /* Two columns, and an odd last tile spans both — a five-figure strip that
-     leaves the tenth cell empty draws a seam into blank paper, which reads as a
-     missing figure. Spanning closes the block instead. Written against
-     `:nth-child(even)`/`:nth-child(-n+2)` rather than the wide grid's `3n`
-     rules: those are the three-column seams and are wrong at two. */
-  /* Every rule here is a `:nth-child`, deliberately — the plainer forms lose to
-     rules already set above. `>div{border-left:0}` loses to the wide strip's
-     `>div+div` seam (same class, one fewer type selector), and
-     `>div{border-top:2px}` loses to the three-column block's
-     `:nth-child(-n+3){border-top:0}`. Written plainly, tile 3 came out with a
-     stray column seam and no row seam: a card offset from the one above it. */
-  .statstrip{grid-template-columns:repeat(2,1fr)}
-  .statstrip>div:nth-child(n+3){border-top:2px solid var(--board)}
-  .statstrip>div:nth-child(-n+2){border-top:0}
-  .statstrip>div:nth-child(odd){border-left:0}
-  .statstrip>div:nth-child(even){border-left:2px solid var(--board)}
-  .statstrip>div:last-child:nth-child(odd){grid-column:1/-1}
   /* the transpose: 24 columns do not fit a thumb's width */
   .hmx.wide{display:none}
   .hmx.tall{display:grid}
