@@ -832,7 +832,7 @@ code,kbd,samp,pre{font-family:inherit}
    name takes the freed width and ellipsises, so a long one is still the
    thing you read. `md` (below) brings the dropped children back and gives
    `.nm` its measured width back. */
-.qrow>*:not(.nm):not(.sdot):not(.cbtn):not(.spill){display:none}
+.qrow>.proj-pill,.qrow>.branch,.qrow>.act-line,.qrow>.ctx,.qrow>.when,.qrow>.prompt{display:none}
 .qrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .qrow .cbtn{margin-left:auto}
 
@@ -867,15 +867,19 @@ code,kbd,samp,pre{font-family:inherit}
   .pop{width:300px}
   .need{grid-template-columns:minmax(0,1fr) auto}
   .acts{flex-direction:column}
-  /* the row has room for all of its children again — same selector as the
-     base rule that hid them, so it wins outright on specificity, not just
-     source order; `.act-line` and `.ctx` are already `display:flex` in
-     their own rules (unaffected — this restates the same value), and a
-     plain-text child (`.proj-pill`, `.branch`, `.when`, `.prompt`) renders
-     identically whether its own display is flex or block, since a flex
-     container holding only a text run draws no differently than a block
-     box would. */
-  .qrow>*:not(.nm):not(.sdot):not(.cbtn):not(.spill){display:flex}
+  /* the row has room for all of its children again. `.act-line` and `.ctx`
+     go back to `flex` (their own rules already say so; enumerated here only
+     because the base hide rule had to be enumerated too, once it stopped
+     being a shared wildcard). The other four are plain-text children that
+     depend on block-only behaviour the hide rule was masking: `.when` needs
+     `text-align:right` to position it — a flex item ignores `text-align`
+     entirely and would sit at flex-start instead — and `.prompt`/`.branch`
+     need `text-overflow:ellipsis`, which applies only to block containers
+     and is not inherited, so a flex box hard-clips them with no `…`.
+     `.proj-pill` has no such dependency but is restored to `block` too,
+     its true prior computed value, rather than `flex` for no reason. */
+  .qrow>.act-line,.qrow>.ctx{display:flex}
+  .qrow>.proj-pill,.qrow>.branch,.qrow>.when,.qrow>.prompt{display:block}
   .qrow .nm{flex:0 1 auto;min-width:auto;overflow:visible;text-overflow:clip}
   .qrow .cbtn{margin-left:0}
 }
@@ -2172,7 +2176,12 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   /* the generated `data-l` label has no reason to exist beside a real
      header row */
   .dt.stack td::before{content:none}
-  .dt.stack td.name{display:table-cell;text-align:left;font-size:13px;font-weight:500;padding-bottom:10px}
+  .dt.stack td.name{display:table-cell;text-align:left;font-size:13px;font-weight:500;padding-bottom:10px;white-space:normal}
+  /* `.dt.stack td{white-space:nowrap}` above is equal specificity to `.dt
+     td.name`/`.dt td.mut` (base rules, both `normal` by design) and sits
+     later in the file, so it would otherwise win at this tier and stop long
+     model ids and prose notes from wrapping inside `.dt{width:100%}`. */
+  .dt.stack td.mut{white-space:normal}
   /* an empty cell is a real column again — hiding it would throw every
      column after it out of alignment with the header row */
   .dt.stack td:empty{display:table-cell}
