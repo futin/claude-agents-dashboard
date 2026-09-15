@@ -67,10 +67,11 @@ export default function ManagementView() {
   // Stacked single-column, column 3 opens *below* both lists — far enough down
   // that picking an item looks like it did nothing. Bring it up. Deselecting
   // (clicking the open row again) unmounts the column, so there is nothing to
-  // scroll to and `?.` is the whole guard; `.mgmt` goes multi-column at the
-  // `md` density tier (768), same as `.board`/`.tiles`/`.split`, and above
-  // that the three columns are side by side so the scroll would be a jump for
-  // no reason.
+  // scroll to and `?.` is the whole guard; `.mgmt` is single-column below the
+  // `md` density tier and goes multi-column at `md` itself (768; see
+  // `styles.css`'s `.mgmt` base rule and its `min-width:768px` override), and
+  // above that the three columns are side by side so the scroll would be a
+  // jump for no reason.
   useEffect(() => {
     if (selectedKey === null) return;
     if (!window.matchMedia('(max-width:767.98px)').matches) return;
