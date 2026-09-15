@@ -77,6 +77,7 @@ import { run as runEnvValue } from './env-value.test.js';
 import { run as runInstallHooksToken } from './install-hooks-token.test.js';
 import { run as runKillGuard } from './kill-guard.test.js';
 import { run as runTailnet } from './tailnet.test.js';
+import { run as runBreakpoints } from './breakpoints.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -157,6 +158,7 @@ failed += runEnvValue();
 failed += runInstallHooksToken();
 failed += runKillGuard();
 failed += runTailnet();
+failed += runBreakpoints();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

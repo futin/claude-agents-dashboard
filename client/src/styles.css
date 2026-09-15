@@ -117,6 +117,31 @@
    the strip full-bleed, and `useStuckStrip`'s threshold all resolve through
    this one name. 44px burger + 8px either side, which is what the bar
    measured before it was given a height. */
+/* ── Breakpoint ladder — token reference ─────────────────────────────────────
+   Seven named tiers, mobile-first ascending. This is prose, not CSS custom
+   properties: `@media` cannot read `var()` in its condition, so a `:root`
+   token would be unreachable from every query below and would drift the
+   moment someone edited the value in one place but not the other. Read this
+   block before touching a query — the numbers below are the only source of
+   truth, and every `(min-width: …px)` / `(max-width: …px)` in this file is a
+   literal copy of one of them. Do not "fix" this into custom properties.
+
+   tier sm:    640   phone landscape / small tablet
+   tier md:    768   tablet portrait
+   tier lg:   1024   tablet landscape / small laptop
+   tier xl:   1280   laptop
+   tier 2xl:  1536   desktop — the rail+measure lock point
+   tier 3xl:  1537   the same lock, one px up: wide desktop opens here
+   tier 4xl:  1921   ultra-wide
+
+   The base tier (0) is the mobile default below `sm` and needs no query of
+   its own — every rule outside a `@media` block already targets it.
+
+   The 2xl/3xl split is not arbitrary: rail 240 + --body-pad 24×2 (48) +
+   measure 1248 = 1536. Below that width the rail and the 1248px reading
+   measure cannot both fit at full size, so 1536 is the last width where the
+   desktop layout is at its natural size, and 1537 is the first where it has
+   room to grow. */
 :root{--row-pad:11px 14px;--rows-gap:7px;--bar-margin:9px 0 8px;--body-pad:24px;--mnav-h:60px}
 /* Must follow the :root defaults — both selectors match <html> at the same
    specificity, so source order is what decides. */
