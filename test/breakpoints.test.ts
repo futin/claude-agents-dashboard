@@ -1,12 +1,17 @@
 /**
- * Guards the breakpoint ladder's token comment block in `client/src/styles.css`.
+ * Guards the breakpoint ladder's token comment block in `client/src/styles.css`,
+ * plus (since the desktop-first → mobile-first inversion landed) the `@media`
+ * queries that are supposed to draw every literal from it.
  *
  * The seven tiers live as prose, not CSS custom properties — `@media` cannot
  * read `var()` in its condition, so the block above `:root` is the single
  * source of truth and every query in the file repeats one of its numbers as a
- * literal. This test only pins those numbers; it asserts nothing about
- * `@media` queries, which stay desktop-first (`max-width`) until a later task
- * migrates them onto this ladder.
+ * literal. Tier blocks are section-local by convention (appended after each
+ * section's own base rules rather than pooled into one block per tier — see
+ * `.claude/CLAUDE.md`), so the query-side cases below assert on the *set* of
+ * values in use, never on a count of blocks or queries: a count would fail
+ * the moment a new section is added, which is exactly the wrong thing to
+ * guard.
  */
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -70,6 +75,41 @@ function parseTiers(block: string): Tier[] {
   return tiers;
 }
 
+/** The ladder's seven values, in ascending tier order. */
+const LADDER_VALUES = [640, 768, 1024, 1280, 1536, 1537, 1921];
+
+/**
+ * A CSS source with every `/* ... *\/` block comment removed.
+ *
+ * `styles.css`'s block comments wrap prose across several lines without a
+ * leading `*` on each continuation line (unlike the JSDoc-style comments
+ * `tailnet.test.ts` strips line-by-line) — its derivation notes read as plain
+ * indented sentences, e.g. "Below 700px `AsideStrip` replaces...". A
+ * line-prefix filter leaves that prose in place, which is exactly the false
+ * positive this case exists to avoid. Removing matched `/* *\/` spans strips
+ * it regardless of per-line formatting.
+ */
+function stripCssComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+/** Every `@media (<condition>)` string in the file, comments excluded. */
+function mediaConditions(): string[] {
+  const css = stripCssComments(fs.readFileSync(STYLES_PATH, 'utf8'));
+  const re = /@media\s*\(([^)]+)\)/g;
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(css)) !== null) out.push(m[1].trim());
+  return out;
+}
+
+/** `mediaConditions()` minus the two deliberately-untouched non-width families. */
+function widthQueries(): string[] {
+  return mediaConditions().filter(
+    (q) => !q.includes('prefers-reduced-motion') && !q.includes('pointer')
+  );
+}
+
 export function run(): number {
   console.log('\n=== breakpoint ladder tokens ===\n');
   let p = 0, f = 0;
@@ -120,6 +160,61 @@ export function run(): number {
     assert.strictEqual(narrowSource.match(/\b700\b/), null, 'useNarrow.ts still references 700');
     assert.strictEqual(
       managementSource.match(/\b700\b/), null, 'ManagementView.tsx still references 700'
+    );
+  })) p++; else f++;
+
+  if (test('every width query is min-width', () => {
+    const queries = widthQueries();
+    assert.ok(queries.length > 0, 'expected at least one width @media query');
+    for (const q of queries) {
+      assert.ok(!q.includes('max-width'), `found a max-width query: (${q})`);
+      assert.ok(q.startsWith('min-width:'), `expected a min-width query, got: (${q})`);
+    }
+  })) p++; else f++;
+
+  if (test('every width query uses a ladder value', () => {
+    const queries = widthQueries();
+    for (const q of queries) {
+      const m = /^min-width:(\d+(?:\.\d+)?)px$/.exec(q);
+      assert.ok(m, `unexpected query shape: (${q})`);
+      const value = Number(m![1]);
+      assert.ok(LADDER_VALUES.includes(value), `${value} (from "${q}") is not a ladder value`);
+    }
+  })) p++; else f++;
+
+  if (test('no orphan tier', () => {
+    const tierValues = parseTiers(ladderBlock()).map((t) => t.value);
+    const queryValues = widthQueries().map((q) => Number(/^min-width:(\d+(?:\.\d+)?)px$/.exec(q)![1]));
+    const usedInQueries = new Set(queryValues);
+    for (const v of tierValues) {
+      assert.ok(usedInQueries.has(v), `tier value ${v} appears in no @media query`);
+    }
+    const inBlock = new Set(tierValues);
+    for (const v of queryValues) {
+      assert.ok(inBlock.has(v), `query value ${v} is not one of the tiers in the token block`);
+    }
+  })) p++; else f++;
+
+  if (test('the retired widths are gone', () => {
+    const css = stripCssComments(fs.readFileSync(STYLES_PATH, 'utf8'));
+    for (const n of [700, 900, 1100, 1201, 1330, 1568]) {
+      assert.strictEqual(
+        new RegExp(`\\b${n}px\\b`).test(css), false,
+        `retired width ${n}px still appears outside a comment`
+      );
+    }
+  })) p++; else f++;
+
+  if (test('the measure dropped', () => {
+    const css = stripCssComments(fs.readFileSync(STYLES_PATH, 'utf8'));
+    const rule = /\.wrap\.wide,\.wrap\.broad\{([^}]*)\}/.exec(css);
+    assert.ok(rule, '.wrap.wide,.wrap.broad rule not found');
+    assert.match(rule![1], /(?:^|;)max-width:1248px(?:;|$)/, 'expected max-width:1248px on .wrap.wide,.wrap.broad');
+    // 1280 legitimately survives as the `xl` @media min-width value; it must
+    // never again show up as a max-width *property* on .wrap.
+    assert.strictEqual(
+      /max-width:\s*1280px/.test(css), false,
+      'found a max-width:1280px property — 1280 should only remain as the xl query value'
     );
   })) p++; else f++;
 
