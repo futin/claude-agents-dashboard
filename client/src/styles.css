@@ -902,38 +902,56 @@ code,kbd,samp,pre{font-family:inherit}
 /* The band is two rows, not one row with a two-line left half: the title and ↻
    centre on each other, and the line runs the full width beneath them. */
 .mgmt-bar{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
-.mgmt-bandrow{display:flex;align-items:center;gap:12px}
-.mgmt-title{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
+/* ↻ is a maintenance control on a read-only page, not the reason you came: the
+   base tier keeps the band's two rows off the 36px control family and onto
+   the compact one, where they cost the screen less. `md` (the ladder block
+   below) puts the row back to `center` once the title stops stacking. */
+.mgmt-bandrow{display:flex;align-items:flex-start;gap:12px}
+/* Title and pill stack below `md`: a path is most of a screen wide on its own,
+   and beside a title it left the ↻ two characters of room. `md` reverts both
+   rules below to the inline shape. */
+.mgmt-title{display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-width:0;font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
+.mgmt-title .set-scope{margin-left:0;vertical-align:0;max-width:100%}
 .mgmt-sub{font-size:13px;color:var(--ink2);line-height:1.45;max-width:92ch}
 .mgmt-bar .off{flex:none;font-size:12px;color:var(--amber)}
 /* the 36px control family §8.2 put every Settings control on */
 .mgmt-bar .icon-refresh{margin-left:auto;flex:none}
-/* Columns 1 and 2 are FIXED. A second column that is wide until you pick
-   something and narrow after is a column that jumps out from under the row you
-   just clicked; the third has to arrive beside the other two. */
-.mgmt{display:grid;grid-template-columns:190px 420px minmax(0,1fr);gap:16px;align-items:start}
-.mgmt.pair{grid-template-columns:190px 420px}
-/* Three columns need ~1330px of viewport before the file column stops being
-   worth having. Below that it drops to a full-width row under the other two —
-   which is also what keeps the item column the same width open or closed. */
-@media (max-width:1330px){
+/* One column below `md`. Columns 1 and 2 are FIXED once both are on screen —
+   a second column that is wide until you pick something and narrow after is a
+   column that jumps out from under the row you just clicked — so `md` (768)
+   gives column 1 its 190px and column 2 the rest, and `xl` (1280, the width
+   at which three columns still leave the file column worth having) is where
+   column 3 arrives beside them at its own fixed width. Both turns are in the
+   ladder blocks below. */
+.mgmt{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+.mgmt.pair{grid-template-columns:minmax(0,1fr)}
+/* the phone's nav bar is sticky, so the scroll-to-column-3 above has to stop
+   short of it or it lands the card's own heading under the bar */
+.mdetail{scroll-margin-top:64px}
+/* `md`: column 1 fixes at 190px, column 2 takes the rest, and the file column
+   drops to a full-width row under them — which is also what keeps the item
+   column the same width open or closed. The title/pill row has room to go
+   back to one line here too. */
+@media (min-width:768px){
   .mgmt,.mgmt.pair{grid-template-columns:190px minmax(0,1fr)}
   .mdetail{grid-column:1/-1}
+  .mgmt-title{display:block}
+  .mgmt-title .set-scope{margin-left:8px;vertical-align:3px;max-width:none}
+  .mgmt-bandrow{align-items:center}
 }
-@media (max-width:700px){
-  .mgmt,.mgmt.pair{grid-template-columns:minmax(0,1fr)}
+/* `xl`: the file column arrives beside the other two, both now fixed —
+   190px + 420px, `1fr` left over for the file. That remainder is 350px here
+   (992px of `.main` content − 190 − 420 − 32px of gaps) and keeps growing
+   with the viewport up to the 606px it reaches at the `.wrap.wide` lock — this
+   wrap still carries `.wide` (it is `.wide-mgmt` that opts out of the *pinned*
+   shell, `.wrap.wide:not(.wide-mgmt)`, not of `.wide` itself), so the same
+   1248px cap holds it at 606px above the lock too. */
+@media (min-width:1280px){
+  .mgmt{grid-template-columns:190px 420px minmax(0,1fr)}
+  .mgmt.pair{grid-template-columns:190px 420px}
+  /* Column 3 is real again, so `.mdetail` drops the full-width span from `md`
+     and returns to its natural spot beside the other two. */
   .mdetail{grid-column:auto}
-  /* the phone's nav bar is sticky, so the scroll-to-column-3 above has to stop
-     short of it or it lands the card's own heading under the bar */
-  .mdetail{scroll-margin-top:64px}
-  /* Title and pill stack: a path is most of a screen wide on its own, and
-     beside a title it left the ↻ two characters of room. */
-  .mgmt-title{display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-width:0}
-  .mgmt-title .set-scope{margin-left:0;vertical-align:0;max-width:100%}
-  /* ↻ is a maintenance control on a read-only page, not the reason you came:
-     off the 36px family and onto the compact one, where the band's two rows
-     cost the screen less. */
-  .mgmt-bandrow{align-items:flex-start}
 }
 /* Column 1 — the type. 16px padding, which is the only number the "you are
    here" mark differs by between the two list columns. */
