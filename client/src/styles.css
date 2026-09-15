@@ -824,6 +824,17 @@ code,kbd,samp,pre{font-family:inherit}
 .qrow .ctx .pct{min-width:38px;text-align:right}
 .qrow .when{flex:none;font-size:12px;color:var(--ink3);min-width:52px;text-align:right;font-variant-numeric:tabular-nums}
 .qrow .prompt{flex:1;font-size:12px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Triage's Working and Idle rows keep the three things a scan needs — the
+   status dot, the name and the one action — and drop the branch pill, the
+   activity line, the context gauge and the age. Eight items on a 375px row
+   did not wrap (`.qrow` is a nowrap flex line by design, so the gauge stays
+   on the baseline); they ran off the card, taking the button with them. The
+   name takes the freed width and ellipsises, so a long one is still the
+   thing you read. `md` (below) brings the dropped children back and gives
+   `.nm` its measured width back. */
+.qrow>*:not(.nm):not(.sdot):not(.cbtn):not(.spill){display:none}
+.qrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.qrow .cbtn{margin-left:auto}
 
 /* ── empty, loading, footer ────────────────────────────────────────────────── */
 .empty{text-align:center;padding:60px 20px;color:var(--ink3);font-size:13px}
@@ -856,6 +867,17 @@ code,kbd,samp,pre{font-family:inherit}
   .pop{width:300px}
   .need{grid-template-columns:minmax(0,1fr) auto}
   .acts{flex-direction:column}
+  /* the row has room for all of its children again — same selector as the
+     base rule that hid them, so it wins outright on specificity, not just
+     source order; `.act-line` and `.ctx` are already `display:flex` in
+     their own rules (unaffected — this restates the same value), and a
+     plain-text child (`.proj-pill`, `.branch`, `.when`, `.prompt`) renders
+     identically whether its own display is flex or block, since a flex
+     container holding only a text run draws no differently than a block
+     box would. */
+  .qrow>*:not(.nm):not(.sdot):not(.cbtn):not(.spill){display:flex}
+  .qrow .nm{flex:0 1 auto;min-width:auto;overflow:visible;text-overflow:clip}
+  .qrow .cbtn{margin-left:0}
 }
 
 /* Three-up from `xl`: two tiers of column growth (`md` for the phone/tablet
@@ -2038,6 +2060,64 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   padding:10px 10px 10px 0;border-bottom:1px solid var(--hairline);white-space:nowrap;
 }
 
+/* ── phone defaults: row-head wraps, the walk shortens, the weekday "now"
+   label drops, the legend stacks one key per row, the learned week shows its
+   transpose, and every table scrolls inside its own sheet rather than the
+   page scrolling sideways. `md` (below) restores every one of these to its
+   desktop shape. */
+.row-head{flex-wrap:wrap}
+.walkwrap{height:180px}
+/* `now` and the first midnight tick are a few hours apart and collide at this
+   measure, so the day row keeps the weekday names and drops the word. The
+   left edge is already read as now — the tooltip names the hour and the
+   y-labels sit on the same origin — and the weekdays are what the row is
+   scanned for. */
+.walkdays .now{display:none}
+/* The legend stacks. Wrapped as a row it broke into ragged part-lines with a
+   swatch or an ⓘ stranded at the end of one, so the phone gets one key per
+   row and the 20px spacer between the two pairs — which only ever separated
+   them *along* a line — goes away. */
+.uplegend{flex-direction:column;align-items:flex-start;gap:9px}
+.uplegend .gap{display:none}
+.uplegend .key{align-items:flex-start}
+.uplegend .key .rule{margin-top:7px}
+.uplegend .key .rule.brick{margin-top:1px}
+.uplegend .key .idot{margin-top:1px}
+/* the transpose: 24 columns do not fit a thumb's width */
+.hmx.wide{display:none}
+.hmx.tall{display:grid}
+/* every table on these pages is wider than a phone; each scrolls in its own
+   box rather than letting the page scroll sideways */
+.sheet .dt{display:block;overflow-x:auto;white-space:nowrap}
+/* …except the ledgers, which unroll into one block per row. Nine columns of
+   token rates is a sideways scroll where every reading needs the Model column
+   that has already scrolled off — so the header row is dropped and each cell
+   carries its own label from `data-l`. One block per model, read top to
+   bottom, is the same data with the key beside the value.
+
+   `data-l` and not `::before{content:attr(headers)}` or a duplicated label
+   span: the column heads carry ⓘ glyphs, so there is no plain-text heading to
+   mirror, and a second copy in the markup is a second thing to keep in sync. */
+.sheet .dt.stack{display:block;overflow:visible;white-space:normal;margin-top:8px}
+.dt.stack thead{display:none}
+.dt.stack tbody{display:block}
+.dt.stack tr{display:block;padding:14px 0;border-bottom:1px solid var(--hairline)}
+.dt.stack tbody tr:last-child{border-bottom:0}
+.dt.stack td{
+  display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+  padding:3px 0;border:0;white-space:normal;text-align:right;
+}
+.dt.stack td::before{content:attr(data-l);flex:none;font-size:12px;color:var(--ink2);text-align:left}
+.dt.stack td:not([data-l])::before{content:none}
+/* the model name is the block's heading, not one of its pairs */
+.dt.stack td.name{display:block;text-align:left;font-size:14px;font-weight:600;padding-bottom:6px}
+/* an unlabelled empty cell is a column that only exists in the wide table */
+.dt.stack td:empty{display:none}
+.dt.stack td.barcell{display:block;width:auto;padding-top:10px}
+/* the totals block keeps its rule, and its cells stop re-drawing one */
+.dt.stack tr.tot{border-top:1px solid var(--hairline2);border-bottom:0}
+.dt.stack tr.tot td{border-top:0;padding-top:3px;font-weight:600}
+
 /* ── md: the density turn ─────────────────────────────────────────────────
    768 is the density boundary — 640 stays a pure shell boundary and carries
    none of this. The strip goes three-across and the sheet takes its full
@@ -2052,6 +2132,51 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   .statstrip>div:nth-child(n+4){border-top:2px solid var(--board)}
   /* the two-column span means nothing at three — the tile goes back in its cell */
   .statstrip>div:last-child:nth-child(2n+1){grid-column:auto}
+  .row-head{flex-wrap:nowrap}
+  .walkwrap{height:220px}
+  /* an absolutely positioned span is blockified regardless of its specified
+     display, so `block` is what this computed to before the phone rule ever
+     hid it — not a guess at "the initial value". */
+  .walkdays .now{display:block}
+  .uplegend{flex-direction:row;align-items:center;gap:10px}
+  .uplegend .gap{display:block}
+  .uplegend .key{align-items:center}
+  .uplegend .key .rule{margin-top:0}
+  .uplegend .key .rule.brick{margin-top:0}
+  .uplegend .key .idot{margin-top:0}
+  .hmx.wide{display:grid}
+  .hmx.tall{display:none}
+  .sheet .dt{display:table;overflow-x:visible;white-space:normal}
+  /* `.dt.stack` is applied unconditionally in markup (UsageRates, the walk
+     table) — the CSS alone decides whether it stacks or is a real table, so
+     every property the phone rules touched on it must be explicitly undone
+     here. Miss one and the desktop table renders as a stack. */
+  .sheet .dt.stack{display:table;overflow:visible;white-space:normal;margin-top:16px}
+  .dt.stack thead{display:table-header-group}
+  .dt.stack tbody{display:table-row-group}
+  /* the row rule moves back onto the cells (`.dt tr.tot td`, already in the
+     base rules) — a border on `<tr>` does nothing in the separate-borders
+     model but *does* enter the collapse resolution this table uses
+     (`border-collapse:collapse`), so it has to be zeroed, not just ignored */
+  .dt.stack tr{display:table-row;padding:0;border-bottom:0}
+  .dt.stack td{
+    display:table-cell;padding:10px;border-bottom:1px solid var(--hairline);
+    white-space:nowrap;
+  }
+  /* numeric cells keep the base rule's right-align (`.dt td.n`, same
+     specificity, declared earlier in the file — untouched); everything else
+     that isn't the name heading goes back to plain left-aligned body text */
+  .dt.stack td:not(.n):not(.name){text-align:left}
+  /* the generated `data-l` label has no reason to exist beside a real
+     header row */
+  .dt.stack td::before{content:none}
+  .dt.stack td.name{display:table-cell;text-align:left;font-size:13px;font-weight:500;padding-bottom:10px}
+  /* an empty cell is a real column again — hiding it would throw every
+     column after it out of alignment with the header row */
+  .dt.stack td:empty{display:table-cell}
+  .dt.stack td.barcell{display:table-cell;width:120px;padding-top:10px}
+  .dt.stack tr.tot{border-top:0;border-bottom:0}
+  .dt.stack tr.tot td{border-top:1px solid var(--hairline2);padding-top:12px}
 }
 
 /* ── 2xl: the strip opens to its full five ────────────────────────────────
@@ -2069,68 +2194,4 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   .statstrip>div:nth-child(-n+5){border-top:0}
   .statstrip>div:nth-child(n+6){border-top:2px solid var(--board)}
   .terms{columns:2}
-}
-@media (max-width:700px){
-  /* the transpose: 24 columns do not fit a thumb's width */
-  .hmx.wide{display:none}
-  .hmx.tall{display:grid}
-  .row-head{flex-wrap:wrap}
-  .walkwrap{height:180px}
-  /* Triage's Working and Idle rows keep the three things a scan needs — the
-     status dot, the name and the one action — and drop the branch pill, the
-     activity line, the context gauge and the age. Eight items on a 375px row
-     did not wrap (`.qrow` is a nowrap flex line by design, so the gauge stays
-     on the baseline); they ran off the card, taking the button with them. The
-     name takes the freed width and ellipsises, so a long one is still the
-     thing you read. */
-  .qrow>*:not(.nm):not(.sdot):not(.cbtn):not(.spill){display:none}
-  .qrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
-  .qrow .cbtn{margin-left:auto}
-  /* `now` and the first midnight tick are a few hours apart and collide at this
-     measure, so the day row keeps the weekday names and drops the word. The
-     left edge is already read as now — the tooltip names the hour and the
-     y-labels sit on the same origin — and the weekdays are what the row is
-     scanned for. */
-  .walkdays .now{display:none}
-  /* The legend stacks. Wrapped as a row it broke into ragged part-lines with a
-     swatch or an ⓘ stranded at the end of one, so the phone gets one key per
-     row and the 20px spacer between the two pairs — which only ever separated
-     them *along* a line — goes away. */
-  .uplegend{flex-direction:column;align-items:flex-start;gap:9px}
-  .uplegend .gap{display:none}
-  .uplegend .key{align-items:flex-start}
-  .uplegend .key .rule{margin-top:7px}
-  .uplegend .key .rule.brick{margin-top:1px}
-  .uplegend .key .idot{margin-top:1px}
-  /* every table on these pages is wider than a phone; each scrolls in its own
-     box rather than letting the page scroll sideways */
-  .sheet .dt{display:block;overflow-x:auto;white-space:nowrap}
-  /* …except the ledgers, which unroll into one block per row. Nine columns of
-     token rates is a sideways scroll where every reading needs the Model column
-     that has already scrolled off — so the header row is dropped and each cell
-     carries its own label from `data-l`. One block per model, read top to
-     bottom, is the same data with the key beside the value.
-
-     `data-l` and not `::before{content:attr(headers)}` or a duplicated label
-     span: the column heads carry ⓘ glyphs, so there is no plain-text heading to
-     mirror, and a second copy in the markup is a second thing to keep in sync. */
-  .sheet .dt.stack{display:block;overflow:visible;white-space:normal;margin-top:8px}
-  .dt.stack thead{display:none}
-  .dt.stack tbody{display:block}
-  .dt.stack tr{display:block;padding:14px 0;border-bottom:1px solid var(--hairline)}
-  .dt.stack tbody tr:last-child{border-bottom:0}
-  .dt.stack td{
-    display:flex;align-items:baseline;justify-content:space-between;gap:16px;
-    padding:3px 0;border:0;white-space:normal;text-align:right;
-  }
-  .dt.stack td::before{content:attr(data-l);flex:none;font-size:12px;color:var(--ink2);text-align:left}
-  .dt.stack td:not([data-l])::before{content:none}
-  /* the model name is the block's heading, not one of its pairs */
-  .dt.stack td.name{display:block;text-align:left;font-size:14px;font-weight:600;padding-bottom:6px}
-  /* an unlabelled empty cell is a column that only exists in the wide table */
-  .dt.stack td:empty{display:none}
-  .dt.stack td.barcell{display:block;width:auto;padding-top:10px}
-  /* the totals block keeps its rule, and its cells stop re-drawing one */
-  .dt.stack tr.tot{border-top:1px solid var(--hairline2);border-bottom:0}
-  .dt.stack tr.tot td{border-top:0;padding-top:3px;font-weight:600}
 }
