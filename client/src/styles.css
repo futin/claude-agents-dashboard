@@ -142,7 +142,7 @@
    measure cannot both fit at full size, so 1536 is the last width where the
    desktop layout is at its natural size, and 1537 is the first where it has
    room to grow. */
-:root{--row-pad:11px 14px;--rows-gap:7px;--bar-margin:9px 0 8px;--body-pad:24px;--mnav-h:60px}
+:root{--row-pad:11px 14px;--rows-gap:7px;--bar-margin:9px 0 8px;--body-pad:24px;--mnav-h:60px;--main-gap:24px}
 /* Must follow the :root defaults — both selectors match <html> at the same
    specificity, so source order is what decides. */
 [data-density="compact"]{--row-pad:7px 11px;--rows-gap:4px;--bar-margin:6px 0 5px;--body-pad:14px}
@@ -334,7 +334,7 @@ code,kbd,samp,pre{font-family:inherit}
   /* the rail carries the wordmark again, and the bar's copy is gone with it */
   .rail-brand{display:flex}
   /* the board tucks back into the rail's corner */
-  .main{margin-top:24px;border-top-left-radius:24px}
+  .main{margin-top:var(--main-gap);border-top-left-radius:24px}
   /* a pointer row, not a thumb one */
   .rail-link{min-height:36px}
   /* and only the section you are in draws its tree */
@@ -1119,13 +1119,15 @@ code,kbd,samp,pre{font-family:inherit}
 /* Desktop: analytics is an app shell — the page never scrolls, the tab does */
 @media (min-width:1280px){
   /* Same 100vh-under-zoom correction as the rail: divide by --font-scale, and
-     subtract .main's own padding from a token rather than a literal so compact
-     density lands on the viewport too. Getting this wrong scrolls the page,
-     which is exactly what the pane scrollers exist to avoid.
+     subtract .main's own box from tokens rather than literals so compact
+     density lands on the viewport too: `--main-gap` is .main's margin-top
+     (set on `.main` above, in this same shell block) and `2 * --body-pad`
+     is its top+bottom padding. Getting either wrong scrolls the page, which
+     is exactly what the pane scrollers exist to avoid.
      `:not(.wide-mgmt)` keeps Management out of it: its three columns size to
      their content and the page body is the single scroller, so a long file is
      read by scrolling the page rather than a pane inside a pane. */
-  .wrap.wide:not(.wide-mgmt){display:flex;flex-direction:column;height:calc(100vh / var(--font-scale,1) - 2 * var(--body-pad))}
+  .wrap.wide:not(.wide-mgmt){display:flex;flex-direction:column;height:calc(100vh / var(--font-scale,1) - var(--main-gap) - 2 * var(--body-pad))}
   .wrap.wide .analytics{flex:1;min-height:0;overflow-y:auto} /* the tab is the scroller */
 }
 
