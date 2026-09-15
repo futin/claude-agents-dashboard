@@ -330,6 +330,12 @@ code,kbd,samp,pre{font-family:inherit}
   .nav{display:contents;position:static;z-index:auto}
   .nav.hid{transform:none}
   .mnav,.mnav-scrim{display:none}
+  /* The phone nav bar is gone from here up, but the Sessions phone strip
+     (below `md`, 768) still renders in the 640–767 band and pins against
+     this token — see "the phone strip" further down and stickyStrip.ts. Zero
+     it here so the strip sits flush instead of leaving a bar-height gap for a
+     bar that this block just hid. */
+  :root{--mnav-h:0px}
   .rail{display:flex;position:sticky;left:auto;right:auto;top:0;flex:0 0 240px;height:calc(100vh / var(--font-scale,1));max-height:none;align-self:flex-start;gap:4px;padding:24px;overflow-x:visible;border-bottom:0;box-shadow:none}
   /* the rail carries the wordmark again, and the bar's copy is gone with it */
   .rail-brand{display:flex}
@@ -379,14 +385,18 @@ code,kbd,samp,pre{font-family:inherit}
 .newbtn:hover{opacity:.88}
 
 /* ── Sessions aside · the phone strip ──────────────────────────────────────
-   Below 700px `AsideStrip` replaces the two aside cards outright (swapped in
-   the markup, not hidden here). One bar: the rate percentages and a caret on
-   the left, the "needs you" count + clock and a caret on the right, the launch
-   square last. Either half opens a panel carrying the card body it summarises.
+   Below `md` (768) `AsideStrip` replaces the two aside cards outright (swapped
+   in the markup, not hidden here) — that gate is `useNarrow`'s (767.98), not a
+   CSS one. One bar: the rate percentages and a caret on the left, the "needs
+   you" count + clock and a caret on the right, the launch square last. Either
+   half opens a panel carrying the card body it summarises.
 
-   Never drawn above 700px — the component is not rendered there — so these
-   rules need no media query of their own, and `--mnav-h` is the only thing they
-   take from the phone layout.
+   Never drawn at `md` (768) or above — the component is not rendered there —
+   so these rules need no tier of their own for *that* edge. But it *is* drawn
+   from 640 to 767, where the `sm` shell switch has already hidden the phone
+   nav bar (`.mnav`) — so `--mnav-h`, the only thing these rules take from the
+   phone layout, is zeroed inside the `sm` block above rather than left at its
+   base 60px, or the strip would pin 60px below a bar that isn't on the page.
 
    Pinned, it goes full-bleed: `--body-pad` cancelled, radius to 0, the card's
    lift down to a hairline, so a stuck bar belongs to the nav above it rather
@@ -502,10 +512,11 @@ code,kbd,samp,pre{font-family:inherit}
    anything but change which rows you see, in what order, and in what shape. */
 .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;row-gap:10px}
 .toolbar .tb-spacer{flex:1;min-width:0}
-/* One row on the phone and tablet portrait. The switcher is down to the three
-   shapes this width draws (`layoutsFor`), so the words fit and the glyph row
-   the toolbar used to swap in is gone — five icons were a legend to learn,
-   three words are not. The sort readout drops, which is what buys the
+/* One row below `md` (768) — phone only; tablet portrait is `md` and up,
+   where the block below this one wraps the row again. The switcher is down to
+   the three shapes this width draws (`layoutsFor`), so the words fit and the
+   glyph row the toolbar used to swap in is gone — five icons were a legend to
+   learn, three words are not. The sort readout drops, which is what buys the
    filter/sort track a place beside the switcher instead of a second row under
    it. The sort *button* stays — the popover it opens prints the current key
    with a tick, so the readout was the only thing repeating itself. */
@@ -1559,7 +1570,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    (.claude/DESIGN.md §8.7, mock `#spawn`) rather than pinned into the Sessions
    column: a launch is a compose surface opened on purpose, not a hold the board
    is answering. Same shell as `.chat` — scrim, air on every side, the shell's
-   lift, full-screen below 700px — at a narrower 620px, because inside it is one
+   lift, full-screen below `md` (768) — at a narrower 620px, because inside it is one
    column read top to bottom: project, prompt, name, then model / effort /
    permission, then remote control.
 

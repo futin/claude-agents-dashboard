@@ -181,7 +181,7 @@ The two rules that are ratios rather than sizes hold unchanged at any scale: the
 active row is marked by an ink bar **plus** a `--bg-subtle` fill and never by a colour
 change in the label (§5), and icons hold `--text-primary` at every row weight (§6).
 
-Below 700 px the rail becomes a menu behind a top bar — wordmark left, ☰ right — and
+Below `sm` (640 px) the rail becomes a menu behind a top bar — wordmark left, ☰ right — and
 drops out of it full width. It is the same `.rail` element, repositioned, so the trees
 come with it: every section's tree stands open there, which puts any sub-view one tap
 away. That is why the sub-view switches the page bands used to carry on a phone (Usage's
@@ -240,8 +240,9 @@ Two things a later section should copy rather than re-derive:
   `--strip-hi`: on the ground those two are two points apart and the pill vanished
   (the mock's first cut). The Shared pill is a `color-mix` tint of `--green` at 22 %.
 - **Two hand-balanced columns, not a masonry.** Cards are placed by column so the
-  tall one (Push notifications, Display) anchors one side; the grid folds to one
-  column under 1100 px, before the 700 px phone breakpoint.
+  tall one (Push notifications, Display) anchors one side; the grid holds one column
+  below `md` (768 px) and opens to two only from there — its one breakpoint. (It never
+  had a separate 1100 px rule; that figure belonged to a different section.)
 
 Mock: `docs/guides/mockups/redesign-mock.html` `#set-local` / `#set-shared`.
 
@@ -368,7 +369,7 @@ right of the `n of m shown` count it changes: the control and its consequence on
 and no chrome row spent on either. Five placements were compared — head, a rail over the
 transcript, this foot, a popover button, a floating pill — and the foot is the only one
 that costs the transcript nothing. It stays the `.seg` switch, at foot scale (11 px labels,
-4/10 padding); below 700 px the foot wraps and the switch takes the second row full width.
+4/10 padding); below `md` (768 px) the foot wraps and the switch takes the second row full width.
 
 Two rules the losers are not around to argue with:
 
@@ -414,7 +415,7 @@ The launch form leaves the wait-panel family. It was a `.qpanel` pinned into the
 column, cyan where the others are amber; but that family is for **holds** — things a
 session is waiting on you for — and a launch is the opposite, a compose surface you opened
 on purpose. It floats now, on §8.6's shell: the scrim, air on every side, the shell's lift,
-and full-screen below 700 px. At **620 px** rather than 1080: there is no second column to
+and full-screen below `md` (768 px). At **620 px** rather than 1080: there is no second column to
 seat, so the sheet is only as wide as one column of fields reads well.
 
 Five shapes were drawn — a sidecar with the project list in its own column, a composer that
