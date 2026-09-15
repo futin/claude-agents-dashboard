@@ -15,7 +15,7 @@ interface Props {
 /**
  * Top-level section switch: live sessions monitor · config management ·
  * session analytics · account usage forecast · settings. A rail down the left edge on desktop; below
- * 700px the same rail becomes a menu panel that drops out of a top bar —
+ * `sm` (640px) the same rail becomes a menu panel that drops out of a top bar —
  * wordmark left, ☰ right — see docs/superpowers/specs/2026-08-15-side-rail-nav-design.md.
  *
  * The phone menu is the *same* markup as the rail, not a second navigation:
@@ -133,7 +133,7 @@ function Icon({ section }: { section: Section }) {
  * empty line that pushed the name away.
  *
  * Rendered once per breakpoint, never twice at once: the rail's copy is hidden
- * below 700px and the top bar's above it, so there is exactly one <h1>.
+ * below `sm` (640px) and the top bar's above it, so there is exactly one <h1>.
  */
 function Brand({ className }: { className: string }) {
   return (
@@ -191,15 +191,15 @@ export function SideRail({ section, onChange }: Props) {
   // Management's tree writes the shared scope, and entering Management from its
   // main row resets that scope the same way the fixed trees reset their tab.
   const { setScope } = useManagementScope();
-  // Phone only — the bar and the burger are `display:none` above 700px, so on a
-  // desktop this stays false and nothing here has any effect on the rail.
+  // Phone only — the bar and the burger are `display:none` above `sm` (640px),
+  // so on a desktop this stays false and nothing here has any effect on the rail.
   const [open, setOpen] = useState(false);
   // The bar gets out of the way going down the page and comes back on the way
   // up. Pinned open while the menu is down: the panel hangs off the bar.
   const barOff = useHideOnScroll(open);
 
   // Picking anything is a destination, so the menu closes behind it. The rail
-  // above 700px is never open, so this is a no-op there.
+  // above `sm` (640px) is never open, so this is a no-op there.
   const pick = (fn: () => void) => (): void => { fn(); setOpen(false); };
 
   /**
@@ -221,9 +221,9 @@ export function SideRail({ section, onChange }: Props) {
   };
 
   return (
-    /* `display:contents` above 700px: the rail itself stays the flex child of
-       `.shell` it has always been. Below it, this is the sticky box the bar
-       sits in and the menu drops out of. */
+    /* `display:contents` above `sm` (640px): the rail itself stays the flex
+       child of `.shell` it has always been. Below it, this is the sticky box
+       the bar sits in and the menu drops out of. */
     <div className={barOff ? 'nav hid' : 'nav'}>
       <div className="mnav">
         <Brand className="mnav-brand" />

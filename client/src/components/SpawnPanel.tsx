@@ -105,8 +105,8 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, pending]);
 
-  // Same intent as Escape, for the input a phone actually has: at <=700px the
-  // modal is full-screen and there is no scrim left to tap.
+  // Same intent as Escape, for the input a phone actually has: below `md`
+  // (768px) the modal is full-screen and there is no scrim left to tap.
   useBackClose(close);
 
   async function doLaunch(): Promise<void> {

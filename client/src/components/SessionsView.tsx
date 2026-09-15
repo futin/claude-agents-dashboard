@@ -31,9 +31,10 @@ const SpawnPanel = lazy(() => import('./SpawnPanel'));
  * polling.
  *
  * Two columns: the list in whichever of the five shapes the toolbar picked, and
- * a 320px aside with the Account gauges and the Board facts. Below 1100px the
- * aside moves above the toolbar (styles.css); below 700px the two cards are
- * replaced outright by `AsideStrip`, one pinned bar carrying their summaries.
+ * a 320px aside with the Account gauges and the Board facts. Below `2xl`
+ * (1536px, the lock) the aside moves above the toolbar (styles.css); below
+ * `md` (768px) the two cards are replaced outright by `AsideStrip`, one
+ * pinned bar carrying their summaries.
  */
 export function SessionsView() {
   const { data, connected } = useSessions();

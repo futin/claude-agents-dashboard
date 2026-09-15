@@ -12,9 +12,9 @@ import { nextStuck } from '../lib/stickyStrip';
  * offset from the same token the strip resolves its `top` through is what keeps
  * the two from drifting apart.
  *
- * Below 700px nothing in the app is a scroll container — the pinned `.wide`
- * shells start at 1201px — so the document is what moves and `window` is what
- * to listen to, exactly as `useHideOnScroll` does.
+ * Below `xl` (1280px) nothing in the app is a scroll container — the pinned
+ * `.wide` shells start there — so the document is what moves and `window` is
+ * what to listen to, exactly as `useHideOnScroll` does.
  *
  * @param enabled  Phone measure only. Off, nothing is observed and the class is
  *                 released — a desktop never draws the strip at all.

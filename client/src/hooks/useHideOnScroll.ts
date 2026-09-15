@@ -17,9 +17,10 @@ import { useEffect, useRef, useState } from 'react';
  * `frozen` pins it open: the menu hangs off the bar, so a bar that slides away
  * under an open panel takes the panel's anchor with it.
  *
- * Reads `window.scrollY` and not an element's: below 700px nothing in the app
- * is a scroll container — the pinned `.wide` shells start at 1201px — so the
- * document is what moves. The listener is passive and does one property read:
+ * Reads `window.scrollY` and not an element's: below `xl` (1280px) nothing in
+ * the app is a scroll container — the pinned `.wide` shells start there — so
+ * the document is what moves. The listener is passive and does one property
+ * read:
  * `scrollY` is already current inside a scroll handler, so this forces no
  * layout and never needs a frame of its own to be cheap.
  */

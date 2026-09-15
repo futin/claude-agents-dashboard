@@ -89,7 +89,7 @@ override it (see `dashboard.section` below).
   (`'last'` prepended to `LAYOUTS`, the shape `LANDING_OPTIONS` has), so the switcher stays
   five buttons while the picker and the validator still cannot drift from it.
 - **The phone draws three of the five.** List is a seven-column table and Split is a
-  two-pane master/detail, and neither survives a 375px measure, so under 700px
+  two-pane master/detail, and neither survives a 375px measure, so under `md` (768px)
   (`hooks/useNarrow.ts`, mirroring the narrow block in `styles.css`) the switcher offers
   board, tiles and triage only. Two *different* coercions, deliberately:
   - `drawableLayout(layout, narrow)` (`lib/filterSort.ts`) changes only what is **drawn**.
@@ -112,7 +112,7 @@ override it (see `dashboard.section` below).
   coercion has only the `drawableAnLayout` half. Nothing is written back, because nothing
   pins the tab's shape from Settings.
 - **The phone draws one of Analytics' two shapes.** Split is a two-pane master/detail there
-  too, so under 700px `anLayoutsFor(true)` is tiles alone and `drawableAnLayout('split',
+  too, so under `md` (768px) `anLayoutsFor(true)` is tiles alone and `drawableAnLayout('split',
   true)` draws tiles while the key goes on saying `split`. With one shape left, the switcher
   is **dropped from the markup entirely** rather than left as a lone tab that switches to
   itself — the row is then the count and the filter/sort track, which is what it was before

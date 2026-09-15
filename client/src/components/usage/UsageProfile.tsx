@@ -63,7 +63,7 @@ import { Band, Definitions, RowHead, Sheet, SheetDivider, StatStrip } from './Sh
  *   `textContent` + `white-space: pre-line` rather than any innerHTML.
  * - **The week is drawn twice and shown once.** Wide, it is 7 rows of 24 hours,
  *   which reads across a sheet. On a phone that would be 24 columns in a
- *   thumb's width, so under 700px the transpose swaps back: the axis needing 24
+ *   thumb's width, so below `md` (768px) the transpose swaps back: the axis needing 24
  *   slots runs the direction a phone actually has. Both grids are in the markup
  *   and `display` picks one, so neither can be the one that silently broke —
  *   and `display:none` takes the hidden grid's 168 cells out of the tab order.

@@ -80,8 +80,8 @@ function Message({ m }: { m: ChatMessage }) {
  * messages loaded, current tool), with the All / Text / You filter down in the
  * foot beside the count it changes. The modal floats over the
  * scrim with air on every side, so the scrim is a real exit at every width
- * (below 700px it goes full-screen, where a 1080px modal with margins cannot
- * fit and the scrim is gone again — back and ✕ are the exits there).
+ * (below `md`, 768px, it goes full-screen, where a 1080px modal with margins
+ * cannot fit and the scrim is gone again — back and ✕ are the exits there).
  *
  * Scroll behaviour: an append only auto-scrolls when the reader was already at
  * the bottom (so reading history isn't yanked away); a prepend restores the
@@ -133,8 +133,9 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Same intent as Escape above, for the input a phone actually has: at <=700px
-  // the drawer is full-width with no scrim to tap, so back is the other exit.
+  // Same intent as Escape above, for the input a phone actually has: below
+  // `md` (768px) the drawer is full-width with no scrim to tap, so back is the
+  // other exit.
   useBackClose(onClose);
 
   useLayoutEffect(() => {

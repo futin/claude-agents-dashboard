@@ -4,8 +4,8 @@ The `chat` tab down the right edge of a session row opens a **centred modal** wi
 conversation: newest page on open, live-tailed at the configured refresh rate, "load older"
 walking backwards through the whole transcript. Read-only, like everything else in the app.
 It floats over the scrim with air on every side — 1080px wide, capped at 820px tall, rounded
-at the shell radius — so the scrim is a real exit at every width above 700px. Below that it
-is full-screen, because a 1080px modal with margins does not fit a phone.
+at the shell radius — so the scrim is a real exit at every width above `md` (768px). Below
+that it is full-screen, because a 1080px modal with margins does not fit a phone.
 
 **Two columns inside it** ([DESIGN.md](../../.claude/DESIGN.md) §8.6, mock `#chat`). The head
 carries the session name, the project pill and ✕. A 290px **sidecar** on the subtle ground
@@ -153,8 +153,8 @@ worst case to the window size, not to the transcript size.
   **not** persisted — session ids churn (same reasoning as row expansion in
   [view-persistence](view-persistence.md)).
 - **Four ways out, and no dead back press.** ✕ in the head works everywhere; **Escape**
-  likewise; and the **scrim** is now a real exit at every width above 700px, because the
-  modal floats with air on every side rather than filling one edge. At `<=700px` the modal
+  likewise; and the **scrim** is now a real exit at every width above `md` (768px), because
+  the modal floats with air on every side rather than filling one edge. Below `md` the modal
   is full-screen, so there is no scrim left to tap and ✕ (40px there, a thumb rather than a
   pointer) and back are the exits. The fourth is the browser's **back** button/swipe — the
   one a phone actually has. `useBackClose`

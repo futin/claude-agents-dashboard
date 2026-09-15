@@ -288,17 +288,17 @@ Three shapes this section adds, which a later one should copy rather than re-der
   figures that answer one question ("where does this stand, and should I believe the rest of
   the page") read as five unrelated facts the moment they get five surfaces. The divider is
   2px of `--board`, for the same reason the sheets are borderless: contrast against the
-  ground does the separating. It wraps to 3 columns under 1100px and 2 under 700px, and the
-  seam then has to be drawn in *both* directions — a wrapped grid whose only rule is
-  `border-left` grows a full-width gap where the rows meet.
+  ground does the separating. It is 2 columns at base, 3 from `md` (768px), and 5 from `2xl`
+  (1536px, the lock), and the seam then has to be drawn in *both* directions — a wrapped
+  grid whose only rule is `border-left` grows a full-width gap where the rows meet.
 - **A filter chip's slot is a slot, not a filter.** The mock draws a chip at the right of
   each sheet's heading row; here it holds whatever that sheet's one control is — a static
   count on the walk, a grid ↔ numbers toggle on the week. A `button.chip` takes
   `aria-pressed` and a raised `--strip-hi` fill; a label chip stays flat and
   `cursor: default`. The chip's own border is `--hairline2`, never `--strip-hi`: on the
   ground those two are two points apart (the §8.2 scope-pill lesson, met a third time).
-- **Every table scrolls inside its own sheet.** Under 700px `.dt` becomes an `overflow-x`
-  box rather than letting the page body scroll sideways. That is what makes a wide ledger
+- **Every table scrolls inside its own sheet.** Under `md` (768px) `.dt` becomes an
+  `overflow-x` box rather than letting the page body scroll sideways. That is what makes a wide ledger
   admissible on a board that is mostly read from a phone — the objection that rejected a
   one-table layout in 2026-09 is answered by the box, not overruled.
 

@@ -353,7 +353,7 @@ describes: a figure strip, then the walk as a picture *and* as rows, then the le
 then every definition the page used.
 
 The week is **drawn twice and shown once**. Wide it is 7 rows of 24 hours, which reads
-across a sheet; under 700px the transpose swaps back, because 24 columns in a thumb's
+across a sheet; under `md` (768px) the transpose swaps back, because 24 columns in a thumb's
 width is not a grid anyone can read and the axis needing 24 slots should run the direction
 a phone has. Both grids are in the markup and one `display` rule picks between them, so
 neither can be the one that silently broke — and `display:none` takes the hidden grid's
@@ -1283,7 +1283,7 @@ rates read as five independent findings and cost a scroll to compare any two of 
 The one-table shape was rejected once before, in the 2026-09-06 mockups
 (`docs/superpowers/specs/2026-09-06-token-value-layout-mockups.html`), because at 375px a
 720px table scrolls the verdict column off screen first. That objection is answered rather
-than overruled: under 700px each `.dt` becomes its own `overflow-x` box, so the table
+than overruled: under `md` (768px) each `.dt` becomes its own `overflow-x` box, so the table
 scrolls sideways *inside its sheet* and the page body does not (verified: `body.scrollWidth
 === window.innerWidth` at 375px). The verdict still leaves the viewport when you scroll the
 table — but the strip above it has already said how many models are drifting, and that is

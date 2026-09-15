@@ -280,6 +280,7 @@ that area:
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `allow?` tab for terminal permission dialogs
 - [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and the one narrow browser layer that came back for headless sessions
+- [breakpoints](subsystems/breakpoints.md) — the seven-tier mobile-first ladder in `styles.css`, the rail+measure lock, and the capped/full content-width matrix
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [docker](workflows/docker.md) — running in containers, dev + prod
 - [hooks-setup](workflows/hooks-setup.md) — `pnpm hooks:install`: all six hooks (seven `settings.json` entries — permission-notify registers twice), one command

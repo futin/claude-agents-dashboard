@@ -153,8 +153,8 @@ restored selection would be stale, and the split's fall-through to the first row
 one unnecessary. Same rule as the Sessions split's `splitId`.
 
 **The phone draws tiles.** Split is a two-pane master/detail and a 375px measure has no
-room for the detail pane to be a pane, so `WIDE_ONLY_AN_LAYOUTS` withholds it under 700px
-(`hooks/useNarrow.ts`) and `drawableAnLayout` draws tiles instead — while the stored key
+room for the detail pane to be a pane, so `WIDE_ONLY_AN_LAYOUTS` withholds it under `md`
+(768px) (`hooks/useNarrow.ts`) and `drawableAnLayout` draws tiles instead — while the stored key
 goes on saying `split`, so widening the window comes straight back without re-picking.
 Only the *drawing* is coerced; unlike the Sessions side there is no written-back half,
 because no Settings picker pins this tab's shape. With one shape left, the switcher is

@@ -8,8 +8,9 @@ params, so a changed row count or window takes effect on the next tick.
 ## The page
 
 Two columns on the broad wrap (`SessionsView.tsx`): the list, in one of five **views**, and
-a 320px **aside** of two cards. Below 1568px the aside moves above the list as a two-card
-row; **below 700px the two cards are replaced outright** by one pinned bar — see
+a 320px **aside** of two cards. Below `2xl` (1536px, the lock) the aside moves above the
+list as a two-card row; **below `md` (768px) the two cards are replaced outright** by one
+pinned bar — see
 §The phone strip.
 
 - **Aside · Account** (`AsideAccount.tsx`) — the two rate-limit gauges and their time
@@ -20,8 +21,8 @@ row; **below 700px the two cards are replaced outright** by one pinned bar — s
   rows shown, `claude` processes), the [remote-answers switch](remote-answer.md), and the
   one write action, **New session** ([spawn](spawn.md)). Nothing here filters or orders
   the list — that is the toolbar's job, which is the whole point of the split.
-- **Aside · the phone strip** (`sessions/AsideStrip.tsx`) — the same two cards below 700px,
-  collapsed into one bar. See §The phone strip.
+- **Aside · the phone strip** (`sessions/AsideStrip.tsx`) — the same two cards below `md`
+  (768px), collapsed into one bar. See §The phone strip.
 - **Toolbar** (`Toolbar.tsx`) — one row: the labelled view switcher on the left; on the
   right one shared track with the filter button, the `Sort: <key> (asc|desc)` label and the
   sort button. Both buttons open a popover (`Popover.tsx`: outside click and Escape close
@@ -426,7 +427,7 @@ Which cards are open is deliberately not persisted (session IDs churn).
 
 ## The phone strip
 
-Below 700px the aside's two cards cost about 600px of screen before the first session row —
+Below `md` (768px) the aside's two cards cost about 600px of screen before the first session row —
 so `AsideStrip.tsx` replaces them with one 48px bar that pins under the nav. The list then
 starts roughly a thumb from the top.
 
@@ -472,7 +473,7 @@ That fixed pin is also what keeps the *pinned/not* test simple: `lib/stickyStrip
 zero-height **sentinel** parked at the strip's unpinned position and compares it against
 `--mnav-h`, with a 2px hysteresis band so a sub-pixel layout cannot flip the class on a
 motionless page. `useStuckStrip.ts` wires that to a frame-coalesced `scroll` listener on
-`window` — below 700px nothing in the app is a scroll container, so the document is what
+`window` — below `xl` (1280px) nothing in the app is a scroll container, so the document is what
 moves.
 
 ### Why the nav bar waits for `--body-pad`
