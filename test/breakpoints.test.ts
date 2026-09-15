@@ -93,13 +93,45 @@ function stripCssComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
-/** Every `@media (<condition>)` string in the file, comments excluded. */
+/**
+ * Every parenthesised condition clause from every `@media` prelude in the
+ * file, comments excluded — one array entry per clause, not per rule.
+ *
+ * A prelude can hold more than one `(...)` clause: `and`-joined ranges
+ * (`@media (min-width:768px) and (max-width:1023px)`) and comma-separated
+ * query lists (`@media (a), (b)`) both put multiple parenthesised groups
+ * before the same `{`. The original version of this helper matched only the
+ * first `(...)` after `@media`, so a compound query's later clauses —
+ * including a reintroduced `max-width` — were silently dropped and never
+ * reached any assertion. This version first isolates each rule's whole
+ * prelude (`@media` up to the next `{`), then pulls every `(...)` clause out
+ * of that prelude, so `and`-joins and comma lists both surface every clause
+ * they contain to every case that consumes this helper.
+ *
+ * Deliberately not specially handled:
+ * - `not` / `only` keywords sit outside the parens and don't affect clause
+ *   extraction either way.
+ * - Range syntax (`@media (400px <= width <= 700px)`) is not parsed into a
+ *   semantic min/max — it comes back as one opaque clause. It won't match
+ *   `min-width:<n>px` in `widthQueries()`'s consumers, so it can't slip a
+ *   disguised upper bound past case 1 undetected: the shape mismatch trips
+ *   `every width query is min-width`'s `startsWith('min-width:')` assertion
+ *   (or, if it hasn't been added to the ladder, case 2's shape guard), so it
+ *   fails loud rather than passing silently. Nothing in the current file
+ *   uses this syntax.
+ */
 function mediaConditions(): string[] {
   const css = stripCssComments(fs.readFileSync(STYLES_PATH, 'utf8'));
-  const re = /@media\s*\(([^)]+)\)/g;
+  const preludeRe = /@media\s*([^{]+)\{/g;
+  const clauseRe = /\(([^()]+)\)/g;
   const out: string[] = [];
   let m: RegExpExecArray | null;
-  while ((m = re.exec(css)) !== null) out.push(m[1].trim());
+  while ((m = preludeRe.exec(css)) !== null) {
+    const prelude = m[1];
+    let c: RegExpExecArray | null;
+    clauseRe.lastIndex = 0;
+    while ((c = clauseRe.exec(prelude)) !== null) out.push(c[1].trim());
+  }
   return out;
 }
 
@@ -184,7 +216,11 @@ export function run(): number {
 
   if (test('no orphan tier', () => {
     const tierValues = parseTiers(ladderBlock()).map((t) => t.value);
-    const queryValues = widthQueries().map((q) => Number(/^min-width:(\d+(?:\.\d+)?)px$/.exec(q)![1]));
+    const queryValues = widthQueries().map((q) => {
+      const m = /^min-width:(\d+(?:\.\d+)?)px$/.exec(q);
+      assert.ok(m, `unexpected query shape: (${q})`);
+      return Number(m![1]);
+    });
     const usedInQueries = new Set(queryValues);
     for (const v of tierValues) {
       assert.ok(usedInQueries.has(v), `tier value ${v} appears in no @media query`);
