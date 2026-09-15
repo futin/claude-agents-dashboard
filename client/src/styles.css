@@ -1241,8 +1241,8 @@ code,kbd,samp,pre{font-family:inherit}
 .an-tile-lesson{font-size:13px;line-height:1.45;color:var(--ink2);margin-top:14px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 /* The open tile keeps the strip on one line — five cells, one figure each, as
    the inspector draws it. It can: the tile spans two columns, and the only
-   reason to fold the strip is the viewport running out, which the 900px rule
-   below already answers for both shapes at once. Tighter cells, because two of
+   reason to fold the strip is the viewport running out, which the lg (1024px)
+   block above already answers for both shapes at once. Tighter cells, because two of
    three columns is less measure than the inspector's. */
 .analytics .tile .an-metrics{margin-top:16px}
 .analytics .tile .an-metric{padding:12px 10px}
