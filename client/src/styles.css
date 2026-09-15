@@ -882,7 +882,7 @@ code,kbd,samp,pre{font-family:inherit}
    keeps this breakpoint rather than growing one of its own. */
 @media (min-width:1536px){
   .sessions{grid-template-columns:minmax(0,1fr) 320px}
-  .s-aside{order:1;display:flex;flex-direction:column}
+  .s-aside{order:1;display:flex;flex-direction:column;align-items:stretch}
   .split{grid-template-columns:320px minmax(0,1fr)}
 }
 
