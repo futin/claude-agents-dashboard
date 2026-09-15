@@ -1,16 +1,20 @@
 import { useMemo, useState } from 'react';
 
-import type { AnalyticsReport, LessonStatus, SessionAnalysis } from '../../../../shared/types';
-import { fmtTok, fmtDuration } from '../../lib/format';
-import { keyActivate } from '../sessions/atoms';
 import { useAnalytics } from '../../hooks/useAnalytics';
+import { useNarrow } from '../../hooks/useNarrow';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import {
   applyAnalyticsView,
   clearAnalyticsFilters,
+  drawableAnLayout,
+  isAnLayout,
   DEFAULT_ANALYTICS_VIEW,
+  DEFAULT_AN_LAYOUT,
+  type AnLayout,
   type AnalyticsView as AnalyticsViewState
 } from '../../lib/analyticsFilterSort';
+import { AnalyticsSplit } from './AnalyticsSplit';
+import { AnalyticsTiles } from './AnalyticsTiles';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
 
 /**
@@ -20,14 +24,15 @@ import { AnalyticsToolbar } from './AnalyticsToolbar';
  * logs it to ~/.claude/session-analytics-log.md). Default export → lazy chunk, so the
  * sessions bundle is unaffected.
  *
- * The shape is the Sessions **split** view, down to its markup: the log as a
- * `.list` of `.lrow`s on the left, one report open in the `.inspect` card
- * beside it. That is deliberate — the two sections differ in subject, not in
- * kind, so the row's dot carries what became of the lesson where Sessions
- * carries a session's state, and the figure column is billable tokens where
- * Sessions shows context used. (Four other shapes were drawn as artboards
- * first — a stack of collapsing cards, a ledger table, tiles and a
- * lesson-first digest; see `docs/guides/mockups/redesign-mock.html`.)
+ * Two shapes, both borrowed from Sessions: the **split** (the log as `.lrow`s,
+ * one report open in the `.inspect` card beside it) and **tiles** (every report
+ * a metric card carrying its billable total). That is deliberate — the two
+ * sections differ in subject, not in kind, so a row's dot carries what became
+ * of the lesson where Sessions carries a session's state, and the figure is
+ * billable tokens where Sessions shows context used. Tiles was one of four
+ * shapes drawn as artboards and dropped when the section was built
+ * (`docs/guides/mockups/redesign-mock.html`); it is back as the second shape,
+ * and as the only one a phone can draw.
  */
 export default function AnalyticsView() {
   const { data, loading, error, refresh } = useAnalytics();
@@ -39,12 +44,34 @@ export default function AnalyticsView() {
   );
   const shown = useMemo(() => applyAnalyticsView(reports, view, Date.now()), [reports, view]);
 
-  // Which report the inspector holds. Not persisted — session ids churn, so a
-  // restored selection would be stale (docs/subsystems/view-persistence.md),
-  // and falling through to the first row means the inspector is never blank
-  // while there is something to show. Same rule as the Sessions split.
+  // The shape gets its own key rather than riding in `view`: it is not a
+  // filter. Guarded on read, because a value stored by an older build (or by
+  // hand) is not necessarily a shape.
+  const [storedLayout, setLayout] = usePersistedState<AnLayout>('dashboard.analyticsLayout', DEFAULT_AN_LAYOUT);
+  const layout = isAnLayout(storedLayout) ? storedLayout : DEFAULT_AN_LAYOUT;
+  // A phone draws tiles where the choice says split — the split's detail pane
+  // has no room to be a pane there. Only the *drawing* is coerced: the stored
+  // key keeps the real choice, so widening the window comes straight back to
+  // it without the user re-picking.
+  const narrow = useNarrow();
+  const drawn = drawableAnLayout(layout, narrow);
+
+  // Neither is persisted — session ids churn, so a restored selection would be
+  // stale (docs/subsystems/view-persistence.md). Two states, as on the
+  // Sessions board: `selectedId` is the split's one inspected report (falling
+  // through to the first row, so the inspector is never blank), `expanded` is
+  // the set of tiles drawn open. Opening three tiles and then switching to the
+  // split should not pick one of them at random.
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = shown.find(r => r.sessionId === selectedId) ?? shown[0] ?? null;
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggle(id: string) {
+    setExpanded(cur => {
+      const next = new Set(cur);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   let body: React.ReactNode;
   if (loading && !reports.length) {
@@ -64,239 +91,69 @@ export default function AnalyticsView() {
         <button type="button" className="an-clear" onClick={() => setView(clearAnalyticsFilters(view))}>Clear filters</button>
       </div>
     );
+  } else if (drawn === 'tiles') {
+    body = <AnalyticsTiles reports={shown} expanded={expanded} onToggle={toggle} />;
   } else {
-    body = (
-      <div className="split">
-        <div className="s-card list">
-          <div className="list-h">
-            <span className="ct">Logged sessions</span>
-            <span className="proj-pill">{shown.length}</span>
-          </div>
-          {shown.map(r => (
-            <LogRow
-              key={r.sessionId}
-              r={r}
-              selected={selected?.sessionId === r.sessionId}
-              onSelect={() => setSelectedId(r.sessionId)}
-            />
-          ))}
-        </div>
-        {selected && <Inspector r={selected} />}
-      </div>
-    );
+    body = <AnalyticsSplit reports={shown} selectedId={selectedId} onSelect={setSelectedId} />;
   }
 
   return (
     <div className="analytics">
+      {/* Two rows, as Management's band is: the title line, then the prose.
+          The title line carries state and one verb — `Review due` beside the
+          title when the log has gone unswept, and ↻ — while every fact about
+          the section (how much of the log is here, what it is, what to do when
+          a review is due) is a sentence in the line below. A chip that both
+          announced a state and spelled out the command was doing the
+          description's job in the row's smallest type. */}
       <div className="an-bar">
-        <div className="an-title">Session analytics</div>
-        <span className="an-hint">last {data?.keep ?? 5} sessions logged by <code>/kaizen</code></span>
-        <span className="spacer" />
-        {data?.reviewDue && (
-          <span
-            className="an-review"
-            title={
-              data.lastReviewAt
-                ? `Last swept ${data.lastReviewAt} — lessons have accumulated since.`
-                : 'The log has never been swept.'
-            }
-          >
-            review due — run <code>/kaizen review</code>
-          </span>
-        )}
-        <button className="an-refresh" onClick={refresh} title="Reload">↻</button>
+        <div className="an-bandrow">
+          <div className="an-title">Analytics</div>
+          {data?.reviewDue && (
+            <span
+              className="an-review"
+              title={
+                data.lastReviewAt
+                  ? `Last swept ${data.lastReviewAt} — lessons have accumulated since.`
+                  : 'The log has never been swept.'
+              }
+            >
+              <i aria-hidden="true" />Review due
+            </span>
+          )}
+          <span className="spacer" />
+          <button className="icon-refresh" onClick={refresh} title="Reload">↻</button>
+        </div>
+        {/* Two lines at this measure, which is what keeps it a caption rather
+            than a paragraph nobody reads — so it carries only what the page
+            cannot show: where the list comes from, that nothing here writes,
+            and the one move to make when a review is due. The rest (why it
+            does not poll, when the log was last swept) is the chip's tooltip
+            and the subsystem doc. One colour throughout: the sentence that
+            asks for something is not a different kind of sentence. */}
+        <div className="an-sub">
+          The last {data?.keep ?? 5} sessions <code>/kaizen</code> logged, each lesson beside a
+          live re-run of the analyzer. Read-only — the list changes only when{' '}
+          {/* the space is explicit: JSX drops a newline that follows a tag, so
+              `</code>` at a line end would butt straight against the word */}
+          <code>/kaizen</code> runs.
+          {data?.reviewDue && <> Lessons have piled up — run <code>/kaizen review</code>.</>}
+        </div>
       </div>
 
       {reports.length > 0 && (
-        <AnalyticsToolbar reports={reports} shownCount={shown.length} view={view} onChange={setView} />
+        <AnalyticsToolbar
+          reports={reports}
+          shownCount={shown.length}
+          view={view}
+          onChange={setView}
+          layout={drawn}
+          onLayout={setLayout}
+          narrow={narrow}
+        />
       )}
 
       {body}
-    </div>
-  );
-}
-
-/** Eight characters is what the log line itself carries, and what identifies a run. */
-const shortId = (id: string) => id.slice(0, 8);
-
-/**
- * One row of the log. Mirrors the Sessions split's row exactly — dot, name,
- * figure, then a second line spanning the last two columns — so the two lists
- * are the same object with a different subject.
- */
-function LogRow({ r, selected, onSelect }: { r: AnalyticsReport; selected: boolean; onSelect: () => void }) {
-  const a = r.analysis;
-  return (
-    <div
-      className={`lrow${selected ? ' selected' : ''}`}
-      onClick={onSelect}
-      onKeyDown={keyActivate(onSelect)}
-      tabIndex={0}
-      role="button"
-      aria-pressed={selected}
-    >
-      <LessonDot s={r.lessonStatus} />
-      {/* project only, as the Sessions row carries name + project and no more:
-          the models are a filter facet and belong in the inspector, where a
-          long model id does not eat the name */}
-      <span className="nm"><span className="t">{r.project}</span></span>
-      <span className="pct">{a ? fmtTok(a.totals.billableApprox) : '—'}</span>
-      <span className="act-line">
-        <StatusBadge s={r.lessonStatus} />
-        {/* One fact, because the column's measure only ever shows one before
-            ellipsising: the id, or — when there is no analysis to open — why
-            the figure beside it is a dash. Both are spelled out again in the
-            inspector's meta line. */}
-        <span className="act">{a ? shortId(r.sessionId) : 'transcript gone'}</span>
-        <span className="ago">{r.loggedAt}</span>
-      </span>
-    </div>
-  );
-}
-
-/** The open report: the log line's facts, the five figures, the two ledgers, the lesson. */
-function Inspector({ r }: { r: AnalyticsReport }) {
-  const a = r.analysis;
-  return (
-    <div className="s-card inspect">
-      <div className="ins-head">
-        <div className="who2">
-          <div className="ct">{r.project}</div>
-          <div className="ins-meta">
-            <LessonDot s={r.lessonStatus} />
-            <StatusBadge s={r.lessonStatus} />
-            {r.models.map(m => <span key={m} className="model">{m}</span>)}
-            <span className="an-id">{shortId(r.sessionId)}</span>
-            <span className="an-when">
-              logged {r.loggedAt}{a?.durationMs != null ? ` · ${fmtDuration(a.durationMs)}` : ''}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {a ? (
-        <>
-          <Metrics a={a} />
-          <div className="an-cols">
-            <TopTools a={a} />
-            <TopAgents a={a} />
-          </div>
-        </>
-      ) : (
-        <div className="an-gone">Transcript no longer on disk — showing the logged lesson only.</div>
-      )}
-
-      <div className="an-lesson">
-        {/* Management's third-column section label, verbatim — the same job in
-            the same place: naming the block under the facts. */}
-        <div className="mdetail-label">Research &amp; suggestions</div>
-        <p className="an-lesson-body">{r.lesson}</p>
-        <LessonOutcome s={r.lessonStatus} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * The five figures. The subagent count and the retry count ride in their
- * labels rather than beside their values: the strip sits in the inspector,
- * which is narrower than a full-width card, and a two-part value wraps there
- * and drops its label out of line with the other four.
- */
-function Metrics({ a }: { a: SessionAnalysis }) {
-  return (
-    <div className="an-metrics">
-      <Metric label="billable" value={fmtTok(a.totals.billableApprox)} lead />
-      <Metric label="context" value={fmtTok(a.totals.combined)} />
-      <Metric label={`subagents · ${a.subagentTotals.count}`} value={fmtTok(a.subagentTotals.tokens)} />
-      <Metric label="turns" value={String(a.perTurn.count)} />
-      <Metric
-        label={`errors · ${a.errorSignals.retries} retry`}
-        value={String(a.errorSignals.toolErrors)}
-        warn={a.errorSignals.toolErrors > 0}
-      />
-    </div>
-  );
-}
-
-function TopTools({ a }: { a: SessionAnalysis }) {
-  const top = a.byTool.slice(0, 3);
-  return (
-    <div className="an-col">
-      <div className="an-col-h">Top tools <span className="an-approx">approx tokens</span></div>
-      {top.length ? top.map(t => (
-        <div key={t.tool} className="an-line">
-          <span className="an-line-name">{t.tool}</span>
-          <span className="an-line-meta">
-            {fmtTok(t.approxOutputTokens)} · {t.count}×{t.errors ? ` · ${t.errors} err` : ''}
-          </span>
-        </div>
-      )) : <div className="an-line muted">none</div>}
-    </div>
-  );
-}
-
-function TopAgents({ a }: { a: SessionAnalysis }) {
-  const top = [...a.bySubagent].sort((x, y) => (y.tokens ?? 0) - (x.tokens ?? 0)).slice(0, 3);
-  return (
-    <div className="an-col">
-      <div className="an-col-h">Top subagents</div>
-      {top.length ? top.map(g => (
-        <div key={g.id} className="an-line">
-          <span className="an-line-name">{g.type || 'agent'}</span>
-          <span className="an-line-meta">
-            {g.tokens != null ? fmtTok(g.tokens) : '—'}{g.toolUses != null ? ` · ${g.toolUses}⚒` : ''}
-          </span>
-        </div>
-      )) : <div className="an-line muted">none launched</div>}
-    </div>
-  );
-}
-
-const STATUS_MARK: Record<LessonStatus['status'], string> = {
-  actioned: '✓',
-  promoted: '↑',
-  dropped: '·'
-};
-
-/**
- * What became of this session's lesson as the row's lead dot — the place the
- * Sessions split states a session's status. Open is the quiet one: it is the
- * default, and a loud default would make every fresh entry shout.
- */
-function LessonDot({ s }: { s?: LessonStatus | null }) {
-  return <span className={`an-dot ${s ? s.status : 'open'}`} aria-hidden="true" />;
-}
-
-/**
- * The same fact spelled out, from the log's `status` lines. A lesson with no
- * status line is still open — shown as such, since "which lessons have I
- * actually acted on" is the question the badge exists to answer.
- */
-function StatusBadge({ s }: { s?: LessonStatus | null }) {
-  if (!s) return <span className="an-status open" title="No status line yet — still open.">○ open</span>;
-  return (
-    <span className={`an-status ${s.status}`} title={`${s.note ? `${s.note} — ` : ''}${s.date}`}>
-      {STATUS_MARK[s.status]} {s.status}
-    </span>
-  );
-}
-
-/** The status line's note, spelled out under the lesson. */
-function LessonOutcome({ s }: { s?: LessonStatus | null }) {
-  if (!s) return null;
-  return (
-    <p className="an-lesson-body muted">
-      {s.status} {s.date}{s.note ? ` — ${s.note}` : ''}
-    </p>
-  );
-}
-
-function Metric({ label, value, lead, warn }: { label: string; value: string; lead?: boolean; warn?: boolean }) {
-  return (
-    <div className={`an-metric${lead ? ' lead' : ''}`}>
-      <div className={`an-metric-v${warn ? ' warn' : ''}`}>{value}</div>
-      <div className="an-metric-l">{label}</div>
     </div>
   );
 }

@@ -7,21 +7,68 @@ a session appears here only because `/kaizen` logged it. The dashboard never wri
 log; it only reads it. The `/kaizen` skill is **vendored** at `.claude/skills/kaizen/` so
 collaborators can populate the tab against their own global log.
 
-## The shape: the Sessions split, with a different subject
+## The band
 
-The tab **is** the Sessions split view — `.split`, the `.list` card with its `.list-h`
-and `.lrow` rows, and the `.inspect` card beside it, shared verbatim down to the CSS.
-Only the subject differs, so the row's lead dot carries what became of the lesson where
-Sessions carries a session's state, and the figure column is billable tokens where
-Sessions shows context used. Selection replaces expansion: exactly one report is open,
-and it falls through to the first row so the inspector is never blank while there is
-something to show. (Four other shapes were drawn as artboards first — a stack of
-collapsing cards, a ledger table, tiles, a lesson-first digest — in
-`docs/guides/mockups/redesign-mock.html`, which records why this one won.)
+Two rows, the shape `.mgmt-bar` set. The title row carries **state and one verb**:
+**Analytics**, a **`Review due`** chip beside it when the log has gone unswept, and a
+glyph-only ↻. The chip is the Management scope pill's shape (`.set-scope` — a filled 24px
+capsule with a dot) in the amber it has always worn; it was an outline chip, which read as
+a control you could press. The row is `align-items:center`, because a 19px title, a 24px
+capsule and a 32px button share no text baseline.
 
-**A row** is the dot, the project, the billable total, then a second line carrying the
-status badge, the 8-char session id and the date `/kaizen` logged it. A report with no
-analysis shows `—` for the figure and `transcript gone` in place of the id.
+The facts are prose in the row below (`.an-sub`), held to **two lines at that measure** so
+it stays a caption rather than a paragraph nobody reads. It carries only what the page
+cannot show: where the list comes from (`The last n sessions /kaizen logged…`), that
+nothing here writes, and — when a review is due — the one move, `run /kaizen review`. Why
+it does not poll and when the log was last swept live in the chip's tooltip and in this
+doc. **One colour throughout**: the sentence that asks for something is not a different
+kind of sentence, and an inked half made the caption look like two captions.
+
+`/kaizen` is set as a chip in **ink** wherever it appears here (`.an-hint code`,
+`.an-sub code`, `.an-lesson-body code`) — the same treatment `.set-hint code` gives a
+command on Settings. It used to be the accent green, which made a third colour in a line
+that already carries two. The ↻ is the shared **`.icon-refresh`** atom, used by
+Management's band too: both sections reload the same way, so the control is the same
+control, and the word "refresh" beside it left the glyph two characters of room once the
+scope path shared that line.
+
+## The shapes: two Sessions shapes, with a different subject
+
+The tab draws the Sessions **split** and the Sessions **tiles**, borrowed whole — `.split`,
+the `.list` card with its `.list-h` and `.lrow` rows, the `.inspect` card beside it, and
+the `.tiles` grid of `.tile` cards, shared verbatim down to the CSS. Only the subject
+differs, so a report's lead dot carries what became of the lesson where Sessions carries
+a session's state, and the figure is billable tokens where Sessions shows context used.
+(Four other shapes were drawn as artboards first — a stack of collapsing cards, a ledger
+table, tiles, a lesson-first digest — in `docs/guides/mockups/redesign-mock.html`, which
+records why the split won. Tiles came back as the second shape, and as the only one a
+phone draws.)
+
+Both are fed by `AnalyticsView`, which owns the state and hands each shape the filtered
+list; `AnalyticsSplit.tsx` and `AnalyticsTiles.tsx` are the two shapes, and
+`analytics/atoms.tsx` is what they share — the lesson's fate in its three forms, the five
+figures, the two ledgers, and `ReportBody`, which is everything under a report's own
+heading. The split draws `ReportBody` in the inspector; a tile draws it when opened.
+
+**Split.** A `.lrow` is the dot, the project, the billable total, then a second line
+carrying the status badge, the 8-char session id and the date `/kaizen` logged it. A
+report with no analysis shows `—` for the figure and `transcript gone` in place of the
+id. Selection replaces expansion: exactly one report is open, and it falls through to the
+first row so the inspector is never blank while there is something to show.
+
+**Tiles.** Every report a metric card — dot, project and status badge in the header, the
+models / id / logged date under it, then the billable total as the figure with the
+context beside it and the lesson clamped to three lines. Cards are **collapsed by
+default** and open in place, spanning two columns (`.tile.selected`) to make room for the
+figures and the ledgers. Expansion, not selection: a grid whose first cell is always open
+reads as a mistake, and comparing figures side by side is what a grid is for. The figure
+and the clamped lesson are dropped from an open tile — the strip below leads with that
+same billable total in the same green and carries context as its second cell, and the
+lesson is spelled out in full under its own label.
+
+The two shapes keep **separate** open-state: `selectedId` for the split, an `expanded`
+set for the tiles. Opening three tiles and then switching to the split should not pick
+one of them at random — the same two-state rule the Sessions board follows.
 
 **The inspector** shows:
 
@@ -63,9 +110,11 @@ line's project tag.
   live. `analysis` is `null` when the transcript is gone.
 - **`reviewDue`** = lessons exist AND no `review:` marker within 7 days
   (`REVIEW_INTERVAL_DAYS` in `analytics.ts`; `now` injectable for tests). An empty log is
-  never "due". The client renders it as an `.an-review` chip in the section bar prompting
-  `/kaizen review` — the nudge to sweep accumulated lessons, promote recurring ones, and
-  prune rules that stopped earning their keep.
+  never "due". The client renders it twice over in the band: the `.an-review` chip
+  (`Review due`, with `lastReviewAt` in its tooltip) and one appended sentence naming the
+  move — run `/kaizen review`, which sweeps accumulated lessons, promotes recurring ones
+  and prunes rules that stopped earning their keep. State in the row, instruction in the
+  prose.
 - **No polling:** the list changes only when `/kaizen` runs. `AnalyticsView` is a
   `React.lazy` default export (own chunk); `useAnalytics` fetches on mount + manual ↻ and
   is client-only.
@@ -75,9 +124,9 @@ line's project tag.
 ## Filter + sort
 
 The tab draws the Sessions toolbar, not a second design of one: the same `.toolbar` row,
-the same filter/sort track, and the same `Popover` dismiss primitive. It carries no view
-switcher — the section has one shape — so the left of the row states how much of the log
-is in front of you (`n of m sessions`). Facets are **project**, **model** (a report
+the same `.seg.view` switcher, the same filter/sort track, and the same `Popover` dismiss
+primitive. The switcher (Split | Tiles) leads the row, then how much of the log is in
+front of you (`n of m sessions`). Facets are **project**, **model** (a report
 matches if *any* of its models is selected), a **logged-at window**, and a sort key
 (recency / tokens / project) with a direction toggle. An empty facet array means "no
 filter", not "match nothing". `analyticsFilterCount` counts **per facet, not per value** —
@@ -95,11 +144,23 @@ Windows are **day-granular** (`Any time` / 7 / 30 / 90 days) because `loggedAt` 
 `YYYY-MM-DD` date with no time-of-day — the Sessions view's "15 min / 1 hour" windows have
 nothing to bite on here.
 
-The toolbar selection persists to `localStorage` under `dashboard.analyticsView` (see
-[view-persistence](view-persistence.md)); **which report is open is deliberately not
-persisted** — session ids churn, so a restored selection would be stale, and the
-fall-through to the first row makes one unnecessary. Same rule as the Sessions split's
-`splitId`. All of it is client-side over the payload `GET /api/analytics` already
+The toolbar selection persists to `localStorage` under `dashboard.analyticsView`, and the
+shape under its own key `dashboard.analyticsLayout` — a shape is not a filter, so it does
+not ride in the object the facets are stored in (see
+[view-persistence](view-persistence.md)). `isAnLayout` guards the read, failing open to
+`split`. **Which report is open is deliberately not persisted** — session ids churn, so a
+restored selection would be stale, and the split's fall-through to the first row makes
+one unnecessary. Same rule as the Sessions split's `splitId`.
+
+**The phone draws tiles.** Split is a two-pane master/detail and a 375px measure has no
+room for the detail pane to be a pane, so `WIDE_ONLY_AN_LAYOUTS` withholds it under 700px
+(`hooks/useNarrow.ts`) and `drawableAnLayout` draws tiles instead — while the stored key
+goes on saying `split`, so widening the window comes straight back without re-picking.
+Only the *drawing* is coerced; unlike the Sessions side there is no written-back half,
+because no Settings picker pins this tab's shape. With one shape left, the switcher is
+dropped from the markup outright rather than left as a lone tab that switches to itself.
+`anLayoutsFor` / `drawableAnLayout` / `isAnLayout` are pure and unit-tested beside the
+filter helpers. All of it is client-side over the payload `GET /api/analytics` already
 returned — no backend change, so the read-only invariant above still holds.
 
 ## Invariants
@@ -150,6 +211,7 @@ returned — no backend change, so the read-only invariant above still holds.
     - server/api.ts
     - client/src/components/analytics/
     - client/src/lib/analyticsFilterSort.ts
+    - client/src/hooks/useSettings.tsx
     - .claude/skills/kaizen/
   kind: subsystem
   verified: f436519f31ef4120521792db7658e2bc5431f0e9

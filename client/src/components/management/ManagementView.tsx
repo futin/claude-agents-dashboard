@@ -97,7 +97,10 @@ export default function ManagementView() {
             <span className="set-scope"><i aria-hidden="true" /><span className="p">{here.path}</span></span>
           </span>
           {error ? <span className="off">scan failed — showing last snapshot</span> : null}
-          <button className="tb-dir" onClick={refresh}>↻ refresh</button>
+          {/* Glyph only, the same `.icon-refresh` atom the Analytics band uses:
+              the word beside it left the ↻ two characters of room once the
+              scope path shares the line. */}
+          <button className="icon-refresh" onClick={refresh} title="Reload">↻</button>
         </div>
         <div className="mgmt-sub">
           Every skill, agent, command, rule, hook, memory file, settings file and installed plugin

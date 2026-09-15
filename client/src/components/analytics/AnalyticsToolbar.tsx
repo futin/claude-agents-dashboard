@@ -3,12 +3,14 @@ import { useCallback, useRef, useState } from 'react';
 import type { AnalyticsReport } from '../../../../shared/types';
 import {
   ANALYTICS_WINDOWS,
+  anLayoutsFor,
   AN_SORT_HINT,
   AN_SORT_LABEL,
   analyticsFilterCount,
   clearAnalyticsFilters,
   distinctModels,
   distinctProjects,
+  type AnLayout,
   type AnSortKey,
   type AnalyticsView
 } from '../../lib/analyticsFilterSort';
@@ -20,24 +22,35 @@ type Open = 'filter' | 'sort' | null;
 
 /**
  * Filter + sort for Analytics, drawn in the Sessions toolbar's language: the
- * filter button on the right of a shared track, the sort readout beside it,
- * and one popover open at a time. It carries no view switcher — the section
- * has one shape — so the left of the row states how much of the log is in
- * front of you, which is what the switcher's space is worth here.
+ * shape switcher on the left, then how much of the log is in front of you;
+ * on the right one shared track holding the filter button, the sort readout
+ * and the sort button. Both buttons open a popover; only one is open at a time.
  *
- * State lives in the parent (persisted under `dashboard.analyticsView`).
+ * State lives in the parent (the facets persisted under
+ * `dashboard.analyticsView`, the shape under `dashboard.analyticsLayout`).
  */
 export function AnalyticsToolbar({
   reports,
   shownCount,
   view,
-  onChange
+  onChange,
+  layout,
+  onLayout,
+  narrow
 }: {
   reports: AnalyticsReport[];
-  /** How many reports survived the filter — the left of the row. */
+  /** How many reports survived the filter — stated beside the switcher. */
   shownCount: number;
   view: AnalyticsView;
   onChange: (v: AnalyticsView) => void;
+  /** Which shape is drawing the log. Owned by `AnalyticsView`, not by `view` —
+      it is not a filter. */
+  layout: AnLayout;
+  onLayout: (l: AnLayout) => void;
+  /** Phone measure: the switcher drops the shape that width cannot draw
+      (`anLayoutsFor`). Filtered in the markup rather than hidden in CSS — a
+      `display:none` button is still a tab stop and still clickable by script. */
+  narrow: boolean;
 }) {
   const [open, setOpen] = useState<Open>(null);
   const wrap = useRef<HTMLDivElement>(null);
@@ -48,9 +61,30 @@ export function AnalyticsToolbar({
   const toggleIn = (list: string[], value: string) =>
     list.includes(value) ? list.filter(v => v !== value) : [...list, value];
   const n = analyticsFilterCount(view);
+  const shapes = anLayoutsFor(narrow);
 
   return (
     <div className="toolbar">
+      {/* Dropped outright when this width draws only one shape, rather than
+          left as a lone tab that switches to itself — the row is then the
+          count and the filter/sort track, which is what it was before the
+          switcher existed. */}
+      {shapes.length > 1 && (
+        <div className="seg view" role="tablist" aria-label="View">
+          {shapes.map(l => (
+            <button
+              key={l.key}
+              type="button"
+              role="tab"
+              aria-selected={layout === l.key}
+              className={layout === l.key ? 'on' : ''}
+              onClick={() => onLayout(l.key)}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      )}
       <span className="an-hint">{shownCount} of {reports.length} sessions</span>
       <span className="tb-spacer" />
       <div className="ctlwrap" ref={wrap}>

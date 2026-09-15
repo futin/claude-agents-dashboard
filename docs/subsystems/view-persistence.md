@@ -54,7 +54,10 @@ override it (see `dashboard.section` below).
   stale or hand-edited value falls back to `board`);
   `dashboard.chatFilter` (the chat drawer's all/text/you filter — see [chat](chat.md); validated
   with `isChatFilter` on read, so a stale value falls back to `all`);
-  `dashboard.analyticsView` (the Analytics tab's own facets — see [analytics](analytics.md));
+  `dashboard.analyticsView` (the Analytics tab's own facets) and
+  `dashboard.analyticsLayout` (which of that tab's two shapes the switcher was left on,
+  a bare `AnLayout` string guarded by `isAnLayout` on read — both see
+  [analytics](analytics.md));
   `dashboard.answerToken` (see [remote-answer](remote-answer.md)); `management.scope`,
   `management.type` (which of the type column's rows the item column is showing) and
   `management.collapsed` (see [management](management.md) — all three resolve during render,
@@ -101,6 +104,19 @@ override it (see `dashboard.section` below).
   Both are pure and unit-tested (`test/filter-sort.test.ts`, `test/client-settings.test.ts`);
   `clampSettings` stays width-agnostic and keeps accepting all six picker values, so a blob
   written on a laptop still validates on a phone.
+- **Analytics keeps the same split, one key over.** Its shape is `dashboard.analyticsLayout`,
+  separate from `dashboard.analyticsView` for the reason `dashboard.layout` is separate from
+  `dashboard.view`: a shape is not a filter. Two differences from the Sessions side, both
+  because the section is smaller: there is **no `defaultLayout` setting** for it — a stored
+  shape is always replayed, with `isAnLayout` failing open to `split` — and the width
+  coercion has only the `drawableAnLayout` half. Nothing is written back, because nothing
+  pins the tab's shape from Settings.
+- **The phone draws one of Analytics' two shapes.** Split is a two-pane master/detail there
+  too, so under 700px `anLayoutsFor(true)` is tiles alone and `drawableAnLayout('split',
+  true)` draws tiles while the key goes on saying `split`. With one shape left, the switcher
+  is **dropped from the markup entirely** rather than left as a lone tab that switches to
+  itself — the row is then the count and the filter/sort track, which is what it was before
+  the switcher existed.
 - **Not persisted:** which cards are open (`SessionsView.tsx` `expanded`) and the split
   view's inspected session (`splitId`), the open chat drawer (`SessionsView.tsx` `chatId`, seeded from the deep link above), and the
   [launch panel](spawn.md) (`SessionsView.tsx` `spawnOpen` — a one-shot form, not a view
@@ -119,6 +135,8 @@ override it (see `dashboard.section` below).
     - client/src/components/settings/SettingsView.tsx
     - client/src/lib/filterSort.ts
     - client/src/lib/settings.ts
+    - client/src/lib/analyticsFilterSort.ts
+    - client/src/components/analytics/AnalyticsView.tsx
     - client/src/hooks/useSettings.tsx
   kind: subsystem
   verified: 0da757e27d2847eb57fca181bf516a3e9c130caa

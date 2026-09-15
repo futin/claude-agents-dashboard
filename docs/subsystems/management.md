@@ -8,7 +8,9 @@ ever written.
 (`~/.claude`) and every recently-active project sit in the sidebar as Management's
 sub-nav, the same tree Usage and Settings draw, and only while the section is open. The
 page keeps the persisted state (`management.scope`) and still resolves a stale value to
-`global` during render — only the control moved. The **band** names it as
+`global` during render — only the control moved. Its ↻ is the shared `.icon-refresh`
+atom the [analytics](analytics.md) band uses — glyph only, since the scope path shares
+that line. The **band** names it as
 `Management · <scope>` with the scope's path in a *neutral* `.set-scope` pill (the green
 fill means "every device" on Settings and would lie here), the ↻ on the same line, and
 the one-line subtitle the full width beneath.

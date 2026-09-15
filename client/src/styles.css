@@ -836,8 +836,7 @@ code,kbd,samp,pre{font-family:inherit}
 .mgmt-sub{font-size:13px;color:var(--ink2);line-height:1.45;max-width:92ch}
 .mgmt-bar .off{flex:none;font-size:12px;color:var(--amber)}
 /* the 36px control family §8.2 put every Settings control on */
-.mgmt-bar .tb-dir{margin-left:auto;flex:none;height:36px;font-family:var(--font);font-size:13px;font-weight:500;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;padding:0 14px;cursor:pointer;transition:border-color .15s,color .15s}
-.mgmt-bar .tb-dir:hover{color:var(--ink);border-color:var(--ink3)}
+.mgmt-bar .icon-refresh{margin-left:auto;flex:none}
 /* Columns 1 and 2 are FIXED. A second column that is wide until you pick
    something and narrow after is a column that jumps out from under the row you
    just clicked; the third has to arrive beside the other two. */
@@ -863,7 +862,6 @@ code,kbd,samp,pre{font-family:inherit}
   /* ↻ is a maintenance control on a read-only page, not the reason you came:
      off the 36px family and onto the compact one, where the band's two rows
      cost the screen less. */
-  .mgmt-bar .tb-dir{height:30px;font-size:12px;padding:0 11px}
   .mgmt-bandrow{align-items:flex-start}
 }
 /* Column 1 — the type. 16px padding, which is the only number the "you are
@@ -1028,15 +1026,32 @@ code,kbd,samp,pre{font-family:inherit}
    here — the section bar, the lesson's fate in its two shapes, and the report
    the inspector holds. */
 .analytics{display:flex;flex-direction:column;gap:12px}
-.an-bar{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+/* Two rows, not one: the title, the count, the review chip and ↻ sit on one
+   line, and the sentence saying what the section is runs the full width under
+   them. Same shape as `.mgmt-bar` — every section that opens with a band
+   builds it this way. */
+.an-bar{display:flex;flex-direction:column;gap:5px}
+/* Centred, not baseline-aligned: the row is a 19px title, a 24px capsule and
+   a 32px button, none of which share a text baseline — `align-self` on each
+   one only ever centred it against a row the others had already stretched. */
+.an-bandrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.an-sub{font-size:13px;color:var(--ink2);line-height:1.45;max-width:92ch}
 .an-title{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
 .an-hint{font-size:13px;color:var(--ink3)}
-.an-hint code,.an-empty code{font-size:12px;color:var(--cyan)}
-.an-refresh{font-family:var(--font);font-size:14px;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;width:32px;height:32px;cursor:pointer;align-self:center;transition:color .15s,border-color .15s}
-.an-refresh:hover{color:var(--ink);border-color:var(--ink3)}
+.an-hint code,.an-sub code,.an-empty code{font-size:12px;font-weight:500;color:var(--ink);background:var(--strip-hi);border-radius:4px;padding:1px 5px}
+/* Shared with Management's band: both sections reload the same way, and a
+   glyph-only button is the same control in both places — the word "refresh"
+   beside it left the ↻ two characters of room on a phone. */
+.icon-refresh{font-family:var(--font);font-size:12px;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;width:26px;height:26px;cursor:pointer;align-self:center;transition:color .15s,border-color .15s}
+.icon-refresh:hover{color:var(--ink);border-color:var(--ink3)}
 .an-empty{font-size:13px;color:var(--ink3);background:var(--strip);border-radius:16px;padding:40px 24px;text-align:center}
 .an-clear{font-family:var(--font);font-size:13px;color:var(--cyan);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
-.an-review{font-size:11px;font-weight:500;color:var(--amber);border:1px solid var(--amber);border-radius:12px;padding:2px 9px;align-self:center}
+/* The scope pill's shape (`.set-scope`), in the amber the chip has always
+   worn: a filled 24px capsule with a dot, centred on the title rather than
+   sitting on its baseline. An outline chip read as a control you could press,
+   which this is not — it states a fact and holds the dates in its tooltip. */
+.an-review{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:11px;font-weight:500;background:color-mix(in srgb,var(--amber) 20%,transparent);color:var(--amber);cursor:help;white-space:nowrap}
+.an-review i{width:6px;height:6px;border-radius:999px;flex:none;background:currentColor}
 .an-review code{text-transform:none;letter-spacing:0;color:inherit}
 
 /* What became of the lesson, twice over: the row leads with it as the dot
@@ -1092,12 +1107,39 @@ code,kbd,samp,pre{font-family:inherit}
 .an-lesson{margin-top:0}
 .an-lesson-body{font-size:13px;line-height:1.5;color:var(--ink);max-width:74ch;margin-top:10px}
 .an-lesson-body.muted{font-size:12px;margin-top:8px}
-.an-lesson-body code{font-size:12px;color:var(--cyan)}
+.an-lesson-body code{font-size:12px;font-weight:500;color:var(--ink);background:var(--strip-hi);border-radius:4px;padding:1px 5px}
 /* Below the split's own fold the inspector has the full measure back, but the
    strip still has to survive the phone: two rows of figures beats five columns
-   of clipped ones. */
-@media (max-width:900px){.an-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.an-metric:nth-child(4){border-left:0;padding-left:0}}
-@media (max-width:700px){.an-cols{grid-template-columns:1fr}.an-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.an-metric:nth-child(odd){border-left:0;padding-left:0}}
+   of clipped ones. Three to a row at every narrow width, and the second row is
+   ruled off the first — every cell is fenced on the side it meets a neighbour,
+   not only on the sides that share a line. The rule is the join itself, with no
+   air either side of it, and the fifth figure takes the two cells the folded
+   row leaves it rather than sitting under one and leaving a hole. */
+@media (max-width:900px){.an-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.an-metric:nth-child(4){border-left:0;padding-left:0}.an-metric:nth-child(n+4){border-top:2px solid var(--board)}.an-metric:nth-child(5){grid-column:span 2}}
+@media (max-width:700px){.an-cols{grid-template-columns:1fr}}
+
+/* The log as tiles — the section's second shape, and the only one a phone
+   draws. Grid, card and open-spans-two are `.tiles` / `.tile` shared verbatim
+   with the sessions board; what is new is the figure (billable tokens, in the
+   green the inspector already gives that same lead figure) and the collapsed
+   lesson, the one thing on the card that is not a number. */
+.analytics .metric{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.1;color:var(--green);font-variant-numeric:tabular-nums}
+.analytics .tile .tile-sub{gap:8px}
+/* The open tile's 2px ring is drawn outside its box, and in `.wrap.wide` the
+   section itself is the scroller — an overflow box clips at its content edge,
+   so without this the ring is shaved off the left column's tiles. Two pixels
+   of room, not a margin: the grid's own gap stays the gap. */
+.analytics .tiles{padding:2px}
+.an-tile-lesson{font-size:13px;line-height:1.45;color:var(--ink2);margin-top:14px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+/* The open tile keeps the strip on one line — five cells, one figure each, as
+   the inspector draws it. It can: the tile spans two columns, and the only
+   reason to fold the strip is the viewport running out, which the 900px rule
+   below already answers for both shapes at once. Tighter cells, because two of
+   three columns is less measure than the inspector's. */
+.analytics .tile .an-metrics{margin-top:16px}
+.analytics .tile .an-metric{padding:12px 10px}
+.analytics .tile .an-metric-v{font-size:17px}
+.analytics .tile .an-metric.lead .an-metric-v{font-size:22px}
 
 /* ---------------------------------------------- chat — the history modal
    (the way in is `.cbtn`, up in the row-atoms block)

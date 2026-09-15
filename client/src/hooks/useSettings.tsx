@@ -23,7 +23,8 @@ const SettingsContext = createContext<SettingsControl | null>(null);
  */
 export const OWNED_KEYS = [
   'dashboard.view', 'dashboard.layout', 'dashboard.section', 'dashboard.chatFilter',
-  'dashboard.analyticsView', 'management.scope', 'management.type', 'management.collapsed'
+  'dashboard.analyticsView', 'dashboard.analyticsLayout',
+  'management.scope', 'management.type', 'management.collapsed'
 ];
 
 /**

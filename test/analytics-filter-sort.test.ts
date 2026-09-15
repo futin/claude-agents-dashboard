@@ -3,10 +3,13 @@ import assert from 'node:assert';
 import type { AnalyticsReport, SessionAnalysis } from '../shared/types.js';
 import {
   analyticsFilterCount,
+  anLayoutsFor,
   applyAnalyticsView,
   clearAnalyticsFilters,
   distinctProjects,
   distinctModels,
+  drawableAnLayout,
+  isAnLayout,
   DEFAULT_ANALYTICS_VIEW,
   type AnalyticsView
 } from '../client/src/lib/analyticsFilterSort.js';
@@ -164,6 +167,30 @@ export function run(): number {
   if (test('clearing an unfiltered view returns it by reference', () => {
     const v = view({ sortKey: 'project' });
     assert.strictEqual(clearAnalyticsFilters(v), v);
+  })) p++; else f++;
+
+  // ── the shape switcher ────────────────────────────────────────────────
+  if (test('the switcher offers both shapes wide, tiles only on a phone', () => {
+    assert.deepStrictEqual(anLayoutsFor(false).map(l => l.key), ['split', 'tiles']);
+    assert.deepStrictEqual(anLayoutsFor(true).map(l => l.key), ['tiles']);
+  })) p++; else f++;
+
+  if (test('a phone draws tiles where the choice says split', () => {
+    assert.strictEqual(drawableAnLayout('split', true), 'tiles');
+    assert.strictEqual(drawableAnLayout('tiles', true), 'tiles');
+  })) p++; else f++;
+
+  if (test('a wide window draws the choice itself', () => {
+    assert.strictEqual(drawableAnLayout('split', false), 'split');
+    assert.strictEqual(drawableAnLayout('tiles', false), 'tiles');
+  })) p++; else f++;
+
+  if (test('a stale stored shape is not a shape', () => {
+    assert.strictEqual(isAnLayout('split'), true);
+    assert.strictEqual(isAnLayout('tiles'), true);
+    assert.strictEqual(isAnLayout('board'), false);
+    assert.strictEqual(isAnLayout(null), false);
+    assert.strictEqual(isAnLayout(undefined), false);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
