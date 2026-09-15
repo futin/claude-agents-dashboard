@@ -64,14 +64,16 @@ export default function ManagementView() {
     return null;
   }, [allGroups, selectedKey]);
 
-  // Stacked on the phone, column 3 opens *below* both lists — far enough down
+  // Stacked single-column, column 3 opens *below* both lists — far enough down
   // that picking an item looks like it did nothing. Bring it up. Deselecting
   // (clicking the open row again) unmounts the column, so there is nothing to
-  // scroll to and `?.` is the whole guard; above 700px the three columns are
-  // side by side and the scroll would be a jump for no reason.
+  // scroll to and `?.` is the whole guard; `.mgmt` goes multi-column at the
+  // `md` density tier (768), same as `.board`/`.tiles`/`.split`, and above
+  // that the three columns are side by side so the scroll would be a jump for
+  // no reason.
   useEffect(() => {
     if (selectedKey === null) return;
-    if (!window.matchMedia('(max-width:700px)').matches) return;
+    if (!window.matchMedia('(max-width:767.98px)').matches) return;
     grid.current?.querySelector('.mdetail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [selectedKey]);
 

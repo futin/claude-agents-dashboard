@@ -9,13 +9,17 @@ import { useSyncExternalStore } from 'react';
  * where hiding with `display:none` would leave a button in the tab order and
  * an option still selectable by keyboard.
  *
- * 700px mirrors `styles.css`'s narrow block, and has to keep mirroring it: the
- * shapes withheld here are the ones whose CSS stops working there.
+ * 767.98px mirrors `styles.css`'s `md` density tier, and has to keep mirroring
+ * it: the shapes withheld here are the ones whose CSS stops working there —
+ * the multi-column grid layout of `.board`, `.tiles` and `.split`, which
+ * arrives at `md` (768), not the shell's rail-to-top-bar switch at 640. The
+ * fractional value keeps this query a true complement of the CSS's
+ * `min-width:768px`, with no gap at fractional viewport widths.
  *
  * `useSyncExternalStore` rather than an effect + state, so the first paint has
  * the real answer instead of a desktop guess it corrects a frame later.
  */
-export const NARROW_PX = 700;
+export const NARROW_PX = 767.98;
 
 const QUERY = `(max-width:${NARROW_PX}px)`;
 

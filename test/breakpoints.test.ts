@@ -13,6 +13,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { NARROW_PX } from '../client/src/hooks/useNarrow.js';
+
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
@@ -31,6 +33,21 @@ function findRepoRoot(from: string): string {
 
 const ROOT = findRepoRoot(path.dirname(fileURLToPath(import.meta.url)));
 const STYLES_PATH = path.join(ROOT, 'client', 'src', 'styles.css');
+const NARROW_HOOK_PATH = path.join(ROOT, 'client', 'src', 'hooks', 'useNarrow.ts');
+const MANAGEMENT_VIEW_PATH = path.join(
+  ROOT, 'client', 'src', 'components', 'management', 'ManagementView.tsx'
+);
+
+/** A file's source with `//` and `*`/`/*`-led comment lines stripped, as `tailnet.test.ts` does. */
+function stripComments(source: string): string {
+  return source
+    .split('\n')
+    .filter(line => {
+      const t = line.trim();
+      return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
+    })
+    .join('\n');
+}
 
 /** The `/* -- Breakpoint ladder ... *\/` comment block, or throws if it's missing. */
 function ladderBlock(): string {
@@ -83,6 +100,26 @@ export function run(): number {
       block,
       /240[^=]*\+[^=]*1248[^=]*=[^=]*1536/s,
       'expected an explicit 240 + ... + 1248 = 1536 arithmetic statement'
+    );
+  })) p++; else f++;
+
+  if (test('useNarrow mirrors the density tier', () => {
+    assert.strictEqual(NARROW_PX, 767.98);
+    const source = fs.readFileSync(NARROW_HOOK_PATH, 'utf8');
+    assert.match(source, /`\(max-width:\$\{NARROW_PX\}px\)`/);
+  })) p++; else f++;
+
+  if (test('ManagementView guards at the density tier', () => {
+    const source = fs.readFileSync(MANAGEMENT_VIEW_PATH, 'utf8');
+    assert.match(source, /\(max-width:767\.98px\)/);
+  })) p++; else f++;
+
+  if (test('no JS breakpoint uses a retired width', () => {
+    const narrowSource = stripComments(fs.readFileSync(NARROW_HOOK_PATH, 'utf8'));
+    const managementSource = stripComments(fs.readFileSync(MANAGEMENT_VIEW_PATH, 'utf8'));
+    assert.strictEqual(narrowSource.match(/\b700\b/), null, 'useNarrow.ts still references 700');
+    assert.strictEqual(
+      managementSource.match(/\b700\b/), null, 'ManagementView.tsx still references 700'
     );
   })) p++; else f++;
 
