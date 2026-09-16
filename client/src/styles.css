@@ -619,6 +619,17 @@ code,kbd,samp,pre{font-family:inherit}
 .track{height:10px;border-radius:8px;background:var(--steel);overflow:hidden}
 .bar .fill,.track .fill{height:100%;border-radius:8px;background:var(--green);transition:width .5s ease}
 .bar .fill.warn,.track .fill.warn{background:var(--amber)}
+/* …but --steel is a *recessed* well, and it only reads as one on paper. On a
+   --strip-hi ground — an open ledger row, a selected list row, a .kv gauge
+   tile — the two are a couple of points apart on daylight and the empty half
+   of the gauge disappears into its card (the §8.2 scope-pill lesson, met again
+   — cf. `.chat-side .kv`). There the well drops to --hairline2, the next step
+   away from the card in every theme, exactly as `.sp-toggle .set-seg` does on
+   its --steel card. */
+.lrow.selected .bar,
+.ledger tr.selected .bar,
+.ledger tr.expand .bar,.ledger tr.expand .track,.ledger tr.expand .tl-track,
+.kv .track{background:var(--hairline2)}
 .act-line{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);min-width:0}
 .act-line .act{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .act-line .act .tool{font-weight:500;color:var(--ink)}
@@ -681,7 +692,14 @@ code,kbd,samp,pre{font-family:inherit}
 /* Per-agent timeline: start→finish bar on the session's shared time axis */
 .agent-block{display:flex;flex-direction:column;gap:5px}
 .tl-track{position:relative;height:6px;border-radius:4px;background:var(--steel)}
-.tl-bar{position:absolute;top:0;height:100%;min-width:3px;border-radius:4px;background:var(--hairline2)}
+/* A finished agent's span is drawn in ink, not in a rule colour: --hairline2
+   reads on paper but disappears the moment the row's card turns --strip-hi
+   (an open ledger row), and the span is data — it should carry about the
+   weight the type around it does. --ink2 and not --ink: full ink made a wall
+   of black bars out of a finished session, and the span is secondary to the
+   agent's name. It inverts with the theme either way — dark grey on daylight,
+   light grey on the four dark boards. */
+.tl-bar{position:absolute;top:0;height:100%;min-width:3px;border-radius:4px;background:var(--ink2)}
 .tl-bar.running{background:var(--green);animation:tlpulse 1.8s ease-in-out infinite}
 @keyframes tlpulse{0%,100%{opacity:.85}50%{opacity:.5}}
 .tl-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums;margin-top:8px}
@@ -1356,6 +1374,8 @@ code,kbd,samp,pre{font-family:inherit}
 /* On a --strip-hi column a --strip-hi card vanishes (the §8.2 scope-pill lesson,
    met again), so the context block takes paper instead. */
 .chat-side .kv{background:var(--strip)}
+/* …which puts the gauge's well back on paper, where --steel is right again. */
+.chat-side .kv .track{background:var(--steel)}
 .chat .metric{font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
 /* the same 70% threshold the row uses — one context reading, two places */
 .chat .metric.warn{color:var(--amber)}
