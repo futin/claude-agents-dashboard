@@ -720,7 +720,11 @@ code,kbd,samp,pre{font-family:inherit}
 .bfoot{margin-top:14px;display:flex;gap:8px}
 
 /* ── List: one table, the open row expands underneath itself ──────────────── */
-.ledger{padding:0 0 16px;overflow:hidden}
+/* Edge-to-edge cards: rows carry their own 20px inset, so the card must not
+   add one. Qualified with `.s-card` on purpose — the `md` tier re-declares
+   `.s-card{padding:24px}` further down, and a bare `.ledger` (same specificity,
+   earlier in the file) loses to it above 768. Same shape as `.s-card.quiet`. */
+.s-card.ledger{padding:0 0 16px;overflow:hidden}
 .ledger table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
 .ledger th{font-size:12px;font-weight:400;color:var(--ink2);text-align:left;padding:14px 12px;border-bottom:1px solid var(--hairline);white-space:nowrap}
 .ledger td{padding:14px 12px;border-top:1px solid var(--hairline);vertical-align:middle;overflow:hidden}
@@ -764,7 +768,8 @@ code,kbd,samp,pre{font-family:inherit}
 /* Rows run to the card's left and right edges, but not to its bottom one:
    the last row needs the same air under it that the head has above the first.
    Same for the ledger's last table row. */
-.list{padding:0 0 16px;overflow:hidden}
+/* Qualified for the same reason as `.s-card.ledger` above. */
+.s-card.list{padding:0 0 16px;overflow:hidden}
 .list-h{display:flex;align-items:center;gap:8px;padding:14px 20px;border-bottom:1px solid var(--hairline)}
 .list-h .ct{font-size:16px}
 .lrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:10px;align-items:center;padding:14px 20px;border-top:1px solid var(--hairline);cursor:pointer;min-width:0;transition:background .15s}
