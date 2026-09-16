@@ -672,7 +672,10 @@ code,kbd,samp,pre{font-family:inherit}
 .detail-empty{font-size:13px;color:var(--ink3);padding:2px 0}
 .agents{display:flex;flex-direction:column;gap:10px}
 .agent{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink2);min-width:0}
-.ag-type{flex-shrink:0;color:var(--magenta);font-weight:500}
+/* Now that it renders only for an informative type, the label needs no colour
+   to earn attention — its presence is the signal. Weight alone separates it
+   from the description. */
+.ag-type{flex-shrink:0;color:var(--ink);font-weight:500}
 .ag-desc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .ag-dur{margin-left:auto;flex-shrink:0;color:var(--ink3);font-size:12px;font-variant-numeric:tabular-nums}
 /* Per-agent timeline: start→finish bar on the session's shared time axis */
@@ -1262,7 +1265,9 @@ code,kbd,samp,pre{font-family:inherit}
 .an-approx{font-size:11px;color:var(--ink3);font-style:italic;font-weight:400;text-transform:none;letter-spacing:0}
 .an-line{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px;padding:4px 0}
 .an-line+.an-line{border-top:1px solid var(--hairline)}
-.an-line-name{color:var(--ink2)}
+/* A subagent line can now fall back to its description, which is long-form —
+   it truncates rather than wrapping the row to two lines. */
+.an-line-name{color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .an-line-meta{color:var(--ink3);font-variant-numeric:tabular-nums;font-size:12px;flex-shrink:0}
 .an-line.muted,.an-lesson-body.muted{color:var(--ink3)}
 .an-gone{font-size:12px;color:var(--ink3);background:var(--strip-hi);border-radius:12px;padding:10px 14px;margin-top:20px}

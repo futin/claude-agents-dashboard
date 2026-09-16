@@ -1,4 +1,5 @@
 import type { AnalyticsReport, LessonStatus, SessionAnalysis } from '../../../../shared/types';
+import { agentLineName } from '../../lib/agentLabel';
 import { fmtTok } from '../../lib/format';
 
 /**
@@ -123,6 +124,8 @@ export function TopTools({ a }: { a: SessionAnalysis }) {
   );
 }
 
+/** The type names the line when it is informative; otherwise the agent's own
+ *  description does, since this surface has no second column for it (bug-24). */
 export function TopAgents({ a }: { a: SessionAnalysis }) {
   const top = [...a.bySubagent].sort((x, y) => (y.tokens ?? 0) - (x.tokens ?? 0)).slice(0, 3);
   return (
@@ -130,7 +133,7 @@ export function TopAgents({ a }: { a: SessionAnalysis }) {
       <div className="an-col-h">Top subagents</div>
       {top.length ? top.map(g => (
         <div key={g.id} className="an-line">
-          <span className="an-line-name">{g.type || 'agent'}</span>
+          <span className="an-line-name">{agentLineName(g.type, g.description)}</span>
           <span className="an-line-meta">
             {g.tokens != null ? fmtTok(g.tokens) : '—'}{g.toolUses != null ? ` · ${g.toolUses}⚒` : ''}
           </span>
