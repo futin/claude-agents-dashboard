@@ -91,7 +91,10 @@ function Message({ m }: { m: ChatMessage }) {
  * body and `.chat-pinned` are siblings in `.chat-stack`, and the pinned layer
  * is absolutely positioned against its bottom edge. The transcript's height is
  * therefore identical with and without a panel — a question arriving mid-read
- * never reflows the sentence being read.
+ * never reflows the sentence being read. What DOES change is the transcript's
+ * bottom padding: `--pinned-h` tracks the layer's live height so the newest
+ * turn can always be scrolled out from under a composer, which is otherwise
+ * tall enough to swallow it whole.
  */
 export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   session: Session; onClose: () => void;
@@ -117,6 +120,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const ctxWarn = ctxPct >= 70;
 
   const bodyRef = useRef<HTMLDivElement>(null);
+  const pinnedRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   /** scrollHeight captured just before an older page is requested. */
   const preHeight = useRef(0);
@@ -155,6 +159,26 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
     if (prepended) el.scrollTop += el.scrollHeight - preHeight.current;
     else if (atBottom.current) el.scrollTop = el.scrollHeight;
   }, [shown, mode]);
+
+  // The pinned layer covers the transcript's bottom edge, so the transcript
+  // pads by exactly its height — a panel appearing, a textarea growing a line
+  // or the panel going away all land here. offsetHeight, not
+  // getBoundingClientRect: `.shell{zoom}` multiplies the rect but not the
+  // layout box, and what we write back is a style px (bug-30 territory).
+  useLayoutEffect(() => {
+    const pinned = pinnedRef.current;
+    const body = bodyRef.current;
+    if (!pinned || !body) return;
+    const measure = () => {
+      body.style.setProperty('--pinned-h', pinned.offsetHeight + 'px');
+      // The pad grew under the reader; keep the tail where they were reading it.
+      if (atBottom.current) body.scrollTop = body.scrollHeight;
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(pinned);
+    return () => ro.disconnect();
+  }, []);
 
   function onScroll() {
     const el = bodyRef.current;
@@ -260,7 +284,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                   (MessagePanel's "gone" note over ResumePanel is the hand-off
                   spawn.md documents), and the layer — not each panel — is what
                   caps at the stack's height and scrolls from there. */}
-              <div className="chat-pinned">
+              <div className="chat-pinned" ref={pinnedRef}>
                 {/* Terminal permission dialog — a sign, not a control (it can only be
                     answered there). Sits above the question panel; the two can't both
                     be live, since a permission prompt blocks the session. */}

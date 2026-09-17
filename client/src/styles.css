@@ -1396,9 +1396,12 @@ code,kbd,samp,pre{font-family:inherit}
      twice and the transcript jumps a whole page. Measured: with anchoring the
      anchor element drifts ~1400px, with this rule it drifts 0. */
   overflow-anchor:none;
-  /* the bottom pad is constant, panel or no panel — a floating panel hides the
-     newest messages, so the tail always keeps room to be scrolled clear of it */
-  padding:20px 24px 40px}
+  /* 40px of air plus whatever the floating panel currently occupies, so the
+     newest messages can always be scrolled out from under it. `--pinned-h` is
+     the pinned layer's measured height, written by ChatDrawer; 0 with no panel,
+     and a composer tall enough to hide a whole turn pushes the pad by exactly
+     its own height. */
+  padding:20px 24px calc(40px + var(--pinned-h,0px))}
 .chat-older{align-self:center;flex:none;height:30px;padding:0 16px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;cursor:pointer;transition:color .15s,border-color .15s}
 .chat-older:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
 .chat-older:disabled{cursor:default;color:var(--ink3)}
@@ -1679,7 +1682,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 /* Project, Messages and Now: the head pill, the foot count and the last turn
    of the transcript already carry them on a phone. */
 .chat-facts .f.wide{display:none}
-.chat-body{padding:14px 14px 40px;gap:16px}
+.chat-body{padding:14px 14px calc(40px + var(--pinned-h,0px));gap:16px}
 .qpanel,.qpanel.min,.pbanner{padding:14px}
 /* three items do not fit a phone-width line: the live reading and the count
    keep the first row, the filter takes the second at full width. */
@@ -1734,7 +1737,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
   .chat-facts{display:grid;gap:10px;font-size:12px}
   .chat-facts .f{justify-content:space-between;gap:12px;max-width:none}
   .chat-facts .f.wide{display:flex}
-  .chat-body{padding:20px 24px 40px;gap:20px}
+  .chat-body{padding:20px 24px calc(40px + var(--pinned-h,0px));gap:20px}
   .qpanel{padding:18px 24px}
   .qpanel.min{padding:12px 24px}
   .pbanner{padding:13px 24px}

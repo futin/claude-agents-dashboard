@@ -48,8 +48,16 @@ them load-bearing:
 - **No shadow.** §5 floats exactly two things on this board — the chart tooltip and the app
   shell — and a panel inside the modal is neither; its 1px `--hairline` is the whole
   separation. (The modal itself does take the shell's lift: over the scrim, it *is* the shell.)
-- The transcript carries a constant 40px of bottom padding so its tail can be scrolled clear
-  of the panel.
+- The transcript's tail can always be scrolled clear of the panel, because its bottom padding
+  is `calc(40px + var(--pinned-h,0px))` — 40px of air plus the pinned layer's live height.
+  `ChatDrawer` writes `--pinned-h` from a `ResizeObserver` on `.chat-pinned`, so a panel
+  appearing, a textarea growing a line and the panel going away all land as padding; and when
+  the reader is already at the tail, the same callback re-pins it. The measurement is
+  `offsetHeight`, not a bounding rect: `.shell{zoom}` multiplies the rect but not the layout
+  box, and what goes back is a style px. A constant pad was not enough — a composer is taller
+  than 40px, so the newest turn sat under it with no way to reach it. `.chat-body` declares
+  its padding three times (base, phone, the `min-width:768px` restore) and `test/chat-pinned-pad.test.ts`
+  asserts all three carry the var; two out of three reads as fixed at one width only.
 - One layer rather than five, so the panels keep stacking in normal flow inside it and the
   layer — not each panel — is what caps and scrolls.
 
