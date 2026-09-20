@@ -2019,6 +2019,72 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .dt th .idot{vertical-align:1px;margin-left:6px}
 .up-tablewrap{overflow-x:auto}
 
+/* ── the day strip ────────────────────────────────────────────────────────
+   One cell per UTC day of the 17-day horizon, coloured by which side of the
+   model's baseline that day landed on. Two hues and a neutral middle —
+   polarity, not magnitude — stepped at the verdict's ±20% band and twice it.
+   Every fill is a `color-mix` over a theme token, like the learned-week grid
+   it borrows its geometry from, so the five themes hold.
+
+   It rides in the rates table as a sub-row spanning every column: the strip
+   is one model's series, and a series does not fit a column that every other
+   model also has. `tr.wdays` is the model row that owns one — it drops its
+   own rule so the pair reads as one block rather than two rows, at both
+   measures.
+
+   Texture and border style carry the three "no colour" states exactly as
+   `.up-cell` does: hatched = measured but under the floor, bare = owned
+   nothing, dotted = predates recording. The cells are ~17px on a phone, so
+   the floating panel is the readout; the dashed rule is the current window's
+   true start, and it cuts through a cell because the window starts mid-day. */
+.dt tr.wdays td{border-bottom:0;padding-bottom:2px}
+.dt tr.days td{border-bottom:1px solid var(--hairline);padding-top:0;white-space:normal}
+.dt tbody tr.days:last-child td{border-bottom:0}
+.rates-days{min-width:0;white-space:normal}
+.rates-dayhead{display:flex;align-items:baseline;gap:8px;font-size:11px;color:var(--ink3)}
+.rates-days-r{margin-left:auto;font-size:11px;color:var(--ink3)}
+.rates-daygrid{position:relative;display:grid;gap:2px;margin-top:6px}
+.rates-day{
+  position:relative;aspect-ratio:1;min-width:0;
+  border:1px solid var(--hairline);border-radius:2px;background:transparent;
+}
+.rates-day:hover{outline:2px solid var(--cyan);outline-offset:0;z-index:2}
+.rates-day:focus-visible{outline:2px solid var(--cyan);outline-offset:1px;z-index:2}
+.rates-day.pre-ledger{border-style:dotted}
+.rates-day.thin{
+  background:repeating-linear-gradient(135deg,var(--hairline) 0 2px,transparent 2px 5px);
+  border-style:dashed;
+}
+.rates-day.far-below{background:color-mix(in oklab,var(--red) 75%,var(--strip))}
+.rates-day.below{background:color-mix(in oklab,var(--red) 40%,var(--strip))}
+.rates-day.within{background:color-mix(in oklab,var(--ink3) 30%,var(--strip))}
+.rates-day.above{background:color-mix(in oklab,var(--cyan) 40%,var(--strip))}
+.rates-day.far-above{background:color-mix(in oklab,var(--cyan) 75%,var(--strip))}
+.rates-cut{
+  position:absolute;top:-3px;bottom:-3px;width:0;
+  border-left:1px dashed var(--amber);pointer-events:none;z-index:3;
+}
+.rates-cut span{
+  position:absolute;top:100%;left:0;margin-top:2px;font-size:10px;color:var(--amber);
+  white-space:nowrap;transform:translateX(-50%);
+}
+.rates-dayaxis{
+  display:flex;justify-content:space-between;gap:8px;margin-top:14px;
+  font-size:10px;color:var(--ink3);
+}
+.rates-dayaxis-mid{color:var(--ink2)}
+/* the strip's key, once under the table — the swatches are the cells' own
+   classes, so the legend cannot drift from the strip */
+.rates-dayleg{
+  display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin-top:14px;
+  font-size:11px;color:var(--ink3);
+}
+.rates-dayleg-k{color:var(--ink2)}
+/* a swatch and its word wrap as one unit, or the word lands on the next line alone */
+.rates-dayleg-item{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.rates-daysw{display:flex;gap:2px}
+.rates-daysw .rates-day{display:block;width:14px;height:14px;aspect-ratio:auto}
+
 /* the verdict pill: four states, each a tint of the colour that state means */
 .tag-v{
   display:inline-block;font-size:11px;font-weight:500;border-radius:999px;padding:3px 9px;
@@ -2248,6 +2314,11 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 /* the totals block keeps its rule, and its cells stop re-drawing one */
 .dt.stack tr.tot{border-top:1px solid var(--hairline2);border-bottom:0}
 .dt.stack tr.tot td{border-top:0;padding-top:3px;font-weight:600}
+/* the day strip's sub-row: the model block's last element, not a pair, so it
+   drops the flex label geometry every other stacked cell wears */
+.dt.stack tr.wdays{border-bottom:0;padding-bottom:0}
+.dt.stack tr.days{padding-top:8px}
+.dt.stack tr.days td{display:block;padding:0;text-align:left}
 
 /* ── md: the density turn ─────────────────────────────────────────────────
    768 is the density boundary — 640 stays a pure shell boundary and carries
@@ -2313,6 +2384,14 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   .dt.stack td.barcell{display:table-cell;width:120px;padding-top:10px}
   .dt.stack tr.tot{border-top:0;border-bottom:0}
   .dt.stack tr.tot td{border-top:1px solid var(--hairline2);padding-top:12px}
+  /* the strip is a real spanning cell again: its `td` must go back to
+     `table-cell` or the colspan collapses to one column's width */
+  .dt.stack tr.days{padding-top:0}
+  .dt.stack tr.days td{display:table-cell;padding:0 0 12px;text-align:left}
+  /* squares across a 900px ledger are 50px tall and swamp the rows they
+     belong to, so the wide strip fixes a height and lets the column breathe —
+     the same trade `.hmx.wide .up-cell` makes for the learned week */
+  .rates-daygrid .rates-day{aspect-ratio:auto;height:22px}
 }
 
 /* ── 2xl: the strip opens to its full five ────────────────────────────────

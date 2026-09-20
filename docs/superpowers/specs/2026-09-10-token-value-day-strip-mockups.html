@@ -1,0 +1,379 @@
+<title>Token Value Day Strip</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* The dashboard's own midnight tokens — this is a mockup of one card inside that
+   board, so it commits to that single theme on purpose. A Daylight swatch row
+   under variant A proves the ramp survives the one light theme. */
+:root{
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --edge:rgba(255,255,255,.05);--hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--amber:#ffb03a;--cyan:#55d0dd;--red:#e0533f;
+  --mono:'IBM Plex Mono','SF Mono',monospace;
+  --font:'Barlow',-apple-system,'Segoe UI',sans-serif;
+  --display:'Barlow Condensed','Barlow',sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--board);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45}
+.page{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
+.lead{max-width:70ch}
+.lead h1{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.02em;margin:0 0 6px;text-wrap:balance}
+.lead p{margin:0 0 6px;color:var(--ink2);font-size:14px}
+.lead .now{margin-top:14px;padding:10px 12px;background:var(--steel);border:1px solid var(--hairline);border-radius:2px;font-size:13px;color:var(--ink2)}
+.lead .now b{color:var(--ink);font-weight:600}
+.lead .now .mono{font-size:12px}
+.vgrid{display:grid;grid-template-columns:1fr;gap:44px;margin-top:40px}
+.variant>.vh{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--hairline)}
+.variant .letter{font-family:var(--display);font-size:30px;font-weight:700;color:var(--cyan);line-height:1}
+.variant h2{font-family:var(--display);font-size:20px;font-weight:600;margin:0;letter-spacing:.02em}
+.variant .tag{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border:1px solid var(--hairline2);border-radius:2px;color:var(--ink2)}
+.variant .tag.rec{color:var(--green);border-color:color-mix(in oklab,var(--green) 45%,var(--hairline2))}
+.variant .tag.yagni{color:var(--ink3)}
+.variant .why{color:var(--ink2);font-size:13px;max-width:72ch;margin:0 0 16px}
+.variant .why b{color:var(--ink);font-weight:600}
+.frames{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+.frame{background:var(--board);border:1px solid var(--hairline2);border-radius:6px;padding:14px;flex:1 1 560px;max-width:680px;min-width:0}
+.frame.phone{flex:0 0 375px;max-width:375px;padding:10px}
+.frame .fl{font-family:var(--mono);font-size:10px;color:var(--ink3);margin:-4px 0 10px;letter-spacing:.04em}
+.tradeoffs{margin:16px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px 20px;font-size:13px;color:var(--ink2)}
+.tradeoffs li{padding-left:14px;position:relative}
+.tradeoffs li::before{content:'';position:absolute;left:0;top:.6em;width:6px;height:6px;border-radius:1px;background:var(--ink3)}
+.tradeoffs li.plus::before{background:var(--green)}
+.tradeoffs li.minus::before{background:var(--amber)}
+.mono{font-family:var(--mono)}
+
+/* ── the card chrome, verbatim from the shipped board ─────────────────── */
+.up{padding:14px;background:var(--strip);border:1px solid var(--hairline);border-radius:3px;box-shadow:inset 0 1px 0 var(--edge)}
+.up h3{margin:0;font-family:var(--display);font-size:14px;letter-spacing:.08em;font-weight:600}
+.up-sub{margin:4px 0 0;max-width:70ch;font-size:12px;line-height:1.5;color:var(--ink3)}
+.status{display:flex;align-items:baseline;gap:8px 14px;flex-wrap:wrap;margin-top:14px}
+.status .q{font-family:var(--display);font-size:15px;font-weight:600;letter-spacing:.02em}
+.status .counts{display:flex;gap:14px;font-family:var(--mono);font-size:11px;color:var(--ink2)}
+.status .counts b{color:var(--ink);font-weight:500}
+.rows{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.row{padding:10px 12px;background:var(--steel);border:1px solid var(--hairline);border-radius:3px}
+.row-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.row-h .model{font-family:var(--mono);font-size:12px;word-break:break-all}
+.badge{margin-left:auto;flex:none;font-family:var(--display);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;padding:3px 8px;border-radius:2px;border:1px solid var(--hairline2);color:var(--ink2);background:var(--strip)}
+.badge.thin{color:var(--ink3)}
+.badge.drift{color:var(--red);border-color:color-mix(in oklab,var(--red) 55%,var(--hairline2));background:color-mix(in oklab,var(--red) 14%,var(--strip))}
+.figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 14px;margin-top:10px}
+.fig{min-width:0;padding:6px 0 4px;border-top:1px solid var(--hairline)}
+.fig .lab{display:flex;align-items:center;gap:5px;font-family:var(--display);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.fig.lead .lab{color:var(--ink2)}
+.fig .val{font-family:var(--display);font-size:20px;font-weight:600;letter-spacing:.02em;margin-top:2px}
+.fig .val small{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--ink3);margin-left:4px}
+.fig .sub{font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:1px}
+.fig .sub .dev{color:var(--red)}
+.fig .sub .dev.ok{color:var(--ink2)}
+.i{display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px;border:1px solid var(--hairline2);border-radius:50%;font-family:var(--mono);font-size:8px;color:var(--ink3);font-weight:500}
+.ev{display:flex;gap:6px 18px;flex-wrap:wrap;margin-top:8px;padding-top:6px;border-top:1px solid var(--hairline);font-family:var(--mono);font-size:10.5px;color:var(--ink3)}
+.ev b{color:var(--ink2);font-weight:500;letter-spacing:.02em}
+.ev .forming{color:var(--amber)}
+.weekly{margin-top:4px;font-family:var(--mono);font-size:10.5px;color:var(--ink3)}
+.hint{margin-top:6px;max-width:60ch;font-size:11.5px;line-height:1.5;color:var(--ink2)}
+.phone .figs{gap:0 10px}
+.phone .fig .val{font-size:18px}
+
+/* ── the new piece: one day strip per model ───────────────────────────── */
+.days{position:relative;margin-top:10px;padding-top:6px;border-top:1px solid var(--hairline)}
+.days-lab{display:flex;align-items:center;gap:5px;font-family:var(--display);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.days-lab .r{margin-left:auto;font-family:var(--mono);font-weight:400;letter-spacing:0;text-transform:none;color:var(--ink3)}
+.dgrid{position:relative;display:grid;gap:2px;margin-top:6px}
+.dc{position:relative;aspect-ratio:1;min-width:0;border:1px solid var(--hairline);border-radius:2px;background:transparent}
+.dc:hover{outline:2px solid var(--cyan);outline-offset:0;z-index:2}
+.dc.pre{border-style:dotted;border-color:var(--hairline)}
+.dc.thin{background:repeating-linear-gradient(135deg,var(--hairline) 0 2px,transparent 2px 5px);border-style:dashed}
+.dc.m2{background:color-mix(in oklab,var(--red) 75%,var(--strip))}
+.dc.m1{background:color-mix(in oklab,var(--red) 40%,var(--strip))}
+.dc.z{background:color-mix(in oklab,var(--ink3) 30%,var(--strip))}
+.dc.p1{background:color-mix(in oklab,var(--cyan) 40%,var(--strip))}
+.dc.p2{background:color-mix(in oklab,var(--cyan) 75%,var(--strip))}
+.dc.n{background:color-mix(in oklab,var(--ink3) 30%,var(--strip))}
+/* sequential (variant C) */
+.dc.q1{background:color-mix(in oklab,var(--cyan) 20%,var(--strip))}
+.dc.q2{background:color-mix(in oklab,var(--cyan) 40%,var(--strip))}
+.dc.q3{background:color-mix(in oklab,var(--cyan) 60%,var(--strip))}
+.dc.q4{background:color-mix(in oklab,var(--cyan) 80%,var(--strip))}
+.dc.q5{background:var(--cyan)}
+/* the exact −3d boundary: a rule through the strip at the true time position */
+.cut{position:absolute;top:-3px;bottom:-3px;width:0;border-left:1px dashed var(--amber);pointer-events:none;z-index:3}
+.cut span{position:absolute;top:100%;left:-2px;margin-top:2px;font-family:var(--mono);font-size:9px;color:var(--amber);white-space:nowrap;transform:translateX(-50%)}
+.daxis{display:flex;justify-content:space-between;margin-top:14px;font-family:var(--mono);font-size:9.5px;color:var(--ink3)}
+.daxis .b{color:var(--ink2)}
+/* calendar (variant B) */
+.cal{display:grid;grid-template-columns:28px repeat(7,minmax(0,1fr));gap:2px;margin-top:6px;max-width:300px}
+.cal .ax{font-family:var(--mono);font-size:9.5px;color:var(--ink3);text-align:center;align-self:center}
+.cal .ax.l{text-align:right;padding-right:4px}
+.cal .dc.fut{border-color:transparent}
+/* the pinned floating panel, as the shipped `.up-tip` draws it */
+.tip{position:absolute;z-index:40;max-width:240px;padding:6px 8px;font-family:var(--mono);font-size:10px;line-height:1.45;white-space:pre-line;color:var(--ink);background:var(--steel);border:1px solid var(--hairline2);border-radius:3px;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+.tip::before{content:'';position:absolute;left:14px;top:-5px;width:8px;height:8px;background:var(--steel);border-left:1px solid var(--hairline2);border-top:1px solid var(--hairline2);transform:rotate(45deg)}
+/* legend */
+.dleg{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--ink3)}
+.dleg .sw{display:flex;gap:2px}
+.dleg .sw .dc{width:14px;height:14px;aspect-ratio:auto}
+.dleg .gap{width:8px}
+.dleg small{font-size:10px}
+.dleg b{color:var(--ink2);font-weight:500}
+.swrow{display:flex;align-items:center;gap:10px;margin-top:10px;padding:8px 10px;border:1px solid var(--hairline);border-radius:3px;font-family:var(--mono);font-size:10px;color:var(--ink3)}
+.swrow.light{--strip:#fbf8f1;--steel:#f2eee5;--hairline:#cdc4b1;--ink3:#8a8172;--ink2:#5a5346;--red:#a83420;--cyan:#136d78;background:var(--strip);color:var(--ink3)}
+.swrow .sw{display:flex;gap:2px}
+.swrow .dc{width:16px;height:16px;aspect-ratio:auto}
+.note{margin:10px 0 0;font-size:12px;color:var(--ink3);max-width:72ch}
+</style>
+
+<div class="page">
+  <div class="lead">
+    <h1>Token value, day by day</h1>
+    <p>The card says <b>drift −38%</b> and shows two numbers. Nothing on it shows the days those numbers were pooled from, so a reader cannot tell a real repricing from one loud afternoon. Three ways to put the days on the card, all drawn from this machine's live ledger as of <span class="mono">2026-09-10 11:30Z</span>.</p>
+    <div class="now">
+      <b>What the data actually looks like right now.</b> Recording began <span class="mono">Aug 31</span>, so the 17-day horizon the verdict is fitted over holds <b>11 opus days</b> and <b>7 unrecorded ones</b>. Opus per-day weighted rate: <span class="mono">197k · 317k · 216k · 208k · 203k · 239k · 231k · 173k · 137k · 200k · 396k</span> (cv 30%). Baseline <span class="mono">228k</span>. The current window is <span class="mono">Sep 7 11:00Z →</span>, so it cuts <em>through</em> Sep 7 — which is why the card says "4 days" for a 3-day window.
+    </div>
+  </div>
+
+  <div class="vgrid">
+
+  <!-- ─────────────────────────── A ─────────────────────────── -->
+  <section class="variant">
+    <div class="vh"><span class="letter">A</span><h2>One day strip per model, coloured against its own baseline</h2><span class="tag rec">Recommended</span></div>
+    <p class="why">Under the tiles, one square per UTC day of the 17-day horizon — the exact evidence the verdict is fitted over, no more. Colour is <b>polarity, not magnitude</b>: each day's weighted rate against <i>this model's</i> baseline, stepped at the ±20% band the verdict already uses and ±40% beyond it. Fewer tokens per 1% (pricier) runs red, more (cheaper) runs cyan, within the band is a neutral grey. A dashed rule marks the true <span class="mono">−3d</span> boundary at its real position — it cuts through a day because the window does. Hatched = measured but under 5 pts (too little to colour). Dotted = before recording began. A model with no baseline yet gets neutral cells: evidence accumulating, no direction claimed.</p>
+    <div class="frames">
+      <div class="frame">
+        <div class="fl">desktop · 680px</div>
+        <div class="up">
+          <h3>TOKEN VALUE PER MODEL</h3>
+          <p class="up-sub">How many tokens each model gets out of 1% of your 5-hour limit, and whether that price has moved. Measured on this machine only.</p>
+          <div class="status"><span class="q">1 model is drifting</span><span class="counts"><span><b>1</b> drifting</span><span><b>4</b> collecting</span></span></div>
+          <ul class="rows">
+            <li class="row">
+              <div class="row-h"><span class="model">claude-opus-5</span><span class="badge drift">drift</span></div>
+              <div class="figs">
+                <div class="fig lead"><div class="lab">Weighted rate <span class="i">i</span></div><div class="val">141k<small>tok / 1%</small></div><div class="sub"><span class="dev">-38.1%</span> vs baseline</div></div>
+                <div class="fig"><div class="lab">Raw tokens <span class="i">i</span></div><div class="val">875k<small>/ 1%</small></div></div>
+                <div class="fig"><div class="lab">Fitted, mixed windows <span class="i">i</span></div><div class="val">281k<small>/ 1%</small></div><div class="sub"><span class="dev ok">+99.0%</span> vs weighted</div></div>
+              </div>
+              <div class="days">
+                <div class="days-lab">By day <span class="i">i</span><span class="r">weighted tok / 1% vs baseline 228k</span></div>
+                <div class="dgrid" data-strip="opus" data-tip="8"></div>
+                <div class="daxis"><span>Aug 24</span><span class="b">← baseline 14d · current 3d →</span><span>today</span></div>
+              </div>
+              <div class="ev"><span><b>Current</b> 257 windows · 4 days · 301.0 pts</span><span><b>Baseline</b> 228k · 8 days</span></div>
+              <div class="weekly">weekly limit: pooled 1.2M · fitted 1.7M weighted / 1%</div>
+              <div class="hint">the weighted rate has moved more than 20% against the 14-day baseline</div>
+            </li>
+            <li class="row">
+              <div class="row-h"><span class="model">claude-fable-5-1</span><span class="badge thin">collecting</span></div>
+              <div class="figs">
+                <div class="fig lead"><div class="lab">Weighted rate <span class="i">i</span></div><div class="val">60k<small>tok / 1%</small></div></div>
+                <div class="fig"><div class="lab">Raw tokens <span class="i">i</span></div><div class="val">241k<small>/ 1%</small></div></div>
+              </div>
+              <div class="days">
+                <div class="days-lab">By day <span class="i">i</span><span class="r">no baseline yet — days shown, not judged</span></div>
+                <div class="dgrid" data-strip="fable"></div>
+                <div class="daxis"><span>Aug 24</span><span class="b">← baseline 14d · current 3d →</span><span>today</span></div>
+              </div>
+              <div class="ev"><span><b>Current</b> 40 windows · 3 days · 66.0 pts</span><span><b>Baseline</b> <span class="forming">forming</span> · 6 of 7 days</span></div>
+            </li>
+          </ul>
+          <div class="dleg">
+            <small>pricier</small>
+            <span class="sw"><span class="dc m2"></span><span class="dc m1"></span><span class="dc z"></span><span class="dc p1"></span><span class="dc p2"></span></span>
+            <small>cheaper</small>
+            <small><b>−40%</b> · <b>−20</b> · within ±20% · <b>+20</b> · <b>+40%</b> vs the model's baseline</small>
+            <span class="gap"></span>
+            <span class="sw"><span class="dc thin"></span></span><small>under 5 pts</small>
+            <span class="sw"><span class="dc"></span></span><small>no windows owned</small>
+            <span class="sw"><span class="dc pre"></span></span><small>before recording</small>
+          </div>
+          <div class="swrow light"><span>the same five steps in Daylight — every colour is a <span class="mono">color-mix</span> over a theme token, no literal</span><span class="sw"><span class="dc m2"></span><span class="dc m1"></span><span class="dc z"></span><span class="dc p1"></span><span class="dc p2"></span></span></div>
+        </div>
+      </div>
+      <div class="frame phone">
+        <div class="fl">phone · 375px — cells ≈17px, the tip is the readout</div>
+        <div class="up">
+          <ul class="rows" style="margin-top:0">
+            <li class="row">
+              <div class="row-h"><span class="model">claude-opus-5</span><span class="badge drift">drift</span></div>
+              <div class="figs">
+                <div class="fig lead"><div class="lab">Weighted rate</div><div class="val">141k<small>tok / 1%</small></div><div class="sub"><span class="dev">-38.1%</span> vs baseline</div></div>
+                <div class="fig"><div class="lab">Raw tokens</div><div class="val">875k<small>/ 1%</small></div></div>
+                <div class="fig"><div class="lab">Fitted, mixed</div><div class="val">281k<small>/ 1%</small></div><div class="sub"><span class="dev ok">+99.0%</span></div></div>
+              </div>
+              <div class="days">
+                <div class="days-lab">By day <span class="r">vs baseline 228k</span></div>
+                <div class="dgrid" data-strip="opus" data-tip="8"></div>
+                <div class="daxis"><span>Aug 24</span><span class="b">baseline · current</span><span>today</span></div>
+              </div>
+              <div class="ev"><span><b>Current</b> 257 windows · 4 days · 301.0 pts</span><span><b>Baseline</b> 228k · 8 days</span></div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <ul class="tradeoffs">
+      <li class="plus">Answers the actual question: the last three cells are red after a fortnight that is mostly grey — <b>and</b> it shows Sep 1 at +39%, so the reader sees the day-to-day noise the verdict is judged against.</li>
+      <li class="plus">Same horizon as the fit, same UTC days as the evidence counts — the strip and the "4 days" clause describe the same thing.</li>
+      <li class="plus">Reuses the Forecast tab's cell, hatch and floating-tip idioms; one new server field per row, no new disk reads.</li>
+      <li class="minus">18 cells on a phone are ~17px — the tip, not the cell, carries the number. Same as the 168-cell profile grid today.</li>
+      <li class="minus">Thin models are a row of neutral cells until day 7 — honest, but a reader may ask why they're grey. The row's caption says why.</li>
+    </ul>
+  </section>
+
+  <!-- ─────────────────────────── B ─────────────────────────── -->
+  <section class="variant">
+    <div class="vh"><span class="letter">B</span><h2>Calendar weeks, Mon → Sun</h2><span class="tag">Alternative</span></div>
+    <p class="why">The same cells and the same colouring, laid out as calendar weeks like the desktop app's grid: one row per week, weekday columns. Weekdays line up, which would matter if the rate had a weekly rhythm. The horizon happens to start on a Monday today; on other days the first row starts part-way and the last row runs into the future.</p>
+    <div class="frames">
+      <div class="frame">
+        <div class="fl">desktop · 680px — opus row only</div>
+        <div class="up">
+          <ul class="rows" style="margin-top:0">
+            <li class="row">
+              <div class="row-h"><span class="model">claude-opus-5</span><span class="badge drift">drift</span></div>
+              <div class="figs">
+                <div class="fig lead"><div class="lab">Weighted rate <span class="i">i</span></div><div class="val">141k<small>tok / 1%</small></div><div class="sub"><span class="dev">-38.1%</span> vs baseline</div></div>
+                <div class="fig"><div class="lab">Raw tokens <span class="i">i</span></div><div class="val">875k<small>/ 1%</small></div></div>
+                <div class="fig"><div class="lab">Fitted, mixed windows <span class="i">i</span></div><div class="val">281k<small>/ 1%</small></div><div class="sub"><span class="dev ok">+99.0%</span> vs weighted</div></div>
+              </div>
+              <div class="days">
+                <div class="days-lab">By day <span class="i">i</span><span class="r">weighted tok / 1% vs baseline 228k</span></div>
+                <div class="cal" data-cal="opus"></div>
+              </div>
+              <div class="ev"><span><b>Current</b> 257 windows · 4 days · 301.0 pts</span><span><b>Baseline</b> 228k · 8 days</span></div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <ul class="tradeoffs">
+      <li class="plus">Bigger cells (~36px) — tappable without the tip.</li>
+      <li class="minus">The baseline/current boundary has no place to live: "the last three days" wrap across two rows, and a rule through a wrapped grid is two rules.</li>
+      <li class="minus">Three rows per model × five models is most of a screen; the strip is one line.</li>
+      <li class="minus">Weekday alignment encodes something the rate does not carry — the profile heatmap already owns the weekly rhythm.</li>
+    </ul>
+  </section>
+
+  <!-- ─────────────────────────── C ─────────────────────────── -->
+  <section class="variant">
+    <div class="vh"><span class="letter">C</span><h2>Desktop-app style: one hue, darker = more tokens</h2><span class="tag yagni">Shown to reject</span></div>
+    <p class="why">The literal port of the desktop app's grid: a single-hue ramp where a darker cell means more tokens per 1% that day, quantised per model. It is what "a heatmap like Claude Code has" most obviously means, and it is the wrong form for this card: that grid counts <b>how much</b> you used (a magnitude), while this card asks <b>which side of the baseline</b> a day fell on (a polarity).</p>
+    <div class="frames">
+      <div class="frame">
+        <div class="fl">desktop · 680px — opus row only</div>
+        <div class="up">
+          <ul class="rows" style="margin-top:0">
+            <li class="row">
+              <div class="row-h"><span class="model">claude-opus-5</span><span class="badge drift">drift</span></div>
+              <div class="figs">
+                <div class="fig lead"><div class="lab">Weighted rate <span class="i">i</span></div><div class="val">141k<small>tok / 1%</small></div><div class="sub"><span class="dev">-38.1%</span> vs baseline</div></div>
+                <div class="fig"><div class="lab">Raw tokens <span class="i">i</span></div><div class="val">875k<small>/ 1%</small></div></div>
+                <div class="fig"><div class="lab">Fitted, mixed windows <span class="i">i</span></div><div class="val">281k<small>/ 1%</small></div><div class="sub"><span class="dev ok">+99.0%</span> vs weighted</div></div>
+              </div>
+              <div class="days">
+                <div class="days-lab">By day <span class="i">i</span><span class="r">weighted tok / 1%, darker = more</span></div>
+                <div class="dgrid" data-strip="opus" data-seq="1"></div>
+                <div class="daxis"><span>Aug 24</span><span></span><span>today</span></div>
+              </div>
+              <div class="ev"><span><b>Current</b> 257 windows · 4 days · 301.0 pts</span><span><b>Baseline</b> 228k · 8 days</span></div>
+            </li>
+          </ul>
+          <div class="dleg"><small>less</small><span class="sw"><span class="dc q1"></span><span class="dc q2"></span><span class="dc q3"></span><span class="dc q4"></span><span class="dc q5"></span></span><small>more tokens per 1%</small></div>
+        </div>
+      </div>
+    </div>
+    <ul class="tradeoffs">
+      <li class="minus">Look at it: Sep 8 is a pale cell and Sep 1 a dark one, and nothing says either is <i>off</i>. The reader needs 228k in their head to read drift out of a magnitude ramp.</li>
+      <li class="minus">No neutral state, so a perfectly stable fortnight still renders as a mid-tone texture that looks like variation.</li>
+      <li class="minus">Quantising per model makes every model's strip use the full ramp — a 5% spread and a 50% spread look identical.</li>
+      <li class="plus">Familiar. That is the whole of the case for it.</li>
+    </ul>
+  </section>
+
+  </div>
+  <p class="note">Figures are this machine's live values on 2026-09-10 (probe over <span class="mono">.usage-history.jsonl</span> × <span class="mono">.usage-ledger.jsonl</span>, pooled per UTC day with <span class="mono">poolRate</span>). Every colour above is a <span class="mono">color-mix</span> over an existing theme token. Diverging poles validated against both the midnight and daylight surfaces (dataviz validator, 2026-09-10).</p>
+</div>
+
+<script>
+// Real per-day figures (UTC days), from the probe. util in points; null = no owned window.
+const DAY = 86400000;
+const H0 = Date.UTC(2026, 7, 24);                // horizon start, Aug 24 00:00Z (17d before now, floored to a day)
+const NOW = Date.UTC(2026, 8, 10, 11, 30);       // Sep 10 11:30Z
+const LEDGER_START = Date.UTC(2026, 7, 31, 7, 41);
+const CUT = NOW - 3 * DAY;                        // Sep 7 11:30Z — the true current-window boundary
+const N = 18;                                     // Aug 24 … Sep 10
+const MODELS = {
+  opus: { baseline: 228461, days: {
+    '08-31': [197e3, 77, 83], '09-01': [317e3, 141, 148], '09-02': [216e3, 182, 198], '09-03': [208e3, 144, 156],
+    '09-04': [203e3, 205, 226], '09-05': [239e3, 144, 165], '09-06': [231e3, 238, 287], '09-07': [173e3, 201, 244],
+    '09-08': [137344, 131, 151], '09-09': [200e3, 28, 31], '09-10': [396e3, 3, 3] } },
+  fable: { baseline: null, days: {
+    '09-02': [117e3, 3, 7], '09-03': [29e3, 4, 5], '09-04': [47e3, 9, 13], '09-05': [49e3, 12, 18], '09-06': [54e3, 27, 34],
+    '09-07': [63e3, 34, 47], '09-08': [100e3, 5, 13], '09-09': [55e3, 23, 30], '09-10': [38e3, 12, 23] } }
+};
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const key = t => new Date(t).toISOString().slice(5, 10);
+const label = t => { const d = new Date(t); return MON[d.getUTCMonth()] + ' ' + d.getUTCDate(); };
+const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : Math.round(n / 1e3) + 'k';
+const THIN_PTS = 5;                               // CURRENT_FLOORS.minUtil — reused, not a new number
+
+function cellFor(m, t, seq) {
+  const d = m.days[key(t)];
+  const el = document.createElement('span');
+  el.className = 'dc';
+  const when = label(t) + (t + DAY > NOW ? ' (UTC) · today so far' : ' (UTC)');
+  if (t + DAY <= LEDGER_START) { el.classList.add('pre'); el.title = when + '\nbefore recording began'; return el; }
+  if (!d) { el.title = when + '\nno windows this model owned'; return el; }
+  const [rate, n, pts] = d;
+  let line = when + '\n' + fmt(rate) + ' weighted tok / 1%';
+  if (m.baseline) { const dev = (rate - m.baseline) / m.baseline * 100; line += '\n' + (dev < 0 ? '−' : '+') + Math.abs(dev).toFixed(1) + '% vs baseline'; }
+  line += '\n' + n + ' window' + (n === 1 ? '' : 's') + ' · ' + pts.toFixed(1) + ' pts';
+  if (pts < THIN_PTS) { el.classList.add('thin'); el.title = line + '\nunder ' + THIN_PTS + ' pts — not coloured'; return el; }
+  if (seq) { el.classList.add(seq(rate)); }
+  else if (!m.baseline) el.classList.add('n');
+  else {
+    const dev = (rate - m.baseline) / m.baseline * 100;
+    el.classList.add(dev <= -40 ? 'm2' : dev <= -20 ? 'm1' : dev >= 40 ? 'p2' : dev >= 20 ? 'p1' : 'z');
+  }
+  el.title = line;
+  return el;
+}
+function seqFor(m) {
+  const vals = Object.values(m.days).filter(d => d[2] >= THIN_PTS).map(d => d[0]).sort((a, b) => a - b);
+  return rate => { const q = vals.findIndex(v => v >= rate) / (vals.length - 1); return q < .2 ? 'q1' : q < .4 ? 'q2' : q < .6 ? 'q3' : q < .8 ? 'q4' : 'q5'; };
+}
+for (const grid of document.querySelectorAll('.dgrid[data-strip]')) {
+  const m = MODELS[grid.dataset.strip];
+  const seq = grid.dataset.seq ? seqFor(m) : null;
+  grid.style.gridTemplateColumns = `repeat(${N}, minmax(0, 1fr))`;
+  const cells = [];
+  for (let i = 0; i < N; i++) { const c = cellFor(m, H0 + i * DAY, seq); grid.appendChild(c); cells.push(c); }
+  if (!seq) {
+    const cut = document.createElement('span'); cut.className = 'cut';
+    cut.style.left = ((CUT - H0) / (N * DAY) * 100).toFixed(2) + '%';
+    cut.innerHTML = '<span>−3d</span>'; grid.appendChild(cut);
+  }
+  if (grid.dataset.tip) {
+    const c = cells[+grid.dataset.tip + 7];         // Sep 8 → index 15
+    const tip = document.createElement('div'); tip.className = 'tip'; tip.textContent = c.title;
+    tip.style.left = ((+grid.dataset.tip + 7) / N * 100 - 6).toFixed(1) + '%'; tip.style.top = 'calc(100% + 8px)';
+    c.style.outline = '2px solid var(--cyan)'; grid.appendChild(tip);
+    grid.parentElement.style.paddingBottom = '78px';
+  }
+}
+for (const cal of document.querySelectorAll('.cal[data-cal]')) {
+  const m = MODELS[cal.dataset.cal];
+  const ax = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  cal.appendChild(document.createElement('span'));
+  for (const a of ax) { const s = document.createElement('span'); s.className = 'ax'; s.textContent = a; cal.appendChild(s); }
+  for (let w = 0; w < 3; w++) {
+    const l = document.createElement('span'); l.className = 'ax l'; l.textContent = label(H0 + w * 7 * DAY).replace(/^(\w+) /, ''); cal.appendChild(l);
+    for (let d = 0; d < 7; d++) {
+      const t = H0 + (w * 7 + d) * DAY;
+      if (t > NOW) { const f = document.createElement('span'); f.className = 'dc fut'; cal.appendChild(f); continue; }
+      cal.appendChild(cellFor(m, t, null));
+    }
+  }
+}
+</script>

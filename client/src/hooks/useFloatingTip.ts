@@ -68,7 +68,15 @@ export function useFloatingTip(): {
     // lets it hang off the screen by the difference.
     tip.style.left = '0px';
     tip.style.top = '0px';
+    tip.style.width = '';
     const w = tip.offsetWidth;
+    // Lock the measured width before moving. A fixed box with `left` and no
+    // `right` shrink-wraps to whatever room is left of the viewport edge, so a
+    // panel that measured 149px at the origin and lands 160px from the edge
+    // re-wraps its longest line onto two — which is exactly where the token
+    // value strip's current-window cells sit. Cleared again above, or the next
+    // text would be measured inside the previous text's box.
+    tip.style.width = w + 'px';
     // `.shell{zoom:var(--font-scale)}` puts this fixed-positioned panel in a
     // *zoomed* coordinate space: its left/top are multiplied by the text scale,
     // while clientX/Y (and getBoundingClientRect) stay in visual viewport px.

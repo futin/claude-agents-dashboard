@@ -1,9 +1,11 @@
-import type { ModelRateRow } from '../../../../shared/types';
+import type { ModelDayRate, ModelRateRow } from '../../../../shared/types';
+import type { PinHandlers, TipHandlers } from '../../hooks/useFloatingTip';
 import { useFloatingTip } from '../../hooks/useFloatingTip';
 import { useUsageRates } from '../../hooks/useUsageRates';
 import {
-  coverageCaveat, coverageRows, figureTip, formatDeviation, formatShare, formatTok,
-  ledgerReading, measuredShare, movedLabel, movedTotal, pricedShare, RATES_GLOSSARY, ratesStats,
+  coverageCaveat, coverageRows, cutFraction, DAY_FLOOR_PTS, dayLabel, dayStep, dayTip,
+  DRIFT_BAND_PCT, figureTip, formatDeviation, formatShare, formatTok, ledgerReading,
+  measuredShare, movedLabel, movedTotal, pricedShare, RATES_GLOSSARY, ratesStats, showsDays,
   spanText, verdictClass, verdictText
 } from '../../lib/usageRatesFormat';
 import { InfoDot } from './ReadingAids';
@@ -44,18 +46,157 @@ import { Definitions, RowHead, Sheet, StatStrip } from './Sheet';
  * here without a colour literal `styles.css` forbids. Refusal reasons are text,
  * where identity does not depend on hue.
  *
+ * **The day strip is a sub-row, not a column.** A badge and a Δ cannot tell a
+ * fortnight moving from one loud afternoon, so a model that has a baseline
+ * carries one cell per UTC day of the 17-day horizon directly under its own
+ * row, spanning every column — a series is one model's shape over time, which
+ * is the one thing on this page that is not a value every other model also
+ * has. The cells are coloured by which side of *this model's* baseline the day
+ * landed on: polarity, stepped at the verdict's own band, never a magnitude
+ * ramp, which would need the baseline figure in the reader's head. It is drawn
+ * only where there is a baseline to judge against — a row of unjudged grey
+ * under a `collecting` verdict reads as a broken chart, and the ledger sheet
+ * already says the baseline is forming. The cells are ~17px on a phone, so the
+ * floating panel is the readout, as it is for the profile grid's 168 cells.
+ *
  * No `title` attributes: this board is read from a phone, where `title` never
  * fires, so every ⓘ opens the real floating panel `useFloatingTip` owns.
  *
  * Mock: `docs/guides/mockups/redesign-mock.html` `#rates`.
  */
 
-/** One model's row in the rates table. */
-function RateRow({ row, share }: { row: ModelRateRow; share: number | null }) {
+/** The rates table's column count, so a full-width sub-row cannot drift from it. */
+const RATE_COLS = 9;
+
+/**
+ * The class a day cell wears: its colour step when rated, otherwise its state,
+ * which the stylesheet renders as texture. `none` is the bare cell.
+ */
+function dayClass(day: ModelDayRate): string {
+  if (day.state === 'rated') {
+    const step = dayStep(day.deviationPct);
+    return step === 'unjudged' ? '' : step;
+  }
+  return day.state === 'none' ? '' : day.state;
+}
+
+/**
+ * One model's days, as the sub-row under its own row in the table.
+ *
+ * The dashed rule is the current window's true start, `cutFraction` along the
+ * strip — it cuts *through* a cell because the window starts mid-day, and that
+ * is the honest geometry: the cut day belongs to both windows, which is why the
+ * ledger can say "4 days" for a 3-day window. The cells spread the hover-only
+ * bundle and carry `tabIndex` + `aria-label` of the same text, so keyboard and
+ * screen-reader users read what the pointer does.
+ */
+function DayStrip({ row, generatedAt, tip, pin }: {
+  row: ModelRateRow;
+  generatedAt: string;
+  tip: (text: string) => TipHandlers;
+  pin: (text: string) => PinHandlers;
+}) {
+  const today = generatedAt.slice(0, 10);
+  const cut = cutFraction(row.daily, generatedAt);
+  return (
+    <tr className="days">
+      <td colSpan={RATE_COLS}>
+        <div className="rates-days">
+          <div className="rates-dayhead">
+            By day
+            <InfoDot label="day strip" text={figureTip('daily')} pin={pin} />
+            <span className="rates-days-r">
+              vs baseline {formatTok(row.baselineWeightedPerPct)}
+            </span>
+          </div>
+          <div
+            className="rates-daygrid"
+            style={{ gridTemplateColumns: `repeat(${row.daily.length}, minmax(0, 1fr))` }}
+          >
+            {row.daily.map(day => {
+              const text = dayTip(day, today);
+              return (
+                <div
+                  key={day.date}
+                  className={`rates-day ${dayClass(day)}`.trim()}
+                  tabIndex={0}
+                  aria-label={text.replace(/\n/g, ' — ')}
+                  {...tip(text)}
+                />
+              );
+            })}
+            {cut !== null && (
+              <span
+                className="rates-cut"
+                style={{ left: `${(cut * 100).toFixed(2)}%` }}
+                aria-hidden="true"
+              ><span>−3d</span></span>
+            )}
+          </div>
+          <div className="rates-dayaxis">
+            <span>{dayLabel(row.daily[0].date)}</span>
+            <span className="rates-dayaxis-mid">← baseline · current →</span>
+            <span>today</span>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+/**
+ * The strip's key, once under the table. The swatches are the cells' own
+ * classes, so the legend cannot drift from the strip; the figures are the
+ * constants the steps and the thin floor are drawn from.
+ */
+function DayLegend() {
+  return (
+    <div className="rates-dayleg">
+      <small>pricier</small>
+      <span className="rates-daysw">
+        <i className="rates-day far-below" /><i className="rates-day below" />
+        <i className="rates-day within" />
+        <i className="rates-day above" /><i className="rates-day far-above" />
+      </span>
+      <small>cheaper</small>
+      <small className="rates-dayleg-k">
+        −{2 * DRIFT_BAND_PCT}% · −{DRIFT_BAND_PCT} · within ±{DRIFT_BAND_PCT}% · +{DRIFT_BAND_PCT}
+        {' '}· +{2 * DRIFT_BAND_PCT}% vs the model's baseline
+      </small>
+      <span className="rates-dayleg-item">
+        <span className="rates-daysw"><i className="rates-day thin" /></span>
+        <small>under {DAY_FLOOR_PTS} pts</small>
+      </span>
+      <span className="rates-dayleg-item">
+        <span className="rates-daysw"><i className="rates-day" /></span><small>no windows</small>
+      </span>
+      <span className="rates-dayleg-item">
+        <span className="rates-daysw"><i className="rates-day pre-ledger" /></span>
+        <small>before recording</small>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * One model's row in the rates table, and — where the model has a baseline to
+ * judge its days against — the day strip that belongs to it. The pair is a
+ * fragment and not one `<tr>`: `tr.wdays` drops its own rule so the two rows
+ * read as one block at both measures.
+ */
+function RateRow({ row, share, generatedAt, tip, pin }: {
+  row: ModelRateRow;
+  share: number | null;
+  generatedAt: string;
+  tip: (text: string) => TipHandlers;
+  pin: (text: string) => PinHandlers;
+}) {
   const showFitted = row.fittedWeightedPerPct !== null
     && Number.isFinite(row.fittedWeightedPerPct);
+  const days = showsDays(row);
   return (
-    <tr>
+    <>
+    <tr className={days ? 'wdays' : undefined}>
       <td className="name">{row.model}</td>
       <td data-l="Verdict"><span className={verdictClass(row.verdict)}>{verdictText(row.verdict).label}</span></td>
       <td data-l="Weighted" className={row.weightedPerPct === null ? 'n mut' : 'n'}>
@@ -79,12 +220,14 @@ function RateRow({ row, share }: { row: ModelRateRow; share: number | null }) {
         />
       </td>
     </tr>
+    {days && <DayStrip row={row} generatedAt={generatedAt} tip={tip} pin={pin} />}
+    </>
   );
 }
 
 export function UsageRates() {
   const { rates, loading, error } = useUsageRates();
-  const { tipRef, pinHandlers } = useFloatingTip();
+  const { tipRef, tipHandlers, pinHandlers } = useFloatingTip();
 
   if (loading) return <p className="note">fitting the token rates…</p>;
   if (error || !rates) return <p className="note">The token rates could not be read.</p>;
@@ -161,7 +304,14 @@ export function UsageRates() {
               </thead>
               <tbody>
                 {models.map(row => (
-                  <RateRow key={row.model} row={row} share={pricedShare(row, models)} />
+                  <RateRow
+                    key={row.model}
+                    row={row}
+                    share={pricedShare(row, models)}
+                    generatedAt={rates.generatedAt}
+                    tip={tipHandlers}
+                    pin={pinHandlers}
+                  />
                 ))}
                 <tr className="tot">
                   <td className="name">Priced share</td>
@@ -182,6 +332,7 @@ export function UsageRates() {
                 </tr>
               </tbody>
             </table>
+            {models.some(showsDays) && <DayLegend />}
             {priced.length < models.length && (
               <p className="note">
                 <b>Collecting is the normal first fortnight</b> — {verdictText('thin').hint}.
