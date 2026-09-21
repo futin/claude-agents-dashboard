@@ -50,7 +50,7 @@ export default function ResumePanel({ session }: { session: Session }) {
   }
 
   return (
-    <div className="qpanel">
+    <div className="qpanel resume">
       <div className="qp-head">
         <span className="qp-badge">session ended</span>
         <span className="qp-hint">send a follow-up to resume it</span>

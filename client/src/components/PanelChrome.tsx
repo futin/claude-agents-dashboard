@@ -42,14 +42,19 @@ export function PanelHead({ badge, hint, onMinimise }: {
  * The collapsed panel: badge, `collapsedSummary()` text, caret. The whole row is
  * the expand button, since on a phone a caret-sized target is a miss waiting to
  * happen.
+ *
+ * `tone` is the panel's own modifier (`plan` / `msg` / `resume`), so a stub
+ * keeps the badge colour its expanded form had — the badge is how you tell
+ * which kind of wait you collapsed.
  */
-export function MinimisedPanel({ badge, summary, onExpand }: {
+export function MinimisedPanel({ badge, summary, tone, onExpand }: {
   badge: string;
   summary: string;
+  tone?: string;
   onExpand: () => void;
 }) {
   return (
-    <div className="qpanel min">
+    <div className={`qpanel min${tone ? ' ' + tone : ''}`}>
       <span className="qp-badge">{badge}</span>
       <button
         type="button"

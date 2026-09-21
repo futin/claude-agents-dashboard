@@ -130,7 +130,7 @@ Both servers bind all interfaces, so LAN/tailnet access works with zero app conf
 shared/types.ts   the API contract (SessionsResponse, Session, ManagementIndex,
                   SessionAnalysis, AnalyticsReport, …)
 shared/frontmatter.ts  zero-dep YAML-frontmatter subset parser — shared because
-                  both sides parse it (lib/management.ts and MarkdownViewer.tsx)
+                  both sides parse it (lib/management.ts and management/FileBlock.tsx)
 server/
   index.ts        HTTP entry + routing; static-serves client/dist in prod
   api.ts          all /api handlers (+ error fallbacks)
@@ -197,30 +197,38 @@ server/
 client/src/
   App.tsx         shell: side rail (Sessions | Usage | Management | Analytics |
                   Settings) + lazy views
-  components/     SideRail (section switcher), SessionsView (the monitor — owns the 3s
-                  poll, so leaving the section stops it), Header (the status plate:
-                  + New, origin badge, remote-answer switch, counts, clock, usage
-                  gauges), Toolbar (filters + sort only), MultiSelect (its facet
-                  control), SessionList/Row, SessionDetail (the subagent timeline),
+  components/     SideRail (section switcher — the rail on desktop, and below 700px
+                  the same markup as a menu dropped out of a top bar, every tree
+                  open), SessionsView (the monitor — owns the 3s
+                  poll, so leaving the section stops it; two columns: the list in one of
+                  five views + a 320px aside), AsideAccount (the account gauges),
+                  AsideBoard (clock, origin, counts, remote-answer switch, New session),
+                  Toolbar (view switcher + filter/sort popovers; Popover is the shared
+                  dismiss primitive), sessions/ (atoms, Expanded, EmptyState and the five
+                  views: Board, List, Split, Tiles, Triage), SessionDetail (the subagent timeline),
                   ChatDrawer, QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   MicButton, SpawnPanel, ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
-                  usage/ (incl. ReadingAids — the ⓘ button and the "How to read
-                  this" glossary drawer, rendered by both Usage tabs), settings/
+                  usage/ (UsageView + the two tabs, Sheet — the band / figure
+                  strip / sheet / Definitions chrome both tabs draw, and
+                  ReadingAids — the ⓘ button they both render), settings/
   hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
-                  useManagement, useAnalytics,
+                  useManagement, useManagementScope (the scope + the one index
+                  fetch, shared by the rail's tree and the page), useAnalytics,
                   useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, useStopSession,
                   usePersistedState, useSettings, useServerSettings, useDictation, useFloatingTip
                   (the one hover/pin explanation panel, shared by both Usage tabs),
                   useTranscribeAvailable, useWebNotify (browser banners for headless
-                  sessions), useBackClose
+                  sessions), useBackClose, useHideOnScroll (the phone top bar's
+                  auto-hide)
   lib/            filterSort, analyticsFilterSort, chatFilter, markdown, managementEntries,
                   format, settings,
                   sections, deepLink, dictation, spawnOptions, resume, pace, usageProfile,
-                  usageRatesFormat, panelCollapse, surface, walkChart, holds, webNotify,
-                  backClose, stopControl
+                  usageRatesFormat, panelCollapse, surface, walkChart (the headroom
+                  chart's geometry), walkRows (the same walk as day rows), holds,
+                  webNotify, backClose, stopControl
 vite.config.ts    dev proxy /api → backend; reuses the server config loader;
                   allowedHosts = `.ts.net` + this node's bare MagicDNS short
                   name (probed via `tailscale status --json`), without which
@@ -272,6 +280,7 @@ that area:
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `allow?` tab for terminal permission dialogs
 - [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and the one narrow browser layer that came back for headless sessions
+- [breakpoints](subsystems/breakpoints.md) — the seven-tier mobile-first ladder in `styles.css`, the rail+measure lock, and the capped/full content-width matrix
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [docker](workflows/docker.md) — running in containers, dev + prod
 - [hooks-setup](workflows/hooks-setup.md) — `pnpm hooks:install`: all six hooks (seven `settings.json` entries — permission-notify registers twice), one command

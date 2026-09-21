@@ -226,7 +226,7 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
 
 ## Client surfaces
 
-- **The switch** (`RemoteAnswerToggle`) sits in the status plate (`Header.tsx`), next to
+- **The switch** (`RemoteAnswerToggle`) sits in the Board card of the sessions aside (`AsideBoard.tsx`), next to
   the connection-origin badge. `SessionsView` owns the `useRemoteAnswer` call and passes
   the control down, so the badge, the switch and the launch panel share one
   `/api/health` poll instead of starting three (see [remote-access](remote-access.md)).
@@ -256,10 +256,10 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
   open, and the transcript-derived blue dot can't cover it (the wait is registered during
   `PreToolUse`, before the `tool_use` record is written). So `serveSessions` passes
   `pendingSessionIds()` into `scanSessions` as `pendingIds`: a flagged session gets
-  `status: 'question'` plus `Session.remoteQuestion`, and `SessionRow` puts its chat tab into
+  `status: 'question'` plus `Session.remoteQuestion`, and the row's chat button (`sessions/atoms.tsx`) goes into
   a pulsing amber `answer` — first in the `holdKind` precedence (`lib/holds.ts`) that
   `chatTab()` reads, so a question outranks every
-  other hold (see [sessions](sessions.md#the-tab-is-also-where-a-session-says-it-needs-a-human)). The store is still RAM-only and still read-only
+  other hold (see [sessions](sessions.md#the-chat-button-is-also-where-a-session-says-it-needs-a-human)). The store is still RAM-only and still read-only
   here — the scan only reads the key set, and gets a copied `Set`, never the store's own.
   `scan.ts` does not import `pending.ts` (injection keeps it pure and testable).
 - **`QuestionPanel` is an action bar, not a message** — pinned between `.chat-body` and
@@ -296,7 +296,8 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
     - client/src/components/RemoteAnswerToggle.tsx
     - client/src/hooks/usePendingQuestion.ts
     - client/src/hooks/useRemoteAnswer.ts
-    - client/src/components/SessionRow.tsx
+    - client/src/components/sessions/atoms.tsx
+    - client/src/lib/holds.ts
   kind: subsystem
   verified: f436519f31ef4120521792db7658e2bc5431f0e9
 -->

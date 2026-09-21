@@ -1,5 +1,5 @@
 import type { ForecastConfidence, ForecastStep, UsageProfileCell } from '../../../shared/types';
-import { fmtWalkHour, Y_MAX } from './walkChart';
+import { fmtWalkHour } from './walkChart';
 
 /**
  * usageProfile.ts — pure helpers for the duty-cycle inspector's status line and
@@ -24,7 +24,7 @@ import { fmtWalkHour, Y_MAX } from './walkChart';
  *
  * The glossary lives here for the same reason the tooltips do: it is copy, and
  * copy that quotes a live number (the weekly mean) or a model constant (the
- * trust floor, the chart's ceiling, the trusted-hour gate) drifts the moment it
+ * trust floor, the debt cap, the trusted-hour gate) drifts the moment it
  * is retyped in a component. Every ⓘ on the tab prints an entry of it, so the
  * panel and the drawer are one string, tested as one.
  */
@@ -301,10 +301,13 @@ export function profileGlossary(
     },
     {
       key: 'ceiling',
-      term: 'The 100% ceiling',
-      text: `The scale stops at ${Y_MAX}%: past the ceiling everything is equally over, so `
-        + 'the curve is not auto-scaled to its endpoint. The red rule is 100% of the '
-        + 'weekly window, and the vertical line is where the walk crosses it.'
+      term: 'Empty, and what is borrowed past it',
+      text: 'The rule is an empty weekly window. Above it the curve is what is left to '
+        + 'spend; below it, the gap between the rule and the line is work the window '
+        + 'cannot pay for — red where the weights are measured, amber and hatched where '
+        + 'the walk is guessing. The band below the rule stops at the height of the '
+        + 'headroom above it: past that everything is equally over, so a week that ends '
+        + '190 points short is not allowed to squash the drain into a sliver.'
     },
     {
       key: 'walk',
@@ -320,4 +323,129 @@ export function profileGlossary(
 /** The definition behind one ⓘ — the same string the drawer prints. */
 export function profileTip(key: ProfileTerm, globalMean: number): string {
   return profileGlossary(globalMean).find(g => g.key === key)!.text;
+}
+
+/**
+ * One cell of a page's figure strip: a label, the figure, a line of evidence
+ * under it.
+ *
+ * Data, not JSX, so the five forecast figures and the five token-value ones are
+ * both testable and both drawn by the same component. `term` is the glossary key
+ * whose ⓘ belongs beside the label — the strip never writes its own definition.
+ */
+export interface StatTile {
+  key: string;
+  label: string;
+  /** The figure itself. `—` whenever the input is missing; never a fabricated 0. */
+  value: string;
+  /** A quieter suffix inside the figure, e.g. the ` / 168` of an out-of count. */
+  unit?: string;
+  /** The evidence line. Empty string prints nothing. */
+  sub: string;
+  /** Draws the figure in the attention colour. */
+  warn?: boolean;
+  term?: ProfileTerm;
+}
+
+/** `2d 4h`, `5h 10m`, `just now` — the distance to a timestamp, at two units. */
+export function fmtUntil(fromMs: number, toMs: number): string {
+  const min = Math.round((toMs - fromMs) / 60_000);
+  if (!Number.isFinite(min) || min <= 0) return 'now';
+  const d = Math.floor(min / 1440);
+  const h = Math.floor((min % 1440) / 60);
+  const m = min % 60;
+  if (d > 0) return h > 0 ? `${d}d ${h}h` : `${d}d`;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  return `${m}m`;
+}
+
+/** `11 Sep` — a date without the year, which the reader supplies. */
+function fmtDay(ms: number): string {
+  return new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+/** Whole hours, rounded — the unit every figure on the forecast strip counts in. */
+function hrs(n: number): string {
+  return String(Math.round(n));
+}
+
+/**
+ * The forecast page's five figures, in reading order: where the window stands,
+ * when it runs out, how hard the rest of it is expected to be worked, how much
+ * of the week has been observed, and whether to believe any of it.
+ *
+ * The utilization figure warns from 80 points rather than at the projection,
+ * because the two say different things: one is measured and one is a forecast,
+ * and marking the measured figure with the forecast's verdict would make a quiet
+ * week look spent. The crossing warns whenever there *is* a crossing — that one
+ * is the forecast, and its existence is the finding.
+ *
+ * `hasWalk` separates the two meanings a null `exhaustAt` used to carry. The
+ * server sends null both for "the walk was run and never crossed" and for "no
+ * walk could be run at all" (`walkAbsent`, `api.ts`), and only the first of
+ * those licenses the claim that the week coasts to its reset — the second is
+ * the absence of evidence, which the tile has to print as a dash like every
+ * other unmeasured figure on the strip.
+ */
+export function forecastStats(opts: {
+  utilizationPct: number | null;
+  resetsAt: string | null;
+  exhaustAt: string | null;
+  dutyCycle: number | null;
+  /** Hours of window left to walk, and how many of them are expected to be active. */
+  hoursLeft: number;
+  activeHours: number;
+  /** Whether a walk was run at all. False = nothing to project from. */
+  hasWalk: boolean;
+  progress: ProfileProgress;
+  confidence: ForecastConfidence;
+  nowMs: number;
+}): StatTile[] {
+  const { utilizationPct, resetsAt, exhaustAt, dutyCycle, hasWalk, progress, confidence, nowMs } = opts;
+  const resetMs = resetsAt ? Date.parse(resetsAt) : Number.NaN;
+  const crossMs = exhaustAt ? Date.parse(exhaustAt) : Number.NaN;
+
+  return [
+    {
+      key: 'window',
+      label: 'Weekly window',
+      value: utilizationPct === null ? '—' : `${Math.round(utilizationPct)}%`,
+      sub: Number.isFinite(resetMs) ? `resets ${fmtWalkHour(new Date(resetMs).toISOString())}` : '',
+      warn: utilizationPct !== null && utilizationPct >= 80
+    },
+    {
+      key: 'crossing',
+      label: 'Projected crossing',
+      value: !hasWalk ? '—' : Number.isFinite(crossMs) ? fmtWalkHour(new Date(crossMs).toISOString()) : 'none',
+      sub: !hasWalk
+        ? 'nothing to project from'
+        : Number.isFinite(crossMs)
+          ? `${fmtDay(crossMs)} · ${fmtUntil(nowMs, crossMs)} from now`
+          : 'the week coasts to its reset',
+      warn: hasWalk && Number.isFinite(crossMs)
+    },
+    {
+      key: 'duty',
+      label: 'Duty cycle, hours left',
+      value: dutyCycle === null ? '—' : `${Math.round(dutyCycle * 100)}%`,
+      sub: opts.hoursLeft > 0
+        ? `${hrs(opts.activeHours)} of ${hrs(opts.hoursLeft)} hours worked`
+        : ''
+    },
+    {
+      key: 'observed',
+      label: 'Hours observed',
+      value: String(progress.touched),
+      unit: ' / 168',
+      sub: `${fmtObserved(progress.totalMin)} recorded`
+    },
+    {
+      key: 'confidence',
+      label: 'Confidence',
+      value: confidence,
+      term: 'confidence',
+      sub: `${progress.trusted} carrying a weight · ${progress.atFloor} at the floor`,
+      warn: confidence !== 'ok'
+    }
+  ];
 }

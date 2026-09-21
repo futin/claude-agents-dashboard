@@ -1,6 +1,6 @@
 import type { Session } from '../../../shared/types';
 
-/** Human labels for each status. Shared by SessionRow and the Toolbar. */
+/** Human labels for each status. Shared by the session views and the Toolbar. */
 export const STATUS_LABEL: Record<Session['status'], string> = {
   working: 'working',
   idle: 'idle',
@@ -23,21 +23,101 @@ export const STATUS_ORDER: Record<Session['status'], number> = {
 export interface ActivityWindow {
   key: string;
   label: string;
+  /** Compact label for the toolbar switch. */
+  short: string;
   /** Max age in ms; undefined = no bound ("Any time"). */
   ms?: number;
 }
 
 /** Activity-recency filter options. `all` = no bound. */
 export const ACTIVITY_WINDOWS: ActivityWindow[] = [
-  { key: 'all', label: 'Any time' },
-  { key: '15m', label: 'Last 15 min', ms: 15 * 60_000 },
-  { key: '1h', label: 'Last 1 hour', ms: 60 * 60_000 },
-  { key: '6h', label: 'Last 6 hours', ms: 6 * 60 * 60_000 },
-  { key: '24h', label: 'Last 24 hours', ms: 24 * 60 * 60_000 }
+  { key: 'all', label: 'Any time', short: 'All' },
+  { key: '15m', label: 'Last 15 min', short: '15min', ms: 15 * 60_000 },
+  { key: '1h', label: 'Last 1 hour', short: '1h', ms: 60 * 60_000 },
+  { key: '6h', label: 'Last 6 hours', short: '6h', ms: 6 * 60 * 60_000 },
+  { key: '24h', label: 'Last 24 hours', short: '24h', ms: 24 * 60 * 60_000 }
 ];
 
 export type SortKey = 'recency' | 'tokens' | 'name' | 'status';
 export type SortDir = 'asc' | 'desc';
+
+/** What the sort popover prints for each key, and the toolbar's `Sort: …` label. */
+export const SORT_LABEL: Record<SortKey, string> = {
+  recency: 'Recency',
+  tokens: 'Tokens',
+  name: 'Name',
+  status: 'Status'
+};
+
+/** One-line hint under each sort key in the popover — what the order means. */
+export const SORT_HINT: Record<SortKey, string> = {
+  recency: 'last activity',
+  tokens: 'context used',
+  name: 'project, A → Z',
+  status: 'waiting → working → pending → idle'
+};
+
+/**
+ * The five shapes the same filtered, sorted list can take. The view switcher
+ * lists them in this order; the mock's default is the board.
+ *
+ * Deliberately NOT part of `View` below: the shape is not a filter, and it is
+ * not persisted with one. Which shape the page opens in is the per-device
+ * `defaultLayout` setting (`lib/settings.ts`); the switcher's own choice is
+ * remembered under its own key (`dashboard.layout`), which `defaultLayout:
+ * 'last'` reads and any other value ignores — exactly how `landing` and
+ * `dashboard.section` pair up. See docs/subsystems/view-persistence.md.
+ */
+export type Layout = 'board' | 'list' | 'split' | 'tiles' | 'triage';
+
+export const LAYOUTS: { key: Layout; label: string }[] = [
+  { key: 'board', label: 'Board' },
+  { key: 'list', label: 'List' },
+  { key: 'split', label: 'Split' },
+  { key: 'tiles', label: 'Tiles' },
+  { key: 'triage', label: 'Triage' }
+];
+
+/**
+ * The shape a fresh browser opens in, and the fallback when `defaultLayout` is
+ * `last` but nothing has been stored yet. The board is the mock's default and
+ * the switcher's first entry.
+ */
+export const DEFAULT_LAYOUT: Layout = 'board';
+
+export function isLayout(v: unknown): v is Layout {
+  return LAYOUTS.some(l => l.key === v);
+}
+
+/**
+ * The shapes a phone is not offered.
+ *
+ * List is a seven-column table and Split is a two-pane master/detail; neither
+ * survives a 375px measure — the table scrolls sideways past the columns that
+ * carry the reading, and the split's detail pane has no room to be a pane. The
+ * three that remain (board, tiles, triage) are single-column stacks by design.
+ *
+ * Withheld rather than degraded: a shape that has to be reinvented at one
+ * breakpoint is a second shape wearing the first one's name.
+ */
+export const WIDE_ONLY_LAYOUTS: readonly Layout[] = ['list', 'split'];
+
+/** The switcher's buttons at this width — all five, or the three that fit. */
+export function layoutsFor(narrow: boolean): { key: Layout; label: string }[] {
+  return narrow ? LAYOUTS.filter(l => !WIDE_ONLY_LAYOUTS.includes(l.key)) : LAYOUTS;
+}
+
+/**
+ * The shape actually drawn at this width.
+ *
+ * The choice itself is left alone — `dashboard.layout` goes on saying `split`
+ * while a narrow window draws the board, so widening it (or opening the same
+ * page on the laptop) comes back to the shape you were using. Only the render
+ * is coerced.
+ */
+export function drawableLayout(layout: Layout, narrow: boolean): Layout {
+  return narrow && WIDE_ONLY_LAYOUTS.includes(layout) ? DEFAULT_LAYOUT : layout;
+}
 
 export interface View {
   /** Selected project names; empty = all projects. */
@@ -75,8 +155,8 @@ export function distinctProjects(sessions: Session[]): string[] {
  * - An empty payload prunes nothing. No sessions is no evidence, not evidence
  *   of absence, and the very first poll of a mount arrives before any rows do.
  * - Names still present survive; only the absent ones go. Pruning the last
- *   survivor yields `[]`, which MultiSelect and applyView both read as
- *   "All projects".
+ *   survivor yields `[]`, which the toolbar's picks and applyView both read
+ *   as "All projects".
  * - Nothing to prune returns `selected` itself, so a caller can compare by
  *   reference instead of deep-equality to decide whether to write state.
  */
@@ -156,7 +236,16 @@ export function describeEmpty(sessions: Session[], view: View, nowMs: number): E
 
 /** Whether any facet is hiding rows right now. Sort key/dir do not count. */
 export function hasActiveFilters(view: View): boolean {
-  return Boolean(view.projects.length || view.statuses.length || view.window !== 'all');
+  return filterCount(view) > 0;
+}
+
+/**
+ * How many of the three facets are set — the badge on the toolbar's filter
+ * button. A facet counts once however many values it holds: two statuses are
+ * one filter, not two.
+ */
+export function filterCount(view: View): number {
+  return (view.projects.length ? 1 : 0) + (view.statuses.length ? 1 : 0) + (view.window !== 'all' ? 1 : 0);
 }
 
 /**

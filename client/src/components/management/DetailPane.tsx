@@ -1,13 +1,17 @@
 import { useState } from 'react';
 
-import { FileViewer } from './FileViewer';
+import { FileBlock } from './FileBlock';
 import { HookDetail } from './HookDetail';
-import { MarkdownViewer } from './MarkdownViewer';
 import { SkillFileRail } from './SkillFileRail';
-import type { Entry, EntryFile, FileKind } from '../../lib/managementEntries';
+import type { Entry, EntryFile } from '../../lib/managementEntries';
 
 interface Props {
-  entry: Entry | null;
+  /**
+   * Never null: column 3 is drawn only when something is selected (DESIGN.md
+   * §8.5) — an empty inspector holding a "select an item" line is a third of
+   * the page spent saying nothing.
+   */
+  entry: Entry;
   /** Type context for the header chip, e.g. 'Skills' — singularized here. */
   groupTitle: string | null;
 }
@@ -18,20 +22,10 @@ function typeLabel(title: string): string {
   return t.endsWith('s') ? t.slice(0, -1) : t;
 }
 
-function viewerFor(path: string, kind: FileKind) {
-  return kind === 'markdown'
-    ? <MarkdownViewer path={path} />
-    : <FileViewer path={path} pretty={kind === 'json'} />;
-}
-
-/** Right pane: selected entry's metadata + its file content. */
+/** Column 3: selected entry's metadata + its file content. */
 export function DetailPane({ entry, groupTitle }: Props) {
   /** Which file of a multi-file skill the viewer shows; tagged with its entry. */
   const [picked, setPicked] = useState<{ entryKey: string; path: string } | null>(null);
-
-  if (entry === null) {
-    return <div className="mdetail"><div className="mgmt-empty">select an item to inspect it</div></div>;
-  }
 
   if (entry.kind === 'hook') {
     return (
@@ -63,21 +57,24 @@ export function DetailPane({ entry, groupTitle }: Props) {
       {shownPath === null ? (
         <div className="mgmt-empty">no file to show for this item</div>
       ) : files === undefined ? (
+        // `key` on the path: switching entries has to reset the fold and the
+        // Code/Preview pick, not carry one file's reading state onto the next.
         <>
-          <div className="mdetail-path">{shownPath}</div>
-          {viewerFor(shownPath, shownKind)}
+          <div className="mdetail-label rule">file</div>
+          <FileBlock key={shownPath} path={shownPath} kind={shownKind} />
         </>
       ) : (
         <div className="skill-body">
+          {/* The rail is the skill's own table of contents, so it runs the full
+              width ABOVE the file it picks rather than taking a column beside
+              it: at 420px of pane a 190px side rail left the file a gutter. */}
+          <div className="mdetail-label rule">files · {files.length}</div>
           <SkillFileRail
             files={files}
             selected={shownPath}
             onSelect={(f: EntryFile) => setPicked({ entryKey: entry.key, path: f.path })}
           />
-          <div className="skill-file">
-            <div className="mdetail-path">{shownPath}</div>
-            {viewerFor(shownPath, shownKind)}
-          </div>
+          <FileBlock key={shownPath} path={shownPath} kind={shownKind} />
         </div>
       )}
     </div>

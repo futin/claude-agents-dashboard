@@ -1,7 +1,7 @@
 /**
  * backClose.ts — the phone's exit from a modal overlay.
  *
- * A full-screen drawer at `<=700px` has no scrim to tap and no Escape key, so
+ * A full-screen drawer below `md` (768px) has no scrim to tap and no Escape key, so
  * the back button/swipe is the exit a phone user already reaches for. Arming it
  * means pushing one synthetic history entry and closing on the popstate that
  * pops it — and, just as importantly, spending that entry with `back()` when the

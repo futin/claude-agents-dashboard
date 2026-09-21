@@ -404,11 +404,12 @@ function stepOf(weight: number): string {
       <summary>More detail — why hours are rows and days are columns</summary>
       <p>Because the axis needing 24 slots should run the direction a phone actually has.
       Days across gives 7 columns of <code>1fr</code>; hours down gives 24 rows that scroll
-      naturally. With <code>aspect-ratio: 1</code> on the cells, <code>max-width</code> on
-      <code>.up-grid</code> is then the single knob for the whole panel's size: width sets
-      the cell size, which sets the height. The mockup's variant C used 320px, giving 38.84px
-      cells and a 992px-tall week; the shipped version uses 250px, giving ~28px cells and
-      ~730px, which keeps the proportions and brings a week within about one screen.</p>
+      naturally. The mockup's variant C squared the cells and capped the grid at 320px,
+      giving 38.84px cells and a 992px-tall week; the shipped grid drops
+      <code>aspect-ratio</code> instead and fixes the cell <em>height</em> at 20px, so the
+      grid takes the sheet's whole measure and a week comes in under ~570px. Squares capped
+      at a <code>max-width</code> left a third of the phone blank to buy a proportion nobody
+      reads off a heatmap.</p>
     </details>
   </div>
 

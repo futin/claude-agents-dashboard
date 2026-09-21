@@ -2,7 +2,7 @@
  * surface.ts — what a row says about where a session lives.
  *
  * Pure, and shared by the two places a session is titled: the list row
- * (`SessionRow`) and the chat drawer's header (`ChatDrawer`). One definition
+ * (`sessions/atoms.tsx`) and the chat drawer's header (`ChatDrawer`). One definition
  * because the *tooltip* is the actual content here — it's the sentence that
  * answers "why is this session not in my desktop app?" — and two copies of a
  * sentence that long drift.

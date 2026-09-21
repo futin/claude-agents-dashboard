@@ -620,6 +620,11 @@ export function shapeUsageProfile(opts: {
 
   const rate = weekly?.ratePerHour ?? null;
   const resetsAtMs = weekly?.resetsAt ? Date.parse(weekly.resetsAt) : Number.NaN;
+  // The window's own two facts, reported whether or not a walk can be run:
+  // the forecast page states them before any projection, so they follow the
+  // *limits* being readable, not the profile being usable.
+  const utilizationPct = typeof weekly?.utilization === 'number' ? weekly.utilization : null;
+  const resetsAt = Number.isFinite(resetsAtMs) ? new Date(resetsAtMs).toISOString() : null;
   // Ordered, not combined: the strip states *which* precondition is missing, so
   // "there is nothing to draw" reads as a state rather than as a broken panel.
   // Recording first — with it off nothing else has been measured either.
@@ -637,7 +642,12 @@ export function shapeUsageProfile(opts: {
       recording,
       walk: [],
       exhaustAt: null,
-      walkAbsent: absent
+      walkAbsent: absent,
+      utilizationPct,
+      resetsAt,
+      // No walk, so no slices to weigh — null rather than 0, which would read
+      // as a measured "never active".
+      dutyCycle: null
     };
   }
 
@@ -664,7 +674,10 @@ export function shapeUsageProfile(opts: {
     exhaustAt: walked.exhaustAtMs == null ? null : new Date(walked.exhaustAtMs).toISOString(),
     // A walked window has nothing absent to report; the field is the negative
     // space of `walk`, so a non-empty walk always pairs with null.
-    walkAbsent: null
+    walkAbsent: null,
+    utilizationPct,
+    resetsAt,
+    dutyCycle: walked.dutyCycle
   };
 }
 
@@ -687,7 +700,8 @@ export function serveUsageProfile(res: ServerResponse): void {
   } catch {
     sendJson(res, 200, {
       cells: blankCells(), globalMean: 1, confidence: 'none',
-      recording: false, walk: [], exhaustAt: null, walkAbsent: 'recording-off'
+      recording: false, walk: [], exhaustAt: null, walkAbsent: 'recording-off',
+      utilizationPct: null, resetsAt: null, dutyCycle: null
     } satisfies UsageProfileResponse);
   }
 }

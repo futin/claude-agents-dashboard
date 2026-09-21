@@ -1,14 +1,20 @@
 import { useMemo, useState } from 'react';
 
-import type { AnalyticsReport, LessonStatus } from '../../../../shared/types';
-import { fmtTok, fmtDuration } from '../../lib/format';
 import { useAnalytics } from '../../hooks/useAnalytics';
+import { useNarrow } from '../../hooks/useNarrow';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import {
   applyAnalyticsView,
+  clearAnalyticsFilters,
+  drawableAnLayout,
+  isAnLayout,
   DEFAULT_ANALYTICS_VIEW,
+  DEFAULT_AN_LAYOUT,
+  type AnLayout,
   type AnalyticsView as AnalyticsViewState
 } from '../../lib/analyticsFilterSort';
+import { AnalyticsSplit } from './AnalyticsSplit';
+import { AnalyticsTiles } from './AnalyticsTiles';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
 
 /**
@@ -18,8 +24,15 @@ import { AnalyticsToolbar } from './AnalyticsToolbar';
  * logs it to ~/.claude/session-analytics-log.md). Default export → lazy chunk, so the
  * sessions bundle is unaffected.
  *
- * Mirrors the Sessions view: a filter/sort Toolbar (persisted) and cards that are
- * collapsed by default, expanding on click.
+ * Two shapes, both borrowed from Sessions: the **split** (the log as `.lrow`s,
+ * one report open in the `.inspect` card beside it) and **tiles** (every report
+ * a metric card carrying its billable total). That is deliberate — the two
+ * sections differ in subject, not in kind, so a row's dot carries what became
+ * of the lesson where Sessions carries a session's state, and the figure is
+ * billable tokens where Sessions shows context used. Tiles was one of four
+ * shapes drawn as artboards and dropped when the section was built
+ * (`docs/guides/mockups/redesign-mock.html`); it is back as the second shape,
+ * and as the only one a phone can draw.
  */
 export default function AnalyticsView() {
   const { data, loading, error, refresh } = useAnalytics();
@@ -31,196 +44,116 @@ export default function AnalyticsView() {
   );
   const shown = useMemo(() => applyAnalyticsView(reports, view, Date.now()), [reports, view]);
 
-  // Which cards are expanded. Ephemeral — not persisted (matches Sessions row-expansion).
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const toggle = (id: string) =>
-    setExpandedIds(cur => {
+  // The shape gets its own key rather than riding in `view`: it is not a
+  // filter. Guarded on read, because a value stored by an older build (or by
+  // hand) is not necessarily a shape.
+  const [storedLayout, setLayout] = usePersistedState<AnLayout>('dashboard.analyticsLayout', DEFAULT_AN_LAYOUT);
+  const layout = isAnLayout(storedLayout) ? storedLayout : DEFAULT_AN_LAYOUT;
+  // A phone draws tiles where the choice says split — the split's detail pane
+  // has no room to be a pane there. Only the *drawing* is coerced: the stored
+  // key keeps the real choice, so widening the window comes straight back to
+  // it without the user re-picking.
+  const narrow = useNarrow();
+  const drawn = drawableAnLayout(layout, narrow);
+
+  // Neither is persisted — session ids churn, so a restored selection would be
+  // stale (docs/subsystems/view-persistence.md). Two states, as on the
+  // Sessions board: `selectedId` is the split's one inspected report (falling
+  // through to the first row, so the inspector is never blank), `expanded` is
+  // the set of tiles drawn open. Opening three tiles and then switching to the
+  // split should not pick one of them at random.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggle(id: string) {
+    setExpanded(cur => {
       const next = new Set(cur);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  }
+
+  let body: React.ReactNode;
+  if (loading && !reports.length) {
+    body = <div className="an-empty">Loading…</div>;
+  } else if (error) {
+    body = <div className="an-empty">Could not load reports.</div>;
+  } else if (!reports.length) {
+    body = (
+      <div className="an-empty">
+        No sessions logged yet. Run <code>/kaizen</code> on a session to record one.
+      </div>
+    );
+  } else if (!shown.length) {
+    body = (
+      <div className="an-empty">
+        No reports match the current filters.{' '}
+        <button type="button" className="an-clear" onClick={() => setView(clearAnalyticsFilters(view))}>Clear filters</button>
+      </div>
+    );
+  } else if (drawn === 'tiles') {
+    body = <AnalyticsTiles reports={shown} expanded={expanded} onToggle={toggle} />;
+  } else {
+    body = <AnalyticsSplit reports={shown} selectedId={selectedId} onSelect={setSelectedId} />;
+  }
 
   return (
     <div className="analytics">
+      {/* Two rows, as Management's band is: the title line, then the prose.
+          The title line carries state and one verb — `Review due` beside the
+          title when the log has gone unswept, and ↻ — while every fact about
+          the section (how much of the log is here, what it is, what to do when
+          a review is due) is a sentence in the line below. A chip that both
+          announced a state and spelled out the command was doing the
+          description's job in the row's smallest type. */}
       <div className="an-bar">
-        <div className="an-title">Session analytics</div>
-        <span className="an-hint">last {data?.keep ?? 5} sessions logged by <code>/kaizen</code></span>
-        <span className="spacer" />
-        {data?.reviewDue && (
-          <span
-            className="an-review"
-            title={
-              data.lastReviewAt
-                ? `Last swept ${data.lastReviewAt} — lessons have accumulated since.`
-                : 'The log has never been swept.'
-            }
-          >
-            review due — run <code>/kaizen review</code>
-          </span>
-        )}
-        <button className="an-refresh" onClick={refresh} title="Reload">↻</button>
+        <div className="an-bandrow">
+          <div className="an-title">Analytics</div>
+          {data?.reviewDue && (
+            <span
+              className="an-review"
+              title={
+                data.lastReviewAt
+                  ? `Last swept ${data.lastReviewAt} — lessons have accumulated since.`
+                  : 'The log has never been swept.'
+              }
+            >
+              <i aria-hidden="true" />Review due
+            </span>
+          )}
+          <span className="spacer" />
+          <button className="icon-refresh" onClick={refresh} title="Reload">↻</button>
+        </div>
+        {/* Two lines at this measure, which is what keeps it a caption rather
+            than a paragraph nobody reads — so it carries only what the page
+            cannot show: where the list comes from, that nothing here writes,
+            and the one move to make when a review is due. The rest (why it
+            does not poll, when the log was last swept) is the chip's tooltip
+            and the subsystem doc. One colour throughout: the sentence that
+            asks for something is not a different kind of sentence. */}
+        <div className="an-sub">
+          The last {data?.keep ?? 5} sessions <code>/kaizen</code> logged, each lesson beside a
+          live re-run of the analyzer. Read-only — the list changes only when{' '}
+          {/* the space is explicit: JSX drops a newline that follows a tag, so
+              `</code>` at a line end would butt straight against the word */}
+          <code>/kaizen</code> runs.
+          {data?.reviewDue && <> Lessons have piled up — run <code>/kaizen review</code>.</>}
+        </div>
       </div>
 
       {reports.length > 0 && (
-        <AnalyticsToolbar reports={reports} view={view} onChange={setView} />
+        <AnalyticsToolbar
+          reports={reports}
+          shownCount={shown.length}
+          view={view}
+          onChange={setView}
+          layout={drawn}
+          onLayout={setLayout}
+          narrow={narrow}
+        />
       )}
 
-      {loading && !reports.length ? (
-        <div className="an-empty">Loading…</div>
-      ) : error ? (
-        <div className="an-empty">Could not load reports.</div>
-      ) : !reports.length ? (
-        <div className="an-empty">
-          No sessions logged yet. Run <code>/kaizen</code> on a session to record one.
-        </div>
-      ) : !shown.length ? (
-        <div className="an-empty">No reports match the current filters.</div>
-      ) : (
-        <div className="an-list">
-          {shown.map(r => (
-            <ReportCard
-              key={r.sessionId}
-              r={r}
-              selected={expandedIds.has(r.sessionId)}
-              onToggle={() => toggle(r.sessionId)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ReportCard({
-  r,
-  selected,
-  onToggle
-}: {
-  r: AnalyticsReport;
-  selected: boolean;
-  onToggle: () => void;
-}) {
-  const a = r.analysis;
-  const topTools = a ? a.byTool.slice(0, 3) : [];
-  const topAgents = a
-    ? [...a.bySubagent].sort((x, y) => (y.tokens ?? 0) - (x.tokens ?? 0)).slice(0, 3)
-    : [];
-
-  return (
-    <div className={`an-card${selected ? ' selected' : ''}`}>
-      <div
-        className="an-head"
-        onClick={onToggle}
-        role="button"
-        aria-expanded={selected}
-      >
-        <span className={`caret${selected ? ' open' : ''}`} aria-hidden="true">▸</span>
-        <span className="an-proj">{r.project}</span>
-        {r.models.map(m => <span key={m} className="an-model">{m}</span>)}
-        <span className="an-id">{r.sessionId.slice(0, 8)}</span>
-        <StatusBadge s={r.lessonStatus} />
-        <span className="spacer" />
-        {a && <span className="an-tok">{fmtTok(a.totals.billableApprox)}</span>}
-        <span className="an-when">logged {r.loggedAt}</span>
-        {a?.durationMs != null && <span className="an-when">· {fmtDuration(a.durationMs)}</span>}
-      </div>
-
-      {selected && (
-        a ? (
-          <>
-            <div className="an-metrics">
-              <Metric label="billable" value={fmtTok(a.totals.billableApprox)} lead />
-              <Metric label="context" value={fmtTok(a.totals.combined)} />
-              <Metric label="subagents" value={`${a.subagentTotals.count} · ${fmtTok(a.subagentTotals.tokens)}`} />
-              <Metric label="turns" value={String(a.perTurn.count)} />
-              <Metric
-                label="errors"
-                value={`${a.errorSignals.toolErrors} · ${a.errorSignals.retries} retry`}
-                warn={a.errorSignals.toolErrors > 0}
-              />
-            </div>
-
-            <div className="an-cols">
-              <div className="an-col">
-                <div className="an-col-h">Top tools <span className="an-approx">approx tokens</span></div>
-                {topTools.length ? topTools.map(t => (
-                  <div key={t.tool} className="an-line">
-                    <span className="an-line-name">{t.tool}</span>
-                    <span className="an-line-meta">
-                      {fmtTok(t.approxOutputTokens)} · {t.count}×{t.errors ? ` · ${t.errors} err` : ''}
-                    </span>
-                  </div>
-                )) : <div className="an-line muted">none</div>}
-              </div>
-              <div className="an-col">
-                <div className="an-col-h">Top subagents</div>
-                {topAgents.length ? topAgents.map(g => (
-                  <div key={g.id} className="an-line">
-                    <span className="an-line-name">{g.type || 'agent'}</span>
-                    <span className="an-line-meta">
-                      {g.tokens != null ? fmtTok(g.tokens) : '—'}{g.toolUses != null ? ` · ${g.toolUses}⚒` : ''}
-                    </span>
-                  </div>
-                )) : <div className="an-line muted">none launched</div>}
-              </div>
-            </div>
-
-            <div className="an-lesson">
-              <div className="an-col-h">Research &amp; suggestions</div>
-              <p className="an-lesson-body">{r.lesson}</p>
-              <LessonOutcome s={r.lessonStatus} />
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="an-line muted">Transcript no longer on disk — showing the logged lesson only.</div>
-            <div className="an-lesson">
-              <div className="an-col-h">Research &amp; suggestions</div>
-              <p className="an-lesson-body">{r.lesson}</p>
-              <LessonOutcome s={r.lessonStatus} />
-            </div>
-          </>
-        )
-      )}
-    </div>
-  );
-}
-
-const STATUS_MARK: Record<LessonStatus['status'], string> = {
-  actioned: '✓',
-  promoted: '↑',
-  dropped: '·'
-};
-
-/**
- * What became of this session's lesson, from the log's `status` lines. A lesson
- * with no status line is still open — shown as such, since "which lessons have I
- * actually acted on" is the question the badge exists to answer.
- */
-function StatusBadge({ s }: { s?: LessonStatus | null }) {
-  if (!s) return <span className="an-status open" title="No status line yet — still open.">○ open</span>;
-  return (
-    <span className={`an-status ${s.status}`} title={`${s.note ? `${s.note} — ` : ''}${s.date}`}>
-      {STATUS_MARK[s.status]} {s.status}
-    </span>
-  );
-}
-
-/** The status line's note, spelled out under the lesson when the card is open. */
-function LessonOutcome({ s }: { s?: LessonStatus | null }) {
-  if (!s) return null;
-  return (
-    <p className="an-lesson-body muted">
-      {s.status} {s.date}{s.note ? ` — ${s.note}` : ''}
-    </p>
-  );
-}
-
-function Metric({ label, value, lead, warn }: { label: string; value: string; lead?: boolean; warn?: boolean }) {
-  return (
-    <div className={`an-metric${lead ? ' lead' : ''}`}>
-      <div className={`an-metric-v${warn ? ' warn' : ''}`}>{value}</div>
-      <div className="an-metric-l">{label}</div>
+      {body}
     </div>
   );
 }

@@ -54,7 +54,7 @@ Getting this wrong fails silently: the hook's output is ignored and the card jus
 | `POST /api/sessions/:id/plan-answer` | `serveSessionPlanAnswer` — `{verdict: 'reject', feedback}` or `'dismiss'`. Token-gated |
 | `server/lib/plans.ts` | RAM-only store; same state machine as `pending.ts` with an injected `resolve` |
 | `scan.ts` `ScanOptions.planIds` | sets `Session.remotePlan` and forces `status: 'question'` |
-| `SessionRow` tab + `PlanPanel` | the row's chat tab labelled `plan?` and the pinned drawer panel |
+| chat button + `PlanPanel` | the row's chat button labelled `plan?` and the pinned drawer panel |
 
 ## Why a separate store from `pending.ts`
 
@@ -193,7 +193,8 @@ same failure mode, and the same one setting as
     - client/src/components/PanelChrome.tsx
     - client/src/lib/panelCollapse.ts
     - client/src/hooks/usePendingPlan.ts
-    - client/src/components/SessionRow.tsx
+    - client/src/components/sessions/atoms.tsx
+    - client/src/lib/holds.ts
   kind: subsystem
   verified: f436519f31ef4120521792db7658e2bc5431f0e9
 -->

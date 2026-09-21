@@ -1,8 +1,7 @@
 # View persistence (Toolbar filters/sort)
 
 The Toolbar's `view` object (`projects`, `statuses`, `window`, `sortKey`, `sortDir` — the
-`View` interface in `client/src/lib/filterSort.ts`) is persisted to **localStorage** under key
-`dashboard.view` so filters/sort survive a page refresh and tab-close. Wired in
+`View` interface in `client/src/lib/filterSort.ts`) is persisted to **localStorage** under key `dashboard.view` so filters/sort survive a page refresh and tab-close. Wired in
 `SessionsView.tsx` via `usePersistedState<View>('dashboard.view', DEFAULT_VIEW)` instead of plain
 `useState`; `AppShell` in `App.tsx` uses the same hook one level up to remember the open
 section — though there it only *seeds* a plain `useState`, because the landing setting can
@@ -13,6 +12,8 @@ override it (see `dashboard.section` below).
   throwing `localStorage` (private mode / quota) falls back to the passed default, never crashes
   render. Object values are shallow-merged over the default (`{ ...fallback, ...parsed }`) so a
   value stored by an older release still gains any newly-added `View` field's default.
+  A stored view written before the shape moved out of `View` still carries a `layout` key;
+  nothing reads it, and it is inert rather than worth a migration.
 - **Stale project names self-heal** — the `projects` facet is the one field whose valid values
   are *data*, not a fixed enum, so a persisted selection can outlive the sessions it named
   (the project went quiet, or fell out of the `limit`/`lookback` window). Left alone every row
@@ -23,7 +24,7 @@ override it (see `dashboard.section` below).
   payload prunes nothing** — no rows is no evidence, and the first poll of a mount arrives
   before any rows do. The tradeoff is deliberate: a filtered project that momentarily drops
   out of the top-`limit` ranking clears the filter rather than showing an empty list.
-- **The empty state names its own cause** — `SessionList` has two empty branches, not one.
+- **The empty state names its own cause** — `sessions/EmptyState.tsx` has two empty branches, not one.
   `describeEmpty(sessions, view, nowMs)` in `lib/filterSort.ts` runs on the *unfiltered*
   payload and returns `{ payloadEmpty, total, culprits }`, where `culprits` lists which of
   the three facets (projects → statuses → window, fixed order) rejected at least one row.
@@ -48,11 +49,20 @@ override it (see `dashboard.section` below).
   on `sessions` rather than falling through `App.tsx`'s chain to Settings.
   A `?session=` deep link outranks both and forces
   `sessions` (see the URL-param note below);
+  `dashboard.layout` (which of the five shapes the switcher was left on — the shape note
+  below, and [settings](settings.md); guarded by `isLayout` inside `resolveLayout`, so a
+  stale or hand-edited value falls back to `board`);
   `dashboard.chatFilter` (the chat drawer's all/text/you filter — see [chat](chat.md); validated
   with `isChatFilter` on read, so a stale value falls back to `all`);
-  `dashboard.analyticsView` (the Analytics tab's own facets — see [analytics](analytics.md));
-  `dashboard.answerToken` (see [remote-answer](remote-answer.md)); `management.scope` and
-  `management.collapsed` (see [management](management.md)).
+  `dashboard.analyticsView` (the Analytics tab's own facets) and
+  `dashboard.analyticsLayout` (which of that tab's two shapes the switcher was left on,
+  a bare `AnLayout` string guarded by `isAnLayout` on read — both see
+  [analytics](analytics.md));
+  `dashboard.answerToken` (see [remote-answer](remote-answer.md)); `management.scope`,
+  `management.type` (which of the type column's rows the item column is showing) and
+  `management.collapsed` (see [management](management.md) — all three resolve during render,
+  so a scope that aged out, a type the filter emptied and a sub-group that no longer exists
+  fall back rather than stranding the page).
 - **Client-only, zero deps** — no backend, and nothing here is shareable/bookmarkable by
   design. The one URL param in the app is the opposite of persistence: `?session=<id>`, the
   deep link a tapped push notification opens (`lib/deepLink.ts`, put in ntfy's `Click` header
@@ -60,12 +70,59 @@ override it (see `dashboard.section` below).
   once, memoises the answer for its two callers (`AppShell` picking the section,
   `SessionsView` opening the drawer), and strips it from the URL via `history.replaceState`,
   precisely so a refresh or a bookmark does *not* replay it.
-- **Not persisted:** row-expansion state (`SessionList.tsx` `expandedIds`), the open chat
-  drawer (`SessionsView.tsx` `chatId`, seeded from the deep link above), and the
+- **Which of the five shapes draws the list is deliberately NOT in `dashboard.view`.** It
+  used to be a `View` field, which made one click in the switcher the shape every future load
+  opened in. The shape is not a filter, and it does not belong in the object the filters are
+  persisted in. It now works exactly like the section does, one key over:
+  `dashboard.layout` (a bare `Layout` string) is **always written** by the switcher, and
+  `defaultLayout` in `dashboard.settings` (see [settings](settings.md)) decides whether a
+  load reads it back. `resolveLayout(settings.defaultLayout, stored)` — pure, in
+  `lib/settings.ts`, unit-tested — is the whole rule: a concrete shape wins outright and the
+  stored value is not consulted; `last` (the default) replays it; `last` with nothing or junk
+  stored lands on `DEFAULT_LAYOUT` (`board`), the fail-open `isLayout` gives it. Resolved in
+  `SessionsView`'s `useState` initializer, so there is no flash of the wrong shape.
+  Writing the key even while a concrete shape is pinned is deliberate: flipping the setting
+  back to **Last used** then resumes from the shape you were actually using, not from a value
+  frozen when you pinned one.
+  ⚠️ `'last'` is a *setting* value only — it is **not** in `LAYOUTS`, which is the toolbar's
+  own button list. The picker's options are the separate derived `LAYOUT_OPTIONS`
+  (`'last'` prepended to `LAYOUTS`, the shape `LANDING_OPTIONS` has), so the switcher stays
+  five buttons while the picker and the validator still cannot drift from it.
+- **The phone draws three of the five.** List is a seven-column table and Split is a
+  two-pane master/detail, and neither survives a 375px measure, so under `md` (768px)
+  (`hooks/useNarrow.ts`, mirroring the narrow block in `styles.css`) the switcher offers
+  board, tiles and triage only. Two *different* coercions, deliberately:
+  - `drawableLayout(layout, narrow)` (`lib/filterSort.ts`) changes only what is **drawn**.
+    `dashboard.layout` goes on saying `split` while a narrow window draws the board, so
+    widening the window — or opening the same board on the laptop — comes straight back to
+    the shape you were using, with nothing to re-pick.
+  - `layoutForWidth(defaultLayout, narrow)` (`lib/settings.ts`) is **written back**, by an
+    effect in `SettingsView`. The picker on a phone lists `layoutOptions(true)`, and a
+    `<select>` holding a value none of its options carry renders blank — so a `list`/`split`
+    default becomes `board` on that device. The setting is per-device already, which is what
+    makes the rewrite affordable.
+  Both are pure and unit-tested (`test/filter-sort.test.ts`, `test/client-settings.test.ts`);
+  `clampSettings` stays width-agnostic and keeps accepting all six picker values, so a blob
+  written on a laptop still validates on a phone.
+- **Analytics keeps the same split, one key over.** Its shape is `dashboard.analyticsLayout`,
+  separate from `dashboard.analyticsView` for the reason `dashboard.layout` is separate from
+  `dashboard.view`: a shape is not a filter. Two differences from the Sessions side, both
+  because the section is smaller: there is **no `defaultLayout` setting** for it — a stored
+  shape is always replayed, with `isAnLayout` failing open to `split` — and the width
+  coercion has only the `drawableAnLayout` half. Nothing is written back, because nothing
+  pins the tab's shape from Settings.
+- **The phone draws one of Analytics' two shapes.** Split is a two-pane master/detail there
+  too, so under `md` (768px) `anLayoutsFor(true)` is tiles alone and `drawableAnLayout('split',
+  true)` draws tiles while the key goes on saying `split`. With one shape left, the switcher
+  is **dropped from the markup entirely** rather than left as a lone tab that switches to
+  itself — the row is then the count and the filter/sort track, which is what it was before
+  the switcher existed.
+- **Not persisted:** which cards are open (`SessionsView.tsx` `expanded`) and the split
+  view's inspected session (`splitId`), the open chat drawer (`SessionsView.tsx` `chatId`, seeded from the deep link above), and the
   [launch panel](spawn.md) (`SessionsView.tsx` `spawnOpen` — a one-shot form, not a view
   setting) stay ephemeral — session IDs churn, so restored expansions and drawers would
   mostly be stale.
-- **Clearing them all** — Settings → Reset this device removes every key listed above
+- **Clearing them all** — Settings → Local › Reset this browser removes every key listed above
   (`OWNED_KEYS` in `hooks/useSettings.tsx`) and restores the defaults. It touches nothing on the
   server and nothing in `~/.claude`. Add a key here and it belongs in that list too.
 
@@ -75,7 +132,12 @@ override it (see `dashboard.section` below).
     - client/src/App.tsx
     - client/src/components/SessionsView.tsx
     - client/src/components/Toolbar.tsx
+    - client/src/components/settings/SettingsView.tsx
     - client/src/lib/filterSort.ts
+    - client/src/lib/settings.ts
+    - client/src/lib/analyticsFilterSort.ts
+    - client/src/components/analytics/AnalyticsView.tsx
+    - client/src/hooks/useSettings.tsx
   kind: subsystem
   verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
 -->

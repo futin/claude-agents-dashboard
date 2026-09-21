@@ -1,4 +1,5 @@
 import { useSessionDetail } from '../hooks/useSessionDetail';
+import { agentTypeLabel } from '../lib/agentLabel';
 import { fmtDuration, fmtTok } from '../lib/format';
 import type { AgentJob } from '../../../shared/types';
 
@@ -59,13 +60,14 @@ export function SessionDetail({ id }: { id: string }) {
         <span className="ds-done">{detail.finished} finished</span>
         <span className="ds-total">{detail.agents.length} agents</span>
       </div>
-      {detail.agents.length === 0 ? (
-        <div className="detail-empty">No agents launched this session.</div>
-      ) : (
+      {/* No empty-state line: the `0 agents` in the summary above already says it. */}
+      {detail.agents.length > 0 && (
         <>
           <div className="agents">
             {detail.agents.map(a => {
               const start = a.startedAt ? Date.parse(a.startedAt) : NaN;
+              // Only an informative subagent_type earns a column here (bug-24).
+              const typeLabel = agentTypeLabel(a.type);
               let bar: { left: number; width: number } | null = null;
               if (range && Number.isFinite(start)) {
                 const end = a.endedAt ? Date.parse(a.endedAt) : now;
@@ -78,7 +80,7 @@ export function SessionDetail({ id }: { id: string }) {
                 <div key={a.id} className="agent-block">
                   <div className="agent">
                     <span className={`ag-pill ${a.status}`}>{a.status === 'running' ? 'running' : 'done'}</span>
-                    <span className="ag-type">{a.type || 'agent'}</span>
+                    {typeLabel && <span className="ag-type">{typeLabel}</span>}
                     <span className="ag-desc">{a.description}</span>
                     <span className="ag-dur">{agentMeta(a, now)}</span>
                   </div>

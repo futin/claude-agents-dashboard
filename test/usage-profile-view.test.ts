@@ -13,9 +13,10 @@ import {
   profileTip,
   nextWeekStartMs,
   fmtObserved,
+  fmtUntil,
+  forecastStats,
   TRUST_FLOOR_MIN
 } from '../client/src/lib/usageProfile.js';
-import { Y_MAX } from '../client/src/lib/walkChart.js';
 import type { ForecastStep, UsageProfileCell } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -318,10 +319,20 @@ export function run(): number {
     assert.ok(profileGlossary(0.07).find(e => e.key === 'ink')!.text.includes('7%'));
   })) p++; else f++;
 
-  if (test('profileGlossary: the two model constants are read, never re-typed', () => {
+  if (test('profileGlossary: the model constant is read, never re-typed', () => {
     const g = profileGlossary(0.42);
     assert.ok(g.find(e => e.key === 'evidence')!.text.includes(String(TRUST_FLOOR_MIN)));
-    assert.ok(g.find(e => e.key === 'ceiling')!.text.includes(String(Y_MAX)));
+  })) p++; else f++;
+
+  if (test('profileGlossary: the empty rule is defined without quoting a scale figure', () => {
+    // The plot's floor is a *ratio* now — the debt band is capped at the height
+    // of the headroom above it — so a number here would be a figure the chart
+    // never draws. The old `ceiling` text named a fixed 130% and had to go with
+    // the fixed domain.
+    const text = profileGlossary(0.42).find(e => e.key === 'ceiling')!.text;
+    assert.ok(text.includes('empty'), text);
+    assert.ok(/measured/.test(text) && /guess/.test(text), 'both deficit inks are named');
+    assert.ok(!/\d+%/.test(text), 'no invented scale figure: ' + text);
   })) p++; else f++;
 
   if (test('profileGlossary: every confidence state is documented, with the ok gate', () => {
@@ -336,6 +347,112 @@ export function run(): number {
     const g = profileGlossary(0.42);
     assert.strictEqual(profileTip('ink', 0.42), g.find(e => e.key === 'ink')!.text);
     assert.strictEqual(profileTip('cell', 0.42), g[0].text);
+  })) p++; else f++;
+
+  // ── the figure strip ──
+
+  if (test('fmtUntil: two units at most, and never a negative distance', () => {
+    const t0 = Date.parse('2026-09-09T12:00:00Z');
+    assert.strictEqual(fmtUntil(t0, t0 + 52 * 3_600_000), '2d 4h');
+    assert.strictEqual(fmtUntil(t0, t0 + 48 * 3_600_000), '2d', 'a whole day drops the hours');
+    assert.strictEqual(fmtUntil(t0, t0 + 5 * 3_600_000 + 10 * 60_000), '5h 10m');
+    assert.strictEqual(fmtUntil(t0, t0 + 7 * 60_000), '7m');
+    assert.strictEqual(fmtUntil(t0, t0 - 3_600_000), 'now', 'the past is not a countdown');
+    assert.strictEqual(fmtUntil(t0, Number.NaN), 'now');
+  })) p++; else f++;
+
+  if (test('forecastStats: the five figures, in the order the page reads them', () => {
+    const now = new Date(2026, 8, 9, 12, 0, 0).getTime();
+    const tiles = forecastStats({
+      utilizationPct: 61,
+      resetsAt: new Date(2026, 8, 14, 9, 0, 0).toISOString(),
+      exhaustAt: new Date(2026, 8, 11, 16, 0, 0).toISOString(),
+      dutyCycle: 0.34,
+      hoursLeft: 117,
+      activeHours: 40,
+      hasWalk: true,
+      progress: { touched: 83, totalMin: 860, atFloor: 7, trusted: 51 },
+      confidence: 'ok',
+      nowMs: now
+    });
+    assert.deepStrictEqual(tiles.map(t => t.key),
+      ['window', 'crossing', 'duty', 'observed', 'confidence']);
+    assert.strictEqual(tiles[0].value, '61%');
+    assert.ok(tiles[0].sub.includes('resets Mon 09:00'), tiles[0].sub);
+    assert.strictEqual(tiles[1].value, 'Fri 16:00');
+    assert.ok(tiles[1].sub.includes('2d 4h from now'), tiles[1].sub);
+    assert.strictEqual(tiles[2].value, '34%');
+    assert.strictEqual(tiles[2].sub, '40 of 117 hours worked');
+    assert.strictEqual(tiles[3].value, '83');
+    assert.strictEqual(tiles[3].unit, ' / 168');
+    assert.strictEqual(tiles[4].value, 'ok');
+    assert.strictEqual(tiles[4].term, 'confidence', 'only this one carries an ⓘ');
+  })) p++; else f++;
+
+  if (test('forecastStats: a missing figure is a dash, never a fabricated zero', () => {
+    const tiles = forecastStats({
+      utilizationPct: null, resetsAt: null, exhaustAt: null, dutyCycle: null,
+      hoursLeft: 0, activeHours: 0, hasWalk: false,
+      progress: { touched: 0, totalMin: 0, atFloor: 0, trusted: 0 },
+      confidence: 'none', nowMs: Date.now()
+    });
+    assert.strictEqual(tiles[0].value, '—');
+    assert.strictEqual(tiles[0].sub, '', 'no reset to name');
+    assert.strictEqual(tiles[2].value, '—');
+    assert.strictEqual(tiles[2].sub, '');
+    assert.strictEqual(tiles[3].value, '0', 'a counted zero is a real zero');
+  })) p++; else f++;
+
+  if (test('forecastStats: the crossing warns, and a coasting week says so instead', () => {
+    const base = {
+      utilizationPct: 20, resetsAt: null, dutyCycle: 0.2, hoursLeft: 10, activeHours: 2,
+      hasWalk: true,
+      progress: { touched: 1, totalMin: 60, atFloor: 1, trusted: 0 },
+      confidence: 'ok' as const, nowMs: Date.now()
+    };
+    const coasting = forecastStats({ ...base, exhaustAt: null });
+    assert.strictEqual(coasting[1].value, 'none');
+    assert.strictEqual(coasting[1].warn, false);
+    assert.ok(coasting[1].sub.includes('coasts'), coasting[1].sub);
+    // Measured and forecast are marked separately: a quiet week must not wear
+    // the projection's verdict.
+    assert.strictEqual(coasting[0].warn, false, '20% is not an alarming window');
+    const spent = forecastStats({ ...base, utilizationPct: 88, exhaustAt: null });
+    assert.strictEqual(spent[0].warn, true, 'but 88% is');
+  })) p++; else f++;
+
+  if (test('forecastStats: with no walk at all the crossing is a dash, not a coasting week', () => {
+    // The absent branch of `/api/usage/profile`: recording off (or no rate, or
+    // no window) sends `walk: []` with `exhaustAt: null` — the same null a walk
+    // that never crosses sends. Only the second one licenses "coasts".
+    const base = {
+      utilizationPct: 20, resetsAt: null, exhaustAt: null, dutyCycle: null,
+      hoursLeft: 0, activeHours: 0,
+      progress: { touched: 0, totalMin: 0, atFloor: 0, trusted: 0 },
+      confidence: 'none' as const, nowMs: Date.now()
+    };
+    const none = forecastStats({ ...base, hasWalk: false });
+    assert.strictEqual(none[1].value, '—', 'no projection is a dash, like every other missing figure');
+    assert.strictEqual(none[1].warn, false);
+    assert.ok(!none[1].sub.includes('coast'), none[1].sub);
+    assert.strictEqual(none[1].sub, 'nothing to project from');
+    // The same input with a walk behind it keeps today's wording exactly.
+    const walked = forecastStats({ ...base, hasWalk: true });
+    assert.strictEqual(walked[1].value, 'none');
+    assert.strictEqual(walked[1].sub, 'the week coasts to its reset');
+  })) p++; else f++;
+
+  if (test('forecastStats: an unfinished profile warns on confidence, not on the counters', () => {
+    const tiles = forecastStats({
+      utilizationPct: 10, resetsAt: null, exhaustAt: null, dutyCycle: 0.1,
+      hoursLeft: 10, activeHours: 1, hasWalk: true,
+      progress: { touched: 12, totalMin: 300, atFloor: 3, trusted: 0 },
+      confidence: 'thin', nowMs: Date.now()
+    });
+    assert.strictEqual(tiles[4].warn, true);
+    assert.strictEqual(tiles[3].warn, undefined);
+    assert.ok(tiles[4].sub.includes('0 carrying a weight'), tiles[4].sub);
+    assert.ok(tiles[4].sub.includes('3 at the floor'), tiles[4].sub);
   })) p++; else f++;
 
   console.log('\n  ' + p + ' passed, ' + f + ' failed');

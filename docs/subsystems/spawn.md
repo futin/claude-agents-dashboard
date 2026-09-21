@@ -195,7 +195,7 @@ poll and swallow any failure before the UI could render it. A resume entry leave
 store the ordinary ways instead: `LAUNCH_TTL_MS` (60s) while `launching`, `FAIL_TTL_MS`
 after a failure, or `stopSession`. Two visible consequences: a `launching` resume holds one
 of the `MAX_LAUNCHING` slots for up to 60s (so resumes count toward the accident rail,
-which is right — they are real processes), and the client (`SessionList`) hides a
+which is right — they are real processes), and the client (`SessionsView`) hides a
 `launching` resume phantom — the real row is the progress indicator — while still
 rendering a `failed` one, which is the only signal a broken resume gets
 (`LaunchingSession.resume` carries the flag across the contract).
@@ -218,7 +218,7 @@ Once the launch is adopted it is an ordinary row — which was the problem: noth
 said that this session appears in **no other list**, not the desktop app's sidebar (RC or
 not), not `claude.ai`. So `Session.surface`
 (`local | dashboard | cloud`) carries that, and a `sdk-cli` transcript — what `-p` writes
-— renders a cyan `dashboard` pill on the row and in the chat drawer's header.
+— renders a cyan `dashboard` pill on the row and in the chat modal's sidecar facts.
 
 It is derived from the transcript's `entrypoint` field, not from this module's store: the
 store drops an entry at adoption by charter, and a mark that vanished three seconds after
@@ -463,6 +463,40 @@ Stopping a still-`launching` entry is unchanged: SIGTERM the *handle* (not the g
 delete the entry immediately, so a launch the user stopped vanishes rather than lingering as
 a `failed` row for `FAIL_TTL_MS`, labelled as an error they never actually hit.
 
+## The launch form is a modal
+
+It used to be a `.qpanel` pinned into the Sessions column, in the wait panels' chrome —
+the same family as `QuestionPanel`/`MessagePanel`, tinted cyan instead of amber. That
+family is for *holds*: things a session is waiting on you for. A launch is the opposite,
+a compose surface opened on purpose, so it now floats like the chat modal
+(`.claude/DESIGN.md` §8.7, mock `#spawn`): `.spawn-back` scrim, a 620 px `.spawn` sheet
+with the shell's lift, full-screen below 700 px where the sheet with margins would not
+fit.
+
+Inside it is one column read top to bottom — project, prompt (with its 4 000 counter),
+name, then model / effort / permission as a triplet, then remote control — which is the
+one shape that needed no second layout for a phone. Four others were drawn and dropped
+in the mock: a sidecar with the project list in its own column, a composer with every
+flag as a chip under the prompt, a Settings-row ledger, and a launchpad of pickable
+tiles.
+
+Nothing about *what* it does changed: same request, same defaults, same ceiling-aware
+permission list. Two rules are worth stating because they are easy to break:
+
+- **Every exit is the cancel button's exit.** ✕, Escape, the scrim and the browser's
+  back all route through one `close()` that refuses while `pending` — the same guard
+  `cancel` has always carried. Without it a stray tap on the scrim unmounts the
+  component holding the in-flight request's own `pending` flag.
+- **The boolean is the board's pill switch**, the `.set-seg` Off/On Settings already
+  draws, not a second toggle shape invented for this modal. `remoteControl` still
+  defaults ON: a launch from here is phone-first, which is exactly when account
+  visibility is wanted.
+
+The one thing the modal shows that the panel did not: when the host sets a ceiling, the
+permission triplet carries a line under it naming that ceiling
+(`host ceiling · <mode> or below (SPAWN_MAX_PERMISSION)`) instead of hiding the reason in
+a `title` attribute.
+
 ## The pieces
 
 | Piece | What it does |
@@ -475,15 +509,15 @@ a `failed` row for `FAIL_TTL_MS`, labelled as an error they never actually hit.
 | `client/src/hooks/useStopSession.ts` | POSTs the stop, same bearer-token pattern as `useSpawn` |
 | `serveSessions` wiring | calls `adoptLaunched(ids)` then `listLaunching()` before every `/api/sessions` response, so `launching` rides the poll the client already makes |
 | `serveHealth` wiring | publishes `spawnAvailable` (`probeSpawn`) and `spawnMaxPermission` (`config.spawnMaxPermission`) |
-| `client/src/components/SpawnPanel.tsx` | the launch form — project picker, prompt textarea with the reply composer's own `MicButton` in its action row, name/model/effort/permission selects (model and effort start at the per-device Settings defaults, `spawnDefaultModel`/`spawnDefaultEffort` in `client/src/lib/settings.ts`, where `''` still means "send no flag and let the CLI decide"); own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
+| `client/src/components/SpawnPanel.tsx` | the launch form, as a **modal** (below) — project picker, prompt textarea with the reply composer's own `MicButton` in the foot, name on its own line, then model/effort/permission as a triplet (model and effort start at the per-device Settings defaults, `spawnDefaultModel`/`spawnDefaultEffort` in `client/src/lib/settings.ts`, where `''` still means "send no flag and let the CLI decide"), and remote control as the board's pill switch; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
 | `client/src/hooks/useSpawn.ts` | POSTs the request, the same bearer-token pattern as `useRemoteAnswer`'s toggle |
 | `client/src/lib/spawnOptions.ts` | the client's copy of `MODELS`/`EFFORTS`/`PERMISSION_MODES` (duplicated, not imported — the FE/BE boundary is `shared/types.ts` alone — kept honest by `test/spawn-options.test.ts` asserting byte-for-byte equality against the server's arrays) and `allowedPermissionModes` |
 | The plate's `+ New` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
-| `SessionList`'s phantom row | renders each `launching` entry above the real rows — project, truncated prompt, `starting…` or (for `failed`) the error — and disappears on its own once the real row adopts the id; never interactive |
+| each view's phantom row | renders each `launching` entry at the head of its list — project, truncated prompt, `starting…` or (for `failed`) the error — and disappears on its own once the real row adopts the id; never interactive |
 | `sessionSurface` (`server/lib/scan.ts`) | maps the transcript's `entrypoint` → `Session.surface`; `sdk-cli` ⇒ `dashboard`, everything else ⇒ `local` |
 | `client/src/components/ResumePanel.tsx` | the resume composer pinned in an ended dashboard session's chat drawer — textarea + mic + *resume session*, POSTing `useSpawn().launch({prompt, resume: id})` |
 | `client/src/lib/resume.ts` | `resumeEligible` — the pure gate deciding when the drawer offers that composer (dashboard surface, nothing pending, turn over, spawn available); unit-tested like every other client lib |
-| `client/src/lib/surface.ts` | the pill's label + tooltip, one copy shared by `SessionRow` and the `ChatDrawer` header |
+| `client/src/lib/surface.ts` | the pill's label + tooltip, one copy shared by the session views (`sessions/atoms.tsx`) and the `ChatDrawer` header |
 
 ## Endpoints
 
@@ -653,8 +687,8 @@ new reason:
     - client/src/components/SpawnPanel.tsx
     - client/src/components/ResumePanel.tsx
     - client/src/components/ChatDrawer.tsx
-    - client/src/components/SessionList.tsx
-    - client/src/components/SessionRow.tsx
+    - client/src/components/SessionsView.tsx
+    - client/src/components/sessions/atoms.tsx
     - client/src/hooks/useSpawn.ts
     - client/src/hooks/useStopSession.ts
     - client/src/lib/resume.ts

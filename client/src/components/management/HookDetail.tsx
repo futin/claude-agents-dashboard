@@ -1,6 +1,4 @@
-import { useState } from 'react';
-
-import { FileViewer } from './FileViewer';
+import { FileBlock } from './FileBlock';
 import type { HookInfo } from '../../../../shared/types';
 
 interface Props {
@@ -9,13 +7,11 @@ interface Props {
 
 /**
  * Structured hook card — event, matcher, command, and the resolved script's
- * content. The declaring settings/hooks file is behind a toggle so nobody has
- * to hunt through the whole JSON array again; FileViewer only mounts (and
- * fetches) once toggled.
+ * content. The declaring settings/hooks file is no longer behind a bespoke
+ * `show file` toggle: it is the same foldable FileBlock every other file on
+ * the page gets, so it reads (and folds) like all of them.
  */
 export function HookDetail({ hook }: Props) {
-  const [showDeclaring, setShowDeclaring] = useState(false);
-
   return (
     <>
       <div className="mdetail-head">
@@ -28,18 +24,11 @@ export function HookDetail({ hook }: Props) {
       {hook.scriptPath !== null ? (
         <>
           <div className="mdetail-label">script</div>
-          <div className="mdetail-path">{hook.scriptPath}</div>
-          <FileViewer path={hook.scriptPath} />
+          <FileBlock path={hook.scriptPath} kind="text" />
         </>
       ) : null}
-      <div className="mdetail-label">
-        declared in
-        <button className="tb-dir" onClick={() => setShowDeclaring(s => !s)}>
-          {showDeclaring ? 'hide file' : 'show file'}
-        </button>
-      </div>
-      <div className="mdetail-path">{hook.declaredIn}</div>
-      {showDeclaring ? <FileViewer path={hook.declaredIn} pretty /> : null}
+      <div className="mdetail-label">declared in</div>
+      <FileBlock path={hook.declaredIn} kind="json" />
     </>
   );
 }

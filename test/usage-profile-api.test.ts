@@ -151,12 +151,18 @@ export function run(): number {
       offsetMinutes: 0
     });
     const json = JSON.stringify(r);
+    // An allowlist, not a spot check: a field added to the response has to be
+    // named here, which is the moment to ask whether it discloses a sample.
     assert.deepStrictEqual(
       Object.keys(r).sort(),
-      ['cells', 'confidence', 'exhaustAt', 'globalMean', 'recording', 'walk', 'walkAbsent']
+      ['cells', 'confidence', 'dutyCycle', 'exhaustAt', 'globalMean', 'recording',
+        'resetsAt', 'utilizationPct', 'walk', 'walkAbsent']
     );
     assert.ok(!json.includes('.jsonl'), 'no log path may leak');
-    assert.ok(!json.includes('utilization'), 'no raw sample may leak');
+    assert.ok(!json.includes('ratePerHour'), 'no raw sample may leak');
+    // `utilizationPct` is the window's own published figure — the same one the
+    // header prints — not a sample out of the ledger.
+    assert.strictEqual(r.utilizationPct, 40);
     assert.deepStrictEqual(
       Object.keys(r.cells[0]).sort(),
       ['hourOfWeek', 'observedMin', 'staleWeeks', 'weight']

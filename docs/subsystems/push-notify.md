@@ -2,7 +2,7 @@
 
 The dashboard publishes a push to an [ntfy](https://ntfy.sh) topic when a session starts
 needing you. Tapping it opens that session's chat. Off by default; every switch lives in
-Settings → **Push notifications · every device**. Per-machine setup — choosing a topic,
+Settings → **Shared › Push notifications**. Per-machine setup — choosing a topic,
 subscribing the phone, the Stop hook — lives in
 [push-notify-setup](../workflows/push-notify-setup.md).
 
@@ -46,7 +46,7 @@ session that existed at the time. A **headless session spawned from the dashboar
 there is no CLI in front of it, so there is no CLI notification to duplicate. That is the whole
 argument, and it is why this layer is scoped to exactly that surface and nothing else —
 `notifyKind` in `client/src/lib/webNotify.ts` returns `null` for every other row before it looks
-at anything else. Settings → **Notify this browser · this device**, off by default.
+at anything else. Settings → **Local › Notify this browser**, off by default.
 
 Three events, not four:
 
