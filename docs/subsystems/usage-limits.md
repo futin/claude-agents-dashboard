@@ -1,7 +1,9 @@
-# Usage limits (header bars)
+# Usage limits (the account gauges)
 
-The header shows two mini progress bars — **5h** and **Week** — the same account
-rate-limit utilization Claude Code's `/usage` reports. Unlike everything else in the app,
+The shell's account chip shows two progress bars — **5h** and **Week** — the same account
+rate-limit utilization Claude Code's `/usage` reports: as micro-meters on the chip itself,
+full size in its popover. Where that chip lives and how it is fed is
+[account-header](account-header.md); everything below is where the numbers come from. Unlike everything else in the app,
 these are **not on disk**: `lib/usage.ts` fetches them live from Anthropic using your
 local credentials. Under each bar sits a **time strip** (`lib/usage-pace.ts` +
 `client/src/lib/pace.ts`) that answers the question a bare percentage can't: *at this
@@ -38,16 +40,20 @@ pace, do I run dry before the window resets?*
   without ever getting a socket — `https` can only time out a socket it *has* — latched the
   guard permanently and froze `usageStatus` (seen live: a stale `token-expired` served for
   hours against a valid token, curable only by restarting the server).
-- **Wiring:** `SessionsResponse.usage?: UsageLimits | null` (in `shared/types.ts`);
-  attached in `api.ts` (both success and error branches) only when `config.showUsage`.
+- **Wiring:** `SessionsResponse.usage?: UsageLimits | null` and the identical pair on
+  `AccountResponse` (both in `shared/types.ts`); attached in `api.ts` — on the sessions
+  snapshot's success *and* error branches, and on `GET /api/account` — only when
+  `config.showUsage`. The chip reads the `/api/account` copy (30s); the sessions
+  snapshot keeps its own because nothing else would make the 3s poll carry it.
   Still **zero npm deps** — `https` + `child_process` are Node built-ins.
-- **Status:** `SessionsResponse.usageStatus` says why bars are/aren't shown: `ok`,
+- **Status:** `usageStatus`, on both bodies, says why bars are/aren't shown: `ok`,
   `token-expired` (stored token past expiresAt), `signed-out` (the credential is present
   but blank — `claude auth logout` leaves it that way), `unavailable` (any other fail-open
   cause, incl. the endpoint's own 429 rate limit). The client renders bars only on `ok`;
-  `token-expired` shows a plain "token expired" hint and `signed-out` shows
-  "signed out — run claude auth login" (no bars, no action button — the dashboard cannot
-  drive an interactive OAuth login). `unavailable` stays silent: most of what lands there
+  `token-expired` and `signed-out` each swap the chip for an empty ring and put the
+  remedy in the popover as visible text — `claude auth login` for the second, "it renews
+  itself" for the first (no action button either way: the dashboard cannot drive an
+  interactive OAuth login). See [account-header](account-header.md) §States. `unavailable` stays silent: most of what lands there
   (non-macOS host, denied keychain read, network) is not something the reader can act on.
   The mapping is `statusForToken()` in `lib/usage.ts`, and `pickTokenState()` resolves the
   three credential stores when they disagree (`ok` > `expired` > `signed-out` > `missing`;
@@ -1527,7 +1533,7 @@ than four days of data.
     - scripts/probe-usage-split.ts
     - scripts/check-token-weights.ts
     - server/api.ts
-    - client/src/components/AsideAccount.tsx
+    - client/src/components/HeaderAccount.tsx
     - client/src/components/usage/
   kind: subsystem
   verified: f436519f31ef4120521792db7658e2bc5431f0e9

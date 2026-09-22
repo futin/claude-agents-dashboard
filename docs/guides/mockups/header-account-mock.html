@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en" data-theme="daylight">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Header account chip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── tokens: verbatim from client/src/styles.css ─────────────────────────── */
+:root,[data-theme="midnight"]{
+  color-scheme:dark;
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --edge:rgba(255,255,255,.05);--hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--amber:#ffb03a;--mustard:#d1ba52;--cyan:#55d0dd;
+  --red:#e0533f;--magenta:#cf6f9e;--on-accent:#0c1220;
+  --scrim:rgba(4,8,16,.66);--shadow:rgba(0,0,0,.4);--shadow2:rgba(0,0,0,.5);
+  --font:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+[data-theme="daylight"]{
+  color-scheme:light;
+  --board:#f4f4f3;--steel:#ededec;--strip:#ffffff;--strip-hi:#f2f2f1;
+  --edge:rgba(0,0,0,.03);--hairline:#eaeae8;--hairline2:#dcdcda;
+  --ink:#131313;--ink2:#6e6e6e;--ink3:#a0a0a0;
+  --green:#5fa92c;--amber:#c4761f;--mustard:#9a8712;--cyan:#3f8f14;
+  --red:#b03b28;--magenta:#6b52a8;--on-accent:#ffffff;
+  --scrim:rgba(19,19,19,.28);--shadow:rgba(0,0,0,.06);--shadow2:rgba(0,0,0,.1);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--board);color:var(--ink);font-family:var(--font);
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+/* ── page chrome (mock harness) ──────────────────────────────────────────── */
+.page{max-width:1180px;margin:0 auto;padding:28px 20px 120px}
+.side .nav span{white-space:nowrap}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:26px}
+.page-head h1{font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:.01em}
+.page-head p{margin:0;font-size:13px;color:var(--ink2);max-width:74ch;line-height:1.5}
+.themes{display:flex;gap:2px;background:var(--steel);border-radius:999px;padding:3px}
+.themes button{font-size:12px;font-weight:500;color:var(--ink2);border-radius:999px;padding:6px 12px}
+.themes button[aria-pressed="true"]{background:var(--strip);color:var(--ink);box-shadow:0 1px 2px var(--shadow)}
+
+.variant{margin-bottom:34px}
+.vlabel{display:flex;align-items:baseline;gap:10px;margin:0 0 8px 2px}
+.vnum{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+.vname{font-size:15px;font-weight:600}
+.vnote{font-size:12.5px;color:var(--ink2);margin:0 0 12px 2px;max-width:88ch;line-height:1.5}
+
+/* ── the shell, as redesign-mock draws it ────────────────────────────────────
+   White shell, rail on the white, and the board a tinted panel tucked into the
+   rail's corner (24px radius). The header strip is that white band above the
+   board — which is what every chip below has to sit on. */
+.shell{display:grid;grid-template-columns:200px 1fr;background:var(--strip);
+  border-radius:24px;box-shadow:0 1px 3px var(--shadow)}
+.side{padding:24px 16px;display:flex;flex-direction:column;gap:4px;border-radius:24px 0 0 24px;background:var(--strip)}
+.brand{display:flex;align-items:center;gap:9px;font-size:18px;font-weight:700;line-height:1;padding:0 10px 20px}
+.dot{flex:none;width:9px;height:9px;border-radius:999px;background:var(--green)}
+.kick{display:block;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3);margin-bottom:4px}
+.nav{display:flex;flex-direction:column;gap:1px}
+.nav span{font-size:13.5px;color:var(--ink2);padding:8px 12px;border-radius:14px}
+.nav span.on{background:var(--strip-hi);color:var(--ink);font-weight:500}
+.maincol{display:flex;flex-direction:column;min-width:0}
+
+/* SPACING — one set of numbers for all five treatments.
+   The band is 50px: 7px of air, a 36px chip, 7px again. That is the whole
+   budget — the chip had to come down with it (36 tall, 26px avatar, 52px
+   meters), because a 42px chip in a 50px band leaves 4px of air and reads as
+   a bar that is about to burst. Its right edge lands 24px in from the shell,
+   the same gutter the board's own padding uses, so chip and board content
+   share one right margin. */
+.topstrip{display:flex;align-items:center;justify-content:flex-end;height:50px;padding:7px 24px}
+/* no overflow:hidden on the shell — the popover has to escape it — so the
+   board rounds its own two outer corners instead of being clipped into them. */
+.board{flex:1;background:var(--board);border-radius:24px 0 24px 0;padding:16px;min-height:230px}
+.hdr{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.seg{display:flex;gap:2px;background:var(--steel);border-radius:999px;padding:3px}
+.seg span{font-size:12.5px;color:var(--ink2);padding:6px 12px;border-radius:999px}
+.seg span.on{background:var(--strip);color:var(--ink);font-weight:600;box-shadow:0 1px 2px var(--shadow)}
+.cards{display:flex;gap:10px}
+.card{flex:1;height:62px;background:var(--strip);border:1px solid var(--hairline);border-radius:14px}
+
+/* ── the chip: geometry shared by all five, look overridden per treatment ── */
+.anchor{position:relative}
+.acct{display:flex;align-items:center;gap:10px;height:36px;padding:0 11px 0 5px;border-radius:999px}
+.acct .av{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:999px;
+  background:var(--ink);color:var(--strip);font-size:11px;font-weight:700}
+.acct .nm{font-size:12.5px;font-weight:600;line-height:1}
+.acct .meters{display:flex;gap:11px;padding-left:11px;border-left:1px solid var(--hairline)}
+.acct .m{display:grid;gap:2.5px;width:52px;text-align:left}
+.acct .mtop{display:flex;align-items:baseline;justify-content:space-between}
+.acct .mtop span{font-size:9.5px;color:var(--ink3);letter-spacing:.04em}
+.acct .mtop b{font-size:11px;font-weight:700}
+.acct .mini{position:relative;height:3.5px;border-radius:999px;background:var(--steel);overflow:hidden}
+.acct .mini i{position:absolute;inset:0 auto 0 0;border-radius:999px;background:var(--green)}
+.acct .mini i.mid{background:var(--mustard)}
+.acct .mini i.high{background:var(--red)}
+.acct .cv{width:9px;height:9px;flex:none;color:var(--ink3);transition:transform .16s}
+.acct[aria-expanded="true"] .cv{transform:rotate(180deg)}
+
+/* T1 — paper chip: the current one. White on white, held by a hairline. */
+.t1{background:var(--strip);border:1px solid var(--hairline);box-shadow:0 1px 2px var(--shadow)}
+.t1:hover{border-color:var(--hairline2)}
+
+/* T2 — bare: no box at all. Type and the meters are the object; the only rule
+   is the one already dividing identity from usage. */
+.t2{padding:0 5px}
+/* hover/open fills with the app ground — the board's own grey, not a new tint */
+.t2:hover,.t2[aria-expanded="true"]{background:var(--board)}
+
+/* T3 — recessed: the same well the board's tracks and segmented controls use.
+   No border anywhere; the fill alone separates it from the white. */
+.t3{background:var(--steel)}
+.t3 .meters{border-left-color:var(--hairline2)}
+.t3 .mini{background:var(--strip)}
+.t3:hover{background:var(--strip-hi)}
+
+/* T4 — two objects: the avatar stands free on the white, the two windows sit
+   in their own small well. Identity and usage stop pretending to be one thing. */
+.t4{gap:10px;padding:0;background:none}
+.t4 .meters{border-left:0;gap:11px;padding:5px 12px;background:var(--steel);border-radius:999px}
+.t4 .mini{background:var(--strip)}
+.t4 .av{width:30px;height:30px;font-size:12px}
+.t4:hover .meters{background:var(--strip-hi)}
+
+/* T5 — ink chip: the header's one dark object, the same black the primary
+   button uses. Reads first on a white band and never fights the board. */
+.t5{background:var(--ink);color:var(--strip)}
+.t5 .av{background:var(--strip);color:var(--ink)}
+.t5 .nm{color:var(--strip)}
+.t5 .meters{border-left-color:rgba(255,255,255,.18)}
+.t5 .mtop span{color:rgba(255,255,255,.55)}
+.t5 .mtop b{color:var(--strip)}
+.t5 .mini{background:rgba(255,255,255,.18)}
+.t5 .cv{color:rgba(255,255,255,.6)}
+.t5:hover{opacity:.92}
+
+/* ── the popover, shared ─────────────────────────────────────────────────── */
+.pop{position:absolute;right:0;top:calc(100% + 8px);z-index:20;width:320px;display:none;
+  background:var(--strip);border:1px solid var(--hairline);border-radius:16px;
+  box-shadow:0 14px 32px var(--shadow2);padding:16px;text-align:left}
+.pop.open{display:block}
+.profile{display:flex;align-items:center;gap:12px;padding-bottom:13px;margin-bottom:13px;border-bottom:1px solid var(--hairline)}
+.profile .av{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:999px;
+  background:var(--ink);color:var(--strip);font-size:15px;font-weight:700}
+.profile .nm{display:block;font-size:14px;font-weight:600;line-height:1.25}
+.profile .em{display:block;font-size:12px;color:var(--ink2);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.tag{font-size:10.5px;font-weight:600;letter-spacing:.03em;color:var(--ink2);background:var(--steel);border-radius:999px;padding:2.5px 8px}
+.tag.acc{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+.gauge{margin-bottom:14px}
+.gauge:last-of-type{margin-bottom:0}
+.grow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px}
+.glabel{font-size:12px;color:var(--ink2)}
+.glabel b{color:var(--ink);font-weight:600;font-size:13px;margin-left:5px}
+.gmeta{font-size:11px;color:var(--ink3)}
+.bar{position:relative;height:6px;border-radius:999px;background:var(--steel);overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;border-radius:999px;background:var(--green)}
+.time{position:relative;height:3px;border-radius:999px;background:var(--steel);margin-top:7px}
+.time i{position:absolute;inset:0 auto 0 0;background:var(--hairline2);border-radius:999px}
+.time u{position:absolute;top:-2px;width:1.5px;height:7px;background:var(--ink2);border-radius:1px}
+.tlabels{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink3);margin-top:5px}
+.tlabels .ok{color:var(--green);font-weight:600}
+.popfoot{display:flex;gap:6px;margin-top:14px;padding-top:13px;border-top:1px solid var(--hairline)}
+.popfoot button{flex:1;font-size:12px;font-weight:500;color:var(--ink2);background:var(--steel);border-radius:10px;padding:8px}
+.popfoot button:hover{color:var(--ink)}
+
+@media (max-width:720px){
+  .shell{grid-template-columns:1fr}
+  .side{display:none}
+  .board{border-radius:0 0 24px 24px}
+  .acct .nm{display:none}
+  .pop{width:290px}
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>Account chip on the white header</h1>
+      <p>Same chip, five ways of sitting on the header band — the problem with T1 is that a white
+         pill on a white strip is held together only by a hairline, which is the weakest mark in
+         the whole design. Spacing is identical across all five: a 50px band (7 / 36 / 7),
+         the chip's right edge on the board's own 24px gutter. Click any chip.</p>
+    </div>
+    <div class="themes">
+      <button data-t="daylight" aria-pressed="true">Daylight</button>
+      <button data-t="midnight" aria-pressed="false">Midnight</button>
+    </div>
+  </div>
+
+  <!-- ══ T1 — the current one ═══════════════════════════════════════════ -->
+  <section class="variant">
+    <div class="vlabel"><span class="vnum">T1</span><span class="vname">Paper chip (current)</span></div>
+    <p class="vnote">White fill, 1px hairline, 1px lift. Unambiguously a control — but on a white band the
+      hairline is doing all the work, and it is the first thing to disappear on a dim screen.</p>
+    <div class="shell">
+      <aside class="side">
+        <div class="brand"><span class="dot"></span><span><span class="kick">Claude</span>Dashboard</span></div>
+        <div class="nav"><span class="on">Sessions</span><span>Usage</span><span>Management</span><span>Analytics</span></div>
+      </aside>
+      <div class="maincol">
+        <div class="topstrip">
+          <div class="anchor">
+            <button class="acct t1" data-pop="p1" aria-expanded="false">
+              <span class="av">Y</span>
+              <span class="nm">Yanko</span>
+              <span class="meters">
+                <span class="m"><span class="mtop"><span>5h</span><b>4%</b></span><span class="mini"><i style="width:4%"></i></span></span>
+                <span class="m"><span class="mtop"><span>WK</span><b>2%</b></span><span class="mini"><i style="width:2%"></i></span></span>
+              </span>
+              <svg class="cv" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>
+            </button>
+            <div class="pop" id="p1">
+              <div class="profile">
+                <span class="av">Y</span>
+                <span style="min-width:0">
+                  <span class="nm">Yanko Petrov</span>
+                  <span class="em">yanko.petrov@timify.com</span>
+                  <span class="tags"><span class="tag acc">Max 5×</span><span class="tag">TIMIFY</span><span class="tag">Team tier 1</span></span>
+                </span>
+              </div>
+              <div class="gauge">
+                <div class="grow"><span class="glabel">5-hour<b>4%</b></span><span class="gmeta">4%/h · resets 20:20</span></div>
+                <div class="bar"><i style="width:4%"></i></div>
+                <div class="time"><i style="width:46%"></i><u style="left:46%"></u></div>
+                <div class="tlabels"><span>15:20</span><span class="ok">lasts → 20:20</span></div>
+              </div>
+              <div class="gauge">
+                <div class="grow"><span class="glabel">Week<b>2%</b></span><span class="gmeta">resets Sat 2:00</span></div>
+                <div class="bar"><i style="width:2%"></i></div>
+                <div class="time"><i style="width:31%"></i><u style="left:31%"></u></div>
+                <div class="tlabels"><span>Sat 2:00</span><span class="ok">lasts → Sat 2:00</span></div>
+              </div>
+              <div class="popfoot"><button>Usage detail</button><button>Settings</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="board">
+          <div class="hdr"><div class="seg"><span class="on">Board</span><span>List</span><span>Split</span><span>Tiles</span></div></div>
+          <div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ T2 — bare ══════════════════════════════════════════════════════ -->
+  <section class="variant">
+    <div class="vlabel"><span class="vnum">T2</span><span class="vname">Bare — no container</span></div>
+    <p class="vnote">No fill, no border, no shadow: the avatar, the name and the meters sit on the white and the
+      one rule left is the divider that was already there. Quietest option, and the header band stops looking
+      like a place where a card floats. Hover tints, so it still answers a pointer.</p>
+    <div class="shell">
+      <aside class="side">
+        <div class="brand"><span class="dot"></span><span><span class="kick">Claude</span>Dashboard</span></div>
+        <div class="nav"><span class="on">Sessions</span><span>Usage</span><span>Management</span><span>Analytics</span></div>
+      </aside>
+      <div class="maincol">
+        <div class="topstrip">
+          <div class="anchor">
+            <button class="acct t2" data-pop="p2" aria-expanded="false">
+              <span class="av">Y</span>
+              <span class="nm">Yanko</span>
+              <span class="meters">
+                <span class="m"><span class="mtop"><span>5h</span><b>4%</b></span><span class="mini"><i style="width:4%"></i></span></span>
+                <span class="m"><span class="mtop"><span>WK</span><b>2%</b></span><span class="mini"><i style="width:2%"></i></span></span>
+              </span>
+              <svg class="cv" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>
+            </button>
+            <div class="pop" id="p2">
+              <div class="profile">
+                <span class="av">Y</span>
+                <span style="min-width:0">
+                  <span class="nm">Yanko Petrov</span>
+                  <span class="em">yanko.petrov@timify.com</span>
+                  <span class="tags"><span class="tag acc">Max 5×</span><span class="tag">TIMIFY</span><span class="tag">Team tier 1</span></span>
+                </span>
+              </div>
+              <div class="gauge">
+                <div class="grow"><span class="glabel">5-hour<b>4%</b></span><span class="gmeta">4%/h · resets 20:20</span></div>
+                <div class="bar"><i style="width:4%"></i></div>
+                <div class="time"><i style="width:46%"></i><u style="left:46%"></u></div>
+                <div class="tlabels"><span>15:20</span><span class="ok">lasts → 20:20</span></div>
+              </div>
+              <div class="gauge">
+                <div class="grow"><span class="glabel">Week<b>2%</b></span><span class="gmeta">resets Sat 2:00</span></div>
+                <div class="bar"><i style="width:2%"></i></div>
+                <div class="time"><i style="width:31%"></i><u style="left:31%"></u></div>
+                <div class="tlabels"><span>Sat 2:00</span><span class="ok">lasts → Sat 2:00</span></div>
+              </div>
+              <div class="popfoot"><button>Usage detail</button><button>Settings</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="board">
+          <div class="hdr"><div class="seg"><span class="on">Board</span><span>List</span><span>Split</span><span>Tiles</span></div></div>
+          <div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ T3 — recessed ══════════════════════════════════════════════════ -->
+  <section class="variant">
+    <div class="vlabel"><span class="vnum">T3</span><span class="vname">Recessed well</span></div>
+    <p class="vnote">Filled with the same grey the board's tracks and segmented controls use, and no border at all.
+      On white it reads as an inset rather than a floating card — which is what the app's other controls on white
+      already do, so it needs no new material.</p>
+    <div class="shell">
+      <aside class="side">
+        <div class="brand"><span class="dot"></span><span><span class="kick">Claude</span>Dashboard</span></div>
+        <div class="nav"><span class="on">Sessions</span><span>Usage</span><span>Management</span><span>Analytics</span></div>
+      </aside>
+      <div class="maincol">
+        <div class="topstrip">
+          <div class="anchor">
+            <button class="acct t3" data-pop="p3" aria-expanded="false">
+              <span class="av">Y</span>
+              <span class="nm">Yanko</span>
+              <span class="meters">
+                <span class="m"><span class="mtop"><span>5h</span><b>4%</b></span><span class="mini"><i style="width:4%"></i></span></span>
+                <span class="m"><span class="mtop"><span>WK</span><b>2%</b></span><span class="mini"><i style="width:2%"></i></span></span>
+              </span>
+              <svg class="cv" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>
+            </button>
+            <div class="pop" id="p3">
+              <div class="profile">
+                <span class="av">Y</span>
+                <span style="min-width:0">
+                  <span class="nm">Yanko Petrov</span>
+                  <span class="em">yanko.petrov@timify.com</span>
+                  <span class="tags"><span class="tag acc">Max 5×</span><span class="tag">TIMIFY</span><span class="tag">Team tier 1</span></span>
+                </span>
+              </div>
+              <div class="gauge">
+                <div class="grow"><span class="glabel">5-hour<b>4%</b></span><span class="gmeta">4%/h · resets 20:20</span></div>
+                <div class="bar"><i style="width:4%"></i></div>
+                <div class="time"><i style="width:46%"></i><u style="left:46%"></u></div>
+                <div class="tlabels"><span>15:20</span><span class="ok">lasts → 20:20</span></div>
+              </div>
+              <div class="gauge">
+                <div class="grow"><span class="glabel">Week<b>2%</b></span><span class="gmeta">resets Sat 2:00</span></div>
+                <div class="bar"><i style="width:2%"></i></div>
+                <div class="time"><i style="width:31%"></i><u style="left:31%"></u></div>
+                <div class="tlabels"><span>Sat 2:00</span><span class="ok">lasts → Sat 2:00</span></div>
+              </div>
+              <div class="popfoot"><button>Usage detail</button><button>Settings</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="board">
+          <div class="hdr"><div class="seg"><span class="on">Board</span><span>List</span><span>Split</span><span>Tiles</span></div></div>
+          <div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ T4 — split ═════════════════════════════════════════════════════ -->
+  <section class="variant">
+    <div class="vlabel"><span class="vnum">T4</span><span class="vname">Split — free avatar + meter well</span></div>
+    <p class="vnote">Two objects instead of one: a 30px avatar standing on the white, and the two windows in their
+      own small well. Nothing has to be drawn around the name, and the account reads as a person next to a
+      readout — which is what it is.</p>
+    <div class="shell">
+      <aside class="side">
+        <div class="brand"><span class="dot"></span><span><span class="kick">Claude</span>Dashboard</span></div>
+        <div class="nav"><span class="on">Sessions</span><span>Usage</span><span>Management</span><span>Analytics</span></div>
+      </aside>
+      <div class="maincol">
+        <div class="topstrip">
+          <div class="anchor">
+            <button class="acct t4" data-pop="p4" aria-expanded="false">
+              <span class="av">Y</span>
+              <span class="nm">Yanko</span>
+              <span class="meters">
+                <span class="m"><span class="mtop"><span>5h</span><b>4%</b></span><span class="mini"><i style="width:4%"></i></span></span>
+                <span class="m"><span class="mtop"><span>WK</span><b>2%</b></span><span class="mini"><i style="width:2%"></i></span></span>
+              </span>
+              <svg class="cv" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>
+            </button>
+            <div class="pop" id="p4">
+              <div class="profile">
+                <span class="av">Y</span>
+                <span style="min-width:0">
+                  <span class="nm">Yanko Petrov</span>
+                  <span class="em">yanko.petrov@timify.com</span>
+                  <span class="tags"><span class="tag acc">Max 5×</span><span class="tag">TIMIFY</span><span class="tag">Team tier 1</span></span>
+                </span>
+              </div>
+              <div class="gauge">
+                <div class="grow"><span class="glabel">5-hour<b>4%</b></span><span class="gmeta">4%/h · resets 20:20</span></div>
+                <div class="bar"><i style="width:4%"></i></div>
+                <div class="time"><i style="width:46%"></i><u style="left:46%"></u></div>
+                <div class="tlabels"><span>15:20</span><span class="ok">lasts → 20:20</span></div>
+              </div>
+              <div class="gauge">
+                <div class="grow"><span class="glabel">Week<b>2%</b></span><span class="gmeta">resets Sat 2:00</span></div>
+                <div class="bar"><i style="width:2%"></i></div>
+                <div class="time"><i style="width:31%"></i><u style="left:31%"></u></div>
+                <div class="tlabels"><span>Sat 2:00</span><span class="ok">lasts → Sat 2:00</span></div>
+              </div>
+              <div class="popfoot"><button>Usage detail</button><button>Settings</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="board">
+          <div class="hdr"><div class="seg"><span class="on">Board</span><span>List</span><span>Split</span><span>Tiles</span></div></div>
+          <div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ T5 — ink ═══════════════════════════════════════════════════════ -->
+  <section class="variant">
+    <div class="vlabel"><span class="vnum">T5</span><span class="vname">Ink chip</span></div>
+    <p class="vnote">The header's one dark object, in the same black as the primary button and the active nav mark.
+      Nothing is asked of a hairline: the chip is the contrast. Costs the most visual weight, so it only works if
+      the account is meant to be the first thing found on the page.</p>
+    <div class="shell">
+      <aside class="side">
+        <div class="brand"><span class="dot"></span><span><span class="kick">Claude</span>Dashboard</span></div>
+        <div class="nav"><span class="on">Sessions</span><span>Usage</span><span>Management</span><span>Analytics</span></div>
+      </aside>
+      <div class="maincol">
+        <div class="topstrip">
+          <div class="anchor">
+            <button class="acct t5" data-pop="p5" aria-expanded="false">
+              <span class="av">Y</span>
+              <span class="nm">Yanko</span>
+              <span class="meters">
+                <span class="m"><span class="mtop"><span>5h</span><b>4%</b></span><span class="mini"><i style="width:4%"></i></span></span>
+                <span class="m"><span class="mtop"><span>WK</span><b>2%</b></span><span class="mini"><i style="width:2%"></i></span></span>
+              </span>
+              <svg class="cv" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>
+            </button>
+            <div class="pop" id="p5">
+              <div class="profile">
+                <span class="av">Y</span>
+                <span style="min-width:0">
+                  <span class="nm">Yanko Petrov</span>
+                  <span class="em">yanko.petrov@timify.com</span>
+                  <span class="tags"><span class="tag acc">Max 5×</span><span class="tag">TIMIFY</span><span class="tag">Team tier 1</span></span>
+                </span>
+              </div>
+              <div class="gauge">
+                <div class="grow"><span class="glabel">5-hour<b>4%</b></span><span class="gmeta">4%/h · resets 20:20</span></div>
+                <div class="bar"><i style="width:4%"></i></div>
+                <div class="time"><i style="width:46%"></i><u style="left:46%"></u></div>
+                <div class="tlabels"><span>15:20</span><span class="ok">lasts → 20:20</span></div>
+              </div>
+              <div class="gauge">
+                <div class="grow"><span class="glabel">Week<b>2%</b></span><span class="gmeta">resets Sat 2:00</span></div>
+                <div class="bar"><i style="width:2%"></i></div>
+                <div class="time"><i style="width:31%"></i><u style="left:31%"></u></div>
+                <div class="tlabels"><span>Sat 2:00</span><span class="ok">lasts → Sat 2:00</span></div>
+              </div>
+              <div class="popfoot"><button>Usage detail</button><button>Settings</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="board">
+          <div class="hdr"><div class="seg"><span class="on">Board</span><span>List</span><span>Split</span><span>Tiles</span></div></div>
+          <div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+document.querySelectorAll('.themes button').forEach(b => b.addEventListener('click', () => {
+  document.documentElement.dataset.theme = b.dataset.t;
+  document.querySelectorAll('.themes button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+}));
+
+function closeAll() {
+  document.querySelectorAll('.pop.open').forEach(el => el.classList.remove('open'));
+  document.querySelectorAll('[aria-expanded="true"]').forEach(btn => btn.setAttribute('aria-expanded', 'false'));
+}
+document.querySelectorAll('[data-pop]').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const target = document.getElementById(btn.dataset.pop);
+    const wasOpen = target.classList.contains('open');
+    closeAll();
+    if (!wasOpen) { target.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); }
+  });
+});
+document.addEventListener('click', () => closeAll());
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(); });
+</script>
+</body>
+</html>

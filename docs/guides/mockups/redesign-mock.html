@@ -211,7 +211,6 @@ button{font:inherit;color:inherit;cursor:pointer}
 /* ── sidebar ─────────────────────────────────────────────────────────────── */
 .side{
   padding:32px 20px;display:flex;flex-direction:column;gap:8px;
-  border-right:1px solid var(--border);
 }
 .brand{
   font-size:20px;font-weight:700;letter-spacing:.01em;line-height:1;
@@ -279,31 +278,147 @@ button{font:inherit;color:inherit;cursor:pointer}
 .live i{width:7px;height:7px;border-radius:var(--r-full);background:var(--green-500);display:inline-block}
 
 /* ── main column ─────────────────────────────────────────────────────────── */
-.main{background:var(--bg-app);padding:24px;display:flex;flex-direction:column;gap:16px;min-width:0}
+/* the column right of the rail: the white header strip, then the board */
+.maincol{display:flex;flex-direction:column;min-width:0;background:var(--bg-surface)}
+/* the board is a panel tucked into the rail's corner, not the page itself */
+.main{flex:1;background:var(--bg-app);padding:24px;display:flex;flex-direction:column;gap:16px;min-width:0;border-top-left-radius:var(--r-xl)}
 
-.top{display:flex;align-items:center;gap:16px;height:56px}
-.search{
-  flex:1;max-width:520px;height:48px;background:var(--bg-surface);
-  border:1px solid var(--border);border-radius:var(--r-lg);
-  display:flex;align-items:center;gap:12px;padding:0 18px;
-  color:var(--text-tertiary);font-size:14px;
+/* ── top strip + account ─────────────────────────────────────────────────
+   The board (`.main`) is a tinted panel tucked into the rail's corner: 24px of
+   the shell's own white above it and its top-left corner rounded into the
+   rail, exactly as the implementation draws it (styles.css `.main`, the
+   min-width:640px block). That white band is not padding any more — it is the
+   header, and the only thing in it is the account.
+
+   The account chip lives HERE rather than in an aside card: one pill carrying
+   who you are plus both rate windows as micro-meters, and a popover with the
+   full gauges. Every field comes from what the app can already read —
+   `~/.claude.json → oauthAccount` (name, email, organisation, seat tier, plan,
+   extra-usage flag) and the usage endpoint the aside card polls. */
+.topstrip{
+  display:flex;align-items:center;justify-content:flex-end;gap:12px;
+  /* 50px band: 7 of air, a 36px chip, 7 again. The chip is sized to the band
+     rather than the band to the chip — 36 tall, 26px avatar, 52px meters. The
+     24px right inset is the board's own gutter, so chip and board content hang
+     off one right margin. */
+  height:50px;padding:7px 24px;
 }
-.top-sp{flex:1}
-.iconbtn{
-  width:48px;height:48px;background:var(--bg-surface);border:1px solid var(--border);
-  border-radius:var(--r-lg);display:grid;place-items:center;position:relative;
+.acct-anchor{position:relative}
+/* T2 — bare: no fill, no border, no shadow. A white pill on a white band is
+   held together by a hairline, which is the weakest mark in the design and the
+   first to vanish on a dim screen; here the avatar, the name and the meters sit
+   directly on the white and the only rule left is the one already dividing
+   identity from usage. Hover and open tint, so it still answers a pointer. */
+.acct{
+  display:flex;align-items:center;gap:10px;height:36px;
+  background:none;border:0;border-radius:var(--r-full);padding:0 5px;
 }
-.iconbtn .pip{
-  position:absolute;top:12px;right:13px;width:7px;height:7px;border-radius:var(--r-full);
-  background:var(--orange-400);border:2px solid var(--bg-surface);
+/* Hover/open fills with the app ground — the same grey the board itself is
+   painted in — so the chip picks up a colour the page already uses rather than
+   introducing a fifth neutral. No border at any state. */
+.acct:hover,.acct[aria-expanded="true"]{background:var(--bg-app)}
+.acct .av,.acct-id .av{
+  flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:var(--r-full);
+  background:var(--ink-inverse);color:var(--text-on-dark);font-size:11px;font-weight:700;
 }
-.who{
-  height:48px;background:var(--bg-surface);border:1px solid var(--border);
-  border-radius:var(--r-lg);display:flex;align-items:center;gap:12px;padding:0 16px 0 8px;
+.acct .nm{font-size:12.5px;font-weight:600;line-height:1;white-space:nowrap}
+.acct .meters{display:flex;gap:11px;padding-left:11px;border-left:1px solid var(--border)}
+.acct .m{display:grid;gap:2.5px;width:52px}
+.acct .mtop{display:flex;align-items:baseline;justify-content:space-between}
+.acct .mtop span{font-size:9.5px;color:var(--text-tertiary);letter-spacing:.04em}
+.acct .mtop b{font-size:11px;font-weight:700}
+.acct .mini{position:relative;height:3.5px;border-radius:var(--r-full);background:var(--bg-track);overflow:hidden}
+.acct .mini i{position:absolute;inset:0 auto 0 0;border-radius:var(--r-full);background:var(--green-600)}
+.acct .mini i.mid{background:var(--yellow-400)}
+.acct .mini i.high{background:var(--red-500)}
+.acct .cv{width:9px;height:9px;flex:none;color:var(--text-tertiary);transition:transform .16s}
+.acct[aria-expanded="true"] .cv{transform:rotate(180deg)}
+
+/* ── signed out ──────────────────────────────────────────────────────────
+   `usageStatus: 'signed-out'` (and its sibling `token-expired`): the credential
+   is readable but blank, so there are no windows to draw and the account has no
+   name. The chip keeps its geometry — same 36px, same slot — and swaps its
+   contents: an empty ring where the avatar was, the state where the name was,
+   and the fix where the meters were. It must name the command in VISIBLE text,
+   not a title attribute: the board is read on a phone, where `title` never
+   fires, and the dashboard cannot log anyone in itself (OAuth login is an
+   interactive terminal + browser flow), so saying the command IS the whole
+   remedy. Same rule as AsideAccount's USAGE_MESSAGES.
+   `unavailable` is the fourth status and stays silent — most of what lands
+   there is not something the reader can act on — so that one renders no chip. */
+/* The band carries nothing but the account: the pages name themselves in
+   their own header band, so a title here was the same words twice. The chips
+   stay right because the strip is `flex-end`. */
+/* ── signed out ──────────────────────────────────────────────────────────
+   `usageStatus: 'signed-out'` (and its sibling `token-expired`): the credential
+   is readable but blank, so there are no windows to draw and the account has no
+   name. The chip keeps its geometry — same 36px, same slot — and swaps its
+   contents: an empty ring where the avatar was, and the state where the name
+   was. The command itself is in the popover, not the chip.
+
+   It must name that command in VISIBLE text, not a title attribute: the board
+   is read on a phone, where `title` never fires, and the dashboard cannot log
+   anyone in itself (OAuth login is an interactive terminal + browser flow), so
+   saying the command IS the whole remedy. Same rule as AsideAccount's
+   USAGE_MESSAGES. `unavailable` is the fourth status and stays silent — most of
+   what lands there is not something the reader can act on — so it draws no chip.
+
+   The empty ring is declared on its own rather than under `.acct.out`, because
+   the popover draws the same mark and a scoped rule left that copy as an
+   unstyled black glyph. */
+.ring{
+  flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:var(--r-full);
+  border:1.5px dashed var(--border-strong);color:var(--text-tertiary);
 }
-.who .av{width:34px;height:34px;border-radius:var(--r-full);background:var(--green-200);display:grid;place-items:center;font-size:13px;font-weight:600;color:var(--green-600)}
-.who .t{font-size:13px;font-weight:500;line-height:1.25}
-.who .t span{display:block;font-size:11px;font-weight:400;color:var(--text-secondary)}
+.ring svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.5;
+  stroke-linecap:round;stroke-linejoin:round}
+.ring.lg{width:34px;height:34px}
+.ring.lg svg{width:17px;height:17px}
+.acct.out .nm{color:var(--text-secondary);font-weight:500}
+.acct.out .dotwarn{flex:none;width:6px;height:6px;border-radius:var(--r-full);background:var(--orange-400)}
+
+/* the signed-out popover: no gauges to show, so it is the sentence and the fix */
+.acct-pop .out-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.acct-pop .out-head .n{font-size:14px;font-weight:600}
+.acct-pop .out-body{font-size:12.5px;line-height:1.5;color:var(--text-secondary)}
+.acct-pop .cmd{
+  display:block;margin-top:12px;background:var(--bg-track);border-radius:var(--r-md);
+  padding:10px 12px;font-size:12.5px;font-weight:600;color:var(--text-primary);
+}
+.acct-pop .out-note{margin-top:12px;font-size:11.5px;color:var(--text-tertiary);line-height:1.45}
+
+/* the popover: profile block over the two gauges the aside card used to draw */
+.acct-pop{
+  position:absolute;right:0;top:calc(100% + 8px);z-index:40;width:320px;display:none;
+  background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-lg);
+  box-shadow:var(--lift-float);padding:16px;
+}
+.acct-pop.open{display:block}
+.acct-id{display:flex;align-items:center;gap:12px;padding-bottom:13px;margin-bottom:13px;border-bottom:1px solid var(--border)}
+.acct-id .av{width:40px;height:40px;font-size:15px}
+.acct-id .who3{min-width:0}
+.acct-id .n{display:block;font-size:14px;font-weight:600;line-height:1.25}
+.acct-id .e{display:block;font-size:12px;color:var(--text-secondary);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.acct-tags span{font-size:10.5px;font-weight:600;letter-spacing:.03em;color:var(--text-secondary);background:var(--bg-track);border-radius:var(--r-full);padding:2.5px 8px}
+.acct-tags span.on{color:var(--green-600);background:var(--green-200)}
+.acct-g{margin-bottom:14px}
+.acct-g:last-of-type{margin-bottom:0}
+.acct-grow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px}
+.acct-grow .l{font-size:12px;color:var(--text-secondary)}
+.acct-grow .l b{color:var(--text-primary);font-weight:600;font-size:13px;margin-left:5px}
+.acct-grow .r{font-size:11px;color:var(--text-tertiary)}
+.acct-bar{position:relative;height:6px;border-radius:var(--r-full);background:var(--bg-track);overflow:hidden}
+.acct-bar i{position:absolute;inset:0 auto 0 0;border-radius:var(--r-full);background:var(--green-600)}
+.acct-time{position:relative;height:3px;border-radius:var(--r-full);background:var(--bg-track);margin-top:7px}
+.acct-time i{position:absolute;inset:0 auto 0 0;background:var(--border-strong);border-radius:var(--r-full)}
+.acct-time u{position:absolute;top:-2px;width:1.5px;height:7px;background:var(--text-secondary);border-radius:1px}
+.acct-tl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--text-tertiary);margin-top:5px}
+.acct-tl .ok{color:var(--green-600);font-weight:600}
+.acct-foot{display:flex;gap:6px;margin-top:14px;padding-top:13px;border-top:1px solid var(--border)}
+.acct-foot button{flex:1;font-size:12px;font-weight:500;color:var(--text-secondary);background:var(--bg-track);border:0;border-radius:var(--r-md);padding:8px}
+.acct-foot button:hover{color:var(--text-primary)}
+
 .newbtn{
   height:48px;padding:0 18px;background:var(--ink-inverse);color:var(--text-on-dark);
   border:0;border-radius:var(--r-lg);font-size:14px;font-weight:500;
@@ -1608,35 +1723,96 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
     </div>
   </aside>
 
-  <!-- ── main ─────────────────────────────────────────────────────────── -->
-  <div class="main">
+  <!-- ── main column: the white header strip, then the tucked board ──── -->
+  <div class="maincol">
 
-    <div class="top">
-      <div class="search">
-        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="5.5"/><path d="M13 13l4 4" stroke-linecap="round"/></svg>
-        Search sessions, projects, branches
+    <!-- the header. Everything that was here before — search, bell, gear, the
+         device chip, New session — is gone: the board's own toolbar filters and
+         sorts, and New session lives in the aside's Board card. What is left is
+         the account, which was an aside card and is now the header itself. -->
+    <div class="topstrip">
+
+      <!-- DEMO SLOT — the signed-out state of the same chip, parked beside the
+           signed-in one so both can be judged together. In the app one chip
+           renders, in one state; this slot does not exist. -->
+      <div class="acct-anchor demo">
+        <button class="acct out" id="acct-out-btn" aria-expanded="false">
+          <span class="ring">
+            <svg viewBox="0 0 20 20"><circle cx="10" cy="7.4" r="3.1"/><path d="M4.4 16.2c.9-2.7 3.1-4.1 5.6-4.1s4.7 1.4 5.6 4.1"/></svg>
+          </span>
+          <span class="nm">Signed out</span>
+          <span class="dotwarn" aria-hidden="true"></span>
+          <svg class="cv" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>
+        </button>
+        <div class="acct-pop" id="acct-out-pop">
+          <div class="out-head">
+            <span class="ring lg">
+              <svg viewBox="0 0 20 20"><circle cx="10" cy="7.4" r="3.1"/><path d="M4.4 16.2c.9-2.7 3.1-4.1 5.6-4.1s4.7 1.4 5.6 4.1"/></svg>
+            </span>
+            <span class="n">Not signed in</span>
+          </div>
+          <div class="out-body">The stored credential is there but blank, so the account usage
+            endpoint has nothing to answer with: no name, no rate windows, no forecast. Sign in
+            from a terminal — this board cannot do it for you.</div>
+          <span class="cmd">claude auth login</span>
+          <div class="out-note">An expired token shows the same chip reading <b>Token expired</b>;
+            it renews itself on the next poll. The <b>unavailable</b> status stays silent and draws
+            no chip at all.</div>
+        </div>
       </div>
-      <span class="top-sp"></span>
-      <button class="iconbtn">
-        <span class="pip"></span>
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5 8a5 5 0 0110 0c0 4 1.5 5 1.5 5h-13S5 12 5 8z"/><path d="M8.5 16a1.8 1.8 0 003 0"/></svg>
-      </button>
-      <button class="iconbtn">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.6v2M10 15.4v2M2.6 10h2M15.4 10h2M4.8 4.8l1.4 1.4M13.8 13.8l1.4 1.4M15.2 4.8l-1.4 1.4M6.2 13.8l-1.4 1.4"/></svg>
-      </button>
-      <div class="who">
-        <span class="av">YP</span>
-        <span class="t">yanko · MacBook<span>tailnet · dashboard-01</span></span>
+
+      <!-- the signed-in chip, the one the app actually draws -->
+      <div class="acct-anchor">
+        <button class="acct" id="acct-btn" aria-expanded="false">
+          <span class="av">Y</span>
+          <span class="nm">Yanko</span>
+          <span class="meters">
+            <span class="m">
+              <span class="mtop"><span>5h</span><b>4%</b></span>
+              <span class="mini"><i style="width:4%"></i></span>
+            </span>
+            <span class="m">
+              <span class="mtop"><span>WK</span><b>2%</b></span>
+              <span class="mini"><i style="width:2%"></i></span>
+            </span>
+          </span>
+          <svg class="cv" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>
+        </button>
+        <div class="acct-pop" id="acct-pop">
+          <div class="acct-id">
+            <span class="av">Y</span>
+            <span class="who3">
+              <span class="n">Yanko Petrov</span>
+              <span class="e">yanko.petrov@timify.com</span>
+              <span class="acct-tags"><span class="on">Max 5×</span><span>TIMIFY</span><span>Team tier 1</span></span>
+            </span>
+          </div>
+          <div class="acct-g">
+            <div class="acct-grow"><span class="l">5-hour<b>4%</b></span><span class="r">4%/h · resets 20:20</span></div>
+            <div class="acct-bar"><i style="width:4%"></i></div>
+            <div class="acct-time"><i style="width:46%"></i><u style="left:46%"></u></div>
+            <div class="acct-tl"><span>15:20</span><span class="ok">lasts → 20:20</span></div>
+          </div>
+          <div class="acct-g">
+            <div class="acct-grow"><span class="l">Week<b>2%</b></span><span class="r">resets Sat 2:00</span></div>
+            <div class="acct-bar"><i style="width:2%"></i></div>
+            <div class="acct-time"><i style="width:31%"></i><u style="left:31%"></u></div>
+            <div class="acct-tl"><span>Sat 2:00</span><span class="ok">lasts → Sat 2:00</span></div>
+          </div>
+          <div class="acct-foot">
+            <button data-go="usage">Usage detail</button>
+            <button data-go="set-local">Settings</button>
+          </div>
+        </div>
       </div>
-      <button class="newbtn" data-go="spawn">
-        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>
-        New session
-      </button>
     </div>
+
+  <div class="main">
 
     <!-- ═══ PAGE: SESSIONS ═══════════════════════════════════════════ -->
     <!-- ═══ PAGE: SESSIONS ══════════════════════════════════════════════
-         Account + Board cards in a 320px aside; on the left one toolbar —
+         The Board card in a 320px aside (Account is in the header now); on the
+         left one toolbar —
          filters, sort, and a view switcher — over the body of the picked view
          (board / list / split / tiles / triage). Rendered by combo() in the
          <script>. -->
@@ -2027,7 +2203,8 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
          <script>. -->
     <section class="page" id="p-spawn"></section>
 
-  </div>
+  </div><!-- /.main -->
+  </div><!-- /.maincol -->
 </div>
 
 <script>
@@ -2036,6 +2213,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
    `set-shared`. The mock bar picks the section and the pill inside the Usage
    pages switches its two tabs, the same tree the rail draws. */
 const PAGES = ['sessions', 'forecast', 'rates', 'set-local', 'set-shared', 'mgmt', 'analytics', 'chat', 'spawn'];
+
 
 function go(page){
   if (page === 'usage') page = lastUsage;
@@ -2685,9 +2863,9 @@ document.querySelectorAll('[data-go]').forEach(el =>
         <div class="sec-h"><span class="ct">Idle</span><span class="cs">no tool activity in the active window</span></div>
         <div class="card quiet">${idle.map(qrow).join('')}</div>`;
   };
+  /* No Account card any more: both rate windows moved to the header account
+     chip, so the aside carries only what is true of the board. */
   const aside = () => `<div class="aside">
-        <div class="card"><div class="ct">Account</div><div class="cs">Both rate windows, from the OAuth usage endpoint</div>
-          <div class="usage">${gauge5h()}${gaugeWk()}</div></div>
         <div class="card"><div class="ct">Board</div><div class="cs">11:52:14 · <span class="odot"></span> tailnet · dashboard-01</div>
           <div class="facts">
             <div class="fact"><span>Active sessions</span><b>5</b></div>
@@ -4310,6 +4488,30 @@ unpersisted, since session ids churn.`;
 const fromHash = () => go(PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'sessions');
 window.addEventListener('hashchange', fromHash);
 fromHash();
+
+/* ── header account ──────────────────────────────────────────────────────
+   Click toggles, a click anywhere else or Escape closes. The footer buttons
+   are artboard jumps, so they must not re-open it on the way out. */
+(function () {
+  const PAIRS = [['acct-btn', 'acct-pop'], ['acct-out-btn', 'acct-out-pop']];
+  const all = PAIRS.map(([b, p]) => [document.getElementById(b), document.getElementById(p)]);
+  const closeAll = () => all.forEach(([btn, pop]) => {
+    pop.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  });
+  all.forEach(([btn, pop]) => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const open = !pop.classList.contains('open');
+      closeAll();
+      pop.classList.toggle('open', open);
+      btn.setAttribute('aria-expanded', String(open));
+    });
+    pop.addEventListener('click', e => { if (e.target.closest('[data-go]')) closeAll(); else e.stopPropagation(); });
+  });
+  document.addEventListener('click', closeAll);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(); });
+})();
 </script>
 </body>
 </html>

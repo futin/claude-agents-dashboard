@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 
-import { AsideAccount } from './AsideAccount';
 import { AsideBoard } from './AsideBoard';
 import { AsideStrip } from './sessions/AsideStrip';
 import { Toolbar } from './Toolbar';
@@ -31,10 +30,12 @@ const SpawnPanel = lazy(() => import('./SpawnPanel'));
  * polling.
  *
  * Two columns: the list in whichever of the five shapes the toolbar picked, and
- * a 320px aside with the Account gauges and the Board facts. Below `2xl`
- * (1536px, the lock) the aside moves above the toolbar (styles.css); below
- * `md` (768px) the two cards are replaced outright by `AsideStrip`, one
- * pinned bar carrying their summaries.
+ * a 320px aside carrying the Board facts. (The Account gauges used to sit above
+ * them; they are the shell's header chip now — `HeaderAccount` — because they
+ * are true of the account wherever you are standing, not of this board.) Below
+ * `2xl` (1536px, the lock) the aside moves above the toolbar (styles.css);
+ * below `md` (768px) the card is replaced outright by `AsideStrip`, one pinned
+ * bar carrying its summary.
  */
 export function SessionsView() {
   const { data, connected } = useSessions();
@@ -139,7 +140,6 @@ export function SessionsView() {
         <AsideStrip data={data} remoteAnswer={remoteAnswer} onOpenSpawn={() => setSpawnOpen(true)} />
       ) : (
         <aside className="s-aside">
-          <AsideAccount data={data} />
           <AsideBoard data={data} remoteAnswer={remoteAnswer} onOpenSpawn={() => setSpawnOpen(true)} />
         </aside>
       )}

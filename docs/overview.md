@@ -32,7 +32,10 @@ via `tsx`, dev and prod alike).
 
 ## Principles
 
-- **Read-only charter.** The app never writes to `~/.claude` or the transcripts. The
+- **Read-only charter.** The app never writes to `~/.claude` or the transcripts. It reads
+  one file outside them — `~/.claude.json` → `oauthAccount`, for the account chip's name
+  and plan (see [account-header](subsystems/account-header.md)) — and nothing else in
+  that file. The
   deliberate exceptions are the answer POST endpoints (RAM-only stores); a handful of
   gitignored, repo-local files — `.remote-answer.json` (see
   [remote answers](subsystems/remote-answer.md)), `.dashboard-settings.json` (see
@@ -86,6 +89,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, plus `notifyAvailable` (never the ntfy topic itself); write path |
 | `GET /api/management`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
+| `GET /api/account` | who the CLI is signed in as (`~/.claude.json` → `oauthAccount`, as display strings) + the two rate windows — the header chip's own 30s poll, so it does not ride the 3s session scan |
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
 | `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, one cell per UTC day of the horizon, plus the coverage disclosure |
 | anything else | static files from `client/dist` (production only) |
@@ -201,7 +205,9 @@ client/src/
                   the same markup as a menu dropped out of a top bar, every tree
                   open), SessionsView (the monitor — owns the 3s
                   poll, so leaving the section stops it; two columns: the list in one of
-                  five views + a 320px aside), AsideAccount (the account gauges),
+                  five views + a 320px aside), HeaderAccount (the shell's account
+                  chip — identity + both rate windows, in the header band or the
+                  phone nav bar; see subsystems/account-header.md),
                   AsideBoard (clock, origin, counts, remote-answer switch, New session),
                   Toolbar (view switcher + filter/sort popovers; Popover is the shared
                   dismiss primitive), sessions/ (atoms, Expanded, EmptyState and the five
@@ -275,7 +281,8 @@ that area:
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
-- [usage-limits](subsystems/usage-limits.md) — header account usage bars, and the Usage tab behind them: pace, the duty-cycle forecast, and token value per model
+- [account-header](subsystems/account-header.md) — the shell's account chip: its two homes, the `oauthAccount` profile reader, and `GET /api/account`
+- [usage-limits](subsystems/usage-limits.md) — the rate-limit gauges the account chip draws, and the Usage tab behind them: pace, the duty-cycle forecast, and token value per model
 - [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold, answer window, push policy
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `allow?` tab for terminal permission dialogs

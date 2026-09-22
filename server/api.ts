@@ -14,6 +14,7 @@ import { archivedSessionIds } from './lib/archived.js';
 import { readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
+import { readAccountProfile } from './lib/account.js';
 import { deriveProfile, profileSnapshot, readRecentSamples } from './lib/usage-history.js';
 import type { ProfileState, UsageSample } from './lib/usage-history.js';
 import { ledgerStartMs, readLedgerSince } from './lib/usage-ledger.js';
@@ -900,6 +901,36 @@ export function shapeUsageRates(opts: {
     },
     weeklyExternalSharePct: weeklyShare === null ? null : weeklyShare * 100
   };
+}
+
+/**
+ * `GET /api/account` — who the CLI is signed in as, plus the two rate windows.
+ *
+ * The header account chip sits in the shell above every section, so it cannot
+ * ride `/api/sessions`: that snapshot is a full transcript scan, polled every
+ * 3s and only while the Sessions section is mounted. This body is two cached
+ * reads — the memoised `~/.claude.json` profile and the same 60s usage cache
+ * `serveSessions` attaches — so the client can poll it slowly from anywhere.
+ *
+ * `usage`/`usageStatus` are gated on `SHOW_USAGE` and absent when it is off,
+ * exactly as they are on the sessions snapshot; the profile is not, because a
+ * name is not a usage number and hiding it would leave the chip nameless for a
+ * reason the reader could not guess.
+ *
+ * Fails open to `{ profile: null }` rather than a 500: this is a disclosure
+ * view, and an empty one is better than a torn one.
+ *
+ * `homeDir` is injectable so a test can point the profile reader at a fixture.
+ */
+export function serveAccount(config: Config, res: ServerResponse, homeDir?: string): void {
+  try {
+    const profile = readAccountProfile(homeDir);
+    if (!config.showUsage) return sendJson(res, 200, { profile });
+    const u = getCachedUsageState();
+    sendJson(res, 200, { profile, usage: u.usage, usageStatus: u.status });
+  } catch {
+    sendJson(res, 200, { profile: null });
+  }
 }
 
 /**

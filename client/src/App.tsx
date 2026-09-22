@@ -1,9 +1,12 @@
 import { lazy, Suspense, useState } from 'react';
 
+import { HeaderAccount } from './components/HeaderAccount';
 import { SideRail } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
 import { deepLinkSession } from './lib/deepLink';
 import { isSection, type Section } from './lib/sections';
+import { useAccount } from './hooks/useAccount';
+import { useShellNarrow } from './hooks/useNarrow';
 import { usePersistedState } from './hooks/usePersistedState';
 import { ManagementScopeProvider } from './hooks/useManagementScope';
 import { SettingsProvider, useSettings } from './hooks/useSettings';
@@ -66,12 +69,30 @@ function AppShell() {
   // unconditional because the phone menu draws every tree from the first paint,
   // Management's among them: the scan happens once on load instead of on
   // entering the section, and ↻ in the band is what re-runs it.
+
+  // The account chip is shell furniture, above every section, so its poll is
+  // owned here and not by any view — and drawn ONCE, in whichever of its two
+  // homes this measure has: the header band on a desktop, the phone nav bar
+  // below `sm` (640px), where there is no band. Swapped in the markup rather
+  // than hidden in CSS, for the reason the toolbar's switcher filters its
+  // shapes — a `display:none` control is still a tab stop, and a popover it
+  // opens is still reachable by script.
+  const account = useAccount();
+  const narrow = useShellNarrow();
+  const chip = <HeaderAccount account={account} onGo={change} />;
+
   return (
     <ManagementScopeProvider active>
       <div className="shell">
-        <SideRail section={section} onChange={change} />
-        <main className="main">
-          <div className={wrap}>
+        <SideRail section={section} onChange={change} accountSlot={narrow ? chip : null} />
+        {/* `display:contents` below `sm`, so the board is the flex child of
+            `.shell` it has always been there; from `sm` this is the column
+            right of the rail: the header band, then the board tucked into the
+            rail's corner beneath it. */}
+        <div className="maincol">
+          {!narrow && <div className="topstrip">{chip}</div>}
+          <main className="main">
+            <div className={wrap}>
             {section === 'sessions' ? (
               <SessionsView />
             ) : section === 'management' ? (
@@ -91,8 +112,9 @@ function AppShell() {
                 <SettingsView />
               </Suspense>
             )}
-          </div>
-        </main>
+            </div>
+          </main>
+        </div>
       </div>
     </ManagementScopeProvider>
   );

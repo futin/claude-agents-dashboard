@@ -8,20 +8,20 @@ params, so a changed row count or window takes effect on the next tick.
 ## The page
 
 Two columns on the broad wrap (`SessionsView.tsx`): the list, in one of five **views**, and
-a 320px **aside** of two cards. Below `2xl` (1536px, the lock) the aside moves above the
-list as a two-card row; **below `md` (768px) the two cards are replaced outright** by one
-pinned bar — see
-§The phone strip.
+a 320px **aside** carrying the Board card. Below `2xl` (1536px, the lock) the aside moves
+above the list; **below `md` (768px) the card is replaced outright** by one pinned bar —
+see §The phone strip.
 
-- **Aside · Account** (`AsideAccount.tsx`) — the two rate-limit gauges and their time
-  strips (see [usage limits](usage-limits.md)); the `token-expired` / `signed-out` line
-  replaces them. Absent entirely when there is nothing to draw.
+The aside carried an **Account** card above it until the rate windows moved into the
+shell's header chip: they are true of the account wherever you are standing, not of this
+board, and reading them should not mean being on Sessions. See
+[account-header](account-header.md).
 - **Aside · Board** (`AsideBoard.tsx`) — everything true of the whole board rather than of
   the list: the clock, the [origin badge](remote-access.md), the counts (active, need you,
   rows shown, `claude` processes), the [remote-answers switch](remote-answer.md), and the
   one write action, **New session** ([spawn](spawn.md)). Nothing here filters or orders
   the list — that is the toolbar's job, which is the whole point of the split.
-- **Aside · the phone strip** (`sessions/AsideStrip.tsx`) — the same two cards below `md`
+- **Aside · the phone strip** (`sessions/AsideStrip.tsx`) — the same card below `md`
   (768px), collapsed into one bar. See §The phone strip.
 - **Toolbar** (`Toolbar.tsx`) — one row: the labelled view switcher on the left; on the
   right one shared track with the filter button, the `Sort: <key> (asc|desc)` label and the
@@ -427,24 +427,27 @@ Which cards are open is deliberately not persisted (session IDs churn).
 
 ## The phone strip
 
-Below `md` (768px) the aside's two cards cost about 600px of screen before the first session row —
-so `AsideStrip.tsx` replaces them with one 48px bar that pins under the nav. The list then
+Below `md` (768px) the aside card costs most of a screen before the first session row — so
+`AsideStrip.tsx` replaces it with one 48px bar that pins under the nav. The list then
 starts roughly a thumb from the top.
 
-The bar is two taps and a button:
+The bar is one tap and a button:
 
-| Half | Collapsed | Open |
+| Part | Collapsed | Open |
 |---|---|---|
-| left | the rate-window percentages (`5h 42%  Wk 68%`), coloured on the gauge's own ramp | `AccountBody` — the Account card's gauges and time strips, under an **Account** title |
-| right | the *needs you* count as an amber pill, and the clock | `BoardBody` — the Board card's facts and the remote-answers switch, under a **Board** title |
+| the tap | the *needs you* count as an amber pill, and the clock | `BoardBody` — the Board card's facts and the remote-answers switch, under a **Board** title |
 | — | the square **+**, always on the bar | opens the [spawn](spawn.md) panel |
+
+It had a second half — the rate-window percentages, opening onto the gauges — until the
+account moved to the shell. Those are in the phone nav bar's chip now, readable from every
+section rather than only from this list; see [account-header](account-header.md).
 
 Three things are deliberate:
 
-- **The panels are the cards' own bodies**, not a second drawing of them. `AsideAccount.tsx`
-  and `AsideBoard.tsx` export `AccountBody` / `BoardBody` (plus `hasAccount` / `hasBoard`,
-  so neither shape frames an empty box on a cold load); the desktop card is a title and a
-  wrapper around the same element. A field added to the card is on the phone for free.
+- **The panel is the card's own body**, not a second drawing of it. `AsideBoard.tsx`
+  exports `BoardBody` (plus `hasBoard`, so neither shape frames an empty box on a cold
+  load); the desktop card is a title and a wrapper around the same element. A field added
+  to the card is on the phone for free.
 - **`BoardBody` takes `launch={false}` here.** The strip's square **+** never scrolls away,
   so repeating **New session** inside the panel would be one action with two controls.
 - **One panel at a time.** They are two halves of one bar; both down is taller than the
@@ -501,7 +504,6 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - server/lib/title-cache.ts
     - client/src/components/SessionsView.tsx
     - client/src/components/Toolbar.tsx
-    - client/src/components/AsideAccount.tsx
     - client/src/components/AsideBoard.tsx
     - client/src/components/sessions/AsideStrip.tsx
     - client/src/lib/stickyStrip.ts

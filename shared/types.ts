@@ -577,6 +577,51 @@ export interface UsageLimits {
 /** Why the header usage section is (or isn't) populated. */
 export type UsageStatus = 'ok' | 'token-expired' | 'signed-out' | 'unavailable';
 
+/**
+ * Who the CLI is signed in as — read from `~/.claude.json` → `oauthAccount`,
+ * the profile Claude Code caches after an OAuth login. Local disk, no network:
+ * the usage endpoint answers with numbers, not with a name, so this is the
+ * only place the account has one.
+ *
+ * Every field is a display string the server has already resolved, because the
+ * raw record is internal tier codes (`default_claude_max_5x`, `team_tier_1`)
+ * that no client should be in the business of translating. A field the record
+ * does not carry is `''` and the header simply omits it.
+ */
+export interface AccountProfile {
+  /** `fullName`, else `displayName`. '' when neither is set. */
+  name: string;
+  /** `emailAddress`. '' when absent. */
+  email: string;
+  /** `organizationName` — '' on a personal account. */
+  organization: string;
+  /** `userRateLimitTier` as a plan label, e.g. `Max 5×`. '' when unrecognised. */
+  plan: string;
+  /** `seatTier` prettified, e.g. 'Team tier 1'. '' when absent. */
+  seat: string;
+  /** `hasExtraUsageEnabled` — paid usage beyond the plan's windows is on. */
+  extraUsage: boolean;
+}
+
+/**
+ * `GET /api/account` — everything the header account chip draws, on one small
+ * body it can poll on its own clock.
+ *
+ * Deliberately not folded into {@link SessionsResponse}: that snapshot is a
+ * full transcript scan polled every 3s and only while the Sessions section is
+ * mounted, and the chip is in the shell above every section. This body reads
+ * one cached file and one cached usage state, so it is cheap to poll slowly
+ * (30s) from anywhere in the app.
+ */
+export interface AccountResponse {
+  /** null when `~/.claude.json` is missing, unreadable, or carries no account. */
+  profile: AccountProfile | null;
+  /** Same field, same meaning, as {@link SessionsResponse.usage}. */
+  usage?: UsageLimits | null;
+  /** Same field, same meaning, as {@link SessionsResponse.usageStatus}. */
+  usageStatus?: UsageStatus;
+}
+
 /** One subagent launched via the `Task` tool, paired from the parent transcript. */
 export interface AgentJob {
   /** The Task tool_use id (pairs with the later tool_result.tool_use_id). */
