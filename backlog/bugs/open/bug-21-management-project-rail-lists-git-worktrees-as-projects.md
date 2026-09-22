@@ -51,32 +51,69 @@ prose.
 
 ## Cause
 
-`listRecentProjects` derives its rows from `~/.claude/projects/*` transcript dirs, and a
-session that chdir's into a worktree writes a transcript into that worktree's own encoded
-dir. That dir is then indistinguishable, to this function, from a real project: it has a
-newest transcript inside the window and a cwd that `encodeProjectDir` matches, which is
-the entire membership test. Nothing consults git, so "is this cwd a linked worktree of a
-repo I already list?" is a question the code never asks.
+`listRecentProjects` (`server/lib/management.ts:422`) derives its rows from `~/.claude/projects/*` transcript dirs, and a session that chdir's into a
+worktree writes a transcript into that worktree's own encoded dir. That dir is then indistinguishable, to this function, from a real project: it has a newest
+transcript inside the window and a cwd that `encodeProjectDir` matches, which is the entire membership test. Nothing consults the filesystem at the row's
+`path` at all — neither "is this a linked worktree?" nor "does this path still exist?".
+
+The second question turns out to be the bigger one. Probed live on 2026-09-22 (this machine, `lookbackHours: 336`): 9 rows, of which 1 is a checked-out
+linked worktree (`backlog-manager/.worktrees/task-47`, `.git` is a file) and 4 are paths that no longer exist on disk — three pruned worktrees
+(`guide-manager/.worktrees/5`, `backlog-manager/.worktrees/task-48`, `claude-agents-dashboard/.worktrees/bug-22`) and one deleted repo
+(`custom-projects/claude-global`). An orchestrator run merges and prunes its worktrees, so after a run almost every worktree row is a dead path: a
+worktree-only detection rule would have removed 1 of the 4 throwaway rows seen here.
 
 ## Fix
 
-unknown — needs a groom decision on the detection rule and on what happens to a
-worktree's `dirName` afterwards. Candidate detection rules, cheapest first:
+Filter the rows `listRecentProjects` returns by what is on disk at each row's `path`. Hide dropped rows outright — no folding under the parent repo and no
+"N worktrees" badge: the Sessions tab already shows a run's worktree sessions live, and Management lists *config*, which a worktree only duplicates from the
+branch it was cut from. Pure `fs` reads, no `git` subprocess, no new dependency — the scanner stays disk-only.
 
-- **path shape**: drop a cwd whose path contains a `.worktrees/` or `.claude-worktrees/`
-  segment. Zero I/O, matches both conventions seen on this machine, but hardcodes other
-  people's layout and misses `git worktree add ../foo`.
-- **`.git` is a file, not a dir**: in a linked worktree `<cwd>/.git` is a file holding
-  `gitdir: …`. One `stat`, no git invocation, works regardless of where the worktree sits.
-- **`git rev-parse --git-common-dir` ≠ `--git-dir`**: authoritative, but spawns a process
-  per candidate row and adds a git dependency to a scanner that is pure disk reads today.
+**The rule.** Drop a row when either holds; keep it otherwise:
 
-Open questions for the groom, beyond the rule itself:
+1. `path` is not an existing directory (pruned worktree, deleted or moved repo). Any `stat` error counts as "not there".
+2. `path/.git` is a regular **file** whose `gitdir:` line points at a directory inside a `worktrees/` segment of a git dir
+   (`gitdir: /r/.git/worktrees/task-47`) — i.e. a linked worktree, wherever it sits (`.worktrees/`, `.claude/worktrees/`, or a sibling from
+   `git worktree add ../foo`). A `.git` file pointing elsewhere is a submodule (`gitdir: ../.git/modules/sub`) and is kept. A `.git` file that cannot be read
+   or has no `gitdir:` line is kept — fail open, the same stance as the naming fallback above it.
 
-- Hide the worktree row outright, or fold it under its parent repo (a "3 worktrees" badge)
-  so an orchestrator run is still visible somewhere?
-- `resolveProject` gates `/api/management/project`; if worktree dirs stop being members,
-  an open Management tab pointed at one starts 404ing. Acceptable, or does resolution need
-  to keep working while only the *rail* filters?
-- A worktree dir whose path no longer exists on disk (pruned after a merge) is arguably a
-  separate, simpler bug — filter stale paths regardless of the worktree question?
+A `.git` directory, or no `.git` at all (e.g. `~/.claude/dashboard-refresh`, which is a real non-git project dir), is kept.
+
+**Where.** Apply the filter to the final deduped set, after the `byCwd` loop and before the sort, so the bug-14 naming rule (`management.ts:443-457`) is
+untouched: it still decides *which* cwd a dir publishes, and only then is that cwd asked whether it belongs on the rail. Keep it a small named, exported
+predicate (e.g. `isListedProjectPath(path): boolean`) so tests can hit it directly; the name is the implementer's call.
+
+**Knock-on effects — all accepted, none needs extra code:**
+
+- `resolveProject` shares the list, so a worktree's or dead path's `dirName` stops resolving: `POST /api/spawn` answers `400 unknown project` for it (correct
+  — spawning into a pruned path fails anyway, and into a live worktree is not what the dropdown is for), and `GET /api/management/project` answers 404. The
+  client already copes: `useManagementScope.tsx:53` treats a persisted `management.scope` that is no longer in `projects` as unknown and falls back to
+  `'global'`. Resume (`api.ts:1388`) builds its ref from the transcript, not from `resolveProject`, so resuming a worktree session is unaffected.
+- `collectServablePaths` shares the list too, so a worktree's own `.claude/` files stop being servable. Unlike the archived-session filter (which
+  `docs/subsystems/management.md` deliberately keeps out of the servable set so an open panel keeps serving), nothing can hold such a file open: the rail
+  never lists the worktree once this lands, and a dead path has no files. Keep the filter unconditional inside `listRecentProjects`, not an option.
+- Cost: one `statSync` per row plus one small `readFileSync` for rows whose `.git` is a file — a few dozen syscalls per call at most.
+
+**Tests** (`test/management.test.ts` unless noted; fixtures are real tmpdirs):
+
+- Linked worktree: repo tmpdir with a `.git` dir, plus `<repo>/.worktrees/X` containing a `.git` *file* `gitdir: <repo>/.git/worktrees/X`; the worktree has
+  its own project dir with a transcript. `listRecentProjects` paths equal `[repo]`; `resolveProject(<worktree dirName>)` is `null`.
+- Worktree outside the repo: same, but the worktree is a separate `makeProject()` tmpdir whose `.git` file points into `<repo>/.git/worktrees/Y`. Dropped.
+- Pruned path: a transcript whose cwd is a path that does not exist. Dropped; the repo row alongside it is kept.
+- Submodule: `.git` file `gitdir: ../.git/modules/sub`. Kept.
+- `.git` file with no `gitdir:` line (e.g. empty). Kept.
+- Plain dir with no `.git`. Kept.
+- The existing bug-14 tests (`management.test.ts:250-310`) build worktree cwds with `path.join(repo, '.worktrees', 'X')` that never exist on disk, so rule 1
+  would drop them. They pin the *naming* rule, not worktree listing: `mkdirSync` those paths (no `.git` file) so they keep asserting exactly what they assert
+  today, and reword the comment at `:288-292` that calls losing the worktree row a breakage — for a real linked worktree it is now the intended behaviour.
+- `test/archived.test.ts:210-230` uses literal `/tmp/one`, `/tmp/two` cwds that need not exist; switch them to real tmpdirs so the archived-filter tests keep
+  testing the archived filter. `test/api-management-analytics.test.ts:57` uses `h.home`, which exists — unaffected.
+- Mutation proof: with the filter call removed, the linked-worktree, outside-the-repo and pruned-path cases must fail. Say so in the outcome.
+
+**Docs.** Update the *Scopes* bullet in `docs/subsystems/management.md` (the "Recent projects come from transcript cwds…" sentence) to state the filter and
+why worktrees are hidden rather than folded, and trim the `management.ts:443-455` comment's claim that the worktree's own dir "still yields the worktree" to
+note that the row is then dropped by the filter.
+
+In the browser (playwright MCP tools): with the dev server running, open http://localhost:5174, switch the side rail to Management, and read the project rail
+and the spawn dialog's project `<select>`. Expected: no row or option whose path contains `/.worktrees/` or `/.claude/worktrees/` (the executing session's
+own worktree has a transcript dir and is the live case to check), no row for a path that does not exist on disk, and `claude-agents-dashboard` itself still
+listed.
