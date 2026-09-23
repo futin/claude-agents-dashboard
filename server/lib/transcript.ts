@@ -17,8 +17,8 @@ export const LARGE_WINDOW = 1000000;
 const LARGE_MARKER = '[1m]';
 export const DEFAULT_TAIL_BYTES = 256 * 1024;
 /**
- * Window for the launch-cwd read. Measured across all 652 transcripts on this
- * machine the first `cwd`-bearing record (always the head `attachment`) ends by
+ * Window for the launch-cwd read. Measured 2026-09-02 across all 652 transcripts
+ * on this machine, the first `cwd`-bearing record (always the head `attachment`) ends by
  * byte 7,837 — this is a little over 2x that, and a miss fails open rather than
  * guessing (see {@link ParsedTranscript.originCwd}).
  */
@@ -80,8 +80,8 @@ export interface ParsedTranscript {
    * How the CLI was entered, verbatim off the record: `cli` (terminal),
    * `claude-desktop` (desktop app), `sdk-cli` (headless `-p` — a dashboard
    * spawn). Null on a transcript old enough to predate the field. Every
-   * user/assistant record carries it (measured: 1504/1504 across the newest 12
-   * transcripts on this machine), so the tail window always holds one — which
+   * user/assistant record carries it (measured 2026-08-17: 1504/1504 across the
+   * newest 12 transcripts on this machine), so the tail window always holds one — which
    * is what makes a session's surface readable with no stored state. `scan.ts`
    * maps it to `Session.surface`; this stays the raw value.
    */
