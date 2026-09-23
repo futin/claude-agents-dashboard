@@ -8,9 +8,11 @@
  *   node kaizen.mjs <session-id>            resolve id under ~/.claude/projects
  *   node kaizen.mjs /abs/path/to/x.jsonl    analyze a transcript directly
  *   node kaizen.mjs --latest                newest transcript for the current cwd
+ *   node kaizen.mjs --trend [/abs/log.md]   ctx trend over the analytics log (default ~/.claude/session-analytics-log.md)
  *
  * PROVENANCE: ported from claude-agents-dashboard server/lib/{analyze,agents,subagent-usage,scan}.ts.
  * That repo holds the unit-tested source of truth; keep this in sync if it changes.
+ * Exception: `--trend` is kaizen-only, has no TS twin, and is tested by spawning this file (test/kaizen-trend.test.ts).
  */
 
 import fs from 'node:fs';
@@ -419,6 +421,85 @@ function analyzeSession(filePath, id) {
   };
 }
 
+/* ------------------------------------------------ context trend over the analytics log (`--trend`) */
+
+// Reads the `N billable (M ctx)` figures back out of lesson lines already in ~/.claude/session-analytics-log.md and compares them as a series, so
+// `/kaizen review` can see a cost drift no single post-mortem can: one run sees one big session, never the cohort it is an outlier against.
+// Kaizen-only — the dashboard does not consume it, so there is no TS source of truth to keep in sync with (unlike everything above).
+
+// - <date> [<project>] <id>: <billable> billable (<ctx> ctx…  — the lesson shape of the log grammar; status/review lines and prose never match it.
+const TREND_LINE_RE = /^-\s+(\d{4}-\d{2}-\d{2})\s+\[([^\]]+)\]\s+(\S+?):\s+~?([\d.,]+)\s*([kMB]?)\s+billable\b(.*)$/;
+const TREND_CTX_RE = /^[^(]*\(\s*~?([\d.,]+)\s*([kMB]?)\s+ctx\b/;
+const SUFFIX = { '': 1, k: 1e3, M: 1e6, B: 1e9 };
+
+// Drift = the median of the newest TREND_WINDOW sessions is ≥ TREND_RATIO × the median of every session before them, in the same group.
+// Medians on both sides are the point: a single spike cannot move a 3-session median, so one big session is never a trend — it takes at least two of
+// the newest three. The baseline is the group's own history, so a project that always runs large is not flagged for being large.
+const TREND_WINDOW = 3;
+const TREND_MIN_BASELINE = 3;
+const TREND_RATIO = 1.5;
+
+function parseFigure(digits, suffix) {
+  const n = parseFloat(digits.replace(/,/g, ''));
+  return Number.isFinite(n) ? n * SUFFIX[suffix] : null;
+}
+
+function median(xs) {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/** Lesson lines carrying both figures, file order. A later line for the same `[project] id` replaces the earlier one (newest-wins, as every log
+ *  consumer reads it) — in memory only; the file is never touched. `withoutCtx` counts lesson lines with a billable figure but no `(N ctx)`. */
+function parseTrendLines(text) {
+  const bySession = new Map();
+  let withoutCtx = 0;
+  for (const raw of String(text).split('\n')) {
+    const m = TREND_LINE_RE.exec(raw.trim());
+    if (!m) continue;
+    const billable = parseFigure(m[4], m[5]);
+    const c = TREND_CTX_RE.exec(m[6]);
+    const ctx = c ? parseFigure(c[1], c[2]) : null;
+    if (billable == null || ctx == null) { withoutCtx++; continue; }
+    const key = `${m[2]}\u0000${m[3]}`;
+    bySession.delete(key);
+    bySession.set(key, { date: m[1], project: m[2], id: m[3], billable, ctx });
+  }
+  return { points: [...bySession.values()], withoutCtx };
+}
+
+function trendGroup(name, points) {
+  const series = points.map(p => p.ctx);
+  const g = { name, sessions: points.length, firstDate: points[0]?.date ?? null, lastDate: points.at(-1)?.date ?? null, series,
+    baselineMedian: null, recentMedian: null, ratio: null, drift: false };
+  if (points.length < TREND_WINDOW + TREND_MIN_BASELINE) return g;
+  g.baselineMedian = median(series.slice(0, -TREND_WINDOW));
+  g.recentMedian = median(series.slice(-TREND_WINDOW));
+  g.ratio = g.baselineMedian > 0 ? Math.round((g.recentMedian / g.baselineMedian) * 100) / 100 : null;
+  g.drift = g.ratio != null && g.ratio >= TREND_RATIO;
+  return g;
+}
+
+/** Per-project series plus an overall one, each with its drift verdict. Groups too short to judge carry null medians and `drift: false`. */
+function contextTrend(text) {
+  const { points, withoutCtx } = parseTrendLines(text);
+  const byProject = new Map();
+  for (const p of points) {
+    if (!byProject.has(p.project)) byProject.set(p.project, []);
+    byProject.get(p.project).push(p);
+  }
+  const projects = [...byProject].map(([name, ps]) => trendGroup(name, ps)).sort((a, b) => b.sessions - a.sessions || a.name.localeCompare(b.name));
+  return {
+    rule: `drift = median ctx of the newest ${TREND_WINDOW} sessions >= ${TREND_RATIO}x the median of the earlier ones, same group; needs ${TREND_WINDOW + TREND_MIN_BASELINE}+ sessions`,
+    sessions: points.length,
+    withoutCtx,
+    overall: trendGroup('overall', points),
+    projects,
+    drifting: projects.filter(g => g.drift).map(g => g.name)
+  };
+}
+
 /* ------------------------------------------------ CLI (kaizen.ts) */
 
 const ID_RE = /^[A-Za-z0-9._-]+$/;
@@ -426,7 +507,15 @@ function die(msg) { console.error(msg); process.exit(1); }
 
 function main() {
   const arg = process.argv[2];
-  if (!arg) die('usage: node kaizen.mjs <session-id | /abs/path.jsonl | --latest>');
+  if (!arg) die('usage: node kaizen.mjs <session-id | /abs/path.jsonl | --latest | --trend [/abs/log.md]>');
+
+  if (arg === '--trend') {
+    const log = process.argv[3] ?? path.join(os.homedir(), '.claude', 'session-analytics-log.md');
+    let text = '';
+    try { text = fs.readFileSync(log, 'utf8'); } catch { /* absent log = empty series, not an error */ }
+    process.stdout.write(JSON.stringify(contextTrend(text), null, 2) + '\n');
+    return;
+  }
 
   let file, id;
   if (arg === '--latest') {

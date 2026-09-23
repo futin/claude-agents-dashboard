@@ -124,7 +124,8 @@ ignored by parsers.
 - 2026-08-09 review: swept 12 lessons, promoted 1, pruned 2
 ```
 
-- **lesson** — one per analyzed session (step 6). `<session-id>` is the short id prefix.
+- **lesson** — one per analyzed session (step 6). `<session-id>` is the short id prefix. Its `<billable> billable (<ctx> ctx` prefix is read back
+  as data by `kaizen.mjs --trend` (review mode, step 2) — keep that prefix exactly; anything after the ctx figure inside the parens is free.
 - **status** — what became of that lesson: `actioned` (written into a CLAUDE.md/memory),
   `promoted` (raised to global config), `dropped` (considered, rejected). The note after the em
   dash is free text. Appended in step 7, never earlier — a lesson with no status line is **open**.
@@ -283,22 +284,28 @@ status machine"), not as a play-by-play of this one exchange.
 
 Per-session runs see one session. Review mode sweeps the **whole log** — that's where
 cross-project patterns and dead rules actually show up. Run it on `/kaizen review`, or when the
-user accepts the review-due offer. It analyzes nothing; it's pure log work.
+user accepts the review-due offer. It analyzes no transcript; it's pure log work.
 
 1. **Read the whole log.** Classify each lesson: **open** (no later `status` line for that
    session id) or settled. Only open lessons are in scope.
-2. **Group semantically**, not by string — one group per underlying habit, across projects
+2. **Trend the context figures.** `node "$CLAUDE_SKILL_DIR/kaizen.mjs" --trend` reads the `<billable> billable (<ctx> ctx)` figures back out of every
+   lesson line — open or settled, since cost is a fact whatever became of the lesson — and prints per-project and overall series as JSON. Report a
+   short table: project, sessions, date range, baseline → recent median ctx, ratio. A project in `drifting` is a finding in its own right, even with no
+   recurring lesson behind it: name it, and propose the fix its own lessons point at (usually the compaction / `/clear` ones in §2). The rule is in the
+   output's `rule` field — median ctx of the newest 3 sessions at least 1.5× the median of the ones before, needing 6+ sessions — so one big session
+   never fires it; a group too short to judge prints `null` medians and is not a finding. Never edit the log to "fix" the series: it only reads.
+3. **Group semantically**, not by string — one group per underlying habit, across projects
    (same matching rule as the cross-project watch).
-3. **Decide per group:**
+4. **Decide per group:**
    - ≥ 4 distinct `[project]` tags → **promote** candidate (global `~/.claude/CLAUDE.md`).
    - recurring in one project → **codify** candidate (that project's CLAUDE.md).
    - one-off and stale (older than ~30 days, never recurred) → **drop** candidate; it was noise.
-4. **Prune pass:** apply the prune-watch tests above to the current project's CLAUDE.md/rules,
+5. **Prune pass:** apply the prune-watch tests above to the current project's CLAUDE.md/rules,
    plus global if the sweep touches it.
-5. **One grouped AskUserQuestion**, not one per group: list each proposal as an option with its
+6. **One grouped AskUserQuestion**, not one per group: list each proposal as an option with its
    evidence (pattern, project count, dates). Multi-select. Anything the user doesn't pick stays
    open — untouched, not dropped.
-6. **Apply** the approved edits, then **append one status line per affected session** and a
+7. **Apply** the approved edits, then **append one status line per affected session** and a
    single review marker:
 
 ```
