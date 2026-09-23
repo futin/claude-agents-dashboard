@@ -10,8 +10,11 @@
  *    four token fields separate, expose `combined` (context pressure) AND
  *    `billableApprox` (excludes cacheRead — closer to real cost).
  *  - There is NO per-tool token field on disk. Per-tool counts/errors/durations
- *    are exact; per-tool tokens are only an even split of a turn's output_tokens
- *    across its tool calls (`approxOutputTokens`).
+ *    are exact; per-tool output tokens are only an even split of a turn's
+ *    output_tokens across its tool calls (`approxOutputTokens`). What each call
+ *    injected into context is sized from its own tool_result text instead
+ *    (`resultTokens`, chars ÷ 4) — per call, never split, so it is the figure
+ *    that surfaces a Read-heavy session.
  *
  * Subagent turns are NOT in this file: the CLI writes them to the session's own
  * `<sessionId>/subagents/agent-*.jsonl`. `subagentTotals` sums those files
@@ -52,6 +55,14 @@ function toolResultText(b: any): string {
     return b.content.map((x: any) => (x && typeof x.text === 'string' ? x.text : '')).join('');
   }
   return '';
+}
+
+/**
+ * Rough token size of a text: chars ÷ 4, the usual English-and-code rule of
+ * thumb. Unrounded — callers sum first and round once.
+ */
+function approxTokens(text: string): number {
+  return text.length / 4;
 }
 
 /** A tool_result the model saw as a failure. */
@@ -98,7 +109,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
 
   const getTool = (name: string): ToolStat => {
     let s = toolMap.get(name);
-    if (!s) { s = { tool: name, count: 0, durationMs: 0, errors: 0, approxOutputTokens: 0 }; toolMap.set(name, s); }
+    if (!s) { s = { tool: name, count: 0, durationMs: 0, errors: 0, approxOutputTokens: 0, resultTokens: 0 }; toolMap.set(name, s); }
     return s;
   };
 
@@ -187,6 +198,8 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
           if (p) {
             pendingTool.delete(b.tool_use_id);
             const s = getTool(p.name);
+            // Per call, error text included — independent of the errors count.
+            s.resultTokens += approxTokens(toolResultText(b));
             if (p.ts && ts) {
               const d = Date.parse(ts) - Date.parse(p.ts);
               if (Number.isFinite(d) && d >= 0) s.durationMs += d;
@@ -214,8 +227,10 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
 
   const combined = input + output + cacheCreation + cacheRead;
   const byTool = [...toolMap.values()]
-    .map(s => ({ ...s, approxOutputTokens: Math.round(s.approxOutputTokens) }))
-    .sort((a, b) => b.approxOutputTokens - a.approxOutputTokens || b.count - a.count);
+    .map(s => ({ ...s, approxOutputTokens: Math.round(s.approxOutputTokens), resultTokens: Math.round(s.resultTokens) }))
+    // resultTokens leads: it is measured per call, and it is what grows the
+    // context every later turn replays. approxOutputTokens is a split estimate.
+    .sort((a, b) => b.resultTokens - a.resultTokens || b.approxOutputTokens - a.approxOutputTokens || b.count - a.count);
 
   const { agents, subagentTotals } = subagentSpend(filePath);
 
@@ -224,6 +239,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
   const notes: string[] = [
     'combined includes cache_read (replayed cached prompt, billed ~10%); lead with billableApprox for real cost.',
     'byTool.approxOutputTokens splits each turn\'s output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.',
+    'byTool.resultTokens is what each tool injected into context: its tool_result text sized at chars ÷ 4, summed per call (not split), error text included, images not counted. The firmer per-tool figure and byTool\'s sort key — but it is context growth, not assistant output; cite both and never add them.',
     'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.'
   ];
   if (subagentTotals.count > 0) {

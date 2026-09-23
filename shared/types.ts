@@ -1176,6 +1176,13 @@ export interface ToolStat {
    * carries no per-tool token field. Never includes input/cache tokens.
    */
   approxOutputTokens: number;
+  /**
+   * Tokens this tool injected into context: every matched tool_result's text
+   * (error text included) sized at chars ÷ 4 and summed per call — not split
+   * across a turn. Approximate in size but measured per call, so the firmer
+   * of the two figures and the key `byTool` sorts by. Image blocks count 0.
+   */
+  resultTokens: number;
 }
 
 /** Aggregate over the subagents ({@link AgentJob}) a session launched. */
@@ -1227,7 +1234,7 @@ export interface SessionAnalysis {
   /** Main-agent token totals (sidechain/subagent turns excluded to avoid double-count). */
   totals: TokenTotals;
   perTurn: PerTurn;
-  /** Per-tool main-agent usage, priciest (approxOutputTokens) first. */
+  /** Per-tool main-agent usage, largest context contributor (resultTokens) first. */
   byTool: ToolStat[];
   /**
    * Subagents launched (from `readAgents`), newest-first. `tokens` is the figure counted into

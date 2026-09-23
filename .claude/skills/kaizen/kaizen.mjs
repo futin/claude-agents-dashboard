@@ -251,6 +251,8 @@ function subagentSpend(filePath) {
 /* ------------------------------------------------ analysis (analyze.ts) */
 
 function num(v) { return typeof v === 'number' && Number.isFinite(v) ? v : 0; }
+// chars ÷ 4 — rough token size of a tool_result's text. Unrounded; sum first, round once.
+function approxTokens(text) { return text.length / 4; }
 function isErrorResult(b) { return b.is_error === true || /<tool_use_error>/i.test(toolResultText(b)); }
 function userText(msg) {
   const c = msg.content;
@@ -276,7 +278,7 @@ function analyzeSession(filePath, id) {
 
   const getTool = (name) => {
     let s = toolMap.get(name);
-    if (!s) { s = { tool: name, count: 0, durationMs: 0, errors: 0, approxOutputTokens: 0 }; toolMap.set(name, s); }
+    if (!s) { s = { tool: name, count: 0, durationMs: 0, errors: 0, approxOutputTokens: 0, resultTokens: 0 }; toolMap.set(name, s); }
     return s;
   };
 
@@ -356,6 +358,8 @@ function analyzeSession(filePath, id) {
           if (p) {
             pendingTool.delete(b.tool_use_id);
             const s = getTool(p.name);
+            // Per call, error text included — independent of the errors count.
+            s.resultTokens += approxTokens(toolResultText(b));
             if (p.ts && ts) { const d = Date.parse(ts) - Date.parse(p.ts); if (Number.isFinite(d) && d >= 0) s.durationMs += d; }
             if (err) { s.errors++; toolErrors++; errorOutstanding.add(p.name); } else errorOutstanding.delete(p.name);
           } else if (err) { toolErrors++; }
@@ -375,14 +379,16 @@ function analyzeSession(filePath, id) {
 
   const combined = input + output + cacheCreation + cacheRead;
   const byTool = [...toolMap.values()]
-    .map(s => ({ ...s, approxOutputTokens: Math.round(s.approxOutputTokens) }))
-    .sort((a, b) => b.approxOutputTokens - a.approxOutputTokens || b.count - a.count);
+    .map(s => ({ ...s, approxOutputTokens: Math.round(s.approxOutputTokens), resultTokens: Math.round(s.resultTokens) }))
+    // resultTokens leads: measured per call, and it is what every later turn replays.
+    .sort((a, b) => b.resultTokens - a.resultTokens || b.approxOutputTokens - a.approxOutputTokens || b.count - a.count);
 
   const { agents, subagentTotals } = subagentSpend(filePath);
 
   const notes = [
     'combined includes cache_read (replayed cached prompt, billed ~10%); lead with billableApprox for real cost.',
     "byTool.approxOutputTokens splits each turn's output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.",
+    "byTool.resultTokens is what each tool injected into context: its tool_result text sized at chars ÷ 4, summed per call (not split), error text included, images not counted. The firmer per-tool figure and byTool's sort key — but it is context growth, not assistant output; cite both and never add them.",
     'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.'
   ];
   if (subagentTotals.count > 0) notes.push("Subagent tokens are summed from each subagent's own transcript and are separate from main-agent totals; whole-session total = totals.combined + subagentTotals.tokens. subagentTotals.usage splits them by class — lead with its billableApprox for cost.");
