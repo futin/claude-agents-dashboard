@@ -267,7 +267,7 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   rates-audit.ts (`pnpm check:ledger`, `pnpm audit:rates -- <sub>`) —
                   re-derives the Token-value inputs from transcripts: `ledger`
                   exits 1 when the ledger misses ±5% of a day's spend, and
-                  `surfaces` / `modifiers` / `offbook` report; pipeline in lib/transcript-audit.ts
+                  `surfaces` / `modifiers` / `offbook` / `gap` report; pipeline in lib/transcript-audit.ts
 ```
 
 ## Map

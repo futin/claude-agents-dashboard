@@ -1,8 +1,8 @@
 /**
  * rates-audit.ts — audit the Token-value card's inputs against the transcripts.
  *
- *   tsx scripts/rates-audit.ts <ledger|surfaces|modifiers|offbook>
- *       [--root <projects dir>] [--dir <repo root>] [--days N] [--model <id>] [--tz <IANA zone>]
+ *   tsx scripts/rates-audit.ts <ledger|surfaces|modifiers|offbook|gap>
+ *       [--root <projects dir>]... [--dir <repo root>] [--days N] [--model <id>] [--tz <IANA zone>]
  *
  * Every token figure here is re-derived from `~/.claude/projects/**.jsonl`
  * directly — a data path independent of `.usage-ledger.jsonl` — so the recorder
@@ -23,6 +23,14 @@
  *   offbook    spend with no usage record — API errors, usage-less assistant
  *              lines, compactions — per `entrypoint`. Raw line counts, not
  *              deduplicated. Report only.
+ *   gap        why does a headless token spend more of the 5-hour window than
+ *              an interactive one? Over the full baseline range, `--model`
+ *              bins split interactive vs headless, the foreign-spend check,
+ *              one table per on-disk covariate (permission mode, concurrency,
+ *              nested share, utilization band, API errors) with the share of
+ *              the gap each explains, and a verdict. `--root` may repeat: the
+ *              roots are walked as one corpus, deduplicated on `message.id`.
+ *              Report only.
  *
  * `probe-usage-split.ts --reconstruct` has its own transcript replay for the
  * `req` counts; the overlap is known and left alone.
@@ -34,20 +42,29 @@
 
 import { projectsRoot } from '../server/lib/scan.js';
 import { RATES_HISTORY_BYTES, readRecentSamples } from '../server/lib/usage-history.js';
-import { ledgerStartMs, rawTokens, readLedgerSince, weightedTokens, weightsFor } from '../server/lib/usage-ledger.js';
+import { ledgerStartMs, rawTokens, readLedgerSince } from '../server/lib/usage-ledger.js';
 import {
-  BASELINE_MS, baselineRange, currentRange, driftRow, joinIntervals
+  BASELINE_MS, baselineRange, currentRange, driftRow, EXTERNAL_WEIGHTED_MAX, joinIntervals
 } from '../server/lib/usage-rate.js';
 import type { DriftRow, Interval } from '../server/lib/usage-rate.js';
 import {
-  completeDays, DAY_MS, formatShares, GATE_FLOOR_WEIGHTED, gateFailures, ledgerRows, mergeBins, MIXED_SURFACE,
-  modelDominates, modifierRows, readRecords, rebuildLedger, recordWeighted, scanFiles, surfaceLabel, walkTranscripts
+  addBin as addBinFor, binCovariates, completeDays, COVARIATES, DAY_MS, emptyAcc, explainedShare, formatShares,
+  GATE_FLOOR_WEIGHTED, gapRatio, gapVerdict, gateFailures, isInteractive, ledgerRows, mergeBins, mergeLevels,
+  MIXED_SURFACE, modelDominates, modifierRows, readOffbookMarks, readRecords, rebuildLedger, recordWeighted, scanFiles,
+  stratify, surfaceLabel, walkTranscripts
 } from './lib/transcript-audit.js';
-import type { Bin } from './lib/transcript-audit.js';
+import type { Acc, AuditFile, AuditRecord, Bin, Covariate, LabelledBin } from './lib/transcript-audit.js';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf('--' + name);
   return i === -1 ? undefined : process.argv[i + 1];
+}
+
+/** Every value of a repeatable flag, in order. */
+function args(name: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < process.argv.length - 1; i++) if (process.argv[i] === '--' + name) out.push(process.argv[i + 1]);
+  return out;
 }
 
 /** The first bare word that is not a flag's value — `pnpm audit:rates -- surfaces` may pass the `--` through. */
@@ -63,6 +80,7 @@ function subcommand(): string | undefined {
 
 const SUB = subcommand();
 const ROOT = arg('root') ?? projectsRoot();
+const ROOTS = args('root').length > 0 ? args('root') : [ROOT];
 const DIR = arg('dir');
 const DAYS = Number(arg('days') ?? 7);
 const MODEL = arg('model') ?? 'claude-opus-5';
@@ -76,8 +94,8 @@ const M = (n: number): string => (n / 1e6).toFixed(2) + 'M';
 const K = (n: number): string => (n / 1e3).toFixed(0) + 'k';
 const P = (n: number, d: number): string => (d > 0 ? ((n / d) * 100).toFixed(1) + '%' : '-');
 
-function header(title: string, files: number, records: number): void {
-  console.log(`\n${title}\n  root ${ROOT}\n  ${files} transcripts, ${records} records\n`);
+function header(title: string, files: number, records: number, roots: string[] = [ROOT]): void {
+  console.log(`\n${title}\n  root ${roots.join(', ')}\n  ${files} transcripts, ${records} records\n`);
 }
 
 // ── ledger ──
@@ -113,23 +131,7 @@ function runLedger(): number {
 
 // ── surfaces ──
 
-interface Acc {
-  bins: number; util: number; weighted: number; requests: number;
-  cc: number; cr: number; out: number; ccW: number; crW: number; outW: number;
-}
-
-const emptyAcc = (): Acc => ({ bins: 0, util: 0, weighted: 0, requests: 0, cc: 0, cr: 0, out: 0, ccW: 0, crW: 0, outW: 0 });
-
-function addBin(acc: Acc, bin: Bin, requests: number): void {
-  const c = bin.tok[MODEL];
-  const w = weightsFor(MODEL);
-  acc.bins++;
-  acc.util += bin.dUtil;
-  acc.requests += requests;
-  acc.weighted += weightedTokens(c, MODEL);
-  acc.cc += c.cc; acc.cr += c.cr; acc.out += c.out;
-  acc.ccW += c.cc * w.cc; acc.crW += c.cr * w.cr; acc.outW += c.out * w.out;
-}
+const addBin = (acc: Acc, bin: Bin, requests: number): void => addBinFor(acc, bin, requests, MODEL);
 
 /** Rows keyed by label, printed with the thin ones suppressed and counted. */
 function printAccs(rows: Map<string, Acc>, labelWidth: number): void {
@@ -320,8 +322,126 @@ function runOffbook(): number {
   return 0;
 }
 
+// ── gap ──
+
+/** How far either side of a bin an `external` interval counts as "near" it. */
+const NEAR_EXTERNAL_MS = 30 * 60_000;
+
+function runGap(): number {
+  const sinceMs = NOW - BASELINE_MS;
+  const seenFiles = new Set<string>();
+  const files: AuditFile[] = [];
+  for (const root of ROOTS) {
+    for (const f of walkTranscripts(root, sinceMs)) if (!seenFiles.has(f.file)) { seenFiles.add(f.file); files.push(f); }
+  }
+  const all = readRecords(files);
+  const records = all.filter(r => r.model === MODEL && rawTokens(r.tok) > 0).sort((a, b) => a.ts - b.ts);
+  const ticks = readLedgerSince(sinceMs, DIR);
+  const rebuild = rebuildLedger(all, ticks);
+  const samples = readRecentSamples(DIR, RATES_HISTORY_BYTES);
+  const intervals: Interval[] = joinIntervals(samples, rebuild.lines, ledgerStartMs(DIR))
+    .filter(iv => iv.toT >= sinceMs);
+  const utilAt = new Map(samples.map(s => [s.t, s.utilization]));
+  const offbook = readOffbookMarks(files);
+  header(`gap — ${MODEL}, interactive vs headless window cost, full ${BASELINE_MS / DAY_MS}-day range (tz ${TZ})`,
+    files.length, all.length, ROOTS);
+  console.log(`  ${ticks.length} ledger ticks, ${samples.length} usage samples, ${all.length - rebuild.outsideTick} records placed, `
+    + `${rebuild.outsideTick} outside every tick\n`);
+
+  const labelled: LabelledBin[] = [];
+  let i = 0;
+  for (const bin of mergeBins(intervals, utilAt)) {
+    while (i < records.length && records[i].ts <= bin.fromT) i++;
+    const inBin: AuditRecord[] = [];
+    for (let j = i; j < records.length && records[j].ts <= bin.toT; j++) inBin.push(records[j]);
+    if (!bin.tok[MODEL] || !modelDominates(bin, MODEL)) continue;
+    const cov = binCovariates(inBin, bin, offbook);
+    if (cov) labelled.push({ bin, cov, requests: inBin.length });
+  }
+
+  // 1. The gap itself.
+  const bySurface = new Map<string, Acc>();
+  for (const { bin, cov, requests } of labelled) {
+    addBin(bySurface.get(cov.surface) ?? bySurface.set(cov.surface, emptyAcc()).get(cov.surface)!, bin, requests);
+  }
+  const sideOf = (surface: string): 'interactive' | 'headless' | null =>
+    surface === MIXED_SURFACE ? null : isInteractive(surface) ? 'interactive' : 'headless';
+  const sides = { interactive: new Map<string, Acc>(), headless: new Map<string, Acc>() };
+  for (const [surface, a] of bySurface) { const s = sideOf(surface); if (s) sides[s].set(surface, a); }
+  const pool = (m: Map<string, Acc>): Map<string, Acc> =>
+    new Map([['(pooled)', mergeLevels([...m.values()].map(a => new Map([['(pooled)', a]]))).get('(pooled)') ?? emptyAcc()]]);
+  const pooledI = pool(sides.interactive), pooledH = pool(sides.headless);
+  // A side under Σutil 3 is rounding noise; its ratio prints but no verdict is fitted on it.
+  const thin = [pooledI, pooledH].some(m => m.get('(pooled)')!.util < MIN_ROW_UTIL);
+  const rawRatio = gapRatio(pooledI, pooledH);
+  const ratio = thin ? null : rawRatio;
+  console.log('  1. the gap, re-measured');
+  colHeader('surface', 16);
+  printAccs(new Map([...bySurface].sort((a, b) => a[0].localeCompare(b[0]))), 16);
+  const rate = (m: Map<string, Acc>): string => {
+    const a = m.get('(pooled)')!;
+    return a.util > 0 ? `${K(a.weighted / a.util)}/1% over ${a.bins} bins` : 'no bins';
+  };
+  console.log(`  interactive ${rate(pooledI)} (${[...sides.interactive.keys()].join(', ') || 'none'})`);
+  console.log(`  headless    ${rate(pooledH)} (${[...sides.headless.keys()].join(', ') || 'none'})`);
+  console.log(`  ratio       ${rawRatio === null ? '-' : rawRatio.toFixed(2) + 'x'} (interactive w/1% over headless w/1%; `
+    + `${MIXED_SURFACE} bins are on neither side)${thin ? ` — a side is under Σutil ${MIN_ROW_UTIL}, so no verdict` : ''}\n`);
+
+  // 2. Hypothesis 0: foreign spend.
+  const external = intervals.filter(iv => iv.kind === 'external');
+  const byPeriod = new Map<string, { ext: number; all: number }>();
+  for (const iv of intervals) {
+    if (iv.kind === 'idle') continue;
+    const p = period(iv.toT);
+    const e = byPeriod.get(p) ?? byPeriod.set(p, { ext: 0, all: 0 }).get(p)!;
+    e.all += iv.dUtil;
+    if (iv.kind === 'external') e.ext += iv.dUtil;
+  }
+  console.log(`  2. hypothesis 0, foreign spend — 'external' intervals: utilization rose, local weight < ${K(EXTERNAL_WEIGHTED_MAX)}`);
+  console.log('  period          Σutil   external   share');
+  for (const [p, e] of [...byPeriod].sort((a, b) => a[0].localeCompare(b[0]))) {
+    console.log('  ' + p.padEnd(14) + e.all.toFixed(1).padStart(7) + e.ext.toFixed(1).padStart(11) + P(e.ext, e.all).padStart(8));
+  }
+  const near = new Map<string, { bins: number; near: number }>();
+  for (const { bin, cov } of labelled) {
+    const n = near.get(cov.surface) ?? near.set(cov.surface, { bins: 0, near: 0 }).get(cov.surface)!;
+    n.bins++;
+    if (external.some(x => x.toT >= bin.fromT - NEAR_EXTERNAL_MS && x.fromT <= bin.toT + NEAR_EXTERNAL_MS)) n.near++;
+  }
+  console.log('  surface           bins   near external   share');
+  for (const [s, n] of [...near].sort((a, b) => a[0].localeCompare(b[0]))) {
+    console.log('  ' + s.padEnd(16) + String(n.bins).padStart(6) + String(n.near).padStart(16) + P(n.near, n.bins).padStart(8));
+  }
+  console.log('  Foreign spend inside a priced bin cannot be split out on one machine: it raises utilization with no local');
+  console.log('  transcript, so every per-machine rate is a lower bound. Join the other machine\'s transcripts with a second --root.\n');
+
+  // 3. One stratified table per covariate.
+  const shares: Partial<Record<Covariate, number | null>> = {};
+  COVARIATES.forEach((c, n) => {
+    const table = stratify(labelled, c, MODEL);
+    const rows = new Map<string, Acc>();
+    for (const [surface, levels] of [...table].sort((a, b) => a[0].localeCompare(b[0]))) {
+      for (const [level, a] of [...levels].sort((x, y) => x[0].localeCompare(y[0]))) rows.set(surface.padEnd(16) + level, a);
+    }
+    const sideLevels = (side: 'interactive' | 'headless'): Map<string, Acc> =>
+      mergeLevels([...table].filter(([s]) => sideOf(s) === side).map(([, levels]) => levels));
+    const share = thin ? null : explainedShare(sideLevels('interactive'), sideLevels('headless'));
+    shares[c] = share;
+    console.log(`  3.${n + 1} ${c}`);
+    colHeader('surface         level', 30);
+    printAccs(rows, 30);
+    console.log(`  explained share: ${share === null
+      ? `null (a side under Σutil ${MIN_ROW_UTIL}, the gap under 1.3x, or covered levels under 80% of headless weight)`
+      : share.toFixed(2)}\n`);
+  });
+
+  // 4. Verdict.
+  console.log(`  verdict: ${gapVerdict(ratio, shares)}`);
+  return 0;
+}
+
 const SUBCOMMANDS: Record<string, () => number> = {
-  ledger: runLedger, surfaces: runSurfaces, modifiers: runModifiers, offbook: runOffbook
+  ledger: runLedger, surfaces: runSurfaces, modifiers: runModifiers, offbook: runOffbook, gap: runGap
 };
 
 const run = SUB === undefined ? undefined : SUBCOMMANDS[SUB];

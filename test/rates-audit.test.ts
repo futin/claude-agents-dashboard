@@ -19,10 +19,10 @@ import { LEDGER_FILE, serializeLedgerLine } from '../server/lib/usage-ledger.js'
 import type { LedgerLine, TokenCounts } from '../server/lib/usage-ledger.js';
 import type { Interval } from '../server/lib/usage-rate.js';
 import {
-  DAY_MS, formatShares, gateFailures, ledgerRows, mergeBins, MIXED_SURFACE, modifierRows, readRecords,
-  rebuildLedger, recordWeighted, surfaceLabel, walkTranscripts
+  binCovariates, DAY_MS, emptyAcc, explainedShare, formatShares, gapVerdict, gateFailures, ledgerRows, mergeBins,
+  MIXED_SURFACE, modifierRows, readRecords, rebuildLedger, recordWeighted, surfaceLabel, walkTranscripts
 } from '../scripts/lib/transcript-audit.js';
-import type { AuditRecord } from '../scripts/lib/transcript-audit.js';
+import type { Acc, AuditRecord } from '../scripts/lib/transcript-audit.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = path.join(REPO, 'scripts', 'rates-audit.ts');
@@ -53,7 +53,7 @@ function line(model: string, tsMs: number, tok: TokenCounts, id?: string): strin
 function rec(over: Partial<AuditRecord>): AuditRecord {
   return {
     ts: 0, model: 'claude-opus-5', tok: tc(0, 0, 0, 0), entrypoint: '', effort: '', nested: false,
-    speed: '', serviceTier: '', isApiError: false, stopReason: '', ...over
+    session: '', permissionMode: '', speed: '', serviceTier: '', isApiError: false, stopReason: '', ...over
   };
 }
 
@@ -81,6 +81,23 @@ function gateFixture(diskIn: number, ledgerIn: number): { root: string; dir: str
   fs.writeFileSync(path.join(dir, LEDGER_FILE), serializeLedgerLine(ledger) + '\n');
   return { root, dir };
 }
+
+/** A `user` prompt line carrying `permissionMode`. */
+function modeLine(tsMs: number, mode: string): string {
+  return JSON.stringify({
+    type: 'user', timestamp: new Date(tsMs).toISOString(), permissionMode: mode,
+    message: { role: 'user', content: 'go' }
+  });
+}
+
+/** A per-level table from `[level, weighted, util]` triples — pre-weighted, so no token fixture is needed. */
+function levels(...rows: [string, number, number][]): Map<string, Acc> {
+  return new Map(rows.map(([level, weighted, util]) => [level, { ...emptyAcc(), bins: 1, weighted, util }]));
+}
+
+/** Records per session for `binCovariates`: `in` tokens weigh 1 on opus, so `w` is the weighted figure. */
+const wrec = (w: number, over: Partial<AuditRecord> = {}): AuditRecord => rec({ tok: tc(w, 0, 0, 0), ...over });
+const covBin = { fromT: 0, toT: 30 * 60_000, fromUtil: 50 };
 
 function runLedgerGate(root: string, dir: string): { status: number; out: string } {
   const r = spawnSync('npx', ['tsx', SCRIPT, 'ledger', '--root', root, '--dir', dir, '--days', '7'], {
@@ -127,7 +144,7 @@ export function run(): number {
       line('claude-opus-5', t, tc(2, 0, 0, 0)),
       line('claude-opus-5', t, tc(2, 0, 0, 0))
     ].join('\n') + '\n');
-    const records = readRecords([{ file, nested: false, mtimeMs: t }]);
+    const records = readRecords([{ file, nested: false, session: 's', mtimeMs: t }]);
     assert.deepStrictEqual(records.map(r => r.tok.in), [1, 2, 2]);
   })) p++; else f++;
 
@@ -207,6 +224,122 @@ export function run(): number {
     ], 'claude-opus-5');
     assert.strictEqual(rows.length, 1);
     assert.strictEqual(formatShares(rows[0].bySpeed), 'fast=75.0% standard=25.0%');
+  })) p++; else f++;
+
+  // ── gap ──
+
+  if (test('gap mode: a record inherits the latest preceding user-line mode in its file; none before it → \'\'', () => {
+    const root = tmp('ra-mode-');
+    fs.mkdirSync(path.join(root, '-p'));
+    const t0 = Date.now() - 3_600_000;
+    fs.writeFileSync(path.join(root, '-p', 'sA.jsonl'), [
+      line('claude-opus-5', t0 - 5_000, tc(1, 0, 0, 0), 'm-5'),
+      modeLine(t0, 'auto'),
+      line('claude-opus-5', t0 + 10_000, tc(2, 0, 0, 0), 'm10'),
+      modeLine(t0 + 20_000, 'default'),
+      line('claude-opus-5', t0 + 30_000, tc(3, 0, 0, 0), 'm30')
+    ].join('\n') + '\n');
+    const records = readRecords(walkTranscripts(root, 0)).sort((a, b) => a.ts - b.ts);
+    assert.deepStrictEqual(records.map(r => [r.tok.in, r.permissionMode, r.session]),
+      [[1, '', 'sA'], [2, 'auto', 'sA'], [3, 'default', 'sA']]);
+  })) p++; else f++;
+
+  if (test('gap mode: a nested file with no mode line inherits its parent session\'s; one with its own uses its own', () => {
+    const root = tmp('ra-nested-');
+    const proj = path.join(root, '-p');
+    fs.mkdirSync(path.join(proj, 'sA', 'subagents'), { recursive: true });
+    const t0 = Date.now() - 3_600_000;
+    fs.writeFileSync(path.join(proj, 'sA.jsonl'), [modeLine(t0, 'auto'), modeLine(t0 + 20_000, 'acceptEdits')].join('\n') + '\n');
+    fs.writeFileSync(path.join(proj, 'sA', 'subagents', 'agent-1.jsonl'),
+      line('claude-opus-5', t0 + 10_000, tc(1, 0, 0, 0), 'n1') + '\n');
+    fs.writeFileSync(path.join(proj, 'sA', 'subagents', 'agent-2.jsonl'),
+      [modeLine(t0 + 5_000, 'plan'), line('claude-opus-5', t0 + 30_000, tc(2, 0, 0, 0), 'n2')].join('\n') + '\n');
+    const records = readRecords(walkTranscripts(root, 0)).sort((a, b) => a.ts - b.ts);
+    assert.deepStrictEqual(records.map(r => [r.tok.in, r.permissionMode, r.session, r.nested]),
+      [[1, 'auto', 'sA', true], [2, 'plan', 'sA', true]]);
+  })) p++; else f++;
+
+  if (test('gap mode dominance: 900 auto / 100 default → auto; 700 / 300 → mixed; 850 \'\' / 150 auto → (none)', () => {
+    const mode = (...rs: AuditRecord[]) => binCovariates(rs, covBin)!.mode;
+    assert.strictEqual(mode(wrec(900, { permissionMode: 'auto' }), wrec(100, { permissionMode: 'default' })), 'auto');
+    assert.strictEqual(mode(wrec(700, { permissionMode: 'auto' }), wrec(300, { permissionMode: 'default' })), 'mixed');
+    assert.strictEqual(mode(wrec(850, { permissionMode: '' }), wrec(150, { permissionMode: 'auto' })), '(none)');
+    assert.strictEqual(binCovariates([], covBin), null);
+  })) p++; else f++;
+
+  if (test('gap concurrency: top-level + nested of session A plus B → 2; three sessions → 3+', () => {
+    const conc = (...rs: AuditRecord[]) => binCovariates(rs, covBin)!.concurrency;
+    assert.strictEqual(conc(wrec(1, { session: 'A' }), wrec(1, { session: 'A', nested: true }), wrec(1, { session: 'B' })), '2');
+    assert.strictEqual(conc(wrec(1, { session: 'A' }), wrec(1, { session: 'B' }), wrec(1, { session: 'C' })), '3+');
+  })) p++; else f++;
+
+  if (test('gap utilBand: from the first merged interval\'s sample — 96 then 97 → >=95; 94 then 96 → 80-94; 79 → <80', () => {
+    const band = (utils: number[]) => {
+      const ivs = utils.map((_, n) => iv(n * 10, n * 10 + 10));
+      const bins = mergeBins(ivs, new Map(utils.map((u, n) => [n * 10 * MIN, u])));
+      assert.strictEqual(bins.length, 1);
+      return binCovariates([wrec(1)], bins[0])!.utilBand;
+    };
+    assert.strictEqual(band([96, 97]), '>=95');
+    assert.strictEqual(band([94, 96]), '80-94', 'the first interval\'s sample, not the last');
+    assert.strictEqual(band([94]), '80-94');
+    assert.strictEqual(band([79]), '<80');
+  })) p++; else f++;
+
+  if (test('gap offbook: an unpriced line of a bin\'s session inside (fromT, toT] → errors; another session\'s → clean', () => {
+    const marks = new Map([['A', [10 * 60_000]], ['B', [5 * 60_000]]]);
+    assert.strictEqual(binCovariates([wrec(1, { session: 'A' })], covBin, marks)!.offbook, 'errors');
+    assert.strictEqual(binCovariates([wrec(1, { session: 'C' })], covBin, marks)!.offbook, 'clean');
+    assert.strictEqual(binCovariates([wrec(1, { session: 'A' })], { ...covBin, fromT: 10 * 60_000 }, marks)!.offbook, 'clean');
+  })) p++; else f++;
+
+  if (test('gap explainedShare: a covariate that explains the whole gap → exactly 1', () => {
+    const share = explainedShare(levels(['a', 400e3, 1], ['b', 100e3, 1]), levels(['a', 200e3, 0.5], ['b', 400e3, 4]));
+    assert.ok(share !== null && Math.abs(share - 1) < 1e-12, String(share));
+  })) p++; else f++;
+
+  if (test('gap explainedShare: a covariate with no effect → exactly 0', () => {
+    const share = explainedShare(levels(['a', 400e3, 1], ['b', 400e3, 1]), levels(['a', 200e3, 1], ['b', 600e3, 3]));
+    assert.ok(share !== null && Math.abs(share) < 1e-12, String(share));
+  })) p++; else f++;
+
+  if (test('gap explainedShare: covered headless weight 800k of 1150k (0.70) → null', () => {
+    assert.strictEqual(explainedShare(levels(['a', 400e3, 1], ['b', 400e3, 1]),
+      levels(['a', 200e3, 1], ['b', 600e3, 3], ['c', 350e3, 1])), null);
+  })) p++; else f++;
+
+  if (test('gap explainedShare: pooled 260k vs 220k (1.18x) → null', () => {
+    assert.strictEqual(explainedShare(levels(['a', 260e3, 1]), levels(['a', 220e3, 1])), null);
+  })) p++; else f++;
+
+  if (test('gap verdict: 1.2x → artefact; mode 0.62 → named; best 0.41 → not on disk; all null → best none', () => {
+    assert.strictEqual(gapVerdict(1.2, { mode: 0.9 }), 'artefact');
+    assert.strictEqual(gapVerdict(1.8, { mode: 0.62, concurrency: 0.3 }), 'named: mode (0.62)');
+    assert.strictEqual(gapVerdict(1.8, { mode: 0.41, utilBand: null }), 'not on disk (best: mode 0.41)');
+    assert.strictEqual(gapVerdict(1.8, { mode: null, concurrency: null }), 'not on disk (best: none)');
+    assert.ok(gapVerdict(null, { mode: 0.9 }).startsWith('insufficient data'));
+  })) p++; else f++;
+
+  if (test('gap (CLI): the same transcript under two --roots counts its record once', () => {
+    const a = tmp('ra-rootA-'), b = tmp('ra-rootB-'), dir = tmp('ra-gapdir-');
+    for (const r of [a, b]) {
+      fs.mkdirSync(path.join(r, '-p'));
+      fs.writeFileSync(path.join(r, '-p', 's1.jsonl'), line('claude-opus-5', Date.now() - 60_000, tc(5, 0, 0, 0), 'g1') + '\n');
+    }
+    const gap = (...roots: string[]) => {
+      const res = spawnSync('npx', ['tsx', SCRIPT, 'gap', ...roots.flatMap(x => ['--root', x]), '--dir', dir], {
+        cwd: REPO, encoding: 'utf8'
+      });
+      assert.strictEqual(res.status, 0, res.stdout + res.stderr);
+      const m = /(\d+) transcripts, (\d+) records/.exec(res.stdout);
+      assert.ok(m, res.stdout);
+      return { files: Number(m![1]), records: Number(m![2]), out: res.stdout };
+    };
+    const one = gap(a), two = gap(a, b);
+    assert.strictEqual(one.records, 1);
+    assert.strictEqual(two.files, 2, 'both roots are walked');
+    assert.strictEqual(two.records, one.records);
+    assert.ok(/verdict: /.test(two.out), two.out);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
