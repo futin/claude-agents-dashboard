@@ -68,9 +68,20 @@ control (the type is a column now, not a collapsible header) and the
   worktree's dir too, so both dirs hold a transcript reporting the repo as launch cwd and the
   worktree as newest — neither cwd is right for both. Naming settles it: the repo's dir
   yields the repo (the newest cwd hid it, and no other dir can name it — bug-14) and the
-  worktree's own dir still yields the worktree. Falls back to launch-then-newest when the
-  name matches neither. One entry per dir, never two: `dirName` is the rail's React key, the
-  spawn `<option>` value and `resolveProject`'s argument, so it has to stay unique.
+  worktree's own dir yields the worktree, which the on-disk filter below then drops. Falls
+  back to launch-then-newest when the name matches neither. One entry per dir, never two:
+  `dirName` is the rail's React key, the spawn `<option>` value and `resolveProject`'s
+  argument, so it has to stay unique.
+  Only then is each cwd checked on disk (`isListedProjectPath`, bug-21): a path that is no
+  longer a directory is dropped (an orchestrator run merges and prunes its worktrees, so most
+  throwaway rows are dead paths; deleted or moved repos go too), and so is a linked git
+  worktree — `.git` is a file whose `gitdir:` points into some git dir's `worktrees/`,
+  wherever the worktree sits. Hidden outright, not folded under the parent repo: Sessions
+  already shows a run's worktree sessions live, and a worktree's config only duplicates the
+  branch it was cut from. A `.git` dir, no `.git`, a submodule's `.git` file, or one with no
+  readable `gitdir:` line is kept — fail open. Pure `fs`, no `git` subprocess. Unconditional,
+  so `resolveProject` and `collectServablePaths` lose those rows too: spawn into one answers
+  `400 unknown project`, and nothing can hold a hidden worktree's file open in a panel.
   Sessions the desktop app archived are skipped — `api.ts` passes `archivedIds` into
   `listRecentProjects`, so a project whose only recent session was deleted in the app stops
   reading as recently active (see [sessions](sessions.md) §Archived-session filter). The

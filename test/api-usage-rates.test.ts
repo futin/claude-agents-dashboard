@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { shapeUsageRates } from '../server/api.js';
+import { emptyRates, shapeUsageRates } from '../server/api.js';
 import { readRecentSamples } from '../server/lib/usage-history.js';
 import { LEDGER_FILE, ledgerStartMs, readLedgerSince } from '../server/lib/usage-ledger.js';
 import { BASELINE_MS, fitDeviation } from '../server/lib/usage-rate.js';
@@ -261,6 +261,38 @@ function weeklyOnlyFixtureDir(): string {
         // `in` tokens weigh exactly 1, so the weighted total reads off the fixture.
         tok: { 'fable-5': { in: 100_000, out: 0, cc: 0, cr: 0 } }
       }));
+    }
+  }
+  fs.writeFileSync(path.join(dir, '.usage-history.jsonl'), samples.join('\n') + '\n', 'utf8');
+  fs.writeFileSync(path.join(dir, LEDGER_FILE), ledger.join('\n') + '\n', 'utf8');
+  return dir;
+}
+
+/** Where `boostFixtureDir`'s record ends: Saturday 2026-09-26 00:00 ET, the evening after its last weekday. */
+const BOOST_NOW = Date.parse('2026-09-26T04:00:00.000Z');
+
+/**
+ * Three ET weekdays, each with a peak block at 10:00 ET and an off-peak block at 16:00 ET — six one-minute intervals of 0.5 points a block,
+ * one reset window each so no pair straddles two. Off-peak carries **twice** the cache-read tokens per point of peak, so the weighted and the
+ * raw ratio are both exactly 2: the step a real limit boost makes, three days running — the least the weekday verdict will claim.
+ */
+function boostFixtureDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rates-boost-'));
+  const samples: string[] = [];
+  const ledger: string[] = [];
+  for (const date of ['2026-09-23', '2026-09-24', '2026-09-25']) {
+    for (const [hourEt, cr] of [[10, 4_500_000], [16, 9_000_000]] as const) {
+      const base = Date.parse(`${date}T${hourEt}:00:00-04:00`);
+      const resetsAt = new Date(base + 3 * 3_600_000).toISOString();
+      let utilization = 10;
+      samples.push(JSON.stringify({ t: base, utilization, resetsAt }));
+      for (let i = 1; i <= 6; i++) {
+        utilization += 0.5;
+        samples.push(JSON.stringify({ t: base + i * MIN, utilization, resetsAt }));
+        ledger.push(JSON.stringify({
+          t: base + i * MIN, prevT: base + (i - 1) * MIN, tok: { 'opus-5': { in: 0, out: 0, cc: 0, cr } }
+        }));
+      }
     }
   }
   fs.writeFileSync(path.join(dir, '.usage-history.jsonl'), samples.join('\n') + '\n', 'utf8');
@@ -714,6 +746,32 @@ export async function run(): Promise<number> {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  }));
+
+  check(test('boost is present and zeroed on the not-recording body and on the fail-open body', () => {
+    const off = shapeUsageRates({ recording: false, samples: [], ledger: [], ledgerStartMs: null, nowMs: T0 });
+    const failed = emptyRates(T0, false, true);
+    assert.strictEqual(failed.error, true);
+    for (const [label, body] of [['recording off', off], ['fail-open', failed]] as const) {
+      assert.strictEqual(body.boost.verdict, 'none', label);
+      assert.deepStrictEqual(body.boost.hours, [], label);
+      assert.strictEqual(body.boost.days, 0, label);
+      assert.strictEqual(body.boost.weekend.verdict, 'none', label);
+      assert.strictEqual(body.boost.weekend.controlDays, 0, label);
+    }
+  }));
+
+  check(test('a recorded three-day 2x weekday step reaches the body as a boost, window echoed', () => {
+    const body = bodyFor(boostFixtureDir(), BOOST_NOW);
+    assert.strictEqual(body.boost.verdict, 'boost');
+    assert.strictEqual(body.boost.model, 'opus-5');
+    assert.strictEqual(body.boost.days, 3);
+    assert.strictEqual(body.boost.since, '2026-09-23');
+    assert.ok(Math.abs((body.boost.ratio ?? 0) - 2) < 0.02, `ratio ${body.boost.ratio}`);
+    assert.ok(Math.abs((body.boost.rawRatio ?? 0) - 2) < 0.02, `rawRatio ${body.boost.rawRatio}`);
+    assert.strictEqual(body.boost.peakStartHourEt, 8);
+    assert.strictEqual(body.boost.peakEndHourEt, 14);
+    assert.deepStrictEqual(body.boost.hours.map((h) => h.hour), [16]);
   }));
 
   check(await testAsync('GET /api/usage/rates is routed and answers JSON', async () => {

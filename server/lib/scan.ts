@@ -9,6 +9,8 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { readTranscript } from './transcript.js';
+import { readAgentsCached } from './agents-cache.js';
+import { SUBAGENT_DIR } from './subagent-usage.js';
 import { refreshCwd } from './token-refresh.js';
 import { readSessionAnalyticsLog, lessonForSession } from './sessionAnalyticsLog.js';
 import type { SessionAnalyticsLesson } from './sessionAnalyticsLog.js';
@@ -114,9 +116,6 @@ const HEADLESS_ENTRYPOINT = 'sdk-cli';
 export function sessionSurface(entrypoint: string | null | undefined): SessionSurface {
   return entrypoint === HEADLESS_ENTRYPOINT ? 'dashboard' : 'local';
 }
-
-/** The per-session directory the CLI writes subagent transcripts into. */
-const SUBAGENT_DIR = 'subagents';
 
 /** One transcript file as a ref, or null when it is gone or not a file. */
 function statRef(full: string, dirName: string): TranscriptRef | null {
@@ -258,12 +257,9 @@ export function findTranscript(root: string, id: string): TranscriptRef | undefi
  * Same field, and so the same fail direction, as the `permissionWait` gate in
  * {@link scanSessions}.
  *
- * Known imprecision, inherited from that gate: `readTranscript` does not filter
- * sidechains, so a subagent writing while the main thread is parked on a wait
- * would read as the session moving on. It needs a single assistant message that
- * pairs a `Task` call with the wait tool, and it fails toward the terminal card
- * — the direction this subsystem always prefers — so it is documented rather
- * than guarded.
+ * A subagent cannot move this value: it writes its own file under
+ * `<id>/subagents/`, and no sidechain record ever lands in the parent transcript
+ * `findTranscript` returns, so the newest message is always the main thread's.
  */
 export function lastMessageMs(root: string, sessionId: string): number | null {
   let ref: TranscriptRef | undefined;
@@ -274,6 +270,45 @@ export function lastMessageMs(root: string, sessionId: string): number | null {
   if (!parsed || !parsed.lastMessageTs) return null;
   const ms = Date.parse(parsed.lastMessageTs);
   return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * How long a subagent file may go unwritten and still count as running. Longer
+ * than the Bash tool's 10-minute maximum timeout, so a subagent sitting inside
+ * its longest possible single tool call is still evidence.
+ */
+export const SUBAGENT_STALL_MS = 15 * 60 * 1000;
+
+/**
+ * Is a subagent of this session still running? The status ladder's evidence for
+ * a parent parked on a dispatched agent (bug-25): the parked parent writes
+ * nothing while it waits, so its own transcript reads finished (background
+ * launch → `end_turn`) or stalled (sync `tool_use` gone quiet).
+ *
+ * True only when all three hold, cheapest first:
+ *  1. an `agent-*.jsonl` under `<dir>/<sessionId>/subagents/` was written within
+ *     {@link SUBAGENT_STALL_MS} — no directory is the common case, one `readdir`;
+ *  2. that file's newest message is mid-turn (a finished subagent ends `end_turn`);
+ *  3. the parent still has a launch `running` per `readAgentsCached` — the veto
+ *     for an interrupted run, where Esc gives the parent a `tool_result` but
+ *     leaves the subagent file fresh and mid-turn.
+ */
+export function subagentRunning(parentFile: string, sessionId: string, nowMs: number): boolean {
+  const dir = path.join(path.dirname(parentFile), sessionId, 'subagents');
+  let names: string[];
+  try { names = fs.readdirSync(dir); } catch { return false; }
+  const unfinished = names.some(name => {
+    if (!name.startsWith('agent-') || !name.endsWith('.jsonl')) return false;
+    const file = path.join(dir, name);
+    let mtimeMs: number;
+    try { mtimeMs = fs.statSync(file).mtimeMs; } catch { return false; }
+    if (nowMs - mtimeMs > SUBAGENT_STALL_MS) return false;
+    const sub = readTranscript(file);
+    return !!sub && sub.hasMessages && !sub.turnComplete;
+  });
+  if (!unfinished) return false;
+  const jobs = readAgentsCached(parentFile);
+  return !!jobs && jobs.some(j => j.status === 'running');
 }
 
 /** Count running `claude` processes (informational cross-check). */
@@ -585,6 +620,11 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     else if (permissionWait) status = 'question';                      // blue — dialog open in the terminal
     else if (parsed.waitingOnQuestion) status = 'question';            // blue — needs an answer, beats all
     else if (recent && !parsed.turnComplete) status = 'working';       // green — machine actively churning
+    // A parent parked on a subagent writes nothing, so its own transcript reads
+    // done or stalled. Below `dead` and every question arm; evaluated only when
+    // the ladder would otherwise say idle/incomplete, so the probe stays off
+    // every row the arm above already settled.
+    else if (subagentRunning(c.file, c.id, now)) status = 'working';   // green — parked on a running subagent
     else if (parsed.turnComplete && !recent) status = 'idle';          // gray — finished and dormant
     else status = 'incomplete';                                        // yellow — your turn (recent+done) OR stalled (stale+pending)
     // Only present when this server holds a live handle for the id — the field

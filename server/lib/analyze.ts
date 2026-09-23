@@ -14,11 +14,12 @@
  *    across its tool calls (`approxOutputTokens`).
  *
  * Subagent turns are NOT in this file: the CLI writes them to the session's own
- * `<sessionId>/subagents/agent-*.jsonl` (the usage ledger reads those — see
- * `scan.ts` `listUsageTranscripts`). Their tokens arrive instead through
- * `bySubagent`/`subagentTotals`, which readAgents parses out of the Task result
- * notification. Whole-session total ≈ totals.combined + subagentTotals.tokens.
- * An `isSidechain:true` record is still skipped below, for the older transcripts
+ * `<sessionId>/subagents/agent-*.jsonl`. `subagentTotals` sums those files
+ * (`subagent-usage.ts`), matched to the launches readAgents pairs out of this
+ * transcript; the harness's own figure in the Task result is only a fallback,
+ * because it is the subagent's final context size, not its spend (bug-27).
+ * Whole-session total = totals.combined + subagentTotals.tokens. An
+ * `isSidechain:true` record is still skipped below, for the older transcripts
  * that did replay one.
  *
  * ONE TURN IS NOT ONE RECORD. Claude Code writes one record per content block —
@@ -34,8 +35,9 @@
 import fs from 'node:fs';
 
 import { readAgents } from './agents.js';
+import { addTotals, emptyTotals, readSubagentUsage } from './subagent-usage.js';
 import type {
-  ErrorSignals, SessionAnalysis, SubagentTotals, ToolStat
+  AgentJob, ErrorSignals, SessionAnalysis, SubagentTotals, ToolStat
 } from '../../shared/types.js';
 
 /** Finite number or 0. */
@@ -215,12 +217,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
     .map(s => ({ ...s, approxOutputTokens: Math.round(s.approxOutputTokens) }))
     .sort((a, b) => b.approxOutputTokens - a.approxOutputTokens || b.count - a.count);
 
-  const agents = readAgents(filePath) || [];
-  const subagentTotals: SubagentTotals = {
-    count: agents.length,
-    tokens: agents.reduce((sum, a) => sum + (a.tokens ?? 0), 0),
-    unknownTokenCount: agents.filter(a => a.tokens == null).length
-  };
+  const { agents, subagentTotals } = subagentSpend(filePath);
 
   const errorSignals: ErrorSignals = { toolErrors, retries, userCorrections };
 
@@ -230,7 +227,10 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
     'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.'
   ];
   if (subagentTotals.count > 0) {
-    notes.push('Subagent tokens are exact and separate from main-agent totals; whole-session total ≈ totals.combined + subagentTotals.tokens.');
+    notes.push('Subagent tokens are summed from each subagent\'s own transcript and are separate from main-agent totals; whole-session total = totals.combined + subagentTotals.tokens. subagentTotals.usage splits them by class — lead with its billableApprox for cost.');
+  }
+  if (subagentTotals.fallbackCount > 0) {
+    notes.push(`${subagentTotals.fallbackCount} subagent(s) have no complete transcript and are counted at the harness figure (their final context size) — a lower bound.`);
   }
   if (subagentTotals.unknownTokenCount > 0) {
     notes.push(`${subagentTotals.unknownTokenCount} subagent(s) have unknown token totals (still running or old transcript).`);
@@ -260,4 +260,38 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
     errorSignals,
     notes
   };
+}
+
+/**
+ * Pair each launch with its subagent transcript — by `agentId` (the filename), else by the
+ * sidecar's `toolUseId` — and settle one figure per launch. A finished launch takes its
+ * transcript sum unless that sums below the harness figure: a final context size larger than
+ * every turn added together means the file is still being written, so the harness figure is
+ * the better (lower-bound) answer. A running launch stays unknown, as does a finished one with
+ * neither. A transcript no launch claims is not a subagent this session can account for, and
+ * is left out rather than risk counting one twice.
+ */
+function subagentSpend(filePath: string): { agents: AgentJob[]; subagentTotals: SubagentTotals } {
+  const files = readSubagentUsage(filePath);
+  const byAgentId = new Map(files.map(f => [f.agentId, f]));
+  const byToolUseId = new Map(files.filter(f => f.toolUseId).map(f => [f.toolUseId as string, f]));
+  const usage = emptyTotals();
+  let tokens = 0, fallbackCount = 0, unknownTokenCount = 0;
+  const agents = (readAgents(filePath) || []).map(a => {
+    const file = (a.agentId && byAgentId.get(a.agentId)) || byToolUseId.get(a.id);
+    let figure: number | null = null;
+    if (a.status === 'done') {
+      if (file && file.usage.combined > 0 && file.usage.combined >= (a.tokens ?? 0)) {
+        figure = file.usage.combined;
+        addTotals(usage, file.usage);
+      } else if (a.tokens != null) {
+        figure = a.tokens;
+        fallbackCount++;
+      }
+    }
+    if (figure == null) unknownTokenCount++;
+    else tokens += figure;
+    return { ...a, tokens: figure };
+  });
+  return { agents, subagentTotals: { count: agents.length, tokens, usage, fallbackCount, unknownTokenCount } };
 }

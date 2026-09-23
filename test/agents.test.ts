@@ -192,6 +192,21 @@ export function run(): number {
     assert.strictEqual(a.durationMs, 52631); // exact value, not the 30s timestamp diff
   })) p++; else f++;
 
+  if (test('agentId: sync result carries it, async ack carries it, old records leave it null', () => {
+    const file = fixture([
+      taskRec('t1', 'Explore', 'sync', '2026-07-01T10:00:00Z'),
+      resultRec('t1', '2026-07-01T10:00:10Z', { status: 'completed', agentId: 'aSync1', totalTokens: 10 }),
+      taskRec('t2', 'Explore', 'async', '2026-07-01T10:00:20Z'),
+      ackRec('t2', 'aAsync2', '2026-07-01T10:00:21Z'),
+      taskRec('t3', 'Explore', 'old', '2026-07-01T10:00:30Z'),
+      resultRec('t3', '2026-07-01T10:00:40Z', { status: 'completed' })
+    ]);
+    const byId = new Map(readAgents(file)!.map(a => [a.id, a]));
+    assert.strictEqual(byId.get('t1')!.agentId, 'aSync1');
+    assert.strictEqual(byId.get('t2')!.agentId, 'aAsync2');
+    assert.strictEqual(byId.get('t3')!.agentId, null);
+  })) p++; else f++;
+
   if (test('async ack via structured toolUseResult alone (no ack text) → running', () => {
     const file = fixture([
       taskRec('toolu_9', 'Explore', 'scan', '2026-07-01T10:00:00Z'),

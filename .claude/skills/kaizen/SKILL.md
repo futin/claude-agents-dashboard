@@ -50,8 +50,10 @@ to stderr — report it, since two sessions in one cwd are indistinguishable. Ou
   cost. `totals.combined` is larger because it adds `cacheRead` — the cached prompt replayed
   each turn, billed at ~10%. Mention `combined` only as a context-pressure signal, never as
   "what this cost". The `notes[]` array restates these caveats — respect them.
-- **Whole-session total ≈ `totals.combined` + `subagentTotals.tokens`.** Subagent tokens are
-  exact and tracked separately (they don't appear in `totals`). Call out the split.
+- **Whole-session total = `totals.combined` + `subagentTotals.tokens`.** Subagent tokens are summed from each subagent's
+  own transcript and tracked separately (they don't appear in `totals`); `subagentTotals.usage` splits them by class, so lead
+  with its `billableApprox` for their cost, exactly as for the main agent. `fallbackCount` subagents had no complete
+  transcript and sit at the harness's figure — their final context size, a lower bound. Call out the split.
 - Flag the bloated turn: `perTurn.maxTurnIndex` / `maxCombined` vs `avgCombined`. A single
   turn far above average usually means context was left to grow (big files re-read, no
   `/clear`, giant tool outputs).
@@ -62,8 +64,9 @@ to stderr — report it, since two sessions in one cwd are indistinguishable. Ou
   split of each turn's output tokens across its tool calls; the transcript has no per-tool
   token field. Say "approx" when you cite it. `count`, `errors`, and `durationMs` (wall time,
   includes model latency) ARE exact — lean on those for firm claims.
-- `bySubagent` has exact per-subagent `tokens` / `toolUses` / `durationMs`. Name the priciest
-  subagents and whether the work justified the spend.
+- `bySubagent` has per-subagent `tokens` (summed from that subagent's own transcript; the harness's final-context figure
+  only where none is complete) and exact `toolUses` / `durationMs`. Name the priciest subagents and whether the work
+  justified the spend.
 
 ## 4. Accuracy read (explicitly subjective)
 

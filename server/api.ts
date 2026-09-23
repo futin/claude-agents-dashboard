@@ -15,7 +15,7 @@ import { readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
 import { readAccountProfile } from './lib/account.js';
-import { deriveProfile, profileSnapshot, readRecentSamples } from './lib/usage-history.js';
+import { deriveProfile, profileSnapshot, RATES_HISTORY_BYTES, readRecentSamples } from './lib/usage-history.js';
 import type { ProfileState, UsageSample } from './lib/usage-history.js';
 import { ledgerStartMs, readLedgerSince } from './lib/usage-ledger.js';
 import type { LedgerLine } from './lib/usage-ledger.js';
@@ -24,6 +24,7 @@ import {
   fitDeviation, fitRates, fitSplits, joinIntervals, joinWeeklyIntervals, ledgerBreakMs,
   poolRate, rateFor
 } from './lib/usage-rate.js';
+import { detectBoost, emptyBoost } from './lib/usage-boost.js';
 import { HOURS_PER_WEEK, confidenceOf, localOffsetMinutes, walkForward } from './lib/usage-forecast.js';
 import {
   claudeHome, collectServablePaths, listRecentProjects, readGlobalScope,
@@ -184,7 +185,8 @@ export function serveSessions(baseConfig: Config, res: ServerResponse, params?: 
  * `GET /api/sessions/:id` — the subagents a session launched. First selection
  * reads the full transcript; while the session stays selected, the 3s detail
  * poll goes through the incremental cache and costs O(new bytes) (see
- * agents-cache.ts). Still runs only on selection — never in the list poll.
+ * agents-cache.ts). The list poll touches the same cache only through scan.ts
+ * `subagentRunning`, and only for a session with a fresh, unfinished subagent.
  * The id is resolved against the enumerated transcript list, never joined into a
  * path directly, so a hostile id can't escape the projects root.
  */
@@ -708,16 +710,6 @@ export function serveUsageProfile(res: ServerResponse): void {
 }
 
 /**
- * How much of the history log a rate fit reads.
- *
- * Sized for the baseline horizon at the worst case — one write-on-change
- * sample per minute for 17 days is ~24_500 lines of ~80 bytes, under 2 MB — so
- * the fit can never be quietly starved of the oldest part of its own baseline.
- * Quiet stretches write the 15-minute heartbeat instead and cost far less.
- */
-export const RATES_HISTORY_BYTES = 4_194_304;
-
-/**
  * An honest empty body — no ledger yet, recording off, or a failed fit.
  *
  * `coverage` is present and zeroed rather than absent: the counters have no
@@ -733,7 +725,8 @@ function zeroCoverage(): UsageCoverage {
   };
 }
 
-function emptyRates(nowMs: number, recording: boolean, error?: true): UsageRatesResponse {
+/** Exported for the fail-open body's test only — the route is its one production caller. */
+export function emptyRates(nowMs: number, recording: boolean, error?: true): UsageRatesResponse {
   return {
     generatedAt: new Date(nowMs).toISOString(),
     recording,
@@ -745,6 +738,7 @@ function emptyRates(nowMs: number, recording: boolean, error?: true): UsageRates
     weeklyRecorded: false,
     weeklyCoverage: zeroCoverage(),
     weeklyExternalSharePct: null,
+    boost: emptyBoost(),
     ...(error ? { error: true } : {})
   };
 }
@@ -899,7 +893,9 @@ export function shapeUsageRates(opts: {
       recorderBreakHours: breakMs / 3_600_000,
       startProvable: startMs !== null
     },
-    weeklyExternalSharePct: weeklyShare === null ? null : weeklyShare * 100
+    weeklyExternalSharePct: weeklyShare === null ? null : weeklyShare * 100,
+    // Off the 5-hour intervals already built above — no second join, no second read.
+    boost: detectBoost(intervals, nowMs)
   };
 }
 

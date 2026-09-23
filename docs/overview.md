@@ -91,7 +91,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/account` | who the CLI is signed in as (`~/.claude.json` → `oauthAccount`, as display strings) + the two rate windows — the header chip's own 30s poll, so it does not ride the 3s session scan |
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
-| `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, one cell per UTC day of the horizon, plus the coverage disclosure |
+| `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, one cell per UTC day of the horizon, plus the coverage disclosure and the off-peak boost verdict (`lib/usage-boost.ts`) |
 | anything else | static files from `client/dist` (production only) |
 
 ⚠️ The static catch-all resolves through `resolveStaticPath` in `index.ts`, which confines
@@ -144,7 +144,8 @@ server/
   lib/scan.ts     enumerates + ranks sessions; status machine; liveness gates (cwd, session id);
                   `listUsageTranscripts` is the second enumeration — top-level files plus
                   `<sessionId>/subagents/*.jsonl` — read by the usage ledger only, since a
-                  subagent file must never become a session row
+                  subagent file must never become a session row (`analyze.ts` reads one
+                  session's subagent files directly, through `subagent-usage.ts`)
   lib/archived.ts reads the desktop app's own session records (macOS Application
                   Support) for the `isArchived` flag, joined to transcripts by
                   `cliSessionId` — the only place that touches that store; the id
@@ -169,10 +170,13 @@ server/
                   plus `joinWeeklyIntervals` (tick-to-tick pairing over the
                   weekly window), `WEEKLY_FLOORS`, `EXTERNAL_WEIGHTED_MAX_WEEKLY`
                   and the exported `poolRate`
+  lib/usage-boost.ts  off-peak usage-limit boost detector over those intervals: weekday
+                  off-peak vs same-day peak, weekend vs pooled weekday peak (pure)
   lib/token-refresh.ts  makes the CLI renew an expired OAuth token (auth status,
                   then one haiku turn) so the bars self-heal
   lib/management.ts   config scanner + servable-path security set
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
+  lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
   lib/analytics.ts  reader for the Analytics tab
   lib/pending.ts  in-memory pending-question store (the first of the four write paths)
@@ -263,6 +267,10 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   the gap between them, the weekly interval tally and rates,
                   check-token-weights.ts (`pnpm check:weights`) — re-measures the
                   cache-write TTL mix behind TYPE_WEIGHTS, exits 1 when it drifts
+                  rates-audit.ts (`pnpm check:ledger`, `pnpm audit:rates -- <sub>`) —
+                  re-derives the Token-value inputs from transcripts: `ledger`
+                  exits 1 when the ledger misses ±5% of a day's spend, and
+                  `surfaces` / `modifiers` / `offbook` report; pipeline in lib/transcript-audit.ts
 ```
 
 ## Map

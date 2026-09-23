@@ -2,6 +2,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 import { analyzeSession } from '../server/lib/analyze.js';
 
@@ -73,6 +74,16 @@ function resultRec(toolUseId: string, iso: string, opts: { isError?: boolean; co
 /** Human-typed user turn. */
 function humanRec(text: string, iso: string) {
   return { timestamp: iso, message: { role: 'user', content: text } };
+}
+/**
+ * Write a subagent transcript where the CLI puts it: `<sessionDir>/<sessionId>/subagents/agent-<agentId>.jsonl`,
+ * plus the `.meta.json` sidecar when `meta` is given.
+ */
+function subagentFile(mainFile: string, agentId: string, records: unknown[], meta?: Record<string, unknown>): void {
+  const dir = path.join(mainFile.replace(/\.jsonl$/, ''), 'subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `agent-${agentId}.jsonl`), records.map(r => JSON.stringify({ isSidechain: true, ...(r as object) })).join('\n'));
+  if (meta) fs.writeFileSync(path.join(dir, `agent-${agentId}.meta.json`), JSON.stringify(meta));
 }
 function taskRec(id: string, type: string, iso: string) {
   return { timestamp: iso, message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Task', input: { subagent_type: type, description: 'do' } }] } };
@@ -289,6 +300,134 @@ export function run(): number {
     assert.strictEqual(a.serverTools.webSearch, 2);
     assert.strictEqual(a.serverTools.webFetch, 1);
     assert.strictEqual(a.durationMs, 5 * 60 * 1000);
+  })) p++; else f++;
+
+  // ── Subagent spend is read from the subagents' own transcripts (bug-27) ──
+  // The harness figure (toolUseResult.totalTokens / <subagent_tokens>) is the
+  // subagent's FINAL context size, not what it spent; it survives only as the
+  // fallback for a subagent whose transcript is missing or incomplete.
+
+  if (test('subagent files, zero harness figures → the transcripts\' real total, split by class', () => {
+    const file = fixture([
+      taskRec('t1', 'Explore', '2026-07-01T10:00:00Z'),
+      resultRec('t1', '2026-07-01T10:00:30Z', { toolUseResult: { status: 'completed', agentId: 'aOne' } }),
+      taskRec('t2', 'Plan', '2026-07-01T10:01:00Z'),
+      resultRec('t2', '2026-07-01T10:01:01Z', { content: 'Async agent launched successfully.\nagentId: aTwo (internal)' }),
+      humanRec('<task-notification>\n<task-id>aTwo</task-id>\n<status>completed</status>\n</task-notification>', '2026-07-01T10:02:00Z')
+    ]);
+    // aOne: two turns, the second split across two records (one usage copy each).
+    const u2 = { input_tokens: 1, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: 1000 };
+    subagentFile(file, 'aOne', [
+      usageRec({ input_tokens: 5, output_tokens: 10, cache_creation_input_tokens: 500, cache_read_input_tokens: 0 }, '2026-07-01T10:00:05Z', { id: 'msg_1' }),
+      usageRec(u2, '2026-07-01T10:00:06Z', { id: 'msg_2', content: [think()] }),
+      usageRec(u2, '2026-07-01T10:00:07Z', { id: 'msg_2', content: [tu('g1', 'Grep')] })
+    ]);
+    subagentFile(file, 'aTwo', [
+      usageRec({ input_tokens: 2, output_tokens: 30, cache_creation_input_tokens: 100, cache_read_input_tokens: 2000 }, '2026-07-01T10:01:30Z', { id: 'msg_3' })
+    ]);
+    const a = analyzeSession(file)!;
+    assert.deepStrictEqual(a.subagentTotals.usage, {
+      input: 8, output: 60, cacheCreation: 600, cacheRead: 3000, combined: 3668, billableApprox: 668
+    });
+    assert.strictEqual(a.subagentTotals.tokens, 3668);
+    assert.strictEqual(a.subagentTotals.fallbackCount, 0);
+    assert.strictEqual(a.subagentTotals.unknownTokenCount, 0);
+    const byId = new Map(a.bySubagent.map(s => [s.id, s.tokens]));
+    assert.strictEqual(byId.get('t1'), 1536);
+    assert.strictEqual(byId.get('t2'), 2132);
+    // The subagents' turns never leak into the main-agent totals.
+    assert.strictEqual(a.totals.combined, 0);
+  })) p++; else f++;
+
+  if (test('harness figure on some dispatches only → transcript wins where present, no double count', () => {
+    const file = fixture([
+      taskRec('t1', 'Explore', '2026-07-01T10:00:00Z'),
+      resultRec('t1', '2026-07-01T10:00:30Z', { toolUseResult: { status: 'completed', agentId: 'aTagged', totalTokens: 500 } }),
+      taskRec('t2', 'Explore', '2026-07-01T10:01:00Z'),
+      resultRec('t2', '2026-07-01T10:01:30Z', { toolUseResult: { status: 'completed', agentId: 'aBare' } }),
+      taskRec('t3', 'Explore', '2026-07-01T10:02:00Z'),
+      resultRec('t3', '2026-07-01T10:02:30Z', { toolUseResult: { status: 'completed', agentId: 'aNoFile', totalTokens: 700 } })
+    ]);
+    subagentFile(file, 'aTagged', [usageRec({ input_tokens: 3000 }, '2026-07-01T10:00:10Z', { id: 'msg_a' })]);
+    subagentFile(file, 'aBare', [usageRec({ input_tokens: 2000 }, '2026-07-01T10:01:10Z', { id: 'msg_b' })]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.subagentTotals.usage.combined, 5000);
+    assert.strictEqual(a.subagentTotals.tokens, 5700);    // 3000 + 2000 from files, 700 fallback
+    assert.strictEqual(a.subagentTotals.fallbackCount, 1);
+    assert.strictEqual(a.subagentTotals.unknownTokenCount, 0);
+    const byId = new Map(a.bySubagent.map(s => [s.id, s.tokens]));
+    assert.deepStrictEqual([byId.get('t1'), byId.get('t2'), byId.get('t3')], [3000, 2000, 700]);
+  })) p++; else f++;
+
+  if (test('mid-write subagent file → falls back to the harness figure; running subagent stays unknown', () => {
+    const file = fixture([
+      taskRec('t1', 'Explore', '2026-07-01T10:00:00Z'),
+      resultRec('t1', '2026-07-01T10:00:30Z', { toolUseResult: { status: 'completed', agentId: 'aPartial', totalTokens: 10000 } }),
+      taskRec('t2', 'Explore', '2026-07-01T10:01:00Z'),
+      resultRec('t2', '2026-07-01T10:01:01Z', { content: 'Async agent launched successfully.\nagentId: aRunning (internal)' })
+    ]);
+    // Final context was 10000, so a complete transcript sums to at least that;
+    // 4000 means the file has not caught up yet.
+    subagentFile(file, 'aPartial', [usageRec({ input_tokens: 4000 }, '2026-07-01T10:00:10Z', { id: 'msg_p' })]);
+    subagentFile(file, 'aRunning', [usageRec({ input_tokens: 900 }, '2026-07-01T10:01:10Z', { id: 'msg_r' })]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.subagentTotals.tokens, 10000);
+    assert.strictEqual(a.subagentTotals.usage.combined, 0);
+    assert.strictEqual(a.subagentTotals.fallbackCount, 1);
+    assert.strictEqual(a.subagentTotals.unknownTokenCount, 1);
+    assert.strictEqual(a.bySubagent.find(s => s.id === 't2')!.tokens, null);
+  })) p++; else f++;
+
+  if (test('no agentId in the result → matched through the file\'s meta.json toolUseId', () => {
+    const file = fixture([
+      taskRec('toolu_m', 'Explore', '2026-07-01T10:00:00Z'),
+      resultRec('toolu_m', '2026-07-01T10:00:30Z', { toolUseResult: { status: 'completed', totalTokens: 100 } })
+    ]);
+    subagentFile(file, 'aMeta', [usageRec({ input_tokens: 800 }, '2026-07-01T10:00:10Z', { id: 'msg_m' })], { toolUseId: 'toolu_m' });
+    subagentFile(file, 'aStray', [usageRec({ input_tokens: 99999 }, '2026-07-01T10:00:10Z', { id: 'msg_s' })]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.subagentTotals.tokens, 800);     // the stray, unmatched file is not a launch
+    assert.strictEqual(a.subagentTotals.fallbackCount, 0);
+  })) p++; else f++;
+
+  if (test('no subagents dir → harness figure as before, counted as fallback', () => {
+    const file = fixture([
+      taskRec('t1', 'Explore', '2026-07-01T10:00:20Z'),
+      resultRec('t1', '2026-07-01T10:00:50Z', { toolUseResult: { status: 'completed', totalTokens: 5000 } })
+    ]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.subagentTotals.tokens, 5000);
+    assert.strictEqual(a.subagentTotals.usage.combined, 0);
+    assert.strictEqual(a.subagentTotals.fallbackCount, 1);
+    assert.ok(a.notes.some(n => /lower bound/i.test(n)));
+  })) p++; else f++;
+
+  if (test('vendored kaizen.mjs reports the same subagent figures as analyzeSession', () => {
+    const file = fixture([
+      taskRec('t1', 'Explore', '2026-07-01T10:00:00Z'),
+      resultRec('t1', '2026-07-01T10:00:30Z', { toolUseResult: { status: 'completed', agentId: 'aK1', totalTokens: 50 } }),
+      taskRec('t2', 'Explore', '2026-07-01T10:01:00Z'),
+      resultRec('t2', '2026-07-01T10:01:30Z', { toolUseResult: { status: 'completed', totalTokens: 70 } }),
+      taskRec('t3', 'Explore', '2026-07-01T10:02:00Z'),
+      resultRec('t3', '2026-07-01T10:02:30Z', { toolUseResult: { status: 'completed', totalTokens: 1 } }),
+      // Async, completed by a notification absorbed mid-turn: no `message`, payload in top-level `content`.
+      taskRec('t4', 'Explore', '2026-07-01T10:03:00Z'),
+      resultRec('t4', '2026-07-01T10:03:01Z', { content: 'Async agent launched successfully.\nagentId: aK4 (internal)' }),
+      { type: 'queue-operation', operation: 'enqueue', timestamp: '2026-07-01T10:04:00Z',
+        content: '<task-notification>\n<task-id>aK4</task-id>\n<status>completed</status>\n</task-notification>' }
+    ]);
+    subagentFile(file, 'aK4', [usageRec({ input_tokens: 9 }, '2026-07-01T10:03:10Z', { id: 'msg_k4' })]);
+    subagentFile(file, 'aK1', [usageRec({ input_tokens: 5, cache_read_input_tokens: 600 }, '2026-07-01T10:00:10Z', { id: 'msg_k' })]);
+    subagentFile(file, 'aK3', [usageRec({ output_tokens: 40 }, '2026-07-01T10:02:10Z', { id: 'msg_k3' })], { toolUseId: 't3' });
+    const kaizen = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../.claude/skills/kaizen/kaizen.mjs');
+    const r = spawnSync(process.execPath, [kaizen, file], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+    const k = JSON.parse(r.stdout);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.subagentTotals.tokens, 724);
+    assert.strictEqual(a.subagentTotals.unknownTokenCount, 0);
+    assert.deepStrictEqual(k.subagentTotals, a.subagentTotals);
+    assert.deepStrictEqual(k.bySubagent.map((s: any) => [s.id, s.agentId, s.tokens]), a.bySubagent.map(s => [s.id, s.agentId, s.tokens]));
   })) p++; else f++;
 
   if (test('missing file → null', () => {
