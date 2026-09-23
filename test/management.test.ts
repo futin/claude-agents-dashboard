@@ -287,16 +287,18 @@ export async function run(): Promise<number> {
 
   // The multi-dir case: the worktree was itself launched in, so it has its own
   // project dir and an older entry for that same cwd. Each dir must keep its own
-  // path — the repo's dir resolving to the worktree would spawn there, and the
-  // worktree's dir losing its entry drops it off the rail. Which of the two
-  // breaks first depends on the order `readdirSync` hands back the dirs, so both
-  // orders are pinned.
+  // path — the repo's dir resolving to the worktree would spawn there. Which dir
+  // wins depends on the order `readdirSync` hands back the dirs, so both orders
+  // are pinned. These pin the naming rule, so the "worktree" here is a plain dir
+  // with no `.git` file: a real linked worktree is dropped by the bug-21 filter,
+  // which is intended, not a breakage.
   for (const [label, ownerDir] of [['after', '-repo-worktrees-X'], ['before', '-a-worktree-owner']]) {
     tally(await test(`resolveProject: an older dir holding the worktree cwd (sorting ${label} the repo's) keeps both dirs intact`, async () => {
       const NOW = Date.parse('2026-07-12T12:00:00Z');
       const HOUR = 3600_000;
       const repo = makeProject();
       const worktree = path.join(repo, '.worktrees', 'X');
+      fs.mkdirSync(worktree, { recursive: true });
       const root = makeProjectsRoot([
         { dirName: ownerDir, id: 'own', cwd: worktree, mtimeMs: NOW - 5 * HOUR },
         { dirName: '-repo', id: 'wt', cwd: worktree, originCwd: repo, mtimeMs: NOW - 1 * HOUR }
@@ -328,6 +330,7 @@ export async function run(): Promise<number> {
     const HOUR = 3600_000;
     const repo = makeProject();
     const worktree = path.join(repo, '.worktrees', 'X');
+    fs.mkdirSync(worktree, { recursive: true });
     const repoDir = mgmt.encodeProjectDir(repo);
     const wtDir = mgmt.encodeProjectDir(worktree);
     const root = makeProjectsRoot([
@@ -348,6 +351,7 @@ export async function run(): Promise<number> {
     // its head carries no cwd record.
     const NOW = Date.parse('2026-07-12T12:00:00Z');
     const worktree = path.join(makeProject(), '.worktrees', 'X');
+    fs.mkdirSync(worktree, { recursive: true });
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-mroot-'));
     const file = path.join(root, '-nohead', 'pad.jsonl');
     const recs = [
@@ -359,6 +363,68 @@ export async function run(): Promise<number> {
     fs.utimesSync(file, NOW / 1000, NOW / 1000);
     const refs = mgmt.listRecentProjects({ lookbackHours: 24 }, { root, now: NOW });
     assert.deepStrictEqual(refs.map(r => r.path), [worktree]);
+  }));
+
+  /* bug-21: the rail lists only paths that still exist and are not linked worktrees. */
+
+  /** A repo tmpdir with a real `.git` dir, and a linked worktree of it at `wt` whose `.git` file points into it. */
+  function makeRepoWithWorktree(wt: (repo: string) => string, name: string): { repo: string; worktree: string } {
+    const repo = makeProject();
+    fs.mkdirSync(path.join(repo, '.git', 'worktrees', name), { recursive: true });
+    const worktree = wt(repo);
+    put(worktree, '.git', `gitdir: ${path.join(repo, '.git', 'worktrees', name)}\n`);
+    return { repo, worktree };
+  }
+
+  tally(await test('listRecentProjects: a linked worktree with its own project dir is dropped, and stops resolving', async () => {
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const HOUR = 3600_000;
+    const { repo, worktree } = makeRepoWithWorktree(r => path.join(r, '.worktrees', 'X'), 'X');
+    const wtDir = mgmt.encodeProjectDir(worktree);
+    const root = makeProjectsRoot([
+      { dirName: mgmt.encodeProjectDir(repo), id: 'r', cwd: repo, mtimeMs: NOW - 2 * HOUR },
+      { dirName: wtDir, id: 'w', cwd: worktree, mtimeMs: NOW - 1 * HOUR }
+    ]);
+    const cfg = { lookbackHours: 24 };
+    assert.deepStrictEqual(mgmt.listRecentProjects(cfg, { root, now: NOW }).map(r => r.path), [repo]);
+    assert.strictEqual(mgmt.resolveProject(cfg, wtDir, { root, now: NOW }), null);
+  }));
+
+  tally(await test('listRecentProjects: a linked worktree outside its repo is dropped too', async () => {
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const { repo, worktree } = makeRepoWithWorktree(() => makeProject(), 'Y');
+    const root = makeProjectsRoot([
+      { dirName: '-repo', id: 'r', cwd: repo, mtimeMs: NOW - 2000 },
+      { dirName: '-sibling', id: 'w', cwd: worktree, mtimeMs: NOW - 1000 }
+    ]);
+    assert.deepStrictEqual(mgmt.listRecentProjects({ lookbackHours: 24 }, { root, now: NOW }).map(r => r.path), [repo]);
+  }));
+
+  tally(await test('listRecentProjects: a cwd that no longer exists on disk is dropped, the live repo beside it kept', async () => {
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const repo = makeProject();
+    const gone = path.join(makeProject(), '.worktrees', 'pruned');
+    const root = makeProjectsRoot([
+      { dirName: '-repo', id: 'r', cwd: repo, mtimeMs: NOW - 2000 },
+      { dirName: '-gone', id: 'g', cwd: gone, mtimeMs: NOW - 1000 }
+    ]);
+    assert.deepStrictEqual(mgmt.listRecentProjects({ lookbackHours: 24 }, { root, now: NOW }).map(r => r.path), [repo]);
+  }));
+
+  tally(await test('isListedProjectPath: keeps submodules, unreadable .git files, .git dirs and plain dirs', async () => {
+    const sub = makeProject();
+    put(sub, '.git', 'gitdir: ../.git/modules/sub\n');
+    const empty = makeProject();
+    put(empty, '.git', '');
+    const repo = makeProject();
+    fs.mkdirSync(path.join(repo, '.git'));
+    const plain = makeProject();
+    assert.strictEqual(mgmt.isListedProjectPath(sub), true, 'submodule');
+    assert.strictEqual(mgmt.isListedProjectPath(empty), true, '.git file with no gitdir: line');
+    assert.strictEqual(mgmt.isListedProjectPath(repo), true, '.git dir');
+    assert.strictEqual(mgmt.isListedProjectPath(plain), true, 'no .git at all');
+    const file = put(makeProject(), 'not-a-dir', 'x');
+    assert.strictEqual(mgmt.isListedProjectPath(file), false, 'a file is not a project dir');
   }));
 
   tally(await test('resolveProject: known dirName → ref; unknown → null', async () => {
