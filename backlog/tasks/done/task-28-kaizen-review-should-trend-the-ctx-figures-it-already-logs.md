@@ -98,3 +98,46 @@ this unattended session writes nowhere outside its worktree. A real `/kaizen rev
 
 Contract sweep: 1 site updated (.claude/skills/kaizen/kaizen.mjs PROVENANCE header now names --trend as the TS-twin exception); left standing on purpose: scripts/session-analytics.ts usage string, the TS twin of the per-session CLI, which does not and should not gain --trend
 Red proof: 9 tests went red with the change reverted (whole --trend branch removed: 8/8 red; targeted mutations — recent mean instead of median, no newest-wins, no per-project grouping, M suffix wrong, ctx optional, min-sessions 2 — each turned its pinning test red; the min-sessions case was green until the "five climbing sessions" test was added)
+
+### Fix loop 1
+
+2026-09-23 — the merge gate saw one intermittent `FAILED (1)`. Caught on the first of a repeated `pnpm test` loop:
+
+```
+  ✗ usableLsofStdout: a real execFileSync timeout is discarded, output and all
+    the killed child did write stdout first
+```
+
+That case is at `test/scan.test.ts:388`. It runs `execFileSync('sh', ['-c', 'echo n/a/b; sleep 5'], { timeout: 200 })` and asserts that the killed child
+had already written stdout. The 200ms timeout is the child's whole budget to spawn `sh` and echo, so on a loaded machine node's SIGTERM can arrive
+first: stdout is empty, and the test's premise assertion fails (`usableLsofStdout` itself was never wrong). A standalone repro of exactly that call,
+12 copies at once, 15 calls each: timeout 200ms → 21/180 calls killed before writing; timeout 2000ms → 0/180.
+
+It predates this branch: this branch touches neither `server/lib/scan.ts` nor `test/scan.test.ts`, and the `scan` suite runs long before
+`kaizen-trend` in `test/run-all.ts`, so nothing in `--trend` or its test can reach it. Timing is the actual cause, so the fix is the timing budget:
+`timeout: 2000` (still well short of the 5s sleep, so the case still proves a real timeout kill), with a comment saying why. No other test uses a
+sub-second `timeout:` (`grep -rnE "timeout: ?[0-9]{1,3}[,} ]" test/` → nothing).
+
+Stress, whole `scan` suite, 12 copies at once through a temp runner (removed afterwards):
+
+```
+HEAD's test/scan.test.ts (timeout 200):   ran 12/12, failed 12   — all 12 on "the killed child did write stdout first"
+fixed test/scan.test.ts (timeout 2000):   ran 12/12, failed 0
+```
+
+Verification after the fix, foreground (`pnpm --pm-on-fail=ignore …`: this machine's pnpm is now v11.13.0 against the pinned 10.33.4 and refuses
+bare `pnpm test` with a version-check error — an environment change, not a code one):
+
+```
+run 1: exit 0, 1678 ✓, 0 ✗, ALL PASS
+run 2: exit 0, 1678 ✓, 0 ✗, ALL PASS
+run 3: exit 0, 1678 ✓, 0 ✗, ALL PASS
+typecheck: exit 0   (tsc --noEmit, no output)
+build: exit 0       (✓ built in 1.33s)
+```
+
+The earlier `api-usage-rates` "near-miss path" failure noted above was the missing `client/dist`. That directory exists now, and the case passes in all
+three runs.
+
+Contract sweep: none found
+Red proof: 1 test went red with the change reverted (HEAD's 200ms version failed the timeout case in 12/12 concurrent runs, the fixed one in 0/12)

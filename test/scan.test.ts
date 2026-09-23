@@ -388,9 +388,11 @@ export function run(): number {
   if (test('usableLsofStdout: a real execFileSync timeout is discarded, output and all', () => {
     // Proves the error shape assumption against node itself, not a fabricated
     // object: the child must have written stdout AND then be killed by timeout.
+    // The timeout is the child's whole budget to spawn `sh` and echo before the kill. 200ms lost that race on a loaded machine (~12% of calls with
+    // a dozen suites running, the "did write stdout" premise then failing) — 2s is 0/180 under the same load and still well short of the sleep.
     let thrown: unknown;
     try {
-      execFileSync('sh', ['-c', 'echo n/a/b; sleep 5'], { encoding: 'utf8', timeout: 200 });
+      execFileSync('sh', ['-c', 'echo n/a/b; sleep 5'], { encoding: 'utf8', timeout: 2000 });
       throw new Error('expected the timeout to throw');
     } catch (e) { thrown = e; }
     const raw = (thrown as { stdout?: string }).stdout;
