@@ -406,6 +406,13 @@ SIGKILL. A second tap is idempotent — it re-signals nothing and does not push 
 back. `escalateStop` fires only if the entry still exists, is `running`, was actually asked
 to stop, the grace has elapsed, and the child is still alive.
 
+**The armed timer is never vetoed by the wall clock.** Its callback passes `escalateStop` the due time (`stopRequestedAtMs + STOP_GRACE_MS`) instead of
+re-reading `Date.now()`: timers run on the loop's monotonic clock, and a wall clock read even a few ms ahead of it — an early fire, a WSL2 clock step — used to
+fail the grace check, drop the SIGKILL, and leave a SIGTERM-ignoring CLI saying `stopping…` until Force stop (bug-28). As a backstop that does not depend on one
+timer, `stopStates()` — run by every 3-second sessions poll — calls `escalateStop` for each `stopping` entry whose child is still alive, so any escalation lost
+some other way finishes on the next poll. Both steps log one `[dashboard] stop:` line (the group SIGTERM with id and pid; the escalation's SIGKILL or its
+refusal), so a repeat is decidable from the server output rather than transcript forensics.
+
 `STOP_GRACE_MS` is an exported constant, not a config setting, for the reason `LAUNCH_TTL_MS`
 and `MAX_LAUNCHING` are: an env var would drag `.env.example`, `README.md`,
 `docs/workflows/configuration.md` and `config.ts` along for a number nobody tunes. 5 seconds,

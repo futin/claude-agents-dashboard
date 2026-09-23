@@ -3,9 +3,12 @@ id: bug-28
 title: Graceful Stop leaves a spawned session's subagent running
 created: 2026-09-09
 tags: spawn, stop, server
-updated: 2026-09-22T21:07:49Z
+updated: 2026-09-23T12:03:56Z
 groom-elapsed: 508
 groom-tokens: 97461
+started: 2026-09-23T11:55:57Z
+execute-elapsed: 479
+execute-tokens: 46604
 ---
 
 ## Symptom
@@ -151,3 +154,36 @@ Kill any survivor by its recorded pid in a `finally`:
 No browser check: the failure needs a child that survives SIGTERM *and* a clock skew between two server reads, and a Playwright session can produce
 neither. The server test above is the proof. What a human can confirm afterwards: with a spawned session whose CLI hangs on exit, the row's `stopping…`
 badge clears within ~5-8 s of a graceful Stop, without pressing Force stop.
+
+## Outcome
+
+2026-09-23 — Fixed as groomed, server-only. `stopSession` now computes `due = now + STOP_GRACE_MS` from the same `now` that became `stopRequestedAtMs` and the
+armed timer calls `escalateStop(id, due)`, so the wall clock is never re-read and cannot veto the SIGKILL. `stopStates(now = Date.now())` now calls
+`escalateStop` for every `stopping` entry with a live child, so the 3 s sessions poll finishes any lost escalation. Two `[dashboard] stop:` log lines: the
+group SIGTERM (id, pid) and the escalation outcome (SIGKILL sent with pid, or refused because the child is already gone). `escalateStop`'s signature and guards
+are unchanged, so the direct-call tests in `test/spawn.test.ts` still hold. The four real-child tests live in a new async `test/spawn-stop.test.ts`,
+registered in `test/run-all.ts`, because `spawn.test.ts`'s runner is synchronous and cannot wait for a timer.
+
+Verification (`pnpm typecheck` exit 0; `pnpm test` after `pnpm build`):
+
+```
+# spawn — graceful stop against a real SIGTERM-ignoring child
+  ✓ the armed escalation SIGKILLs even when the wall clock read ahead of the timer at stop time
+  ✓ an ordinary graceful stop SIGKILLs a child that ignores SIGTERM once the grace elapses
+  ✓ stopStates inside the grace sends no SIGKILL
+  ✓ stopStates finishes a stop whose grace has passed, without waiting for the armed timer
+  4 passed, 0 failed
+...
+  9/9
+ALL PASS
+TEST_EXIT 0   (1014 passed, 0 failed summed over every module)
+```
+
+Without `client/dist` built, `test/api-usage-rates.test.ts` › "a near-miss path is not the rates endpoint" fails ("it falls through to the static handler").
+It fails the same way on a pristine detached checkout of HEAD, so it predates this change and is environmental. Once `pnpm build` has run, it passes.
+
+Contract sweep: 3 sites updated (docs/subsystems/spawn.md §"SIGTERM, then SIGKILL after `STOP_GRACE_MS`", `escalateStop` JSDoc and `stopStates` JSDoc in server/lib/spawn.ts)
+Red proof: 2 tests went red with the change reverted (the wall-clock-skew test when the timer callback went back to `escalateStop(id)`; the backstop test when the `stopStates` escalation line was removed). The other two are regression guards, green both before and after: the ordinary no-skew stop, and "no SIGKILL inside the grace".
+
+Not verified: a live dashboard with a real CLI that hangs on exit. That needs a human. Expect the `stopping…` badge to clear within ~5-8 s of a graceful Stop,
+with no Force stop pressed.
