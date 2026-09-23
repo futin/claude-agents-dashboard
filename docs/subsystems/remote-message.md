@@ -111,20 +111,15 @@ drawer — walking away is what opened the window, so walking back should close 
 Held questions and plans had no equivalent, so a question raised while you were away sat
 parked on the dashboard for its full `answerSecs` window even once you were back at the
 keyboard. `pending.ts` and `plans.ts` now run the same reaper; the shared half of the
-policy — the reading, the threshold, and the fail directions in steps 2 and 3 below — lives
-in `lib/idle.ts` as `backAtDesk()`, which is also where the `setIdleReader` test seam now
-lives. What stays here is the headless exemption, which is this store's alone.
+policy lives in `lib/idle.ts` as `backAtDesk()` and is documented once, in
+[the idle sweep](remote-answer.md#the-idle-sweep-coming-back-to-the-desk). What stays here
+is the headless exemption, which is this store's alone.
 
 1. No entries → no-op; an idle server never spawns `ioreg`.
-2. `getSettings().idleSecs === 0` → the idle gate is disabled everywhere else, so it's
-   disabled here too.
-3. `readIdleSecs()` returns `null` (Docker, non-macOS) **or** a value still at-or-above the
-   threshold → no-op. Unreadable idle is treated as "never guess you're back," not as "push
-   anyway" — the opposite fail-direction from the notifier's own predicate (see
-   [push-notify](push-notify.md#fail-directions)), because guessing wrong here ends a
-   session early instead of merely sending an extra ping. Same direction `ask-remote-hook.sh`
-   takes for the same reason.
-4. Otherwise (a real reading below the threshold) → every open **terminal-backed** entry
+2. `backAtDesk()` says you are not back — see
+   [the idle sweep](remote-answer.md#the-idle-sweep-coming-back-to-the-desk) for the
+   threshold and both fail directions → no-op.
+3. Otherwise (`backAtDesk()` says you are back) → every open **terminal-backed** entry
    settles as `released`; each hook's held `/api/messages/wait` call returns with that
    status, exits 0, and the session stops — within ~5s of the first keystroke.
 
@@ -255,16 +250,13 @@ state, reset on a new `messageId`, never persisted.
 <!-- docs-sync:
   sources:
     - server/lib/messages.ts
-    - server/lib/idle.ts
     - server/api.ts
     - server/index.ts
     - server/lib/scan.ts
     - scripts/stop-notify-hook.sh
     - client/src/components/MessagePanel.tsx
-    - client/src/components/PanelChrome.tsx
     - client/src/lib/panelCollapse.ts
     - client/src/hooks/usePendingMessage.ts
-    - client/src/components/sessions/atoms.tsx
     - client/src/lib/holds.ts
   kind: subsystem
   verified: f436519f31ef4120521792db7658e2bc5431f0e9

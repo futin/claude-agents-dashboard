@@ -183,17 +183,13 @@ same failure mode, and the same one setting as
 <!-- docs-sync:
   sources:
     - server/lib/plans.ts
-    - server/lib/idle.ts
     - server/api.ts
     - server/index.ts
     - server/lib/scan.ts
     - scripts/plan-remote-hook.sh
     - scripts/remote-decision-hook.sh
     - client/src/components/PlanPanel.tsx
-    - client/src/components/PanelChrome.tsx
-    - client/src/lib/panelCollapse.ts
     - client/src/hooks/usePendingPlan.ts
-    - client/src/components/sessions/atoms.tsx
     - client/src/lib/holds.ts
   kind: subsystem
   verified: f436519f31ef4120521792db7658e2bc5431f0e9
