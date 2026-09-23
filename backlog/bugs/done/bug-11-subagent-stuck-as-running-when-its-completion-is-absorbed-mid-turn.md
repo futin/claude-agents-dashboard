@@ -23,7 +23,7 @@ tokens or tool count.
 4. Open that session in the dashboard: the agent is still `RUNNING`.
 
 Live evidence, session `d4aef3be-4e1a-40ae-90a8-a01bfe1cc443` under
-`~/.claude/projects/-Users-andrejajevtic-Documents-custom-projects-backlog-manager/`:
+`~/.claude/projects/-Users-me-Documents-custom-projects-backlog-manager/`:
 
 | line | ts | record |
 |---|---|---|

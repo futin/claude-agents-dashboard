@@ -34,10 +34,10 @@ Direct proof of the gate's input, captured live while pid 35791 was mid-turn:
 
 ```
 $ lsof -c claude -a -d cwd -Fn     # what liveCwds() runs
-n/Users/andrejajevtic/Documents/custom-projects/backlog-manager
-n/Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
-n/Users/andrejajevtic/Documents/custom-projects/ixray
-n/Users/andrejajevtic/Documents/timify-projects/microservice
+n/Users/me/Documents/custom-projects/backlog-manager
+n/Users/me/Documents/custom-projects/claude-agents-dashboard
+n/Users/me/Documents/custom-projects/ixray
+n/Users/me/Documents/work-projects/service
 # ← the task-5 worktree cwd is absent
 
 $ ps -o pid,comm,args -p 35791
@@ -47,7 +47,7 @@ $ lsof -p 35791 -a -d cwd -Fcn
 p35791
 c2.1.250                                              # ← lsof's command name
 fcwd
-n/Users/andrejajevtic/.../backlog-manager/.worktrees/task-5
+n/Users/me/.../backlog-manager/.worktrees/task-5
 ```
 
 ## Affects
@@ -73,7 +73,7 @@ The native installer ships each version as a single file named after the version
 symlinks the launcher at it:
 
 ```
-/Users/andrejajevtic/.local/bin/claude -> /Users/andrejajevtic/.local/share/claude/versions/2.1.250
+/Users/me/.local/bin/claude -> /Users/me/.local/share/claude/versions/2.1.250
 ```
 
 The process is exec'd through that symlink, so its `p_comm` is `claude` and `ps` reports
@@ -218,27 +218,27 @@ Cause re-confirmed live before any change (pid 73008 = this session, native inst
 
 ```
 $ ps -Ao comm= | grep -E '(^|/)claude$' | sort | uniq -c
-   1 /Users/andrejajevtic/.local/bin/claude
-   2 /Users/andrejajevtic/Library/Application Support/Claude/claude-code/2.1.247/claude.app/Contents/MacOS/claude
+   1 /Users/me/.local/bin/claude
+   2 /Users/me/Library/Application Support/Claude/claude-code/2.1.247/claude.app/Contents/MacOS/claude
    1 claude
 $ lsof -p 73008 -a -d cwd -Fcn
 p73008
 c2.1.250                                    # ← lsof's command name, not "claude"
 fcwd
-n/Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+n/Users/me/Documents/custom-projects/claude-agents-dashboard
 ```
 
 Probe before vs after, run from a scratchpad against the live machine:
 
 ```
 OLD (lsof -c claude) size=2
-  old  /Users/andrejajevtic/Documents/custom-projects/backlog-manager
-  old  /Users/andrejajevtic/Documents/custom-projects/backlog-manager/.worktrees/runs-archive
+  old  /Users/me/Documents/custom-projects/backlog-manager
+  old  /Users/me/Documents/custom-projects/backlog-manager/.worktrees/runs-archive
 NEW (ps + lsof -p) size=4
-  new  /Users/andrejajevtic/Documents/custom-projects/backlog-manager
-  new  /Users/andrejajevtic/Documents/custom-projects/backlog-manager/.worktrees/runs-archive
-  new  /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
-  new  /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard/.worktrees/bug-12
+  new  /Users/me/Documents/custom-projects/backlog-manager
+  new  /Users/me/Documents/custom-projects/backlog-manager/.worktrees/runs-archive
+  new  /Users/me/Documents/custom-projects/claude-agents-dashboard
+  new  /Users/me/Documents/custom-projects/claude-agents-dashboard/.worktrees/bug-12
 countClaudeProcesses() = 4
 ```
 
@@ -251,9 +251,9 @@ Symptom gone, measured through the real `scanSessions` on live transcripts — t
 native-installer session running in this worktree, mid-turn:
 
 ```
-working     bug-12  /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard/.worktrees/bug-12
-incomplete  claude-agents-dashboard  /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
-idle        claude-agents-dashboard  /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+working     bug-12  /Users/me/Documents/custom-projects/claude-agents-dashboard/.worktrees/bug-12
+incomplete  claude-agents-dashboard  /Users/me/Documents/custom-projects/claude-agents-dashboard
+idle        claude-agents-dashboard  /Users/me/Documents/custom-projects/claude-agents-dashboard
 active=1
 ```
 
@@ -261,9 +261,9 @@ Red-green proof that the fix is what moved it: the same session re-scanned with 
 live set injected reads idle again.
 
 ```
-OLD-INPUT idle        /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard/.worktrees/bug-12
-OLD-INPUT idle        /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
-OLD-INPUT idle        /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+OLD-INPUT idle        /Users/me/Documents/custom-projects/claude-agents-dashboard/.worktrees/bug-12
+OLD-INPUT idle        /Users/me/Documents/custom-projects/claude-agents-dashboard
+OLD-INPUT idle        /Users/me/Documents/custom-projects/claude-agents-dashboard
 ```
 
 `pnpm test` (the three parser/composer tests failed with `scan.parsePsClaudePids is not a

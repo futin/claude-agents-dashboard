@@ -285,7 +285,7 @@ draws the icon at.
 ### `pnpm typecheck`
 
 ```
-> claude-agents-dashboard@0.1.0 typecheck /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard/.worktrees/task-16
+> claude-agents-dashboard@0.1.0 typecheck /Users/me/Documents/custom-projects/claude-agents-dashboard/.worktrees/task-16
 > tsc --noEmit
 ```
 

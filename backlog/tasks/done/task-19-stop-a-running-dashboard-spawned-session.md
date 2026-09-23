@@ -451,7 +451,7 @@ expanded it, clicked `stop session` → `really stop?`. Its process group at the
 click was **nine** processes:
 
 ```
-50461 50461 /Users/andrejajevtic/.local/bin/claude
+50461 50461 /Users/me/.local/bin/claude
 50481 50461 node
 50483 50461 npm exec @playwright/mcp@latest --headless --isolated
 50487 50461 .../codegraph-darwin-arm64/node

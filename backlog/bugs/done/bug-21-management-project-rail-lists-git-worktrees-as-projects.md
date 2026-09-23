@@ -31,7 +31,7 @@ merged and pruned them.
 3. The rail lists one row per worktree. Today, with no worktrees checked out at all
    (`git worktree list` shows only the main checkout), `~/.claude/projects/` still holds
    the transcript dirs for ~30 of them:
-   `-Users-andrejajevtic-Documents-custom-projects-backlog-manager--worktrees-bug-10`,
+   `-Users-me-Documents-custom-projects-backlog-manager--worktrees-bug-10`,
    `…-bug-11`, `…-bug-12`, and so on, plus
    `…-backlog-manager--claude-worktrees-agents-dispatch`.
 

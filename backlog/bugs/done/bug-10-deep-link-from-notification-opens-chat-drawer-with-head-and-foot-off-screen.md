@@ -119,7 +119,7 @@ Verification on merged main:
 
 ```
 $ pnpm typecheck
-> claude-agents-dashboard@0.1.0 typecheck /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+> claude-agents-dashboard@0.1.0 typecheck /Users/me/Documents/custom-projects/claude-agents-dashboard
 > tsc --noEmit
 
 

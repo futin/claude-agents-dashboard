@@ -37,7 +37,7 @@ lsof -p <pid> -a -d cwd -Fn                                     # but its cwd re
 Measured 2026-08-28 with three desktop-app sessions and one native-install session live:
 the aggregate probe returned 3 of the 4 pids. Missing pid `93162`
 (`~/.local/bin/claude -p --session-id … --remote-control`), cwd
-`/Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard`.
+`/Users/me/Documents/custom-projects/claude-agents-dashboard`.
 
 Cause B (cwd drift):
 
@@ -247,7 +247,7 @@ What shipped, matching the plan's steps 1-4 with the user's answer to the flagge
 ### `pnpm typecheck`
 
 ```
-> claude-agents-dashboard@0.1.0 typecheck /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
+> claude-agents-dashboard@0.1.0 typecheck /Users/me/Documents/custom-projects/claude-agents-dashboard
 > tsc --noEmit
 ```
 
@@ -298,10 +298,10 @@ save the row.
 
 ```
 $ lsof -p 24675,30389,32761,60284,70188 -a -d cwd -Fn | grep ^n | sort | uniq -c
-   1 /Users/andrejajevtic/Documents/custom-projects/backlog-manager
-   1 /Users/andrejajevtic/Documents/custom-projects/backlog-manager/.worktrees/runs-view-redesign
-   2 /Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard
-   1 /Users/andrejajevtic/Documents/timify-projects/microservice
+   1 /Users/me/Documents/custom-projects/backlog-manager
+   1 /Users/me/Documents/custom-projects/backlog-manager/.worktrees/runs-view-redesign
+   2 /Users/me/Documents/custom-projects/claude-agents-dashboard
+   1 /Users/me/Documents/work-projects/service
 ```
 
 `GET /api/sessions` (dev server on 4700/5700, the user's own 4173/5174 left untouched):
@@ -311,7 +311,7 @@ $ lsof -p 24675,30389,32761,60284,70188 -a -d cwd -Fn | grep ^n | sort | uniq -c
   "id": "606079c7-82fd-47fb-990a-86f723cc6559",
   "status": "working",
   "project": "claude-agents-dashboard",
-  "projectPath": "/Users/andrejajevtic/Documents/custom-projects/claude-agents-dashboard",
+  "projectPath": "/Users/me/Documents/custom-projects/claude-agents-dashboard",
   "branch": "main",
   "activity": { "tool": "Bash", "detail": "Query the live API for this session's row" }
 }

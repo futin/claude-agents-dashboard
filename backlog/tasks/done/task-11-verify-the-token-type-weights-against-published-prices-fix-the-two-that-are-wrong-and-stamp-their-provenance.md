@@ -262,7 +262,7 @@ ALL PASS
 machine, and the record of the 1h share on the day it landed:
 
 ```
-token-weight check — last 7 day(s) under /Users/andrejajevtic/.claude/projects
+token-weight check — last 7 day(s) under /Users/me/.claude/projects
   transcripts read: 333
 
   model                              requests    cache-write     1h share   blended cc   configured
