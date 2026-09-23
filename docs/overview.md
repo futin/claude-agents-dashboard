@@ -140,7 +140,8 @@ server/
   lib/scan.ts     enumerates + ranks sessions; status machine; liveness gates (cwd, session id);
                   `listUsageTranscripts` is the second enumeration — top-level files plus
                   `<sessionId>/subagents/*.jsonl` — read by the usage ledger only, since a
-                  subagent file must never become a session row
+                  subagent file must never become a session row (`analyze.ts` reads one
+                  session's subagent files directly, through `subagent-usage.ts`)
   lib/archived.ts reads the desktop app's own session records (macOS Application
                   Support) for the `isArchived` flag, joined to transcripts by
                   `cliSessionId` — the only place that touches that store; the id
@@ -169,6 +170,7 @@ server/
                   then one haiku turn) so the bars self-heal
   lib/management.ts   config scanner + servable-path security set
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
+  lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
   lib/analytics.ts  reader for the Analytics tab
   lib/pending.ts  in-memory pending-question store (the first of the four write paths)

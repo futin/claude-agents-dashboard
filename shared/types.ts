@@ -629,11 +629,19 @@ export interface AgentJob {
    */
   durationMs: number | null;
   /**
-   * Total tokens the subagent consumed (sync: toolUseResult.totalTokens;
-   * async: <subagent_tokens> in the notification). Null while running or on
-   * old transcripts that lack the field.
+   * The harness's own token figure (sync: toolUseResult.totalTokens; async:
+   * <subagent_tokens> in the notification). It is the subagent's FINAL context
+   * size, not what it spent — a many-turn subagent replays its context every
+   * turn and none of that is in here. Null while running or on old transcripts
+   * that lack the field. `SessionAnalysis.bySubagent` replaces it with the
+   * spend summed from the subagent's own transcript where one is readable.
    */
   tokens: number | null;
+  /**
+   * The subagent's own id — the `<id>` in `<sessionId>/subagents/agent-<id>.jsonl`.
+   * From the sync toolUseResult or the async launch ack; null on old transcripts.
+   */
+  agentId: string | null;
   /** Tool calls the subagent made (totalToolUseCount / <tool_uses>). Same nullability. */
   toolUses: number | null;
 }
@@ -1104,9 +1112,22 @@ export interface ToolStat {
 /** Aggregate over the subagents ({@link AgentJob}) a session launched. */
 export interface SubagentTotals {
   count: number;
-  /** Sum of known `tokens` — exact, and separate from the main-agent totals. */
+  /**
+   * Everything the subagents moved, separate from the main-agent totals: `usage.combined`
+   * plus the harness figure for each of the `fallbackCount` subagents.
+   */
   tokens: number;
-  /** Subagents whose token total is unknown (still running / old transcript). */
+  /**
+   * The four token classes, summed over every unique `message.id` in the subagents' own
+   * `<sessionId>/subagents/agent-*.jsonl` transcripts — what they spent vs what they replayed.
+   */
+  usage: TokenTotals;
+  /**
+   * Finished subagents with no readable transcript, or one that sums below the harness figure
+   * (still being written). Counted at the harness figure — their final context size, a lower bound.
+   */
+  fallbackCount: number;
+  /** Subagents with no figure at all (still running / old transcript). */
   unknownTokenCount: number;
 }
 
@@ -1139,7 +1160,10 @@ export interface SessionAnalysis {
   perTurn: PerTurn;
   /** Per-tool main-agent usage, priciest (approxOutputTokens) first. */
   byTool: ToolStat[];
-  /** Subagents launched (from `readAgents`), newest-first. */
+  /**
+   * Subagents launched (from `readAgents`), newest-first. `tokens` is the figure counted into
+   * `subagentTotals.tokens` — transcript spend, else the harness fallback.
+   */
   bySubagent: AgentJob[];
   subagentTotals: SubagentTotals;
   /** server_tool_use counts (Anthropic-side web search / fetch). */

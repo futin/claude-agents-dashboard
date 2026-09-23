@@ -10,6 +10,7 @@ import { execFileSync } from 'node:child_process';
 
 import { readTranscript } from './transcript.js';
 import { readAgentsCached } from './agents-cache.js';
+import { SUBAGENT_DIR } from './subagent-usage.js';
 import { refreshCwd } from './token-refresh.js';
 import { readSessionAnalyticsLog, lessonForSession } from './sessionAnalyticsLog.js';
 import type { SessionAnalyticsLesson } from './sessionAnalyticsLog.js';
@@ -115,9 +116,6 @@ const HEADLESS_ENTRYPOINT = 'sdk-cli';
 export function sessionSurface(entrypoint: string | null | undefined): SessionSurface {
   return entrypoint === HEADLESS_ENTRYPOINT ? 'dashboard' : 'local';
 }
-
-/** The per-session directory the CLI writes subagent transcripts into. */
-const SUBAGENT_DIR = 'subagents';
 
 /** One transcript file as a ref, or null when it is gone or not a file. */
 function statRef(full: string, dirName: string): TranscriptRef | null {

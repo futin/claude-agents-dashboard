@@ -404,7 +404,8 @@ true; false unless that record is an assistant with `end_turn`), `waitingOnQuest
 Click a card, row or tile to open it (or pick it in the split view): the dashboard fetches
 `GET /api/sessions/:id` and lists the
 subagents that session launched via the `Task` tool — type, description, running/done,
-duration, tokens, tool-use count — under a `N running · N finished · N agents` summary.
+duration, tokens (the harness's figure: the subagent's final context size, not its spend — the Analytics
+inspector sums the real spend from the subagent transcripts), tool-use count — under a `N running · N finished · N agents` summary.
 Served by an incremental byte-offset cache (`agents.ts` / `agents-cache.ts`) so repeat
 opens stay cheap.
 
