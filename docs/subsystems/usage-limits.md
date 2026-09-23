@@ -568,6 +568,10 @@ weighted with the uniform set on assumption. The list price itself still has to
 be re-read by a human; what the command removes is the need to re-derive the
 *tier*.
 
+**`pnpm check:ledger` audits the recorder the same way**, and `pnpm audit:rates -- surfaces` is the first thing to run when the badge says `drift`: both are
+`scripts/rates-audit.ts`, which rebuilds the ledger from the transcripts on the real ledger's own tick boundaries — `ledger` exits 1 when a (day, model) with ≥ 5M
+weighted on disk was recorded outside ±5%, `surfaces` splits each window's rate by the session surface that spent it, beside the card's own `driftRow`.
+
 **Drift is judged on the weighted rate only, and the card leads with it.**
 Weighted tokens per percent are invariant to the token-*type* mix — thinking
 tokens are output tokens, so raising effort from `high` to `xhigh` raises token

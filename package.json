@@ -16,6 +16,8 @@
     "session-analytics": "tsx scripts/session-analytics.ts",
     "probe:usage-split": "tsx scripts/probe-usage-split.ts",
     "check:weights": "tsx scripts/check-token-weights.ts",
+    "check:ledger": "tsx scripts/rates-audit.ts ledger",
+    "audit:rates": "tsx scripts/rates-audit.ts",
     "hooks:install": "bash scripts/install-hooks.sh",
     "hooks:uninstall": "bash scripts/install-hooks.sh --uninstall"
   },
