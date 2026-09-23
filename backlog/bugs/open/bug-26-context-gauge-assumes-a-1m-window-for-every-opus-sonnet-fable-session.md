@@ -103,7 +103,7 @@ Resolve the window from the newest `attachment.type === "model"` record's `ident
    than 200k tokens. Plain `claude-opus-5` sessions must report `200000`. No browser MCP server is configured in this repo's `.mcp.json`, so this probe
    stands in for a browser check. Optionally confirm by eye that a plain-opus card on the Sessions view reads `/ 200k`.
 
-Out of scope, worth its own item: `~/.claude/settings.json` sets `"autoCompactWindow": 200000`. That makes Claude Code compact a `[1m]` session near 200k
-(the 4 recorded `compact_boundary` records have `preTokens` of 168-171k). After this fix those sessions read against 1M while they compact at around 17% of
-it. That is the same dangerous direction, from a different cause. `resolveWindow` honours the env form of this setting only from the dashboard's own process
-env. It does not read it from the session's settings files.
+Out of scope, filed as bug-29: `~/.claude/settings.json` sets `"autoCompactWindow": 200000`. If Claude Code honours it for a `[1m]` session, that session
+compacts near 200k while the gauge reads it against 1M after this fix. The 4 recorded `compact_boundary` records are all plain `claude-opus-5` sessions, so
+that effect is not observed yet. `resolveWindow` reads the env form of this setting only from the dashboard's own process env, never from the session's
+settings files.
