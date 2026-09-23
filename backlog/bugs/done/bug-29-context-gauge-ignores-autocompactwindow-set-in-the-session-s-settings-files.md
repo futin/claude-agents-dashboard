@@ -3,9 +3,12 @@ id: bug-29
 title: Context gauge ignores autoCompactWindow set in the session's settings files
 created: 2026-09-23
 tags: sessions, context
-updated: 2026-09-23T08:14:09Z
+updated: 2026-09-23T12:21:26Z
 groom-elapsed: 129
 groom-tokens: 51476
+started: 2026-09-23T12:09:43Z
+execute-elapsed: 703
+execute-tokens: 61029
 ---
 
 ## Symptom
@@ -112,3 +115,57 @@ Apply the same `min(modelMax, configured)` rule Claude Code applies, reading `co
    `1000000` unless it has passed 200k tokens. When a `[1m]` session next auto-compacts, check that its `compact_boundary` `preTokens` sits near 170k. That
    closes the one step of the repro this groom proved from source instead of observing. No browser MCP server is configured in this repo's `.mcp.json`, so
    the probe stands in for a browser check.
+
+## Outcome
+
+2026-09-23 — Fixed. New `server/lib/compact-window.ts` exports `sessionCompactWindow(projectDir, homeDir?)`: merges `~/.claude/settings.json` →
+`<project>/.claude/settings.json` → `<project>/.claude/settings.local.json` → managed file (later wins, `env` merged key by key), returns `null` when
+`autoCompactEnabled` is `false`, else a settings-`env` `CLAUDE_CODE_AUTO_COMPACT_WINDOW` floored at 100k, else `autoCompactWindow`, else `null`. Each file is
+cached by `mtimeMs` + `size`; missing/malformed files contribute nothing. `resolveWindow` gained a fifth `compactWindow` argument and now returns
+`min(modelMax, compactWindow)` when `tokens <= compactWindow`, else `modelMax`; the dashboard's own env override still wins first. `readTranscript` passes
+`sessionCompactWindow(originCwd)`; its signature is unchanged.
+
+Deviations from the plan, on purpose:
+- Test seams are `setCompactWindowHome(dir|null)` and `setManagedSettingsPath(file|null)` in addition to the `homeDir` argument, because `readTranscript`'s
+  signature stays unchanged, so its test can only redirect the user-level and managed reads through module state. `test/transcript.test.ts` points both at an
+  empty tmp sandbox for the whole module, so this machine's `~/.claude/settings.json` (which does set `autoCompactWindow: 200000`) cannot leak into the
+  existing `[1m]` → 1M fixtures.
+- `compact-window.ts` imports `claudeHome` from `management.ts` as the plan asked. That closes an import cycle (transcript → compact-window → management →
+  transcript), the same shape `sessionAnalyticsLog.ts` → `management.ts` already has with `scan.ts`; only functions cross it at call time, so it is safe
+  under ESM live bindings.
+- A managed-file precedence test was added (not in the plan's case list).
+
+Verification — `pnpm test` (after `pnpm build`, see below):
+
+```
+=== compact-window.ts ===
+
+  ✓ user, project and local files layer in that order, later wins
+  ✓ the managed file beats every other layer
+  ✓ a settings env CLAUDE_CODE_AUTO_COMPACT_WINDOW wins, floored at 100k
+  ✓ autoCompactEnabled false means no cap at all
+  ✓ no files, malformed JSON and a null projectDir fail open
+  ✓ cache: a changed file is re-read, an unchanged one is not
+
+  6 passed, 0 failed
+...
+  9/9
+ALL PASS
+```
+
+`pnpm typecheck` → `tsc --noEmit`, no errors. The first `pnpm test` run in this fresh worktree failed one unrelated case,
+`test/api-usage-rates.test.ts` "a near-miss path is not the rates endpoint" ("it falls through to the static handler"), because `client/dist/` did not
+exist yet; after `pnpm build` it passes. Pre-existing environment dependency, not touched here.
+
+Live probe (repo step 6): `readTranscript` over every `~/.claude/projects/*/*.jsonl` under this machine's `"autoCompactWindow": 200000`:
+
+```
+{ transcripts: 1192, byWin: { '200000': 932, '1000000': 260 }, oneM: 260, over200k: 260, violations: 0 }
+```
+
+Every session at or under 200k tokens reports 200000, `[1m]` sessions included; the 260 at 1M are exactly the 260 past 200k. Not verified: a `[1m]` session
+actually auto-compacting with `compact_boundary` `preTokens` near 170k — none has compacted on this machine yet, so that repro step is still proven only from
+Claude Code's source. No browser check (no browser MCP in this repo's `.mcp.json`); the probe stands in for it.
+
+Contract sweep: 3 sites updated (docs/subsystems/sessions.md, docs/workflows/configuration.md, docs/overview.md)
+Red proof: 8 tests went red with the change reverted

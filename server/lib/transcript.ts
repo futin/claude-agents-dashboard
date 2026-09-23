@@ -5,6 +5,7 @@
 
 import fs from 'node:fs';
 
+import { sessionCompactWindow } from './compact-window.js';
 import { findModelIdentity, resolveModelIdentity } from './model-identity.js';
 import { findTitle, resolveSessionTitle } from './title-cache.js';
 
@@ -252,16 +253,28 @@ export function usageTokens(record: any): number {
 }
 
 /**
- * Pick a context window size. Order: env override, then observed tokens past
- * 200k (proof, so it beats any identity), then a `[1m]` marker on the session's
- * model identity or on `message.model` — otherwise 200k, whatever the family.
+ * Pick a context window size. Order: the dashboard's own env override, then
+ * the model maximum — observed tokens past 200k (proof, so it beats any
+ * identity), then a `[1m]` marker on the session's model identity or on
+ * `message.model`, otherwise 200k whatever the family — capped at the
+ * session's configured compact window, as Claude Code caps it. Context already
+ * past that window proves the cap is not in force, so the tokens beat the file.
  *
  * @param identityModel `identity.modelId` off the newest model attachment, if any
+ * @param compactWindow the session's `autoCompactWindow` (see `compact-window.ts`), if any
  */
-export function resolveWindow(tokens: number, model: string, env?: NodeJS.ProcessEnv, identityModel?: string | null): number {
+export function resolveWindow(
+  tokens: number, model: string, env?: NodeJS.ProcessEnv, identityModel?: string | null, compactWindow?: number | null
+): number {
   const e = env || (typeof process !== 'undefined' ? process.env : {}) || {};
   const override = Number.parseInt(e.CLAUDE_CODE_AUTO_COMPACT_WINDOW || e.CLAUDE_OBS_CONTEXT_WINDOW || '', 10);
   if (Number.isInteger(override) && override > 0) return override;
+  const modelMax = modelMaxWindow(tokens, model, identityModel);
+  if (typeof compactWindow === 'number' && compactWindow > 0 && tokens <= compactWindow) return Math.min(modelMax, compactWindow);
+  return modelMax;
+}
+
+function modelMaxWindow(tokens: number, model: string, identityModel?: string | null): number {
   if (Number.isFinite(tokens) && tokens > STANDARD_WINDOW) return LARGE_WINDOW;
   if (typeof identityModel === 'string' && identityModel.includes(LARGE_MARKER)) return LARGE_WINDOW;
   if (typeof model === 'string' && model.includes(LARGE_MARKER)) return LARGE_WINDOW;
@@ -422,7 +435,7 @@ export function readTranscript(
 
   const originCwd = resolveOriginCwd(filePath, tail, lines, first);
 
-  const win = resolveWindow(tokens, model, undefined, identityModel);
+  const win = resolveWindow(tokens, model, undefined, identityModel, sessionCompactWindow(originCwd));
   const contextPct = win > 0 ? Math.min(100, Math.round((tokens / win) * 1000) / 10) : 0;
 
   return {
