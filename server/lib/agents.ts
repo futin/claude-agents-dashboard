@@ -7,7 +7,9 @@
  *  - Synchronous: the assistant `tool_use` (id `toolu_…`) is answered by a user
  *    `tool_result` with the matching `tool_use_id` — that result IS the agent's
  *    output. The record also carries a top-level `toolUseResult` with the exact
- *    `totalDurationMs` / `totalTokens` / `totalToolUseCount`.
+ *    `totalDurationMs` / `totalToolUseCount`, the subagent's `agentId`, and
+ *    `totalTokens` — which is the subagent's final context size, not its spend
+ *    (analyze.ts sums the spend from the subagent's own transcript; bug-27).
  *
  *  - Background (async): the immediate `tool_result` is only a launch ack
  *    (`toolUseResult.isAsync` / "Async agent launched … agentId: <hex>"). The
@@ -164,13 +166,12 @@ export function parseRecordEvents(rec: any): AgentEvent[] {
       const isAsyncAck =
         (t && (t.isAsync === true || t.status === 'async_launched')) ||
         /Async agent launched/i.test(text);
-      let agentId: string | null = null;
-      if (isAsyncAck) {
-        if (t && typeof t.agentId === 'string') agentId = t.agentId;
-        else {
-          const m = text.match(AGENT_ID_RE);
-          agentId = m ? m[1] : null;
-        }
+      // Both shapes name the subagent: an ack so its completion can be paired,
+      // a sync result so its own transcript (`subagents/agent-<id>.jsonl`) can be.
+      let agentId: string | null = t && typeof t.agentId === 'string' ? t.agentId : null;
+      if (isAsyncAck && !agentId) {
+        const m = text.match(AGENT_ID_RE);
+        agentId = m ? m[1] : null;
       }
       events.push({
         kind: 'result',
@@ -196,6 +197,7 @@ interface Launch {
   exactDurationMs: number | null;
   tokens: number | null;
   toolUses: number | null;
+  agentId: string | null;
 }
 
 /**
@@ -220,7 +222,7 @@ export function applyEvent(state: ScanState, ev: AgentEvent): void {
   if (ev.kind === 'launch') {
     const l: Launch = {
       id: ev.id, type: ev.type, description: ev.description,
-      startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null
+      startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId: null
     };
     state.launches.push(l);
     if (!state.byToolUseId.has(ev.id)) state.byToolUseId.set(ev.id, l);
@@ -230,6 +232,7 @@ export function applyEvent(state: ScanState, ev: AgentEvent): void {
     const l = state.byToolUseId.get(ev.toolUseId);
     if (!l) return;
     state.byToolUseId.delete(ev.toolUseId);
+    l.agentId = ev.agentId;
     if (ev.isAsyncAck) {
       // Launch ack, not completion; completion (if any) is a later
       // task-notification keyed by agentId. Unparsable id → stays running.
@@ -268,7 +271,8 @@ export function toAgentJobs(state: ScanState): AgentJob[] {
       endedAt: l.endedAt,
       durationMs: l.exactDurationMs ?? diff,
       tokens: l.tokens,
-      toolUses: l.toolUses
+      toolUses: l.toolUses,
+      agentId: l.agentId
     };
   });
   agents.reverse(); // file order is oldest→newest; return newest-first

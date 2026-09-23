@@ -79,6 +79,13 @@ one of them at random — the same two-state rule the Sessions board follows.
   strip of one value each — the subagent count and the retry count ride in their
   **labels**, because the inspector is narrower than a full-width card and a two-part
   value wraps there and drops its label out of line with the other four.
+- **The subagent figure is summed from the subagents' own transcripts** (`server/lib/subagent-usage.ts`): every
+  `<sessionId>/subagents/agent-<agentId>.jsonl`, once per `message.id`, paired to its launch by `agentId` or the
+  `.meta.json` sidecar's `toolUseId`. The harness's own number (`toolUseResult.totalTokens` / `<subagent_tokens>`) is the
+  subagent's *final context size*, not its spend — 5–130x low on many-turn subagents (bug-27) — so it is only the fallback
+  for a finished subagent whose transcript is missing or sums below it, counted in `subagentTotals.fallbackCount`. The
+  metric's tooltip carries `subagentTotals.usage`'s billable / cache-read split. `/kaizen`'s vendored `kaizen.mjs` does the
+  same, and `test/analyze.test.ts` runs it against `analyzeSession` to keep the two in step.
 - **Research & suggestions** — the one-line lesson `/kaizen` wrote for that session. The
   server does **no** LLM calls and invents no advice; the qualitative judgment is
   entirely `/kaizen`'s.
@@ -207,6 +214,7 @@ returned — no backend change, so the read-only invariant above still holds.
   sources:
     - server/lib/analytics.ts
     - server/lib/analyze.ts
+    - server/lib/subagent-usage.ts
     - server/lib/sessionAnalyticsLog.ts
     - server/api.ts
     - client/src/components/analytics/

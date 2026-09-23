@@ -9,7 +9,7 @@
  *   node kaizen.mjs /abs/path/to/x.jsonl    analyze a transcript directly
  *   node kaizen.mjs --latest                newest transcript for the current cwd
  *
- * PROVENANCE: ported from claude-agents-dashboard server/lib/{analyze,agents,scan}.ts.
+ * PROVENANCE: ported from claude-agents-dashboard server/lib/{analyze,agents,subagent-usage,scan}.ts.
  * That repo holds the unit-tested source of truth; keep this in sync if it changes.
  */
 
@@ -81,13 +81,22 @@ const DURATION_MS_RE = /<duration_ms>\s*(\d+)\s*<\/duration_ms>/;
 function finiteOrNull(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null; }
 function intFromMatch(text, re) { const m = text.match(re); return m ? parseInt(m[1], 10) : null; }
 
+// A notification landing mid-turn is absorbed into the running turn as message-less
+// `queue-operation` (top-level `content`) / `attachment` (`attachment.prompt`) records (bug-11).
+function notificationText(rec, content) {
+  let out = contentText(content);
+  if (typeof rec.content === 'string') out += '\n' + rec.content;
+  const prompt = rec.attachment && rec.attachment.prompt;
+  if (typeof prompt === 'string') out += '\n' + prompt;
+  return out;
+}
+
 function parseRecordEvents(rec) {
-  const msg = rec && rec.message;
-  if (!msg) return [];
-  const content = msg.content;
+  if (!rec || typeof rec !== 'object') return [];
+  const content = rec.message ? rec.message.content : undefined;
   const ts = typeof rec.timestamp === 'string' ? rec.timestamp : null;
   const events = [];
-  const flat = contentText(content);
+  const flat = notificationText(rec, content);
   if (flat.includes('<task-notification>')) {
     const idM = flat.match(TASK_ID_RE), stM = flat.match(STATUS_RE);
     if (idM && stM) events.push({
@@ -112,11 +121,8 @@ function parseRecordEvents(rec) {
       const t = tur && typeof tur === 'object' ? tur : null;
       tur = undefined;
       const isAsyncAck = (t && (t.isAsync === true || t.status === 'async_launched')) || /Async agent launched/i.test(text);
-      let agentId = null;
-      if (isAsyncAck) {
-        if (t && typeof t.agentId === 'string') agentId = t.agentId;
-        else { const m = text.match(AGENT_ID_RE); agentId = m ? m[1] : null; }
-      }
+      let agentId = t && typeof t.agentId === 'string' ? t.agentId : null;
+      if (isAsyncAck && !agentId) { const m = text.match(AGENT_ID_RE); agentId = m ? m[1] : null; }
       events.push({
         kind: 'result', toolUseId: b.tool_use_id, ts, isAsyncAck: !!isAsyncAck, agentId,
         tokens: isAsyncAck ? null : finiteOrNull(t && t.totalTokens),
@@ -134,7 +140,7 @@ function readAgents(filePath) {
   const launches = [], byToolUseId = new Map(), byAgentId = new Map();
   const apply = (ev) => {
     if (ev.kind === 'launch') {
-      const l = { id: ev.id, type: ev.type, description: ev.description, startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null };
+      const l = { id: ev.id, type: ev.type, description: ev.description, startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId: null };
       launches.push(l);
       if (!byToolUseId.has(ev.id)) byToolUseId.set(ev.id, l);
       return;
@@ -143,6 +149,7 @@ function readAgents(filePath) {
       const l = byToolUseId.get(ev.toolUseId);
       if (!l) return;
       byToolUseId.delete(ev.toolUseId);
+      l.agentId = ev.agentId;
       if (ev.isAsyncAck) { if (ev.agentId && !byAgentId.has(ev.agentId)) byAgentId.set(ev.agentId, l); }
       else { l.endedAt = ev.ts; l.tokens = ev.tokens; l.toolUses = ev.toolUses; l.exactDurationMs = ev.exactDurationMs; }
       return;
@@ -166,11 +173,79 @@ function readAgents(filePath) {
     const diff = Number.isFinite(startMs) && Number.isFinite(endMs) ? endMs - startMs : null;
     return {
       id: l.id, type: l.type, description: l.description, status: l.endedAt ? 'done' : 'running',
-      startedAt: l.startedAt, endedAt: l.endedAt, durationMs: l.exactDurationMs ?? diff, tokens: l.tokens, toolUses: l.toolUses
+      startedAt: l.startedAt, endedAt: l.endedAt, durationMs: l.exactDurationMs ?? diff, tokens: l.tokens, toolUses: l.toolUses, agentId: l.agentId
     };
   });
   agents.reverse();
   return agents;
+}
+
+/* ------------------------------------------------ subagent spend (subagent-usage.ts) */
+
+// The harness figure (totalTokens / <subagent_tokens>) is a subagent's FINAL context size,
+// not its spend; the spend is in its own transcript, summed once per message.id (bug-27).
+function emptyTotals() { return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0, combined: 0, billableApprox: 0 }; }
+function addTotals(a, b) {
+  a.input += b.input; a.output += b.output; a.cacheCreation += b.cacheCreation; a.cacheRead += b.cacheRead;
+  a.combined += b.combined; a.billableApprox += b.billableApprox;
+}
+function sumSubagentTranscript(text) {
+  const t = emptyTotals();
+  const seen = new Set();
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let rec;
+    try { rec = JSON.parse(trimmed); } catch { continue; }
+    const msg = rec && rec.message;
+    if (!msg || msg.role !== 'assistant' || !msg.usage || typeof msg.usage !== 'object') continue;
+    if (typeof msg.id === 'string' && msg.id) { if (seen.has(msg.id)) continue; seen.add(msg.id); }
+    const u = msg.usage;
+    t.input += num(u.input_tokens); t.output += num(u.output_tokens);
+    t.cacheCreation += num(u.cache_creation_input_tokens); t.cacheRead += num(u.cache_read_input_tokens);
+  }
+  t.combined = t.input + t.output + t.cacheCreation + t.cacheRead;
+  t.billableApprox = t.input + t.output + t.cacheCreation;
+  return t;
+}
+function readSubagentUsage(mainPath) {
+  const dir = path.join(mainPath.replace(/\.jsonl$/, ''), 'subagents');
+  let names;
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  const out = [];
+  for (const name of names) {
+    const m = /^agent-(.+)\.jsonl$/.exec(name);
+    if (!m) continue;
+    let text;
+    try { text = fs.readFileSync(path.join(dir, name), 'utf8'); } catch { continue; }
+    let toolUseId = null;
+    try {
+      const meta = JSON.parse(fs.readFileSync(path.join(dir, `agent-${m[1]}.meta.json`), 'utf8'));
+      if (meta && typeof meta.toolUseId === 'string') toolUseId = meta.toolUseId;
+    } catch { /* no sidecar */ }
+    out.push({ agentId: m[1], toolUseId, usage: sumSubagentTranscript(text) });
+  }
+  return out;
+}
+// A finished launch takes its transcript sum unless that sums below the harness figure (file
+// still being written) — then the harness figure, as a lower bound. Unclaimed files are left out.
+function subagentSpend(filePath) {
+  const files = readSubagentUsage(filePath);
+  const byAgentId = new Map(files.map(f => [f.agentId, f]));
+  const byToolUseId = new Map(files.filter(f => f.toolUseId).map(f => [f.toolUseId, f]));
+  const usage = emptyTotals();
+  let tokens = 0, fallbackCount = 0, unknownTokenCount = 0;
+  const agents = (readAgents(filePath) || []).map(a => {
+    const file = (a.agentId && byAgentId.get(a.agentId)) || byToolUseId.get(a.id);
+    let figure = null;
+    if (a.status === 'done') {
+      if (file && file.usage.combined > 0 && file.usage.combined >= (a.tokens ?? 0)) { figure = file.usage.combined; addTotals(usage, file.usage); }
+      else if (a.tokens != null) { figure = a.tokens; fallbackCount++; }
+    }
+    if (figure == null) unknownTokenCount++; else tokens += figure;
+    return { ...a, tokens: figure };
+  });
+  return { agents, subagentTotals: { count: agents.length, tokens, usage, fallbackCount, unknownTokenCount } };
 }
 
 /* ------------------------------------------------ analysis (analyze.ts) */
@@ -303,19 +378,15 @@ function analyzeSession(filePath, id) {
     .map(s => ({ ...s, approxOutputTokens: Math.round(s.approxOutputTokens) }))
     .sort((a, b) => b.approxOutputTokens - a.approxOutputTokens || b.count - a.count);
 
-  const agents = readAgents(filePath) || [];
-  const subagentTotals = {
-    count: agents.length,
-    tokens: agents.reduce((sum, a) => sum + (a.tokens ?? 0), 0),
-    unknownTokenCount: agents.filter(a => a.tokens == null).length
-  };
+  const { agents, subagentTotals } = subagentSpend(filePath);
 
   const notes = [
     'combined includes cache_read (replayed cached prompt, billed ~10%); lead with billableApprox for real cost.',
     "byTool.approxOutputTokens splits each turn's output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.",
     'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.'
   ];
-  if (subagentTotals.count > 0) notes.push('Subagent tokens are exact and separate from main-agent totals; whole-session total ≈ totals.combined + subagentTotals.tokens.');
+  if (subagentTotals.count > 0) notes.push("Subagent tokens are summed from each subagent's own transcript and are separate from main-agent totals; whole-session total = totals.combined + subagentTotals.tokens. subagentTotals.usage splits them by class — lead with its billableApprox for cost.");
+  if (subagentTotals.fallbackCount > 0) notes.push(`${subagentTotals.fallbackCount} subagent(s) have no complete transcript and are counted at the harness figure (their final context size) — a lower bound.`);
   if (subagentTotals.unknownTokenCount > 0) notes.push(`${subagentTotals.unknownTokenCount} subagent(s) have unknown token totals (still running or old transcript).`);
 
   const durationMs = minTs && maxTs ? Date.parse(maxTs) - Date.parse(minTs) : null;
