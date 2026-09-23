@@ -261,6 +261,10 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   the gap between them, the weekly interval tally and rates,
                   check-token-weights.ts (`pnpm check:weights`) — re-measures the
                   cache-write TTL mix behind TYPE_WEIGHTS, exits 1 when it drifts
+                  rates-audit.ts (`pnpm check:ledger`, `pnpm audit:rates -- <sub>`) —
+                  re-derives the Token-value inputs from transcripts: `ledger`
+                  exits 1 when the ledger misses ±5% of a day's spend, and
+                  `surfaces` / `modifiers` / `offbook` report; pipeline in lib/transcript-audit.ts
 ```
 
 ## Map

@@ -14,7 +14,7 @@ import { archivedSessionIds } from './lib/archived.js';
 import { readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
-import { deriveProfile, profileSnapshot, readRecentSamples } from './lib/usage-history.js';
+import { deriveProfile, profileSnapshot, RATES_HISTORY_BYTES, readRecentSamples } from './lib/usage-history.js';
 import type { ProfileState, UsageSample } from './lib/usage-history.js';
 import { ledgerStartMs, readLedgerSince } from './lib/usage-ledger.js';
 import type { LedgerLine } from './lib/usage-ledger.js';
@@ -707,16 +707,6 @@ export function serveUsageProfile(res: ServerResponse): void {
     } satisfies UsageProfileResponse);
   }
 }
-
-/**
- * How much of the history log a rate fit reads.
- *
- * Sized for the baseline horizon at the worst case — one write-on-change
- * sample per minute for 17 days is ~24_500 lines of ~80 bytes, under 2 MB — so
- * the fit can never be quietly starved of the oldest part of its own baseline.
- * Quiet stretches write the 15-minute heartbeat instead and cost far less.
- */
-export const RATES_HISTORY_BYTES = 4_194_304;
 
 /**
  * An honest empty body — no ledger yet, recording off, or a failed fit.
