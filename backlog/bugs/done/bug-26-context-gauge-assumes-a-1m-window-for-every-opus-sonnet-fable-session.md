@@ -3,9 +3,12 @@ id: bug-26
 title: Context gauge assumes a 1M window for every opus/sonnet/fable session
 created: 2026-09-20
 tags: sessions, context
-updated: 2026-09-23T08:02:28Z
+updated: 2026-09-23T11:49:19Z
 groom-elapsed: 160
 groom-tokens: 43183
+started: 2026-09-23T11:40:28Z
+execute-elapsed: 531
+execute-tokens: 69483
 ---
 
 ## Symptom
@@ -107,3 +110,47 @@ Out of scope, filed as bug-29: `~/.claude/settings.json` sets `"autoCompactWindo
 compacts near 200k while the gauge reads it against 1M after this fix. The 4 recorded `compact_boundary` records are all plain `claude-opus-5` sessions, so
 that effect is not observed yet. `resolveWindow` reads the env form of this setting only from the dashboard's own process env, never from the session's
 settings files.
+
+## Outcome
+
+2026-09-23 — Fixed. `resolveWindow` now sizes the window from the session's newest model attachment (`identity.modelId`), not the model family: env override,
+then tokens > 200k, then `[1m]` on the identity, then `[1m]` on `message.model`, else 200k. `LARGE_WINDOW_MODEL_PATTERNS` is gone. Shape chosen for step 1:
+`title-cache.ts`'s tail-then-hunt machinery moved verbatim (renamed generics only) into a new `server/lib/record-cache.ts` as
+`createRecordCache(marker, extract)`; `title-cache.ts` is now a thin instance with its exports unchanged, and the new `server/lib/model-identity.ts` is the second
+instance (marker `"type":"model"`, shape-checked extractor). No `scanBack`/`readAt` copy exists. Real model attachments measured ≤ 983 bytes, well inside
+`RECORD_SLACK` (4096).
+
+Verification (`pnpm test`, after `pnpm build` — see note below):
+
+```
+=== transcript.ts ===
+...
+Passed: 23  Failed: 0
+=== title-cache.ts ===
+  ... 13 passed, 0 failed
+ALL PASS
+TEST_EXIT 0
+```
+
+`pnpm typecheck` → `tsc --noEmit`, exit 0.
+
+Live probe (step 6), run from `/tmp/bug26-probe` with `CLAUDE_CODE_AUTO_COMPACT_WINDOW`/`CLAUDE_OBS_CONTEXT_WINDOW` unset. It ran `readTranscript` over every
+`~/.claude/projects/*/*.jsonl` and compared against an independent full-file read of the newest model attachment:
+
+```
+{ n: 1187, large: 304, mismatch: 0, noIdent: 876, plainOpus: 120, plainOpusBad: 0 }
+```
+
+So the set of 1M-window sessions exactly equals the `[1m]`-identity-or-over-200k set, and all 120 plain `claude-opus-5` sessions report 200000. `noIdent: 876` is
+far above the grooming measurement's 2/117 because the probe covers every transcript on the machine, and most older ones predate the attachment. Those sessions
+now read against 200k until they pass it, which is the plan's decided behaviour. The browser check was not done (no browser MCP in this repo).
+
+Note: on a fresh worktree `test/api-usage-rates.test.ts` › "a near-miss path is not the rates endpoint" fails, because it needs `client/dist` (gitignored, absent
+in a new worktree) for the SPA fallback. This is not related to this diff. After `pnpm build` it passes, and `client/dist` was left in place (gitignored).
+
+Contract sweep: 3 sites updated (docs/subsystems/sessions.md context-bar bullet + title-cache paragraph `{ title, … }` → `{ value, … }` + docs-sync sources;
+docs/overview.md map gains record-cache.ts and model-identity.ts; the old family-regex comment in server/lib/transcript.ts was replaced). Left standing on
+purpose: `backlog/bugs/open/bug-29-*.md` says "Today bug-26's family regex hides this" — a separate open item whose text is explicitly conditional on this fix
+landing. It is bug-29's groom to restate, not this item's.
+Red proof: 7 tests went red with the change reverted — identity lookup stubbed to null reddens the `[1m]` attachment test and the below-tail test; the family
+regex reinstated reddens both resolveWindow tests, the updated readTranscript meta test (200k), the newest-wins test and the marker-decoy test.

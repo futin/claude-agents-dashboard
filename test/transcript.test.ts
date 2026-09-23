@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import * as mi from '../server/lib/model-identity.js';
 import * as tr from '../server/lib/transcript.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -27,13 +28,23 @@ export function run(): number {
     assert.strictEqual(tr.usageTokens({}), 0);
   })) p++; else f++;
 
-  if (test('resolveWindow: default 200k, sonnet/opus 1M, [1m] marker, env override, overflow', () => {
+  if (test('resolveWindow: default 200k for every family, [1m] marker, env override, overflow', () => {
     assert.strictEqual(tr.resolveWindow(1000, 'claude-haiku-4-5-20251001', {}), 200000);
-    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-4-8', {}), 1000000);
-    assert.strictEqual(tr.resolveWindow(1000, 'claude-sonnet-5', {}), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-4-8', {}), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-sonnet-5', {}), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-fable-5-1', {}), 200000);
     assert.strictEqual(tr.resolveWindow(1000, 'claude-sonnet-5[1m]', {}), 1000000);
     assert.strictEqual(tr.resolveWindow(1000, 'x', { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '400000' }), 400000);
     assert.strictEqual(tr.resolveWindow(250000, 'x', {}), 1000000);
+  })) p++; else f++;
+
+  // The model attachment's identity is the only on-disk record of the 1M grant.
+  if (test('resolveWindow: the identity decides, proof and env override beat it', () => {
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5', {}, 'claude-opus-5[1m]'), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5', {}, 'claude-opus-5'), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-haiku-4-5-20251001', {}, 'claude-haiku-4-5-20251001'), 200000);
+    assert.strictEqual(tr.resolveWindow(250000, 'x', {}, 'claude-opus-5'), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'x', { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '400000' }, 'claude-opus-5[1m]'), 400000);
   })) p++; else f++;
 
   if (test('windowLabel formats k / M', () => {
@@ -66,8 +77,8 @@ export function run(): number {
     const s = tr.readTranscript(file)!;
     assert.strictEqual(s.tokens, 1000);
     assert.strictEqual(s.model, 'claude-opus-4-8');
-    assert.strictEqual(s.contextWindow, 1000000);
-    assert.strictEqual(s.contextPct, 0.1);
+    assert.strictEqual(s.contextWindow, 200000);
+    assert.strictEqual(s.contextPct, 0.5);
     assert.strictEqual(s.activity!.tool, 'Edit');
     assert.strictEqual(s.activity!.detail, '/a/b.js');
     assert.strictEqual(s.cwd, '/Users/me/proj');
@@ -304,6 +315,51 @@ export function run(): number {
     assert.strictEqual(p.originCwd, '/a/repo');
     assert.strictEqual(p.cwd, '/a/repo/sub');
     assert.strictEqual(tr.originCacheStats().headReads, 0);
+  })) p++; else f++;
+
+  const IDENT = (id: string) => ({
+    type: 'attachment',
+    attachment: { type: 'model', identity: { modelId: id, marketingName: 'Opus 5' }, text: 'You are powered by ' + id }
+  });
+  const USAGE = (i: number) => ({
+    timestamp: '2026-07-01T09:00:00Z', cwd: '/p', gitBranch: 'main', version: '2.1.0',
+    message: { role: 'assistant', model: 'claude-opus-5', stop_reason: 'end_turn', usage: { input_tokens: 1000 + i }, content: [] }
+  });
+
+  if (test('readTranscript: a [1m] model attachment sizes the window at 1M', () => {
+    mi.resetModelIdentityCache();
+    const s = tr.readTranscript(fixture([IDENT('claude-opus-5[1m]'), USAGE(0), USAGE(1)]))!;
+    assert.strictEqual(s.model, 'claude-opus-5');
+    assert.strictEqual(s.contextWindow, 1000000);
+    assert.strictEqual(s.contextWindowLabel, '1M');
+  })) p++; else f++;
+
+  if (test('readTranscript: the newest model attachment wins after a /model switch', () => {
+    mi.resetModelIdentityCache();
+    const s = tr.readTranscript(fixture([IDENT('claude-opus-5[1m]'), USAGE(0), IDENT('claude-opus-5'), USAGE(1)]))!;
+    assert.strictEqual(s.contextWindow, 200000);
+  })) p++; else f++;
+
+  if (test('readTranscript: a model attachment below the tail window is found once, then remembered', () => {
+    mi.resetModelIdentityCache();
+    const pad: unknown[] = [];
+    for (let i = 0; i < 200; i++) pad.push(USAGE(i));
+    const file = fixture([IDENT('claude-opus-5[1m]'), ...pad]);
+    const tailBytes = 4096;
+    assert.strictEqual(tr.readTail(file, tailBytes)!.text.includes(mi.MODEL_MARKER), false, 'fixture must bury the attachment');
+    assert.strictEqual(tr.readTranscript(file, { tailBytes })!.contextWindow, 1000000);
+    assert.strictEqual(mi.modelIdentityCacheStats().fullScans, 1);
+    assert.strictEqual(tr.readTranscript(file, { tailBytes })!.contextWindow, 1000000);
+    assert.strictEqual(mi.modelIdentityCacheStats().fullScans, 1, 'second read must be served from the remembered range');
+  })) p++; else f++;
+
+  if (test('readTranscript: marker text inside a user message does not promote', () => {
+    mi.resetModelIdentityCache();
+    const s = tr.readTranscript(fixture([
+      { type: 'user', message: { role: 'user', content: 'grep for {"type":"model","identity":{"modelId":"claude-opus-5[1m]"}}' } },
+      USAGE(0)
+    ]))!;
+    assert.strictEqual(s.contextWindow, 200000);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

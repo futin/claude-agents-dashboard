@@ -69,9 +69,11 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   is sitting in its sidebar. `lib/surface.ts` supplies the label and tooltip, and the pill has
   no handler of its own — clicking it toggles the row like the rest of `.r1`. Which surface
   can continue what is mapped in [session surfaces](session-surfaces.md).
-- **Context bar + %** — current context tokens vs. the model's window (1M for
-  Sonnet/Opus/Fable, 200k for Haiku and unknowns; override with
-  `CLAUDE_CODE_AUTO_COMPACT_WINDOW`). Turns orange/red as it fills.
+- **Context bar + %** — current context tokens vs. the session's window. The window comes from the session's own model attachment
+  (`{"type":"attachment","attachment":{"type":"model","identity":{"modelId":"claude-opus-5[1m]"}}}`, newest wins, found by `model-identity.ts` the same
+  way the title is found below): 1M only when that `modelId` carries `[1m]` or context has already passed 200k, 200k otherwise — whatever the model
+  family, since `message.model` never records the grant. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the dashboard's own env overrides all of it. Turns
+  orange/red as it fills.
 - **Activity line** — the most recent tool call (e.g. `Edit server.ts`,
   `Task Explore: map the codebase`).
 - **Relative time** — since the last conversational message.
@@ -160,9 +162,11 @@ transcript), where no scan order helps. Widening the window is not the fix — t
 here run to several megabytes and the scan re-reads every session on every poll. So
 `title-cache.ts` searches the tail first (free — those bytes are already decoded) and only
 on a miss hunts backward through the rest of the file a chunk at a time, newest hit wins.
+The search and its memory live in `record-cache.ts` (`createRecordCache(marker, extract)`),
+which `model-identity.ts` reuses for the model attachment that sizes the context window.
 
 **What gets remembered is the searched byte range, not just the answer** —
-`resolveSessionTitle` stores `{ title, scannedFrom, size }` per file. A later poll can then
+the cache stores `{ value, scannedFrom, size }` per file. A later poll can then
 prove its own tail window joins up with the range already covered and skip the disk
 entirely. A miss is cached too; otherwise every poll re-scans every untitled session.
 
@@ -515,6 +519,8 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - server/lib/agents.ts
     - server/lib/agents-cache.ts
     - server/lib/title-cache.ts
+    - server/lib/record-cache.ts
+    - server/lib/model-identity.ts
     - client/src/components/SessionsView.tsx
     - client/src/components/Toolbar.tsx
     - client/src/components/AsideAccount.tsx
