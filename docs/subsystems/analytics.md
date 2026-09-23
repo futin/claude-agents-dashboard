@@ -194,6 +194,12 @@ returned — no backend change, so the read-only invariant above still holds.
   **Not affected:** `lib/transcript.ts` (session rows, chat-drawer context) reads the
   *latest* usage rather than summing, and the copies are identical — its numbers were
   always right.
+- **`perTurn.neverCompacted` is inferred, never read.** The transcript carries no context-window field (`message.model` reads `claude-opus-5`, no
+  `[1m]` suffix) and no compaction marker, so `analyzeSession` derives it from turn sizes alone: `maxCombined` above `NEVER_COMPACTED_PEAK` (250k — a
+  200k window compacts near 160k, so only a larger window reaches it) **and** no turn anywhere below `COMPACTION_DROP_RATIO` (half) of the running peak.
+  A turn's `combined` is its whole context, which only grows between compactions, so that fall is the one compaction leaves — which is why a big early
+  peak followed by a drop reads `false` where a bare `max > 250k` would say `true`. No turns reads `false`. A `notes[]` entry states the inference, and
+  `/kaizen` §2 treats `true` as a primary explanation for cost. Only `kaizen.mjs` surfaces it today — the Analytics tab does not render it.
 - **⚠️ Log grammar (the contract with `/kaizen` — three line shapes, all append-only):**
 
   ```

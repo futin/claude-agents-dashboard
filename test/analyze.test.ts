@@ -514,6 +514,59 @@ export function run(): number {
     assert.deepStrictEqual(k.notes, a.notes);
   })) p++; else f++;
 
+  // --- never-compacted inference (task-27) --------------------------------
+  // A turn's combined is its whole context, so it only grows between compactions. One record per turn at
+  // each size models that growth; the threshold is 250k and a compaction is a fall below half the running peak.
+  const ctx = (sizes: number[]) => fixture(sizes.map((n, i) => usageRec({ cache_read_input_tokens: n }, `2026-07-01T10:${String(i).padStart(2, '0')}:00Z`)));
+
+  if (test('neverCompacted: a session that grows to ~600k reads true', () => {
+    const a = analyzeSession(ctx([20_000, 150_000, 400_000, 600_000]))!;
+    assert.strictEqual(a.perTurn.maxCombined, 600_000);
+    assert.strictEqual(a.perTurn.neverCompacted, true);
+  })) p++; else f++;
+
+  if (test('neverCompacted: a session peaking at ~140k reads false', () => {
+    assert.strictEqual(analyzeSession(ctx([20_000, 90_000, 140_000]))!.perTurn.neverCompacted, false);
+  })) p++; else f++;
+
+  if (test('neverCompacted: the 250k boundary is exclusive — 250,000 false, 250,001 true', () => {
+    assert.strictEqual(analyzeSession(ctx([100_000, 250_000]))!.perTurn.neverCompacted, false);
+    assert.strictEqual(analyzeSession(ctx([100_000, 250_001]))!.perTurn.neverCompacted, true);
+  })) p++; else f++;
+
+  if (test('neverCompacted: a big early peak followed by a compaction drop reads false', () => {
+    // The shape compaction leaves: peak, then a fall well below half of it, then regrowth. `max > threshold` alone says true.
+    const a = analyzeSession(ctx([100_000, 600_000, 40_000, 80_000]))!;
+    assert.strictEqual(a.perTurn.maxCombined, 600_000);
+    assert.strictEqual(a.perTurn.maxTurnIndex, 1);
+    assert.strictEqual(a.perTurn.neverCompacted, false);
+  })) p++; else f++;
+
+  if (test('neverCompacted: a compaction before the peak still reads false — the session did compact', () => {
+    assert.strictEqual(analyzeSession(ctx([150_000, 30_000, 600_000]))!.perTurn.neverCompacted, false);
+  })) p++; else f++;
+
+  if (test('neverCompacted: one turn, and no usage at all, read false rather than undefined', () => {
+    assert.strictEqual(analyzeSession(ctx([12_000]))!.perTurn.neverCompacted, false);
+    const empty = analyzeSession(fixture([{ timestamp: '2026-07-01T10:00:00Z', message: { role: 'user', content: 'hi' } }]))!;
+    assert.strictEqual(empty.perTurn.count, 0);
+    assert.strictEqual(empty.perTurn.neverCompacted, false);
+  })) p++; else f++;
+
+  if (test('vendored kaizen.mjs reports the same perTurn (neverCompacted included) as analyzeSession', () => {
+    const kaizen = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../.claude/skills/kaizen/kaizen.mjs');
+    for (const sizes of [[20_000, 400_000, 600_000], [100_000, 600_000, 40_000], [100_000, 250_000]]) {
+      const file = ctx(sizes);
+      const r = spawnSync(process.execPath, [kaizen, file], { encoding: 'utf8' });
+      assert.strictEqual(r.status, 0, r.stderr);
+      const k = JSON.parse(r.stdout);
+      const a = analyzeSession(file)!;
+      assert.deepStrictEqual(k.perTurn, a.perTurn);
+      assert.deepStrictEqual(k.notes, a.notes);
+    }
+    assert.strictEqual(JSON.parse(spawnSync(process.execPath, [kaizen, ctx([20_000, 600_000])], { encoding: 'utf8' }).stdout).perTurn.neverCompacted, true);
+  })) p++; else f++;
+
   if (test('missing file → null', () => {
     assert.strictEqual(analyzeSession('/no/such/transcript.jsonl'), null);
   })) p++; else f++;

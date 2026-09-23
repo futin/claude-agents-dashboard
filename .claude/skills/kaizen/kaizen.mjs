@@ -262,6 +262,12 @@ function userText(msg) {
 }
 const CORRECTION_RE = /\b(no|nope|wrong|incorrect|not (?:what|right|correct)|actually|instead|revert|undo|don'?t|that'?s not)\b/i;
 
+// Peak context that proves auto-compaction never fired: a 200k window compacts near 160k, so only a larger one (1M puts compaction out of reach)
+// gets a turn past 250k — and every turn replays the whole context, so total input grows with the square of it. Inferred: the transcript records
+// neither the window nor a compaction marker. A turn below half the running peak is a compaction — context only grows between them.
+const NEVER_COMPACTED_PEAK = 250_000;
+const COMPACTION_DROP_RATIO = 0.5;
+
 function analyzeSession(filePath, id) {
   let text;
   try { text = fs.readFileSync(filePath, 'utf8'); } catch { return null; }
@@ -274,6 +280,7 @@ function analyzeSession(filePath, id) {
   let serverWebSearch = 0, serverWebFetch = 0;
   let toolErrors = 0, retries = 0, userCorrections = 0;
   let turnCount = 0, sumCombined = 0, maxCombined = 0, maxTurnIndex = -1;
+  let compacted = false;
   let cwd = null, minTs = null, maxTs = null;
 
   const getTool = (name) => {
@@ -332,6 +339,7 @@ function analyzeSession(filePath, id) {
           if (typeof msg.model === 'string' && msg.model) models.add(msg.model);
           const idx = turnCount++;
           sumCombined += combined;
+          if (combined < maxCombined * COMPACTION_DROP_RATIO) compacted = true;
           if (combined > maxCombined) { maxCombined = combined; maxTurnIndex = idx; }
         }
         const stu = u.server_tool_use;
@@ -389,7 +397,8 @@ function analyzeSession(filePath, id) {
     'combined includes cache_read (replayed cached prompt, billed ~10%); lead with billableApprox for real cost.',
     "byTool.approxOutputTokens splits each turn's output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.",
     "byTool.resultTokens is what each tool injected into context: its tool_result text sized at chars ÷ 4, summed per call (not split), error text included, images not counted. The firmer per-tool figure and byTool's sort key — but it is context growth, not assistant output; cite both and never add them.",
-    'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.'
+    'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.',
+    'perTurn.neverCompacted is inferred from peak context, not read from a window field — the transcript records neither the window nor a compaction: true when the peak turn tops 250k combined (a 200k window compacts near 160k) and no turn ever fell below half the running peak.'
   ];
   if (subagentTotals.count > 0) notes.push("Subagent tokens are summed from each subagent's own transcript and are separate from main-agent totals; whole-session total = totals.combined + subagentTotals.tokens. subagentTotals.usage splits them by class — lead with its billableApprox for cost.");
   if (subagentTotals.fallbackCount > 0) notes.push(`${subagentTotals.fallbackCount} subagent(s) have no complete transcript and are counted at the harness figure (their final context size) — a lower bound.`);
@@ -402,7 +411,7 @@ function analyzeSession(filePath, id) {
     file: filePath, cwd, models: [...models],
     startedAt: minTs, endedAt: maxTs, durationMs: Number.isFinite(durationMs) ? durationMs : null,
     totals: { input, output, cacheCreation, cacheRead, combined, billableApprox: input + output + cacheCreation },
-    perTurn: { count: turnCount, avgCombined: turnCount > 0 ? Math.round(sumCombined / turnCount) : 0, maxCombined, maxTurnIndex },
+    perTurn: { count: turnCount, avgCombined: turnCount > 0 ? Math.round(sumCombined / turnCount) : 0, maxCombined, maxTurnIndex, neverCompacted: maxCombined > NEVER_COMPACTED_PEAK && !compacted },
     byTool, bySubagent: agents, subagentTotals,
     serverTools: { webSearch: serverWebSearch, webFetch: serverWebFetch },
     errorSignals: { toolErrors, retries, userCorrections },
