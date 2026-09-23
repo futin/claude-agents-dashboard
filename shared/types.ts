@@ -502,8 +502,77 @@ export interface UsageRatesResponse {
   weeklyCoverage: UsageCoverage;
   /** Share of moved weekly utilization this machine cannot account for. */
   weeklyExternalSharePct: number | null;
+  /**
+   * Is a time-of-day capacity promotion running — limits raised outside weekday
+   * peak hours, as they were 2026-03-13 → 2026-03-27. Always present, like
+   * `weekly`: a thin reading is a `none` verdict with zeroed counters, never an
+   * absent key.
+   */
+  boost: UsageBoost;
   /** Only set when the fit itself failed; a missing ledger is not an error. */
   error?: boolean;
+}
+
+/** What the off-peak boost detector concluded. Shared by the weekday and the weekend verdict. */
+export type BoostVerdict = 'boost' | 'none' | 'inconclusive';
+
+/**
+ * Why a verdict is not `boost`, or null when it is. `thin-evidence` — too few
+ * days, or a run too short to claim; `flat` — the ratio did not move;
+ * `mix-shift` — weighted and raw disagreed, which a real limit change never does.
+ */
+export type BoostReason = 'thin-evidence' | 'flat' | 'mix-shift';
+
+/** One ET hour that carries a detected boost, as observed rather than as announced. */
+export interface BoostHour {
+  /** 0–23, America/New_York. */
+  hour: number;
+  weightedPerPct: number;
+  utilSum: number;
+}
+
+/**
+ * The **weekday** verdict: each ET weekday's off-peak cells against that same
+ * day's peak cells, so every day is its own control.
+ */
+export interface UsageBoost {
+  verdict: BoostVerdict;
+  reason: BoostReason | null;
+  /** The one model measured — the one holding the most owned utilization over the horizon. */
+  model: string | null;
+  /** Off-peak ÷ peak weighted tokens per point, pooled over the days behind it. */
+  ratio: number | null;
+  rawRatio: number | null;
+  /** Paired days behind `ratio`: the run when `boost`, every paired day otherwise. */
+  days: number;
+  /** ET date (`YYYY-MM-DD`) of the oldest day in the run, or null. */
+  since: string | null;
+  /** The peak window under test, half-open, in ET hours — echoed so the card owns no literal. */
+  peakStartHourEt: number;
+  peakEndHourEt: number;
+  /** Hours clearing the boost floor across the run. Empty unless `verdict` is `boost`. */
+  hours: BoostHour[];
+  weekend: BoostWeekend;
+}
+
+/**
+ * The **weekend** verdict — the weaker instrument of the two, and never merged
+ * into the weekday one. A weekend day has no unboosted hours to pair against,
+ * so each is compared against the weekday *peak* rate pooled across every
+ * weekday date in the horizon: a cross-day control, which a weekend-long change
+ * in the work itself can move and the weekday verdict cannot.
+ */
+export interface BoostWeekend {
+  verdict: BoostVerdict;
+  reason: BoostReason | null;
+  /** Weekend ÷ pooled weekday-peak weighted tokens per point. Null without a control. */
+  ratio: number | null;
+  rawRatio: number | null;
+  /** Weekend days behind `ratio`: the run when `boost`, every qualifying weekend day otherwise. */
+  days: number;
+  since: string | null;
+  /** How many weekday ET dates the pooled control was built from — only peak cells that clear the cell floor count — how strong the control is. */
+  controlDays: number;
 }
 
 /**

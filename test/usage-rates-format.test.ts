@@ -1,7 +1,12 @@
 import assert from 'node:assert';
 
-import type { ModelDayRate, ModelRateRow, ModelRateVerdict, UsageCoverage } from '../shared/types.js';
+import type {
+  BoostHour, BoostWeekend, ModelDayRate, ModelRateRow, ModelRateVerdict, UsageBoost, UsageCoverage
+} from '../shared/types.js';
 import {
+  boostHoursText,
+  boostLine,
+  weekendBoostLine,
   baselineText,
   coverageCaveat,
   coverageRows,
@@ -341,7 +346,7 @@ export function run(): number {
   if (test('the glossary is the single copy of every definition the card shows', () => {
     assert.deepStrictEqual(
       RATES_GLOSSARY.map(g => g.key),
-      ['weighted', 'raw', 'fitted', 'baseline', 'daily', 'window', 'across']
+      ['weighted', 'raw', 'fitted', 'baseline', 'daily', 'window', 'across', 'boost', 'weekendBoost']
     );
     for (const g of RATES_GLOSSARY) {
       assert.ok(g.term.length > 0 && g.text.length > 0, `${g.key} needs a term and a definition`);
@@ -555,6 +560,71 @@ export function run(): number {
     const entry = RATES_GLOSSARY.find(g => g.key === 'daily');
     assert.ok(entry !== undefined && entry.text.length > 0);
     assert.strictEqual(figureTip('daily'), entry!.text);
+  })) p++; else f++;
+
+  // ── the off-peak boost lines ──
+
+  const noWeekend: BoostWeekend = {
+    verdict: 'none', reason: 'flat', ratio: 1.01, rawRatio: 1.0, days: 4, since: null, controlDays: 10
+  };
+  const weekendFired: BoostWeekend = {
+    verdict: 'boost', reason: null, ratio: 1.8, rawRatio: 1.85, days: 2, since: '2026-09-26', controlDays: 10
+  };
+  const boostOf = (over: Partial<UsageBoost> = {}): UsageBoost => ({
+    verdict: 'boost', reason: null, model: 'claude-opus-5', ratio: 2.1, rawRatio: 2.05, days: 3,
+    since: '2026-09-23', peakStartHourEt: 8, peakEndHourEt: 14,
+    hours: [{ hour: 15, weightedPerPct: 420_000, utilSum: 6 }], weekend: noWeekend, ...over
+  });
+  const hoursOf = (hs: number[]): BoostHour[] => hs.map(hour => ({ hour, weightedPerPct: 400_000, utilSum: 5 }));
+
+  if (test('boostLine says nothing for none and for inconclusive', () => {
+    assert.strictEqual(boostLine(boostOf({ verdict: 'none', reason: 'flat', ratio: 1.0 })), null);
+    assert.strictEqual(boostLine(boostOf({ verdict: 'inconclusive', reason: 'mix-shift' })), null);
+  })) p++; else f++;
+
+  if (test('boostLine names the ratio, the ET peak window, the model, the run and its start', () => {
+    const line = boostLine(boostOf())!;
+    for (const part of ['2.10', '08:00–14:00 ET', 'claude-opus-5', '3 ', '2026-09-23', '15:00–16:00 ET']) {
+      assert.ok(line.includes(part), `missing ${JSON.stringify(part)} in: ${line}`);
+    }
+  })) p++; else f++;
+
+  if (test('boostHoursText collapses contiguous hours, and midnight is 00:00', () => {
+    const hs = [0, 1, 2, 3, 4, 5, 6, 7, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+    assert.strictEqual(boostHoursText(hoursOf(hs)), '00:00–08:00, 14:00–00:00 ET');
+    assert.strictEqual(boostHoursText(hoursOf([9])), '09:00–10:00 ET');
+  })) p++; else f++;
+
+  if (test('no observed hours → no hours text, and the sentence carries no hours clause', () => {
+    assert.strictEqual(boostHoursText([]), null);
+    const line = boostLine(boostOf({ hours: [] }))!;
+    assert.ok(line !== null);
+    assert.ok(!line.includes('Carried by'), line);
+  })) p++; else f++;
+
+  if (test('weekendBoostLine is its own claim — null unless the weekend verdict itself fired', () => {
+    assert.strictEqual(weekendBoostLine(boostOf({ weekend: noWeekend })), null, 'weekday boost alone');
+    assert.strictEqual(weekendBoostLine(boostOf({
+      verdict: 'none', reason: 'flat', weekend: { ...weekendFired, verdict: 'none', reason: 'flat' }
+    })), null);
+    assert.strictEqual(weekendBoostLine(boostOf({
+      weekend: { ...weekendFired, verdict: 'inconclusive', reason: 'mix-shift' }
+    })), null);
+  })) p++; else f++;
+
+  if (test('weekendBoostLine names its ratio, days, start and the pooled weekday-peak control', () => {
+    const line = weekendBoostLine(boostOf({ verdict: 'none', reason: 'flat', weekend: weekendFired }))!;
+    for (const part of ['1.80', 'weekend', '2 ', '2026-09-26', 'weekday 08:00–14:00 ET rate', '10 weekday']) {
+      assert.ok(line.includes(part), `missing ${JSON.stringify(part)} in: ${line}`);
+    }
+  })) p++; else f++;
+
+  if (test('both fired → two sentences, neither carrying the other\'s ratio', () => {
+    const both = boostOf({ weekend: weekendFired });
+    const weekday = boostLine(both)!;
+    const weekend = weekendBoostLine(both)!;
+    assert.ok(weekday.includes('2.10') && !weekday.includes('1.80'), weekday);
+    assert.ok(weekend.includes('1.80') && !weekend.includes('2.10'), weekend);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

@@ -23,6 +23,7 @@ import {
   fitDeviation, fitRates, fitSplits, joinIntervals, joinWeeklyIntervals, ledgerBreakMs,
   poolRate, rateFor
 } from './lib/usage-rate.js';
+import { detectBoost, emptyBoost } from './lib/usage-boost.js';
 import { HOURS_PER_WEEK, confidenceOf, localOffsetMinutes, walkForward } from './lib/usage-forecast.js';
 import {
   claudeHome, collectServablePaths, listRecentProjects, readGlobalScope,
@@ -733,7 +734,8 @@ function zeroCoverage(): UsageCoverage {
   };
 }
 
-function emptyRates(nowMs: number, recording: boolean, error?: true): UsageRatesResponse {
+/** Exported for the fail-open body's test only — the route is its one production caller. */
+export function emptyRates(nowMs: number, recording: boolean, error?: true): UsageRatesResponse {
   return {
     generatedAt: new Date(nowMs).toISOString(),
     recording,
@@ -745,6 +747,7 @@ function emptyRates(nowMs: number, recording: boolean, error?: true): UsageRates
     weeklyRecorded: false,
     weeklyCoverage: zeroCoverage(),
     weeklyExternalSharePct: null,
+    boost: emptyBoost(),
     ...(error ? { error: true } : {})
   };
 }
@@ -899,7 +902,9 @@ export function shapeUsageRates(opts: {
       recorderBreakHours: breakMs / 3_600_000,
       startProvable: startMs !== null
     },
-    weeklyExternalSharePct: weeklyShare === null ? null : weeklyShare * 100
+    weeklyExternalSharePct: weeklyShare === null ? null : weeklyShare * 100,
+    // Off the 5-hour intervals already built above — no second join, no second read.
+    boost: detectBoost(intervals, nowMs)
   };
 }
 

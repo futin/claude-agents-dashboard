@@ -3,10 +3,10 @@ import type { PinHandlers, TipHandlers } from '../../hooks/useFloatingTip';
 import { useFloatingTip } from '../../hooks/useFloatingTip';
 import { useUsageRates } from '../../hooks/useUsageRates';
 import {
-  coverageCaveat, coverageRows, cutFraction, DAY_FLOOR_PTS, dayLabel, dayStep, dayTip,
+  boostLine, coverageCaveat, coverageRows, cutFraction, DAY_FLOOR_PTS, dayLabel, dayStep, dayTip,
   DRIFT_BAND_PCT, figureTip, formatDeviation, formatShare, formatTok, ledgerReading,
   measuredShare, movedLabel, movedTotal, pricedShare, RATES_GLOSSARY, ratesStats, showsDays,
-  spanText, surfaceText, verdictClass, verdictText
+  spanText, surfaceText, verdictClass, verdictText, weekendBoostLine
 } from '../../lib/usageRatesFormat';
 import { InfoDot } from './ReadingAids';
 import { Definitions, RowHead, Sheet, StatStrip } from './Sheet';
@@ -259,6 +259,8 @@ export function UsageRates() {
   const measured = measuredShare(rates.coverage);
   const windows = models.reduce((n, m) => n + m.intervals, 0);
   const pricedPts = Math.round(rates.coverage.pricedPct).toLocaleString('en-US');
+  const weekdayBoost = boostLine(rates.boost);
+  const weekendBoost = weekendBoostLine(rates.boost);
 
   return (
     <div className="up">
@@ -273,6 +275,11 @@ export function UsageRates() {
       )}
 
       <StatStrip tiles={ratesStats(models, rates.coverage)} />
+
+      {/* Two lines, never one sentence: they rest on different controls and fire independently, and a merged line would let the
+          weekday reading lend its strength to the weekend one. Neither is a drift question, so neither enters the headline. */}
+      {weekdayBoost !== null && <p className="note">{weekdayBoost}</p>}
+      {weekendBoost !== null && <p className="note">{weekendBoost}</p>}
 
       <Sheet>
         <RowHead

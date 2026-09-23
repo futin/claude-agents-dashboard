@@ -1216,8 +1216,9 @@ request:token variation away, so the design would be rank-deficient and
 
 `GET /api/usage/rates` (`shapeUsageRates` is the pure part) returns one row per
 model that either owns an attributable interval **or** is identified by the
-one-term joint fit, richest evidence first, plus `externalSharePct` and a
-`coverage` object. Read-only, unpolled — it reads two files and does
+one-term joint fit, richest evidence first, plus `externalSharePct`, a
+`coverage` object and an always-present `boost` object (see the off-peak boost
+detector below). Read-only, unpolled — it reads two files and does
 arithmetic, and the numbers move on a scale of days — and it fails open to an
 honest empty body exactly like `serveUsageProfile`. A model with **neither**
 still gets no row: a row of nulls reads as a broken fit rather than as an
@@ -1368,7 +1369,7 @@ the figure the phone reader came for.
    weekly figure carries `weeklyAsideText` after it. `spanText` drops the window count the
    cell beside it already shows.
 4. **Where the unpriced points went** (`coverageRows`, `coverageCaveat`), and then the
-   **Definitions sheet** over `RATES_GLOSSARY`'s six entries — printed, not folded, exactly
+   **Definitions sheet** over every `RATES_GLOSSARY` entry — printed, not folded, exactly
    as on the forecast page. The ⓘ panels read the *same* strings through `figureTip`, so
    the sheet and the panel cannot drift apart.
 
@@ -1520,6 +1521,74 @@ the current window is 3 days wide by construction, which makes it the dominant
 noise term whatever the baseline does. Widening the band is a question for more
 than four days of data.
 
+### The off-peak boost detector (`lib/usage-boost.ts`, pure)
+
+Anthropic has run a time-of-day capacity promotion once: 2026-03-13 → 2026-03-27, limits raised outside weekday 08:00–14:00 ET and all weekend.
+`detectBoost` watches for the next one and the card says so in one line when it fires, and **says nothing at all** when it does not — the null
+case is the live case, and its only trace is the `Off-peak boost` entry in the `How to read this` drawer. Detection and display only: no
+"best hour to start" advice, no scheduling, no forecast integration.
+
+It is pure over the same 5-hour `Interval[]` `shapeUsageRates` already built — no second join, no second read — and every rate in it is
+`poolRate` over a slice, so ownership and the pooled arithmetic stay in `usage-rate.ts`. It reads `[now − 14d, ∞)` (the observed promo ran
+14 days) and measures **one model**, the one holding the most owned utilization: a boost is an account property, and pooling models would
+reintroduce the mix confound. Intervals are bucketed by their midpoint's ET date and hour (`Intl.DateTimeFormat`, `America/New_York`,
+`hourCycle: 'h23'` — `hour12: false` can yield `'24'`); one longer than an hour is **dropped**, never split, because a split invents a token
+distribution nobody measured. The 08:00/14:00 partition is a hardcoded constant — the hypothesis under test, since one instance cannot
+teach a change point — while the hours *reported* as carrying a boost are observed per ET hour across the run.
+
+**Both ratios must move together.** A real limit boost halves the percentage charged for every token, so the weighted *and* the raw tokens per
+point both double. A cache-heavy stretch moves raw far more than weighted; a weighting artifact moves weighted and not raw. A step in only one
+is `inconclusive` / `mix-shift` — the same discriminator `driftRow` uses between drift and mix-shift, though its verdict is not reused: it
+compares two windows of time, not two times of day.
+
+#### Two controls, and why one is weaker
+
+| | Weekday verdict | Weekend verdict |
+|---|---|---|
+| Numerator | one date's off-peak cell | one weekend date, whole day |
+| Control | **the same date's** 08:00–14:00 ET cell | the weekday **peak** pooled over every weekday date in the horizon whose peak cell clears the cell floor |
+| Cancels | day-to-day variation, model drift, workload drift | only what pooling averages out |
+| Run required | 3 newest paired days (`BOOST_MIN_RUN_DAYS`) | 2 newest weekend days (`WEEKEND_MIN_RUN_DAYS`) |
+| Control floor | each cell ≥ 5 intervals / 3 pts | ≥ 30 intervals / 15 pts / **5 weekday ET dates**, each a peak cell ≥ 5 intervals / 3 pts |
+
+The noise arithmetic, from this machine's measured per-day rate dispersion of cv ≈ 24%:
+
+- **Weekday.** A ratio of two daily cells sits near cv ≈ √2 · 24% ≈ 34%, so the 1.5× floor is ≈ +1.5σ and a true 2× is ≈ 3σ clear. Three
+  consecutive days agreeing puts chance firing near 3 × 10⁻⁴.
+- **Weekend.** Pooling the control over n weekday dates shrinks its own noise to 24% / √n: ≈ 7.6% at 10 dates, ≈ 10.7% at the floor of 5. The
+  ratio then carries √(24² + 7.6²) ≈ 25.2% (≈ 26.3% at 5 dates), so 1.5× is ≈ 2.0σ (1.9σ) and a true 2× ≈ 4.0σ (3.8σ). Two consecutive
+  weekend days put chance firing near 0.05% under independence — call it under 1% in practice, since one unusual weekend correlates its own
+  two days. The `minDays: 5` floor is the load-bearing one: the whole case for a cross-day control is that pooling shrinks its noise.
+
+The weekend control is **the weekday peak, never the off-peak**: during a live promotion the off-peak hours are the boosted ones, and an
+off-peak control would divide a boost by a boost and read flat. What licenses a cross-day control at all is a measurement: on this machine's
+baseline the weekend rate was 222.0k tokens per 1% against the weekday-peak 218.7k — **1.015×** — so weekend work was indistinguishable from
+weekday-peak work here. That is a fact about this account over that period, not a general result, and worth re-checking as the record grows
+more weekends. The weekend verdict is labelled the weaker reading in all three places it surfaces: its own `weekend` object on the wire
+(never merged into the weekday counts), its own card sentence naming the control, and its own glossary entry.
+
+A run that has started but not reached its length reads `none` / `thin-evidence`, not `flat` — a boost may be beginning, and "not enough yet"
+is the honest answer. Only a record with no run at all reads `flat`. A boost's `ratio` is pooled over the run alone, so older unboosted days
+neither dilute it nor count; outside a boost it is pooled over every compared day, so a flat reading still publishes its ~1.0.
+
+⚠️ **Unproven: does the 5-hour `utilization` counter reflect a boost at all?** No promotion has been live since the detector existed, so it
+cannot be probed. If Anthropic rescales utilization so a boost is invisible in the percentage, the detector reads flat and shows nothing —
+the honest null. If a boost lands as half the percentage per token, it sees the step. So the copy claims only what was measured — more
+tokens per 1% than in the account's own peak hours — never "your limit doubled".
+
+Accepted limitations:
+
+- A boost applying to only *one* model would be invisible — one model is measured. Limits do not work that way, but it is a real blind spot.
+- The weekend verdict rests on a cross-day control: a weekend-long change in what the work *is* — another project, a long compacted session,
+  a run of cache-heavy replays — moves it in a way the weekday verdict is immune to. Both ratios moving together, two consecutive days and a
+  pooled control hold it down; none of them removes the confound.
+- A weekend promotion is detectable **one weekend late at worst**: one starting on a Saturday is claimed on the Sunday at the earliest, one
+  starting on a Sunday waits for the next weekend.
+- A promotion that starts mid-horizon is handled by the trailing run, not by dilution. One that starts *today* reads as no boost until three
+  paired days agree.
+- The null baseline (idea-23: 1.01× off-peak/peak over 1166 priced intervals) is the evidence that time-of-day work patterns do not move this
+  ratio by themselves — on this machine, over that period. It is not a general result.
+
 ## Invariants
 
 - **Fail-open everywhere:** no token / expired / network error / non-2xx / unparseable →
@@ -1548,6 +1617,7 @@ than four days of data.
     - server/lib/usage-history.ts
     - server/lib/usage-ledger.ts
     - server/lib/usage-rate.ts
+    - server/lib/usage-boost.ts
     - server/lib/token-refresh.ts
     - client/src/lib/pace.ts
     - client/src/lib/usageProfile.ts
