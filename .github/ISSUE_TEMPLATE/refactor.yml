@@ -1,0 +1,22 @@
+# Written by `backlog.mjs connect github`. Safe to edit: nothing re-reads this file, and `connect` never overwrites one that already exists.
+#
+# The `## ` headings in the textarea below are the skeleton the board reads — a bug's `## Cause` and `## Fix` and a task's `## Plan` are what decide
+# whether an item shows as groomed. Keep them at level two; GitHub's own `### ` field heading above them is ignored.
+name: Refactor
+description: Existing code that works but should be improved
+labels:
+  - "type:refactor"
+body:
+  - type: textarea
+    id: item
+    attributes:
+      label: Refactor
+      description: Fill in each section. Leave `unknown` where the answer is not known yet — that is a real answer, and the board reads it as ungroomed.
+      value: |
+        ## What exists today
+
+        ## Why it should change
+
+        ## Rough shape
+    validations:
+      required: true
