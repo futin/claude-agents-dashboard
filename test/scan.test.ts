@@ -879,6 +879,88 @@ export function run(): number {
     assert.deepStrictEqual(ids, ['sess-1']);
   })) p++; else f++;
 
+  // bug-25: a parent parked on a subagent writes nothing while it waits, so the
+  // ladder needs the subagent's own file as evidence. Every fixture below has
+  // the parent's newest message 6 minutes old (activeWindowMin 5 → not recent).
+  const subNow = 1_700_000_000_000;
+  const subT6 = new Date(subNow - 6 * 60 * 1000).toISOString();
+  const agentLaunch = (id: string) => ({ type: 'assistant', message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'tool_use',
+    content: [{ type: 'tool_use', id, name: 'Agent', input: { subagent_type: 'Explore', description: 'look' } }], usage: { input_tokens: 1000 } } });
+  const asyncAck = (id: string, hex: string) => ({ type: 'user', toolUseResult: { isAsync: true, status: 'async_launched', agentId: hex },
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: `Async agent launched successfully. agentId: ${hex}` }] } });
+  const syncResult = (id: string) => ({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: '[Request interrupted by user]' }] } });
+  const notified = (hex: string) => ({ type: 'user',
+    message: { role: 'user', content: `<task-notification>\n<task-id>${hex}</task-id>\n<status>completed</status>\n</task-notification>` } });
+  /** Parent transcript + `<id>/subagents/agent-<hex>.jsonl`, the layout Claude Code writes. */
+  function subRoot(id: string, cwd: string, parent: unknown[], sub: unknown[], subAgeMs: number, hex = 'a0b1c2d3'): { root: string; parentFile: string } {
+    const dirName = '-a-' + id;
+    const root = makeRoot([{ dirName, id, mtimeMs: subNow - 6 * 60 * 1000, records: [metaRec(cwd, 'main'), ...parent.map(r => at(r, subT6))] }]);
+    const subDir = path.join(root, dirName, id, 'subagents');
+    fs.mkdirSync(subDir, { recursive: true });
+    const subFile = path.join(subDir, `agent-${hex}.jsonl`);
+    fs.writeFileSync(subFile, sub.map(r => JSON.stringify({ ...(r as object), isSidechain: true })).join('\n'));
+    fs.writeFileSync(path.join(subDir, `agent-${hex}.meta.json`), '{}');
+    const t = (subNow - subAgeMs) / 1000;
+    fs.utimesSync(subFile, t, t);
+    return { root, parentFile: path.join(root, dirName, id + '.jsonl') };
+  }
+  const subScan = (root: string, extra: object = {}) =>
+    scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now: subNow, skipProcScan: true, ...extra }).sessions[0].status;
+  const subBusy = [{ type: 'user', message: { role: 'user', content: 'go' } }, assistantPending()];
+  const subDone = [{ type: 'user', message: { role: 'user', content: 'go' } }, assistantDone()];
+  const bgParent = (hex = 'a0b1c2d3') => [agentLaunch('toolu_bg'), asyncAck('toolu_bg', hex), assistantDone()];
+  const syncParent = () => [agentLaunch('toolu_sy')];
+
+  if (test('subagent: background park with a fresh unfinished subagent reads working, not idle', () => {
+    const { root } = subRoot('bgpark', '/a/bgpark', bgParent(), subBusy, 60 * 1000);
+    assert.strictEqual(subScan(root), 'working');
+  })) p++; else f++;
+
+  if (test('subagent: background park turns idle once the parent records the completion', () => {
+    const { root, parentFile } = subRoot('bgdone', '/a/bgdone', bgParent(), subBusy, 60 * 1000);
+    assert.strictEqual(subScan(root), 'working');
+    // The notification lands between turns and the main thread answers it; the
+    // subagent file is still fresh and still ends mid-turn — only check 3 flips.
+    fs.appendFileSync(parentFile, '\n' + [notified('a0b1c2d3'), assistantDone()].map(r => JSON.stringify(at(r, subT6))).join('\n'));
+    assert.strictEqual(subScan(root), 'idle');
+  })) p++; else f++;
+
+  if (test('subagent: sync park with a fresh unfinished subagent reads working, not incomplete', () => {
+    const { root } = subRoot('sypark', '/a/sypark', syncParent(), subBusy, 60 * 1000);
+    assert.strictEqual(subScan(root), 'working');
+  })) p++; else f++;
+
+  if (test('subagent: a fresh subagent that ended its turn leaves the ladder unchanged', () => {
+    assert.strictEqual(subScan(subRoot('syfin', '/a/syfin', syncParent(), subDone, 60 * 1000).root), 'incomplete');
+    assert.strictEqual(subScan(subRoot('bgfin', '/a/bgfin', bgParent(), subDone, 60 * 1000).root), 'idle');
+  })) p++; else f++;
+
+  if (test('subagent: an unfinished subagent silent past SUBAGENT_STALL_MS is not evidence', () => {
+    assert.strictEqual(scan.SUBAGENT_STALL_MS, 15 * 60 * 1000);
+    assert.strictEqual(subScan(subRoot('systall', '/a/systall', syncParent(), subBusy, 16 * 60 * 1000).root), 'incomplete');
+    assert.strictEqual(subScan(subRoot('bgstall', '/a/bgstall', bgParent(), subBusy, 16 * 60 * 1000).root), 'idle');
+  })) p++; else f++;
+
+  if (test('subagent: an interrupted sync launch (result recorded) vetoes a fresh unfinished subagent', () => {
+    const { root } = subRoot('syint', '/a/syint', [...syncParent(), syncResult('toolu_sy')], subBusy, 60 * 1000);
+    assert.strictEqual(subScan(root), 'incomplete');
+  })) p++; else f++;
+
+  if (test('subagent: no subagents/ directory leaves the ladder exactly as before', () => {
+    const root = makeRoot([
+      { dirName: '-a-nosub1', id: 'nosub1', mtimeMs: subNow - 6 * 60 * 1000, records: [metaRec('/a/nosub1', 'main'), ...syncParent().map(r => at(r, subT6))] },
+      { dirName: '-a-nosub2', id: 'nosub2', mtimeMs: subNow - 7 * 60 * 1000, records: [metaRec('/a/nosub2', 'main'), ...bgParent().map(r => at(r, subT6))] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now: subNow, skipProcScan: true });
+    assert.deepStrictEqual(out.sessions.map(s => [s.id, s.status]), [['nosub1', 'incomplete'], ['nosub2', 'idle']]);
+    assert.strictEqual(scan.subagentRunning(path.join(root, '-a-nosub1', 'nosub1.jsonl'), 'nosub1', subNow), false);
+  })) p++; else f++;
+
+  if (test('subagent: a dead process still reads idle over a fresh unfinished subagent', () => {
+    const { root } = subRoot('subdead', '/a/subdead', syncParent(), subBusy, 60 * 1000);
+    assert.strictEqual(subScan(root, { skipProcScan: false, liveCwds: new Set(['/a/other']) }), 'idle');
+  })) p++; else f++;
+
   if (test('parsePsSessionIds: both flag spellings, claude lines only, charset-delimited', () => {
     const psOut = [
       '  111 /usr/local/bin/claude -p --session-id 11111111-1111-4111-8111-111111111111 --print',

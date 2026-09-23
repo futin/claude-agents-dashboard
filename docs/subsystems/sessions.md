@@ -239,6 +239,21 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
 - **working** (green, pulsing) — recent AND the turn is unfinished = machine actively
   churning. **Only this state** counts toward `totals.active`. A finished turn (end_turn)
   is NOT working even if recent — the ball is in the human's court.
+- **working** also comes from a **running subagent** (bug-25) — the one cell-override below
+  the question rungs and the liveness gate. A parent parked on a dispatched agent writes
+  nothing while it waits: a background launch acks and ends its turn (`end_turn`, so the 2×2
+  says `idle` once stale), a sync launch sits on its `tool_use` (so it says `incomplete`,
+  "stalled"). The subagent writes its own file, `<projectDir>/<id>/subagents/agent-<hex>.jsonl`
+  — no sidechain record ever lands in the parent transcript — so `scan.ts` `subagentRunning`
+  reads it, only for a row the 2×2 would otherwise leave idle or incomplete. All three must
+  hold: an `agent-*.jsonl` written within `SUBAGENT_STALL_MS` (**15 minutes** — longer than the
+  Bash tool's 10-minute maximum timeout, so a subagent inside its longest single tool call
+  still counts); its newest message mid-turn (a finished subagent ends `end_turn`); and the
+  parent still showing a launch `running` in `readAgentsCached` — the veto for Esc, which
+  records the launch's `tool_result` but leaves the subagent file fresh and mid-turn. A dead
+  process still reads `idle`, and a question still wins. Out of scope: a parent parked on a
+  background `Bash`/`Monitor` task has the same `end_turn` shape and still reads `idle` — it
+  has no subagent file and no reliable liveness signal.
 - **incomplete** (yellow, "pending") — either recent + finished (your turn to reply) or
   stale + unfinished (stalled mid-task).
 - **idle** (gray) — stale AND the last turn finished cleanly.
