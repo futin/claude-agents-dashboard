@@ -4,7 +4,7 @@ title: Explain why a headless (sdk-cli) opus request costs ~1.8x more 5h-window 
 created: 2026-09-09
 tags: usage, rates
 updated: 2026-09-23T11:43:45Z
-promoted-to: task-31
+promoted-to: task-33
 groom-elapsed: 220
 groom-tokens: 55785
 ---

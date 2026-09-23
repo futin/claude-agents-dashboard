@@ -1,5 +1,5 @@
 ---
-id: task-31
+id: task-33
 title: Name the on-disk covariate behind the headless 5h-window gap, or prove none exists
 created: 2026-09-23
 from: idea-25
