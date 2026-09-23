@@ -4,6 +4,10 @@ title: Three docs claim exactly one outbound server call
 created: 2026-09-07
 kind: chore
 tags: docs
+updated: 2026-09-23T11:41:19Z
+promoted-to: task-29
+groom-elapsed: 85
+groom-tokens: 25908
 ---
 
 ## What exists today

@@ -3,6 +3,10 @@ id: idea-24
 title: "Management: list MCP servers alongside plugins and skills"
 created: 2026-09-08
 tags: management, config, mcp
+promoted-to: task-31
+updated: 2026-09-23T11:42:31Z
+groom-elapsed: 132
+groom-tokens: 40431
 ---
 
 ## Problem

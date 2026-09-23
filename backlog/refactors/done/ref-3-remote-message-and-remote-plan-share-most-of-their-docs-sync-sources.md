@@ -4,6 +4,10 @@ title: remote-message and remote-plan share most of their docs-sync sources
 created: 2026-09-07
 kind: chore
 tags: docs
+promoted-to: task-32
+updated: 2026-09-23T11:46:26Z
+groom-elapsed: 203
+groom-tokens: 58775
 ---
 
 ## What exists today
