@@ -306,6 +306,19 @@ export function run(): number {
     assert.deepStrictEqual(weekdayPart(b), weekdayPart(detectBoost(fourDates, NOW)));
   }));
 
+  check(test('a peak cell under the cell floor is not a control day — dust cannot reach minDays', () => {
+    // Three real dates clear the interval and point floors on their own (36 each), so only the day count can refuse; two more dates hold one 0.05-pt
+    // peak interval each — present, but not a measurement. Counted as dates they would make five and fire the loud weekend.
+    const real = WEEKDAYS.slice(-3).flatMap((d) => weekday(d));
+    const dust = WEEKDAYS.slice(3, 5).map((d) => iv(at(d, 10, 15), 0.05, W, R));
+    const loud = WEEKENDS.slice(2).flatMap((d) => weekendDay(d, 2 * W, 2 * R));
+    const b = detectBoost([...real, ...dust, ...loud], NOW);
+    assert.strictEqual(b.weekend.verdict, 'none');
+    assert.strictEqual(b.weekend.reason, 'thin-evidence');
+    assert.strictEqual(b.weekend.ratio, null);
+    assert.strictEqual(b.weekend.controlDays, 3);
+  }));
+
   check(test('a weekend-only record has no control, so neither verdict publishes a ratio', () => {
     const b = detectBoost(WEEKENDS.flatMap((d) => weekendDay(d, 2 * W, 2 * R)), NOW);
     assert.strictEqual(b.verdict, 'none');

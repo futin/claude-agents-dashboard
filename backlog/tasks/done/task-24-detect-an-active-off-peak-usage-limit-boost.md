@@ -447,3 +447,32 @@ the independent pass.
 
 Contract sweep: 3 sites updated (docs/overview.md endpoint row + map entry, docs/subsystems/usage-limits.md endpoint paragraph and "six entries" → "every `RATES_GLOSSARY` entry", client/src/lib/usageRatesFormat.ts "prints all six" → "prints every one")
 Red proof: 32 tests went red with the change reverted
+
+### Fix loop 1 (2026-09-23)
+
+Reviewer finding (Important), at `server/lib/usage-boost.ts:251`: `controlDays` was `peak.size`, which counted every weekday date holding any peak interval.
+So 3 real days plus 2 dates that each held one 0.05-pt interval passed the `minDays: 5` floor and fired the weekend boost. The weekend control now pools and
+counts only peak cells that clear `BOOST_CELL_FLOORS` (`clearsCell`), so a dust date is neither a control day nor part of the pooled rate. Also updated to
+match: the `BoostWeekend.controlDays` doc comment in `shared/types.ts`, and the Control and Control-floor rows of the two-controls table in
+`docs/subsystems/usage-limits.md`.
+
+New test in `test/usage-boost.test.ts`: "a peak cell under the cell floor is not a control day — dust cannot reach minDays". It uses 3 real weekday dates, 2
+dust dates and the two newest weekend days at 2×. It expects `none/thin-evidence`, a null ratio and `controlDays: 3`. Before the fix it went red
+(`23 passed, 1 failed`, a strict-equal failure); after the fix it passes (`24 passed, 0 failed`).
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(clean)
+
+$ pnpm build
+✓ built in 1.38s          (exit 0)
+
+$ pnpm test               # 1647 ✓, 0 ✗ (+1 over the first pass's 1646)
+5 passed, 0 failed
+ALL PASS
+exit=0
+```
+
+Contract sweep: 2 sites updated (shared/types.ts controlDays comment, docs/subsystems/usage-limits.md two-controls table rows 1549/1552)
+Red proof: 1 tests went red with the change reverted

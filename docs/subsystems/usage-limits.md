@@ -1546,10 +1546,10 @@ compares two windows of time, not two times of day.
 | | Weekday verdict | Weekend verdict |
 |---|---|---|
 | Numerator | one date's off-peak cell | one weekend date, whole day |
-| Control | **the same date's** 08:00–14:00 ET cell | the weekday **peak** pooled over every weekday date in the horizon |
+| Control | **the same date's** 08:00–14:00 ET cell | the weekday **peak** pooled over every weekday date in the horizon whose peak cell clears the cell floor |
 | Cancels | day-to-day variation, model drift, workload drift | only what pooling averages out |
 | Run required | 3 newest paired days (`BOOST_MIN_RUN_DAYS`) | 2 newest weekend days (`WEEKEND_MIN_RUN_DAYS`) |
-| Control floor | each cell ≥ 5 intervals / 3 pts | ≥ 30 intervals / 15 pts / **5 weekday ET dates** |
+| Control floor | each cell ≥ 5 intervals / 3 pts | ≥ 30 intervals / 15 pts / **5 weekday ET dates**, each a peak cell ≥ 5 intervals / 3 pts |
 
 The noise arithmetic, from this machine's measured per-day rate dispersion of cv ≈ 24%:
 

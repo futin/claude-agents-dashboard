@@ -248,8 +248,11 @@ export function detectBoost(intervals: Interval[], nowMs: number): UsageBoost {
 
   // ── Weekend: each date against the pooled weekday *peak* ──────────────────
   // Never the off-peak: during a live promotion those are the boosted hours, and the control would divide a boost by a boost and read flat.
-  const control = [...peak.values()].flat();
-  const controlDays = peak.size;
+  // Only a peak cell that clears the cell floor is a control day: a date holding one stray interval is present but measures nothing, and counted
+  // as a date it would carry the day floor below on dust.
+  const controlCells = [...peak.values()].filter((cell) => clearsCell(pool(cell, model)));
+  const control = controlCells.flat();
+  const controlDays = controlCells.length;
   const controlRate = pool(control, model);
   let weekend: BoostWeekend;
   if (controlRate === null || controlRate.intervals < WEEKEND_CONTROL_FLOORS.minIntervals

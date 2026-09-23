@@ -571,7 +571,7 @@ export interface BoostWeekend {
   /** Weekend days behind `ratio`: the run when `boost`, every qualifying weekend day otherwise. */
   days: number;
   since: string | null;
-  /** How many weekday ET dates the pooled control was built from — how strong the control is. */
+  /** How many weekday ET dates the pooled control was built from — only peak cells that clear the cell floor count — how strong the control is. */
   controlDays: number;
 }
 
