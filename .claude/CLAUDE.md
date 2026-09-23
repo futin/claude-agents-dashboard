@@ -58,8 +58,11 @@ config — see `docs/subsystems/remote-access.md` before touching any of it.
   inline `renderPage()`. React auto-escapes — no `esc()`.
 - **Never hardcode a color or shadow in `styles.css`** below the theme-token block. The 5
   themes are pure `[data-theme]` token overrides; one literal breaks the light one.
-- **Keep new deps out of `server/`.** It reads disk and makes exactly one kind of outbound
-  call — the ntfy push in `lib/notify.ts`. A second needs a reason.
+- **Keep new deps out of `server/`.** It reads disk and makes exactly two kinds of outbound
+  call — the ntfy push in `lib/notify.ts` and the usage read in `lib/usage.ts`. A third needs
+  a reason. `lib/token-refresh.ts` and `lib/spawn.ts` launch the `claude` CLI, which makes its
+  own network calls — the server does not, so they are not a third kind. `test/outbound.test.ts`
+  pins the list.
 - `client/dist/` and `.env` are gitignored.
 - Keep the vendored `/kaizen` skill (`.claude/skills/kaizen/`) in lockstep with the
   session-analytics log format (`docs/subsystems/analytics.md`).

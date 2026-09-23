@@ -153,7 +153,8 @@ server/
   lib/agents.ts   whole-file subagent parser → AgentJob[]
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts
   lib/chat.ts     byte-offset paged chat history
-  lib/usage.ts    account 5h/weekly limits from Anthropic (OAuth)
+  lib/usage.ts    account 5h/weekly limits from Anthropic (OAuth) — the other
+                  outbound call
   lib/usage-pace.ts  utilization sample ring → burn rate + projected 100% per window
   lib/usage-forecast.ts  forward walk over hour-of-week weights → projected 100%
   lib/usage-history.ts  persisted samples → the learned 168-bucket duty-cycle profile;
@@ -190,8 +191,8 @@ server/
   lib/settings.ts persisted idle threshold, answer window, push policy + the
                   usage-recording switch
   lib/notify.ts   server-sent ntfy pushes — the layered policy, the `atDesk`
-                  predicate, phone-vs-desk topic routing, and the one outbound
-                  call the backend makes
+                  predicate, phone-vs-desk topic routing, and one of the backend's
+                  two outbound calls (the other is `lib/usage.ts`)
   lib/origin.ts   connection classifier → local | lan | tailnet | unknown
   lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags,
                   fed by the PermissionRequest hook; display-only
