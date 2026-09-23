@@ -200,6 +200,15 @@ returned — no backend change, so the read-only invariant above still holds.
   A turn's `combined` is its whole context, which only grows between compactions, so that fall is the one compaction leaves — which is why a big early
   peak followed by a drop reads `false` where a bare `max > 250k` would say `true`. No turns reads `false`. A `notes[]` entry states the inference, and
   `/kaizen` §2 treats `true` as a primary explanation for cost. Only `kaizen.mjs` surfaces it today — the Analytics tab does not render it.
+- **The lesson line's figures are data, not only prose.** `kaizen.mjs --trend [log]` reads the `<billable> billable (<ctx> ctx` prefix back out of
+  every lesson line (`k` / `M` / `B` suffixes, decimals, thousands commas; trailing `, 231 turns` and the like ignored) and prints per-project and
+  overall ctx series, which `/kaizen review` step 2 reports. Drift is the median ctx of a group's newest 3 sessions at ≥ 1.5× the median of all its
+  earlier ones, and needs 6+ sessions: medians on both sides are what keep one outsized session from ever reading as a trend (it takes two of the
+  newest three), and a group's own history as baseline is what keeps a project that always runs large from being flagged for size alone. An absolute
+  ctx threshold was the rejected alternative — it fires on exactly that single big session. The read keeps the newest line per `[project] id` in memory
+  (newest-wins, as `lessonForSession` reads it) and never writes the log. Lines without both figures — status, review, prose, mid-session captures —
+  are skipped; a line with `billable` but no `(N ctx)` counts in `withoutCtx` and nowhere else. `--trend` is kaizen-only: no server module or
+  Analytics view reads it, so `test/kaizen-trend.test.ts` spawns the vendored script itself.
 - **⚠️ Log grammar (the contract with `/kaizen` — three line shapes, all append-only):**
 
   ```

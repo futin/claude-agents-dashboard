@@ -83,6 +83,7 @@ import { run as runKillGuard } from './kill-guard.test.js';
 import { run as runTailnet } from './tailnet.test.js';
 import { run as runBreakpoints } from './breakpoints.test.js';
 import { run as runChatPinnedPad } from './chat-pinned-pad.test.js';
+import { run as runKaizenTrend } from './kaizen-trend.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -169,6 +170,7 @@ failed += runKillGuard();
 failed += runTailnet();
 failed += runBreakpoints();
 failed += runChatPinnedPad();
+failed += runKaizenTrend();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);
