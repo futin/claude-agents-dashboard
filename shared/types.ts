@@ -230,8 +230,31 @@ export interface UsageProfileResponse {
   dutyCycle: number | null;
 }
 
-/** What the drift comparison concluded for one model. */
-export type ModelRateVerdict = 'drift' | 'stable' | 'mix-shift' | 'thin';
+/**
+ * What the drift comparison concluded for one model. `surface-shift` is the
+ * pooled rate crossing the drift band while the rate surface by surface did not
+ * — the headless/interactive proportion moved, not the price (bug-23).
+ */
+export type ModelRateVerdict = 'drift' | 'stable' | 'mix-shift' | 'surface-shift' | 'thin';
+
+/**
+ * The session surface a model's tokens were spent from: headless `claude -p`
+ * (transcript `entrypoint` `sdk-cli`) or anything a person drives. The two are
+ * not the same goods — a headless token has measured ~1.8× the window cost of
+ * an interactive one — so a rate is only comparable within one.
+ */
+export type ModelRateSurface = 'interactive' | 'headless';
+
+/** One surface's slice of a model's rate. Nulls mean too thin to say, never zero. */
+export interface ModelSurfaceRate {
+  surface: ModelRateSurface;
+  /** Weighted tokens per 1% over the current window, intervals this surface dominates only. */
+  weightedPerPct: number | null;
+  /** The same over the baseline window. */
+  baselineWeightedPerPct: number | null;
+  /** Current-window points behind it — evidence, reported whatever the rate. */
+  utilSum: number;
+}
 
 /**
  * Whether the two-term (tokens + requests) split is reported for one model.
@@ -354,7 +377,16 @@ export interface ModelRateRow {
   baselineWeightedPerPct: number | null;
   /** Signed percent change of the weighted rate against baseline. */
   deviationPct: number | null;
+  /**
+   * The same change with the headless/interactive mix held fixed: the current
+   * window's points against what its tokens would have cost at each surface's
+   * baseline rate. What `verdict` judges drift on whenever it is non-null;
+   * null until enough of the current window has a surface with a baseline.
+   */
+  mixAdjustedDeviationPct: number | null;
   verdict: ModelRateVerdict;
+  /** Both surfaces, `interactive` then `headless`, whatever the evidence. */
+  surfaces: ModelSurfaceRate[];
   /** Intervals behind the current-window fit — the evidence, shown either way. */
   intervals: number;
   /** Cumulative utilization points behind it. */
@@ -470,8 +502,77 @@ export interface UsageRatesResponse {
   weeklyCoverage: UsageCoverage;
   /** Share of moved weekly utilization this machine cannot account for. */
   weeklyExternalSharePct: number | null;
+  /**
+   * Is a time-of-day capacity promotion running — limits raised outside weekday
+   * peak hours, as they were 2026-03-13 → 2026-03-27. Always present, like
+   * `weekly`: a thin reading is a `none` verdict with zeroed counters, never an
+   * absent key.
+   */
+  boost: UsageBoost;
   /** Only set when the fit itself failed; a missing ledger is not an error. */
   error?: boolean;
+}
+
+/** What the off-peak boost detector concluded. Shared by the weekday and the weekend verdict. */
+export type BoostVerdict = 'boost' | 'none' | 'inconclusive';
+
+/**
+ * Why a verdict is not `boost`, or null when it is. `thin-evidence` — too few
+ * days, or a run too short to claim; `flat` — the ratio did not move;
+ * `mix-shift` — weighted and raw disagreed, which a real limit change never does.
+ */
+export type BoostReason = 'thin-evidence' | 'flat' | 'mix-shift';
+
+/** One ET hour that carries a detected boost, as observed rather than as announced. */
+export interface BoostHour {
+  /** 0–23, America/New_York. */
+  hour: number;
+  weightedPerPct: number;
+  utilSum: number;
+}
+
+/**
+ * The **weekday** verdict: each ET weekday's off-peak cells against that same
+ * day's peak cells, so every day is its own control.
+ */
+export interface UsageBoost {
+  verdict: BoostVerdict;
+  reason: BoostReason | null;
+  /** The one model measured — the one holding the most owned utilization over the horizon. */
+  model: string | null;
+  /** Off-peak ÷ peak weighted tokens per point, pooled over the days behind it. */
+  ratio: number | null;
+  rawRatio: number | null;
+  /** Paired days behind `ratio`: the run when `boost`, every paired day otherwise. */
+  days: number;
+  /** ET date (`YYYY-MM-DD`) of the oldest day in the run, or null. */
+  since: string | null;
+  /** The peak window under test, half-open, in ET hours — echoed so the card owns no literal. */
+  peakStartHourEt: number;
+  peakEndHourEt: number;
+  /** Hours clearing the boost floor across the run. Empty unless `verdict` is `boost`. */
+  hours: BoostHour[];
+  weekend: BoostWeekend;
+}
+
+/**
+ * The **weekend** verdict — the weaker instrument of the two, and never merged
+ * into the weekday one. A weekend day has no unboosted hours to pair against,
+ * so each is compared against the weekday *peak* rate pooled across every
+ * weekday date in the horizon: a cross-day control, which a weekend-long change
+ * in the work itself can move and the weekday verdict cannot.
+ */
+export interface BoostWeekend {
+  verdict: BoostVerdict;
+  reason: BoostReason | null;
+  /** Weekend ÷ pooled weekday-peak weighted tokens per point. Null without a control. */
+  ratio: number | null;
+  rawRatio: number | null;
+  /** Weekend days behind `ratio`: the run when `boost`, every qualifying weekend day otherwise. */
+  days: number;
+  since: string | null;
+  /** How many weekday ET dates the pooled control was built from — only peak cells that clear the cell floor count — how strong the control is. */
+  controlDays: number;
 }
 
 /**
@@ -597,11 +698,19 @@ export interface AgentJob {
    */
   durationMs: number | null;
   /**
-   * Total tokens the subagent consumed (sync: toolUseResult.totalTokens;
-   * async: <subagent_tokens> in the notification). Null while running or on
-   * old transcripts that lack the field.
+   * The harness's own token figure (sync: toolUseResult.totalTokens; async:
+   * <subagent_tokens> in the notification). It is the subagent's FINAL context
+   * size, not what it spent — a many-turn subagent replays its context every
+   * turn and none of that is in here. Null while running or on old transcripts
+   * that lack the field. `SessionAnalysis.bySubagent` replaces it with the
+   * spend summed from the subagent's own transcript where one is readable.
    */
   tokens: number | null;
+  /**
+   * The subagent's own id — the `<id>` in `<sessionId>/subagents/agent-<id>.jsonl`.
+   * From the sync toolUseResult or the async launch ack; null on old transcripts.
+   */
+  agentId: string | null;
   /** Tool calls the subagent made (totalToolUseCount / <tool_uses>). Same nullability. */
   toolUses: number | null;
 }
@@ -1049,6 +1158,11 @@ export interface PerTurn {
   maxCombined: number;
   /** 0-based index (in assistant-turn order) of the `maxCombined` turn, or -1. */
   maxTurnIndex: number;
+  /**
+   * Inferred, not read: `maxCombined` topped 250k (out of a 200k window's reach — it compacts near 160k) and no turn ever fell below half the
+   * running peak, the drop compaction leaves. A session with no turns, or one that compacted after its peak, reads false.
+   */
+  neverCompacted: boolean;
 }
 
 /** Per-tool usage in the main agent. Counts/errors are exact; tokens are approximate. */
@@ -1067,14 +1181,34 @@ export interface ToolStat {
    * carries no per-tool token field. Never includes input/cache tokens.
    */
   approxOutputTokens: number;
+  /**
+   * Tokens this tool injected into context: every matched tool_result's text
+   * (error text included) sized at chars ÷ 4 and summed per call — not split
+   * across a turn. Approximate in size but measured per call, so the firmer
+   * of the two figures and the key `byTool` sorts by. Image blocks count 0.
+   */
+  resultTokens: number;
 }
 
 /** Aggregate over the subagents ({@link AgentJob}) a session launched. */
 export interface SubagentTotals {
   count: number;
-  /** Sum of known `tokens` — exact, and separate from the main-agent totals. */
+  /**
+   * Everything the subagents moved, separate from the main-agent totals: `usage.combined`
+   * plus the harness figure for each of the `fallbackCount` subagents.
+   */
   tokens: number;
-  /** Subagents whose token total is unknown (still running / old transcript). */
+  /**
+   * The four token classes, summed over every unique `message.id` in the subagents' own
+   * `<sessionId>/subagents/agent-*.jsonl` transcripts — what they spent vs what they replayed.
+   */
+  usage: TokenTotals;
+  /**
+   * Finished subagents with no readable transcript, or one that sums below the harness figure
+   * (still being written). Counted at the harness figure — their final context size, a lower bound.
+   */
+  fallbackCount: number;
+  /** Subagents with no figure at all (still running / old transcript). */
   unknownTokenCount: number;
 }
 
@@ -1105,9 +1239,12 @@ export interface SessionAnalysis {
   /** Main-agent token totals (sidechain/subagent turns excluded to avoid double-count). */
   totals: TokenTotals;
   perTurn: PerTurn;
-  /** Per-tool main-agent usage, priciest (approxOutputTokens) first. */
+  /** Per-tool main-agent usage, largest context contributor (resultTokens) first. */
   byTool: ToolStat[];
-  /** Subagents launched (from `readAgents`), newest-first. */
+  /**
+   * Subagents launched (from `readAgents`), newest-first. `tokens` is the figure counted into
+   * `subagentTotals.tokens` — transcript spend, else the harness fallback.
+   */
   bySubagent: AgentJob[];
   subagentTotals: SubagentTotals;
   /** server_tool_use counts (Anthropic-side web search / fetch). */

@@ -46,24 +46,39 @@ to stderr — report it, since two sessions in one cwd are indistinguishable. Ou
 
 ## 2. Read tokens honestly
 
-- **Lead with `totals.billableApprox`** (input + output + cacheCreation). This tracks real
-  cost. `totals.combined` is larger because it adds `cacheRead` — the cached prompt replayed
-  each turn, billed at ~10%. Mention `combined` only as a context-pressure signal, never as
-  "what this cost". The `notes[]` array restates these caveats — respect them.
-- **Whole-session total ≈ `totals.combined` + `subagentTotals.tokens`.** Subagent tokens are
-  exact and tracked separately (they don't appear in `totals`). Call out the split.
+- **Lead with `totals.billableApprox`** (input + output + cacheCreation) for cost. `totals.combined` is larger because it adds `cacheRead` — the cached
+  prompt replayed each turn, billed at ~10% — so never quote `combined` as "what this cost". The `notes[]` array restates these caveats — respect them.
+- **But `cacheRead` growth is the diagnosis, not a footnote.** Every turn replays the whole context, so total input grows with the *square* of it:
+  `total ≈ (C_end² − C_start²) / 2d`, `d` = tokens added per turn. Context growth is a first-class efficiency signal — the single biggest one on a long
+  session — even though each replayed token bills cheaply. Report it alongside the billable figure, never instead of it.
+- **`perTurn.neverCompacted: true` is a primary explanation for cost — lead the cost story with it.** It means the peak turn topped 250k combined
+  (a 200k window auto-compacts near 160k, so it cannot get there) and no turn ever fell below half the running peak, the drop a compaction leaves. The
+  usual cause is a 1M-window model (`"model": "opus[1m]"` or similar) putting auto-compaction out of reach, so the session paid the quadratic curve to
+  the end. Say it is **inferred** from peak context — the transcript carries neither the window nor a compaction marker (`notes[]` says so too) — and
+  suggest the fix: a 200k-window default, `/compact` or `/clear` between tasks. `false` does not mean cheap: a session that compacted can still be
+  bloated, so keep reading the bloated-turn bullet below.
+- **Whole-session total = `totals.combined` + `subagentTotals.tokens`.** Subagent tokens are summed from each subagent's
+  own transcript and tracked separately (they don't appear in `totals`); `subagentTotals.usage` splits them by class, so lead
+  with its `billableApprox` for their cost, exactly as for the main agent. `fallbackCount` subagents had no complete
+  transcript and sit at the harness's figure — their final context size, a lower bound. Call out the split.
 - Flag the bloated turn: `perTurn.maxTurnIndex` / `maxCombined` vs `avgCombined`. A single
   turn far above average usually means context was left to grow (big files re-read, no
   `/clear`, giant tool outputs).
 
 ## 3. Find where the tokens/time went
 
-- `byTool` is sorted priciest-first by `approxOutputTokens`. **This is approximate** — an even
-  split of each turn's output tokens across its tool calls; the transcript has no per-tool
-  token field. Say "approx" when you cite it. `count`, `errors`, and `durationMs` (wall time,
-  includes model latency) ARE exact — lean on those for firm claims.
-- `bySubagent` has exact per-subagent `tokens` / `toolUses` / `durationMs`. Name the priciest
-  subagents and whether the work justified the spend.
+- `byTool` carries two token figures per tool — **cite both, label each, never add them**:
+  - `resultTokens` — what the tool **injected into context**: its tool_result text at chars ÷ 4, summed per call (error
+    text included, images count 0). The **firmer** figure — measured per call, never split — and the key `byTool` is
+    sorted by, so `byTool[0]` is the top context contributor. This is the one that surfaces a `Read`-heavy session: a
+    `Read` writes almost no assistant output, yet everything it returned is replayed by every later turn.
+  - `approxOutputTokens` — **assistant output** tokens, an even split of each turn's `output_tokens` across its tool
+    calls; the transcript has no per-tool token field. Say "approx" when you cite it.
+
+  `count`, `errors`, and `durationMs` (wall time, includes model latency) ARE exact — lean on those for firm claims.
+- `bySubagent` has per-subagent `tokens` (summed from that subagent's own transcript; the harness's final-context figure
+  only where none is complete) and exact `toolUses` / `durationMs`. Name the priciest subagents and whether the work
+  justified the spend.
 
 ## 4. Accuracy read (explicitly subjective)
 
@@ -75,8 +90,8 @@ of whether the session met its stated goal, stalled, or thrashed. Give a short, 
 
 ## 5. Concrete improvements
 
-Tie each suggestion to evidence above. Examples: high `cacheRead` + a bloated turn → suggest
-`/clear` between tasks or smaller reads; many `retries` on one tool → the specific fix;
+Tie each suggestion to evidence above. Examples: `perTurn.neverCompacted` → check the model default for a 1M window and suggest a 200k one, or
+`/compact` / `/clear` between tasks; high `cacheRead` + a bloated turn → suggest `/clear` between tasks or smaller reads; many `retries` on one tool → the specific fix;
 repeated manual work a skill would cover → name the skill to **use, add, or install**
 (check installed skills first). Keep it to a few high-signal actions, not a checklist.
 

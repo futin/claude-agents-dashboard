@@ -1,4 +1,4 @@
-import type { AnalyticsReport, LessonStatus, SessionAnalysis } from '../../../../shared/types';
+import type { AnalyticsReport, LessonStatus, SessionAnalysis, SubagentTotals } from '../../../../shared/types';
 import { agentLineName } from '../../lib/agentLabel';
 import { fmtTok } from '../../lib/format';
 
@@ -96,7 +96,11 @@ export function Metrics({ a }: { a: SessionAnalysis }) {
     <div className="an-metrics">
       <Metric label="billable" value={fmtTok(a.totals.billableApprox)} lead />
       <Metric label="context" value={fmtTok(a.totals.combined)} />
-      <Metric label={`subagents · ${a.subagentTotals.count}`} value={fmtTok(a.subagentTotals.tokens)} />
+      <Metric
+        label={`subagents · ${a.subagentTotals.count}`}
+        value={fmtTok(a.subagentTotals.tokens)}
+        title={subagentSplit(a.subagentTotals)}
+      />
       <Metric label="turns" value={String(a.perTurn.count)} />
       <Metric
         label={`errors · ${a.errorSignals.retries} retry`}
@@ -111,12 +115,12 @@ export function TopTools({ a }: { a: SessionAnalysis }) {
   const top = a.byTool.slice(0, 3);
   return (
     <div className="an-col">
-      <div className="an-col-h">Top tools <span className="an-approx">approx tokens</span></div>
+      <div className="an-col-h">Top tools <span className="an-approx">approx tokens · in = injected into context, out = assistant output</span></div>
       {top.length ? top.map(t => (
         <div key={t.tool} className="an-line">
           <span className="an-line-name">{t.tool}</span>
           <span className="an-line-meta">
-            {fmtTok(t.approxOutputTokens)} · {t.count}×{t.errors ? ` · ${t.errors} err` : ''}
+            {fmtTok(t.resultTokens)} in · {fmtTok(t.approxOutputTokens)} out · {t.count}×{t.errors ? ` · ${t.errors} err` : ''}
           </span>
         </div>
       )) : <div className="an-line muted">none</div>}
@@ -143,9 +147,17 @@ export function TopAgents({ a }: { a: SessionAnalysis }) {
   );
 }
 
-export function Metric({ label, value, lead, warn }: { label: string; value: string; lead?: boolean; warn?: boolean }) {
+/** What the subagents spent vs what they replayed — the strip has room for one number, the tooltip for the split. */
+function subagentSplit(t: SubagentTotals): string {
+  const parts = [`${fmtTok(t.usage.billableApprox)} billable`, `${fmtTok(t.usage.cacheRead)} cache read`];
+  if (t.fallbackCount) parts.push(`${t.fallbackCount} at final context size (no complete transcript)`);
+  if (t.unknownTokenCount) parts.push(`${t.unknownTokenCount} unknown`);
+  return parts.join(' · ');
+}
+
+export function Metric({ label, value, lead, warn, title }: { label: string; value: string; lead?: boolean; warn?: boolean; title?: string }) {
   return (
-    <div className={`an-metric${lead ? ' lead' : ''}`}>
+    <div className={`an-metric${lead ? ' lead' : ''}`} title={title}>
       <div className={`an-metric-v${warn ? ' warn' : ''}`}>{value}</div>
       <div className="an-metric-l">{label}</div>
     </div>

@@ -32,6 +32,10 @@
  * *under*-count requests for older ticks. Lines that already carry `req` are
  * left exactly as they are.
  *
+ * `scripts/rates-audit.ts` (`lib/transcript-audit.ts`) has a second transcript
+ * replay onto the real ledger's ticks. The overlap is known; the two have not
+ * been merged.
+ *
  *   stdout   one report, human-readable
  *   exit 0   the fit ran (whatever it concluded)
  *   exit 1   not enough data to fit anything

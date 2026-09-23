@@ -3,9 +3,12 @@ id: bug-25
 title: Session parked on a subagent reads idle instead of working
 created: 2026-09-15
 tags: dashboard, status, subagents
-updated: 2026-09-22T21:02:00Z
+updated: 2026-09-23T08:56:17Z
 groom-elapsed: 253
 groom-tokens: 64296
+started: 2026-09-23T08:43:56Z
+execute-elapsed: 741
+execute-tokens: 81280
 ---
 
 ## Symptom
@@ -112,3 +115,40 @@ the liveness probe finds a live `claude` process there. Stamp the parent's newes
 with `HOME=<tmp>` on a spare port and record its pid. Point Vite at that port, or use the prod build. Open the Sessions tab and find the fixture's row.
 Its status dot must read `working` (green), not `idle`. Then append a completed `<task-notification>` for `<hex>` to the parent file, wait one poll
 (3s), and check that the same row turns `idle`. Stop the API by the recorded pid.
+
+## Outcome
+
+2026-09-23. I confirmed the groomed cause against the current code. The status ladder in `scan.ts` read only the parent's own records, and a parent
+parked on a subagent writes none while it waits. I added `subagentRunning(parentFile, sessionId, nowMs)` and `SUBAGENT_STALL_MS = 15 min` to
+`server/lib/scan.ts`. The helper runs three checks, in the order the plan gave: a fresh `agent-*.jsonl`, that file mid-turn, and a `running` launch in
+`readAgentsCached`. It is wired in as a `working` arm directly below `recent && !turnComplete`. That puts it below `dead` and every question arm, and it
+runs only for a row the ladder would otherwise call idle or incomplete. The arm sits one rung *after* the plan's stated position rather than before it.
+Both arms answer `working`, so the order cannot change a result, and this way the probe never runs on a row that is already green.
+
+Deviation in one test case: for "after the parent receives a `<task-notification>`, expect `idle`", the fixture appends the notification **and** the
+main thread's `end_turn` reply, both stamped 6 min old. A notification on its own is a user message, which is newest-message pending. With a 6-min stamp
+that reads `incomplete` on today's ladder as well, so "expect idle" only holds once the parent has answered. The browser check used the same shape.
+
+Verification:
+
+```
+$ npx tsx test/scan.test.ts | tail -1
+Passed: 70  Failed: 0
+$ pnpm test | tail -1
+ALL PASS
+$ pnpm typecheck
+> tsc --noEmit        (exit 0)
+```
+
+The first full-suite run failed 1 case: `a near-miss path is not the rates endpoint — it falls through to the static handler`
+(`test/api-usage-rates.test.ts`). The cause is environmental. That test needs `client/dist`, and this fresh worktree had no build. After `pnpm build` the
+suite printed `ALL PASS`.
+
+Browser: installed Chrome over CDP, because the playwright MCP's `chrome-for-testing` browser is not installed on this machine and the session did not
+download one. The API ran with a scratch `HOME` in prod mode on port 4199, with a no-op `open` shim so no browser window popped up. The fixture was a
+background park whose records carry this worktree's cwd, parent newest message 6 min old, and a touched subagent file. The Sessions row showed
+`sdot working` / `spill working`. After appending the completed notification plus `end_turn` and waiting one poll, the same row showed `sdot idle`. The
+subagent file was still fresh and mid-turn at that point, so the check-3 veto is what flipped it. The API and Chrome were stopped by their recorded pids.
+
+Contract sweep: 5 sites updated (server/lib/scan.ts `lastMessageMs` "known imprecision" doc comment, server/lib/agents.ts header, server/lib/agents-cache.ts header, server/api.ts `serveSessionDetail` doc comment, docs/subsystems/sessions.md §"The status machine")
+Red proof: 4 tests went red with the change reverted (removing the ladder arm reddens the background-park, background-completion and sync-park cases; replacing check 3 with `return true` reddens the background-completion and interrupt-veto cases; the stall, ended-turn, no-directory and dead-gate cases are regression guards that pass on both sides by design)

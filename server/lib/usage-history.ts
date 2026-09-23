@@ -403,6 +403,16 @@ export const HEARTBEAT_MS = 900_000;
 export const MAX_HISTORY_BYTES = 33_554_432;
 /** Tail window for a read — the same 256 KB `transcript.ts` uses. */
 export const TAIL_BYTES = 262_144;
+/**
+ * How much of the history log a rate fit reads — `/api/usage/rates` and
+ * `scripts/rates-audit.ts` both, so the audit replays the card's own window.
+ *
+ * Sized for the baseline horizon at the worst case — one write-on-change
+ * sample per minute for 17 days is ~24_500 lines of ~80 bytes, under 2 MB — so
+ * the fit can never be quietly starved of the oldest part of its own baseline.
+ * Quiet stretches write the 15-minute heartbeat instead and cost far less.
+ */
+export const RATES_HISTORY_BYTES = 4_194_304;
 
 /**
  * The repo root, found by walking up for `package.json`.

@@ -79,6 +79,13 @@ one of them at random — the same two-state rule the Sessions board follows.
   strip of one value each — the subagent count and the retry count ride in their
   **labels**, because the inspector is narrower than a full-width card and a two-part
   value wraps there and drops its label out of line with the other four.
+- **The subagent figure is summed from the subagents' own transcripts** (`server/lib/subagent-usage.ts`): every
+  `<sessionId>/subagents/agent-<agentId>.jsonl`, once per `message.id`, paired to its launch by `agentId` or the
+  `.meta.json` sidecar's `toolUseId`. The harness's own number (`toolUseResult.totalTokens` / `<subagent_tokens>`) is the
+  subagent's *final context size*, not its spend — 5–130x low on many-turn subagents (bug-27) — so it is only the fallback
+  for a finished subagent whose transcript is missing or sums below it, counted in `subagentTotals.fallbackCount`. The
+  metric's tooltip carries `subagentTotals.usage`'s billable / cache-read split. `/kaizen`'s vendored `kaizen.mjs` does the
+  same, and `test/analyze.test.ts` runs it against `analyzeSession` to keep the two in step.
 - **Research & suggestions** — the one-line lesson `/kaizen` wrote for that session. The
   server does **no** LLM calls and invents no advice; the qualitative judgment is
   entirely `/kaizen`'s.
@@ -180,9 +187,19 @@ returned — no backend change, so the read-only invariant above still holds.
   turn. `count` / `durationMs` / `errors` stay **per call** (parallel calls are real,
   separate calls); only the token split is per turn. `server_tool_use` rides in the same
   usage block, so it is deduped too.
+  `byTool.resultTokens` is the opposite case and must stay that way: it sizes each call's own
+  matched tool_result (chars ÷ 4, error text included) and is **never** split across the turn,
+  so it is the figure that names a context-heavy `Read`. `byTool` sorts by it, and the
+  Analytics tab's *Top tools* shows it as `in` beside `approxOutputTokens` as `out`.
   **Not affected:** `lib/transcript.ts` (session rows, chat-drawer context) reads the
   *latest* usage rather than summing, and the copies are identical — its numbers were
   always right.
+- **`perTurn.neverCompacted` is inferred, never read.** The transcript carries no context-window field (`message.model` reads `claude-opus-5`, no
+  `[1m]` suffix) and no compaction marker, so `analyzeSession` derives it from turn sizes alone: `maxCombined` above `NEVER_COMPACTED_PEAK` (250k — a
+  200k window compacts near 160k, so only a larger window reaches it) **and** no turn anywhere below `COMPACTION_DROP_RATIO` (half) of the running peak.
+  A turn's `combined` is its whole context, which only grows between compactions, so that fall is the one compaction leaves — which is why a big early
+  peak followed by a drop reads `false` where a bare `max > 250k` would say `true`. No turns reads `false`. A `notes[]` entry states the inference, and
+  `/kaizen` §2 treats `true` as a primary explanation for cost. Only `kaizen.mjs` surfaces it today — the Analytics tab does not render it.
 - **⚠️ Log grammar (the contract with `/kaizen` — three line shapes, all append-only):**
 
   ```
@@ -207,6 +224,7 @@ returned — no backend change, so the read-only invariant above still holds.
   sources:
     - server/lib/analytics.ts
     - server/lib/analyze.ts
+    - server/lib/subagent-usage.ts
     - server/lib/sessionAnalyticsLog.ts
     - server/api.ts
     - client/src/components/analytics/

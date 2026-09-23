@@ -2043,6 +2043,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .rates-days{min-width:0;white-space:normal}
 .rates-dayhead{display:flex;align-items:baseline;gap:8px;font-size:11px;color:var(--ink3)}
 .rates-days-r{margin-left:auto;font-size:11px;color:var(--ink3)}
+.rates-surf{display:block;font-size:11px;font-weight:400;color:var(--ink3)}
 .rates-daygrid{position:relative;display:grid;gap:2px;margin-top:6px}
 .rates-day{
   position:relative;aspect-ratio:1;min-width:0;

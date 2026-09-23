@@ -48,6 +48,18 @@ export function run(): number {
     assert.strictEqual(LEDGER_COVERAGE_MIN, 0.8);
   })) p++; else f++;
 
+  if (test('an owned interval takes the surface holding 90% of its model, by class not raw entrypoint', () => {
+    const line = (sur: LedgerLine['sur']): LedgerLine => ({ ...l(0, MIN, { A: counts(10_000) }), sur });
+    const one = (sur: LedgerLine['sur']) => joinIntervals([s(0, 10), s(MIN, 12)], [line(sur)])[0];
+    assert.strictEqual(one({ A: { 'sdk-cli': counts(9_000), cli: counts(1_000) } }).surface, 'headless');
+    assert.strictEqual(one({ A: { cli: counts(5_000), 'claude-desktop': counts(5_000) } }).surface, 'interactive',
+      'two interactive entrypoints are one surface');
+    assert.ok(!('surface' in one({ A: { 'sdk-cli': counts(8_000), cli: counts(2_000) } })), '80:20 has no surface');
+    assert.ok(!('surface' in one({ A: { 'sdk-cli': counts(8_000) } })),
+      'the share is of the model\'s whole tok — 2k unattributed keeps it under 90%');
+    assert.ok(!('surface' in one(undefined)), 'a line from before surfaces has none');
+  })) p++; else f++;
+
   if (test('a window change breaks the chain — that pair is discarded', () => {
     const out = joinIntervals(
       [s(0, 10), s(MIN, 12), s(2 * MIN, 5, R2)],

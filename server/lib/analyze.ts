@@ -10,15 +10,19 @@
  *    four token fields separate, expose `combined` (context pressure) AND
  *    `billableApprox` (excludes cacheRead — closer to real cost).
  *  - There is NO per-tool token field on disk. Per-tool counts/errors/durations
- *    are exact; per-tool tokens are only an even split of a turn's output_tokens
- *    across its tool calls (`approxOutputTokens`).
+ *    are exact; per-tool output tokens are only an even split of a turn's
+ *    output_tokens across its tool calls (`approxOutputTokens`). What each call
+ *    injected into context is sized from its own tool_result text instead
+ *    (`resultTokens`, chars ÷ 4) — per call, never split, so it is the figure
+ *    that surfaces a Read-heavy session.
  *
  * Subagent turns are NOT in this file: the CLI writes them to the session's own
- * `<sessionId>/subagents/agent-*.jsonl` (the usage ledger reads those — see
- * `scan.ts` `listUsageTranscripts`). Their tokens arrive instead through
- * `bySubagent`/`subagentTotals`, which readAgents parses out of the Task result
- * notification. Whole-session total ≈ totals.combined + subagentTotals.tokens.
- * An `isSidechain:true` record is still skipped below, for the older transcripts
+ * `<sessionId>/subagents/agent-*.jsonl`. `subagentTotals` sums those files
+ * (`subagent-usage.ts`), matched to the launches readAgents pairs out of this
+ * transcript; the harness's own figure in the Task result is only a fallback,
+ * because it is the subagent's final context size, not its spend (bug-27).
+ * Whole-session total = totals.combined + subagentTotals.tokens. An
+ * `isSidechain:true` record is still skipped below, for the older transcripts
  * that did replay one.
  *
  * ONE TURN IS NOT ONE RECORD. Claude Code writes one record per content block —
@@ -34,8 +38,9 @@
 import fs from 'node:fs';
 
 import { readAgents } from './agents.js';
+import { addTotals, emptyTotals, readSubagentUsage } from './subagent-usage.js';
 import type {
-  ErrorSignals, SessionAnalysis, SubagentTotals, ToolStat
+  AgentJob, ErrorSignals, SessionAnalysis, SubagentTotals, ToolStat
 } from '../../shared/types.js';
 
 /** Finite number or 0. */
@@ -50,6 +55,14 @@ function toolResultText(b: any): string {
     return b.content.map((x: any) => (x && typeof x.text === 'string' ? x.text : '')).join('');
   }
   return '';
+}
+
+/**
+ * Rough token size of a text: chars ÷ 4, the usual English-and-code rule of
+ * thumb. Unrounded — callers sum first and round once.
+ */
+function approxTokens(text: string): number {
+  return text.length / 4;
 }
 
 /** A tool_result the model saw as a failure. */
@@ -72,6 +85,15 @@ function userText(msg: any): string {
 const CORRECTION_RE = /\b(no|nope|wrong|incorrect|not (?:what|right|correct)|actually|instead|revert|undo|don'?t|that'?s not)\b/i;
 
 /**
+ * Peak context that proves auto-compaction never fired. A 200k window compacts near 160k, so a turn above 250k can only come from a larger window
+ * (a 1M one puts compaction out of reach) — and since every turn replays the whole context, a session that never compacts pays total input
+ * ≈ (C_end² − C_start²) / 2d to the end. The transcript records neither the window nor a compaction marker, so this is an inference.
+ */
+const NEVER_COMPACTED_PEAK = 250_000;
+/** A turn below this fraction of the running peak is a compaction: context only ever grows between them, and compaction cuts it several-fold. */
+const COMPACTION_DROP_RATIO = 0.5;
+
+/**
  * Read a transcript and return whole-session facts. Null if the file can't be
  * read. Never throws on malformed lines — bad records are skipped.
  */
@@ -91,12 +113,13 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
   let serverWebSearch = 0, serverWebFetch = 0;
   let toolErrors = 0, retries = 0, userCorrections = 0;
   let turnCount = 0, sumCombined = 0, maxCombined = 0, maxTurnIndex = -1;
+  let compacted = false;
   let cwd: string | null = null;
   let minTs: string | null = null, maxTs: string | null = null;
 
   const getTool = (name: string): ToolStat => {
     let s = toolMap.get(name);
-    if (!s) { s = { tool: name, count: 0, durationMs: 0, errors: 0, approxOutputTokens: 0 }; toolMap.set(name, s); }
+    if (!s) { s = { tool: name, count: 0, durationMs: 0, errors: 0, approxOutputTokens: 0, resultTokens: 0 }; toolMap.set(name, s); }
     return s;
   };
 
@@ -155,6 +178,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
           if (typeof msg.model === 'string' && msg.model) models.add(msg.model);
           const idx = turnCount++;
           sumCombined += combined;
+          if (combined < maxCombined * COMPACTION_DROP_RATIO) compacted = true;
           if (combined > maxCombined) { maxCombined = combined; maxTurnIndex = idx; }
         }
         const stu = u.server_tool_use;
@@ -185,6 +209,8 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
           if (p) {
             pendingTool.delete(b.tool_use_id);
             const s = getTool(p.name);
+            // Per call, error text included — independent of the errors count.
+            s.resultTokens += approxTokens(toolResultText(b));
             if (p.ts && ts) {
               const d = Date.parse(ts) - Date.parse(p.ts);
               if (Number.isFinite(d) && d >= 0) s.durationMs += d;
@@ -212,25 +238,27 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
 
   const combined = input + output + cacheCreation + cacheRead;
   const byTool = [...toolMap.values()]
-    .map(s => ({ ...s, approxOutputTokens: Math.round(s.approxOutputTokens) }))
-    .sort((a, b) => b.approxOutputTokens - a.approxOutputTokens || b.count - a.count);
+    .map(s => ({ ...s, approxOutputTokens: Math.round(s.approxOutputTokens), resultTokens: Math.round(s.resultTokens) }))
+    // resultTokens leads: it is measured per call, and it is what grows the
+    // context every later turn replays. approxOutputTokens is a split estimate.
+    .sort((a, b) => b.resultTokens - a.resultTokens || b.approxOutputTokens - a.approxOutputTokens || b.count - a.count);
 
-  const agents = readAgents(filePath) || [];
-  const subagentTotals: SubagentTotals = {
-    count: agents.length,
-    tokens: agents.reduce((sum, a) => sum + (a.tokens ?? 0), 0),
-    unknownTokenCount: agents.filter(a => a.tokens == null).length
-  };
+  const { agents, subagentTotals } = subagentSpend(filePath);
 
   const errorSignals: ErrorSignals = { toolErrors, retries, userCorrections };
 
   const notes: string[] = [
     'combined includes cache_read (replayed cached prompt, billed ~10%); lead with billableApprox for real cost.',
     'byTool.approxOutputTokens splits each turn\'s output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.',
-    'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.'
+    'byTool.resultTokens is what each tool injected into context: its tool_result text sized at chars ÷ 4, summed per call (not split), error text included, images not counted. The firmer per-tool figure and byTool\'s sort key — but it is context growth, not assistant output; cite both and never add them.',
+    'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.',
+    'perTurn.neverCompacted is inferred from peak context, not read from a window field — the transcript records neither the window nor a compaction: true when the peak turn tops 250k combined (a 200k window compacts near 160k) and no turn ever fell below half the running peak.'
   ];
   if (subagentTotals.count > 0) {
-    notes.push('Subagent tokens are exact and separate from main-agent totals; whole-session total ≈ totals.combined + subagentTotals.tokens.');
+    notes.push('Subagent tokens are summed from each subagent\'s own transcript and are separate from main-agent totals; whole-session total = totals.combined + subagentTotals.tokens. subagentTotals.usage splits them by class — lead with its billableApprox for cost.');
+  }
+  if (subagentTotals.fallbackCount > 0) {
+    notes.push(`${subagentTotals.fallbackCount} subagent(s) have no complete transcript and are counted at the harness figure (their final context size) — a lower bound.`);
   }
   if (subagentTotals.unknownTokenCount > 0) {
     notes.push(`${subagentTotals.unknownTokenCount} subagent(s) have unknown token totals (still running or old transcript).`);
@@ -251,7 +279,8 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
       count: turnCount,
       avgCombined: turnCount > 0 ? Math.round(sumCombined / turnCount) : 0,
       maxCombined,
-      maxTurnIndex
+      maxTurnIndex,
+      neverCompacted: maxCombined > NEVER_COMPACTED_PEAK && !compacted
     },
     byTool,
     bySubagent: agents,
@@ -260,4 +289,38 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
     errorSignals,
     notes
   };
+}
+
+/**
+ * Pair each launch with its subagent transcript — by `agentId` (the filename), else by the
+ * sidecar's `toolUseId` — and settle one figure per launch. A finished launch takes its
+ * transcript sum unless that sums below the harness figure: a final context size larger than
+ * every turn added together means the file is still being written, so the harness figure is
+ * the better (lower-bound) answer. A running launch stays unknown, as does a finished one with
+ * neither. A transcript no launch claims is not a subagent this session can account for, and
+ * is left out rather than risk counting one twice.
+ */
+function subagentSpend(filePath: string): { agents: AgentJob[]; subagentTotals: SubagentTotals } {
+  const files = readSubagentUsage(filePath);
+  const byAgentId = new Map(files.map(f => [f.agentId, f]));
+  const byToolUseId = new Map(files.filter(f => f.toolUseId).map(f => [f.toolUseId as string, f]));
+  const usage = emptyTotals();
+  let tokens = 0, fallbackCount = 0, unknownTokenCount = 0;
+  const agents = (readAgents(filePath) || []).map(a => {
+    const file = (a.agentId && byAgentId.get(a.agentId)) || byToolUseId.get(a.id);
+    let figure: number | null = null;
+    if (a.status === 'done') {
+      if (file && file.usage.combined > 0 && file.usage.combined >= (a.tokens ?? 0)) {
+        figure = file.usage.combined;
+        addTotals(usage, file.usage);
+      } else if (a.tokens != null) {
+        figure = a.tokens;
+        fallbackCount++;
+      }
+    }
+    if (figure == null) unknownTokenCount++;
+    else tokens += figure;
+    return { ...a, tokens: figure };
+  });
+  return { agents, subagentTotals: { count: agents.length, tokens, usage, fallbackCount, unknownTokenCount } };
 }

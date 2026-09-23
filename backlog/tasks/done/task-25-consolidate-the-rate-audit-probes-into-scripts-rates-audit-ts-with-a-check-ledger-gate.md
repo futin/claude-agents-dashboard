@@ -3,6 +3,10 @@ id: task-25
 title: Consolidate the rate-audit probes into scripts/rates-audit.ts with a check:ledger gate
 created: 2026-09-09
 tags: usage, rates, scripts
+updated: 2026-09-23T10:07:47Z
+started: 2026-09-23T09:53:01Z
+execute-elapsed: 886
+execute-tokens: 153760
 ---
 
 ## Goal
@@ -132,3 +136,76 @@ directly (no subprocess except the gate's exit code):
 - `docs/overview.md` row and the `usage-limits.md` pointer in place; nothing under `docs/`
   copies the scratchpad scripts.
 - The four scratchpad probes are not referenced anywhere in the repo.
+
+## Outcome
+
+2026-09-23 — `scripts/rates-audit.ts` (CLI, four subcommands) and `scripts/lib/transcript-audit.ts` (walk / records / rebuild / bins / report pipeline, pure
+except the file reads) are in. Wiring: `pnpm check:ledger` and `pnpm audit:rates -- <sub>`. `RATES_HISTORY_BYTES` moved from `server/api.ts` to sit beside
+`TAIL_BYTES` in `server/lib/usage-history.ts`; api.ts imports it from there. Row in `docs/overview.md`, pointer paragraph in `usage-limits.md`'s Token-value
+section, overlap note in `probe-usage-split.ts`'s header. 9 cases in `test/rates-audit.test.ts`.
+
+Deviations from the plan, on purpose:
+
+- **The walk delegates to `listUsageTranscripts`** (bug-22 already shipped it), so it is not a separate recursive walk. `nested` is `parentId !== null`.
+- **`ledger` prints an extra `in-ticks` column**: the disk weight that fell inside some real ledger tick. It does not change the gate. It separates recorder
+  downtime (low against disk, fine against in-ticks) from a real blind spot (low against both).
+- **Compaction markers**: the current CLI writes `type: "system", subtype: "compact_boundary"` lines carrying `compactMetadata.trigger` (`auto` / `manual`),
+  followed by a user line with `isCompactSummary: true`. Both show up on 30 days of logs (35 boundaries, 35 summaries). `offbook` counts both, boundaries split
+  by trigger. The scratchpad's "zero" was wrong.
+- `effort` is read from the record's top-level `effort` field. That is where the current CLI writes it.
+
+Live verdicts (ledger in the main checkout, so `--dir` points there; the worktree has none):
+
+```
+$ npx tsx scripts/rates-audit.ts ledger --dir <main>        # 5.3 s wall, 329 transcripts
+  2026-09-16  claude-opus-5     38.23M  2.83M  41.06M  in-ticks 41.06M  recorded 38.56M  0.939
+  2026-09-17  claude-opus-5     24.29M  0.34M  24.63M  in-ticks 22.35M  recorded 20.90M  0.849
+  2026-09-18  claude-opus-5     47.60M 12.02M  59.62M  in-ticks 59.62M  recorded 56.15M  0.942
+  2026-09-18  claude-sonnet-5    0.17M 51.28M  51.44M  in-ticks 51.44M  recorded 51.34M  0.998
+  2026-09-22  claude-opus-5-5   11.11M  0.00M  11.11M  in-ticks 11.11M  recorded 10.43M  0.938
+  ...
+FAIL (6) — the ledger does not hold what the transcripts spent        (exit 1)
+```
+
+The gate fails on live data, as the plan predicted, but not for the predicted reason. 2026-09-08 has aged out of the 7-day range, so the sonnet-5 row the plan
+expected is not there. Post-bug-22, sonnet-5 reconciles (0.997–0.998). claude-opus-5 and opus-5-5 still record 0.85–0.96 of disk, and fable-5-1 records
+0.62–0.84 (under the floor). **In-ticks ≈ disk on those rows, so the shortfall is a blind spot, not downtime.** This is a new finding and was not diagnosed
+here. One hypothesis, unverified: a record's `timestamp` precedes the moment its bytes reach disk, and when that lag crosses a tick, `sumWindow` drops the
+event as `ts ≤ prevT` on the next read. The threshold was not lowered.
+
+```
+$ npx tsx scripts/rates-audit.ts surfaces --dir <main>      # 10.7 s wall, 1291 transcripts, 65284 records
+  baseline  sdk-cli  98 bins Σutil 630  295k/1%  ·  claude-desktop  82 bins Σutil 167  458k/1%  ·  pooled 327k/1%
+  real       baseline 235k/1%  current 285k/1%  pooled +21.1%  mix-adjusted -  verdict drift
+  rebuilt    baseline 293k/1%  current 298k/1%  pooled +1.6%  mix-adjusted -13.9%  verdict stable
+```
+
+The bug-23 split reproduces: desktop 458k against ≈460k. sdk-cli comes out at 295k against ≈250k. The baseline window has moved since bug-23 was measured, and
+a rebuild from disk includes the nested tokens the old ledger never saw, which would push headless higher. That reasoning is unverified. The real ledger
+reads `drift`. The same fit on the rebuilt ledger reads `stable`, which is consistent with the ledger shortfall above. `modifiers` ran in 5.6 s and `offbook
+--days 30` in 16.4 s (2229 transcripts). All four are under the ~3 min budget.
+
+Verification:
+
+```
+$ pnpm typecheck
+> tsc --noEmit                                   (exit 0)
+$ pnpm test
+=== rates-audit.ts (transcript audit) ===
+  ✓ walk … ✓ dedupe … ✓ rebuild … ✓ weights … ✓ gate … ✓ gate (CLI) … ✓ bins … ✓ surface label … ✓ modifiers
+  9 passed, 0 failed
+...
+ALL PASS                                         (exit 0, 1656 ✓)
+```
+
+`pnpm test` needs `client/dist`. On the first run in this worktree, `api-usage-rates` "a near-miss path is not the rates endpoint" failed with "it falls
+through to the static handler", because a fresh worktree has no build. After `pnpm build`, everything passed. The failure is environmental; nothing in this
+diff caused it.
+
+Contract sweep: 1 sites updated (server/api.ts — `RATES_HISTORY_BYTES` now imported from `lib/usage-history.ts`; no doc, test or comment named its old home).
+The scratchpad probe names (`disk-sum.mjs`, `surface.mts`, `modifiers.mjs`, `ctx-premium.mjs`, `offbook.mjs`) survive only in backlog records: this item and
+the done bug-22 / bug-23 files. They are left as history on purpose. Nothing under `docs/`, `scripts/` or `server/` names them.
+Red proof: 13 tests went red with the change reverted (13 production mutations, each run against `test/rates-audit.test.ts` alone and each failing at least
+one case: walk nested flag, global dedupe, tick edge `<`→`<=`, outside-tick count, inline `0.1` weights, gate min 0.95→0.85, gate max 1.05→1.15, gate floor
+removed, bin span cap removed, bin contiguity removed, surface dominance 0.8→0.6, modifier share by count instead of weight, CLI `return 1`→`0`). The
+contiguity mutant initially survived because the gap fixture also broke the 30-min span. The fixture was tightened to `iv(21, 25)` and the mutant then failed.
