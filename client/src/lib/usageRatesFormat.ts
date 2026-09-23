@@ -129,11 +129,18 @@ export function verdictText(verdict: ModelRateVerdict): { label: string; hint: s
       return {
         label: 'drift',
         hint: 'the weighted rate has moved more than 20% against the 14-day baseline'
+          + ' — measured surface by surface once both surfaces have a baseline'
       };
     case 'mix-shift':
       return {
         label: 'mix shift',
         hint: 'the raw token count moved but the weighted rate did not — a change of habit, not a repricing'
+      };
+    case 'surface-shift':
+      return {
+        label: 'surface shift',
+        hint: 'the pooled rate moved more than 20% but, headless and interactive each on its own, it did not'
+          + ' — the mix of sessions changed, not the price'
       };
     case 'stable':
       return { label: 'stable', hint: 'the weighted rate is within 20% of its baseline' };
@@ -168,11 +175,29 @@ export function statusLine(models: ModelRateRow[]): {
   // A fixed order, not a frequency sort: the reader learns where to look, and
   // the list is not a ranking. Zero counts are omitted — a row of zeroes reads
   // as a fault, the same rule the coverage list follows.
-  const order: ModelRateVerdict[] = ['drift', 'mix-shift', 'stable', 'thin'];
+  const order: ModelRateVerdict[] = ['drift', 'surface-shift', 'mix-shift', 'stable', 'thin'];
   const counts = order
     .map(v => ({ label: verdictText(v).label, n: models.filter(m => m.verdict === v).length }))
     .filter(c => c.n > 0);
   return { headline, counts };
+}
+
+/**
+ * The per-surface breakdown under a model's name — `interactive 455k ·
+ * headless 249k` — or null when neither surface has a current rate.
+ *
+ * The card's honesty rule is that no rate is comparable across models; this is
+ * the same rule across surfaces (bug-23). A headless point and an interactive
+ * point are not the same goods, so a pooled rate that moved because the
+ * proportion between them did is only readable with the two shown apart. A
+ * surface too thin to rate is left out rather than dashed, the way a zero count
+ * is left out of the status line.
+ */
+export function surfaceText(row: ModelRateRow): string | null {
+  const parts = row.surfaces
+    .filter(s => s.weightedPerPct !== null && Number.isFinite(s.weightedPerPct))
+    .map(s => `${s.surface} ${formatTok(s.weightedPerPct)}`);
+  return parts.length === 0 ? null : parts.join(' · ');
 }
 
 /**
@@ -497,7 +522,8 @@ export function verdictClass(verdict: ModelRateVerdict): string {
   switch (verdict) {
     case 'stable': return 'tag-v stable';
     case 'drift': return 'tag-v drift';
-    case 'mix-shift': return 'tag-v mix';
+    case 'mix-shift':
+    case 'surface-shift': return 'tag-v mix';
     default: return 'tag-v';
   }
 }
@@ -519,7 +545,7 @@ export function ratesStats(models: ModelRateRow[], coverage: UsageCoverage): Sta
     {
       key: 'priced',
       label: 'Priced',
-      value: String(n('stable') + drifting + n('mix-shift')),
+      value: String(n('stable') + drifting + n('mix-shift') + n('surface-shift')),
       sub: drifting === 0 ? 'no rate has moved' : 'not all of them holding'
     },
     {
