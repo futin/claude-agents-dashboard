@@ -8,6 +8,10 @@ mechanism also holds a *finished* turn open for a free-text follow-up, the third
 path — see [remote-message](remote-message.md). Per-machine hook installation lives in
 [remote-answer-setup](../workflows/remote-answer-setup.md).
 
+**This doc is the home of the hold machinery all three holds share** — question, plan and reply. It owns the `lib/idle.ts` `backAtDesk()` policy, the
+`PanelHead` / `MinimisedPanel` chrome and `lib/panelCollapse.ts`, the `holdKind` precedence in `lib/holds.ts`, and the `$`-anchored route-order trap in
+`server/index.ts`. [remote-plan](remote-plan.md) and [remote-message](remote-message.md) document only their own deltas and link here for the rest.
+
 ## How it works
 
 A `PreToolUse` hook fires on `AskUserQuestion` and offers the question to the dashboard,
@@ -164,7 +168,10 @@ already decide this?" versus "is the user back?".
 - **The policy is shared, the sweep is not.** `lib/idle.ts` owns `backAtDesk()` — the
   threshold read, the `ioreg` reading, the `setIdleReader` test seam, and both fail
   directions (unreadable idle → stay held, never guess; `idleSecs === 0` → the idle gate is
-  off everywhere else, so it's off here too). The comparison itself is `notify.ts`'s
+  off everywhere else, so it's off here too). Unreadable idle failing to "held" is the
+  opposite direction from the notifier's own predicate (see
+  [push-notify](push-notify.md#fail-directions)), because a wrong guess here ends a hold early
+  instead of merely sending an extra ping. The comparison itself is `notify.ts`'s
   `atDesk`, shared with callers that already hold an idle reading; the zero-threshold check
   runs *before* the read, so that case never spawns `ioreg`. Each store keeps its own `sweepIdle()`,
   because *what* is releasable and *which* status it settles as differ. This layout is the
@@ -289,6 +296,7 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
     - server/lib/idle.ts
     - server/lib/remoteState.ts
     - server/api.ts
+    - server/index.ts
     - scripts/ask-remote-hook.sh
     - client/src/components/QuestionPanel.tsx
     - client/src/components/PanelChrome.tsx
