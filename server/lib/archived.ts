@@ -44,7 +44,7 @@ export function appSessionsRoot(homeDir?: string): string {
  * Verdict cache, keyed by absolute path: `archivedId` is the record's
  * `cliSessionId` when it is archived, null in every other case (live, no CLI
  * run, unreadable). Keyed on mtime because a full parse of the store is not
- * affordable against a 3 s poll — measured on a 669-record store, stat-sweeping
+ * affordable against a 3 s poll — measured 2026-09-01 on a 669-record store, stat-sweeping
  * all of them costs 3 ms while parsing all of them costs 4.0 s. Archiving
  * rewrites the record, so its mtime moves and the next sweep re-reads it.
  */

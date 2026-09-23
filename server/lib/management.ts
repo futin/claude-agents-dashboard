@@ -407,7 +407,7 @@ export async function readProjectScope(projectPath: string, dirName?: string, ho
  * character outside `[A-Za-z0-9]` becomes `-`. Lossy in that direction — many
  * paths encode to one dirName, and no decoder is possible — but exact in this
  * one, which is all {@link listRecentProjects} needs to ask "is this dir named
- * for that cwd?". Measured against every project dir on this machine: 75/75
+ * for that cwd?". Measured 2026-09-04 against every project dir on this machine: 75/75
  * matched one of their newest transcript's two cwds, 0 missed.
  */
 export function encodeProjectDir(cwd: string): string {

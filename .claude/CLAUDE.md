@@ -116,6 +116,8 @@ filling them with nothing.
   every citation reports as `gone`. This has bitten twice.
 - Reference docs → `docs/subsystems/` + `docs/overview.md`. Records of a moment →
   `docs/superpowers/`. Raw study notes → `docs/learning-notes/`.
+- A figure measured off this machine's own data (a count of transcripts, records or dirs, or a ratio over them) carries its
+  measurement date inline beside the number, in docs and code comments alike — swap it for a command only when one in the repo prints it.
 
 <!-- docs-sync:
   sources:

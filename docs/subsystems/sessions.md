@@ -282,7 +282,7 @@ either, still by **exact** equality per key — no containment matching, or one 
 `~` would mark every session beneath it live. `originCwd` costs a second read only when it has
 to: an untruncated tail already holds the whole file, so the oldest decoded line *is* the first
 record. Only a truncated tail triggers `readHead(file, HEAD_BYTES)` (16 KB — a little over 2×
-the worst first-`cwd` offset measured across every transcript on this machine, 7,837 B), and
+the worst first-`cwd` offset measured across every transcript on this machine on 2026-09-02, 7,837 B), and
 that answer is memoized per path and dropped only when the file **shrinks** (rotation or
 truncation) — the same invalidation rule, for the same reason, as `title-cache.ts`. A head
 window holding no `cwd` yields `originCwd: null` and falls open to the newest cwd alone, which
@@ -357,7 +357,7 @@ Two properties make it affordable and safe:
 
 - **mtime-keyed cache.** The records are ~200 KB each (they embed
   `remoteMcpServersConfig` with full tool descriptions); parsing all 669 on this machine
-  costs 4.0s against a 3s poll, while stat-sweeping them costs 3ms. So the sweep re-reads
+  (2026-09-01) costs 4.0s against a 3s poll, while stat-sweeping them costs 3ms. So the sweep re-reads
   only records whose mtime advanced — and archiving rewrites the record, so its mtime moves.
   A record whose mtime is unchanged is never re-read. Within a re-read, a prefix read
   (8 KB, where both top-level fields actually sit) is trusted only to say *"not archived"*;
