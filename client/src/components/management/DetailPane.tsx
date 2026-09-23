@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { FileBlock } from './FileBlock';
 import { HookDetail } from './HookDetail';
+import { McpDetail } from './McpDetail';
 import { SkillFileRail } from './SkillFileRail';
 import type { Entry, EntryFile } from '../../lib/managementEntries';
 
@@ -32,6 +33,15 @@ export function DetailPane({ entry, groupTitle }: Props) {
       <div className="mdetail">
         {groupTitle !== null ? <div className="mdetail-type">{typeLabel(groupTitle)}</div> : null}
         <HookDetail hook={entry.hook} />
+      </div>
+    );
+  }
+
+  if (entry.kind === 'mcp') {
+    return (
+      <div className="mdetail">
+        {groupTitle !== null ? <div className="mdetail-type">{typeLabel(groupTitle)}</div> : null}
+        <McpDetail mcp={entry.mcp} />
       </div>
     );
   }

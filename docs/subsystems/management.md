@@ -18,14 +18,14 @@ the one-line subtitle the full width beneath.
 What is left is three levels, so the page is **three columns**:
 
 - **Column 1 — type:** one row per kind (Skills, Agents, Commands, Rules, Hooks, Memory,
-  Settings, Plugins) with its count as a pill. Only kinds with at least one entry appear,
+  Settings, Plugins, MCP servers) with its count as a pill. Only kinds with at least one entry appear,
   and the counts are the *filter's* counts. Which type is showing is persisted
   (`management.type`) and resolved during render, so a filter that empties the picked type
   falls back to the first type still standing rather than drawing an empty card.
 - **Column 2 — item, as a Settings card (§8.2):** the type is the category title, the
   subtitle counts what the filter left, then the filter box, then one row per item — name
   over its description, source badge on the right, a hairline between. Every item is tagged
-  `user`, `project`, or `plugin:<name>`; installed plugins are fully expanded, so
+  `user`, `project`, or `plugin:<name>` (an MCP server can also be `local`); installed plugins are fully expanded, so
   plugin-provided skills/hooks/agents/rules show up too. The filter matches an item's name
   and description, and for a skill its **file names** too, so searching a reference doc
   finds the skill that ships it. **Source sub-groups survive as collapsible labelled rows**
@@ -60,7 +60,12 @@ control (the type is a column now, not a collapsible header) and the
 - **Scopes:** global = `~/.claude/{skills,agents,commands,rules,hooks,CLAUDE.md,settings*}`
   **plus every installed plugin's subtree** (`plugins/installed_plugins.json` →
   installPath → skills/agents/commands/rules/hooks.json), items tagged `plugin:<name>`.
-  Project = `<cwd>/.claude/*` + root CLAUDE.md, items tagged `project`. Recent projects
+  Project = `<cwd>/.claude/*` + root CLAUDE.md, items tagged `project`. **MCP servers**, in Claude Code's own scope names:
+  global lists `user` (root `mcpServers` of `~/.claude.json`) then `plugin:<name>` (a plugin's `.mcp.json`, and its manifest's
+  `mcpServers` — inline, or a path that stays inside installPath); a project lists `local` (`projects[<cwd>].mcpServers` of
+  `~/.claude.json`) then `project` (`<cwd>/.mcp.json`). `disabled` only says what disk says: the plugin is disabled, or the name is
+  in that project entry's `disabledMcpServers`/`disabledMcpjsonServers`. No dedupe across scopes. The group sits right after
+  Plugins (first in a project), and its detail card renders from the payload — no FileBlock, see Invariants. Recent projects
   come from transcript cwds (same lookback as sessions), deduped by cwd, newest-first.
   Each dir publishes the cwd **it is named for**: of the newest transcript's launch and
   newest cwds, the one whose `encodeProjectDir` spelling equals the dirName. A session that
@@ -117,7 +122,10 @@ control (the type is a column now, not a collapsible header) and the
   exact set membership is what keeps those unservable. `dirName` is resolved against the
   enumerated recent-project list, never joined into a path (same philosophy as
   `serveSessionDetail`). Content capped at 256 KB (`truncated` flag). `~/.claude.json`
-  (huge, private) is never read.
+  (large, private) is read for its two `mcpServers` locations and nothing else, parsed at most once per (path, mtime, size),
+  and is **never servable** — nor is any `.mcp.json`, project or plugin: each can hold `env` values, and `normalizeMcpServers`
+  reduces `env`/`headers` to key names so no value reaches the payload. (A plugin manifest with inline `mcpServers` stays
+  servable as the Plugins row's file — it is the plugin's published file, not local config.)
 - **⚠️ The skill-dir walk feeds that set, so it enumerates only what it can see itself:**
   **symlinks and dotfiles/dot-dirs are skipped**. A symlink inside a skill dir pointing at
   `~/.claude/.credentials.json` or a project `.env` would otherwise turn into a servable

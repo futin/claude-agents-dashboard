@@ -1310,10 +1310,10 @@ export interface AnalyticsResponse {
 /**
  * Management section (`GET /api/management*`) — read-only view over Claude
  * config on disk: skills, agents, commands, rules, hooks, memory, settings,
- * and installed plugins, per scope (global `~/.claude` or one project).
+ * installed plugins and MCP servers, per scope (global `~/.claude` or one project).
  */
 
-/** Where a config item comes from: 'user', 'project', or 'plugin:<name>'. */
+/** Where a config item comes from: 'user', 'project', 'local' (MCP servers only), or 'plugin:<name>'. */
 export type ItemSource = string;
 
 /** One file inside a skill directory, relative to the directory that holds SKILL.md. */
@@ -1377,6 +1377,30 @@ export interface PluginInfo {
   counts: { skills: number; agents: number; commands: number; rules: number; hooks: number };
 }
 
+/**
+ * One declared MCP server. `source` follows Claude Code's own scope names: 'user' (root `mcpServers` in
+ * `~/.claude.json`), 'local' (that file's `projects[<path>].mcpServers`), 'project' (`<root>/.mcp.json`) or
+ * 'plugin:<name>'. Secret-bearing `env` and `headers` arrive as key names only — their values never leave the server.
+ */
+export interface McpServerInfo {
+  name: string;
+  source: ItemSource;
+  /** Declared `type` ('stdio' | 'http' | 'sse' | …), else 'stdio'. */
+  transport: string;
+  command: string | null;
+  /** String args only; anything else is dropped. */
+  args: string[];
+  url: string | null;
+  /** Sorted `env` key names; values are never included. */
+  envKeys: string[];
+  /** Sorted `headers` key names; values are never included. */
+  headerKeys: string[];
+  /** Absolute path of the file that declared it. Display only — never servable by the file endpoint. */
+  declaredIn: string;
+  /** Plugin disabled, or the name is in the project entry's disabledMcpServers / disabledMcpjsonServers. */
+  disabled: boolean;
+}
+
 /** All config for one scope (global or one project). Metadata only, no file bodies. */
 export interface ScopeConfig {
   scope: 'global' | 'project';
@@ -1392,6 +1416,8 @@ export interface ScopeConfig {
   settings: SettingsFileInfo[];
   /** Populated for global only; [] for projects. */
   plugins: PluginInfo[];
+  /** Global: user then plugin servers. Project: local then project servers. Env/header values are never included. */
+  mcpServers: McpServerInfo[];
   error?: boolean;
 }
 
