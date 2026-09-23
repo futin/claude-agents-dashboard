@@ -1158,6 +1158,11 @@ export interface PerTurn {
   maxCombined: number;
   /** 0-based index (in assistant-turn order) of the `maxCombined` turn, or -1. */
   maxTurnIndex: number;
+  /**
+   * Inferred, not read: `maxCombined` topped 250k (out of a 200k window's reach — it compacts near 160k) and no turn ever fell below half the
+   * running peak, the drop compaction leaves. A session with no turns, or one that compacted after its peak, reads false.
+   */
+  neverCompacted: boolean;
 }
 
 /** Per-tool usage in the main agent. Counts/errors are exact; tokens are approximate. */

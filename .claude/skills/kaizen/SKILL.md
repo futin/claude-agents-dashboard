@@ -46,10 +46,17 @@ to stderr — report it, since two sessions in one cwd are indistinguishable. Ou
 
 ## 2. Read tokens honestly
 
-- **Lead with `totals.billableApprox`** (input + output + cacheCreation). This tracks real
-  cost. `totals.combined` is larger because it adds `cacheRead` — the cached prompt replayed
-  each turn, billed at ~10%. Mention `combined` only as a context-pressure signal, never as
-  "what this cost". The `notes[]` array restates these caveats — respect them.
+- **Lead with `totals.billableApprox`** (input + output + cacheCreation) for cost. `totals.combined` is larger because it adds `cacheRead` — the cached
+  prompt replayed each turn, billed at ~10% — so never quote `combined` as "what this cost". The `notes[]` array restates these caveats — respect them.
+- **But `cacheRead` growth is the diagnosis, not a footnote.** Every turn replays the whole context, so total input grows with the *square* of it:
+  `total ≈ (C_end² − C_start²) / 2d`, `d` = tokens added per turn. Context growth is a first-class efficiency signal — the single biggest one on a long
+  session — even though each replayed token bills cheaply. Report it alongside the billable figure, never instead of it.
+- **`perTurn.neverCompacted: true` is a primary explanation for cost — lead the cost story with it.** It means the peak turn topped 250k combined
+  (a 200k window auto-compacts near 160k, so it cannot get there) and no turn ever fell below half the running peak, the drop a compaction leaves. The
+  usual cause is a 1M-window model (`"model": "opus[1m]"` or similar) putting auto-compaction out of reach, so the session paid the quadratic curve to
+  the end. Say it is **inferred** from peak context — the transcript carries neither the window nor a compaction marker (`notes[]` says so too) — and
+  suggest the fix: a 200k-window default, `/compact` or `/clear` between tasks. `false` does not mean cheap: a session that compacted can still be
+  bloated, so keep reading the bloated-turn bullet below.
 - **Whole-session total = `totals.combined` + `subagentTotals.tokens`.** Subagent tokens are summed from each subagent's
   own transcript and tracked separately (they don't appear in `totals`); `subagentTotals.usage` splits them by class, so lead
   with its `billableApprox` for their cost, exactly as for the main agent. `fallbackCount` subagents had no complete
@@ -83,8 +90,8 @@ of whether the session met its stated goal, stalled, or thrashed. Give a short, 
 
 ## 5. Concrete improvements
 
-Tie each suggestion to evidence above. Examples: high `cacheRead` + a bloated turn → suggest
-`/clear` between tasks or smaller reads; many `retries` on one tool → the specific fix;
+Tie each suggestion to evidence above. Examples: `perTurn.neverCompacted` → check the model default for a 1M window and suggest a 200k one, or
+`/compact` / `/clear` between tasks; high `cacheRead` + a bloated turn → suggest `/clear` between tasks or smaller reads; many `retries` on one tool → the specific fix;
 repeated manual work a skill would cover → name the skill to **use, add, or install**
 (check installed skills first). Keep it to a few high-signal actions, not a checklist.
 
