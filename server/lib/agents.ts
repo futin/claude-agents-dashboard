@@ -23,8 +23,9 @@
  * `ScanState` (`applyEvent`), so the whole-file `readAgents` (the oracle) and
  * the incremental cache (agents-cache.ts) share the exact same logic. Unlike
  * transcript.ts (256KB tail, newest tool only) `readAgents` walks the WHOLE
- * file, so it runs on demand (only for a selected session), never in the 3s
- * poll loop.
+ * file, so it never runs in the 3s poll loop itself: the list poll reaches it
+ * only through the incremental cache, and only for a session with a fresh,
+ * unfinished subagent file (`subagentRunning` in scan.ts).
  */
 
 import fs from 'node:fs';

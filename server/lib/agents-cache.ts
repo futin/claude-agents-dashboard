@@ -21,9 +21,11 @@
  *  - `size < offset` means truncation/rotation → reset and re-read from 0.
  *  - Any unexpected error falls back to the pure whole-file readAgents.
  *
- * Used only by the on-demand GET /api/sessions/:id handler — never the 3s
- * /api/sessions poll loop — so state exists only for sessions the UI actually
- * watches (LRU-capped at MAX_ENTRIES).
+ * Two callers: the on-demand GET /api/sessions/:id handler, and the 3s
+ * /api/sessions poll through scan.ts `subagentRunning` — gated there behind a
+ * subagent file written in the last 15 minutes that is still mid-turn. So state
+ * exists only for sessions the UI watches or that are parked on a live subagent
+ * (LRU-capped at MAX_ENTRIES).
  */
 
 import fs from 'node:fs';

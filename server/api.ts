@@ -183,7 +183,8 @@ export function serveSessions(baseConfig: Config, res: ServerResponse, params?: 
  * `GET /api/sessions/:id` — the subagents a session launched. First selection
  * reads the full transcript; while the session stays selected, the 3s detail
  * poll goes through the incremental cache and costs O(new bytes) (see
- * agents-cache.ts). Still runs only on selection — never in the list poll.
+ * agents-cache.ts). The list poll touches the same cache only through scan.ts
+ * `subagentRunning`, and only for a session with a fresh, unfinished subagent.
  * The id is resolved against the enumerated transcript list, never joined into a
  * path directly, so a hostile id can't escape the projects root.
  */
