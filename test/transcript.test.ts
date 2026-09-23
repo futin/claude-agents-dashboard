@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import * as cw from '../server/lib/compact-window.js';
 import * as mi from '../server/lib/model-identity.js';
 import * as tr from '../server/lib/transcript.js';
 
@@ -21,6 +22,15 @@ function fixture(records: unknown[]): string {
 export function run(): number {
   console.log('\n=== transcript.ts ===\n');
   let p = 0, f = 0;
+
+  // readTranscript reads each session's settings files for autoCompactWindow.
+  // Point the user-level and managed reads at an empty sandbox, so this
+  // machine's own ~/.claude/settings.json cannot leak into any window below.
+  const cwRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-tr-cw-'));
+  fs.mkdirSync(path.join(cwRoot, 'home', '.claude'), { recursive: true });
+  cw.setCompactWindowHome(path.join(cwRoot, 'home'));
+  cw.setManagedSettingsPath(path.join(cwRoot, 'managed-settings.json'));
+  cw.resetCompactWindowCache();
 
   if (test('usageTokens sums input + cache read + cache create', () => {
     assert.strictEqual(tr.usageTokens({ message: { usage: { input_tokens: 10, cache_read_input_tokens: 90, cache_creation_input_tokens: 5 } } }), 105);
@@ -45,6 +55,15 @@ export function run(): number {
     assert.strictEqual(tr.resolveWindow(1000, 'claude-haiku-4-5-20251001', {}, 'claude-haiku-4-5-20251001'), 200000);
     assert.strictEqual(tr.resolveWindow(250000, 'x', {}, 'claude-opus-5'), 1000000);
     assert.strictEqual(tr.resolveWindow(1000, 'x', { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '400000' }, 'claude-opus-5[1m]'), 400000);
+  })) p++; else f++;
+
+  // bug-29: the session's autoCompactWindow caps the window, never raises it.
+  if (test('resolveWindow: a configured compact window caps the model maximum', () => {
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5', {}, 'claude-opus-5[1m]', 200000), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5', {}, 'claude-opus-5[1m]', null), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5', {}, 'claude-opus-5', 500000), 200000);
+    assert.strictEqual(tr.resolveWindow(250000, 'x', {}, 'claude-opus-5[1m]', 200000), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'x', { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '400000' }, 'claude-opus-5[1m]', 200000), 400000);
   })) p++; else f++;
 
   if (test('windowLabel formats k / M', () => {
@@ -361,6 +380,26 @@ export function run(): number {
     ]))!;
     assert.strictEqual(s.contextWindow, 200000);
   })) p++; else f++;
+
+  if (test('readTranscript: the launch directory\'s autoCompactWindow caps a [1m] session', () => {
+    mi.resetModelIdentityCache();
+    cw.resetCompactWindowCache();
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-tr-proj-'));
+    const settings = path.join(project, '.claude', 'settings.json');
+    fs.mkdirSync(path.dirname(settings), { recursive: true });
+    fs.writeFileSync(settings, JSON.stringify({ autoCompactWindow: 200000 }));
+    const at = (i: number) => ({ ...USAGE(i), cwd: project });
+    const file = fixture([IDENT('claude-opus-5[1m]'), at(0), at(1)]);
+    const capped = tr.readTranscript(file)!;
+    assert.strictEqual(capped.contextWindow, 200000);
+    assert.strictEqual(capped.contextWindowLabel, '200k');
+    fs.rmSync(settings);
+    assert.strictEqual(tr.readTranscript(file)!.contextWindow, 1000000);
+  })) p++; else f++;
+
+  cw.setCompactWindowHome(null);
+  cw.setManagedSettingsPath(null);
+  cw.resetCompactWindowCache();
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;

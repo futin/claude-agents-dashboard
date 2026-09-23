@@ -1,6 +1,7 @@
 /** Run every test module and exit nonzero if any fail. */
 import { run as runTranscript } from './transcript.test.js';
 import { run as runTitleCache } from './title-cache.test.js';
+import { run as runCompactWindow } from './compact-window.test.js';
 import { run as runScan } from './scan.test.js';
 import { run as runArchived } from './archived.test.js';
 import { run as runUsage } from './usage.test.js';
@@ -89,6 +90,7 @@ import { run as runKaizenTrend } from './kaizen-trend.test.js';
 let failed = 0;
 failed += runTranscript();
 failed += runTitleCache();
+failed += runCompactWindow();
 failed += runScan();
 failed += runArchived();
 failed += runUsage();

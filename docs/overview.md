@@ -138,6 +138,7 @@ server/
   lib/transcript.ts  tail-reads a transcript → tokens/model/window/activity
   lib/title-cache.ts  remembers a custom title once it sinks below the tail window
   lib/model-identity.ts  the session's model attachment id (`[1m]` ⇒ 1M window), same tail-then-hunt
+  lib/compact-window.ts  the session's `autoCompactWindow` off its settings files — caps the window
   lib/record-cache.ts  the shared tail-then-hunt search + remembered byte range both use
   lib/scan.ts     enumerates + ranks sessions; status machine; liveness gates (cwd, session id);
                   `listUsageTranscripts` is the second enumeration — top-level files plus

@@ -72,8 +72,10 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
 - **Context bar + %** — current context tokens vs. the session's window. The window comes from the session's own model attachment
   (`{"type":"attachment","attachment":{"type":"model","identity":{"modelId":"claude-opus-5[1m]"}}}`, newest wins, found by `model-identity.ts` the same
   way the title is found below): 1M only when that `modelId` carries `[1m]` or context has already passed 200k, 200k otherwise — whatever the model
-  family, since `message.model` never records the grant. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the dashboard's own env overrides all of it. Turns
-  orange/red as it fills.
+  family, since `message.model` never records the grant. That maximum is then capped at the session's own `autoCompactWindow` (or an `env`
+  `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), read by `compact-window.ts` from its user, project, local and managed settings files, as Claude Code caps it —
+  unless context has already passed the cap, which proves it is not in force. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the dashboard's own env overrides all
+  of it. Turns orange/red as it fills.
 - **Activity line** — the most recent tool call (e.g. `Edit server.ts`,
   `Task Explore: map the codebase`).
 - **Relative time** — since the last conversational message.
