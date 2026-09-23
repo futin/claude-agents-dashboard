@@ -20,7 +20,7 @@ function test(name: string, fn: () => void): boolean {
 const tc = (i: number, o: number, cc: number, cr: number): TokenCounts =>
   ({ in: i, out: o, cc, cr });
 
-const ev = (ts: number, model: string, tok: TokenCounts): UsageEvent => ({ ts, model, tok });
+const ev = (ts: number, model: string, tok: TokenCounts, surface = ''): UsageEvent => ({ ts, model, tok, surface });
 
 export function run(): number {
   console.log('\n=== usage-ledger.ts (pure core) ===\n');
@@ -96,7 +96,8 @@ export function run(): number {
     ];
     assert.deepStrictEqual(sumWindow(events, 1000, 61_000), {
       tok: { A: tc(0, 2, 4, 0) },
-      req: { A: 2 }
+      req: { A: 2 },
+      sur: {}
     });
   })) p++; else f++;
 
@@ -111,17 +112,32 @@ export function run(): number {
         'opus-5': tc(11, 22, 33, 44),
         'fable-5': tc(5, 5, 5, 5)
       },
-      req: { 'opus-5': 2, 'fable-5': 1 }
+      req: { 'opus-5': 2, 'fable-5': 1 },
+      sur: {}
     });
   })) p++; else f++;
 
   if (test('sumWindow: an empty model string is skipped, not bucketed as ""', () => {
     const events = [ev(10, '', tc(9, 9, 9, 9)), ev(20, 'A', tc(1, 1, 1, 1))];
-    assert.deepStrictEqual(sumWindow(events, 0, 100), { tok: { A: tc(1, 1, 1, 1) }, req: { A: 1 } });
+    assert.deepStrictEqual(sumWindow(events, 0, 100), { tok: { A: tc(1, 1, 1, 1) }, req: { A: 1 }, sur: {} });
+  })) p++; else f++;
+
+  if (test('sumWindow: splits each model by surface, and an event with none is in tok only', () => {
+    const events = [
+      ev(10, 'A', tc(1, 0, 0, 0), 'sdk-cli'),
+      ev(20, 'A', tc(2, 0, 0, 0), 'sdk-cli'),
+      ev(30, 'A', tc(0, 4, 0, 0), 'claude-desktop'),
+      ev(40, 'A', tc(0, 0, 8, 0))
+    ];
+    assert.deepStrictEqual(sumWindow(events, 0, 100), {
+      tok: { A: tc(3, 4, 8, 0) },
+      req: { A: 4 },
+      sur: { A: { 'sdk-cli': tc(3, 0, 0, 0), 'claude-desktop': tc(0, 4, 0, 0) } }
+    });
   })) p++; else f++;
 
   if (test('sumWindow: no events in range → two empty maps, a measured zero', () => {
-    assert.deepStrictEqual(sumWindow([ev(5, 'A', tc(1, 1, 1, 1))], 10, 20), { tok: {}, req: {} });
+    assert.deepStrictEqual(sumWindow([ev(5, 'A', tc(1, 1, 1, 1))], 10, 20), { tok: {}, req: {}, sur: {} });
   })) p++; else f++;
 
   // ── the line codec ──
@@ -154,6 +170,23 @@ export function run(): number {
     assert.strictEqual(parsed.req, undefined, 'absent must not coerce to {} or to 0');
     assert.ok(!('req' in parsed), 'and must not appear as a key at all');
     assert.deepStrictEqual(parsed.tok, { A: tc(5, 0, 0, 0) }, 'its tokens are still usable');
+  })) p++; else f++;
+
+  if (test('surface splits round-trip; a line from before them parses with sur absent', () => {
+    const line: LedgerLine = {
+      t: 2, prevT: 1,
+      tok: { A: tc(3, 4, 0, 0) },
+      req: { A: 2 },
+      sur: { A: { 'sdk-cli': tc(3, 0, 0, 0), 'claude-desktop': tc(0, 4, 0, 0) } }
+    };
+    assert.deepStrictEqual(parseLedgerLine(serializeLedgerLine(line)), line);
+    const old = parseLedgerLine(JSON.stringify({ t: 2, prevT: 1, tok: { A: tc(5, 0, 0, 0) }, req: { A: 1 } }));
+    assert.ok(old);
+    assert.ok(!('sur' in old), 'absent must not become {} — that would claim every token was unattributed');
+    const junk = parseLedgerLine(JSON.stringify({
+      t: 2, prevT: 1, tok: {}, sur: { A: { '': tc(1, 0, 0, 0), 'sdk-cli': 'x', cli: tc(0, 1, 0, 0) }, B: 7 }
+    }));
+    assert.deepStrictEqual(junk!.sur, { A: { cli: tc(0, 1, 0, 0) } }, 'junk entries drop, the rest survive');
   })) p++; else f++;
 
   if (test('junk and negative counts drop that model only; the line stays usable', () => {

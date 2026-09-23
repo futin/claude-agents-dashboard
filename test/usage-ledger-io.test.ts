@@ -121,8 +121,30 @@ export function run(): number {
           'opus-5': { in: 11, out: 22, cc: 33, cr: 44 },
           'fable-5': { in: 5, out: 6, cc: 7, cr: 8 }
         },
-        req: { 'opus-5': 2, 'fable-5': 1 }
+        req: { 'opus-5': 2, 'fable-5': 1 },
+        sur: {}
       });
+    });
+  })) p++; else f++;
+
+  if (test('each record\'s entrypoint splits its model\'s counts; a record with none is in tok only', () => {
+    withFixture(fx => {
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+      fs.appendFileSync(fx.transcript,
+        assistantLine(T0 + 10_000, 'opus-5', 'm1', { in: 10, out: 20, cc: 30, cr: 40 }, { entrypoint: 'sdk-cli' }) + '\n' +
+        assistantLine(T0 + 20_000, 'opus-5', 'm2', { in: 1, out: 2, cc: 3, cr: 4 }, { entrypoint: 'claude-desktop' }) + '\n' +
+        assistantLine(T0 + 25_000, 'opus-5', 'm3', { in: 2, out: 0, cc: 0, cr: 0 }, { entrypoint: 'sdk-cli' }) + '\n' +
+        assistantLine(T0 + 30_000, 'fable-5', 'm4', { in: 5, out: 6, cc: 7, cr: 8 }) + '\n');
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
+
+      const line = JSON.parse(fx.ledgerLines()[0]);
+      assert.deepStrictEqual(line.tok['opus-5'], { in: 13, out: 22, cc: 33, cr: 44 }, 'tok stays the whole total');
+      assert.deepStrictEqual(line.sur, {
+        'opus-5': {
+          'sdk-cli': { in: 12, out: 20, cc: 30, cr: 40 },
+          'claude-desktop': { in: 1, out: 2, cc: 3, cr: 4 }
+        }
+      }, 'raw entrypoints kept; fable-5 had none, so it has no surface entry at all');
     });
   })) p++; else f++;
 
@@ -132,7 +154,7 @@ export function run(): number {
       recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
       const lines = fx.ledgerLines();
       assert.strictEqual(lines.length, 1);
-      assert.deepStrictEqual(JSON.parse(lines[0]), { t: T0 + MIN, prevT: T0, tok: {}, req: {} },
+      assert.deepStrictEqual(JSON.parse(lines[0]), { t: T0 + MIN, prevT: T0, tok: {}, req: {}, sur: {} },
         'an empty `req` is the tell that counts were recorded and nothing was spent');
     });
   })) p++; else f++;
@@ -230,7 +252,7 @@ export function run(): number {
       recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 4 * MIN });
       const lines = fx.ledgerLines().map(l => JSON.parse(l));
       assert.strictEqual(lines.length, 1);
-      assert.deepStrictEqual(lines[0], { t: T0 + 4 * MIN, prevT: T0 + 3 * MIN, tok: {}, req: {} });
+      assert.deepStrictEqual(lines[0], { t: T0 + 4 * MIN, prevT: T0 + 3 * MIN, tok: {}, req: {}, sur: {} });
     });
   })) p++; else f++;
 

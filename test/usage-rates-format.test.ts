@@ -28,6 +28,7 @@ import {
   verdictClass,
   showsDays,
   statusLine,
+  surfaceText,
   verdictText,
   waitingText,
   weeklyAsideText
@@ -90,8 +91,9 @@ export function run(): number {
     assert.strictEqual(verdictText('drift').label, 'drift');
     assert.strictEqual(verdictText('stable').label, 'stable');
     assert.strictEqual(verdictText('mix-shift').label, 'mix shift');
+    assert.strictEqual(verdictText('surface-shift').label, 'surface shift');
     assert.strictEqual(verdictText('thin').label, 'collecting');
-    for (const v of ['drift', 'stable', 'mix-shift', 'thin'] as const) {
+    for (const v of ['drift', 'stable', 'mix-shift', 'surface-shift', 'thin'] as const) {
       assert.ok(verdictText(v).hint.length > 0, `${v} needs a hint`);
     }
     // The thin hint names both day floors, so the card says what it is waiting
@@ -162,6 +164,8 @@ export function run(): number {
       verdict: 'thin', fitVerdict: 'thin', intervals: 0, utilSum: 0, days: 0
     },
     daily: [],
+    mixAdjustedDeviationPct: null,
+    surfaces: [],
     ...over
   });
   const verdicts = (...vs: ModelRateVerdict[]): ModelRateRow[] =>
@@ -183,6 +187,23 @@ export function run(): number {
     assert.deepStrictEqual(s.counts, [
       { label: 'drift', n: 1 }, { label: 'stable', n: 1 }, { label: 'collecting', n: 1 }
     ]);
+  })) p++; else f++;
+
+  if (test('statusLine: a surface shift is not drift either, and is counted after drift', () => {
+    const s = statusLine(verdicts('surface-shift', 'mix-shift', 'drift'))!;
+    assert.strictEqual(s.headline, '1 model is drifting');
+    assert.deepStrictEqual(s.counts.map(c => c.label), ['drift', 'surface shift', 'mix shift']);
+  })) p++; else f++;
+
+  if (test('surfaceText: both surfaces, in order; a thin one is left out; none is null', () => {
+    const surf = (i: number | null, h: number | null): Partial<ModelRateRow> => ({ surfaces: [
+      { surface: 'interactive', weightedPerPct: i, baselineWeightedPerPct: null, utilSum: 0 },
+      { surface: 'headless', weightedPerPct: h, baselineWeightedPerPct: null, utilSum: 0 }
+    ] });
+    assert.strictEqual(surfaceText(rowOf(surf(455_000, 249_000))), 'interactive 455k · headless 249k');
+    assert.strictEqual(surfaceText(rowOf(surf(null, 249_000))), 'headless 249k');
+    assert.strictEqual(surfaceText(rowOf(surf(null, Number.NaN))), null);
+    assert.strictEqual(surfaceText(rowOf()), null, 'no surfaces at all');
   })) p++; else f++;
 
   if (test('statusLine agrees with itself in the plural', () => {
@@ -364,6 +385,7 @@ export function run(): number {
     assert.strictEqual(new Set(all).size, 4);
     for (const c of all) assert.ok(c.startsWith('tag-v'), c);
     assert.strictEqual(verdictClass('thin'), 'tag-v', 'collecting is the bare pill');
+    assert.strictEqual(verdictClass('surface-shift'), verdictClass('mix-shift'), 'both are "the mix moved, not the price"');
   })) p++; else f++;
 
   // ── the figure strip ──
@@ -371,6 +393,7 @@ export function run(): number {
   if (test('ratesStats: the five figures, in the order the page reads them', () => {
     const models = verdicts('stable', 'drift', 'mix-shift', 'thin', 'thin');
     const tiles = ratesStats(models, LIVE);
+    assert.strictEqual(ratesStats(verdicts('surface-shift', 'thin'), LIVE)[0].value, '1', 'a surface shift is priced');
     assert.deepStrictEqual(tiles.map(t => t.key),
       ['priced', 'drifting', 'collecting', 'coverage', 'ledger']);
     assert.strictEqual(tiles[0].value, '3', 'stable + drift + mix-shift are priced');
@@ -452,6 +475,8 @@ export function run(): number {
       verdict: 'thin', fitVerdict: 'thin', intervals: 0, utilSum: 0, days: 0
     },
     daily: [day({})],
+    mixAdjustedDeviationPct: null,
+    surfaces: [],
     ...over
   });
 

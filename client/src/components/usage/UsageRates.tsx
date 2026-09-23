@@ -6,7 +6,7 @@ import {
   coverageCaveat, coverageRows, cutFraction, DAY_FLOOR_PTS, dayLabel, dayStep, dayTip,
   DRIFT_BAND_PCT, figureTip, formatDeviation, formatShare, formatTok, ledgerReading,
   measuredShare, movedLabel, movedTotal, pricedShare, RATES_GLOSSARY, ratesStats, showsDays,
-  spanText, verdictClass, verdictText
+  spanText, surfaceText, verdictClass, verdictText
 } from '../../lib/usageRatesFormat';
 import { InfoDot } from './ReadingAids';
 import { Definitions, RowHead, Sheet, StatStrip } from './Sheet';
@@ -194,10 +194,14 @@ function RateRow({ row, share, generatedAt, tip, pin }: {
   const showFitted = row.fittedWeightedPerPct !== null
     && Number.isFinite(row.fittedWeightedPerPct);
   const days = showsDays(row);
+  const surfaces = surfaceText(row);
   return (
     <>
     <tr className={days ? 'wdays' : undefined}>
-      <td className="name">{row.model}</td>
+      <td className="name">
+        {row.model}
+        {surfaces !== null && <small className="rates-surf">{surfaces}</small>}
+      </td>
       <td data-l="Verdict"><span className={verdictClass(row.verdict)}>{verdictText(row.verdict).label}</span></td>
       <td data-l="Weighted" className={row.weightedPerPct === null ? 'n mut' : 'n'}>
         {formatTok(row.weightedPerPct)}
@@ -210,6 +214,9 @@ function RateRow({ row, share, generatedAt, tip, pin }: {
           : <span className={row.verdict === 'drift' ? 'dev bad' : 'dev'}>
             {formatDeviation(row.deviationPct)}
           </span>}
+        {row.mixAdjustedDeviationPct !== null && (
+          <small className="rates-surf">{formatDeviation(row.mixAdjustedDeviationPct)} per surface</small>
+        )}
       </td>
       <td data-l="Windows" className="n">{row.intervals}</td>
       <td data-l="Share" className="n">{formatShare(share)}</td>

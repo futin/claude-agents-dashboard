@@ -48,6 +48,18 @@ export interface LedgerLine {
    * in `usage-rate.ts` must be able to tell those apart from a measured zero.
    */
   req?: Record<string, number>;
+  /**
+   * Model id → transcript `entrypoint` → the counts spent from that surface, or
+   * **absent** on every line written before surfaces were recorded (bug-23).
+   *
+   * A parallel map for the same reason `req` is one: `tok` stays the per-model
+   * total every reader already sums. A model's surfaces need not add up to its
+   * `tok` — an event whose record carried no `entrypoint` is counted in `tok`
+   * and in no surface, so the shortfall reads as *unattributed*, never as a
+   * third surface. The raw entrypoint is kept, not a headless/interactive class:
+   * the classification is `usage-rate.ts`'s to change, the record is not.
+   */
+  sur?: Record<string, Record<string, TokenCounts>>;
 }
 
 /** What one window of events measured: tokens per model, and the requests behind them. */
@@ -55,6 +67,8 @@ export interface WindowSums {
   tok: Record<string, TokenCounts>;
   /** One per event kept — an event is one deduplicated assistant `message.id`. */
   req: Record<string, number>;
+  /** Per model, per `entrypoint` — only the events that carried one. */
+  sur: Record<string, Record<string, TokenCounts>>;
 }
 
 /** One assistant message's usage, as read out of a transcript. */
@@ -64,6 +78,8 @@ export interface UsageEvent {
   /** `message.model`. Blank/absent events are dropped by {@link sumWindow}. */
   model: string;
   tok: TokenCounts;
+  /** The record's `entrypoint` — which session surface spent it — or `''` when absent. */
+  surface: string;
 }
 
 /**
@@ -190,14 +206,19 @@ export function addCounts(into: TokenCounts, from: TokenCounts): void {
 export function sumWindow(events: UsageEvent[], prevT: number, t: number): WindowSums {
   const tok: Record<string, TokenCounts> = {};
   const req: Record<string, number> = {};
+  const sur: Record<string, Record<string, TokenCounts>> = {};
   for (const e of events) {
     if (e.ts <= prevT || e.ts > t) continue;
     if (!e.model) continue;
     const bucket = tok[e.model] ?? (tok[e.model] = emptyCounts());
     addCounts(bucket, e.tok);
     req[e.model] = (req[e.model] ?? 0) + 1;
+    if (e.surface) {
+      const bySurface = sur[e.model] ?? (sur[e.model] = {});
+      addCounts(bySurface[e.surface] ?? (bySurface[e.surface] = emptyCounts()), e.tok);
+    }
   }
-  return { tok, req };
+  return { tok, req, sur };
 }
 
 /** One compact JSON object, no trailing newline — the caller adds it. */
@@ -247,7 +268,28 @@ export function parseLedgerLine(line: string): LedgerLine | null {
       req[model] = n;
     }
   }
-  return { t: raw.t, prevT: raw.prevT, tok, ...(req === undefined ? {} : { req }) };
+  // Absent stays absent here too, and for the same reason: an empty map on an
+  // old line would claim every token it carries was measured as unattributed.
+  const rawSur = raw.sur;
+  let sur: Record<string, Record<string, TokenCounts>> | undefined;
+  if (rawSur && typeof rawSur === 'object' && !Array.isArray(rawSur)) {
+    sur = {};
+    for (const [model, bySurface] of Object.entries(rawSur as Record<string, unknown>)) {
+      if (!model || !bySurface || typeof bySurface !== 'object' || Array.isArray(bySurface)) continue;
+      const out: Record<string, TokenCounts> = {};
+      for (const [surface, counts] of Object.entries(bySurface as Record<string, unknown>)) {
+        if (!surface || !counts || typeof counts !== 'object' || Array.isArray(counts)) continue;
+        const c = counts as Record<string, unknown>;
+        out[surface] = { in: num(c.in), out: num(c.out), cc: num(c.cc), cr: num(c.cr) };
+      }
+      sur[model] = out;
+    }
+  }
+  return {
+    t: raw.t, prevT: raw.prevT, tok,
+    ...(req === undefined ? {} : { req }),
+    ...(sur === undefined ? {} : { sur })
+  };
 }
 
 // ── The I/O shell ────────────────────────────────────────────────────────────
@@ -347,7 +389,8 @@ function eventFromRecord(raw: unknown, cursor: FileCursor): UsageEvent | null {
   const ts = typeof rec.timestamp === 'string' ? Date.parse(rec.timestamp) : Number.NaN;
   if (!Number.isFinite(ts)) return null;
 
-  return { ts, model, tok };
+  const surface = typeof rec.entrypoint === 'string' ? rec.entrypoint : '';
+  return { ts, model, tok, surface };
 }
 
 /**
@@ -465,8 +508,8 @@ export function recordLedgerTick(opts?: { dir?: string; root?: string; nowMs?: n
       prevTickMs = nowMs; // seeding tick (or a clock that went backwards)
       return;
     }
-    const { tok, req } = sumWindow(events, prevTickMs, nowMs);
-    appendLedgerLine({ t: nowMs, prevT: prevTickMs, tok, req }, opts?.dir);
+    const { tok, req, sur } = sumWindow(events, prevTickMs, nowMs);
+    appendLedgerLine({ t: nowMs, prevT: prevTickMs, tok, req, sur }, opts?.dir);
     prevTickMs = nowMs;
     rotateLedgerIfNeeded(opts?.dir);
   } catch {

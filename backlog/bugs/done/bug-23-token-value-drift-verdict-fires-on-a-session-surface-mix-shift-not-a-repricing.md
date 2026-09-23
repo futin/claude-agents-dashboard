@@ -3,6 +3,10 @@ id: bug-23
 title: Token-value drift verdict fires on a session-surface mix shift, not a repricing
 created: 2026-09-09
 tags: usage, rates
+updated: 2026-09-23T08:38:21Z
+started: 2026-09-23T08:25:26Z
+execute-elapsed: 775
+execute-tokens: 139776
 ---
 
 ## Symptom
@@ -100,3 +104,38 @@ Candidate — groom to choose the shape:
 
 Until 1. lands there is no way to compute this from the ledger; a first cut can run the
 disk rebuild the probe used, but that is the analytics-side scan, not the recorder.
+
+## Outcome
+
+2026-09-23 — fixed; shape chosen by execute, because `## Fix` left it to groom ("Candidate — groom to choose the shape"), and under an unattended orchestrator
+run there was nobody to ask. Chosen: fix option 1 + the "keep one headline" branch of option 2, generalised to a mix-adjusted deviation, + options 3–5.
+
+- **Recorder** (`server/lib/usage-ledger.ts`): every assistant record's `entrypoint` is read into `UsageEvent.surface`; ledger lines gain a parallel
+  `sur: model → raw entrypoint → TokenCounts` map (absent on old lines, stays absent through `parseLedgerLine`; records without an entrypoint count in `tok`
+  only). Checked live first: all 56/56 and 20/20 assistant records in a current main and subagent transcript carry `entrypoint`.
+- **Rates** (`server/lib/usage-rate.ts`): `gather` folds `sur` into headless/interactive classes (`rateSurface`, via `scan.ts` `sessionSurface`); an owned
+  interval gets `surface` when one class holds ≥ `DOMINANCE` of the owning model's whole `tok`. New `mixAdjustedDeviation` = Σ(current tokens ÷ that surface's
+  baseline rate) ÷ current points − 1, null unless ≥ `SURFACE_COVERAGE_MIN` (0.8) of current points have a surface with a full-floored baseline. `driftRow`
+  judges drift on it when present (both directions), and a pooled move past ±20% it does not confirm is the new verdict `surface-shift`. Rows carry
+  `mixAdjustedDeviationPct` and `surfaces[]` (per-surface current/baseline rate + points).
+- **Contract** (`shared/types.ts`): `ModelRateVerdict` + `'surface-shift'`, `ModelRateSurface`, `ModelSurfaceRate`, the two new `ModelRateRow` fields.
+- **Client**: verdict copy/pill (`tag-v mix`)/status order/`Priced` tile count for `surface-shift`; `surfaceText` line under the model name
+  (`interactive 455k · headless 249k`); adjusted figure under the Δ chip (`-3.0% per surface`); one `.rates-surf` rule using theme tokens only.
+- **Doc** (`docs/subsystems/usage-limits.md`): ledger shape, the new `sur` bullet, the "effort-invariant" paragraph corrected (invariant to token type,
+  not to surface — cites this item), verdict order, reading-column and tiles notes.
+
+Transition: until ~14 days of `sur` lines exist, no stratum baseline clears `BASELINE_FLOORS`, so `mixAdjustedDeviationPct` is null and the pooled verdict
+stands exactly as before — the guard switches itself on when the data is there. Not verified: the live `/api/usage/rates` payload or the rendered card
+(no dev server run in this worktree; the live ledger has no `sur` lines yet, so the guard would read null today anyway).
+
+Verification (`pnpm typecheck && pnpm test`, after `pnpm build` — `api-usage-rates` "a near-miss path…" needs `client/dist`, absent in a fresh worktree):
+
+```
+typecheck: OK
+pnpm test exit 0
+1599 ✓ / 0 ✗
+ALL PASS
+```
+
+Contract sweep: 5 sites updated (docs/subsystems/usage-limits.md ×4 — ledger `{t, prevT, tok, req}` shape + "Six things", "effort-invariant" paragraph, verdict order, reading/tiles notes; client/src/lib/usageRatesFormat.ts drift hint)
+Red proof: 9 mutations turned new tests red (guard removed → 2; coverage floor removed → 1; surfaceOf disabled / attributed-only denominator / raw entrypoint unclassed → 1 each; sumWindow sur off, parse drops sur, recorder ignores entrypoint → 1 each; client surface-shift copy/class/order/tile/filter reverted → 5). Two new drift tests are deliberate complements and stay green with the guard removed: "every surface falling 25% at a constant mix is still drift" and "without surfaces the pooled verdict stands" — they pin that the guard does not over-fire.

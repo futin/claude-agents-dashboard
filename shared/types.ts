@@ -230,8 +230,31 @@ export interface UsageProfileResponse {
   dutyCycle: number | null;
 }
 
-/** What the drift comparison concluded for one model. */
-export type ModelRateVerdict = 'drift' | 'stable' | 'mix-shift' | 'thin';
+/**
+ * What the drift comparison concluded for one model. `surface-shift` is the
+ * pooled rate crossing the drift band while the rate surface by surface did not
+ * — the headless/interactive proportion moved, not the price (bug-23).
+ */
+export type ModelRateVerdict = 'drift' | 'stable' | 'mix-shift' | 'surface-shift' | 'thin';
+
+/**
+ * The session surface a model's tokens were spent from: headless `claude -p`
+ * (transcript `entrypoint` `sdk-cli`) or anything a person drives. The two are
+ * not the same goods — a headless token has measured ~1.8× the window cost of
+ * an interactive one — so a rate is only comparable within one.
+ */
+export type ModelRateSurface = 'interactive' | 'headless';
+
+/** One surface's slice of a model's rate. Nulls mean too thin to say, never zero. */
+export interface ModelSurfaceRate {
+  surface: ModelRateSurface;
+  /** Weighted tokens per 1% over the current window, intervals this surface dominates only. */
+  weightedPerPct: number | null;
+  /** The same over the baseline window. */
+  baselineWeightedPerPct: number | null;
+  /** Current-window points behind it — evidence, reported whatever the rate. */
+  utilSum: number;
+}
 
 /**
  * Whether the two-term (tokens + requests) split is reported for one model.
@@ -354,7 +377,16 @@ export interface ModelRateRow {
   baselineWeightedPerPct: number | null;
   /** Signed percent change of the weighted rate against baseline. */
   deviationPct: number | null;
+  /**
+   * The same change with the headless/interactive mix held fixed: the current
+   * window's points against what its tokens would have cost at each surface's
+   * baseline rate. What `verdict` judges drift on whenever it is non-null;
+   * null until enough of the current window has a surface with a baseline.
+   */
+  mixAdjustedDeviationPct: number | null;
   verdict: ModelRateVerdict;
+  /** Both surfaces, `interactive` then `headless`, whatever the evidence. */
+  surfaces: ModelSurfaceRate[];
   /** Intervals behind the current-window fit — the evidence, shown either way. */
   intervals: number;
   /** Cumulative utilization points behind it. */

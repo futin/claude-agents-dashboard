@@ -569,11 +569,33 @@ be re-read by a human; what the command removes is the need to re-derive the
 *tier*.
 
 **Drift is judged on the weighted rate only, and the card leads with it.**
-Weighted tokens per percent are mix-invariant *and* effort-invariant — thinking
-tokens are output tokens, so raising effort from `high` to `xhigh` raises
-consumption and utilization together and leaves the rate flat. That invariance
-is why the headline figure, its baseline and the deviation chip are all the
-weighted rate. The raw "1% ≈ N tokens" figure is a courtesy translation at the
+Weighted tokens per percent are invariant to the token-*type* mix — thinking
+tokens are output tokens, so raising effort from `high` to `xhigh` raises token
+consumption and output share together, and the weights absorb that. That is
+why the headline figure, its baseline and the deviation chip are all the
+weighted rate. **It is not invariant to which session spent the tokens**
+(bug-23): on 2026-09-09 opus measured ~462k weighted/1% interactive against
+~260k headless (`claude -p`) with identical token composition, and inside one
+baseline window `high` (71% headless) ran at 299k while `xhigh` (79%
+interactive) ran at 491k — effort was a proxy for surface. A fortnight that
+moved from mostly-interactive to mostly-headless read **−21.9%, `drift`**
+pooled while each surface moved −1.6% and −4.1%. So the verdict is judged on
+the **mix-adjusted** deviation whenever there is one (`mixAdjustedDeviation`):
+the current window's points against what the same tokens would have cost at
+each surface's own baseline rate. A pooled move past ±20% that the adjusted
+figure does not confirm is **`surface-shift`**, never drift; an adjusted move
+past ±20% the pool hides behind a move to the pricier surface *is* drift. The
+adjusted figure is null — and the pooled verdict stands, as before — until the
+intervals that have a surface *and* that surface's baseline (the full baseline
+floors, per stratum) carry ≥ 80% (`SURFACE_COVERAGE_MIN`) of the current
+window's points: for the first two weeks after surfaces began to be recorded
+the guard is simply not there. An interval's surface is the one holding ≥ 90%
+(`DOMINANCE`) of its owning model's weighted tokens, measured against the
+model's whole `tok` so a partly-attributed interval has none. The row shows the
+two surfaces' current rates under the model name (`interactive 455k · headless
+249k`) and the adjusted figure under the pooled chip, because a pooled rate
+over two goods priced ~1.8× apart is only readable with the two shown apart.
+Why a headless token costs more window is its own item (idea-25). The raw "1% ≈ N tokens" figure is a courtesy translation at the
 model's recent mix, kept as its own labelled tile (`RAW TOKENS`) beside the
 headline one, and omitted entirely when there is no raw rate; when raw moves and
 weighted did not, the card says **mix shift**, never drift.
@@ -635,10 +657,10 @@ the history log), written from the same fetch-success path that calls
 `recordTick`, so a ledger line and a history sample describe the same instant.
 Each tick reads only the bytes appended to each transcript since the last one
 (a RAM map of per-file offsets over `listUsageTranscripts`), sums `message.usage`
-per model, and appends `{t, prevT, tok, req}` — `tok` weighed in tokens, `req`
-counted in requests.
+per model, and appends `{t, prevT, tok, req, sur}` — `tok` weighed in tokens, `req`
+counted in requests, `sur` the same tokens split by the session surface that spent them.
 
-Six things are deliberate:
+Seven things are deliberate:
 
 - **`prevT` is carried explicitly.** It is what makes a recording gap visible;
   a bare `t` could never show that two lines do not abut, and the fitter would
@@ -674,6 +696,11 @@ Six things are deliberate:
   every line written before counts existed. Absent means *not recorded*, `{}`
   on a line with spend means recorded and nothing attributable, and a junk or
   negative count drops that model's key rather than the line.
+- **`sur` is a parallel map too, and it keeps the raw `entrypoint`** (bug-23). `model → entrypoint → counts`, from the `entrypoint` every assistant record
+  carries (`sdk-cli`, `claude-desktop`, `cli`, …). A model's surfaces need not sum to its `tok`: a record with no `entrypoint` is counted in `tok` and in no
+  surface, so the shortfall reads as unattributed rather than as a third surface. Absent on every line written before 2026-09-23, and absent stays absent
+  exactly as for `req`. The raw value is recorded and the headless/interactive class is applied at read time (`rateSurface` in `usage-rate.ts`, via
+  `scan.ts`' own `sessionSurface`), so the classification can change without the record being wrong.
 
 #### Every measured number in this document predates the nested-transcript fix
 
@@ -836,8 +863,9 @@ window's width, so a verdict needs a baseline at least half-populated. Both day
 counts are reported on the row whatever the verdict — `days` and
 `baselineDays` — since with every baseline rate null they are the only thing
 separating "no baseline yet" from "still forming". Verdict order is
-`thin` → `drift` (weighted deviation > ±20%) → `mix-shift` (raw > ±25%) →
-`stable`, and **thin outranks everything**: a rate fitted on too little data can
+`thin` → `drift` (the mix-adjusted deviation > ±20%, or the weighted one when
+there is no adjusted figure) → `surface-shift` (weighted > ±20%, adjusted not) →
+`mix-shift` (raw > ±25%) → `stable`, and **thin outranks everything**: a rate fitted on too little data can
 deviate by any amount, so calling that drift would make the badge fire hardest
 exactly when it knows least.
 
@@ -1309,7 +1337,8 @@ the figure the phone reader came for.
    to right as "what the fit concluded, then what it read". `Drifting` is the only tile
    that warns. **Mix shift is not drift** and is counted under `Priced`: it says the token
    mix moved and the price did not, which is the opposite of what a drift count watches
-   for.
+   for. `surface-shift` is counted there too, for the same reason about the headless/interactive
+   mix (bug-23).
 2. **Token value per model** — Model, Verdict, Weighted, Raw, Fitted, Δ baseline, Windows,
    Share, and a bar. **Weighted leads** because it is the only mix-invariant quantity on
    the row and the one the verdict judges: raw tokens per percent are dominated by how much
@@ -1334,8 +1363,8 @@ the figure the phone reader came for.
 3. **The evidence ledger** — what each rate was fitted on, and against what. The `Reading`
    column is where the `thin` hint used to be repeated verbatim on every collecting row;
    `ledgerReading` prints the row's own distance from the gates instead (`waiting on 0 of 7
-   baseline days and 1 of 2 current days`), and a met gate is not listed. Drift and
-   mix-shift keep their hints, because those *are* facts about one model, and a row with a
+   baseline days and 1 of 2 current days`), and a met gate is not listed. Drift,
+   surface-shift and mix-shift keep their hints, because those *are* facts about one model, and a row with a
    weekly figure carries `weeklyAsideText` after it. `spanText` drops the window count the
    cell beside it already shows.
 4. **Where the unpriced points went** (`coverageRows`, `coverageCaveat`), and then the

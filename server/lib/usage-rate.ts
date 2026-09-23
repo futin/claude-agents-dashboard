@@ -18,7 +18,8 @@ import { sameWindow } from './usage-history.js';
 import type { UsageSample } from './usage-history.js';
 import { addCounts, emptyCounts, scaleCounts, weightedTokens } from './usage-ledger.js';
 import type { LedgerLine, TokenCounts } from './usage-ledger.js';
-import type { ModelDayRate, ModelDayState } from '../../shared/types.js';
+import { sessionSurface } from './scan.js';
+import type { ModelDayRate, ModelDayState, ModelRateSurface, ModelSurfaceRate } from '../../shared/types.js';
 
 /** Weighted share of an interval one model must hold to own it. */
 export const DOMINANCE = 0.9;
@@ -104,7 +105,26 @@ export interface Interval {
    */
   reqUsable: boolean;
   kind: IntervalKind;
+  /**
+   * Which session surface spent the owning model's tokens here, when one holds
+   * {@link DOMINANCE} of them — absent otherwise, and on every interval built
+   * from ledger lines written before surfaces were recorded. Only a model-owned
+   * interval ever carries one. See {@link mixAdjustedDeviation} for why (bug-23).
+   */
+  surface?: ModelRateSurface;
 }
+
+/**
+ * The two surfaces a rate is stratified by, from the transcript `entrypoint`:
+ * headless `claude -p` (`sdk-cli`) against everything a person drives. The
+ * mapping is `scan.ts`' own, so "headless" means one thing across the app.
+ */
+export function rateSurface(entrypoint: string): ModelRateSurface {
+  return sessionSurface(entrypoint) === 'dashboard' ? 'headless' : 'interactive';
+}
+
+/** Fixed order, so a row's surfaces never reshuffle between polls. */
+export const RATE_SURFACES: readonly ModelRateSurface[] = ['interactive', 'headless'];
 
 export function totalWeighted(tok: Record<string, TokenCounts>): number {
   let sum = 0;
@@ -148,10 +168,13 @@ function gather(ledger: LedgerLine[], fromT: number, toT: number): {
   tok: Record<string, TokenCounts>;
   req: Record<string, number>;
   reqUsable: boolean;
+  /** Per model, per surface class — only what the lines attributed to one. */
+  sur: Record<string, Partial<Record<ModelRateSurface, TokenCounts>>>;
   coveredMs: number;
 } {
   const tok: Record<string, TokenCounts> = {};
   const req: Record<string, number> = {};
+  const sur: Record<string, Partial<Record<ModelRateSurface, TokenCounts>>> = {};
   let reqUsable = true;
   let coveredMs = 0;
   for (const line of ledger) {
@@ -171,8 +194,40 @@ function gather(ledger: LedgerLine[], fromT: number, toT: number): {
       if (n === undefined) reqUsable = false;
       else req[model] = (req[model] ?? 0) + n * share;
     }
+    for (const [model, bySurface] of Object.entries(line.sur ?? {})) {
+      const into = sur[model] ?? (sur[model] = {});
+      for (const [entrypoint, counts] of Object.entries(bySurface)) {
+        const cls = rateSurface(entrypoint);
+        addCounts(into[cls] ?? (into[cls] = emptyCounts()), share === 1 ? counts : scaleCounts(counts, share));
+      }
+    }
   }
-  return { tok, req, reqUsable, coveredMs };
+  return { tok, req, reqUsable, sur, coveredMs };
+}
+
+/**
+ * The surface that spent at least {@link DOMINANCE} of the owning model's
+ * weighted tokens, or undefined. The denominator is the model's whole `tok`,
+ * not its attributed part, so an interval stitched from pre-surface ledger
+ * lines is unattributed rather than judged on whichever sliver was recorded.
+ */
+function surfaceOf(
+  kind: IntervalKind, tok: Record<string, TokenCounts>,
+  sur: Record<string, Partial<Record<ModelRateSurface, TokenCounts>>>
+): ModelRateSurface | undefined {
+  if (typeof kind !== 'object') return undefined;
+  const total = tok[kind.model] ? weightedTokens(tok[kind.model], kind.model) : 0;
+  if (total <= 0) return undefined;
+  for (const surface of RATE_SURFACES) {
+    const counts = sur[kind.model]?.[surface];
+    if (counts && weightedTokens(counts, kind.model) / total >= DOMINANCE) return surface;
+  }
+  return undefined;
+}
+
+/** `surface` as an optional key — absent, never `undefined`, so fixtures compare cleanly. */
+function withSurface(interval: Interval, surface: ModelRateSurface | undefined): Interval {
+  return surface === undefined ? interval : { ...interval, surface };
 }
 
 /**
@@ -243,11 +298,12 @@ export function joinIntervals(
     const dUtil = to.utilization - from.utilization;
     if (dUtil < 0) continue;
 
-    const { tok, req, reqUsable, coveredMs } = gather(ledger, from.t, to.t);
-    out.push({
-      fromT: from.t, toT: to.t, dUtil, tok, req, reqUsable,
-      kind: classify(dUtil, tok, coveredMs, durationMs, to.t, ledgerStartMs)
-    });
+    const { tok, req, reqUsable, sur, coveredMs } = gather(ledger, from.t, to.t);
+    const kind = classify(dUtil, tok, coveredMs, durationMs, to.t, ledgerStartMs);
+    out.push(withSurface(
+      { fromT: from.t, toT: to.t, dUtil, tok, req, reqUsable, kind },
+      surfaceOf(kind, tok, sur)
+    ));
   }
   return out;
 }
@@ -333,14 +389,15 @@ export function joinWeeklyIntervals(
     // an earlier instant than the one it already holds.
     if (durationMs <= 0) continue;
 
-    const { tok, req, reqUsable, coveredMs } = gather(ledger, held.t, sample.t);
-    out.push({
-      fromT: held.t, toT: sample.t, dUtil, tok, req, reqUsable,
-      kind: classify(
-        dUtil, tok, coveredMs, durationMs, sample.t, ledgerStartMs,
-        EXTERNAL_WEIGHTED_MAX_WEEKLY
-      )
-    });
+    const { tok, req, reqUsable, sur, coveredMs } = gather(ledger, held.t, sample.t);
+    const kind = classify(
+      dUtil, tok, coveredMs, durationMs, sample.t, ledgerStartMs,
+      EXTERNAL_WEIGHTED_MAX_WEEKLY
+    );
+    out.push(withSurface(
+      { fromT: held.t, toT: sample.t, dUtil, tok, req, reqUsable, kind },
+      surfaceOf(kind, tok, sur)
+    ));
     held = sample;
     heldWeek = week;
   }
@@ -361,6 +418,15 @@ export const DRIFT_PCT = 20;
 
 /** Wider still, and never called drift — raw moves whenever the token mix does. */
 export const RAW_SHIFT_PCT = 25;
+
+/**
+ * Share of the current window's moved points that must sit in intervals with a
+ * surface *and* that surface's own baseline before {@link mixAdjustedDeviation}
+ * answers. The same 0.8 as {@link LEDGER_COVERAGE_MIN}, for the same reason: a
+ * figure resting on four-fifths of the evidence is a measurement, and one
+ * resting on less is a guess about the rest.
+ */
+export const SURFACE_COVERAGE_MIN = 0.8;
 
 /** What a rate needs before it is worth reporting. */
 export interface RateFloors {
@@ -424,7 +490,7 @@ export interface ModelRate {
   days: number;
 }
 
-export type ModelRateVerdictKind = 'drift' | 'stable' | 'mix-shift' | 'thin';
+export type ModelRateVerdictKind = 'drift' | 'stable' | 'mix-shift' | 'surface-shift' | 'thin';
 
 /** One model's row: current rate, baseline, and what the comparison says. */
 export interface DriftRow {
@@ -435,7 +501,11 @@ export interface DriftRow {
   baselineWeightedPerPct: number | null;
   /** Signed percent change of the weighted rate against baseline. */
   deviationPct: number | null;
+  /** The same change with the surface mix held fixed — see {@link mixAdjustedDeviation}. */
+  mixAdjustedDeviationPct: number | null;
   verdict: ModelRateVerdictKind;
+  /** One entry per {@link RATE_SURFACES}, always both, in that order. */
+  surfaces: ModelSurfaceRate[];
   /** Evidence in the **current** window — reported even when it is too thin to fit. */
   intervals: number;
   utilSum: number;
@@ -474,8 +544,13 @@ function ownedBy(interval: Interval, model: string, sinceMs: number, untilMs: nu
   return interval.toT >= sinceMs && interval.toT < untilMs;
 }
 
-/** The pooled ratio and its evidence, floors not applied. */
-export function poolRate(intervals: Interval[], model: string, sinceMs: number, untilMs: number): ModelRate | null {
+/**
+ * The pooled ratio and its evidence, floors not applied. With `surface`, only
+ * the intervals that surface dominates — one stratum of the pool.
+ */
+export function poolRate(
+  intervals: Interval[], model: string, sinceMs: number, untilMs: number, surface?: ModelRateSurface
+): ModelRate | null {
   let weighted = 0, raw = 0, utilSum = 0, count = 0;
   // Distinct UTC dates rather than `max(toT) − min(toT)`: a span is cleared by
   // two clusters at either end of the window with nothing in between, which is
@@ -483,6 +558,7 @@ export function poolRate(intervals: Interval[], model: string, sinceMs: number, 
   const dates = new Set<string>();
   for (const interval of intervals) {
     if (!ownedBy(interval, model, sinceMs, untilMs)) continue;
+    if (surface !== undefined && interval.surface !== surface) continue;
     for (const [tokModel, counts] of Object.entries(interval.tok)) {
       weighted += weightedTokens(counts, tokModel);
       raw += counts.in + counts.out + counts.cc + counts.cr;
@@ -506,9 +582,10 @@ export function poolRate(intervals: Interval[], model: string, sinceMs: number, 
  * keep the pool robust, and why a median was not needed instead.
  */
 export function rateFor(
-  intervals: Interval[], model: string, sinceMs: number, untilMs: number, floors: RateFloors
+  intervals: Interval[], model: string, sinceMs: number, untilMs: number, floors: RateFloors,
+  surface?: ModelRateSurface
 ): ModelRate | null {
-  const fitted = poolRate(intervals, model, sinceMs, untilMs);
+  const fitted = poolRate(intervals, model, sinceMs, untilMs, surface);
   if (fitted === null) return null;
   if (fitted.intervals < floors.minIntervals) return null;
   if (fitted.utilSum < floors.minUtil) return null;
@@ -518,6 +595,68 @@ export function rateFor(
 
 function deviation(current: number, baseline: number): number {
   return ((current - baseline) / baseline) * 100;
+}
+
+/**
+ * The current window's rate against its baseline **with the surface mix held
+ * at the current window's own**, or null when too little of it can be judged.
+ *
+ * Why it exists (bug-23): the pooled ratio assumes every token of a model buys
+ * the same fraction of the window, and on this machine a headless `claude -p`
+ * token measured ~1.8× the window cost of an interactive one. A fortnight that
+ * moved from mostly-interactive to mostly-headless read −22% pooled while each
+ * surface, on its own, moved −2% and −4% — Simpson's paradox, reported as a
+ * repricing. The day floors and the ±20% band guard against sampling noise;
+ * nothing guarded against a change in *what* was being sampled.
+ *
+ * The figure asks one question: what would these same current-window tokens
+ * have cost at each surface's **baseline** rate? Σ(tokens ÷ that surface's
+ * baseline rate) is the points they would have charged; against the points
+ * they did charge, that is the deviation. A pure mix shift reads 0 here however
+ * far the pool moved; a repricing of every surface reads its full size; a
+ * repricing of one surface reads in proportion to that surface's share.
+ *
+ * Null — and the pooled verdict stands, unguarded — when the intervals that
+ * have a surface *and* a baseline for it carry under
+ * {@link SURFACE_COVERAGE_MIN} of the current window's points. That is every
+ * model for the first 14 days after surfaces began to be recorded: a stratum
+ * baseline is held to the full {@link BASELINE_FLOORS}, no looser, because a
+ * guard that could veto a verdict on thinner evidence than the verdict itself
+ * would be the noisier of the two.
+ */
+export function mixAdjustedDeviation(intervals: Interval[], model: string, nowMs: number): number | null {
+  const base = baselineRange(nowMs);
+  const cur = currentRange(nowMs);
+  const baselineRate = new Map<ModelRateSurface, number>();
+  for (const surface of RATE_SURFACES) {
+    const rate = rateFor(intervals, model, base.sinceMs, base.untilMs, BASELINE_FLOORS, surface);
+    if (rate !== null && rate.weightedPerPct > 0) baselineRate.set(surface, rate.weightedPerPct);
+  }
+  let moved = 0, covered = 0, expected = 0;
+  for (const interval of intervals) {
+    if (!ownedBy(interval, model, cur.sinceMs, cur.untilMs)) continue;
+    moved += interval.dUtil;
+    const rate = interval.surface === undefined ? undefined : baselineRate.get(interval.surface);
+    if (rate === undefined) continue;
+    covered += interval.dUtil;
+    expected += totalWeighted(interval.tok) / rate;
+  }
+  if (moved <= 0 || covered <= 0 || covered / moved < SURFACE_COVERAGE_MIN) return null;
+  return (expected / covered - 1) * 100;
+}
+
+/** Each surface's own current and baseline rate — the breakdown under the headline. */
+export function surfaceRates(intervals: Interval[], model: string, nowMs: number): ModelSurfaceRate[] {
+  const base = baselineRange(nowMs);
+  const cur = currentRange(nowMs);
+  return RATE_SURFACES.map((surface) => ({
+    surface,
+    weightedPerPct:
+      rateFor(intervals, model, cur.sinceMs, cur.untilMs, CURRENT_FLOORS, surface)?.weightedPerPct ?? null,
+    baselineWeightedPerPct:
+      rateFor(intervals, model, base.sinceMs, base.untilMs, BASELINE_FLOORS, surface)?.weightedPerPct ?? null,
+    utilSum: poolRate(intervals, model, cur.sinceMs, cur.untilMs, surface)?.utilSum ?? 0
+  }));
 }
 
 /**
@@ -549,7 +688,9 @@ export function driftRow(intervals: Interval[], model: string, nowMs: number): D
     baselineRawPerPct: baseline?.rawPerPct ?? null,
     baselineWeightedPerPct: baseline?.weightedPerPct ?? null,
     deviationPct: null,
+    mixAdjustedDeviationPct: null,
     verdict: 'thin',
+    surfaces: surfaceRates(intervals, model, nowMs),
     intervals: evidence?.intervals ?? 0,
     utilSum: evidence?.utilSum ?? 0,
     days: evidence?.days ?? 0,
@@ -562,9 +703,16 @@ export function driftRow(intervals: Interval[], model: string, nowMs: number): D
   const weightedDev = deviation(current.weightedPerPct, baseline.weightedPerPct);
   const rawDev = deviation(current.rawPerPct, baseline.rawPerPct);
   row.deviationPct = weightedDev;
-  row.verdict = Math.abs(weightedDev) > DRIFT_PCT ? 'drift'
-    : Math.abs(rawDev) > RAW_SHIFT_PCT ? 'mix-shift'
-      : 'stable';
+  row.mixAdjustedDeviationPct = mixAdjustedDeviation(intervals, model, nowMs);
+  // Drift is judged on the mix-adjusted figure whenever there is one, in both
+  // directions: a pooled −22% that is −3% surface by surface is not drift, and
+  // a pooled −5% hiding a −25% repricing behind a move to the cheaper surface
+  // is. With no adjusted figure the pooled one is judged, as it always was.
+  const judged = row.mixAdjustedDeviationPct ?? weightedDev;
+  row.verdict = Math.abs(judged) > DRIFT_PCT ? 'drift'
+    : Math.abs(weightedDev) > DRIFT_PCT ? 'surface-shift'
+      : Math.abs(rawDev) > RAW_SHIFT_PCT ? 'mix-shift'
+        : 'stable';
   return row;
 }
 

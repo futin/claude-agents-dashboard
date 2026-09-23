@@ -9,6 +9,7 @@ import {
   CURRENT_MS,
   DRIFT_PCT,
   RAW_SHIFT_PCT,
+  SURFACE_COVERAGE_MIN,
   SPLIT_FLOORS,
   SPLIT_MAX_R2,
   SPLIT_MIN_INDEPENDENT_SHARE,
@@ -22,6 +23,7 @@ import {
   externalShare,
   fitSplits,
   ledgerBreakMs,
+  mixAdjustedDeviation,
   rateFor,
   totalWeighted
 } from '../server/lib/usage-rate.js';
@@ -362,6 +364,91 @@ export function run(): number {
     const row = rows({ baseWeighted: 1_000_000, baseRaw: 400_000, curWeighted: 700_000, curRaw: 280_000 });
     assert.strictEqual(row.verdict, 'drift');
     assert.strictEqual(row.deviationPct, -30);
+  })) p++; else f++;
+
+  // ── surface mix (bug-23) ──
+  //
+  // Interactive at 400k/1% and headless at 200k/1% in the baseline, 60:40 by
+  // points. Each stratum clears BASELINE_FLOORS on its own (≥ 30 intervals,
+  // ≥ 15 pts, 7 days), so the guard has a baseline for both.
+
+  const onSurface = (surface: 'interactive' | 'headless', intervals: Interval[]): Interval[] =>
+    intervals.map(i => ({ ...i, surface }));
+  /** One stratum: `pts` points as 0.5-point intervals over `days` dates ending at `endT`. */
+  const stratum = (
+    surface: 'interactive' | 'headless', pts: number, weightedPerPct: number, days: number, endT: number
+  ): Interval[] => onSurface(surface, daily({
+    count: pts * 2, days, dUtil: 0.5, weightedPerPct, rawPerPct: weightedPerPct / 2, model: 'A', endT
+  }));
+  const baseline6040 = [
+    ...stratum('interactive', 30, 400_000, 7, NOW - 4 * DAY),
+    ...stratum('headless', 20, 200_000, 7, NOW - 4 * DAY)
+  ];
+
+  if (test('the surface guard\'s coverage floor is the ledger coverage floor', () => {
+    assert.strictEqual(SURFACE_COVERAGE_MIN, 0.8);
+  })) p++; else f++;
+
+  if (test('a mix shift at flat per-surface rates is surface-shift, not drift', () => {
+    // 60:40 → 20:80 at unchanged prices: pooled 320k → 240k, −25%.
+    const row = driftRow([
+      ...baseline6040,
+      ...stratum('interactive', 5, 400_000, 2, NOW - MIN),
+      ...stratum('headless', 20, 200_000, 2, NOW - MIN)
+    ], 'A', NOW);
+    assert.ok(Math.abs(row.deviationPct! - -25) < 1e-9, `pooled deviation was ${row.deviationPct}`);
+    assert.ok(Math.abs(row.mixAdjustedDeviationPct!) < 1e-9, `adjusted was ${row.mixAdjustedDeviationPct}`);
+    assert.strictEqual(row.verdict, 'surface-shift');
+    assert.deepStrictEqual(row.surfaces.map(s => [s.surface, Math.round(s.weightedPerPct!), Math.round(s.baselineWeightedPerPct!), s.utilSum]), [
+      ['interactive', 400_000, 400_000, 5],
+      ['headless', 200_000, 200_000, 20]
+    ]);
+  })) p++; else f++;
+
+  if (test('every surface falling 25% at a constant mix is still drift', () => {
+    const row = driftRow([
+      ...baseline6040,
+      ...stratum('interactive', 15, 300_000, 2, NOW - MIN),
+      ...stratum('headless', 10, 150_000, 2, NOW - MIN)
+    ], 'A', NOW);
+    assert.ok(Math.abs(row.mixAdjustedDeviationPct! - -25) < 1e-9, `adjusted was ${row.mixAdjustedDeviationPct}`);
+    assert.strictEqual(row.verdict, 'drift');
+  })) p++; else f++;
+
+  if (test('a repricing the pool hides behind a move to the pricier surface is drift', () => {
+    // Both surfaces −25%, mix 60:40 → 80:20: pooled 320k → 270k is only −15.6%.
+    const row = driftRow([
+      ...baseline6040,
+      ...stratum('interactive', 20, 300_000, 2, NOW - MIN),
+      ...stratum('headless', 5, 150_000, 2, NOW - MIN)
+    ], 'A', NOW);
+    assert.ok(Math.abs(row.deviationPct!) < DRIFT_PCT, `pooled was ${row.deviationPct}`);
+    assert.ok(Math.abs(row.mixAdjustedDeviationPct! - -25) < 1e-9, `adjusted was ${row.mixAdjustedDeviationPct}`);
+    assert.strictEqual(row.verdict, 'drift');
+  })) p++; else f++;
+
+  if (test('without surfaces (pre-bug-23 ledger) the pooled verdict stands unguarded', () => {
+    const strip = (xs: Interval[]) => xs.map(({ surface: _s, ...rest }) => rest);
+    const row = driftRow(strip([
+      ...baseline6040,
+      ...stratum('interactive', 5, 400_000, 2, NOW - MIN),
+      ...stratum('headless', 20, 200_000, 2, NOW - MIN)
+    ]), 'A', NOW);
+    assert.strictEqual(row.mixAdjustedDeviationPct, null);
+    assert.strictEqual(row.verdict, 'drift');
+    assert.deepStrictEqual(row.surfaces.map(s => s.weightedPerPct), [null, null]);
+  })) p++; else f++;
+
+  if (test('under 80% of current points judgeable → no adjusted figure', () => {
+    // Headless has no baseline stratum here, and carries 5 of 20 current points: 75% covered.
+    const base = stratum('interactive', 30, 400_000, 7, NOW - 4 * DAY);
+    const at75 = [...base,
+      ...stratum('interactive', 15, 300_000, 2, NOW - MIN), ...stratum('headless', 5, 150_000, 2, NOW - MIN)];
+    assert.strictEqual(mixAdjustedDeviation(at75, 'A', NOW), null);
+    // 16 of 20 is exactly 80% — judged, on the interactive stratum alone.
+    const at80 = [...base,
+      ...stratum('interactive', 16, 300_000, 2, NOW - MIN), ...stratum('headless', 4, 150_000, 2, NOW - MIN)];
+    assert.ok(Math.abs(mixAdjustedDeviation(at80, 'A', NOW)! - -25) < 1e-9);
   })) p++; else f++;
 
   if (test('too little current data is thin, and the baseline is still reported', () => {
