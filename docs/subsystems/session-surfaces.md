@@ -99,9 +99,9 @@ GET ${BASE_API_URL}/v1/code/sessions?limit=100[&cursor=…]
 (without the code-sessions flag it falls back to `/v1/sessions` with an
 `anthropic-beta` header and `after_id` paging). There is no local file, no
 cache, and no socket behind it — cloud state exists only at the other end of
-that request. Adding it to this backend means a **second outbound call**
-(see the zero-dep rule in `CLAUDE.md`) plus reading an OAuth token the CLI keeps
-in the macOS keychain.
+that request. Adding it to this backend means a **third outbound call**
+(see the zero-dep rule in `CLAUDE.md`) — another call on the same OAuth token
+`lib/usage.ts` already reads, not a new credential surface.
 
 **And the feature you'd buy is half a feature.** The bridge does expose
 `postInterClaudeMessage`, so a message can be sent *into* a cloud session — but
