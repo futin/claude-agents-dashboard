@@ -417,7 +417,8 @@ export function encodeProjectDir(cwd: string): string {
 /**
  * Recently-active projects for the management side-menu: per project dir the
  * newest transcript within the lookback window, resolved to the cwd that dir is
- * named for; deduped by cwd (newest wins), newest-first.
+ * named for; deduped by cwd (newest wins), minus dead paths and linked worktrees
+ * ({@link isListedProjectPath}), newest-first.
  */
 export function listRecentProjects(config: Partial<Config>, options: ProjectsOptions = {}): ProjectRef[] {
   const lookbackHours = (config.lookbackHours ?? 0) > 0 ? (config.lookbackHours as number) : 24;
@@ -446,7 +447,8 @@ export function listRecentProjects(config: Partial<Config>, options: ProjectsOpt
     // its newest. Neither cwd is right for both dirs. What settles it is the dir
     // itself: publish the cwd it is *named* for, so the repo's dir yields the
     // repo (bug-14: the newest cwd hid it, and no other dir can name it) and the
-    // worktree's own dir still yields the worktree. Falls back to the launch cwd
+    // worktree's own dir yields the worktree — a row the bug-21 filter below then
+    // drops, since a linked worktree is not listed. Falls back to the launch cwd
     // the way `scan.ts` labels a session, then the newest, when the name matches
     // neither — fail open, never a guess.
     //
@@ -466,7 +468,37 @@ export function listRecentProjects(config: Partial<Config>, options: ProjectsOpt
     });
   }
 
-  return [...byCwd.values()].sort((a, b) => b.lastActiveMs - a.lastActiveMs);
+  // bug-21: only now, once each dir has settled on its cwd, ask whether that cwd belongs on the rail at all.
+  return [...byCwd.values()].filter(r => isListedProjectPath(r.path)).sort((a, b) => b.lastActiveMs - a.lastActiveMs);
+}
+
+/**
+ * Whether a recent project's cwd belongs in the published list (bug-21). Drops a path that is not an existing
+ * directory — an orchestrator run merges and prunes its worktrees, so most throwaway rows are dead paths, plus deleted
+ * or moved repos — and a linked git worktree, whose `.git` is a file with a `gitdir:` pointing into a `worktrees/`
+ * dir of some git dir, wherever the worktree itself sits. A worktree only duplicates the config of the branch it was
+ * cut from, and the Sessions tab already shows its sessions live. Everything else is kept, failing open: a `.git`
+ * dir, no `.git` at all, a submodule's `.git` file (`gitdir: ../.git/modules/sub`), or one that cannot be read or
+ * has no `gitdir:` line. Pure `fs`, no `git` subprocess.
+ */
+export function isListedProjectPath(dir: string): boolean {
+  try {
+    if (!fs.statSync(dir).isDirectory()) return false;
+  } catch {
+    return false;
+  }
+  const dotGit = path.join(dir, '.git');
+  let text: string;
+  try {
+    if (!fs.statSync(dotGit).isFile()) return true;
+    text = fs.readFileSync(dotGit, 'utf8');
+  } catch {
+    return true;
+  }
+  const m = /^gitdir:\s*(.+?)\s*$/m.exec(text);
+  if (!m) return true;
+  const gitdir = path.resolve(dir, m[1]);
+  return path.basename(path.dirname(gitdir)) !== 'worktrees';
 }
 
 /** Resolve a dirName to its recent ProjectRef by membership, or null. */

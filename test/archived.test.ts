@@ -205,10 +205,14 @@ export function run(): number {
 
   /* ---------------------------------------------------------- recent projects */
 
+  // Real dirs: listRecentProjects drops a cwd that does not exist on disk (bug-21).
+  const ONE = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-one-'));
+  const TWO = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-two-'));
+
   t('listRecentProjects: a project whose only recent session is archived drops out', () => {
     const root = makeProjectsRoot([
-      { dirName: '-tmp-one', id: 'sess-arch', cwd: '/tmp/one', mtimeMs: NOW - 60_000 },
-      { dirName: '-tmp-two', id: 'sess-live', cwd: '/tmp/two', mtimeMs: NOW - 120_000 }
+      { dirName: '-tmp-one', id: 'sess-arch', cwd: ONE, mtimeMs: NOW - 60_000 },
+      { dirName: '-tmp-two', id: 'sess-live', cwd: TWO, mtimeMs: NOW - 120_000 }
     ]);
     const refs = mgmt.listRecentProjects(CFG, { root, now: NOW, archivedIds: new Set(['sess-arch']) });
     assert.deepEqual(refs.map(r => r.dirName), ['-tmp-two']);
@@ -216,8 +220,8 @@ export function run(): number {
 
   t('listRecentProjects: a project keeps its unarchived session as the newest', () => {
     const root = makeProjectsRoot([
-      { dirName: '-tmp-one', id: 'sess-arch', cwd: '/tmp/one', mtimeMs: NOW - 60_000 },
-      { dirName: '-tmp-one', id: 'sess-live', cwd: '/tmp/one', mtimeMs: NOW - 600_000 }
+      { dirName: '-tmp-one', id: 'sess-arch', cwd: ONE, mtimeMs: NOW - 60_000 },
+      { dirName: '-tmp-one', id: 'sess-live', cwd: ONE, mtimeMs: NOW - 600_000 }
     ]);
     const refs = mgmt.listRecentProjects(CFG, { root, now: NOW, archivedIds: new Set(['sess-arch']) });
     assert.deepEqual(refs.map(r => r.dirName), ['-tmp-one']);
@@ -226,8 +230,8 @@ export function run(): number {
 
   t('listRecentProjects: no archivedIds → unchanged behaviour', () => {
     const root = makeProjectsRoot([
-      { dirName: '-tmp-one', id: 'sess-arch', cwd: '/tmp/one', mtimeMs: NOW - 60_000 },
-      { dirName: '-tmp-two', id: 'sess-live', cwd: '/tmp/two', mtimeMs: NOW - 120_000 }
+      { dirName: '-tmp-one', id: 'sess-arch', cwd: ONE, mtimeMs: NOW - 60_000 },
+      { dirName: '-tmp-two', id: 'sess-live', cwd: TWO, mtimeMs: NOW - 120_000 }
     ]);
     const refs = mgmt.listRecentProjects(CFG, { root, now: NOW });
     assert.deepEqual(refs.map(r => r.dirName).sort(), ['-tmp-one', '-tmp-two']);

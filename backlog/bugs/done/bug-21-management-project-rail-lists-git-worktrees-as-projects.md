@@ -3,6 +3,10 @@ id: bug-21
 title: Management project rail lists git worktrees as projects
 created: 2026-09-08
 tags: management, worktrees, ui
+updated: 2026-09-23T08:17:49Z
+started: 2026-09-23T08:10:31Z
+execute-elapsed: 438
+execute-tokens: 36782
 ---
 
 ## Symptom
@@ -117,3 +121,38 @@ In the browser (playwright MCP tools): with the dev server running, open http://
 and the spawn dialog's project `<select>`. Expected: no row or option whose path contains `/.worktrees/` or `/.claude/worktrees/` (the executing session's
 own worktree has a transcript dir and is the live case to check), no row for a path that does not exist on disk, and `claude-agents-dashboard` itself still
 listed.
+
+## Outcome
+
+2026-09-23 — `listRecentProjects` now filters its deduped rows through a new exported predicate `isListedProjectPath(dir)` (`server/lib/management.ts`),
+applied after the `byCwd` loop and before the sort, so the bug-14 naming rule is untouched. It drops a path that is not an existing directory, and a linked
+worktree (`.git` is a file whose `gitdir:` resolves to a dir whose parent is named `worktrees`); it keeps `.git` dirs, no `.git`, submodule `.git` files and
+`.git` files with no readable `gitdir:` line. Pure `fs`, unconditional, so `resolveProject` and `collectServablePaths` shrink with it as the plan accepted.
+
+Tests: four new cases in `test/management.test.ts` (linked worktree inside the repo, which also asserts `resolveProject(<worktree dirName>) === null`; worktree
+outside the repo; pruned path beside a live repo; one predicate case covering submodule / empty `.git` file / `.git` dir / plain dir / a regular file). The
+bug-14 tests that assert a fake worktree is listed now `mkdirSync` it (plain dir, no `.git` file) and their comment is reworded; `test/archived.test.ts`
+recent-project tests use real tmpdirs instead of `/tmp/one`, `/tmp/two`.
+
+Verification (`pnpm build` first — the fresh worktree had no `client/dist`, which made the unrelated `api-usage-rates` "near-miss path" SPA-fallback test fail
+before the build; it passes after):
+
+```
+$ pnpm test   # exit 0
+management: 35 passed, 0 failed
+managementEntries: 11 passed, 0 failed
+ALL PASS
+$ pnpm typecheck
+> tsc --noEmit        # exit 0
+```
+
+Live probe against this machine's `~/.claude/projects` (`listRecentProjects({ lookbackHours: 336 })`): 20 rows, `claude-agents-dashboard` listed, this
+session's own worktree (`.worktrees/bug-21`) not listed (`isListedProjectPath` → false), no row matching `/.worktrees/` or `/.claude/worktrees/`, no row whose
+path is missing on disk.
+
+Not verified: the playwright browser check in the plan (Management rail + spawn `<select>` at :5174). The server on 5174 belongs to the user's main checkout
+and serves main's code, not this branch; starting a second dev server from this worktree was skipped. The live probe above exercises the same function the
+rail and the spawn options are built from. Needs a human look after merge.
+
+Contract sweep: 3 sites updated (docs/subsystems/management.md Scopes bullet, server/lib/management.ts bug-14 comment + listRecentProjects JSDoc, test/management.test.ts multi-dir comment)
+Red proof: 3 tests went red with the change reverted (filter call removed from `listRecentProjects`: linked-worktree, outside-the-repo and pruned-path cases; the `isListedProjectPath` predicate case was red before the function existed)
