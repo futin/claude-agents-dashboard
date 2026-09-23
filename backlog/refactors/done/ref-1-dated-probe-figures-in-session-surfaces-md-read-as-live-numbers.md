@@ -4,6 +4,10 @@ title: Dated probe figures in session-surfaces.md read as live numbers
 created: 2026-09-07
 kind: chore
 tags: docs
+promoted-to: task-30
+updated: 2026-09-23T11:41:47Z
+groom-elapsed: 123
+groom-tokens: 37344
 ---
 
 ## What exists today
