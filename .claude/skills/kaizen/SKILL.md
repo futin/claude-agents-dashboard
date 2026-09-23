@@ -60,10 +60,15 @@ to stderr — report it, since two sessions in one cwd are indistinguishable. Ou
 
 ## 3. Find where the tokens/time went
 
-- `byTool` is sorted priciest-first by `approxOutputTokens`. **This is approximate** — an even
-  split of each turn's output tokens across its tool calls; the transcript has no per-tool
-  token field. Say "approx" when you cite it. `count`, `errors`, and `durationMs` (wall time,
-  includes model latency) ARE exact — lean on those for firm claims.
+- `byTool` carries two token figures per tool — **cite both, label each, never add them**:
+  - `resultTokens` — what the tool **injected into context**: its tool_result text at chars ÷ 4, summed per call (error
+    text included, images count 0). The **firmer** figure — measured per call, never split — and the key `byTool` is
+    sorted by, so `byTool[0]` is the top context contributor. This is the one that surfaces a `Read`-heavy session: a
+    `Read` writes almost no assistant output, yet everything it returned is replayed by every later turn.
+  - `approxOutputTokens` — **assistant output** tokens, an even split of each turn's `output_tokens` across its tool
+    calls; the transcript has no per-tool token field. Say "approx" when you cite it.
+
+  `count`, `errors`, and `durationMs` (wall time, includes model latency) ARE exact — lean on those for firm claims.
 - `bySubagent` has per-subagent `tokens` (summed from that subagent's own transcript; the harness's final-context figure
   only where none is complete) and exact `toolUses` / `durationMs`. Name the priciest subagents and whether the work
   justified the spend.

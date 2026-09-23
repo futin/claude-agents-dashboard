@@ -187,6 +187,10 @@ returned — no backend change, so the read-only invariant above still holds.
   turn. `count` / `durationMs` / `errors` stay **per call** (parallel calls are real,
   separate calls); only the token split is per turn. `server_tool_use` rides in the same
   usage block, so it is deduped too.
+  `byTool.resultTokens` is the opposite case and must stay that way: it sizes each call's own
+  matched tool_result (chars ÷ 4, error text included) and is **never** split across the turn,
+  so it is the figure that names a context-heavy `Read`. `byTool` sorts by it, and the
+  Analytics tab's *Top tools* shows it as `in` beside `approxOutputTokens` as `out`.
   **Not affected:** `lib/transcript.ts` (session rows, chat-drawer context) reads the
   *latest* usage rather than summing, and the copies are identical — its numbers were
   always right.
