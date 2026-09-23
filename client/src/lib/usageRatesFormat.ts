@@ -14,7 +14,7 @@
  */
 
 import type {
-  ModelDayRate, ModelRateRow, ModelRateVerdict, UsageCoverage
+  BoostHour, ModelDayRate, ModelRateRow, ModelRateVerdict, UsageBoost, UsageCoverage
 } from '../../../shared/types';
 import type { StatTile } from './usageProfile';
 
@@ -428,12 +428,12 @@ export function showsDays(row: ModelRateRow): boolean {
 
 /**
  * Every definition the card owns, in one place, read by two renderers: the
- * `How to read this` drawer prints all six, and the ⓘ beside a figure label
+ * `How to read this` drawer prints every one, and the ⓘ beside a figure label
  * opens the matching one. One copy of each string, so the drawer and the panel
  * cannot drift apart.
  */
 export const RATES_GLOSSARY: readonly {
-  key: 'weighted' | 'raw' | 'fitted' | 'baseline' | 'daily' | 'window' | 'across';
+  key: 'weighted' | 'raw' | 'fitted' | 'baseline' | 'daily' | 'window' | 'across' | 'boost' | 'weekendBoost';
   term: string;
   text: string;
 }[] = [
@@ -486,6 +486,22 @@ export const RATES_GLOSSARY: readonly {
     text: 'Not a price list. A model that fires more requests per token carries '
       + 'that per-request cost inside its rate, so rates compare a model to its '
       + 'own past, not to another model.'
+  },
+  {
+    key: 'boost',
+    term: 'Off-peak boost',
+    text: 'Watches for a time-of-day promotion — limits raised outside weekday peak hours (08:00–14:00 ET), as in March 2026. Each '
+      + "weekday's off-peak tokens per 1% are compared against that same day's peak, on the one model with the most evidence, and "
+      + 'both the weighted and the raw rate must rise 1.5× for three days running. When it sees nothing it says nothing: no line '
+      + 'under the headline means no boost was measured.'
+  },
+  {
+    key: 'weekendBoost',
+    term: 'Weekend boost',
+    text: 'The weaker of the two readings. A weekend day has no peak hours of its own to compare against, so it is measured '
+      + 'against the weekday 08:00–14:00 ET rate pooled across every weekday of the last 14 days, not against the same day — a '
+      + 'weekend-long change in the work itself can move it where the weekday reading cannot. Two weekend days in a row must '
+      + 'both clear 1.5× on weighted and raw alike.'
   }
 ];
 
@@ -617,4 +633,54 @@ export function ledgerReading(row: ModelRateRow): string {
       + 'separate this model from the ones it runs beside';
   }
   return `waiting on ${parts.join(' and ')}`;
+}
+
+/** `HH:00`, two digits, from an ET hour — 24 wraps to `00:00`. */
+function etHourLabel(hour: number): string {
+  return `${String(hour % 24).padStart(2, '0')}:00`;
+}
+
+/**
+ * The hours a boost was observed on, contiguous runs collapsed: `[0..7, 14..23]` reads `00:00–08:00, 14:00–00:00 ET`. Each run's end
+ * label is its last hour plus one. Runs are not joined across midnight — the list arrives ascending, and the two ends are reported as the
+ * two runs they are. Null for no hours, so the sentence carries no empty clause.
+ */
+export function boostHoursText(hours: BoostHour[]): string | null {
+  if (hours.length === 0) return null;
+  const runs: [number, number][] = [];
+  for (const { hour } of hours) {
+    const last = runs[runs.length - 1];
+    if (last !== undefined && hour === last[1] + 1) last[1] = hour;
+    else runs.push([hour, hour]);
+  }
+  return runs.map(([from, to]) => `${etHourLabel(from)}–${etHourLabel(to + 1)}`).join(', ') + ' ET';
+}
+
+const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * The weekday boost, in one sentence — or null for every verdict but `boost`, so the null case renders nothing. Claims only what was
+ * measured: more tokens per 1% than in this account's own peak hours, never that the limit doubled.
+ */
+export function boostLine(boost: UsageBoost): string | null {
+  if (boost.verdict !== 'boost' || boost.ratio === null) return null;
+  const window = `${etHourLabel(boost.peakStartHourEt)}–${etHourLabel(boost.peakEndHourEt)} ET`;
+  const hours = boostHoursText(boost.hours);
+  return `Off-peak boost: ${boost.ratio.toFixed(2)}× the tokens per 1% outside weekday ${window} than inside it, on ${boost.model}, `
+    + `${plural(boost.days, 'weekday')} running since ${boost.since}.`
+    + (hours === null ? '' : ` Carried by ${hours}.`);
+}
+
+/**
+ * The weekend verdict's own sentence — null for every weekend verdict but `boost`, whatever the weekday one says; the two are independent
+ * claims. It names its control in the sentence itself, because that clause is what separates it from the weekday line: a reader who sees
+ * only this one has to be able to tell it is the weaker, cross-day reading.
+ */
+export function weekendBoostLine(boost: UsageBoost): string | null {
+  const w = boost.weekend;
+  if (w.verdict !== 'boost' || w.ratio === null) return null;
+  const window = `${etHourLabel(boost.peakStartHourEt)}–${etHourLabel(boost.peakEndHourEt)} ET`;
+  return `Weekend boost (weaker reading): ${w.ratio.toFixed(2)}× the tokens per 1% on the last ${plural(w.days, 'weekend day')} `
+    + `since ${w.since}, measured against the weekday ${window} rate pooled over ${plural(w.controlDays, 'weekday')} — not against `
+    + 'the same day, so a weekend-long change in the work can move it too.';
 }

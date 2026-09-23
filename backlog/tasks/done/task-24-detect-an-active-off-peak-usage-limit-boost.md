@@ -3,6 +3,10 @@ id: task-24
 title: Detect an active off-peak usage-limit boost
 created: 2026-09-09
 from: idea-23
+updated: 2026-09-23T09:41:38Z
+started: 2026-09-23T09:22:08Z
+execute-elapsed: 1170
+execute-tokens: 211357
 ---
 
 ## Goal
@@ -373,3 +377,73 @@ their definitions.
   `docs-sync: sources:` entry.
 - No new dependency in `server/`, no colour or shadow literal added to `styles.css` below
   the theme-token block, and `shared/types.ts` was changed before its producer and consumer.
+
+## Outcome
+
+2026-09-23 — Built the boost detector as planned. `server/lib/usage-boost.ts` is pure and zero-dep, with `etStamp`, `emptyBoost` and `detectBoost`. `shared/types.ts`
+changed first: `UsageBoost`, `BoostWeekend`, `BoostHour`, `BoostVerdict`, `BoostReason`, and `boost` on `UsageRatesResponse`. `shapeUsageRates` now returns
+`boost: detectBoost(intervals, nowMs)`, and the fail-open `emptyRates` carries `emptyBoost()`. On the client, `boostLine`, `weekendBoostLine` and `boostHoursText`
+are new, the glossary gains `boost` and `weekendBoost`, and `UsageRates.tsx` renders two separate `p.note` lines under the stat strip, only when a verdict is
+`boost`. The docs section and the `docs-sync: sources:` entry are in `docs/subsystems/usage-limits.md`, and the map entry is in `docs/overview.md`.
+
+Verification:
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(clean)
+
+$ pnpm test          # 1646 ✓, 0 ✗ (baseline before this item: 1613 → +33 on the count; +32 are this item's cases, see below)
+  ✓ the measurement is offsetHeight, not a bounding rect
+
+5 passed, 0 failed
+ALL PASS
+exit=0
+```
+
+New cases: 23 in `test/usage-boost.test.ts` (ET mapping 1–5, weekday 6–14, weekend 15–23), 2 in `test/api-usage-rates.test.ts` (24 fail-open body, 25
+end-to-end fixture fires with hours `[16]`, since `2026-09-23`), and 7 in `test/usage-rates-format.test.ts` (26–32), plus the glossary key-list assertion updated.
+
+A pre-existing failure, not caused by this item: in a fresh worktree with no `client/dist`, "a near-miss path is not the rates endpoint" fails. After
+`pnpm build` it passes, and that accounts for the 1645 → 1646 step. `client/dist` is gitignored and was left built.
+
+Mutation proofs. Each production file was copied aside, mutated, the test file run, and the original restored and confirmed with `cmp`:
+1. Weighted-ratio comparison deleted → the weekday mirror and weekend mirror cases went red.
+2. Raw-ratio comparison deleted → the weighted-only cases (weekday and weekend) went red.
+3. `BOOST_MIN_RUN_DAYS` → 1 → the "run of two" case went red.
+4. Cell floor deleted → case 12 went red.
+5. Drop of intervals over 1h deleted → case 13 went red.
+6. `WEEKEND_MIN_RUN_DAYS` → 1 → the weekend run-too-short case went red.
+7. Control `minDays` check deleted → case 20 went red. Variant: `minDays` 4 → case 20 also went red.
+8. Weekend control pointed at off-peak instead of weekday peak → case 23 went red.
+
+Extras, all red: removing `|| runLength > 0` (2 cases); reverting the api's `detectBoost` to `emptyBoost()` (case 25); removing `boost: emptyBoost()` from
+`emptyRates` (case 24); removing the weekend control clause from `weekendBoostLine` (case 31). The format cases were red on the missing exports before they
+were implemented.
+
+Live API: the worktree server ran on port 4191 over a copied snapshot of the main tree's record files. Weekday: `none/flat`, model `claude-opus-5`, ratio 1.115,
+raw 1.243, 9 days, hours `[]`. Weekend: `none/flat`, ratio 0.880, raw 0.947, 4 days, controlDays 10. So there is no boost in the real data right now.
+
+Browser: headless chromium, driven with the cached playwright-core because the plugin's MCP browser binary was not installed and installing it would be a
+side effect outside the worktree. Null case: 0 boost lines, and the "Off-peak boost" and "Weekend boost" terms are both listed in the Definitions block.
+Fired case (API response intercepted): 2 lines, "Off-peak boost: 2.03× … since 2026-09-21. Carried by 14:00–16:00 ET." followed by the "Weekend boost
+(weaker reading): …" sentence naming its pooled-weekday control. The servers were stopped by recorded pid, and the copied record files were removed.
+
+Rulings:
+- A run that started but is shorter than the minimum is `thin-evidence`, not `flat`. The plan's literal rule said flat, and its cases 11/17 expect thin-evidence.
+  Cost if wrong: the reason label only; the verdict is `none` either way.
+- The horizon is `[now−14d, ∞)`, not `[now−14d, now]`, matching `currentRange`'s clock-skew rationale. Cost if wrong: negligible.
+- `p.note` is used instead of the plan's `.rates-notice`, which does not exist. No CSS was added. Cost if wrong: styling only.
+- `emptyRates` is exported so case 24 can pin the fail-open body. Cost if wrong: one widened export.
+- `controlDays` counts ET weekday dates, not poolRate's UTC `days`. Cost if wrong: the displayed count can differ by one near midnight UTC.
+- A non-boost ratio is pooled over every compared day, while a boost ratio is pooled over the run. `days` follows the same split. Cost if wrong: the
+  interpretation of `ratio` and `days` when there is no boost.
+- Hours are not merged across midnight (case 28). Cost if wrong: cosmetic.
+- The browser check targeted the "Definitions" block, because the plan's "How to read this" drawer no longer exists.
+
+Not verified: whether Anthropic's utilization figure reflects a boost at all. This is marked ⚠️ Unproven in the docs, and the detector can only ever see a boost
+that moves `five_hour` utilization per token. No real boost was observed firing. The final review was a self-review; the orchestrator's backlog-reviewer is
+the independent pass.
+
+Contract sweep: 3 sites updated (docs/overview.md endpoint row + map entry, docs/subsystems/usage-limits.md endpoint paragraph and "six entries" → "every `RATES_GLOSSARY` entry", client/src/lib/usageRatesFormat.ts "prints all six" → "prints every one")
+Red proof: 32 tests went red with the change reverted

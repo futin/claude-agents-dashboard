@@ -87,7 +87,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/management`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
-| `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, one cell per UTC day of the horizon, plus the coverage disclosure |
+| `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, one cell per UTC day of the horizon, plus the coverage disclosure and the off-peak boost verdict (`lib/usage-boost.ts`) |
 | anything else | static files from `client/dist` (production only) |
 
 ⚠️ The static catch-all resolves through `resolveStaticPath` in `index.ts`, which confines
@@ -166,6 +166,8 @@ server/
                   plus `joinWeeklyIntervals` (tick-to-tick pairing over the
                   weekly window), `WEEKLY_FLOORS`, `EXTERNAL_WEIGHTED_MAX_WEEKLY`
                   and the exported `poolRate`
+  lib/usage-boost.ts  off-peak usage-limit boost detector over those intervals: weekday
+                  off-peak vs same-day peak, weekend vs pooled weekday peak (pure)
   lib/token-refresh.ts  makes the CLI renew an expired OAuth token (auth status,
                   then one haiku turn) so the bars self-heal
   lib/management.ts   config scanner + servable-path security set
