@@ -932,8 +932,9 @@ code,kbd,samp,pre{font-family:inherit}
    being fixed-width and starts shrinking: 240px rail + 2×24px `.main` padding
    + the 1248px `.wrap.broad` measure. Above it the layout never moves, which is
    what makes 1537 (3xl) the width where wide desktop opens; at the lock the
-   aside leaves the right column and rides above the list as a two-card row, and
-   the list takes the full measure. On a phone the two aside cards stack.
+   aside takes the 320px right column beside the list. Below it the aside rides
+   above the list as a two-card row and the list takes the full measure; below
+   `md` SessionsView swaps the two cards for the one pinned strip (AsideStrip).
 
    Two knock-on caveats, both pre-existing and both deliberate:
    • `[data-density="compact"]` trims --body-pad to 14px, so its true crossover

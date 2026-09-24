@@ -1,7 +1,7 @@
 # Spawning a new session (the fourth write path)
 
-The status plate's **+ New** button starts a brand-new Claude Code session from the
-dashboard: pick a recent project, write or dictate a prompt, tap launch. The server
+The Board card's **+ New session** button starts a brand-new Claude Code session from the
+dashboard: pick a recent project, write or dictate a prompt, tap `Launch`. The server
 spawns a detached, headless `claude -p` in that project's directory; the session
 appears in the list a poll or two later (usually under 3s), and from then on it's an
 ordinary row — you keep talking to it with the [reply window](remote-message.md) that
@@ -335,7 +335,7 @@ single source of truth, the same division that keeps `pending.ts`/`plans.ts`/
 
 **A session this dashboard spawned can be stopped from its row, at any point in its life** —
 not just during the ~3s pre-adoption window the original endpoint reached. Expand the row and
-the control is under the panel: `stop session`, then `really stop?`.
+the control is under the panel: `Stop session`, then `Really stop?`.
 
 ### The lifecycle: `launching → running → gone`
 
@@ -477,8 +477,8 @@ the same family as `QuestionPanel`/`MessagePanel`, tinted cyan instead of amber.
 family is for *holds*: things a session is waiting on you for. A launch is the opposite,
 a compose surface opened on purpose, so it now floats like the chat modal
 (`.claude/DESIGN.md` §8.7, mock `#spawn`): `.spawn-back` scrim, a 620 px `.spawn` sheet
-with the shell's lift, full-screen below 700 px where the sheet with margins would not
-fit.
+with the shell's lift, full-screen below `md` (768 px — see [breakpoints](breakpoints.md)) where the sheet with
+margins would not fit.
 
 Inside it is one column read top to bottom — project, prompt (with its 4 000 counter),
 name, then model / effort / permission as a triplet, then remote control — which is the
@@ -492,7 +492,7 @@ permission list. Two rules are worth stating because they are easy to break:
 
 - **Every exit is the cancel button's exit.** ✕, Escape, the scrim and the browser's
   back all route through one `close()` that refuses while `pending` — the same guard
-  `cancel` has always carried. Without it a stray tap on the scrim unmounts the
+  `Cancel` has always carried. Without it a stray tap on the scrim unmounts the
   component holding the in-flight request's own `pending` flag.
 - **The boolean is the board's pill switch**, the `.set-seg` Off/On Settings already
   draws, not a second toggle shape invented for this modal. `remoteControl` still
@@ -519,7 +519,7 @@ a `title` attribute.
 | `client/src/components/SpawnPanel.tsx` | the launch form, as a **modal** (below) — project picker, prompt textarea with the reply composer's own `MicButton` in the foot, name on its own line, then model/effort/permission as a triplet (model and effort start at the per-device Settings defaults, `spawnDefaultModel`/`spawnDefaultEffort` in `client/src/lib/settings.ts`, where `''` still means "send no flag and let the CLI decide"), and remote control as the board's pill switch; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
 | `client/src/hooks/useSpawn.ts` | POSTs the request, the same bearer-token pattern as `useRemoteAnswer`'s toggle |
 | `client/src/lib/spawnOptions.ts` | the client's copy of `MODELS`/`EFFORTS`/`PERMISSION_MODES` (duplicated, not imported — the FE/BE boundary is `shared/types.ts` alone — kept honest by `test/spawn-options.test.ts` asserting byte-for-byte equality against the server's arrays) and `allowedPermissionModes` |
-| The plate's `+ New` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
+| The Board card's `+ New session` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
 | each view's phantom row | renders each `launching` entry at the head of its list — project, truncated prompt, `starting…` or (for `failed`) the error — and disappears on its own once the real row adopts the id; never interactive |
 | `sessionSurface` (`server/lib/scan.ts`) | maps the transcript's `entrypoint` → `Session.surface`; `sdk-cli` ⇒ `dashboard`, everything else ⇒ `local` |
 | `client/src/components/ResumePanel.tsx` | the resume composer pinned in an ended dashboard session's chat drawer — textarea + mic + *resume session*, POSTing `useSpawn().launch({prompt, resume: id})` |
@@ -703,5 +703,5 @@ new reason:
     - client/src/lib/spawnOptions.ts
     - client/src/lib/surface.ts
   kind: subsystem
-  verified: f436519f31ef4120521792db7658e2bc5431f0e9
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

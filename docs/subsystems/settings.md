@@ -127,9 +127,10 @@ Two Display rows that change what the *board* does rather than what this page do
 **Content width** (`contentWidth`, `fixed` | `full`, default `fixed`) is stamped as
 `data-width` on `<html>` next to `data-theme` and `data-density`, so it is one CSS block
 (`:root[data-width="full"] .wrap{max-width:none}`) and no component re-renders when it
-flips. `fixed` is the drawn measure — 820px, or the 1280px `.wide`/`.broad` sections get;
+flips. `fixed` is the drawn measure — 820px, or the 1248px `.wide`/`.broad` sections get;
 `full` drops the cap and every section spans the window, keeping its own internal layout
-(the sessions aside stays 320px, the list column takes the rest). It rides the same
+(from `2xl` the sessions aside is a 320px column — 380px from `3xl`, full width only — and
+the list takes the rest; see [breakpoints](breakpoints.md)). It rides the same
 pre-paint stamp in `client/index.html` as the theme, for the same reason: applied at mount
 instead, a fullscreen board would visibly snap out from the fixed measure on every load.
 
@@ -223,7 +224,7 @@ Three things this page is responsible for getting right:
   reading On while being silently half-impossible.
 
 What it covers — headless sessions only, three of the four holds, and the four places it
-cannot reach — is [push-notify](push-notify.md). The header's `N need you` pill is deliberately
+cannot reach — is [push-notify](push-notify.md). The Board card's `Need you` count is deliberately
 wider than this switch: it counts every surface, and it is not gated on it.
 
 ## Push notifications
@@ -299,5 +300,5 @@ a value the rows never reflect.
     - server/lib/settings.ts
     - client/index.html
   kind: subsystem
-  verified: f436519f31ef4120521792db7658e2bc5431f0e9
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

@@ -83,7 +83,7 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   it names a hold. It stops the click from reaching the card it sits in, so opening the
   drawer never also toggles the row.
 - **Stop control** — a `stopping…` badge beside the activity line, plus a two-stage
-  `stop session` → `really stop?` pair (and `force stop` once stopping) in the expanded
+  `Stop session` → `Really stop?` pair (and `Force stop` once stopping) in the expanded
   body (`sessions/Expanded.tsx`, shared by every view that opens a session). It renders
   only for a session carrying `Session.stopState`, i.e. one this server still holds a
   child handle for; `lib/stopControl.ts` decides every branch. Absent for every other
@@ -100,11 +100,11 @@ grouping and the browser notifications instead of being restated per reader:
 
 | `Session` flag | Label | Tone |
 | --- | --- | --- |
-| `remoteQuestion` | `answer` | amber, pulsing |
-| `remotePlan` | `plan?` | amber, pulsing |
-| `remoteReply` | `reply?` | amber, pulsing |
-| `permissionWait` | `allow?` | mustard, pulsing — answerable only in that terminal |
-| none | `chat` | outlined, no tint |
+| `remoteQuestion` | `Answer` | amber, pulsing |
+| `remotePlan` | `Plan?` | amber, pulsing |
+| `remoteReply` | `Reply?` | amber, pulsing |
+| `permissionWait` | `Allow?` | mustard, pulsing — answerable only in that terminal |
+| none | `Chat` | outlined, no tint |
 
 Mustard rather than amber for the last one keeps the "needs you, but not here" case visually
 apart from the three you can act on from the phone.
@@ -409,7 +409,9 @@ true; false unless that record is an assistant with `end_turn`), `waitingOnQuest
 
 Click a card, row or tile to open it (or pick it in the split view): the dashboard fetches
 `GET /api/sessions/:id` and lists the
-subagents that session launched via the `Task` tool — type, description, running/done,
+subagents that session launched via the `Task` tool — type (only when informative:
+`agentTypeLabel` in `lib/agentLabel.ts` hides the `general-purpose` catch-all and a missing
+type, so that width goes to the description), description, running/done,
 duration, tokens (the harness's figure: the subagent's final context size, not its spend — the Analytics
 inspector sums the real spend from the subagent transcripts), tool-use count — under a `N running · N finished · N agents` summary.
 Served by an incremental byte-offset cache (`agents.ts` / `agents-cache.ts`) so repeat
@@ -541,5 +543,5 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

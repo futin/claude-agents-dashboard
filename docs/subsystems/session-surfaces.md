@@ -65,7 +65,7 @@ Three details that are load-bearing:
   launch store deliberately drops at adoption ([spawn](spawn.md)) — so this reads the
   disk instead of growing a fifth store.
 
-The pill renders in the list row and again in the chat modal's sidecar facts
+The pill renders with the session in every board view and again in the chat modal's sidecar facts
 (`client/src/lib/surface.ts` holds the one copy of its tooltip): a modal opened
 straight from a tapped push (`?session=<id>`) never showed the list, so the sidecar is
 the first place that reader learns the session lives only here.
@@ -284,5 +284,5 @@ visible to the dashboard.
     - client/src/lib/holds.ts
     - client/src/components/ChatDrawer.tsx
   kind: subsystem
-  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

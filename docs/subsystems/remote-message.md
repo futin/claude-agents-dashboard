@@ -1,4 +1,4 @@
-# Remote messages (the `reply?` tab)
+# Remote messages (the `Reply?` tab)
 
 When a session's turn ends while you are away, the [chat drawer](chat.md) can hold that
 turn open for a short window and let you send free text back from your phone — the model
@@ -70,7 +70,7 @@ same session with your follow-up.
 | `POST /api/sessions/:id/message-answer` | `serveSessionMessageAnswer` — `{messageId, text}` or `{messageId, dismiss: true}`. Token-gated |
 | `server/lib/messages.ts` | RAM-only store; same state machine as `pending.ts`/`plans.ts` with an injected `resolve`, plus the idle-release reaper below |
 | `scan.ts` `ScanOptions.messageIds` | sets `Session.remoteReply` and forces `status: 'question'` (blue) |
-| chat button + `MessagePanel` | the `reply?` label on the row's chat button (same amber `answer` tone as `answer`/`plan?`, just different text) and the pinned drawer composer |
+| chat button + `MessagePanel` | the `Reply?` label on the row's chat button (same amber `answer` tone as `Answer`/`Plan?`, just different text) and the pinned drawer composer |
 | `MicButton` | optional mic in the composer's action row — records, transcribes locally, and hands text back for you to edit before you tap send; see [dictation](dictation.md) |
 | `chat.ts` `REMOTE_MESSAGE_RE` | unwraps the delivered follow-up back out of `composeReason` so it shows in the drawer as an ordinary user message — see below |
 
@@ -259,5 +259,5 @@ state, reset on a new `messageId`, never persisted.
     - client/src/hooks/usePendingMessage.ts
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: f436519f31ef4120521792db7658e2bc5431f0e9
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

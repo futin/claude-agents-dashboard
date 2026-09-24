@@ -16,7 +16,7 @@ app depends on any of them being present.
 
 A tailnet is a private WireGuard network between your own devices, so the dashboard never
 touches the public internet. **Device identity is the auth** — only devices signed into
-your Tailscale account can connect, there is no URL to guess, and trafficpus is end-to-end
+your Tailscale account can connect, there is no URL to guess, and traffic is end-to-end
 encrypted. That is *stronger* than the app's LAN-trust posture, so the existing security
 model carries over unchanged: reads stay open, and `ANSWER_TOKEN` (gating **every** write
 endpoint — `grep -c 'tokenOk(config, req)' server/api.ts` for the current count — including
@@ -41,7 +41,7 @@ to someone who isn't on your tailnet.
 
 ## Which route am I on? (the origin badge)
 
-The status plate shows a small pill — `local`, `LAN`, `tailnet`, or `public` — saying how
+The Board card in the Sessions aside shows a small pill — `local`, `LAN`, `tailnet`, or `public` — saying how
 *your browser* reached the dashboard. `public` is tinted orange, since it's the one worth
 noticing.
 
@@ -180,7 +180,7 @@ what is registered.
 - Keep the Tailscale VPN toggle **on** — set-and-forget, negligible battery, works over
   cellular and foreign wifi alike.
 - Bookmark the stable hostname; it never changes when the LAN IP does.
-- The remote-answer flow (the pulsing `answer` tab → option buttons in the drawer — see
+- The remote-answer flow (the pulsing `Answer` tab → option buttons in the drawer — see
   [remote-answer](remote-answer.md)) works from anywhere; the hook still talks to
   `127.0.0.1` on the host and is untouched by any of this.
 - [Dictation](dictation.md)'s mic needs the HTTPS route above specifically — over a plain
@@ -230,5 +230,5 @@ what is registered.
     - package.json
     - scripts/tailnet.ts
   kind: subsystem
-  verified: f436519f31ef4120521792db7658e2bc5431f0e9
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->
