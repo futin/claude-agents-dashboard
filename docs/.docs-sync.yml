@@ -25,7 +25,7 @@ docs:
     note: session rows, status machine, subagent detail
   - path: docs/subsystems/usage-limits.md
     kind: subsystem
-    note: header 5h/week usage bars
+    note: the Sessions aside's 5h/week account usage bars, and the Usage tab
   - path: docs/subsystems/view-persistence.md
     kind: subsystem
     note: toolbar filter/sort localStorage persistence
