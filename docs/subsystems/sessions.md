@@ -69,13 +69,16 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   is sitting in its sidebar. `lib/surface.ts` supplies the label and tooltip, and the pill has
   no handler of its own — clicking it toggles the row like the rest of `.r1`. Which surface
   can continue what is mapped in [session surfaces](session-surfaces.md).
-- **Context bar + %** — current context tokens vs. the session's window. The window comes from the session's own model attachment
-  (`{"type":"attachment","attachment":{"type":"model","identity":{"modelId":"claude-opus-5[1m]"}}}`, newest wins, found by `model-identity.ts` the same
-  way the title is found below): 1M only when that `modelId` carries `[1m]` or context has already passed 200k, 200k otherwise — whatever the model
-  family, since `message.model` never records the grant. That maximum is then capped at the session's own `autoCompactWindow` (or an `env`
-  `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), read by `compact-window.ts` from its user, project, local and managed settings files, as Claude Code caps it —
-  unless context has already passed the cap, which proves it is not in force. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the dashboard's own env overrides all
-  of it. Turns orange/red as it fills.
+- **Context bar + %** — current context tokens vs. the session's window. No record on disk names that window, so it is inferred (#159). The model
+  maximum is 1M once context has passed 200k — live, or at the session's newest compaction, whose `compact_boundary` `preTokens` `compact-history.ts`
+  finds the same way the title is found below — or when the model id carries `[1m]`. Otherwise it is the model's native window: 1M for Opus, Sonnet,
+  Fable and Mythos from 4.6 on, 200k for Haiku, anything older and any id that doesn't parse. The id is the session's own model attachment
+  (`{"type":"attachment","attachment":{"type":"model","identity":{"modelId":"claude-opus-5-5"}}}`, newest wins, found by `model-identity.ts`), else
+  `message.model`. That maximum is then capped at the session's own `autoCompactWindow` (or an `env` `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), read by
+  `compact-window.ts` from its user, project, local and managed settings files, as Claude Code caps it — unless context has already passed the cap, which
+  proves it is not in force. The cap is pinned per transcript the first time it is resolved, because a session loads its settings once, at start: a later
+  edit moves only sessions first seen after it. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the dashboard's own env overrides all of it. Turns orange/red as it
+  fills.
 - **Activity line** — the most recent tool call (e.g. `Edit server.ts`,
   `Task Explore: map the codebase`).
 - **Relative time** — since the last conversational message.
@@ -165,7 +168,8 @@ here run to several megabytes and the scan re-reads every session on every poll.
 `title-cache.ts` searches the tail first (free — those bytes are already decoded) and only
 on a miss hunts backward through the rest of the file a chunk at a time, newest hit wins.
 The search and its memory live in `record-cache.ts` (`createRecordCache(marker, extract)`),
-which `model-identity.ts` reuses for the model attachment that sizes the context window.
+which `model-identity.ts` reuses for the model attachment that sizes the context window, and
+`compact-history.ts` for the newest compaction's `preTokens`.
 
 **What gets remembered is the searched byte range, not just the answer** —
 the cache stores `{ value, scannedFrom, size }` per file. A later poll can then
