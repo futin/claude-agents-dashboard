@@ -130,5 +130,5 @@ migration:
     - client/src/components/management/ManagementView.tsx
     - test/breakpoints.test.ts
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: f06c54a88e5655ce39e1f5b23b97d42151e257b2
 -->
