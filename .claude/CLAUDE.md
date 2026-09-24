@@ -87,10 +87,6 @@ config — see `docs/subsystems/remote-access.md` before touching any of it.
 - **Reserve per-task review agents for logic-heavy tasks** — concurrency, subprocess handling,
   security surfaces, real design judgement. Pure transcription of a fully-specified brief gets
   self-review plus the final whole-branch review instead.
-- **Implementation plans specify behaviour and exact test *cases*, never literal code.** Handed
-  code gets transcribed verbatim, so a bug in the plan becomes a bug in the branch with nobody
-  positioned to catch it. Test scaffolding is the worst offender — it reads as boilerplate.
-  Give signatures, exact expected values and edge cases; let the implementer disagree with you.
 
 ## PR rules
 
