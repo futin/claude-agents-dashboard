@@ -94,3 +94,5 @@ out-of-scope:
     reason: PR body template — a form, not reference prose; no code to drift against
   - path: audits/
     reason: whole-repo audit reports — records of a moment, like docs/superpowers/
+  - path: .claude/DESIGN.md
+    reason: the design reference — changes often and on its own schedule, independent of the code docs-sync tracks
