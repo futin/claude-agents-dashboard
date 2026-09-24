@@ -86,5 +86,5 @@ Two things a container can't reach on its own:
     - scripts/lan-ip.sh
     - server/lib/config.ts
   kind: workflow
-  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

@@ -543,5 +543,5 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

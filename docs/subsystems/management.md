@@ -145,5 +145,5 @@ control (the type is a column now, not a collapsible header) and the
     - client/src/hooks/useManagementScope.tsx
     - client/src/lib/managementEntries.ts
   kind: subsystem
-  verified: f436519f31ef4120521792db7658e2bc5431f0e9
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

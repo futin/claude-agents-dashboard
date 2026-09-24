@@ -142,5 +142,5 @@ override it (see `dashboard.section` below).
     - client/src/components/analytics/AnalyticsView.tsx
     - client/src/hooks/useSettings.tsx
   kind: subsystem
-  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

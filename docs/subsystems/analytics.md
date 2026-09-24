@@ -241,5 +241,5 @@ returned — no backend change, so the read-only invariant above still holds.
     - client/src/hooks/useSettings.tsx
     - .claude/skills/kaizen/
   kind: subsystem
-  verified: f436519f31ef4120521792db7658e2bc5431f0e9
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->
