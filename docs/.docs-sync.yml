@@ -74,6 +74,8 @@ docs:
     kind: readme
   - path: .claude/CLAUDE.md
     kind: index
+  - path: docs/subsystems/breakpoints.md
+    kind: subsystem
 overlap-ok:
   - pair: docs/subsystems/push-notify.md ~ docs/workflows/push-notify-setup.md
     reason: same code, different register — why the policy is shaped this way vs the steps you run; a changed sendTest string or config default genuinely stales the setup doc too
