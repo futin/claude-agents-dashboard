@@ -43,8 +43,8 @@ than an `isLocalOnly` boolean because `cloud` is already a known third answer:
 | `cloud` | reserved for E. Nothing produces it: a cloud session writes no transcript here, so the scanner cannot see one | grey `cloud` |
 
 It is read off the transcript's own `entrypoint` field — `cli`, `claude-desktop`,
-`sdk-cli` — which every user/assistant record carries (measured: 1504/1504 across the
-newest 12 transcripts on this machine), so it sits inside the 256KB tail
+`sdk-cli` — which every user/assistant record carries (measured 2026-08-17: 1504/1504 across
+the newest 12 transcripts on this machine), so it sits inside the 256KB tail
 `transcript.ts` already reads. **No stored state**: nothing to persist, nothing to
 prune, nothing lost on a restart, and sessions spawned before the field existed get
 labelled too.
@@ -99,9 +99,9 @@ GET ${BASE_API_URL}/v1/code/sessions?limit=100[&cursor=…]
 (without the code-sessions flag it falls back to `/v1/sessions` with an
 `anthropic-beta` header and `after_id` paging). There is no local file, no
 cache, and no socket behind it — cloud state exists only at the other end of
-that request. Adding it to this backend means a **second outbound call**
-(see the zero-dep rule in `CLAUDE.md`) plus reading an OAuth token the CLI keeps
-in the macOS keychain.
+that request. Adding it to this backend means a **third outbound call**
+(see the zero-dep rule in `CLAUDE.md`) — another call on the same OAuth token
+`lib/usage.ts` already reads, not a new credential surface.
 
 **And the feature you'd buy is half a feature.** The bridge does expose
 `postInterClaudeMessage`, so a message can be sent *into* a cloud session — but
@@ -126,7 +126,7 @@ elsewhere and looks more useful than it is:
 
 `cliSessionId` joins straight onto the transcript filename `scan.ts` already
 keys on, which makes it tempting as a metadata source. Measured on this machine
-before believing it:
+on 2026-08-20, before believing it:
 
 | | count |
 |---|---|
@@ -137,7 +137,7 @@ before believing it:
 | — **registry only** | **4** |
 | — transcript only (registry misses) | 62 |
 
-The join is worth four titles out of 722 and loses 62, because the registry only
+The join was worth four titles out of the 722 then on disk and lost 62, because the registry only
 holds desktop-app sessions — terminal sessions and dashboard spawns are never in
 it. Its other fields are no better: `"effort"` and `"permissionMode"` are both
 already present in the 256 KB tail `transcript.ts` decodes anyway. As a

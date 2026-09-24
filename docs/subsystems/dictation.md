@@ -10,9 +10,10 @@ runs a locally-installed `whisper-cli` over it. The transcript lands in the text
 
 `webkitSpeechRecognition` is free, needs no install, and streams interim results as you
 talk. It also ships your audio to Apple or Google to do it. This dashboard reads your
-session transcripts off disk and makes exactly one outbound call by design — the ntfy push
-in `lib/notify.ts` (see [push-notify](push-notify.md)) — and routing dictated follow-ups
-through a third party would be the loudest thing it does, on an app whose whole pitch is
+session transcripts off disk and makes exactly two kinds of outbound call by design — the ntfy
+push in `lib/notify.ts` (see [push-notify](push-notify.md)) and the usage-limit read in
+`lib/usage.ts` — and routing dictated follow-ups through a third party would still be
+the loudest thing it does, on an app whose whole pitch is
 that your transcripts never leave the machine. Local whisper keeps the audio on the same
 box that already holds them. The cost is real: an install step (`brew install whisper-cpp`
 plus a ~141MB model), and no interim text while you talk — whisper is batch, so the

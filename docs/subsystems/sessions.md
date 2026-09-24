@@ -69,9 +69,13 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   is sitting in its sidebar. `lib/surface.ts` supplies the label and tooltip, and the pill has
   no handler of its own — clicking it toggles the row like the rest of `.r1`. Which surface
   can continue what is mapped in [session surfaces](session-surfaces.md).
-- **Context bar + %** — current context tokens vs. the model's window (1M for
-  Sonnet/Opus/Fable, 200k for Haiku and unknowns; override with
-  `CLAUDE_CODE_AUTO_COMPACT_WINDOW`). Turns orange/red as it fills.
+- **Context bar + %** — current context tokens vs. the session's window. The window comes from the session's own model attachment
+  (`{"type":"attachment","attachment":{"type":"model","identity":{"modelId":"claude-opus-5[1m]"}}}`, newest wins, found by `model-identity.ts` the same
+  way the title is found below): 1M only when that `modelId` carries `[1m]` or context has already passed 200k, 200k otherwise — whatever the model
+  family, since `message.model` never records the grant. That maximum is then capped at the session's own `autoCompactWindow` (or an `env`
+  `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), read by `compact-window.ts` from its user, project, local and managed settings files, as Claude Code caps it —
+  unless context has already passed the cap, which proves it is not in force. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the dashboard's own env overrides all
+  of it. Turns orange/red as it fills.
 - **Activity line** — the most recent tool call (e.g. `Edit server.ts`,
   `Task Explore: map the codebase`).
 - **Relative time** — since the last conversational message.
@@ -160,9 +164,11 @@ transcript), where no scan order helps. Widening the window is not the fix — t
 here run to several megabytes and the scan re-reads every session on every poll. So
 `title-cache.ts` searches the tail first (free — those bytes are already decoded) and only
 on a miss hunts backward through the rest of the file a chunk at a time, newest hit wins.
+The search and its memory live in `record-cache.ts` (`createRecordCache(marker, extract)`),
+which `model-identity.ts` reuses for the model attachment that sizes the context window.
 
 **What gets remembered is the searched byte range, not just the answer** —
-`resolveSessionTitle` stores `{ title, scannedFrom, size }` per file. A later poll can then
+the cache stores `{ value, scannedFrom, size }` per file. A later poll can then
 prove its own tail window joins up with the range already covered and skip the disk
 entirely. A miss is cached too; otherwise every poll re-scans every untitled session.
 
@@ -276,7 +282,7 @@ either, still by **exact** equality per key — no containment matching, or one 
 `~` would mark every session beneath it live. `originCwd` costs a second read only when it has
 to: an untruncated tail already holds the whole file, so the oldest decoded line *is* the first
 record. Only a truncated tail triggers `readHead(file, HEAD_BYTES)` (16 KB — a little over 2×
-the worst first-`cwd` offset measured across every transcript on this machine, 7,837 B), and
+the worst first-`cwd` offset measured across every transcript on this machine on 2026-09-02, 7,837 B), and
 that answer is memoized per path and dropped only when the file **shrinks** (rotation or
 truncation) — the same invalidation rule, for the same reason, as `title-cache.ts`. A head
 window holding no `cwd` yields `originCwd: null` and falls open to the newest cwd alone, which
@@ -351,7 +357,7 @@ Two properties make it affordable and safe:
 
 - **mtime-keyed cache.** The records are ~200 KB each (they embed
   `remoteMcpServersConfig` with full tool descriptions); parsing all 669 on this machine
-  costs 4.0s against a 3s poll, while stat-sweeping them costs 3ms. So the sweep re-reads
+  (2026-09-01) costs 4.0s against a 3s poll, while stat-sweeping them costs 3ms. So the sweep re-reads
   only records whose mtime advanced — and archiving rewrites the record, so its mtime moves.
   A record whose mtime is unchanged is never re-read. Within a re-read, a prefix read
   (8 KB, where both top-level fields actually sit) is trusted only to say *"not archived"*;
@@ -518,6 +524,8 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - server/lib/agents.ts
     - server/lib/agents-cache.ts
     - server/lib/title-cache.ts
+    - server/lib/record-cache.ts
+    - server/lib/model-identity.ts
     - client/src/components/SessionsView.tsx
     - client/src/components/Toolbar.tsx
     - client/src/components/AsideBoard.tsx

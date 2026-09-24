@@ -10,8 +10,11 @@
  *    four token fields separate, expose `combined` (context pressure) AND
  *    `billableApprox` (excludes cacheRead — closer to real cost).
  *  - There is NO per-tool token field on disk. Per-tool counts/errors/durations
- *    are exact; per-tool tokens are only an even split of a turn's output_tokens
- *    across its tool calls (`approxOutputTokens`).
+ *    are exact; per-tool output tokens are only an even split of a turn's
+ *    output_tokens across its tool calls (`approxOutputTokens`). What each call
+ *    injected into context is sized from its own tool_result text instead
+ *    (`resultTokens`, chars ÷ 4) — per call, never split, so it is the figure
+ *    that surfaces a Read-heavy session.
  *
  * Subagent turns are NOT in this file: the CLI writes them to the session's own
  * `<sessionId>/subagents/agent-*.jsonl`. `subagentTotals` sums those files
@@ -54,6 +57,14 @@ function toolResultText(b: any): string {
   return '';
 }
 
+/**
+ * Rough token size of a text: chars ÷ 4, the usual English-and-code rule of
+ * thumb. Unrounded — callers sum first and round once.
+ */
+function approxTokens(text: string): number {
+  return text.length / 4;
+}
+
 /** A tool_result the model saw as a failure. */
 function isErrorResult(b: any): boolean {
   return b.is_error === true || /<tool_use_error>/i.test(toolResultText(b));
@@ -72,6 +83,15 @@ function userText(msg: any): string {
  * a noisy lower bound — the skill, not this heuristic, judges accuracy.
  */
 const CORRECTION_RE = /\b(no|nope|wrong|incorrect|not (?:what|right|correct)|actually|instead|revert|undo|don'?t|that'?s not)\b/i;
+
+/**
+ * Peak context that proves auto-compaction never fired. A 200k window compacts near 160k, so a turn above 250k can only come from a larger window
+ * (a 1M one puts compaction out of reach) — and since every turn replays the whole context, a session that never compacts pays total input
+ * ≈ (C_end² − C_start²) / 2d to the end. The transcript records neither the window nor a compaction marker, so this is an inference.
+ */
+const NEVER_COMPACTED_PEAK = 250_000;
+/** A turn below this fraction of the running peak is a compaction: context only ever grows between them, and compaction cuts it several-fold. */
+const COMPACTION_DROP_RATIO = 0.5;
 
 /**
  * Read a transcript and return whole-session facts. Null if the file can't be
@@ -93,12 +113,13 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
   let serverWebSearch = 0, serverWebFetch = 0;
   let toolErrors = 0, retries = 0, userCorrections = 0;
   let turnCount = 0, sumCombined = 0, maxCombined = 0, maxTurnIndex = -1;
+  let compacted = false;
   let cwd: string | null = null;
   let minTs: string | null = null, maxTs: string | null = null;
 
   const getTool = (name: string): ToolStat => {
     let s = toolMap.get(name);
-    if (!s) { s = { tool: name, count: 0, durationMs: 0, errors: 0, approxOutputTokens: 0 }; toolMap.set(name, s); }
+    if (!s) { s = { tool: name, count: 0, durationMs: 0, errors: 0, approxOutputTokens: 0, resultTokens: 0 }; toolMap.set(name, s); }
     return s;
   };
 
@@ -157,6 +178,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
           if (typeof msg.model === 'string' && msg.model) models.add(msg.model);
           const idx = turnCount++;
           sumCombined += combined;
+          if (combined < maxCombined * COMPACTION_DROP_RATIO) compacted = true;
           if (combined > maxCombined) { maxCombined = combined; maxTurnIndex = idx; }
         }
         const stu = u.server_tool_use;
@@ -187,6 +209,8 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
           if (p) {
             pendingTool.delete(b.tool_use_id);
             const s = getTool(p.name);
+            // Per call, error text included — independent of the errors count.
+            s.resultTokens += approxTokens(toolResultText(b));
             if (p.ts && ts) {
               const d = Date.parse(ts) - Date.parse(p.ts);
               if (Number.isFinite(d) && d >= 0) s.durationMs += d;
@@ -214,8 +238,10 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
 
   const combined = input + output + cacheCreation + cacheRead;
   const byTool = [...toolMap.values()]
-    .map(s => ({ ...s, approxOutputTokens: Math.round(s.approxOutputTokens) }))
-    .sort((a, b) => b.approxOutputTokens - a.approxOutputTokens || b.count - a.count);
+    .map(s => ({ ...s, approxOutputTokens: Math.round(s.approxOutputTokens), resultTokens: Math.round(s.resultTokens) }))
+    // resultTokens leads: it is measured per call, and it is what grows the
+    // context every later turn replays. approxOutputTokens is a split estimate.
+    .sort((a, b) => b.resultTokens - a.resultTokens || b.approxOutputTokens - a.approxOutputTokens || b.count - a.count);
 
   const { agents, subagentTotals } = subagentSpend(filePath);
 
@@ -224,7 +250,9 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
   const notes: string[] = [
     'combined includes cache_read (replayed cached prompt, billed ~10%); lead with billableApprox for real cost.',
     'byTool.approxOutputTokens splits each turn\'s output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.',
-    'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.'
+    'byTool.resultTokens is what each tool injected into context: its tool_result text sized at chars ÷ 4, summed per call (not split), error text included, images not counted. The firmer per-tool figure and byTool\'s sort key — but it is context growth, not assistant output; cite both and never add them.',
+    'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.',
+    'perTurn.neverCompacted is inferred from peak context, not read from a window field — the transcript records neither the window nor a compaction: true when the peak turn tops 250k combined (a 200k window compacts near 160k) and no turn ever fell below half the running peak.'
   ];
   if (subagentTotals.count > 0) {
     notes.push('Subagent tokens are summed from each subagent\'s own transcript and are separate from main-agent totals; whole-session total = totals.combined + subagentTotals.tokens. subagentTotals.usage splits them by class — lead with its billableApprox for cost.');
@@ -251,7 +279,8 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
       count: turnCount,
       avgCombined: turnCount > 0 ? Math.round(sumCombined / turnCount) : 0,
       maxCombined,
-      maxTurnIndex
+      maxTurnIndex,
+      neverCompacted: maxCombined > NEVER_COMPACTED_PEAK && !compacted
     },
     byTool,
     bySubagent: agents,

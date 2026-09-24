@@ -46,10 +46,17 @@ to stderr — report it, since two sessions in one cwd are indistinguishable. Ou
 
 ## 2. Read tokens honestly
 
-- **Lead with `totals.billableApprox`** (input + output + cacheCreation). This tracks real
-  cost. `totals.combined` is larger because it adds `cacheRead` — the cached prompt replayed
-  each turn, billed at ~10%. Mention `combined` only as a context-pressure signal, never as
-  "what this cost". The `notes[]` array restates these caveats — respect them.
+- **Lead with `totals.billableApprox`** (input + output + cacheCreation) for cost. `totals.combined` is larger because it adds `cacheRead` — the cached
+  prompt replayed each turn, billed at ~10% — so never quote `combined` as "what this cost". The `notes[]` array restates these caveats — respect them.
+- **But `cacheRead` growth is the diagnosis, not a footnote.** Every turn replays the whole context, so total input grows with the *square* of it:
+  `total ≈ (C_end² − C_start²) / 2d`, `d` = tokens added per turn. Context growth is a first-class efficiency signal — the single biggest one on a long
+  session — even though each replayed token bills cheaply. Report it alongside the billable figure, never instead of it.
+- **`perTurn.neverCompacted: true` is a primary explanation for cost — lead the cost story with it.** It means the peak turn topped 250k combined
+  (a 200k window auto-compacts near 160k, so it cannot get there) and no turn ever fell below half the running peak, the drop a compaction leaves. The
+  usual cause is a 1M-window model (`"model": "opus[1m]"` or similar) putting auto-compaction out of reach, so the session paid the quadratic curve to
+  the end. Say it is **inferred** from peak context — the transcript carries neither the window nor a compaction marker (`notes[]` says so too) — and
+  suggest the fix: a 200k-window default, `/compact` or `/clear` between tasks. `false` does not mean cheap: a session that compacted can still be
+  bloated, so keep reading the bloated-turn bullet below.
 - **Whole-session total = `totals.combined` + `subagentTotals.tokens`.** Subagent tokens are summed from each subagent's
   own transcript and tracked separately (they don't appear in `totals`); `subagentTotals.usage` splits them by class, so lead
   with its `billableApprox` for their cost, exactly as for the main agent. `fallbackCount` subagents had no complete
@@ -60,10 +67,15 @@ to stderr — report it, since two sessions in one cwd are indistinguishable. Ou
 
 ## 3. Find where the tokens/time went
 
-- `byTool` is sorted priciest-first by `approxOutputTokens`. **This is approximate** — an even
-  split of each turn's output tokens across its tool calls; the transcript has no per-tool
-  token field. Say "approx" when you cite it. `count`, `errors`, and `durationMs` (wall time,
-  includes model latency) ARE exact — lean on those for firm claims.
+- `byTool` carries two token figures per tool — **cite both, label each, never add them**:
+  - `resultTokens` — what the tool **injected into context**: its tool_result text at chars ÷ 4, summed per call (error
+    text included, images count 0). The **firmer** figure — measured per call, never split — and the key `byTool` is
+    sorted by, so `byTool[0]` is the top context contributor. This is the one that surfaces a `Read`-heavy session: a
+    `Read` writes almost no assistant output, yet everything it returned is replayed by every later turn.
+  - `approxOutputTokens` — **assistant output** tokens, an even split of each turn's `output_tokens` across its tool
+    calls; the transcript has no per-tool token field. Say "approx" when you cite it.
+
+  `count`, `errors`, and `durationMs` (wall time, includes model latency) ARE exact — lean on those for firm claims.
 - `bySubagent` has per-subagent `tokens` (summed from that subagent's own transcript; the harness's final-context figure
   only where none is complete) and exact `toolUses` / `durationMs`. Name the priciest subagents and whether the work
   justified the spend.
@@ -78,8 +90,8 @@ of whether the session met its stated goal, stalled, or thrashed. Give a short, 
 
 ## 5. Concrete improvements
 
-Tie each suggestion to evidence above. Examples: high `cacheRead` + a bloated turn → suggest
-`/clear` between tasks or smaller reads; many `retries` on one tool → the specific fix;
+Tie each suggestion to evidence above. Examples: `perTurn.neverCompacted` → check the model default for a 1M window and suggest a 200k one, or
+`/compact` / `/clear` between tasks; high `cacheRead` + a bloated turn → suggest `/clear` between tasks or smaller reads; many `retries` on one tool → the specific fix;
 repeated manual work a skill would cover → name the skill to **use, add, or install**
 (check installed skills first). Keep it to a few high-signal actions, not a checklist.
 
@@ -112,7 +124,8 @@ ignored by parsers.
 - 2026-08-09 review: swept 12 lessons, promoted 1, pruned 2
 ```
 
-- **lesson** — one per analyzed session (step 6). `<session-id>` is the short id prefix.
+- **lesson** — one per analyzed session (step 6). `<session-id>` is the short id prefix. Its `<billable> billable (<ctx> ctx` prefix is read back
+  as data by `kaizen.mjs --trend` (review mode, step 2) — keep that prefix exactly; anything after the ctx figure inside the parens is free.
 - **status** — what became of that lesson: `actioned` (written into a CLAUDE.md/memory),
   `promoted` (raised to global config), `dropped` (considered, rejected). The note after the em
   dash is free text. Appended in step 7, never earlier — a lesson with no status line is **open**.
@@ -271,22 +284,28 @@ status machine"), not as a play-by-play of this one exchange.
 
 Per-session runs see one session. Review mode sweeps the **whole log** — that's where
 cross-project patterns and dead rules actually show up. Run it on `/kaizen review`, or when the
-user accepts the review-due offer. It analyzes nothing; it's pure log work.
+user accepts the review-due offer. It analyzes no transcript; it's pure log work.
 
 1. **Read the whole log.** Classify each lesson: **open** (no later `status` line for that
    session id) or settled. Only open lessons are in scope.
-2. **Group semantically**, not by string — one group per underlying habit, across projects
+2. **Trend the context figures.** `node "$CLAUDE_SKILL_DIR/kaizen.mjs" --trend` reads the `<billable> billable (<ctx> ctx)` figures back out of every
+   lesson line — open or settled, since cost is a fact whatever became of the lesson — and prints per-project and overall series as JSON. Report a
+   short table: project, sessions, date range, baseline → recent median ctx, ratio. A project in `drifting` is a finding in its own right, even with no
+   recurring lesson behind it: name it, and propose the fix its own lessons point at (usually the compaction / `/clear` ones in §2). The rule is in the
+   output's `rule` field — median ctx of the newest 3 sessions at least 1.5× the median of the ones before, needing 6+ sessions — so one big session
+   never fires it; a group too short to judge prints `null` medians and is not a finding. Never edit the log to "fix" the series: it only reads.
+3. **Group semantically**, not by string — one group per underlying habit, across projects
    (same matching rule as the cross-project watch).
-3. **Decide per group:**
+4. **Decide per group:**
    - ≥ 4 distinct `[project]` tags → **promote** candidate (global `~/.claude/CLAUDE.md`).
    - recurring in one project → **codify** candidate (that project's CLAUDE.md).
    - one-off and stale (older than ~30 days, never recurred) → **drop** candidate; it was noise.
-4. **Prune pass:** apply the prune-watch tests above to the current project's CLAUDE.md/rules,
+5. **Prune pass:** apply the prune-watch tests above to the current project's CLAUDE.md/rules,
    plus global if the sweep touches it.
-5. **One grouped AskUserQuestion**, not one per group: list each proposal as an option with its
+6. **One grouped AskUserQuestion**, not one per group: list each proposal as an option with its
    evidence (pattern, project count, dates). Multi-select. Anything the user doesn't pick stays
    open — untouched, not dropped.
-6. **Apply** the approved edits, then **append one status line per affected session** and a
+7. **Apply** the approved edits, then **append one status line per affected session** and a
    single review marker:
 
 ```

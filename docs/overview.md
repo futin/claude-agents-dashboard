@@ -141,6 +141,9 @@ server/
   lib/config.ts   .env loader — process.env > .env > defaults
   lib/transcript.ts  tail-reads a transcript → tokens/model/window/activity
   lib/title-cache.ts  remembers a custom title once it sinks below the tail window
+  lib/model-identity.ts  the session's model attachment id (`[1m]` ⇒ 1M window), same tail-then-hunt
+  lib/compact-window.ts  the session's `autoCompactWindow` off its settings files — caps the window
+  lib/record-cache.ts  the shared tail-then-hunt search + remembered byte range both use
   lib/scan.ts     enumerates + ranks sessions; status machine; liveness gates (cwd, session id);
                   `listUsageTranscripts` is the second enumeration — top-level files plus
                   `<sessionId>/subagents/*.jsonl` — read by the usage ledger only, since a
@@ -154,7 +157,8 @@ server/
   lib/agents.ts   whole-file subagent parser → AgentJob[]
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts
   lib/chat.ts     byte-offset paged chat history
-  lib/usage.ts    account 5h/weekly limits from Anthropic (OAuth)
+  lib/usage.ts    account 5h/weekly limits from Anthropic (OAuth) — the other
+                  outbound call
   lib/usage-pace.ts  utilization sample ring → burn rate + projected 100% per window
   lib/usage-forecast.ts  forward walk over hour-of-week weights → projected 100%
   lib/usage-history.ts  persisted samples → the learned 168-bucket duty-cycle profile;
@@ -191,8 +195,8 @@ server/
   lib/settings.ts persisted idle threshold, answer window, push policy + the
                   usage-recording switch
   lib/notify.ts   server-sent ntfy pushes — the layered policy, the `atDesk`
-                  predicate, phone-vs-desk topic routing, and the one outbound
-                  call the backend makes
+                  predicate, phone-vs-desk topic routing, and one of the backend's
+                  two outbound calls (the other is `lib/usage.ts`)
   lib/origin.ts   connection classifier → local | lan | tailnet | unknown
   lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags,
                   fed by the PermissionRequest hook; display-only
@@ -270,7 +274,7 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   rates-audit.ts (`pnpm check:ledger`, `pnpm audit:rates -- <sub>`) —
                   re-derives the Token-value inputs from transcripts: `ledger`
                   exits 1 when the ledger misses ±5% of a day's spend, and
-                  `surfaces` / `modifiers` / `offbook` report; pipeline in lib/transcript-audit.ts
+                  `surfaces` / `modifiers` / `offbook` / `gap` report; pipeline in lib/transcript-audit.ts
 ```
 
 ## Map

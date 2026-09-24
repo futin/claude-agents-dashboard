@@ -136,6 +136,21 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await testAsync('GET /api/management/file is 403 for ~/.claude.json even though it declares MCP servers', async () => {
+    await withServer(ENV, async h => {
+      h.plant(ID);
+      const claudeJson = path.join(h.home, '.claude.json');
+      fs.writeFileSync(claudeJson, JSON.stringify({ mcpServers: { s: { command: 'x', env: { TOKEN: 'SEKRIT' } } } }));
+      const listed = await h.req('/api/management');
+      const global = listed.json?.global as { mcpServers: Array<{ name: string; declaredIn: string }> };
+      assert.deepEqual(global.mcpServers.map(m => [m.name, m.declaredIn]), [['s', claudeJson]], 'the server is listed');
+      assert.ok(!JSON.stringify(listed.json).includes('SEKRIT'), 'env values stay server-side');
+      const reply = await h.req(`/api/management/file?path=${encodeURIComponent(claudeJson)}`);
+      assert.equal(reply.status, 403);
+      assert.equal(reply.json?.content, '');
+    });
+  }));
+
   check(await testAsync('GET /api/management/file is 400 for a relative or dot-dot path', async () => {
     await withServer(ENV, async h => {
       for (const p of ['', 'relative/path', '/etc/../etc/passwd']) {

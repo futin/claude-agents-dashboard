@@ -577,6 +577,8 @@ be re-read by a human; what the command removes is the need to re-derive the
 **`pnpm check:ledger` audits the recorder the same way**, and `pnpm audit:rates -- surfaces` is the first thing to run when the badge says `drift`: both are
 `scripts/rates-audit.ts`, which rebuilds the ledger from the transcripts on the real ledger's own tick boundaries — `ledger` exits 1 when a (day, model) with ≥ 5M
 weighted on disk was recorded outside ±5%, `surfaces` splits each window's rate by the session surface that spent it, beside the card's own `driftRow`.
+`gap` asks why a headless token spends more window than an interactive one: it stratifies the full baseline range by five on-disk covariates and gives each
+one's share of the gap (`--root` repeats, so another machine's transcripts can join).
 
 **Drift is judged on the weighted rate only, and the card leads with it.**
 Weighted tokens per percent are invariant to the token-*type* mix — thinking
@@ -605,7 +607,7 @@ model's whole `tok` so a partly-attributed interval has none. The row shows the
 two surfaces' current rates under the model name (`interactive 455k · headless
 249k`) and the adjusted figure under the pooled chip, because a pooled rate
 over two goods priced ~1.8× apart is only readable with the two shown apart.
-Why a headless token costs more window is its own item (idea-25). The raw "1% ≈ N tokens" figure is a courtesy translation at the
+Why a headless token costs more window is not on disk: see *The headless gap is not on disk* below. The raw "1% ≈ N tokens" figure is a courtesy translation at the
 model's recent mix, kept as its own labelled tile (`RAW TOKENS`) beside the
 headline one, and omitted entirely when there is no raw rate; when raw moves and
 weighted did not, the card says **mix shift**, never drift.
@@ -622,6 +624,24 @@ fable-5 and opus-5 is exactly **2.00x** as of 2026-09-02 — on input, output,
 both cache-write tiers and cache reads alike — but the 5-hour limit's own
 per-model weighting is **not published anywhere**, so 2.00x was never something
 the fit was obliged to reproduce. See *What the weights are, and are not* below.
+
+#### The headless gap is not on disk
+
+Measured 2026-09-23 on the Mac by `pnpm audit:rates -- gap --dir <main checkout>`. It covered this machine's `~/.claude/projects` only, over the 17-day
+baseline range, with nested subagent transcripts included. On opus-5, interactive bins (`claude-desktop`, 105 bins) ran at **441k** weighted/1% and headless
+bins (`sdk-cli`, 95 bins) at **296k**. That is a **1.49x** gap, under the ~1.8x of 2026-09-09 but still over the 1.3x line below which it would be an artefact.
+opus-5-5 had too few interactive bins (under Σutil 3) for a verdict.
+
+No on-disk covariate explains the gap. Each covariate's share prices headless tokens at the interactive rate of their own level. The shares were: nested-subagent
+share 0.02, utilization band 0.01, API errors 0.00 and concurrency 0.00. Permission mode could not be computed at all. An orchestrator's
+`claude -p --permission-mode auto` writes no `permissionMode` line, so most headless bins have no mode, and that level has no interactive counterpart. The
+verdict is `not on disk (best: nestedShare 0.02)`.
+
+**Every per-machine rate is a lower bound.** The window is account-wide, so spend from another machine or from claude.ai chat raises utilization with no local
+transcript. Here `external` intervals were 1.7–4.8% of Σutil per period, and they sat near 8.6% of interactive bins and 7.4% of headless ones. That asymmetry is
+too small to explain the gap. Foreign spend inside a priced bin still cannot be split out on one machine. What is left is spend that no transcript records:
+auto-mode classifier requests and SDK retries. Only counting requests can test those, and that spends window, so it is an idea for a human to schedule
+(#157).
 
 ### What the weights are, and are not
 

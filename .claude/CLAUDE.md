@@ -58,8 +58,11 @@ config — see `docs/subsystems/remote-access.md` before touching any of it.
   inline `renderPage()`. React auto-escapes — no `esc()`.
 - **Never hardcode a color or shadow in `styles.css`** below the theme-token block. The 5
   themes are pure `[data-theme]` token overrides; one literal breaks the light one.
-- **Keep new deps out of `server/`.** It reads disk and makes exactly one kind of outbound
-  call — the ntfy push in `lib/notify.ts`. A second needs a reason.
+- **Keep new deps out of `server/`.** It reads disk and makes exactly two kinds of outbound
+  call — the ntfy push in `lib/notify.ts` and the usage read in `lib/usage.ts`. A third needs
+  a reason. `lib/token-refresh.ts` and `lib/spawn.ts` launch the `claude` CLI, which makes its
+  own network calls — the server does not, so they are not a third kind. `test/outbound.test.ts`
+  pins the list.
 - `client/dist/` and `.env` are gitignored.
 - Keep the vendored `/kaizen` skill (`.claude/skills/kaizen/`) in lockstep with the
   session-analytics log format (`docs/subsystems/analytics.md`).
@@ -84,10 +87,6 @@ config — see `docs/subsystems/remote-access.md` before touching any of it.
 - **Reserve per-task review agents for logic-heavy tasks** — concurrency, subprocess handling,
   security surfaces, real design judgement. Pure transcription of a fully-specified brief gets
   self-review plus the final whole-branch review instead.
-- **Implementation plans specify behaviour and exact test *cases*, never literal code.** Handed
-  code gets transcribed verbatim, so a bug in the plan becomes a bug in the branch with nobody
-  positioned to catch it. Test scaffolding is the worst offender — it reads as boilerplate.
-  Give signatures, exact expected values and edge cases; let the implementer disagree with you.
 
 ## PR rules
 
@@ -116,6 +115,8 @@ filling them with nothing.
   every citation reports as `gone`. This has bitten twice.
 - Reference docs → `docs/subsystems/` + `docs/overview.md`. Records of a moment →
   `docs/superpowers/`. Raw study notes → `docs/learning-notes/`.
+- A figure measured off this machine's own data (a count of transcripts, records or dirs, or a ratio over them) carries its
+  measurement date inline beside the number, in docs and code comments alike — swap it for a command only when one in the repo prints it.
 
 <!-- docs-sync:
   sources:

@@ -16,7 +16,7 @@ app depends on any of them being present.
 
 A tailnet is a private WireGuard network between your own devices, so the dashboard never
 touches the public internet. **Device identity is the auth** — only devices signed into
-your Tailscale account can connect, there is no URL to guess, and traffic is end-to-end
+your Tailscale account can connect, there is no URL to guess, and trafficpus is end-to-end
 encrypted. That is *stronger* than the app's LAN-trust posture, so the existing security
 model carries over unchanged: reads stay open, and `ANSWER_TOKEN` (gating **every** write
 endpoint — `grep -c 'tokenOk(config, req)' server/api.ts` for the current count — including

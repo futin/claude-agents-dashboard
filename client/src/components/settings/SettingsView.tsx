@@ -549,7 +549,7 @@ export default function SettingsView() {
           <SettingsGroup title="Reset" sub="Local only — the server and ~/.claude are untouched">
             <SettingsRow
               name="Reset this browser"
-              hint="Puts every Local setting back to its default and clears saved filters, sort, the chat filter and the management pane state. Doesn’t touch the server or anything in ~/.claude."
+              hint="Puts every Local setting back to its default and clears saved filters, sort, the chat filter and the management pane state. Keeps the answer token. Doesn’t touch the server or anything in ~/.claude."
             >
               {confirmReset ? (
                 <>

@@ -1,6 +1,7 @@
 /** Run every test module and exit nonzero if any fail. */
 import { run as runTranscript } from './transcript.test.js';
 import { run as runTitleCache } from './title-cache.test.js';
+import { run as runCompactWindow } from './compact-window.test.js';
 import { run as runScan } from './scan.test.js';
 import { run as runArchived } from './archived.test.js';
 import { run as runUsage } from './usage.test.js';
@@ -33,6 +34,7 @@ import { run as runDictation } from './dictation.test.js';
 import { run as runTranscribe } from './transcribe.test.js';
 import { run as runApiBody } from './api-body.test.js';
 import { run as runSpawn } from './spawn.test.js';
+import { run as runSpawnStop } from './spawn-stop.test.js';
 import { run as runSpawnEndpoint } from './spawn-endpoint.test.js';
 import { run as runApiDismiss } from './api-dismiss.test.js';
 import { run as runApiReadEndpoints } from './api-read-endpoints.test.js';
@@ -85,10 +87,13 @@ import { run as runKillGuard } from './kill-guard.test.js';
 import { run as runTailnet } from './tailnet.test.js';
 import { run as runBreakpoints } from './breakpoints.test.js';
 import { run as runChatPinnedPad } from './chat-pinned-pad.test.js';
+import { run as runKaizenTrend } from './kaizen-trend.test.js';
+import { run as runOutbound } from './outbound.test.js';
 
 let failed = 0;
 failed += runTranscript();
 failed += runTitleCache();
+failed += runCompactWindow();
 failed += runScan();
 failed += runArchived();
 failed += runUsage();
@@ -140,6 +145,7 @@ failed += runDictation();
 failed += await runTranscribe();
 failed += await runApiBody();
 failed += runSpawn();
+failed += await runSpawnStop();
 failed += await runSpawnEndpoint();
 failed += await runApiDismiss();
 failed += await runApiReadEndpoints();
@@ -173,6 +179,8 @@ failed += runKillGuard();
 failed += runTailnet();
 failed += runBreakpoints();
 failed += runChatPinnedPad();
+failed += runKaizenTrend();
+failed += runOutbound();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

@@ -5,26 +5,20 @@
 
 import fs from 'node:fs';
 
-import { TITLE_MARKER, resolveSessionTitle, titleFromRecord } from './title-cache.js';
+import { sessionCompactWindow } from './compact-window.js';
+import { findModelIdentity, resolveModelIdentity } from './model-identity.js';
+import { findTitle, resolveSessionTitle } from './title-cache.js';
 
 import type { Activity } from '../../shared/types.js';
 
 export const STANDARD_WINDOW = 200000;
 export const LARGE_WINDOW = 1000000;
+/** The 1M grant is recorded only on the session's model attachment (`model-identity.ts`), never in `message.model`. */
 const LARGE_MARKER = '[1m]';
-
-/**
- * Real transcripts never carry the `[1m]` marker (it's a beta-header artifact
- * that doesn't show up in `message.model`) — model ids look like
- * "claude-sonnet-5" / "claude-opus-4-8" / "claude-haiku-4-5-20251001". So the
- * marker check below is effectively dead for live sessions; this map is the
- * real source of truth for which model families ship a 1M window.
- */
-const LARGE_WINDOW_MODEL_PATTERNS = [/sonnet/i, /opus/i, /fable/i];
 export const DEFAULT_TAIL_BYTES = 256 * 1024;
 /**
- * Window for the launch-cwd read. Measured across all 652 transcripts on this
- * machine the first `cwd`-bearing record (always the head `attachment`) ends by
+ * Window for the launch-cwd read. Measured 2026-09-02 across all 652 transcripts
+ * on this machine, the first `cwd`-bearing record (always the head `attachment`) ends by
  * byte 7,837 — this is a little over 2x that, and a miss fails open rather than
  * guessing (see {@link ParsedTranscript.originCwd}).
  */
@@ -86,8 +80,8 @@ export interface ParsedTranscript {
    * How the CLI was entered, verbatim off the record: `cli` (terminal),
    * `claude-desktop` (desktop app), `sdk-cli` (headless `-p` — a dashboard
    * spawn). Null on a transcript old enough to predate the field. Every
-   * user/assistant record carries it (measured: 1504/1504 across the newest 12
-   * transcripts on this machine), so the tail window always holds one — which
+   * user/assistant record carries it (measured 2026-08-17: 1504/1504 across the
+   * newest 12 transcripts on this machine), so the tail window always holds one — which
    * is what makes a session's surface readable with no stored state. `scan.ts`
    * maps it to `Session.surface`; this stays the raw value.
    */
@@ -258,14 +252,32 @@ export function usageTokens(record: any): number {
   return total > 0 ? total : 0;
 }
 
-/** Pick a context window size for a model / observed token count. */
-export function resolveWindow(tokens: number, model: string, env?: NodeJS.ProcessEnv): number {
+/**
+ * Pick a context window size. Order: the dashboard's own env override, then
+ * the model maximum — observed tokens past 200k (proof, so it beats any
+ * identity), then a `[1m]` marker on the session's model identity or on
+ * `message.model`, otherwise 200k whatever the family — capped at the
+ * session's configured compact window, as Claude Code caps it. Context already
+ * past that window proves the cap is not in force, so the tokens beat the file.
+ *
+ * @param identityModel `identity.modelId` off the newest model attachment, if any
+ * @param compactWindow the session's `autoCompactWindow` (see `compact-window.ts`), if any
+ */
+export function resolveWindow(
+  tokens: number, model: string, env?: NodeJS.ProcessEnv, identityModel?: string | null, compactWindow?: number | null
+): number {
   const e = env || (typeof process !== 'undefined' ? process.env : {}) || {};
   const override = Number.parseInt(e.CLAUDE_CODE_AUTO_COMPACT_WINDOW || e.CLAUDE_OBS_CONTEXT_WINDOW || '', 10);
   if (Number.isInteger(override) && override > 0) return override;
-  if (typeof model === 'string' && model.includes(LARGE_MARKER)) return LARGE_WINDOW;
-  if (typeof model === 'string' && LARGE_WINDOW_MODEL_PATTERNS.some((p) => p.test(model))) return LARGE_WINDOW;
+  const modelMax = modelMaxWindow(tokens, model, identityModel);
+  if (typeof compactWindow === 'number' && compactWindow > 0 && tokens <= compactWindow) return Math.min(modelMax, compactWindow);
+  return modelMax;
+}
+
+function modelMaxWindow(tokens: number, model: string, identityModel?: string | null): number {
   if (Number.isFinite(tokens) && tokens > STANDARD_WINDOW) return LARGE_WINDOW;
+  if (typeof identityModel === 'string' && identityModel.includes(LARGE_MARKER)) return LARGE_WINDOW;
+  if (typeof model === 'string' && model.includes(LARGE_MARKER)) return LARGE_WINDOW;
   return STANDARD_WINDOW;
 }
 
@@ -326,15 +338,7 @@ export function describeTool(block: any): string {
  * window and remembers what it finds (see `title-cache.ts`).
  */
 function findSessionName(lines: string[], first: number): string | null {
-  for (let i = lines.length - 1; i >= first; i--) {
-    const line = lines[i];
-    if (!line || line.indexOf(TITLE_MARKER) === -1) continue;
-    try {
-      const t = titleFromRecord(JSON.parse(line.trim()));
-      if (t) return t;
-    } catch { continue; }
-  }
-  return null;
+  return findTitle(lines, first);
 }
 
 /** Read a transcript and return usage, metadata, and current activity. */
@@ -358,6 +362,10 @@ export function readTranscript(
   let entrypoint: string | null = null;
   const sessionName = resolveSessionTitle(
     filePath, findSessionName(lines, first), tail.start, tail.size
+  );
+  // Same tail-then-hunt shape as the title: the model attachment is written near the start.
+  const identityModel = resolveModelIdentity(
+    filePath, findModelIdentity(lines, first), tail.start, tail.size
   );
 
   // Session-state signals, taken from the newest message record only.
@@ -427,7 +435,7 @@ export function readTranscript(
 
   const originCwd = resolveOriginCwd(filePath, tail, lines, first);
 
-  const win = resolveWindow(tokens, model);
+  const win = resolveWindow(tokens, model, undefined, identityModel, sessionCompactWindow(originCwd));
   const contextPct = win > 0 ? Math.min(100, Math.round((tokens / win) * 1000) / 10) : 0;
 
   return {

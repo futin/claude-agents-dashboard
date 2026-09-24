@@ -565,6 +565,147 @@ export async function run(): Promise<number> {
     assert.strictEqual(r!.truncated, true);
   }));
 
+
+  /* ------------------------------------------------------------ MCP servers */
+
+  tally(await test('mcp: root mcpServers → one user row in global scope, fully shaped', async () => {
+    const home = makeHome();
+    const decl = put(home, '.claude.json', JSON.stringify({
+      mcpServers: { codegraph: { type: 'stdio', command: 'codegraph', args: ['serve', '--mcp'] } }
+    }));
+    const scope = await mgmt.readGlobalScope(home);
+    assert.deepStrictEqual(scope.mcpServers, [{
+      name: 'codegraph', source: 'user', transport: 'stdio', command: 'codegraph', args: ['serve', '--mcp'],
+      url: null, envKeys: [], headerKeys: [], declaredIn: decl, disabled: false
+    }]);
+  }));
+
+  tally(await test('mcp: missing type → stdio; http entry keeps url, headers become keys only', async () => {
+    const home = makeHome();
+    put(home, '.claude.json', JSON.stringify({ mcpServers: {
+      a: { command: 'run-a' },
+      b: { type: 'http', url: 'https://x/mcp', headers: { Authorization: 'Bearer SEKRIT-H' } }
+    } }));
+    const [a, b] = (await mgmt.readGlobalScope(home)).mcpServers;
+    assert.strictEqual(a.transport, 'stdio');
+    assert.strictEqual(a.command, 'run-a');
+    assert.strictEqual(b.transport, 'http');
+    assert.strictEqual(b.command, null);
+    assert.strictEqual(b.url, 'https://x/mcp');
+    assert.deepStrictEqual(b.headerKeys, ['Authorization']);
+  }));
+
+  tally(await test('mcp: env/header values never leave the server — keys sorted, values absent from the payload', async () => {
+    const home = makeHome();
+    put(home, '.claude.json', JSON.stringify({ mcpServers: {
+      s: { command: 'x', env: { B_KEY: 'SEKRIT-B', A_KEY: 'SEKRIT-A' } },
+      h: { type: 'sse', url: 'https://y', headers: { Authorization: 'SEKRIT-H' } }
+    } }));
+    const scope = await mgmt.readGlobalScope(home);
+    assert.deepStrictEqual(scope.mcpServers.find(m => m.name === 's')!.envKeys, ['A_KEY', 'B_KEY']);
+    const json = JSON.stringify(scope);
+    for (const secret of ['SEKRIT-A', 'SEKRIT-B', 'SEKRIT-H']) assert.ok(!json.includes(secret), `payload leaks ${secret}`);
+  }));
+
+  tally(await test('mcp: missing / malformed ~/.claude.json, non-object mcpServers, null entry → [] or valid rows only, no error', async () => {
+    const missing = await mgmt.readGlobalScope(makeHome());
+    assert.deepStrictEqual(missing.mcpServers, []);
+    assert.strictEqual(missing.error, undefined);
+    for (const body of ['{not json', JSON.stringify({ mcpServers: [{ command: 'x' }] }), JSON.stringify({ mcpServers: 'x' })]) {
+      const home = makeHome();
+      put(home, '.claude.json', body);
+      const scope = await mgmt.readGlobalScope(home);
+      assert.deepStrictEqual(scope.mcpServers, [], body);
+      assert.strictEqual(scope.error, undefined);
+    }
+    const home = makeHome();
+    put(home, '.claude.json', JSON.stringify({ mcpServers: { bad: null, good: { command: 'g' } } }));
+    assert.deepStrictEqual((await mgmt.readGlobalScope(home)).mcpServers.map(m => m.name), ['good']);
+  }));
+
+  tally(await test('mcp: project scope reads local (projects[path]) then project (.mcp.json) rows with their disabled lists', async () => {
+    const home = makeHome();
+    const proj = makeProject();
+    const mcpJson = put(proj, '.mcp.json', JSON.stringify({ mcpServers: { b: { command: 'b' }, c: { command: 'c' } } }));
+    const decl = put(home, '.claude.json', JSON.stringify({
+      mcpServers: { rootOnly: { command: 'r' } },
+      projects: {
+        [proj]: { mcpServers: { a: { command: 'a' }, a2: { command: 'a2' } }, disabledMcpServers: ['a'], disabledMcpjsonServers: ['b'] },
+        '/somewhere/else': { mcpServers: { other: { command: 'o' } } }
+      }
+    }));
+    const scope = await mgmt.readProjectScope(proj, undefined, home);
+    assert.deepStrictEqual(scope.mcpServers.map(m => [m.name, m.source, m.disabled]),
+      [['a', 'local', true], ['a2', 'local', false], ['b', 'project', true], ['c', 'project', false]]);
+    assert.strictEqual(scope.mcpServers[0].declaredIn, decl);
+    assert.strictEqual(scope.mcpServers[2].declaredIn, mcpJson);
+    const global = await mgmt.readGlobalScope(home);
+    assert.deepStrictEqual(global.mcpServers.map(m => m.name), ['rootOnly']);
+  }));
+
+  tally(await test('mcp: plugin .mcp.json → plugin:<name> row, disabled with its plugin; escaping manifest path ignored', async () => {
+    const home = makeHome();
+    const installPath = putPlugin(home, 'plug@mkt', {
+      pluginJson: { name: 'plug', mcpServers: '../../escape.json' }
+    });
+    put(installPath, '../../escape.json', JSON.stringify({ mcpServers: { leaked: { command: 'no' } } }));
+    const pw = put(installPath, '.mcp.json', JSON.stringify({ mcpServers: { pw: { command: 'bash', args: ['-c', 'x'] } } }));
+    const scope = await mgmt.readGlobalScope(home);
+    assert.deepStrictEqual(scope.mcpServers.map(m => [m.name, m.source, m.declaredIn, m.disabled]),
+      [['pw', 'plugin:plug', pw, false]]);
+    assert.deepStrictEqual(scope.plugins[0].counts, { skills: 1, agents: 1, commands: 2, rules: 1, hooks: 1 });
+    put(home, '.claude/settings.json', JSON.stringify({ enabledPlugins: { 'plug@mkt': false } }));
+    assert.strictEqual((await mgmt.readGlobalScope(home)).mcpServers[0].disabled, true);
+  }));
+
+  tally(await test('mcp: plugin manifest with object mcpServers or an inside path is read too', async () => {
+    const home = makeHome();
+    const installPath = putPlugin(home, 'plug@mkt', { pluginJson: { name: 'plug', mcpServers: { inline: { command: 'i' } } } });
+    const manifest = path.join(installPath, '.claude-plugin', 'plugin.json');
+    let scope = await mgmt.readGlobalScope(home);
+    assert.deepStrictEqual(scope.mcpServers.map(m => [m.name, m.declaredIn]), [['inline', manifest]]);
+    put(installPath, '.claude-plugin/plugin.json', JSON.stringify({ name: 'plug', mcpServers: './cfg/mcp.json' }));
+    const cfg = put(installPath, 'cfg/mcp.json', JSON.stringify({ mcpServers: { viaPath: { command: 'v' } } }));
+    scope = await mgmt.readGlobalScope(home);
+    assert.deepStrictEqual(scope.mcpServers.map(m => [m.name, m.declaredIn]), [['viaPath', cfg]]);
+  }));
+
+  tally(await test('mcp: servable set never includes ~/.claude.json, a project .mcp.json or a plugin .mcp.json', async () => {
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const home = makeHome();
+    const proj = makeProject();
+    const installPath = putPlugin(home, 'plug@mkt');
+    const pluginMcp = put(installPath, '.mcp.json', JSON.stringify({ mcpServers: { pw: { command: 'p', env: { K: 'v' } } } }));
+    const projMcp = put(proj, '.mcp.json', JSON.stringify({ mcpServers: { b: { command: 'b' } } }));
+    const claudeJson = put(home, '.claude.json', JSON.stringify({
+      mcpServers: { u: { command: 'u' } }, projects: { [proj]: { mcpServers: { l: { command: 'l' } } } }
+    }));
+    const root = makeProjectsRoot([{ dirName: '-p', id: 'p1', cwd: proj, mtimeMs: NOW - 1000 }]);
+    const allowed = await mgmt.collectServablePaths({ lookbackHours: 24 }, { root, now: NOW, homeDir: home });
+    assert.ok(allowed.size > 0);
+    assert.ok(!allowed.has(claudeJson), '~/.claude.json servable');
+    assert.ok(!allowed.has(projMcp), 'project .mcp.json servable');
+    assert.ok(!allowed.has(pluginMcp), 'plugin .mcp.json servable');
+  }));
+
+  tally(await test('mcp: ~/.claude.json is re-read when it changes (memo keyed on mtime + size)', async () => {
+    const home = makeHome();
+    const decl = put(home, '.claude.json', JSON.stringify({ mcpServers: { first: { command: 'a' } } }));
+    assert.deepStrictEqual((await mgmt.readGlobalScope(home)).mcpServers.map(m => m.name), ['first']);
+    fs.writeFileSync(decl, JSON.stringify({ mcpServers: { secondOne: { command: 'b' } } }));
+    fs.utimesSync(decl, new Date(Date.now() + 5000), new Date(Date.now() + 5000));
+    assert.deepStrictEqual((await mgmt.readGlobalScope(home)).mcpServers.map(m => m.name), ['secondOne']);
+  }));
+
+  tally(await test('normalizeMcpServers: non-object → []; sorted by name; non-string args dropped', async () => {
+    assert.deepStrictEqual(mgmt.normalizeMcpServers(null, 'user', '/d', new Set()), []);
+    assert.deepStrictEqual(mgmt.normalizeMcpServers([1], 'user', '/d', new Set()), []);
+    const rows = mgmt.normalizeMcpServers({ z: { command: 'z', args: ['ok', 3, null] }, a: { command: 'a' } }, 'user', '/d', new Set(['z']));
+    assert.deepStrictEqual(rows.map(r => r.name), ['a', 'z']);
+    assert.deepStrictEqual(rows[1].args, ['ok']);
+    assert.strictEqual(rows[1].disabled, true);
+  }));
+
   console.log(`\nmanagement: ${p} passed, ${f} failed`);
   return f;
 }

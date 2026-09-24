@@ -123,8 +123,10 @@ override it (see `dashboard.section` below).
   setting) stay ephemeral — session IDs churn, so restored expansions and drawers would
   mostly be stale.
 - **Clearing them all** — Settings → Local › Reset this browser removes every key listed above
-  (`OWNED_KEYS` in `hooks/useSettings.tsx`) and restores the defaults. It touches nothing on the
-  server and nothing in `~/.claude`. Add a key here and it belongs in that list too.
+  (`OWNED_KEYS` in `hooks/useSettings.tsx`) **except `dashboard.answerToken`** and restores the defaults. The token is kept on purpose: it is a credential
+  rather than view state, and Reset is not a sign-out, so clearing it would silently disarm every write path (see [remote-answer](remote-answer.md)). It
+  touches nothing on the server and nothing in `~/.claude`. Add a view-state key here and it belongs in that list too; the test in
+  `test/client-settings.test.ts` fails if it is missing.
 
 <!-- docs-sync:
   sources:

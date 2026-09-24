@@ -49,7 +49,7 @@ that starts the server:
 
 | Var | Read by | Meaning |
 |-----|---------|---------|
-| `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | `server/lib/transcript.ts` | Force the context-window size (tokens) used for the `%` bar |
+| `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | `server/lib/transcript.ts` | Force the context-window size (tokens) used for every session's `%` bar — a global override in the *dashboard's* env. A session's own window belongs in its settings files (`autoCompactWindow`), which `server/lib/compact-window.ts` reads per session |
 | `CLAUDE_CREDENTIALS_JSON` | `server/lib/usage.ts` | OAuth creds blob for the usage bars when the host keychain isn't reachable (Docker — see [docker.md](docker.md)) |
 
 ## Hook-side (remote answers)

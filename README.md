@@ -12,7 +12,8 @@ opt-in features that need one ([remote answers](docs/subsystems/remote-answer.md
 [`allow?` tab](docs/subsystems/permission-notify.md), and the `Stop` hook behind both the
 finished-turn [push](docs/subsystems/push-notify.md) and
 [remote messages](docs/subsystems/remote-message.md)). Zero runtime dependencies on the backend (Node
-built-ins only), and exactly one outbound call — the ntfy push.
+built-ins only), and exactly two kinds of outbound call — the ntfy push and the usage-bar read
+from Anthropic's API.
 
 ## Quick start
 
@@ -66,8 +67,8 @@ That's the whole basic setup. Everything below is optional.
   survives the idle sweep — whether you're at the desk or not.
 - **[Dictation](docs/subsystems/dictation.md)** — a mic in that same composer: speak the
   follow-up instead of thumb-typing it on a phone. Recorded in the browser, transcoded and
-  transcribed **on this machine** by a local whisper.cpp — no audio leaves the box, keeping
-  the ntfy push the only outbound call. The transcript lands in the textarea as editable
+  transcribed **on this machine** by a local whisper.cpp — no audio leaves the box, so
+  dictation adds no outbound call. The transcript lands in the textarea as editable
   text; **send** stays a deliberate tap. Off until you install the engine, and needs HTTPS
   (`pnpm tunnel`) to record at all from a phone.
 - **[New session](docs/subsystems/spawn.md)** — the header's **+ New** button starts a

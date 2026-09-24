@@ -1524,7 +1524,7 @@ function sendJson(res: ServerResponse, code: number, body: unknown): void {
 }
 
 function emptyScope(scope: 'global' | 'project', root = ''): ScopeConfig {
-  return { scope, root, skills: [], agents: [], commands: [], rules: [], hooks: [], memory: [], settings: [], plugins: [] };
+  return { scope, root, skills: [], agents: [], commands: [], rules: [], hooks: [], memory: [], settings: [], plugins: [], mcpServers: [] };
 }
 
 /**

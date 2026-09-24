@@ -821,10 +821,17 @@ export function stopSession(id: string, now: number = Date.now()): StopResult {
 
   entry.stopRequestedAtMs = now;
   signalGroup(entry.child, 'SIGTERM');
+  console.error(`[dashboard] stop: SIGTERM to group of ${id} (pid ${entry.child.pid})`);
+  // The timer firing IS the evidence the grace elapsed, so its callback hands
+  // `escalateStop` the due time rather than letting it re-read the wall clock.
+  // Timers run on the loop's monotonic clock; a `Date.now()` read ahead of it
+  // (an early fire, a WSL2 clock step) used to veto the SIGKILL, and nothing
+  // re-armed it (bug-28). `stopStates` backstops any escalation still lost.
+  const due = now + STOP_GRACE_MS;
   // unref'd so a pending escalation can never hold the process open — the same
   // rule every timer in this codebase follows. Cleared by `dropIfRunning` when
   // the child exits first, which is the ordinary case.
-  entry.escalateTimer = setTimeout(() => { escalateStop(id); }, STOP_GRACE_MS);
+  entry.escalateTimer = setTimeout(() => { escalateStop(id, due); }, STOP_GRACE_MS);
   entry.escalateTimer.unref?.();
   return 'stopping';
 }
@@ -852,7 +859,8 @@ export function forceStopSession(id: string): StopResult {
  * whether it actually signalled.
  *
  * Exported, and taking `now`, so the synchronous test runner can drive it
- * directly — the armed timer's callback is nothing but a call to this.
+ * directly — the armed timer's callback is nothing but a call to this, passing
+ * its own due time as `now`, and {@link stopStates} calls it as the backstop.
  *
  * False (and silent) unless every one of these holds: the entry still exists,
  * it is `running`, a stop was actually requested, `STOP_GRACE_MS` has elapsed
@@ -865,7 +873,9 @@ export function escalateStop(id: string, now: number = Date.now()): boolean {
   if (!entry || entry.state !== 'running') return false;
   if (entry.stopRequestedAtMs === undefined) return false;
   if (now - entry.stopRequestedAtMs < STOP_GRACE_MS) return false;
-  return signalGroup(entry.child, 'SIGKILL');
+  const signalled = signalGroup(entry.child, 'SIGKILL');
+  console.error(`[dashboard] stop: escalation for ${id} ${signalled ? `sent SIGKILL (pid ${entry.child?.pid})` : 'refused: child already gone'}`);
+  return signalled;
 }
 
 /**
@@ -874,15 +884,24 @@ export function escalateStop(id: string, now: number = Date.now()): boolean {
  * way `messageSessionIds()` is — a Map rather than a Set because the one field
  * carries two states.
  *
+ * Not a pure read: it is also the backstop that SIGKILLs a stop past its grace
+ * (see the loop). `now` is a parameter for the tests, like `escalateStop`'s.
+ *
  * Only `running` entries with a live child appear. An id that is absent means
  * "not stoppable", which is the honest answer for a terminal-started session,
  * for a resume still inside its `LAUNCH_TTL_MS` window, and for anything
  * spawned before the last dashboard restart.
  */
-export function stopStates(): ReadonlyMap<string, StopState> {
+export function stopStates(now: number = Date.now()): ReadonlyMap<string, StopState> {
   const out = new Map<string, StopState>();
   for (const [id, entry] of entries) {
     if (entry.state !== 'running' || signalablePid(entry.child) === null) continue;
+    // The backstop for a lost escalation (bug-28): a stop past its grace whose
+    // child is still alive gets its SIGKILL here, on the next 3 s poll, rather
+    // than saying `stopping…` until someone presses Force stop. Lazy, like the
+    // expiry `listLaunching` does on the same poll. Still listed as `stopping`
+    // until the exit handler drops the entry.
+    if (entry.stopRequestedAtMs !== undefined) escalateStop(id, now);
     out.set(id, entry.stopRequestedAtMs === undefined ? 'ready' : 'stopping');
   }
   return out;

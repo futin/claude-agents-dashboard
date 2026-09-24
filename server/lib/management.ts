@@ -2,7 +2,9 @@
  * management.ts — read-only scanner over Claude config on disk, powering
  * GET /api/management*. Enumerates skills/agents/commands/rules/hooks/memory/
  * settings for the global scope (~/.claude, including every installed
- * plugin's subtree) and for individual project scopes (<cwd>/.claude).
+ * plugin's subtree) and for individual project scopes (<cwd>/.claude), plus
+ * the MCP servers each scope declares (~/.claude.json, <cwd>/.mcp.json,
+ * plugin .mcp.json) — env/header values redacted to key names here.
  *
  * Everything fails open: a missing directory, unreadable file, or malformed
  * JSON yields empty arrays/nulls — a scope is always a complete shape.
@@ -23,7 +25,7 @@ import { listTranscripts } from './scan.js';
 import { readTranscript } from './transcript.js';
 import type { Config } from './config.js';
 import type {
-  ConfigItem, FileContent, HookInfo, PluginInfo, ProjectRef, ScopeConfig, SettingsFileInfo, SkillFile
+  ConfigItem, FileContent, HookInfo, McpServerInfo, PluginInfo, ProjectRef, ScopeConfig, SettingsFileInfo, SkillFile
 } from '../../shared/types.js';
 
 /** Max bytes served per file by GET /api/management/file. */
@@ -34,6 +36,11 @@ export const SKILL_FILES_CAP = 200;
 
 export function claudeHome(homeDir?: string): string {
   return path.join(homeDir || os.homedir(), '.claude');
+}
+
+/** `~/.claude.json` — a sibling of {@link claudeHome}, not inside it. Read for its `mcpServers` only; never servable. */
+export function claudeJsonPath(homeDir?: string): string {
+  return path.join(homeDir || os.homedir(), '.claude.json');
 }
 
 interface ProjectsOptions {
@@ -248,6 +255,101 @@ export function readHooksConfig(
   return out;
 }
 
+/* ------------------------------------------------------------ mcp servers */
+
+type JsonObject = Record<string, unknown>;
+
+function isObject(v: unknown): v is JsonObject {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+let claudeJsonMemo: { path: string; mtimeMs: number; size: number; json: JsonObject } | null = null;
+
+/**
+ * Parse `~/.claude.json` at most once per (path, mtimeMs, size): the file is large and
+ * `collectServablePaths` reads a scope per recent project on every file request. Missing,
+ * unreadable or malformed → `{}`, never throws.
+ */
+async function readClaudeJson(homeDir?: string): Promise<JsonObject> {
+  const p = claudeJsonPath(homeDir);
+  try {
+    const stat = await fsp.stat(p);
+    if (!stat.isFile()) return {};
+    const memo = claudeJsonMemo;
+    if (memo && memo.path === p && memo.mtimeMs === stat.mtimeMs && memo.size === stat.size) return memo.json;
+    let json: JsonObject = {};
+    try {
+      const parsed = JSON.parse(await fsp.readFile(p, 'utf8'));
+      if (isObject(parsed)) json = parsed;
+    } catch {
+      /* malformed → {} */
+    }
+    claudeJsonMemo = { path: p, mtimeMs: stat.mtimeMs, size: stat.size, json };
+    return json;
+  } catch {
+    return {};
+  }
+}
+
+function sortedKeys(v: unknown): string[] {
+  return isObject(v) ? Object.keys(v).sort() : [];
+}
+
+function stringList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+}
+
+/**
+ * One `mcpServers` object → rows sorted by name. The only place redaction happens: `env` and
+ * `headers` are reduced to their key names, so no value of either can reach the payload.
+ */
+export function normalizeMcpServers(raw: unknown, source: string, declaredIn: string, disabledNames: ReadonlySet<string>): McpServerInfo[] {
+  if (!isObject(raw)) return [];
+  const rows: McpServerInfo[] = [];
+  for (const [name, entry] of Object.entries(raw)) {
+    if (!isObject(entry)) continue;
+    rows.push({
+      name,
+      source,
+      transport: typeof entry.type === 'string' && entry.type ? entry.type : 'stdio',
+      command: typeof entry.command === 'string' ? entry.command : null,
+      args: stringList(entry.args),
+      url: typeof entry.url === 'string' ? entry.url : null,
+      envKeys: sortedKeys(entry.env),
+      headerKeys: sortedKeys(entry.headers),
+      declaredIn,
+      disabled: disabledNames.has(name)
+    });
+  }
+  return rows.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+/** A `.mcp.json`-shaped file's `mcpServers`, or [] when it is absent or malformed. */
+async function readMcpJson(p: string, source: string, disabledNames: ReadonlySet<string>): Promise<McpServerInfo[]> {
+  const json = await readJsonIfFile(p);
+  return isObject(json) ? normalizeMcpServers(json.mcpServers, source, p, disabledNames) : [];
+}
+
+/**
+ * A plugin's servers: `<installPath>/.mcp.json`, plus the manifest's `mcpServers` — inline when it
+ * is an object, a file when it is a string that resolves inside installPath (anything else ignored).
+ */
+async function readPluginMcp(installPath: string, manifest: JsonObject | null, manifestPath: string, source: string, enabled: boolean): Promise<McpServerInfo[]> {
+  if (!installPath) return [];
+  const disabled = new Set<string>();
+  const markAll = (rows: McpServerInfo[]) => rows.map(r => ({ ...r, disabled: !enabled }));
+  const rows = await readMcpJson(path.join(installPath, '.mcp.json'), source, disabled);
+  const declared = manifest ? manifest.mcpServers : undefined;
+  if (isObject(declared)) {
+    rows.push(...normalizeMcpServers(declared, source, manifestPath, disabled));
+  } else if (typeof declared === 'string') {
+    const resolved = path.resolve(installPath, declared);
+    const rel = path.relative(installPath, resolved);
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) rows.push(...await readMcpJson(resolved, source, disabled));
+  }
+  return markAll(rows);
+}
+
 /* ---------------------------------------------------------------- plugins */
 
 interface PluginScan {
@@ -257,6 +359,7 @@ interface PluginScan {
   commands: ConfigItem[];
   rules: ConfigItem[];
   hooks: HookInfo[];
+  mcpServers: McpServerInfo[];
 }
 
 async function readPlugin(key: string, installPath: string, version: string | null, enabled: boolean): Promise<PluginScan> {
@@ -279,6 +382,7 @@ async function readPlugin(key: string, installPath: string, version: string | nu
   const hooks = hooksJson
     ? readHooksConfig(hooksJson.hooks ?? hooksJson, source, hooksPath, [installPath], installPath)
     : [];
+  const mcpServers = await readPluginMcp(installPath, manifest, manifestPath, source, enabled);
 
   return {
     info: {
@@ -292,7 +396,7 @@ async function readPlugin(key: string, installPath: string, version: string | nu
       manifestPath: manifest ? manifestPath : null,
       counts: { skills: skills.length, agents: agents.length, commands: commands.length, rules: rules.length, hooks: hooks.length }
     },
-    skills, agents, commands, rules, hooks
+    skills, agents, commands, rules, hooks, mcpServers
   };
 }
 
@@ -350,15 +454,18 @@ export async function readGlobalScope(homeDir?: string): Promise<ScopeConfig> {
   const enabledMap = settingsJson && typeof settingsJson.enabledPlugins === 'object' && settingsJson.enabledPlugins
     ? settingsJson.enabledPlugins as Record<string, unknown> : {};
 
-  const [skills, agents, commands, rules, memory, plugins, { hooks, existing }] = await Promise.all([
+  const [skills, agents, commands, rules, memory, plugins, { hooks, existing }, claudeJson] = await Promise.all([
     readSkillsDir(path.join(home, 'skills'), 'user'),
     readMdDir(path.join(home, 'agents'), 'user', 1),
     readMdDir(path.join(home, 'commands'), 'user'),
     readMdDir(path.join(home, 'rules'), 'user', 1),
     memoryItems([path.join(home, 'CLAUDE.md')], 'user'),
     readPlugins(home, enabledMap),
-    settingsHooks(home, 'user', [hooksDir])
+    settingsHooks(home, 'user', [hooksDir]),
+    readClaudeJson(homeDir)
   ]);
+  // User servers are never marked disabled: the per-project toggles belong to a project view.
+  const userMcp = normalizeMcpServers(claudeJson.mcpServers, 'user', claudeJsonPath(homeDir), new Set());
 
   return {
     scope: 'global',
@@ -370,7 +477,8 @@ export async function readGlobalScope(homeDir?: string): Promise<ScopeConfig> {
     hooks: hooks.concat(plugins.flatMap(p => p.hooks)),
     memory,
     settings: settingsInfo(home, existing),
-    plugins: plugins.map(p => p.info)
+    plugins: plugins.map(p => p.info),
+    mcpServers: userMcp.concat(plugins.flatMap(p => p.mcpServers))
   };
 }
 
@@ -381,22 +489,30 @@ export async function readProjectScope(projectPath: string, dirName?: string, ho
   // encoded dirName is known (both callers pass it; the security path set and
   // the served scope stay in sync because both go through here).
   const memoryDir = dirName ? path.join(claudeHome(homeDir), 'projects', dirName, 'memory') : null;
-  const [skills, agents, commands, rules, claudeMd, memoryStore, { hooks, existing }] = await Promise.all([
+  const [skills, agents, commands, rules, claudeMd, memoryStore, { hooks, existing }, claudeJson] = await Promise.all([
     readSkillsDir(path.join(dir, 'skills'), 'project'),
     readMdDir(path.join(dir, 'agents'), 'project', 1),
     readMdDir(path.join(dir, 'commands'), 'project'),
     readMdDir(path.join(dir, 'rules'), 'project', 1),
     memoryItems([path.join(projectPath, 'CLAUDE.md'), path.join(dir, 'CLAUDE.md')], 'project'),
     memoryDir ? readMdDir(memoryDir, 'project', 1) : Promise.resolve([]),
-    settingsHooks(dir, 'project', [dir])
+    settingsHooks(dir, 'project', [dir]),
+    readClaudeJson(homeDir)
   ]);
+  // `projects` is keyed by the exact project path string; its two disabled lists cover both sources.
+  const projects = isObject(claudeJson.projects) ? claudeJson.projects : {};
+  const entry = isObject(projects[projectPath]) ? projects[projectPath] as JsonObject : {};
+  const disabledMcp = new Set([...stringList(entry.disabledMcpServers), ...stringList(entry.disabledMcpjsonServers)]);
+  const localMcp = normalizeMcpServers(entry.mcpServers, 'local', claudeJsonPath(homeDir), disabledMcp);
+  const projectMcp = await readMcpJson(path.join(projectPath, '.mcp.json'), 'project', disabledMcp);
   return {
     scope: 'project',
     root: projectPath,
     skills, agents, commands, rules, hooks,
     memory: claudeMd.concat(memoryStore),
     settings: settingsInfo(dir, existing),
-    plugins: []
+    plugins: [],
+    mcpServers: localMcp.concat(projectMcp)
   };
 }
 
@@ -407,7 +523,7 @@ export async function readProjectScope(projectPath: string, dirName?: string, ho
  * character outside `[A-Za-z0-9]` becomes `-`. Lossy in that direction — many
  * paths encode to one dirName, and no decoder is possible — but exact in this
  * one, which is all {@link listRecentProjects} needs to ask "is this dir named
- * for that cwd?". Measured against every project dir on this machine: 75/75
+ * for that cwd?". Measured 2026-09-04 against every project dir on this machine: 75/75
  * matched one of their newest transcript's two cwds, 0 missed.
  */
 export function encodeProjectDir(cwd: string): string {
@@ -542,6 +658,7 @@ export async function collectServablePaths(config: Partial<Config>, options: Pro
     for (const plugin of scope.plugins) {
       if (plugin.manifestPath) allowed.add(plugin.manifestPath);
     }
+    // scope.mcpServers adds nothing: every file that declares one (~/.claude.json, .mcp.json) holds the env values the payload redacts.
   }
   return allowed;
 }

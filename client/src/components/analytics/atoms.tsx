@@ -115,12 +115,12 @@ export function TopTools({ a }: { a: SessionAnalysis }) {
   const top = a.byTool.slice(0, 3);
   return (
     <div className="an-col">
-      <div className="an-col-h">Top tools <span className="an-approx">approx tokens</span></div>
+      <div className="an-col-h">Top tools <span className="an-approx">approx tokens · in = injected into context, out = assistant output</span></div>
       {top.length ? top.map(t => (
         <div key={t.tool} className="an-line">
           <span className="an-line-name">{t.tool}</span>
           <span className="an-line-meta">
-            {fmtTok(t.approxOutputTokens)} · {t.count}×{t.errors ? ` · ${t.errors} err` : ''}
+            {fmtTok(t.resultTokens)} in · {fmtTok(t.approxOutputTokens)} out · {t.count}×{t.errors ? ` · ${t.errors} err` : ''}
           </span>
         </div>
       )) : <div className="an-line muted">none</div>}

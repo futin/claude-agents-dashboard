@@ -3,7 +3,7 @@
  * entry groups the middle pane renders. Pure (unit-tested server-side).
  */
 
-import type { ConfigItem, HookInfo, ScopeConfig } from '../../../shared/types';
+import type { ConfigItem, HookInfo, McpServerInfo, ScopeConfig } from '../../../shared/types';
 
 export type FileKind = 'markdown' | 'json' | 'text';
 
@@ -33,7 +33,8 @@ interface EntryBase {
 /** One selectable row in the item list. */
 export type Entry =
   | (EntryBase & { kind: 'file'; fileKind: FileKind; files?: EntryFile[] })
-  | (EntryBase & { kind: 'hook'; hook: HookInfo });
+  | (EntryBase & { kind: 'hook'; hook: HookInfo })
+  | (EntryBase & { kind: 'mcp'; mcp: McpServerInfo });
 
 export interface EntryGroup {
   title: string;
@@ -52,10 +53,11 @@ function itemSubgroup(source: string): string {
   return source.startsWith('plugin:') ? source.slice('plugin:'.length) : source;
 }
 
-/** user/project first, then plugin subgroups alphabetically; labels alphabetical within. */
+/** user/project/local first, then plugin subgroups alphabetically; labels alphabetical within. */
 function bySubgroupThenLabel(a: Entry, b: Entry): number {
-  const aLocal = a.subgroup === 'user' || a.subgroup === 'project';
-  const bLocal = b.subgroup === 'user' || b.subgroup === 'project';
+  const isLocal = (s: string | null) => s === 'user' || s === 'project' || s === 'local';
+  const aLocal = isLocal(a.subgroup);
+  const bLocal = isLocal(b.subgroup);
   if (aLocal !== bLocal) return aLocal ? -1 : 1;
   const as = a.subgroup ?? '';
   const bs = b.subgroup ?? '';
@@ -112,9 +114,31 @@ function fromHooks(hooks: HookInfo[]): Entry[] {
   }));
 }
 
-/** Group order is fixed; Plugins appears for the global scope only. */
+/**
+ * Sublabel is the command alone, never its args — a plugin's `bash -c` script arg runs to hundreds of chars.
+ * No file: every file that declares a server holds env values, so none is servable.
+ */
+function fromMcpServers(servers: McpServerInfo[]): Entry[] {
+  const entries: Entry[] = servers.map(m => ({
+    kind: 'mcp',
+    mcp: m,
+    key: `mcp:${m.source}:${m.name}`,
+    label: m.name,
+    sublabel: `${m.transport} · ${m.url ?? m.command ?? ''}`,
+    badge: m.disabled ? 'disabled' : m.source,
+    filePath: null,
+    subgroup: itemSubgroup(m.source)
+  }));
+  return entries.sort(bySubgroupThenLabel);
+}
+
+/**
+ * Group order is fixed; Plugins appears for the global scope only. MCP servers sits beside Plugins (first in a
+ * project scope) and is left out when the scope declares none.
+ */
 export function buildEntries(scope: ScopeConfig): EntryGroup[] {
   const groups: EntryGroup[] = [];
+  const mcp: EntryGroup[] = scope.mcpServers.length > 0 ? [{ title: 'MCP servers', entries: fromMcpServers(scope.mcpServers) }] : [];
 
   if (scope.scope === 'global') {
     groups.push({
@@ -133,6 +157,7 @@ export function buildEntries(scope: ScopeConfig): EntryGroup[] {
   }
 
   groups.push(
+    ...mcp,
     { title: 'Skills', entries: fromItems(scope.skills, true) },
     { title: 'Agents', entries: fromItems(scope.agents, true) },
     { title: 'Commands', entries: fromItems(scope.commands, true) },

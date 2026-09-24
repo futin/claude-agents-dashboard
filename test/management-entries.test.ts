@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 
 import { buildEntries, filterEntries, railRows } from '../client/src/lib/managementEntries.js';
-import type { ScopeConfig } from '../shared/types.js';
+import type { McpServerInfo, ScopeConfig } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -11,7 +11,7 @@ function test(name: string, fn: () => void): boolean {
 function scope(partial: Partial<ScopeConfig>): ScopeConfig {
   return {
     scope: 'global', root: '/home/.claude',
-    skills: [], agents: [], commands: [], rules: [], hooks: [], memory: [], settings: [], plugins: [],
+    skills: [], agents: [], commands: [], rules: [], hooks: [], memory: [], settings: [], plugins: [], mcpServers: [],
     ...partial
   };
 }
@@ -182,6 +182,52 @@ export function run(): number {
     ];
     assert.deepStrictEqual(railRows(files).map(r => r.kind), ['file', 'dir', 'file']);
     assert.deepStrictEqual(railRows([]), []);
+  })) p++; else f++;
+
+  const mcp = (partial: Partial<McpServerInfo>): McpServerInfo => ({
+    name: 'codegraph', source: 'user', transport: 'stdio', command: 'codegraph', args: ['serve', '--mcp'], url: null,
+    envKeys: [], headerKeys: [], declaredIn: '/home/.claude.json', disabled: false, ...partial
+  });
+
+  if (test('MCP servers group sits right after Plugins (global) and first (project); absent when empty', () => {
+    const plugin = { key: 'p@m', name: 'p', marketplace: 'm', version: '1', description: null, installPath: '/p', enabled: true, manifestPath: null,
+      counts: { skills: 0, agents: 0, commands: 0, rules: 0, hooks: 0 } };
+    const g = buildEntries(scope({ plugins: [plugin], mcpServers: [mcp({})] }));
+    assert.deepStrictEqual(g.map(x => x.title).slice(0, 3), ['Plugins', 'MCP servers', 'Skills']);
+    const pr = buildEntries(scope({ scope: 'project', mcpServers: [mcp({ source: 'project' })] }));
+    assert.strictEqual(pr[0].title, 'MCP servers');
+    assert.ok(!buildEntries(scope({})).some(x => x.title === 'MCP servers'));
+    assert.ok(!buildEntries(scope({ scope: 'project' })).some(x => x.title === 'MCP servers'));
+  })) p++; else f++;
+
+  if (test('MCP entry: kind mcp, key, sublabel from command or url, source/disabled badge, no file', () => {
+    const g = buildEntries(scope({ mcpServers: [
+      mcp({}),
+      mcp({ name: 'remote', transport: 'http', command: null, args: [], url: 'https://x/mcp' }),
+      mcp({ name: 'off', source: 'plugin:bm', disabled: true })
+    ] }));
+    const entries = g.find(x => x.title === 'MCP servers')!.entries;
+    const cg = entries.find(e => e.label === 'codegraph')!;
+    assert.strictEqual(cg.kind, 'mcp');
+    if (cg.kind === 'mcp') assert.strictEqual(cg.mcp.name, 'codegraph');
+    assert.strictEqual(cg.key, 'mcp:user:codegraph');
+    assert.strictEqual(cg.sublabel, 'stdio · codegraph');
+    assert.strictEqual(cg.badge, 'user');
+    assert.strictEqual(cg.filePath, null);
+    assert.strictEqual(entries.find(e => e.label === 'remote')!.sublabel, 'http · https://x/mcp');
+    const off = entries.find(e => e.label === 'off')!;
+    assert.strictEqual(off.badge, 'disabled');
+    assert.strictEqual(off.subgroup, 'bm');
+  })) p++; else f++;
+
+  if (test('MCP subgroups: user and local rows before plugin:* rows', () => {
+    const g = buildEntries(scope({ mcpServers: [
+      mcp({ name: 'aaa', source: 'plugin:alpha' }),
+      mcp({ name: 'zzz', source: 'user' }),
+      mcp({ name: 'mmm', source: 'local' })
+    ] }));
+    const entries = g.find(x => x.title === 'MCP servers')!.entries;
+    assert.deepStrictEqual(entries.map(e => e.subgroup), ['local', 'user', 'alpha']);
   })) p++; else f++;
 
   console.log(`\nmanagementEntries: ${p} passed, ${f} failed`);

@@ -187,9 +187,28 @@ returned — no backend change, so the read-only invariant above still holds.
   turn. `count` / `durationMs` / `errors` stay **per call** (parallel calls are real,
   separate calls); only the token split is per turn. `server_tool_use` rides in the same
   usage block, so it is deduped too.
+  `byTool.resultTokens` is the opposite case and must stay that way: it sizes each call's own
+  matched tool_result (chars ÷ 4, error text included) and is **never** split across the turn,
+  so it is the figure that names a context-heavy `Read`. `byTool` sorts by it, and the
+  Analytics tab's *Top tools* shows it as `in` beside `approxOutputTokens` as `out`.
   **Not affected:** `lib/transcript.ts` (session rows, chat-drawer context) reads the
   *latest* usage rather than summing, and the copies are identical — its numbers were
   always right.
+- **`perTurn.neverCompacted` is inferred, never read.** The transcript carries no context-window field (`message.model` reads `claude-opus-5`, no
+  `[1m]` suffix) and no compaction marker, so `analyzeSession` derives it from turn sizes alone: `maxCombined` above `NEVER_COMPACTED_PEAK` (250k — a
+  200k window compacts near 160k, so only a larger window reaches it) **and** no turn anywhere below `COMPACTION_DROP_RATIO` (half) of the running peak.
+  A turn's `combined` is its whole context, which only grows between compactions, so that fall is the one compaction leaves — which is why a big early
+  peak followed by a drop reads `false` where a bare `max > 250k` would say `true`. No turns reads `false`. A `notes[]` entry states the inference, and
+  `/kaizen` §2 treats `true` as a primary explanation for cost. Only `kaizen.mjs` surfaces it today — the Analytics tab does not render it.
+- **The lesson line's figures are data, not only prose.** `kaizen.mjs --trend [log]` reads the `<billable> billable (<ctx> ctx` prefix back out of
+  every lesson line (`k` / `M` / `B` suffixes, decimals, thousands commas; trailing `, 231 turns` and the like ignored) and prints per-project and
+  overall ctx series, which `/kaizen review` step 2 reports. Drift is the median ctx of a group's newest 3 sessions at ≥ 1.5× the median of all its
+  earlier ones, and needs 6+ sessions: medians on both sides are what keep one outsized session from ever reading as a trend (it takes two of the
+  newest three), and a group's own history as baseline is what keeps a project that always runs large from being flagged for size alone. An absolute
+  ctx threshold was the rejected alternative — it fires on exactly that single big session. The read keeps the newest line per `[project] id` in memory
+  (newest-wins, as `lessonForSession` reads it) and never writes the log. Lines without both figures — status, review, prose, mid-session captures —
+  are skipped; a line with `billable` but no `(N ctx)` counts in `withoutCtx` and nowhere else. `--trend` is kaizen-only: no server module or
+  Analytics view reads it, so `test/kaizen-trend.test.ts` spawns the vendored script itself.
 - **⚠️ Log grammar (the contract with `/kaizen` — three line shapes, all append-only):**
 
   ```
