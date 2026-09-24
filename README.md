@@ -9,7 +9,7 @@ Reads everything straight from `~/.claude/projects/*/*.jsonl` on disk. **Monitor
 no daemon, no hooks, and no config in Claude Code** — hooks are installed only by the
 opt-in features that need one ([remote answers](docs/subsystems/remote-answer.md),
 [remote plan verdicts](docs/subsystems/remote-plan.md), the
-[`allow?` tab](docs/subsystems/permission-notify.md), and the `Stop` hook behind both the
+[`Allow?` tab](docs/subsystems/permission-notify.md), and the `Stop` hook behind both the
 finished-turn [push](docs/subsystems/push-notify.md) and
 [remote messages](docs/subsystems/remote-message.md)). Zero runtime dependencies on the backend (Node
 built-ins only), and exactly two kinds of outbound call — the ntfy push and the usage-bar read
@@ -48,8 +48,8 @@ That's the whole basic setup. Everything below is optional.
 - **[Live session monitor](docs/subsystems/sessions.md)** — one row per session: status
   dot (working / question / incomplete / idle), project + branch, model, context bar,
   current tool activity, expandable subagent detail, filter + sort toolbar, and a
-  full-height tab down the row's right edge that opens the chat — and names the hold
-  (`answer` / `plan?` / `reply?` / `allow?`) when a session is waiting on you.
+  `Chat` button on every session that opens the chat — and names the hold
+  (`Answer` / `Plan?` / `Reply?` / `Allow?`) when a session is waiting on you.
 - **[Chat drawer](docs/subsystems/chat.md)** — read any session's conversation:
   live-tailed, pageable back through the whole transcript, with an all/text/you filter
   and markdown rendering.
@@ -71,25 +71,25 @@ That's the whole basic setup. Everything below is optional.
   dictation adds no outbound call. The transcript lands in the textarea as editable
   text; **send** stays a deliberate tap. Off until you install the engine, and needs HTTPS
   (`pnpm tunnel`) to record at all from a phone.
-- **[New session](docs/subsystems/spawn.md)** — the header's **+ New** button starts a
+- **[New session](docs/subsystems/spawn.md)** — the Board card's **+ New session** button starts a
   brand-new session from the dashboard: pick a recent project, write or dictate the prompt,
-  tap launch. The server spawns a detached, headless `claude -p` in that project's
+  tap `Launch`. The server spawns a detached, headless `claude -p` in that project's
   directory and the row shows up a poll later, ordinary from then on. The fourth write
   path, and the first one the dashboard *initiates* rather than answers. A session started
   this way is also not a dead end once its turn is over: its chat drawer offers a **resume**
   composer that relaunches the same session id, so the same transcript continues and the
   same row wakes up. And it can be ended from the dashboard too: while the server still
   holds a handle on the child, the expanded row carries a two-tap **stop** control
-  (`stop session` → `really stop?`, with `force stop` if the graceful signal doesn't
+  (`Stop session` → `Really stop?`, with `Force stop` if the graceful signal doesn't
   land). Off by default (empty `CLAUDE_BIN`); how much a launch can do unattended is
   bounded by the `SPAWN_MAX_PERMISSION` ceiling on the host, never by the browser.
 - **[Management tab](docs/subsystems/management.md)** — read-only browser for all Claude
-  config on the machine: skills, agents, commands, rules, hooks, settings, plugins, per
-  scope. A skill that ships more than `SKILL.md` opens its whole directory in a file rail
+  config on the machine: skills, agents, commands, rules, hooks, settings, plugins, MCP
+  servers (secrets redacted), per scope. A skill that ships more than `SKILL.md` opens its whole directory in a file rail
   beside the viewer.
 - **[Analytics tab](docs/subsystems/analytics.md)** — per-session post-mortem cards
   (tokens, priciest tools/subagents) paired with the lesson the `/kaizen` skill logged.
-- **[Usage bars and forecast](docs/subsystems/usage-limits.md)** — the header's 5h / Week
+- **[Usage bars and forecast](docs/subsystems/usage-limits.md)** — the Sessions aside's 5h / Week
   account rate-limit bars, same numbers as `/usage` in the CLI, each with a time strip
   underneath: how much of the window has elapsed, your burn rate, and where the current
   pace projects 100% — as a band rather than a single tick while the estimate is still
@@ -119,10 +119,11 @@ That's the whole basic setup. Everything below is optional.
   section the app lands on, refresh rate, the scan knobs, the default model and effort for
   the launch panel, the browser-notification switch, the push-notification policy,
   usage-history recording, and the remote-answer idle threshold and answer window — all
-  editable in the app, no `.env` edit or rebuild. It also names any `.env` key edited
+  editable in the app, no `.env` edit or rebuild. Two pages, one per store: Local (this
+  browser) and Shared (the server's settings file). It also names any `.env` key edited
   since the server started, because those are read once, at startup.
 - **[Phone access & origin badge](docs/subsystems/remote-access.md)** — reach the
-  dashboard over LAN, Tailscale, or a tunnel; a header pill shows which route you're on.
+  dashboard over LAN, Tailscale, or a tunnel; a pill on the Board card shows which route you're on.
 
 ## Optional setup
 

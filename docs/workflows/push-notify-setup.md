@@ -42,7 +42,7 @@ tap-through link. The tailnet hostname is what belongs there (see
 
 **Restart the server** — these are read once at startup, unlike the Settings page.
 
-**4. Turn it on.** Settings → **Push notifications · every device** → *Send push
+**4. Turn it on.** Settings → **Shared › Push notifications** → *Send push
 notifications* On, then pick which events you want. If the group is greyed out under a
 warning naming `NTFY_TOPIC`, the server did not see step 3: check you restarted it, and
 that you edited `.env` rather than `.env.example`.

@@ -264,7 +264,7 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
   `PreToolUse`, before the `tool_use` record is written). So `serveSessions` passes
   `pendingSessionIds()` into `scanSessions` as `pendingIds`: a flagged session gets
   `status: 'question'` plus `Session.remoteQuestion`, and the row's chat button (`sessions/atoms.tsx`) goes into
-  a pulsing amber `answer` — first in the `holdKind` precedence (`lib/holds.ts`) that
+  a pulsing amber `Answer` — first in the `holdKind` precedence (`lib/holds.ts`) that
   `chatTab()` reads, so a question outranks every
   other hold (see [sessions](sessions.md#the-chat-button-is-also-where-a-session-says-it-needs-a-human)). The store is still RAM-only and still read-only
   here — the scan only reads the key set, and gets a copied `Set`, never the store's own.

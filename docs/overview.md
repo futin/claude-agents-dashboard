@@ -11,7 +11,7 @@ Everything the dashboard shows is read straight off disk from
 needs no daemon, no hooks, and no config in Claude Code — hooks are installed only by the
 opt-in features that need one ([remote answers](subsystems/remote-answer.md),
 [remote plan verdicts](subsystems/remote-plan.md), the
-[`allow?` tab](subsystems/permission-notify.md), and the `Stop` hook that backs both the
+[`Allow?` tab](subsystems/permission-notify.md), and the `Stop` hook that backs both the
 finished-turn [push](subsystems/push-notify.md) and
 [remote messages](subsystems/remote-message.md)). One hook ships alongside them but feeds
 nothing here: `kill-guard.sh`, a `PreToolUse`/`Bash` guard that refuses unanchored
@@ -205,15 +205,18 @@ server/
 client/src/
   App.tsx         shell: side rail (Sessions | Usage | Management | Analytics |
                   Settings) + lazy views
-  components/     SideRail (section switcher — the rail on desktop, and below 700px
-                  the same markup as a menu dropped out of a top bar, every tree
+  components/     SideRail (section switcher — the rail on desktop, and below `sm`
+                  (640px) the same markup as a menu dropped out of a top bar, every tree
                   open), SessionsView (the monitor — owns the 3s
                   poll, so leaving the section stops it; two columns: the list in one of
-                  five views + a 320px aside), AsideAccount (the account gauges),
+                  five views + an aside — a side column from `2xl`, above the list
+                  below it, and below `md` one pinned strip; see
+                  subsystems/breakpoints.md), AsideAccount (the account gauges),
                   AsideBoard (clock, origin, counts, remote-answer switch, New session),
                   Toolbar (view switcher + filter/sort popovers; Popover is the shared
-                  dismiss primitive), sessions/ (atoms, Expanded, EmptyState and the five
-                  views: Board, List, Split, Tiles, Triage), SessionDetail (the subagent timeline),
+                  dismiss primitive), sessions/ (atoms, Expanded, EmptyState, AsideStrip
+                  — the phone's one-bar aside — and the five views: Board, List, Split,
+                  Tiles, Triage), SessionDetail (the subagent timeline),
                   ChatDrawer, QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   MicButton, SpawnPanel, ResumePanel, PermissionBanner,
@@ -230,13 +233,15 @@ client/src/
                   (the one hover/pin explanation panel, shared by both Usage tabs),
                   useTranscribeAvailable, useWebNotify (browser banners for headless
                   sessions), useBackClose, useHideOnScroll (the phone top bar's
-                  auto-hide)
+                  auto-hide), useNarrow (the one JS read of the `md` breakpoint),
+                  useStuckStrip (when the phone's aside strip pins)
   lib/            filterSort, analyticsFilterSort, chatFilter, markdown, managementEntries,
                   format, settings,
                   sections, deepLink, dictation, spawnOptions, resume, pace, usageProfile,
                   usageRatesFormat, panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
-                  webNotify, backClose, stopControl
+                  webNotify, backClose, stopControl, triage (the board/triage piles),
+                  stickyStrip, agentLabel (a subagent's type only when informative)
 vite.config.ts    dev proxy /api → backend; reuses the server config loader;
                   allowedHosts = `.ts.net` + this node's bare MagicDNS short
                   name (probed via `tailscale status --json`), without which
@@ -287,10 +292,10 @@ that area:
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [management](subsystems/management.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
-- [usage-limits](subsystems/usage-limits.md) — header account usage bars, and the Usage tab behind them: pace, the duty-cycle forecast, and token value per model
+- [usage-limits](subsystems/usage-limits.md) — the account usage bars in the Sessions aside, and the Usage tab behind them: pace, the duty-cycle forecast, and token value per model
 - [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold, answer window, push policy
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
-- [permission-notify](subsystems/permission-notify.md) — the `allow?` tab for terminal permission dialogs
+- [permission-notify](subsystems/permission-notify.md) — the `Allow?` tab for terminal permission dialogs
 - [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and the one narrow browser layer that came back for headless sessions
 - [breakpoints](subsystems/breakpoints.md) — the seven-tier mobile-first ladder in `styles.css`, the rail+measure lock, and the capped/full content-width matrix
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference

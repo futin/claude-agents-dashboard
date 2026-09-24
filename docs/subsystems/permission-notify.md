@@ -1,7 +1,7 @@
-# Permission prompts (the `allow?` tab)
+# Permission prompts (the `Allow?` tab)
 
 When the CLI shows its interactive permission dialog — *"Do you want to allow Bash:
-`pnpm dev`?"* — the dashboard shows a blue dot, the row's chat tab reading `allow?`, and a
+`pnpm dev`?"* — the dashboard shows a blue dot, the row's chat tab reading `Allow?`, and a
 banner in the chat drawer naming the command. **Display-only**: you still answer in that terminal.
 
 ## Why it needs a hook at all
@@ -60,7 +60,7 @@ back with feedback" is a real instruction, not merely a refusal.
 | `POST /api/permissions/notify` | `servePermissionNotify` in `api.ts` — `tokenOk` 403, `ID_RE` 400, unknown session 404, else `notifyPermission()` followed by `maybeSend(config, 'permission', …)`. The route notifies inline rather than through `/api/notify/event`, because the hook is already POSTing here (see [push-notify](push-notify.md)) |
 | `server/lib/permissions.ts` | RAM-only `Map<sessionId, {notifiedAt, message, timer}>`. No held socket, no resolve — a notify is a fact, not a wait |
 | `scan.ts` `ScanOptions.permissionWaits` | injected `sessionId → notifiedAt`; sets `Session.permissionWait` and forces `status: 'question'` |
-| chat button + `PermissionBanner` | the row's chat button in mustard `allow?` — `chatTab()` now looks the label up by `holdKind(s)` (`client/src/lib/holds.ts`), which returns `permission` last, so `remoteQuestion`, `remotePlan` and `remoteReply` all label it first (see [sessions](sessions.md#the-chat-button-is-also-where-a-session-says-it-needs-a-human)). That precedence lives in `holds.ts` rather than in the row because the header's "need you" count and the browser-notification gate read the same answer — and the pinned drawer strip |
+| chat button + `PermissionBanner` | the row's chat button in mustard `Allow?` — `chatTab()` now looks the label up by `holdKind(s)` (`client/src/lib/holds.ts`), which returns `permission` last, so `remoteQuestion`, `remotePlan` and `remoteReply` all label it first (see [sessions](sessions.md#the-chat-button-is-also-where-a-session-says-it-needs-a-human)). That precedence lives in `holds.ts` rather than in the row because the Board card's "Need you" count and the browser-notification gate read the same answer — and the pinned drawer strip |
 
 ## ⚠️ Clearing is the scan's job, not the store's
 
@@ -90,8 +90,8 @@ Below the liveness gate **on purpose**: a fire-and-forget notify is a fact about
 carries no evidence the session is still alive, unlike `pending.ts`'s held socket (which
 outranks `lsof` precisely because the socket is open *now*). A session killed at its prompt
 reads `idle`, not a permanent blue dot. Below `remoteQuestion`, `remotePlan` and
-`remoteReply` too, so a session that somehow has both keeps the actionable `answer` /
-`plan?` / `reply?` label rather than the informational one.
+`remoteReply` too, so a session that somehow has both keeps the actionable `Answer` /
+`Plan?` / `Reply?` label rather than the informational one.
 
 ## Install (manual, user-consented)
 

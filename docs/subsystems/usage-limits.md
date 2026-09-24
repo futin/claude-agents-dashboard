@@ -1,6 +1,6 @@
-# Usage limits (header bars)
+# Usage limits (account bars)
 
-The header shows two mini progress bars — **5h** and **Week** — the same account
+The Sessions aside's Account card (`AsideAccount.tsx`) shows two mini progress bars — **5h** and **Week** — the same account
 rate-limit utilization Claude Code's `/usage` reports. Unlike everything else in the app,
 these are **not on disk**: `lib/usage.ts` fetches them live from Anthropic using your
 local credentials. Under each bar sits a **time strip** (`lib/usage-pace.ts` +
@@ -128,7 +128,7 @@ each hour — is wrong, and the strip exists to make the real shape visible.
   fetch. No persistence — after a restart the pace fields are null for a few minutes.
 - **Slope:** `computePace` is pure: least-recent → most-recent over a lookback window
   (5h: 30 min lookback / 5 min min-span; weekly: 6h / 30 min, since the weekly number
-  moves in ~1% integer steps). Under the min span → `null`, and the header renders
+  moves in ~1% integer steps). Under the min span → `null`, and the Account card renders
   exactly as it did before. A non-positive slope reports `ratePerHour: 0` and no projection.
 - **Window rolls** are handled twice over: `prunedSamples` drops anything older than the
   anchor (`resetsAt − window length`), and any utilization *drop* clears the history —
@@ -367,8 +367,9 @@ texture rather than a sixth colour step for no-evidence cells, and a bare cell f
 
 The numbers view is **required, not a nicety**: the two lowest ramp steps fall under 3:1
 against the sheet, which obligates a non-colour path to the same weights. The mock has no
-such control, and it is kept anyway — as a chip in the sheet's row-head, the slot the
-design puts a filter chip in (§7).
+such control, and it is kept anyway — in the sheet's row-head, the slot the
+design puts a filter chip in (§7), as a `Grid | Numbers` segmented pair with the active view filled, since a single `Show …` chip named
+the view you were leaving.
 
 Two things the grid alone cannot do:
 
@@ -1336,8 +1337,8 @@ absent. `coverage` is computed over `[now − BASELINE_MS, ∞)`, deliberately t
 **same horizon `externalSharePct` uses**: two disclosure figures on one card
 that quietly spanned different windows would be a defect, not a nuance.
 
-The **Usage** section is now two sub-tabs — `Forecast | Token value` — through
-the Settings page's `.set-seg` control, persisted per device as `usageTab`.
+The **Usage** section is now two sub-tabs — `Forecast | Token value` — picked from the tree under Usage in `SideRail` (the desktop rail
+and the phone menu alike), persisted per device as `usageTab`.
 Each tab runs to several sheets on its own, so stacking would bury whichever one you did
 not come for; only the active sub-view mounts, which also means each one's fetch-per-mount
 hook fires when its tab is opened rather than on every visit to the section.
@@ -1353,9 +1354,9 @@ The one-table shape was rejected once before, in the 2026-09-06 mockups
 720px table scrolls the verdict column off screen first. That objection is answered rather
 than overruled: under `md` (768px) each `.dt` becomes its own `overflow-x` box, so the table
 scrolls sideways *inside its sheet* and the page body does not (verified: `body.scrollWidth
-=== window.innerWidth` at 375px). The verdict still leaves the viewport when you scroll the
-table — but the strip above it has already said how many models are drifting, and that is
-the figure the phone reader came for.
+=== window.innerWidth` at 375px). The ledgers go further and unroll (`.dt.stack`): the header row is dropped and each cell carries its own
+label from `data-l`, so a model reads as one block top to bottom with the verdict beside its key rather than a sideways scroll away from the
+Model column.
 
 1. **A figure strip** (`ratesStats`): priced, drifting, collecting, coverage, ledger.
    Counts of *models* on the left, points and windows on the right, so the strip reads left
@@ -1616,7 +1617,7 @@ Accepted limitations:
 ## Invariants
 
 - **Fail-open everywhere:** no token / expired / network error / non-2xx / unparseable →
-  `usage: null` → the header simply omits the bars. Never throws into `scanSessions`
+  `usage: null` → the Account card simply omits the bars. Never throws into `scanSessions`
   (which stays pure).
 - **We never write credentials ourselves — we make the CLI do it.** Direct OAuth refresh
   is still rejected: undocumented endpoint, and taking a rotated refresh token and then
@@ -1631,7 +1632,7 @@ Accepted limitations:
   self-healing, and the only cure was to run the CLI by hand. The earlier removal
   (`backlog/tasks/done/task-1-remove-in-app-oauth-token-refresh.md`) also rejected
   *auto*-refresh as "burning turns silently"; at one haiku turn per 8h, with a free
-  `auth status` tried first, that cost is worth a header that heals itself.
+  `auth status` tried first, that cost is worth bars that heal themselves.
 
 <!-- docs-sync:
   sources:

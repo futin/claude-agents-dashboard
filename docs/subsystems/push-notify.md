@@ -71,9 +71,9 @@ token (`--amber` question, `--cyan` plan, `--mustard` reply) with a solid glyph 
 per batch: one sound per batch whatever the OS would have done, and the beep still fires when
 the banner is blocked.
 
-The header's `N need you` pill is a different thing wearing a similar name: **it counts every
-surface, not just headless ones.** It mirrors the row tabs (`answer` / `plan?` / `reply?` /
-`allow?`) one for one, because a count labelled "need you" that omitted a row visibly saying it
+The Board card's `Need you` count is a different thing wearing a similar name: **it counts every
+surface, not just headless ones.** It mirrors the chat buttons (`Answer` / `Plan?` / `Reply?` /
+`Allow?`) one for one, because a count labelled "need you" that omitted a row visibly saying it
 needs you would be worse than no count. Same precedence ladder, `holdKind` in
 `client/src/lib/holds.ts`, shared with the row tabs so the two cannot drift.
 
@@ -282,7 +282,7 @@ calculus changes.
 ## Desk routing: which device rings
 
 With an `NTFY_TOPIC_DESK` set, a push raised **while you are at the keyboard** goes to that
-topic instead of `NTFY_TOPIC`. Walk away past Settings → "Away after" and it goes back to the
+topic instead of `NTFY_TOPIC`. Walk away past Settings → **Shared › Remote answers** → "Away after" and it goes back to the
 phone. Unset — the default — every push behaves exactly as the rest of this document
 describes, including the number of `ioreg` spawns per push.
 

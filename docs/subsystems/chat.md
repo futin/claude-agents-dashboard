@@ -1,6 +1,6 @@
 # Chat — history tail and the modal
 
-The `chat` tab down the right edge of a session row opens a **centred modal** with that session's
+The `Chat` button on every session opens a **centred modal** with that session's
 conversation: newest page on open, live-tailed at the configured refresh rate, "load older"
 walking backwards through the whole transcript. Read-only, like everything else in the app.
 It floats over the scrim with air on every side — 1080px wide, capped at 820px tall, rounded
@@ -11,7 +11,9 @@ that it is full-screen, because a 1080px modal with margins does not fit a phone
 carries the session name, the project pill and ✕. A 290px **sidecar** on the subtle ground
 carries everything the head used to: the live context reading as a metric block (percent,
 `tokens / window`, a track, amber at the same 70% threshold the list row uses), then a facts
-list — project, branch, model, surface, messages loaded, current tool. The context reading
+list — project, branch, model, surface, messages loaded, current tool. Below `md` the sidecar
+becomes a band over the transcript and drops project, messages and current tool: the head pill,
+the foot count and the transcript's last turn already carry them. The context reading
 is off the same 3s poll rather than a second read, and it is there because a modal opened
 straight from a tapped push ([deep link](push-notify.md)) never showed the list, so this is
 the only place that reader sees how full the session is.
@@ -175,9 +177,9 @@ worst case to the window size, not to the transcript size.
   nothing. If `pushState` throws (Safari's throttle, `file://`) the arm goes inert and the
   drawer behaves exactly as it did before — teardown must never `back()` in that state.
 
-- The `chat` tab (`.row-chat`) is a **sibling** of the clickable card face (`.row-main`),
-  not a child of it — so opening the drawer never has to out-shout the row's own toggle.
-  It also carries the row's held states: `answer` / `plan?` / `reply?` / `allow?` are the
+- The `Chat` button (`ChatButton` in `sessions/atoms.tsx`, `.cbtn`) sits inside the clickable
+  card and stops its click from propagating — so opening the drawer never also toggles the row.
+  It also carries the row's held states: `Answer` / `Plan?` / `Reply?` / `Allow?` are the
   same one control with a different label and tone, since all four open this drawer.
 
 ## The pinned panels' own shapes

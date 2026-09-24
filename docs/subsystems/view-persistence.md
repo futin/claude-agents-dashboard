@@ -120,8 +120,9 @@ override it (see `dashboard.section` below).
 - **Not persisted:** which cards are open (`SessionsView.tsx` `expanded`) and the split
   view's inspected session (`splitId`), the open chat drawer (`SessionsView.tsx` `chatId`, seeded from the deep link above), and the
   [launch panel](spawn.md) (`SessionsView.tsx` `spawnOpen` — a one-shot form, not a view
-  setting) stay ephemeral — session IDs churn, so restored expansions and drawers would
-  mostly be stale.
+  setting), and on Analytics the inspected report and open tiles (`AnalyticsView.tsx`
+  `selectedId` / `expanded`) stay ephemeral — session IDs churn, so restored expansions and
+  drawers would mostly be stale.
 - **Clearing them all** — Settings → Local › Reset this browser removes every key listed above
   (`OWNED_KEYS` in `hooks/useSettings.tsx`) **except `dashboard.answerToken`** and restores the defaults. The token is kept on purpose: it is a credential
   rather than view state, and Reset is not a sign-out, so clearing it would silently disarm every write path (see [remote-answer](remote-answer.md)). It
