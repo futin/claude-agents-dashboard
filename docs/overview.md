@@ -137,8 +137,9 @@ server/
   lib/config.ts   .env loader — process.env > .env > defaults
   lib/transcript.ts  tail-reads a transcript → tokens/model/window/activity
   lib/title-cache.ts  remembers a custom title once it sinks below the tail window
-  lib/model-identity.ts  the session's model attachment id (`[1m]` ⇒ 1M window), same tail-then-hunt
-  lib/compact-window.ts  the session's `autoCompactWindow` off its settings files — caps the window
+  lib/model-identity.ts  the session's model attachment id — its family/version (or `[1m]`) sizes the window, same tail-then-hunt
+  lib/compact-history.ts  the newest compaction's `preTokens` — past 200k it proves a 1M window, same tail-then-hunt
+  lib/compact-window.ts  the session's `autoCompactWindow` off its settings files, pinned per session — caps the window
   lib/record-cache.ts  the shared tail-then-hunt search + remembered byte range both use
   lib/scan.ts     enumerates + ranks sessions; status machine; liveness gates (cwd, session id);
                   `listUsageTranscripts` is the second enumeration — top-level files plus
