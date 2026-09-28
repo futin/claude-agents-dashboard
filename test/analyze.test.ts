@@ -339,6 +339,26 @@ export function run(): number {
     assert.strictEqual(a.totals.combined, 0);
   })) p++; else f++;
 
+  if (test('SendMessage resumes share one transcript → spent once, on the launch row', () => {
+    const file = fixture([
+      taskRec('t1', 'general-purpose', '2026-07-01T10:00:00Z'),
+      resultRec('t1', '2026-07-01T10:00:30Z', { toolUseResult: { status: 'completed', agentId: 'aRes', totalTokens: 100 } }),
+      { timestamp: '2026-07-01T10:01:00Z', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'sm1', name: 'SendMessage', input: { to: 'aRes', summary: 'round 1', message: 'x' } }] } },
+      resultRec('sm1', '2026-07-01T10:01:01Z', { toolUseResult: { success: true, resumedAgentId: 'aRes' } }),
+      humanRec('<task-notification>\n<task-id>aRes</task-id>\n<status>completed</status>\n<usage><subagent_tokens>200</subagent_tokens></usage>\n</task-notification>', '2026-07-01T10:02:00Z')
+    ]);
+    subagentFile(file, 'aRes', [
+      usageRec({ input_tokens: 3000 }, '2026-07-01T10:00:10Z', { id: 'msg_r1' }),
+      usageRec({ input_tokens: 4000 }, '2026-07-01T10:01:30Z', { id: 'msg_r2' })   // the resumed run's turn
+    ]);
+    const a = analyzeSession(file)!;
+    assert.deepStrictEqual(a.bySubagent.map(s => [s.id, s.tokens]), [['t1', 7000]]);
+    assert.strictEqual(a.subagentTotals.count, 1);
+    assert.strictEqual(a.subagentTotals.tokens, 7000);
+    assert.strictEqual(a.subagentTotals.usage.combined, 7000);
+    assert.strictEqual(a.subagentTotals.unknownTokenCount, 0);
+  })) p++; else f++;
+
   if (test('harness figure on some dispatches only → transcript wins where present, no double count', () => {
     const file = fixture([
       taskRec('t1', 'Explore', '2026-07-01T10:00:00Z'),
