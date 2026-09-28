@@ -73,6 +73,23 @@ function attachmentRec(agentId: string, status: string, iso: string, usage?: { t
   };
 }
 
+/** A SendMessage tool_use addressed to a subagent by its agentId. */
+function sendRec(id: string, to: string, iso: string, summary?: string) {
+  return {
+    timestamp: iso,
+    message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'SendMessage', input: { to, message: 'fix these', ...(summary !== undefined ? { summary } : {}) } }] }
+  };
+}
+/** SendMessage's result when it woke a stopped subagent — a new run, not a completion. */
+function resumeRec(toolUseId: string, agentId: string, iso: string, opts: { structured?: boolean } = {}) {
+  const body = { success: true, message: `Resuming agent ${agentId.slice(0, 7)}`, resumedAgentId: agentId };
+  return {
+    timestamp: iso,
+    ...(opts.structured === false ? {} : { toolUseResult: body }),
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: [{ type: 'text', text: JSON.stringify(body) }] }] }
+  };
+}
+
 export function run(): number {
   console.log('\n=== agents.ts ===\n');
   let p = 0, f = 0;
@@ -310,6 +327,122 @@ export function run(): number {
     const agents = readAgents(file)!;
     assert.strictEqual(agents.length, 1);
     assert.strictEqual(agents[0].status, 'running');
+  })) p++; else f++;
+
+  // ── SendMessage resumes: a stopped subagent woken by SendMessage runs again ──
+  // The resume is its own run of the same agentId, completed later by a
+  // task-notification keyed by that id — the original launch row stays as it was.
+
+  if (test('SendMessage resume of a finished sync agent → new running row, original untouched', () => {
+    const file = fixture([
+      taskRec('toolu_impl', 'general-purpose', 'Implement Task 7', '2026-07-01T10:00:00Z'),
+      resultRec('toolu_impl', '2026-07-01T10:18:00Z', { agentId: 'a6d6', totalDurationMs: 1080000, totalToolUseCount: 41, totalTokens: 900 }),
+      sendRec('toolu_sm1', 'a6d6', '2026-07-01T10:25:00Z', 'Task 7 fix round 1'),
+      resumeRec('toolu_sm1', 'a6d6', '2026-07-01T10:25:02Z')
+    ]);
+    const agents = readAgents(file)!;
+    assert.strictEqual(agents.length, 2);
+    const [resume, orig] = agents;
+    assert.deepStrictEqual(resume, {
+      id: 'toolu_sm1', type: 'general-purpose', description: 'Task 7 fix round 1', status: 'running',
+      startedAt: '2026-07-01T10:25:00Z', endedAt: null, durationMs: null, tokens: null, toolUses: null,
+      agentId: 'a6d6', resumed: true
+    });
+    assert.strictEqual(orig.id, 'toolu_impl');
+    assert.strictEqual(orig.status, 'done');
+    assert.strictEqual(orig.durationMs, 1080000);
+    assert.strictEqual('resumed' in orig, false);
+  })) p++; else f++;
+
+  if (test('resumed run completes on the task-notification for its agentId', () => {
+    const file = fixture([
+      taskRec('toolu_impl', 'general-purpose', 'Implement', '2026-07-01T10:00:00Z'),
+      resultRec('toolu_impl', '2026-07-01T10:18:00Z', { agentId: 'a6d6', totalDurationMs: 1080000 }),
+      sendRec('toolu_sm1', 'a6d6', '2026-07-01T10:25:00Z', 'fix round 1'),
+      resumeRec('toolu_sm1', 'a6d6', '2026-07-01T10:25:02Z'),
+      queueOpRec('a6d6', 'completed', '2026-07-01T10:46:00Z', 'enqueue', { tokens: 700, toolUses: 9, durationMs: 1258000 }),
+      attachmentRec('a6d6', 'completed', '2026-07-01T10:46:00Z', { tokens: 700, toolUses: 9, durationMs: 1258000 })
+    ]);
+    const [resume, orig] = readAgents(file)!;
+    assert.strictEqual(resume.status, 'done');
+    assert.strictEqual(resume.endedAt, '2026-07-01T10:46:00Z');
+    assert.strictEqual(resume.durationMs, 1258000);
+    assert.strictEqual(resume.tokens, 700);
+    assert.strictEqual(resume.toolUses, 9);
+    assert.strictEqual(orig.endedAt, '2026-07-01T10:18:00Z');
+    assert.strictEqual(orig.durationMs, 1080000);
+  })) p++; else f++;
+
+  if (test('second resume after the first completed → first done, second running', () => {
+    const file = fixture([
+      taskRec('toolu_impl', 'general-purpose', 'Implement', '2026-07-01T10:00:00Z'),
+      resultRec('toolu_impl', '2026-07-01T10:18:00Z', { agentId: 'a6d6' }),
+      sendRec('toolu_sm1', 'a6d6', '2026-07-01T10:25:00Z', 'round 1'),
+      resumeRec('toolu_sm1', 'a6d6', '2026-07-01T10:25:02Z'),
+      notifyRec('a6d6', 'completed', '2026-07-01T10:46:00Z'),
+      sendRec('toolu_sm2', 'a6d6', '2026-07-01T10:50:00Z', 'round 2'),
+      resumeRec('toolu_sm2', 'a6d6', '2026-07-01T10:50:04Z')
+    ]);
+    const agents = readAgents(file)!;
+    assert.deepStrictEqual(agents.map(a => [a.id, a.description, a.status]), [
+      ['toolu_sm2', 'round 2', 'running'], ['toolu_sm1', 'round 1', 'done'], ['toolu_impl', 'Implement', 'done']
+    ]);
+  })) p++; else f++;
+
+  if (test('resume of a background agent: its own completion and the resume\'s stay separate', () => {
+    const file = fixture([
+      taskRec('toolu_bg', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_bg', 'bb11', '2026-07-01T10:00:00.030Z', { structured: true }),
+      notifyRec('bb11', 'completed', '2026-07-01T10:05:00Z'),
+      sendRec('toolu_sm', 'bb11', '2026-07-01T10:06:00Z', 'look again'),
+      resumeRec('toolu_sm', 'bb11', '2026-07-01T10:06:01Z')
+    ]);
+    const [resume, orig] = readAgents(file)!;
+    assert.strictEqual(orig.status, 'done');
+    assert.strictEqual(orig.endedAt, '2026-07-01T10:05:00Z');
+    assert.strictEqual(resume.status, 'running');
+    assert.strictEqual(resume.type, 'Explore');
+  })) p++; else f++;
+
+  if (test('resumedAgentId read from the result text when toolUseResult is absent', () => {
+    const file = fixture([
+      taskRec('toolu_impl', 'Plan', 'plan it', '2026-07-01T10:00:00Z'),
+      resultRec('toolu_impl', '2026-07-01T10:01:00Z', { agentId: 'cc22' }),
+      sendRec('toolu_sm', 'cc22', '2026-07-01T10:02:00Z', 'again'),
+      resumeRec('toolu_sm', 'cc22', '2026-07-01T10:02:01Z', { structured: false })
+    ]);
+    const agents = readAgents(file)!;
+    assert.strictEqual(agents.length, 2);
+    assert.strictEqual(agents[0].agentId, 'cc22');
+    assert.strictEqual(agents[0].status, 'running');
+  })) p++; else f++;
+
+  if (test('SendMessage that resumed nothing (no resumedAgentId) adds no row', () => {
+    const file = fixture([
+      taskRec('toolu_bg', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_bg', 'bb11', '2026-07-01T10:00:00.030Z', { structured: true }),
+      sendRec('toolu_sm', 'bb11', '2026-07-01T10:01:00Z', 'also check X'),
+      { timestamp: '2026-07-01T10:01:01Z', toolUseResult: { success: true, message: 'Message queued for delivery to bb11' },
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_sm', content: 'Message queued for delivery to bb11' }] } }
+    ]);
+    const agents = readAgents(file)!;
+    assert.deepStrictEqual(agents.map(a => [a.id, a.status]), [['toolu_bg', 'running']]);
+  })) p++; else f++;
+
+  if (test('resume without a summary falls back to the launch description; unknown agent → type \'\'', () => {
+    const file = fixture([
+      taskRec('toolu_impl', 'Plan', 'plan it', '2026-07-01T10:00:00Z'),
+      resultRec('toolu_impl', '2026-07-01T10:01:00Z', { agentId: 'cc22' }),
+      sendRec('toolu_sm', 'cc22', '2026-07-01T10:02:00Z'),
+      resumeRec('toolu_sm', 'cc22', '2026-07-01T10:02:01Z'),
+      sendRec('toolu_sm2', 'zz99', '2026-07-01T10:03:00Z'),
+      resumeRec('toolu_sm2', 'zz99', '2026-07-01T10:03:01Z')
+    ]);
+    const byId = new Map(readAgents(file)!.map(a => [a.id, a]));
+    assert.strictEqual(byId.get('toolu_sm')!.description, 'plan it');
+    assert.strictEqual(byId.get('toolu_sm')!.type, 'Plan');
+    assert.strictEqual(byId.get('toolu_sm2')!.type, '');
+    assert.strictEqual(byId.get('toolu_sm2')!.status, 'running');
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

@@ -156,6 +156,22 @@ export function run(): number {
     assert.strictEqual(a.durationMs, 540000);
   })) p++; else f++;
 
+  if (test('SendMessage call and its resume result split across incremental reads', () => {
+    _resetAgentsCache();
+    const file = tmpFile();
+    const sm = { timestamp: '2026-07-01T10:05:00Z', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'sm', name: 'SendMessage', input: { to: 'syncA', summary: 'again' } }] } };
+    fs.writeFileSync(file, [taskRec('a', 'Plan', 'sync one', '2026-07-01T10:00:00Z'),
+      resultRec('a', '2026-07-01T10:01:00Z', { agentId: 'syncA' }), sm].map(r => JSON.stringify(r)).join('\n') + '\n');
+    assert.strictEqual(readAgentsCached(file)!.length, 1);
+    fs.appendFileSync(file, JSON.stringify(resultRec('sm', '2026-07-01T10:05:01Z', { success: true, resumedAgentId: 'syncA' })) + '\n');
+    assertMatchesOracle(file);
+    const jobs = readAgentsCached(file)!;
+    assert.deepStrictEqual(jobs.map(j => [j.id, j.status]), [['sm', 'running'], ['a', 'done']]);
+    fs.appendFileSync(file, JSON.stringify(notifyRec('syncA', '2026-07-01T10:09:00Z')) + '\n');
+    assertMatchesOracle(file);
+    assert.strictEqual(readAgentsCached(file)!.find(j => j.id === 'sm')!.status, 'done');
+  })) p++; else f++;
+
   if (test('absorbed mid-turn completion: byte-split appends still match the oracle', () => {
     _resetAgentsCache();
     const file = tmpFile();

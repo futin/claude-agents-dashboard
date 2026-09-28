@@ -259,7 +259,8 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
   hold: an `agent-*.jsonl` written within `SUBAGENT_STALL_MS` (**15 minutes** — longer than the
   Bash tool's 10-minute maximum timeout, so a subagent inside its longest single tool call
   still counts); its newest message mid-turn (a finished subagent ends `end_turn`); and the
-  parent still showing a launch `running` in `readAgentsCached` — the veto for Esc, which
+  parent still showing a launch `running` in `readAgentsCached` (a `SendMessage` resume counts — see
+  [Expandable subagent detail](#expandable-subagent-detail)) — the veto for Esc, which
   records the launch's `tool_result` but leaves the subagent file fresh and mid-turn. A dead
   process still reads `idle`, and a question still wins. Out of scope: a parent parked on a
   background `Bash`/`Monitor` task has the same `end_turn` shape and still reads `idle` — it
@@ -420,6 +421,12 @@ duration, tokens (the harness's figure: the subagent's final context size, not i
 inspector sums the real spend from the subagent transcripts), tool-use count — under a `N running · N finished · N agents` summary.
 Served by an incremental byte-offset cache (`agents.ts` / `agents-cache.ts`) so repeat
 opens stay cheap.
+
+**Resumed agents get their own row.** `SendMessage` to a stopped subagent wakes it for another run — the subagent-driven fix loop does this every round. The
+result carries `toolUseResult.resumedAgentId`, and the run completes like a background launch, on a `<task-notification>` keyed by that agentId. `agents.ts`
+opens a `resumed: true` row per resume (description from the `SendMessage` `summary`, type from the launch it resumed) and leaves the launch row as it was.
+Without it the launch row reads `done`, so a parent parked on round 2 fell through `subagentRunning` to `incomplete`. Every run writes the same
+`agent-<id>.jsonl`, so the Analytics spend skips `resumed` rows — the launch row already claims that whole file.
 
 `useSessionDetail` keeps polling that endpoint **every 3s for as long as the row stays
 open** — not once on expand — because the panel is watching live work. It clears its state

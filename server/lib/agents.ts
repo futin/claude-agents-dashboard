@@ -20,6 +20,12 @@
  *    into the running turn as message-less `queue-operation` / `attachment`
  *    records — see `notificationText`.
  *
+ *  - Resumed: `SendMessage` to a stopped subagent wakes it for another run. Its
+ *    result carries `toolUseResult.resumedAgentId`, and that run completes like a
+ *    background one — a `<task-notification>` keyed by the same agentId. Each
+ *    resume is its own row (`resumed: true`) so a parent parked on round 2 of a
+ *    fix loop reads as running; the launch row it resumes is left as it was.
+ *
  * Both are derived from the PARENT transcript alone. The interpretation is split
  * into a pure per-record event parser (`parseRecordEvents`) and a reducer over
  * `ScanState` (`applyEvent`), so the whole-file `readAgents` (the oracle) and
@@ -42,6 +48,10 @@ function isAgentLaunch(b: any): boolean {
   if (!b || b.type !== 'tool_use') return false;
   if (b.name === 'Task' || b.name === 'Agent') return true;
   return !!(b.input && typeof b.input.subagent_type === 'string');
+}
+
+function isSendMessage(b: any): boolean {
+  return !!b && b.type === 'tool_use' && b.name === 'SendMessage';
 }
 
 /** Flatten a message.content (array of blocks | string) into plain text. */
@@ -67,6 +77,7 @@ function toolResultText(b: any): string {
 }
 
 const AGENT_ID_RE = /agentId:\s*([A-Za-z0-9]+)/;
+const RESUMED_ID_RE = /"resumedAgentId"\s*:\s*"([A-Za-z0-9]+)"/;
 const TASK_ID_RE = /<task-id>\s*([A-Za-z0-9]+)\s*<\/task-id>/;
 const STATUS_RE = /<status>\s*([a-z_]+)\s*<\/status>/i;
 const SUBAGENT_TOKENS_RE = /<subagent_tokens>\s*(\d+)\s*<\/subagent_tokens>/;
@@ -100,8 +111,9 @@ function notificationText(rec: any, content: any): string {
 /** One agent-relevant fact extracted from a transcript record. */
 export type AgentEvent =
   | { kind: 'launch'; id: string; type: string; description: string; ts: string | null }
+  | { kind: 'send'; id: string; summary: string; ts: string | null }
   | { kind: 'result'; toolUseId: string; ts: string | null;
-      isAsyncAck: boolean; agentId: string | null;
+      isAsyncAck: boolean; agentId: string | null; resumedAgentId: string | null;
       tokens: number | null; toolUses: number | null; exactDurationMs: number | null }
   | { kind: 'notify'; agentId: string; completed: boolean; ts: string | null;
       tokens: number | null; toolUses: number | null; exactDurationMs: number | null };
@@ -159,6 +171,9 @@ export function parseRecordEvents(rec: any): AgentEvent[] {
         description: typeof input.description === 'string' ? input.description : '',
         ts
       });
+    } else if (isSendMessage(b) && typeof b.id === 'string') {
+      const input = b.input || {};
+      events.push({ kind: 'send', id: b.id, summary: typeof input.summary === 'string' ? input.summary : '', ts });
     } else if (b.type === 'tool_result' && typeof b.tool_use_id === 'string') {
       const text = toolResultText(b);
       const t = tur && typeof tur === 'object' ? tur : null;
@@ -173,12 +188,18 @@ export function parseRecordEvents(rec: any): AgentEvent[] {
         const m = text.match(AGENT_ID_RE);
         agentId = m ? m[1] : null;
       }
+      let resumedAgentId: string | null = t && typeof t.resumedAgentId === 'string' ? t.resumedAgentId : null;
+      if (!resumedAgentId) {
+        const m = text.match(RESUMED_ID_RE);
+        resumedAgentId = m ? m[1] : null;
+      }
       events.push({
         kind: 'result',
         toolUseId: b.tool_use_id,
         ts,
         isAsyncAck: !!isAsyncAck,
         agentId,
+        resumedAgentId,
         tokens: isAsyncAck ? null : finiteOrNull(t?.totalTokens),
         toolUses: isAsyncAck ? null : finiteOrNull(t?.totalToolUseCount),
         exactDurationMs: isAsyncAck ? null : finiteOrNull(t?.totalDurationMs)
@@ -198,12 +219,14 @@ interface Launch {
   tokens: number | null;
   toolUses: number | null;
   agentId: string | null;
+  resumed: boolean;
 }
 
 /**
  * Reducer state. `byToolUseId` holds launches awaiting their immediate
  * tool_result; `byAgentId` holds background launches awaiting their
- * task-notification. Keeping these maps alive across incremental reads is what
+ * task-notification; `sends` holds SendMessage calls awaiting the result that
+ * says whether they resumed an agent. Keeping these maps alive across incremental reads is what
  * lets an out-of-order completion (a notification landing long after younger
  * launches settled) still resolve — no re-scan needed.
  */
@@ -211,10 +234,11 @@ export interface ScanState {
   launches: Launch[];                  // file order (oldest first)
   byToolUseId: Map<string, Launch>;
   byAgentId: Map<string, Launch>;
+  sends: Map<string, { summary: string; ts: string | null }>;
 }
 
 export function createScanState(): ScanState {
-  return { launches: [], byToolUseId: new Map(), byAgentId: new Map() };
+  return { launches: [], byToolUseId: new Map(), byAgentId: new Map(), sends: new Map() };
 }
 
 /** Fold one event into the state. First result / first notification wins. */
@@ -222,15 +246,25 @@ export function applyEvent(state: ScanState, ev: AgentEvent): void {
   if (ev.kind === 'launch') {
     const l: Launch = {
       id: ev.id, type: ev.type, description: ev.description,
-      startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId: null
+      startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId: null, resumed: false
     };
     state.launches.push(l);
     if (!state.byToolUseId.has(ev.id)) state.byToolUseId.set(ev.id, l);
     return;
   }
+  if (ev.kind === 'send') {
+    if (!state.sends.has(ev.id)) state.sends.set(ev.id, { summary: ev.summary, ts: ev.ts });
+    return;
+  }
   if (ev.kind === 'result') {
     const l = state.byToolUseId.get(ev.toolUseId);
-    if (!l) return;
+    if (!l) {
+      const send = state.sends.get(ev.toolUseId);
+      if (!send) return;
+      state.sends.delete(ev.toolUseId);
+      if (ev.resumedAgentId) applyResume(state, ev.toolUseId, ev.resumedAgentId, send);
+      return;
+    }
     state.byToolUseId.delete(ev.toolUseId);
     l.agentId = ev.agentId;
     if (ev.isAsyncAck) {
@@ -256,6 +290,22 @@ export function applyEvent(state: ScanState, ev: AgentEvent): void {
   l.exactDurationMs = ev.exactDurationMs;
 }
 
+/**
+ * Open a row for a SendMessage resume, pending the task-notification for its
+ * agentId. It inherits the resumed launch's type, and its description unless the
+ * SendMessage carried a summary. It takes over `byAgentId`: a resume proves the
+ * previous run stopped, so the next notification for that id is this run's.
+ */
+function applyResume(state: ScanState, id: string, agentId: string, send: { summary: string; ts: string | null }): void {
+  const origin = state.launches.find(x => x.agentId === agentId && !x.resumed);
+  const l: Launch = {
+    id, type: origin ? origin.type : '', description: send.summary || (origin ? origin.description : ''),
+    startedAt: send.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId, resumed: true
+  };
+  state.launches.push(l);
+  state.byAgentId.set(agentId, l);
+}
+
 /** Materialize AgentJob[] (newest-first) from state. Non-destructive. */
 export function toAgentJobs(state: ScanState): AgentJob[] {
   const agents: AgentJob[] = state.launches.map(l => {
@@ -272,7 +322,8 @@ export function toAgentJobs(state: ScanState): AgentJob[] {
       durationMs: l.exactDurationMs ?? diff,
       tokens: l.tokens,
       toolUses: l.toolUses,
-      agentId: l.agentId
+      agentId: l.agentId,
+      ...(l.resumed ? { resumed: true as const } : {})
     };
   });
   agents.reverse(); // file order is oldest→newest; return newest-first

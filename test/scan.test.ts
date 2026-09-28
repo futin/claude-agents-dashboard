@@ -948,6 +948,25 @@ export function run(): number {
     assert.strictEqual(subScan(root), 'incomplete');
   })) p++; else f++;
 
+  // A SendMessage resume of a finished sync agent: the launch row is done, so only the
+  // resume row can say the parent is parked on it.
+  const sendMsg = (id: string, hex: string) => ({ type: 'assistant', message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'tool_use',
+    content: [{ type: 'tool_use', id, name: 'SendMessage', input: { to: hex, summary: 'fix round 2', message: 'x' } }], usage: { input_tokens: 1000 } } });
+  const resumed = (id: string, hex: string) => ({ type: 'user', toolUseResult: { success: true, resumedAgentId: hex },
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: `{"success":true,"resumedAgentId":"${hex}"}` }] } });
+  const resumeParent = (hex = 'a0b1c2d3') => [agentLaunch('toolu_sy'),
+    { type: 'user', toolUseResult: { status: 'completed', agentId: hex }, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_sy', content: 'done' }] } },
+    sendMsg('toolu_sm', hex), resumed('toolu_sm', hex), assistantDone()];
+
+  if (test('subagent: parked on a SendMessage-resumed agent reads working', () => {
+    assert.strictEqual(subScan(subRoot('smpark', '/a/smpark', resumeParent(), subBusy, 60 * 1000).root), 'working');
+  })) p++; else f++;
+
+  if (test('subagent: the resumed run\'s completion notification releases the park', () => {
+    const { root } = subRoot('smdone', '/a/smdone', [...resumeParent(), notified('a0b1c2d3'), assistantDone()], subBusy, 60 * 1000);
+    assert.strictEqual(subScan(root), 'idle');
+  })) p++; else f++;
+
   if (test('subagent: no subagents/ directory leaves the ladder exactly as before', () => {
     const root = makeRoot([
       { dirName: '-a-nosub1', id: 'nosub1', mtimeMs: subNow - 6 * 60 * 1000, records: [metaRec('/a/nosub1', 'main'), ...syncParent().map(r => at(r, subT6))] },

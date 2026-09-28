@@ -298,7 +298,8 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
  * every turn added together means the file is still being written, so the harness figure is
  * the better (lower-bound) answer. A running launch stays unknown, as does a finished one with
  * neither. A transcript no launch claims is not a subagent this session can account for, and
- * is left out rather than risk counting one twice.
+ * is left out rather than risk counting one twice. A `resumed` row is left out too: its runs
+ * write into the transcript the original launch already claims.
  */
 function subagentSpend(filePath: string): { agents: AgentJob[]; subagentTotals: SubagentTotals } {
   const files = readSubagentUsage(filePath);
@@ -306,7 +307,7 @@ function subagentSpend(filePath: string): { agents: AgentJob[]; subagentTotals: 
   const byToolUseId = new Map(files.filter(f => f.toolUseId).map(f => [f.toolUseId as string, f]));
   const usage = emptyTotals();
   let tokens = 0, fallbackCount = 0, unknownTokenCount = 0;
-  const agents = (readAgents(filePath) || []).map(a => {
+  const agents = (readAgents(filePath) || []).filter(a => !a.resumed).map(a => {
     const file = (a.agentId && byAgentId.get(a.agentId)) || byToolUseId.get(a.id);
     let figure: number | null = null;
     if (a.status === 'done') {

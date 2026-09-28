@@ -725,7 +725,10 @@ export interface AccountResponse {
 
 /** One subagent launched via the `Task` tool, paired from the parent transcript. */
 export interface AgentJob {
-  /** The Task tool_use id (pairs with the later tool_result.tool_use_id). */
+  /**
+   * The Task tool_use id (pairs with the later tool_result.tool_use_id) — or, on a
+   * `resumed` row, the id of the SendMessage call that woke the agent.
+   */
   id: string;
   /** subagent_type, e.g. "Explore"; '' when the record omits it. */
   type: string;
@@ -758,6 +761,11 @@ export interface AgentJob {
   agentId: string | null;
   /** Tool calls the subagent made (totalToolUseCount / <tool_uses>). Same nullability. */
   toolUses: number | null;
+  /**
+   * Present only on a run started by SendMessage waking a stopped subagent. It shares
+   * `agentId` — and so one transcript — with the launch row it resumed.
+   */
+  resumed?: true;
 }
 
 /** Payload of `GET /api/sessions/:id` — a session's subagent activity. */
