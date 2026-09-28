@@ -277,6 +277,11 @@ code,kbd,samp,pre{font-family:inherit}
    Only that one corner — the other three run to the edges of the window, so
    rounding them would open a gap the board has no use for. */
 .main{flex:1;min-width:0;margin-top:0;padding:var(--body-pad);background:var(--board);border-top-left-radius:0;overflow-x:clip}
+/* The column right of the rail: the header band, then the board. Below `sm`
+   there is no band (the account chip is in the phone bar instead), so this
+   generates no box at all and `.main` stays the flex child of `.shell` it has
+   always been there. From `sm` it becomes a real column — see the block below. */
+.maincol{display:contents}
 /* ── phone navigation ─────────────────────────────────────────────────────
    The base tier is the phone, so this is the nav the stylesheet declares first
    and the rail beside the board is the variant. A top bar carries the wordmark
@@ -335,20 +340,151 @@ code,kbd,samp,pre{font-family:inherit}
      this token — see "the phone strip" further down and stickyStrip.ts. Zero
      it here so the strip sits flush instead of leaving a bar-height gap for a
      bar that this block just hid. */
-  :root{--mnav-h:0px}
+  /* …and --main-gap stops being a margin and becomes the header band's height.
+     The white space above the board is the account chip's strip now, so the two
+     are the same measurement and must stay one token: `.wrap.wide`'s pinned
+     height (the xl block, far below) subtracts it to work out what is left of
+     the viewport, and would be 26px out if the band and the gap drifted apart.
+     50px is 7 of air, a 36px chip, 7 again. */
+  :root{--mnav-h:0px;--main-gap:50px}
   .rail{display:flex;position:sticky;left:auto;right:auto;top:0;flex:0 0 240px;height:calc(100vh / var(--font-scale,1));max-height:none;align-self:flex-start;gap:4px;padding:24px;overflow-x:visible;border-bottom:0;box-shadow:none}
   /* the rail carries the wordmark again, and the bar's copy is gone with it */
   .rail-brand{display:flex}
-  /* the board tucks back into the rail's corner */
-  .main{margin-top:var(--main-gap);border-top-left-radius:24px}
+  /* the column is a real box from here up, and it paints the band's white */
+  .maincol{display:flex;flex-direction:column;flex:1;min-width:0;background:var(--strip)}
+  /* the board tucks back into the rail's corner. No top margin any more: the
+     band above it is that space, drawn rather than left empty. */
+  .main{margin-top:0;border-top-left-radius:24px}
   /* a pointer row, not a thumb one */
   .rail-link{min-height:36px}
   /* and only the section you are in draws its tree */
   .rail-group:not(.here) .rail-sub{display:none}
 }
+/* ── the header band · account ─────────────────────────────────────────────
+   The band is the white space above the board, which used to be `.main`'s top
+   margin and is now a header with exactly one thing in it: the account.
+
+   That account was a card in the sessions aside. It is here because it is the
+   one block on that aside which is not about the board — the 5-hour and weekly
+   windows are true of the account wherever you are standing — and reading them
+   should not require being on Sessions. Everything it prints comes from what
+   the app already reads: `~/.claude.json` → `oauthAccount` for the identity and
+   the same usage endpoint the card polled for the windows (`/api/account`).
+
+   Below `sm` (640) none of this draws: there is no band, and `HeaderAccount`
+   is handed to the phone bar instead (the `.mnav` rules at the end of this
+   block). One chip either way — `useShellNarrow` picks, not `display:none`.
+
+   Mock: docs/guides/mockups/redesign-mock.html, the top strip. */
+.topstrip{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex:none;height:var(--main-gap);padding:0 var(--body-pad)}
+.acct-anchor{position:relative;flex:none}
+/* Bare: no fill, no border, no shadow. A white pill on a white band is held
+   together by a hairline, which is the weakest mark in the design and the first
+   to vanish on a dim screen; here the avatar, the name and the meters sit
+   straight on the band and the only rule left is the one already dividing
+   identity from usage. Hover and open tint with the board's own ground, so the
+   chip answers a pointer in a colour the page already uses rather than
+   introducing a fifth neutral. */
+.acct{display:flex;align-items:center;gap:10px;height:36px;padding:0 5px;background:none;border:0;border-radius:999px;font-family:var(--font);color:var(--ink);cursor:pointer;transition:background .15s}
+.acct:hover,.acct[aria-expanded="true"]{background:var(--board)}
+.acct .av,.acct-id .av{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:999px;background:var(--ink);color:var(--strip);font-size:11px;font-weight:700}
+.acct .nm{font-size:12.5px;font-weight:600;line-height:1;white-space:nowrap}
+/* the one rule on the chip: identity left of it, usage right */
+.acct .meters{display:flex;gap:11px;padding-left:11px;border-left:1px solid var(--hairline)}
+.acct .m{display:grid;gap:2.5px;width:52px}
+.acct .mtop{display:flex;align-items:baseline;justify-content:space-between}
+.acct .mtop span{font-size:9.5px;color:var(--ink3);letter-spacing:.04em}
+.acct .mtop b{font-size:11px;font-weight:700}
+/* Same ramp as the card's bars, a quarter of the height: this is a glance, and
+   the popover is where the same number is read properly. */
+.acct .mini{position:relative;height:3.5px;border-radius:999px;background:var(--steel);overflow:hidden}
+.acct .mini i{position:absolute;inset:0 auto 0 0;border-radius:999px;background:var(--green);transition:width .5s ease}
+.acct .mini i.mid{background:var(--amber)}
+.acct .mini i.high{background:var(--red)}
+.acct .cv{flex:none;width:9px;height:9px;color:var(--ink3);fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .16s}
+.acct[aria-expanded="true"] .cv{transform:rotate(180deg)}
+
+/* signed out · token expired — the credential is readable but blank (or stale),
+   so there are no windows to draw and the account has no name. The chip keeps
+   its geometry and swaps its contents: an empty ring where the avatar was, the
+   state where the name was. The command itself is in the popover, as VISIBLE
+   text: `title` never fires on a phone, and the dashboard cannot sign anyone in
+   — so saying the command is the whole of the remedy.
+   Declared on its own rather than under `.acct.out`, because the popover draws
+   the same mark at a second size. */
+.ring{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:999px;border:1.5px dashed var(--hairline2);color:var(--ink3)}
+.ring svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.ring.lg{width:34px;height:34px}
+.ring.lg svg{width:17px;height:17px}
+.acct.out .nm{color:var(--ink2);font-weight:500}
+.acct.out .dotwarn{flex:none;width:6px;height:6px;border-radius:999px;background:var(--amber)}
+
+/* the popover: the identity block over the two gauges the aside card drew.
+   Floating paper, per DESIGN.md §5 — the same stroke, radius and lift as the
+   toolbar's `.pop`, because there is one floating surface in this design and
+   not two. 372 and not the toolbar's 300: the identity block's four tiers —
+   plan, organisation, seat, extra usage — wrap to a second row below about
+   360, and a tag rail that wraps reads as four things rather than as one line
+   of facts about the account. Capped against the viewport so a 320px phone
+   cannot push it off the right edge. */
+.acct-pop{position:absolute;right:0;top:calc(100% + 8px);z-index:40;width:min(372px,calc(100vw - 24px));text-align:left;background:var(--strip);border:1px solid var(--hairline);border-radius:12px;box-shadow:0 8px 24px var(--shadow2);padding:16px}
+.acct-id{display:flex;align-items:center;gap:12px;padding-bottom:13px;margin-bottom:13px;border-bottom:1px solid var(--hairline)}
+.acct-id .av{width:40px;height:40px;font-size:15px}
+.acct-id .who3{min-width:0}
+.acct-id .n{display:block;font-size:14px;font-weight:600;line-height:1.25}
+.acct-id .e{display:block;font-size:12px;color:var(--ink2);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* plan · organisation · seat · extra usage, each drawn only when the server
+   could resolve it — an unrecognised tier is absent, never guessed at */
+.acct-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.acct-tags span{font-size:10.5px;font-weight:600;letter-spacing:.03em;color:var(--ink2);background:var(--strip-hi);border-radius:999px;padding:2.5px 8px}
+.acct-tags span.on{color:var(--green)}
+/* Belt to the `format-detection` meta in index.html: a phone browser that
+   linkifies the name, the avatar letter or a plan tag ("Max 5x") — data
+   detectors, an accessibility "button shapes" setting, a translate or
+   password-manager overlay — must not leave it underlined and reading as
+   clickable. Nothing in this popover is a link, so none of it gets a link's
+   decoration. */
+.acct,.acct *,.acct-pop,.acct-pop *{text-decoration:none;-webkit-text-decoration:none}
+.acct-pop a{color:inherit}
+/* the card's gauges, verbatim — only the space above them changes, because the
+   identity block already supplies it */
+.acct-pop .usage{margin-top:0;gap:20px}
+.acct-foot{display:flex;gap:6px;margin-top:14px;padding-top:13px;border-top:1px solid var(--hairline)}
+.acct-foot button{flex:1;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:12px;padding:8px;cursor:pointer;transition:color .15s}
+.acct-foot button:hover{color:var(--ink)}
+/* the signed-out popover: no gauges to show, so it is the sentence and the fix */
+.acct-pop .out-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.acct-pop .out-head .n{font-size:14px;font-weight:600}
+.acct-pop .out-body{font-size:12.5px;line-height:1.5;color:var(--ink2)}
+.acct-pop .cmd{display:block;margin-top:12px;padding:10px 12px;background:var(--steel);border-radius:12px;font-size:12.5px;font-weight:600;color:var(--ink)}
+.acct-pop .out-note{margin-top:12px;font-size:11.5px;color:var(--ink3);line-height:1.45}
+
+/* the chip's phone home. The bar has a wordmark and a 44px burger already, so
+   the name comes off and the meters tighten: on a phone the account's two
+   percentages are what the chip is for, and the name is one tap away in the
+   popover that also carries it. `margin-left:auto` moves here from the burger,
+   which would otherwise split the free space with it. */
+.mnav .acct-anchor{margin-left:auto}
+/* Only once a chip is actually there. The burger's own `margin-left:auto` is
+   what holds it right when the chip is absent — a cold poll, `unavailable`,
+   SHOW_USAGE off with no profile — and two auto margins would split the free
+   space between them and strand the chip mid-bar. */
+.mnav .acct-anchor~.mnav-burger{margin-left:0}
+.mnav .acct .nm{display:none}
+/* The popover hangs off the BAR here, not off the chip: anchored to a chip
+   sitting left of a 44px burger, a 320px sheet ran 15px past the left edge of a
+   375px screen. The anchor goes static so the sticky `.nav` becomes the
+   containing block, and the sheet spans the bar's own gutters — which is also
+   the phone shape for a surface this tall. */
+.mnav .acct-anchor{position:static}
+.mnav .acct-pop{left:14px;right:14px;width:auto}
+.mnav .acct .meters{gap:9px}
+.mnav .acct .m{width:46px}
+
 /* ── Sessions page ─────────────────────────────────────────────────────────
    Two columns on the broad wrap: the list in one of five shapes, and a 320px
-   aside carrying the Account gauges and the Board facts. Cards follow
+   aside carrying the Board facts. (The Account gauges were the card above them
+   until they became the header band's chip — see the block above.) Cards follow
    DESIGN.md §8.2 — `--strip`, 16px radius, no stroke, no shadow; the ground
    does the separating. Mock: docs/guides/mockups/redesign-mock.html #sessions.
    State rides on the element itself (`.sdot.working`, `.spill.question`)
@@ -385,11 +521,16 @@ code,kbd,samp,pre{font-family:inherit}
 .newbtn:hover{opacity:.88}
 
 /* ── Sessions aside · the phone strip ──────────────────────────────────────
-   Below `md` (768) `AsideStrip` replaces the two aside cards outright (swapped
-   in the markup, not hidden here) — that gate is `useNarrow`'s (767.98), not a
-   CSS one. One bar: the rate percentages and a caret on the left, the "needs
-   you" count + clock and a caret on the right, the launch square last. Either
-   half opens a panel carrying the card body it summarises.
+   Below `md` (768) `AsideStrip` replaces the Board card outright (swapped in
+   the markup, not hidden here) — that gate is `useNarrow`'s (767.98), not a
+   CSS one. One bar: the "needs you" count + clock and a caret, then the launch
+   square. The tap opens a panel carrying the card body it summarises.
+
+   It carried a second half until the account moved to the header: the rate
+   percentages sat left of the separator and opened onto the gauges. Those are
+   in the phone nav bar's chip now (`.mnav .acct`, in the header-band block
+   above), readable from every section instead of only from this list — so the
+   left half and the separator between them are gone.
 
    Never drawn at `md` (768) or above — the component is not rendered there —
    so these rules need no tier of their own for *that* edge. But it *is* drawn
@@ -420,21 +561,19 @@ code,kbd,samp,pre{font-family:inherit}
    bar — the same curve on paper, visibly behind it in the hand. Only while
    stuck: unpinned there is nothing to lift, and the bar can hide before the
    strip has reached it (`useHideOnScroll` has no run-up). */
-.nav.hid~.main .s-strip.stuck{transform:translateY(calc(var(--mnav-h) * -1))}
+/* `~.maincol` and not `~.main`: the board is a child of the header column
+   now. `.maincol` is `display:contents` at this measure so it draws no box,
+   but selectors read the DOM tree, not the box tree — `~.main` matched
+   nothing and the strip stopped riding the bar. */
+.nav.hid~.maincol .s-strip.stuck{transform:translateY(calc(var(--mnav-h) * -1))}
 .s-strip.stuck{margin:0 calc(var(--body-pad) * -1);border-radius:0;box-shadow:0 1px 0 var(--hairline),0 8px 16px -8px var(--shadow)}
 .s-strip-row{display:flex;align-items:center;gap:6px;min-height:48px;padding:7px 10px 7px 12px}
-/* Each half is a tap target, not a label: the fill on :active is the only
-   feedback a phone gets, since there is no hover to lean on. */
+/* The tap is a target, not a label: the fill on :active is the only feedback a
+   phone gets, since there is no hover to lean on. */
 .s-strip-tap{flex:none;display:flex;align-items:center;gap:8px;min-width:0;padding:6px 4px;border:0;border-radius:10px;background:none;font-family:var(--font);color:inherit;cursor:pointer}
 /* Named apart from `.board`, which is the board view's grid. */
 .s-strip-tap.s-tap-board{margin-left:auto}
 .s-strip-tap:active{background:var(--strip-hi)}
-.s-mini{display:inline-flex;align-items:baseline;gap:5px;font-size:13px;white-space:nowrap}
-.s-mini .k{color:var(--ink2)}
-.s-mini .v{font-weight:600;color:var(--ink)}
-.s-mini .v.mid{color:var(--amber)}
-.s-mini .v.high{color:var(--red)}
-.s-strip-sep{flex:none;width:1px;height:20px;background:var(--hairline)}
 .s-strip-badge{flex:none;white-space:nowrap;font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
 .s-strip-clock{font-size:13px;color:var(--ink2);white-space:nowrap}
 /* The launch action, promoted out of the Board card: on a phone the board's

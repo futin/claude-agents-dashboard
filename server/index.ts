@@ -30,7 +30,8 @@ import {
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
   serveSettingsRead, serveSettingsWrite, serveNotifyEvent, serveNotifyTest,
-  serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates
+  serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates,
+  serveAccount
 } from './api.js';
 import { startUsageRecording } from './lib/usage-history.js';
 import { refreshUsageNow, setUsageAutoRefresh } from './lib/usage.js';
@@ -194,6 +195,11 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (u.pathname === '/api/settings') {
       if (req.method === 'POST') return void serveSettingsWrite(config, req, res);
       return void serveSettingsRead(config, res);
+    }
+    // Who the CLI is signed in as + the two rate windows, on one small body the
+    // header account chip polls on its own 30s clock from every section.
+    if (u.pathname === '/api/account') {
+      return void serveAccount(config, res);
     }
     // The duty-cycle profile behind the weekly forecast — read-only, and never
     // carrying raw samples (see docs/subsystems/usage-limits.md).

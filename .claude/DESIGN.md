@@ -249,7 +249,9 @@ Mock: `docs/guides/mockups/redesign-mock.html` `#set-local` / `#set-shared`.
 ### 8.3 Sessions — the board, five ways
 
 The Sessions page is two columns on the broad wrap: the list, and a 320px aside carrying
-the Account gauges and the Board facts as two §8.2 cards. The list has **five shapes** —
+the Board facts as a §8.2 card. (The Account gauges were a second card above it until they
+became the shell's header chip — see `docs/subsystems/account-header.md`: they are true of
+the account wherever you are standing, not of this board.) The list has **five shapes** —
 board, list, split, tiles, triage — picked by a labelled segmented switcher; the same
 filtered, sorted array feeds all five, so switching changes nothing but the drawing.
 

@@ -1,7 +1,9 @@
-# Usage limits (account bars)
+# Usage limits (the account gauges)
 
-The Sessions aside's Account card (`AsideAccount.tsx`) shows two mini progress bars — **5h** and **Week** — the same account
-rate-limit utilization Claude Code's `/usage` reports. Unlike everything else in the app,
+The shell's account chip shows two progress bars — **5h** and **Week** — the same account
+rate-limit utilization Claude Code's `/usage` reports: as micro-meters on the chip itself,
+full size in its popover. Where that chip lives and how it is fed is
+[account-header](account-header.md); everything below is where the numbers come from. Unlike everything else in the app,
 these are **not on disk**: `lib/usage.ts` fetches them live from Anthropic using your
 local credentials. Under each bar sits a **time strip** (`lib/usage-pace.ts` +
 `client/src/lib/pace.ts`) that answers the question a bare percentage can't: *at this
@@ -38,16 +40,20 @@ pace, do I run dry before the window resets?*
   without ever getting a socket — `https` can only time out a socket it *has* — latched the
   guard permanently and froze `usageStatus` (seen live: a stale `token-expired` served for
   hours against a valid token, curable only by restarting the server).
-- **Wiring:** `SessionsResponse.usage?: UsageLimits | null` (in `shared/types.ts`);
-  attached in `api.ts` (both success and error branches) only when `config.showUsage`.
+- **Wiring:** `SessionsResponse.usage?: UsageLimits | null` and the identical pair on
+  `AccountResponse` (both in `shared/types.ts`); attached in `api.ts` — on the sessions
+  snapshot's success *and* error branches, and on `GET /api/account` — only when
+  `config.showUsage`. The chip reads the `/api/account` copy (30s); the sessions
+  snapshot keeps its own because nothing else would make the 3s poll carry it.
   Still **zero npm deps** — `https` + `child_process` are Node built-ins.
-- **Status:** `SessionsResponse.usageStatus` says why bars are/aren't shown: `ok`,
+- **Status:** `usageStatus`, on both bodies, says why bars are/aren't shown: `ok`,
   `token-expired` (stored token past expiresAt), `signed-out` (the credential is present
   but blank — `claude auth logout` leaves it that way), `unavailable` (any other fail-open
   cause, incl. the endpoint's own 429 rate limit). The client renders bars only on `ok`;
-  `token-expired` shows a plain "token expired" hint and `signed-out` shows
-  "signed out — run claude auth login" (no bars, no action button — the dashboard cannot
-  drive an interactive OAuth login). `unavailable` stays silent: most of what lands there
+  `token-expired` and `signed-out` each swap the chip for an empty ring and put the
+  remedy in the popover as visible text — `claude auth login` for the second, "it renews
+  itself" for the first (no action button either way: the dashboard cannot drive an
+  interactive OAuth login). See [account-header](account-header.md) §States. `unavailable` stays silent: most of what lands there
   (non-macOS host, denied keychain read, network) is not something the reader can act on.
   The mapping is `statusForToken()` in `lib/usage.ts`, and `pickTokenState()` resolves the
   three credential stores when they disagree (`ok` > `expired` > `signed-out` > `missing`;
@@ -128,7 +134,7 @@ each hour — is wrong, and the strip exists to make the real shape visible.
   fetch. No persistence — after a restart the pace fields are null for a few minutes.
 - **Slope:** `computePace` is pure: least-recent → most-recent over a lookback window
   (5h: 30 min lookback / 5 min min-span; weekly: 6h / 30 min, since the weekly number
-  moves in ~1% integer steps). Under the min span → `null`, and the Account card renders
+  moves in ~1% integer steps). Under the min span → `null`, and the header renders
   exactly as it did before. A non-positive slope reports `ratePerHour: 0` and no projection.
 - **Window rolls** are handled twice over: `prunedSamples` drops anything older than the
   anchor (`resetsAt − window length`), and any utilization *drop* clears the history —
@@ -367,9 +373,8 @@ texture rather than a sixth colour step for no-evidence cells, and a bare cell f
 
 The numbers view is **required, not a nicety**: the two lowest ramp steps fall under 3:1
 against the sheet, which obligates a non-colour path to the same weights. The mock has no
-such control, and it is kept anyway — in the sheet's row-head, the slot the
-design puts a filter chip in (§7), as a `Grid | Numbers` segmented pair with the active view filled, since a single `Show …` chip named
-the view you were leaving.
+such control, and it is kept anyway — as a chip in the sheet's row-head, the slot the
+design puts a filter chip in (§7).
 
 Two things the grid alone cannot do:
 
@@ -1337,8 +1342,8 @@ absent. `coverage` is computed over `[now − BASELINE_MS, ∞)`, deliberately t
 **same horizon `externalSharePct` uses**: two disclosure figures on one card
 that quietly spanned different windows would be a defect, not a nuance.
 
-The **Usage** section is now two sub-tabs — `Forecast | Token value` — picked from the tree under Usage in `SideRail` (the desktop rail
-and the phone menu alike), persisted per device as `usageTab`.
+The **Usage** section is now two sub-tabs — `Forecast | Token value` — through
+the Settings page's `.set-seg` control, persisted per device as `usageTab`.
 Each tab runs to several sheets on its own, so stacking would bury whichever one you did
 not come for; only the active sub-view mounts, which also means each one's fetch-per-mount
 hook fires when its tab is opened rather than on every visit to the section.
@@ -1354,9 +1359,9 @@ The one-table shape was rejected once before, in the 2026-09-06 mockups
 720px table scrolls the verdict column off screen first. That objection is answered rather
 than overruled: under `md` (768px) each `.dt` becomes its own `overflow-x` box, so the table
 scrolls sideways *inside its sheet* and the page body does not (verified: `body.scrollWidth
-=== window.innerWidth` at 375px). The ledgers go further and unroll (`.dt.stack`): the header row is dropped and each cell carries its own
-label from `data-l`, so a model reads as one block top to bottom with the verdict beside its key rather than a sideways scroll away from the
-Model column.
+=== window.innerWidth` at 375px). The verdict still leaves the viewport when you scroll the
+table — but the strip above it has already said how many models are drifting, and that is
+the figure the phone reader came for.
 
 1. **A figure strip** (`ratesStats`): priced, drifting, collecting, coverage, ledger.
    Counts of *models* on the left, points and windows on the right, so the strip reads left
@@ -1617,7 +1622,7 @@ Accepted limitations:
 ## Invariants
 
 - **Fail-open everywhere:** no token / expired / network error / non-2xx / unparseable →
-  `usage: null` → the Account card simply omits the bars. Never throws into `scanSessions`
+  `usage: null` → the header simply omits the bars. Never throws into `scanSessions`
   (which stays pure).
 - **We never write credentials ourselves — we make the CLI do it.** Direct OAuth refresh
   is still rejected: undocumented endpoint, and taking a rotated refresh token and then
@@ -1632,7 +1637,7 @@ Accepted limitations:
   self-healing, and the only cure was to run the CLI by hand. The earlier removal
   (`backlog/tasks/done/task-1-remove-in-app-oauth-token-refresh.md`) also rejected
   *auto*-refresh as "burning turns silently"; at one haiku turn per 8h, with a free
-  `auth status` tried first, that cost is worth bars that heal themselves.
+  `auth status` tried first, that cost is worth a header that heals itself.
 
 <!-- docs-sync:
   sources:
@@ -1651,8 +1656,8 @@ Accepted limitations:
     - scripts/probe-usage-split.ts
     - scripts/check-token-weights.ts
     - server/api.ts
-    - client/src/components/AsideAccount.tsx
+    - client/src/components/HeaderAccount.tsx
     - client/src/components/usage/
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: f436519f31ef4120521792db7658e2bc5431f0e9
 -->

@@ -2,9 +2,13 @@
 
 `client/src/styles.css` is written mobile-first against a named, seven-tier ladder on
 Tailwind's numbers. The base (unprefixed) rules are the phone; every tier layers upward
-with `min-width`. Two TypeScript breakpoints (`hooks/useNarrow.ts`'s `NARROW_PX` and the
-column-count comment in `components/management/ManagementView.tsx`) sit on the same
-ladder rather than carrying their own numbers. Design and migration history:
+with `min-width`. Three TypeScript breakpoints sit on the same ladder rather than carrying
+their own numbers: `hooks/useNarrow.ts` exports `NARROW_PX` (767.98, the `md` density
+tier — which shapes the switcher offers, which options a `<select>` lists) and
+`SHELL_NARROW_PX` (639.98, the `sm` shell tier — which of its two homes the account chip
+is drawn in, see [account-header](account-header.md)), and the column-count comment in
+`components/management/ManagementView.tsx` is the third. Each is fractional so it is a
+true complement of the CSS's `min-width`, with no gap at fractional viewport widths. Design and migration history:
 [2026-09-15-breakpoint-ladder-design.md](../superpowers/specs/2026-09-15-breakpoint-ladder-design.md).
 
 ## The tiers
@@ -121,7 +125,7 @@ migration:
 - `client/src/styles.css` — the enforced token comment, directly above `:root`.
 - `test/breakpoints.test.ts` — the guard test: the seven literals appear in `styles.css`
   only inside `@media` queries and the token comment, and `useNarrow.ts`'s `NARROW_PX`
-  mirrors `md` exactly.
+  and `SHELL_NARROW_PX` mirror `md` and `sm` exactly.
 
 <!-- docs-sync:
   sources:

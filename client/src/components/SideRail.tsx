@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { SECTIONS, type Section } from '../lib/sections';
 import { useBackClose } from '../hooks/useBackClose';
@@ -10,6 +10,15 @@ import type { Settings } from '../lib/settings';
 interface Props {
   section: Section;
   onChange: (s: Section) => void;
+  /**
+   * The account chip, on a phone. Below `sm` (640px) there is no header band to
+   * hang it in — the rail is a top bar and the board runs full-bleed under it —
+   * so `App` hands it here instead, and the bar carries it between the wordmark
+   * and the burger. Null above `sm`, where the band draws it: one instance
+   * either way, swapped in the markup rather than hidden in CSS, because a
+   * `display:none` button is still a tab stop and still clickable by script.
+   */
+  accountSlot?: ReactNode;
 }
 
 /**
@@ -183,7 +192,7 @@ function MenuLayer({ onClose }: { onClose: () => void }) {
   return <div className="mnav-scrim" onClick={onClose} />;
 }
 
-export function SideRail({ section, onChange }: Props) {
+export function SideRail({ section, onChange, accountSlot }: Props) {
   // A section's sub-views are navigation, so they live in the nav: this is the
   // only control for them at every width, and the section renders whichever is
   // chosen. Per-device, like every other setting.
@@ -227,6 +236,7 @@ export function SideRail({ section, onChange }: Props) {
     <div className={barOff ? 'nav hid' : 'nav'}>
       <div className="mnav">
         <Brand className="mnav-brand" />
+        {accountSlot}
         <button
           className="mnav-burger"
           aria-expanded={open}

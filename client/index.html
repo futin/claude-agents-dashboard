@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
+<!-- iOS/Android text auto-detection off. The account popover shows a bare first
+     name, a single-letter avatar and plan tags like "Max 5x"; mobile Safari
+     linkified some of those as phone numbers/dates and underlined them, which
+     reads as clickable. Nothing in this UI wants a detector-made link. -->
+<meta name="format-detection" content="telephone=no,date=no,address=no,email=no">
 <title>Claude Dashboard</title>
 <!-- The UI face. Hanken Grotesk is the free stand-in for the geometric grotesque
      the reference design is drawn in (.claude/DESIGN.md §1); every weight the

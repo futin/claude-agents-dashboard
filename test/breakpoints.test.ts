@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { NARROW_PX } from '../client/src/hooks/useNarrow.js';
+import { NARROW_PX, SHELL_NARROW_PX } from '../client/src/hooks/useNarrow.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -179,6 +179,16 @@ export function run(): number {
     assert.strictEqual(NARROW_PX, 767.98);
     const source = fs.readFileSync(NARROW_HOOK_PATH, 'utf8');
     assert.match(source, /`\(max-width:\$\{NARROW_PX\}px\)`/);
+  })) p++; else f++;
+
+  if (test('useShellNarrow mirrors the shell tier', () => {
+    // 640, not 768: this is the rail-to-top-bar switch, and it decides which of
+    // its two homes the one account chip is drawn in (App.tsx). Reading it off
+    // NARROW_PX would have handed the chip to the phone bar across the whole
+    // 640–767 band, where that bar is already `display:none`.
+    assert.strictEqual(SHELL_NARROW_PX, 639.98);
+    const source = fs.readFileSync(NARROW_HOOK_PATH, 'utf8');
+    assert.match(source, /`\(max-width:\$\{SHELL_NARROW_PX\}px\)`/);
   })) p++; else f++;
 
   if (test('ManagementView guards at the density tier', () => {
