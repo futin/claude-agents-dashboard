@@ -2,7 +2,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 RUN corepack enable
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # --- dev: source bind-mounted in, node_modules baked into image (see docker-compose.dev.yml) ---

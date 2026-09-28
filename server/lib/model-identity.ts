@@ -1,10 +1,10 @@
 /**
  * model-identity.ts — the exact model a session runs on, window grant included.
  *
- * `message.model` on usage records reads `claude-opus-5` whether or not the
- * session was granted the 1M window, so it cannot size the context gauge.
- * Claude Code also writes an attachment record naming the model with its
- * marker, and re-emits it on a `/model` switch — newest wins:
+ * `message.model` on usage records never carries a `[1m]` grant, and on a
+ * `/model` switch it lags the switch by a turn. Claude Code also writes an
+ * attachment record naming the model with its marker, and re-emits it on a
+ * switch — newest wins, and it is checked first:
  *
  *   {"type":"attachment","attachment":{"type":"model","identity":{"modelId":"claude-opus-5[1m]",…},…}}
  *

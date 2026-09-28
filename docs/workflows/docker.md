@@ -49,7 +49,7 @@ Two things a container can't reach on its own:
   supported way to use it; see [dictation-setup](dictation-setup.md).
 - **Spawning a session is unavailable in these images too.** `config.ts` reads `CLAUDE_BIN`,
   but neither compose file passes it and no stage installs the `claude` CLI — so `probeSpawn`
-  fails, `/api/health` reports `spawnAvailable: false`, and the toolbar's `+ New` button never
+  fails, `/api/health` reports `spawnAvailable: false`, and the Board card's `+ New session` button never
   renders. Same designed no-binary behavior as dictation above, and the same fix: run the
   server on the host. See [spawn](../subsystems/spawn.md).
 - **Automatic OAuth token renewal is out for the same reason.** It renews by making the CLI
@@ -86,5 +86,5 @@ Two things a container can't reach on its own:
     - scripts/lan-ip.sh
     - server/lib/config.ts
   kind: workflow
-  verified: 0da757e27d2847eb57fca181bf516a3e9c130caa
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

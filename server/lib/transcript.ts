@@ -5,7 +5,8 @@
 
 import fs from 'node:fs';
 
-import { sessionCompactWindow } from './compact-window.js';
+import { findCompactPreTokens, resolveCompactPreTokens } from './compact-history.js';
+import { frozenCompactWindow } from './compact-window.js';
 import { findModelIdentity, resolveModelIdentity } from './model-identity.js';
 import { findTitle, resolveSessionTitle } from './title-cache.js';
 
@@ -13,8 +14,17 @@ import type { Activity } from '../../shared/types.js';
 
 export const STANDARD_WINDOW = 200000;
 export const LARGE_WINDOW = 1000000;
-/** The 1M grant is recorded only on the session's model attachment (`model-identity.ts`), never in `message.model`. */
+/** A 1M grant to a 200k-native model is recorded only on the session's model attachment (`model-identity.ts`), never in `message.model`. */
 const LARGE_MARKER = '[1m]';
+/**
+ * Families whose native window is 1M from version 4.6 on, per platform.claude.com's
+ * models overview (read 2026-09-24): Fable 5.1, Opus 5.5 and Sonnet 5 are 1M, Haiku 4.5
+ * is 200k. Measured the same day, 49 transcripts here whose identity never carried
+ * `[1m]` ran past 200k — up to 567k on `claude-opus-5` — so the marker is not the grant.
+ */
+const LARGE_NATIVE_FAMILIES = new Set(['opus', 'sonnet', 'fable', 'mythos']);
+/** `claude-<family>-<major>[-<minor>]`; a date suffix (`-20250514`) is not a minor version. */
+const MODEL_ID = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?=-|\[|$)/;
 export const DEFAULT_TAIL_BYTES = 256 * 1024;
 /**
  * Window for the launch-cwd read. Measured 2026-09-02 across all 652 transcripts
@@ -254,31 +264,44 @@ export function usageTokens(record: any): number {
 
 /**
  * Pick a context window size. Order: the dashboard's own env override, then
- * the model maximum — observed tokens past 200k (proof, so it beats any
- * identity), then a `[1m]` marker on the session's model identity or on
- * `message.model`, otherwise 200k whatever the family — capped at the
- * session's configured compact window, as Claude Code caps it. Context already
- * past that window proves the cap is not in force, so the tokens beat the file.
+ * the model maximum — context past 200k, live or at the newest compaction
+ * (proof, so it beats any identity), then a `[1m]` marker, then the native
+ * window of the model named by the session's identity or else `message.model`
+ * (see {@link nativeWindow}) — capped at the session's configured compact
+ * window, as Claude Code caps it. Context already past that window proves the
+ * cap is not in force, so the tokens beat the file.
  *
  * @param identityModel `identity.modelId` off the newest model attachment, if any
  * @param compactWindow the session's `autoCompactWindow` (see `compact-window.ts`), if any
+ * @param compactedAt   `preTokens` of the session's newest compaction (see `compact-history.ts`), if any
  */
 export function resolveWindow(
-  tokens: number, model: string, env?: NodeJS.ProcessEnv, identityModel?: string | null, compactWindow?: number | null
+  tokens: number, model: string, env?: NodeJS.ProcessEnv, identityModel?: string | null,
+  compactWindow?: number | null, compactedAt?: number | null
 ): number {
   const e = env || (typeof process !== 'undefined' ? process.env : {}) || {};
   const override = Number.parseInt(e.CLAUDE_CODE_AUTO_COMPACT_WINDOW || e.CLAUDE_OBS_CONTEXT_WINDOW || '', 10);
   if (Number.isInteger(override) && override > 0) return override;
-  const modelMax = modelMaxWindow(tokens, model, identityModel);
-  if (typeof compactWindow === 'number' && compactWindow > 0 && tokens <= compactWindow) return Math.min(modelMax, compactWindow);
+  const reached = Math.max(Number.isFinite(tokens) ? tokens : 0, Number.isFinite(compactedAt) ? compactedAt as number : 0);
+  const modelMax = modelMaxWindow(reached, model, identityModel);
+  if (typeof compactWindow === 'number' && compactWindow > 0 && reached <= compactWindow) return Math.min(modelMax, compactWindow);
   return modelMax;
 }
 
-function modelMaxWindow(tokens: number, model: string, identityModel?: string | null): number {
-  if (Number.isFinite(tokens) && tokens > STANDARD_WINDOW) return LARGE_WINDOW;
+function modelMaxWindow(reached: number, model: string, identityModel?: string | null): number {
+  if (reached > STANDARD_WINDOW) return LARGE_WINDOW;
   if (typeof identityModel === 'string' && identityModel.includes(LARGE_MARKER)) return LARGE_WINDOW;
   if (typeof model === 'string' && model.includes(LARGE_MARKER)) return LARGE_WINDOW;
-  return STANDARD_WINDOW;
+  return nativeWindow(identityModel) ?? nativeWindow(model) ?? STANDARD_WINDOW;
+}
+
+/** Native window for a parseable model id — 1M for a large family at 4.6 or later, else 200k — or null for an unparseable one. */
+function nativeWindow(id: string | null | undefined): number | null {
+  const m = typeof id === 'string' ? MODEL_ID.exec(id) : null;
+  if (!m) return null;
+  const major = Number(m[2]), minor = m[3] === undefined ? 0 : Number(m[3]);
+  const large = LARGE_NATIVE_FAMILIES.has(m[1]) && (major > 4 || (major === 4 && minor >= 6));
+  return large ? LARGE_WINDOW : STANDARD_WINDOW;
 }
 
 export function windowLabel(win: number): string {
@@ -367,6 +390,9 @@ export function readTranscript(
   const identityModel = resolveModelIdentity(
     filePath, findModelIdentity(lines, first), tail.start, tail.size
   );
+  const compactedAt = resolveCompactPreTokens(
+    filePath, findCompactPreTokens(lines, first), tail.start, tail.size
+  );
 
   // Session-state signals, taken from the newest message record only.
   let newestMessageSeen = false;
@@ -435,7 +461,9 @@ export function readTranscript(
 
   const originCwd = resolveOriginCwd(filePath, tail, lines, first);
 
-  const win = resolveWindow(tokens, model, undefined, identityModel, sessionCompactWindow(originCwd));
+  const win = resolveWindow(
+    tokens, model, undefined, identityModel, frozenCompactWindow(filePath, tail.size, originCwd), compactedAt
+  );
   const contextPct = win > 0 ? Math.min(100, Math.round((tokens / win) * 1000) / 10) : 0;
 
   return {

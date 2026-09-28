@@ -25,7 +25,7 @@ docs:
     note: session rows, status machine, subagent detail
   - path: docs/subsystems/usage-limits.md
     kind: subsystem
-    note: header 5h/week usage bars
+    note: the Sessions aside's 5h/week account usage bars, and the Usage tab
   - path: docs/subsystems/view-persistence.md
     kind: subsystem
     note: toolbar filter/sort localStorage persistence
@@ -74,6 +74,8 @@ docs:
     kind: readme
   - path: .claude/CLAUDE.md
     kind: index
+  - path: docs/subsystems/breakpoints.md
+    kind: subsystem
 overlap-ok:
   - pair: docs/subsystems/push-notify.md ~ docs/workflows/push-notify-setup.md
     reason: same code, different register — why the policy is shaped this way vs the steps you run; a changed sendTest string or config default genuinely stales the setup doc too
@@ -92,3 +94,5 @@ out-of-scope:
     reason: PR body template — a form, not reference prose; no code to drift against
   - path: audits/
     reason: whole-repo audit reports — records of a moment, like docs/superpowers/
+  - path: .claude/DESIGN.md
+    reason: the design reference — changes often and on its own schedule, independent of the code docs-sync tracks

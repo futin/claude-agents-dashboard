@@ -42,7 +42,8 @@ What is left is three levels, so the page is **three columns**:
 Columns 1 and 2 are **fixed** (190px / 420px): a column that is wide until you pick
 something and narrow after jumps out from under the row you just clicked. Below `xl`
 (1280px) the file column drops to a full-width row under the other two; below `md`
-(768px) everything is one column. Every column sizes to its content and the page body is the only scroller — no pane
+(768px) everything is one column, and picking an item scrolls the detail column into view (`ManagementView.tsx`): it opens below both
+lists, far enough down that the pick would otherwise look like it did nothing. Every column sizes to its content and the page body is the only scroller — no pane
 is pinned to the viewport, so a long file is read by scrolling the page. The scope has no
 control in the band at any width: it is a nav destination, so it is the tree under
 Management — on the desktop rail, and in the phone menu, which draws every tree open.
@@ -144,5 +145,5 @@ control (the type is a column now, not a collapsible header) and the
     - client/src/hooks/useManagementScope.tsx
     - client/src/lib/managementEntries.ts
   kind: subsystem
-  verified: f436519f31ef4120521792db7658e2bc5431f0e9
+  verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

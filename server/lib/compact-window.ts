@@ -19,6 +19,13 @@
  * `CLAUDE_CODE_AUTO_COMPACT_WINDOW` exported in the shell that launched the
  * session, and the server-side `clientdata` / experiment windows.
  *
+ * A session reads these files once, at start, so `frozenCompactWindow` pins
+ * each transcript to the value seen the first time the dashboard resolved it
+ * (#159) — a later edit moves only sessions first seen after it. What the files
+ * said at a session's start is not recoverable either: a session the dashboard
+ * first sees after an edit, or after a server restart (the pins live in memory),
+ * gets the value current at that first sight.
+ *
  * Every file is cached by `mtimeMs` + `size`: one `stat` per file per poll in
  * the steady state. A missing, unreadable or malformed file contributes nothing
  * and never throws.
@@ -39,6 +46,7 @@ const MANAGED_PATH = process.platform === 'darwin'
 interface Entry { mtimeMs: number; size: number; value: Record<string, any> | null }
 
 const cache = new Map<string, Entry>();
+const frozen = new Map<string, { size: number; value: number | null }>();
 let reads = 0;
 let homeOverride: string | null = null;
 let managedOverride: string | null = null;
@@ -93,6 +101,24 @@ export function sessionCompactWindow(projectDir: string | null, homeDir?: string
   return typeof merged.autoCompactWindow === 'number' ? positiveInt(merged.autoCompactWindow) : null;
 }
 
+/**
+ * `sessionCompactWindow` for the session whose transcript is `filePath`, pinned
+ * at the first answer. A transcript that shrank was rotated or truncated, so it
+ * is re-resolved, the same rule as `record-cache.ts`.
+ *
+ * @param size the transcript's current size
+ */
+export function frozenCompactWindow(filePath: string, size: number, projectDir: string | null): number | null {
+  const hit = frozen.get(filePath);
+  if (hit && size >= hit.size) {
+    hit.size = size;
+    return hit.value;
+  }
+  const value = sessionCompactWindow(projectDir);
+  frozen.set(filePath, { size, value });
+  return value;
+}
+
 /** Test seam: the home `sessionCompactWindow` reads when no `homeDir` is passed (null restores `os.homedir()`). */
 export function setCompactWindowHome(dir: string | null): void {
   homeOverride = dir;
@@ -103,9 +129,10 @@ export function setManagedSettingsPath(file: string | null): void {
   managedOverride = file;
 }
 
-/** Test seam: forget every cached settings file. */
+/** Test seam: forget every cached settings file and every pinned session. */
 export function resetCompactWindowCache(): void {
   cache.clear();
+  frozen.clear();
   reads = 0;
 }
 
