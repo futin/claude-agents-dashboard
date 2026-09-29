@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  CHAT_WINDOW_BYTES, NO_CAPS, TEXT_CAP, TOOL_BODY_CAP,
+  CHAT_MAX_WINDOW_BYTES, CHAT_WINDOW_BYTES, NO_CAPS, TEXT_CAP, TOOL_BODY_CAP,
   parseChatRecord, readChatAfter, readChatBefore, readChatTail
 } from '../server/lib/chat.js';
 // The real producer of the remote-message wrapper: importing it here is what
@@ -270,6 +270,65 @@ export function run(): number {
     }
     assert.strictEqual(collected.length, count);
     assert.deepStrictEqual(collected.map(m => m.uuid), Array.from({ length: count }, (_, i) => 'u' + i));
+  })) p++; else f++;
+
+  // A Read of a screenshot lands as one tool_result record of base64 — observed at 1.35 MB,
+  // four in a row. Such a record renders nothing, and one alone outgrows a whole window.
+  const imageRec = (uuid: string, bytes: number) => userRec(uuid, [{
+    type: 'tool_result', tool_use_id: 't-' + uuid,
+    content: [{ type: 'image', source: { type: 'base64', data: 'A'.repeat(bytes) } }]
+  }]);
+  /** Tail, then every older page, oldest-first — what the drawer shows after loading it all. */
+  function walkAll(file: string): ChatMessage[] {
+    const collected: ChatMessage[] = [];
+    let page = readChatTail(file, 100)!;
+    collected.unshift(...page.messages);
+    let guard = 0;
+    while (page.hasMore) {
+      if (++guard > 100) throw new Error('paging did not terminate');
+      page = readChatBefore(file, page.headOffset, 100)!;
+      collected.unshift(...page.messages);
+    }
+    return collected;
+  }
+
+  if (test('tail behind records larger than a window still shows the messages before them', () => {
+    const file = writeJsonl([
+      userRec('u0', 'look at scr9'),
+      asstRec('a0', [{ type: 'text', text: 'opening it' }]),
+      imageRec('i0', CHAT_WINDOW_BYTES + 1000),
+      imageRec('i1', CHAT_WINDOW_BYTES / 2)
+    ]);
+    const page = readChatTail(file)!;
+    assert.deepStrictEqual(page.messages.map(m => m.uuid), ['u0', 'a0']);
+    assert.strictEqual(page.hasMore, false);
+    assert.strictEqual(page.cursor, fs.statSync(file).size);
+  })) p++; else f++;
+
+  if (test('an older page ending behind oversized records reaches past them', () => {
+    const file = writeJsonl([
+      userRec('u0', 'first'),
+      imageRec('i0', CHAT_WINDOW_BYTES * 2),
+      userRec('u1', 'second')
+    ]);
+    const tail = readChatTail(file)!;
+    assert.deepStrictEqual(tail.messages.map(m => m.uuid), ['u1']);
+    const older = readChatBefore(file, tail.headOffset)!;
+    assert.deepStrictEqual(older.messages.map(m => m.uuid), ['u0']);
+    assert.strictEqual(older.hasMore, false);
+  })) p++; else f++;
+
+  if (test('a record past the widening ceiling is skipped without losing the rest', () => {
+    const file = writeJsonl([
+      userRec('u0', 'before'),
+      imageRec('i0', CHAT_MAX_WINDOW_BYTES + 1000),
+      userRec('u1', 'middle'),
+      imageRec('i1', CHAT_MAX_WINDOW_BYTES + 1000)
+    ]);
+    const tail = readChatTail(file)!;
+    assert.deepStrictEqual(tail.messages, []);
+    assert.strictEqual(tail.hasMore, true);
+    assert.deepStrictEqual(walkAll(file).map(m => m.uuid), ['u0', 'u1']);
   })) p++; else f++;
 
   if (test('after-appends equal the whole-file parse (odd chunks, multibyte)', () => {

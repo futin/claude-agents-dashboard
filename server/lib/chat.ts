@@ -32,6 +32,12 @@ import type { ChatMessage, ChatToolCall, SessionChat } from '../../shared/types.
 export const CHAT_PAGE_MESSAGES = 100;
 /** Bytes read per page — ~300 records at the observed p50 record size. */
 export const CHAT_WINDOW_BYTES = 512 * 1024;
+/**
+ * How far a page may widen when its window holds no message. One screenshot `Read` lands as
+ * a single base64 tool_result record — seen at 1.35 MB, four in a row — which renders
+ * nothing and outgrows a whole window, so a fixed window behind it comes back empty.
+ */
+export const CHAT_MAX_WINDOW_BYTES = 8 * 1024 * 1024;
 /** Per-message text cap; the drawer is a monitor, not a full transcript viewer. */
 export const TEXT_CAP = 2000;
 /** Cap for a tool body (a proposed plan runs 2–10 KB; this bounds pathological ones). */
@@ -44,8 +50,9 @@ export const TOOL_BODY_CAP = 20_000;
  * instead of being a rendering choice in the drawer.
  *
  * A `full` page is still bounded: a page never reads more than
- * `CHAT_WINDOW_BYTES`, so lifting the per-message caps raises the worst case
- * from ~200 KB to the window size, not to the transcript size.
+ * `CHAT_WINDOW_BYTES` (`CHAT_MAX_WINDOW_BYTES` only when that window held no
+ * message at all), so lifting the per-message caps raises the worst case from
+ * ~200 KB to the window size, not to the transcript size.
  */
 export interface ChatCaps {
   text: number;
@@ -188,6 +195,8 @@ export interface WindowParse {
   items: Array<{ offset: number; msg: ChatMessage }>;
   /** Absolute offset up to which the window is fully consumed. */
   consumed: number;
+  /** Absolute offset of the first whole line — past the dropped partial, if any. */
+  lineStart: number;
 }
 
 /**
@@ -203,9 +212,10 @@ export function parseChatWindow(
 
   if (dropFirstPartial) {
     const nl = buf.indexOf(0x0a);
-    if (nl === -1) return { items, consumed: windowStart + buf.length };
+    if (nl === -1) return { items, consumed: windowStart + buf.length, lineStart: windowStart + buf.length };
     start = nl + 1;
   }
+  const lineStart = windowStart + start;
 
   let consumed = windowStart + start;
   while (start < buf.length) {
@@ -235,7 +245,7 @@ export function parseChatWindow(
     consumed = windowStart + start;
   }
 
-  return { items, consumed };
+  return { items, consumed, lineStart };
 }
 
 function statSize(file: string): number | null {
@@ -261,11 +271,35 @@ function readRange(file: string, start: number, end: number): Buffer | null {
   }
 }
 
+/**
+ * Parse the window ending at `end`, doubling it while it holds no message, up to
+ * `CHAT_MAX_WINDOW_BYTES` or the start of the file. Without this, a tail sitting
+ * behind a run of screenshot records is an empty page and the drawer goes blank.
+ */
+function readWindow(
+  file: string, end: number, caps: ChatCaps
+): { parse: WindowParse; start: number; end: number } | null {
+  for (let span = CHAT_WINDOW_BYTES; ; span *= 2) {
+    const start = Math.max(0, end - span);
+    const buf = readRange(file, start, end);
+    if (!buf) return null;
+    const parse = parseChatWindow(buf, start, start > 0, caps);
+    if (parse.items.length || start === 0 || span >= CHAT_MAX_WINDOW_BYTES) return { parse, start, end };
+  }
+}
+
 /** Keep the newest `limit` messages of a window and shape the page. */
-function page(parse: WindowParse, windowStart: number, limit: number, cursor: number): ChatPage {
+function page(
+  { parse, start: windowStart, end }: { parse: WindowParse; start: number; end: number },
+  limit: number, cursor: number
+): ChatPage {
   const { items } = parse;
   const kept = items.slice(Math.max(0, items.length - limit));
-  const headOffset = kept.length ? kept[0].offset : windowStart;
+  // An empty page still has to hand back a line start, or the next older page ends mid-line
+  // and drops that line. Only a window with no line start before `end` (one record wider
+  // than the ceiling) falls back to its own start: that record is unreadable at any size.
+  const headOffset = kept.length ? kept[0].offset
+    : parse.lineStart < end ? parse.lineStart : windowStart;
   return {
     messages: kept.map(i => i.msg),
     cursor,
@@ -280,11 +314,9 @@ export function readChatTail(
 ): ChatPage | null {
   const size = statSize(file);
   if (size === null) return null;
-  const start = Math.max(0, size - CHAT_WINDOW_BYTES);
-  const buf = readRange(file, start, size);
-  if (!buf) return null;
-  const parse = parseChatWindow(buf, start, start > 0, caps);
-  return page(parse, start, limit, parse.consumed);
+  const win = readWindow(file, size, caps);
+  if (!win) return null;
+  return page(win, limit, win.parse.consumed);
 }
 
 /**
@@ -299,10 +331,9 @@ export function readChatBefore(
   if (size === null) return null;
   const end = Math.min(before, size);
   if (end <= 0) return { messages: [], cursor: 0, headOffset: 0, hasMore: false };
-  const start = Math.max(0, end - CHAT_WINDOW_BYTES);
-  const buf = readRange(file, start, end);
-  if (!buf) return null;
-  return page(parseChatWindow(buf, start, start > 0, caps), start, limit, 0);
+  const win = readWindow(file, end, caps);
+  if (!win) return null;
+  return page(win, limit, 0);
 }
 
 /**
