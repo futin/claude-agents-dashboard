@@ -124,7 +124,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fontScale: 100,
   refreshMs: 3000,
   maxSessions: 5,
-  lookbackHours: 24,
+  lookbackHours: 48,
   activeWindowMin: 5,
   landing: 'last',
   chatFullText: false,

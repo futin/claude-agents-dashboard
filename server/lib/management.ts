@@ -537,7 +537,7 @@ export function encodeProjectDir(cwd: string): string {
  * ({@link isListedProjectPath}), newest-first.
  */
 export function listRecentProjects(config: Partial<Config>, options: ProjectsOptions = {}): ProjectRef[] {
-  const lookbackHours = (config.lookbackHours ?? 0) > 0 ? (config.lookbackHours as number) : 24;
+  const lookbackHours = (config.lookbackHours ?? 0) > 0 ? (config.lookbackHours as number) : 48;
   const now = Number.isFinite(options.now) ? (options.now as number) : Date.now();
   const root = options.root || path.join(claudeHome(options.homeDir), 'projects');
   const lookbackMs = lookbackHours * 60 * 60 * 1000;

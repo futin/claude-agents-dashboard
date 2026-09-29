@@ -505,7 +505,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   const cfg = config || {};
   const maxSessions = (cfg.maxSessions ?? 0) > 0 ? (cfg.maxSessions as number) : 5;
   const activeWindowMin = (cfg.activeWindowMin ?? 0) > 0 ? (cfg.activeWindowMin as number) : 5;
-  const lookbackHours = (cfg.lookbackHours ?? 0) > 0 ? (cfg.lookbackHours as number) : 24;
+  const lookbackHours = (cfg.lookbackHours ?? 0) > 0 ? (cfg.lookbackHours as number) : 48;
 
   const now = Number.isFinite(options.now) ? (options.now as number) : Date.now();
   const root = options.root || projectsRoot(options.homeDir);
