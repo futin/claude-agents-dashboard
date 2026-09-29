@@ -111,6 +111,12 @@ worst case to the window size, not to the transcript size.
   - `?after=<cursor>` → **live tail**: only the bytes appended since (`O(new bytes)`),
   - `?before=<headOffset>` → **older page**: the 512 KB window ending at that offset.
 
+  A tail or older window that holds no message at all doubles backwards until it finds one,
+  reaches byte 0, or hits `CHAT_MAX_WINDOW_BYTES` (8 MB). A screenshot `Read` is one base64
+  tool_result record, seen at 1.35 MB and four in a row, and renders nothing — so without the
+  widening the page behind it came back empty and the drawer went blank until newer messages
+  arrived.
+
   `?full=1` composes with all three (`chatQuery` in `client/src/lib/settings.ts` builds the
   string, so the tail, the poll and "load older" can never disagree about it) and lifts the
   per-message caps. Any other value, or its absence, is the capped default.
