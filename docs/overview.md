@@ -227,7 +227,8 @@ client/src/
                   MicButton, SpawnPanel, ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
                   usage/ (UsageView + the two tabs, Sheet — the band / figure
-                  strip / sheet / Definitions chrome both tabs draw, and
+                  strip / sheet / D48claude
+                  efinitions chrome both tabs draw, and
                   ReadingAids — the ⓘ button they both render), settings/
   hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
                   useManagement, useManagementScope (the scope + the one index
