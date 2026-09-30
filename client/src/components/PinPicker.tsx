@@ -4,32 +4,25 @@ import { lastSessionLabel, matchesPinFilter, shortenHome } from '../lib/pins';
 import type { ProjectRef } from '../../../shared/types';
 
 interface Props {
-  /** `GET /api/pins` `older` — projects outside the lookback, newest-first. */
-  older: ProjectRef[];
+  /** The projects on offer, newest-first: `older` in the launch sheet, `recent` + `older` in Settings. */
+  projects: ProjectRef[];
   home: string;
   /** The dirName whose request is in flight — its button reads `Pinning…`, the rest wait. */
   busy: string | null;
   /** Resolves null on success, else the reason to show under that row. */
   onPin: (dirName: string) => Promise<string | null>;
-  /**
-   * Launch sheet: every older project is a row before anything is typed.
-   * Settings: rows appear only once the filter has text — the card is about the
-   * pins already made, the picker is the footnote.
-   */
-  listWhenEmpty: boolean;
 }
 
 /**
- * The older-projects picker (#161): a filter box over name and path, and one
+ * The pin picker (#161): a filter box over name and path, and one
  * row per match — name, `~` path, last-session age, **Pin**. Enter pins the
  * first match. Shared by the launch sheet and Settings › Pinned, so both offer
  * pins the same way. A refusal shows inline under its row and changes nothing.
  */
-export default function PinPicker({ older, home, busy, onPin, listWhenEmpty }: Props) {
+export default function PinPicker({ projects, home, busy, onPin }: Props) {
   const [query, setQuery] = useState('');
   const [error, setError] = useState<{ dirName: string; text: string } | null>(null);
-  const matches = older.filter(r => matchesPinFilter(r, query));
-  const shown = listWhenEmpty || query.trim() !== '' ? matches : [];
+  const matches = projects.filter(r => matchesPinFilter(r, query));
 
   async function pin(dirName: string): Promise<void> {
     if (busy) return;
@@ -45,7 +38,7 @@ export default function PinPicker({ older, home, busy, onPin, listWhenEmpty }: P
         className="qp-other"
         type="text"
         placeholder="Filter by name or path"
-        aria-label="Filter older projects"
+        aria-label="Filter projects"
         value={query}
         onChange={e => setQuery(e.target.value)}
         onKeyDown={e => {
@@ -55,9 +48,9 @@ export default function PinPicker({ older, home, busy, onPin, listWhenEmpty }: P
           }
         }}
       />
-      {shown.length > 0 && (
+      {matches.length > 0 && (
         <ul className="pin-list">
-          {shown.map(r => (
+          {matches.map(r => (
             <li key={r.dirName} className="pin-row">
               <span className="pin-text">
                 <span className="pin-name">{r.name}</span>
@@ -71,7 +64,7 @@ export default function PinPicker({ older, home, busy, onPin, listWhenEmpty }: P
           ))}
         </ul>
       )}
-      {query.trim() !== '' && matches.length === 0 && <span className="sp-note">No older project matches.</span>}
+      {query.trim() !== '' && matches.length === 0 && <span className="sp-note">No project matches.</span>}
     </div>
   );
 }

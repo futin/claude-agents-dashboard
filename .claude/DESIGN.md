@@ -449,7 +449,8 @@ expands, **in place inside the sheet**, a filter box and one boxless row per old
 path, `last session <age> ago`, a §8.2 36 px **Pin** button). No second surface and no new tint: the
 link is ink, cyan stays the launch button's. Pinning selects the project; a pinned option reads
 `<name> · pinned`, since a native `<option>` cannot hold an icon. Settings › Pinned draws the same
-picker under its Pinned projects card, where the Unpin lives.
+picker under its Pinned projects card, where the Unpin lives, but offers recent projects too, so one in
+daily use can be pinned before it ages out; the sheet does not need them, they are already in its select.
 
 Mock: `docs/guides/mockups/redesign-mock.html` `#spawn`.
 Reference: `docs/subsystems/spawn.md`.

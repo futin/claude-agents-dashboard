@@ -54,7 +54,7 @@ shared because a pin is a server-side fact — the spawn membership check and th
 both read it — not a view preference. The clamp keeps only `[A-Za-z0-9-]+` strings, deduped in
 first-seen order, at most 50; a non-array reads as `[]` without touching the other keys. It is
 **not** in the `ServerSettings` payload: the pins have their own route, `GET/POST /api/pins`, whose
-answer also carries the older projects on offer — so the Settings page's merge/validate logic for
+answer also carries the recent and older projects on offer — so the Settings page's merge/validate logic for
 `POST /api/settings` never sees them. Still one file: the app writes to disk only this store and
 the remote-answer toggle's.
 
@@ -284,7 +284,7 @@ Worth knowing from this page's side:
 |---|---|
 | `GET /api/settings` | the non-per-device settings + any detected override, plus `notifyAvailable` and `staleEnvKeys` (names only — never the topic or token itself) |
 | `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?}` — any subset); token-guarded like the other writes |
-| `GET /api/pins` | `{pinned: PinRow[], older: ProjectRef[], home}` — the stored pins (a dead one `listed: false`) and the projects on offer to pin |
+| `GET /api/pins` | `{pinned: PinRow[], recent: ProjectRef[], older: ProjectRef[], home}` — the stored pins (a dead one `listed: false`) and the projects on offer to pin: `recent` is the listed ones not yet pinned, `older` the 30-day tail past the lookback |
 | `POST /api/pins` | `{dirName, pinned}` — token-guarded; a pin must name a recent or older project (404 otherwise), 409 past 50; an unpin takes any stored dir; answers with the fresh `GET` payload |
 | `POST /api/notify/test` | fire one push regardless of policy and report the outcome |
 | `GET /api/health` | now also carries `idleSecs` and `answerSecs`, for the hooks |

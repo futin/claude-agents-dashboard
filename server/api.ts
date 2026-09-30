@@ -1597,12 +1597,13 @@ function pinsPayload(config: Config): PinsResponse {
   const options = { archivedIds: archivedSessionIds(), ...pinOptions() };
   return {
     pinned: listPinRows(config, getPinnedProjects(), options),
+    recent: listRecentProjects(config, options).filter(r => !r.pinned),
     older: listOlderProjects(config, options),
     home: nodePath.dirname(claudeHome())
   };
 }
 
-/** `GET /api/pins` — the stored pins plus the older projects offered for pinning (#161). */
+/** `GET /api/pins` — the stored pins plus the recent and older projects offered for pinning (#161). */
 export function servePinsRead(config: Config, res: ServerResponse): void {
   try {
     sendJson(res, 200, pinsPayload(config));

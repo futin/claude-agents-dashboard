@@ -1513,6 +1513,11 @@ export interface PinRow {
 export interface PinsResponse {
   /** Every stored pin, in pin order. */
   pinned: PinRow[];
+  /**
+   * Unpinned projects inside the lookback, newest-first — already listed today,
+   * offered so a busy project can be pinned before it ages out.
+   */
+  recent: ProjectRef[];
   /** Projects offered for pinning: outside the lookback, inside 30 days, newest-first. */
   older: ProjectRef[];
   /** The server's home dir, so the UI can show paths as `~/…`. */

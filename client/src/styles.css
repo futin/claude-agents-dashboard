@@ -1805,6 +1805,8 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    button on the right of each. */
 .pin-pick{display:flex;flex-direction:column;gap:8px;min-width:0;width:100%}
 .pin-list{list-style:none;margin:0;padding:0;max-height:240px;overflow-y:auto;overscroll-behavior:contain}
+/* Settings › Pinned is the list's own page: it grows with the page scroll, not a boxed one. */
+.set .pin-list{max-height:none;overflow-y:visible}
 .pin-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--hairline)}
 .pin-row:first-child{border-top:0}
 .pin-text{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}

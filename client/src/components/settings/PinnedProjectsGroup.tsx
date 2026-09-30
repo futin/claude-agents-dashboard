@@ -7,7 +7,8 @@ import { lastSessionLabel, shortenHome } from '../../lib/pins';
 
 /**
  * Settings › Pinned (#161): one row per pin with its Unpin,
- * then the older-projects picker to add one. Its own component so the
+ * then the picker to add one — every unpinned project, recent ones included, so
+ * a project in daily use can be pinned before it ages out of the lookback. Its own component so the
  * `GET /api/pins` scan runs only when the Pinned page is actually open.
  *
  * A dead pin — its folder is gone or is now a linked worktree — is still
@@ -17,6 +18,7 @@ import { lastSessionLabel, shortenHome } from '../../lib/pins';
 export default function PinnedProjectsGroup() {
   const { pins, busy, setPin } = usePins();
   const [error, setError] = useState<string | null>(null);
+  const offered = pins ? [...pins.recent, ...pins.older] : [];
 
   async function change(dirName: string, pinned: boolean): Promise<string | null> {
     setError(null);
@@ -59,13 +61,13 @@ export default function PinnedProjectsGroup() {
         <SettingsRow
           name="Pin another project"
           hint={
-            pins.older.length > 0
-              ? 'Projects outside the lookback that had a session in the last 30 days. Pick one to pin it.'
-              : 'Every project active in the last 30 days is already listed.'
+            offered.length > 0
+              ? 'Every project with a session in the last 30 days, newest first. Pick one to pin it.'
+              : 'Every project active in the last 30 days is already pinned.'
           }
           below={
-            pins.older.length > 0 && (
-              <PinPicker older={pins.older} home={pins.home} busy={busy} onPin={d => change(d, true)} listWhenEmpty={false} />
+            offered.length > 0 && (
+              <PinPicker projects={offered} home={pins.home} busy={busy} onPin={d => change(d, true)} />
             )
           }
         />

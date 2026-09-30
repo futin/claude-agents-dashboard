@@ -110,6 +110,21 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await testAsync('a 1-day-old dir is offered under recent, not older, and pinning it moves it to pinned', async () => {
+    await withPins(ENV, async h => {
+      const { dirName, cwd } = plantProject(h, 'fresh', 1 / 24);
+      const before = (await h.req('/api/pins')).json as unknown as PinsResponse;
+      assert.deepStrictEqual(before.recent.map(r => r.dirName), [dirName]);
+      assert.deepStrictEqual(before.older, []);
+
+      const reply = await post(h, { dirName, pinned: true });
+      assert.equal(reply.status, 200);
+      const after = reply.json as unknown as PinsResponse;
+      assert.deepStrictEqual(after.pinned.map(r => [r.dirName, r.path, r.listed]), [[dirName, cwd, true]]);
+      assert.deepStrictEqual(after.recent, [], 'a pinned project is not offered again');
+    });
+  }));
+
   check(await testAsync('a pin whose cwd was deleted reads listed: false, and unpinning it is 200', async () => {
     await withPins(ENV, async h => {
       const { dirName, cwd } = plantProject(h, 'old', 5);

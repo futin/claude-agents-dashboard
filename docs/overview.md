@@ -87,7 +87,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/dismiss` | where a tapped desk push lands — a page that closes the tab it opened in; carries no deep link |
 | `GET /api/health` | liveness + remote-answer state + connection origin + the two hook numbers (idle threshold, answer window) |
 | `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, plus `notifyAvailable` (never the ntfy topic itself); write path |
-| `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the older ones on offer to pin; write path (see [management](subsystems/management.md)) |
+| `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; write path (see [management](subsystems/management.md)) |
 | `GET /api/management`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/account` | who the CLI is signed in as (`~/.claude.json` → `oauthAccount`, as display strings) + the two rate windows — the header chip's own 30s poll, so it does not ride the 3s session scan |
@@ -225,8 +225,8 @@ client/src/
                   Tiles, Triage), SessionDetail (the subagent timeline),
                   ChatDrawer, QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
-                  MicButton, SpawnPanel, PinPicker (older projects to pin — the
-                  launch sheet and Settings › Pinned), ResumePanel, PermissionBanner,
+                  MicButton, SpawnPanel, PinPicker (projects to pin — older ones in
+                  the launch sheet, recent + older in Settings › Pinned), ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
                   usage/ (UsageView + the two tabs, Sheet — the band / figure
                   strip / sheet / D48claude
