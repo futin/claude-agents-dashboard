@@ -6,14 +6,16 @@ shell export for is editable here and takes effect on the next tick.
 ## Where each setting lives, and why
 
 There are two backends, and the section is two pages — **Local** and **Shared** — one per
-backend, so the page *is* the scope and no card mixes the two. Which page is showing is
+backend, so the page *is* the scope and no card mixes the two. A third page, **Pinned**, holds
+the pinned projects: server-stored like Shared, but a list that grows with use rather than a
+policy, so it has a page of its own instead of sitting at the foot of Shared. Which page is showing is
 picked from the tree under Settings in the nav — the rail on desktop, the menu on the
 phone, where every tree stands open (`.rail-sub`). The page band used to carry a
 phone-only pill switch of its own; it is gone, so `settingsTab` has exactly one control
 at any width, as Usage's Forecast / Token value does. Each page is a band
 (title, a scope pill, one line) over sub-category cards: Local has Display, Live data,
 New sessions, Notify this browser, Connection and Reset; Shared has Push notifications,
-Remote answers, Usage forecast and Pinned projects.
+Remote answers and Usage forecast; Pinned has the one Pinned projects card, full width.
 
 **Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, content
 width, the default session view, landing tab
@@ -23,7 +25,7 @@ cannot drift apart), chat truncation, refresh rate, row count, lookback, active 
 notifications, the launch panel's default model and default effort (`''` = send no flag and let
 the `claude` CLI choose; either way a launch can still override it), which Usage sub-tab
 opens (`forecast` | `rates`), and which Settings page is showing (`settingsTab`: `local` |
-`shared`). The answer token is per browser too (`dashboard.answerToken`, its own key), which
+`shared` | `pinned`). The answer token is per browser too (`dashboard.answerToken`, its own key), which
 is why it sits under **Local › Connection** and not beside the remote-answer switch it
 unlocks — a Shared page carrying it would break the promise the two pages make. A phone propped on the desk
 wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and

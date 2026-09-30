@@ -22,7 +22,7 @@ interface Props {
 /**
  * The older-projects picker (#161): a filter box over name and path, and one
  * row per match — name, `~` path, last-session age, **Pin**. Enter pins the
- * first match. Shared by the launch sheet and Settings › Shared, so both offer
+ * first match. Shared by the launch sheet and Settings › Pinned, so both offer
  * pins the same way. A refusal shows inline under its row and changes nothing.
  */
 export default function PinPicker({ older, home, busy, onPin, listWhenEmpty }: Props) {

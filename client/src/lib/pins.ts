@@ -1,7 +1,7 @@
 /**
  * pins.ts — the pure pieces of the pinned-projects UI (#161): the launch
  * select's option label, the older-projects filter, and `~` path shortening.
- * Shared by the launch sheet and Settings › Shared; unit-tested server-side.
+ * Shared by the launch sheet and Settings › Pinned; unit-tested server-side.
  */
 
 import { formatAgo } from './format';

@@ -63,7 +63,7 @@ const ICONS: Record<Section, JSX.Element> = {
 /**
  * The sections whose sub-views are a *fixed* list, and the per-device setting
  * each tree writes: Usage (Forecast / Token value) and Settings (Local /
- * Shared), drawn from one table so a third gets the same tree for one line.
+ * Shared / Pinned), drawn from one table so a third gets the same tree for one line.
  * Management's tree is the third destination but not a fixed list — its rows
  * are the scanned projects — so it has its own component below.
  */
@@ -71,7 +71,7 @@ type SubKey = 'usageTab' | 'settingsTab';
 interface SubNav<K extends SubKey> { key: K; items: { value: Settings[K]; label: string }[] }
 const SUBNAV: Partial<Record<Section, SubNav<'usageTab'> | SubNav<'settingsTab'>>> = {
   usage: { key: 'usageTab', items: [{ value: 'forecast', label: 'Forecast' }, { value: 'rates', label: 'Token value' }] },
-  settings: { key: 'settingsTab', items: [{ value: 'local', label: 'Local' }, { value: 'shared', label: 'Shared' }] }
+  settings: { key: 'settingsTab', items: [{ value: 'local', label: 'Local' }, { value: 'shared', label: 'Shared' }, { value: 'pinned', label: 'Pinned' }] }
 };
 
 /**

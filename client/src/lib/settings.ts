@@ -37,11 +37,16 @@ export type Density = 'comfortable' | 'compact';
 /** Which sub-view the Usage section opens on. */
 export type UsageTab = 'forecast' | 'rates';
 /**
- * Which page the Settings section shows: `local` is this browser's storage,
+ * Where a Settings page's values are stored: `local` is this browser's storage,
  * `shared` is the server's file. The scope of the *settings on the page*, not
- * of this field — which is per device like every other key here.
+ * of `settingsTab` — which is per device like every other key here.
  */
 export type SettingsScope = 'local' | 'shared';
+/**
+ * Which page the Settings section shows. `pinned` is server-stored like
+ * `shared` but gets a page of its own: it is a list that grows, not a policy.
+ */
+export type SettingsTab = SettingsScope | 'pinned';
 /** Which section opens on load. `last` restores whatever you were on. */
 export type Landing = Section | 'last';
 /**
@@ -95,7 +100,7 @@ export interface Settings {
    */
   usageTab: UsageTab;
   /** Which Settings page is showing. Mirrors `usageTab` in every respect. */
-  settingsTab: SettingsScope;
+  settingsTab: SettingsTab;
   /**
    * Which of the five shapes the sessions list opens in, or `last` to reopen
    * whichever one the switcher was left on. A concrete shape pins every load
@@ -218,7 +223,7 @@ const LANDINGS: Landing[] = LANDING_OPTIONS.map(o => o.value);
 const SPAWN_MODELS: SpawnDefaultModel[] = ['', ...MODELS];
 const SPAWN_EFFORTS: SpawnDefaultEffort[] = ['', ...EFFORTS];
 const USAGE_TABS: UsageTab[] = ['forecast', 'rates'];
-const SETTINGS_SCOPES: SettingsScope[] = ['local', 'shared'];
+const SETTINGS_TABS: SettingsTab[] = ['local', 'shared', 'pinned'];
 /** Derived from the picker, so the offered set and the accepted set cannot drift. */
 const LAYOUT_IDS: DefaultLayout[] = LAYOUT_OPTIONS.map(o => o.value);
 const CONTENT_WIDTHS: ContentWidth[] = ['fixed', 'full'];
@@ -244,7 +249,7 @@ export function clampSettings(raw: unknown): Settings {
     spawnDefaultEffort: pickOne(s.spawnDefaultEffort, SPAWN_EFFORTS, DEFAULT_SETTINGS.spawnDefaultEffort),
     notifyBrowser: pickBool(s.notifyBrowser, DEFAULT_SETTINGS.notifyBrowser),
     usageTab: pickOne(s.usageTab, USAGE_TABS, DEFAULT_SETTINGS.usageTab),
-    settingsTab: pickOne(s.settingsTab, SETTINGS_SCOPES, DEFAULT_SETTINGS.settingsTab),
+    settingsTab: pickOne(s.settingsTab, SETTINGS_TABS, DEFAULT_SETTINGS.settingsTab),
     defaultLayout: pickOne(s.defaultLayout, LAYOUT_IDS, DEFAULT_SETTINGS.defaultLayout),
     contentWidth: pickOne(s.contentWidth, CONTENT_WIDTHS, DEFAULT_SETTINGS.contentWidth)
   };

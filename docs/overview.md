@@ -226,7 +226,7 @@ client/src/
                   ChatDrawer, QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   MicButton, SpawnPanel, PinPicker (older projects to pin — the
-                  launch sheet and Settings › Shared), ResumePanel, PermissionBanner,
+                  launch sheet and Settings › Pinned), ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
                   usage/ (UsageView + the two tabs, Sheet — the band / figure
                   strip / sheet / D48claude

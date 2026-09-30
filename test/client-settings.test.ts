@@ -84,6 +84,7 @@ export function run(): number {
   if (test('the Settings scope defaults to local and rejects anything else', () => {
     assert.strictEqual(DEFAULT_SETTINGS.settingsTab, 'local');
     assert.strictEqual(clampSettings({ settingsTab: 'shared' }).settingsTab, 'shared');
+    assert.strictEqual(clampSettings({ settingsTab: 'pinned' }).settingsTab, 'pinned');
     assert.strictEqual(clampSettings({ settingsTab: 'nonsense' }).settingsTab, 'local');
     assert.strictEqual(clampSettings({ settingsTab: 7 }).settingsTab, 'local');
   })) p++; else f++;

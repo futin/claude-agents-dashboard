@@ -6,9 +6,9 @@ import { usePins } from '../../hooks/usePins';
 import { lastSessionLabel, shortenHome } from '../../lib/pins';
 
 /**
- * Settings › Shared › Pinned projects (#161): one row per pin with its Unpin,
+ * Settings › Pinned (#161): one row per pin with its Unpin,
  * then the older-projects picker to add one. Its own component so the
- * `GET /api/pins` scan runs only when the Shared page is actually open.
+ * `GET /api/pins` scan runs only when the Pinned page is actually open.
  *
  * A dead pin — its folder is gone or is now a linked worktree — is still
  * stored and still listed here, flagged, because this is the one place it can

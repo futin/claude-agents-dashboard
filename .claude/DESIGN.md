@@ -448,7 +448,7 @@ under it a link-styled button reads `Not listed? Show older projects · N` — h
 expands, **in place inside the sheet**, a filter box and one boxless row per older project (name, `~`
 path, `last session <age> ago`, a §8.2 36 px **Pin** button). No second surface and no new tint: the
 link is ink, cyan stays the launch button's. Pinning selects the project; a pinned option reads
-`<name> · pinned`, since a native `<option>` cannot hold an icon. Settings › Shared draws the same
+`<name> · pinned`, since a native `<option>` cannot hold an icon. Settings › Pinned draws the same
 picker under its Pinned projects card, where the Unpin lives.
 
 Mock: `docs/guides/mockups/redesign-mock.html` `#spawn`.
