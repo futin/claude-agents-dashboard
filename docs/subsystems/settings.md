@@ -15,7 +15,7 @@ phone-only pill switch of its own; it is gone, so `settingsTab` has exactly one 
 at any width, as Usage's Forecast / Token value does. Each page is a band
 (title, a scope pill, one line) over sub-category cards: Local has Display, Live data,
 New sessions, Notify this browser, Connection and Reset; Shared has Push notifications,
-Remote answers and Usage forecast; Pinned has the one Pinned projects card, full width.
+Remote answers and Usage forecast; Pinned has the one Projects card, full width: every project of the last 30 days as one ledger, the pins under a heading of their own with an Unpin each, the rest under another with a Pin each, one filter over both.
 
 **Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, content
 width, the default session view, landing tab

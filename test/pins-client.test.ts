@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { matchesPinFilter, pinnedOptionLabel, shortenHome } from '../client/src/lib/pins.js';
+import { matchesPinFilter, pinnedOptionLabel, shortenHome, splitPath } from '../client/src/lib/pins.js';
 import type { ProjectRef } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -38,6 +38,23 @@ export function run(): number {
     assert.strictEqual(shortenHome('/opt/x', '/Users/me'), '/opt/x');
     assert.strictEqual(shortenHome('/Users/meow/x', '/Users/me'), '/Users/meow/x', 'a prefix is not a parent');
     assert.strictEqual(shortenHome('/Users/me/x', ''), '/Users/me/x', 'no home known');
+  }));
+
+  tally(test('filter: a dead pin has no path — it matches by name only', () => {
+    assert.strictEqual(matchesPinFilter({ name: 'old-worktree', path: null }, 'old'), true);
+    assert.strictEqual(matchesPinFilter({ name: 'old-worktree', path: null }, 'Documents'), false);
+    assert.strictEqual(matchesPinFilter({ name: 'old-worktree', path: null }, ''), true, 'a blank filter hides nothing');
+  }));
+
+  tally(test('splitPath: parent segments each keep their slash, the basename stands alone', () => {
+    assert.deepStrictEqual(splitPath('~/Documents/custom-projects/claude-agents-dashboard'),
+      { dirs: ['~/', 'Documents/', 'custom-projects/'], name: 'claude-agents-dashboard' });
+    assert.deepStrictEqual(splitPath('/opt/x'), { dirs: ['/', 'opt/'], name: 'x' });
+  }));
+
+  tally(test('splitPath: a bare name has no parents; the root has no name', () => {
+    assert.deepStrictEqual(splitPath('~'), { dirs: [], name: '~' });
+    assert.deepStrictEqual(splitPath('/'), { dirs: ['/'], name: '' });
   }));
 
   console.log(`\n  ${p} passed, ${f} failed`);
