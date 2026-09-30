@@ -8,7 +8,6 @@ import { usePins } from '../hooks/usePins';
 import { useSettings } from '../hooks/useSettings';
 import { useSpawn } from '../hooks/useSpawn';
 import { appendTranscript } from '../lib/dictation';
-import { pinnedOptionLabel } from '../lib/pins';
 import {
   EFFORTS, MODELS, NAME_CAP, PERMISSION_MODE_LABEL, PERMISSION_MODES, PROMPT_CAP,
   allowedPermissionModes
@@ -53,8 +52,7 @@ interface Props {
  * A project past `LOOKBACK_HOURS` is not in that list, so under the select a
  * disclosure offers the older ones for pinning (#161, DESIGN.md §8.7): it
  * expands in place, inside the sheet, rather than opening a second surface. A
- * pin re-fetches the index and selects the project it just pinned. Pinned
- * options read `<name> · pinned` — a native `<option>` cannot hold an icon.
+ * pin re-fetches the index and selects the project it just pinned.
  */
 export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: Props) {
   const { launch, pending, error, needsToken, setToken } = useSpawn();
@@ -166,7 +164,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
                   <option value="">{loading ? 'loading projects…' : 'no recent projects'}</option>
                 )}
                 {projects.map(p => (
-                  <option key={p.dirName} value={p.dirName}>{pinnedOptionLabel(p)}</option>
+                  <option key={p.dirName} value={p.dirName}>{p.name}</option>
                 ))}
               </select>
             </span>

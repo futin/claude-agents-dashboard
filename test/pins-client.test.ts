@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { matchesPinFilter, pinnedOptionLabel, shortenHome, splitPath } from '../client/src/lib/pins.js';
+import { matchesPinFilter, shortenHome, splitPath } from '../client/src/lib/pins.js';
 import type { ProjectRef } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -8,19 +8,14 @@ function test(name: string, fn: () => void): boolean {
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
 }
 
-function ref(name: string, path: string, pinned?: true): ProjectRef {
-  return { dirName: path.replace(/[^A-Za-z0-9]/g, '-'), name, path, lastActiveMs: 0, ...(pinned ? { pinned } : {}) };
+function ref(name: string, path: string): ProjectRef {
+  return { dirName: path.replace(/[^A-Za-z0-9]/g, '-'), name, path, lastActiveMs: 0 };
 }
 
 export function run(): number {
   console.log('\n=== pins.ts (client) ===\n');
   let p = 0, f = 0;
   const tally = (ok: boolean): void => { if (ok) p++; else f++; };
-
-  tally(test('option label: "· pinned" suffix only on a pinned ref', () => {
-    assert.strictEqual(pinnedOptionLabel(ref('backlog-manager', '/x/backlog-manager', true)), 'backlog-manager · pinned');
-    assert.strictEqual(pinnedOptionLabel(ref('backlog-manager', '/x/backlog-manager')), 'backlog-manager');
-  }));
 
   tally(test('filter: matches name or path, case-insensitive; empty matches everything', () => {
     const gm = ref('guide-manager', '/Users/me/Documents/custom-projects/guide-manager');

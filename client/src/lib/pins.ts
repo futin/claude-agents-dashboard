@@ -1,16 +1,8 @@
 /**
- * pins.ts — the pure pieces of the pinned-projects UI (#161): the launch
- * select's option label, the picker's filter, `~` path shortening and the
- * split a picker row sets its path from. Shared by the launch sheet and
- * Settings › Pinned; unit-tested server-side.
+ * pins.ts — the pure pieces of the pinned-projects UI (#161): the picker's
+ * filter, `~` path shortening and the split a picker row sets its path from.
+ * Shared by the launch sheet and Settings › Pinned; unit-tested server-side.
  */
-
-import type { ProjectRef } from '../../../shared/types';
-
-/** A native `<option>` cannot hold an icon, so a pin is spelled out. */
-export function pinnedOptionLabel(ref: ProjectRef): string {
-  return ref.pinned ? `${ref.name} · pinned` : ref.name;
-}
 
 /**
  * Case-insensitive substring match over name and path. A blank query matches
