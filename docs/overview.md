@@ -77,7 +77,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `POST /api/sessions/:id/message-answer` | send free text into a finished turn, or let it stop (write path) |
 | `POST /api/messages/wait` | the Stop hook's held-open wait, away only — except headless sessions, which hold at the desk too (write path) |
 | `POST /api/transcribe` | a recorded clip in, transcribed text out — feeds the reply composer's mic (write path) |
-| `POST /api/spawn` | start a new headless `claude -p` session in a recent project, or `resume` an ended `dashboard` one by id (write path, the one the dashboard initiates rather than answers) |
+| `POST /api/spawn` | start a new headless `claude -p` session in a recent or pinned project, or `resume` an ended `dashboard` one by id (write path, the one the dashboard initiates rather than answers) |
 | `POST /api/spawn/:id/stop` | SIGTERM a still-launching session's child (write path) |
 | `POST /api/sessions/:id/stop` | stop a dashboard-spawned session at any point in its life — graceful by default, `{"force":true}` to skip the grace window; the row's button only ever calls this one (write path) |
 | `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) |
@@ -87,6 +87,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/dismiss` | where a tapped desk push lands — a page that closes the tab it opened in; carries no deep link |
 | `GET /api/health` | liveness + remote-answer state + connection origin + the two hook numbers (idle threshold, answer window) |
 | `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, plus `notifyAvailable` (never the ntfy topic itself); write path |
+| `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the older ones on offer to pin; write path (see [management](subsystems/management.md)) |
 | `GET /api/management`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/account` | who the CLI is signed in as (`~/.claude.json` → `oauthAccount`, as display strings) + the two rate windows — the header chip's own 30s poll, so it does not ride the 3s session scan |
@@ -224,7 +225,8 @@ client/src/
                   Tiles, Triage), SessionDetail (the subagent timeline),
                   ChatDrawer, QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
-                  MicButton, SpawnPanel, ResumePanel, PermissionBanner,
+                  MicButton, SpawnPanel, PinPicker (older projects to pin — the
+                  launch sheet and Settings › Shared), ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
                   usage/ (UsageView + the two tabs, Sheet — the band / figure
                   strip / sheet / D48claude
@@ -234,7 +236,7 @@ client/src/
                   useManagement, useManagementScope (the scope + the one index
                   fetch, shared by the rail's tree and the page), useAnalytics,
                   useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
-                  usePendingMessage, useRemoteAnswer, useSpawn, useStopSession,
+                  usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins,
                   usePersistedState, useSettings, useServerSettings, useDictation, useFloatingTip
                   (the one hover/pin explanation panel, shared by both Usage tabs),
                   useTranscribeAvailable, useWebNotify (browser banners for headless
@@ -243,7 +245,7 @@ client/src/
                   useStuckStrip (when the phone's aside strip pins)
   lib/            filterSort, analyticsFilterSort, chatFilter, markdown, managementEntries,
                   format, settings,
-                  sections, deepLink, dictation, spawnOptions, resume, pace, usageProfile,
+                  sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
                   usageRatesFormat, panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
                   webNotify, backClose, stopControl, triage (the board/triage piles),

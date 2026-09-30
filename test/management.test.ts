@@ -436,6 +436,98 @@ export async function run(): Promise<number> {
     assert.strictEqual(mgmt.resolveProject({ lookbackHours: 24 }, '-other', { root, now: NOW }), null);
   }));
 
+  /* #161: pinned projects stay listed past the lookback; the older list offers the rest of the last 30 days. */
+
+  const PIN_NOW = Date.parse('2026-07-12T12:00:00Z');
+  const DAY = 24 * 3600_000;
+  const pinCfg = { lookbackHours: 48 };
+
+  tally(await test('listRecentProjects: a 5-day-old dir is absent unpinned, present with pinned: true once pinned', async () => {
+    const proj = makeProject();
+    const root = makeProjectsRoot([{ dirName: '-old', id: 'o1', cwd: proj, mtimeMs: PIN_NOW - 5 * DAY }]);
+    assert.deepStrictEqual(mgmt.listRecentProjects(pinCfg, { root, now: PIN_NOW }), []);
+    const refs = mgmt.listRecentProjects(pinCfg, { root, now: PIN_NOW, pinnedDirs: new Set(['-old']) });
+    assert.deepStrictEqual(refs.map(r => [r.dirName, r.path, r.pinned]), [['-old', proj, true]]);
+    assert.strictEqual(refs[0].lastActiveMs, PIN_NOW - 5 * DAY);
+  }));
+
+  tally(await test('listRecentProjects: a pinned recent dir appears once; an unpinned one carries no pinned key', async () => {
+    const pinned = makeProject();
+    const plain = makeProject();
+    const root = makeProjectsRoot([
+      { dirName: '-pin', id: 'p1', cwd: pinned, mtimeMs: PIN_NOW - 1000 },
+      { dirName: '-pin', id: 'p2', cwd: pinned, mtimeMs: PIN_NOW - 9 * DAY },
+      { dirName: '-plain', id: 'q1', cwd: plain, mtimeMs: PIN_NOW - 2000 }
+    ]);
+    const refs = mgmt.listRecentProjects(pinCfg, { root, now: PIN_NOW, pinnedDirs: new Set(['-pin']) });
+    assert.deepStrictEqual(refs.map(r => r.dirName), ['-pin', '-plain']);
+    assert.strictEqual(refs[0].pinned, true);
+    assert.strictEqual(refs[0].lastActiveMs, PIN_NOW - 1000, 'the recent transcript, not the old one');
+    assert.ok(!('pinned' in refs[1]), 'no pinned: false either');
+  }));
+
+  tally(await test('listRecentProjects: a pin wins over archiving for listing; an unpinned archived dir stays hidden', async () => {
+    const pinned = makeProject();
+    const plain = makeProject();
+    const root = makeProjectsRoot([
+      { dirName: '-pin', id: 'arch-pin', cwd: pinned, mtimeMs: PIN_NOW - 1000 },
+      { dirName: '-plain', id: 'arch-plain', cwd: plain, mtimeMs: PIN_NOW - 1000 }
+    ]);
+    const archivedIds = new Set(['arch-pin', 'arch-plain']);
+    const refs = mgmt.listRecentProjects(pinCfg, { root, now: PIN_NOW, archivedIds, pinnedDirs: new Set(['-pin']) });
+    assert.deepStrictEqual(refs.map(r => r.dirName), ['-pin']);
+  }));
+
+  tally(await test('listRecentProjects: a pinned dir whose cwd was deleted is absent', async () => {
+    const proj = makeProject();
+    const root = makeProjectsRoot([{ dirName: '-gone', id: 'g1', cwd: proj, mtimeMs: PIN_NOW - 5 * DAY }]);
+    fs.rmSync(proj, { recursive: true, force: true });
+    assert.deepStrictEqual(mgmt.listRecentProjects(pinCfg, { root, now: PIN_NOW, pinnedDirs: new Set(['-gone']) }), []);
+  }));
+
+  tally(await test('resolveProject: a pinned 5-day-old dirName resolves; without the pin it is null', async () => {
+    const proj = makeProject();
+    const root = makeProjectsRoot([{ dirName: '-old', id: 'o1', cwd: proj, mtimeMs: PIN_NOW - 5 * DAY }]);
+    assert.strictEqual(mgmt.resolveProject(pinCfg, '-old', { root, now: PIN_NOW }), null);
+    const hit = mgmt.resolveProject(pinCfg, '-old', { root, now: PIN_NOW, pinnedDirs: new Set(['-old']) });
+    assert.strictEqual(hit && hit.path, proj);
+  }));
+
+  tally(await test('listOlderProjects: inside 30 days and outside the lookback, minus recent, pinned, temp and worktree cwds, newest-first', async () => {
+    const five = makeProject();
+    const ten = makeProject();
+    const month = makeProject();
+    const recent = makeProject();
+    const pinned = makeProject();
+    const fakeTmp = makeProject();
+    const scratch = path.join(fakeTmp, 'scratchpad');
+    fs.mkdirSync(scratch);
+    const { worktree } = makeRepoWithWorktree(r => path.join(r, '.worktrees', 'Z'), 'Z');
+    const root = makeProjectsRoot([
+      { dirName: '-ten', id: 't1', cwd: ten, mtimeMs: PIN_NOW - 10 * DAY },
+      { dirName: '-five', id: 'f1', cwd: five, mtimeMs: PIN_NOW - 5 * DAY },
+      { dirName: '-month', id: 'm1', cwd: month, mtimeMs: PIN_NOW - 31 * DAY },
+      { dirName: '-recent', id: 'r1', cwd: recent, mtimeMs: PIN_NOW - 1000 },
+      { dirName: '-recent', id: 'r2', cwd: recent, mtimeMs: PIN_NOW - 6 * DAY },
+      { dirName: '-pinned', id: 'p1', cwd: pinned, mtimeMs: PIN_NOW - 4 * DAY },
+      { dirName: '-scratch', id: 's1', cwd: scratch, mtimeMs: PIN_NOW - 3 * DAY },
+      { dirName: '-wt', id: 'w1', cwd: worktree, mtimeMs: PIN_NOW - 3 * DAY }
+    ]);
+    const opts = { root, now: PIN_NOW, pinnedDirs: new Set(['-pinned']), tempRoots: [fakeTmp] };
+    const older = mgmt.listOlderProjects(pinCfg, opts);
+    assert.deepStrictEqual(older.map(r => r.dirName), ['-five', '-ten']);
+    assert.deepStrictEqual(older.map(r => r.path), [five, ten]);
+    assert.strictEqual(mgmt.OLDER_PROJECTS_DAYS, 30);
+  }));
+
+  tally(await test('listOlderProjects: by default a cwd under os.tmpdir() is never offered', async () => {
+    // Every fixture cwd in this file sits under os.tmpdir(), which is exactly the case the default guards.
+    const proj = makeProject();
+    const root = makeProjectsRoot([{ dirName: '-tmp', id: 'x1', cwd: proj, mtimeMs: PIN_NOW - 5 * DAY }]);
+    assert.deepStrictEqual(mgmt.listOlderProjects(pinCfg, { root, now: PIN_NOW }), []);
+    assert.deepStrictEqual(mgmt.listOlderProjects(pinCfg, { root, now: PIN_NOW, tempRoots: [] }).map(r => r.dirName), ['-tmp']);
+  }));
+
   tally(await test('readProjectScope on nonexistent path → all-empty scope, no throw', async () => {
     const scope = await mgmt.readProjectScope('/nonexistent/path/xyz');
     assert.deepStrictEqual(scope.skills, []);

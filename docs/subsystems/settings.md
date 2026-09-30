@@ -13,7 +13,7 @@ phone-only pill switch of its own; it is gone, so `settingsTab` has exactly one 
 at any width, as Usage's Forecast / Token value does. Each page is a band
 (title, a scope pill, one line) over sub-category cards: Local has Display, Live data,
 New sessions, Notify this browser, Connection and Reset; Shared has Push notifications,
-Remote answers and Usage forecast.
+Remote answers, Usage forecast and Pinned projects.
 
 **Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, content
 width, the default session view, landing tab
@@ -45,6 +45,16 @@ it on makes the server call Anthropic for as long as the process lives, with nob
 necessarily watching — the honest place for that is a switch the user throws, and the help
 text in Settings says so in as many words. The server re-reads it on every tick, so flipping
 it takes effect without a restart.
+
+`pinnedProjects` (#161, default `[]`) rides in the same file: encoded project dir names that
+stay listed past `LOOKBACK_HOURS` (see [management](management.md) §Pinned projects). It is
+shared because a pin is a server-side fact — the spawn membership check and the servable-path set
+both read it — not a view preference. The clamp keeps only `[A-Za-z0-9-]+` strings, deduped in
+first-seen order, at most 50; a non-array reads as `[]` without touching the other keys. It is
+**not** in the `ServerSettings` payload: the pins have their own route, `GET/POST /api/pins`, whose
+answer also carries the older projects on offer — so the Settings page's merge/validate logic for
+`POST /api/settings` never sees them. Still one file: the app writes to disk only this store and
+the remote-answer toggle's.
 
 The three scan knobs are the interesting case: they change what the **server** computes, but
 they are still per-device, so they travel as query params on the poll the client already makes —
@@ -272,6 +282,8 @@ Worth knowing from this page's side:
 |---|---|
 | `GET /api/settings` | the non-per-device settings + any detected override, plus `notifyAvailable` and `staleEnvKeys` (names only — never the topic or token itself) |
 | `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?}` — any subset); token-guarded like the other writes |
+| `GET /api/pins` | `{pinned: PinRow[], older: ProjectRef[], home}` — the stored pins (a dead one `listed: false`) and the projects on offer to pin |
+| `POST /api/pins` | `{dirName, pinned}` — token-guarded; a pin must name a recent or older project (404 otherwise), 409 past 50; an unpin takes any stored dir; answers with the fresh `GET` payload |
 | `POST /api/notify/test` | fire one push regardless of policy and report the outcome |
 | `GET /api/health` | now also carries `idleSecs` and `answerSecs`, for the hooks |
 | `GET /api/sessions?limit=&lookback=&active=` | per-request scan overrides |

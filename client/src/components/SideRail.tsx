@@ -75,7 +75,7 @@ const SUBNAV: Partial<Record<Section, SubNav<'usageTab'> | SubNav<'settingsTab'>
 };
 
 /**
- * Management's sub-nav: Global + every recently-active project (DESIGN.md
+ * Management's sub-nav: Global + every recently-active or pinned project (DESIGN.md
  * §8.5). Unlike Usage and Settings this tree is *data* — its rows come from
  * `GET /api/management`, shared with the page through `ManagementScopeProvider`
  * so the index is fetched exactly once. Mounted from the first paint now that

@@ -1487,6 +1487,36 @@ export interface ProjectRef {
   /** Real cwd from the transcript. */
   path: string;
   lastActiveMs: number;
+  /**
+   * Present, and only ever `true`, when the dir is pinned (#161): listed past
+   * `LOOKBACK_HOURS`. Absent otherwise — consumers that don't know pins ignore it.
+   */
+  pinned?: true;
+}
+
+/** One stored pin, as `GET /api/pins` reports it (#161). */
+export interface PinRow {
+  dirName: string;
+  /** Basename of `path`, or the dirName when no transcript is left to resolve a path from. */
+  name: string;
+  /** The cwd the dir resolves to, or null when no transcript is left. */
+  path: string | null;
+  lastActiveMs: number | null;
+  /**
+   * False for a dead pin: its cwd is gone or is now a linked worktree, so every
+   * list hides it. It stays stored until unpinned.
+   */
+  listed: boolean;
+}
+
+/** Payload of `GET /api/pins`, and of a successful `POST /api/pins` (#161). */
+export interface PinsResponse {
+  /** Every stored pin, in pin order. */
+  pinned: PinRow[];
+  /** Projects offered for pinning: outside the lookback, inside 30 days, newest-first. */
+  older: ProjectRef[];
+  /** The server's home dir, so the UI can show paths as `~/…`. */
+  home: string;
 }
 
 /** Payload of `GET /api/management`. */

@@ -12,6 +12,10 @@
  *                  dashboard before the hook gives up and the terminal dialog
  *                  appears instead. The hooks' wait window.
  *
+ * Plus `pinnedProjects` (#161): shared by every device, and read by the server
+ * itself rather than a hook, so it cannot live in localStorage either. It has
+ * its own route (`/api/pins`) and stays out of the `ServerSettings` payload.
+ *
  * A web app can't set an environment variable inside Claude Code's process, so
  * the hooks read both off `GET /api/health` — a request they already make as
  * their reachability probe, before the idle check. Zero added latency, no new
@@ -62,11 +66,23 @@ const NOTIFY_EVENTS: readonly NotifyEvent[] = ['question', 'stop', 'permission',
 /** Off by default — recording makes the server poll Anthropic unattended. */
 export const DEFAULT_RECORD_USAGE_HISTORY = false;
 
+/** Cap on stored pins. The list is offered as rows in two UIs, not searched. */
+export const MAX_PINNED_PROJECTS = 50;
+
+/** The `encodeProjectDir` alphabet — a pin is a dir name, never a path. */
+const PIN_RE = /^[A-Za-z0-9-]+$/;
+
 interface Stored {
   idleSecs: number;
   answerSecs: number;
   notify: NotifyPolicy;
   recordUsageHistory: boolean;
+  /**
+   * Encoded project dir names that stay listed past `LOOKBACK_HOURS` (#161).
+   * Still only this store and `remoteState` write to disk — this key rides in
+   * the same file, it is not a third one.
+   */
+  pinnedProjects: string[];
 }
 
 let cached: Stored | null = null;
@@ -92,6 +108,18 @@ export function clampAnswerSecs(value: unknown): number | null {
   const n = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
   if (!Number.isFinite(n)) return null;
   return Math.min(MAX_ANSWER_SECS, Math.max(MIN_ANSWER_SECS, Math.round(n)));
+}
+
+/** Keep only dir-name strings, deduped in first-seen order, at most {@link MAX_PINNED_PROJECTS}. */
+export function clampPinned(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const v of value) {
+    if (typeof v !== 'string' || !PIN_RE.test(v) || out.includes(v)) continue;
+    out.push(v);
+    if (out.length === MAX_PINNED_PROJECTS) break;
+  }
+  return out;
 }
 
 /**
@@ -130,7 +158,8 @@ function readStored(): Stored {
     idleSecs: DEFAULT_IDLE_SECS,
     answerSecs: DEFAULT_ANSWER_SECS,
     notify: DEFAULT_NOTIFY,
-    recordUsageHistory: DEFAULT_RECORD_USAGE_HISTORY
+    recordUsageHistory: DEFAULT_RECORD_USAGE_HISTORY,
+    pinnedProjects: []
   };
   try {
     const raw = JSON.parse(fs.readFileSync(statePath(), 'utf8'));
@@ -142,7 +171,8 @@ function readStored(): Stored {
       recordUsageHistory:
         typeof raw.recordUsageHistory === 'boolean'
           ? raw.recordUsageHistory
-          : fallback.recordUsageHistory
+          : fallback.recordUsageHistory,
+      pinnedProjects: clampPinned(raw.pinnedProjects)
     };
   } catch {
     return fallback; // absent / unreadable / malformed — fall back to the defaults
@@ -192,8 +222,9 @@ export function detectAnswerOverride(homeDir?: string): EnvOverride | null {
 /** Current settings. The values are resolved from disk once; overrides are live. */
 export function getSettings(homeDir?: string): ServerSettings {
   if (cached === null) cached = readStored();
+  const { pinnedProjects: _pins, ...values } = cached;
   return {
-    ...cached,
+    ...values,
     persisted,
     idleOverride: detectIdleOverride(homeDir),
     answerOverride: detectAnswerOverride(homeDir),
@@ -246,13 +277,41 @@ export function setSettings(patch: unknown): ServerSettings | null {
 
   if (cached === null) cached = readStored();
   cached = { ...cached, ...next };
+  persist(cached);
+  return getSettings();
+}
+
+function persist(values: Stored): void {
   try {
-    fs.writeFileSync(statePath(), JSON.stringify(cached) + '\n', 'utf8');
+    fs.writeFileSync(statePath(), JSON.stringify(values) + '\n', 'utf8');
     persisted = true;
   } catch {
     persisted = false; // read-only fs / container — the values still hold this run
   }
-  return getSettings();
+}
+
+/** The pinned project dir names, in the order they were pinned. */
+export function getPinnedProjects(): string[] {
+  if (cached === null) cached = readStored();
+  return [...cached.pinnedProjects];
+}
+
+/**
+ * Pin or unpin one dir name and return the new list — or null when a new pin
+ * would pass {@link MAX_PINNED_PROJECTS}, which the route answers with a 409.
+ * Pinning a stored dir and unpinning an absent one are both no-ops, not errors.
+ * The caller decides *which* dir names may be pinned; this only stores them.
+ */
+export function setPinned(dirName: string, pinned: boolean): string[] | null {
+  if (cached === null) cached = readStored();
+  const cur = cached.pinnedProjects;
+  const has = cur.includes(dirName);
+  if (pinned === has) return [...cur];
+  if (pinned && cur.length >= MAX_PINNED_PROJECTS) return null;
+  const next = pinned ? clampPinned([...cur, dirName]) : cur.filter(d => d !== dirName);
+  cached = { ...cached, pinnedProjects: next };
+  persist(cached);
+  return [...next];
 }
 
 /** Test seam: forget the cached values so the next read re-resolves them. */

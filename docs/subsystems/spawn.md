@@ -1,7 +1,7 @@
 # Spawning a new session (the fourth write path)
 
 The Board card's **+ New session** button starts a brand-new Claude Code session from the
-dashboard: pick a recent project, write or dictate a prompt, tap `Launch`. The server
+dashboard: pick a recent (or pinned) project, write or dictate a prompt, tap `Launch`. The server
 spawns a detached, headless `claude -p` in that project's directory; the session
 appears in the list a poll or two later (usually under 3s), and from then on it's an
 ordinary row — you keep talking to it with the [reply window](remote-message.md) that
@@ -279,7 +279,9 @@ at all.
 `SpawnRequest.project` is a `dirName`, resolved through the same `resolveProject`
 [management](management.md) already uses for its own `dirName` query param, against
 `listRecentProjects`'s enumerated list (`server/lib/management.ts`) — never
-joined into a filesystem path. An unknown name is a 400, not a lookup that might escape
+joined into a filesystem path. That list includes every pinned project whatever its age (#161),
+so a pin is what makes a project past `LOOKBACK_HOURS` launchable; the sheet's `Not listed? Show
+older projects` disclosure pins one and selects it. An unknown name is a 400, not a lookup that might escape
 somewhere unexpected. The project's `cwd` (read off its own most-recent transcript, not
 user input — its launch cwd, not whatever that session later chdir'd into) becomes the
 child's working directory; there is no free-text cwd field, on

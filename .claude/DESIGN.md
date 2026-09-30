@@ -319,7 +319,7 @@ Reference: `docs/subsystems/usage-limits.md`.
 ### 8.5 Management — the scope is a destination, the rest is columns
 
 **The scope is a rail destination, not a pane.** Global (`~/.claude`) and each
-recently-active project sit in the sidebar as Management's sub-nav — the same tree Usage
+recently-active or pinned project sit in the sidebar as Management's sub-nav — the same tree Usage
 and Settings draw — instead of taking a column inside the page. The live view's three
 panes made the config's first level compete for width with the items under it, and the
 first level is the one that changes least: you pick a scope once and then work inside it.
@@ -442,6 +442,14 @@ Three rules carried out of that comparison:
 - **A host limit is printed, not hovered.** When `SPAWN_MAX_PERMISSION` cuts the ladder the
   triplet carries `host ceiling · <mode> or below` under it. The old panel put that in a
   `title`, which on a phone is nowhere.
+
+**The older-projects disclosure (#161).** A project past `LOOKBACK_HOURS` is not in the select, so
+under it a link-styled button reads `Not listed? Show older projects · N` — hidden when N is 0 — and
+expands, **in place inside the sheet**, a filter box and one boxless row per older project (name, `~`
+path, `last session <age> ago`, a §8.2 36 px **Pin** button). No second surface and no new tint: the
+link is ink, cyan stays the launch button's. Pinning selects the project; a pinned option reads
+`<name> · pinned`, since a native `<option>` cannot hold an icon. Settings › Shared draws the same
+picker under its Pinned projects card, where the Unpin lives.
 
 Mock: `docs/guides/mockups/redesign-mock.html` `#spawn`.
 Reference: `docs/subsystems/spawn.md`.

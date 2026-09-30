@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import PinnedProjectsGroup from './PinnedProjectsGroup';
 import { NumberField, Segmented, Select, SettingsBand, SettingsGroup, SettingsRow } from './SettingsRow';
 import { useNarrow } from '../../hooks/useNarrow';
 import { usePersistedState } from '../../hooks/usePersistedState';
@@ -172,7 +173,7 @@ export default function SettingsView() {
           sub="Stored by the dashboard server. One change here shows up on every device, and steers the hooks that run outside any browser."
         />
 
-        {/* Hand-balanced: the nine push rows on their own, the two shorter
+        {/* Hand-balanced: the nine push rows on their own, the shorter
             cards stacked beside them. */}
         <div className="set-cols">
           <div className="set-col">
@@ -418,6 +419,8 @@ export default function SettingsView() {
                 />
               </SettingsRow>
             </SettingsGroup>
+
+            <PinnedProjectsGroup />
           </div>
         </div>
       </div>

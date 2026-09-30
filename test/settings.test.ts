@@ -5,9 +5,9 @@ import path from 'node:path';
 
 import {
   DEFAULT_ANSWER_SECS, DEFAULT_IDLE_SECS, DEFAULT_NOTIFY, MAX_ANSWER_SECS, MAX_IDLE_SECS,
-  MIN_ANSWER_SECS, SETTINGS_FILE,
-  clampAnswerSecs, clampIdleSecs, detectAnswerOverride, detectIdleOverride,
-  getSettings, resetSettings, setSettings
+  MAX_PINNED_PROJECTS, MIN_ANSWER_SECS, SETTINGS_FILE,
+  clampAnswerSecs, clampIdleSecs, clampPinned, detectAnswerOverride, detectIdleOverride,
+  getPinnedProjects, getSettings, resetSettings, setPinned, setSettings
 } from '../server/lib/settings.js';
 import { scanOverrides } from '../server/api.js';
 import type { Config } from '../server/lib/config.js';
@@ -321,6 +321,59 @@ export function run(): number {
       setSettings({ recordUsageHistory: true });
       setSettings({ recordUsageHistory: 3 });
       assert.strictEqual(getSettings().recordUsageHistory, true);
+    });
+  })) p++; else f++;
+
+  /* #161: pinned projects — the third key of the same store. */
+
+  if (test('pinnedProjects: no key, or a non-array, reads as [] and the other keys still load', () => {
+    inTmpCwd(dir => {
+      assert.deepStrictEqual(getPinnedProjects(), []);
+      for (const bad of ['x', {}]) {
+        fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ idleSecs: 15, pinnedProjects: bad }));
+        resetSettings();
+        assert.deepStrictEqual(getPinnedProjects(), [], JSON.stringify(bad));
+        assert.strictEqual(getSettings().idleSecs, 15, 'a bad pin list must not take the other keys down with it');
+      }
+    });
+  })) p++; else f++;
+
+  if (test('pinnedProjects: clamp dedupes in first-seen order and drops non-strings, empty and non-alphabet', () => {
+    assert.deepStrictEqual(clampPinned(['-a', '-a', 'b/c', '', 7, '-Users-x']), ['-a', '-Users-x']);
+    assert.deepStrictEqual(clampPinned('x'), []);
+  })) p++; else f++;
+
+  if (test('pinnedProjects: a 51st distinct pin is refused and the list stays at 50', () => {
+    inTmpCwd(() => {
+      for (let i = 0; i < MAX_PINNED_PROJECTS; i++) assert.ok(setPinned(`-p${i}`, true), `pin ${i}`);
+      assert.strictEqual(MAX_PINNED_PROJECTS, 50);
+      assert.strictEqual(setPinned('-one-too-many', true), null, 'the refusal is reported as null');
+      assert.strictEqual(getPinnedProjects().length, 50);
+      assert.ok(!getPinnedProjects().includes('-one-too-many'));
+      assert.ok(setPinned('-p0', true), 're-pinning an existing pin at the cap is not a refusal');
+    });
+  })) p++; else f++;
+
+  if (test('pinnedProjects: pin is idempotent, unpin removes, unpinning an absent dir changes nothing', () => {
+    inTmpCwd(() => {
+      setPinned('-a', true);
+      assert.deepStrictEqual(setPinned('-a', true), ['-a']);
+      setPinned('-b', true);
+      assert.deepStrictEqual(setPinned('-a', false), ['-b']);
+      assert.deepStrictEqual(setPinned('-never', false), ['-b']);
+    });
+  })) p++; else f++;
+
+  if (test('pinnedProjects: a pin survives a restart, and stays out of the GET /api/settings payload', () => {
+    inTmpCwd(dir => {
+      setPinned('-Users-x', true);
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(dir, SETTINGS_FILE), 'utf8')).pinnedProjects, ['-Users-x']);
+      resetSettings();
+      assert.deepStrictEqual(getPinnedProjects(), ['-Users-x']);
+      assert.ok(!('pinnedProjects' in getSettings()), 'the pins have their own route');
+      setSettings({ idleSecs: 20 });
+      resetSettings();
+      assert.deepStrictEqual(getPinnedProjects(), ['-Users-x'], 'a settings save must not drop the pins');
     });
   })) p++; else f++;
 

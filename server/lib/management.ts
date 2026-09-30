@@ -25,7 +25,7 @@ import { listTranscripts } from './scan.js';
 import { readTranscript } from './transcript.js';
 import type { Config } from './config.js';
 import type {
-  ConfigItem, FileContent, HookInfo, McpServerInfo, PluginInfo, ProjectRef, ScopeConfig, SettingsFileInfo, SkillFile
+  ConfigItem, FileContent, HookInfo, McpServerInfo, PinRow, PluginInfo, ProjectRef, ScopeConfig, SettingsFileInfo, SkillFile
 } from '../../shared/types.js';
 
 /** Max bytes served per file by GET /api/management/file. */
@@ -54,6 +54,17 @@ interface ProjectsOptions {
    * active. Omitted/null ⇒ nothing is hidden.
    */
   archivedIds?: ReadonlySet<string> | null;
+  /**
+   * Pinned project dir names (`settings.ts` `getPinnedProjects()`), injected by
+   * the handler (#161). A pinned dir stays listed whatever its age.
+   */
+  pinnedDirs?: ReadonlySet<string> | null;
+  /**
+   * Roots whose cwds {@link listOlderProjects} never offers — session
+   * scratchpads. Omitted ⇒ {@link defaultTempRoots}. A test seam as much as an
+   * option: every fixture cwd lives under `os.tmpdir()`.
+   */
+  tempRoots?: readonly string[];
 }
 
 /* ---------------------------------------------------------------- helpers */
@@ -530,31 +541,44 @@ export function encodeProjectDir(cwd: string): string {
   return cwd.replace(/[^A-Za-z0-9]/g, '-');
 }
 
-/**
- * Recently-active projects for the management side-menu: per project dir the
- * newest transcript within the lookback window, resolved to the cwd that dir is
- * named for; deduped by cwd (newest wins), minus dead paths and linked worktrees
- * ({@link isListedProjectPath}), newest-first.
- */
-export function listRecentProjects(config: Partial<Config>, options: ProjectsOptions = {}): ProjectRef[] {
+/** How far back {@link listOlderProjects} reaches for projects to offer for pinning (#161). */
+export const OLDER_PROJECTS_DAYS = 30;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+type Newest = Map<string, { file: string; mtimeMs: number }>;
+
+function lookbackMsOf(config: Partial<Config>): number {
   const lookbackHours = (config.lookbackHours ?? 0) > 0 ? (config.lookbackHours as number) : 48;
-  const now = Number.isFinite(options.now) ? (options.now as number) : Date.now();
-  const root = options.root || path.join(claudeHome(options.homeDir), 'projects');
-  const lookbackMs = lookbackHours * 60 * 60 * 1000;
+  return lookbackHours * 60 * 60 * 1000;
+}
 
-  // Newest transcript per project dir, inside the lookback window.
-  const newestPerDir = new Map<string, { file: string; mtimeMs: number }>();
-  const archived = options.archivedIds || null;
-  for (const t of listTranscripts(root)) {
-    if (archived && archived.has(t.id)) continue;
-    if (now - t.mtimeMs > lookbackMs) continue;
-    const cur = newestPerDir.get(t.dirName);
-    if (!cur || t.mtimeMs > cur.mtimeMs) newestPerDir.set(t.dirName, { file: t.file, mtimeMs: t.mtimeMs });
+function projectsRootOf(options: ProjectsOptions): string {
+  return options.root || path.join(claudeHome(options.homeDir), 'projects');
+}
+
+function nowOf(options: ProjectsOptions): number {
+  return Number.isFinite(options.now) ? (options.now as number) : Date.now();
+}
+
+/** Newest transcript per project dir, over the transcripts `keep` admits. */
+function newestPerDir(transcripts: ReturnType<typeof listTranscripts>, keep: (t: { id: string; dirName: string; mtimeMs: number }) => boolean): Newest {
+  const out: Newest = new Map();
+  for (const t of transcripts) {
+    if (!keep(t)) continue;
+    const cur = out.get(t.dirName);
+    if (!cur || t.mtimeMs > cur.mtimeMs) out.set(t.dirName, { file: t.file, mtimeMs: t.mtimeMs });
   }
+  return out;
+}
 
-  // Extract cwd; dedupe by cwd keeping the most recent dirName.
+/**
+ * Resolve each dir's newest transcript to the cwd that dir is named for, deduped
+ * by cwd (newest wins). Not yet filtered by {@link isListedProjectPath}.
+ */
+function refsByCwd(newest: Newest): Map<string, ProjectRef> {
   const byCwd = new Map<string, ProjectRef>();
-  for (const [dirName, t] of newestPerDir) {
+  for (const [dirName, t] of newest) {
     const parsed = readTranscript(t.file);
     if (!parsed) continue;
     // A session that chdir's into a worktree drifts away from the dir it is
@@ -583,9 +607,114 @@ export function listRecentProjects(config: Partial<Config>, options: ProjectsOpt
       lastActiveMs: t.mtimeMs
     });
   }
+  return byCwd;
+}
+
+/**
+ * Recently-active projects for the management side-menu: per project dir the
+ * newest transcript within the lookback window, resolved to the cwd that dir is
+ * named for; deduped by cwd (newest wins), minus dead paths and linked worktrees
+ * ({@link isListedProjectPath}), newest-first.
+ *
+ * Plus every pinned dir (#161, `options.pinnedDirs`), at any age: one with
+ * nothing inside the lookback contributes its newest transcript regardless, and
+ * ignores the archived filter for that dir only. Such entries carry
+ * `pinned: true`. Because `resolveProject`, `collectServablePaths` and the rail
+ * all build from this list, a pin makes a project spawnable, makes its config
+ * files servable by `GET /api/management/file`, and lists it on the rail — all
+ * three intended; the servable-path widening is the security-relevant one.
+ */
+export function listRecentProjects(config: Partial<Config>, options: ProjectsOptions = {}): ProjectRef[] {
+  const now = nowOf(options);
+  const lookbackMs = lookbackMsOf(config);
+  const archived = options.archivedIds || null;
+  const pinned = options.pinnedDirs || null;
+  const transcripts = listTranscripts(projectsRootOf(options));
+
+  const newest = newestPerDir(transcripts, t => !(archived && archived.has(t.id)) && now - t.mtimeMs <= lookbackMs);
+  if (pinned && pinned.size > 0) {
+    const stale = newestPerDir(transcripts, t => pinned.has(t.dirName) && !newest.has(t.dirName));
+    for (const [dirName, t] of stale) newest.set(dirName, t);
+  }
 
   // bug-21: only now, once each dir has settled on its cwd, ask whether that cwd belongs on the rail at all.
-  return [...byCwd.values()].filter(r => isListedProjectPath(r.path)).sort((a, b) => b.lastActiveMs - a.lastActiveMs);
+  return [...refsByCwd(newest).values()]
+    .filter(r => isListedProjectPath(r.path))
+    .map(r => (pinned && pinned.has(r.dirName) ? { ...r, pinned: true as const } : r))
+    .sort((a, b) => b.lastActiveMs - a.lastActiveMs);
+}
+
+let tempRootsOverride: readonly string[] | null = null;
+
+/**
+ * Test seam: replace {@link defaultTempRoots} process-wide, null to restore. The
+ * API suites need it — their `$HOME`, and so every project they plant, is a tmpdir.
+ */
+export function overrideTempRoots(roots: readonly string[] | null): void {
+  tempRootsOverride = roots;
+}
+
+/** `os.tmpdir()` (and its realpath — macOS hands out a `/var` symlink), `/tmp`, `/private/tmp`. */
+export function defaultTempRoots(): readonly string[] {
+  if (tempRootsOverride) return tempRootsOverride;
+  const roots = [os.tmpdir(), '/tmp', '/private/tmp'];
+  try { roots.push(fs.realpathSync(os.tmpdir())); } catch { /* keep the literal */ }
+  return roots;
+}
+
+function isUnder(p: string, root: string): boolean {
+  const rel = path.relative(root, p);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+/**
+ * Projects offered for pinning (#161): dirs whose newest transcript is outside
+ * the lookback but inside {@link OLDER_PROJECTS_DAYS}, resolved to cwds exactly
+ * as {@link listRecentProjects} does, minus any already listed (recent or
+ * pinned), any cwd under a temp root — throwaway session scratchpads — and any
+ * failing {@link isListedProjectPath}. Newest-first. The horizon limits only
+ * what is offered; a pin already made stays listed at any age.
+ */
+export function listOlderProjects(config: Partial<Config>, options: ProjectsOptions = {}): ProjectRef[] {
+  const now = nowOf(options);
+  const horizonMs = OLDER_PROJECTS_DAYS * DAY_MS;
+  const archived = options.archivedIds || null;
+  const tempRoots = options.tempRoots ?? defaultTempRoots();
+  const transcripts = listTranscripts(projectsRootOf(options));
+
+  const newest = newestPerDir(transcripts, t => !(archived && archived.has(t.id)) && now - t.mtimeMs <= horizonMs);
+
+  // One guard for "already listed", by cwd: it drops every recent and pinned dir, and an old dir
+  // sharing a cwd with a listed one — a project is offered once or not at all.
+  const listed = new Set(listRecentProjects(config, options).map(r => r.path));
+  return [...refsByCwd(newest).values()]
+    .filter(r => !listed.has(r.path) && !tempRoots.some(root => isUnder(r.path, root)) && isListedProjectPath(r.path))
+    .sort((a, b) => b.lastActiveMs - a.lastActiveMs);
+}
+
+/**
+ * One {@link PinRow} per stored pin, in pin order (#161). A pin is `listed` when
+ * {@link listRecentProjects} lists its cwd — under its own dirName, or under
+ * another dir that won the cwd dedupe. Otherwise it is a dead pin: its cwd still
+ * resolved from its newest transcript when one is left, so Settings can name it.
+ */
+export function listPinRows(config: Partial<Config>, dirNames: readonly string[], options: ProjectsOptions = {}): PinRow[] {
+  const recent = listRecentProjects(config, { ...options, pinnedDirs: new Set(dirNames) });
+  const byDir = new Map(recent.map(r => [r.dirName, r]));
+  const listedPaths = new Set(recent.map(r => r.path));
+  const unlisted = new Set(dirNames.filter(d => !byDir.has(d)));
+  const stale = unlisted.size > 0
+    ? newestPerDir(listTranscripts(projectsRootOf(options)), t => unlisted.has(t.dirName))
+    : new Map() as Newest;
+
+  return dirNames.map(dirName => {
+    const hit = byDir.get(dirName);
+    if (hit) return { dirName, name: hit.name, path: hit.path, lastActiveMs: hit.lastActiveMs, listed: true };
+    const t = stale.get(dirName);
+    const ref = t ? [...refsByCwd(new Map([[dirName, t]])).values()][0] : undefined;
+    if (!ref) return { dirName, name: dirName, path: null, lastActiveMs: null, listed: false };
+    return { dirName, name: ref.name, path: ref.path, lastActiveMs: ref.lastActiveMs, listed: listedPaths.has(ref.path) };
+  });
 }
 
 /**
@@ -617,7 +746,7 @@ export function isListedProjectPath(dir: string): boolean {
   return path.basename(path.dirname(gitdir)) !== 'worktrees';
 }
 
-/** Resolve a dirName to its recent ProjectRef by membership, or null. */
+/** Resolve a dirName to its recent (or pinned) ProjectRef by membership, or null. */
 export function resolveProject(config: Partial<Config>, dirName: string, options: ProjectsOptions = {}): ProjectRef | null {
   return listRecentProjects(config, options).find(r => r.dirName === dirName) || null;
 }

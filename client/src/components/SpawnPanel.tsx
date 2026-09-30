@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 
 import MicButton from './MicButton';
+import PinPicker from './PinPicker';
 import { useBackClose } from '../hooks/useBackClose';
 import { useManagementIndex } from '../hooks/useManagement';
+import { usePins } from '../hooks/usePins';
 import { useSettings } from '../hooks/useSettings';
 import { useSpawn } from '../hooks/useSpawn';
 import { appendTranscript } from '../lib/dictation';
+import { pinnedOptionLabel } from '../lib/pins';
 import {
   EFFORTS, MODELS, NAME_CAP, PERMISSION_MODE_LABEL, PERMISSION_MODES, PROMPT_CAP,
   allowedPermissionModes
@@ -27,7 +30,7 @@ interface Props {
 }
 
 /**
- * The launch form: pick a recent project, write (or dictate) a prompt, tap
+ * The launch form: pick a recent (or pinned) project, write (or dictate) a prompt, tap
  * launch.
  *
  * It is a **modal** (`.claude/DESIGN.md` §8.7, mock `#spawn`) rather than a
@@ -46,12 +49,22 @@ interface Props {
  *
  * Project defaults to the most recently active one — `useManagementIndex`'s
  * `projects` is already newest-first, so that's simply the first entry.
+ *
+ * A project past `LOOKBACK_HOURS` is not in that list, so under the select a
+ * disclosure offers the older ones for pinning (#161, DESIGN.md §8.7): it
+ * expands in place, inside the sheet, rather than opening a second surface. A
+ * pin re-fetches the index and selects the project it just pinned. Pinned
+ * options read `<name> · pinned` — a native `<option>` cannot hold an icon.
  */
 export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: Props) {
   const { launch, pending, error, needsToken, setToken } = useSpawn();
-  const { index, loading } = useManagementIndex(0);
+  const [indexKey, setIndexKey] = useState(0);
+  const { index, loading } = useManagementIndex(indexKey);
   const { settings } = useSettings();
+  const { pins, busy: pinBusy, setPin } = usePins();
+  const [showOlder, setShowOlder] = useState(false);
   const projects = index?.projects ?? [];
+  const older = pins?.older ?? [];
 
   // null = "the user hasn't touched this control yet" — once projects load,
   // the select falls back to the newest one without needing an effect to sync it.
@@ -109,6 +122,15 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
   // (768px) the modal is full-screen and there is no scrim left to tap.
   useBackClose(close);
 
+  async function pinAndSelect(dirName: string): Promise<string | null> {
+    const failure = await setPin(dirName, true);
+    if (failure) return failure;
+    setIndexKey(k => k + 1);
+    setProject(dirName);
+    setShowOlder(false);
+    return null;
+  }
+
   async function doLaunch(): Promise<void> {
     if (!canLaunch) return;
     const req: SpawnRequest = {
@@ -144,11 +166,33 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
                   <option value="">{loading ? 'loading projects…' : 'no recent projects'}</option>
                 )}
                 {projects.map(p => (
-                  <option key={p.dirName} value={p.dirName}>{p.name}</option>
+                  <option key={p.dirName} value={p.dirName}>{pinnedOptionLabel(p)}</option>
                 ))}
               </select>
             </span>
           </label>
+
+          {(older.length > 0 || showOlder) && (
+            <div className="sp-older">
+              <button
+                type="button"
+                className="sp-more"
+                aria-expanded={showOlder}
+                disabled={pending}
+                onClick={() => setShowOlder(v => !v)}
+              >
+                {showOlder ? 'Hide older projects' : `Not listed? Show older projects · ${older.length}`}
+              </button>
+              {showOlder && pins && (
+                <>
+                  <PinPicker older={older} home={pins.home} busy={pinBusy} onPin={pinAndSelect} listWhenEmpty />
+                  <span className="sp-note">
+                    A pin keeps a project listed past the lookback, on every device. Unpin it under Settings › Shared.
+                  </span>
+                </>
+              )}
+            </div>
+          )}
 
           <label className="sp-field">
             <span className="sp-label">prompt</span>
