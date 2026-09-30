@@ -72,7 +72,7 @@ That's the whole basic setup. Everything below is optional.
   text; **send** stays a deliberate tap. Off until you install the engine, and needs HTTPS
   (`pnpm tunnel`) to record at all from a phone.
 - **[New session](docs/subsystems/spawn.md)** — the Board card's **+ New session** button starts a
-  brand-new session from the dashboard: pick a recent project, write or dictate the prompt,
+  brand-new session from the dashboard: pick a recent (or pinned) project, write or dictate the prompt,
   tap `Launch`. The server spawns a detached, headless `claude -p` in that project's
   directory and the row shows up a poll later, ordinary from then on. The fourth write
   path, and the first one the dashboard *initiates* rather than answers. A session started

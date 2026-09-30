@@ -5,7 +5,7 @@ A **Management** section (top-level `SideRail` in `App.tsx`, persisted as
 ever written.
 
 **The scope is a rail destination, not a pane** (`.claude/DESIGN.md` §8.5): Global
-(`~/.claude`) and every recently-active project sit in the sidebar as Management's
+(`~/.claude`) and every recently-active or pinned project sit in the sidebar as Management's
 sub-nav, the same tree Usage and Settings draw, and only while the section is open. The
 page keeps the persisted state (`management.scope`) and still resolves a stale value to
 `global` during render — only the control moved. Its ↻ is the shared `.icon-refresh`
@@ -67,7 +67,7 @@ control (the type is a column now, not a collapsible header) and the
   `~/.claude.json`) then `project` (`<cwd>/.mcp.json`). `disabled` only says what disk says: the plugin is disabled, or the name is
   in that project entry's `disabledMcpServers`/`disabledMcpjsonServers`. No dedupe across scopes. The group sits right after
   Plugins (first in a project), and its detail card renders from the payload — no FileBlock, see Invariants. Recent projects
-  come from transcript cwds (same lookback as sessions), deduped by cwd, newest-first.
+  come from transcript cwds (same lookback as sessions, except pinned ones — below), deduped by cwd, newest-first.
   Each dir publishes the cwd **it is named for**: of the newest transcript's launch and
   newest cwds, the one whose `encodeProjectDir` spelling equals the dirName. A session that
   chdir'd into a worktree drifts away from the dir it is filed under *and* writes into the
@@ -93,6 +93,26 @@ control (the type is a column now, not a collapsible header) and the
   reading as recently active (see [sessions](sessions.md) §Archived-session filter). The
   servable-path set (`collectServablePaths`) is deliberately *not* narrowed that way: a file
   already listed in an open panel must keep serving.
+- **Pinned projects (#161):** the list is recent ∪ pinned. `api.ts` passes the stored pins
+  (`settings.ts` `getPinnedProjects()`) into `listRecentProjects` as `pinnedDirs`, the same injection
+  as `archivedIds`; a pinned dir with nothing inside the lookback contributes its newest transcript at
+  any age, and every later step — naming, cwd dedupe, the bug-21 filter, the sort — runs unchanged.
+  Pinned entries carry `ProjectRef.pinned: true`; unpinned ones carry no key at all. **A pin wins over
+  archiving for listing only:** a pinned dir whose every transcript is archived still resolves its cwd
+  from them, and those sessions stay archived everywhere else. **A dead pin** — its cwd gone, or now a
+  linked worktree — fails the bug-21 filter like any other row, so it stays stored but hidden;
+  `GET /api/pins` reports it `listed: false` and Settings › Pinned flags it with an Unpin.
+  `resolveProject`, `collectServablePaths` and the rail all build from this one list, so a pin makes a
+  project spawnable, lists it on the rail, and **widens the servable-path set** to its config files —
+  all three intended, and the last is why `POST /api/pins` only accepts a dirName the server itself
+  enumerated. `listOlderProjects` is what is offered for pinning: dirs whose newest transcript is
+  outside the lookback but inside `OLDER_PROJECTS_DAYS` (30), minus anything already listed, any cwd
+  under a Claude root (`defaultClaudeRoots`: `os.tmpdir()` and its realpath, `/tmp`, `/private/tmp` —
+  session scratchpads — plus `~/.claude` and `~/Library/Application Support/Claude`, the desktop app's
+  scratch workspaces) and anything failing bug-21. `GET /api/pins` drops Claude-root cwds from its
+  `recent` offers the same way; they stay on the rail and in the launch select, and a pin already made
+  under one still lists under `pinned`. The 30 days cap only what is *offered*; a pin already made stays
+  listed at any age.
 - **Skill directories:** `readSkillsDir` walks each skill dir at scan time and sets
   `ConfigItem.files` (`{rel, size}[]`, SKILL.md first then rel-sorted) — only when there
   is more than SKILL.md, so a single-file skill's payload is byte-identical to before. No
@@ -121,7 +141,7 @@ control (the type is a column now, not a collapsible header) and the
   enumerated. **Never replace this with prefix/subtree checks**: `~/.claude` also holds
   `.credentials.json`/`history.jsonl`/`session-data/`, and project roots hold `.env` —
   exact set membership is what keeps those unservable. `dirName` is resolved against the
-  enumerated recent-project list, never joined into a path (same philosophy as
+  enumerated recent-or-pinned project list, never joined into a path (same philosophy as
   `serveSessionDetail`). Content capped at 256 KB (`truncated` flag). `~/.claude.json`
   (large, private) is read for its two `mcpServers` locations and nothing else, parsed at most once per (path, mtime, size),
   and is **never servable** — nor is any `.mcp.json`, project or plugin: each can hold `env` values, and `normalizeMcpServers`

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import PinnedProjectsGroup from './PinnedProjectsGroup';
 import { NumberField, Segmented, Select, SettingsBand, SettingsGroup, SettingsRow } from './SettingsRow';
 import { useNarrow } from '../../hooks/useNarrow';
 import { usePersistedState } from '../../hooks/usePersistedState';
@@ -49,7 +50,8 @@ const WIDTHS: { value: ContentWidth; label: string }[] = [
 ];
 
 /**
- * The Settings section: two pages, one per storage backend.
+ * The Settings section: two pages, one per storage backend, plus a third for
+ * the pinned projects.
  *
  * **Local** is `localStorage['dashboard.settings']` — set again on the next
  * phone or laptop. **Shared** is the server's `.dashboard-settings.json` — the
@@ -58,6 +60,9 @@ const WIDTHS: { value: ContentWidth; label: string }[] = [
  * page *is* the scope: nothing on either mixes the two, which is why the answer
  * token sits under Local › Connection rather than beside the remote-answer
  * switch it unlocks.
+ *
+ * **Pinned** is server-stored too, but a list that grows with use rather than
+ * a policy, so it gets its own page instead of the foot of Shared.
  *
  * Which page is showing is itself per-device (`settingsTab`), picked from the
  * rail's tree on desktop and the band's pill switch on the phone — the same
@@ -163,6 +168,23 @@ export default function SettingsView() {
   }
 
 
+  if (scope === 'pinned') {
+    return (
+      <div className="set">
+        <SettingsBand
+          scope="shared"
+          title="Settings · Pinned"
+          sub="Projects that stay in Management and the launch sheet however long ago their last session was. Stored by the dashboard server, so a pin shows up on every device."
+        />
+        {/* One full-width column: the list grows with every pin, so it gets
+            the page to itself rather than half of a two-column grid. */}
+        <div className="set-col">
+          <PinnedProjectsGroup />
+        </div>
+      </div>
+    );
+  }
+
   if (scope === 'shared') {
     return (
       <div className="set">
@@ -172,7 +194,7 @@ export default function SettingsView() {
           sub="Stored by the dashboard server. One change here shows up on every device, and steers the hooks that run outside any browser."
         />
 
-        {/* Hand-balanced: the nine push rows on their own, the two shorter
+        {/* Hand-balanced: the nine push rows on their own, the shorter
             cards stacked beside them. */}
         <div className="set-cols">
           <div className="set-col">

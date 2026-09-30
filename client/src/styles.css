@@ -1791,6 +1791,49 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    this card the track drops to --hairline2, the next step darker. */
 .sp-toggle .set-seg{flex:none;background:var(--hairline2);border-color:var(--hairline2)}
 .sp-toggle .set-seg button{padding:5px 12px;font-size:12px}
+/* #161: the older-projects disclosure under the project select (DESIGN.md §8.7).
+   A link-styled button, never tinted — cyan stays the launch button's — that
+   expands the picker in place, inside the sheet. */
+.sp-older{display:flex;flex-direction:column;align-items:flex-start;gap:10px;margin-top:-8px}
+.sp-more{font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-decoration-color:var(--hairline2);text-underline-offset:3px}
+.sp-more:hover:not(:disabled){color:var(--ink)}
+.sp-more:disabled{cursor:default;opacity:.55}
+.sp-older .pin-pick{align-self:stretch}
+
+/* The picker itself (PinPicker.tsx), shared by the launch sheet and Settings ›
+   Pinned: a filter box, then boxless rows split by hairlines. The path IS the
+   row's title — parents dim, basename bright, no second name line — with the
+   last-session age and §8.2's 36px button beside it. On the phone the row is
+   two lines, path over age, the button spanning both, so the path keeps the
+   width; from md it is one line of three grid columns under a column header,
+   the two right columns fixed so the ages line up across Settings' two groups,
+   whose buttons (Pin / Unpin) differ in width. */
+.pin-pick{display:flex;flex-direction:column;gap:8px;min-width:0;width:100%}
+.pin-list{list-style:none;margin:0;padding:0;max-height:240px;overflow-y:auto;overscroll-behavior:contain}
+/* Settings › Pinned is the list's own page: it grows with the page scroll, not a boxed one. */
+.set .pin-list{max-height:none;overflow-y:visible}
+.pin-head{display:none;font-size:11px;color:var(--ink3);padding:6px 0 0}
+.pin-head span:nth-child(2){text-align:right}
+.pin-row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;row-gap:2px;align-items:center;padding:10px 0;border-top:1px solid var(--hairline)}
+.pin-row:first-child{border-top:0}
+/* a heading or the column header sits on the list's first hairline rather than floating over it */
+.pin-head+.pin-list>.pin-row:first-child,.pin-group+.pin-list>.pin-row:first-child{border-top:1px solid var(--hairline)}
+.pin-path{font-size:13px;line-height:1.45;color:var(--ink2);min-width:0}
+/* each segment atomic: a line breaks only between them, and inside one only when it alone is wider than the column */
+.pin-seg,.pin-path b{display:inline-block;max-width:100%;overflow-wrap:anywhere}
+.pin-path b{font-size:15px;font-weight:500;color:var(--ink)}
+.pin-sub{display:block;font-size:12px;line-height:1.45;color:var(--amber);margin-top:2px}
+.pin-sub.err{color:var(--red)}
+.pin-age{grid-column:1;font-size:12px;color:var(--ink3);white-space:nowrap}
+.pin-row .qp-term{grid-column:2;grid-row:1/span 2;justify-self:end}
+/* Settings' two groups: a heading each, its count beside it */
+.pin-group{padding:14px 0 2px;font-size:13px;font-weight:500;color:var(--ink)}
+.pin-count{font-size:12px;font-weight:400;color:var(--ink3);margin-left:6px}
+@media (min-width:768px){
+  .pin-head,.pin-row{display:grid;grid-template-columns:minmax(0,1fr) 64px 96px;gap:12px}
+  .pin-age{grid-column:auto;font-size:13px;color:var(--ink2);text-align:right}
+  .pin-row .qp-term{grid-column:auto;grid-row:auto}
+}
 
 /* A 1080px modal with margins does not fit a phone, so the presentation goes
    back to full-screen — which also takes the scrim away again, leaving ✕ and

@@ -27,8 +27,8 @@ import {
 import { detectBoost, emptyBoost } from './lib/usage-boost.js';
 import { HOURS_PER_WEEK, confidenceOf, localOffsetMinutes, walkForward } from './lib/usage-forecast.js';
 import {
-  claudeHome, collectServablePaths, listRecentProjects, readGlobalScope,
-  readProjectScope, readServableFile, resolveProject
+  claudeHome, collectServablePaths, defaultClaudeRoots, isClaudeOwned, listOlderProjects, listPinRows,
+  listRecentProjects, readGlobalScope, readProjectScope, readServableFile, resolveProject
 } from './lib/management.js';
 import { listReports, reviewStatus } from './lib/analytics.js';
 import {
@@ -51,7 +51,7 @@ import {
 import { notifyPermission, permissionWaits } from './lib/permissions.js';
 import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
-import { getSettings, setSettings } from './lib/settings.js';
+import { getPinnedProjects, getSettings, setPinned, setSettings } from './lib/settings.js';
 import { classifyOrigin } from './lib/origin.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
@@ -60,7 +60,7 @@ import {
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import type {
-  AnalyticsResponse, ManagementIndex, MessageWaitResult, PlanWaitResult, ScopeConfig,
+  AnalyticsResponse, ManagementIndex, MessageWaitResult, PinsResponse, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
   ModelRateRow, RateLimit, SpawnResponse, UsageCoverage, UsageProfileCell,
   UsageProfileResponse, UsageRatesResponse, WaitResult
@@ -1307,7 +1307,7 @@ export async function serveNotifyTest(
 
 /**
  * `POST /api/spawn` — start a new headless `claude -p` session in an existing
- * recent project.
+ * recent or pinned project.
  *
  * Gated on the remote-answer toggle exactly like `serveTranscribe` above, and
  * for the stronger version of its reason: spawn writes a whole new session on
@@ -1334,7 +1334,7 @@ export async function serveNotifyTest(
  *
  * Neither `body.project` nor `body.resume` ever reaches the filesystem by
  * being joined into a path — the former resolves through `resolveProject`'s
- * membership check against the enumerated recent-project list (the same
+ * membership check against the enumerated recent-or-pinned project list (the same
  * reasoning `serveManagementProject` documents for its `dirName` query param),
  * the latter through an exact-id match against the enumerated transcripts.
  * Resume additionally requires the target to be a `dashboard`-surface
@@ -1420,7 +1420,7 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
       sessionId = launch(config, ref, parsed.input, rid);
     } else {
       const projectName = typeof body.project === 'string' ? body.project : '';
-      const ref = resolveProject(config, projectName);
+      const ref = resolveProject(config, projectName, pinOptions());
       // Named, but bounded: the body cap is 64KB, and every other rejection in
       // this file answers with a fixed string.
       if (!ref) return sendJson(res, 400, { error: `unknown project: ${projectName.slice(0, 60)}` });
@@ -1528,7 +1528,7 @@ function emptyScope(scope: 'global' | 'project', root = ''): ScopeConfig {
 }
 
 /**
- * `GET /api/management` — the global scope (incl. plugins) + recent projects.
+ * `GET /api/management` — the global scope (incl. plugins) + recent and pinned projects.
  * Fetched on section open, not polled: config changes on the order of days.
  */
 export async function serveManagementIndex(config: Config, res: ServerResponse): Promise<void> {
@@ -1536,7 +1536,7 @@ export async function serveManagementIndex(config: Config, res: ServerResponse):
   try {
     const [global, projects] = await Promise.all([
       readGlobalScope(),
-      Promise.resolve(listRecentProjects(config, { archivedIds: archivedSessionIds() }))
+      Promise.resolve(listRecentProjects(config, { archivedIds: archivedSessionIds(), ...pinOptions() }))
     ]);
     data = { generatedAt: new Date().toISOString(), global, projects };
   } catch (e) {
@@ -1548,13 +1548,13 @@ export async function serveManagementIndex(config: Config, res: ServerResponse):
 
 /**
  * `GET /api/management/project?dir=<dirName>` — one project's scope. The
- * dirName is resolved against the enumerated recent-project list, never
+ * dirName is resolved against the enumerated recent-or-pinned project list, never
  * joined into a path (same philosophy as serveSessionDetail).
  */
 export async function serveManagementProject(config: Config, dirName: string, res: ServerResponse): Promise<void> {
   if (!ID_RE.test(dirName)) return sendJson(res, 400, { ...emptyScope('project'), error: true });
   try {
-    const ref = resolveProject(config, dirName);
+    const ref = resolveProject(config, dirName, pinOptions());
     if (!ref) return sendJson(res, 404, { ...emptyScope('project'), error: true });
     sendJson(res, 200, await readProjectScope(ref.path, ref.dirName));
   } catch (e) {
@@ -1572,7 +1572,7 @@ export async function serveManagementFile(config: Config, rawPath: string, res: 
   const fail = (code: number) => sendJson(res, code, { path: p, content: '', size: 0, truncated: false, error: true });
   if (!p || !p.startsWith('/') || p.includes('..')) return fail(400);
   try {
-    const allowed = await collectServablePaths(config);
+    const allowed = await collectServablePaths(config, pinOptions());
     if (!allowed.has(p)) return fail(403);
     const file = await readServableFile(p, allowed);
     if (!file) return fail(404);
@@ -1581,6 +1581,68 @@ export async function serveManagementFile(config: Config, rawPath: string, res: 
     console.error('[dashboard] management file failed:', (e as Error).message);
     fail(500);
   }
+}
+
+/* ------------------------------------------------------- pins endpoints */
+
+/**
+ * The stored pins, as the `ProjectsOptions` every project-list caller passes
+ * (#161). Read per request — `settings.ts` caches it, so this costs nothing.
+ */
+function pinOptions(): { pinnedDirs: ReadonlySet<string> } {
+  return { pinnedDirs: new Set(getPinnedProjects()) };
+}
+
+/**
+ * A recent project Claude made for itself (a scratch workspace, a dir under
+ * `~/.claude`) stays on the rail but is not offered here, the same rule
+ * `listOlderProjects` applies. A pin already made there still lists under
+ * `pinned` — that is where it can be removed.
+ */
+function pinsPayload(config: Config): PinsResponse {
+  const options = { archivedIds: archivedSessionIds(), ...pinOptions() };
+  const claudeRoots = defaultClaudeRoots();
+  return {
+    pinned: listPinRows(config, getPinnedProjects(), options),
+    recent: listRecentProjects(config, options).filter(r => !r.pinned && !isClaudeOwned(r.path, claudeRoots)),
+    older: listOlderProjects(config, options),
+    home: nodePath.dirname(claudeHome())
+  };
+}
+
+/** `GET /api/pins` — the stored pins plus the recent and older projects offered for pinning (#161). */
+export function servePinsRead(config: Config, res: ServerResponse): void {
+  try {
+    sendJson(res, 200, pinsPayload(config));
+  } catch (e) {
+    console.error('[dashboard] pins read failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'pins read failed' });
+  }
+}
+
+/**
+ * `POST /api/pins` `{dirName, pinned}` — pin or unpin one project (#161).
+ * Token-guarded like `POST /api/settings`. A pin must name a dir the server
+ * itself enumerated (older ∪ recent), compared as a string and never joined into
+ * a path — a pinned dir becomes spawnable and its config servable, so this is
+ * the gate. An unpin accepts any stored dir, so a dead pin can be removed.
+ * Success answers with the fresh `GET /api/pins` payload.
+ */
+export async function servePinsWrite(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  const body = await readJsonBody(req) as { dirName?: unknown; pinned?: unknown } | null;
+  if (!body || typeof body.dirName !== 'string' || typeof body.pinned !== 'boolean') {
+    return sendBadBody(res, { error: 'expected {dirName: string, pinned: boolean}' });
+  }
+  const { dirName, pinned } = body;
+  if (pinned) {
+    const options = { archivedIds: archivedSessionIds(), ...pinOptions() };
+    const known = [...listRecentProjects(config, options), ...listOlderProjects(config, options)]
+      .some(r => r.dirName === dirName);
+    if (!known) return sendJson(res, 404, { error: 'no such project' });
+  }
+  if (setPinned(dirName, pinned) === null) return sendJson(res, 409, { error: 'pin limit reached' });
+  sendJson(res, 200, pinsPayload(config));
 }
 
 /* -------------------------------------------------- analytics endpoint */

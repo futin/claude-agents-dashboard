@@ -23,7 +23,7 @@ are credentials.
 | `WEB_PORT` | `5174` | Port the Vite dev UI serves on (`pnpm dev` only; prod ignores it). Deliberately not Vite's stock 5173, which another project usually holds. Set it only if 5174 is taken too |
 | `MAX_SESSIONS` | `5` | How many sessions to show, most-recent first. **Per-browser override** in Settings → Sessions shown (sent as `?limit=`, capped at 50) |
 | `ACTIVE_WINDOW_MIN` | `5` | A "recent" session is one whose last message is within this many minutes. **Per-browser override** in Settings → Active window (`?active=`, capped at 120) |
-| `LOOKBACK_HOURS` | `48` | Only consider sessions modified within this many hours. **Per-browser override** in Settings → Lookback (`?lookback=`, capped at 168) |
+| `LOOKBACK_HOURS` | `48` | Only consider sessions modified within this many hours. **Per-browser override** in Settings → Lookback (`?lookback=`, capped at 168). Pinned projects (Settings › Pinned) ignore it for the project list |
 | `SHOW_USAGE` | `true` | Show the account [usage bars](../subsystems/usage-limits.md) in the Sessions aside. `false` disables the fetch and the keychain read entirely |
 | `SHOW_ANALYTICS` | `true` | Show the [Analytics tab](../subsystems/analytics.md) |
 | `ANALYTICS_KEEP` | `5` | How many `/kaizen`-logged sessions the Analytics tab shows |
