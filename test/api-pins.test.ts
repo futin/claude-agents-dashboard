@@ -5,7 +5,7 @@
  * row, and the knock-on effect on `GET /api/management`.
  *
  * The harness `$HOME` is a tmpdir, and the older-projects list never offers a
- * cwd under one, so every case here lifts that filter with `overrideTempRoots`.
+ * cwd under one, so every case here lifts that filter with `overrideClaudeRoots`.
  */
 
 import assert from 'node:assert';
@@ -14,16 +14,15 @@ import path from 'node:path';
 
 import { testAsync, userRecord, withServer } from './api-harness.js';
 import type { Harness } from './api-harness.js';
-import { encodeProjectDir, overrideTempRoots } from '../server/lib/management.js';
+import { encodeProjectDir, overrideClaudeRoots } from '../server/lib/management.js';
 import { getPinnedProjects, resetSettings } from '../server/lib/settings.js';
 import type { PinsResponse, ProjectRef } from '../shared/types.js';
 
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
 const DAY = 24 * 3600_000;
 
-/** A project cwd under `$HOME`, with one transcript `ageDays` old. Returns its dirName. */
-function plantProject(h: Harness, name: string, ageDays: number): { dirName: string; cwd: string } {
-  const cwd = path.join(h.home, 'projs', name);
+/** A project cwd (default `$HOME/projs/<name>`), with one transcript `ageDays` old. Returns its dirName. */
+function plantProject(h: Harness, name: string, ageDays: number, cwd = path.join(h.home, 'projs', name)): { dirName: string; cwd: string } {
   fs.mkdirSync(cwd, { recursive: true });
   const dirName = encodeProjectDir(cwd);
   const dir = path.join(h.home, '.claude', 'projects', dirName);
@@ -39,16 +38,16 @@ function post(h: Harness, body: unknown, headers: Record<string, string> = {}) {
   return h.req('/api/pins', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body), headers });
 }
 
-/** Each case starts with no pins and the temp-root filter off, and leaves both that way. */
+/** Each case starts with no pins and the Claude-root filter off, and leaves both that way. */
 async function withPins(env: string, fn: (h: Harness) => Promise<void>): Promise<void> {
-  overrideTempRoots([]);
+  overrideClaudeRoots([]);
   try {
     await withServer(env, async h => {
       resetSettings();
       try { await fn(h); } finally { resetSettings(); }
     });
   } finally {
-    overrideTempRoots(null);
+    overrideClaudeRoots(null);
   }
 }
 
@@ -122,6 +121,22 @@ export async function run(): Promise<number> {
       const after = reply.json as unknown as PinsResponse;
       assert.deepStrictEqual(after.pinned.map(r => [r.dirName, r.path, r.listed]), [[dirName, cwd, true]]);
       assert.deepStrictEqual(after.recent, [], 'a pinned project is not offered again');
+    });
+  }));
+
+  check(await testAsync('a recent dir under a Claude root is not offered, and a pin already made there stays listed', async () => {
+    await withPins(ENV, async h => {
+      overrideClaudeRoots([path.join(h.home, '.claude')]);
+      const mine = plantProject(h, 'mine', 1 / 24);
+      const own = plantProject(h, 'refresh', 1 / 24, path.join(h.home, '.claude', 'dashboard-refresh'));
+      const before = (await h.req('/api/pins')).json as unknown as PinsResponse;
+      assert.deepStrictEqual(before.recent.map(r => r.dirName), [mine.dirName]);
+
+      // The gate still knows it — it is listed on the rail — so a pin made before the filter survives it.
+      assert.equal((await post(h, { dirName: own.dirName, pinned: true })).status, 200);
+      const after = (await h.req('/api/pins')).json as unknown as PinsResponse;
+      assert.deepStrictEqual(after.pinned.map(r => [r.dirName, r.listed]), [[own.dirName, true]]);
+      assert.deepStrictEqual(after.recent.map(r => r.dirName), [mine.dirName]);
     });
   }));
 

@@ -27,8 +27,8 @@ import {
 import { detectBoost, emptyBoost } from './lib/usage-boost.js';
 import { HOURS_PER_WEEK, confidenceOf, localOffsetMinutes, walkForward } from './lib/usage-forecast.js';
 import {
-  claudeHome, collectServablePaths, listOlderProjects, listPinRows, listRecentProjects, readGlobalScope,
-  readProjectScope, readServableFile, resolveProject
+  claudeHome, collectServablePaths, defaultClaudeRoots, isClaudeOwned, listOlderProjects, listPinRows,
+  listRecentProjects, readGlobalScope, readProjectScope, readServableFile, resolveProject
 } from './lib/management.js';
 import { listReports, reviewStatus } from './lib/analytics.js';
 import {
@@ -1593,11 +1593,18 @@ function pinOptions(): { pinnedDirs: ReadonlySet<string> } {
   return { pinnedDirs: new Set(getPinnedProjects()) };
 }
 
+/**
+ * A recent project Claude made for itself (a scratch workspace, a dir under
+ * `~/.claude`) stays on the rail but is not offered here, the same rule
+ * `listOlderProjects` applies. A pin already made there still lists under
+ * `pinned` — that is where it can be removed.
+ */
 function pinsPayload(config: Config): PinsResponse {
   const options = { archivedIds: archivedSessionIds(), ...pinOptions() };
+  const claudeRoots = defaultClaudeRoots();
   return {
     pinned: listPinRows(config, getPinnedProjects(), options),
-    recent: listRecentProjects(config, options).filter(r => !r.pinned),
+    recent: listRecentProjects(config, options).filter(r => !r.pinned && !isClaudeOwned(r.path, claudeRoots)),
     older: listOlderProjects(config, options),
     home: nodePath.dirname(claudeHome())
   };

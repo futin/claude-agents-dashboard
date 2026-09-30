@@ -1515,10 +1515,11 @@ export interface PinsResponse {
   pinned: PinRow[];
   /**
    * Unpinned projects inside the lookback, newest-first — already listed today,
-   * offered so a busy project can be pinned before it ages out.
+   * offered so a busy project can be pinned before it ages out. Never a dir
+   * Claude made for itself (a scratchpad, a scratch workspace, `~/.claude`).
    */
   recent: ProjectRef[];
-  /** Projects offered for pinning: outside the lookback, inside 30 days, newest-first. */
+  /** Projects offered for pinning: outside the lookback, inside 30 days, newest-first, same exclusion as `recent`. */
   older: ProjectRef[];
   /** The server's home dir, so the UI can show paths as `~/…`. */
   home: string;

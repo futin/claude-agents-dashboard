@@ -107,9 +107,12 @@ control (the type is a column now, not a collapsible header) and the
   all three intended, and the last is why `POST /api/pins` only accepts a dirName the server itself
   enumerated. `listOlderProjects` is what is offered for pinning: dirs whose newest transcript is
   outside the lookback but inside `OLDER_PROJECTS_DAYS` (30), minus anything already listed, any cwd
-  under a temp root (`os.tmpdir()` and its realpath, `/tmp`, `/private/tmp` — session scratchpads) and
-  anything failing bug-21. The 30 days cap only what is *offered*; a pin already made stays listed at
-  any age.
+  under a Claude root (`defaultClaudeRoots`: `os.tmpdir()` and its realpath, `/tmp`, `/private/tmp` —
+  session scratchpads — plus `~/.claude` and `~/Library/Application Support/Claude`, the desktop app's
+  scratch workspaces) and anything failing bug-21. `GET /api/pins` drops Claude-root cwds from its
+  `recent` offers the same way; they stay on the rail and in the launch select, and a pin already made
+  under one still lists under `pinned`. The 30 days cap only what is *offered*; a pin already made stays
+  listed at any age.
 - **Skill directories:** `readSkillsDir` walks each skill dir at scan time and sets
   `ConfigItem.files` (`{rel, size}[]`, SKILL.md first then rel-sorted) — only when there
   is more than SKILL.md, so a single-file skill's payload is byte-identical to before. No

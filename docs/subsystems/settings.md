@@ -284,7 +284,7 @@ Worth knowing from this page's side:
 |---|---|
 | `GET /api/settings` | the non-per-device settings + any detected override, plus `notifyAvailable` and `staleEnvKeys` (names only — never the topic or token itself) |
 | `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?}` — any subset); token-guarded like the other writes |
-| `GET /api/pins` | `{pinned: PinRow[], recent: ProjectRef[], older: ProjectRef[], home}` — the stored pins (a dead one `listed: false`) and the projects on offer to pin: `recent` is the listed ones not yet pinned, `older` the 30-day tail past the lookback |
+| `GET /api/pins` | `{pinned: PinRow[], recent: ProjectRef[], older: ProjectRef[], home}` — the stored pins (a dead one `listed: false`) and the projects on offer to pin: `recent` is the listed ones not yet pinned, `older` the 30-day tail past the lookback, both minus Claude's own dirs (scratchpads, scratch workspaces, `~/.claude`) |
 | `POST /api/pins` | `{dirName, pinned}` — token-guarded; a pin must name a recent or older project (404 otherwise), 409 past 50; an unpin takes any stored dir; answers with the fresh `GET` payload |
 | `POST /api/notify/test` | fire one push regardless of policy and report the outcome |
 | `GET /api/health` | now also carries `idleSecs` and `answerSecs`, for the hooks |

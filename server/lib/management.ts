@@ -60,11 +60,11 @@ interface ProjectsOptions {
    */
   pinnedDirs?: ReadonlySet<string> | null;
   /**
-   * Roots whose cwds {@link listOlderProjects} never offers — session
-   * scratchpads. Omitted ⇒ {@link defaultTempRoots}. A test seam as much as an
-   * option: every fixture cwd lives under `os.tmpdir()`.
+   * Roots whose cwds are never offered for pinning — see {@link defaultClaudeRoots}.
+   * Omitted ⇒ that default. A test seam as much as an option: every fixture cwd
+   * lives under `os.tmpdir()`.
    */
-  tempRoots?: readonly string[];
+  claudeRoots?: readonly string[];
 }
 
 /* ---------------------------------------------------------------- helpers */
@@ -644,20 +644,27 @@ export function listRecentProjects(config: Partial<Config>, options: ProjectsOpt
     .sort((a, b) => b.lastActiveMs - a.lastActiveMs);
 }
 
-let tempRootsOverride: readonly string[] | null = null;
+let claudeRootsOverride: readonly string[] | null = null;
 
 /**
- * Test seam: replace {@link defaultTempRoots} process-wide, null to restore. The
+ * Test seam: replace {@link defaultClaudeRoots} process-wide, null to restore. The
  * API suites need it — their `$HOME`, and so every project they plant, is a tmpdir.
  */
-export function overrideTempRoots(roots: readonly string[] | null): void {
-  tempRootsOverride = roots;
+export function overrideClaudeRoots(roots: readonly string[] | null): void {
+  claudeRootsOverride = roots;
 }
 
-/** `os.tmpdir()` (and its realpath — macOS hands out a `/var` symlink), `/tmp`, `/private/tmp`. */
-export function defaultTempRoots(): readonly string[] {
-  if (tempRootsOverride) return tempRootsOverride;
-  const roots = [os.tmpdir(), '/tmp', '/private/tmp'];
+/**
+ * Where Claude itself makes working dirs, never offered for pinning: the temp
+ * dirs (`os.tmpdir()` and its realpath — macOS hands out a `/var` symlink —
+ * `/tmp`, `/private/tmp`) that hold session scratchpads, `~/.claude`, and the
+ * desktop app's data dir, which holds its scratch workspaces. Not
+ * platform-gated: a root that does not exist hides nothing.
+ */
+export function defaultClaudeRoots(homeDir?: string): readonly string[] {
+  if (claudeRootsOverride) return claudeRootsOverride;
+  const home = homeDir || os.homedir();
+  const roots = [os.tmpdir(), '/tmp', '/private/tmp', claudeHome(homeDir), path.join(home, 'Library', 'Application Support', 'Claude')];
   try { roots.push(fs.realpathSync(os.tmpdir())); } catch { /* keep the literal */ }
   return roots;
 }
@@ -667,19 +674,24 @@ function isUnder(p: string, root: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
+/** Whether `p` is at or under one of `roots` ({@link defaultClaudeRoots}). */
+export function isClaudeOwned(p: string, roots: readonly string[]): boolean {
+  return roots.some(root => isUnder(p, root));
+}
+
 /**
  * Projects offered for pinning (#161): dirs whose newest transcript is outside
  * the lookback but inside {@link OLDER_PROJECTS_DAYS}, resolved to cwds exactly
  * as {@link listRecentProjects} does, minus any already listed (recent or
- * pinned), any cwd under a temp root — throwaway session scratchpads — and any
- * failing {@link isListedProjectPath}. Newest-first. The horizon limits only
+ * pinned), any cwd {@link isClaudeOwned} — scratchpads, scratch workspaces,
+ * `~/.claude` — and any failing {@link isListedProjectPath}. Newest-first. The horizon limits only
  * what is offered; a pin already made stays listed at any age.
  */
 export function listOlderProjects(config: Partial<Config>, options: ProjectsOptions = {}): ProjectRef[] {
   const now = nowOf(options);
   const horizonMs = OLDER_PROJECTS_DAYS * DAY_MS;
   const archived = options.archivedIds || null;
-  const tempRoots = options.tempRoots ?? defaultTempRoots();
+  const claudeRoots = options.claudeRoots ?? defaultClaudeRoots(options.homeDir);
   const transcripts = listTranscripts(projectsRootOf(options));
 
   const newest = newestPerDir(transcripts, t => !(archived && archived.has(t.id)) && now - t.mtimeMs <= horizonMs);
@@ -688,7 +700,7 @@ export function listOlderProjects(config: Partial<Config>, options: ProjectsOpti
   // sharing a cwd with a listed one — a project is offered once or not at all.
   const listed = new Set(listRecentProjects(config, options).map(r => r.path));
   return [...refsByCwd(newest).values()]
-    .filter(r => !listed.has(r.path) && !tempRoots.some(root => isUnder(r.path, root)) && isListedProjectPath(r.path))
+    .filter(r => !listed.has(r.path) && !isClaudeOwned(r.path, claudeRoots) && isListedProjectPath(r.path))
     .sort((a, b) => b.lastActiveMs - a.lastActiveMs);
 }
 

@@ -513,7 +513,7 @@ export async function run(): Promise<number> {
       { dirName: '-scratch', id: 's1', cwd: scratch, mtimeMs: PIN_NOW - 3 * DAY },
       { dirName: '-wt', id: 'w1', cwd: worktree, mtimeMs: PIN_NOW - 3 * DAY }
     ]);
-    const opts = { root, now: PIN_NOW, pinnedDirs: new Set(['-pinned']), tempRoots: [fakeTmp] };
+    const opts = { root, now: PIN_NOW, pinnedDirs: new Set(['-pinned']), claudeRoots: [fakeTmp] };
     const older = mgmt.listOlderProjects(pinCfg, opts);
     assert.deepStrictEqual(older.map(r => r.dirName), ['-five', '-ten']);
     assert.deepStrictEqual(older.map(r => r.path), [five, ten]);
@@ -525,7 +525,24 @@ export async function run(): Promise<number> {
     const proj = makeProject();
     const root = makeProjectsRoot([{ dirName: '-tmp', id: 'x1', cwd: proj, mtimeMs: PIN_NOW - 5 * DAY }]);
     assert.deepStrictEqual(mgmt.listOlderProjects(pinCfg, { root, now: PIN_NOW }), []);
-    assert.deepStrictEqual(mgmt.listOlderProjects(pinCfg, { root, now: PIN_NOW, tempRoots: [] }).map(r => r.dirName), ['-tmp']);
+    assert.deepStrictEqual(mgmt.listOlderProjects(pinCfg, { root, now: PIN_NOW, claudeRoots: [] }).map(r => r.dirName), ['-tmp']);
+  }));
+
+  tally(await test('defaultClaudeRoots: the temp dirs, plus ~/.claude and the desktop app data dir under the given home', async () => {
+    const roots = mgmt.defaultClaudeRoots('/Users/me');
+    for (const want of [os.tmpdir(), '/tmp', '/private/tmp', '/Users/me/.claude', '/Users/me/Library/Application Support/Claude']) {
+      assert.ok(roots.includes(want), `missing ${want}`);
+    }
+  }));
+
+  tally(await test('isClaudeOwned: a cwd at or under a root is owned; a sibling that only shares a prefix is not', async () => {
+    const roots = ['/Users/me/.claude', '/Users/me/Library/Application Support/Claude'];
+    assert.strictEqual(mgmt.isClaudeOwned('/Users/me/.claude/dashboard-refresh', roots), true);
+    assert.strictEqual(mgmt.isClaudeOwned('/Users/me/.claude', roots), true);
+    assert.strictEqual(mgmt.isClaudeOwned('/Users/me/Library/Application Support/Claude/scratch-workspaces/a/b/scratch-2026-09-24-e7ff91', roots), true);
+    assert.strictEqual(mgmt.isClaudeOwned('/Users/me/claude-global', roots), false, 'a user repo named after Claude');
+    assert.strictEqual(mgmt.isClaudeOwned('/Users/me/.claude-other', roots), false, 'a prefix is not a parent');
+    assert.strictEqual(mgmt.isClaudeOwned('/Users/me/Documents/x', roots), false);
   }));
 
   tally(await test('readProjectScope on nonexistent path → all-empty scope, no throw', async () => {
