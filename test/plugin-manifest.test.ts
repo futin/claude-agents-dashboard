@@ -19,7 +19,7 @@ function test(name: string, fn: () => void): boolean {
 }
 
 /** Every skill the plugin ships. A new one is added here deliberately, beside its directory. */
-const SKILLS = ['git-sync'];
+const SKILLS = ['git-sync', 'kaizen'];
 
 const readJson = (p: string): any => JSON.parse(fs.readFileSync(p, 'utf8'));
 

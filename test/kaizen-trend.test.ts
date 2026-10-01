@@ -4,9 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// `kaizen.mjs --trend` is kaizen-only (the dashboard never reads it), so the vendored script is the thing under test — spawned, as the
+// `kaizen.mjs --trend` is kaizen-only (the dashboard never reads it), so the plugin's script is the thing under test — spawned, as the
 // analyze.test.ts parity cases spawn it.
-const KAIZEN = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../.claude/skills/kaizen/kaizen.mjs');
+const KAIZEN = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../plugin/skills/kaizen/kaizen.mjs');
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }

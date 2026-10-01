@@ -422,7 +422,7 @@ export function run(): number {
     assert.ok(a.notes.some(n => /lower bound/i.test(n)));
   })) p++; else f++;
 
-  if (test('vendored kaizen.mjs reports the same subagent figures as analyzeSession', () => {
+  if (test('plugin kaizen.mjs reports the same subagent figures as analyzeSession', () => {
     const file = fixture([
       taskRec('t1', 'Explore', '2026-07-01T10:00:00Z'),
       resultRec('t1', '2026-07-01T10:00:30Z', { toolUseResult: { status: 'completed', agentId: 'aK1', totalTokens: 50 } }),
@@ -439,7 +439,7 @@ export function run(): number {
     subagentFile(file, 'aK4', [usageRec({ input_tokens: 9 }, '2026-07-01T10:03:10Z', { id: 'msg_k4' })]);
     subagentFile(file, 'aK1', [usageRec({ input_tokens: 5, cache_read_input_tokens: 600 }, '2026-07-01T10:00:10Z', { id: 'msg_k' })]);
     subagentFile(file, 'aK3', [usageRec({ output_tokens: 40 }, '2026-07-01T10:02:10Z', { id: 'msg_k3' })], { toolUseId: 't3' });
-    const kaizen = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../.claude/skills/kaizen/kaizen.mjs');
+    const kaizen = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../plugin/skills/kaizen/kaizen.mjs');
     const r = spawnSync(process.execPath, [kaizen, file], { encoding: 'utf8' });
     assert.strictEqual(r.status, 0, r.stderr);
     const k = JSON.parse(r.stdout);
@@ -517,14 +517,14 @@ export function run(): number {
     assert.strictEqual(bash.resultTokens, 1); // only the one text block counts
   })) p++; else f++;
 
-  if (test('vendored kaizen.mjs reports the same byTool as analyzeSession', () => {
+  if (test('plugin kaizen.mjs reports the same byTool as analyzeSession', () => {
     const file = fixture([
       toolUseRec([tu('r1', 'Read')], '2026-07-01T10:00:00Z', { output_tokens: 30 }, 'msg_a'),
       toolUseRec([tu('b1', 'Bash')], '2026-07-01T10:00:01Z', { output_tokens: 30 }, 'msg_a'),
       resultRec('r1', '2026-07-01T10:00:02Z', { content: 'r'.repeat(8000) }),
       resultRec('b1', '2026-07-01T10:00:03Z', { isError: true, content: 'b'.repeat(90) })
     ]);
-    const kaizen = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../.claude/skills/kaizen/kaizen.mjs');
+    const kaizen = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../plugin/skills/kaizen/kaizen.mjs');
     const r = spawnSync(process.execPath, [kaizen, file], { encoding: 'utf8' });
     assert.strictEqual(r.status, 0, r.stderr);
     const k = JSON.parse(r.stdout);
@@ -573,8 +573,8 @@ export function run(): number {
     assert.strictEqual(empty.perTurn.neverCompacted, false);
   })) p++; else f++;
 
-  if (test('vendored kaizen.mjs reports the same perTurn (neverCompacted included) as analyzeSession', () => {
-    const kaizen = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../.claude/skills/kaizen/kaizen.mjs');
+  if (test('plugin kaizen.mjs reports the same perTurn (neverCompacted included) as analyzeSession', () => {
+    const kaizen = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../plugin/skills/kaizen/kaizen.mjs');
     for (const sizes of [[20_000, 400_000, 600_000], [100_000, 600_000, 40_000], [100_000, 250_000]]) {
       const file = ctx(sizes);
       const r = spawnSync(process.execPath, [kaizen, file], { encoding: 'utf8' });

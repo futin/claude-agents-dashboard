@@ -68,8 +68,8 @@ config — see `docs/subsystems/remote-access.md` before touching any of it.
   own network calls — the server does not, so they are not a third kind. `test/outbound.test.ts`
   pins the list.
 - `client/dist/` and `.env` are gitignored.
-- Keep the vendored `/kaizen` skill (`.claude/skills/kaizen/`) in lockstep with the
-  session-analytics log format (`docs/subsystems/analytics.md`).
+- `plugin/skills/kaizen/` is the only copy of `/kaizen`; its log path and line grammar are a
+  contract with Analytics (`docs/subsystems/analytics.md`) — never change one side only.
 
 ## Subagent rules
 

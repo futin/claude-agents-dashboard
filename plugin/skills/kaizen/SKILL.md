@@ -3,14 +3,9 @@ name: kaizen
 description: Continuous-improvement loop over finished Claude Code sessions — total token usage across the whole session (incl. every subagent), which tools/subagents cost the most, an accuracy read, and concrete suggestions to work better next time. Appends one lesson to ~/.claude/session-analytics-log.md so patterns accumulate across all projects, records what became of each lesson, and flags lessons recurring across 4+ projects for promotion to global config. Use when the user says "/kaizen" (or the legacy "/doctor"), "review this session", "how did that session do", "where did I waste tokens", or wants a retrospective on work just completed. Also use for "/kaizen review" (sweep the whole log: batch promote, prune stale rules), and to bank a lesson mid-session when the user corrects course or says "remember that", "bank that lesson", "note that for next time".
 ---
 
-> **NOTE — vendored copy.** This is a copy of the personal global `kaizen` skill
-> (`~/.claude/skills/kaizen/`), vendored into this repo so collaborators can populate the
-> dashboard's Analytics tab. The log path + line grammar below
-> (`~/.claude/session-analytics-log.md`) are a contract with the Analytics consumer — keep them
-> in lockstep with `docs/subsystems/analytics.md` and `server/lib/sessionAnalyticsLog.ts`. Never
-> rename the log or add a line shape on one side only. **Edits here don't take effect for the
-> user until they're copied to `~/.claude/skills/kaizen/SKILL.md`** — the global copy is the one
-> that actually runs.
+> **NOTE — a contract with the dashboard.** This skill ships in the Claude Agents Dashboard plugin (`plugin/skills/kaizen/` in that repo), because the
+> dashboard's Analytics tab reads what it writes. The log path + line grammar below (`~/.claude/session-analytics-log.md`) are that contract — the
+> other side is `docs/subsystems/analytics.md` and `server/lib/sessionAnalyticsLog.ts`. Never rename the log or add a line shape on one side only.
 
 # Kaizen — session post-mortem + continuous-improvement loop
 
@@ -32,17 +27,23 @@ judgment.** Never invent figures; always read them from the analyzer.
 ## 1. Get the facts
 
 Run the self-contained analyzer (pure Node, zero deps — works in any project, no repo or
-server needed). It lives next to this skill; use the skill's own base directory:
+server needed). It ships in this skill's plugin:
 
-- Inside the session / project you want to analyze: `node "$CLAUDE_SKILL_DIR/kaizen.mjs" --latest`
-- A specific past session: `node "$CLAUDE_SKILL_DIR/kaizen.mjs" <session-id>` (UUID in `~/.claude/projects/*/`)
-- A transcript by path: `node "$CLAUDE_SKILL_DIR/kaizen.mjs" /abs/path/to/x.jsonl`
+- Inside the session / project you want to analyze: `node "${CLAUDE_PLUGIN_ROOT}/skills/kaizen/kaizen.mjs" --latest`
+- A specific past session: `node "${CLAUDE_PLUGIN_ROOT}/skills/kaizen/kaizen.mjs" <session-id>` (UUID in `~/.claude/projects/*/`)
+- A transcript by path: `node "${CLAUDE_PLUGIN_ROOT}/skills/kaizen/kaizen.mjs" /abs/path/to/x.jsonl`
 
-`$CLAUDE_SKILL_DIR` = this skill's base directory (given to you when the skill loads, e.g.
-`~/.claude/skills/kaizen`). Substitute the real absolute path. `--latest` picks the newest
-transcript whose recorded cwd matches the current directory and prints the chosen session id
-to stderr — report it, since two sessions in one cwd are indistinguishable. Output is a
-`SessionAnalysis` JSON.
+`--latest` picks the newest transcript whose recorded cwd matches the current directory and prints the chosen session id to stderr — report it, since
+two sessions in one cwd are indistinguishable. Output is a `SessionAnalysis` JSON.
+
+**`--latest` fails after a mid-session directory change.** The transcript records the cwd the
+session *started* in, so a session that ran `EnterWorktree` (or was otherwise moved) is
+invisible to a `--latest` run from the new directory — it exits `no transcript found for cwd
+<path>`. That is not "no data": pass the session id explicitly instead. Recover it from any
+absolute path the session already printed — the scratchpad dir and the subagent transcript dir
+both embed it as `…/<uuid>/…` — or list candidates with
+`ls -t ~/.claude/projects/*/*.jsonl | head`, noting that the project directory is keyed by the
+*original* cwd, not the worktree. Do not conclude the session is unanalyzable.
 
 ## 2. Read tokens honestly
 
@@ -54,7 +55,8 @@ to stderr — report it, since two sessions in one cwd are indistinguishable. Ou
 - **`perTurn.neverCompacted: true` is a primary explanation for cost — lead the cost story with it.** It means the peak turn topped 250k combined
   (a 200k window auto-compacts near 160k, so it cannot get there) and no turn ever fell below half the running peak, the drop a compaction leaves. The
   usual cause is a 1M-window model (`"model": "opus[1m]"` or similar) putting auto-compaction out of reach, so the session paid the quadratic curve to
-  the end. Say it is **inferred** from peak context — the transcript carries neither the window nor a compaction marker (`notes[]` says so too) — and
+  the end. Say it is **inferred** from peak context — the transcript carries no window field (`notes[]` also says there is no compaction marker; that
+  predates `compactions` below, which reads the `compact_boundary` records, so when `compactions.count > 0` the session did compact) — and
   suggest the fix: a 200k-window default, `/compact` or `/clear` between tasks. `false` does not mean cheap: a session that compacted can still be
   bloated, so keep reading the bloated-turn bullet below.
 - **Whole-session total = `totals.combined` + `subagentTotals.tokens`.** Subagent tokens are summed from each subagent's
@@ -64,6 +66,15 @@ to stderr — report it, since two sessions in one cwd are indistinguishable. Ou
 - Flag the bloated turn: `perTurn.maxTurnIndex` / `maxCombined` vs `avgCombined`. A single
   turn far above average usually means context was left to grow (big files re-read, no
   `/clear`, giant tool outputs).
+- **Compactions** (`compactions`, one row per main-chain `compact_boundary`, a replayed boundary
+  with the same timestamp counted once in `duplicatesSkipped`). When `count > 0`, report whether
+  autocompact paid: the window ceiling is roughly the `preCtx` the auto rows cluster at, so
+  `turnsAfterFirst` is how many turns exist only because of it; `counterfactualExtraCacheRead`
+  (dropped × turns after, i.e. an unbounded window) against `totals.cacheRead` is the context it
+  saved; its price is `postCompactCacheCreation` (billable, already in `totals.cacheCreation`) +
+  `durationMs` (exact summarisation wall time) + the summaries (`summaryChars` / 4 ≈ output
+  tokens). A `postCtx` floor that climbs across rows means less headroom per epoch. Say plainly
+  that the counterfactual is unreachable — a real window stops the session at the first boundary.
 
 ## 3. Find where the tokens/time went
 
@@ -78,7 +89,8 @@ to stderr — report it, since two sessions in one cwd are indistinguishable. Ou
   `count`, `errors`, and `durationMs` (wall time, includes model latency) ARE exact — lean on those for firm claims.
 - `bySubagent` has per-subagent `tokens` (summed from that subagent's own transcript; the harness's final-context figure
   only where none is complete) and exact `toolUses` / `durationMs`. Name the priciest subagents and whether the work
-  justified the spend.
+  justified the spend. Rows still `status: "running"` carry `null` — they are unmeasured, not cheap: rank only what is
+  measured and say how many rows you could not rank.
 
 ## 4. Accuracy read (explicitly subjective)
 
@@ -265,7 +277,7 @@ that way", "you should have checked X first"), or says "bank that lesson" / "not
 time", record it immediately:
 
 1. Don't stop the work, don't run the analyzer, don't present a report. This is one append.
-2. Get the session id: `node "$CLAUDE_SKILL_DIR/kaizen.mjs" --latest` prints it to stderr (it's
+2. Get the session id: `node "${CLAUDE_PLUGIN_ROOT}/skills/kaizen/kaizen.mjs" --latest` prints it to stderr (it's
    also fine to reuse an id you already resolved this session).
 3. Append one lesson line with `mid-session observation.` where the token prose normally sits:
 
@@ -288,7 +300,7 @@ user accepts the review-due offer. It analyzes no transcript; it's pure log work
 
 1. **Read the whole log.** Classify each lesson: **open** (no later `status` line for that
    session id) or settled. Only open lessons are in scope.
-2. **Trend the context figures.** `node "$CLAUDE_SKILL_DIR/kaizen.mjs" --trend` reads the `<billable> billable (<ctx> ctx)` figures back out of every
+2. **Trend the context figures.** `node "${CLAUDE_PLUGIN_ROOT}/skills/kaizen/kaizen.mjs" --trend` reads the `<billable> billable (<ctx> ctx)` figures back out of every
    lesson line — open or settled, since cost is a fact whatever became of the lesson — and prints per-project and overall series as JSON. Report a
    short table: project, sessions, date range, baseline → recent median ctx, ratio. A project in `drifting` is a finding in its own right, even with no
    recurring lesson behind it: name it, and propose the fix its own lessons point at (usually the compaction / `/clear` ones in §2). The rule is in the
