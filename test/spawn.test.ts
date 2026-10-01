@@ -351,6 +351,20 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  if (test('oneShot: true is kept', () => {
+    const r = parseSpawnRequest({ prompt: 'x', oneShot: true }, 'auto');
+    assert.ok(r.ok);
+    if (r.ok) assert.strictEqual(r.input.oneShot, true);
+  })) p++; else f++;
+
+  if (test('an absent or non-boolean oneShot normalizes to false (fail-soft)', () => {
+    for (const body of [{ prompt: 'x' }, { prompt: 'x', oneShot: 'yes' }, { prompt: 'x', oneShot: 1 }]) {
+      const r = parseSpawnRequest(body, 'auto');
+      assert.ok(r.ok);
+      if (r.ok) assert.strictEqual(r.input.oneShot, false, `${JSON.stringify(body)} should normalize to false`);
+    }
+  })) p++; else f++;
+
   /* ------------------------------------------------------------ buildSpawnArgs */
 
   if (test('minimal input builds exactly the five fixed elements', () => {
@@ -394,6 +408,11 @@ export function run(): number {
   if (test('remoteControl: false emits no flag — argv identical to the minimal build', () => {
     const args = buildSpawnArgs({ sessionId: UUID, prompt: 'hi', permissionMode: 'auto', remoteControl: false });
     assert.deepStrictEqual(args, ['-p', '--session-id', UUID, '--permission-mode', 'auto']);
+  })) p++; else f++;
+
+  if (test('oneShot adds nothing to argv — it travels as an env var, not a CLI flag', () => {
+    const base = { sessionId: UUID, prompt: 'hi', permissionMode: 'auto' as const, model: 'opus', name: 'n' };
+    assert.deepStrictEqual(buildSpawnArgs({ ...base, oneShot: true }), buildSpawnArgs(base));
   })) p++; else f++;
 
   // NOTE ON THE COUNT: the brief's Step 1 table claims length 13 for "all
@@ -1211,6 +1230,12 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  if (test('parseSpawnRequest: a resume forces oneShot off — resuming is wanting a conversation', () => {
+    const r = parseSpawnRequest({ prompt: 'go on', resume: UUID, oneShot: true }, 'auto');
+    assert.ok(r.ok);
+    if (r.ok) assert.strictEqual(r.input.oneShot, false);
+  })) p++; else f++;
+
   if (test('parseSpawnRequest: a present-but-malformed resume REJECTS (load-bearing, unlike cosmetic fields)', () => {
     for (const bad of [42, '', '../evil', 'a b', {}]) {
       const r = parseSpawnRequest({ prompt: 'p', resume: bad }, 'auto');
@@ -1277,6 +1302,34 @@ export function run(): number {
     } finally {
       if (prev === undefined) delete process.env.CLAUDE_CODE_ENTRYPOINT;
       else process.env.CLAUDE_CODE_ENTRYPOINT = prev;
+      setSpawner(null);
+    }
+  })) p++; else f++;
+
+  if (test('launch with oneShot sets CLAUDE_DASHBOARD_ONESHOT=1 in the child env', () => {
+    resetLaunches();
+    const calls: SpawnCall[] = [];
+    setSpawner(fakeSpawner(calls, []));
+    try {
+      launch(cfg(), REF, baseInput({ oneShot: true }));
+      const env = calls[0].options.env as Record<string, string>;
+      assert.strictEqual(env.CLAUDE_DASHBOARD_ONESHOT, '1');
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('launch without oneShot strips an inherited CLAUDE_DASHBOARD_ONESHOT (server started inside a one-shot shell)', () => {
+    resetLaunches();
+    const calls: SpawnCall[] = [];
+    setSpawner(fakeSpawner(calls, []));
+    const prev = process.env.CLAUDE_DASHBOARD_ONESHOT;
+    process.env.CLAUDE_DASHBOARD_ONESHOT = '1';
+    try {
+      launch(cfg(), REF, baseInput());
+      const env = calls[0].options.env as Record<string, string>;
+      assert.ok(!('CLAUDE_DASHBOARD_ONESHOT' in env), 'an un-flagged launch must hold for a reply, whatever the server inherited');
+    } finally {
+      if (prev === undefined) delete process.env.CLAUDE_DASHBOARD_ONESHOT;
+      else process.env.CLAUDE_DASHBOARD_ONESHOT = prev;
       setSpawner(null);
     }
   })) p++; else f++;
