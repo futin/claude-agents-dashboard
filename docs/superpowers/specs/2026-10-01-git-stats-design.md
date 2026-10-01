@@ -26,6 +26,10 @@ Where the two disagree, **this spec wins**. Known differences:
 - The mockup's "3 branches" / "no other branches" chips and its "8 · 0 merged" Branches cell come from §6's copy table instead: the Branches column shows
   the unmerged total.
 - The phone's "wt" badge is "worktree" at every width. The error sentences keep §6's casing in every layout.
+- The Table's cells and the phone layout use §6's copy-table strings unchanged. The mockup's "— even", bare "2 behind", "4" / "—", "6h", "main 2 behind"
+  and "fetched 6h" short forms are not built.
+- The mockup's `●` current-branch marker in a branch row is not built: the current branch is already the header chip. Triage's "3 unmerged branches" chip
+  is not built either.
 - The mockup's Sync buttons are Phase 2 (§9). Phase 1 renders none.
 
 ## Decisions
@@ -48,8 +52,8 @@ Where the two disagree, **this spec wins**. Known differences:
 
 ## §1 Why not the git-sync engine
 
-`plugin/skills/git-sync/tools/git-sync.mjs` is plugin code: the server never imports or runs anything under `plugin/` (`test/plugin-manifest.test.ts` pins
-that). Its `survey` also answers a different question. It reports a branch ahead of `origin/<branch>` (unpushed), while this page wants ahead/behind the
+`plugin/skills/git-sync/tools/git-sync.mjs` is plugin code: the server never imports or runs anything under `plugin/`. That is a `.claude/CLAUDE.md` rule ("never
+imported by server or client at runtime"), and §7 adds a sweep test for it. `test/plugin-manifest.test.ts` pins only what may live under `plugin/`. Its `survey` also answers a different question. It reports a branch ahead of `origin/<branch>` (unpushed), while this page wants ahead/behind the
 trunk, and it calls `gh` for PR state, which is network. Two ideas are borrowed and re-implemented, each in a few lines: `trunkOf` (D7) and the `git cherry`
 squash-merge proof (`cherrySigns`, its M2 case). git-sync's M3 probe is not borrowed, because it writes a probe commit object with `commit-tree`, and D4 rules
 out writes.
@@ -59,10 +63,14 @@ out writes.
 One module, Node built-ins only.
 
 - **Input:** the pin rows from `listPinRows`, in pin order. A row with `path: null` is a dead pin and never reaches git.
+  - A row with `listed: false` but a non-null path is read like any other. It is usually a linked worktree, which the projects list drops
+    (`isListedProjectPath`). Such a pin shows that worktree's state, and its own branch gets the worktree badge (see below).
 - **Runner:** every git call goes through one injectable async runner, built on `child_process.execFile` in array form, never `shell: true`. Each call has a
   **5s timeout**. Env adds `GIT_OPTIONAL_LOCKS=0`, so `git status` never takes `index.lock` while the user runs git themselves, plus `GIT_TERMINAL_PROMPT=0`
   and `LC_ALL=C`. Tests swap the runner to simulate a timeout.
-- **Concurrency:** repos are read in parallel. A request that arrives while a read is in flight gets the same promise rather than starting a second round.
+- **Concurrency:** repos are read in parallel, but **calls within one repo run one at a time**, so at most one git process per pinned repo is alive.
+  - A cold poll costs 2–3 calls per unmerged branch (all of them, not only the 50 served). After that, the memo keeps polls to the cheap calls.
+  - A request that arrives while a read is in flight gets the same promise rather than starting a second round.
 - **Failure is per repo.** A timeout or unexpected exit puts that one repo in the `error` state with a short message. The other repos and the response itself
   are unaffected.
 
@@ -71,12 +79,12 @@ One module, Node built-ins only.
 | Question                       | How                                                                                     |
 | ------------------------------ | --------------------------------------------------------------------------------------- |
 | Does the folder exist          | `fs.stat` before any git call. Missing or not a directory → `missing`, with no git run.   |
-| Is this a repo, where is it    | `rev-parse --show-toplevel --absolute-git-dir`. A non-zero exit → `not-git`.             |
+| Is this a repo, where is it    | `rev-parse --show-toplevel --path-format=absolute --git-common-dir`. A non-zero exit → `not-git`. The main worktree is the common dir's parent. |
 | Current branch                 | `symbolic-ref -q --short HEAD` → `branch`. Failure = detached: `branch: null`, `detachedSha` = `rev-parse --short HEAD`. |
 | Uncommitted files              | `status --porcelain=v1 -z`, default untracked mode. Counted the way `git status` lists them (see below).                 |
 | Local branches                 | `for-each-ref refs/heads` with name, sha, committer date and `%(worktreepath)`.          |
 | Trunk, has origin              | D7's rule; `hasOrigin` = `remote` lists `origin`.                                         |
-| Fetched age                    | mtime of `<git-dir>/FETCH_HEAD`; absent → `null` ("never fetched").                     |
+| Fetched age                    | newest mtime of `<common-dir>/FETCH_HEAD` and `<common-dir>/worktrees/*/FETCH_HEAD`; none → `null` ("never fetched"). |
 
 A pin's path is the session cwd, which can be a subdirectory of the repo. The reader works from `--show-toplevel`. Two pins that resolve to the same toplevel
 are shown twice; this is rare, and deduping would hide one pin's name.
@@ -87,8 +95,16 @@ directory counts once, not once per file, because that is how the default untrac
 **Unborn HEAD** (a fresh `git init`, no commits yet): `branch` is the name HEAD points at, there are no branches, and trunk is `null`.
 
 **Worktree badge.** `%(worktreepath)` is set for every branch checked out in *any* worktree, the main one included (checked on git 2.50.1).
-`worktreePath` is that path when it differs from the repo toplevel, comparing realpaths, and `null` otherwise. Only branches checked out in a *linked*
-worktree get the D10 badge.
+`worktreePath` is that path when it differs from the **main worktree**, comparing realpaths, and `null` otherwise. The main worktree is the common dir's
+parent, not `--show-toplevel`; for a pin that is itself a linked worktree, those two differ. Only branches checked out in a *linked* worktree get the D10
+badge.
+
+**Fetched age.** `FETCH_HEAD` is per worktree: a fetch run inside a linked worktree writes `.git/worktrees/<name>/FETCH_HEAD` and leaves `.git/FETCH_HEAD`
+alone (checked on git 2.50.1). The newest one across all worktrees is when this repo's remote-tracking refs were last refreshed. Orchestrator runs fetch
+from linked worktrees, so on this machine that case is common.
+
+**Trunk with no local branch.** D7 can name a trunk that exists only as `origin/<trunk>`, e.g. `origin/HEAD → develop` with no local `develop`. Then
+`trunkVsOrigin` is `null`, `onTrunk` is `false`, and branches are still compared against `origin/<trunk>` (D8). No call names `refs/heads/<trunk>`.
 
 ### Memoised (only recomputed when a sha moves)
 
@@ -97,8 +113,8 @@ Keyed by `(repo toplevel, branch sha, base sha)`:
 - **Ahead/behind:** `rev-list --left-right --count <base>...<branch>`, using full refnames (`refs/heads/x`), never a bare name.
 - **Merged:** ahead = 0 (ancestor of the base), or else git-sync's M2 test (`git-sync.mjs` `patchEquivalence`). That test requires three things:
   `git cherry <base> <branch>` prints **at least one** line, every line is `-`, and `rev-list --merges <base>..<branch>` is empty.
-  - The ≥ 1 rule matters because cherry prints nothing for a branch that is ahead only by merge commits. Without it, "all lines are `-`" would be
-    vacuously true.
+  - The ≥ 1 rule is belt and braces. Cherry prints nothing only for a branch that is ahead only by merge commits, and the no-merges rule already
+    refuses that branch. It is kept so the proof never rests on an empty list. No test isolates it.
   - The no-merges rule matters because cherry skips merge commits, so a merge that carries real work would otherwise hide.
   - A multi-commit branch that was squash-merged does not pass this test and is shown as unmerged. That error is accepted: it always errs toward showing a branch, never hiding one. The converse is
   intended: a branch created at the base's tip with no commits of its own is ahead 0, so it counts as merged and is hidden. It has nothing to show yet.
@@ -126,7 +142,7 @@ Every variant carries `dirName` and `name` (from the pin row) and `path: string 
 | `uncommitted`   | `number`                                 | §2's count                                                                                 |
 | `trunk`         | `string \| null`                         | D7; `null` = no trunk                                                                      |
 | `hasOrigin`     | `boolean`                                | a remote named `origin` exists                                                             |
-| `trunkVsOrigin` | `{ ahead: number; behind: number } \| null` | local trunk vs `origin/<trunk>`; `null` when there is no origin, no trunk, or no `origin/<trunk>` |
+| `trunkVsOrigin` | `{ ahead: number; behind: number } \| null` | local trunk vs `origin/<trunk>`; `null` when there is no origin, no trunk, no `origin/<trunk>`, or no local `<trunk>` |
 | `fetchedAtMs`   | `number \| null`                         | `FETCH_HEAD` mtime (epoch ms); the client derives the age                                  |
 | `branches`      | `GitBranch[]`                            | unmerged, trunk excluded, newest commit first, at most **50**                              |
 | `unmergedTotal` | `number`                                 | all unmerged branches, before the cap                                                      |
@@ -213,6 +229,7 @@ Chip and bar colours come from the existing theme tokens (`--amber`, `--mustard`
 | behind only / ahead only / both                    | "`<trunk>` N behind origin" / "`<trunk>` N ahead of origin" / "`<trunk>` N ahead, M behind origin" (mustard) |
 | `hasOrigin: false`                                 | "no remote"                                                           |
 | origin exists, no `origin/<trunk>`                 | "`<trunk>` not on origin"                                             |
+| `origin/<trunk>` exists, no local `<trunk>`        | "`<trunk>` only on origin"                                            |
 | `trunk: null`                                      | "no main branch"; branches show no bar and no numbers                |
 | `fetchedAtMs` set / `null`                         | "fetched 2h ago" / "never fetched"                                    |
 | no unmerged branches                               | "no open branches"                                                    |
@@ -263,10 +280,13 @@ node-assert, in the existing `test/run-all.ts` style. The server tests build **r
 | Branch fast-forward merged into `main`                       | hidden; merged count 1                                                                      |
 | Branch whose single commit was cherry-picked onto `main`     | hidden via `git cherry`; merged count 1                                                      |
 | Branch of 2 commits squash-merged as 1                       | **shown** as unmerged (the accepted error, §2)                                              |
-| Branch ahead only by a merge of another unmerged branch      | **shown**: the no-merges rule stops cherry's skipped merge from hiding it                    |
-| Branch ahead only by an empty merge of `main` into itself    | **shown**: cherry prints 0 lines, and the ≥ 1 rule refuses a vacuous proof                   |
+| Branch with commit X; X cherry-picked onto `main`; then `main` merged into the branch | **shown**: cherry prints only `-`, but the branch carries 1 merge, so the no-merges rule refuses |
 | Local `main` behind `origin/main`, branch merged on origin   | hidden, since the base is `origin/main` (D8)                                                     |
 | Branch checked out in a linked worktree; another checked out in the main worktree | linked one: `worktreePath` = that worktree; main worktree's branch: `null` |
+| Pin whose path is that linked worktree (`listed: false`)     | `ok`; `branch` = the worktree's branch, with the badge; main worktree's branch: `null`       |
+| Fetch run only from a linked worktree, 1h ago               | `fetchedAtMs` ≈ 1h ago, though `.git/FETCH_HEAD` is absent                                   |
+| `origin/HEAD` → `origin/develop`, no local `develop`         | trunk `develop`, `trunkVsOrigin` `null`, `onTrunk: false`; branches compared against `origin/develop`; state `ok` |
+| 60 branches, cold poll                                       | the runner spy never sees two calls in flight for one repo                                  |
 | 7 unmerged branches                                          | newest-first by commit date, all 7 in payload, total 7                                     |
 | 60 unmerged branches                                         | 50 in payload, total 60                                                                     |
 | Pin with `path: null`; pin to a deleted folder               | `missing`, and no git call made (`fs.stat` first; runner spy)                                |
@@ -287,6 +307,7 @@ Client domain logic (pure modules):
 - `drawableGitLayout('table', narrow=true)` → `cards`, and the stored choice is untouched.
 - The settings validator maps a stored `settingsTab: 'pinned'` → `local`, and `managementTab: 'nonsense'` → `git`.
 - The rename sweep (§4).
+- No file under `server/` or `client/src/` imports from `plugin/` (§1).
 
 Not testable here, and so to be verified by hand: the rendered layouts against the mockup, the 30s visible-only timer, and the phone fallback.
 
@@ -300,6 +321,8 @@ Not testable here, and so to be verified by hand: the rendered layouts against t
 - `docs/subsystems/remote-access.md` and the `scripts/tailnet.ts` comment: `/api/management/file` → `/api/configs/file`, and add `/api/git-stats` to the
   exposure list.
 - `docs/subsystems/settings.md` and `view-persistence.md`: the Pinned move, `managementTab`, `management.gitLayout`, and the renamed keys.
+- `docs/superpowers/specs/2026-10-01-dashboard-plugin-design.md`: a one-line note beside its Phase 1 row and its "Phase 1's server can `import` it"
+  line, pointing here (§1 supersedes both).
 - `.claude/CLAUDE.md` Orientation names the rail as "Sessions | Usage | Management | Analytics | Settings". Add Claude Configs there.
 
 ## §9 Phase 2 slot (recorded, not built)
