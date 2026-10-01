@@ -11,7 +11,7 @@ Brainstormed in futin/claude-agents-dashboard#166 (2026-10-01). This spec covers
 | P     | Dashboard ships git-sync + kaizen as a plugin                                                                   | merged, `62c22a8`                         |
 | **0** | Nav reshuffle: Management → **Claude Configs**; a new **Management** tab holds Pinned Projects + Git Stats        | this document                             |
 | **1** | **Git Stats**: read-only local git state per pinned project                                                       | this document                             |
-| 2     | **Sync** button per repo, spawning `/claude-agents-dashboard:git-sync` there                                     | separate spec; its slot is fixed in §9    |
+| 2     | **Sync** button per repo, spawning `/claude-agents-dashboard:git-sync` there                                     | §9, planned 2026-10-01                    |
 | —     | Multi-machine hub                                                                                                | parked: futin/claude-agents-dashboard#164 |
 
 The plugin spec's Phase 1 row says Git Stats "reuses P's git-sync engine". It does not: see §1 for why.
@@ -325,20 +325,31 @@ Not testable here, and so to be verified by hand: the rendered layouts against t
   line, pointing here (§1 supersedes both).
 - `.claude/CLAUDE.md` Orientation names the rail as "Sessions | Usage | Management | Analytics | Settings". Add Claude Configs there.
 
-## §9 Phase 2 slot (recorded, not built)
+## §9 Phase 2: the Sync button
 
-Phase 2 adds one **Sync** button per repo:
+Recorded with Phase 1, amended 2026-10-01 when Phase 2 was planned ([plan](../plans/2026-10-01-git-sync-button.md)). Phase 2 adds one **Sync** button
+per repo:
 
 - **Cards:** the right end of the card header.
 - **Table:** a last column.
 - **Triage:** the right end of the repo row.
-- It is not shown when git-sync would refuse the repo: `missing`, `not-git`, `error`, or `hasOrigin: false`.
+- It is not shown when git-sync would refuse the repo: `missing`, `not-git`, `error`, or `hasOrigin: false`. It is not shown either while the host
+  cannot spawn (`HealthResponse.spawnAvailable` is not `true`).
 - There is no "Sync all" and no separate Prune, because git-sync already prunes inside its own run and asks before doing so.
-- **Click** opens the existing launch sheet (`SpawnPanel`) prefilled with cwd = the repo toplevel and prompt = `/claude-agents-dashboard:git-sync`. You
-  see the model and permission mode before pressing Launch.
-- While that session runs, the button reads "Syncing · open" and opens its chat. When the session ends, the repo is re-polled.
+- **Click launches at once**, with no launch sheet and no confirm: `POST /api/spawn` with the pin's `dirName`, prompt `/claude-agents-dashboard:git-sync`
+  and a session name `git-sync · <repo name>`. Model, effort, permission mode and remote control come from a new Settings › Local group, **Git Sync**,
+  separate from the New sessions defaults so a sync can run cheaper than a hand launch. A stray tap costs one session's tokens and nothing else, because
+  git-sync asks before every push and deletion.
+- The session runs in the **pin's path**, not the toplevel: `/api/spawn` resolves a `dirName` and never takes a path, and git-sync works from any
+  subdirectory of the repo.
+- The launched session id is remembered **per device** in `localStorage`, keyed by toplevel, so two pins on one repo share one run and the state survives
+  a tab switch or a reload. A sync started from a terminal is not detected.
+- While that session runs (`working` or `question`), the button reads "Syncing · open" and opens its chat in a drawer **inside Management**, which is
+  where git-sync's decision round gets answered. While the run is still launching, or is not in the sessions payload, it reads "Syncing…" and is
+  disabled. When the session ends (`idle` or `incomplete`), the run is forgotten and the repo is re-polled.
 
-Phase 1 already carries `hasOrigin` and the toplevel, so Phase 2 needs no server change. Phase 1 renders **no** placeholder button.
+Phase 2 needs **no server change**: Phase 1 already carries `hasOrigin`, the toplevel and the `dirName`, and the spawn route already accepts a pinned
+`dirName`. Phase 1 renders **no** placeholder button.
 
 ## Verification
 
