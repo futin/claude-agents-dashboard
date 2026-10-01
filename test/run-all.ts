@@ -92,6 +92,7 @@ import { run as runChatPinnedPad } from './chat-pinned-pad.test.js';
 import { run as runKaizenTrend } from './kaizen-trend.test.js';
 import { run as runOutbound } from './outbound.test.js';
 import { run as runPluginManifest } from './plugin-manifest.test.js';
+import { run as runSyncPlugin } from './sync-plugin.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -187,6 +188,7 @@ failed += runChatPinnedPad();
 failed += runKaizenTrend();
 failed += runOutbound();
 failed += runPluginManifest();
+failed += runSyncPlugin();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

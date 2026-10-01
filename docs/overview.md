@@ -268,6 +268,9 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   default or `--http` at the matching port, always fronting WEB_PORT as
                   loadConfig reports it; holds no port literal of its own
                   (subsystems/remote-access.md),
+                  sync-plugin.ts (`pnpm plugin:sync`) — reinstalls the plugin from
+                  GitHub's main when plugin/ differs from the installed copy;
+                  refuses a tree that is off main, dirty, unpushed or behind,
                   session-analytics.ts (`pnpm session-analytics`) — prints one
                   session's SessionAnalysis as JSON without the server running,
                   which is how `/kaizen` gets exact numbers,

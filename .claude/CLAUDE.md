@@ -30,6 +30,8 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
 - `pnpm test` — `test/run-all.ts` via tsx; prints the case count.
 - `pnpm test:skills` — git-sync's own `node --test` suite (~4 min, 2026-10-01), kept out of `pnpm test` for its length. **Required green for any change
   under `plugin/skills/git-sync/`.**
+- `pnpm plugin:sync` — reinstall the plugin once a `plugin/` change is pushed to `main`; the installed copy is a snapshot, not a link, so until this
+  runs the edit reaches no session. Refuses an unpushed tree (`scripts/sync-plugin.ts`).
 - `pnpm typecheck` — `tsc --noEmit`.
 - `pnpm hooks:install` — symlinks the six hook scripts into `~/.claude/hooks`, merges the
   seven `settings.json` entries. Idempotent; `-- --dry-run` / `-- --uninstall` / `-- --force`.

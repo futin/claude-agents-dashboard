@@ -163,20 +163,21 @@ That's the whole basic setup. Everything below is optional.
 
 The repo is its own plugin marketplace; the plugin itself lives in `plugin/`, so nothing else in the repo installs with it:
 
-```
-/plugin marketplace add futin/claude-agents-dashboard
-/plugin install claude-agents-dashboard@claude-agents-dashboard-marketplace
+```bash
+claude plugin marketplace add futin/claude-agents-dashboard --sparse .claude-plugin plugin
+claude plugin install claude-agents-dashboard@claude-agents-dashboard-marketplace
 ```
 
-(`/plugin marketplace add` also takes a local path to a checkout of this repo.) That gives every project on the machine two skills:
+`--sparse` keeps the marketplace clone to the two directories the install reads. That gives every project on the machine two skills:
 
 - **`/kaizen`** — a post-mortem of a finished session. It appends one lesson line to `~/.claude/session-analytics-log.md`, which is what the **Analytics**
   tab reads; without it the tab stays empty.
 - **`/git-sync`** — the repo's git chores in one pass: commit what's lying around behind a secret scan, sync and verify the trunk, push it, and prune
   branches proven merged. The trunk is pushed once it verifies; every deletion, branch push and stash change is asked first.
 
-A skill edit in `plugin/skills/` reaches a session only after `/plugin marketplace update claude-agents-dashboard-marketplace` and a reinstall: the installed
-copy is a cached snapshot, not a link to this checkout.
+The installed copy is a cached snapshot of GitHub's `main`, not a link to this checkout, so a skill edit in `plugin/` reaches a session only once it is
+committed and pushed and `pnpm plugin:sync` has run. The script compares `plugin/` with the installed copy, refuses a tree GitHub does not have (off
+`main`, uncommitted, unpushed or behind), reinstalls, and re-checks the result; restart Claude Code afterwards.
 
 ## Documentation
 
