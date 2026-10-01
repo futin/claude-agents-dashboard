@@ -88,9 +88,12 @@ The merged `kaizen` is a superset of both copies; neither copy's features may be
 ## §4 Tests
 
 - The three `kaizen.mjs` path resolutions in `test/analyze.test.ts` and the one in `test/kaizen-trend.test.ts` point at `plugin/skills/kaizen/kaizen.mjs`.
-- `pnpm test` also runs the skills' own `node --test` suites (`plugin/skills/*/test/*.test.mjs`) — one command still answers "is everything green". Whether
-  that is a second script chained from `test` or a call out of `test/run-all.ts` is the plan's choice; the case counts of both runners must appear in the
-  output.
+- `pnpm test` also runs **kaizen's** own `node --test` suite (`plugin/skills/kaizen/test/*.test.mjs`, 5 tests, ~0.1 s) — the one coupled to Analytics. The
+  case counts of both runners appear in the output.
+- **git-sync's** suite gets its own script, `pnpm test:skills`, and is not part of `pnpm test`: it is 193 tests that took 3 min 45 s on 2026-10-01 (real git
+  processes per case), which would make every `pnpm test` — orchestrator verifications included — four minutes slower for a skill this repo rarely edits.
+  `.claude/CLAUDE.md` requires `pnpm test:skills` green for any change under `plugin/skills/git-sync/`. (Amended 2026-10-01 after the baseline was measured;
+  the first draft put both suites in `pnpm test`.)
 - `pnpm typecheck` stays green (no new TS; the repointed tests are TS).
 
 ## §5 Docs and rules that change
@@ -120,7 +123,7 @@ step 2 leaves a window with no git-sync at all, which is worse, so the order is 
 
 ## Verification
 
-Provable in the repo: `pnpm test` (both runners' counts), `pnpm typecheck`, a grep showing no `.claude/skills/kaizen` or `~/.claude/skills/git-sync` path
+Provable in the repo: `pnpm test` (both runners' counts), `pnpm test:skills` (193 git-sync cases, the 2026-10-01 baseline), `pnpm typecheck`, a grep showing no `.claude/skills/kaizen` or `~/.claude/skills/git-sync` path
 left outside `docs/learning-notes/` and `docs/superpowers/`, and the §2 hunk list showing nothing from either kaizen copy was lost.
 
 **Needs a human** (not provable by the implementing session):
