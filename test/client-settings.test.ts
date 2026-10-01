@@ -12,6 +12,7 @@ import { DEFAULT_LAYOUT, LAYOUTS } from '../client/src/lib/filterSort.js';
 import { SECTIONS, isSection } from '../client/src/lib/sections.js';
 import { DEFAULTS } from '../server/lib/config.js';
 import { OWNED_KEYS } from '../client/src/hooks/useSettings.js';
+import { EFFORTS, MODELS } from '../client/src/lib/spawnOptions.js';
 
 const CLIENT_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'client', 'src');
 
@@ -320,6 +321,36 @@ export function run(): number {
 
   if (test('one bad sibling cannot discard the browser-notify switch', () => {
     assert.strictEqual(clampSettings({ notifyBrowser: true, theme: 'chartreuse' }).notifyBrowser, true);
+  })) p++; else f++;
+
+  if (test('Git Sync defaults: CLI model and effort, auto, remote control on', () => {
+    const s = clampSettings({});
+    assert.strictEqual(s.syncModel, '');
+    assert.strictEqual(s.syncEffort, '');
+    assert.strictEqual(s.syncPermissionMode, 'auto');
+    assert.strictEqual(s.syncRemoteControl, true);
+  })) p++; else f++;
+
+  if (test('valid Git Sync settings round-trip unchanged', () => {
+    const blob = { syncModel: MODELS[0], syncEffort: EFFORTS[0], syncPermissionMode: 'plan', syncRemoteControl: false };
+    const s = clampSettings(blob);
+    assert.deepStrictEqual(
+      { syncModel: s.syncModel, syncEffort: s.syncEffort, syncPermissionMode: s.syncPermissionMode, syncRemoteControl: s.syncRemoteControl },
+      blob
+    );
+  })) p++; else f++;
+
+  if (test('each junk Git Sync field falls back alone, a valid sibling survives', () => {
+    const s = clampSettings({ syncModel: 'gpt-4', syncEffort: 7, syncPermissionMode: 'root', syncRemoteControl: 'yes', theme: 'graphite' });
+    assert.strictEqual(s.syncModel, '');
+    assert.strictEqual(s.syncEffort, '');
+    assert.strictEqual(s.syncPermissionMode, 'auto');
+    assert.strictEqual(s.syncRemoteControl, true);
+    assert.strictEqual(s.theme, 'graphite');
+  })) p++; else f++;
+
+  if (test('the New sessions model does not leak into Git Sync', () => {
+    assert.strictEqual(clampSettings({ spawnDefaultModel: MODELS[0] }).syncModel, '');
   })) p++; else f++;
 
   if (test('Reset clears every persisted view-state key the client writes', () => {

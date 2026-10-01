@@ -16,7 +16,8 @@ import {
   type ContentWidth, type DefaultLayout, type Landing,
   type SpawnDefaultEffort, type SpawnDefaultModel, type ThemeId
 } from '../../lib/settings';
-import { EFFORTS, MODELS } from '../../lib/spawnOptions';
+import { EFFORTS, MODELS, PERMISSION_MODES, PERMISSION_MODE_LABEL, allowedPermissionModes } from '../../lib/spawnOptions';
+import type { PermissionMode } from '../../../../shared/types';
 
 /**
  * Preview colors per theme — board / strip / accent, in that order. A mirror of
@@ -73,6 +74,13 @@ export default function SettingsView() {
   const [webTestResult, setWebTestResult] = useState<string | null>(null);
   const [webPermission, setWebPermission] = useState(() => webNotifyPermission());
   const notify = server.state?.notify;
+  // Git Sync's permission picker offers only what the host honours, as the launch sheet does: a stored mode above the ceiling is drawn as the ceiling,
+  // which is also what `syncRequest` will send.
+  const syncModes = allowedPermissionModes(remote.state?.spawnMaxPermission);
+  const syncShownMode = syncModes.includes(settings.syncPermissionMode) ? settings.syncPermissionMode : syncModes[syncModes.length - 1];
+  const syncPermissionHint = syncModes.length < PERMISSION_MODES.length
+    ? `This host limits launches to '${PERMISSION_MODE_LABEL[syncModes[syncModes.length - 1]]}' or below (SPAWN_MAX_PERMISSION).`
+    : 'A sync runs headless, with no terminal to approve a tool call in.';
   const scope = settings.settingsTab;
   /**
    * The phone measure drops List and Split from the view picker, and rewrites
@@ -543,6 +551,36 @@ export default function SettingsView() {
                 <option value="">CLI default</option>
                 {EFFORTS.map(f => <option key={f} value={f}>{f}</option>)}
               </Select>
+            </SettingsRow>
+          </SettingsGroup>
+
+          <SettingsGroup title="Git Sync" sub="Used by the Sync button on Management › Git; no launch sheet">
+            <SettingsRow name="Model" hint="“CLI default” sends no --model flag. Separate from New sessions, so a sync can run on a cheaper model.">
+              <Select value={settings.syncModel} onChange={e => update({ syncModel: e.target.value as SpawnDefaultModel })}>
+                <option value="">CLI default</option>
+                {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+              </Select>
+            </SettingsRow>
+
+            <SettingsRow name="Effort" hint="“CLI default” sends no --effort flag.">
+              <Select value={settings.syncEffort} onChange={e => update({ syncEffort: e.target.value as SpawnDefaultEffort })}>
+                <option value="">CLI default</option>
+                {EFFORTS.map(f => <option key={f} value={f}>{f}</option>)}
+              </Select>
+            </SettingsRow>
+
+            <SettingsRow name="Permission mode" hint={syncPermissionHint}>
+              <Select value={syncShownMode} onChange={e => update({ syncPermissionMode: e.target.value as PermissionMode })}>
+                {syncModes.map(m => <option key={m} value={m}>{PERMISSION_MODE_LABEL[m]}</option>)}
+              </Select>
+            </SettingsRow>
+
+            <SettingsRow name="Remote control" hint="Registers the sync with your account, so the phone app can see and answer it.">
+              <Segmented
+                value={settings.syncRemoteControl ? 'on' : 'off'}
+                options={ON_OFF}
+                onChange={v => update({ syncRemoteControl: v === 'on' })}
+              />
             </SettingsRow>
           </SettingsGroup>
 
