@@ -108,6 +108,7 @@ Most likely to bite a real user, none of them exercised by the spec's own exampl
 **Files:**
 - Create: `client/src/lib/gitSync.ts`
 - Create: `test/git-sync-client.test.ts`, registered in `test/run-all.ts` beside `git-stats-client`
+- Modify: `client/src/lib/spawnOptions.ts` (a `NAME_RE` mirror beside `NAME_CAP`)
 
 **Interfaces:**
 - Consumes: `RepoGitStats`, `Session`, `LaunchingSession`, `SessionsResponse`, `SpawnRequest`, `PermissionMode` (`shared/types.ts`, `import type`);
@@ -220,9 +221,12 @@ Most likely to bite a real user, none of them exercised by the spec's own exampl
 - `start(repo)`: refuses when `pending`, when `!available`, when `!canSync(repo)` or when `runFor(runs, repo)` exists. Otherwise
   `launch(syncRequest(...))`; on an id, store `{ sessionId, dirName: repo.dirName, name: repo.name, launchedAtMs: Date.now() }` under `repo.toplevel`.
 - The launch-failure note **cannot** be read inside `start` after `await launch()`: `useSpawn` reports `needsToken` / `error` through React state
-  (`client/src/hooks/useSpawn.ts:49-63`), so the closure still holds the previous render's values. Derive it in an effect keyed on `useSpawn`'s
-  `needsToken` and `error` instead: `needsToken` → `SYNC_NEEDS_TOKEN` (beats `error`), else `error` → `syncLaunchErrorText(<name of the repo last
-  started>, error)`. `start` only clears the note and remembers which repo it started.
+  (`client/src/hooks/useSpawn.ts:49-63`), so the closure still holds the previous render's values. Nor can an effect keyed on `needsToken` / `error`
+  work: `needsToken` is not reset before a launch (`useSpawn.ts:40-52`), so a second 403 in a row changes no dependency and shows no note. Derive it
+  on the **`pending` true → false transition** instead: an effect on `[pending]` plus a "start outstanding" ref set by `start`; when `pending` drops
+  with the ref set, read that render's `needsToken` / `error` (batched with `setPending(false)`, `useSpawn.ts:50,59,62` before `:65`), clear the ref,
+  and set `needsToken` → `SYNC_NEEDS_TOKEN` (beats `error`), else `error` → `syncLaunchErrorText(<name of the repo last started>, error)`, else
+  nothing. `start` clears the note and remembers which repo it started.
 
 - [ ] **Step 1: Write the failing tests:**
   - Q1 `scanQuery(DEFAULT_SETTINGS)` unchanged from today (`?limit=5&lookback=48&active=5`); `scanQuery(DEFAULT_SETTINGS, 50)` = `?limit=50&lookback=48&active=5`.
