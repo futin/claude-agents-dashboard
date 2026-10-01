@@ -242,7 +242,8 @@ client/src/
                   fetch, shared by the rail's tree and the page), useAnalytics,
                   useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins,
-                  useGitStats (the Git sub-view's 30s visible-only poll),
+                  useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
+                  Sync pill: runs per device, a sessions poll only while one is live),
                   usePersistedState, useSettings, useServerSettings, useDictation, useFloatingTip
                   (the one hover/pin explanation panel, shared by both Usage tabs),
                   useTranscribeAvailable, useWebNotify (browser banners for headless
@@ -258,7 +259,8 @@ client/src/
                   stickyStrip, agentLabel (a subagent's type only when informative),
                   gitLayouts / gitTriage / gitStatsText (the Git sub-view's switcher rules,
                   Triage grouping and copy table), gitBar (the divergence bar's scale),
-                  gitPoll (its poll schedule, apart from the DOM)
+                  gitPoll (its poll schedule, apart from the DOM), gitSync / gitSyncRuns
+                  (the Sync pill's rules, copy and run reconciler)
 vite.config.ts    dev proxy /api → backend; reuses the server config loader;
                   allowedHosts = `.ts.net` + this node's bare MagicDNS short
                   name (probed via `tailscale status --json`), without which
