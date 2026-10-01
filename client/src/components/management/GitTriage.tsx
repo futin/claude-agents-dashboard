@@ -40,16 +40,17 @@ export default function GitTriage({ repos, sync }: { repos: RepoGitStats[]; sync
 function GitBusyRow({ repo, group, sync }: { repo: OkRepo; group: GitTriageGroup; sync: GitSyncControl }) {
   return (
     <section className="git-arow">
-      <div className="git-head">
-        <GitDot group={group} />
-        <span className="git-name">{repo.name}</span>
-        <GitBranchChip repo={repo} />
-        <GitUncommittedChip repo={repo} />
-        <GitTrunkChip repo={repo} />
-        <span className="git-head-end">
+      {/* As in Cards: Sync beside the wrapping head so it holds the first line; "fetched" trails the chips as one more fact. */}
+      <div className="git-head-row">
+        <div className="git-head">
+          <GitDot group={group} />
+          <span className="git-name">{repo.name}</span>
+          <GitBranchChip repo={repo} />
+          <GitUncommittedChip repo={repo} />
+          <GitTrunkChip repo={repo} />
           <GitFetched repo={repo} />
-          <GitSyncButton repo={repo} sync={sync} />
-        </span>
+        </div>
+        <span className="git-head-end"><GitSyncButton repo={repo} sync={sync} /></span>
       </div>
       <GitBranchList repo={repo} />
     </section>

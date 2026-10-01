@@ -137,8 +137,12 @@ non-zero `mergedCount` adds "N merged branches hidden". A non-`ok` repo shows it
 **The copy.** Every string is in `client/src/lib/gitStatsText.ts`, verbatim from spec §6's copy table; the components never build their own. The empty
 state's "Pinned" is a link that sets `managementTab: 'pinned'`.
 
-**Sync** (spec §9). Every `ok` repo with an origin gets a Sync pill while `/api/health` reports `spawnAvailable` (`canSync` in `client/src/lib/gitSync.ts`):
-beside "fetched" at the right of a card's or busy Triage row's head, in the Table's seventh column, and beside a quiet row's line. A click launches at once,
+**Sync** (spec §9). Every `ok` repo with an origin gets a Sync button while `/api/health` reports `spawnAvailable` (`canSync` in `client/src/lib/gitSync.ts`):
+pinned to the first line at the right of a card's or busy Triage row's head (`.git-head-end` is a sibling of the wrapping `.git-head`, never an item in it, so
+the button holds its place however long the name), in the Table's seventh column, and beside a quiet row's line. It is drawn as a raised key — `--strip-hi`
+paper, 8px corners, a two-arrow glyph that turns while a run is live — where the fact chips are round and outlined, so the two never read alike
+([mockups](../superpowers/specs/2026-10-01-git-sync-button-mockups.html)). "fetched" is a fact, so on a card it ends the facts row and on a busy Triage row it
+trails the chips. A click launches at once,
 with no sheet: `POST /api/spawn` with the repo's `dirName`, the prompt `/claude-agents-dashboard:git-sync`, the session name `git-sync <repo>` (characters
 the server's `NAME_RE` would reject become `-`, cut at 60, because a bad name is dropped without a word), the Settings › Local › Git Sync model and effort,
 the host's `SYNC_PERMISSION_MODE` (default `auto`, published on `/api/health` as `syncPermissionMode` already clamped to `SPAWN_MAX_PERMISSION`), and
@@ -146,7 +150,8 @@ remote control on exactly when Remote answers is (`remoteAnswer`, so the `REMOTE
 
 `useGitSync` (`client/src/hooks/useGitSync.ts`) remembers each launch per device in `localStorage['management.syncRuns']`, keyed by the repo's toplevel, so
 two pins on one repo share a run. `syncPhase` reads a run against the sessions payload: a `launching` entry, or a row not seen yet, is "Syncing…" and
-disabled; a `working` or `question` row is "Syncing · open", which opens that session's `ChatDrawer` over Management; an ended row or a failed launch is
+disabled; a `working` or `question` row is "Syncing" (no "open" suffix: the cyan tint and the turning glyph say it is live), which opens that session's
+`ChatDrawer` over Management; an ended row or a failed launch is
 forgotten (`reconcileRuns` in `client/src/lib/gitSyncRuns.ts`), and each payload that forgets any run re-polls git stats once. A row missing from the
 payload is not an end, since the scan caps rows by recency and a sync parked on its question writes nothing, so absence ends a run only 24h after launch
 once its row has shown, or 10 min after launch if it never has: a launch that failed while no tab watched leaves no trace once the server drops it.

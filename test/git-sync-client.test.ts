@@ -197,7 +197,7 @@ export function run(): number {
     const running: SyncPhase = { kind: 'running', session: session('s1', 'working') };
     assert.strictEqual(syncButtonText(null, false), 'Sync');
     assert.strictEqual(syncButtonText(null, true), 'Starting…');
-    assert.strictEqual(syncButtonText(running, false), 'Syncing · open');
+    assert.strictEqual(syncButtonText(running, false), 'Syncing');
     assert.strictEqual(syncButtonText({ kind: 'launching' }, false), 'Syncing…');
     assert.strictEqual(syncButtonText({ kind: 'unseen' }, false), 'Syncing…');
     assert.strictEqual(syncButtonText({ kind: 'ended' }, false), 'Sync');

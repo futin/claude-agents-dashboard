@@ -15,22 +15,21 @@ export default function GitCards({ repos, sync }: { repos: RepoGitStats[]; sync:
     <div className="git-cards">
       {repos.map(r => (
         <section key={r.dirName} className="git-card">
-          <div className="git-head">
-            <GitDot group={groups.get(r.dirName)} />
-            <span className="git-name">{r.name}</span>
-            {r.state === 'ok' && <GitBranchChip repo={r} />}
-            {r.state === 'ok' && (
-              <span className="git-head-end">
-                <GitFetched repo={r} />
-                <GitSyncButton repo={r} sync={sync} />
-              </span>
-            )}
+          {/* Sync sits beside the wrapping head, not in it, so it stays on the first line however long the name; "fetched" is a fact and ends the facts row. */}
+          <div className="git-head-row">
+            <div className="git-head">
+              <GitDot group={groups.get(r.dirName)} />
+              <span className="git-name">{r.name}</span>
+              {r.state === 'ok' && <GitBranchChip repo={r} />}
+            </div>
+            {r.state === 'ok' && <span className="git-head-end"><GitSyncButton repo={r} sync={sync} /></span>}
           </div>
           {r.state === 'ok' ? (
             <>
               <div className="git-facts">
                 <GitUncommittedChip repo={r} />
                 <GitTrunkChip repo={r} />
+                <GitFetched repo={r} />
               </div>
               <GitBranchList repo={r} />
             </>

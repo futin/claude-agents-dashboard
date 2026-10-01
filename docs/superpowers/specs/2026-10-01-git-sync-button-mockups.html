@@ -1,0 +1,285 @@
+<title>Git Sync Button</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&display=swap">
+<style>
+/* The dashboard's own tokens (client/src/styles.css): daylight on the light ground, midnight on the dark one, so the mock follows the viewer's theme the
+   way the app does. Layout: one column of labelled boards; each board is a slice of Management › Git at desktop width. Markup is the real class names. */
+:root{
+  --board:#f4f4f3;--steel:#ededec;--strip:#ffffff;--strip-hi:#f2f2f1;
+  --hairline:#eaeae8;--hairline2:#dcdcda;
+  --ink:#131313;--ink2:#6e6e6e;--ink3:#a0a0a0;
+  --green:#5fa92c;--amber:#c4761f;--mustard:#9a8712;--cyan:#3f8f14;--magenta:#b5527f;
+  --shadow:rgba(0,0,0,.06);
+  --font:'Hanken Grotesk','Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--amber:#ffb03a;--mustard:#d1ba52;--cyan:#55d0dd;--magenta:#cf6f9e;
+  --shadow:rgba(0,0,0,.4);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--amber:#ffb03a;--mustard:#d1ba52;--cyan:#55d0dd;--magenta:#cf6f9e;
+  --shadow:rgba(0,0,0,.4);color-scheme:dark}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--board);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45;font-variant-numeric:tabular-nums}
+.page{max-width:1120px;margin:0 auto;padding-block:28px 80px;padding-inline:16px;display:flex;flex-direction:column;gap:44px}
+.lead{max-width:76ch;display:flex;flex-direction:column;gap:8px}
+.lead h1{font-size:26px;font-weight:600;letter-spacing:-.01em;margin:0;text-wrap:balance}
+.lead p{margin:0;color:var(--ink2)}
+.lead .facts{margin-top:6px;padding:10px 12px;background:var(--steel);border:1px solid var(--hairline);border-radius:8px;font-size:13px;color:var(--ink2)}
+.lead .facts b{color:var(--ink);font-weight:600}
+.lead code,.note code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:var(--steel);padding:1px 5px;border-radius:4px}
+section.v{display:flex;flex-direction:column;gap:12px}
+.vh{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.vh h2{margin:0;font-size:19px;font-weight:600}
+.tag{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid var(--hairline2);color:var(--ink2)}
+.tag.rec{color:var(--green);border-color:var(--green)}
+.tag.yagni{color:var(--magenta);border-color:var(--magenta)}
+.tag.now{color:var(--amber);border-color:var(--amber)}
+.note{max-width:84ch;color:var(--ink2);margin:0}
+.note b{color:var(--ink)}
+.tradeoff{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;font-size:13px;color:var(--ink2)}
+.tradeoff div{background:var(--steel);border:1px solid var(--hairline);border-radius:8px;padding:10px 12px}
+.tradeoff h4{margin:0 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.board{border:1px solid var(--hairline);border-radius:12px;background:var(--board);padding:20px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.cap{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.cap em{font-style:normal;color:var(--ink2);text-transform:none;letter-spacing:0;font-weight:400;margin-left:6px}
+.pair{display:flex;gap:16px;flex-wrap:wrap;align-items:start}
+.pair .w340{flex:0 1 340px;min-width:0}
+.pair .w430{flex:0 1 430px;min-width:0}
+.states{display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--ink3)}
+.states>span{display:inline-flex;align-items:center;gap:8px}
+@media (max-width:760px){.pair .w340,.pair .w430{flex-basis:100%}}
+
+/* --- the real git-* rules, verbatim from styles.css where unchanged --- */
+.git-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ink3)}
+.git-dot.needs{background:var(--amber)}.git-dot.flight{background:var(--mustard)}.git-dot.quiet{background:var(--green)}
+.git-name{font-size:15px;font-weight:500;color:var(--ink);letter-spacing:-.01em;min-width:0;overflow-wrap:anywhere}
+.git-fetched{font-size:12px;color:var(--ink3);white-space:nowrap}
+.git-facts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.git-chip{display:inline-block;font-size:12px;font-weight:500;line-height:1.4;padding:2px 9px;border-radius:999px;border:1px solid var(--hairline2);color:var(--ink2);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.git-chip.branch{color:var(--ink);max-width:240px}
+.git-chip.amber{color:var(--amber);border-color:transparent;background:color-mix(in srgb,var(--amber) 14%,transparent)}
+.git-chip.green{color:var(--green);border-color:transparent;background:color-mix(in srgb,var(--green) 16%,transparent)}
+.git-chip.mustard{color:var(--mustard);border-color:transparent;background:color-mix(in srgb,var(--mustard) 20%,transparent)}
+.git-chip.wt{flex:none;font-size:11px;padding:0 7px;color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
+.git-branches{display:flex;flex-direction:column;border-top:1px solid var(--hairline)}
+.git-brow{display:grid;grid-template-columns:minmax(0,1fr) 72px 36px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--hairline);font-size:13px;color:var(--ink)}
+.git-bname{display:flex;align-items:center;gap:6px;min-width:0}
+.git-bname-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.git-nums{font-size:12px;color:var(--ink3);white-space:nowrap}.git-nums-b{color:var(--ink2)}.git-nums-a{color:var(--cyan)}
+.git-age{font-size:12px;color:var(--ink3);text-align:right;white-space:nowrap}
+.git-note{font-size:12px;color:var(--ink3);padding-top:7px}
+.git-card{background:var(--strip);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.git-tri{display:flex;flex-direction:column;gap:20px}
+.git-tri-group{display:flex;flex-direction:column;gap:8px}
+.git-tri-h{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.git-arow{background:var(--strip);border-radius:16px;padding:16px 20px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.git-arow .git-branches{border-top:0;padding-left:16px;border-left:1px solid var(--hairline2)}
+.git-arow.quiet{background:transparent;border:1px dashed var(--hairline2);padding:8px 16px}
+.git-arow.quiet .git-name{font-size:14px}
+.git-summary{font-size:13px;color:var(--ink3);min-width:0;overflow-wrap:anywhere;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.git-caret{display:inline-block;width:16px;flex:none;color:var(--ink3);margin-left:auto;text-align:right}
+.git-qhead{display:flex;align-items:center;gap:8px;min-width:0}
+.git-qhead>.git-rowbtn{display:flex;flex:1;min-width:0;align-items:center;gap:8px;font:inherit;color:inherit;text-align:left;background:none;border:0;padding:0;cursor:pointer}
+.git-table-wrap{background:var(--strip);border-radius:16px;padding:8px 20px;overflow-x:auto}
+.git-table{width:100%;border-collapse:collapse;font-size:13px;color:var(--ink)}
+.git-table th{text-align:left;font-size:11px;font-weight:500;color:var(--ink2);padding:12px 10px 8px;border-bottom:1px solid var(--hairline2);white-space:nowrap}
+.git-table td{padding:10px;border-bottom:1px solid var(--hairline);vertical-align:middle}
+.git-table th.n,.git-table td.n{text-align:right}
+.git-table td:first-child,.git-table th:first-child{padding-left:0}
+.git-table td:last-child,.git-table th:last-child{padding-right:0}
+.git-table tbody tr:last-child td{border-bottom:0}
+.git-table .git-tname{font-weight:500;white-space:nowrap}
+.git-sync-td{width:1%;text-align:right;white-space:nowrap}
+
+/* --- the head: NOW (wrapping flex) vs FIX (grid, end column pinned to row 1) --- */
+.now .git-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.now .git-head-end{margin-left:auto;display:flex;align-items:center;gap:8px}
+.fix .git-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:8px;align-items:start;min-width:0}
+.fix .git-head>.git-dot{margin-top:7px}
+.fix .git-head-mid{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.fix .git-head-end{display:flex;align-items:center;gap:8px;height:22px}
+.fix .git-facts>.git-fetched{margin-left:auto}
+
+/* --- NOW: the Sync pill, verbatim --- */
+.now .git-sync{flex:none;height:26px;padding:0 12px;font-family:var(--font);font-size:12px;font-weight:500;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;cursor:pointer;white-space:nowrap}
+.now .git-sync.on{color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
+.now .git-sync:disabled{cursor:default;color:var(--ink3)}
+
+/* --- shared by A/B/C: the glyph (two arrows, not the band's ↻), the spin, the tap target --- */
+.git-sync{flex:none;display:inline-flex;align-items:center;gap:6px;font-family:var(--font);font-size:12px;font-weight:500;line-height:1;cursor:pointer;white-space:nowrap;transition:color .15s,background .15s,border-color .15s}
+.git-sync svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.git-sync.on svg{animation:git-spin 1.6s linear infinite}
+@keyframes git-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.git-sync.on svg{animation:none}}
+.git-sync:disabled{cursor:default}
+
+/* A — ink fill: the app's primary-action grammar (.newbtn, .qp-send, .s-plus) at row size */
+.va .git-sync{height:26px;padding:0 10px 0 9px;border:0;border-radius:8px;color:var(--strip);background:var(--ink)}
+.va .git-sync:hover:not(:disabled){opacity:.85}
+.va .git-sync.on{background:var(--cyan);color:var(--strip)}
+.va .git-sync:disabled{opacity:.45}
+
+/* B — raised key: strip-hi paper, 8px corners, no border. Square = action, round = fact. */
+.vb .git-sync{height:26px;padding:0 10px 0 9px;border:0;border-radius:8px;color:var(--ink2);background:var(--strip-hi)}
+.vb .git-sync:hover:not(:disabled){color:var(--ink);background:var(--hairline2)}
+.vb .git-sync.on{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+.vb .git-sync:disabled{color:var(--ink3)}
+.vb .git-arow.quiet .git-sync,.vb .git-table .git-sync{background:var(--steel)}
+.vb .git-table .git-sync{background:var(--strip-hi)}
+
+/* C — text action: cyan like "+N more" and the Pinned link; the tap target is padding, not paint */
+.vc .git-sync{height:26px;padding:0 4px;border:0;border-radius:6px;color:var(--cyan);background:none}
+.vc .git-sync:hover:not(:disabled){background:color-mix(in srgb,var(--cyan) 10%,transparent)}
+.vc .git-sync.on{color:var(--cyan)}
+.vc .git-sync:disabled{color:var(--ink3)}
+
+/* D — icon only, shown once to say no */
+.vd{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.vd .icon-refresh{font-family:var(--font);font-size:12px;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;width:26px;height:26px;display:grid;place-items:center}
+.vd .git-sync{width:26px;height:26px;padding:0;border:0;border-radius:8px;color:var(--ink2);background:var(--strip-hi);justify-content:center}
+</style>
+
+<div class="page">
+  <header class="lead">
+    <h1>Git Sync Button</h1>
+    <p>Management › Git. Two things to fix: the Sync control is drawn with the branch chip's exact recipe (12px/500, 1px <code>--hairline2</code>, 999px corners,
+       card paper), so a reader cannot tell a fact from an action; and the card head wraps, so Sync sits on line 1 or line 2 depending on how long the repo name
+       is. Three button treatments below, one rejected, then the two ways to pin the head. Every mock uses the real class names and tokens.</p>
+    <div class="facts"><b>Where Sync lives:</b> the right end of a card head · the right end of a busy Triage row's head · beside a quiet Triage row's line · the Table's
+       last column. Only the first two wrap today. States: <b>Sync</b> (idle) · <b>Syncing</b> (running: tinted and turning, click opens the chat; no "open" suffix, the tint says it) · <b>Syncing…</b> (launching, disabled)
+       · <b>Starting…</b> (mid-POST, disabled).</div>
+  </header>
+
+  <section class="v now">
+    <div class="vh"><h2>Now</h2><span class="tag now">the problem</span></div>
+    <p class="note">Same card width. <b>backlog-manager</b> has the longer name, so "fetched · Sync" drops to a second line; on <b>brickwright</b> it fits on the first.
+       And in both, Sync and <code>main</code> are the same pill.</p>
+    <div class="board" id="b-now"></div>
+  </section>
+
+  <section class="v fix va">
+    <div class="vh"><h2>A · Ink fill</h2><span class="tag">heaviest</span></div>
+    <p class="note">The app's primary-action grammar (New session, Send, the + key: <code>--ink</code> fill, <code>--strip</code> text, square-ish corners) shrunk to row size.
+       Running turns <code>--cyan</code>, as the spawn Send does. Unmistakable, but a board of eight repos gets eight black buttons fighting the repo names for
+       attention, and Sync is a per-row chore, not the page's one action.</p>
+    <div class="board" id="b-a"></div>
+  </section>
+
+  <section class="v fix vb">
+    <div class="vh"><h2>B · Raised key</h2><span class="tag rec">recommended</span></div>
+    <p class="note">A key on the paper: <code>--strip-hi</code> fill, 8px corners, no border, a two-arrow glyph. The grammar becomes <b>square with a glyph = action,
+       round and outlined = fact</b>, which is what <code>.seg</code> already does one level up. Running tints it cyan and spins the glyph (still under
+       <code>prefers-reduced-motion</code>). Medium weight: visible on every card, dominant on none. The glyph is not the band's ↻, which means "re-read stats".</p>
+    <div class="board" id="b-b"></div>
+  </section>
+
+  <section class="v fix vc">
+    <div class="vh"><h2>C · Text action</h2><span class="tag">lightest</span></div>
+    <p class="note">Sync as cyan text, the way the card already writes "+N more" and the empty state writes "Pinned": <code>--cyan</code> is the one interactive
+       accent, so colour alone says action. Nothing can be mistaken for a chip. Costs discoverability, and on a phone the tap target is invisible padding; the
+       running state leans on the glyph spin to be noticed.</p>
+    <div class="board" id="b-c"></div>
+  </section>
+
+  <section class="v">
+    <div class="vh"><h2>D · Icon only</h2><span class="tag yagni">rejected</span></div>
+    <p class="note">One glyph, no word. Rejected because the band already has a 26px round ↻ meaning "refresh now, re-read the stats"; a second circle-with-arrows per
+       card that means "launch a git-sync session" is two look-alikes with different costs, and a stray tap here spends a session.</p>
+    <div class="vd"><span class="icon-refresh">↻</span><span class="cap">band: refresh stats</span>
+      <button type="button" class="git-sync" aria-label="Sync"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 0 1-9.4 3.9M2.5 8a5.5 5.5 0 0 1 9.4-3.9"/><path d="M12 1.5v3h-3M4 14.5v-3h3"/></svg></button>
+      <span class="cap">card: launch a sync</span></div>
+  </section>
+
+  <section class="v fix">
+    <div class="vh"><h2>Pinning the head</h2></div>
+    <p class="note">Both fixes replace the wrapping flex head with a grid: dot | name + chip (wrapping inside its own column) | end. The end column is pinned to
+       the first line, so Sync never moves. They differ in what the end column holds.</p>
+    <div class="tradeoff">
+      <div><h4>H1 · fetched stays in the head</h4>Nothing moves between rows. When the card is tight the <code>main</code> chip drops under the name instead, so the
+        first line is name · fetched · Sync and the chip starts line 2. The head grows by a line on narrow cards.</div>
+      <div><h4>H2 · fetched joins the facts row <span class="tag rec" style="margin-left:6px">recommended</span></h4>"fetched 1d ago" is a fact about the data, like
+        "clean" and "main = origin", so it sits at the right end of that row, muted. The head is then name · chip | Sync and fits one line down to a phone-width
+        card. Triage busy rows get the same; the Table keeps its Fetched column.</div>
+    </div>
+    <div class="board vb" id="b-head"></div>
+  </section>
+</div>
+
+<script>
+(function(){
+  var GLYPH = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 0 1-9.4 3.9M2.5 8a5.5 5.5 0 0 1 9.4-3.9"/><path d="M12 1.5v3h-3M4 14.5v-3h3"/></svg>';
+  function sync(state, glyph){
+    var text = state === 'on' ? 'Syncing' : state === 'wait' ? 'Syncing…' : state === 'post' ? 'Starting…' : 'Sync';
+    var dis = state === 'wait' || state === 'post' ? ' disabled' : '';
+    return '<button type="button" class="git-sync' + (state === 'on' ? ' on' : '') + '"' + dis + '>' + (glyph ? GLYPH : '') + text + '</button>';
+  }
+  function brow(name, wt, b, a, age){
+    return '<div class="git-brow"><span class="git-bname"><span class="git-bname-t">' + name + '</span>' + (wt ? '<span class="git-chip wt">worktree</span>' : '') +
+      '</span>' + (b === null ? '<span></span>' : '<span class="git-nums"><span class="git-nums-b">' + b + '</span> | <span class="git-nums-a">' + a + '</span></span>') +
+      '<span class="git-age">' + age + '</span></div>';
+  }
+  var BM = { name: 'backlog-manager', dot: 'quiet', rows: '<div class="git-note">no open branches</div>' };
+  var BW = { name: 'brickwright', dot: 'flight', rows: brow('worktree-phase4a-…', true, 0, 14, '58m') + brow('experiments/models', false, 234, 1, '7d') };
+  function fetched(){ return '<span class="git-fetched">fetched 1d ago</span>'; }
+  function facts(withFetched){
+    return '<div class="git-facts"><span class="git-chip green">clean</span><span class="git-chip">main = origin</span>' + (withFetched ? fetched() : '') + '</div>';
+  }
+  // layout: 'now' (wrapping flex, fetched in head) | 'h1' (grid, fetched in head) | 'h2' (grid, fetched in facts)
+  function card(r, layout, state, glyph){
+    var head;
+    if (layout === 'now') {
+      head = '<div class="git-head"><span class="git-dot ' + r.dot + '"></span><span class="git-name">' + r.name + '</span><span class="git-chip branch">main</span>' +
+        '<span class="git-head-end">' + fetched() + sync(state, glyph) + '</span></div>';
+    } else {
+      head = '<div class="git-head"><span class="git-dot ' + r.dot + '"></span><span class="git-head-mid"><span class="git-name">' + r.name + '</span><span class="git-chip branch">main</span></span>' +
+        '<span class="git-head-end">' + (layout === 'h1' ? fetched() : '') + sync(state, glyph) + '</span></div>';
+    }
+    return '<section class="git-card">' + head + facts(layout === 'h2') + '<div class="git-branches">' + r.rows + '</div></section>';
+  }
+  function triage(layout, glyph){
+    var headBusy = layout === 'now'
+      ? '<div class="git-head"><span class="git-dot needs"></span><span class="git-name">claude-agents-dashboard</span><span class="git-chip branch">feat/git-sync-button</span><span class="git-chip amber">2 uncommitted</span><span class="git-chip mustard">main 1 behind origin</span><span class="git-head-end">' + fetched() + sync('idle', glyph) + '</span></div>'
+      : '<div class="git-head"><span class="git-dot needs"></span><span class="git-head-mid"><span class="git-name">claude-agents-dashboard</span><span class="git-chip branch">feat/git-sync-button</span><span class="git-chip amber">2 uncommitted</span><span class="git-chip mustard">main 1 behind origin</span>' + (layout === 'h2' ? fetched() : '') + '</span><span class="git-head-end">' + (layout === 'h1' ? fetched() : '') + sync('idle', glyph) + '</span></div>';
+    return '<div class="git-tri"><div class="git-tri-group"><div class="git-tri-h">Needs you</div><section class="git-arow">' + headBusy +
+      '<div class="git-branches">' + brow('feat/git-sync-button', false, 0, 3, '2h') + '</div></section></div>' +
+      '<div class="git-tri-group"><div class="git-tri-h">Quiet</div><section class="git-arow quiet"><div class="git-qhead"><button type="button" class="git-head git-rowbtn">' +
+      '<span class="git-dot quiet"></span><span class="git-name">backlog-manager</span><span class="git-summary">main · clean · main = origin · fetched 1d ago</span><span class="git-caret">▸</span></button>' +
+      sync('on', glyph) + '</div></section></div></div>';
+  }
+  function table(glyph){
+    function tr(name, chip, unc, trunk, n, state){
+      return '<tr><td class="git-tname"><span class="git-caret" style="margin-left:0">▸</span>' + name + '</td><td><span class="git-chip branch">' + chip + '</span></td><td>' + unc + '</td><td>' + trunk +
+        '</td><td class="n">' + n + '</td><td><span class="git-fetched">fetched 1d ago</span></td><td class="git-sync-td">' + sync(state, glyph) + '</td></tr>';
+    }
+    return '<div class="git-table-wrap"><table class="git-table"><thead><tr><th>Repo</th><th>On</th><th>Uncommitted</th><th>Trunk vs origin</th><th class="n">Branches</th><th>Fetched</th><th></th></tr></thead><tbody>' +
+      tr('backlog-manager', 'main', '<span class="git-chip green">clean</span>', '<span class="git-chip">main = origin</span>', 0, 'idle') +
+      tr('brickwright', 'main', '<span class="git-chip green">clean</span>', '<span class="git-chip">main = origin</span>', 2, 'wait') +
+      '</tbody></table></div>';
+  }
+  function states(glyph){
+    return '<div class="states"><span>' + sync('idle', glyph) + 'idle</span><span>' + sync('on', glyph) + 'running · opens the chat</span><span>' + sync('wait', glyph) + 'launching</span><span>' + sync('post', glyph) + 'mid-POST</span></div>';
+  }
+  function board(id, layout, glyph, withStates){
+    var el = document.getElementById(id);
+    el.innerHTML =
+      '<div class="cap">Cards<em>two widths of the same card</em></div><div class="pair"><div class="w340">' + card(BM, layout, 'idle', glyph) + '</div><div class="w430">' + card(BW, layout, 'on', glyph) + '</div></div>' +
+      '<div class="cap">Triage<em>busy row, quiet row</em></div>' + triage(layout, glyph) +
+      '<div class="cap">Table</div>' + table(glyph) +
+      (withStates ? '<div class="cap">States</div>' + states(glyph) : '');
+  }
+  board('b-now', 'now', false, false);
+  board('b-a', 'h2', true, true);
+  board('b-b', 'h2', true, true);
+  board('b-c', 'h2', true, true);
+  var h = document.getElementById('b-head');
+  h.innerHTML = '<div class="cap">H1<em>fetched stays in the head; the chip wraps under the name when tight</em></div><div class="pair"><div class="w340">' + card(BM, 'h1', 'idle', true) + '</div><div class="w430">' + card(BW, 'h1', 'idle', true) + '</div></div>' +
+    '<div class="cap">H2<em>fetched joins the facts row; the head stays one line</em></div><div class="pair"><div class="w340">' + card(BM, 'h2', 'idle', true) + '</div><div class="w430">' + card(BW, 'h2', 'idle', true) + '</div></div>';
+})();
+</script>

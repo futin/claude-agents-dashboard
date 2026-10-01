@@ -109,7 +109,8 @@ export function parseSyncRuns(raw: unknown): SyncRuns {
 export function syncButtonText(phase: SyncPhase | null, pending: boolean): string {
   if (pending) return 'Starting…';
   if (!phase) return 'Sync';
-  if (phase.kind === 'running') return 'Syncing · open';
+  // No "· open" suffix: the running key is already tinted and turning, which says it is live and clickable; the disabled states carry the ellipsis.
+  if (phase.kind === 'running') return 'Syncing';
   if (phase.kind === 'launching' || phase.kind === 'unseen') return 'Syncing…';
   return 'Sync';
 }

@@ -117,9 +117,20 @@ export function GitBranchList({ repo }: { repo: OkRepo }) {
   );
 }
 
+/** Two arrows chasing, not the band's ↻: that one re-reads the stats, this one spends a session. Turns while a sync runs (`.git-sync.on`). */
+function GitSyncGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M13.5 8a5.5 5.5 0 0 1-9.4 3.9M2.5 8a5.5 5.5 0 0 1 9.4-3.9" />
+      <path d="M12 1.5v3h-3M4 14.5v-3h3" />
+    </svg>
+  );
+}
+
 /**
- * The repo's Sync button (spec §9): nothing while the host cannot spawn or git-sync would refuse the repo. Idle it launches; running it opens the chat;
- * launching, unseen or mid-POST it is disabled. Its click never bubbles, so the Table row it sits in does not toggle.
+ * The repo's Sync button (spec §9): a raised key, square where the fact chips are round, so the two never read alike. Nothing while the host cannot spawn
+ * or git-sync would refuse the repo. Idle it launches; running it opens the chat; launching, unseen or mid-POST it is disabled. Its click never bubbles, so
+ * the Table row it sits in does not toggle.
  */
 export function GitSyncButton({ repo, sync }: { repo: RepoGitStats; sync: GitSyncControl }) {
   if (!sync.available || !canSync(repo)) return null;
@@ -139,6 +150,7 @@ export function GitSyncButton({ repo, sync }: { repo: RepoGitStats; sync: GitSyn
         else sync.start(repo);
       }}
     >
+      <GitSyncGlyph />
       {syncButtonText(phase, sync.starting === repo.toplevel)}
     </button>
   );

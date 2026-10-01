@@ -2618,7 +2618,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .git-name{font-size:15px;font-weight:500;color:var(--ink);letter-spacing:-.01em;min-width:0;overflow-wrap:anywhere}
 .git-fetched{margin-left:auto;font-size:12px;color:var(--ink3);white-space:nowrap}
-.git-facts{display:flex;gap:6px;flex-wrap:wrap}
+.git-facts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .git-chip{display:inline-block;font-size:12px;font-weight:500;line-height:1.4;padding:2px 9px;border-radius:999px;border:1px solid var(--hairline2);color:var(--ink2);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .git-chip.branch{color:var(--ink);max-width:240px}
 .git-chip.amber{color:var(--amber);border-color:transparent;background:color-mix(in srgb,var(--amber) 14%,transparent)}
@@ -2692,14 +2692,23 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-arow.unreadable .git-name{color:var(--ink2)}
 .git-summary{font-size:13px;color:var(--ink3);min-width:0;overflow-wrap:anywhere}
 
-/* Sync (git-stats spec §9): a pill in each layout's head; `.on` is a running sync whose chat it opens */
-.git-sync{flex:none;height:26px;padding:0 12px;font-family:var(--font);font-size:12px;font-weight:500;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s}
-.git-sync:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
-.git-sync.on{color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
+/* Sync (git-stats spec §9): a raised key — --strip-hi paper, 8px corners, a two-arrow glyph — where the fact chips are round and outlined, so the two never
+   read alike. `.on` is a running sync whose chat it opens: cyan tint, glyph turning. The quiet Triage row's dashed line sits on the board, where --strip-hi
+   would vanish, so the row lifts the paper to --strip through the variable rather than a heavier selector that would also beat `.on`. */
+.git-sync{flex:none;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px 0 9px;font-family:var(--font);font-size:12px;font-weight:500;line-height:1;color:var(--ink2);background:var(--sync-paper,var(--strip-hi));border:0;border-radius:8px;cursor:pointer;white-space:nowrap;transition:color .15s,background .15s}
+.git-sync svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.git-sync:hover:not(:disabled){color:var(--ink);background:var(--hairline2)}
+.git-sync.on{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+.git-sync.on svg{animation:git-spin 1.6s linear infinite}
 .git-sync:disabled{cursor:default;color:var(--ink3)}
-/* fetched + Sync wrap as one cluster, so a narrow head drops both to its right edge instead of stranding the pill at the left */
-.git-head-end{margin-left:auto;display:flex;align-items:center;gap:8px}
-.git-head-end>.git-fetched{margin-left:0}
+.git-arow.quiet{--sync-paper:var(--strip)}
+@keyframes git-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.git-sync.on svg{animation:none}}
+/* The head's facts wrap inside `.git-head`; `.git-head-end` is its sibling, never a wrapping item, so Sync holds the first line whatever the name's length.
+   22px is the name's line box, so the key centres on that line. */
+.git-head-row{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.git-head-row>.git-head{flex:1}
+.git-head-end{flex:none;display:flex;align-items:center;min-height:22px}
 .git-sync-note{font-size:12px;color:var(--amber);overflow-wrap:anywhere}
 .git-sync-td{width:1%;text-align:right;white-space:nowrap}
 .git-qhead{display:flex;align-items:center;gap:8px;min-width:0}
