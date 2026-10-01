@@ -50,8 +50,9 @@ Section references (§n) point into it.
    CSS anyway, because the build is part of the `webServer` command, not a separate script step. Pinned in Task 1.
 2. **`--update-snapshots` on Linux.** Expected: refused with the platform line before any file is written, so a Linux render can never overwrite a darwin
    baseline. Pinned in Task 1.
-3. **Default Sessions filters hide fixture sessions.** `dashboard.view` defaults plus the seeded `maxSessions` and `activeWindowMin` decide what shows.
-   Expected: every fixture session renders as a card, none filtered out by the window facet at `EPOCH`. Pinned in Task 2.
+3. **Client-side filters hide fixture sessions.** `maxSessions` / `activeWindowMin` are server query params the pathname-matching mock ignores; what
+   can hide a row in the browser is `dashboard.view` (`DEFAULT_VIEW`, `client/src/lib/filterSort.ts:134`). Expected: every fixture session renders as a
+   card. Pinned in Task 2.
 4. **Retina display, or a Mac in another time zone or region.** Expected: `devicePixelRatio` is 1 and the page's resolved time zone is `UTC` regardless of the
    host, so the same baseline matches on any Mac. Pinned in Task 2.
 5. **Port 4373 already held** (a preview left over from an aborted run). Expected: the run fails fast with an error naming the port, and never screenshots
@@ -62,8 +63,13 @@ Section references (§n) point into it.
 ### Task 1: Playwright scaffold, mock API, refusals
 
 **Files:**
-- Modify: `package.json` (devDependencies, scripts), `.gitignore`, `tsconfig.json` (`include` gains `playwright.config.ts`)
-- Create: `playwright.config.ts`, `test/visual/mock-api.ts`, `test/visual/fixtures/index.ts` (empty registry for now), `test/visual/mock-api.spec.ts`
+- Modify: `package.json` (devDependencies, scripts), `.gitignore`, `tsconfig.json` (`include` gains `playwright.config.ts`), `test/run-all.ts`
+- Create: `playwright.config.ts`, `test/visual/platform-guard.ts` (pure), `test/visual-platform-guard.test.ts` (node-assert), `test/visual/mock-api.ts`,
+  `test/visual/harness.ts` (the shared Playwright fixture), `test/visual/fixtures/index.ts` (empty registry for now), `test/visual/mock-api.spec.ts`
+
+**Why `vite.config.ts` is not modified:** `vite preview` inherits `server.open: true`, `host: true` and the `/api` proxy from it (`vite.config.ts:75-91`).
+The `webServer` overrides the first two: `--host localhost` on the command line, and `env: { BROWSER: 'none' }`, which Vite's browser opener honours. The `/api` proxy is never reached, because every
+`/api` request is answered in the browser before it leaves. Step 6 verifies that no browser window opens and that the preview listens on localhost only.
 
 **Interfaces:**
 - Produces:
@@ -71,19 +77,25 @@ Section references (§n) point into it.
   - `FixtureMap` = a map from **pathname pattern** to a response body. Patterns are exact pathnames (`/api/sessions`) or carry one `:param` segment
     (`/api/sessions/:id/chat`). Exact patterns win over param patterns.
   - `mockApiFailures(page: Page): string[]`, the refusals recorded so far, each formatted `GET /api/nope: no fixture` or `POST /api/pins: writes are refused`
-    or `GET https://example.com/x: off-origin request refused`. A spec fails on any entry in its `afterEach`.
+    or `GET https://example.com/x: off-origin request refused`.
+  - `test` and `expect` from `test/visual/harness.ts`: Playwright's `test` extended with an automatic `afterEach` that fails the case when
+    `mockApiFailures(page)` is non-empty, listing every entry. Every spec except `mock-api.spec.ts` imports `test` from here.
+  - `platformRefusal(platform: string): string | null` from `test/visual/platform-guard.ts`: `null` for `'darwin'`, otherwise the exact Global
+    Constraints line with `<platform>` filled in. The config calls it with `process.platform`; no env override exists.
   - Scripts: `test:visual` = `playwright test`, `test:visual:report` = `playwright show-report`. `--update-snapshots` passes through as
     `pnpm test:visual -- --update-snapshots`.
 
 **Requirements:**
 - `playwright.config.ts`:
   - `testDir: test/visual`, `testMatch: *.spec.ts`, one worker, Chromium project only, `use` carrying the Global Constraints values (viewport, scale,
-    tz, locale, launch arg).
+    tz, locale, launch arg) and `baseURL: 'http://localhost:4373'`, so relative navigation works.
   - `snapshotPathTemplate` resolving to `test/visual/__screenshots__/{arg}{ext}`. No `{platform}` segment: the platform guard is what keeps it
     darwin-only.
   - `expect.toHaveScreenshot` defaults set to the Global Constraints values.
-  - `webServer.command` runs `vite build` then `vite preview --port 4373 --strictPort`. `reuseExistingServer: false`, `url` on 4373.
-- The platform guard runs at config load, before Playwright starts anything, and exits nonzero with the exact line from Global Constraints.
+  - `webServer.command` runs `vite build` then `vite preview --port 4373 --strictPort --host localhost` with `env: { BROWSER: 'none' }`. `reuseExistingServer: false`,
+    `url` on 4373.
+- The config calls `platformRefusal(process.platform)` at load, before Playwright starts anything (so before any `--update-snapshots` write). On a
+  non-null result it prints the line and exits nonzero.
 - `mock-api` behaviour:
   - Route `**/*`. Match by `new URL(req.url).pathname`, ignoring the query.
   - **GET `/api/*` with a fixture:** 200 with the fixture as JSON.
@@ -96,11 +108,20 @@ Section references (§n) point into it.
 
 - [ ] **Step 1: Ask the user** for the Chromium download, naming the package and the roughly 150MB size. Then install the two dev dependencies and the
   browser.
-- [ ] **Step 2: Write the failing tests** in `mock-api.spec.ts`.
-  - Setup: each case calls `installMockApi` with only the fixtures the case names. Then, in the spec itself (not in `mock-api`), it registers its own route
-    answering `/__blank` with an empty HTML document. Playwright tries the last-registered route first, so this one wins. Then it navigates to `/__blank`.
-  - Why: the app never loads, so its own requests add no noise, and the failure list holds only what the case caused. Assertions read
-    `mockApiFailures(page)`, not console text.
+- [ ] **Step 2: Scaffold, then write the failing tests.**
+  - **Scaffold first:** `playwright.config.ts`, `platform-guard.ts` and the scripts. Without a config, Playwright's default `testMatch` would collect the
+    repo's ~80 node-assert `test/*.test.ts` files and the plugin's `node:test` suites.
+  - **Unit tests** in `test/visual-platform-guard.test.ts` (RF2), registered in `test/run-all.ts`:
+    - `platformRefusal('darwin')` is `null`
+    - `platformRefusal('linux')` is exactly `visual baselines exist for macOS only (platform: linux); run pnpm test:visual on a Mac`
+    - `platformRefusal('win32')` is the same line with `win32`
+  - **`mock-api.spec.ts`:**
+    - Setup: each case calls `installMockApi` with only the fixtures the case names. Then, in the spec itself (not in `mock-api`), it registers its own
+      route answering `/__blank` with an empty HTML document. Playwright tries the last-registered route first, so this one wins. Then it navigates to
+      `/__blank`.
+    - Why: the app never loads, so its own requests add no noise, and the failure list holds only what the case caused. Assertions read
+      `mockApiFailures(page)`, not console text.
+    - This deliberately differs from spec §9.3's "from a staged page". A staged page would mix the app's own requests into the list being asserted.
   - Cases:
   - in-page `fetch('/api/nope')` → status 404 and failures deep-equal `['GET /api/nope: no fixture']`
   - in-page `fetch('/api/pins', { method: 'POST', body: '{}' })` → status 405 and failures contain `POST /api/pins: writes are refused`
@@ -109,15 +130,15 @@ Section references (§n) point into it.
   - with fixtures for both `/api/sessions/:id/chat` and `/api/sessions/abc/chat`, a fetch of `/api/sessions/abc/chat` gets the exact one's body
   - in-page `fetch('https://example.com/x')` rejects, and failures contain `GET https://example.com/x: off-origin request refused`
   - This spec opts out of the shared fail-on-failures `afterEach`, since recording failures is what it tests.
-- [ ] **Step 3: Run `pnpm test:visual`.** Expect: failures because `installMockApi` does not exist yet.
-- [ ] **Step 4: Implement** the config, the guard and `mock-api.ts`.
-- [ ] **Step 5: Run `pnpm test:visual`.** All 5 cases pass.
-- [ ] **Step 6: Prove the Review Focus items by hand** and paste the output into the task report:
+- [ ] **Step 3: Run `pnpm test` and `pnpm test:visual`.** Expect: the guard cases fail until the guard returns the line, and the spec fails because
+  `installMockApi` is not importable.
+- [ ] **Step 4: Implement** the guard, `mock-api.ts` and `harness.ts`.
+- [ ] **Step 5: Run both.** `pnpm test` is green with 3 more cases, and `pnpm test:visual` passes all 5 cases.
+- [ ] **Step 6: Prove the remaining Review Focus items by hand** and paste the output into the task report:
   - **RF1:** add a visible `outline:5px solid red` to `body` in `styles.css` and run without building first. A throwaway screenshot shows the outline.
     Revert.
-  - **RF2:** run with `process.platform` stubbed to `linux` via an env override honoured only by the guard (`VISUAL_PLATFORM_OVERRIDE`). Name it in the
-    config's comment as a test seam for the guard itself. Run `-- --update-snapshots` and see the exact line, exit nonzero, and no change in `git status`.
   - **RF5:** hold 4373 with `python3 -m http.server 4373` (record its pid, kill **that pid** after). The run fails naming 4373.
+  - **Preview flags:** during a run, no browser window opens, and `lsof -nP -iTCP:4373 -sTCP:LISTEN` shows only a loopback address.
 - [ ] **Step 7: Run `pnpm test && pnpm typecheck`.** Both green and the `pnpm test` case count is unchanged.
 - [ ] **Step 8: Commit** `test(visual): Playwright scaffold and mock API`.
 
@@ -133,9 +154,10 @@ Section references (§n) point into it.
 - Produces:
   - `EPOCH: number` (ms) and `ago(ms: number): number` from `fixtures/epoch.ts`.
   - `fixtures: FixtureMap` from `fixtures/index.ts`.
-  - `FIXTURE_SESSION_ID: string`, the id the chat-drawer shot deep-links to.
-  - `stage(page: Page, opts: StageOpts): Promise<void>`, where `StageOpts` = `{ section: Section; theme: Theme; width: number; contentWidth: 'fixed' | 'full';
-    query?: string }`. `Section` and `Theme` are imported as types from the client's own modules.
+  - `FIXTURE_SESSION_ID: string`, the id the chat-drawer shot deep-links to. It is a **lowercase UUID**: `deepLinkSession` accepts only
+    `/^[0-9a-fA-F-]{8,64}$/` (`client/src/lib/deepLink.ts:19`) and silently drops anything else. Every fixture session id is a UUID for the same reason.
+  - `stage(page: Page, opts: StageOpts): Promise<void>`, where `StageOpts` = `{ section: Section; theme: ThemeId; width: number; contentWidth: 'fixed' | 'full';
+    query?: string }`. `Section` comes from `client/src/lib/sections.ts`, `ThemeId` from `client/src/lib/settings.ts:35`, both as `import type`.
   - `isReady(page): Promise<boolean>`, exported so `stage.spec.ts` can assert it.
 
 **Fixture endpoints:** every GET in `client/src/hooks/*.ts`, re-derived from source at the start of the task (`grep -n "fetch(" client/src/hooks`).
@@ -149,8 +171,8 @@ Each body is typed with its `shared/types.ts` response type (`SessionsResponse`,
 `AnalyticsResponse`, `HealthResponse`, `PinsResponse`, and the management, chat and pending types the hooks name). The pending-plan, message and question
 fixtures are the "nothing pending" shape. `/api/settings` carries only what `useServerSettings` reads.
 
-**Fixture content:** 4 sessions, below the seeded `maxSessions` of 5, all with activity inside the default active window at `EPOCH`.
-- Statuses: at least one active, one idle and one waiting on a question (if `SessionsResponse` models that), across 2 invented projects.
+**Fixture content:** 4 sessions, all with activity inside the default active window at `EPOCH`.
+- Statuses: one each of `working`, `idle`, `question` and `incomplete` (`shared/types.ts:63`), across 2 invented projects.
 - Their models and context usage are spread so the context bars show distinct fills.
 - Usage and analytics carry enough history across the week before `EPOCH` that charts are not empty.
 
@@ -161,18 +183,23 @@ fixtures are the "nothing pending" shape. `/api/settings` carries only what `use
 - **`stage`**, in this order:
   1. installs the mock API;
   2. calls `page.clock.setFixedTime(EPOCH)`;
-  3. adds an init script that writes `dashboard.settings` and `dashboard.section` before any page script runs;
+  3. adds an init script that writes `dashboard.settings` and `dashboard.section` before any page script runs. Both are **JSON-encoded**, because
+     `usePersistedState` JSON-parses (`client/src/hooks/usePersistedState.ts:15`), so the section is stored as `"usage"` with the quotes;
   4. sets the viewport to `{ width, height: 900 }`;
   5. navigates to `/` plus `query`;
   6. waits until `isReady`.
 - **The seeded settings object** sets every field the spec names (§3), explicitly:
   - `theme` and `contentWidth` from opts;
   - `fontScale: 100`, `density: 'comfortable'`, `maxSessions: 5`, `notifyBrowser: false`;
-  - `landing` equal to `section`, `usageTab: 'forecast'`, `settingsTab: 'local'`.
-  - Field names come from `client/src/lib/settings.ts`. If a name differs, the code wins and you report the difference.
+  - `landing` equal to `section`, `usageTab: 'forecast'`, `settingsTab: 'local'`;
+  - `defaultLayout: 'board'`, because the default `'last'` defers to `dashboard.layout` (`client/src/components/SessionsView.tsx:50-51`), and
+    `chatFullText: false`.
+  - Field names come from `client/src/lib/settings.ts`. If a name differs, the code wins and you report the difference. Spec §3's list omits the last two;
+    "every field a shot depends on" is the rule they fall under.
 - **`isReady` is all of:**
   - `document.fonts.ready` resolved;
-  - `document.fonts.check('16px "Hanken Grotesk"')`;
+  - some entry of `document.fonts` has `family` `Hanken Grotesk` (quotes stripped) and `status === 'loaded'`. `document.fonts.check(...)` is not used: it
+    returns `true` when no `@font-face` matches at all, so it would pass with the font missing;
   - every `/api` request issued so far has been answered;
   - no element whose own text node, trimmed, matches `/^loading/i`.
 - Poll it with Playwright's `expect.poll` (5s timeout). Never a fixed sleep.
@@ -182,12 +209,14 @@ fixtures are the "nothing pending" shape. `/api/settings` carries only what `use
   - the computed `--font-scale` on `.shell` resolves to `1`
   - `Date.now() === EPOCH` and `new Date().toISOString() === '2026-09-30T14:00:00.000Z'`
   - `Intl.DateTimeFormat().resolvedOptions().timeZone === 'UTC'` and `window.devicePixelRatio === 1` (RF4)
-  - `document.fonts.check('16px "Hanken Grotesk"') === true`
+  - a `document.fonts` entry for `Hanken Grotesk` has `status === 'loaded'`. This case must fail before the fonts are vendored: run it once with the
+    font routes removed to see it fail.
   - the number of session cards rendered equals the fixture's session count, 4 (RF3); find cards by the class the board uses, read from the component
   - `mockApiFailures(page)` is empty
   - staged with `theme: 'midnight'`, `dataset.theme === 'midnight'`, proving the seed and not the default decides
   - staged with `query: '?session=' + FIXTURE_SESSION_ID`, the chat drawer is open and shows the fixture's first message text
-  - for each `SECTIONS` entry, staging that section yields `isReady` true and no failures. One case per section, so a missing fixture names its view.
+  - for each `SECTIONS` entry, staging that section yields `isReady` true, no failures, and the side rail's active item is that section's label. One case
+    per section, so a missing fixture names its view and a mis-encoded `dashboard.section` cannot pass by landing on the default.
 - [ ] **Step 2: Run `pnpm test:visual`.** Expect: the new cases fail.
 - [ ] **Step 3: Implement** the fixtures, font vendoring and routes, and `stage`. If a view needs an endpoint the list above lacks, add the fixture; the
   per-section case tells you which.
@@ -239,7 +268,7 @@ fixtures are the "nothing pending" shape. `/api/settings` carries only what `use
   - `ContrastEntry` = `{ view: string; text: string; fg: string; bg: string; ratio: number; required: number; selector: string }`.
   - `contrastKey(e): string` = `` `${view}|${text}|${fg}|${bg}` ``, where:
     - `text` is trimmed with internal whitespace runs collapsed to one space;
-    - `fg` and `bg` are lowercased 7-character `#rrggbb`.
+    - `fg` and `bg` are lowercased exactly as axe reports them, keeping an alpha suffix (`#rrggbbaa`) when present, never stripped.
     - `selector`, `ratio` and `required` are **not** part of the key.
   - `diffContrast(known: ContrastEntry[], found: ContrastEntry[]): { added: ContrastEntry[]; fixed: ContrastEntry[] }`. `added` = found whose key is not in
     known; `fixed` = known whose key is not in found. Duplicate keys within `found` collapse to the first occurrence.
@@ -294,10 +323,10 @@ fixtures are the "nothing pending" shape. `/api/settings` carries only what `use
   - how to re-baseline, and that a re-baseline is always deliberate;
   - the macOS-only rule and its exact message;
   - how to add a view, a data state (fixture variant or seeded settings key) or an endpoint fixture;
-  - how `contrast-known.json` grows and shrinks;
+  - how `contrast-known.json` grows and shrinks, and that a run right after deleting it proves nothing about contrast (it only re-records);
   - that dark-theme contrast is off until those themes are redesigned.
 - The doc ends with a docs-sync stamp block like `docs/subsystems/breakpoints.md`'s. Its sources are the files under `test/visual/` that the doc describes
-  plus `playwright.config.ts`, and `verified:` is the commit that lands this task.
+  plus `playwright.config.ts`, and `verified:` is `git rev-parse HEAD` at writing time (the commit the doc was checked against, per docs-sync).
 - The overview line follows its neighbours' one-line form. The CLAUDE.md line sits next to `pnpm test:skills` and says the suite is on demand, macOS only,
   and not part of `pnpm test`.
 

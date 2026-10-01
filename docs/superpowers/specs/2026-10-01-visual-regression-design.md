@@ -82,7 +82,7 @@ this one. Rules:
 - One populated variant per endpoint. `GET /api/settings` carries only server-side settings (`idleSecs`, `client/src/hooks/useServerSettings.ts:56`); it is
   a plain fixture and **not** where theme or width come from.
 - **Device settings live in `localStorage['dashboard.settings']`** (`client/src/lib/settings.ts:4`): theme, content width (`'fixed' | 'full'`), font scale
-  (`fontScale`, a stored **percent**: seed 100), density (`'comfortable'`), landing section, and the Usage / Settings sub-tabs (`usageTab`,
+  (`fontScale`, a stored **percent**: seed 100), density (`'comfortable'`), landing section, Sessions layout (`defaultLayout`), `chatFullText`, and the Usage / Settings sub-tabs (`usageTab`,
   `settingsTab`). Every field a shot depends on is seeded explicitly, so a changed default in `DEFAULT_SETTINGS` (`settings.ts:126`) surfaces as a
   deliberate re-baseline, not a mystery. `stage` seeds that key before navigation (init script), so both the inline pre-paint script in `client/index.html` and
   `useSettings` (`client/src/hooks/useSettings.tsx:66`) read the same values. The open section is seeded through `dashboard.section`, with the seeded
@@ -128,7 +128,7 @@ Management tab. Views are one list in `views.spec.ts`; when that lands, the list
 - **Time zone and locale:** pinned in the Playwright config (`timezoneId`, one named zone; `locale: 'en-US'`). The client renders local wall-clock time
   (`client/src/components/AsideBoard.tsx:49`, `client/src/lib/walkChart.ts:322` — hour-of-week columns move with the zone), so EPOCH and `timezoneId`
   are one pair: a baseline taken on a Mac in another zone or region must still match.
-- **Ready means all of:** `document.fonts.ready` resolved **and** `document.fonts.check('16px "Hanken Grotesk"')` true; every route the view requested has
+- **Ready means all of:** `document.fonts.ready` resolved **and** a `document.fonts` entry for Hanken Grotesk has `status === 'loaded'` (`fonts.check` is true even when no face matches); every route the view requested has
   been answered at least once; no element whose own text matches `/^loading/i`. A fixed sleep is never a readiness signal.
 - **Motion:** screenshot options `animations: 'disabled'` and `caret: 'hide'` (19 `@keyframes` / `animation:` rules in `styles.css`, 2026-10-01).
 - **Rendering:** Chromium launched with `--force-color-profile=srgb`. The UI face, Hanken Grotesk (`--font`, `client/src/styles.css:35`), is loaded from
