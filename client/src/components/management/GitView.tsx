@@ -7,7 +7,7 @@ import { usePersistedState } from '../../hooks/usePersistedState';
 import { useSettings } from '../../hooks/useSettings';
 import { formatAgo } from '../../lib/format';
 import { DEFAULT_GIT_LAYOUT, drawableGitLayout, gitLayoutsFor, isGitLayout, type GitLayout } from '../../lib/gitLayouts';
-import { GIT_LOAD_FAILED, GIT_NO_PINS, GIT_UPDATE_FAILED } from '../../lib/gitStatsText';
+import { GIT_NO_PINS, GIT_UPDATE_FAILED, gitFirstLoadText } from '../../lib/gitStatsText';
 import { Band } from '../usage/Sheet';
 import GitCards from './GitCards';
 import GitTable from './GitTable';
@@ -68,7 +68,7 @@ function GitBody({ data, error, layout }: {
   layout: GitLayout;
 }) {
   const { update } = useSettings();
-  if (data === null) return error ? <div className="git-empty">{GIT_LOAD_FAILED}</div> : null;
+  if (data === null) return <div className="git-empty">{gitFirstLoadText(error)}</div>;
   if (data.repos.length === 0) {
     // The last "Pinned" of the sentence becomes the link to the Pinned sub-view; the rest stays the copy table's text.
     const at = GIT_NO_PINS.lastIndexOf('Pinned');

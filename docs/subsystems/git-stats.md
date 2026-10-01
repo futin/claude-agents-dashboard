@@ -109,8 +109,9 @@ the Pinned sub-view and every other section run no poll.
 **The poll.** `useGitStats` fetches on mount, then every **30s** while the page is visible; a `visibilitychange` back to visible polls at once and restarts
 the 30s, and going hidden drops the timer, so a backgrounded tab makes no requests. The schedule is `startGitPoll` in `client/src/lib/gitPoll.ts`, written
 against injected timer and visibility functions so `test/git-stats-client.test.ts` drives it with fakes; the hook only hands it `document` and `window`. A
-failed fetch keeps the last payload and sets `error`: with no payload yet the body reads "Couldn't load git stats. Retrying every 30s.", with one the band's
-right side reads "couldn't update" in place of "updated Ns ago". The band's ↻ polls now, and is a no-op while a poll is in flight.
+failed fetch keeps the last payload and sets `error`. Before the first payload the body reads a muted "Loading…", as Management › Pinned does; a first
+fetch that fails turns it into "Couldn't load git stats. Retrying every 30s.", and once there is a payload a failure shows only on the band's
+right side, as "couldn't update" in place of "updated Ns ago". The band's ↻ polls now, and is a no-op while a poll is in flight.
 
 **The layouts.** A `.seg` switcher offers `gitLayoutsFor(narrow)` and stores the pick per device in `management.gitLayout` (default `cards`); what is drawn is
 `drawableGitLayout`, so a phone draws Cards while a stored Table waits for the next wide window (`client/src/lib/gitLayouts.ts`). All three shapes take the

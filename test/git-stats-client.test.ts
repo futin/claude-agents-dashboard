@@ -10,8 +10,8 @@ import { OWNED_KEYS } from '../client/src/hooks/useSettings.js';
 import { DEFAULT_GIT_LAYOUT, GIT_LAYOUTS, WIDE_ONLY_GIT_LAYOUTS, drawableGitLayout, gitLayoutsFor, isGitLayout } from '../client/src/lib/gitLayouts.js';
 import { triageGitRepos } from '../client/src/lib/gitTriage.js';
 import {
-  GIT_LOAD_FAILED, GIT_NO_OPEN_BRANCHES, GIT_NO_PINS, GIT_UPDATE_FAILED,
-  gitBranchChipText, gitBranchCounts, gitFetchedText, gitMergedText, gitMoreText, gitNotShownText, gitStateSentence, gitTrunkVsOriginText,
+  GIT_LOAD_FAILED, GIT_LOADING, GIT_NO_OPEN_BRANCHES, GIT_NO_PINS, GIT_UPDATE_FAILED,
+  gitBranchChipText, gitFirstLoadText, gitBranchCounts, gitFetchedText, gitMergedText, gitMoreText, gitNotShownText, gitStateSentence, gitTrunkVsOriginText,
   gitUncommittedText, gitVisibleBranches,
 } from '../client/src/lib/gitStatsText.js';
 import { GIT_BAR_HALF_PX, GIT_BAR_MIN_PX, gitBarMax, gitBarWidth } from '../client/src/lib/gitBar.js';
@@ -198,6 +198,12 @@ export function run(): number {
     assert.strictEqual(GIT_NO_PINS, 'No pinned projects yet. Pin one under Pinned.');
     assert.strictEqual(GIT_LOAD_FAILED, "Couldn't load git stats. Retrying every 30s.");
     assert.strictEqual(GIT_UPDATE_FAILED, "couldn't update");
+  })) p++; else f++;
+
+  if (test('before the first payload: "Loading…" while waiting, the failure sentence once the first fetch failed', () => {
+    assert.strictEqual(GIT_LOADING, 'Loading…');
+    assert.strictEqual(gitFirstLoadText(false), 'Loading…');
+    assert.strictEqual(gitFirstLoadText(true), "Couldn't load git stats. Retrying every 30s.");
   })) p++; else f++;
 
   // ── branch helpers ─────────────────────────────────────────────────────────
