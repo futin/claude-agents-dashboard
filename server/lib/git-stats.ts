@@ -8,7 +8,11 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { GitBranch, PinRow, RepoGitStats } from '../../shared/types.js';
+import type { GitBranch, GitStatsResponse, PinRow, RepoGitStats } from '../../shared/types.js';
+import { archivedSessionIds } from './archived.js';
+import type { Config } from './config.js';
+import { listPinRows } from './management.js';
+import { getPinnedProjects } from './settings.js';
 
 /** Exit code and output of one git call. Rejects only when git could not be spawned or outlived its timeout; a non-zero exit resolves. */
 export type GitRunner = (cwd: string, args: string[]) => Promise<{ code: number; stdout: string; stderr: string }>;
@@ -337,4 +341,48 @@ async function patchEquivalent(expect0: (dir: string, args: string[]) => Promise
   const lines = (await expect0(cwd, ['cherry', base, ref])).split('\n').filter(Boolean);
   if (lines.length === 0 || lines.some(l => !l.startsWith('-'))) return false;
   return (await expect0(cwd, ['rev-list', '--merges', `${base}..${ref}`])).trim() === '';
+}
+
+/** The runner every API read uses. Process-wide, like `overrideClaudeRoots`: the API suites build their server from `createRequestListener(cfg)` alone. */
+let runner: GitRunner = defaultGitRunner;
+
+/** Test seam: replace the runner behind `GET /api/git-stats` process-wide; null restores {@link defaultGitRunner}. */
+export function overrideGitRunner(run: GitRunner | null): void {
+  runner = run ?? defaultGitRunner;
+}
+
+/** The memo that outlives one API read, so a poll with no sha moved makes only the cheap calls. */
+const memo: GitMemo = new Map();
+
+/** The module memo's keys. Test-only: the API suites observe the memo through this and nothing else. */
+export function gitStatsMemoKeys(): string[] {
+  return memoKeys(memo);
+}
+
+let inFlight: Promise<GitStatsResponse> | null = null;
+
+/**
+ * Every pinned project's git state, in pin order. A call that arrives while a read is in flight gets that read's promise, so a slow cold poll is never
+ * doubled by a second tab or the ↻ button. Repos run in parallel; each keeps its own calls strictly sequential (see {@link readRepo}).
+ */
+export function readGitStats(config: Partial<Config>): Promise<GitStatsResponse> {
+  if (inFlight) return inFlight;
+  const read = readAll(config).finally(() => { inFlight = null; });
+  inFlight = read;
+  return read;
+}
+
+async function readAll(config: Partial<Config>): Promise<GitStatsResponse> {
+  // The same options `GET /api/pins` builds its `pinned` rows with, so a pin resolves to the same path in both.
+  const pins = listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), pinnedDirs: new Set(getPinnedProjects()) });
+  const run = runner;
+  const repos = await Promise.all(pins.map(pin => readRepo(pin, run, memo)));
+
+  // `readRepo` replaces the entries of the repo it reads, so only a repo that is no longer read is left to drop. When a repo errored its toplevel is
+  // unknown, and dropping on a guess would throw away a healthy repo's entries, so that read keeps everything and the next clean one prunes.
+  if (repos.every(r => r.state !== 'error')) {
+    const live = new Set(repos.flatMap(r => (r.state === 'ok' ? [r.toplevel] : [])));
+    for (const key of memo.keys()) if (!live.has(key.slice(0, key.indexOf('\0')))) memo.delete(key);
+  }
+  return { repos, generatedAt: Date.now() };
 }

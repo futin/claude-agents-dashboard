@@ -52,6 +52,7 @@ import { notifyPermission, permissionWaits } from './lib/permissions.js';
 import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getPinnedProjects, getSettings, setPinned, setSettings } from './lib/settings.js';
+import { readGitStats } from './lib/git-stats.js';
 import { classifyOrigin } from './lib/origin.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
@@ -1617,6 +1618,19 @@ export function servePinsRead(config: Config, res: ServerResponse): void {
   } catch (e) {
     console.error('[dashboard] pins read failed:', (e as Error).message);
     sendJson(res, 500, { error: 'pins read failed' });
+  }
+}
+
+/**
+ * `GET /api/git-stats` — the local git state of every pinned project (git-stats spec §3). No parameters and no method check, like the read routes beside it:
+ * the repo paths come from the stored pins, never from the request. A repo that fails reports its own `error` state; only an unreadable pin list is a 500.
+ */
+export async function serveGitStats(config: Config, res: ServerResponse): Promise<void> {
+  try {
+    sendJson(res, 200, await readGitStats(config));
+  } catch (e) {
+    console.error('[dashboard] git stats read failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'git stats read failed' });
   }
 }
 

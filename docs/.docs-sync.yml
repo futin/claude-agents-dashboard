@@ -14,6 +14,9 @@ docs:
   - path: docs/subsystems/configs.md
     kind: subsystem
     note: read-only config browser
+  - path: docs/subsystems/git-stats.md
+    kind: subsystem
+    note: read-only local git state of the pinned repos
   - path: docs/subsystems/remote-access.md
     kind: subsystem
     note: origin classification and the ways in

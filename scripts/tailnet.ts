@@ -57,7 +57,8 @@
  * ## What is safe to expose this way
  *
  * Never Funnel. Every read endpoint here is open — full transcripts, chat
- * history, `/api/configs/file` config bodies — and with `CLAUDE_BIN` set,
+ * history, `/api/git-stats` repo paths and branch names, `/api/configs/file`
+ * config bodies — and with `CLAUDE_BIN` set,
  * `/api/spawn` starts a real Claude Code session on this machine. A tailnet is
  * private WireGuard between your own devices and device identity is the auth,
  * which is why `ANSWER_TOKEN` may stay empty there and must not on anything

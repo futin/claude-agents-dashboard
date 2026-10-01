@@ -8,6 +8,7 @@
  *   GET  /api/sessions/:id/chat → a page of that session's chat history
  *   GET/POST /api/settings      → the non-per-device settings (see lib/settings.ts)
  *   GET/POST /api/pins          → pinned projects, listed past LOOKBACK_HOURS (see api.ts)
+ *   GET  /api/git-stats         → local git state of each pinned project (see lib/git-stats.ts)
  *   GET  /api/dismiss           → a tapped desk push lands here; the page closes itself
  *   everything else             → static files from client/dist (production build)
  *
@@ -30,7 +31,7 @@ import {
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
-  serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, serveNotifyEvent, serveNotifyTest,
+  serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, serveGitStats, serveNotifyEvent, serveNotifyTest,
   serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates,
   serveAccount
 } from './api.js';
@@ -202,6 +203,10 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (u.pathname === '/api/pins') {
       if (req.method === 'POST') return void servePinsWrite(config, req, res);
       return void servePinsRead(config, res);
+    }
+    // Read-only git state of the pinned repos; the pins are the only input.
+    if (u.pathname === '/api/git-stats') {
+      return void serveGitStats(config, res);
     }
     // Who the CLI is signed in as + the two rate windows, on one small body the
     // header account chip polls on its own 30s clock from every section.
