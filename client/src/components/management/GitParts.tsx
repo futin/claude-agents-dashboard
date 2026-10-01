@@ -15,7 +15,8 @@ import { triageGitRepos, type GitTriageGroup } from '../../lib/gitTriage';
  * "+N more" / merged lines. The three layouts differ only in how they arrange these.
  */
 
-import type { OkRepo } from '../../lib/gitSync';
+import type { GitSyncControl } from '../../hooks/useGitSync';
+import { canSync, syncButtonText, type OkRepo } from '../../lib/gitSync';
 
 export type { OkRepo };
 
@@ -113,5 +114,32 @@ export function GitBranchList({ repo }: { repo: OkRepo }) {
       )}
       {repo.mergedCount > 0 && <div className="git-note">{gitMergedText(repo.mergedCount)}</div>}
     </div>
+  );
+}
+
+/**
+ * The repo's Sync button (spec §9): nothing while the host cannot spawn or git-sync would refuse the repo. Idle it launches; running it opens the chat;
+ * launching, unseen or mid-POST it is disabled. Its click never bubbles, so the Table row it sits in does not toggle.
+ */
+export function GitSyncButton({ repo, sync }: { repo: RepoGitStats; sync: GitSyncControl }) {
+  if (!sync.available || !canSync(repo)) return null;
+  // `canSync` narrowed `repo` to an ok one, so `toplevel` is there.
+  const phase = sync.phaseFor(repo);
+  const running = phase?.kind === 'running' ? phase : null;
+  const idle = phase === null || phase.kind === 'ended' || phase.kind === 'failed';
+  return (
+    <button
+      type="button"
+      className={`git-sync${running ? ' on' : ''}`}
+      disabled={!running && (!idle || sync.pending)}
+      aria-label={running ? `Open the git-sync chat for ${repo.name}` : `Sync ${repo.name}`}
+      onClick={e => {
+        e.stopPropagation();
+        if (running) sync.openChat(running.session.id);
+        else sync.start(repo);
+      }}
+    >
+      {syncButtonText(phase, sync.starting === repo.toplevel)}
+    </button>
   );
 }

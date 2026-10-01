@@ -1,14 +1,15 @@
 import type { RepoGitStats } from '../../../../shared/types';
+import type { GitSyncControl } from '../../hooks/useGitSync';
 import { gitStateSentence } from '../../lib/gitStatsText';
 import {
-  GitBranchChip, GitBranchList, GitDot, GitFetched, GitTrunkChip, GitUncommittedChip, gitGroupsByDir,
+  GitBranchChip, GitBranchList, GitDot, GitFetched, GitSyncButton, GitTrunkChip, GitUncommittedChip, gitGroupsByDir,
 } from './GitParts';
 
 /**
  * Cards: one card per repo in pin order, auto-filling columns (two on a laptop, one on a phone). Below `md` the CSS drops the divergence bar and the numbers
  * stay. A non-`ok` repo's card carries its one sentence and nothing else, so broken numbers are never drawn.
  */
-export default function GitCards({ repos }: { repos: RepoGitStats[] }) {
+export default function GitCards({ repos, sync }: { repos: RepoGitStats[]; sync: GitSyncControl }) {
   const groups = gitGroupsByDir(repos);
   return (
     <div className="git-cards">
@@ -18,7 +19,12 @@ export default function GitCards({ repos }: { repos: RepoGitStats[] }) {
             <GitDot group={groups.get(r.dirName)} />
             <span className="git-name">{r.name}</span>
             {r.state === 'ok' && <GitBranchChip repo={r} />}
-            {r.state === 'ok' && <GitFetched repo={r} />}
+            {r.state === 'ok' && (
+              <span className="git-head-end">
+                <GitFetched repo={r} />
+                <GitSyncButton repo={r} sync={sync} />
+              </span>
+            )}
           </div>
           {r.state === 'ok' ? (
             <>

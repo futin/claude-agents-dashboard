@@ -2690,6 +2690,19 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-arow.unreadable .git-name{color:var(--ink2)}
 .git-summary{font-size:13px;color:var(--ink3);min-width:0;overflow-wrap:anywhere}
 
+/* Sync (git-stats spec §9): a pill in each layout's head; `.on` is a running sync whose chat it opens */
+.git-sync{flex:none;height:26px;padding:0 12px;font-family:var(--font);font-size:12px;font-weight:500;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s}
+.git-sync:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
+.git-sync.on{color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
+.git-sync:disabled{cursor:default;color:var(--ink3)}
+/* fetched + Sync wrap as one cluster, so a narrow head drops both to its right edge instead of stranding the pill at the left */
+.git-head-end{margin-left:auto;display:flex;align-items:center;gap:8px}
+.git-head-end>.git-fetched{margin-left:0}
+.git-sync-note{font-size:12px;color:var(--amber);overflow-wrap:anywhere}
+.git-sync-td{width:1%;text-align:right;white-space:nowrap}
+.git-qhead{display:flex;align-items:center;gap:8px;min-width:0}
+.git-qhead>.git-rowbtn{display:flex;flex:1;min-width:0}
+
 /* `md`: the bar comes back between name and numbers, and the paper gets the
    standard 20px of padding */
 @media (min-width:768px){
