@@ -16,6 +16,11 @@ export const SYNC_RUNS_KEY = 'management.syncRuns';
 export const SYNC_SCAN_LIMIT = 50;
 /** A run nobody has seen for this long after launch is taken as over. */
 export const SYNC_UNSEEN_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * A run whose session row was never seen is taken as over this soon after launch: its launch most likely failed while no tab watched, and the server forgets
+ * a failed launch after 5 min (`FAIL_TTL_MS`), so waiting the full day would hold a dead pill for 24h.
+ */
+export const SYNC_NEVER_SEEN_TTL_MS = 10 * 60 * 1000;
 
 export const SYNC_NEEDS_TOKEN = 'Sync needs the Answer token — set it under Settings › Local › Connection.';
 
@@ -26,6 +31,8 @@ export interface SyncRun {
   /** `repo.name`, for the notes — not the session name. */
   name: string;
   launchedAtMs: number;
+  /** Its session row has shown in a payload at least once; until then absence ends it after `SYNC_NEVER_SEEN_TTL_MS`, not the full day. */
+  seen: boolean;
 }
 
 export type SyncRuns = Record<string, SyncRun>;
@@ -65,7 +72,7 @@ export function syncRequest(repo: OkRepo, s: SyncSettings, ceiling: PermissionMo
 
 /**
  * What `run` is doing in `data`. A row that is not in the payload is not proof of an end: the scan caps its rows by recency, and a sync parked on its
- * question writes nothing, so absence only ends a run after `SYNC_UNSEEN_TTL_MS`.
+ * question writes nothing, so absence only ends a run after `SYNC_UNSEEN_TTL_MS` — or `SYNC_NEVER_SEEN_TTL_MS` for a run whose row never showed.
  */
 export function syncPhase(run: SyncRun, data: SessionsResponse | null, nowMs: number): SyncPhase {
   if (!data) return { kind: 'unseen' };
@@ -73,7 +80,7 @@ export function syncPhase(run: SyncRun, data: SessionsResponse | null, nowMs: nu
   if (launch) return launch.state === 'failed' ? { kind: 'failed', error: launch.error ?? null } : { kind: 'launching' };
   const row = data.sessions.find(s => s.id === run.sessionId);
   if (row) return row.status === 'working' || row.status === 'question' ? { kind: 'running', session: row } : { kind: 'ended' };
-  return nowMs - run.launchedAtMs < SYNC_UNSEEN_TTL_MS ? { kind: 'unseen' } : { kind: 'ended' };
+  return nowMs - run.launchedAtMs < (run.seen ? SYNC_UNSEEN_TTL_MS : SYNC_NEVER_SEEN_TTL_MS) ? { kind: 'unseen' } : { kind: 'ended' };
 }
 
 export function runFor(runs: SyncRuns, repo: RepoGitStats): SyncRun | null {
@@ -89,7 +96,7 @@ export function parseSyncRuns(raw: unknown): SyncRuns {
     const r = v as Record<string, unknown>;
     if (typeof r.sessionId !== 'string' || typeof r.dirName !== 'string' || typeof r.name !== 'string') continue;
     if (typeof r.launchedAtMs !== 'number' || !Number.isFinite(r.launchedAtMs)) continue;
-    out[key] = { sessionId: r.sessionId, dirName: r.dirName, name: r.name, launchedAtMs: r.launchedAtMs };
+    out[key] = { sessionId: r.sessionId, dirName: r.dirName, name: r.name, launchedAtMs: r.launchedAtMs, seen: r.seen === true };
   }
   return out;
 }

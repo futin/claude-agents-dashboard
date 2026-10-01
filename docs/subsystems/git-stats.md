@@ -147,7 +147,8 @@ permission mode clamped to the host's ceiling (`syncRequest`). The session runs 
 two pins on one repo share a run. `syncPhase` reads a run against the sessions payload: a `launching` entry, or a row not seen yet, is "Syncing…" and
 disabled; a `working` or `question` row is "Syncing · open", which opens that session's `ChatDrawer` over Management; an ended row or a failed launch is
 forgotten (`reconcileRuns` in `client/src/lib/gitSyncRuns.ts`), and each payload that forgets any run re-polls git stats once. A row missing from the
-payload is not an end, since the scan caps rows by recency and a sync parked on its question writes nothing, so absence ends a run only 24h after launch.
+payload is not an end, since the scan caps rows by recency and a sync parked on its question writes nothing, so absence ends a run only 24h after launch
+once its row has shown, or 10 min after launch if it never has: a launch that failed while no tab watched leaves no trace once the server drops it.
 That sessions poll runs only while a run is remembered or the drawer is open, and asks for the server's maximum of 50 rows. A refused launch (no Answer
 token), a launch error, or a launch the server reports failed leaves one amber line under the band. One launch at a time: every pill disables while one is
 in flight, and only the clicked one reads "Starting…". The runs key is not a setting, so Settings › Reset leaves it alone.

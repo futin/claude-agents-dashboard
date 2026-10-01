@@ -52,12 +52,15 @@ export function useGitSync(onEnded: () => void): GitSyncControl {
   onEndedRef.current = onEnded;
   useEffect(() => {
     if (!data) return;
-    const r = reconcileRuns(parseSyncRuns(stored), data, Date.now());
-    if (r.ended.length === 0 && r.failed.length === 0) return;
-    setStored(r.runs);
+    const now = Date.now();
+    const cur = parseSyncRuns(stored);
+    const r = reconcileRuns(cur, data, now);
+    if (r.runs === cur) return;
+    // Functional, so a launch recorded since this render is reconciled too rather than overwritten.
+    setStored((latest: unknown) => reconcileRuns(parseSyncRuns(latest), data, now).runs);
     if (r.failed.length > 0) setNote(syncFailedText(r.failed[0].name, r.failed[0].error));
-    onEndedRef.current();
-    // `stored` is read, not watched: a new payload is what can end a run, and the write above would otherwise re-run this on its own result.
+    if (r.ended.length > 0 || r.failed.length > 0) onEndedRef.current();
+    // `stored` is read, not watched: a new payload is what can change a run, and the write above would otherwise re-run this on its own result.
   }, [data]);
 
   const liveChat = chatId && data ? data.sessions.find(s => s.id === chatId) ?? null : null;
@@ -90,7 +93,7 @@ export function useGitSync(onEnded: () => void): GitSyncControl {
       if (!sessionId) return;
       setStored((cur: unknown) => ({
         ...parseSyncRuns(cur),
-        [repo.toplevel]: { sessionId, dirName: repo.dirName, name: repo.name, launchedAtMs: Date.now() },
+        [repo.toplevel]: { sessionId, dirName: repo.dirName, name: repo.name, launchedAtMs: Date.now(), seen: false },
       }));
     });
   }, [pending, available, runs, launch, settings, ceiling, setStored]);

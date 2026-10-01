@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 
 /**
  * useState backed by localStorage. Reads + parses the stored value once (lazy
@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
  * render. Objects are shallow-merged over `fallback` so a stored value written by
  * an older release still gains any newly-added field's default.
  */
-export function usePersistedState<T>(key: string, fallback: T): [T, (v: T) => void] {
+export function usePersistedState<T>(key: string, fallback: T): [T, Dispatch<SetStateAction<T>>] {
   const [value, setValue] = useState<T>(() => {
     try {
       const raw = localStorage.getItem(key);

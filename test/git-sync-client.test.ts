@@ -12,7 +12,7 @@ import type { LaunchingSession, RepoGitStats, Session, SessionsResponse } from '
 import { DEFAULT_SETTINGS } from '../client/src/lib/settings.js';
 import { EFFORTS, MODELS, NAME_CAP, NAME_RE } from '../client/src/lib/spawnOptions.js';
 import {
-  GIT_SYNC_PROMPT, SYNC_NEEDS_TOKEN, SYNC_RUNS_KEY, SYNC_UNSEEN_TTL_MS,
+  GIT_SYNC_PROMPT, SYNC_NEEDS_TOKEN, SYNC_NEVER_SEEN_TTL_MS, SYNC_RUNS_KEY, SYNC_UNSEEN_TTL_MS,
   canSync, parseSyncRuns, runFor, syncButtonText, syncFailedText, syncLaunchErrorText, syncPhase, syncRequest, syncSessionName,
   type SyncPhase, type SyncRun,
 } from '../client/src/lib/gitSync.js';
@@ -51,7 +51,10 @@ function launchingEntry(sessionId: string, state: LaunchingSession['state'], err
   return l;
 }
 
-const RUN: SyncRun = { sessionId: 's1', dirName: 'd1', name: 'repo', launchedAtMs: 1_000_000 };
+/** A run whose session row has been seen at least once; `RUN_NEW` is one fresh from its launch. */
+const RUN: SyncRun = { sessionId: 's1', dirName: 'd1', name: 'repo', launchedAtMs: 1_000_000, seen: true };
+const RUN_NEW: SyncRun = { ...RUN, seen: false };
+const MIN = 60 * 1000;
 const HOUR = 60 * 60 * 1000;
 const SYNC_DEFAULTS = {
   syncModel: DEFAULT_SETTINGS.syncModel, syncEffort: DEFAULT_SETTINGS.syncEffort,
@@ -262,6 +265,41 @@ export function run(): number {
     const r = reconcileRuns({ '/p/a': RUN }, payload([]), RUN.launchedAtMs + 24 * HOUR);
     assert.deepStrictEqual(r.runs, {});
     assert.deepStrictEqual(r.ended, ['/p/a']);
+  })) p++; else f++;
+
+  if (test('a run whose row was never seen holds unseen until exactly 10 min, then ends', () => {
+    assert.strictEqual(SYNC_NEVER_SEEN_TTL_MS, 10 * MIN);
+    assert.deepStrictEqual(syncPhase(RUN_NEW, payload([]), RUN.launchedAtMs + 10 * MIN - 1), { kind: 'unseen' });
+    assert.deepStrictEqual(syncPhase(RUN_NEW, payload([]), RUN.launchedAtMs + 10 * MIN), { kind: 'ended' });
+  })) p++; else f++;
+
+  if (test('a never-seen run with a launching entry reads launching an hour in', () => {
+    assert.deepStrictEqual(syncPhase(RUN_NEW, payload([], [launchingEntry('s1', 'launching')]), RUN.launchedAtMs + HOUR), { kind: 'launching' });
+  })) p++; else f++;
+
+  if (test('reconcile marks a never-seen run seen once its row is running', () => {
+    const runs = { '/p/a': RUN_NEW };
+    const r = reconcileRuns(runs, payload([session('s1', 'working')]), RUN.launchedAtMs);
+    assert.notStrictEqual(r.runs, runs);
+    assert.deepStrictEqual(r.runs, { '/p/a': RUN });
+    assert.deepStrictEqual(r.ended, []);
+    assert.deepStrictEqual(r.failed, []);
+  })) p++; else f++;
+
+  if (test('reconcile leaves a never-seen run alone while only its launching entry shows', () => {
+    const runs = { '/p/a': RUN_NEW };
+    assert.strictEqual(reconcileRuns(runs, payload([], [launchingEntry('s1', 'launching')]), RUN.launchedAtMs).runs, runs);
+  })) p++; else f++;
+
+  if (test('reconcile ends a never-seen run missing past 10 min (its failure expired off the server unseen)', () => {
+    const r = reconcileRuns({ '/p/a': RUN_NEW }, payload([]), RUN.launchedAtMs + 10 * MIN);
+    assert.deepStrictEqual(r.runs, {});
+    assert.deepStrictEqual(r.ended, ['/p/a']);
+  })) p++; else f++;
+
+  if (test('a stored entry without a boolean seen parses as never seen', () => {
+    const { seen: _seen, ...old } = RUN;
+    assert.deepStrictEqual(parseSyncRuns({ '/p/a': old, '/p/b': { ...old, seen: 'yes' } }), { '/p/a': RUN_NEW, '/p/b': RUN_NEW });
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
