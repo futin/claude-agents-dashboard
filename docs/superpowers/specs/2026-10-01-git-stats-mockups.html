@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Git Stats Layouts</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&display=swap">
+<style>
+/* The dashboard's own midnight tokens (client/src/styles.css) — this mocks a tab inside that board, so it commits to that one theme on purpose.
+   Layout: one column of labelled boards, each board a slice of the real shell (rail + page) at desktop width, with a phone strip where it matters. */
+:root{
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --edge:rgba(255,255,255,.05);--hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--amber:#ffb03a;--mustard:#d1ba52;--cyan:#55d0dd;--red:#e0533f;--magenta:#cf6f9e;
+  --font:'Hanken Grotesk','Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--board);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45;font-variant-numeric:tabular-nums}
+.page{max-width:1180px;margin:0 auto;padding:28px 16px 80px;display:flex;flex-direction:column;gap:40px}
+.lead{max-width:72ch;display:flex;flex-direction:column;gap:6px}
+.lead h1{font-size:26px;font-weight:600;letter-spacing:-.01em;margin:0;text-wrap:balance}
+.lead p{margin:0;color:var(--ink2)}
+.lead .facts{margin-top:8px;padding:10px 12px;background:var(--steel);border:1px solid var(--hairline);border-radius:8px;font-size:13px;color:var(--ink2)}
+.lead .facts b{color:var(--ink);font-weight:600}
+section.v{display:flex;flex-direction:column;gap:12px}
+.vh{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.vh h2{margin:0;font-size:19px;font-weight:600}
+.tag{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid var(--hairline2);color:var(--ink2)}
+.tag.rec{color:var(--green);border-color:var(--green)}
+.tag.yagni{color:var(--magenta);border-color:var(--magenta)}
+.note{max-width:80ch;color:var(--ink2);margin:0}
+.note b{color:var(--ink)}
+.tradeoff{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;font-size:13px;color:var(--ink2)}
+.tradeoff div{background:var(--steel);border:1px solid var(--hairline);border-radius:8px;padding:10px 12px}
+.tradeoff h4{margin:0 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+
+/* --- the shell slice --- */
+.shell{display:flex;border:1px solid var(--hairline);border-radius:12px;overflow:hidden;background:var(--board);min-width:0}
+.rail{flex:0 0 190px;padding:16px 10px;border-right:1px solid var(--hairline);display:flex;flex-direction:column;gap:2px;background:var(--board)}
+.brand{font-weight:600;padding:0 16px 14px;color:var(--ink)}
+.rl{display:flex;align-items:center;min-height:38px;padding:0 16px;border-radius:16px;color:var(--ink2);font-weight:500;position:relative}
+.rl.on{background:var(--strip-hi);color:var(--ink)}
+.rl.on::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:16px;border-radius:999px;background:var(--ink)}
+.rl .new{margin-left:auto;font-size:10px;color:var(--cyan);letter-spacing:.06em;text-transform:uppercase}
+.rsub{display:flex;flex-direction:column;margin:2px 0 6px 32px}
+.rs{padding:6px 0 6px 20px;color:var(--ink2);position:relative;border-left:1px solid var(--hairline2)}
+.rs::after{content:"";position:absolute;left:0;top:50%;width:12px;border-top:1px solid var(--hairline2)}
+.rs.on{color:var(--ink);font-weight:500}
+.rdiv{border-top:1px solid var(--hairline);margin:8px 6px}
+.main{flex:1;min-width:0;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.band{display:flex;align-items:flex-start;gap:16px}
+.band .t{font-size:19px;font-weight:500;letter-spacing:-.01em}
+.band .s{color:var(--ink2);font-size:13px;max-width:70ch}
+.band .act{margin-left:auto;display:flex;gap:8px;align-items:center;color:var(--ink3);font-size:12px;white-space:nowrap}
+.btn{border:1px solid var(--hairline2);background:var(--steel);color:var(--ink);border-radius:8px;padding:4px 10px;font:inherit;font-size:12px}
+.btn.ghost{opacity:.5}
+
+/* --- shared bits --- */
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:1px 8px;border-radius:999px;background:var(--steel);border:1px solid var(--hairline);color:var(--ink2);white-space:nowrap}
+.chip.br{color:var(--ink);border-color:var(--hairline2)}
+.chip.amber{color:var(--amber);border-color:rgba(255,176,58,.45)}
+.chip.mustard{color:var(--mustard);border-color:rgba(209,186,82,.4)}
+.chip.green{color:var(--green);border-color:rgba(70,212,140,.4)}
+.chip.red{color:var(--red);border-color:rgba(224,83,63,.45)}
+.chip.wt{color:var(--cyan);border-color:rgba(85,208,221,.4)}
+.mut{color:var(--ink3)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.dot.g{background:var(--green)}.dot.a{background:var(--amber)}.dot.m{background:var(--mustard)}.dot.x{background:var(--ink3)}.dot.r{background:var(--red)}
+/* GitHub-style divergence bar: behind grows left from the centre line, ahead grows right */
+.div{display:inline-grid;grid-template-columns:44px 1px 44px;align-items:center;gap:0;height:12px;vertical-align:middle}
+.div .b,.div .a{height:6px;border-radius:2px}
+.div .b{justify-self:end;background:var(--ink3)}
+.div .a{justify-self:start;background:var(--cyan)}
+.div .c{height:12px;background:var(--hairline2)}
+.nums{font-size:12px;color:var(--ink2);white-space:nowrap}
+.nums .ah{color:var(--cyan)}
+
+/* --- A: card per repo --- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+.card{background:var(--strip);border:1px solid var(--hairline);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.ch{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ch .nm{font-weight:600}
+.ch .fx{margin-left:auto;font-size:12px;color:var(--ink3)}
+.facts2{display:flex;gap:6px;flex-wrap:wrap}
+.btab{display:flex;flex-direction:column;border-top:1px solid var(--hairline)}
+.brow{display:grid;grid-template-columns:minmax(0,1fr) 92px 70px 34px;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--edge);font-size:13px}
+.brow .bn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;gap:6px;align-items:center}
+.brow .bn span:first-child{overflow:hidden;text-overflow:ellipsis}
+.brow .ag{color:var(--ink3);text-align:right;font-size:12px}
+.more{font-size:12px;color:var(--cyan)}
+.merged{font-size:12px;color:var(--ink3)}
+.state{font-size:13px;color:var(--ink3);padding:4px 0}
+
+/* --- B: dense table --- */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--hairline);border-radius:12px;background:var(--strip)}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:13px}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);font-weight:600;text-align:left;padding:8px 12px;border-bottom:1px solid var(--hairline)}
+td{padding:8px 12px;border-bottom:1px solid var(--edge);vertical-align:middle}
+tr.sub td{background:var(--steel);font-size:12.5px;color:var(--ink2);padding:5px 12px}
+tr.sub td:first-child{padding-left:34px}
+.car{color:var(--ink3);display:inline-block;width:14px}
+
+/* --- C: attention first --- */
+.alist{display:flex;flex-direction:column;gap:8px}
+.arow{background:var(--strip);border:1px solid var(--hairline);border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:8px}
+.arow.quiet{background:transparent;border-style:dashed;padding:6px 14px}
+.atop{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.atop .nm{font-weight:600}
+.atop .fx{margin-left:auto;font-size:12px;color:var(--ink3)}
+.asec{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-top:6px}
+.bl{display:flex;flex-direction:column;gap:2px;padding-left:16px;border-left:1px solid var(--hairline2)}
+
+/* --- D: YAGNI --- */
+.pr{font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid var(--hairline2);color:var(--green)}
+
+.sync{border:1px solid rgba(85,208,221,.5);background:transparent;color:var(--cyan);border-radius:8px;padding:2px 10px;font:inherit;font-size:12px;font-weight:500;white-space:nowrap}
+.sync.run{border-color:var(--hairline2);color:var(--ink2)}
+.sync.run::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:middle}
+.sync.sm{padding:0 8px;font-size:11.5px}
+/* phone strip */
+.phone{width:380px;max-width:100%;border:1px solid var(--hairline);border-radius:22px;padding:14px 12px;background:var(--board);display:flex;flex-direction:column;gap:8px}
+.phone .card{padding:10px 12px}
+.phone .brow{grid-template-columns:minmax(0,1fr) 70px 34px}
+.phone .brow .div{display:none}
+.duo{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.duo>.shell{flex:1 1 640px}
+
+@media (max-width:720px){.rail{display:none}.main{padding:14px 12px}.band{flex-wrap:wrap}.band .act{margin-left:0}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="lead">
+  <h1>Git Stats — layouts for the new Management tab</h1>
+  <p>Issue #166, Phase 0 + 1. Every board uses the same sample data: six pinned projects covering each state the reader has to render.</p>
+  <div class="facts"><b>Decided:</b> pinned repos only · local refs, no fetch · current branch, uncommitted count, trunk vs <code>origin/&lt;trunk&gt;</code>, fetched age ·
+    per branch ahead/behind trunk + last-commit age · newest 5, "+N more" · proven-merged hidden behind a count · worktree badge · 30s poll while visible + ↻.</div>
+</header>
+
+<!-- ================= NAV ================= -->
+<section class="v">
+  <div class="vh"><h2>Nav — where Pinned Projects and Git Stats sit</h2></div>
+  <p class="note">Two shapes for the tab itself; pick one independently of the row layout below. Both rename the old tab to <b>Claude Configs</b>, keeping its
+    Global / project scope tree.</p>
+  <div class="duo">
+    <div class="shell" style="flex:1 1 360px">
+      <div class="rail" style="flex-basis:220px;border-right:0">
+        <div class="brand">Agents</div>
+        <div class="rl">Sessions</div>
+        <div class="rl">Usage</div>
+        <div class="rl on">Management <span class="new">new</span></div>
+        <div class="rsub"><div class="rs on">Git</div><div class="rs">Pinned</div></div>
+        <div class="rl">Claude Configs</div>
+        <div class="rsub"><div class="rs">Global</div><div class="rs">claude-agents-dashboard</div><div class="rs">…</div></div>
+        <div class="rl">Analytics</div>
+        <div class="rdiv"></div>
+        <div class="rl">Settings</div>
+        <div class="rsub"><div class="rs">Local</div><div class="rs">Shared</div></div>
+      </div>
+    </div>
+    <div class="tradeoff" style="flex:1 1 420px">
+      <div><h4>N1 · sub-nav Git | Pinned <span class="tag rec">rec</span></h4>Matches how Settings already splits Local / Shared / Pinned, so the pin list
+        moves over unchanged with its own page. Git is the default sub-view. Each page polls only while it is the one open.</div>
+      <div><h4>N2 · one page, stacked</h4>Git Stats on top, the pin list (with add / remove) folded below it. One less click to change a pin, but the pin
+        editor sits under a list that grows with every repo, and the page mixes a monitor with a settings form.</div>
+      <div><h4>Order on the rail</h4>Management keeps its slot (third). Claude Configs goes right after it, so the old tab is where muscle memory looks for it.</div>
+    </div>
+  </div>
+</section>
+
+<section class="v">
+  <div class="vh"><h2>Sync — one per repo, every layout</h2><span class="tag">phase 2 slot</span></div>
+  <p class="note">The button starts a headless <code>/claude-agents-dashboard:git-sync</code> session in that repo through the existing <code>POST /api/spawn</code>.
+    Every decision git-sync asks (push, delete, stash) still comes through the dashboard's remote answers, so nothing happens without your pick. While the session
+    runs, the button reads <b>Syncing · open</b> and opens its chat. When the run ends the card refreshes, since a sync is the one thing that changes "fetched".
+    Repos git-sync would refuse (folder gone, not git, no origin, as with ixray) get no button.</p>
+</section>
+
+<!-- ================= A ================= -->
+<section class="v">
+  <div class="vh"><h2>A · Card per repo</h2><span class="tag rec">recommended</span></div>
+  <p class="note">Each repo is a card: repo-level facts in the header, branches as a small table with a divergence bar (behind ◂ | ▸ ahead, same as GitHub's branch
+    list). Cards flow into two columns on a wide screen, one on a phone.</p>
+  <div class="shell">
+    <div class="rail">
+      <div class="brand">Agents</div>
+      <div class="rl">Sessions</div><div class="rl">Usage</div>
+      <div class="rl on">Management</div>
+      <div class="rsub"><div class="rs on">Git</div><div class="rs">Pinned</div></div>
+      <div class="rl">Claude Configs</div><div class="rl">Analytics</div>
+      <div class="rdiv"></div><div class="rl">Settings</div>
+    </div>
+    <div class="main">
+      <div class="band">
+        <div><div class="t">Management · Git</div><div class="s">Local state of your pinned repos. Nothing here fetches — "fetched" says how old the remote data is.</div></div>
+        <div class="act">updated 12s ago <button class="btn">↻</button></div>
+      </div>
+      <div class="cards">
+        <div class="card">
+          <div class="ch"><span class="dot m"></span><span class="nm">claude-agents-dashboard</span><span class="chip br">main</span><span class="fx">fetched 2h ago</span><button class="sync">Sync</button></div>
+          <div class="facts2"><span class="chip green">clean</span><span class="chip">main = origin</span><span class="chip">3 branches</span></div>
+          <div class="btab">
+            <div class="brow"><div class="bn"><span>feat/git-stats</span></div><div class="div"><i class="b" style="width:0"></i><i class="c"></i><i class="a" style="width:10px"></i></div><div class="nums"><span class="mut">0</span> | <span class="ah">3</span></div><div class="ag">2h</div></div>
+            <div class="brow"><div class="bn"><span>backlog/task-41</span><span class="chip wt">worktree</span></div><div class="div"><i class="b" style="width:30px"></i><i class="c"></i><i class="a" style="width:4px"></i></div><div class="nums"><span class="mut">12</span> | <span class="ah">1</span></div><div class="ag">3d</div></div>
+            <div class="brow"><div class="bn"><span>spike/tooltip-follow</span></div><div class="div"><i class="b" style="width:44px"></i><i class="c"></i><i class="a" style="width:6px"></i></div><div class="nums"><span class="mut">88</span> | <span class="ah">2</span></div><div class="ag">19d</div></div>
+          </div>
+          <div class="merged">7 merged branches hidden — cleanup candidates for Sync</div>
+        </div>
+
+        <div class="card">
+          <div class="ch"><span class="dot a"></span><span class="nm">backlog-manager</span><span class="chip br">feat/tracker</span><span class="fx">fetched 6h ago</span><button class="sync run">Syncing · open</button></div>
+          <div class="facts2"><span class="chip amber">4 uncommitted</span><span class="chip mustard">main 2 behind origin</span><span class="chip">8 branches</span></div>
+          <div class="btab">
+            <div class="brow"><div class="bn"><span>feat/tracker</span><span class="mut">●</span></div><div class="div"><i class="b" style="width:6px"></i><i class="c"></i><i class="a" style="width:20px"></i></div><div class="nums"><span class="mut">2</span> | <span class="ah">9</span></div><div class="ag">40m</div></div>
+            <div class="brow"><div class="bn"><span>fix/groom-stamp</span></div><div class="div"><i class="b" style="width:6px"></i><i class="c"></i><i class="a" style="width:4px"></i></div><div class="nums"><span class="mut">2</span> | <span class="ah">1</span></div><div class="ag">1d</div></div>
+            <div class="brow"><div class="bn"><span>backlog/task-12</span><span class="chip wt">worktree</span></div><div class="div"><i class="b" style="width:12px"></i><i class="c"></i><i class="a" style="width:8px"></i></div><div class="nums"><span class="mut">5</span> | <span class="ah">3</span></div><div class="ag">2d</div></div>
+            <div class="brow"><div class="bn"><span>refactor/run-file</span></div><div class="div"><i class="b" style="width:22px"></i><i class="c"></i><i class="a" style="width:16px"></i></div><div class="nums"><span class="mut">9</span> | <span class="ah">6</span></div><div class="ag">6d</div></div>
+            <div class="brow"><div class="bn"><span>idea/retro-chart</span></div><div class="div"><i class="b" style="width:36px"></i><i class="c"></i><i class="a" style="width:4px"></i></div><div class="nums"><span class="mut">31</span> | <span class="ah">1</span></div><div class="ag">12d</div></div>
+          </div>
+          <div class="more">+3 more</div>
+        </div>
+
+        <div class="card">
+          <div class="ch"><span class="dot g"></span><span class="nm">guide-manager</span><span class="chip br">main</span><span class="fx">fetched 9d ago</span><button class="sync">Sync</button></div>
+          <div class="facts2"><span class="chip green">clean</span><span class="chip">main = origin</span><span class="chip">no other branches</span></div>
+        </div>
+
+        <div class="card">
+          <div class="ch"><span class="dot m"></span><span class="nm">ixray</span><span class="chip br">master</span><span class="fx">no remote</span></div>
+          <div class="facts2"><span class="chip green">clean</span><span class="chip">1 branch</span></div>
+          <div class="btab">
+            <div class="brow"><div class="bn"><span>experiment/sampler</span></div><div class="div"><i class="b" style="width:0"></i><i class="c"></i><i class="a" style="width:14px"></i></div><div class="nums"><span class="mut">0</span> | <span class="ah">4</span></div><div class="ag">5d</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="ch"><span class="dot x"></span><span class="nm">old-prototype</span></div>
+          <div class="state">Folder is gone — <span class="mut">~/code/old-prototype</span>. Unpin it under Pinned.</div>
+        </div>
+
+        <div class="card">
+          <div class="ch"><span class="dot x"></span><span class="nm">notes</span></div>
+          <div class="state">Not a git repository.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="duo">
+    <div class="phone">
+      <div class="card">
+        <div class="ch"><span class="dot a"></span><span class="nm">backlog-manager</span><span class="chip br">feat/tracker</span><span style="margin-left:auto"></span><button class="sync">Sync</button></div>
+        <div class="facts2"><span class="chip amber">4 uncommitted</span><span class="chip mustard">main 2 behind</span><span class="chip">fetched 6h</span></div>
+        <div class="btab">
+          <div class="brow"><div class="bn"><span>feat/tracker</span></div><div class="nums"><span class="mut">2</span> | <span class="ah">9</span></div><div class="ag">40m</div></div>
+          <div class="brow"><div class="bn"><span>fix/groom-stamp</span></div><div class="nums"><span class="mut">2</span> | <span class="ah">1</span></div><div class="ag">1d</div></div>
+          <div class="brow"><div class="bn"><span>backlog/task-12</span><span class="chip wt">wt</span></div><div class="nums"><span class="mut">5</span> | <span class="ah">3</span></div><div class="ag">2d</div></div>
+        </div>
+        <div class="more">+5 more</div>
+      </div>
+    </div>
+    <div class="tradeoff" style="flex:1 1 400px">
+      <div><h4>For</h4>Every repo reads the same way, top to bottom. Error states (gone, not git, timed out) take the card's place with one sentence and no
+        broken numbers. On a phone the bar drops and the numbers stay.</div>
+      <div><h4>Against</h4>A repo that needs attention looks no different from a clean one except for its dot and chips. With 10+ pins you scroll past
+        clean cards to find the busy ones.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= B ================= -->
+<section class="v">
+  <div class="vh"><h2>B · Dense table, expand for branches</h2></div>
+  <p class="note">One row per repo, scannable in a single column. Click a repo to open its branches as sub-rows under it.</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Repo</th><th>On</th><th>Uncommitted</th><th>Trunk vs origin</th><th>Branches</th><th>Fetched</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><span class="car">▾</span><b>backlog-manager</b></td><td><span class="chip br">feat/tracker</span></td><td><span class="chip amber">4</span></td><td><span class="chip mustard">2 behind</span></td><td>8 <span class="mut">· 0 merged</span></td><td class="mut">6h</td><td><button class="sync run sm">Syncing · open</button></td></tr>
+        <tr class="sub"><td>feat/tracker</td><td colspan="2"><span class="div"><i class="b" style="width:6px"></i><i class="c"></i><i class="a" style="width:20px"></i></span> <span class="nums">2 | <span class="ah">9</span></span></td><td colspan="2"></td><td>40m</td><td></td></tr>
+        <tr class="sub"><td>fix/groom-stamp</td><td colspan="2"><span class="div"><i class="b" style="width:6px"></i><i class="c"></i><i class="a" style="width:4px"></i></span> <span class="nums">2 | <span class="ah">1</span></span></td><td colspan="2"></td><td>1d</td><td></td></tr>
+        <tr class="sub"><td>backlog/task-12 <span class="chip wt">worktree</span></td><td colspan="2"><span class="div"><i class="b" style="width:12px"></i><i class="c"></i><i class="a" style="width:8px"></i></span> <span class="nums">5 | <span class="ah">3</span></span></td><td colspan="2"></td><td>2d</td><td></td></tr>
+        <tr class="sub"><td colspan="7" style="color:var(--cyan)">+5 more</td></tr>
+        <tr><td><span class="car">▸</span><b>claude-agents-dashboard</b></td><td><span class="chip br">main</span></td><td class="mut">—</td><td class="mut">even</td><td>3 <span class="mut">· 7 merged</span></td><td class="mut">2h</td><td><button class="sync sm">Sync</button></td></tr>
+        <tr><td><span class="car">▸</span><b>ixray</b></td><td><span class="chip br">master</span></td><td class="mut">—</td><td class="mut">no remote</td><td>1</td><td class="mut">—</td><td></td></tr>
+        <tr><td><span class="car"></span><b>guide-manager</b></td><td><span class="chip br">main</span></td><td class="mut">—</td><td class="mut">even</td><td class="mut">0</td><td class="mut">9d</td><td><button class="sync sm">Sync</button></td></tr>
+        <tr><td><span class="car"></span><b class="mut">old-prototype</b></td><td colspan="6" class="mut">Folder is gone</td></tr>
+        <tr><td><span class="car"></span><b class="mut">notes</b></td><td colspan="6" class="mut">Not a git repository</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="tradeoff">
+    <div><h4>For</h4>Densest: ten repos fit on one screen with no scrolling. Columns make "who has uncommitted work" a vertical scan.</div>
+    <div><h4>Against</h4>Branch detail is hidden behind a click, so what you came for (which branches) takes a second step. The table needs a horizontal
+      scroll on a phone, or a separate phone layout, which means a second component.</div>
+  </div>
+</section>
+
+<!-- ================= C ================= -->
+<section class="v">
+  <div class="vh"><h2>C · Attention first</h2></div>
+  <p class="note">Repos sorted by how much they need you. Busy repos open with their branches showing; clean repos collapse to one dashed line at the bottom. The
+    order changes as state changes.</p>
+  <div class="shell">
+    <div class="main">
+      <div class="band">
+        <div><div class="t">Management · Git</div><div class="s">2 of 6 pinned repos need attention.</div></div>
+        <div class="act">updated 12s ago <button class="btn">↻</button></div>
+      </div>
+      <div class="alist">
+        <div class="arow">
+          <div class="atop"><span class="dot a"></span><span class="nm">backlog-manager</span><span class="chip br">feat/tracker</span><span class="chip amber">4 uncommitted</span><span class="chip mustard">main 2 behind origin</span><span class="fx">fetched 6h ago</span><button class="sync run">Syncing · open</button></div>
+          <div class="bl">
+            <div class="brow"><div class="bn"><span>feat/tracker</span></div><div class="div"><i class="b" style="width:6px"></i><i class="c"></i><i class="a" style="width:20px"></i></div><div class="nums"><span class="mut">2</span> | <span class="ah">9</span></div><div class="ag">40m</div></div>
+            <div class="brow"><div class="bn"><span>fix/groom-stamp</span></div><div class="div"><i class="b" style="width:6px"></i><i class="c"></i><i class="a" style="width:4px"></i></div><div class="nums"><span class="mut">2</span> | <span class="ah">1</span></div><div class="ag">1d</div></div>
+            <div class="brow"><div class="bn"><span>backlog/task-12</span><span class="chip wt">worktree</span></div><div class="div"><i class="b" style="width:12px"></i><i class="c"></i><i class="a" style="width:8px"></i></div><div class="nums"><span class="mut">5</span> | <span class="ah">3</span></div><div class="ag">2d</div></div>
+            <div class="more">+5 more</div>
+          </div>
+        </div>
+        <div class="arow">
+          <div class="atop"><span class="dot m"></span><span class="nm">claude-agents-dashboard</span><span class="chip br">main</span><span class="chip">3 unmerged branches</span><span class="fx">fetched 2h ago</span><button class="sync">Sync</button></div>
+          <div class="bl">
+            <div class="brow"><div class="bn"><span>feat/git-stats</span></div><div class="div"><i class="b" style="width:0"></i><i class="c"></i><i class="a" style="width:10px"></i></div><div class="nums"><span class="mut">0</span> | <span class="ah">3</span></div><div class="ag">2h</div></div>
+            <div class="brow"><div class="bn"><span>backlog/task-41</span><span class="chip wt">worktree</span></div><div class="div"><i class="b" style="width:30px"></i><i class="c"></i><i class="a" style="width:4px"></i></div><div class="nums"><span class="mut">12</span> | <span class="ah">1</span></div><div class="ag">3d</div></div>
+            <div class="brow"><div class="bn"><span>spike/tooltip-follow</span></div><div class="div"><i class="b" style="width:44px"></i><i class="c"></i><i class="a" style="width:6px"></i></div><div class="nums"><span class="mut">88</span> | <span class="ah">2</span></div><div class="ag">19d</div></div>
+            <div class="merged">7 merged hidden</div>
+          </div>
+        </div>
+        <div class="asec">Quiet</div>
+        <div class="arow quiet"><div class="atop"><span class="dot g"></span><span class="nm">guide-manager</span><span class="mut">main · clean · no branches · fetched 9d ago</span><span class="fx"></span><button class="sync sm">Sync</button></div></div>
+        <div class="arow quiet"><div class="atop"><span class="dot m"></span><span class="nm">ixray</span><span class="mut">master · clean · 1 branch · no remote</span><span class="fx">▸</span></div></div>
+        <div class="arow quiet"><div class="atop"><span class="dot x"></span><span class="nm">old-prototype</span><span class="mut">folder is gone</span></div></div>
+        <div class="arow quiet"><div class="atop"><span class="dot x"></span><span class="nm">notes</span><span class="mut">not a git repository</span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="tradeoff">
+    <div><h4>For</h4>Answers "what needs me" without reading: the top of the page is the to-do list. Clean repos shrink to a line, so many pins stay cheap.</div>
+    <div><h4>Against</h4>Rows move when state changes, so a repo is never in the same place twice. That clashes with pin order, which you set on purpose. It
+      also needs a rule for what counts as "attention", and that rule becomes a spec decision in its own right. Does an unmerged branch count? A 9-day-old
+      fetch?</div>
+  </div>
+</section>
+
+<!-- ================= D ================= -->
+<section class="v">
+  <div class="vh"><h2>D · The full version</h2><span class="tag yagni">dropped · yagni</span></div>
+  <p class="note">What the issue rules out for now, shown so the cut is visible. Each extra breaks a decision already made: a separate Prune button and Sync all duplicate what one /git-sync run already does, PR state needs
+    <code>gh</code> (network), "on other machine" is #164.</p>
+  <div class="card" style="max-width:720px">
+    <div class="ch"><span class="dot a"></span><span class="nm">backlog-manager</span><span class="chip br">feat/tracker</span><span class="chip amber">4 uncommitted</span><span class="fx">fetched 6h ago</span>
+      <button class="btn ghost">Prune 0 merged</button><button class="btn ghost">Sync all</button></div>
+    <div class="btab">
+      <div class="brow" style="grid-template-columns:minmax(0,1fr) 92px 70px 60px 34px"><div class="bn"><span>feat/tracker</span><span class="pr">PR #88 open · ✓ CI</span></div><div class="div"><i class="b" style="width:6px"></i><i class="c"></i><i class="a" style="width:20px"></i></div><div class="nums"><span class="mut">2</span> | <span class="ah">9</span></div><div class="nums">pushed</div><div class="ag">40m</div></div>
+      <div class="brow" style="grid-template-columns:minmax(0,1fr) 92px 70px 60px 34px"><div class="bn"><span>feat/hub-sync</span><span class="chip">on work-mac</span></div><div class="div"><i class="b" style="width:4px"></i><i class="c"></i><i class="a" style="width:12px"></i></div><div class="nums"><span class="mut">1</span> | <span class="ah">5</span></div><div class="nums mut">remote</div><div class="ag">3h</div></div>
+    </div>
+  </div>
+  <div class="tradeoff">
+    <div><h4>Why not now</h4>/git-sync already prunes inside its own run, and asks first, so a Prune button would be a second path to the same deletion. Sync all would start N sessions at once. PR and CI badges need <code>gh</code>, which is a network call from
+      <code>server/</code>, and <code>test/outbound.test.ts</code> pins those. Branches that exist only on another machine need a fetch here, or the #164 hub.</div>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

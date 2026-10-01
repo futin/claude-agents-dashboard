@@ -1,0 +1,264 @@
+# Management restructure + Git Stats — design
+
+Show the git state of every pinned project on one page, so knowing whether a repo needs `/git-sync` no longer means opening it and checking by hand. The page
+lives in a new **Management** tab; today's Management tab, which only ever held Claude config, becomes **Claude Configs**.
+
+Brainstormed in futin/claude-agents-dashboard#166 (2026-10-01). This spec covers **Phase 0 + Phase 1** of the line set out in
+[the plugin spec](2026-10-01-dashboard-plugin-design.md), whose order is now P (done) → 0 → 1 → 2:
+
+| Phase | What                                                                                                           | Status                                    |
+| ----- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| P     | Dashboard ships git-sync + kaizen as a plugin                                                                   | merged, `62c22a8`                         |
+| **0** | Nav reshuffle: Management → **Claude Configs**; a new **Management** tab holds Pinned Projects + Git Stats        | this document                             |
+| **1** | **Git Stats**: read-only local git state per pinned project                                                       | this document                             |
+| 2     | **Sync** button per repo, spawning `/claude-agents-dashboard:git-sync` there                                     | separate spec; its slot is fixed in §9    |
+| —     | Multi-machine hub                                                                                                | parked: futin/claude-agents-dashboard#164 |
+
+The plugin spec's Phase 1 row says Git Stats "reuses P's git-sync engine". It does not: see §1 for why.
+
+Mockups: [2026-10-01-git-stats-mockups.html](2026-10-01-git-stats-mockups.html). Every layout in this spec is drawn there with the same six sample repos.
+
+## Decisions
+
+| #   | Decision                                                                                                                                      |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | **Full rename**, not label-only: rail id, hooks, components, `/api/management*` paths and localStorage keys move to `configs`. CSS class names stay. |
+| D2  | The freed `management` id becomes the new tab, with sub-nav **Git** (default) and **Pinned**. Settings loses its Pinned sub-view.                     |
+| D3  | **Pinned projects only.** Repo paths come from `listPinRows` (`server/lib/management.ts`), never from the request.                                   |
+| D4  | **Read-only, zero network.** The server never runs `git fetch`, `gh`, or anything that writes to a repo. `test/outbound.test.ts` does not change.     |
+| D5  | **Local branches only.** A branch pushed from another machine appears once it is checked out here (or after a Phase 2 Sync).                        |
+| D6  | **Own reader in `server/`**, not the git-sync engine. The server never runs plugin code; `survey` measures branches against `origin/<branch>`, not the trunk, and calls `gh`. |
+| D7  | Trunk = git-sync's `trunkOf` rule: `origin/HEAD`, else `main`, else `master`, remote-tracking ref before local. Copied, not imported.             |
+| D8  | Branches are compared against **`origin/<trunk>` when it exists**, else the local trunk.                                                          |
+| D9  | Proven-merged branches are **hidden behind a count** ("7 merged branches hidden"). Proof = ancestor of the base, or `git cherry` all `-`.            |
+| D10 | A branch checked out in a linked worktree gets a **worktree badge**. Worktrees get no status of their own.                                         |
+| D11 | Three layouts behind a switcher, **Cards \| Table \| Triage**, same pattern as Sessions. Default Cards; Table is withheld on a phone.               |
+| D12 | Client polls **every 30s, only while the Git sub-view is open and the page is visible**, plus a ↻ button.                                          |
+| D13 | The rename **does not migrate** stored state: the old keys are cosmetic, and a stored `'management'` section still names a real tab.              |
+
+## §1 Why not the git-sync engine
+
+`plugin/skills/git-sync/tools/git-sync.mjs` is plugin code: the server never imports or runs anything under `plugin/` (`test/plugin-manifest.test.ts` pins
+that). Its `survey` also answers a different question. It reports a branch ahead of `origin/<branch>` (unpushed), while this page wants ahead/behind the
+trunk, and it calls `gh` for PR state, which is network. Two ideas are borrowed and re-implemented, each in a few lines: `trunkOf` (D7) and the `git cherry`
+squash-merge proof (`cherrySigns`, its M2 case). git-sync's M3 probe is not borrowed, because it writes a probe commit object with `commit-tree`, and D4 rules
+out writes.
+
+## §2 Server: `server/lib/git-stats.ts`
+
+One module, Node built-ins only.
+
+- **Input:** the pin rows from `listPinRows`, in pin order. A row with `path: null` is a dead pin and never reaches git.
+- **Runner:** every git call goes through one injectable async runner, built on `child_process.execFile` in array form, never `shell: true`. Each call has a
+  **5s timeout**. Env adds `GIT_OPTIONAL_LOCKS=0`, so `git status` never takes `index.lock` while the user runs git themselves, plus `GIT_TERMINAL_PROMPT=0`
+  and `LC_ALL=C`. Tests swap the runner to simulate a timeout.
+- **Concurrency:** repos are read in parallel. A request that arrives while a read is in flight gets the same promise rather than starting a second round.
+- **Failure is per repo.** A timeout or unexpected exit puts that one repo in the `error` state with a short message. The other repos and the response itself
+  are unaffected.
+
+### Per poll, per repo (cheap calls, never cached)
+
+| Question                       | How                                                                                     |
+| ------------------------------ | --------------------------------------------------------------------------------------- |
+| Is this a repo, where is it    | `rev-parse --show-toplevel --absolute-git-dir`. A non-zero exit → `not-git`.             |
+| Current branch                 | `symbolic-ref -q HEAD`. Failure means detached HEAD: report the short sha instead.       |
+| Uncommitted files              | `status --porcelain -z`, counting entries; untracked files count, ignored ones do not. |
+| Local branches                 | `for-each-ref refs/heads` with name, sha, committer date and `%(worktreepath)`.          |
+| Trunk, has origin              | D7's rule; `hasOrigin` = `remote` lists `origin`.                                         |
+| Fetched age                    | mtime of `<git-dir>/FETCH_HEAD`; absent → `null` ("never fetched").                     |
+
+A pin's path is the session cwd, which can be a subdirectory of the repo. The reader works from `--show-toplevel`. Two pins that resolve to the same toplevel
+are shown twice; this is rare, and deduping would hide one pin's name.
+
+`%(worktreepath)` marks a branch checked out in a worktree. It is empty for the main worktree's own branch, so only *linked* worktrees get the D10 badge.
+
+### Memoised (only recomputed when a sha moves)
+
+Keyed by `(repo toplevel, branch sha, base sha)`:
+
+- **Ahead/behind:** `rev-list --left-right --count <base>...<branch>`, using full refnames (`refs/heads/x`), never a bare name.
+- **Merged:** ahead = 0 (ancestor of the base), or else `git cherry <base> <branch>` prints only `-` lines. A multi-commit branch that was squash-merged
+  does not pass this test and is shown as unmerged. That error is accepted: it always errs toward showing a branch, never hiding one. The converse is
+  intended: a branch created at the base's tip with no commits of its own is ahead 0, so it counts as merged and is hidden. It has nothing to show yet.
+
+The trunk's own row, local trunk vs `origin/<trunk>` ahead/behind, uses the same memo. Each poll replaces the memo with the entries it touched, so it never
+holds a branch that no longer exists.
+
+### What a repo reports
+
+`RepoGitStats` is a discriminated union on `state`, defined in `shared/types.ts` first:
+
+- **`missing`**: dead pin, or the folder is gone. It carries the pin's name and last known path.
+- **`not-git`**: the folder exists but is not in a repo.
+- **`error`**: a git call failed or timed out, with a message.
+- **`ok`**, carrying:
+  - name, toplevel, current branch (or detached sha), whether it is the trunk, uncommitted count
+  - trunk name (or `null`: "no trunk"), `hasOrigin`, trunk vs origin ahead/behind (or `null` when there is no origin, or no `origin/<trunk>`)
+  - fetched age in ms (or `null`)
+  - unmerged branches: name, ahead, behind, last-commit ms, worktree path or `null`. Newest commit first, the trunk excluded, capped at **50**.
+  - total unmerged count and merged count
+
+With no trunk at all, every branch is listed without ahead/behind and the merged count is 0. Without a base, nothing can be proved merged.
+
+## §3 API
+
+`GET /api/git-stats` → `GitStatsResponse { repos: RepoGitStats[]; generatedAt: number }`, with repos in pin order. It takes no parameters, routed in
+`server/index.ts` beside `/api/pins`, with its handler in `server/api.ts`. Its exposure matches `/api/sessions`: branch names and paths, readable by anyone who
+can reach the dashboard. `docs/subsystems/remote-access.md` lists it.
+
+## §4 Phase 0: the rename
+
+`management` → `configs` everywhere it names the Claude-config tab:
+
+- `Section` gains `'configs'`. Rail order becomes Sessions, Usage, Management, **Claude Configs**, Analytics, Settings. The landing picker follows, since it
+  derives from `SECTIONS`.
+- Components move from `client/src/components/management/` to `components/configs/`. `ManagementView` becomes `ConfigsView`, and `useManagement` /
+  `useManagementScope` become `useConfigs` / `useConfigsScope`. The rail's scope tree (`ManagementSubNav`) moves with them and hangs under Claude Configs.
+- Routes move to `/api/configs`, `/api/configs/project` and `/api/configs/file`. The old paths are dropped, not aliased, because the client is the only
+  consumer.
+- localStorage keys become `configs.collapsed`, `configs.type` and `configs.scope`, with no migration (D13).
+- The server module `server/lib/management.ts` keeps its name for now: it also holds the project listing that pins and Git Stats use. Renaming it is out of
+  scope (see Out of scope).
+- **CSS class names do not change** (`.wide-mgmt` and the rest), per the repo rule. The new Management tab gets the plain `wrap wide`.
+- Tests that hit the old routes (`test/api-management-analytics.test.ts`, `test/management.test.ts`) move to the new paths. A sweep test asserts that no
+  `'/api/management` string remains under `client/src`.
+
+## §5 Phase 0: the new Management tab
+
+- Its sub-nav is **Git | Pinned**, driven by a new local setting `managementTab: 'git' | 'pinned'` (default `git`). It goes through the same `SUBNAV` table
+  and validator as `usageTab` and `settingsTab`.
+- **Pinned** renders `PinnedProjectsGroup` unchanged, under a band "Management · Pinned". The band's sub-line drops "stay in Management" wording that no
+  longer makes sense.
+- **Settings** drops `'pinned'` from `SettingsTab`, `SETTINGS_TABS` and its `SUBNAV` entry. A stored `settingsTab: 'pinned'` fails the validator and falls
+  back to `local`, which is the validator's existing behaviour.
+- A stored `dashboard.section: 'management'`, or a landing pick of Management, now opens the new tab. No migration (D13).
+
+## §6 Phase 1: the Git sub-view
+
+### Band
+
+The title is "Management · Git", with the sub-line "Local state of your pinned repos. Nothing here fetches — "fetched" says how old the remote data is." On the
+right: "updated Ns ago" and a ↻ button that forces a poll now. With no pins, the empty state says to pin a project and links to the Pinned sub-view.
+
+### Switcher
+
+`GIT_LAYOUTS = cards | table | triage`, mirroring Sessions' `LAYOUTS`, `WIDE_ONLY_LAYOUTS` and `drawableLayout` in `client/src/lib/filterSort.ts`, as a
+pure module under `client/src/lib/`.
+
+- `table` is wide-only. A phone draws `cards`, and the stored choice is kept, so widening the window brings the table back.
+- The choice persists per device in `management.gitLayout`, default `cards`. There is no Settings "default layout" picker for it.
+
+### Shared repo facts
+
+Every layout shows the same facts:
+
+- name and current branch, as a chip
+- uncommitted count (amber when > 0, "clean" otherwise)
+- trunk vs origin ("main = origin", "main 2 behind origin", "no remote")
+- fetched age
+- the unmerged branches: name, a GitHub-style divergence bar (behind ◂ | ▸ ahead) with both numbers, last-commit age, worktree badge
+  - the newest 5 show, then "+N more" expands the rest inline
+  - when merged > 0, a muted "N merged branches hidden" line follows
+
+Non-`ok` states replace the body with one sentence: "Folder is gone — `<path>`. Unpin it under Pinned.", "Not a git repository.", or "Couldn't read: <message>".
+They never show broken numbers.
+
+### Layouts
+
+- **Cards:** one card per repo, in pin order, auto-filling columns (two on a laptop, one on a phone). On a phone the divergence bar drops and the numbers stay.
+- **Table:** one row per repo with columns On / Uncommitted / Trunk vs origin / Branches / Fetched. A click expands that repo's branches as sub-rows beneath it.
+- **Triage:** repos grouped by a pure function `triageGitRepos(repos)`. Within each group, repos keep pin order, so a repo only ever moves between groups.
+  - **Needs you:** uncommitted > 0, or trunk ahead or behind origin.
+  - **In flight:** clean and even with origin, but with ≥ 1 unmerged branch.
+  - **Quiet:** clean, even, no unmerged branches. A repo with no remote, or no trunk, but otherwise clean also lands here.
+  - **Can't read:** `missing`, `not-git` and `error`, as one muted line each at the bottom.
+  - Needs you and In flight rows show their branches. Quiet rows are one dashed line each, expandable.
+
+### Polling
+
+`useGitStats` fetches on mount, then every **30s** while the Git sub-view is mounted and `document.visibilityState === 'visible'`. A `visibilitychange` back
+to visible polls immediately. Unmounting, or switching to Pinned, stops the timer. A failed fetch keeps the last good data and marks the band "couldn't
+update".
+
+## §7 Tests
+
+node-assert, in the existing `test/run-all.ts` style. The server tests build **real repos** with `git init` in a tmpdir (no mocks for git output). Cases:
+
+| Case                                                        | Expected                                                                                     |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Clean repo on `main`, cloned from a local bare `origin`       | `ok`, `isTrunk: true`, uncommitted 0, trunk vs origin 0/0, `hasOrigin: true`                    |
+| One modified + one untracked file                           | uncommitted 2                                                                               |
+| Detached HEAD                                               | current branch `null`, detached sha = `git rev-parse --short HEAD`                          |
+| No `origin` remote, branch `master`                         | trunk `master`, `hasOrigin: false`, trunk vs origin `null`                                    |
+| No `main`/`master`/`origin/HEAD`, only branch `dev`           | trunk `null`; `dev` listed without ahead/behind; merged count 0                              |
+| `origin/HEAD` → `origin/develop`                             | trunk `develop`                                                                             |
+| Branch 3 ahead / 2 behind `origin/main`                       | ahead 3, behind 2                                                                           |
+| Branch fast-forward merged into `main`                       | hidden; merged count 1                                                                      |
+| Branch whose single commit was cherry-picked onto `main`     | hidden via `git cherry`; merged count 1                                                      |
+| Branch of 2 commits squash-merged as 1                       | **shown** as unmerged (the accepted error, §2)                                              |
+| Local `main` behind `origin/main`, branch merged on origin   | hidden, since the base is `origin/main` (D8)                                                     |
+| Branch checked out in a linked worktree                      | `worktreePath` = that worktree; the main worktree's branch has `null`                        |
+| 7 unmerged branches                                          | newest-first by commit date, all 7 in payload, total 7                                     |
+| 60 unmerged branches                                         | 50 in payload, total 60                                                                     |
+| Pin with `path: null`; pin to a deleted folder               | `missing`, and no git call made (runner spy)                                                 |
+| Pin to a plain folder                                        | `not-git`                                                                                   |
+| Pin to a repo subdirectory                                   | reads the toplevel; same stats as pinning the root                                          |
+| Runner times out for repo A                                  | A is `error`; repo B in the same response is `ok`                                            |
+| Two polls with no sha change                                 | second poll makes no `rev-list`/`cherry` calls (runner spy)                                 |
+| A branch is deleted between polls                            | memo no longer holds its key                                                               |
+| Concurrent requests                                          | one round of git calls, both resolve to the same object                                    |
+| `FETCH_HEAD` absent / touched 2h ago                         | `null` / ≈ 2h                                                                              |
+| `GIT_OPTIONAL_LOCKS=0` is in the runner env                  | asserted on the spy                                                                         |
+
+Client domain logic (pure modules):
+
+- `triageGitRepos` puts each state in the right group. Pin order holds within a group. A clean repo with no remote, or with no trunk, is Quiet.
+- `drawableGitLayout('table', narrow=true)` → `cards`, and the stored choice is untouched.
+- The settings validator maps a stored `settingsTab: 'pinned'` → `local`, and `managementTab: 'nonsense'` → `git`.
+- The rename sweep (§4).
+
+Not testable here, and so to be verified by hand: the rendered layouts against the mockup, the 30s visible-only timer, and the phone fallback.
+
+## §8 Docs
+
+- `docs/subsystems/management.md` → `docs/subsystems/configs.md`, its routes and names updated.
+- New `docs/subsystems/git-stats.md`: what each number means, why there is no fetch, the merged proof and its accepted error, the memo, and the triage rule.
+- `docs/overview.md` §Map: both entries, plus the file map for the moved components.
+- `.claude/DESIGN.md` §8.5 retitled for Claude Configs, plus a new subsection for Management (Git | Pinned and the three layouts).
+- `docs/subsystems/remote-access.md` and the `scripts/tailnet.ts` comment: `/api/management/file` → `/api/configs/file`, and add `/api/git-stats` to the
+  exposure list.
+- `docs/subsystems/settings.md` and `view-persistence.md`: the Pinned move, `managementTab`, `management.gitLayout`, and the renamed keys.
+- `.claude/CLAUDE.md` Orientation names the rail as "Sessions | Usage | Management | Analytics | Settings". Add Claude Configs there.
+
+## §9 Phase 2 slot (recorded, not built)
+
+Phase 2 adds one **Sync** button per repo:
+
+- **Cards:** the right end of the card header.
+- **Table:** a last column.
+- **Triage:** the right end of the repo row.
+- It is not shown when git-sync would refuse the repo: `missing`, `not-git`, `error`, or `hasOrigin: false`.
+- There is no "Sync all" and no separate Prune, because git-sync already prunes inside its own run and asks before doing so.
+- **Click** opens the existing launch sheet (`SpawnPanel`) prefilled with cwd = the repo toplevel and prompt = `/claude-agents-dashboard:git-sync`. You
+  see the model and permission mode before pressing Launch.
+- While that session runs, the button reads "Syncing · open" and opens its chat. When the session ends, the repo is re-polled.
+
+Phase 1 already carries `hasOrigin` and the toplevel, so Phase 2 needs no server change. Phase 1 renders **no** placeholder button.
+
+## Verification
+
+- `pnpm test`, `pnpm typecheck` and `pnpm build` are green, with the output quoted in the PR.
+- Live probe against this machine's real pins: every pinned repo renders in each layout, and the numbers for this repo match `git rev-list --left-right
+  --count origin/main...<branch>` run by hand.
+- Phone width (375px): Table is not offered, Cards draws, and nothing scrolls sideways.
+- Not verified by any test: how the layouts look against the mockup, and whether the visible-only timer actually stops. Both are for a human to check, and the
+  PR says so.
+
+## Out of scope
+
+- `git fetch`, PR or CI state, and remote-only branches (D4, D5; #164 for cross-machine).
+- The Sync button itself (Phase 2, §9).
+- Per-worktree uncommitted counts (D10).
+- Renaming `server/lib/management.ts` or splitting its project listing into its own module.
+- A Settings "Git Stats opens in" default-layout picker.
+- Migrating old localStorage keys (D13).
