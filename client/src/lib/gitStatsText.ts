@@ -17,6 +17,13 @@ export const GIT_NO_OPEN_BRANCHES = 'no open branches';
 export const GIT_NO_PINS = 'No pinned projects yet. Pin one under Pinned.';
 export const GIT_LOAD_FAILED = "Couldn't load git stats. Retrying every 30s.";
 export const GIT_UPDATE_FAILED = "couldn't update";
+/** Before the first answer arrives — the same muted "Loading…" Management › Pinned shows while its scan runs. */
+export const GIT_LOADING = 'Loading…';
+
+/** The body's one line while there is no payload yet: still waiting, or the first fetch failed. */
+export function gitFirstLoadText(error: boolean): string {
+  return error ? GIT_LOAD_FAILED : GIT_LOADING;
+}
 
 /** The branch chip: the branch name, or the short sha while HEAD is detached. */
 export function gitBranchChipText(r: OkRepo): string {
