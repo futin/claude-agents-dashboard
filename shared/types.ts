@@ -1361,7 +1361,7 @@ export interface AnalyticsResponse {
 }
 
 /**
- * Management section (`GET /api/management*`) — read-only view over Claude
+ * Claude Configs section (`GET /api/configs*`) — read-only view over Claude
  * config on disk: skills, agents, commands, rules, hooks, memory, settings,
  * installed plugins and MCP servers, per scope (global `~/.claude` or one project).
  */
@@ -1474,10 +1474,10 @@ export interface ScopeConfig {
   error?: boolean;
 }
 
-/** A recently-active project (management side-menu entry). */
+/** A recently-active project (Claude Configs side-menu entry). */
 export interface ProjectRef {
   /**
-   * Encoded ~/.claude/projects dir name — the key for /api/management/project,
+   * Encoded ~/.claude/projects dir name — the key for /api/configs/project,
    * and unique within a `projects[]`: one entry per dir, so the rail can key
    * rows by it and `resolveProject` maps it to exactly one path.
    */
@@ -1525,7 +1525,7 @@ export interface PinsResponse {
   home: string;
 }
 
-/** Payload of `GET /api/management`. */
+/** Payload of `GET /api/configs`. */
 export interface ManagementIndex {
   generatedAt: string;
   global: ScopeConfig;
@@ -1534,7 +1534,7 @@ export interface ManagementIndex {
   error?: boolean;
 }
 
-/** Payload of `GET /api/management/file`. */
+/** Payload of `GET /api/configs/file`. */
 export interface FileContent {
   path: string;
   content: string;

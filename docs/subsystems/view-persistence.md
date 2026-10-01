@@ -40,7 +40,7 @@ override it (see `dashboard.section` below).
   `dashboard.settings` (theme, density, text scale, refresh rate, scan knobs, landing tab
   — see [settings](settings.md); re-clamped on every read by `clampSettings`, and the
   one key an inline script in `index.html` also reads, pre-paint, to avoid a theme flash);
-  `dashboard.section` (Sessions | Usage | Management | Analytics | Settings —
+  `dashboard.section` (Sessions | Usage | Claude Configs | Analytics | Settings —
   the `Section` union in `lib/sections.ts`, switched on in `App.tsx`) — always
   *written* on navigation, but only *read* on open when Settings → landing is `last`; any
   other value pins the opening section, resolved in the `useState` initializer so there's no
@@ -58,9 +58,9 @@ override it (see `dashboard.section` below).
   `dashboard.analyticsLayout` (which of that tab's two shapes the switcher was left on,
   a bare `AnLayout` string guarded by `isAnLayout` on read — both see
   [analytics](analytics.md));
-  `dashboard.answerToken` (see [remote-answer](remote-answer.md)); `management.scope`,
-  `management.type` (which of the type column's rows the item column is showing) and
-  `management.collapsed` (see [management](management.md) — all three resolve during render,
+  `dashboard.answerToken` (see [remote-answer](remote-answer.md)); `configs.scope`,
+  `configs.type` (which of the type column's rows the item column is showing) and
+  `configs.collapsed` (see [configs](configs.md) — all three resolve during render,
   so a scope that aged out, a type the filter emptied and a sub-group that no longer exists
   fall back rather than stranding the page).
 - **Client-only, zero deps** — no backend, and nothing here is shareable/bookmarkable by

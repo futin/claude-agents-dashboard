@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import MicButton from './MicButton';
 import PinPicker from './PinPicker';
 import { useBackClose } from '../hooks/useBackClose';
-import { useManagementIndex } from '../hooks/useManagement';
+import { useConfigsIndex } from '../hooks/useConfigs';
 import { usePins } from '../hooks/usePins';
 import { useSettings } from '../hooks/useSettings';
 import { useSpawn } from '../hooks/useSpawn';
@@ -46,7 +46,7 @@ interface Props {
  * launchpad of tiles); the sheet is the only one that fits a phone unchanged.
  * The chrome is cyan, not amber: amber means "a session is waiting on you".
  *
- * Project defaults to the most recently active one — `useManagementIndex`'s
+ * Project defaults to the most recently active one — `useConfigsIndex`'s
  * `projects` is already newest-first, so that's simply the first entry.
  *
  * A project past `LOOKBACK_HOURS` is not in that list, so under the select a
@@ -57,7 +57,7 @@ interface Props {
 export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: Props) {
   const { launch, pending, error, needsToken, setToken } = useSpawn();
   const [indexKey, setIndexKey] = useState(0);
-  const { index, loading } = useManagementIndex(indexKey);
+  const { index, loading } = useConfigsIndex(indexKey);
   const { settings } = useSettings();
   const { pins, busy: pinBusy, setPin } = usePins();
   const [showOlder, setShowOlder] = useState(false);

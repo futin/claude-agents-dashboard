@@ -238,7 +238,7 @@ export function run(): number {
   if (test('the picker offers exactly the six intended choices', () => {
     assert.deepStrictEqual(
       LANDING_OPTIONS.map(o => o.value),
-      ['last', 'sessions', 'usage', 'management', 'analytics', 'settings']
+      ['last', 'sessions', 'usage', 'configs', 'analytics', 'settings']
     );
     assert.strictEqual(LANDING_OPTIONS.length, 6);
   })) p++; else f++;
@@ -318,13 +318,14 @@ export function run(): number {
     // component fails this test instead of quietly surviving Reset — which is
     // how `dashboard.layout` and then `management.type` each got missed.
     const keys = persistedKeys(CLIENT_SRC);
-    assert.ok(keys.has('dashboard.layout') && keys.has('management.type'), 'the scan found the keys');
+    assert.ok(keys.has('dashboard.layout') && keys.has('configs.type'), 'the scan found the keys');
     // The settings blob is reset by writing the defaults, not by removal; the
     // answer token is a credential and Reset is not a sign-out.
     const exempt = new Set(['dashboard.settings', 'dashboard.answerToken']);
     const missed = [...keys].filter(k => !exempt.has(k) && !OWNED_KEYS.includes(k));
     assert.deepStrictEqual(missed, [], 'keys Reset would leave behind');
-    const stale = OWNED_KEYS.filter(k => !keys.has(k));
+    // `management.*` are kept on purpose: the pre-rename keys, swept so Reset clears what an older build left behind (D13).
+    const stale = OWNED_KEYS.filter(k => !keys.has(k) && !k.startsWith('management.'));
     assert.deepStrictEqual(stale, [], 'keys nothing writes any more');
   })) p++; else f++;
 

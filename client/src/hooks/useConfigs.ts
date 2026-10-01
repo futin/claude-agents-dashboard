@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FileContent, ManagementIndex, ScopeConfig } from '../../../shared/types';
 
 /**
- * Management data hooks. No polling anywhere: config changes on the order of
+ * Claude Configs data hooks. No polling anywhere: config changes on the order of
  * days (the 3s pattern exists because *sessions* are live). The index is
  * fetched once per mount / refresh bump; project scopes and file contents are
  * fetched lazily on selection and memoized in ref-held Maps.
@@ -16,19 +16,19 @@ export interface IndexState {
 }
 
 /**
- * `active` is the Management section being open. The index now feeds the
+ * `active` is the Claude Configs section being open. The index now feeds the
  * *rail's* scope tree as well as the page, so the hook is mounted for the whole
- * app life (see hooks/useManagementScope.tsx) — without the flag every visitor
+ * app life (see hooks/useConfigsScope.tsx) — without the flag every visitor
  * to Sessions would fetch a config scan they never look at.
  */
-export function useManagementIndex(refreshKey: number, active = true): IndexState {
+export function useConfigsIndex(refreshKey: number, active = true): IndexState {
   const [state, setState] = useState<IndexState>({ index: null, loading: true, error: false });
 
   useEffect(() => {
     if (!active) return;
     let alive = true;
     setState(prev => ({ index: prev.index, loading: true, error: false }));
-    fetch('/api/management')
+    fetch('/api/configs')
       .then(res => res.json() as Promise<ManagementIndex>)
       .then(index => {
         if (alive) setState({ index, loading: false, error: index.error === true });
@@ -51,7 +51,7 @@ export function useProjectScope(dirName: string | null, refreshKey: number): Sco
   useEffect(() => {
     if (key === null || dirName === null || cache.current.has(key)) return;
     let alive = true;
-    fetch(`/api/management/project?dir=${encodeURIComponent(dirName)}`)
+    fetch(`/api/configs/project?dir=${encodeURIComponent(dirName)}`)
       .then(res => res.json() as Promise<ScopeConfig>)
       .then(scope => {
         if (!alive) return;
@@ -87,7 +87,7 @@ export function useFileContent(path: string | null): FileState {
     }
     let alive = true;
     setState({ file: null, loading: true, error: false });
-    fetch(`/api/management/file?path=${encodeURIComponent(path)}`)
+    fetch(`/api/configs/file?path=${encodeURIComponent(path)}`)
       .then(res => res.json() as Promise<FileContent>)
       .then(file => {
         if (!alive) return;

@@ -2,7 +2,7 @@
  * `GET/POST /api/pins` (#161), driven through the real route table: the token
  * gate, the body shape, the membership rule a pin must pass (a pinned dir
  * becomes spawnable and its config servable, so this is the gate), the dead-pin
- * row, and the knock-on effect on `GET /api/management`.
+ * row, and the knock-on effect on `GET /api/configs`.
  *
  * The harness `$HOME` is a tmpdir, and the older-projects list never offers a
  * cwd under one, so every case here lifts that filter with `overrideClaudeRoots`.
@@ -89,7 +89,7 @@ export async function run(): Promise<number> {
     });
   }));
 
-  check(await testAsync('pinning a 5-day-old dir: 200, moves from older to pinned, and GET /api/management lists it pinned', async () => {
+  check(await testAsync('pinning a 5-day-old dir: 200, moves from older to pinned, and GET /api/configs lists it pinned', async () => {
     await withPins(ENV, async h => {
       const { dirName, cwd } = plantProject(h, 'old', 5);
       const before = (await h.req('/api/pins')).json as unknown as PinsResponse;
@@ -102,7 +102,7 @@ export async function run(): Promise<number> {
       assert.deepStrictEqual(after.pinned.map(r => [r.dirName, r.path, r.listed]), [[dirName, cwd, true]]);
       assert.deepStrictEqual(after.older, []);
 
-      const mgmt = (await h.req('/api/management')).json as { projects: ProjectRef[] };
+      const mgmt = (await h.req('/api/configs')).json as { projects: ProjectRef[] };
       const row = mgmt.projects.find(p => p.dirName === dirName);
       assert.ok(row, 'the pinned project is listed');
       assert.strictEqual(row!.pinned, true);

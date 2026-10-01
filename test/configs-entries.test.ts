@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { buildEntries, filterEntries, railRows } from '../client/src/lib/managementEntries.js';
+import { buildEntries, filterEntries, railRows } from '../client/src/lib/configsEntries.js';
 import type { McpServerInfo, ScopeConfig } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -17,7 +17,7 @@ function scope(partial: Partial<ScopeConfig>): ScopeConfig {
 }
 
 export function run(): number {
-  console.log('\n=== managementEntries.ts ===\n');
+  console.log('\n=== configsEntries.ts ===\n');
   let p = 0, f = 0;
 
   if (test('groups in fixed order; plugins group only for global scope', () => {
@@ -230,6 +230,6 @@ export function run(): number {
     assert.deepStrictEqual(entries.map(e => e.subgroup), ['local', 'user', 'alpha']);
   })) p++; else f++;
 
-  console.log(`\nmanagementEntries: ${p} passed, ${f} failed`);
+  console.log(`\nconfigsEntries: ${p} passed, ${f} failed`);
   return f;
 }

@@ -8,12 +8,12 @@ import { isSection, type Section } from './lib/sections';
 import { useAccount } from './hooks/useAccount';
 import { useShellNarrow } from './hooks/useNarrow';
 import { usePersistedState } from './hooks/usePersistedState';
-import { ManagementScopeProvider } from './hooks/useManagementScope';
+import { ConfigsScopeProvider } from './hooks/useConfigsScope';
 import { SettingsProvider, useSettings } from './hooks/useSettings';
 
 // Lazy: these chunks load only when their section is opened, so the sessions
 // view's bundle is unaffected.
-const ManagementView = lazy(() => import('./components/management/ManagementView'));
+const ConfigsView = lazy(() => import('./components/configs/ConfigsView'));
 const AnalyticsView = lazy(() => import('./components/analytics/AnalyticsView'));
 const UsageView = lazy(() => import('./components/usage/UsageView'));
 const SettingsView = lazy(() => import('./components/settings/SettingsView'));
@@ -56,18 +56,18 @@ function AppShell() {
   // the tab scrolls. Settings, Sessions and Usage want the same width for their
   // columns but scroll as a page, so they get `broad`: width only. Usage on the
   // plain 820px `.wrap` read as a different app from Sessions sitting next to it
-  // in the rail. `wide-mgmt` is that same width and opts Management *out* of the
+  // in the rail. `wide-mgmt` is that same width and opts Claude Configs *out* of the
   // pinning: its three columns size to their content and the page body is the
   // single scroller, so a long file is read by scrolling the page.
   const broad = section === 'settings' || section === 'sessions' || section === 'usage';
-  const wrap = section === 'management' ? 'wrap wide wide-mgmt'
+  const wrap = section === 'configs' ? 'wrap wide wide-mgmt'
     : section === 'analytics' ? 'wrap wide'
     : broad ? 'wrap broad' : 'wrap';
 
-  // Management's scope is a rail destination now (DESIGN.md §8.5), so the rail
-  // and the page share one state and one `/api/management` fetch. `active` is
+  // Claude Configs' scope is a rail destination now (DESIGN.md §8.5), so the rail
+  // and the page share one state and one `/api/configs` fetch. `active` is
   // unconditional because the phone menu draws every tree from the first paint,
-  // Management's among them: the scan happens once on load instead of on
+  // Claude Configs' among them: the scan happens once on load instead of on
   // entering the section, and ↻ in the band is what re-runs it.
 
   // The account chip is shell furniture, above every section, so its poll is
@@ -82,7 +82,7 @@ function AppShell() {
   const chip = <HeaderAccount account={account} onGo={change} />;
 
   return (
-    <ManagementScopeProvider active>
+    <ConfigsScopeProvider active>
       <div className="shell">
         <SideRail section={section} onChange={change} accountSlot={narrow ? chip : null} />
         {/* `display:contents` below `sm`, so the board is the flex child of
@@ -95,9 +95,9 @@ function AppShell() {
             <div className={wrap}>
             {section === 'sessions' ? (
               <SessionsView />
-            ) : section === 'management' ? (
+            ) : section === 'configs' ? (
               <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
-                <ManagementView />
+                <ConfigsView />
               </Suspense>
             ) : section === 'analytics' ? (
               <Suspense fallback={<div className="an-empty">loading…</div>}>
@@ -116,6 +116,6 @@ function AppShell() {
           </main>
         </div>
       </div>
-    </ManagementScopeProvider>
+    </ConfigsScopeProvider>
   );
 }

@@ -25,7 +25,7 @@ nothing here: `kill-guard.sh`, a `PreToolUse`/`Bash` guard that refuses unanchor
    recency, and calls `server/lib/transcript.ts` to tail-read the last 256 KB of each —
    enough to derive tokens, model, context window, current activity, and status.
 3. Detail views fetch lazily: subagents (`/api/sessions/:id`), chat pages
-   (`/api/sessions/:id/chat`), management config, analytics reports.
+   (`/api/sessions/:id/chat`), Claude config, analytics reports.
 
 No database, no cache layer beyond in-memory maps, no build step for the server (it runs
 via `tsx`, dev and prod alike).
@@ -87,8 +87,8 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/dismiss` | where a tapped desk push lands — a page that closes the tab it opened in; carries no deep link |
 | `GET /api/health` | liveness + remote-answer state + connection origin + the two hook numbers (idle threshold, answer window) |
 | `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, plus `notifyAvailable` (never the ntfy topic itself); write path |
-| `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; write path (see [management](subsystems/management.md)) |
-| `GET /api/management`, `/project`, `/file` | config browser index / scope / file body |
+| `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; write path (see [configs](subsystems/configs.md)) |
+| `GET /api/configs`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/account` | who the CLI is signed in as (`~/.claude.json` → `oauthAccount`, as display strings) + the two rate windows — the header chip's own 30s poll, so it does not ride the 3s session scan |
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
@@ -135,7 +135,7 @@ Both servers bind all interfaces, so LAN/tailnet access works with zero app conf
 shared/types.ts   the API contract (SessionsResponse, Session, ManagementIndex,
                   SessionAnalysis, AnalyticsReport, …)
 shared/frontmatter.ts  zero-dep YAML-frontmatter subset parser — shared because
-                  both sides parse it (lib/management.ts and management/FileBlock.tsx)
+                  both sides parse it (lib/management.ts and configs/FileBlock.tsx)
 server/
   index.ts        HTTP entry + routing; static-serves client/dist in prod
   api.ts          all /api handlers (+ error fallbacks)
@@ -209,7 +209,7 @@ server/
                   also owns stopping one (graceful SIGTERM, grace window, escalation)
                   (see docs/subsystems/spawn.md)
 client/src/
-  App.tsx         shell: side rail (Sessions | Usage | Management | Analytics |
+  App.tsx         shell: side rail (Sessions | Usage | Claude Configs | Analytics |
                   Settings) + lazy views
   components/     SideRail (section switcher — the rail on desktop, and below `sm`
                   (640px) the same markup as a menu dropped out of a top bar, every tree
@@ -227,13 +227,13 @@ client/src/
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   MicButton, SpawnPanel, PinPicker (projects to pin — older ones in
                   the launch sheet, recent + older in Settings › Pinned), ResumePanel, PermissionBanner,
-                  RemoteAnswerToggle, OriginBadge, Markdown, management/, analytics/,
+                  RemoteAnswerToggle, OriginBadge, Markdown, configs/, analytics/,
                   usage/ (UsageView + the two tabs, Sheet — the band / figure
                   strip / sheet / D48claude
                   efinitions chrome both tabs draw, and
                   ReadingAids — the ⓘ button they both render), settings/
   hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
-                  useManagement, useManagementScope (the scope + the one index
+                  useConfigs, useConfigsScope (the scope + the one index
                   fetch, shared by the rail's tree and the page), useAnalytics,
                   useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins,
@@ -243,7 +243,7 @@ client/src/
                   sessions), useBackClose, useHideOnScroll (the phone top bar's
                   auto-hide), useNarrow (the one JS read of the `md` breakpoint),
                   useStuckStrip (when the phone's aside strip pins)
-  lib/            filterSort, analyticsFilterSort, chatFilter, markdown, managementEntries,
+  lib/            filterSort, analyticsFilterSort, chatFilter, markdown, configsEntries,
                   format, settings,
                   sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
                   usageRatesFormat, panelCollapse, surface, walkChart (the headroom
@@ -310,7 +310,7 @@ that area:
 - [spawn](subsystems/spawn.md) — starting a new headless session from the dashboard (the fourth write path, and the first one it initiates), and stopping one from its row
 - [session-surfaces](subsystems/session-surfaces.md) — where a session lives, and where you can continue it (also where `Session.surface` is specified)
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
-- [management](subsystems/management.md) — read-only config browser
+- [configs](subsystems/configs.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
 <<<<<<< HEAD
 - [account-header](subsystems/account-header.md) — the shell's account chip: its two homes, the `oauthAccount` profile reader, and `GET /api/account`

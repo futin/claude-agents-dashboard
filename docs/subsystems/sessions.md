@@ -375,7 +375,7 @@ Two properties make it affordable and safe:
 
 The filter is applied at the **call sites**, not inside `listTranscripts()`: `api.ts` passes
 `archivedIds: archivedSessionIds()` into `scanSessions` and into `listRecentProjects`
-([management](management.md)), the same injected-Set pattern as `pendingIds`. The other
+([configs](configs.md)), the same injected-Set pattern as `pendingIds`. The other
 `listTranscripts` callers deliberately keep seeing archived transcripts — `analytics.ts`
 `listReports` (a kaizen entry must still resolve its transcript) and the `api.ts` id lookups
 behind the transcript and chat panels (a panel already open would 404 for no gain).

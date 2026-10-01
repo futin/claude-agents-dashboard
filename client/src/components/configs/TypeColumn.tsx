@@ -1,4 +1,4 @@
-import type { EntryGroup } from '../../lib/managementEntries';
+import type { EntryGroup } from '../../lib/configsEntries';
 
 interface Props {
   /** Already filtered and stripped of empty types — only kinds with entries appear. */

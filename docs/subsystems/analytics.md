@@ -11,7 +11,7 @@ collaborators can populate the tab against their own global log.
 
 Two rows, the shape `.mgmt-bar` set. The title row carries **state and one verb**:
 **Analytics**, a **`Review due`** chip beside it when the log has gone unswept, and a
-glyph-only ↻. The chip is the Management scope pill's shape (`.set-scope` — a filled 24px
+glyph-only ↻. The chip is the Claude Configs scope pill's shape (`.set-scope` — a filled 24px
 capsule with a dot) in the amber it has always worn; it was an outline chip, which read as
 a control you could press. The row is `align-items:center`, because a 19px title, a 24px
 capsule and a 32px button share no text baseline.
@@ -28,7 +28,7 @@ kind of sentence, and an inked half made the caption look like two captions.
 `.an-sub code`, `.an-lesson-body code`) — the same treatment `.set-hint code` gives a
 command on Settings. It used to be the accent green, which made a third colour in a line
 that already carries two. The ↻ is the shared **`.icon-refresh`** atom, used by
-Management's band too: both sections reload the same way, so the control is the same
+Claude Configs' band too: both sections reload the same way, so the control is the same
 control, and the word "refresh" beside it left the glyph two characters of room once the
 scope path shared that line.
 

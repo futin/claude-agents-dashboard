@@ -84,7 +84,7 @@ That's the whole basic setup. Everything below is optional.
   (`Stop session` → `Really stop?`, with `Force stop` if the graceful signal doesn't
   land). Off by default (empty `CLAUDE_BIN`); how much a launch can do unattended is
   bounded by the `SPAWN_MAX_PERMISSION` ceiling on the host, never by the browser.
-- **[Management tab](docs/subsystems/management.md)** — read-only browser for all Claude
+- **[Claude Configs tab](docs/subsystems/configs.md)** — read-only browser for all Claude
   config on the machine: skills, agents, commands, rules, hooks, settings, plugins, MCP
   servers (secrets redacted), per scope. A skill that ships more than `SKILL.md` opens its whole directory in a file rail
   beside the viewer.

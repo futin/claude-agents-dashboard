@@ -1,10 +1,10 @@
 import { useId, useState, type ReactNode, type SyntheticEvent } from 'react';
 
 import { parseFrontmatter } from '../../../../shared/frontmatter';
-import { useFileContent } from '../../hooks/useManagement';
+import { useFileContent } from '../../hooks/useConfigs';
 import { fmtTok } from '../../lib/format';
 import { Markdown } from '../Markdown';
-import type { FileKind } from '../../lib/managementEntries';
+import type { FileKind } from '../../lib/configsEntries';
 
 interface Props {
   path: string;

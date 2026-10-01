@@ -1,17 +1,17 @@
-# Management — read-only config browser
+# Claude Configs — read-only config browser
 
-A **Management** section (top-level `SideRail` in `App.tsx`, persisted as
+A **Claude Configs** section (top-level `SideRail` in `App.tsx`, persisted as
 `dashboard.section`) shows all Claude config on the machine. Read-only v1 — nothing is
 ever written.
 
 **The scope is a rail destination, not a pane** (`.claude/DESIGN.md` §8.5): Global
-(`~/.claude`) and every recently-active or pinned project sit in the sidebar as Management's
+(`~/.claude`) and every recently-active or pinned project sit in the sidebar as Claude Configs'
 sub-nav, the same tree Usage and Settings draw, and only while the section is open. The
-page keeps the persisted state (`management.scope`) and still resolves a stale value to
+page keeps the persisted state (`configs.scope`) and still resolves a stale value to
 `global` during render — only the control moved. Its ↻ is the shared `.icon-refresh`
 atom the [analytics](analytics.md) band uses — glyph only, since the scope path shares
 that line. The **band** names it as
-`Management · <scope>` with the scope's path in a *neutral* `.set-scope` pill (the green
+`Claude Configs · <scope>` with the scope's path in a *neutral* `.set-scope` pill (the green
 fill means "every device" on Settings and would lie here), the ↻ on the same line, and
 the one-line subtitle the full width beneath.
 
@@ -20,7 +20,7 @@ What is left is three levels, so the page is **three columns**:
 - **Column 1 — type:** one row per kind (Skills, Agents, Commands, Rules, Hooks, Memory,
   Settings, Plugins, MCP servers) with its count as a pill. Only kinds with at least one entry appear,
   and the counts are the *filter's* counts. Which type is showing is persisted
-  (`management.type`) and resolved during render, so a filter that empties the picked type
+  (`configs.type`) and resolved during render, so a filter that empties the picked type
   falls back to the first type still standing rather than drawing an empty card.
 - **Column 2 — item, as a Settings card (§8.2):** the type is the category title, the
   subtitle counts what the filter left, then the filter box, then one row per item — name
@@ -42,11 +42,11 @@ What is left is three levels, so the page is **three columns**:
 Columns 1 and 2 are **fixed** (190px / 420px): a column that is wide until you pick
 something and narrow after jumps out from under the row you just clicked. Below `xl`
 (1280px) the file column drops to a full-width row under the other two; below `md`
-(768px) everything is one column, and picking an item scrolls the detail column into view (`ManagementView.tsx`): it opens below both
+(768px) everything is one column, and picking an item scrolls the detail column into view (`ConfigsView.tsx`): it opens below both
 lists, far enough down that the pick would otherwise look like it did nothing. Every column sizes to its content and the page body is the only scroller — no pane
 is pinned to the viewport, so a long file is read by scrolling the page. The scope has no
 control in the band at any width: it is a nav destination, so it is the tree under
-Management — on the desktop rail, and in the phone menu, which draws every tree open.
+Claude Configs — on the desktop rail, and in the phone menu, which draws every tree open.
 
 Two things the three-pane version had are **gone on purpose**: the type-group collapse
 control (the type is a column now, not a collapsible header) and the
@@ -54,9 +54,9 @@ control (the type is a column now, not a collapsible header) and the
 
 ## Mechanism
 
-- **Endpoints:** `GET /api/management` (ManagementIndex: global ScopeConfig + recent
-  ProjectRefs), `GET /api/management/project?dir=<dirName>` (one project's ScopeConfig),
-  `GET /api/management/file?path=<abs>` (FileContent). Handlers in `api.ts`, scanner in
+- **Endpoints:** `GET /api/configs` (ManagementIndex: global ScopeConfig + recent
+  ProjectRefs), `GET /api/configs/project?dir=<dirName>` (one project's ScopeConfig),
+  `GET /api/configs/file?path=<abs>` (FileContent). Handlers in `api.ts`, scanner in
   `lib/management.ts`, frontmatter metadata via `shared/frontmatter.ts`.
 - **Scopes:** global = `~/.claude/{skills,agents,commands,rules,hooks,CLAUDE.md,settings*}`
   **plus every installed plugin's subtree** (`plugins/installed_plugins.json` →
@@ -117,20 +117,20 @@ control (the type is a column now, not a collapsible header) and the
   `ConfigItem.files` (`{rel, size}[]`, SKILL.md first then rel-sorted) — only when there
   is more than SKILL.md, so a single-file skill's payload is byte-identical to before. No
   file bodies are read during the scan; the rail fetches one on click through the same
-  `/api/management/file`. Caps: depth 4 rel-segments, 200 files per skill.
+  `/api/configs/file`. Caps: depth 4 rel-segments, 200 files per skill.
 - **No polling:** config changes over days. Index fetched on entering the section / manual
   ↻; project scopes + file bodies fetched lazily on click and cached in ref-held Maps.
-  Switching to Management unmounts SessionsView → the 3s poll stops.
-- **Client:** ManagementView is a `React.lazy` default export (own chunk; sessions bundle
-  unchanged). Entry normalization is pure (`lib/managementEntries.ts`, unit-tested).
+  Switching to Claude Configs unmounts SessionsView → the 3s poll stops.
+- **Client:** ConfigsView is a `React.lazy` default export (own chunk; sessions bundle
+  unchanged). Entry normalization is pure (`lib/configsEntries.ts`, unit-tested).
   Stale persisted scope / type / dead selection resolve during render — no effects.
 - **⚠️ One index fetch, two consumers.** The rail's scope tree needs `projects[]` from
-  `GET /api/management`, which the lazy chunk used to own. `hooks/useManagementScope.tsx`
+  `GET /api/configs`, which the lazy chunk used to own. `hooks/useConfigsScope.tsx`
   hoists the scope state *and* that one fetch into a context above both `SideRail` and
   `main` (`App.tsx`), so the index is fetched exactly once and the rail and the page can
-  never disagree about the scope. Only `hooks/useManagement.ts` — three fetch hooks, no
-  components — moves into the main bundle with it; the management chunk itself stays lazy.
-  The provider's `active` prop (`section === 'management'`) is what keeps a Sessions
+  never disagree about the scope. Only `hooks/useConfigs.ts` — three fetch hooks, no
+  components — moves into the main bundle with it; the configs chunk itself stays lazy.
+  The provider's `active` prop (`section === 'configs'`) is what keeps a Sessions
   visitor from triggering a config scan, and the rail renders no rows at all while the
   section is closed.
 
@@ -160,10 +160,10 @@ control (the type is a column now, not a collapsible header) and the
     - server/lib/management.ts
     - shared/frontmatter.ts
     - server/api.ts
-    - client/src/components/management/
-    - client/src/hooks/useManagement.ts
-    - client/src/hooks/useManagementScope.tsx
-    - client/src/lib/managementEntries.ts
+    - client/src/components/configs/
+    - client/src/hooks/useConfigs.ts
+    - client/src/hooks/useConfigsScope.tsx
+    - client/src/lib/configsEntries.ts
   kind: subsystem
   verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

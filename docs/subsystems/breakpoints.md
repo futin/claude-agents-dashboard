@@ -7,7 +7,7 @@ their own numbers: `hooks/useNarrow.ts` exports `NARROW_PX` (767.98, the `md` de
 tier — which shapes the switcher offers, which options a `<select>` lists) and
 `SHELL_NARROW_PX` (639.98, the `sm` shell tier — which of its two homes the account chip
 is drawn in, see [account-header](account-header.md)), and the column-count comment in
-`components/management/ManagementView.tsx` is the third. Each is fractional so it is a
+`components/configs/ConfigsView.tsx` is the third. Each is fractional so it is a
 true complement of the CSS's `min-width`, with no gap at fractional viewport widths. Design and migration history:
 [2026-09-15-breakpoint-ladder-design.md](../superpowers/specs/2026-09-15-breakpoint-ladder-design.md).
 
@@ -131,7 +131,7 @@ migration:
   sources:
     - client/src/styles.css
     - client/src/hooks/useNarrow.ts
-    - client/src/components/management/ManagementView.tsx
+    - client/src/components/configs/ConfigsView.tsx
     - test/breakpoints.test.ts
   kind: subsystem
   verified: f06c54a88e5655ce39e1f5b23b97d42151e257b2

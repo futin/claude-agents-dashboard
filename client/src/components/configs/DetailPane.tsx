@@ -4,7 +4,7 @@ import { FileBlock } from './FileBlock';
 import { HookDetail } from './HookDetail';
 import { McpDetail } from './McpDetail';
 import { SkillFileRail } from './SkillFileRail';
-import type { Entry, EntryFile } from '../../lib/managementEntries';
+import type { Entry, EntryFile } from '../../lib/configsEntries';
 
 interface Props {
   /**
@@ -47,7 +47,7 @@ export function DetailPane({ entry, groupTitle }: Props) {
   }
 
   const files = entry.files;
-  // Resolve during render (the pattern the rest of Management uses): a pick made
+  // Resolve during render (the pattern the rest of Claude Configs uses): a pick made
   // on another entry — or on a file a refresh dropped — falls back to SKILL.md.
   const active =
     files !== undefined && picked !== null && picked.entryKey === entry.key

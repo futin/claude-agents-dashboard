@@ -25,7 +25,7 @@ import { loadConfig } from './lib/config.js';
 import type { Config } from './lib/config.js';
 import {
   serveSessions, serveSessionDetail, serveSessionChat,
-  serveManagementIndex, serveManagementProject, serveManagementFile,
+  serveConfigsIndex, serveConfigsProject, serveConfigsFile,
   serveAnalytics, serveHealth, serveDismiss, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
@@ -167,18 +167,18 @@ function badRequest(res: http.ServerResponse): void {
  */
 export function createRequestListener(config: Config): http.RequestListener {
   return (req, res) => {
-    // Management routes take query params — parse once. Handlers are async but
+    // Configs routes take query params — parse once. Handlers are async but
     // self-contained (they always end the response), so `void` keeps the
     // callback signature.
     const u = new URL(req.url || '/', 'http://local');
-    if (u.pathname === '/api/management/file') {
-      return void serveManagementFile(config, u.searchParams.get('path') || '', res);
+    if (u.pathname === '/api/configs/file') {
+      return void serveConfigsFile(config, u.searchParams.get('path') || '', res);
     }
-    if (u.pathname === '/api/management/project') {
-      return void serveManagementProject(config, u.searchParams.get('dir') || '', res);
+    if (u.pathname === '/api/configs/project') {
+      return void serveConfigsProject(config, u.searchParams.get('dir') || '', res);
     }
-    if (u.pathname === '/api/management') {
-      return void serveManagementIndex(config, res);
+    if (u.pathname === '/api/configs') {
+      return void serveConfigsIndex(config, res);
     }
     if (u.pathname === '/api/analytics') {
       return void serveAnalytics(config, res);

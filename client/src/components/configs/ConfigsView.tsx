@@ -3,18 +3,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DetailPane } from './DetailPane';
 import { ItemList } from './ItemList';
 import { TypeColumn } from './TypeColumn';
-import { useProjectScope } from '../../hooks/useManagement';
-import { scopeLabel, useManagementScope } from '../../hooks/useManagementScope';
+import { useProjectScope } from '../../hooks/useConfigs';
+import { scopeLabel, useConfigsScope } from '../../hooks/useConfigsScope';
 import { usePersistedState } from '../../hooks/usePersistedState';
-import { buildEntries, filterEntries } from '../../lib/managementEntries';
+import { buildEntries, filterEntries } from '../../lib/configsEntries';
 
 /**
- * Management section — read-only browser over Claude config, drawn as the three
+ * Claude Configs section — read-only browser over Claude config, drawn as the three
  * columns of DESIGN.md §8.5: type | item | file.
  *
  * The scope is *not* here: it is the rail's sub-nav (`SideRail`), and this view
- * reads it — plus the one `/api/management` fetch that feeds both — out of
- * `ManagementScopeProvider`. The band names the scope and spells out its path,
+ * reads it — plus the one `/api/configs` fetch that feeds both — out of
+ * `ConfigsScopeProvider`. The band names the scope and spells out its path,
  * since the rail only carries the label.
  *
  * Everything that can go stale resolves during render rather than in an effect:
@@ -22,14 +22,14 @@ import { buildEntries, filterEntries } from '../../lib/managementEntries';
  * key is not in this scope, and a picked type the filter emptied. Default
  * export: loaded via React.lazy so the sessions bundle stays unchanged.
  */
-export default function ManagementView() {
-  const { index, loading, error, projects, scope, refreshKey, refresh } = useManagementScope();
+export default function ConfigsView() {
+  const { index, loading, error, projects, scope, refreshKey, refresh } = useConfigsScope();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const grid = useRef<HTMLDivElement>(null);
   // Which type the columns are showing — persisted like the section's other
   // state, resolved below so a filter that empties it cannot strand the page.
-  const [typeSel, setTypeSel] = usePersistedState<string>('management.type', 'Skills');
+  const [typeSel, setTypeSel] = usePersistedState<string>('configs.type', 'Skills');
 
   const projectScope = useProjectScope(scope === 'global' ? null : scope, refreshKey);
   const config = scope === 'global' ? (index !== null ? index.global : null) : projectScope;
@@ -79,7 +79,7 @@ export default function ManagementView() {
   }, [selectedKey]);
 
   if (loading && index === null) return <div className="mgmt-empty">loading config…</div>;
-  if (index === null) return <div className="mgmt-empty off">couldn't load management data</div>;
+  if (index === null) return <div className="mgmt-empty off">couldn't load configs data</div>;
 
   const here = scopeLabel(scope, projects);
 
@@ -96,7 +96,7 @@ export default function ManagementView() {
                 phone the title is a flex column so the pill drops to its own
                 line, and the path needs an element of its own to be the one
                 that ellipsises when it is longer than the screen. */}
-            <span className="n">Management · {here.name}</span>
+            <span className="n">Claude Configs · {here.name}</span>
             <span className="set-scope"><i aria-hidden="true" /><span className="p">{here.path}</span></span>
           </span>
           {error ? <span className="off">scan failed — showing last snapshot</span> : null}

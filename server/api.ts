@@ -1335,7 +1335,7 @@ export async function serveNotifyTest(
  * Neither `body.project` nor `body.resume` ever reaches the filesystem by
  * being joined into a path — the former resolves through `resolveProject`'s
  * membership check against the enumerated recent-or-pinned project list (the same
- * reasoning `serveManagementProject` documents for its `dirName` query param),
+ * reasoning `serveConfigsProject` documents for its `dirName` query param),
  * the latter through an exact-id match against the enumerated transcripts.
  * Resume additionally requires the target to be a `dashboard`-surface
  * (`sdk-cli`) session that is not still running. Three checks answer that, and
@@ -1516,7 +1516,7 @@ export async function serveSessionStop(
   }
 }
 
-/* -------------------------------------------------- management endpoints */
+/* -------------------------------------------------- configs endpoints */
 
 function sendJson(res: ServerResponse, code: number, body: unknown): void {
   res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -1528,10 +1528,10 @@ function emptyScope(scope: 'global' | 'project', root = ''): ScopeConfig {
 }
 
 /**
- * `GET /api/management` — the global scope (incl. plugins) + recent and pinned projects.
+ * `GET /api/configs` — the global scope (incl. plugins) + recent and pinned projects.
  * Fetched on section open, not polled: config changes on the order of days.
  */
-export async function serveManagementIndex(config: Config, res: ServerResponse): Promise<void> {
+export async function serveConfigsIndex(config: Config, res: ServerResponse): Promise<void> {
   let data: ManagementIndex;
   try {
     const [global, projects] = await Promise.all([
@@ -1540,34 +1540,34 @@ export async function serveManagementIndex(config: Config, res: ServerResponse):
     ]);
     data = { generatedAt: new Date().toISOString(), global, projects };
   } catch (e) {
-    console.error('[dashboard] management index failed:', (e as Error).message);
+    console.error('[dashboard] configs index failed:', (e as Error).message);
     data = { error: true, generatedAt: new Date().toISOString(), global: emptyScope('global', claudeHome()), projects: [] };
   }
   sendJson(res, 200, data);
 }
 
 /**
- * `GET /api/management/project?dir=<dirName>` — one project's scope. The
+ * `GET /api/configs/project?dir=<dirName>` — one project's scope. The
  * dirName is resolved against the enumerated recent-or-pinned project list, never
  * joined into a path (same philosophy as serveSessionDetail).
  */
-export async function serveManagementProject(config: Config, dirName: string, res: ServerResponse): Promise<void> {
+export async function serveConfigsProject(config: Config, dirName: string, res: ServerResponse): Promise<void> {
   if (!ID_RE.test(dirName)) return sendJson(res, 400, { ...emptyScope('project'), error: true });
   try {
     const ref = resolveProject(config, dirName, pinOptions());
     if (!ref) return sendJson(res, 404, { ...emptyScope('project'), error: true });
     sendJson(res, 200, await readProjectScope(ref.path, ref.dirName));
   } catch (e) {
-    console.error('[dashboard] management project failed:', (e as Error).message);
+    console.error('[dashboard] configs project failed:', (e as Error).message);
     sendJson(res, 500, { ...emptyScope('project'), error: true });
   }
 }
 
 /**
- * `GET /api/management/file?path=<abs>` — one enumerated file's content.
+ * `GET /api/configs/file?path=<abs>` — one enumerated file's content.
  * 400 malformed path, 403 not in the servable set, 404 vanished on disk.
  */
-export async function serveManagementFile(config: Config, rawPath: string, res: ServerResponse): Promise<void> {
+export async function serveConfigsFile(config: Config, rawPath: string, res: ServerResponse): Promise<void> {
   const p = rawPath;
   const fail = (code: number) => sendJson(res, code, { path: p, content: '', size: 0, truncated: false, error: true });
   if (!p || !p.startsWith('/') || p.includes('..')) return fail(400);
@@ -1578,7 +1578,7 @@ export async function serveManagementFile(config: Config, rawPath: string, res: 
     if (!file) return fail(404);
     sendJson(res, 200, file);
   } catch (e) {
-    console.error('[dashboard] management file failed:', (e as Error).message);
+    console.error('[dashboard] configs file failed:', (e as Error).message);
     fail(500);
   }
 }

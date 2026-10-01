@@ -185,14 +185,14 @@ Below `sm` (640 px) the rail becomes a menu behind a top bar — wordmark left, 
 drops out of it full width. It is the same `.rail` element, repositioned, so the trees
 come with it: every section's tree stands open there, which puts any sub-view one tap
 away. That is why the sub-view switches the page bands used to carry on a phone (Usage's
-pill, Settings' Local/Shared, Management's scope select) are gone — the nav is the one
+pill, Settings' Local/Shared, Claude Configs' scope select) are gone — the nav is the one
 control at every width. The bar slides out of the way on a downward scroll and returns
 on the first upward one; while the menu is open it is pinned, because the menu hangs
 off it.
 
 ### 8.1 The board's type, after the §1 scale landed
 
-The rest of the board (sessions, usage, analytics, management, settings, the chat
+The rest of the board (sessions, usage, analytics, configs, settings, the chat
 drawer) now reads off §1's scale rather than the old strip-board sizes. The old
 board had three habits this pass removed outright:
 
@@ -316,14 +316,14 @@ board has no fifth data colour to give it, and amber is what it already calls a 
 Mock: `docs/guides/mockups/redesign-mock.html` `#forecast` / `#rates`.
 Reference: `docs/subsystems/usage-limits.md`.
 
-### 8.5 Management — the scope is a destination, the rest is columns
+### 8.5 Claude Configs — the scope is a destination, the rest is columns
 
 **The scope is a rail destination, not a pane.** Global (`~/.claude`) and each
-recently-active or pinned project sit in the sidebar as Management's sub-nav — the same tree Usage
+recently-active or pinned project sit in the sidebar as Claude Configs' sub-nav — the same tree Usage
 and Settings draw — instead of taking a column inside the page. The live view's three
 panes made the config's first level compete for width with the items under it, and the
 first level is the one that changes least: you pick a scope once and then work inside it.
-The page names it in the band as `Management · <scope>` (the `section · destination`
+The page names it in the band as `Claude Configs · <scope>` (the `section · destination`
 convention the Usage pages set) with the `.scope` pill after it, because the rail carries
 the label but only the band can spell out the path. The pill stays neutral: the green
 `.scope` fill means "every device" on Settings and would lie here.
@@ -353,7 +353,7 @@ three levels, and saying so out loud beats nesting two of them inside one scroll
   shadow into a crescent.
 
 Mock: `docs/guides/mockups/redesign-mock.html` `#mgmt`.
-Reference: `docs/subsystems/management.md`.
+Reference: `docs/subsystems/configs.md`.
 
 ### 8.6 The chat modal — the sidecar, and how a wait panel arrives
 

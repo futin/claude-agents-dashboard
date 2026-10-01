@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 
 import { usePersistedState } from '../../hooks/usePersistedState';
-import type { Entry, EntryGroup } from '../../lib/managementEntries';
+import type { Entry, EntryGroup } from '../../lib/configsEntries';
 
 interface Props {
   /** The picked type's entries, already filtered; null when nothing matches. */
@@ -43,7 +43,7 @@ function badgeText(badge: string): string {
 export function ItemList({ group, type, total, filter, onFilter, selectedKey, onSelect }: Props) {
   const filtered = filter.trim() !== '';
   // Keys of sub-groups the user toggled away from their default state.
-  const [collapsedKeys, setCollapsedKeys] = usePersistedState<string[]>('management.collapsed', []);
+  const [collapsedKeys, setCollapsedKeys] = usePersistedState<string[]>('configs.collapsed', []);
   const toggled = useMemo(() => new Set(collapsedKeys), [collapsedKeys]);
 
   const toggle = (key: string) => {

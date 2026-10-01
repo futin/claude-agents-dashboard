@@ -11,7 +11,7 @@ docs:
   - path: docs/subsystems/chat.md
     kind: subsystem
     note: chat drawer + transcript tail endpoint
-  - path: docs/subsystems/management.md
+  - path: docs/subsystems/configs.md
     kind: subsystem
     note: read-only config browser
   - path: docs/subsystems/remote-access.md

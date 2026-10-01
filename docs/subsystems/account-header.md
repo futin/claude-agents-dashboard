@@ -9,7 +9,7 @@ rate windows as micro-meters, and a popover with the full gauges. It replaced th
 The sessions aside is for what is true of *this board* — the clock, the counts, the
 remote-answers switch, **New session**. The two rate windows are not: they are true of the
 account wherever you are standing, and reading them meant being on Sessions. So they came
-out of the aside and into the shell, where Usage, Management, Analytics and Settings can
+out of the aside and into the shell, where Usage, Claude Configs, Analytics and Settings can
 see them too.
 
 The card's contents did not change. The popover draws the same bars, time strips, pace
