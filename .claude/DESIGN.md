@@ -321,7 +321,23 @@ Reference: `docs/subsystems/usage-limits.md`.
 A rail section with the same fixed two-row tree Usage and Settings draw: **Git** (the default) and **Pinned**, per device in `managementTab`. The page
 takes the plain `wrap wide`, and each sub-view opens on a band titled `Management · <sub-view>` (the `section · destination` convention the Usage
 pages set). Pinned is the §8.2 Projects card under its own band, carrying the green "every device" scope pill because the pins are server-stored; it is
-the page that used to be Settings › Pinned, moved unchanged. Git is the band alone until its body lands.
+the page that used to be Settings › Pinned, moved unchanged.
+
+Git is the Usage band with a right slot (`Band`'s optional `right`: "updated Ns ago", or an amber "couldn't update", and the `.icon-refresh` ↻), then a
+`.seg` switcher on the ground — the Sessions one, on `--hairline2` for the same §8.3 reason — and one of **three shapes** over the same repo list, in pin
+order:
+
+- **Cards** — one borderless `--strip` card per repo (§8.2), auto-filling columns: two on a laptop, one on a phone. Header: a status dot, the name, the
+  branch chip, the fetched age pushed right; then the uncommitted and trunk-vs-origin chips; then the branch rows.
+- **Table** — `.dt`'s rules (one rule per row, a heavier one under the head) in a sheet that scrolls inside itself; a row click opens that repo's branches
+  as sub-rows on `--strip-hi`. Wide-only: a phone is never offered it, and a stored Table comes back with the width.
+- **Triage** — the Sessions triage idea, re-ruled for git: Needs you, In flight, Quiet, Can't read, in that order and only when non-empty, under small
+  uppercase `--ink3` headers. Busy repos are paper cards with their branches; Quiet and Can't read are one dashed line each, Quiet expanding on click.
+
+Four inks carry the Triage rule wherever a repo appears: **amber** needs you (uncommitted work, or a diverged trunk), **mustard** in flight (and a diverged
+trunk's chip), **green** quiet (and "clean"), **`--ink3`** can't read. The branch row borrows GitHub's divergence bar — behind grows left in `--ink3`, ahead
+grows right in `--cyan`, one scale per repo so the largest count fills its half. Below `md` the bar drops and the two numbers stay; the worktree badge is
+the one cyan-outlined chip. Every class is `git-` prefixed and every colour a token or a `color-mix` over one.
 
 ### 8.5 Claude Configs — the scope is a destination, the rest is columns
 

@@ -64,7 +64,9 @@ override it (see `dashboard.section` below).
   `configs.type` (which of the type column's rows the item column is showing) and
   `configs.collapsed` (see [configs](configs.md) — all three resolve during render,
   so a scope that aged out, a type the filter emptied and a sub-group that no longer exists
-  fall back rather than stranding the page).
+  fall back rather than stranding the page);
+  `management.gitLayout` (which of Management › Git's three shapes the switcher was left on, a bare `GitLayout` string guarded by `isGitLayout` on read;
+  a phone draws Cards without overwriting a stored Table — see [git-stats](git-stats.md)).
 - **Client-only, zero deps** — no backend, and nothing here is shareable/bookmarkable by
   design. The one URL param in the app is the opposite of persistence: `?session=<id>`, the
   deep link a tapped push notification opens (`lib/deepLink.ts`, put in ntfy's `Click` header

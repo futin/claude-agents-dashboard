@@ -230,7 +230,9 @@ client/src/
                   MicButton, SpawnPanel, PinPicker (projects to pin — older ones in
                   the launch sheet, recent + older in Management › Pinned), ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, configs/, management/ (ManagementView —
-                  the Git | Pinned section — and PinnedProjectsGroup), analytics/,
+                  the Git | Pinned section — PinnedProjectsGroup, and the Git sub-view: GitView
+                  (band, switcher, poll owner), GitCards / GitTable / GitTriage (the three
+                  shapes) and GitParts (chips, divergence bar, branch list they share)), analytics/,
                   usage/ (UsageView + the two tabs, Sheet — the band / figure
                   strip / sheet / definitions
                   chrome both tabs draw, and
@@ -240,6 +242,7 @@ client/src/
                   fetch, shared by the rail's tree and the page), useAnalytics,
                   useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins,
+                  useGitStats (the Git sub-view's 30s visible-only poll),
                   usePersistedState, useSettings, useServerSettings, useDictation, useFloatingTip
                   (the one hover/pin explanation panel, shared by both Usage tabs),
                   useTranscribeAvailable, useWebNotify (browser banners for headless
@@ -252,7 +255,10 @@ client/src/
                   usageRatesFormat, panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
                   webNotify, backClose, stopControl, triage (the board/triage piles),
-                  stickyStrip, agentLabel (a subagent's type only when informative)
+                  stickyStrip, agentLabel (a subagent's type only when informative),
+                  gitLayouts / gitTriage / gitStatsText (the Git sub-view's switcher rules,
+                  Triage grouping and copy table), gitBar (the divergence bar's scale),
+                  gitPoll (its poll schedule, apart from the DOM)
 vite.config.ts    dev proxy /api → backend; reuses the server config loader;
                   allowedHosts = `.ts.net` + this node's bare MagicDNS short
                   name (probed via `tailscale status --json`), without which

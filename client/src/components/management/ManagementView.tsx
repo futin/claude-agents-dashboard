@@ -1,6 +1,6 @@
 import { useSettings } from '../../hooks/useSettings';
-import { Band } from '../usage/Sheet';
 import { SettingsBand } from '../settings/SettingsRow';
+import GitView from './GitView';
 import PinnedProjectsGroup from './PinnedProjectsGroup';
 
 /**
@@ -10,8 +10,8 @@ import PinnedProjectsGroup from './PinnedProjectsGroup';
  * rail's tree at every width — the same swap Usage and Settings make, so there
  * is no switch on the page itself.
  *
- * Git is the local state of the pinned repos; for now it is the band alone and
- * its body arrives with the Git stats view. Pinned is the project ledger that
+ * Git is the local state of the pinned repos (`GitView`, which owns the poll,
+ * so showing Pinned stops it). Pinned is the project ledger that
  * used to be Settings › Pinned, moved here unchanged — a list that grows with
  * use belongs next to the repos it feeds, not among the policies.
  *
@@ -37,12 +37,5 @@ export default function ManagementView() {
     );
   }
 
-  return (
-    <div className="usage-section">
-      <Band
-        title="Management · Git"
-        sub={'Local state of your pinned repos. Nothing here fetches — "fetched" says how old the remote data is.'}
-      />
-    </div>
-  );
+  return <GitView />;
 }

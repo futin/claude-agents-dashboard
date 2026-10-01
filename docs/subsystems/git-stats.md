@@ -99,10 +99,52 @@ route.
 
 ## Client
 
-Filled in with the client half (layouts, triage, copy table, poll). The copy table's source is spec §6; its module is `client/src/lib/gitStatsText.ts`.
+Management › Git (`client/src/components/management/GitView.tsx`) draws the payload. `ManagementView` mounts it only while `managementTab` is `git`, so
+the Pinned sub-view and every other section run no poll.
+
+**The poll.** `useGitStats` fetches on mount, then every **30s** while the page is visible; a `visibilitychange` back to visible polls at once and restarts
+the 30s, and going hidden drops the timer, so a backgrounded tab makes no requests. The schedule is `startGitPoll` in `client/src/lib/gitPoll.ts`, written
+against injected timer and visibility functions so `test/git-stats-client.test.ts` drives it with fakes; the hook only hands it `document` and `window`. A
+failed fetch keeps the last payload and sets `error`: with no payload yet the body reads "Couldn't load git stats. Retrying every 30s.", with one the band's
+right side reads "couldn't update" in place of "updated Ns ago". The band's ↻ polls now, and is a no-op while a poll is in flight.
+
+**The layouts.** A `.seg` switcher offers `gitLayoutsFor(narrow)` and stores the pick per device in `management.gitLayout` (default `cards`); what is drawn is
+`drawableGitLayout`, so a phone draws Cards while a stored Table waits for the next wide window (`client/src/lib/gitLayouts.ts`). All three shapes take the
+same repos in pin order and share `GitParts.tsx`:
+
+| Layout | Shape |
+| ------ | ----- |
+| Cards  | one card per repo, auto-filling columns. Below `md` (768px) the divergence bar drops and the numbers stay |
+| Table  | one row per repo: On / Uncommitted / Trunk vs origin / Branches (`unmergedTotal`) / Fetched. A click opens the branches as sub-rows. Wide-only |
+| Triage | groups from `triageGitRepos`, drawn Needs you, In flight, Quiet, Can't read, empty groups omitted. Quiet rows are one dashed line, expanding on click |
+
+**The triage rule** (`client/src/lib/gitTriage.ts`), first match wins: any non-`ok` state is Can't read; uncommitted work or a non-zero `trunkVsOrigin` is
+Needs you; `unmergedTotal ≥ 1` is In flight, which includes a repo with no remote or no trunk; everything else is Quiet. Within a group repos keep pin
+order, so a repo moves between groups but never reorders inside one. The same group colours each repo's status dot in Cards and Triage.
+
+**A branch row** is the name (plus a "worktree" badge when `worktreePath` is set), the divergence bar, "behind | ahead", and the last-commit age. The bar
+grows behind to the left and ahead to the right on one scale per repo: the largest count among the repo's listed branches fills its 44px half, and a
+non-zero count never drops below 2px (`client/src/lib/gitBar.ts`). A branch whose `ahead`/`behind` are null draws neither bar nor numbers; that is keyed
+on the branch's own counts (`gitBranchCounts`), not on `repo.trunk`, because a named trunk with no base ref also yields null counts. The newest five rows
+show and "+N more" expands the rest inline (N = `branches.length − 5`); once expanded, a list the server capped adds "N more not shown (over 50)"; a
+non-zero `mergedCount` adds "N merged branches hidden". A non-`ok` repo shows its one sentence instead of a body.
+
+**The copy.** Every string is in `client/src/lib/gitStatsText.ts`, verbatim from spec §6's copy table; the components never build their own. The empty
+state's "Pinned" is a link that sets `managementTab: 'pinned'`.
 
 <!-- docs-sync:
   sources:
     - server/lib/git-stats.ts
+    - client/src/hooks/useGitStats.ts
+    - client/src/components/management/GitView.tsx
+    - client/src/components/management/GitCards.tsx
+    - client/src/components/management/GitTable.tsx
+    - client/src/components/management/GitTriage.tsx
+    - client/src/components/management/GitParts.tsx
+    - client/src/lib/gitLayouts.ts
+    - client/src/lib/gitTriage.ts
+    - client/src/lib/gitStatsText.ts
+    - client/src/lib/gitBar.ts
+    - client/src/lib/gitPoll.ts
   kind: subsystem
 -->
