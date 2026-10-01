@@ -17,6 +17,16 @@ Brainstormed in futin/claude-agents-dashboard#166 (2026-10-01). This spec covers
 The plugin spec's Phase 1 row says Git Stats "reuses P's git-sync engine". It does not: see §1 for why.
 
 Mockups: [2026-10-01-git-stats-mockups.html](2026-10-01-git-stats-mockups.html). Every layout in this spec is drawn there with the same six sample repos.
+Where the two disagree, **this spec wins**. Known differences:
+
+- Every band uses §6's fixed sub-line. The mockup's Triage band ("2 of 6 pinned repos need attention.") is not built.
+- The mockup puts ixray (no remote, one unmerged branch) in Quiet. Under §6's rule it is **In flight**.
+- The mockup draws only the "Quiet" group header. All four groups get one.
+- The merged line is always "N merged branches hidden". The mockup's "— cleanup candidates for Sync" and its short "7 merged hidden" are not built.
+- The mockup's "3 branches" / "no other branches" chips and its "8 · 0 merged" Branches cell come from §6's copy table instead: the Branches column shows
+  the unmerged total.
+- The phone's "wt" badge is "worktree" at every width. The error sentences keep §6's casing in every layout.
+- The mockup's Sync buttons are Phase 2 (§9). Phase 1 renders none.
 
 ## Decisions
 
@@ -30,7 +40,7 @@ Mockups: [2026-10-01-git-stats-mockups.html](2026-10-01-git-stats-mockups.html).
 | D6  | **Own reader in `server/`**, not the git-sync engine. The server never runs plugin code; `survey` measures branches against `origin/<branch>`, not the trunk, and calls `gh`. |
 | D7  | Trunk = git-sync's `trunkOf` rule: `origin/HEAD`, else `main`, else `master`, remote-tracking ref before local. Copied, not imported.             |
 | D8  | Branches are compared against **`origin/<trunk>` when it exists**, else the local trunk.                                                          |
-| D9  | Proven-merged branches are **hidden behind a count** ("7 merged branches hidden"). Proof = ancestor of the base, or `git cherry` all `-`.            |
+| D9  | Proven-merged branches are **hidden behind a count** ("7 merged branches hidden"). Proof = ancestor of the base, or git-sync's M2 `git cherry` test (§2).   |
 | D10 | A branch checked out in a linked worktree gets a **worktree badge**. Worktrees get no status of their own.                                         |
 | D11 | Three layouts behind a switcher, **Cards \| Table \| Triage**, same pattern as Sessions. Default Cards; Table is withheld on a phone.               |
 | D12 | Client polls **every 30s, only while the Git sub-view is open and the page is visible**, plus a ↻ button.                                          |
@@ -60,9 +70,10 @@ One module, Node built-ins only.
 
 | Question                       | How                                                                                     |
 | ------------------------------ | --------------------------------------------------------------------------------------- |
+| Does the folder exist          | `fs.stat` before any git call. Missing or not a directory → `missing`, with no git run.   |
 | Is this a repo, where is it    | `rev-parse --show-toplevel --absolute-git-dir`. A non-zero exit → `not-git`.             |
-| Current branch                 | `symbolic-ref -q HEAD`. Failure means detached HEAD: report the short sha instead.       |
-| Uncommitted files              | `status --porcelain -z`, counting entries; untracked files count, ignored ones do not. |
+| Current branch                 | `symbolic-ref -q --short HEAD` → `branch`. Failure = detached: `branch: null`, `detachedSha` = `rev-parse --short HEAD`. |
+| Uncommitted files              | `status --porcelain=v1 -z`, default untracked mode. Counted the way `git status` lists them (see below).                 |
 | Local branches                 | `for-each-ref refs/heads` with name, sha, committer date and `%(worktreepath)`.          |
 | Trunk, has origin              | D7's rule; `hasOrigin` = `remote` lists `origin`.                                         |
 | Fetched age                    | mtime of `<git-dir>/FETCH_HEAD`; absent → `null` ("never fetched").                     |
@@ -70,15 +81,26 @@ One module, Node built-ins only.
 A pin's path is the session cwd, which can be a subdirectory of the repo. The reader works from `--show-toplevel`. Two pins that resolve to the same toplevel
 are shown twice; this is rare, and deduping would hide one pin's name.
 
-`%(worktreepath)` marks a branch checked out in a worktree. It is empty for the main worktree's own branch, so only *linked* worktrees get the D10 badge.
+**Counting uncommitted entries.** A rename or copy (`R`/`C` in either column) is one entry, even though `-z` emits two paths for it. An untracked
+directory counts once, not once per file, because that is how the default untracked mode reports it. Ignored files are not counted.
+
+**Unborn HEAD** (a fresh `git init`, no commits yet): `branch` is the name HEAD points at, there are no branches, and trunk is `null`.
+
+**Worktree badge.** `%(worktreepath)` is set for every branch checked out in *any* worktree, the main one included (checked on git 2.50.1).
+`worktreePath` is that path when it differs from the repo toplevel, comparing realpaths, and `null` otherwise. Only branches checked out in a *linked*
+worktree get the D10 badge.
 
 ### Memoised (only recomputed when a sha moves)
 
 Keyed by `(repo toplevel, branch sha, base sha)`:
 
 - **Ahead/behind:** `rev-list --left-right --count <base>...<branch>`, using full refnames (`refs/heads/x`), never a bare name.
-- **Merged:** ahead = 0 (ancestor of the base), or else `git cherry <base> <branch>` prints only `-` lines. A multi-commit branch that was squash-merged
-  does not pass this test and is shown as unmerged. That error is accepted: it always errs toward showing a branch, never hiding one. The converse is
+- **Merged:** ahead = 0 (ancestor of the base), or else git-sync's M2 test (`git-sync.mjs` `patchEquivalence`). That test requires three things:
+  `git cherry <base> <branch>` prints **at least one** line, every line is `-`, and `rev-list --merges <base>..<branch>` is empty.
+  - The ≥ 1 rule matters because cherry prints nothing for a branch that is ahead only by merge commits. Without it, "all lines are `-`" would be
+    vacuously true.
+  - The no-merges rule matters because cherry skips merge commits, so a merge that carries real work would otherwise hide.
+  - A multi-commit branch that was squash-merged does not pass this test and is shown as unmerged. That error is accepted: it always errs toward showing a branch, never hiding one. The converse is
   intended: a branch created at the base's tip with no commits of its own is ahead 0, so it counts as merged and is hidden. It has nothing to show yet.
 
 The trunk's own row, local trunk vs `origin/<trunk>` ahead/behind, uses the same memo. Each poll replaces the memo with the entries it touched, so it never
@@ -88,15 +110,30 @@ holds a branch that no longer exists.
 
 `RepoGitStats` is a discriminated union on `state`, defined in `shared/types.ts` first:
 
-- **`missing`**: dead pin, or the folder is gone. It carries the pin's name and last known path.
+Every variant carries `dirName` and `name` (from the pin row) and `path: string | null` (the pin's cwd).
+
+- **`missing`**: dead pin (`path: null`), or the folder is gone.
 - **`not-git`**: the folder exists but is not in a repo.
-- **`error`**: a git call failed or timed out, with a message.
-- **`ok`**, carrying:
-  - name, toplevel, current branch (or detached sha), whether it is the trunk, uncommitted count
-  - trunk name (or `null`: "no trunk"), `hasOrigin`, trunk vs origin ahead/behind (or `null` when there is no origin, or no `origin/<trunk>`)
-  - fetched age in ms (or `null`)
-  - unmerged branches: name, ahead, behind, last-commit ms, worktree path or `null`. Newest commit first, the trunk excluded, capped at **50**.
-  - total unmerged count and merged count
+- **`error`**: adds `message: string`. A git call failed or timed out.
+- **`ok`** adds:
+
+| Field           | Type                                     | Meaning                                                                                    |
+| --------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `toplevel`      | `string`                                 | `--show-toplevel`                                                                          |
+| `branch`        | `string \| null`                         | current branch; `null` when detached                                                       |
+| `detachedSha`   | `string \| null`                         | `rev-parse --short HEAD` when detached, else `null`                                        |
+| `onTrunk`       | `boolean`                                | `branch === trunk`                                                                         |
+| `uncommitted`   | `number`                                 | §2's count                                                                                 |
+| `trunk`         | `string \| null`                         | D7; `null` = no trunk                                                                      |
+| `hasOrigin`     | `boolean`                                | a remote named `origin` exists                                                             |
+| `trunkVsOrigin` | `{ ahead: number; behind: number } \| null` | local trunk vs `origin/<trunk>`; `null` when there is no origin, no trunk, or no `origin/<trunk>` |
+| `fetchedAtMs`   | `number \| null`                         | `FETCH_HEAD` mtime (epoch ms); the client derives the age                                  |
+| `branches`      | `GitBranch[]`                            | unmerged, trunk excluded, newest commit first, at most **50**                              |
+| `unmergedTotal` | `number`                                 | all unmerged branches, before the cap                                                      |
+| `mergedCount`   | `number`                                 | proven-merged branches, hidden                                                             |
+
+`GitBranch` = `{ name: string; ahead: number | null; behind: number | null; lastCommitMs: number; worktreePath: string | null }`. Ahead and behind are `null`
+only when there is no trunk.
 
 With no trunk at all, every branch is listed without ahead/behind and the merged count is 0. Without a base, nothing can be proved merged.
 
@@ -113,10 +150,13 @@ can reach the dashboard. `docs/subsystems/remote-access.md` lists it.
 - `Section` gains `'configs'`. Rail order becomes Sessions, Usage, Management, **Claude Configs**, Analytics, Settings. The landing picker follows, since it
   derives from `SECTIONS`.
 - Components move from `client/src/components/management/` to `components/configs/`. `ManagementView` becomes `ConfigsView`, and `useManagement` /
-  `useManagementScope` become `useConfigs` / `useConfigsScope`. The rail's scope tree (`ManagementSubNav`) moves with them and hangs under Claude Configs.
+  `useManagementScope` become `useConfigs` / `useConfigsScope`. `useManagementIndex` becomes `useConfigsIndex`; `SpawnPanel` imports it. The rail's scope tree (`ManagementSubNav`) moves with them and hangs under Claude Configs.
 - Routes move to `/api/configs`, `/api/configs/project` and `/api/configs/file`. The old paths are dropped, not aliased, because the client is the only
   consumer.
 - localStorage keys become `configs.collapsed`, `configs.type` and `configs.scope`, with no migration (D13).
+  - `OWNED_KEYS` (`client/src/hooks/useSettings.tsx`) is the list Settings → Reset clears. It gains the three `configs.*` keys and `management.gitLayout`
+    (§6), so Reset keeps covering every view key.
+  - It also keeps the three old `management.*` names, so Reset sweeps D13 leftovers.
 - The server module `server/lib/management.ts` keeps its name for now: it also holds the project listing that pins and Git Stats use. Renaming it is out of
   scope (see Out of scope).
 - **CSS class names do not change** (`.wide-mgmt` and the rest), per the repo rule. The new Management tab gets the plain `wrap wide`.
@@ -126,7 +166,7 @@ can reach the dashboard. `docs/subsystems/remote-access.md` lists it.
 ## §5 Phase 0: the new Management tab
 
 - Its sub-nav is **Git | Pinned**, driven by a new local setting `managementTab: 'git' | 'pinned'` (default `git`). It goes through the same `SUBNAV` table
-  and validator as `usageTab` and `settingsTab`.
+  and validator as `usageTab` and `settingsTab`. That widens `SideRail.tsx`'s `SubKey` union and the `SUBNAV` record's value type.
 - **Pinned** renders `PinnedProjectsGroup` unchanged, under a band "Management · Pinned". The band's sub-line drops "stay in Management" wording that no
   longer makes sense.
 - **Settings** drops `'pinned'` from `SettingsTab`, `SETTINGS_TABS` and its `SUBNAV` entry. A stored `settingsTab: 'pinned'` fails the validator and falls
@@ -138,7 +178,7 @@ can reach the dashboard. `docs/subsystems/remote-access.md` lists it.
 ### Band
 
 The title is "Management · Git", with the sub-line "Local state of your pinned repos. Nothing here fetches — "fetched" says how old the remote data is." On the
-right: "updated Ns ago" and a ↻ button that forces a poll now. With no pins, the empty state says to pin a project and links to the Pinned sub-view.
+right: "updated Ns ago" and a ↻ button that forces a poll now. Strings for every state are in the copy table below.
 
 ### Switcher
 
@@ -153,32 +193,57 @@ pure module under `client/src/lib/`.
 Every layout shows the same facts:
 
 - name and current branch, as a chip
-- uncommitted count (amber when > 0, "clean" otherwise)
-- trunk vs origin ("main = origin", "main 2 behind origin", "no remote")
+- uncommitted count
+- trunk vs origin
 - fetched age
 - the unmerged branches: name, a GitHub-style divergence bar (behind ◂ | ▸ ahead) with both numbers, last-commit age, worktree badge
   - the newest 5 show, then "+N more" expands the rest inline
-  - when merged > 0, a muted "N merged branches hidden" line follows
+  - when merged > 0, a muted merged line follows
 
-Non-`ok` states replace the body with one sentence: "Folder is gone — `<path>`. Unpin it under Pinned.", "Not a git repository.", or "Couldn't read: <message>".
-They never show broken numbers.
+Chip and bar colours come from the existing theme tokens (`--amber`, `--mustard`, `--cyan`, `--green`). Per the repo rule, no new colour literal goes into
+`styles.css`.
+
+**Copy.** `<trunk>` is the trunk's name, and N, M are counts.
+
+| State                                              | Text                                                                  |
+| -------------------------------------------------- | --------------------------------------------------------------------- |
+| Detached HEAD                                      | branch chip "detached at `<detachedSha>`"                             |
+| Uncommitted > 0 / = 0                              | "N uncommitted" (amber) / "clean" (green)                             |
+| `trunkVsOrigin` 0 / 0                              | "`<trunk>` = origin"                                                  |
+| behind only / ahead only / both                    | "`<trunk>` N behind origin" / "`<trunk>` N ahead of origin" / "`<trunk>` N ahead, M behind origin" (mustard) |
+| `hasOrigin: false`                                 | "no remote"                                                           |
+| origin exists, no `origin/<trunk>`                 | "`<trunk>` not on origin"                                             |
+| `trunk: null`                                      | "no main branch"; branches show no bar and no numbers                |
+| `fetchedAtMs` set / `null`                         | "fetched 2h ago" / "never fetched"                                    |
+| no unmerged branches                               | "no open branches"                                                    |
+| `branches` longer than 5                           | "+N more", where N = `branches.length − 5`. Expanding shows all `branches`.            |
+| `unmergedTotal` > 50, once expanded                | muted "N more not shown (over 50)", where N = `unmergedTotal − 50`     |
+| `mergedCount` > 0                                  | "N merged branches hidden"                                            |
+| `missing`                                          | "Folder is gone — `<path>`. Unpin it under Pinned." (a dead pin with no path: "Folder is gone. Unpin it under Pinned.") |
+| `not-git`                                          | "Not a git repository."                                               |
+| `error`                                            | "Couldn't read: `<message>`"                                          |
+| no pins at all                                     | "No pinned projects yet. Pin one under Pinned." with Pinned as a link |
+| first fetch fails, no data yet                     | page body "Couldn't load git stats. Retrying every 30s."              |
+| a later fetch fails                                | band right side reads "couldn't update" in place of "updated Ns ago", and the last data stays |
+
+Non-`ok` states replace the repo body with their one sentence and never show broken numbers. The Table's Branches column shows `unmergedTotal`.
 
 ### Layouts
 
 - **Cards:** one card per repo, in pin order, auto-filling columns (two on a laptop, one on a phone). On a phone the divergence bar drops and the numbers stay.
 - **Table:** one row per repo with columns On / Uncommitted / Trunk vs origin / Branches / Fetched. A click expands that repo's branches as sub-rows beneath it.
 - **Triage:** repos grouped by a pure function `triageGitRepos(repos)`. Within each group, repos keep pin order, so a repo only ever moves between groups.
-  - **Needs you:** uncommitted > 0, or trunk ahead or behind origin.
-  - **In flight:** clean and even with origin, but with ≥ 1 unmerged branch.
-  - **Quiet:** clean, even, no unmerged branches. A repo with no remote, or no trunk, but otherwise clean also lands here.
-  - **Can't read:** `missing`, `not-git` and `error`, as one muted line each at the bottom.
+  - The first matching rule wins:
+    1. **Can't read:** `missing`, `not-git` or `error`. Shown as one muted line each, at the bottom.
+    2. **Needs you:** uncommitted > 0, or `trunkVsOrigin` is non-null with ahead > 0 or behind > 0.
+    3. **In flight:** `unmergedTotal` ≥ 1. This includes a repo with no remote, and a repo with no trunk, whose every branch counts as unmerged.
+    4. **Quiet:** everything else.
   - Needs you and In flight rows show their branches. Quiet rows are one dashed line each, expandable.
 
 ### Polling
 
 `useGitStats` fetches on mount, then every **30s** while the Git sub-view is mounted and `document.visibilityState === 'visible'`. A `visibilitychange` back
-to visible polls immediately. Unmounting, or switching to Pinned, stops the timer. A failed fetch keeps the last good data and marks the band "couldn't
-update".
+to visible polls immediately. Unmounting, or switching to Pinned, stops the timer. For failures, see the copy table's last two rows.
 
 ## §7 Tests
 
@@ -186,21 +251,25 @@ node-assert, in the existing `test/run-all.ts` style. The server tests build **r
 
 | Case                                                        | Expected                                                                                     |
 | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Clean repo on `main`, cloned from a local bare `origin`       | `ok`, `isTrunk: true`, uncommitted 0, trunk vs origin 0/0, `hasOrigin: true`                    |
-| One modified + one untracked file                           | uncommitted 2                                                                               |
-| Detached HEAD                                               | current branch `null`, detached sha = `git rev-parse --short HEAD`                          |
-| No `origin` remote, branch `master`                         | trunk `master`, `hasOrigin: false`, trunk vs origin `null`                                    |
+| Clean repo on `main`, cloned from a local bare `origin`       | `ok`, `onTrunk: true`, uncommitted 0, `trunkVsOrigin` 0/0, `hasOrigin: true`                    |
+| One modified tracked file + one untracked file at the root   | uncommitted 2                                                                               |
+| One staged rename + one untracked dir holding 2 files         | uncommitted 2                                                                               |
+| Detached HEAD                                               | `branch: null`, `detachedSha` = `git rev-parse --short HEAD`                                 |
+| Unborn HEAD (fresh `git init`)                               | `ok`, `branch` = HEAD's name, no branches, trunk `null`                                     |
+| No `origin` remote, branch `master`                         | trunk `master`, `hasOrigin: false`, `trunkVsOrigin` `null`                                    |
 | No `main`/`master`/`origin/HEAD`, only branch `dev`           | trunk `null`; `dev` listed without ahead/behind; merged count 0                              |
 | `origin/HEAD` → `origin/develop`                             | trunk `develop`                                                                             |
 | Branch 3 ahead / 2 behind `origin/main`                       | ahead 3, behind 2                                                                           |
 | Branch fast-forward merged into `main`                       | hidden; merged count 1                                                                      |
 | Branch whose single commit was cherry-picked onto `main`     | hidden via `git cherry`; merged count 1                                                      |
 | Branch of 2 commits squash-merged as 1                       | **shown** as unmerged (the accepted error, §2)                                              |
+| Branch ahead only by a merge of another unmerged branch      | **shown**: the no-merges rule stops cherry's skipped merge from hiding it                    |
+| Branch ahead only by an empty merge of `main` into itself    | **shown**: cherry prints 0 lines, and the ≥ 1 rule refuses a vacuous proof                   |
 | Local `main` behind `origin/main`, branch merged on origin   | hidden, since the base is `origin/main` (D8)                                                     |
-| Branch checked out in a linked worktree                      | `worktreePath` = that worktree; the main worktree's branch has `null`                        |
+| Branch checked out in a linked worktree; another checked out in the main worktree | linked one: `worktreePath` = that worktree; main worktree's branch: `null` |
 | 7 unmerged branches                                          | newest-first by commit date, all 7 in payload, total 7                                     |
 | 60 unmerged branches                                         | 50 in payload, total 60                                                                     |
-| Pin with `path: null`; pin to a deleted folder               | `missing`, and no git call made (runner spy)                                                 |
+| Pin with `path: null`; pin to a deleted folder               | `missing`, and no git call made (`fs.stat` first; runner spy)                                |
 | Pin to a plain folder                                        | `not-git`                                                                                   |
 | Pin to a repo subdirectory                                   | reads the toplevel; same stats as pinning the root                                          |
 | Runner times out for repo A                                  | A is `error`; repo B in the same response is `ok`                                            |
@@ -212,7 +281,9 @@ node-assert, in the existing `test/run-all.ts` style. The server tests build **r
 
 Client domain logic (pure modules):
 
-- `triageGitRepos` puts each state in the right group. Pin order holds within a group. A clean repo with no remote, or with no trunk, is Quiet.
+- `triageGitRepos` follows §6's precedence, and pin order holds within a group. A clean repo with no remote and no branches is Quiet. With one branch it
+  is In flight. A no-trunk repo with any branch is In flight. A dirty repo with branches is Needs you.
+- `OWNED_KEYS` holds the `configs.*` keys, the old `management.*` names and `management.gitLayout`.
 - `drawableGitLayout('table', narrow=true)` → `cards`, and the stored choice is untouched.
 - The settings validator maps a stored `settingsTab: 'pinned'` → `local`, and `managementTab: 'nonsense'` → `git`.
 - The rename sweep (§4).
@@ -221,7 +292,8 @@ Not testable here, and so to be verified by hand: the rendered layouts against t
 
 ## §8 Docs
 
-- `docs/subsystems/management.md` → `docs/subsystems/configs.md`, its routes and names updated.
+- `docs/subsystems/management.md` → `docs/subsystems/configs.md`, its routes and names updated. Every inbound link moves with it (`grep -rn
+  subsystems/management.md`). The docs-links test catches any it misses.
 - New `docs/subsystems/git-stats.md`: what each number means, why there is no fetch, the merged proof and its accepted error, the memo, and the triage rule.
 - `docs/overview.md` §Map: both entries, plus the file map for the moved components.
 - `.claude/DESIGN.md` §8.5 retitled for Claude Configs, plus a new subsection for Management (Git | Pinned and the three layouts).
