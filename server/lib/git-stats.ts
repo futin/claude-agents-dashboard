@@ -319,6 +319,7 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
     trunk,
     hasOrigin,
     trunkVsOrigin,
+    trunkRefs: trunk === null ? null : { local: localTrunk !== undefined, origin: originTrunk !== null },
     fetchedAtMs: await newestFetchHead(commonDir),
     branches,
     unmergedTotal: unmerged.length,

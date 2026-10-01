@@ -1569,6 +1569,8 @@ export type RepoGitStats =
       hasOrigin: boolean;
       /** Local trunk vs `origin/<trunk>`; null without an origin, a trunk, an `origin/<trunk>` or a local `<trunk>`. */
       trunkVsOrigin: { ahead: number; behind: number } | null;
+      /** Which refs of the trunk exist; null exactly when `trunk` is null. Lets the client tell "<trunk> not on origin" from "<trunk> only on origin", which `trunkVsOrigin: null` alone cannot. */
+      trunkRefs: { local: boolean; origin: boolean } | null;
       /** Newest `FETCH_HEAD` mtime across every worktree (epoch ms); null when never fetched. The client derives the age. */
       fetchedAtMs: number | null;
       /** Unmerged branches, trunk excluded, newest commit first, at most 50. */

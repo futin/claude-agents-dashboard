@@ -85,6 +85,7 @@ export async function run(): Promise<number> {
         { branch: 'main', detachedSha: null, onTrunk: true, uncommitted: 0, trunk: 'main', hasOrigin: true },
       );
       assert.deepStrictEqual(r.trunkVsOrigin, { ahead: 0, behind: 0 });
+      assert.deepStrictEqual(r.trunkRefs, { local: true, origin: true });
       assert.strictEqual(r.toplevel, work);
       assert.deepStrictEqual(
         { branches: r.branches, unmergedTotal: r.unmergedTotal, mergedCount: r.mergedCount },
@@ -146,9 +147,9 @@ export async function run(): Promise<number> {
       assert.deepStrictEqual(
         {
           branch: r.branch, detachedSha: r.detachedSha, trunk: r.trunk, onTrunk: r.onTrunk,
-          hasOrigin: r.hasOrigin, trunkVsOrigin: r.trunkVsOrigin, branches: r.branches,
+          hasOrigin: r.hasOrigin, trunkVsOrigin: r.trunkVsOrigin, trunkRefs: r.trunkRefs, branches: r.branches,
         },
-        { branch: 'main', detachedSha: null, trunk: null, onTrunk: false, hasOrigin: false, trunkVsOrigin: null, branches: [] },
+        { branch: 'main', detachedSha: null, trunk: null, onTrunk: false, hasOrigin: false, trunkVsOrigin: null, trunkRefs: null, branches: [] },
       );
     });
   }));
@@ -159,8 +160,21 @@ export async function run(): Promise<number> {
       fx.commit(repo, 'first');
       const r = ok(await read(repo));
       assert.deepStrictEqual(
-        { trunk: r.trunk, hasOrigin: r.hasOrigin, trunkVsOrigin: r.trunkVsOrigin, onTrunk: r.onTrunk },
-        { trunk: 'master', hasOrigin: false, trunkVsOrigin: null, onTrunk: true },
+        { trunk: r.trunk, hasOrigin: r.hasOrigin, trunkVsOrigin: r.trunkVsOrigin, trunkRefs: r.trunkRefs, onTrunk: r.onTrunk },
+        { trunk: 'master', hasOrigin: false, trunkVsOrigin: null, trunkRefs: { local: true, origin: false }, onTrunk: true },
+      );
+    });
+  }));
+
+  check(await test('origin exists but has no origin/main → trunkRefs {local: true, origin: false}, hasOrigin true', async () => {
+    await withGitFixture(async fx => {
+      const repo = fx.init('unpushed', 'main');
+      fx.commit(repo, 'first');
+      fx.git(repo, ['remote', 'add', 'origin', fx.bare('other-origin.git', ['elsewhere'])]);
+      const r = ok(await read(repo));
+      assert.deepStrictEqual(
+        { trunk: r.trunk, hasOrigin: r.hasOrigin, trunkVsOrigin: r.trunkVsOrigin, trunkRefs: r.trunkRefs },
+        { trunk: 'main', hasOrigin: true, trunkVsOrigin: null, trunkRefs: { local: true, origin: false } },
       );
     });
   }));
@@ -171,6 +185,7 @@ export async function run(): Promise<number> {
       fx.commit(repo, 'first');
       const r = ok(await read(repo));
       assert.strictEqual(r.trunk, null);
+      assert.strictEqual(r.trunkRefs, null);
       assert.strictEqual(await trunkOf(defaultGitRunner, repo), null);
     });
   }));
@@ -194,8 +209,8 @@ export async function run(): Promise<number> {
       const s = spy();
       const r = ok(await read(work, s.run));
       assert.deepStrictEqual(
-        { trunk: r.trunk, trunkVsOrigin: r.trunkVsOrigin, onTrunk: r.onTrunk, branch: r.branch },
-        { trunk: 'develop', trunkVsOrigin: null, onTrunk: false, branch: 'feature' },
+        { trunk: r.trunk, trunkVsOrigin: r.trunkVsOrigin, trunkRefs: r.trunkRefs, onTrunk: r.onTrunk, branch: r.branch },
+        { trunk: 'develop', trunkVsOrigin: null, trunkRefs: { local: false, origin: true }, onTrunk: false, branch: 'feature' },
       );
       const named = s.calls.filter(args => args.some(a => a.includes('refs/heads/develop')));
       assert.deepStrictEqual(named, []);

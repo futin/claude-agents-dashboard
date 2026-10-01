@@ -35,6 +35,7 @@ Every variant carries `dirName`, `name` and `path` (the pin's cwd). `state` is o
 | `trunk`         | `origin/HEAD`'s branch, else `main`, else `master`, the remote-tracking ref checked before the local one (`trunkOf`, copied from git-sync, not imported). `null` = none |
 | `hasOrigin`     | a remote named `origin` exists                                                                                                                   |
 | `trunkVsOrigin` | local trunk ahead/behind `origin/<trunk>`; `null` with no origin, no trunk, no `origin/<trunk>` or no local trunk                                |
+| `trunkRefs`     | `{ local, origin }` — whether the local `<trunk>` and `origin/<trunk>` exist; `null` exactly when `trunk` is `null`. It lets the client tell "not on origin" from "only on origin", which `trunkVsOrigin: null` cannot |
 | `fetchedAtMs`   | newest mtime of `FETCH_HEAD` (see below); `null` = never fetched                                                                                 |
 | `branches`      | unmerged local branches, trunk excluded, newest commit first (ties by name), at most **50**                                                      |
 | `unmergedTotal` | all unmerged branches, before the 50 cap                                                                                                         |
