@@ -78,8 +78,9 @@ The `webServer` overrides the first two: `--host localhost` on the command line,
     (`/api/sessions/:id/chat`). Exact patterns win over param patterns.
   - `mockApiFailures(page: Page): string[]`, the refusals recorded so far, each formatted `GET /api/nope: no fixture` or `POST /api/pins: writes are refused`
     or `GET https://example.com/x: off-origin request refused`.
-  - `test` and `expect` from `test/visual/harness.ts`: Playwright's `test` extended with an automatic `afterEach` that fails the case when
-    `mockApiFailures(page)` is non-empty, listing every entry. Every spec except `mock-api.spec.ts` imports `test` from here.
+  - `test` and `expect` from `test/visual/harness.ts`: Playwright's `test` extended via `test.extend` with an **auto fixture** (`{ auto: true }`). Its
+    teardown, after `use()`, throws when `mockApiFailures(page)` is non-empty, listing every entry. It is not a module-level `test.afterEach`. Every
+    spec except `mock-api.spec.ts` imports `test` from here.
   - `platformRefusal(platform: string): string | null` from `test/visual/platform-guard.ts`: `null` for `'darwin'`, otherwise the exact Global
     Constraints line with `<platform>` filled in. The config calls it with `process.platform`; no env override exists.
   - Scripts: `test:visual` = `playwright test`, `test:visual:report` = `playwright show-report`. `--update-snapshots` passes through as
@@ -139,7 +140,10 @@ The `webServer` overrides the first two: `--host localhost` on the command line,
     Revert.
   - **RF5:** hold 4373 with `python3 -m http.server 4373` (record its pid, kill **that pid** after). The run fails naming 4373.
   - **Preview flags:** during a run, no browser window opens, and `lsof -nP -iTCP:4373 -sTCP:LISTEN` shows only a loopback address.
-- [ ] **Step 7: Run `pnpm test && pnpm typecheck`.** Both green and the `pnpm test` case count is unchanged.
+  - **RF2 wiring:** the unit tests pin only the string, so prove the config uses it.
+    - Run `playwright test --update-snapshots` with `NODE_OPTIONS` loading a scratchpad preload that redefines `process.platform` as `'linux'`.
+    - Expect: the exact refusal line, a nonzero exit, and `git status` unchanged.
+- [ ] **Step 7: Run `pnpm test && pnpm typecheck`.** Both green, and the `pnpm test` case count is up by 3 over `main`.
 - [ ] **Step 8: Commit** `test(visual): Playwright scaffold and mock API`.
 
 ### Task 2: Fixtures, fonts, stage
@@ -194,8 +198,7 @@ fixtures are the "nothing pending" shape. `/api/settings` carries only what `use
   - `landing` equal to `section`, `usageTab: 'forecast'`, `settingsTab: 'local'`;
   - `defaultLayout: 'board'`, because the default `'last'` defers to `dashboard.layout` (`client/src/components/SessionsView.tsx:50-51`), and
     `chatFullText: false`.
-  - Field names come from `client/src/lib/settings.ts`. If a name differs, the code wins and you report the difference. Spec §3's list omits the last two;
-    "every field a shot depends on" is the rule they fall under.
+  - Field names come from `client/src/lib/settings.ts`. If a name differs, the code wins and you report the difference.
 - **`isReady` is all of:**
   - `document.fonts.ready` resolved;
   - some entry of `document.fonts` has `family` `Hanken Grotesk` (quotes stripped) and `status === 'loaded'`. `document.fonts.check(...)` is not used: it
@@ -213,6 +216,8 @@ fixtures are the "nothing pending" shape. `/api/settings` carries only what `use
     font routes removed to see it fail.
   - the number of session cards rendered equals the fixture's session count, 4 (RF3); find cards by the class the board uses, read from the component
   - `mockApiFailures(page)` is empty
+  - **harness proof:** a case annotated `test.fail()` that, after staging, runs in-page `fetch('/api/nope')`. It passes only because the harness teardown
+    throws. A no-op `harness.ts` turns it red.
   - staged with `theme: 'midnight'`, `dataset.theme === 'midnight'`, proving the seed and not the default decides
   - staged with `query: '?session=' + FIXTURE_SESSION_ID`, the chat drawer is open and shows the fixture's first message text
   - for each `SECTIONS` entry, staging that section yields `isReady` true, no failures, and the side rail's active item is that section's label. One case
