@@ -643,6 +643,38 @@ export async function run(): Promise<number> {
     });
   }));
 
+  /* ------------------------------------ SYNC_PERMISSION_MODE on /api/health */
+
+  const syncMode = async (env: string): Promise<unknown> => {
+    let mode: unknown;
+    await withServer(ROUTER_ENV + env, async h => {
+      const reply = await h.req('/api/health');
+      assert.equal(reply.status, 200);
+      mode = reply.json?.syncPermissionMode;
+    });
+    return mode;
+  };
+
+  check(await testAsync('health reports syncPermissionMode auto when SYNC_PERMISSION_MODE is unset', async () => {
+    assert.equal(await syncMode(''), 'auto');
+  }));
+
+  check(await testAsync('SYNC_PERMISSION_MODE=plan is reported as plan', async () => {
+    assert.equal(await syncMode('SYNC_PERMISSION_MODE=plan\n'), 'plan');
+  }));
+
+  check(await testAsync('SYNC_PERMISSION_MODE above the default auto ceiling is reported as auto', async () => {
+    assert.equal(await syncMode('SYNC_PERMISSION_MODE=bypassPermissions\n'), 'auto');
+  }));
+
+  check(await testAsync('SYNC_PERMISSION_MODE=bypassPermissions under a bypassPermissions ceiling is kept', async () => {
+    assert.equal(await syncMode('SYNC_PERMISSION_MODE=bypassPermissions\nSPAWN_MAX_PERMISSION=bypassPermissions\n'), 'bypassPermissions');
+  }));
+
+  check(await testAsync('an unrecognized SYNC_PERMISSION_MODE falls back to auto', async () => {
+    assert.equal(await syncMode('SYNC_PERMISSION_MODE=Plan\n'), 'auto');
+  }));
+
   console.log(`\n  ${ok}/${total} passed`);
   return total - ok;
 }

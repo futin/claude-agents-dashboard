@@ -29,8 +29,8 @@ from which both the picker's options and `clampSettings`'s accepted set are deri
 cannot drift apart), chat truncation, refresh rate, row count, lookback, active window, browser
 notifications, the launch panel's default model and default effort (`''` = send no flag and let
 the `claude` CLI choose; either way a launch can still override it), the Git Sync button's own
-model, effort, permission mode and remote control (`syncModel` / `syncEffort` / `syncPermissionMode` / `syncRemoteControl`, defaults `''`, `''`, `auto`
-and on; the button never asks, so these are the whole launch, and the mode is clamped to the host's ceiling when it posts), which Usage sub-tab
+model and effort (`syncModel` / `syncEffort`, default `''` each; the button never asks, so these are its whole say — its permission mode is the host's
+`SYNC_PERMISSION_MODE` and its remote control follows Remote answers, both shown read-only in the same card), which Usage sub-tab
 opens (`forecast` | `rates`), which Management sub-view is showing (`managementTab`: `git` |
 `pinned`, default `git`), and which Settings page is showing (`settingsTab`: `local` |
 `shared`). A `settingsTab: 'pinned'` stored by an older release fails the validator and falls back to

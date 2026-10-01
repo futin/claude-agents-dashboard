@@ -16,8 +16,7 @@ import {
   type ContentWidth, type DefaultLayout, type Landing,
   type SpawnDefaultEffort, type SpawnDefaultModel, type ThemeId
 } from '../../lib/settings';
-import { EFFORTS, MODELS, PERMISSION_MODES, PERMISSION_MODE_LABEL, allowedPermissionModes } from '../../lib/spawnOptions';
-import type { PermissionMode } from '../../../../shared/types';
+import { EFFORTS, MODELS, PERMISSION_MODE_LABEL } from '../../lib/spawnOptions';
 
 /**
  * Preview colors per theme — board / strip / accent, in that order. A mirror of
@@ -74,13 +73,6 @@ export default function SettingsView() {
   const [webTestResult, setWebTestResult] = useState<string | null>(null);
   const [webPermission, setWebPermission] = useState(() => webNotifyPermission());
   const notify = server.state?.notify;
-  // Git Sync's permission picker offers only what the host honours, as the launch sheet does: a stored mode above the ceiling is drawn as the ceiling,
-  // which is also what `syncRequest` will send.
-  const syncModes = allowedPermissionModes(remote.state?.spawnMaxPermission);
-  const syncShownMode = syncModes.includes(settings.syncPermissionMode) ? settings.syncPermissionMode : syncModes[syncModes.length - 1];
-  const syncPermissionHint = syncModes.length < PERMISSION_MODES.length
-    ? `This host limits launches to '${PERMISSION_MODE_LABEL[syncModes[syncModes.length - 1]]}' or below (SPAWN_MAX_PERMISSION).`
-    : 'A sync runs headless, with no terminal to approve a tool call in.';
   const scope = settings.settingsTab;
   /**
    * The phone measure drops List and Split from the view picker, and rewrites
@@ -569,18 +561,13 @@ export default function SettingsView() {
               </Select>
             </SettingsRow>
 
-            <SettingsRow name="Permission mode" hint={syncPermissionHint}>
-              <Select value={syncShownMode} onChange={e => update({ syncPermissionMode: e.target.value as PermissionMode })}>
-                {syncModes.map(m => <option key={m} value={m}>{PERMISSION_MODE_LABEL[m]}</option>)}
-              </Select>
+            {/* Read-only: the host decides these two, so the card says where each comes from instead of offering a control that would not hold. */}
+            <SettingsRow name="Permission mode" hint="Set on the host by SYNC_PERMISSION_MODE in .env, capped by SPAWN_MAX_PERMISSION.">
+              <span className="set-fixed">{remote.state?.syncPermissionMode ? PERMISSION_MODE_LABEL[remote.state.syncPermissionMode] : '—'}</span>
             </SettingsRow>
 
-            <SettingsRow name="Remote control" hint="Registers the sync with your account, so the phone app can see and answer it.">
-              <Segmented
-                value={settings.syncRemoteControl ? 'on' : 'off'}
-                options={ON_OFF}
-                onChange={v => update({ syncRemoteControl: v === 'on' })}
-              />
+            <SettingsRow name="Remote control" hint="Follows Remote answers under Shared, so a sync can be answered from the phone exactly when the dashboard can.">
+              <span className="set-fixed">{remote.state ? (remote.state.remoteAnswer ? 'On' : 'Off') : '—'}</span>
             </SettingsRow>
           </SettingsGroup>
 

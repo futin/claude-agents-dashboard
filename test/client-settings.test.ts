@@ -328,30 +328,29 @@ export function run(): number {
     assert.strictEqual(clampSettings({ notifyBrowser: true, theme: 'chartreuse' }).notifyBrowser, true);
   })) p++; else f++;
 
-  if (test('Git Sync defaults: CLI model and effort, auto, remote control on', () => {
+  if (test('Git Sync defaults: CLI model and effort', () => {
     const s = clampSettings({});
     assert.strictEqual(s.syncModel, '');
     assert.strictEqual(s.syncEffort, '');
-    assert.strictEqual(s.syncPermissionMode, 'auto');
-    assert.strictEqual(s.syncRemoteControl, true);
   })) p++; else f++;
 
   if (test('valid Git Sync settings round-trip unchanged', () => {
-    const blob = { syncModel: MODELS[0], syncEffort: EFFORTS[0], syncPermissionMode: 'plan', syncRemoteControl: false };
+    const blob = { syncModel: MODELS[0], syncEffort: EFFORTS[0] };
     const s = clampSettings(blob);
-    assert.deepStrictEqual(
-      { syncModel: s.syncModel, syncEffort: s.syncEffort, syncPermissionMode: s.syncPermissionMode, syncRemoteControl: s.syncRemoteControl },
-      blob
-    );
+    assert.deepStrictEqual({ syncModel: s.syncModel, syncEffort: s.syncEffort }, blob);
   })) p++; else f++;
 
   if (test('each junk Git Sync field falls back alone, a valid sibling survives', () => {
-    const s = clampSettings({ syncModel: 'gpt-4', syncEffort: 7, syncPermissionMode: 'root', syncRemoteControl: 'yes', theme: 'graphite' });
+    const s = clampSettings({ syncModel: 'gpt-4', syncEffort: 7, theme: 'graphite' });
     assert.strictEqual(s.syncModel, '');
     assert.strictEqual(s.syncEffort, '');
-    assert.strictEqual(s.syncPermissionMode, 'auto');
-    assert.strictEqual(s.syncRemoteControl, true);
     assert.strictEqual(s.theme, 'graphite');
+  })) p++; else f++;
+
+  if (test('a syncPermissionMode or syncRemoteControl stored by the earlier build is dropped, not kept', () => {
+    const s = clampSettings({ syncPermissionMode: 'plan', syncRemoteControl: false }) as unknown as Record<string, unknown>;
+    assert.strictEqual('syncPermissionMode' in s, false);
+    assert.strictEqual('syncRemoteControl' in s, false);
   })) p++; else f++;
 
   if (test('the New sessions model does not leak into Git Sync', () => {

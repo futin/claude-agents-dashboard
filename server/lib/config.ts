@@ -111,6 +111,11 @@ export interface Config {
    * to `'auto'` instead.
    */
   spawnMaxPermission: PermissionMode;
+  /**
+   * The permission mode the Git Sync button launches with (`SYNC_PERMISSION_MODE`, default `'auto'`). The button has no launch sheet, so this is the
+   * whole choice; `/api/health` publishes it clamped to `spawnMaxPermission`, never above.
+   */
+  syncPermissionMode: PermissionMode;
 }
 
 export const DEFAULTS = {
@@ -136,7 +141,8 @@ export const DEFAULTS = {
   WHISPER_BIN: 'whisper-cli',
   FFMPEG_BIN: 'ffmpeg',
   CLAUDE_BIN: '',
-  SPAWN_MAX_PERMISSION: 'auto'
+  SPAWN_MAX_PERMISSION: 'auto',
+  SYNC_PERMISSION_MODE: 'auto'
 } as const;
 
 /** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
@@ -189,12 +195,12 @@ function isPermissionMode(s: string): s is PermissionMode {
  * stays silent, the same "empty means default" rule every other optional
  * value in this file follows.
  */
-export function toPermissionMode(value: unknown, fallback: PermissionMode): PermissionMode {
+export function toPermissionMode(value: unknown, fallback: PermissionMode, key = 'SPAWN_MAX_PERMISSION'): PermissionMode {
   const s = typeof value === 'string' ? value.trim() : '';
   if (s === '') return fallback;
   if (isPermissionMode(s)) return s;
   console.warn(
-    `[dashboard] SPAWN_MAX_PERMISSION="${s}" is not a recognized permission mode ` +
+    `[dashboard] ${key}="${s}" is not a recognized permission mode ` +
     `(plan, acceptEdits, auto, bypassPermissions) — falling back to "${fallback}".`
   );
   return fallback;
@@ -317,6 +323,7 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     whisperBin: (src('WHISPER_BIN') || DEFAULTS.WHISPER_BIN).trim(),
     ffmpegBin: (src('FFMPEG_BIN') || DEFAULTS.FFMPEG_BIN).trim(),
     claudeBin: (src('CLAUDE_BIN') || DEFAULTS.CLAUDE_BIN).trim(),
-    spawnMaxPermission: toPermissionMode(src('SPAWN_MAX_PERMISSION'), DEFAULTS.SPAWN_MAX_PERMISSION)
+    spawnMaxPermission: toPermissionMode(src('SPAWN_MAX_PERMISSION'), DEFAULTS.SPAWN_MAX_PERMISSION),
+    syncPermissionMode: toPermissionMode(src('SYNC_PERMISSION_MODE'), DEFAULTS.SYNC_PERMISSION_MODE, 'SYNC_PERMISSION_MODE')
   };
 }
