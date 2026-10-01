@@ -123,6 +123,16 @@ if [ -n "$BM_ORCH_RUN" ]; then
   notify_fallback
 fi
 
+# A one-shot launch never holds either. The dashboard sets this on a child it
+# spawns with `oneShot` (the Git Sync button, or the spawn form's "Close when
+# done"; spawn.ts deletes any inherited value first). A separate marker from
+# BM_ORCH_RUN because the owner differs: the person at the launch form, not an
+# orchestrator run. Follow-ups go through Resume. Same rule as above — never
+# widen this into a blanket headless exemption.
+if [ -n "$CLAUDE_DASHBOARD_ONESHOT" ]; then
+  notify_fallback
+fi
+
 # Same three-way resolution as ask-remote-hook.sh: explicit env var wins, then
 # the dashboard's Settings (carried on the probe), then the default.
 IDLE_MIN_S="${CLAUDE_DASHBOARD_IDLE_SECS:-$(printf '%s' "$HEALTH" | jq -r '.idleSecs // 60')}"

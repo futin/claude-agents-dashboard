@@ -73,10 +73,15 @@ export function run(): number {
     assert.strictEqual(canSync({ dirName: 'a', name: 'a', path: '/p/a', state: 'error', message: 'git status timed out after 5s' }), false);
   })) p++; else f++;
 
-  if (test('defaults post the pin, the prompt, the name, the host mode and remote control, and no model or effort key', () => {
+  if (test('defaults post the pin, the prompt, the name, the host mode, remote control and one-shot, and no model or effort key', () => {
     assert.deepStrictEqual(syncRequest(okRepo('repo', { dirName: 'd1' }), SYNC_DEFAULTS, HOST), {
-      project: 'd1', prompt: GIT_SYNC_PROMPT, name: 'git-sync repo', permissionMode: 'auto', remoteControl: true,
+      project: 'd1', prompt: GIT_SYNC_PROMPT, name: 'git-sync repo', permissionMode: 'auto', remoteControl: true, oneShot: true,
     });
+  })) p++; else f++;
+
+  if (test('every sync launch is one-shot, so the run ends when its last turn does', () => {
+    assert.strictEqual(syncRequest(okRepo('repo'), SYNC_DEFAULTS, HOST).oneShot, true);
+    assert.strictEqual(syncRequest(okRepo('repo'), SYNC_DEFAULTS, { syncPermissionMode: 'plan', remoteAnswer: false }).oneShot, true);
   })) p++; else f++;
 
   if (test('session name keeps a plain repo name and dashes every character the server rejects', () => {

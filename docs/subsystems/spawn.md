@@ -104,6 +104,23 @@ launch store watches the child the same way, and an account or org that refuses 
 registration surfaces it as the CLI's own startup error through the ordinary
 `failed`-entry path.
 
+## Close when done (`oneShot`)
+
+`SpawnRequest.oneShot: true` makes a launch end when its last turn does, instead of holding in the Stop hook's reply window for up to `answerSecs`. It is an
+environment flag, not a CLI flag: `launch()` sets `CLAUDE_DASHBOARD_ONESHOT=1` in the child's env, `buildSpawnArgs` never sees it, and
+`scripts/stop-notify-hook.sh` then takes `notify_fallback` (the "finished" push still goes out) where it would have held. Parsing is the same strict
+`=== true` fail-soft rule as `remoteControl`.
+
+- **The inherited value is always deleted first,** beside `CLAUDE_CODE_ENTRYPOINT` and for the same reason: a server started from inside a one-shot session's
+  shell (one that ran `pnpm dev`) would otherwise hand the flag to every child it spawns and silently turn the hold off for launches that never asked.
+- **Forced off on a resume.** Resuming is the act of wanting a conversation, so a resumed turn holds like any un-flagged launch.
+- **The follow-up is Resume.** An ended one-shot session is still a `dashboard` row, so [§Resuming an ended session](#resuming-an-ended-session-resume) is the
+  channel for anything asked after it closes.
+
+The Git Sync button sends it on every launch (`syncRequest`); the launch form's **Close when done** row defaults off, because a free-typed prompt is the launch
+most likely to want a follow-up. Only the Stop hold is skipped — `AskUserQuestion` and permission prompts still reach the phone, which git-sync's own decision
+round relies on.
+
 ## Two writers on one transcript (2.1.259)
 
 Everything the resume guard above does rests on one measured fact: **the CLI has no lock of
@@ -187,7 +204,8 @@ same permission ladder and ceiling, prompt still stdin-only — with these diffe
   the reason the feature exists.
 - **`name` and `--remote-control` are forced off** on a resume: renaming or
   account-registering a *resumed* session are unverified CLI combos, so they are never
-  sent. `model`/`effort`/`permissionMode` pass through as usual.
+  sent. `oneShot` is forced off too, so a resumed turn holds for a reply ([§Close when done](#close-when-done-oneshot)).
+  `model`/`effort`/`permissionMode` pass through as usual.
 
 **The store treats a resume entry specially.** Its id names a transcript that already
 exists, so `adoptLaunched` skips it — adoption-on-scan would delete the entry on the first
@@ -499,7 +517,8 @@ permission list. Two rules are worth stating because they are easy to break:
 - **The boolean is the board's pill switch**, the `.set-seg` Off/On Settings already
   draws, not a second toggle shape invented for this modal. `remoteControl` still
   defaults ON: a launch from here is phone-first, which is exactly when account
-  visibility is wanted.
+  visibility is wanted. **Close when done** (`oneShot`) is a second row of the same shape, default off and
+  not persisted; it is sent only when on, so an untouched form posts the same body as before.
 
 The one thing the modal shows that the panel did not: when the host sets a ceiling, the
 permission triplet carries a line under it naming that ceiling
@@ -518,8 +537,8 @@ a `title` attribute.
 | `client/src/hooks/useStopSession.ts` | POSTs the stop, same bearer-token pattern as `useSpawn` |
 | `serveSessions` wiring | calls `adoptLaunched(ids)` then `listLaunching()` before every `/api/sessions` response, so `launching` rides the poll the client already makes |
 | `serveHealth` wiring | publishes `spawnAvailable` (`probeSpawn`) and `spawnMaxPermission` (`config.spawnMaxPermission`) |
-| `client/src/components/SpawnPanel.tsx` | the launch form, as a **modal** (below) — project picker, prompt textarea with the reply composer's own `MicButton` in the foot, name on its own line, then model/effort/permission as a triplet (model and effort start at the per-device Settings defaults, `spawnDefaultModel`/`spawnDefaultEffort` in `client/src/lib/settings.ts`, where `''` still means "send no flag and let the CLI decide"), and remote control as the board's pill switch; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
-| Management › Git's Sync button | a second launcher (`client/src/hooks/useGitSync.ts`): `useSpawn().launch` with no sheet, the body built by `syncRequest` (`client/src/lib/gitSync.ts`) from the Settings › Git Sync model and effort, the host's `SYNC_PERMISSION_MODE` (`HealthResponse.syncPermissionMode`, clamped to the ceiling) and Remote answers' state; `docs/subsystems/git-stats.md` §Client |
+| `client/src/components/SpawnPanel.tsx` | the launch form, as a **modal** (below) — project picker, prompt textarea with the reply composer's own `MicButton` in the foot, name on its own line, then model/effort/permission as a triplet (model and effort start at the per-device Settings defaults, `spawnDefaultModel`/`spawnDefaultEffort` in `client/src/lib/settings.ts`, where `''` still means "send no flag and let the CLI decide"), and remote control and Close when done as the board's pill switch; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
+| Management › Git's Sync button | a second launcher (`client/src/hooks/useGitSync.ts`): `useSpawn().launch` with no sheet, the body built by `syncRequest` (`client/src/lib/gitSync.ts`) from the Settings › Git Sync model and effort, the host's `SYNC_PERMISSION_MODE` (`HealthResponse.syncPermissionMode`, clamped to the ceiling) and Remote answers' state, always `oneShot`; `docs/subsystems/git-stats.md` §Client |
 | `client/src/hooks/useSpawn.ts` | POSTs the request, the same bearer-token pattern as `useRemoteAnswer`'s toggle |
 | `client/src/lib/spawnOptions.ts` | the client's copy of `MODELS`/`EFFORTS`/`PERMISSION_MODES` (duplicated, not imported — the FE/BE boundary is `shared/types.ts` alone — kept honest by `test/spawn-options.test.ts` asserting byte-for-byte equality against the server's arrays) and `allowedPermissionModes` |
 | The Board card's `+ New session` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
@@ -533,7 +552,7 @@ a `title` attribute.
 
 | Method | Path | Codes |
 |---|---|---|
-| `POST` | `/api/spawn` | 200 `{sessionId}` (`SpawnResponse`); 400 malformed body / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target / resume target with no recorded cwd; 403 bad token; 404 remote answers off *or* feature off; 409 resume of a still-running or already-resuming session; 429 `MAX_LAUNCHING` launches already in flight; 500 spawn threw |
+| `POST` | `/api/spawn` | Body is `SpawnRequest` (`project`, `prompt`, optional `name`/`model`/`effort`/`permissionMode`/`remoteControl`/`oneShot`/`resume`). 200 `{sessionId}` (`SpawnResponse`); 400 malformed body / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target / resume target with no recorded cwd; 403 bad token; 404 remote answers off *or* feature off; 409 resume of a still-running or already-resuming session; 429 `MAX_LAUNCHING` launches already in flight; 500 spawn threw |
 | `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}` for a still-`launching` entry, or `{stopping: true}` if that id has since become a running session (it delegates to `stopSession`); 400 bad id shape; 403 bad token; 404 remote answers off *or* no live launch for that id |
 | `POST` | `/api/sessions/:id/stop` | 200 `{stopping: true}` (graceful) or `{stopped: true}` (`{"force": true}`); 400 bad id shape, bad path encoding, *or* a present-but-unparseable body — an absent/empty body is normal; 403 bad token; 404 remote answers off *or* no live session for that id; 405 + `Allow: POST` for any other method |
 
