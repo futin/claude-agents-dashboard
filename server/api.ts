@@ -56,7 +56,7 @@ import { readGitStats } from './lib/git-stats.js';
 import { classifyOrigin } from './lib/origin.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
-  MAX_LAUNCHING, adoptLaunched, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
+  MAX_LAUNCHING, adoptLaunched, clampPermission, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
   probeSpawn, stopSession, stopStates
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
@@ -520,7 +520,8 @@ export function serveHealth(config: Config, res: ServerResponse, req?: IncomingM
     tokenRequired: config.answerToken !== '',
     transcribe: probeTranscribe(config),
     spawnAvailable: probeSpawn(config),
-    spawnMaxPermission: config.spawnMaxPermission
+    spawnMaxPermission: config.spawnMaxPermission,
+    syncPermissionMode: clampPermission(config.syncPermissionMode, config.spawnMaxPermission)
   });
 }
 

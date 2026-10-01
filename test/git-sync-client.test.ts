@@ -56,10 +56,9 @@ const RUN: SyncRun = { sessionId: 's1', dirName: 'd1', name: 'repo', launchedAtM
 const RUN_NEW: SyncRun = { ...RUN, seen: false };
 const MIN = 60 * 1000;
 const HOUR = 60 * 60 * 1000;
-const SYNC_DEFAULTS = {
-  syncModel: DEFAULT_SETTINGS.syncModel, syncEffort: DEFAULT_SETTINGS.syncEffort,
-  syncPermissionMode: DEFAULT_SETTINGS.syncPermissionMode, syncRemoteControl: DEFAULT_SETTINGS.syncRemoteControl,
-};
+const SYNC_DEFAULTS = { syncModel: DEFAULT_SETTINGS.syncModel, syncEffort: DEFAULT_SETTINGS.syncEffort };
+/** What `/api/health` says on a stock host with Remote answers on. */
+const HOST = { syncPermissionMode: 'auto', remoteAnswer: true } as const;
 
 export function run(): number {
   console.log('\n=== client/lib/gitSync.ts ===\n');
@@ -74,8 +73,8 @@ export function run(): number {
     assert.strictEqual(canSync({ dirName: 'a', name: 'a', path: '/p/a', state: 'error', message: 'git status timed out after 5s' }), false);
   })) p++; else f++;
 
-  if (test('defaults post the pin, the prompt, the name, auto and remote control, and no model or effort key', () => {
-    assert.deepStrictEqual(syncRequest(okRepo('repo', { dirName: 'd1' }), SYNC_DEFAULTS, 'auto'), {
+  if (test('defaults post the pin, the prompt, the name, the host mode and remote control, and no model or effort key', () => {
+    assert.deepStrictEqual(syncRequest(okRepo('repo', { dirName: 'd1' }), SYNC_DEFAULTS, HOST), {
       project: 'd1', prompt: GIT_SYNC_PROMPT, name: 'git-sync repo', permissionMode: 'auto', remoteControl: true,
     });
   })) p++; else f++;
@@ -101,27 +100,22 @@ export function run(): number {
   })) p++; else f++;
 
   if (test('a picked model and effort are both sent', () => {
-    const req = syncRequest(okRepo('repo'), { ...SYNC_DEFAULTS, syncModel: MODELS[0], syncEffort: EFFORTS[0] }, 'auto');
+    const req = syncRequest(okRepo('repo'), { syncModel: MODELS[0], syncEffort: EFFORTS[0] }, HOST);
     assert.strictEqual(req.model, MODELS[0]);
     assert.strictEqual(req.effort, EFFORTS[0]);
   })) p++; else f++;
 
-  if (test('remote control off is sent as false', () => {
-    assert.strictEqual(syncRequest(okRepo('repo'), { ...SYNC_DEFAULTS, syncRemoteControl: false }, 'auto').remoteControl, false);
+  if (test('the host SYNC_PERMISSION_MODE is sent as published', () => {
+    assert.strictEqual(syncRequest(okRepo('repo'), SYNC_DEFAULTS, { ...HOST, syncPermissionMode: 'plan' }).permissionMode, 'plan');
   })) p++; else f++;
 
-  if (test('a mode above the ceiling is sent as the ceiling', () => {
-    assert.strictEqual(syncRequest(okRepo('repo'), { ...SYNC_DEFAULTS, syncPermissionMode: 'bypassPermissions' }, 'plan').permissionMode, 'plan');
+  if (test('an older server with no syncPermissionMode gets no permissionMode key', () => {
+    assert.strictEqual('permissionMode' in syncRequest(okRepo('repo'), SYNC_DEFAULTS, { remoteAnswer: true }), false);
   })) p++; else f++;
 
-  if (test('an unknown ceiling clamps to auto', () => {
-    assert.strictEqual(syncRequest(okRepo('repo'), { ...SYNC_DEFAULTS, syncPermissionMode: 'bypassPermissions' }, undefined).permissionMode, 'auto');
-  })) p++; else f++;
-
-  if (test('a mode below the ceiling is never raised', () => {
-    assert.strictEqual(
-      syncRequest(okRepo('repo'), { ...SYNC_DEFAULTS, syncPermissionMode: 'acceptEdits' }, 'bypassPermissions').permissionMode, 'acceptEdits'
-    );
+  if (test('remote control follows Remote answers: off when it is off or not known yet', () => {
+    assert.strictEqual(syncRequest(okRepo('repo'), SYNC_DEFAULTS, { ...HOST, remoteAnswer: false }).remoteControl, false);
+    assert.strictEqual(syncRequest(okRepo('repo'), SYNC_DEFAULTS, { syncPermissionMode: 'auto' }).remoteControl, false);
   })) p++; else f++;
 
   if (test('no payload yet reads unseen, never ended', () => {

@@ -1013,6 +1013,11 @@ export interface HealthResponse extends RemoteAnswerState {
    * up to `'auto'`, today's default ceiling.
    */
   spawnMaxPermission?: PermissionMode;
+  /**
+   * The mode the Git Sync button launches with: `SYNC_PERMISSION_MODE` (default `'auto'`) clamped to `spawnMaxPermission`. Absent on an older server;
+   * the button then sends no mode and the server's own default applies.
+   */
+  syncPermissionMode?: PermissionMode;
 }
 
 /** `POST /api/transcribe` — text may be '' when the clip held no speech. */

@@ -3,9 +3,9 @@
  * remembered run is doing now, and every string the button and its note show. Pure, so `test/git-sync-client.test.ts` drives it without React.
  */
 
-import type { PermissionMode, RepoGitStats, Session, SessionsResponse, SpawnRequest } from '../../../shared/types';
+import type { HealthResponse, RepoGitStats, Session, SessionsResponse, SpawnRequest } from '../../../shared/types';
 import type { Settings } from './settings';
-import { NAME_CAP, allowedPermissionModes } from './spawnOptions';
+import { NAME_CAP } from './spawnOptions';
 
 export type OkRepo = Extract<RepoGitStats, { state: 'ok' }>;
 
@@ -44,7 +44,9 @@ export type SyncPhase =
   | { kind: 'ended' }
   | { kind: 'failed'; error: string | null };
 
-type SyncSettings = Pick<Settings, 'syncModel' | 'syncEffort' | 'syncPermissionMode' | 'syncRemoteControl'>;
+type SyncSettings = Pick<Settings, 'syncModel' | 'syncEffort'>;
+/** The two launch fields the host decides, read off `/api/health`; either may be missing before it answers or on an older server. */
+export type SyncHost = Partial<Pick<HealthResponse, 'syncPermissionMode' | 'remoteAnswer'>>;
 
 /** git-sync refuses a repo it cannot read or one with no origin to sync against. */
 export function canSync(repo: RepoGitStats): repo is OkRepo {
@@ -56,15 +58,18 @@ export function syncSessionName(repoName: string): string {
   return `git-sync ${repoName.replace(/[^A-Za-z0-9 ._-]/g, '-')}`.slice(0, NAME_CAP);
 }
 
-export function syncRequest(repo: OkRepo, s: SyncSettings, ceiling: PermissionMode | undefined): SpawnRequest {
-  const allowed = allowedPermissionModes(ceiling);
+/**
+ * The launch body. Permission mode is the host's `SYNC_PERMISSION_MODE`, already clamped to its ceiling by the server; unknown, it is left out and the
+ * server's own default applies. Remote control follows Remote answers, and is off until health says otherwise.
+ */
+export function syncRequest(repo: OkRepo, s: SyncSettings, host: SyncHost): SpawnRequest {
   const req: SpawnRequest = {
     project: repo.dirName,
     prompt: GIT_SYNC_PROMPT,
     name: syncSessionName(repo.name),
-    permissionMode: allowed.includes(s.syncPermissionMode) ? s.syncPermissionMode : allowed[allowed.length - 1],
-    remoteControl: s.syncRemoteControl,
+    remoteControl: host.remoteAnswer === true,
   };
+  if (host.syncPermissionMode) req.permissionMode = host.syncPermissionMode;
   if (s.syncModel) req.model = s.syncModel;
   if (s.syncEffort) req.effort = s.syncEffort;
   return req;

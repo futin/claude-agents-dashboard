@@ -337,8 +337,10 @@ per repo:
   cannot spawn (`HealthResponse.spawnAvailable` is not `true`).
 - There is no "Sync all" and no separate Prune, because git-sync already prunes inside its own run and asks before doing so.
 - **Click launches at once**, with no launch sheet and no confirm: `POST /api/spawn` with the pin's `dirName`, prompt `/claude-agents-dashboard:git-sync`
-  and a session name `git-sync <repo name>` (characters the spawn route's name rule rejects become `-`). Model, effort, permission mode and remote
-  control come from a new Settings › Local group, **Git Sync**, separate from the New sessions defaults so a sync can run cheaper than a hand launch. A stray tap costs one session's tokens and nothing else, because
+  and a session name `git-sync <repo name>` (characters the spawn route's name rule rejects become `-`). Model and effort come
+  from a new Settings › Local group, **Git Sync**, separate from the New sessions defaults so a sync can run cheaper than a hand launch. Permission mode
+  is the host's `SYNC_PERMISSION_MODE` (default `auto`, capped by `SPAWN_MAX_PERMISSION`), and remote control follows Remote answers; the card shows
+  both read-only (amended 2026-10-01, after Phase 2 shipped with all four as per-device settings). A stray tap costs one session's tokens and nothing else, because
   git-sync asks before every push and deletion.
 - The session runs in the **pin's path**, not the toplevel: `/api/spawn` resolves a `dirName` and never takes a path, and git-sync works from any
   subdirectory of the repo.

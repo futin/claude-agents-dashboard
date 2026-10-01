@@ -2029,6 +2029,8 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 /* a warning that something outside the app overrides a setting */
 .set-warn{display:flex;gap:10px;font-size:12px;line-height:1.5;color:var(--ink2);border-radius:12px;background:color-mix(in srgb,var(--amber) 12%,transparent);padding:12px 14px;margin:0 0 16px}
 .set-warn b{color:var(--ink);font-weight:500}
+/* a value the host decides, shown where a control would sit */
+.set-fixed{font-size:13px;font-weight:500;color:var(--ink2);white-space:nowrap}
 .set-warn code{overflow-wrap:anywhere}
 .set-saving{font-size:11px;color:var(--ink3)}
 /* Settings holds its phone density as the base tier — a settings row is short

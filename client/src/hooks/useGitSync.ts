@@ -82,21 +82,22 @@ export function useGitSync(onEnded: () => void): GitSyncControl {
   }, [pending]);
 
   const available = remote.state?.spawnAvailable === true;
-  const ceiling = remote.state?.spawnMaxPermission;
+  const syncPermissionMode = remote.state?.syncPermissionMode;
+  const remoteAnswer = remote.state?.remoteAnswer;
 
   const start = useCallback((repo: OkRepo): void => {
     if (pending || !available || !canSync(repo) || runFor(runs, repo)) return;
     setNote(null);
     startedName.current = repo.name;
     setStarting(repo.toplevel);
-    void launch(syncRequest(repo, settings, ceiling)).then(sessionId => {
+    void launch(syncRequest(repo, settings, { syncPermissionMode, remoteAnswer })).then(sessionId => {
       if (!sessionId) return;
       setStored((cur: unknown) => ({
         ...parseSyncRuns(cur),
         [repo.toplevel]: { sessionId, dirName: repo.dirName, name: repo.name, launchedAtMs: Date.now(), seen: false },
       }));
     });
-  }, [pending, available, runs, launch, settings, ceiling, setStored]);
+  }, [pending, available, runs, launch, settings, syncPermissionMode, remoteAnswer, setStored]);
 
   const phaseFor = (repo: RepoGitStats): SyncPhase | null => {
     const run = runFor(runs, repo);
