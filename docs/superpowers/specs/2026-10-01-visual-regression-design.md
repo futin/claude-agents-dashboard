@@ -37,9 +37,9 @@ A real server with `HOME` pointed at a fixture directory looks cheaper than it i
 
 - `readToken()` (`server/lib/usage.ts:78`) reads the **macOS keychain before anything under `$HOME`**. A fake home still picks up the real OAuth token,
   makes the real usage call, and can raise a keychain access prompt.
-- `server/lib/scan.ts` derives session status from `Date.now()` against file mtimes. Freezing the browser clock does not freeze that, so payloads would drift
-  between runs.
-- Making either deterministic needs test-only seams inside `server/`.
+- `server/lib/scan.ts` derives session status from the current time against file mtimes. Freezing the browser clock does not freeze that, so payloads would
+  drift between runs. `scanSessions` already accepts `options.now` (`server/lib/scan.ts:510`), but the HTTP handler does not pass it.
+- Making either deterministic needs a stub for the keychain read and a way to inject `now` through the HTTP layer — test-only plumbing inside `server/`.
 
 So the built client is served statically and every `/api` request is answered **inside the browser** by Playwright route interception, from typed fixtures.
 The UI is the subject under test; the API contract is held by `shared/types.ts`, which the fixtures are typed against, so `pnpm typecheck` fails when the
@@ -48,7 +48,9 @@ contract moves and a fixture did not.
 ## 3. Parts
 
 ```
-playwright.config.ts           chromium only, 1 worker, webServer = `vite preview` of client/dist on a port of its own
+playwright.config.ts           chromium only, 1 worker, webServer = `vite preview` of client/dist on port 4373 (not 4173 / 5174, which a running
+                               prod or dev server owns), snapshotPathTemplate pointing at __screenshots__/
+test/visual/fonts/             vendored Hanken Grotesk woff2 + the Google Fonts CSS that references it (§5)
 test/visual/
   fixtures/                    one module per endpoint, plain objects typed against shared/types.ts
   mock-api.ts                  installs the /api route handler
@@ -63,8 +65,9 @@ Each part knows one thing:
 
 - **`mock-api`** knows endpoints, nothing about the UI. A GET with a fixture answers 200 with it. A GET with **no** fixture fails the test naming the URL, so
   a new endpoint can never silently bake a loading or error state into a baseline. Any POST / PUT / PATCH / DELETE fails the test naming the URL.
-- **`stage`** knows how to reach a state, nothing about endpoints: clock, viewport, localStorage, which settings fixture variant to serve, and when the page
-  counts as ready (§5).
+  Requests to `fonts.googleapis.com` / `fonts.gstatic.com` are fulfilled from `test/visual/fonts/`; any other off-origin request fails the test naming it.
+- **`stage`** knows how to reach a state, nothing about endpoints: clock, viewport, the localStorage it seeds before the page loads, an optional URL query,
+  and when the page counts as ready (§5).
 - **The specs** only enumerate cases.
 
 **Fixtures.** The client's GETs, from a scan of `client/src` on 2026-10-01: `sessions`, `sessions/:id/…`, `health`, `management` (+ `management/project`,
@@ -73,10 +76,13 @@ this one. Rules:
 
 - Every timestamp is an offset from one exported fixed epoch, so relative text ("3m ago") never changes.
 - No real project names, paths, branches or account details. Invented, plausible values only.
-- One populated variant per endpoint. The settings fixture is parameterised by theme and content-width mode, because `useSettings` applies
-  `settings.theme` to `root.dataset.theme` (`client/src/hooks/useSettings.tsx:66`); the open section is seeded through the `dashboard.section`
-  localStorage key, with the settings fixture's landing value agreeing so the landing override cannot fight it.
-- No test hooks are added to the client. If a state is unreachable through fixtures and localStorage, that is a finding to raise, not a seam to add.
+- One populated variant per endpoint. `GET /api/settings` carries only server-side settings (`idleSecs`, `client/src/hooks/useServerSettings.ts:56`); it is
+  a plain fixture and **not** where theme or width come from.
+- **Device settings live in `localStorage['dashboard.settings']`** (`client/src/lib/settings.ts:4`): theme, content width (`'fixed' | 'full'`), font scale,
+  landing section. `stage` seeds that key before navigation (init script), so both the inline pre-paint script in `client/index.html` and
+  `useSettings` (`client/src/hooks/useSettings.tsx:66`) read the same values. The open section is seeded through `dashboard.section`, with the seeded
+  landing value agreeing so the landing override cannot fight it.
+- No test hooks are added to the client. If a state is unreachable through fixtures, localStorage and the URL, that is a finding to raise, not a seam to add.
 
 **Commands** (root `package.json`):
 
@@ -84,7 +90,7 @@ this one. Rules:
 - `pnpm test:visual -- --update-snapshots` — re-baselines.
 - `pnpm test:visual:report` — opens the last HTML report.
 
-**Dependencies:** `@playwright/test` and `@axe-core/playwright`, root devDependencies only, plus the Chromium download (~150MB), which the implementing
+**Dependencies:** `@playwright/test` and `@axe-core/playwright`, root devDependencies only, plus the Chromium download (roughly 150MB), which the implementing
 session asks before fetching. `test-results/` and `playwright-report/` are gitignored.
 
 ## 4. The screenshot matrix
@@ -93,14 +99,16 @@ Views: Sessions, Usage, Management, Analytics, Settings. Per view:
 
 | Shots                  | Theme            | Width (px)                              | Content width |
 | ---------------------- | ---------------- | --------------------------------------- | ------------- |
-| Breakpoint tiers (6)   | daylight         | 375, 640, 768, 1024, 1280, 1536         | default       |
-| Wide tiers (2)         | daylight         | 1537, 1921                              | full          |
-| Other themes (4)       | midnight, amber, graphite, nightshift | 1280                | default       |
+| Breakpoint tiers (6)   | daylight         | 375, 640, 768, 1024, 1280, 1536         | `fixed`       |
+| Wide tiers (2)         | daylight         | 1537, 1921                              | `full`        |
+| Other themes (4)       | midnight, amber, graphite, nightshift | 1280                | `fixed`       |
 
-That is **12 per view, 60 total**, plus **one** Sessions shot at 1280 / daylight with a session's detail open: **61**. Widths are each tier's `min-width` from
-`docs/subsystems/breakpoints.md`, with 375 standing in for the phone base; `3xl` / `4xl` exist only in full content-width mode, hence the second row.
+That is **12 per view, 60 total**, plus **one** Sessions shot at 1280 / daylight with the chat drawer open, reached by loading
+`?session=<fixture session id>` (`client/src/components/SessionsView.tsx:70`; card expansion and split view are unpersisted `useState` and unreachable
+without clicks): **61**. Widths are each tier's `min-width` from `docs/subsystems/breakpoints.md`, with 375 standing in for the phone base; `3xl` / `4xl`
+exist only in full content-width mode, hence the second row.
 
-Every shot is full-page, viewport height 900, `deviceScaleFactor` 1, font scale 1 (from the settings fixture).
+Every shot is full-page, viewport height 900, `deviceScaleFactor` 1, font scale 1 (seeded in `dashboard.settings`).
 
 **The view list is expected to move.** The Git Stats spec (`2026-10-01-git-stats-design.md`) renames today's Management to Claude Configs and adds a new
 Management tab. Views are one list in `views.spec.ts`; when that lands, the list changes and the affected baselines are regenerated.
@@ -109,36 +117,45 @@ Management tab. Views are one list in `views.spec.ts`; when that lands, the list
 
 `stage` enforces, for every shot:
 
-- **Clock:** installed at the fixture epoch before navigation. With time frozen, the 3s poll does not fire again after the first fetch on mount, so nothing
-  repaints mid-capture.
-- **Ready means all of:** `document.fonts.ready` resolved; every route the view requested has been answered at least once; no loading indicator in the DOM.
-  A fixed sleep is never a readiness signal.
+- **Clock:** `page.clock.setFixedTime(EPOCH)` before navigation. `Date.now()` and `new Date()` return the epoch for the whole run while timers keep running,
+  so `requestAnimationFrame` / `setTimeout` users are not starved. The 3s poll (`client/src/hooks/useSessions.ts:41`) keeps firing, but every poll returns
+  the same fixture at the same "now", so a repaint mid-capture is pixel-identical. Freezing timers (`install` + `pauseAt`) is deliberately not used.
+- **Ready means all of:** `document.fonts.ready` resolved **and** `document.fonts.check('16px "Hanken Grotesk"')` true; every route the view requested has
+  been answered at least once; no element whose own text matches `/^loading/i`. A fixed sleep is never a readiness signal.
 - **Motion:** screenshot options `animations: 'disabled'` and `caret: 'hide'` (19 `@keyframes` / `animation:` rules in `styles.css`, 2026-10-01).
-- **Rendering:** Chromium launched with `--force-color-profile=srgb`. Fonts are already self-hosted through `@fontsource`, so no network font fetch exists.
-- **Tolerance:** `maxDiffPixels: 0`. The suite exists to prove zero diff; a tolerance hides exactly the one-pixel shifts it is there to catch.
+- **Rendering:** Chromium launched with `--force-color-profile=srgb`. The UI face, Hanken Grotesk (`--font`, `client/src/styles.css:35`), is loaded from
+  Google Fonts with `display=swap` (`client/index.html:19`); `mock-api` serves it from `test/visual/fonts/`, so no run depends on the network or can capture
+  the fallback face.
+- **Tolerance:** `maxDiffPixels: 0` **and** `threshold: 0`. Playwright's per-pixel colour threshold defaults to 0.2, which would let a small token change
+  pass. The suite exists to prove zero diff; any tolerance hides exactly the shifts it is there to catch.
 - **Platform:** baselines are generated and compared on macOS only. Run on any other platform, the suite stops before comparing, with one line saying so,
   rather than reporting 61 pixel failures.
 - **Permissions:** Playwright auto-denies permission prompts (notifications). Any view whose render depends on a permission state gets that state from a
-  fixture or a granted permission in config, never from a prompt.
+  fixture or a granted permission in config, never from a prompt. Under auto-deny `Notification.permission` is `'denied'`, so the Settings baseline shows
+  the "blocked" copy (`client/src/hooks/useWebNotify.ts:31`) — expected, not a bug.
 
 ## 6. Non-image checks (`layout.spec.ts`)
 
 Same fixtures, same staging, no images.
 
-- **No horizontal page overflow:** every view at every one of the 8 widths in §4 satisfies `document.documentElement.scrollWidth ≤ window.innerWidth`.
-  40 cases, no allowlist — overflow is always a bug.
+- **No horizontal page overflow:** every view at every one of the 8 widths in §4, in the same content-width mode §4 pairs with that width, satisfies
+  `document.documentElement.scrollWidth ≤ window.innerWidth`. 40 cases, no allowlist — overflow is always a bug.
 - **Text contrast, daylight only:** every view, at 1280, run through axe-core with **only** the `color-contrast` rule enabled (WCAG AA: 4.5:1 normal text,
   3:1 large). Other axe rules are not visual and are out of scope.
-  - The first run writes `contrast-known.json`: the violations that exist today, keyed by view and selector, each with its measured ratio.
-  - After that a run fails only on a violation **not** in the file, and reports it as view, selector, both colors, ratio, required ratio.
-  - A known entry that no longer occurs is reported as fixed so the file can shrink; it does not fail the run.
+  - Entries are keyed by **view + the element's trimmed text + foreground/background colour pair**, never by selector: the CSS Modules migration this suite
+    serves renames classes, and a selector key would report every known violation as new on each step.
+  - **File absent** (first run, or deleted on purpose): the run writes `contrast-known.json` from what it found and passes.
+  - **File present:** the run fails only on a violation whose key is not in the file, reporting view, text, selector, both colours, ratio, required ratio.
+    A known entry that no longer occurs is reported as fixed so the file can shrink; it does not fail the run.
+  - axe's `incomplete` results (contrast it cannot compute, e.g. text over a gradient or image) never fail the run; their count per view is printed.
 - **Dropped:** generic overlap and clipping checks. Popovers, badges, tooltips and ellipsized text overlap or clip by design, so a generic rule is noisy
   enough to be ignored. Real overlap shows in the screenshots.
 
 ## 7. Failure output
 
 - Playwright's HTML report: expected / actual / diff per failing shot; `pnpm test:visual:report` opens it.
-- The console names each failing case as `view · theme · width`, so the run log alone says what broke.
+- The console names each failing case as `view · theme · width · kind`, where kind is `shot`, `detail`, `overflow` or `contrast`, so the run log alone says
+  what broke.
 - Re-baselining is always an explicit `--update-snapshots`; nothing re-baselines on its own.
 
 ## 8. Relation to other work
@@ -155,7 +172,7 @@ Same fixtures, same staging, no images.
 The implementing branch is done when:
 
 1. `pnpm test:visual` passes on a clean tree, then passes again immediately with no change (determinism, §1).
-2. Mutation proof, each reverted after: change one token's value in the daylight block → named daylight shots fail; add `margin-left:1px` to one shared
+2. Mutation proof, each reverted after: change one daylight token by the smallest step (one unit in one RGB channel) → named daylight shots fail; add `margin-left:1px` to one shared
    class → shots of every view using it fail; give one element `width:120vw` → the overflow check fails at the narrow widths; lower one daylight text
    token's lightness until it drops below 4.5:1 → the contrast check fails with that selector.
 3. A GET with no fixture, and any POST, each fail the run naming the URL.
