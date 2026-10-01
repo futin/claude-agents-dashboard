@@ -316,6 +316,13 @@ board has no fifth data colour to give it, and amber is what it already calls a 
 Mock: `docs/guides/mockups/redesign-mock.html` `#forecast` / `#rates`.
 Reference: `docs/subsystems/usage-limits.md`.
 
+### 8.4b Management — Git | Pinned
+
+A rail section with the same fixed two-row tree Usage and Settings draw: **Git** (the default) and **Pinned**, per device in `managementTab`. The page
+takes the plain `wrap wide`, and each sub-view opens on a band titled `Management · <sub-view>` (the `section · destination` convention the Usage
+pages set). Pinned is the §8.2 Projects card under its own band, carrying the green "every device" scope pill because the pins are server-stored; it is
+the page that used to be Settings › Pinned, moved unchanged. Git is the band alone until its body lands.
+
 ### 8.5 Claude Configs — the scope is a destination, the rest is columns
 
 **The scope is a rail destination, not a pane.** Global (`~/.claude`) and each
@@ -448,7 +455,7 @@ under it a link-styled button reads `Not listed? Show older projects · N` — h
 expands, **in place inside the sheet**, a filter box and one boxless row per older project (name, `~`
 path, `last session <age> ago`, a §8.2 36 px **Pin** button). No second surface and no new tint: the
 link is ink, cyan stays the launch button's. Pinning selects the project; its option reads the plain
-name, like any other. Settings › Pinned draws the same
+name, like any other. Management › Pinned draws the same
 picker under its Pinned projects card, where the Unpin lives, but offers recent projects too, so one in
 daily use can be pinned before it ages out; the sheet does not need them, they are already in its select.
 

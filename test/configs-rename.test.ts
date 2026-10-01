@@ -8,7 +8,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { SECTIONS } from '../client/src/lib/sections.js';
+import { SECTIONS, isSection } from '../client/src/lib/sections.js';
 import { OWNED_KEYS } from '../client/src/hooks/useSettings.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -56,9 +56,14 @@ export function run(): number {
     assert.deepStrictEqual(SECTIONS.find(s => s.id === 'configs'), { id: 'configs', label: 'Claude Configs' });
   })) p++; else f++;
 
-  // Task 2 flips this: the new Management tab re-adds the id.
-  if (test('SECTIONS has no management entry yet', () => {
-    assert.ok(!SECTIONS.some(s => (s.id as string) === 'management'));
+  if (test('SECTIONS ids are exactly sessions, usage, management, configs, analytics, settings, in that order', () => {
+    assert.deepStrictEqual(SECTIONS.map(s => s.id), ['sessions', 'usage', 'management', 'configs', 'analytics', 'settings']);
+    assert.deepStrictEqual(SECTIONS.find(s => s.id === 'management'), { id: 'management', label: 'Management' });
+  })) p++; else f++;
+
+  if (test('isSection accepts both the new management id and configs', () => {
+    assert.strictEqual(isSection('management'), true);
+    assert.strictEqual(isSection('configs'), true);
   })) p++; else f++;
 
   if (test('OWNED_KEYS covers the configs.* keys and still sweeps the old management.* leftovers', () => {

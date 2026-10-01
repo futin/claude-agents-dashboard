@@ -40,13 +40,15 @@ override it (see `dashboard.section` below).
   `dashboard.settings` (theme, density, text scale, refresh rate, scan knobs, landing tab
   — see [settings](settings.md); re-clamped on every read by `clampSettings`, and the
   one key an inline script in `index.html` also reads, pre-paint, to avoid a theme flash);
-  `dashboard.section` (Sessions | Usage | Claude Configs | Analytics | Settings —
+  `dashboard.section` (Sessions | Usage | Management | Claude Configs | Analytics | Settings —
   the `Section` union in `lib/sections.ts`, switched on in `App.tsx`) — always
   *written* on navigation, but only *read* on open when Settings → landing is `last`; any
   other value pins the opening section, resolved in the `useState` initializer so there's no
   flash of the previously-open one. Whichever of the two wins is passed through `isSection`
   first, so a value naming a section this build no longer has (the removed Guides tab) lands
-  on `sessions` rather than falling through `App.tsx`'s chain to Settings.
+  on `sessions` rather than falling through `App.tsx`'s chain to Settings. The id
+  `management` is the new Git | Pinned tab; before the Claude Configs rename it named what is now
+  Claude Configs, and a stored one is not migrated — it opens the new tab.
   A `?session=` deep link outranks both and forces
   `sessions` (see the URL-param note below);
   `dashboard.layout` (which of the five shapes the switcher was left on — the shape note

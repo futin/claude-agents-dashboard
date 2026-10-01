@@ -22,8 +22,8 @@ interface Props {
 }
 
 /**
- * Top-level section switch: live sessions monitor · Claude configs ·
- * session analytics · account usage forecast · settings. A rail down the left edge on desktop; below
+ * Top-level section switch: live sessions monitor · account usage forecast · management (Git | Pinned) ·
+ * Claude configs · session analytics · settings. A rail down the left edge on desktop; below
  * `sm` (640px) the same rail becomes a menu panel that drops out of a top bar —
  * wordmark left, ☰ right — see docs/superpowers/specs/2026-08-15-side-rail-nav-design.md.
  *
@@ -55,6 +55,7 @@ interface Props {
 const ICONS: Record<Section, JSX.Element> = {
   sessions: <><rect x="2.5" y="3" width="15" height="5.5" rx="1.8" /><rect x="2.5" y="11.5" width="15" height="5.5" rx="1.8" /></>,
   usage: <path d="M3.5 16.5v-5M8.5 16.5v-13M13 16.5v-7.5M17 16.5v-10" />,
+  management: <><circle cx="6" cy="4.5" r="1.8" /><circle cx="6" cy="15.5" r="1.8" /><circle cx="14" cy="8" r="1.8" /><path d="M6 6.3v7.4M14 9.8c0 2.7-3 3.2-8 3.9" /></>,
   configs: <><rect x="3" y="3.5" width="14" height="13" rx="1.8" /><path d="M3 8h14M8 8v8.5" /></>,
   analytics: <path d="M3 14.5l4.5-6 3.5 3.5L17 5" />,
   settings: <><circle cx="10" cy="10" r="2.6" /><path d="M10 2.6v2.2M10 15.2v2.2M2.6 10h2.2M15.2 10h2.2M4.8 4.8l1.6 1.6M13.6 13.6l1.6 1.6M15.2 4.8l-1.6 1.6M6.4 13.6l-1.6 1.6" /></>
@@ -62,16 +63,17 @@ const ICONS: Record<Section, JSX.Element> = {
 
 /**
  * The sections whose sub-views are a *fixed* list, and the per-device setting
- * each tree writes: Usage (Forecast / Token value) and Settings (Local /
- * Shared / Pinned), drawn from one table so a third gets the same tree for one line.
+ * each tree writes: Usage (Forecast / Token value), Management (Git / Pinned)
+ * and Settings (Local / Shared), drawn from one table so a third gets the same tree for one line.
  * Claude Configs' tree is the third destination but not a fixed list — its rows
  * are the scanned projects — so it has its own component below.
  */
-type SubKey = 'usageTab' | 'settingsTab';
+type SubKey = 'usageTab' | 'managementTab' | 'settingsTab';
 interface SubNav<K extends SubKey> { key: K; items: { value: Settings[K]; label: string }[] }
-const SUBNAV: Partial<Record<Section, SubNav<'usageTab'> | SubNav<'settingsTab'>>> = {
+const SUBNAV: Partial<Record<Section, SubNav<'usageTab'> | SubNav<'managementTab'> | SubNav<'settingsTab'>>> = {
   usage: { key: 'usageTab', items: [{ value: 'forecast', label: 'Forecast' }, { value: 'rates', label: 'Token value' }] },
-  settings: { key: 'settingsTab', items: [{ value: 'local', label: 'Local' }, { value: 'shared', label: 'Shared' }, { value: 'pinned', label: 'Pinned' }] }
+  management: { key: 'managementTab', items: [{ value: 'git', label: 'Git' }, { value: 'pinned', label: 'Pinned' }] },
+  settings: { key: 'settingsTab', items: [{ value: 'local', label: 'Local' }, { value: 'shared', label: 'Shared' }] }
 };
 
 /**

@@ -101,7 +101,7 @@ control (the type is a column now, not a collapsible header) and the
   archiving for listing only:** a pinned dir whose every transcript is archived still resolves its cwd
   from them, and those sessions stay archived everywhere else. **A dead pin** — its cwd gone, or now a
   linked worktree — fails the bug-21 filter like any other row, so it stays stored but hidden;
-  `GET /api/pins` reports it `listed: false` and Settings › Pinned flags it with an Unpin.
+  `GET /api/pins` reports it `listed: false` and Management › Pinned flags it with an Unpin.
   `resolveProject`, `collectServablePaths` and the rail all build from this one list, so a pin makes a
   project spawnable, lists it on the rail, and **widens the servable-path set** to its config files —
   all three intended, and the last is why `POST /api/pins` only accepts a dirName the server itself

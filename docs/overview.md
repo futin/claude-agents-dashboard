@@ -209,8 +209,8 @@ server/
                   also owns stopping one (graceful SIGTERM, grace window, escalation)
                   (see docs/subsystems/spawn.md)
 client/src/
-  App.tsx         shell: side rail (Sessions | Usage | Claude Configs | Analytics |
-                  Settings) + lazy views
+  App.tsx         shell: side rail (Sessions | Usage | Management | Claude Configs |
+                  Analytics | Settings) + lazy views
   components/     SideRail (section switcher — the rail on desktop, and below `sm`
                   (640px) the same markup as a menu dropped out of a top bar, every tree
                   open), SessionsView (the monitor — owns the 3s
@@ -226,11 +226,12 @@ client/src/
                   ChatDrawer, QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   MicButton, SpawnPanel, PinPicker (projects to pin — older ones in
-                  the launch sheet, recent + older in Settings › Pinned), ResumePanel, PermissionBanner,
-                  RemoteAnswerToggle, OriginBadge, Markdown, configs/, analytics/,
+                  the launch sheet, recent + older in Management › Pinned), ResumePanel, PermissionBanner,
+                  RemoteAnswerToggle, OriginBadge, Markdown, configs/, management/ (ManagementView —
+                  the Git | Pinned section — and PinnedProjectsGroup), analytics/,
                   usage/ (UsageView + the two tabs, Sheet — the band / figure
-                  strip / sheet / D48claude
-                  efinitions chrome both tabs draw, and
+                  strip / sheet / definitions
+                  chrome both tabs draw, and
                   ReadingAids — the ⓘ button they both render), settings/
   hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
                   useConfigs, useConfigsScope (the scope + the one index
@@ -312,12 +313,8 @@ that area:
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [configs](subsystems/configs.md) — read-only config browser
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
-<<<<<<< HEAD
 - [account-header](subsystems/account-header.md) — the shell's account chip: its two homes, the `oauthAccount` profile reader, and `GET /api/account`
 - [usage-limits](subsystems/usage-limits.md) — the rate-limit gauges the account chip draws, and the Usage tab behind them: pace, the duty-cycle forecast, and token value per model
-=======
-- [usage-limits](subsystems/usage-limits.md) — the account usage bars in the Sessions aside, and the Usage tab behind them: pace, the duty-cycle forecast, and token value per model
->>>>>>> main
 - [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold, answer window, push policy
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `Allow?` tab for terminal permission dialogs

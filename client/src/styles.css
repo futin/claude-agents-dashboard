@@ -1800,7 +1800,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .sp-more:disabled{cursor:default;opacity:.55}
 .sp-older .pin-pick{align-self:stretch}
 
-/* The picker itself (PinPicker.tsx), shared by the launch sheet and Settings ›
+/* The picker itself (PinPicker.tsx), shared by the launch sheet and Management ›
    Pinned: a filter box, then boxless rows split by hairlines. The path IS the
    row's title — parents dim, basename bright, no second name line — with the
    last-session age and §8.2's 36px button beside it. On the phone the row is
@@ -1810,7 +1810,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    whose buttons (Pin / Unpin) differ in width. */
 .pin-pick{display:flex;flex-direction:column;gap:8px;min-width:0;width:100%}
 .pin-list{list-style:none;margin:0;padding:0;max-height:240px;overflow-y:auto;overscroll-behavior:contain}
-/* Settings › Pinned is the list's own page: it grows with the page scroll, not a boxed one. */
+/* Management › Pinned is the list's own page: it grows with the page scroll, not a boxed one. */
 .set .pin-list{max-height:none;overflow-y:visible}
 .pin-head{display:none;font-size:11px;color:var(--ink3);padding:6px 0 0}
 .pin-head span:nth-child(2){text-align:right}

@@ -10,8 +10,8 @@ Monolith, three domains plus the plugin. The **only** things crossing the FE/BE 
 the typed JSON in `shared/types.ts`, plus the zero-dep parser in `shared/frontmatter.ts`.
 
 - `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only).
-- `client/` — Vite + React + TypeScript; side rail Sessions | Usage | Claude Configs |
-  Analytics | Settings, all lazy but Sessions.
+- `client/` — Vite + React + TypeScript; side rail Sessions | Usage | Management |
+  Claude Configs | Analytics | Settings, all lazy but Sessions.
 - `shared/` — `types.ts` is the API contract and the single source of truth for it;
   `frontmatter.ts` is the one module both sides run.
 - `test/` — node-assert tests over backend + client domain logic, tmpdir JSONL fixtures.

@@ -16,6 +16,7 @@ import { SettingsProvider, useSettings } from './hooks/useSettings';
 const ConfigsView = lazy(() => import('./components/configs/ConfigsView'));
 const AnalyticsView = lazy(() => import('./components/analytics/AnalyticsView'));
 const UsageView = lazy(() => import('./components/usage/UsageView'));
+const ManagementView = lazy(() => import('./components/management/ManagementView'));
 const SettingsView = lazy(() => import('./components/settings/SettingsView'));
 
 export function App() {
@@ -61,7 +62,7 @@ function AppShell() {
   // single scroller, so a long file is read by scrolling the page.
   const broad = section === 'settings' || section === 'sessions' || section === 'usage';
   const wrap = section === 'configs' ? 'wrap wide wide-mgmt'
-    : section === 'analytics' ? 'wrap wide'
+    : section === 'analytics' || section === 'management' ? 'wrap wide'
     : broad ? 'wrap broad' : 'wrap';
 
   // Claude Configs' scope is a rail destination now (DESIGN.md §8.5), so the rail
@@ -95,6 +96,10 @@ function AppShell() {
             <div className={wrap}>
             {section === 'sessions' ? (
               <SessionsView />
+            ) : section === 'management' ? (
+              <Suspense fallback={<div className="an-empty">loading…</div>}>
+                <ManagementView />
+              </Suspense>
             ) : section === 'configs' ? (
               <Suspense fallback={<div className="mgmt-empty">loading…</div>}>
                 <ConfigsView />

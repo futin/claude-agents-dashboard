@@ -8,12 +8,13 @@
  * node-assert test's import graph. No JSX, no imports.
  */
 
-export type Section = 'sessions' | 'usage' | 'configs' | 'analytics' | 'settings';
+export type Section = 'sessions' | 'usage' | 'management' | 'configs' | 'analytics' | 'settings';
 
 /** The rail's own order — it is also the order the landing picker offers. */
 export const SECTIONS: { id: Section; label: string }[] = [
   { id: 'sessions', label: 'Sessions' },
   { id: 'usage', label: 'Usage' },
+  { id: 'management', label: 'Management' },
   { id: 'configs', label: 'Claude Configs' },
   { id: 'analytics', label: 'Analytics' },
   { id: 'settings', label: 'Settings' }
