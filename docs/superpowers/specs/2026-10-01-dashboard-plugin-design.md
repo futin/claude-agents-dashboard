@@ -14,6 +14,8 @@ This is **Phase P** of a four-phase line agreed on 2026-10-01:
 | —     | Multi-machine hub (tokens, backlog/orchestration, git across Mac + Linux)                               | parked: futin/claude-agents-dashboard#164            |
 | —     | Ship the six hooks in the plugin, retire `pnpm hooks:install`                                           | parked: futin/claude-agents-dashboard#165            |
 
+*Phase 1 row:* Superseded: see [2026-10-01-git-stats-design.md](2026-10-01-git-stats-design.md) §1.
+
 ## Problem
 
 Two skills the dashboard consumes live outside it:
@@ -57,6 +59,7 @@ plugin/
   copied from.
 - The engine already guards its CLI entry (`isDirectRun()` at the foot of `git-sync.mjs`), so Phase 1's server can `import` it without running it. P does not
   change that file beyond paths and the comment above `isDirectRun()`, which describes the old `~/.claude/skills` symlink route.
+  Superseded: see [2026-10-01-git-stats-design.md](2026-10-01-git-stats-design.md) §1.
 - `plugin/` is never compiled and holds no TypeScript; the server's zero-runtime-dep rule is untouched (P adds no server code at all).
 
 ## §2 Kaizen merge

@@ -1525,6 +1525,66 @@ export interface PinsResponse {
   home: string;
 }
 
+/** One unmerged local branch of a pinned repo (Git Stats, `docs/superpowers/specs/2026-10-01-git-stats-design.md` §2). */
+export interface GitBranch {
+  name: string;
+  /** Commits on the branch and not on the base (`origin/<trunk>` when it exists, else the local trunk); null only when the repo has no trunk. */
+  ahead: number | null;
+  /** Commits on the base and not on the branch; null only when the repo has no trunk. */
+  behind: number | null;
+  lastCommitMs: number;
+  /** The linked worktree this branch is checked out in; null when it is checked out nowhere or only in the main worktree. */
+  worktreePath: string | null;
+}
+
+/** Fields every `RepoGitStats` variant carries, copied from the pin row. */
+interface RepoGitStatsPin {
+  dirName: string;
+  name: string;
+  /** The pin's cwd, which may be a subdirectory of the repo; null for a dead pin. */
+  path: string | null;
+}
+
+/**
+ * Local git state of one pinned project, read-only and with no network. `missing` is a dead pin or a folder that is gone, `not-git` a folder outside any
+ * repo, `error` a git call that failed or timed out.
+ */
+export type RepoGitStats =
+  | (RepoGitStatsPin & { state: 'missing' })
+  | (RepoGitStatsPin & { state: 'not-git' })
+  | (RepoGitStatsPin & { state: 'error'; message: string })
+  | (RepoGitStatsPin & {
+      state: 'ok';
+      /** `git rev-parse --show-toplevel`: the repo root, or the linked worktree's root when the pin is one. */
+      toplevel: string;
+      /** Current branch; null when detached, including mid-rebase. On an unborn HEAD, the name HEAD points at. */
+      branch: string | null;
+      /** `rev-parse --short HEAD` when detached, else null. */
+      detachedSha: string | null;
+      onTrunk: boolean;
+      /** Entries the way `git status` lists them: a rename is one, an untracked directory is one, ignored files are none. */
+      uncommitted: number;
+      /** `origin/HEAD`'s branch, else `main`, else `master`; null when there is none. */
+      trunk: string | null;
+      hasOrigin: boolean;
+      /** Local trunk vs `origin/<trunk>`; null without an origin, a trunk, an `origin/<trunk>` or a local `<trunk>`. */
+      trunkVsOrigin: { ahead: number; behind: number } | null;
+      /** Newest `FETCH_HEAD` mtime across every worktree (epoch ms); null when never fetched. The client derives the age. */
+      fetchedAtMs: number | null;
+      /** Unmerged branches, trunk excluded, newest commit first, at most 50. */
+      branches: GitBranch[];
+      /** Every unmerged branch, before the cap. */
+      unmergedTotal: number;
+      /** Branches proven merged into the base, which the page hides behind a count. */
+      mergedCount: number;
+    });
+
+/** Payload of `GET /api/git-stats`: one entry per pin, in pin order. */
+export interface GitStatsResponse {
+  repos: RepoGitStats[];
+  generatedAt: number;
+}
+
 /** Payload of `GET /api/configs`. */
 export interface ManagementIndex {
   generatedAt: string;
