@@ -2655,13 +2655,14 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 
 /* Table: `.dt`'s rules (one rule per row, a heavier one under the head), in
    its own sheet that scrolls rather than the page */
-.git-table-wrap{background:var(--strip);border-radius:16px;padding:8px 20px;overflow-x:auto}
+/* The sheet keeps 8px; the outer cells carry the other 12px, so a tinted row (hover, an expanded branch) keeps its text off the tint's edge */
+.git-table-wrap{background:var(--strip);border-radius:16px;padding:8px;overflow-x:auto}
 .git-table{width:100%;border-collapse:collapse;font-size:13px;color:var(--ink)}
 .git-table th{text-align:left;font-size:11px;font-weight:500;color:var(--ink2);padding:12px 10px 8px;border-bottom:1px solid var(--hairline2);white-space:nowrap}
 .git-table td{padding:10px;border-bottom:1px solid var(--hairline);vertical-align:middle}
 .git-table th.n,.git-table td.n{text-align:right}
-.git-table td:first-child,.git-table th:first-child{padding-left:0}
-.git-table td:last-child,.git-table th:last-child{padding-right:0}
+.git-table td:first-child,.git-table th:first-child{padding-left:12px}
+.git-table td:last-child,.git-table th:last-child{padding-right:12px}
 .git-table tbody tr:last-child td{border-bottom:0}
 .git-table .git-tname{font-weight:500;white-space:nowrap}
 .git-table .git-state{font-size:13px}
@@ -2671,7 +2672,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-rowbtn{font:inherit;color:inherit;text-align:left;background:none;border:0;padding:0;cursor:pointer;display:inline-flex;align-items:center}
 .git-caret{display:inline-block;width:16px;flex:none;color:var(--ink3)}
 .git-table .git-sub td{padding-top:6px;padding-bottom:6px;font-size:12px;color:var(--ink2);background:var(--strip-hi)}
-.git-table .git-sub td:first-child{padding-left:16px}
+.git-table .git-sub td:first-child{padding-left:28px}
 .git-table .git-sub .git-more{padding:0}
 .git-table .git-sub .git-note{padding-top:6px}
 /* Contributes no width of its own, so a long branch name ellipsizes inside Repo + On instead of widening the table when a row expands */
