@@ -282,6 +282,12 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   re-derives the Token-value inputs from transcripts: `ledger`
                   exits 1 when the ledger misses ±5% of a day's spend, and
                   `surfaces` / `modifiers` / `offbook` / `gap` report; pipeline in lib/transcript-audit.ts
+.claude-plugin/marketplace.json  the repo as a plugin marketplace — one plugin, sourced from plugin/
+plugin/           the installable Claude Code plugin (`/plugin install`, README §Install the skills);
+                  plain JS, never imported by server/ or client/ at runtime
+  .claude-plugin/plugin.json  name + version
+  skills/git-sync/  repo chores across machines; engine tools/git-sync.mjs, own `node --test`
+                  suite run by `pnpm test:skills` (~4 min, 2026-10-01)
 ```
 
 ## Map

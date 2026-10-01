@@ -1,0 +1,11 @@
+{
+  "name": "claude-agents-dashboard-marketplace",
+  "owner": { "name": "andrejajevtic" },
+  "plugins": [
+    {
+      "name": "claude-agents-dashboard",
+      "source": "./plugin",
+      "description": "git-sync + kaizen, the skills the dashboard's Sync button and Analytics tab depend on"
+    }
+  ]
+}

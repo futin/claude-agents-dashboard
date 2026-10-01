@@ -12,6 +12,7 @@
     "tailnet:local": "tsx scripts/tailnet.ts --http",
     "tunnel": "tsx scripts/tailnet.ts",
     "test": "tsx test/run-all.ts",
+    "test:skills": "node --test plugin/skills/git-sync/test/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "session-analytics": "tsx scripts/session-analytics.ts",
     "probe:usage-split": "tsx scripts/probe-usage-split.ts",

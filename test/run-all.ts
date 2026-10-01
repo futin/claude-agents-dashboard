@@ -91,6 +91,7 @@ import { run as runBreakpoints } from './breakpoints.test.js';
 import { run as runChatPinnedPad } from './chat-pinned-pad.test.js';
 import { run as runKaizenTrend } from './kaizen-trend.test.js';
 import { run as runOutbound } from './outbound.test.js';
+import { run as runPluginManifest } from './plugin-manifest.test.js';
 
 let failed = 0;
 failed += runTranscript();
@@ -185,6 +186,7 @@ failed += runBreakpoints();
 failed += runChatPinnedPad();
 failed += runKaizenTrend();
 failed += runOutbound();
+failed += runPluginManifest();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

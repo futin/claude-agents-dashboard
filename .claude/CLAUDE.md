@@ -6,7 +6,7 @@ usage and current tool activity per session. Polls every 3s.
 
 ## Orientation
 
-Monolith, three domains. The **only** things crossing the FE/BE boundary live in `shared/`:
+Monolith, three domains plus the plugin. The **only** things crossing the FE/BE boundary live in `shared/`:
 the typed JSON in `shared/types.ts`, plus the zero-dep parser in `shared/frontmatter.ts`.
 
 - `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only).
@@ -15,6 +15,8 @@ the typed JSON in `shared/types.ts`, plus the zero-dep parser in `shared/frontma
 - `shared/` — `types.ts` is the API contract and the single source of truth for it;
   `frontmatter.ts` is the one module both sides run.
 - `test/` — node-assert tests over backend + client domain logic, tmpdir JSONL fixtures.
+- `plugin/` — the installable Claude Code plugin (the repo root's `.claude-plugin/marketplace.json` points at it): the skills the dashboard depends on, plain
+  JS, never imported by server or client at runtime. `test/plugin-manifest.test.ts` pins what may live in it.
 
 **The file-by-file map is `docs/overview.md`, not this file.** It is not auto-loaded —
 read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `docs/overview.md`
@@ -26,6 +28,8 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: built client + API on http://localhost:4173 (`NODE_ENV=production`).
 - `pnpm test` — `test/run-all.ts` via tsx; prints the case count.
+- `pnpm test:skills` — git-sync's own `node --test` suite (~4 min, 2026-10-01), kept out of `pnpm test` for its length. **Required green for any change
+  under `plugin/skills/git-sync/`.**
 - `pnpm typecheck` — `tsc --noEmit`.
 - `pnpm hooks:install` — symlinks the six hook scripts into `~/.claude/hooks`, merges the
   seven `settings.json` entries. Idempotent; `-- --dry-run` / `-- --uninstall` / `-- --force`.
