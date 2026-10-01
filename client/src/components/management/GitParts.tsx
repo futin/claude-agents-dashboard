@@ -15,7 +15,9 @@ import { triageGitRepos, type GitTriageGroup } from '../../lib/gitTriage';
  * "+N more" / merged lines. The three layouts differ only in how they arrange these.
  */
 
-export type OkRepo = Extract<RepoGitStats, { state: 'ok' }>;
+import type { OkRepo } from '../../lib/gitSync';
+
+export type { OkRepo };
 
 /** Each repo's Triage group, so Cards and Triage colour the same repo's dot the same way. */
 export function gitGroupsByDir(repos: RepoGitStats[]): Map<string, GitTriageGroup> {
