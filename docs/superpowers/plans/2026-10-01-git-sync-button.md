@@ -35,7 +35,9 @@ Table / Triage shapes this plan adds a button to are defined there. Subsystem do
   - note on 403: `Sync needs the Answer token — set it under Settings › Local › Connection.`
   - note on other launch failure: `Sync in <repo name> couldn't start: <server error>`.
   - note on a failed launch the store reported: `git-sync in <repo name> failed to start: <error>` (or `… failed to start.` when the store gave no error).
-  - session name sent with the launch: `git-sync · <repo name>`.
+  - session name sent with the launch: `git-sync <repo name>`, passed through `syncSessionName` (Task 2) so it always satisfies the server's `NAME_RE`
+    and `NAME_CAP` — the server drops a non-matching name silently (`server/lib/spawn.ts:91,178-180`), so `·` or any repo name outside
+    `[A-Za-z0-9 ._-]` would launch unnamed.
 - New text wraps at 160 columns; commit bodies at 72. Conventional Commits subjects (`feat(management):`, `feat(settings):`, `docs:`).
 
 ## Review Focus
@@ -43,7 +45,8 @@ Table / Triage shapes this plan adds a button to are defined there. Subsystem do
 Most likely to bite a real user, none of them exercised by the spec's own examples. Each line's test lives in the task named.
 
 1. **A running sync drops out of the sessions payload.** The scan ranks by transcript mtime and caps the rows; a sync parked on git-sync's question writes
-   nothing while other sessions do. It must read `Syncing…` (unseen), not be declared ended, forgotten and re-polled. → Task 2 cases P5, P6.
+   nothing while other sessions do. It must read `Syncing…` (unseen), not be declared ended, forgotten and re-polled. An unseen run's drawer cannot open
+   from Management (no row to give it); its question is answered from Sessions or the phone. → Task 2 cases P5, P6.
 2. **Two pins on one repo** (a pin on the root and one on a subdirectory share a toplevel). Launching from either shows the run on both, and neither can
    start a second one. → Task 2 case K1, Task 4 manual check.
 3. **Permission ceiling below the setting.** Setting `bypassPermissions` on a host whose ceiling is `plan` must send `plan` — the server would clamp anyway,
@@ -87,7 +90,7 @@ Most likely to bite a real user, none of them exercised by the spec's own exampl
   Model and Effort (`Select`, first option `CLI default`, same lists as New sessions), Permission mode (`Select` over
   `allowedPermissionModes(remote.state?.spawnMaxPermission)` — `SettingsView` already holds `remote = useRemoteAnswer()`; labels from
   `PERMISSION_MODE_LABEL`), Remote control (the existing on/off control style used elsewhere in the file). If the stored mode is above the ceiling, the
-  select shows the ceiling and the row hint says the host limits launches to it (reuse the launch sheet's `SPAWN_MAX_PERMISSION` wording).
+  select shows the ceiling and the row hint says the host limits launches to it (copy the launch sheet's `permissionTitle` sentence, a local literal in `SpawnPanel.tsx`, not an export).
 
 - [ ] **Step 1: Write the failing tests** in `test/client-settings.test.ts`, cases:
   - C1 `clampSettings({})` has `syncModel ''`, `syncEffort ''`, `syncPermissionMode 'auto'`, `syncRemoteControl true`.
@@ -108,16 +111,19 @@ Most likely to bite a real user, none of them exercised by the spec's own exampl
 
 **Interfaces:**
 - Consumes: `RepoGitStats`, `Session`, `LaunchingSession`, `SessionsResponse`, `SpawnRequest`, `PermissionMode` (`shared/types.ts`, `import type`);
-  `allowedPermissionModes` (`client/src/lib/spawnOptions.ts`); the four Task 1 settings fields.
+  `allowedPermissionModes` (`client/src/lib/spawnOptions.ts`); the `Settings` type and the four Task 1 fields (`client/src/lib/settings.ts`).
 - Produces (later tasks rely on these exact names):
   - `GIT_SYNC_PROMPT = '/claude-agents-dashboard:git-sync'`, `SYNC_RUNS_KEY = 'management.syncRuns'`, `SYNC_SCAN_LIMIT = 50`,
     `SYNC_UNSEEN_TTL_MS = 24 * 60 * 60 * 1000`.
-  - `type SyncRun = { sessionId: string; dirName: string; name: string; launchedAtMs: number }`; `type SyncRuns = Record<string /* toplevel */, SyncRun>`.
+  - `type SyncRun = { sessionId: string; dirName: string; name: string /* repo.name, not the session name */; launchedAtMs: number }`; `type SyncRuns = Record<string /* toplevel */, SyncRun>`.
   - `canSync(repo: RepoGitStats): boolean`.
   - `syncRequest(repo: OkRepo, s: Pick<Settings, 'syncModel'|'syncEffort'|'syncPermissionMode'|'syncRemoteControl'>, ceiling: PermissionMode | undefined): SpawnRequest`.
   - `type SyncPhase = { kind: 'launching' } | { kind: 'running'; session: Session } | { kind: 'unseen' } | { kind: 'ended' } | { kind: 'failed'; error: string | null }`.
   - `syncPhase(run: SyncRun, data: SessionsResponse | null, nowMs: number): SyncPhase`.
   - `parseSyncRuns(raw: unknown): SyncRuns`.
+  - `syncSessionName(repoName: string): string` — `git-sync ` + the repo name with every character outside `[A-Za-z0-9 ._-]` replaced by `-`, cut to
+    `NAME_CAP` (60). Uses a client `NAME_RE` mirror added to `client/src/lib/spawnOptions.ts` beside `NAME_CAP`, with the same "Mirrors
+    server/lib/spawn.ts" comment.
   - `runFor(runs: SyncRuns, repo: RepoGitStats): SyncRun | null` — `runs[repo.toplevel]` for an ok repo, `null` for every other state.
   - `syncButtonText(phase: SyncPhase | null, pending: boolean): string`; `syncFailedText(name: string, error: string | null): string`;
     `syncLaunchErrorText(name: string, error: string): string`; `SYNC_NEEDS_TOKEN` (the 403 note).
@@ -126,7 +132,7 @@ Most likely to bite a real user, none of them exercised by the spec's own exampl
 
 **Behaviour:**
 - `canSync`: true only for `state: 'ok'` with `hasOrigin: true`.
-- `syncRequest`: `project` = `repo.dirName`, `prompt` = `GIT_SYNC_PROMPT`, `name` = `git-sync · <repo.name>`, `remoteControl` = the setting; `model` /
+- `syncRequest`: `project` = `repo.dirName`, `prompt` = `GIT_SYNC_PROMPT`, `name` = `syncSessionName(repo.name)`, `remoteControl` = the setting; `model` /
   `effort` present only when non-empty; `permissionMode` = the setting if it is in `allowedPermissionModes(ceiling)`, else that list's last entry.
 - `syncPhase`, first match wins:
   1. `data` null → `unseen` (no poll answered yet; never `ended`).
@@ -141,8 +147,12 @@ Most likely to bite a real user, none of them exercised by the spec's own exampl
 - [ ] **Step 1: Write the failing tests**, exact cases. Fixture: an `okRepo(name, over)` builder like `test/git-stats-client.test.ts`'s, a `session(id,
   status)` builder, and `run = { sessionId: 's1', dirName: 'd1', name: 'repo', launchedAtMs: 1_000_000 }`.
   - G1 `canSync`: ok + `hasOrigin` → true; ok without origin → false; `missing`, `not-git`, `error` → false.
-  - R1 `syncRequest` with all four settings at defaults and ceiling `'auto'` → exactly `{ project: 'd1', prompt: GIT_SYNC_PROMPT, name: 'git-sync · repo',
+  - R1 `syncRequest` with all four settings at defaults and ceiling `'auto'` → exactly `{ project: 'd1', prompt: GIT_SYNC_PROMPT, name: 'git-sync repo',
     permissionMode: 'auto', remoteControl: true }` — no `model`, no `effort` keys (`deepStrictEqual`, so absent ≠ `undefined`).
+  - N1 `syncSessionName('claude-agents-dashboard')` = `git-sync claude-agents-dashboard`; `syncSessionName('café+ü')` = `git-sync caf---`.
+  - N2 a 70-character repo name → result length exactly 60 and starts with `git-sync `.
+  - N3 every N1/N2 result matches the client `NAME_RE`; and the client `NAME_RE.source` equals the regex literal in `server/lib/spawn.ts`'s
+    `const NAME_RE = …` line, read as source text (the `test/tailnet.test.ts` pattern) — a parity check, not an import of server code.
   - R2 `syncModel` = first `MODELS` entry, `syncEffort` = first `EFFORTS` entry → both keys present with those values.
   - R3 `syncRemoteControl false` → `remoteControl: false`.
   - R4 setting `bypassPermissions`, ceiling `plan` → `permissionMode: 'plan'`.
@@ -169,6 +179,7 @@ Most likely to bite a real user, none of them exercised by the spec's own exampl
   - T2 `syncFailedText('repo', 'boom')` = `git-sync in repo failed to start: boom`; `syncFailedText('repo', null)` = `git-sync in repo failed to start.`
   - T3 `syncLaunchErrorText('repo', 'unknown project')` = `Sync in repo couldn't start: unknown project`.
   - T4 `SYNC_NEEDS_TOKEN` equals the Global Constraints string byte for byte.
+  - T5 `SYNC_RUNS_KEY === 'management.syncRuns'`.
 - [ ] **Step 2:** `pnpm test` — the new file fails to import.
 - [ ] **Step 3:** implement `gitSync.ts`.
 - [ ] **Step 4:** `pnpm test`, `pnpm typecheck` green.
@@ -178,9 +189,8 @@ Most likely to bite a real user, none of them exercised by the spec's own exampl
 
 **Files:**
 - Modify: `client/src/hooks/useSessions.ts` (optional options), `client/src/lib/settings.ts` (`scanQuery` gains an optional limit override)
-- Create: `client/src/hooks/useGitSync.ts`, plus a pure reducer `client/src/lib/gitSyncRuns.ts` if the hook's transition logic is more than a few lines
-  (recommended — it is the part that can be tested without React)
-- Test: `test/git-sync-client.test.ts` (extend), `test/client-settings.test.ts` (`scanQuery`)
+- Create: `client/src/hooks/useGitSync.ts`, and the pure reducer `client/src/lib/gitSyncRuns.ts` (the part tested without React)
+- Test: `test/git-sync-client.test.ts` (extend), `test/client-settings.test.ts` (`scanQuery`; the Reset sweep's `exempt` set gains `management.syncRuns`)
 
 **Interfaces:**
 - Consumes: Task 2's exports; `useSpawn()` (`launch`, `pending`, `error`, `needsToken`); `useRemoteAnswer().state` (`spawnAvailable`,
@@ -190,7 +200,7 @@ Most likely to bite a real user, none of them exercised by the spec's own exampl
     `enabled: false` → no fetch and no timer, `data` null. `limit` replaces only the `limit=` param.
   - `scanQuery(s: Settings, limit?: number): string`.
   - `useGitSync(onEnded: () => void): GitSyncControl` with
-    `{ available: boolean; phaseFor(repo): SyncPhase | null; start(repo: OkRepo): void; pending: boolean; note: string | null; chat: Session | null; openChat(id: string): void; closeChat(): void }`.
+    `{ available: boolean; phaseFor(repo: RepoGitStats): SyncPhase | null; start(repo: OkRepo): void; pending: boolean; note: string | null; chat: Session | null; openChat(id: string): void; closeChat(): void }`.
     `available` = `spawnAvailable === true`. `note` is the single line GitView shows under the band (403 text, launch error text, or failed-launch text;
     null otherwise, cleared by the next `start`). `chat` is the drawer's session: the live row for the opened id while the payload has it, else the last
     row seen for it (so a run that ends under an open drawer does not yank it), null once `closeChat` runs.
@@ -199,14 +209,20 @@ Most likely to bite a real user, none of them exercised by the spec's own exampl
     object** when nothing was dropped, so the hook can skip a write.
 
 **Behaviour:**
-- Runs live in `usePersistedState(SYNC_RUNS_KEY, {})`, read through `parseSyncRuns`.
+- Runs live in `usePersistedState('management.syncRuns', {})` — the **literal** key, not `SYNC_RUNS_KEY`, so the Reset sweep in
+  `test/client-settings.test.ts:18-27,326-335` sees it — read through `parseSyncRuns`. That sweep fails on any persisted key outside `OWNED_KEYS`
+  unless exempted: add `management.syncRuns` to its `exempt` set with Q2's reason (live state, not a preference). A test asserts
+  `SYNC_RUNS_KEY === 'management.syncRuns'` so the two spellings cannot drift.
 - The sessions poll is `useSessions({ enabled: <at least one run> || <a chat is open>, limit: SYNC_SCAN_LIMIT })` — the open drawer keeps it alive after
   its run is pruned, so the drawer's row stays live until closed.
 - On every new sessions payload, `reconcileRuns`; if anything was dropped, write the new map, set `note` from the first `failed` entry, and call
   `onEnded()` **once** for the whole batch (GitView passes `useGitStats().refresh`).
 - `start(repo)`: refuses when `pending`, when `!available`, when `!canSync(repo)` or when `runFor(runs, repo)` exists. Otherwise
-  `launch(syncRequest(...))`; on an id, store `{ sessionId, dirName, name, launchedAtMs: Date.now() }` under `repo.toplevel`; on null, set `note` from
-  `needsToken` (→ `SYNC_NEEDS_TOKEN`) or `error` (→ `syncLaunchErrorText`).
+  `launch(syncRequest(...))`; on an id, store `{ sessionId, dirName: repo.dirName, name: repo.name, launchedAtMs: Date.now() }` under `repo.toplevel`.
+- The launch-failure note **cannot** be read inside `start` after `await launch()`: `useSpawn` reports `needsToken` / `error` through React state
+  (`client/src/hooks/useSpawn.ts:49-63`), so the closure still holds the previous render's values. Derive it in an effect keyed on `useSpawn`'s
+  `needsToken` and `error` instead: `needsToken` → `SYNC_NEEDS_TOKEN` (beats `error`), else `error` → `syncLaunchErrorText(<name of the repo last
+  started>, error)`. `start` only clears the note and remembers which repo it started.
 
 - [ ] **Step 1: Write the failing tests:**
   - Q1 `scanQuery(DEFAULT_SETTINGS)` unchanged from today (`?limit=5&lookback=48&active=5`); `scanQuery(DEFAULT_SETTINGS, 50)` = `?limit=50&lookback=48&active=5`.
@@ -238,7 +254,8 @@ Most likely to bite a real user, none of them exercised by the spec's own exampl
   its id like SessionsView's, with `onClose={sync.closeChat}` and `spawnAvailable` from the same health snapshot.
 - The `note`, when non-null, is one line directly under the band (`.git-sync-note`, muted danger token like `.git-band-off`).
 - **Cards:** the button is the last child of `.git-head`, pushed right (a spacer or `margin-left:auto`), on ok repos only.
-- **Table:** a seventh column with an empty `<th>` (`aria-label="Sync"`); `COLS` becomes 7. Off rows get an empty cell. The button's click calls
+- **Table:** a seventh column with an empty `<th>` (`aria-label="Sync"`); `COLS` becomes 7. Off rows add **no** cell: their sentence already spans `COLS - 1` (`GitTable.tsx:38`) and absorbs the new column; the sub-row
+  `colSpan={COLS}` cells (`:75-101`) widen with it. The button's click calls
   `stopPropagation` so it does not toggle the row's sub-rows.
 - **Triage:** busy rows — last child of `.git-head`. Quiet rows — the head is itself a `<button>`, and a button cannot nest in a button: wrap the row
   button and `GitSyncButton` as siblings in a flex container (the row button keeps `flex:1`), keep `git-rowbtn` on the row button, keep its caret. Can't-read
@@ -262,9 +279,9 @@ Most likely to bite a real user, none of them exercised by the spec's own exampl
 **Files:**
 - Modify: `docs/subsystems/git-stats.md` (§Client: a **Sync** paragraph — when the button shows, the launch, the runs key and its phases, the gated
   poll and its limit, the drawer, re-poll on end; cite `gitSync.ts`, `useGitSync.ts`)
-- Modify: `docs/subsystems/settings.md` (the four `sync*` keys in its where-each-setting-lives table)
+- Modify: `docs/subsystems/settings.md` (the four `sync*` keys and the new Git Sync group in §Where each setting lives)
 - Modify: `docs/subsystems/spawn.md` (§The pieces or §The launch form is a modal: a second launcher, the Sync button, which posts without the sheet)
-- Modify: `docs/overview.md` §Map / file map lines for `client/src/lib/gitSync.ts`, `gitSyncRuns.ts` (if created), `client/src/hooks/useGitSync.ts`
+- Modify: `docs/overview.md` §Map / file map lines for `client/src/lib/gitSync.ts`, `gitSyncRuns.ts`, `client/src/hooks/useGitSync.ts`
 
 - [ ] **Step 1:** write the edits; cross-check every name against the code as merged (no names from this plan that the code didn't keep).
 - [ ] **Step 2:** commit `docs: Git Sync button`.
