@@ -1,0 +1,5 @@
+{
+  "name": "claude-agents-dashboard",
+  "description": "Skills the Claude Agents Dashboard depends on: git-sync (repo chores across machines) and kaizen (session post-mortems feeding the Analytics tab)",
+  "version": "0.1.0"
+}

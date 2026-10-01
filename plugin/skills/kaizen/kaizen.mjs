@@ -13,11 +13,14 @@
  * PROVENANCE: ported from claude-agents-dashboard server/lib/{analyze,agents,subagent-usage,scan}.ts.
  * That repo holds the unit-tested source of truth; keep this in sync if it changes.
  * Exception: `--trend` is kaizen-only, has no TS twin, and is tested by spawning this file (test/kaizen-trend.test.ts).
+ * Kaizen-only too, not yet in that source: the `compactions` block and skipping compact summaries in the
+ * correction heuristic (tested in test/compactions.test.mjs: `node --test test/*.test.mjs`).
  */
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /* ------------------------------------------------ transcript enumeration */
 
@@ -270,7 +273,7 @@ const CORRECTION_RE = /\b(no|nope|wrong|incorrect|not (?:what|right|correct)|act
 const NEVER_COMPACTED_PEAK = 250_000;
 const COMPACTION_DROP_RATIO = 0.5;
 
-function analyzeSession(filePath, id) {
+export function analyzeSession(filePath, id) {
   let text;
   try { text = fs.readFileSync(filePath, 'utf8'); } catch { return null; }
 
@@ -306,6 +309,14 @@ function analyzeSession(filePath, id) {
   const countedTurns = new Set();
   let anonTurnSeq = 0;
 
+  // COMPACTIONS. Each main-chain compact_boundary is one row: the context of
+  // the last turn before it and the first turn after it. A resumed session can
+  // replay an old boundary (same timestamp, same summary) — counted once.
+  const boundaries = [];
+  const boundaryKeys = new Set();
+  let duplicatesSkipped = 0, awaitingPost = null, skipSummary = false, lastCtx = null;
+  const turnCtx = [];
+
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -316,6 +327,27 @@ function analyzeSession(filePath, id) {
     if (ts) { if (!minTs || ts < minTs) minTs = ts; if (!maxTs || ts > maxTs) maxTs = ts; }
     if (!cwd && typeof rec.cwd === 'string') cwd = rec.cwd;
     if (rec.isSidechain === true) continue;
+
+    if (rec.compactMetadata && typeof rec.compactMetadata === 'object') {
+      const key = ts ?? `#b${boundaries.length + duplicatesSkipped}`;
+      if (boundaryKeys.has(key)) { duplicatesSkipped++; skipSummary = true; continue; }
+      boundaryKeys.add(key); skipSummary = false;
+      const m = rec.compactMetadata;
+      const b = {
+        at: ts, trigger: typeof m.trigger === 'string' ? m.trigger : 'unknown', preTokens: finiteOrNull(m.preTokens), durationMs: finiteOrNull(m.durationMs),
+        turnIndex: turnCount, preCtx: lastCtx, postCtx: null, postCacheCreation: null, dropped: null, turnsAfter: 0, summaryChars: null
+      };
+      boundaries.push(b); awaitingPost = b;
+      continue;
+    }
+    // The summary quotes the user's earlier messages, so it must not reach the
+    // correction heuristic below.
+    if (rec.isCompactSummary === true) {
+      const last = boundaries[boundaries.length - 1];
+      if (!skipSummary && last && last.summaryChars == null) last.summaryChars = contentText(rec.message?.content).length;
+      skipSummary = false;
+      continue;
+    }
 
     const msg = rec.message;
     if (!msg) continue;
@@ -340,6 +372,9 @@ function analyzeSession(filePath, id) {
           input += inp; output += out; cacheCreation += cc; cacheRead += cr;
           if (typeof msg.model === 'string' && msg.model) models.add(msg.model);
           const idx = turnCount++;
+          const ctx = inp + cc + cr;
+          turnCtx.push(ctx); lastCtx = ctx;
+          if (awaitingPost) { awaitingPost.postCtx = ctx; awaitingPost.postCacheCreation = cc; awaitingPost = null; }
           sumCombined += combined;
           if (combined < maxCombined * COMPACTION_DROP_RATIO) compacted = true;
           if (combined > maxCombined) { maxCombined = combined; maxTurnIndex = idx; }
@@ -395,6 +430,28 @@ function analyzeSession(filePath, id) {
 
   const { agents, subagentTotals } = subagentSpend(filePath);
 
+  let cum = 0, bi = 0, hypotheticalPeakCtx = turnCtx.length ? 0 : null;
+  for (const b of boundaries) {
+    b.turnsAfter = turnCount - b.turnIndex;
+    b.dropped = b.preCtx != null && b.postCtx != null ? b.preCtx - b.postCtx : null;
+  }
+  for (let j = 0; j < turnCtx.length; j++) {
+    while (bi < boundaries.length && boundaries[bi].turnIndex <= j) cum += boundaries[bi++].dropped ?? 0;
+    hypotheticalPeakCtx = Math.max(hypotheticalPeakCtx, turnCtx[j] + cum);
+  }
+  const compactions = {
+    count: boundaries.length,
+    auto: boundaries.filter(b => b.trigger === 'auto').length,
+    manual: boundaries.filter(b => b.trigger === 'manual').length,
+    duplicatesSkipped,
+    turnsAfterFirst: boundaries.length ? boundaries[0].turnsAfter : 0,
+    counterfactualExtraCacheRead: boundaries.reduce((sum, b) => sum + (b.dropped ?? 0) * b.turnsAfter, 0),
+    postCompactCacheCreation: boundaries.reduce((sum, b) => sum + (b.postCacheCreation ?? 0), 0),
+    durationMs: boundaries.reduce((sum, b) => sum + (b.durationMs ?? 0), 0),
+    hypotheticalPeakCtx,
+    boundaries
+  };
+
   const notes = [
     'combined includes cache_read (replayed cached prompt, billed ~10%); lead with billableApprox for real cost.',
     "byTool.approxOutputTokens splits each turn's output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.",
@@ -405,6 +462,7 @@ function analyzeSession(filePath, id) {
   if (subagentTotals.count > 0) notes.push("Subagent tokens are summed from each subagent's own transcript and are separate from main-agent totals; whole-session total = totals.combined + subagentTotals.tokens. subagentTotals.usage splits them by class — lead with its billableApprox for cost.");
   if (subagentTotals.fallbackCount > 0) notes.push(`${subagentTotals.fallbackCount} subagent(s) have no complete transcript and are counted at the harness figure (their final context size) — a lower bound.`);
   if (subagentTotals.unknownTokenCount > 0) notes.push(`${subagentTotals.unknownTokenCount} subagent(s) have unknown token totals (still running or old transcript).`);
+  if (compactions.count > 0) notes.push('compactions.counterfactualExtraCacheRead assumes an unbounded window (dropped context × turns after each boundary); a real window would have stopped the session at the first boundary. postCompactCacheCreation is billable and already inside totals.cacheCreation.');
 
   const durationMs = minTs && maxTs ? Date.parse(maxTs) - Date.parse(minTs) : null;
 
@@ -417,6 +475,7 @@ function analyzeSession(filePath, id) {
     byTool, bySubagent: agents, subagentTotals,
     serverTools: { webSearch: serverWebSearch, webFetch: serverWebFetch },
     errorSignals: { toolErrors, retries, userCorrections },
+    compactions,
     notes
   };
 }
@@ -540,4 +599,5 @@ function main() {
   process.stdout.write(JSON.stringify(analysis, null, 2) + '\n');
 }
 
-main();
+// Run only as a CLI, so tests can import analyzeSession. argv[1] may reach this file through a symlink; import.meta.url is the real path.
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main();

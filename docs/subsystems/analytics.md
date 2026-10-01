@@ -4,7 +4,7 @@ An **Analytics** section (third `SideRail` entry, persisted `dashboard.section`)
 last N (default 5) sessions the **`/kaizen` skill has logged**.
 `~/.claude/session-analytics-log.md` (one line per `/kaizen` run) is the **sole trigger** —
 a session appears here only because `/kaizen` logged it. The dashboard never writes that
-log; it only reads it. The `/kaizen` skill is **vendored** at `.claude/skills/kaizen/` so
+log; it only reads it. The `/kaizen` skill ships in this repo's plugin at `plugin/skills/kaizen/` (`README.md` §Install the skills), so
 collaborators can populate the tab against their own global log.
 
 ## The band
@@ -84,7 +84,7 @@ one of them at random — the same two-state rule the Sessions board follows.
   `.meta.json` sidecar's `toolUseId`. The harness's own number (`toolUseResult.totalTokens` / `<subagent_tokens>`) is the
   subagent's *final context size*, not its spend — 5–130x low on many-turn subagents (bug-27) — so it is only the fallback
   for a finished subagent whose transcript is missing or sums below it, counted in `subagentTotals.fallbackCount`. The
-  metric's tooltip carries `subagentTotals.usage`'s billable / cache-read split. `/kaizen`'s vendored `kaizen.mjs` does the
+  metric's tooltip carries `subagentTotals.usage`'s billable / cache-read split. `/kaizen`'s `kaizen.mjs` does the
   same, and `test/analyze.test.ts` runs it against `analyzeSession` to keep the two in step.
 - **Research & suggestions** — the one-line lesson `/kaizen` wrote for that session. The
   server does **no** LLM calls and invents no advice; the qualitative judgment is
@@ -208,7 +208,7 @@ returned — no backend change, so the read-only invariant above still holds.
   ctx threshold was the rejected alternative — it fires on exactly that single big session. The read keeps the newest line per `[project] id` in memory
   (newest-wins, as `lessonForSession` reads it) and never writes the log. Lines without both figures — status, review, prose, mid-session captures —
   are skipped; a line with `billable` but no `(N ctx)` counts in `withoutCtx` and nowhere else. `--trend` is kaizen-only: no server module or
-  Analytics view reads it, so `test/kaizen-trend.test.ts` spawns the vendored script itself.
+  Analytics view reads it, so `test/kaizen-trend.test.ts` spawns the plugin's script itself.
 - **⚠️ Log grammar (the contract with `/kaizen` — three line shapes, all append-only):**
 
   ```
@@ -239,7 +239,7 @@ returned — no backend change, so the read-only invariant above still holds.
     - client/src/components/analytics/
     - client/src/lib/analyticsFilterSort.ts
     - client/src/hooks/useSettings.tsx
-    - .claude/skills/kaizen/
+    - plugin/skills/kaizen/
   kind: subsystem
   verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

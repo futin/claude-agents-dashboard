@@ -39,6 +39,7 @@ Tests and types:
 ```bash
 pnpm test        # node-assert tests over the domain logic
 pnpm typecheck   # tsc --noEmit
+pnpm test:skills # git-sync's own suite, ~4 min — only needed when you change plugin/skills/git-sync/
 ```
 
 That's the whole basic setup. Everything below is optional.
@@ -157,6 +158,25 @@ That's the whole basic setup. Everything below is optional.
   [docker](docs/workflows/docker.md).
 - **Configuration** — everything is optional, defaults work out of the box; the full
   `.env` reference is in [configuration](docs/workflows/configuration.md).
+
+## Install the skills
+
+The repo is its own plugin marketplace; the plugin itself lives in `plugin/`, so nothing else in the repo installs with it:
+
+```
+/plugin marketplace add futin/claude-agents-dashboard
+/plugin install claude-agents-dashboard@claude-agents-dashboard-marketplace
+```
+
+(`/plugin marketplace add` also takes a local path to a checkout of this repo.) That gives every project on the machine two skills:
+
+- **`/kaizen`** — a post-mortem of a finished session. It appends one lesson line to `~/.claude/session-analytics-log.md`, which is what the **Analytics**
+  tab reads; without it the tab stays empty.
+- **`/git-sync`** — the repo's git chores in one pass: commit what's lying around behind a secret scan, sync and verify the trunk, push it, and prune
+  branches proven merged. The trunk is pushed once it verifies; every deletion, branch push and stash change is asked first.
+
+A skill edit in `plugin/skills/` reaches a session only after `/plugin marketplace update claude-agents-dashboard-marketplace` and a reinstall: the installed
+copy is a cached snapshot, not a link to this checkout.
 
 ## Documentation
 
