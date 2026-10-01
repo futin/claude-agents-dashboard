@@ -69,6 +69,10 @@ refuses. Cherry runs first because an unmerged branch almost always fails it, wh
 **Accepted error:** a multi-commit branch that was squash-merged as one commit has no patch-equivalent per commit, so it is **shown** as unmerged. The proof
 errs only toward showing a branch, never toward hiding one.
 
+A timeout inside the proof (the cherry or the merges walk) means "not proven", the same direction: the branch is shown with its counts instead of the repo
+going to `error`, and that verdict is memoised like a computed one, while any other failure or a timeout elsewhere still errors the repo, keeping in the memo
+the entries computed before the throw but pruning nothing until a read finishes.
+
 ## Worktrees and `FETCH_HEAD`
 
 - `%(worktreepath)` is set for a branch checked out in *any* worktree, the main one included. `worktreePath` is that path only when it differs from the **main
@@ -114,7 +118,7 @@ same repos in pin order and share `GitParts.tsx`:
 
 | Layout | Shape |
 | ------ | ----- |
-| Cards  | one card per repo, auto-filling columns. Below `md` (768px) the divergence bar drops and the numbers stay |
+| Cards  | one card per repo, auto-filling columns. Below `md` (768px), or in a branch list narrower than 400px (a container query), the divergence bar drops and the numbers stay |
 | Table  | one row per repo: On / Uncommitted / Trunk vs origin / Branches (`unmergedTotal`) / Fetched. A click opens the branches as sub-rows. Wide-only |
 | Triage | groups from `triageGitRepos`, drawn Needs you, In flight, Quiet, Can't read, empty groups omitted. Quiet rows are one dashed line, expanding on click |
 

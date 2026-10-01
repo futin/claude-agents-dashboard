@@ -267,31 +267,33 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
   };
 
   let trunkVsOrigin: AheadBehind | null = null;
-  if (trunk !== null && hasOrigin && localTrunk && originTrunk) {
-    const { ahead, behind } = await counts(`refs/heads/${trunk}`, localTrunk.sha, originTrunk);
-    trunkVsOrigin = { ahead, behind };
-  }
-
   // D8: branches are measured against origin's trunk when it exists, else the local one. No base means nothing can be counted or proved merged.
   const baseRef = originTrunk ?? (localTrunk ? { ref: `refs/heads/${localTrunk.name}`, sha: localTrunk.sha } : null);
-
   const unmerged: { ref: LocalRef; counts: AheadBehind | null }[] = [];
   let mergedCount = 0;
-  for (const ref of locals) {
-    if (ref.name === trunk) continue;
-    if (!baseRef) {
-      unmerged.push({ ref, counts: null });
-      continue;
+  try {
+    if (trunk !== null && hasOrigin && localTrunk && originTrunk) {
+      const { ahead, behind } = await counts(`refs/heads/${trunk}`, localTrunk.sha, originTrunk);
+      trunkVsOrigin = { ahead, behind };
     }
-    const full = `refs/heads/${ref.name}`;
-    const entry = await counts(full, ref.sha, baseRef);
-    if (entry.merged === undefined) entry.merged = entry.ahead === 0 || (await patchEquivalent(expect0, toplevel, baseRef.ref, full));
-    if (entry.merged) mergedCount++;
-    else unmerged.push({ ref, counts: entry });
-  }
 
+    for (const ref of locals) {
+      if (ref.name === trunk) continue;
+      if (!baseRef) {
+        unmerged.push({ ref, counts: null });
+        continue;
+      }
+      const full = `refs/heads/${ref.name}`;
+      const entry = await counts(full, ref.sha, baseRef);
+      if (entry.merged === undefined) entry.merged = entry.ahead === 0 || (await patchEquivalent(expect0, toplevel, baseRef.ref, full));
+      if (entry.merged) mergedCount++;
+      else unmerged.push({ ref, counts: entry });
+    }
+  } finally {
+    // Kept even when a call threw, so a read that errs part-way leaves its progress for the next poll; only a read that finished prunes, below.
+    for (const [key, entry] of used) memo.set(key, entry);
+  }
   for (const key of memo.keys()) if (key.startsWith(`${toplevel}\0`) && !used.has(key)) memo.delete(key);
-  for (const [key, entry] of used) memo.set(key, entry);
 
   // The main worktree is the common dir's parent, not the toplevel: for a pin on a linked worktree the two differ (§2 "Worktree badge").
   const mainWorktree = await realpathOr(path.dirname(commonDir));
@@ -337,11 +339,20 @@ async function resolveRef(run: GitRunner, cwd: string, ref: string): Promise<{ r
  * git-sync's M2 proof (`patchEquivalence`), re-implemented: every commit on `ref` past `base` has a patch-equivalent commit in `base`. Cherry skips merge
  * commits, so any merge in the range refuses the proof, since a merge can carry real work cherry never sees. An empty cherry list never proves anything.
  * Cherry runs first: an unmerged branch almost always fails it, and that saves the merges walk.
+ *
+ * A timeout in either call means "not proven", so the branch is shown rather than the repo failed: cherry's cost grows with how far the branch is behind,
+ * and that verdict is memoised like any other, so a stale branch far behind the trunk costs one timeout per sha move, not one per poll. Any other error
+ * still propagates.
  */
 async function patchEquivalent(expect0: (dir: string, args: string[]) => Promise<string>, cwd: string, base: string, ref: string): Promise<boolean> {
-  const lines = (await expect0(cwd, ['cherry', base, ref])).split('\n').filter(Boolean);
-  if (lines.length === 0 || lines.some(l => !l.startsWith('-'))) return false;
-  return (await expect0(cwd, ['rev-list', '--merges', `${base}..${ref}`])).trim() === '';
+  try {
+    const lines = (await expect0(cwd, ['cherry', base, ref])).split('\n').filter(Boolean);
+    if (lines.length === 0 || lines.some(l => !l.startsWith('-'))) return false;
+    return (await expect0(cwd, ['rev-list', '--merges', `${base}..${ref}`])).trim() === '';
+  } catch (err) {
+    if ((err as { code?: unknown }).code === 'ETIMEDOUT') return false;
+    throw err;
+  }
 }
 
 /** The runner every API read uses. Process-wide, like `overrideClaudeRoots`: the API suites build their server from `createRequestListener(cfg)` alone. */

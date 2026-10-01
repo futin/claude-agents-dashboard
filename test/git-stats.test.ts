@@ -70,6 +70,29 @@ function cleanClone(fx: GitFixture): string {
   return fx.clone(fx.bare('origin.git'), 'work');
 }
 
+/**
+ * A clone with two branches off the first commit: `slow`, one unmerged commit (2 behind origin/main), and `picked`, cherry-picked onto main and pushed, so
+ * the cherry proof hides it.
+ */
+function slowAndPicked(fx: GitFixture): string {
+  const work = cleanClone(fx);
+  fx.git(work, ['checkout', '-q', '-b', 'slow']);
+  fx.commit(work, 'slow work');
+  fx.git(work, ['checkout', '-q', '-b', 'picked', 'main']);
+  fx.commit(work, 'picked work');
+  fx.git(work, ['checkout', '-q', 'main']);
+  fx.commit(work, 'main moves');
+  fx.git(work, ['cherry-pick', 'picked']);
+  fx.git(work, ['push', '-q', 'origin', 'main']);
+  return work;
+}
+
+/** The real runner, except `git cherry` against `refs/heads/slow` outlives its timeout. */
+const slowCherry: GitRunner = async (cwd, args) => {
+  if (args[0] === 'cherry' && args.includes('refs/heads/slow')) throw new GitTimeoutError(5000);
+  return defaultGitRunner(cwd, args);
+};
+
 export async function run(): Promise<number> {
   console.log('\n=== git-stats: repo facts and branches ===\n');
   let ok_ = 0, total = 0;
@@ -602,6 +625,66 @@ export async function run(): Promise<number> {
       const r2 = ok(await readRepo(pin(work), second.run, memo));
       assert.deepStrictEqual(second.calls.filter(a => a[0] === 'rev-list' || a[0] === 'cherry'), []);
       assert.deepStrictEqual(r2, r1);
+    });
+  }));
+
+  check(await test('cherry times out for one branch → repo ok, that branch listed with its counts, the other still proven merged', async () => {
+    await withGitFixture(async fx => {
+      const work = slowAndPicked(fx);
+      const r = ok(await read(work, slowCherry));
+      assert.deepStrictEqual(r.branches.map(b => ({ name: b.name, ahead: b.ahead, behind: b.behind })), [{ name: 'slow', ahead: 1, behind: 2 }]);
+      assert.deepStrictEqual({ unmergedTotal: r.unmergedTotal, mergedCount: r.mergedCount }, { unmergedTotal: 1, mergedCount: 1 });
+    });
+  }));
+
+  check(await test('after a cherry timeout, a second read with no sha moved makes no cherry and no rev-list', async () => {
+    await withGitFixture(async fx => {
+      const work = slowAndPicked(fx);
+      const memo: GitMemo = new Map();
+      const r1 = ok(await readRepo(pin(work), slowCherry, memo));
+      const second = spy();
+      const r2 = ok(await readRepo(pin(work), second.run, memo));
+      assert.deepStrictEqual(second.calls.filter(a => a[0] === 'rev-list' || a[0] === 'cherry'), []);
+      assert.deepStrictEqual(r2, r1);
+    });
+  }));
+
+  check(await test('rev-list counts time out on a later branch → error; the next read recomputes only that branch; an errored read prunes nothing', async () => {
+    await withGitFixture(async fx => {
+      const work = cleanClone(fx);
+      for (const b of ['a', 'b', 'c']) {
+        fx.git(work, ['checkout', '-q', '-b', b, 'main']);
+        fx.commit(work, `${b} work`);
+      }
+      fx.git(work, ['checkout', '-q', 'main']);
+      const countsOfC: GitRunner = async (cwd, args) => {
+        if (args[0] === 'rev-list' && args[1] === '--left-right' && args[args.length - 1].endsWith('...refs/heads/c')) throw new GitTimeoutError(5000);
+        return defaultGitRunner(cwd, args);
+      };
+      const stale = `${work}\0${'0'.repeat(40)}\0${'1'.repeat(40)}`;
+      const memo: GitMemo = new Map([[stale, { ahead: 0, behind: 0 }]]);
+      const r1 = await readRepo(pin(work), countsOfC, memo);
+      assert.strictEqual(r1.state, 'error');
+      assert.ok(memoKeys(memo).includes(stale), 'an errored read should prune nothing');
+
+      const second = spy();
+      ok(await readRepo(pin(work), second.run, memo));
+      const expensive = second.calls.filter(a => a[0] === 'rev-list' || a[0] === 'cherry');
+      assert.deepStrictEqual(expensive.filter(a => a.some(x => /refs\/heads\/(a|b|main)$/.test(x))), [], 'main, a and b were computed before the throw');
+      assert.ok(expensive.some(a => a.some(x => x.endsWith('refs/heads/c'))), 'fixture: c was never computed, so it should be now');
+      assert.ok(!memoKeys(memo).includes(stale), 'a clean read prunes what it did not touch');
+    });
+  }));
+
+  check(await test('cherry fails with a non-timeout error → repo error, not swallowed', async () => {
+    await withGitFixture(async fx => {
+      const work = slowAndPicked(fx);
+      const exploding: GitRunner = async (cwd, args) => {
+        if (args[0] === 'cherry') throw new Error('cherry exploded');
+        return defaultGitRunner(cwd, args);
+      };
+      const r = await read(work, exploding);
+      assert.deepStrictEqual(r.state === 'error' ? r.message : r.state, 'cherry exploded');
     });
   }));
 
