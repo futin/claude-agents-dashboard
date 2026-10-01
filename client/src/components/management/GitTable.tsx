@@ -78,8 +78,9 @@ function GitSubRows({ repo }: { repo: OkRepo }) {
         const c = gitBranchCounts(b);
         return (
           <tr key={b.name} className="git-sub">
-            <td className="git-bname"><span className="git-bname-t">{b.name}</span><GitWorktreeBadge b={b} /></td>
-            <td colSpan={COLS - 2}>
+            {/* The name borrows the On column rather than widening Repo; the age stays under Fetched. */}
+            <td colSpan={2}><span className="git-bname"><span className="git-bname-t">{b.name}</span><GitWorktreeBadge b={b} /></span></td>
+            <td colSpan={COLS - 3}>
               {c && <span className="git-div"><GitDivergenceBar ahead={c.ahead} behind={c.behind} max={max} /><GitNums ahead={c.ahead} behind={c.behind} /></span>}
             </td>
             <td className="git-age">{formatAgo(b.lastCommitMs)}</td>

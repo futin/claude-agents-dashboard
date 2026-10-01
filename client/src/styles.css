@@ -2629,7 +2629,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
    halves and the centre rule) before the numbers. Phone first: below `md`
    the bar drops and the numbers stay (spec §6); 768 is the same tier
    `useNarrow` withholds the Table at. */
-.git-branches{display:flex;flex-direction:column;border-top:1px solid var(--hairline)}
+.git-branches{display:flex;flex-direction:column;border-top:1px solid var(--hairline);container:git-branches/inline-size}
 .git-brow{display:grid;grid-template-columns:minmax(0,1fr) 72px 36px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--hairline);font-size:13px;color:var(--ink)}
 .git-bname{display:flex;align-items:center;gap:6px;min-width:0}
 .git-bname-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2672,7 +2672,8 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-table .git-sub td:first-child{padding-left:16px}
 .git-table .git-sub .git-more{padding:0}
 .git-table .git-sub .git-note{padding-top:6px}
-.git-table .git-bname{max-width:320px}
+/* Contributes no width of its own, so a long branch name ellipsizes inside Repo + On instead of widening the table when a row expands */
+.git-table .git-bname{contain:inline-size}
 .git-div{display:inline-flex;align-items:center;gap:10px}
 
 /* Triage: the four groups in order, Can't read last; busy repos on paper
@@ -2697,4 +2698,11 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   .git-card{padding:20px}
   .git-arow{padding:16px 20px}
   .git-arow.quiet{padding:8px 16px}
+}
+
+/* A list narrower than this keeps the phone grid at any viewport: with the bar's 89px column a two-up laptop card leaves the name ~50px, too little for a
+   branch name beside its worktree badge. Comes after the `md` rule so it wins. */
+@container git-branches (width < 400px){
+  .git-brow{grid-template-columns:minmax(0,1fr) 72px 36px}
+  .git-brow .git-bar{display:none}
 }
