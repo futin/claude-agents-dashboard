@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 
 import { useGitStats } from '../../hooks/useGitStats';
+import { useGitSync, type GitSyncControl } from '../../hooks/useGitSync';
 import type { GitStatsResponse } from '../../../../shared/types';
 import { useNarrow } from '../../hooks/useNarrow';
 import { usePersistedState } from '../../hooks/usePersistedState';
@@ -13,6 +14,9 @@ import GitCards from './GitCards';
 import GitTable from './GitTable';
 import GitTriage from './GitTriage';
 
+/** Own chunk, as in SessionsView: most visits never open a sync's chat. */
+const ChatDrawer = lazy(() => import('../ChatDrawer'));
+
 /**
  * Management › Git: the band (with "updated Ns ago" / "couldn't update" and ↻ on its right), the Cards | Table | Triage switcher, and the layout it picks.
  * The poll lives in `useGitStats`, mounted with this view, so switching to Pinned or leaving the section stops it.
@@ -22,6 +26,7 @@ import GitTriage from './GitTriage';
  */
 export default function GitView() {
   const { data, error, updatedAt, refresh } = useGitStats();
+  const sync = useGitSync(refresh);
   const narrow = useNarrow();
   const [stored, setStored] = usePersistedState<string>('management.gitLayout', DEFAULT_GIT_LAYOUT);
   const layout = drawableGitLayout(isGitLayout(stored) ? stored : DEFAULT_GIT_LAYOUT, narrow);
@@ -40,7 +45,14 @@ export default function GitView() {
           </button>
         ))}
       </div>
-      <GitBody data={data} error={error} layout={layout} />
+      {sync.note && <div className="git-sync-note">{sync.note}</div>}
+      <GitBody data={data} error={error} layout={layout} sync={sync} />
+      {sync.chat && (
+        <Suspense fallback={null}>
+          {/* keyed by id, as in SessionsView: another sync's chat remounts the tail cleanly */}
+          <ChatDrawer key={sync.chat.id} session={sync.chat} onClose={sync.closeChat} spawnAvailable={sync.available} />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -62,10 +74,11 @@ function GitBandStatus({ failed, updatedAt, onRefresh }: { failed: boolean; upda
   );
 }
 
-function GitBody({ data, error, layout }: {
+function GitBody({ data, error, layout, sync }: {
   data: GitStatsResponse | null;
   error: boolean;
   layout: GitLayout;
+  sync: GitSyncControl;
 }) {
   const { update } = useSettings();
   if (data === null) return <div className="git-empty">{gitFirstLoadText(error)}</div>;
@@ -80,7 +93,7 @@ function GitBody({ data, error, layout }: {
       </div>
     );
   }
-  if (layout === 'table') return <GitTable repos={data.repos} />;
-  if (layout === 'triage') return <GitTriage repos={data.repos} />;
-  return <GitCards repos={data.repos} />;
+  if (layout === 'table') return <GitTable repos={data.repos} sync={sync} />;
+  if (layout === 'triage') return <GitTriage repos={data.repos} sync={sync} />;
+  return <GitCards repos={data.repos} sync={sync} />;
 }

@@ -41,6 +41,9 @@ export const PERMISSION_MODE_LABEL: Record<PermissionMode, string> = {
 /** Mirrors server/lib/spawn.ts's NAME_CAP. */
 export const NAME_CAP = 60;
 
+/** Mirrors server/lib/spawn.ts's NAME_RE: a name outside it is dropped by the server without a word. `test/git-sync-client.test.ts` pins the parity. */
+export const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
+
 /** Mirrors server/lib/spawn.ts's PROMPT_CAP. */
 export const PROMPT_CAP = 4000;
 

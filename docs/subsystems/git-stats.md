@@ -137,6 +137,22 @@ non-zero `mergedCount` adds "N merged branches hidden". A non-`ok` repo shows it
 **The copy.** Every string is in `client/src/lib/gitStatsText.ts`, verbatim from spec §6's copy table; the components never build their own. The empty
 state's "Pinned" is a link that sets `managementTab: 'pinned'`.
 
+**Sync** (spec §9). Every `ok` repo with an origin gets a Sync pill while `/api/health` reports `spawnAvailable` (`canSync` in `client/src/lib/gitSync.ts`):
+beside "fetched" at the right of a card's or busy Triage row's head, in the Table's seventh column, and beside a quiet row's line. A click launches at once,
+with no sheet: `POST /api/spawn` with the repo's `dirName`, the prompt `/claude-agents-dashboard:git-sync`, the session name `git-sync <repo>` (characters
+the server's `NAME_RE` would reject become `-`, cut at 60, because a bad name is dropped without a word) and the Settings › Local › Git Sync defaults, the
+permission mode clamped to the host's ceiling (`syncRequest`). The session runs in the pin's path, the cwd the server resolves for that `dirName`.
+
+`useGitSync` (`client/src/hooks/useGitSync.ts`) remembers each launch per device in `localStorage['management.syncRuns']`, keyed by the repo's toplevel, so
+two pins on one repo share a run. `syncPhase` reads a run against the sessions payload: a `launching` entry, or a row not seen yet, is "Syncing…" and
+disabled; a `working` or `question` row is "Syncing · open", which opens that session's `ChatDrawer` over Management; an ended row or a failed launch is
+forgotten (`reconcileRuns` in `client/src/lib/gitSyncRuns.ts`), and each payload that forgets any run re-polls git stats once. A row missing from the
+payload is not an end, since the scan caps rows by recency and a sync parked on its question writes nothing, so absence ends a run only 24h after launch
+once its row has shown, or 10 min after launch if it never has: a launch that failed while no tab watched leaves no trace once the server drops it.
+That sessions poll runs only while a run is remembered or the drawer is open, and asks for the server's maximum of 50 rows. A refused launch (no Answer
+token), a launch error, or a launch the server reports failed leaves one amber line under the band. One launch at a time: every pill disables while one is
+in flight, and only the clicked one reads "Starting…". The runs key is not a setting, so Settings › Reset leaves it alone.
+
 <!-- docs-sync:
   sources:
     - server/lib/git-stats.ts
@@ -151,5 +167,8 @@ state's "Pinned" is a link that sets `managementTab: 'pinned'`.
     - client/src/lib/gitStatsText.ts
     - client/src/lib/gitBar.ts
     - client/src/lib/gitPoll.ts
+    - client/src/lib/gitSync.ts
+    - client/src/lib/gitSyncRuns.ts
+    - client/src/hooks/useGitSync.ts
   kind: subsystem
 -->

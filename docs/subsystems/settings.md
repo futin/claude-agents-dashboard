@@ -15,7 +15,7 @@ phone, where every tree stands open (`.rail-sub`). The page band used to carry a
 phone-only pill switch of its own; it is gone, so `settingsTab` has exactly one control
 at any width, as Usage's Forecast / Token value does. Each page is a band
 (title, a scope pill, one line) over sub-category cards: Local has Display, Live data,
-New sessions, Notify this browser, Connection and Reset; Shared has Push notifications,
+New sessions, Git Sync, Notify this browser, Connection and Reset; Shared has Push notifications,
 Remote answers and Usage forecast.
 
 The Management › Pinned page is the one Projects card, full width: every project of the last 30 days as one ledger, the pins under a heading of their own with an
@@ -28,7 +28,9 @@ width, the default session view, landing tab
 from which both the picker's options and `clampSettings`'s accepted set are derived, so the two
 cannot drift apart), chat truncation, refresh rate, row count, lookback, active window, browser
 notifications, the launch panel's default model and default effort (`''` = send no flag and let
-the `claude` CLI choose; either way a launch can still override it), which Usage sub-tab
+the `claude` CLI choose; either way a launch can still override it), the Git Sync button's own
+model, effort, permission mode and remote control (`syncModel` / `syncEffort` / `syncPermissionMode` / `syncRemoteControl`, defaults `''`, `''`, `auto`
+and on; the button never asks, so these are the whole launch, and the mode is clamped to the host's ceiling when it posts), which Usage sub-tab
 opens (`forecast` | `rates`), which Management sub-view is showing (`managementTab`: `git` |
 `pinned`, default `git`), and which Settings page is showing (`settingsTab`: `local` |
 `shared`). A `settingsTab: 'pinned'` stored by an older release fails the validator and falls back to

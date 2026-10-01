@@ -1,21 +1,22 @@
 import { Fragment, useState } from 'react';
 
 import type { RepoGitStats } from '../../../../shared/types';
+import type { GitSyncControl } from '../../hooks/useGitSync';
 import { formatAgo } from '../../lib/format';
 import { gitBarMax } from '../../lib/gitBar';
 import {
   GIT_BRANCHES_SHOWN, GIT_BRANCH_CAP, GIT_NO_OPEN_BRANCHES,
   gitBranchCounts, gitMergedText, gitMoreText, gitNotShownText, gitStateSentence, gitVisibleBranches,
 } from '../../lib/gitStatsText';
-import { GitBranchChip, GitDivergenceBar, GitFetched, GitNums, GitTrunkChip, GitUncommittedChip, GitWorktreeBadge, type OkRepo } from './GitParts';
+import { GitBranchChip, GitDivergenceBar, GitFetched, GitNums, GitSyncButton, GitTrunkChip, GitUncommittedChip, GitWorktreeBadge, type OkRepo } from './GitParts';
 
-const COLS = 6;
+const COLS = 7;
 
 /**
  * Table: one row per repo, columns On / Uncommitted / Trunk vs origin / Branches / Fetched, cells in the copy table's own strings. Clicking an `ok` row opens
  * its branches as sub-rows beneath it. Wide-only (`gitLayoutsFor`): five columns do not survive a phone measure, so a phone is never offered it.
  */
-export default function GitTable({ repos }: { repos: RepoGitStats[] }) {
+export default function GitTable({ repos, sync }: { repos: RepoGitStats[]; sync: GitSyncControl }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const toggle = (dir: string) => setOpen(prev => {
     const next = new Set(prev);
@@ -27,7 +28,7 @@ export default function GitTable({ repos }: { repos: RepoGitStats[] }) {
     <div className="git-table-wrap">
       <table className="git-table">
         <thead>
-          <tr><th>Repo</th><th>On</th><th>Uncommitted</th><th>Trunk vs origin</th><th className="n">Branches</th><th>Fetched</th></tr>
+          <tr><th>Repo</th><th>On</th><th>Uncommitted</th><th>Trunk vs origin</th><th className="n">Branches</th><th>Fetched</th><th aria-label="Sync" /></tr>
         </thead>
         <tbody>
           {repos.map(r => {
@@ -54,6 +55,7 @@ export default function GitTable({ repos }: { repos: RepoGitStats[] }) {
                   <td><GitTrunkChip repo={r} /></td>
                   <td className="n">{r.unmergedTotal}</td>
                   <td><GitFetched repo={r} /></td>
+                  <td className="git-sync-td"><GitSyncButton repo={r} sync={sync} /></td>
                 </tr>
                 {isOpen && <GitSubRows repo={r} />}
               </Fragment>

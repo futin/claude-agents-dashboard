@@ -12,6 +12,7 @@ import { DEFAULT_LAYOUT, LAYOUTS } from '../client/src/lib/filterSort.js';
 import { SECTIONS, isSection } from '../client/src/lib/sections.js';
 import { DEFAULTS } from '../server/lib/config.js';
 import { OWNED_KEYS } from '../client/src/hooks/useSettings.js';
+import { EFFORTS, MODELS } from '../client/src/lib/spawnOptions.js';
 
 const CLIENT_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'client', 'src');
 
@@ -268,6 +269,11 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  if (test('scanQuery takes a limit override and changes nothing else', () => {
+    assert.strictEqual(scanQuery(DEFAULT_SETTINGS), '?limit=5&lookback=48&active=5');
+    assert.strictEqual(scanQuery(DEFAULT_SETTINGS, 50), '?limit=50&lookback=48&active=5');
+  })) p++; else f++;
+
   if (test('scanQuery carries all three knobs', () => {
     assert.strictEqual(
       scanQuery(clampSettings({ maxSessions: 3, lookbackHours: 48, activeWindowMin: 15 })),
@@ -322,6 +328,36 @@ export function run(): number {
     assert.strictEqual(clampSettings({ notifyBrowser: true, theme: 'chartreuse' }).notifyBrowser, true);
   })) p++; else f++;
 
+  if (test('Git Sync defaults: CLI model and effort, auto, remote control on', () => {
+    const s = clampSettings({});
+    assert.strictEqual(s.syncModel, '');
+    assert.strictEqual(s.syncEffort, '');
+    assert.strictEqual(s.syncPermissionMode, 'auto');
+    assert.strictEqual(s.syncRemoteControl, true);
+  })) p++; else f++;
+
+  if (test('valid Git Sync settings round-trip unchanged', () => {
+    const blob = { syncModel: MODELS[0], syncEffort: EFFORTS[0], syncPermissionMode: 'plan', syncRemoteControl: false };
+    const s = clampSettings(blob);
+    assert.deepStrictEqual(
+      { syncModel: s.syncModel, syncEffort: s.syncEffort, syncPermissionMode: s.syncPermissionMode, syncRemoteControl: s.syncRemoteControl },
+      blob
+    );
+  })) p++; else f++;
+
+  if (test('each junk Git Sync field falls back alone, a valid sibling survives', () => {
+    const s = clampSettings({ syncModel: 'gpt-4', syncEffort: 7, syncPermissionMode: 'root', syncRemoteControl: 'yes', theme: 'graphite' });
+    assert.strictEqual(s.syncModel, '');
+    assert.strictEqual(s.syncEffort, '');
+    assert.strictEqual(s.syncPermissionMode, 'auto');
+    assert.strictEqual(s.syncRemoteControl, true);
+    assert.strictEqual(s.theme, 'graphite');
+  })) p++; else f++;
+
+  if (test('the New sessions model does not leak into Git Sync', () => {
+    assert.strictEqual(clampSettings({ spawnDefaultModel: MODELS[0] }).syncModel, '');
+  })) p++; else f++;
+
   if (test('Reset clears every persisted view-state key the client writes', () => {
     // Scanned off the source rather than listed here, so a key added in a new
     // component fails this test instead of quietly surviving Reset — which is
@@ -329,8 +365,9 @@ export function run(): number {
     const keys = persistedKeys(CLIENT_SRC);
     assert.ok(keys.has('dashboard.layout') && keys.has('configs.type'), 'the scan found the keys');
     // The settings blob is reset by writing the defaults, not by removal; the
-    // answer token is a credential and Reset is not a sign-out.
-    const exempt = new Set(['dashboard.settings', 'dashboard.answerToken']);
+    // answer token is a credential and Reset is not a sign-out. The Git Sync runs are live state, not a
+    // preference: forgetting one would let a second sync start on a repo still syncing, and an ended run prunes itself.
+    const exempt = new Set(['dashboard.settings', 'dashboard.answerToken', 'management.syncRuns']);
     const missed = [...keys].filter(k => !exempt.has(k) && !OWNED_KEYS.includes(k));
     assert.deepStrictEqual(missed, [], 'keys Reset would leave behind');
     // `management.*` are kept on purpose: the pre-rename keys, swept so Reset clears what an older build left behind (D13).

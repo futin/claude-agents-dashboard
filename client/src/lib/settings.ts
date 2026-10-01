@@ -22,7 +22,8 @@ import {
   DEFAULT_LAYOUT, WIDE_ONLY_LAYOUTS, isLayout, layoutsFor, type Layout
 } from './filterSort';
 import { SECTIONS, type Section } from './sections';
-import { EFFORTS, MODELS } from './spawnOptions';
+import { EFFORTS, MODELS, PERMISSION_MODES } from './spawnOptions';
+import type { PermissionMode } from '../../../shared/types';
 
 export const THEMES = [
   { id: 'midnight', label: 'Midnight Radar', hint: 'the original — deep navy scope room' },
@@ -88,6 +89,15 @@ export interface Settings {
   /** Same as `spawnDefaultModel`, for the effort picker. */
   spawnDefaultEffort: SpawnDefaultEffort;
   /**
+   * The Git Sync button's launch, which has no sheet to pick in (git-stats spec §9). Its own four fields rather than the New sessions pair, so a sync
+   * can run cheaper than a hand launch. '' = send no flag, as above.
+   */
+  syncModel: SpawnDefaultModel;
+  syncEffort: SpawnDefaultEffort;
+  /** Clamped to the host's ceiling at launch (`syncRequest`); the server clamps again. */
+  syncPermissionMode: PermissionMode;
+  syncRemoteControl: boolean;
+  /**
    * Show an OS banner + beep in this browser when a dashboard-spawned session
    * starts needing you. Per device on purpose: permission is granted per
    * browser, and the tab has to be open on Sessions for the poll to see it.
@@ -136,6 +146,10 @@ export const DEFAULT_SETTINGS: Settings = {
   chatFullText: false,
   spawnDefaultModel: '',
   spawnDefaultEffort: '',
+  syncModel: '',
+  syncEffort: '',
+  syncPermissionMode: 'auto',
+  syncRemoteControl: true,
   notifyBrowser: false,
   usageTab: 'forecast',
   settingsTab: 'local',
@@ -250,6 +264,10 @@ export function clampSettings(raw: unknown): Settings {
     chatFullText: pickBool(s.chatFullText, DEFAULT_SETTINGS.chatFullText),
     spawnDefaultModel: pickOne(s.spawnDefaultModel, SPAWN_MODELS, DEFAULT_SETTINGS.spawnDefaultModel),
     spawnDefaultEffort: pickOne(s.spawnDefaultEffort, SPAWN_EFFORTS, DEFAULT_SETTINGS.spawnDefaultEffort),
+    syncModel: pickOne(s.syncModel, SPAWN_MODELS, DEFAULT_SETTINGS.syncModel),
+    syncEffort: pickOne(s.syncEffort, SPAWN_EFFORTS, DEFAULT_SETTINGS.syncEffort),
+    syncPermissionMode: pickOne(s.syncPermissionMode, PERMISSION_MODES, DEFAULT_SETTINGS.syncPermissionMode),
+    syncRemoteControl: pickBool(s.syncRemoteControl, DEFAULT_SETTINGS.syncRemoteControl),
     notifyBrowser: pickBool(s.notifyBrowser, DEFAULT_SETTINGS.notifyBrowser),
     usageTab: pickOne(s.usageTab, USAGE_TABS, DEFAULT_SETTINGS.usageTab),
     settingsTab: pickOne(s.settingsTab, SETTINGS_TABS, DEFAULT_SETTINGS.settingsTab),
@@ -273,9 +291,9 @@ export function resolveLayout(defaultLayout: DefaultLayout, stored: unknown): La
   return isLayout(stored) ? stored : DEFAULT_LAYOUT;
 }
 
-/** The scan knobs as the query string `GET /api/sessions` takes. */
-export function scanQuery(s: Settings): string {
-  return `?limit=${s.maxSessions}&lookback=${s.lookbackHours}&active=${s.activeWindowMin}`;
+/** The scan knobs as the query string `GET /api/sessions` takes. `limit` replaces only the row count (Management's Git Sync poll asks for all). */
+export function scanQuery(s: Settings, limit?: number): string {
+  return `?limit=${limit ?? s.maxSessions}&lookback=${s.lookbackHours}&active=${s.activeWindowMin}`;
 }
 
 /**
