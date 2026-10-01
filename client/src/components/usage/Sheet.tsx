@@ -21,14 +21,17 @@ import { InfoDot } from './ReadingAids';
  */
 
 /** The page header: the title and one line under it. The switch between the
-    section's two sub-views is the nav's tree, at every width — see `SideRail`. */
-export function Band({ title, sub }: { title: string; sub: string }) {
+    section's two sub-views is the nav's tree, at every width — see `SideRail`.
+    `right` is an optional slot after the text (Management › Git's "updated Ns
+    ago" and ↻); left out, the band renders exactly as Usage has always drawn it. */
+export function Band({ title, sub, right }: { title: string; sub: string; right?: ReactNode }) {
   return (
     <div className="usg-band">
       <div>
         <div className="usg-title">{title}</div>
         <div className="usg-sub">{sub}</div>
       </div>
+      {right}
     </div>
   );
 }

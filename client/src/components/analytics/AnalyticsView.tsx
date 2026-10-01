@@ -99,7 +99,7 @@ export default function AnalyticsView() {
 
   return (
     <div className="analytics">
-      {/* Two rows, as Management's band is: the title line, then the prose.
+      {/* Two rows, as Claude Configs' band is: the title line, then the prose.
           The title line carries state and one verb — `Review due` beside the
           title when the log has gone unswept, and ↻ — while every fact about
           the section (how much of the log is here, what it is, what to do when

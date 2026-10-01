@@ -39,8 +39,8 @@ function findRepoRoot(from: string): string {
 const ROOT = findRepoRoot(path.dirname(fileURLToPath(import.meta.url)));
 const STYLES_PATH = path.join(ROOT, 'client', 'src', 'styles.css');
 const NARROW_HOOK_PATH = path.join(ROOT, 'client', 'src', 'hooks', 'useNarrow.ts');
-const MANAGEMENT_VIEW_PATH = path.join(
-  ROOT, 'client', 'src', 'components', 'management', 'ManagementView.tsx'
+const CONFIGS_VIEW_PATH = path.join(
+  ROOT, 'client', 'src', 'components', 'configs', 'ConfigsView.tsx'
 );
 
 /** A file's source with `//` and `*`/`/*`-led comment lines stripped, as `tailnet.test.ts` does. */
@@ -191,17 +191,17 @@ export function run(): number {
     assert.match(source, /`\(max-width:\$\{SHELL_NARROW_PX\}px\)`/);
   })) p++; else f++;
 
-  if (test('ManagementView guards at the density tier', () => {
-    const source = fs.readFileSync(MANAGEMENT_VIEW_PATH, 'utf8');
+  if (test('ConfigsView guards at the density tier', () => {
+    const source = fs.readFileSync(CONFIGS_VIEW_PATH, 'utf8');
     assert.match(source, /\(max-width:767\.98px\)/);
   })) p++; else f++;
 
   if (test('no JS breakpoint uses a retired width', () => {
     const narrowSource = stripComments(fs.readFileSync(NARROW_HOOK_PATH, 'utf8'));
-    const managementSource = stripComments(fs.readFileSync(MANAGEMENT_VIEW_PATH, 'utf8'));
+    const configsSource = stripComments(fs.readFileSync(CONFIGS_VIEW_PATH, 'utf8'));
     assert.strictEqual(narrowSource.match(/\b700\b/), null, 'useNarrow.ts still references 700');
     assert.strictEqual(
-      managementSource.match(/\b700\b/), null, 'ManagementView.tsx still references 700'
+      configsSource.match(/\b700\b/), null, 'ConfigsView.tsx still references 700'
     );
   })) p++; else f++;
 

@@ -1,5 +1,5 @@
 /**
- * managementEntries.ts — normalize a ScopeConfig into the flat, selectable
+ * configsEntries.ts — normalize a ScopeConfig into the flat, selectable
  * entry groups the middle pane renders. Pure (unit-tested server-side).
  */
 

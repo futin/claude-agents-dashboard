@@ -1,6 +1,6 @@
 /**
  * management.ts — read-only scanner over Claude config on disk, powering
- * GET /api/management*. Enumerates skills/agents/commands/rules/hooks/memory/
+ * GET /api/configs*. Enumerates skills/agents/commands/rules/hooks/memory/
  * settings for the global scope (~/.claude, including every installed
  * plugin's subtree) and for individual project scopes (<cwd>/.claude), plus
  * the MCP servers each scope declares (~/.claude.json, <cwd>/.mcp.json,
@@ -28,7 +28,7 @@ import type {
   ConfigItem, FileContent, HookInfo, McpServerInfo, PinRow, PluginInfo, ProjectRef, ScopeConfig, SettingsFileInfo, SkillFile
 } from '../../shared/types.js';
 
-/** Max bytes served per file by GET /api/management/file. */
+/** Max bytes served per file by GET /api/configs/file. */
 export const FILE_CONTENT_CAP = 256 * 1024;
 
 /** Max files listed per skill dir (after sorting, so SKILL.md always survives). */
@@ -611,7 +611,7 @@ function refsByCwd(newest: Newest): Map<string, ProjectRef> {
 }
 
 /**
- * Recently-active projects for the management side-menu: per project dir the
+ * Recently-active projects for the Claude Configs side-menu: per project dir the
  * newest transcript within the lookback window, resolved to the cwd that dir is
  * named for; deduped by cwd (newest wins), minus dead paths and linked worktrees
  * ({@link isListedProjectPath}), newest-first.
@@ -621,7 +621,7 @@ function refsByCwd(newest: Newest): Map<string, ProjectRef> {
  * ignores the archived filter for that dir only. Such entries carry
  * `pinned: true`. Because `resolveProject`, `collectServablePaths` and the rail
  * all build from this list, a pin makes a project spawnable, makes its config
- * files servable by `GET /api/management/file`, and lists it on the rail — all
+ * files servable by `GET /api/configs/file`, and lists it on the rail — all
  * three intended; the servable-path widening is the security-relevant one.
  */
 export function listRecentProjects(config: Partial<Config>, options: ProjectsOptions = {}): ProjectRef[] {
@@ -766,7 +766,7 @@ export function resolveProject(config: Partial<Config>, dirName: string, options
 /* --------------------------------------------------------------- security */
 
 /**
- * Authoritative set of file paths GET /api/management/file may serve: every
+ * Authoritative set of file paths GET /api/configs/file may serve: every
  * path this scanner itself enumerated across the global scope and all recent
  * project scopes. Exact membership only — secrets under the same roots
  * (~/.claude/.credentials.json, history.jsonl, project .env) are never

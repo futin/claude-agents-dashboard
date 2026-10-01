@@ -8,6 +8,7 @@
  *   GET  /api/sessions/:id/chat → a page of that session's chat history
  *   GET/POST /api/settings      → the non-per-device settings (see lib/settings.ts)
  *   GET/POST /api/pins          → pinned projects, listed past LOOKBACK_HOURS (see api.ts)
+ *   GET  /api/git-stats         → local git state of each pinned project (see lib/git-stats.ts)
  *   GET  /api/dismiss           → a tapped desk push lands here; the page closes itself
  *   everything else             → static files from client/dist (production build)
  *
@@ -25,12 +26,12 @@ import { loadConfig } from './lib/config.js';
 import type { Config } from './lib/config.js';
 import {
   serveSessions, serveSessionDetail, serveSessionChat,
-  serveManagementIndex, serveManagementProject, serveManagementFile,
+  serveConfigsIndex, serveConfigsProject, serveConfigsFile,
   serveAnalytics, serveHealth, serveDismiss, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
-  serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, serveNotifyEvent, serveNotifyTest,
+  serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, serveGitStats, serveNotifyEvent, serveNotifyTest,
   serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates,
   serveAccount
 } from './api.js';
@@ -167,18 +168,18 @@ function badRequest(res: http.ServerResponse): void {
  */
 export function createRequestListener(config: Config): http.RequestListener {
   return (req, res) => {
-    // Management routes take query params — parse once. Handlers are async but
+    // Configs routes take query params — parse once. Handlers are async but
     // self-contained (they always end the response), so `void` keeps the
     // callback signature.
     const u = new URL(req.url || '/', 'http://local');
-    if (u.pathname === '/api/management/file') {
-      return void serveManagementFile(config, u.searchParams.get('path') || '', res);
+    if (u.pathname === '/api/configs/file') {
+      return void serveConfigsFile(config, u.searchParams.get('path') || '', res);
     }
-    if (u.pathname === '/api/management/project') {
-      return void serveManagementProject(config, u.searchParams.get('dir') || '', res);
+    if (u.pathname === '/api/configs/project') {
+      return void serveConfigsProject(config, u.searchParams.get('dir') || '', res);
     }
-    if (u.pathname === '/api/management') {
-      return void serveManagementIndex(config, res);
+    if (u.pathname === '/api/configs') {
+      return void serveConfigsIndex(config, res);
     }
     if (u.pathname === '/api/analytics') {
       return void serveAnalytics(config, res);
@@ -202,6 +203,10 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (u.pathname === '/api/pins') {
       if (req.method === 'POST') return void servePinsWrite(config, req, res);
       return void servePinsRead(config, res);
+    }
+    // Read-only git state of the pinned repos; the pins are the only input.
+    if (u.pathname === '/api/git-stats') {
+      return void serveGitStats(config, res);
     }
     // Who the CLI is signed in as + the two rate windows, on one small body the
     // header account chip polls on its own 30s clock from every section.

@@ -31,7 +31,8 @@ to someone who isn't on your tailnet.
 
 > ⚠️ **If you pick a public tunnel instead** (ngrok, Cloudflare, …), understand what it
 > exposes: *every* read endpoint is open — full transcripts, chat history,
-> and `/api/management/file` (config file bodies) — to anyone with the link. And if you have
+> `/api/git-stats` (pinned repos' paths and branch names), and `/api/configs/file`
+> (config file bodies) — to anyone with the link. And if you have
 > set `CLAUDE_BIN`, so is [spawn](spawn.md): with `ANSWER_TOKEN` empty, anyone with the
 > link can start a real Claude Code session on this machine. Set
 > `ANSWER_TOKEN` at minimum, and put auth at the edge (ngrok Basic Auth / Cloudflare
@@ -141,7 +142,8 @@ outside a secure context, so a plain-http tailnet URL or LAN IP can never record
 went from "nicer bookmark" to "the only way a phone dictates" without any change of its own.
 
 **Never Funnel.** Every read endpoint here is open — full transcripts, chat history,
-`/api/management/file` config bodies — and with `CLAUDE_BIN` set, [spawn](spawn.md) starts
+`/api/git-stats` repo paths and branch names, `/api/configs/file` config bodies — and
+with `CLAUDE_BIN` set, [spawn](spawn.md) starts
 a real Claude Code session on this machine. The tailnet *is* the perimeter;
 `tailscale funnel` is the one command that removes it. `test/tailnet.test.ts` asserts the
 word never appears in the script.

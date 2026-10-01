@@ -75,7 +75,7 @@ export function ReportBody({ r }: { r: AnalyticsReport }) {
       )}
 
       <div className="an-lesson">
-        {/* Management's third-column section label, verbatim — the same job in
+        {/* Claude Configs' third-column section label, verbatim — the same job in
             the same place: naming the block under the facts. */}
         <div className="mdetail-label">Research &amp; suggestions</div>
         <p className="an-lesson-body">{r.lesson}</p>

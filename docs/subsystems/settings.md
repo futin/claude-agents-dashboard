@@ -6,16 +6,21 @@ shell export for is editable here and takes effect on the next tick.
 ## Where each setting lives, and why
 
 There are two backends, and the section is two pages — **Local** and **Shared** — one per
-backend, so the page *is* the scope and no card mixes the two. A third page, **Pinned**, holds
-the pinned projects: server-stored like Shared, but a list that grows with use rather than a
-policy, so it has a page of its own instead of sitting at the foot of Shared. Which page is showing is
+backend, so the page *is* the scope and no card mixes the two. The pinned projects, server-stored
+like Shared but a list that grows with use rather than a policy, used to be a third page here; they
+now live under the Management section's **Pinned** sub-view (`management/PinnedProjectsGroup.tsx`).
+Which page is showing is
 picked from the tree under Settings in the nav — the rail on desktop, the menu on the
 phone, where every tree stands open (`.rail-sub`). The page band used to carry a
 phone-only pill switch of its own; it is gone, so `settingsTab` has exactly one control
 at any width, as Usage's Forecast / Token value does. Each page is a band
 (title, a scope pill, one line) over sub-category cards: Local has Display, Live data,
 New sessions, Notify this browser, Connection and Reset; Shared has Push notifications,
-Remote answers and Usage forecast; Pinned has the one Projects card, full width: every project of the last 30 days as one ledger, the pins under a heading of their own with an Unpin each, the rest under another with a Pin each, one filter over both.
+Remote answers and Usage forecast.
+
+The Management › Pinned page is the one Projects card, full width: every project of the last 30 days as one ledger, the pins under a heading of their own with an
+Unpin each, the rest under another with a Pin each, one filter over both. Its band reads "Management · Pinned", carries the "every device" scope pill (the
+pins are server-stored) and says the pins keep a project in the launch sheet however long ago its last session was.
 
 **Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, content
 width, the default session view, landing tab
@@ -24,8 +29,10 @@ from which both the picker's options and `clampSettings`'s accepted set are deri
 cannot drift apart), chat truncation, refresh rate, row count, lookback, active window, browser
 notifications, the launch panel's default model and default effort (`''` = send no flag and let
 the `claude` CLI choose; either way a launch can still override it), which Usage sub-tab
-opens (`forecast` | `rates`), and which Settings page is showing (`settingsTab`: `local` |
-`shared` | `pinned`). The answer token is per browser too (`dashboard.answerToken`, its own key), which
+opens (`forecast` | `rates`), which Management sub-view is showing (`managementTab`: `git` |
+`pinned`, default `git`), and which Settings page is showing (`settingsTab`: `local` |
+`shared`). A `settingsTab: 'pinned'` stored by an older release fails the validator and falls back to
+`local`. The answer token is per browser too (`dashboard.answerToken`, its own key), which
 is why it sits under **Local › Connection** and not beside the remote-answer switch it
 unlocks — a Shared page carrying it would break the promise the two pages make. A phone propped on the desk
 wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and
@@ -49,7 +56,7 @@ text in Settings says so in as many words. The server re-reads it on every tick,
 it takes effect without a restart.
 
 `pinnedProjects` (#161, default `[]`) rides in the same file: encoded project dir names that
-stay listed past `LOOKBACK_HOURS` (see [management](management.md) §Pinned projects). It is
+stay listed past `LOOKBACK_HOURS` (see [configs](configs.md) §Pinned projects). It is
 shared because a pin is a server-side fact — the spawn membership check and the servable-path set
 both read it — not a view preference. The clamp keeps only `[A-Za-z0-9-]+` strings, deduped in
 first-seen order, at most 50; a non-array reads as `[]` without touching the other keys. It is

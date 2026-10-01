@@ -265,7 +265,7 @@ export async function run(): Promise<number> {
 
   tally(await test('listRecentProjects: one entry per dirName, so a drifted dir cannot collide with itself', async () => {
     // dirName is the key the rail uses for React keys and the spawn <option>
-    // values, and /api/management/project resolves it to exactly one path.
+    // values, and /api/configs/project resolves it to exactly one path.
     const NOW = Date.parse('2026-07-12T12:00:00Z');
     const repo = makeProject();
     const root = makeProjectsRoot([

@@ -18,7 +18,7 @@ export interface PinsControl {
 
 /**
  * Pinned projects (#161) over `GET/POST /api/pins`, for the launch sheet and
- * Settings › Pinned. Fetched once on mount, not polled — the pin list changes
+ * Management › Pinned. Fetched once on mount, not polled — the pin list changes
  * only when someone clicks. A successful POST answers with the fresh payload,
  * so no second request follows it. Same `dashboard.answerToken` Bearer pattern
  * as `useServerSettings`.

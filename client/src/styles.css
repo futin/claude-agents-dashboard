@@ -1800,7 +1800,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .sp-more:disabled{cursor:default;opacity:.55}
 .sp-older .pin-pick{align-self:stretch}
 
-/* The picker itself (PinPicker.tsx), shared by the launch sheet and Settings ›
+/* The picker itself (PinPicker.tsx), shared by the launch sheet and Management ›
    Pinned: a filter box, then boxless rows split by hairlines. The path IS the
    row's title — parents dim, basename bright, no second name line — with the
    last-session age and §8.2's 36px button beside it. On the phone the row is
@@ -1810,7 +1810,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    whose buttons (Pin / Unpin) differ in width. */
 .pin-pick{display:flex;flex-direction:column;gap:8px;min-width:0;width:100%}
 .pin-list{list-style:none;margin:0;padding:0;max-height:240px;overflow-y:auto;overscroll-behavior:contain}
-/* Settings › Pinned is the list's own page: it grows with the page scroll, not a boxed one. */
+/* Management › Pinned is the list's own page: it grows with the page scroll, not a boxed one. */
 .set .pin-list{max-height:none;overflow-y:visible}
 .pin-head{display:none;font-size:11px;color:var(--ink3);padding:6px 0 0}
 .pin-head span:nth-child(2){text-align:right}
@@ -2593,4 +2593,116 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   .statstrip>div:nth-child(-n+5){border-top:0}
   .statstrip>div:nth-child(n+6){border-top:2px solid var(--board)}
   .terms{columns:2}
+}
+
+/* ── Management › Git ─────────────────────────────────────────────────────
+   DESIGN.md §8.4b: the Usage band (plus a right slot for the poll's age and
+   ↻), a `.seg` switcher, then one of three shapes over the same repo list —
+   Cards, Table, Triage. Every colour is a theme token or a `color-mix` over
+   one. The four data inks are the Triage rule: amber needs you, mustard in
+   flight, green quiet, ink3 can't read; the ahead half of a divergence bar is
+   `--cyan` and the behind half `--ink3`, as on GitHub's branch list. */
+.git-band-act{margin-left:auto;flex:none;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink3);white-space:nowrap}
+.git-band-off{color:var(--amber)}
+.git-switch{align-self:flex-start}
+.git-empty{padding:48px 20px;text-align:center;font-size:13px;color:var(--ink2)}
+.git-link{font:inherit;color:var(--cyan);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+
+/* the repo facts, shared by all three shapes */
+.git-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ink3)}
+.git-dot.needs{background:var(--amber)}
+.git-dot.flight{background:var(--mustard)}
+.git-dot.quiet{background:var(--green)}
+.git-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.git-name{font-size:15px;font-weight:500;color:var(--ink);letter-spacing:-.01em;min-width:0;overflow-wrap:anywhere}
+.git-fetched{margin-left:auto;font-size:12px;color:var(--ink3);white-space:nowrap}
+.git-facts{display:flex;gap:6px;flex-wrap:wrap}
+.git-chip{display:inline-block;font-size:12px;font-weight:500;line-height:1.4;padding:2px 9px;border-radius:999px;border:1px solid var(--hairline2);color:var(--ink2);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.git-chip.branch{color:var(--ink);max-width:240px}
+.git-chip.amber{color:var(--amber);border-color:transparent;background:color-mix(in srgb,var(--amber) 14%,transparent)}
+.git-chip.green{color:var(--green);border-color:transparent;background:color-mix(in srgb,var(--green) 16%,transparent)}
+.git-chip.mustard{color:var(--mustard);border-color:transparent;background:color-mix(in srgb,var(--mustard) 20%,transparent)}
+.git-chip.wt{flex:none;font-size:11px;padding:0 7px;color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
+.git-state{font-size:13px;color:var(--ink2);overflow-wrap:anywhere}
+
+/* a branch row: name, numbers, age — and from `md` the bar (89px = two 44px
+   halves and the centre rule) before the numbers. Phone first: below `md`
+   the bar drops and the numbers stay (spec §6); 768 is the same tier
+   `useNarrow` withholds the Table at. */
+.git-branches{display:flex;flex-direction:column;border-top:1px solid var(--hairline);container:git-branches/inline-size}
+.git-brow{display:grid;grid-template-columns:minmax(0,1fr) 72px 36px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--hairline);font-size:13px;color:var(--ink)}
+.git-bname{display:flex;align-items:center;gap:6px;min-width:0}
+.git-bname-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.git-bar{display:inline-grid;grid-template-columns:44px 1px 44px;align-items:center;height:12px;vertical-align:middle}
+.git-brow .git-bar{display:none}
+.git-bar-b,.git-bar-a{height:6px;border-radius:2px}
+.git-bar-b{justify-self:end;background:var(--ink3)}
+.git-bar-a{justify-self:start;background:var(--cyan)}
+.git-bar-c{height:12px;background:var(--hairline2)}
+.git-nums{font-size:12px;color:var(--ink3);white-space:nowrap}
+.git-nums-b{color:var(--ink2)}
+.git-nums-a{color:var(--cyan)}
+.git-age{font-size:12px;color:var(--ink3);text-align:right;white-space:nowrap}
+.git-more{align-self:flex-start;font-family:var(--font);font-size:12px;color:var(--cyan);background:none;border:0;padding:7px 0 0;cursor:pointer}
+.git-note{font-size:12px;color:var(--ink3);padding-top:7px}
+
+/* Cards: §8.2's borderless paper, auto-filling — two columns on a laptop,
+   one on a phone; `min()` keeps a 340px track from overflowing a phone */
+.git-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:16px;align-items:start}
+.git-card{background:var(--strip);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+
+/* Table: `.dt`'s rules (one rule per row, a heavier one under the head), in
+   its own sheet that scrolls rather than the page */
+.git-table-wrap{background:var(--strip);border-radius:16px;padding:8px 20px;overflow-x:auto}
+.git-table{width:100%;border-collapse:collapse;font-size:13px;color:var(--ink)}
+.git-table th{text-align:left;font-size:11px;font-weight:500;color:var(--ink2);padding:12px 10px 8px;border-bottom:1px solid var(--hairline2);white-space:nowrap}
+.git-table td{padding:10px;border-bottom:1px solid var(--hairline);vertical-align:middle}
+.git-table th.n,.git-table td.n{text-align:right}
+.git-table td:first-child,.git-table th:first-child{padding-left:0}
+.git-table td:last-child,.git-table th:last-child{padding-right:0}
+.git-table tbody tr:last-child td{border-bottom:0}
+.git-table .git-tname{font-weight:500;white-space:nowrap}
+.git-table .git-state{font-size:13px}
+.git-tr:not(.off){cursor:pointer}
+.git-tr:not(.off):hover td{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
+.git-tr.off .git-tname{color:var(--ink2)}
+.git-rowbtn{font:inherit;color:inherit;text-align:left;background:none;border:0;padding:0;cursor:pointer;display:inline-flex;align-items:center}
+.git-caret{display:inline-block;width:16px;flex:none;color:var(--ink3)}
+.git-table .git-sub td{padding-top:6px;padding-bottom:6px;font-size:12px;color:var(--ink2);background:var(--strip-hi)}
+.git-table .git-sub td:first-child{padding-left:16px}
+.git-table .git-sub .git-more{padding:0}
+.git-table .git-sub .git-note{padding-top:6px}
+/* Contributes no width of its own, so a long branch name ellipsizes inside Repo + On instead of widening the table when a row expands */
+.git-table .git-bname{contain:inline-size}
+.git-div{display:inline-flex;align-items:center;gap:10px}
+
+/* Triage: the four groups in order, Can't read last; busy repos on paper
+   with their branches, quiet and unreadable ones as one dashed line */
+.git-tri{display:flex;flex-direction:column;gap:20px}
+.git-tri-group{display:flex;flex-direction:column;gap:8px}
+.git-tri-h{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.git-arow{background:var(--strip);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.git-arow .git-branches{border-top:0;padding-left:16px;border-left:1px solid var(--hairline2)}
+.git-arow.quiet{background:transparent;border:1px dashed var(--hairline2);padding:8px 12px}
+.git-arow.quiet>.git-rowbtn{display:flex;width:100%}
+.git-arow.quiet .git-name{font-size:14px}
+.git-arow.quiet .git-caret{margin-left:auto;text-align:right}
+.git-arow.unreadable .git-name{color:var(--ink2)}
+.git-summary{font-size:13px;color:var(--ink3);min-width:0;overflow-wrap:anywhere}
+
+/* `md`: the bar comes back between name and numbers, and the paper gets the
+   standard 20px of padding */
+@media (min-width:768px){
+  .git-brow{grid-template-columns:minmax(0,1fr) 89px 72px 36px}
+  .git-brow .git-bar{display:inline-grid}
+  .git-card{padding:20px}
+  .git-arow{padding:16px 20px}
+  .git-arow.quiet{padding:8px 16px}
+}
+
+/* A list narrower than this keeps the phone grid at any viewport: with the bar's 89px column a two-up laptop card leaves the name ~50px, too little for a
+   branch name beside its worktree badge. Comes after the `md` rule so it wins. */
+@container git-branches (width < 400px){
+  .git-brow{grid-template-columns:minmax(0,1fr) 72px 36px}
+  .git-brow .git-bar{display:none}
 }

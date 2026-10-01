@@ -1,4 +1,4 @@
-import { railRows, type EntryFile } from '../../lib/managementEntries';
+import { railRows, type EntryFile } from '../../lib/configsEntries';
 import { fmtBytes } from '../../lib/format';
 
 interface Props {

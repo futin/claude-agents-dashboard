@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { AnalyticsResponse } from '../../../shared/types';
 
 /**
- * Analytics data hook. Like the management hooks, it does NOT poll — the list is
+ * Analytics data hook. Like the configs hooks, it does NOT poll — the list is
  * driven by `/kaizen` (which changes rarely), so it's fetched on mount and on
  * manual refresh only.
  */

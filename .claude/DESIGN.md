@@ -185,14 +185,14 @@ Below `sm` (640 px) the rail becomes a menu behind a top bar — wordmark left, 
 drops out of it full width. It is the same `.rail` element, repositioned, so the trees
 come with it: every section's tree stands open there, which puts any sub-view one tap
 away. That is why the sub-view switches the page bands used to carry on a phone (Usage's
-pill, Settings' Local/Shared, Management's scope select) are gone — the nav is the one
+pill, Settings' Local/Shared, Claude Configs' scope select) are gone — the nav is the one
 control at every width. The bar slides out of the way on a downward scroll and returns
 on the first upward one; while the menu is open it is pinned, because the menu hangs
 off it.
 
 ### 8.1 The board's type, after the §1 scale landed
 
-The rest of the board (sessions, usage, analytics, management, settings, the chat
+The rest of the board (sessions, usage, analytics, configs, settings, the chat
 drawer) now reads off §1's scale rather than the old strip-board sizes. The old
 board had three habits this pass removed outright:
 
@@ -316,14 +316,37 @@ board has no fifth data colour to give it, and amber is what it already calls a 
 Mock: `docs/guides/mockups/redesign-mock.html` `#forecast` / `#rates`.
 Reference: `docs/subsystems/usage-limits.md`.
 
-### 8.5 Management — the scope is a destination, the rest is columns
+### 8.4b Management — Git | Pinned
+
+A rail section with the same fixed two-row tree Usage and Settings draw: **Git** (the default) and **Pinned**, per device in `managementTab`. The page
+takes the plain `wrap wide`, and each sub-view opens on a band titled `Management · <sub-view>` (the `section · destination` convention the Usage
+pages set). Pinned is the §8.2 Projects card under its own band, carrying the green "every device" scope pill because the pins are server-stored; it is
+the page that used to be Settings › Pinned, moved unchanged.
+
+Git is the Usage band with a right slot (`Band`'s optional `right`: "updated Ns ago", or an amber "couldn't update", and the `.icon-refresh` ↻), then a
+`.seg` switcher on the ground — the Sessions one, on `--hairline2` for the same §8.3 reason — and one of **three shapes** over the same repo list, in pin
+order:
+
+- **Cards** — one borderless `--strip` card per repo (§8.2), auto-filling columns: two on a laptop, one on a phone. Header: a status dot, the name, the
+  branch chip, the fetched age pushed right; then the uncommitted and trunk-vs-origin chips; then the branch rows.
+- **Table** — `.dt`'s rules (one rule per row, a heavier one under the head) in a sheet that scrolls inside itself; a row click opens that repo's branches
+  as sub-rows on `--strip-hi`. Wide-only: a phone is never offered it, and a stored Table comes back with the width.
+- **Triage** — the Sessions triage idea, re-ruled for git: Needs you, In flight, Quiet, Can't read, in that order and only when non-empty, under small
+  uppercase `--ink3` headers. Busy repos are paper cards with their branches; Quiet and Can't read are one dashed line each, Quiet expanding on click.
+
+Four inks carry the Triage rule wherever a repo appears: **amber** needs you (uncommitted work, or a diverged trunk), **mustard** in flight (and a diverged
+trunk's chip), **green** quiet (and "clean"), **`--ink3`** can't read. The branch row borrows GitHub's divergence bar — behind grows left in `--ink3`, ahead
+grows right in `--cyan`, one scale per repo so the largest count fills its half. Below `md` the bar drops and the two numbers stay; the worktree badge is
+the one cyan-outlined chip. Every class is `git-` prefixed and every colour a token or a `color-mix` over one.
+
+### 8.5 Claude Configs — the scope is a destination, the rest is columns
 
 **The scope is a rail destination, not a pane.** Global (`~/.claude`) and each
-recently-active or pinned project sit in the sidebar as Management's sub-nav — the same tree Usage
+recently-active or pinned project sit in the sidebar as Claude Configs' sub-nav — the same tree Usage
 and Settings draw — instead of taking a column inside the page. The live view's three
 panes made the config's first level compete for width with the items under it, and the
 first level is the one that changes least: you pick a scope once and then work inside it.
-The page names it in the band as `Management · <scope>` (the `section · destination`
+The page names it in the band as `Claude Configs · <scope>` (the `section · destination`
 convention the Usage pages set) with the `.scope` pill after it, because the rail carries
 the label but only the band can spell out the path. The pill stays neutral: the green
 `.scope` fill means "every device" on Settings and would lie here.
@@ -353,7 +376,7 @@ three levels, and saying so out loud beats nesting two of them inside one scroll
   shadow into a crescent.
 
 Mock: `docs/guides/mockups/redesign-mock.html` `#mgmt`.
-Reference: `docs/subsystems/management.md`.
+Reference: `docs/subsystems/configs.md`.
 
 ### 8.6 The chat modal — the sidecar, and how a wait panel arrives
 
@@ -448,7 +471,7 @@ under it a link-styled button reads `Not listed? Show older projects · N` — h
 expands, **in place inside the sheet**, a filter box and one boxless row per older project (name, `~`
 path, `last session <age> ago`, a §8.2 36 px **Pin** button). No second surface and no new tint: the
 link is ink, cyan stays the launch button's. Pinning selects the project; its option reads the plain
-name, like any other. Settings › Pinned draws the same
+name, like any other. Management › Pinned draws the same
 picker under its Pinned projects card, where the Unpin lives, but offers recent projects too, so one in
 daily use can be pinned before it ages out; the sheet does not need them, they are already in its select.
 

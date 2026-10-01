@@ -85,7 +85,7 @@ is the channel that has none of them:
 1. **The poll's window.** Only the top `maxSessions` sessions by recency are in the payload at
    all (default 5). A sixth parked session announces nothing.
 2. **Section-bound.** `SessionsView` owns the poll and unmounts on a section switch, so nothing
-   fires while you sit on Management, Analytics, Usage or Settings. Chosen over lifting the poll
+   fires while you sit on Claude Configs, Analytics, Usage or Settings. Chosen over lifting the poll
    to the shell, which would poll every 3s on every section and turn a contained feature into a
    shell-wide change.
 3. **Hidden tabs are throttled.** A background tab's timers can stretch to ~1/minute, so a

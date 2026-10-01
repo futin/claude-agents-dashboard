@@ -1,6 +1,6 @@
 /**
  * The read-only config/report endpoints, driven through the real route table:
- * `GET /api/management`, `GET /api/management/project`, `GET /api/management/file`,
+ * `GET /api/configs`, `GET /api/configs/project`, `GET /api/configs/file`,
  * `GET /api/analytics`.
  *
  * These three share one design rule that is invisible from their readers'
@@ -10,7 +10,7 @@
  * else here is fail-open behaviour — an unreadable `~/.claude` must answer an
  * honest empty payload with `error: true`, never a 500 that blanks the section.
  *
- * `serveManagementFile` is not in task-7's list of thirteen; it is covered here
+ * `serveConfigsFile` is not in task-7's list of thirteen; it is covered here
  * anyway because it is the one route in this group that reads arbitrary
  * absolute paths, and its 403 is the guard that stops it.
  */
@@ -33,12 +33,12 @@ export async function run(): Promise<number> {
   let ok = 0, total = 0;
   const check = (r: boolean): void => { total++; if (r) ok++; };
 
-  /* ------------------------------------------------------- /api/management */
+  /* ------------------------------------------------------- /api/configs */
 
-  check(await testAsync('GET /api/management is 200 with a global scope and a project list', async () => {
+  check(await testAsync('GET /api/configs is 200 with a global scope and a project list', async () => {
     await withServer(ENV, async h => {
       h.plant(ID);
-      const reply = await h.req('/api/management');
+      const reply = await h.req('/api/configs');
       assert.equal(reply.status, 200);
       assert.equal(reply.json?.error, undefined, 'a readable home is not an error');
       assert.ok(reply.json?.generatedAt, 'the payload is stamped');
@@ -48,17 +48,17 @@ export async function run(): Promise<number> {
     });
   }));
 
-  check(await testAsync('GET /api/management lists a project with a recent transcript', async () => {
+  check(await testAsync('GET /api/configs lists a project with a recent transcript', async () => {
     await withServer(ENV, async h => {
       h.plant(ID);
-      const reply = await h.req('/api/management');
+      const reply = await h.req('/api/configs');
       const projects = reply.json?.projects as Array<{ dirName: string; path: string }>;
       assert.deepEqual(projects.map(p => p.dirName), [PROJECT_DIR]);
       assert.equal(projects[0].path, h.home, "the ref's path comes from the transcript's cwd");
     });
   }));
 
-  check(await testAsync('GET /api/management drops a project whose only recent session was archived', async () => {
+  check(await testAsync('GET /api/configs drops a project whose only recent session was archived', async () => {
     await withServer(ENV, async h => {
       resetArchivedCache();
       h.plant(ID);
@@ -68,19 +68,19 @@ export async function run(): Promise<number> {
         path.join(dir, `local_${ID}.json`),
         JSON.stringify({ sessionId: `local_${ID}`, cliSessionId: ID, isArchived: true })
       );
-      const reply = await h.req('/api/management');
+      const reply = await h.req('/api/configs');
       assert.equal(reply.status, 200);
       const dirNames = (reply.json?.projects as { dirName: string }[]).map(p => p.dirName);
       assert.equal(dirNames.includes(PROJECT_DIR), false, 'archived-only project is not recently active');
     });
   }));
 
-  /* ----------------------------------------------- /api/management/project */
+  /* ----------------------------------------------- /api/configs/project */
 
-  check(await testAsync('GET /api/management/project resolves an enumerated dirName', async () => {
+  check(await testAsync('GET /api/configs/project resolves an enumerated dirName', async () => {
     await withServer(ENV, async h => {
       h.plant(ID);
-      const reply = await h.req(`/api/management/project?dir=${PROJECT_DIR}`);
+      const reply = await h.req(`/api/configs/project?dir=${PROJECT_DIR}`);
       assert.equal(reply.status, 200);
       assert.equal(reply.json?.error, undefined);
       assert.equal(reply.json?.scope, 'project');
@@ -88,76 +88,84 @@ export async function run(): Promise<number> {
     });
   }));
 
-  check(await testAsync('GET /api/management/project for an unknown project is 404', async () => {
+  check(await testAsync('GET /api/configs/project for an unknown project is 404', async () => {
     await withServer(ENV, async h => {
       h.plant(ID);
-      const reply = await h.req('/api/management/project?dir=-no-such-project');
+      const reply = await h.req('/api/configs/project?dir=-no-such-project');
       assert.equal(reply.status, 404, 'a dirName nobody has is a miss, not a server fault');
       assert.equal(reply.json?.error, true);
       assert.equal(reply.json?.scope, 'project', 'the empty payload is still well-formed');
     });
   }));
 
-  check(await testAsync('GET /api/management/project with a traversal-shaped dir is 400', async () => {
+  check(await testAsync('GET /api/configs/project with a traversal-shaped dir is 400', async () => {
     await withServer(ENV, async h => {
       h.plant(ID);
       for (const dir of ['../../etc', '/etc/passwd', 'a/b', '']) {
-        const reply = await h.req(`/api/management/project?dir=${encodeURIComponent(dir)}`);
+        const reply = await h.req(`/api/configs/project?dir=${encodeURIComponent(dir)}`);
         assert.equal(reply.status, 400, `dir=${JSON.stringify(dir)} must fail ID_RE`);
         assert.equal(reply.json?.error, true);
       }
     });
   }));
 
-  /* -------------------------------------------------- /api/management/file */
+  /* -------------------------------------------------- /api/configs/file */
 
-  check(await testAsync('GET /api/management/file serves an enumerated file', async () => {
+  check(await testAsync('GET /api/configs/file serves an enumerated file', async () => {
     await withServer(ENV, async h => {
       h.plant(ID);
       const claudeMd = path.join(h.home, '.claude', 'CLAUDE.md');
       fs.writeFileSync(claudeMd, '# fake rules\n');
-      const reply = await h.req(`/api/management/file?path=${encodeURIComponent(claudeMd)}`);
+      const reply = await h.req(`/api/configs/file?path=${encodeURIComponent(claudeMd)}`);
       assert.equal(reply.status, 200);
       assert.equal(reply.json?.error, undefined);
       assert.equal(reply.json?.content, '# fake rules\n');
     });
   }));
 
-  check(await testAsync('GET /api/management/file is 403 for a real file outside the servable set', async () => {
+  check(await testAsync('GET /api/configs/file is 403 for a real file outside the servable set', async () => {
     await withServer(ENV, async h => {
       h.plant(ID);
       // Exists and is readable — the only thing stopping it is the allowlist.
       const secret = path.join(h.home, 'secret.txt');
       fs.writeFileSync(secret, 'do not serve me');
-      const reply = await h.req(`/api/management/file?path=${encodeURIComponent(secret)}`);
+      const reply = await h.req(`/api/configs/file?path=${encodeURIComponent(secret)}`);
       assert.equal(reply.status, 403);
       assert.equal(reply.json?.error, true);
       assert.equal(reply.json?.content, '');
     });
   }));
 
-  check(await testAsync('GET /api/management/file is 403 for ~/.claude.json even though it declares MCP servers', async () => {
+  check(await testAsync('GET /api/configs/file is 403 for ~/.claude.json even though it declares MCP servers', async () => {
     await withServer(ENV, async h => {
       h.plant(ID);
       const claudeJson = path.join(h.home, '.claude.json');
       fs.writeFileSync(claudeJson, JSON.stringify({ mcpServers: { s: { command: 'x', env: { TOKEN: 'SEKRIT' } } } }));
-      const listed = await h.req('/api/management');
+      const listed = await h.req('/api/configs');
       const global = listed.json?.global as { mcpServers: Array<{ name: string; declaredIn: string }> };
       assert.deepEqual(global.mcpServers.map(m => [m.name, m.declaredIn]), [['s', claudeJson]], 'the server is listed');
       assert.ok(!JSON.stringify(listed.json).includes('SEKRIT'), 'env values stay server-side');
-      const reply = await h.req(`/api/management/file?path=${encodeURIComponent(claudeJson)}`);
+      const reply = await h.req(`/api/configs/file?path=${encodeURIComponent(claudeJson)}`);
       assert.equal(reply.status, 403);
       assert.equal(reply.json?.content, '');
     });
   }));
 
-  check(await testAsync('GET /api/management/file is 400 for a relative or dot-dot path', async () => {
+  check(await testAsync('GET /api/configs/file is 400 for a relative or dot-dot path', async () => {
     await withServer(ENV, async h => {
       for (const p of ['', 'relative/path', '/etc/../etc/passwd']) {
-        const reply = await h.req(`/api/management/file?path=${encodeURIComponent(p)}`);
+        const reply = await h.req(`/api/configs/file?path=${encodeURIComponent(p)}`);
         assert.equal(reply.status, 400, `path=${JSON.stringify(p)} must be refused`);
         assert.equal(reply.json?.error, true);
       }
+    });
+  }));
+
+  check(await testAsync('GET /api/management (the dropped old path) no longer answers JSON', async () => {
+    await withServer(ENV, async h => {
+      const reply = await h.req('/api/management');
+      // Unknown /api/* paths fall through to serveStatic, so the status is whatever the static server says; only the type matters.
+      assert.ok(!String(reply.headers['content-type'] ?? '').includes('application/json'), `got ${reply.headers['content-type']}`);
     });
   }));
 

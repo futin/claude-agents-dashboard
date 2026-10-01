@@ -84,9 +84,18 @@ export function run(): number {
   if (test('the Settings scope defaults to local and rejects anything else', () => {
     assert.strictEqual(DEFAULT_SETTINGS.settingsTab, 'local');
     assert.strictEqual(clampSettings({ settingsTab: 'shared' }).settingsTab, 'shared');
-    assert.strictEqual(clampSettings({ settingsTab: 'pinned' }).settingsTab, 'pinned');
+    assert.strictEqual(clampSettings({ settingsTab: 'pinned' }).settingsTab, 'local', 'Pinned moved to Management');
     assert.strictEqual(clampSettings({ settingsTab: 'nonsense' }).settingsTab, 'local');
     assert.strictEqual(clampSettings({ settingsTab: 7 }).settingsTab, 'local');
+  })) p++; else f++;
+
+  // The Management section's sub-view (Git | Pinned), picked like the other two.
+  if (test('the Management sub-tab defaults to git and accepts only git and pinned', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.managementTab, 'git');
+    assert.strictEqual(clampSettings({}).managementTab, 'git');
+    assert.strictEqual(clampSettings({ managementTab: 'nonsense' }).managementTab, 'git');
+    assert.strictEqual(clampSettings({ managementTab: 'pinned' }).managementTab, 'pinned');
+    assert.strictEqual(clampSettings({ managementTab: 'git' }).managementTab, 'git');
   })) p++; else f++;
 
   // The shape the sessions list opens in. It used to live in the persisted
@@ -235,12 +244,12 @@ export function run(): number {
   // Spelled out literally, not derived from SECTIONS: a test that reads the
   // same array as the code under test passes whatever either one says. This
   // fails if a section joins the rail without a decision about landing on it.
-  if (test('the picker offers exactly the six intended choices', () => {
+  if (test('the picker offers exactly the seven intended choices', () => {
     assert.deepStrictEqual(
       LANDING_OPTIONS.map(o => o.value),
-      ['last', 'sessions', 'usage', 'management', 'analytics', 'settings']
+      ['last', 'sessions', 'usage', 'management', 'configs', 'analytics', 'settings']
     );
-    assert.strictEqual(LANDING_OPTIONS.length, 6);
+    assert.strictEqual(LANDING_OPTIONS.length, 7);
   })) p++; else f++;
 
   if (test('each landing option carries the rail\'s own label', () => {
@@ -318,13 +327,14 @@ export function run(): number {
     // component fails this test instead of quietly surviving Reset — which is
     // how `dashboard.layout` and then `management.type` each got missed.
     const keys = persistedKeys(CLIENT_SRC);
-    assert.ok(keys.has('dashboard.layout') && keys.has('management.type'), 'the scan found the keys');
+    assert.ok(keys.has('dashboard.layout') && keys.has('configs.type'), 'the scan found the keys');
     // The settings blob is reset by writing the defaults, not by removal; the
     // answer token is a credential and Reset is not a sign-out.
     const exempt = new Set(['dashboard.settings', 'dashboard.answerToken']);
     const missed = [...keys].filter(k => !exempt.has(k) && !OWNED_KEYS.includes(k));
     assert.deepStrictEqual(missed, [], 'keys Reset would leave behind');
-    const stale = OWNED_KEYS.filter(k => !keys.has(k));
+    // `management.*` are kept on purpose: the pre-rename keys, swept so Reset clears what an older build left behind (D13).
+    const stale = OWNED_KEYS.filter(k => !keys.has(k) && !k.startsWith('management.'));
     assert.deepStrictEqual(stale, [], 'keys nothing writes any more');
   })) p++; else f++;
 

@@ -24,6 +24,10 @@ const SettingsContext = createContext<SettingsControl | null>(null);
 export const OWNED_KEYS = [
   'dashboard.view', 'dashboard.layout', 'dashboard.section', 'dashboard.chatFilter',
   'dashboard.analyticsView', 'dashboard.analyticsLayout',
+  'configs.scope', 'configs.type', 'configs.collapsed',
+  // The Git sub-view's layout: a live key despite the `management.` prefix the pre-rename keys below share.
+  'management.gitLayout',
+  // The pre-rename keys: nothing writes them now (D13, no migration), but Reset still sweeps what an older build left behind.
   'management.scope', 'management.type', 'management.collapsed'
 ];
 

@@ -1,9 +1,9 @@
 import PinPicker from '../PinPicker';
-import { SettingsGroup } from './SettingsRow';
+import { SettingsGroup } from '../settings/SettingsRow';
 import { usePins } from '../../hooks/usePins';
 
 /**
- * Settings › Pinned (#161): one card, one ledger — every project with a
+ * Management › Pinned (#161, moved here from Settings): one card, one ledger — every project with a
  * session in the last 30 days, the stored pins under a heading of their own
  * with an Unpin each, the rest under another with a Pin each, one filter over
  * both. Its own component so the `GET /api/pins` scan runs only when the

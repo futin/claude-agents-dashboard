@@ -277,7 +277,7 @@ at all.
 ## Project selection is a membership check, never a path
 
 `SpawnRequest.project` is a `dirName`, resolved through the same `resolveProject`
-[management](management.md) already uses for its own `dirName` query param, against
+[configs](configs.md) already uses for its own `dirName` query param, against
 `listRecentProjects`'s enumerated list (`server/lib/management.ts`) — never
 joined into a filesystem path. That list includes every pinned project whatever its age (#161),
 so a pin is what makes a project past `LOOKBACK_HOURS` launchable; the sheet's `Not listed? Show
