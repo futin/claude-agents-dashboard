@@ -8,16 +8,28 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { PinRow, RepoGitStats } from '../../shared/types.js';
+import type { GitBranch, PinRow, RepoGitStats } from '../../shared/types.js';
 
 /** Exit code and output of one git call. Rejects only when git could not be spawned or outlived its timeout; a non-zero exit resolves. */
 export type GitRunner = (cwd: string, args: string[]) => Promise<{ code: number; stdout: string; stderr: string }>;
 
-/** `rev-list --left-right --count` result, keyed by `memoKey`. */
+/** `rev-list --left-right --count <base>...<ref>`: commits only on `<ref>` (ahead) and only on the base (behind). */
 export type AheadBehind = { ahead: number; behind: number };
 
-/** Ahead/behind counts keyed by `` `${toplevel}\0${branchSha}\0${baseSha}` ``, so a count is only recomputed when a sha moves. */
-export type GitMemo = Map<string, AheadBehind>;
+/**
+ * A memo value. `merged` is the §2 proof, filled the first time a branch needs it; the trunk's own row stores counts only, and a branch whose shas match
+ * that row computes the proof on top of the shared entry.
+ */
+export type MemoEntry = AheadBehind & { merged?: boolean };
+
+/**
+ * Keyed by `` `${toplevel}\0${refSha}\0${baseSha}` ``, so counts and the merged proof are only recomputed when a sha moves. One map may serve many repos:
+ * each read replaces only its own toplevel's entries.
+ */
+export type GitMemo = Map<string, MemoEntry>;
+
+/** The most branches one repo serves; `unmergedTotal` counts the rest. */
+export const MAX_BRANCHES = 50;
 
 export const GIT_TIMEOUT_MS = 5000;
 
@@ -161,7 +173,26 @@ export async function readRepo(pin: PinRow, run: GitRunner, memo: GitMemo): Prom
   try {
     return await readGitFacts(base, pin.path, run, memo);
   } catch (err) {
+    // A missing cwd fails the spawn with the same ENOENT as a missing git binary, so a folder deleted since the stat would read as "git not found".
+    if ((err as { code?: unknown }).code === 'ENOENT' && !(await isDirectory(pin.path))) return { ...base, state: 'missing' };
     return { ...base, state: 'error', message: errorMessage(err) };
+  }
+}
+
+async function isDirectory(p: string): Promise<boolean> {
+  try {
+    return (await fs.promises.stat(p)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+async function realpathOr(p: string): Promise<string> {
+  try {
+    return await fs.promises.realpath(p);
+  } catch {
+    // A worktree folder deleted without `git worktree prune` is still listed; its recorded path is the best we have.
+    return p;
   }
 }
 
@@ -214,14 +245,63 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
   const trunk = await trunkOf(git, toplevel);
 
   // The local trunk comes from the for-each-ref list, so a trunk that exists only as `origin/<trunk>` is never named as `refs/heads/<trunk>` (§2).
-  let trunkVsOrigin: AheadBehind | null = null;
   const localTrunk = trunk === null ? undefined : locals.find(r => r.name === trunk);
-  if (trunk !== null && hasOrigin && localTrunk) {
-    const originRef = `refs/remotes/origin/${trunk}`;
-    if (await refExists(git, toplevel, originRef)) {
-      const counts = (await expect0(toplevel, ['rev-list', '--left-right', '--count', `${originRef}...refs/heads/${trunk}`])).trim().split(/\s+/);
-      trunkVsOrigin = { ahead: Number(counts[1]), behind: Number(counts[0]) };
+  const originTrunk = trunk === null ? null : await resolveRef(git, toplevel, `refs/remotes/origin/${trunk}`);
+
+  // Every memo entry this read touches; the repo's other entries are dropped at the end, so the memo never outlives a branch.
+  const used = new Map<string, MemoEntry>();
+  const keyOf = (refSha: string, baseSha: string) => `${toplevel}\0${refSha}\0${baseSha}`;
+  const counts = async (ref: string, refSha: string, b: { ref: string; sha: string }): Promise<MemoEntry> => {
+    const key = keyOf(refSha, b.sha);
+    let entry = used.get(key) ?? memo.get(key);
+    if (!entry) {
+      const [behind, ahead] = (await expect0(toplevel, ['rev-list', '--left-right', '--count', `${b.ref}...${ref}`])).trim().split(/\s+/).map(Number);
+      entry = { ahead, behind };
     }
+    used.set(key, entry);
+    return entry;
+  };
+
+  let trunkVsOrigin: AheadBehind | null = null;
+  if (trunk !== null && hasOrigin && localTrunk && originTrunk) {
+    const { ahead, behind } = await counts(`refs/heads/${trunk}`, localTrunk.sha, originTrunk);
+    trunkVsOrigin = { ahead, behind };
+  }
+
+  // D8: branches are measured against origin's trunk when it exists, else the local one. No base means nothing can be counted or proved merged.
+  const baseRef = originTrunk ?? (localTrunk ? { ref: `refs/heads/${localTrunk.name}`, sha: localTrunk.sha } : null);
+
+  const unmerged: { ref: LocalRef; counts: AheadBehind | null }[] = [];
+  let mergedCount = 0;
+  for (const ref of locals) {
+    if (ref.name === trunk) continue;
+    if (!baseRef) {
+      unmerged.push({ ref, counts: null });
+      continue;
+    }
+    const full = `refs/heads/${ref.name}`;
+    const entry = await counts(full, ref.sha, baseRef);
+    if (entry.merged === undefined) entry.merged = entry.ahead === 0 || (await patchEquivalent(expect0, toplevel, baseRef.ref, full));
+    if (entry.merged) mergedCount++;
+    else unmerged.push({ ref, counts: entry });
+  }
+
+  for (const key of memo.keys()) if (key.startsWith(`${toplevel}\0`) && !used.has(key)) memo.delete(key);
+  for (const [key, entry] of used) memo.set(key, entry);
+
+  // The main worktree is the common dir's parent, not the toplevel: for a pin on a linked worktree the two differ (§2 "Worktree badge").
+  const mainWorktree = await realpathOr(path.dirname(commonDir));
+  unmerged.sort((a, b) => b.ref.committedMs - a.ref.committedMs || (a.ref.name < b.ref.name ? -1 : a.ref.name > b.ref.name ? 1 : 0));
+  const branches: GitBranch[] = [];
+  for (const { ref, counts: c } of unmerged.slice(0, MAX_BRANCHES)) {
+    const wt = ref.worktreePath === null ? null : await realpathOr(ref.worktreePath);
+    branches.push({
+      name: ref.name,
+      ahead: c ? c.ahead : null,
+      behind: c ? c.behind : null,
+      lastCommitMs: ref.committedMs,
+      worktreePath: wt !== null && wt !== mainWorktree ? wt : null,
+    });
   }
 
   return {
@@ -236,8 +316,25 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
     hasOrigin,
     trunkVsOrigin,
     fetchedAtMs: await newestFetchHead(commonDir),
-    branches: [],
-    unmergedTotal: 0,
-    mergedCount: 0,
+    branches,
+    unmergedTotal: unmerged.length,
+    mergedCount,
   };
+}
+
+/** The sha `ref` points at, or null when it does not exist. */
+async function resolveRef(run: GitRunner, cwd: string, ref: string): Promise<{ ref: string; sha: string } | null> {
+  const r = await run(cwd, ['rev-parse', '--verify', '--quiet', ref]);
+  return r.code === 0 && r.stdout.trim() ? { ref, sha: r.stdout.trim() } : null;
+}
+
+/**
+ * git-sync's M2 proof (`patchEquivalence`), re-implemented: every commit on `ref` past `base` has a patch-equivalent commit in `base`. Cherry skips merge
+ * commits, so any merge in the range refuses the proof, since a merge can carry real work cherry never sees. An empty cherry list never proves anything.
+ * Cherry runs first: an unmerged branch almost always fails it, and that saves the merges walk.
+ */
+async function patchEquivalent(expect0: (dir: string, args: string[]) => Promise<string>, cwd: string, base: string, ref: string): Promise<boolean> {
+  const lines = (await expect0(cwd, ['cherry', base, ref])).split('\n').filter(Boolean);
+  if (lines.length === 0 || lines.some(l => !l.startsWith('-'))) return false;
+  return (await expect0(cwd, ['rev-list', '--merges', `${base}..${ref}`])).trim() === '';
 }
