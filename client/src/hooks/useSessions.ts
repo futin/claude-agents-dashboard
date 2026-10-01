@@ -18,14 +18,20 @@ export interface SessionsState {
  * config, so they're per-device and take effect on the very next tick — see
  * `server/api.ts` `scanOverrides`.
  */
-export function useSessions(): SessionsState {
+export function useSessions(opts: { enabled?: boolean; limit?: number } = {}): SessionsState {
   const [state, setState] = useState<SessionsState>({ data: null, connected: true });
   const timer = useRef<ReturnType<typeof setInterval>>();
   const { settings } = useSettings();
-  const query = scanQuery(settings);
+  const query = scanQuery(settings, opts.limit);
   const { refreshMs } = settings;
+  // Off = no fetch and no timer, and the last payload is dropped so a later start cannot show a stale one. SessionsView never passes it.
+  const enabled = opts.enabled ?? true;
 
   useEffect(() => {
+    if (!enabled) {
+      setState({ data: null, connected: true });
+      return;
+    }
     let alive = true;
 
     async function poll() {
@@ -46,7 +52,7 @@ export function useSessions(): SessionsState {
     };
     // Changing either restarts the loop, so a new interval or row count shows up
     // immediately instead of on the next natural tick.
-  }, [query, refreshMs]);
+  }, [query, refreshMs, enabled]);
 
   return state;
 }

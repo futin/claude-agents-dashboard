@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { reconcileRuns } from '../client/src/lib/gitSyncRuns.js';
 import type { LaunchingSession, RepoGitStats, Session, SessionsResponse } from '../shared/types.js';
 import { DEFAULT_SETTINGS } from '../client/src/lib/settings.js';
 import { EFFORTS, MODELS, NAME_CAP, NAME_RE } from '../client/src/lib/spawnOptions.js';
@@ -221,6 +222,46 @@ export function run(): number {
 
   if (test('the runs key is management.syncRuns', () => {
     assert.strictEqual(SYNC_RUNS_KEY, 'management.syncRuns');
+  })) p++; else f++;
+
+  const RUN2: SyncRun = { ...RUN, sessionId: 's2', dirName: 'd2', name: 'other' };
+
+  if (test('reconcile keeps a running run and returns the same object', () => {
+    const runs = { '/p/a': RUN };
+    const r = reconcileRuns(runs, payload([session('s1', 'working')]), RUN.launchedAtMs);
+    assert.strictEqual(r.runs, runs);
+    assert.deepStrictEqual(r.ended, []);
+    assert.deepStrictEqual(r.failed, []);
+  })) p++; else f++;
+
+  if (test('reconcile drops an idle run and reports its toplevel', () => {
+    const r = reconcileRuns({ '/p/a': RUN, '/p/b': RUN2 }, payload([session('s1', 'working'), session('s2', 'idle')]), RUN.launchedAtMs);
+    assert.deepStrictEqual(r.runs, { '/p/a': RUN });
+    assert.deepStrictEqual(r.ended, ['/p/b']);
+  })) p++; else f++;
+
+  if (test('reconcile ends a run whose repo is gone; repos are not an input', () => {
+    const r = reconcileRuns({ '/p/moved': RUN }, payload([session('s1', 'incomplete')]), RUN.launchedAtMs);
+    assert.deepStrictEqual(r.runs, {});
+    assert.deepStrictEqual(r.ended, ['/p/moved']);
+  })) p++; else f++;
+
+  if (test('reconcile drops a failed launch into failed, not ended', () => {
+    const r = reconcileRuns({ '/p/a': RUN }, payload([], [launchingEntry('s1', 'failed', 'boom')]), RUN.launchedAtMs);
+    assert.deepStrictEqual(r.runs, {});
+    assert.deepStrictEqual(r.ended, []);
+    assert.deepStrictEqual(r.failed, [{ name: 'repo', error: 'boom' }]);
+  })) p++; else f++;
+
+  if (test('reconcile before any payload changes nothing', () => {
+    const runs = { '/p/a': RUN };
+    assert.strictEqual(reconcileRuns(runs, null, RUN.launchedAtMs + 48 * HOUR).runs, runs);
+  })) p++; else f++;
+
+  if (test('reconcile ends a run unseen past 24h', () => {
+    const r = reconcileRuns({ '/p/a': RUN }, payload([]), RUN.launchedAtMs + 24 * HOUR);
+    assert.deepStrictEqual(r.runs, {});
+    assert.deepStrictEqual(r.ended, ['/p/a']);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

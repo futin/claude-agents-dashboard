@@ -269,6 +269,11 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  if (test('scanQuery takes a limit override and changes nothing else', () => {
+    assert.strictEqual(scanQuery(DEFAULT_SETTINGS), '?limit=5&lookback=48&active=5');
+    assert.strictEqual(scanQuery(DEFAULT_SETTINGS, 50), '?limit=50&lookback=48&active=5');
+  })) p++; else f++;
+
   if (test('scanQuery carries all three knobs', () => {
     assert.strictEqual(
       scanQuery(clampSettings({ maxSessions: 3, lookbackHours: 48, activeWindowMin: 15 })),
@@ -360,8 +365,9 @@ export function run(): number {
     const keys = persistedKeys(CLIENT_SRC);
     assert.ok(keys.has('dashboard.layout') && keys.has('configs.type'), 'the scan found the keys');
     // The settings blob is reset by writing the defaults, not by removal; the
-    // answer token is a credential and Reset is not a sign-out.
-    const exempt = new Set(['dashboard.settings', 'dashboard.answerToken']);
+    // answer token is a credential and Reset is not a sign-out. The Git Sync runs are live state, not a
+    // preference: forgetting one would let a second sync start on a repo still syncing, and an ended run prunes itself.
+    const exempt = new Set(['dashboard.settings', 'dashboard.answerToken', 'management.syncRuns']);
     const missed = [...keys].filter(k => !exempt.has(k) && !OWNED_KEYS.includes(k));
     assert.deepStrictEqual(missed, [], 'keys Reset would leave behind');
     // `management.*` are kept on purpose: the pre-rename keys, swept so Reset clears what an older build left behind (D13).
