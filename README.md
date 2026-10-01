@@ -173,7 +173,7 @@ The repo is its own plugin marketplace; the plugin itself lives in `plugin/`, so
 - **`/kaizen`** — a post-mortem of a finished session. It appends one lesson line to `~/.claude/session-analytics-log.md`, which is what the **Analytics**
   tab reads; without it the tab stays empty.
 - **`/git-sync`** — the repo's git chores in one pass: commit what's lying around behind a secret scan, sync and verify the trunk, push it, and prune
-  branches proven merged. Every deletion and push is asked first.
+  branches proven merged. The trunk is pushed once it verifies; every deletion, branch push and stash change is asked first.
 
 A skill edit in `plugin/skills/` reaches a session only after `/plugin marketplace update claude-agents-dashboard-marketplace` and a reinstall: the installed
 copy is a cached snapshot, not a link to this checkout.

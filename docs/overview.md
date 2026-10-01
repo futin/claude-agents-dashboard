@@ -288,6 +288,9 @@ plugin/           the installable Claude Code plugin (`/plugin install`, README 
   .claude-plugin/plugin.json  name + version
   skills/git-sync/  repo chores across machines; engine tools/git-sync.mjs, own `node --test`
                   suite run by `pnpm test:skills` (~4 min, 2026-10-01)
+  skills/kaizen/  session post-mortem; analyzer kaizen.mjs, own `node --test` suite run
+                  inside `pnpm test`; its log line grammar is a contract with Analytics
+                  (docs/subsystems/analytics.md)
 ```
 
 ## Map
