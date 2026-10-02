@@ -143,8 +143,12 @@ function readAgents(filePath) {
   let text;
   try { text = fs.readFileSync(filePath, 'utf8'); } catch { return null; }
   const launches = [], byToolUseId = new Map(), byAgentId = new Map();
+  // Both indexes are emptied as they are consumed, so only this set recognizes a launch replayed after a compaction (#174).
+  const seenLaunch = new Set();
   const apply = (ev) => {
     if (ev.kind === 'launch') {
+      if (seenLaunch.has(ev.id)) return;
+      seenLaunch.add(ev.id);
       const l = { id: ev.id, type: ev.type, description: ev.description, startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId: null };
       launches.push(l);
       if (!byToolUseId.has(ev.id)) byToolUseId.set(ev.id, l);
@@ -240,11 +244,12 @@ function subagentSpend(filePath) {
   const byToolUseId = new Map(files.filter(f => f.toolUseId).map(f => [f.toolUseId, f]));
   const usage = emptyTotals();
   let tokens = 0, fallbackCount = 0, unknownTokenCount = 0;
+  const added = new Set();
   const agents = (readAgents(filePath) || []).map(a => {
     const file = (a.agentId && byAgentId.get(a.agentId)) || byToolUseId.get(a.id);
     let figure = null;
     if (a.status === 'done') {
-      if (file && file.usage.combined > 0 && file.usage.combined >= (a.tokens ?? 0)) { figure = file.usage.combined; addTotals(usage, file.usage); }
+      if (file && file.usage.combined > 0 && file.usage.combined >= (a.tokens ?? 0)) { figure = file.usage.combined; if (!added.has(file)) { added.add(file); addTotals(usage, file.usage); } }
       else if (a.tokens != null) { figure = a.tokens; fallbackCount++; }
     }
     if (figure == null) unknownTokenCount++; else tokens += figure;
@@ -281,6 +286,8 @@ export function analyzeSession(filePath, id) {
   const models = new Set();
   const toolMap = new Map();
   const pendingTool = new Map();
+  // pendingTool forgets a call once its result lands, so these two catch the copies a compaction replays (#174).
+  const seenToolUse = new Set(), seenToolResult = new Set();
   const errorOutstanding = new Set();
   let serverWebSearch = 0, serverWebFetch = 0;
   let toolErrors = 0, retries = 0, userCorrections = 0;
@@ -385,6 +392,7 @@ export function analyzeSession(filePath, id) {
       if (Array.isArray(content)) {
         const toolBlocks = content.filter(b => b && b.type === 'tool_use' && typeof b.name === 'string');
         for (const b of toolBlocks) {
+          if (typeof b.id === 'string') { if (seenToolUse.has(b.id)) continue; seenToolUse.add(b.id); }
           const s = getTool(b.name);
           // count/duration/retries are per tool CALL — parallel calls really do
           // land in separate records. Only the token split is per turn.
@@ -398,6 +406,8 @@ export function analyzeSession(filePath, id) {
       if (Array.isArray(content)) {
         for (const b of content) {
           if (!b || b.type !== 'tool_result' || typeof b.tool_use_id !== 'string') continue;
+          if (seenToolResult.has(b.tool_use_id)) continue;
+          seenToolResult.add(b.tool_use_id);
           const p = pendingTool.get(b.tool_use_id);
           const err = isErrorResult(b);
           if (p) {
