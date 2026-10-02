@@ -84,14 +84,14 @@ Dropped: records with no user/assistant `message.role` (`last-prompt`, `custom-t
 A follow-up typed into `MessagePanel` comes back as a Stop-hook block, which the CLI
 records as an `isMeta` user record whose content is `messages.ts` `composeReason` output
 under a `Stop hook feedback:` line — so the plain meta filter made the message you just
-sent invisible in the history you sent it from. `REMOTE_MESSAGE_RE` unwraps that one shape
+sent invisible in the history you sent it from. `unwrapRemoteMessage` unwraps that one shape
 and the record becomes an ordinary user message carrying only your typed text; the caps,
 `<system-reminder>` strip and `text`/`you` filters then apply to it like any other. It is
-**not** marked as remote — a message you sent is a message you sent. The pattern is
-duplicated in `chat.ts` rather than imported, so the read path never pulls in the
-reply-window store; `chat.test.ts` imports the real `composeReason` to pin the two
-together. Both ends are anchored, so drift in that prose **fails closed** — back to a
-dropped record, never a half-unwrapped one.
+**not** marked as remote — a message you sent is a message you sent. The matcher and
+`composeReason` share one leaf module, `remote-message-prose.ts`, which imports nothing — so
+the read path never pulls in the reply-window store, and the two cannot drift apart. Both
+ends are anchored, so anything else **fails closed** — a record from some other Stop hook
+is dropped as before, never shown half-unwrapped.
 
 **Both caps are a request parameter, not a constant.** `parseChatRecord` takes a `ChatCaps`
 (`{ text, toolBody }`) that defaults to `DEFAULT_CAPS`; `?full=1` swaps in `NO_CAPS`

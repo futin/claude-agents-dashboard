@@ -197,6 +197,7 @@ server/
   lib/messages.ts in-memory turn-end reply-window store (same machine, plus a 5s
                   idle sweep that auto-releases every terminal-backed hold — headless
                   ones are exempt)
+  lib/remote-message-prose.ts  the reply prose, wrap + unwrap in one import-free leaf
   lib/idle.ts     the shared `backAtDesk()` policy behind all three stores' 5s sweeps —
                   threshold, ioreg reading, test seam, fail directions (the rule
                   itself is `atDesk` in lib/notify.ts)

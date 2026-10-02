@@ -72,7 +72,8 @@ same session with your follow-up.
 | `scan.ts` `ScanOptions.messageIds` | sets `Session.remoteReply` and forces `status: 'question'` (blue) |
 | chat button + `MessagePanel` | the `Reply?` label on the row's chat button (same amber `answer` tone as `Answer`/`Plan?`, just different text) and the pinned drawer composer |
 | `MicButton` | optional mic in the composer's action row — records, transcribes locally, and hands text back for you to edit before you tap send; see [dictation](dictation.md) |
-| `chat.ts` `REMOTE_MESSAGE_RE` | unwraps the delivered follow-up back out of `composeReason` so it shows in the drawer as an ordinary user message — see below |
+| `server/lib/remote-message-prose.ts` | the one owner of the prose: `wrapRemoteMessage` (what `composeReason` returns) and `unwrapRemoteMessage`, both built from the same two constants. Imports nothing |
+| `chat.ts` `parseChatRecord` | calls `unwrapRemoteMessage` on `isMeta` records so the delivered follow-up shows in the drawer as an ordinary user message — see below |
 
 ## Seeing what you sent
 
@@ -84,11 +85,17 @@ to a prompt that wasn't there.
 
 So `chat.ts` carries an anchored pattern for that one shape, strips the preamble and the
 away-mode postamble, and emits your text alone as a normal user message. No marker: a
-message you sent is a message you sent, however it got there. The pattern is duplicated
-there rather than imported — the chat read path should not pull in this store — and
-`chat.test.ts` imports the real `composeReason` so a drift in the prose below breaks a test
-rather than the drawer. Anchored at both ends, so drift **fails closed**: the record goes
-back to being dropped, never shown half-unwrapped. See [chat](chat.md).
+message you sent is a message you sent, however it got there. The wrapping and the
+unwrapping both live in `remote-message-prose.ts`, a leaf module with no imports — so the
+chat read path does not pull in this store, and the two directions derive from one pair of
+constants instead of being kept in step by a test. Anchored at both ends, so anything else
+**fails closed**: the record goes back to being dropped, never shown half-unwrapped. See
+[chat](chat.md).
+
+The wording is frozen by the transcripts already on disk: every past follow-up carries it,
+so changing it would make all of them stop unwrapping in the drawer. A change to it is a
+compatibility decision, not a copy edit — `test/remote-message-prose.test.ts` pins the exact
+bytes.
 
 ## Why a third parallel store
 

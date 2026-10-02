@@ -20,6 +20,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { backAtDesk } from './idle.js';
+import { wrapRemoteMessage } from './remote-message-prose.js';
 import type { MessageAnswerRequest, MessageWaitResult, PendingMessage } from '../../shared/types.js';
 
 /** Cap on the follow-up that reaches the model verbatim. */
@@ -53,18 +54,10 @@ const entries = new Map<string, Entry>();
  * remote-decision injection) do NOT fire on hook-continued turns, so this is
  * the only place the reminder can ride.
  *
- * ⚠️ `chat.ts` `REMOTE_MESSAGE_RE` mirrors this exact prose to unwrap the record
- * back into a plain drawer message. Editing the wording here without editing it
- * there breaks `chat.test.ts` — which is the point; it fails closed, and the
- * follow-up just stops showing in the drawer.
+ * The wording, and its unwrapping back in `chat.ts`, live in `remote-message-prose.ts`.
  */
 export function composeReason(text: string): string {
-  const trimmed = text.trim();
-  return 'The user is away from the terminal and sent this follow-up from the dashboard; '
-    + `treat it as their next message:\n${trimmed}\n\n`
-    + 'Continue working on it now. The user is still away: put any decision through the '
-    + 'AskUserQuestion tool, never end the turn on a prose question, and prefer '
-    + 'already-permitted tools — a permission dialog would park the session until they return.';
+  return wrapRemoteMessage(text);
 }
 
 /** Finish an entry: fire `resolve` once, clear its timer, drop it from the map. */
