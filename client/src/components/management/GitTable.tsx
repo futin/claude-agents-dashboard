@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 
-import type { RepoGitStats } from '../../../../shared/types';
+import type { FetchClock, RepoGitStats } from '../../../../shared/types';
 import type { GitSyncControl } from '../../hooks/useGitSync';
 import { formatAgo } from '../../lib/format';
 import { gitBarMax } from '../../lib/gitBar';
@@ -16,7 +16,7 @@ const COLS = 7;
  * Table: one row per repo, columns On / Uncommitted / Trunk vs origin / Branches / Fetched, cells in the copy table's own strings. Clicking an `ok` row opens
  * its branches as sub-rows beneath it. Wide-only (`gitLayoutsFor`): five columns do not survive a phone measure, so a phone is never offered it.
  */
-export default function GitTable({ repos, sync }: { repos: RepoGitStats[]; sync: GitSyncControl }) {
+export default function GitTable({ repos, sync, clock }: { repos: RepoGitStats[]; sync: GitSyncControl; clock: FetchClock | undefined }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const toggle = (dir: string) => setOpen(prev => {
     const next = new Set(prev);
@@ -54,7 +54,7 @@ export default function GitTable({ repos, sync }: { repos: RepoGitStats[]; sync:
                   <td><GitUncommittedChip repo={r} /></td>
                   <td><GitTrunkChip repo={r} /></td>
                   <td className="n">{r.unmergedTotal}</td>
-                  <td><GitFetched repo={r} /></td>
+                  <td><GitFetched repo={r} clock={clock} /></td>
                   <td className="git-sync-td"><GitSyncButton repo={r} sync={sync} /></td>
                 </tr>
                 {isOpen && <GitSubRows repo={r} />}

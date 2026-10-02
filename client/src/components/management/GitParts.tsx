@@ -1,11 +1,11 @@
 import { useState } from 'react';
 
-import type { GitBranch, RepoGitStats } from '../../../../shared/types';
+import type { FetchClock, GitBranch, RepoGitStats } from '../../../../shared/types';
 import { formatAgo } from '../../lib/format';
 import { gitBarMax, gitBarWidth } from '../../lib/gitBar';
 import {
   GIT_BRANCHES_SHOWN, GIT_BRANCH_CAP, GIT_NO_OPEN_BRANCHES,
-  gitBranchChipText, gitBranchCounts, gitFetchedAgeText, gitMergedText, gitMoreText, gitNotShownText, gitTrunkVsOriginText, gitUncommittedText,
+  gitBranchChipText, gitBranchCounts, gitFetchedText, gitMergedText, gitMoreText, gitNotShownText, gitTrunkVsOriginText, gitUncommittedText,
   gitVisibleBranches,
 } from '../../lib/gitStatsText';
 import { triageGitRepos, type GitTriageGroup } from '../../lib/gitTriage';
@@ -48,8 +48,10 @@ export function GitTrunkChip({ repo }: { repo: OkRepo }) {
   return <span className={`git-chip${diverged ? ' mustard' : ''}`}>{gitTrunkVsOriginText(repo)}</span>;
 }
 
-export function GitFetched({ repo }: { repo: OkRepo }) {
-  return <span className="git-fetched">{gitFetchedAgeText(repo.fetchedAtMs)}</span>;
+/** The age alone when the last fetch went fine; the server's verdict in amber when it did not; cyan "fetching…" while one runs. */
+export function GitFetched({ repo, clock }: { repo: OkRepo; clock: FetchClock | undefined }) {
+  const { text, tone } = gitFetchedText(repo, clock);
+  return <span className={`git-fetched${tone ? ` ${tone}` : ''}`}>{text}</span>;
 }
 
 /** Behind grows left from the centre line, ahead grows right; `max` is the repo's scale (`gitBarMax`). */

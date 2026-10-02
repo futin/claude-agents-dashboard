@@ -60,12 +60,11 @@ export default function GitView() {
   );
 }
 
-function GitBody({ data, error, layout, sync }: {
+function GitBody({ data, error, layout, sync, clock }: {
   data: GitStatsResponse | null;
   error: boolean;
   layout: GitLayout;
   sync: GitSyncControl;
-  /** Held for the three layouts, which take it on in the next task; nothing here reads it yet. */
   clock: FetchClock | undefined;
 }) {
   const { update } = useSettings();
@@ -81,7 +80,7 @@ function GitBody({ data, error, layout, sync }: {
       </div>
     );
   }
-  if (layout === 'table') return <GitTable repos={data.repos} sync={sync} />;
-  if (layout === 'triage') return <GitTriage repos={data.repos} sync={sync} />;
-  return <GitCards repos={data.repos} sync={sync} />;
+  if (layout === 'table') return <GitTable repos={data.repos} sync={sync} clock={clock} />;
+  if (layout === 'triage') return <GitTriage repos={data.repos} sync={sync} clock={clock} />;
+  return <GitCards repos={data.repos} sync={sync} clock={clock} />;
 }
