@@ -392,6 +392,36 @@ export async function run(): Promise<number> {
     });
   }));
 
+  // A main thread blocked past the timeout lets the timer fire before the already-exited child's exit is read. `execFile`'s own `timeout` then destroys
+  // stdout and still reports success with empty output (#168); the runner must keep whatever the child really printed.
+  const stall = (ms: number) => { const end = Date.now() + ms; while (Date.now() < end) { /* busy-wait */ } };
+
+  check(await test('a stalled event loop past the timeout keeps a finished call\'s stdout', async () => {
+    await withGitFixture(async fx => {
+      const work = cleanClone(fx);
+      fx.git(work, ['branch', 'feat']);
+      const refsArgs = ['for-each-ref', '--format=%(refname)', 'refs/heads'];
+      const headArgs = ['rev-parse', '--verify', '--quiet', 'HEAD'];
+      const runner = makeGitRunner({ timeoutMs: 200 });
+      const expected = [await runner(work, refsArgs), await runner(work, headArgs)];
+      assert.ok(expected[0].stdout.includes('refs/heads/feat'), 'fixture: for-each-ref should list feat');
+      assert.match(expected[1].stdout, /^[0-9a-f]{40}\n$/, 'fixture: rev-parse should print a sha');
+      const pending = Promise.all([runner(work, refsArgs), runner(work, headArgs)]);
+      stall(600);
+      const got = await pending;
+      assert.deepStrictEqual(got.map(r => ({ code: r.code, stdout: r.stdout })), expected.map(r => ({ code: 0, stdout: r.stdout })));
+    });
+  }));
+
+  check(await test('a stalled event loop past the timeout keeps a finished call\'s non-zero exit', async () => {
+    await withGitFixture(async fx => {
+      const work = cleanClone(fx);
+      const pending = makeGitRunner({ timeoutMs: 200 })(work, ['show-ref', '--verify', '--quiet', 'refs/heads/no-such-branch']);
+      stall(600);
+      assert.strictEqual((await pending).code, 1);
+    });
+  }));
+
   check(await test('GIT_ENV holds the three overrides, and the real runner hands them to the child', async () => {
     assert.strictEqual(GIT_ENV.GIT_OPTIONAL_LOCKS, '0');
     assert.strictEqual(GIT_ENV.GIT_TERMINAL_PROMPT, '0');

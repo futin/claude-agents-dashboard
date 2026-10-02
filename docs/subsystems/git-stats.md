@@ -16,6 +16,11 @@ or writes to a repo; `commit-tree` is out for the same reason. The numbers are a
 the payload carries `fetchedAtMs` and the client shows its age. Branches are **local only**: one pushed from another machine appears once it is checked out
 here.
 
+The 5s timeout is `makeGitRunner`'s own timer, not `execFile`'s `timeout` option. When the event loop stalls past the timeout, Node's option fires before the
+already-exited child's exit is read, destroys stdout, and still reports success with empty output — an empty `for-each-ref` that reads as "no branches" (#168).
+The runner's timer only kills the child; the child's real exit decides the result, so a finished call keeps its output and only a child that died by the kill
+rejects `GitTimeoutError`.
+
 ## The fetch
 
 `server/lib/git-fetch.ts` is the one place the server runs `git fetch` (design record: `docs/superpowers/specs/2026-10-02-git-fetch-design.md`, D1–D13). It
