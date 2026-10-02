@@ -81,6 +81,8 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
   // account visibility (drive it from the phone app) is wanted. Uncheck for a
   // local-only run.
   const [remoteControl, setRemoteControl] = useState(true);
+  // Default OFF: a free-typed prompt is the launch most likely to want a follow-up.
+  const [oneShot, setOneShot] = useState(false);
   const [tokenDraft, setTokenDraft] = useState('');
 
   const selectedProject = project ?? projects[0]?.dirName ?? '';
@@ -137,6 +139,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
     if (name.trim()) req.name = name.trim();
     if (model) req.model = model;
     if (effort) req.effort = effort;
+    if (oneShot) req.oneShot = true;
     const sessionId = await launch(req);
     if (sessionId) onLaunched(sessionId);
   }
@@ -285,6 +288,35 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
                 aria-pressed={remoteControl}
                 disabled={pending}
                 onClick={() => setRemoteControl(true)}
+              >
+                On
+              </button>
+            </span>
+          </div>
+
+          <div className="sp-toggle">
+            <span className="sp-toggle-text">
+              <span className="sp-toggle-name">Close when done</span>
+              <span className="sp-toggle-hint">
+                End the session when its work is done instead of waiting for a reply. Follow up with Resume.
+              </span>
+            </span>
+            <span className="set-seg" role="group" aria-label="Close when done">
+              <button
+                type="button"
+                className={oneShot ? '' : 'on'}
+                aria-pressed={!oneShot}
+                disabled={pending}
+                onClick={() => setOneShot(false)}
+              >
+                Off
+              </button>
+              <button
+                type="button"
+                className={oneShot ? 'on' : ''}
+                aria-pressed={oneShot}
+                disabled={pending}
+                onClick={() => setOneShot(true)}
               >
                 On
               </button>

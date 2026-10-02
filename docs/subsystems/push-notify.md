@@ -171,7 +171,8 @@ idle check runs, so it never holds. Run-ownership is a property of the *caller*,
 why an env var has to carry it — the tty and entrypoint the hook inspects both describe the
 front end, and by those tests every one of these sessions is simply headless. Deliberately
 not a blanket headless exemption: a headless session a person started by hand is reachable
-on purpose and still holds. Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
+on purpose and still holds. A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT`, set by the dashboard's Close when done and on every Git Sync run)
+takes the same `notify_fallback` route, so it still pushes "finished". Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
 (and so which phrase and suppression rule apply), not whether `stop` pushes at all — see
 [remote-message](remote-message.md).
 

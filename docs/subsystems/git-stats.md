@@ -147,6 +147,8 @@ with no sheet: `POST /api/spawn` with the repo's `dirName`, the prompt `/claude-
 the server's `NAME_RE` would reject become `-`, cut at 60, because a bad name is dropped without a word), the Settings › Local › Git Sync model and effort,
 the host's `SYNC_PERMISSION_MODE` (default `auto`, published on `/api/health` as `syncPermissionMode` already clamped to `SPAWN_MAX_PERMISSION`), and
 remote control on exactly when Remote answers is (`remoteAnswer`, so the `REMOTE_ANSWER` kill switch turns it off too) (`syncRequest`). The session runs in the pin's path, the cwd the server resolves for that `dirName`.
+Every sync is one-shot (`oneShot: true`, [spawn](spawn.md#close-when-done-oneshot)): the run closes when its last turn finishes instead of holding for a
+reply, so its row ends and the button returns to Sync; a follow-up goes through Resume.
 
 `useGitSync` (`client/src/hooks/useGitSync.ts`) remembers each launch per device in `localStorage['management.syncRuns']`, keyed by the repo's toplevel, so
 two pins on one repo share a run. `syncPhase` reads a run against the sessions payload: a `launching` entry, or a row not seen yet, is "Syncing…" and

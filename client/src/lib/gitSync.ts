@@ -60,7 +60,8 @@ export function syncSessionName(repoName: string): string {
 
 /**
  * The launch body. Permission mode is the host's `SYNC_PERMISSION_MODE`, already clamped to its ceiling by the server; unknown, it is left out and the
- * server's own default applies. Remote control follows Remote answers, and is off until health says otherwise.
+ * server's own default applies. Remote control follows Remote answers, and is off until health says otherwise. Always one-shot: the run closes when done,
+ * and a follow-up goes through Resume.
  */
 export function syncRequest(repo: OkRepo, s: SyncSettings, host: SyncHost): SpawnRequest {
   const req: SpawnRequest = {
@@ -68,6 +69,7 @@ export function syncRequest(repo: OkRepo, s: SyncSettings, host: SyncHost): Spaw
     prompt: GIT_SYNC_PROMPT,
     name: syncSessionName(repo.name),
     remoteControl: host.remoteAnswer === true,
+    oneShot: true,
   };
   if (host.syncPermissionMode) req.permissionMode = host.syncPermissionMode;
   if (s.syncModel) req.model = s.syncModel;

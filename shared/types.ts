@@ -1672,6 +1672,13 @@ export interface SpawnRequest {
    */
   remoteControl?: boolean;
   /**
+   * Close when done: the child is launched with `CLAUDE_DASHBOARD_ONESHOT=1`,
+   * and the Stop hook then lets the session end instead of holding for a
+   * reply. Anything but literal `true` means off. Forced off on a resume —
+   * resuming is the act of wanting a conversation.
+   */
+  oneShot?: boolean;
+  /**
    * Resume this session id instead of starting fresh: the child runs
    * `--resume <id>` in the session's own cwd and appends to the same
    * transcript under the same id. Only sessions whose transcript says

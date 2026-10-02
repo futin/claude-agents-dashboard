@@ -117,6 +117,8 @@ export interface SpawnInput {
   effort?: string;
   /** Launch with `--remote-control`: the session registers with the account and is drivable from the phone app (docs/subsystems/spawn.md). */
   remoteControl?: boolean;
+  /** Close when done: the child gets `CLAUDE_DASHBOARD_ONESHOT=1` in its env, never a CLI flag (docs/subsystems/spawn.md). */
+  oneShot?: boolean;
   /**
    * Resume `sessionId` instead of starting it fresh: argv carries
    * `--resume <sessionId>` and NO `--session-id` — the CLI refuses that pair
@@ -181,25 +183,27 @@ export function parseSpawnRequest(body: unknown, ceiling: PermissionMode): Parse
   // Strictly `=== true`: anything else (absent, "yes", 1) fails soft to false,
   // the same drop-don't-reject rule the fields above follow.
   const remoteControl = b.remoteControl === true;
+  const oneShot = b.oneShot === true;
 
   // `resume` is the one optional field that REJECTS when present-but-malformed
   // instead of dropping: silently ignoring it would launch a fresh session
   // somewhere the user never asked for, which is worse than any 400. A valid
   // one also forces the identity fields off — `-n` renames and
   // `--remote-control` registration on a resumed session are unverified CLI
-  // combos, so they are never sent.
+  // combos, so they are never sent. `oneShot` goes too: resuming is the act of
+  // wanting a conversation, so a resumed turn holds for a reply.
   if (b.resume !== undefined) {
     if (typeof b.resume !== 'string' || b.resume === '' || !RESUME_ID_RE.test(b.resume)) {
       return { ok: false, error: 'bad resume id' };
     }
     return {
       ok: true,
-      input: { prompt, permissionMode, name: undefined, model, effort, remoteControl: false },
+      input: { prompt, permissionMode, name: undefined, model, effort, remoteControl: false, oneShot: false },
       resumeId: b.resume
     };
   }
 
-  return { ok: true, input: { prompt, permissionMode, name, model, effort, remoteControl } };
+  return { ok: true, input: { prompt, permissionMode, name, model, effort, remoteControl, oneShot } };
 }
 
 /**
@@ -632,9 +636,13 @@ export function launch(
   // `claude-desktop`; without it a `-p` run says `sdk-cli`. `delete`, not an
   // `undefined` assignment: this Node build happens to omit undefined-valued
   // keys (measured), but that is filtering behaviour to not lean on — an
-  // absent key needs no guarantee at all.
+  // absent key needs no guarantee at all. CLAUDE_DASHBOARD_ONESHOT is deleted
+  // for the same reason: a server started inside a one-shot session's shell
+  // would otherwise turn the reply hold off for every child it spawns.
   const env = { ...process.env };
   delete env.CLAUDE_CODE_ENTRYPOINT;
+  delete env.CLAUDE_DASHBOARD_ONESHOT;
+  if (input.oneShot) env.CLAUDE_DASHBOARD_ONESHOT = '1';
 
   let child: ChildProcess;
   try {
