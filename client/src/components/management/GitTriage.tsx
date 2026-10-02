@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import type { RepoGitStats } from '../../../../shared/types';
+import type { FetchClock, RepoGitStats } from '../../../../shared/types';
 import { gitBranchChipText, gitFetchedText, gitStateSentence, gitTrunkVsOriginText, gitUncommittedText } from '../../lib/gitStatsText';
 import { triageGitRepos, type GitTriageGroup } from '../../lib/gitTriage';
 import { GitBranchChip, GitBranchList, GitDot, GitFetched, GitSyncButton, GitTrunkChip, GitUncommittedChip, type OkRepo } from './GitParts';
@@ -18,7 +18,7 @@ const GROUPS: { key: GitTriageGroup; label: string }[] = [
  * Triage: repos grouped by `triageGitRepos`, pin order kept inside each group. Needs you and In flight rows open with their branches; Quiet rows are one
  * dashed line each that expands on click; Can't read rows are one muted line with their sentence.
  */
-export default function GitTriage({ repos, sync }: { repos: RepoGitStats[]; sync: GitSyncControl }) {
+export default function GitTriage({ repos, sync, clock }: { repos: RepoGitStats[]; sync: GitSyncControl; clock: FetchClock | undefined }) {
   const groups = triageGitRepos(repos);
   return (
     <div className="git-tri">
@@ -28,8 +28,8 @@ export default function GitTriage({ repos, sync }: { repos: RepoGitStats[]; sync
           {groups[g.key].map(r => {
             if (r.state !== 'ok') return <GitUnreadableRow key={r.dirName} repo={r} />;
             return g.key === 'quiet'
-              ? <GitQuietRow key={r.dirName} repo={r} sync={sync} />
-              : <GitBusyRow key={r.dirName} repo={r} group={g.key} sync={sync} />;
+              ? <GitQuietRow key={r.dirName} repo={r} sync={sync} clock={clock} />
+              : <GitBusyRow key={r.dirName} repo={r} group={g.key} sync={sync} clock={clock} />;
           })}
         </div>
       ))}
@@ -37,7 +37,7 @@ export default function GitTriage({ repos, sync }: { repos: RepoGitStats[]; sync
   );
 }
 
-function GitBusyRow({ repo, group, sync }: { repo: OkRepo; group: GitTriageGroup; sync: GitSyncControl }) {
+function GitBusyRow({ repo, group, sync, clock }: { repo: OkRepo; group: GitTriageGroup; sync: GitSyncControl; clock: FetchClock | undefined }) {
   return (
     <section className="git-arow">
       {/* As in Cards: Sync beside the wrapping head so it holds the first line; "fetched" trails the chips as one more fact. */}
@@ -48,7 +48,7 @@ function GitBusyRow({ repo, group, sync }: { repo: OkRepo; group: GitTriageGroup
           <GitBranchChip repo={repo} />
           <GitUncommittedChip repo={repo} />
           <GitTrunkChip repo={repo} />
-          <GitFetched repo={repo} />
+          <GitFetched repo={repo} clock={clock} />
         </div>
         <span className="git-head-end"><GitSyncButton repo={repo} sync={sync} /></span>
       </div>
@@ -57,9 +57,9 @@ function GitBusyRow({ repo, group, sync }: { repo: OkRepo; group: GitTriageGroup
   );
 }
 
-function GitQuietRow({ repo, sync }: { repo: OkRepo; sync: GitSyncControl }) {
+function GitQuietRow({ repo, sync, clock }: { repo: OkRepo; sync: GitSyncControl; clock: FetchClock | undefined }) {
   const [open, setOpen] = useState(false);
-  const summary = [gitBranchChipText(repo), gitUncommittedText(repo.uncommitted), gitTrunkVsOriginText(repo), gitFetchedText(repo.fetchedAtMs)].join(' · ');
+  const summary = [gitBranchChipText(repo), gitUncommittedText(repo.uncommitted), gitTrunkVsOriginText(repo), gitFetchedText(repo, clock).text].join(' · ');
   return (
     <section className={`git-arow quiet${open ? ' open' : ''}`}>
       {/* A button cannot hold a button, so Sync sits beside the row toggle, not inside it. */}

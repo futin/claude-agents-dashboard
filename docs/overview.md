@@ -44,12 +44,15 @@ via `tsx`, dev and prod alike).
   the Settings tab's recording switch is on (off by default — see
   [usage limits](subsystems/usage-limits.md)); and, going
   further than any of those, [spawning a new `claude -p` process](subsystems/spawn.md) on
-  this machine — off by default (empty `CLAUDE_BIN`), and the one exception that reaches
+  this machine — off by default (empty `CLAUDE_BIN`), and the first exception that reaches
   outside the dashboard's own state, since what it writes is a whole new session's
   transcript rather than a row in a RAM-only store. Where such a session can be
   continued afterwards — phone app, terminal resume, and the surfaces that will
   never show it — is mapped in [session surfaces](subsystems/session-surfaces.md),
   which is also where `Session.surface` (the row's `dashboard` pill) is specified.
+  The second thing that reaches outside the dashboard's own state is [the Git fetch timer](subsystems/git-stats.md#the-fetch): off by default, it runs
+  `git fetch origin` over the pinned repos while Management › Git is open, which writes their remote-tracking refs and `FETCH_HEAD`, never a branch or a
+  working tree.
 - **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only. Keep
   new npm deps out of it.
 - **Fail-open everywhere.** A missing token, an unreadable file, a failed probe — every
@@ -88,7 +91,8 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/health` | liveness + remote-answer state + connection origin + the two hook numbers (idle threshold, answer window) |
 | `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, plus `notifyAvailable` (never the ntfy topic itself); write path |
 | `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; write path (see [configs](subsystems/configs.md)) |
-| `GET /api/git-stats` | local git state of every pinned project, in pin order; a repo that fails is its own `error` row (see [git-stats](subsystems/git-stats.md)) |
+| `GET /api/git-stats` | local git state of every pinned project, in pin order, plus the fetch clock and each repo's last-fetch verdict; a repo that fails is its own `error` row (see [git-stats](subsystems/git-stats.md)) |
+| `POST /api/git-fetch` | `git fetch origin` over every pinned repo now, answering with the fetch clock; token-guarded write path (see [git-stats](subsystems/git-stats.md#the-fetch)) |
 | `GET /api/configs`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/account` | who the CLI is signed in as (`~/.claude.json` → `oauthAccount`, as display strings) + the two rate windows — the header chip's own 30s poll, so it does not ride the 3s session scan |
@@ -183,6 +187,7 @@ server/
                   then one haiku turn) so the bars self-heal
   lib/management.ts   config scanner + servable-path security set
   lib/git-stats.ts    read-only git reader for the pinned repos: runner, trunk, memoised branch counts + merged proof
+  lib/git-fetch.ts    the Git fetch: detached `git fetch origin` per common dir, error classifier, watched-only timer + clock
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
   lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
@@ -231,7 +236,8 @@ client/src/
                   the launch sheet, recent + older in Management › Pinned), ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, configs/, management/ (ManagementView —
                   the Git | Pinned section — PinnedProjectsGroup, and the Git sub-view: GitView
-                  (band, switcher, poll owner), GitCards / GitTable / GitTriage (the three
+                  (band, switcher, poll owner), GitClockChip (the sync/fetch clock chip and
+                  its popover), GitCards / GitTable / GitTriage (the three
                   shapes) and GitParts (chips, divergence bar, branch list they share)), analytics/,
                   usage/ (UsageView + the two tabs, Sheet — the band / figure
                   strip / sheet / definitions
@@ -322,7 +328,7 @@ that area:
 - [session-surfaces](subsystems/session-surfaces.md) — where a session lives, and where you can continue it (also where `Session.surface` is specified)
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [configs](subsystems/configs.md) — read-only config browser
-- [git-stats](subsystems/git-stats.md) — `GET /api/git-stats`: read-only local git state of each pinned project — unmerged branches, ahead/behind the trunk, the merged proof, no fetch
+- [git-stats](subsystems/git-stats.md) — `GET /api/git-stats`: read-only local git state of each pinned project — unmerged branches, ahead/behind the trunk, the merged proof, and the watched-only background fetch
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
 - [account-header](subsystems/account-header.md) — the shell's account chip: its two homes, the `oauthAccount` profile reader, and `GET /api/account`
 - [usage-limits](subsystems/usage-limits.md) — the rate-limit gauges the account chip draws, and the Usage tab behind them: pace, the duty-cycle forecast, and token value per model

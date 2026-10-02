@@ -67,8 +67,8 @@ config — see `docs/subsystems/remote-access.md` before touching any of it.
 - **Keep new deps out of `server/`.** It reads disk and makes exactly two kinds of outbound
   call — the ntfy push in `lib/notify.ts` and the usage read in `lib/usage.ts`. A third needs
   a reason. `lib/token-refresh.ts` and `lib/spawn.ts` launch the `claude` CLI, which makes its
-  own network calls — the server does not, so they are not a third kind. `test/outbound.test.ts`
-  pins the list.
+  own network calls — the server does not, so they are not a third kind. `lib/git-fetch.ts` launches `git fetch`, which makes its own network call —
+  not a third kind either. `test/outbound.test.ts` pins the list.
 - `client/dist/` and `.env` are gitignored.
 - `plugin/skills/kaizen/` is the only copy of `/kaizen`; its log path and line grammar are a
   contract with Analytics (`docs/subsystems/analytics.md`) — never change one side only.

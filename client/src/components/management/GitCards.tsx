@@ -1,4 +1,4 @@
-import type { RepoGitStats } from '../../../../shared/types';
+import type { FetchClock, RepoGitStats } from '../../../../shared/types';
 import type { GitSyncControl } from '../../hooks/useGitSync';
 import { gitStateSentence } from '../../lib/gitStatsText';
 import {
@@ -9,7 +9,7 @@ import {
  * Cards: one card per repo in pin order, auto-filling columns (two on a laptop, one on a phone). Below `md` the CSS drops the divergence bar and the numbers
  * stay. A non-`ok` repo's card carries its one sentence and nothing else, so broken numbers are never drawn.
  */
-export default function GitCards({ repos, sync }: { repos: RepoGitStats[]; sync: GitSyncControl }) {
+export default function GitCards({ repos, sync, clock }: { repos: RepoGitStats[]; sync: GitSyncControl; clock: FetchClock | undefined }) {
   const groups = gitGroupsByDir(repos);
   return (
     <div className="git-cards">
@@ -29,7 +29,7 @@ export default function GitCards({ repos, sync }: { repos: RepoGitStats[]; sync:
               <div className="git-facts">
                 <GitUncommittedChip repo={r} />
                 <GitTrunkChip repo={r} />
-                <GitFetched repo={r} />
+                <GitFetched repo={r} clock={clock} />
               </div>
               <GitBranchList repo={r} />
             </>

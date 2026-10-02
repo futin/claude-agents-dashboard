@@ -1,16 +1,17 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy } from 'react';
 
+import { useGitFetch } from '../../hooks/useGitFetch';
 import { useGitStats } from '../../hooks/useGitStats';
 import { useGitSync, type GitSyncControl } from '../../hooks/useGitSync';
-import type { GitStatsResponse } from '../../../../shared/types';
+import type { FetchClock, GitStatsResponse } from '../../../../shared/types';
 import { useNarrow } from '../../hooks/useNarrow';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import { useSettings } from '../../hooks/useSettings';
-import { formatAgo } from '../../lib/format';
 import { DEFAULT_GIT_LAYOUT, drawableGitLayout, gitLayoutsFor, isGitLayout, type GitLayout } from '../../lib/gitLayouts';
-import { GIT_NO_PINS, GIT_UPDATE_FAILED, gitFirstLoadText } from '../../lib/gitStatsText';
+import { GIT_BAND_SUB, GIT_NO_PINS, gitFirstLoadText } from '../../lib/gitStatsText';
 import { Band } from '../usage/Sheet';
 import GitCards from './GitCards';
+import GitClockChip from './GitClockChip';
 import GitTable from './GitTable';
 import GitTriage from './GitTriage';
 
@@ -18,35 +19,37 @@ import GitTriage from './GitTriage';
 const ChatDrawer = lazy(() => import('../ChatDrawer'));
 
 /**
- * Management › Git: the band (with "updated Ns ago" / "couldn't update" and ↻ on its right), the Cards | Table | Triage switcher, and the layout it picks.
+ * Management › Git: the band, a toolbar of the Cards | Table | Triage switcher and the Sync/Fetch clock chip, and the layout the switcher picks.
  * The poll lives in `useGitStats`, mounted with this view, so switching to Pinned or leaving the section stops it.
  *
  * The stored layout is per device (`management.gitLayout`); what is drawn is `drawableGitLayout`, so a phone draws Cards while a stored Table survives for
  * the next wide window.
  */
 export default function GitView() {
-  const { data, error, updatedAt, refresh } = useGitStats();
-  const sync = useGitSync(refresh);
+  const stats = useGitStats();
+  const { data, error } = stats;
+  const sync = useGitSync(stats.refresh);
+  const fetchCtl = useGitFetch(sync.tokenRequired, stats.refresh);
   const narrow = useNarrow();
   const [stored, setStored] = usePersistedState<string>('management.gitLayout', DEFAULT_GIT_LAYOUT);
   const layout = drawableGitLayout(isGitLayout(stored) ? stored : DEFAULT_GIT_LAYOUT, narrow);
 
   return (
     <div className="usage-section git-view">
-      <Band
-        title="Management · Git"
-        sub={'Local state of your pinned repos. Nothing here fetches — "fetched" says how old the remote data is.'}
-        right={<GitBandStatus failed={error && data !== null} updatedAt={updatedAt} onRefresh={refresh} />}
-      />
-      <div className="seg git-switch" role="tablist" aria-label="Layout">
-        {gitLayoutsFor(narrow).map(l => (
-          <button key={l.key} type="button" role="tab" aria-selected={layout === l.key} className={layout === l.key ? 'on' : ''} onClick={() => setStored(l.key)}>
-            {l.label}
-          </button>
-        ))}
+      <Band title="Management · Git" sub={GIT_BAND_SUB} />
+      <div className="git-toolbar">
+        <div className="seg git-switch" role="tablist" aria-label="Layout">
+          {gitLayoutsFor(narrow).map(l => (
+            <button key={l.key} type="button" role="tab" aria-selected={layout === l.key} className={layout === l.key ? 'on' : ''} onClick={() => setStored(l.key)}>
+              {l.label}
+            </button>
+          ))}
+        </div>
+        {/* Once the first poll has answered, payload or error: a first-load failure still gets the chip, whose Local sync key is the retry. */}
+        {(data !== null || error) && <GitClockChip stats={stats} fetchCtl={fetchCtl} tokenRequired={sync.tokenRequired} clock={data?.fetch} />}
       </div>
       {sync.note && <div className="git-sync-note">{sync.note}</div>}
-      <GitBody data={data} error={error} layout={layout} sync={sync} />
+      <GitBody data={data} error={error} layout={layout} sync={sync} clock={data?.fetch} />
       {sync.chat && (
         <Suspense fallback={null}>
           {/* keyed by id, as in SessionsView: another sync's chat remounts the tail cleanly */}
@@ -57,28 +60,12 @@ export default function GitView() {
   );
 }
 
-/** The band's right slot. Re-renders every second while mounted so the age moves between polls. */
-function GitBandStatus({ failed, updatedAt, onRefresh }: { failed: boolean; updatedAt: number | null; onRefresh: () => void }) {
-  const [, tick] = useState(0);
-  useEffect(() => {
-    const id = window.setInterval(() => tick(n => n + 1), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-  return (
-    <div className="git-band-act">
-      {failed
-        ? <span className="git-band-off">{GIT_UPDATE_FAILED}</span>
-        : updatedAt !== null && <span>updated {formatAgo(updatedAt)} ago</span>}
-      <button type="button" className="icon-refresh" onClick={onRefresh} aria-label="Refresh now">↻</button>
-    </div>
-  );
-}
-
-function GitBody({ data, error, layout, sync }: {
+function GitBody({ data, error, layout, sync, clock }: {
   data: GitStatsResponse | null;
   error: boolean;
   layout: GitLayout;
   sync: GitSyncControl;
+  clock: FetchClock | undefined;
 }) {
   const { update } = useSettings();
   if (data === null) return <div className="git-empty">{gitFirstLoadText(error)}</div>;
@@ -93,7 +80,7 @@ function GitBody({ data, error, layout, sync }: {
       </div>
     );
   }
-  if (layout === 'table') return <GitTable repos={data.repos} sync={sync} />;
-  if (layout === 'triage') return <GitTriage repos={data.repos} sync={sync} />;
-  return <GitCards repos={data.repos} sync={sync} />;
+  if (layout === 'table') return <GitTable repos={data.repos} sync={sync} clock={clock} />;
+  if (layout === 'triage') return <GitTriage repos={data.repos} sync={sync} clock={clock} />;
+  return <GitCards repos={data.repos} sync={sync} clock={clock} />;
 }

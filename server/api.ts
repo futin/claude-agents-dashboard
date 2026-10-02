@@ -52,6 +52,7 @@ import { notifyPermission, permissionWaits } from './lib/permissions.js';
 import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getPinnedProjects, getSettings, setPinned, setSettings } from './lib/settings.js';
+import { fetchAll, markGitWatched } from './lib/git-fetch.js';
 import { readGitStats } from './lib/git-stats.js';
 import { classifyOrigin } from './lib/origin.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
@@ -971,7 +972,7 @@ export async function serveSettingsWrite(
   const body = await readJsonBody(req);
   const next = setSettings(body);
   if (!next) {
-    return sendBadBody(res, { error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy}' });
+    return sendBadBody(res, { error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, gitFetchSecs?: 0|30|60|120|300|600}' });
   }
   sendJson(res, 200, { ...next, notifyAvailable: config.ntfyTopic !== '' });
 }
@@ -1625,13 +1626,30 @@ export function servePinsRead(config: Config, res: ServerResponse): void {
 /**
  * `GET /api/git-stats` — the local git state of every pinned project (git-stats spec §3). No parameters and no method check, like the read routes beside it:
  * the repo paths come from the stored pins, never from the request. A repo that fails reports its own `error` state; only an unreadable pin list is a 500.
+ * Every answer marks the Git view watched, which is what lets the fetch timer run (git-fetch spec D2).
  */
 export async function serveGitStats(config: Config, res: ServerResponse): Promise<void> {
   try {
+    markGitWatched();
     sendJson(res, 200, await readGitStats(config));
   } catch (e) {
     console.error('[dashboard] git stats read failed:', (e as Error).message);
     sendJson(res, 500, { error: 'git stats read failed' });
+  }
+}
+
+/**
+ * `POST /api/git-fetch` — fetch every pinned repo's `origin` now and answer with the clock as the run leaves it (git-fetch spec §2). The method check is the
+ * router's; the token guard is here, because this is the one route that makes git talk to the network. A run already in flight is joined, not doubled (D6).
+ */
+export async function serveGitFetch(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  try {
+    markGitWatched();
+    sendJson(res, 200, { fetch: await fetchAll(config) });
+  } catch (e) {
+    console.error('[dashboard] git fetch failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'git fetch failed' });
   }
 }
 

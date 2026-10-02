@@ -16,13 +16,27 @@ export interface GitPollDeps {
   onVisibilityChange(cb: () => void): () => void;
   setTimer(fn: () => void, ms: number): unknown;
   clearTimer(id: unknown): void;
+  /** The clock `onSchedule` is told times of; defaults to `Date.now`. */
+  now?(): number;
+  /** When the next timed poll is due (epoch ms), or null once the timer is dropped — so the chip's SYNC countdown reads the real schedule. */
+  onSchedule?(nextAtMs: number | null): void;
 }
 
 export function startGitPoll(d: GitPollDeps): () => void {
   let timer: unknown = null;
-  const arm = () => { if (timer === null) timer = d.setTimer(d.poll, GIT_POLL_MS); };
+  const now = d.now ?? Date.now;
+  // The timer repeats, so the schedule is re-reported on every fire: reported only at arm time it would go stale after the first one.
+  const arm = () => {
+    if (timer !== null) return;
+    d.onSchedule?.(now() + GIT_POLL_MS);
+    timer = d.setTimer(() => { d.onSchedule?.(now() + GIT_POLL_MS); d.poll(); }, GIT_POLL_MS);
+  };
+  // `disarm` runs on every visibility change and on stop, so it only says "no schedule" when it actually cleared one.
   const disarm = () => {
-    if (timer !== null) { d.clearTimer(timer); timer = null; }
+    if (timer === null) return;
+    d.clearTimer(timer);
+    timer = null;
+    d.onSchedule?.(null);
   };
 
   d.poll();

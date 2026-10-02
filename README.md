@@ -13,7 +13,7 @@ opt-in features that need one ([remote answers](docs/subsystems/remote-answer.md
 finished-turn [push](docs/subsystems/push-notify.md) and
 [remote messages](docs/subsystems/remote-message.md)). Zero runtime dependencies on the backend (Node
 built-ins only), and exactly two kinds of outbound call — the ntfy push and the usage-bar read
-from Anthropic's API.
+from Anthropic's API — plus `git fetch` on the pinned repos when you turn the Git fetch timer on.
 
 ## Quick start
 

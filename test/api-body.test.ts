@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { readJsonBody, serveSettingsWrite } from '../server/api.js';
 import { loadConfig } from '../server/lib/config.js';
-import { resetSettings } from '../server/lib/settings.js';
+import { getSettings, resetSettings } from '../server/lib/settings.js';
 
 async function testAsync(name: string, fn: () => Promise<void>): Promise<boolean> {
   try { await fn(); console.log('  ✓ ' + name); return true; }
@@ -149,6 +149,25 @@ export async function run(): Promise<number> {
         );
         assert.equal(reply.status, 200);
         assert.equal(reply.json?.idleSecs, 90);
+      });
+    });
+  }));
+
+  check(await testAsync('POST /api/settings refuses an off-list gitFetchSecs whole, and takes a listed one', async () => {
+    await inTmpCwd(async () => {
+      await withEnvFile('', async cfg => {
+        const before = getSettings().idleSecs;
+        const bad = await post(
+          (req, res) => void serveSettingsWrite(cfg, req, res), Buffer.from(JSON.stringify({ idleSecs: 30, gitFetchSecs: 45 }))
+        );
+        assert.equal(bad.status, 400);
+        assert.equal(getSettings().gitFetchSecs, 0);
+        assert.equal(getSettings().idleSecs, before);
+        const good = await post(
+          (req, res) => void serveSettingsWrite(cfg, req, res), Buffer.from(JSON.stringify({ gitFetchSecs: 300 }))
+        );
+        assert.equal(good.status, 200);
+        assert.equal(good.json?.gitFetchSecs, 300);
       });
     });
   }));

@@ -66,6 +66,11 @@ const NOTIFY_EVENTS: readonly NotifyEvent[] = ['question', 'stop', 'permission',
 /** Off by default — recording makes the server poll Anthropic unattended. */
 export const DEFAULT_RECORD_USAGE_HISTORY = false;
 
+/** The fetch intervals the Settings card offers, in seconds; 0 is off. A literal on each side of the boundary, each pinned by a test. */
+export const GIT_FETCH_SECS: readonly number[] = [0, 30, 60, 120, 300, 600];
+/** Off by default — fetching makes the server talk to every pinned repo's remote unattended. */
+export const DEFAULT_GIT_FETCH_SECS = 0;
+
 /** Cap on stored pins. The list is offered as rows in two UIs, not searched. */
 export const MAX_PINNED_PROJECTS = 50;
 
@@ -77,6 +82,7 @@ interface Stored {
   answerSecs: number;
   notify: NotifyPolicy;
   recordUsageHistory: boolean;
+  gitFetchSecs: number;
   /**
    * Encoded project dir names that stay listed past `LOOKBACK_HOURS` (#161).
    * Still only this store and `remoteState` write to disk — this key rides in
@@ -108,6 +114,11 @@ export function clampAnswerSecs(value: unknown): number | null {
   const n = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
   if (!Number.isFinite(n)) return null;
   return Math.min(MAX_ANSWER_SECS, Math.max(MIN_ANSWER_SECS, Math.round(n)));
+}
+
+/** The value itself when it is one of {@link GIT_FETCH_SECS}, else null — a stray 45 or "300" is refused, not rounded to a neighbour. */
+export function parseGitFetchSecs(value: unknown): number | null {
+  return typeof value === 'number' && GIT_FETCH_SECS.includes(value) ? value : null;
 }
 
 /** Keep only dir-name strings, deduped in first-seen order, at most {@link MAX_PINNED_PROJECTS}. */
@@ -159,6 +170,7 @@ function readStored(): Stored {
     answerSecs: DEFAULT_ANSWER_SECS,
     notify: DEFAULT_NOTIFY,
     recordUsageHistory: DEFAULT_RECORD_USAGE_HISTORY,
+    gitFetchSecs: DEFAULT_GIT_FETCH_SECS,
     pinnedProjects: []
   };
   try {
@@ -172,6 +184,7 @@ function readStored(): Stored {
         typeof raw.recordUsageHistory === 'boolean'
           ? raw.recordUsageHistory
           : fallback.recordUsageHistory,
+      gitFetchSecs: parseGitFetchSecs(raw.gitFetchSecs) ?? DEFAULT_GIT_FETCH_SECS,
       pinnedProjects: clampPinned(raw.pinnedProjects)
     };
   } catch {
@@ -249,6 +262,7 @@ export function setSettings(patch: unknown): ServerSettings | null {
     answerSecs?: unknown;
     notify?: unknown;
     recordUsageHistory?: unknown;
+    gitFetchSecs?: unknown;
   } | null;
   if (!body || typeof body !== 'object') return null;
 
@@ -273,12 +287,23 @@ export function setSettings(patch: unknown): ServerSettings | null {
     if (typeof body.recordUsageHistory !== 'boolean') return null;
     next.recordUsageHistory = body.recordUsageHistory;
   }
+  if (body.gitFetchSecs !== undefined) {
+    const gitFetchSecs = parseGitFetchSecs(body.gitFetchSecs);
+    if (gitFetchSecs === null) return null;
+    next.gitFetchSecs = gitFetchSecs;
+  }
   if (Object.keys(next).length === 0) return null;
 
   if (cached === null) cached = readStored();
   cached = { ...cached, ...next };
   persist(cached);
   return getSettings();
+}
+
+/** The fetch interval alone, for the timer: no env-override probes, which `getSettings` runs on every call. */
+export function getGitFetchSecs(): number {
+  if (cached === null) cached = readStored();
+  return cached.gitFetchSecs;
 }
 
 function persist(values: Stored): void {

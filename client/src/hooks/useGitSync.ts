@@ -15,6 +15,8 @@ import { useSpawn } from './useSpawn';
 export interface GitSyncControl {
   /** The host can spawn (`HealthResponse.spawnAvailable`); no button draws until it says so. */
   available: boolean;
+  /** The server wants an Answer token on writes (`HealthResponse.tokenRequired`); undefined until health answers or on an older server. The chip's Fetch all key reads it. */
+  tokenRequired: boolean | undefined;
   /** The repo's remembered run as it stands now; null when it has none. */
   phaseFor(repo: RepoGitStats): SyncPhase | null;
   start(repo: OkRepo): void;
@@ -106,6 +108,7 @@ export function useGitSync(onEnded: () => void): GitSyncControl {
 
   return {
     available,
+    tokenRequired: remote.state?.tokenRequired,
     phaseFor,
     start,
     pending,

@@ -16,6 +16,7 @@ import {
   type ContentWidth, type DefaultLayout, type Landing,
   type SpawnDefaultEffort, type SpawnDefaultModel, type ThemeId
 } from '../../lib/settings';
+import { GIT_FETCH_OPTIONS } from '../../lib/gitClock';
 import { EFFORTS, MODELS, PERMISSION_MODE_LABEL } from '../../lib/spawnOptions';
 
 /**
@@ -415,6 +416,20 @@ export default function SettingsView() {
                   value={server.state?.recordUsageHistory ? 'on' : 'off'}
                   options={ON_OFF}
                   onChange={v => void server.save({ recordUsageHistory: v === 'on' })}
+                />
+              </SettingsRow>
+            </SettingsGroup>
+
+            <SettingsGroup title="Git fetch" sub="How Management › Git learns what landed on origin">
+              <SettingsRow
+                name="Auto-fetch"
+                hint={'Runs git fetch origin for each pinned repo on this interval, only while a Git view is open on some device. Never pulls, never asks for a password or passphrase: a repo that needs one shows "needs auth".'}
+              >
+                <Segmented
+                  value={server.state?.gitFetchSecs ?? 0}
+                  options={GIT_FETCH_OPTIONS}
+                  className="git-fetch-seg"
+                  onChange={v => void server.save({ gitFetchSecs: v })}
                 />
               </SettingsRow>
             </SettingsGroup>
