@@ -50,7 +50,7 @@ test('T14.3 the four hard rules appear verbatim', () => {
   for (const rule of [
     'Never work around a stop.',
     'The only git command you run yourself is git commit -F, in phase 1.',
-    'Without AskUserQuestion, ask in prose, run verify and push-trunk, and skip plan and apply.',
+    'Without AskUserQuestion, plan with survey.unattended unchanged, run every phase, and ask the rest in prose after the report.',
     'Never kill a process by pattern.',
   ]) {
     assert.ok(text.includes(rule), `missing: ${rule}`)

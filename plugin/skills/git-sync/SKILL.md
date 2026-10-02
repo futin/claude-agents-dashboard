@@ -51,14 +51,16 @@ build it yourself: it sits under the git common dir, which is not always `<root>
 
 3. **Survey.** `node "${CLAUDE_PLUGIN_ROOT}/skills/git-sync/tools/git-sync.mjs" survey`. Read-only. It classifies every branch into `protected`, `merged`,
    `gone-unproven`, `abandoned` or `active`, lists stashes and worktrees, and hands back the decision round ready to ask: `rounds` (a list of calls,
-   each a list of at most 4 questions) and `followups.merged`. When `remoteKind` is `github` and `gh` is `absent`, open-PR protection was off for this
-   run — a branch with an open PR can be offered as merged — so say that in one line right before the decision round, not only at the end.
+   each a list of at most 4 questions), `followups.merged`, and `unattended`, the answers to use when there is no AskUserQuestion. When
+   `remoteKind` is `github` and `gh` is `absent`, open-PR protection was off for this run — a branch with an open PR can be offered as merged — so say that in one line right before the decision round, not only at the end.
 
 4. **Decision round.** Ask every call in `survey.rounds`, in order, back to back, with nothing else in between. Pass each call to AskUserQuestion as
    given: each question's `header`, `question`, `multiSelect` and `options` (labels and descriptions) unchanged, and its `id` kept aside to map the
    answer back. Ask `followups.merged` only when the user chose `Let me pick` on the `merged` question, right after the call that held it. Without
-   AskUserQuestion, follow the hard rule instead: ask in prose and skip `plan` and `apply`. Then write `answers.json` in `<stateDir>` from the chosen
-   labels — branch labels are exact branch names, copied character for character:
+   AskUserQuestion, follow the hard rule instead: write `survey.unattended` to answers.json as it stands, never adding to it, and run every phase
+   after it. Those answers remove merged branches and every worktree on a merged branch, dirty ones included, and keep everything else; list the
+   questions they left unanswered in prose after the report. Otherwise write `answers.json` in `<stateDir>` from the chosen labels — branch labels
+   are exact branch names, copied character for character:
 
    | Question id | Chosen label(s) | answers.json |
    | --- | --- | --- |
@@ -129,9 +131,10 @@ add a choice they did not make — and run `plan` again, once. Correcting your o
 
 - Never work around a stop.
 - The only git command you run yourself is git commit -F, in phase 1.
-- Without AskUserQuestion, ask in prose, run verify and push-trunk, and skip plan and apply.
+- Without AskUserQuestion, plan with survey.unattended unchanged, run every phase, and ask the rest in prose after the report.
 - Never kill a process by pattern.
 - **Destructive operations happen only in `apply`, and only for what the user chose.** Deleting a branch, removing a worktree, dropping a stash and
-  pushing a branch all go through the plan built from the user's answers; nothing is removed on inference.
+  pushing a branch all go through the plan built from the user's answers — or, with no AskUserQuestion, from `survey.unattended`, the merged-work
+  cleanup the user approved in advance; nothing is removed on inference.
 - **Ask the survey's questions, not your own.** Never add, merge, reword or reorder questions or options: `buildPlan` accepts only what `rounds`
   offered, and the counts in the `merged` question are exactly what `Delete all` does.

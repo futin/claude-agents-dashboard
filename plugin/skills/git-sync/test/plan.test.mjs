@@ -332,3 +332,41 @@ test('T8.11 balanced chunks: every split keeps 2–4 options per question in can
     assert.deepEqual(qs.flatMap((q) => q.options.map((o) => o.label)), branches.map((b) => b.name), `n=${n}`)
   }
 })
+
+test('T8.12 unattended answers remove merged work only: the merged set, and every worktree on a merged branch, dirty or clean', (t) => {
+  const w = world(t)
+  const m1 = mergedInWorktree(w, 'm1')
+  const m2 = mergedInWorktree(w, 'm2')
+  fs.writeFileSync(path.join(w.root, 'wt m2', 'm2.txt'), 'changed\n')
+  branch(w, 'stale', { daysAgo: 40 })
+  branch(w, 'feat')
+  w.git(w.a, 'worktree', 'add', path.join(w.root, 'wt feat'), 'feat')
+  fs.writeFileSync(path.join(w.root, 'wt feat', 'feat.txt'), 'changed\n')
+  const s = surveyOf(w)
+  // The asked, push and unmerged-worktree questions exist, so leaving them out of the answers is what keeps them.
+  for (const id of ['asked:0', 'push:0', `worktree:${realWt(w, 'feat')}`]) assert.ok(byId(s, id), id)
+  assert.deepEqual(s.unattended, { merged: 'all', worktrees: { [realWt(w, 'm2')]: 'remove' } })
+
+  const result = planCli(w, s.unattended)
+  assert.equal(result.status, 0, result.stdout + result.stderr)
+  const merged = { basis: 'merged', proof: 'M1' }
+  assert.deepEqual(result.json.actions, [
+    { kind: 'remove-worktree', target: realWt(w, 'm1'), expectTip: m1, force: false, expectDirty: 0, ...merged },
+    { kind: 'remove-worktree', target: realWt(w, 'm2'), expectTip: m2, force: true, expectDirty: 1 },
+    { kind: 'delete-remote', target: 'm1', expectTip: m1, ...merged },
+    { kind: 'delete-remote', target: 'm2', expectTip: m2, ...merged },
+    { kind: 'delete-local', target: 'm1', expectTip: m1, ...merged },
+    { kind: 'delete-local', target: 'm2', expectTip: m2, ...merged },
+  ])
+})
+
+test('T8.13 unattended answers are empty when nothing is merged', (t) => {
+  const w = world(t)
+  branch(w, 'stale', { daysAgo: 40 })
+  branch(w, 'feat')
+  w.git(w.a, 'worktree', 'add', path.join(w.root, 'wt feat'), 'feat')
+  const s = surveyOf(w)
+  assert.ok(s.rounds.length > 0)
+  assert.deepEqual(s.unattended, {})
+  assert.deepEqual(buildPlan(s, s.unattended), [])
+})

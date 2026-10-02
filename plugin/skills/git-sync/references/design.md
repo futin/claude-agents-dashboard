@@ -118,9 +118,10 @@ questions spread over consecutive calls, still asked back to back before anythin
 | Each stash | branch it and push / branch it, keep local / drop / keep as stash (push option omitted when downgraded) |
 | Each dirty or unmerged worktree | keep / remove, the option naming how many changed files would be lost |
 
-Choosing to delete a branch whose worktree the user keeps is skipped at apply time by invariant 1 and reported as such. An unanswered question, or a
-session with no AskUserQuestion, means keep — no destructive or outward action happens without an answer. In that case the skill asks in prose, still runs
-verify and the trunk push, and applies nothing else.
+Choosing to delete a branch whose worktree the user keeps is skipped at apply time by invariant 1 and reported as such. An unanswered question means
+keep — no destructive or outward action happens without an answer. A session with no AskUserQuestion answers with `survey.unattended` instead (R37): the
+merged set goes (`"merged": "all"`), and so does every offered worktree on a merged branch, dirty or not. Nothing else is answered, so abandoned,
+gone-unproven and unpushed branches, stashes and unmerged or detached worktrees are kept and asked in prose after the report.
 
 The `plan` subcommand turns the answers into `plan.json` (the model never writes it): a list of actions — `stash-branch`, `stash-drop`,
 `remove-worktree`, `push-branch`, `delete-remote`, `delete-local` — each carrying the tip or stash SHA the survey saw (`expectTip`).
@@ -297,3 +298,6 @@ Rulings made while the tasks were implemented that change behaviour this spec de
   `warnings` list, which the report shows; an error inside one action that is not git's own is that action's `failed` result with reason `internal`;
   a `deleted.log` write that fails after a deletion keeps the `done` result and adds a warning; and an error outside every action writes the results
   so far as a `partial: true` apply.json before it is rethrown as an engine failure (R33). `<stateDir>/deleted.log` stays the durable record.
+- R37 — with no AskUserQuestion the survey's `unattended` answers are applied, not skipped (2026-10-02, the user's call: cleaning up merged work is the
+  point of the skill and needs no answer). They are built from `offered`, so `buildPlan` accepts them by construction, and they hold merged work only;
+  a dirty worktree on a merged branch is removed and its changed or ignored files are lost.
