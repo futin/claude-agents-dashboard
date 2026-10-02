@@ -16,7 +16,7 @@ export interface GitFetchControl {
 
 /**
  * Management › Git's Fetch all key (git-fetch spec §4). `onDone` is the stats poll, run after every answer — a refusal included, so the chip re-reads the
- * clock either way. The POST answers once the fetch has been *started*, not finished: the fetch's own end is seen by the polls that follow.
+ * clock either way. The POST answers once the fetch has *finished* (the server awaits `fetchAll`), so the poll after it already sees the new refs.
  */
 export function useGitFetch(tokenRequired: boolean | undefined, onDone: () => void): GitFetchControl {
   const [token] = usePersistedState<string>('dashboard.answerToken', '');

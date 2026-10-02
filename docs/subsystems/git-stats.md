@@ -8,13 +8,43 @@ reader is `server/lib/git-stats.ts`; the payload types (`RepoGitStats`, `GitBran
 Repo paths come from `listPinRows` (the same rows `GET /api/pins` serves), never from the request: the route takes no parameters and, like the read routes
 beside it, does not check the method. Git must be **2.31 or newer** (`rev-parse --path-format=absolute`).
 
-## Why there is no fetch
+## The reader stays read-only
 
-The server is read-only and makes exactly two kinds of outbound call (`.claude/CLAUDE.md`); this is not a third. Every git call runs against local refs and is
-an array-form `execFile` (never a shell) with a 5s timeout and `GIT_OPTIONAL_LOCKS=0` (so `git status` never takes `index.lock` while you run git yourself),
-`GIT_TERMINAL_PROMPT=0` and `LC_ALL=C`. Nothing here fetches, pulls, pushes, calls `gh` or writes to a repo; `commit-tree` is out for the same reason. The
-numbers are therefore as fresh as the last fetch somebody ran, which is why the payload carries `fetchedAtMs` and the client shows its age. Branches are
-**local only**: one pushed from another machine appears once it is checked out here.
+Every git call the reader makes runs against local refs and is an array-form `execFile` (never a shell) with a 5s timeout and `GIT_OPTIONAL_LOCKS=0` (so
+`git status` never takes `index.lock` while you run git yourself), `GIT_TERMINAL_PROMPT=0` and `LC_ALL=C`. The reader never fetches, pulls, pushes, calls `gh`
+or writes to a repo; `commit-tree` is out for the same reason. The numbers are as fresh as the last fetch anybody ran, the server's own included, which is why
+the payload carries `fetchedAtMs` and the client shows its age. Branches are **local only**: one pushed from another machine appears once it is checked out
+here.
+
+## The fetch
+
+`server/lib/git-fetch.ts` is the one place the server runs `git fetch` (design record: `docs/superpowers/specs/2026-10-02-git-fetch-design.md`, D1–D13). It
+imports nothing from the reader and has its own runner. It is a module of its own so the reader above stays read-only; a fetch does write — refs, objects and
+`FETCH_HEAD` — but only remote-tracking refs and the tags origin sends, never a local branch, the index or the working tree.
+
+- **One timer per server process** (D1), started by `startGitFetchTimer` in `server/index.ts`'s main guard, never at module level, since the API test
+  harness imports `index.ts`. A 1s unref'd tick reads `gitFetchSecs` from the settings cache (`getGitFetchSecs`), so a change in Settings needs no restart.
+- **Off by default** (D3): `gitFetchSecs ∈ {0, 30, 60, 120, 300, 600}`, `0` = off, a Shared setting ([settings](settings.md)).
+- **Watched-only** (D2). Every `GET /api/git-stats` answer calls `markGitWatched()`; the timer fires only while the last one is younger than
+  `max(2 × interval, 90s)`. After the last tab closes the server runs at most two more fetches (three at 30s), then none. A hidden tab stops polling, so it
+  stops watching too.
+- **Entering or changing the schedule fetches if stale** (D11): on the first watched read after an unwatched stretch, Off to a value, or one value to another,
+  a last fetch older than the new interval (or none) runs at once; a fresh one keeps `lastEndedMs + interval`.
+- **What runs** (D4): `git -c core.hooksPath=/dev/null fetch origin --quiet --no-prune --no-recurse-submodules --no-auto-maintenance`, once per **common dir**
+  (two pins in one repo, a linked-worktree pin included, are one fetch), groups in parallel, 30s timeout, origin only, no pull. A repo with no `origin` is
+  skipped, and a skipped repo's last verdict is cleared.
+- **Never prompts** (D5): spawned `detached: true` with stdin ignored, env overlay `LC_ALL=C`, `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`,
+  `GIT_ASKPASS=''`, `SSH_ASKPASS=''`. ssh gets `GIT_SSH_COMMAND=ssh -o BatchMode=yes` unless the repo sets `core.sshCommand` or the environment sets
+  `GIT_SSH_COMMAND` / `GIT_SSH`, which are left alone. A timeout kills the whole process group. An ssh-agent's own confirmation dialog is not git's and may
+  still appear.
+- **One fetch in flight** (D6): a call while one runs, timer or button, joins the same promise. `fetchAll` always resolves, and it owns the clock: it sets
+  `runningSinceMs`, then `lastEndedMs` and the next `nextAtMs` when it ends.
+- **Per-repo verdicts** (D10): `classifyFetchError` reads stderr into `auth`, `offline`, `timeout`, `lock` or `other`. The first four but `lock` show amber
+  in the client; `lock` (a clash with another git process) shows nothing and the next scheduled fetch retries.
+- **No memo work** (D12): a fetch that moves `origin/<trunk>` changes the base sha, so the reader's next read recounts on its own.
+
+`POST /api/git-fetch` runs one now: token-guarded by `tokenOk` like `POST /api/settings` (`403 { error: 'bad token' }`), marks the view watched, awaits
+`fetchAll` and answers `200 { fetch }`; `500` only if `fetchAll` throws despite the above, `405` for any other method. A manual fetch resets the schedule.
 
 ## What each number means
 
@@ -40,8 +70,12 @@ Every variant carries `dirName`, `name` and `path` (the pin's cwd). `state` is o
 | `branches`      | unmerged local branches, trunk excluded, newest commit first (ties by name), at most **50**                                                      |
 | `unmergedTotal` | all unmerged branches, before the 50 cap                                                                                                         |
 | `mergedCount`   | branches proven merged, hidden behind this count                                                                                                 |
+| `lastFetch`     | `{ atMs, error }` from this server process's own last fetch of the repo (`error` is `null` or a `FetchError`); `null` = never fetched by it. Not the same fact as `fetchedAtMs`, which counts any tool's fetch |
 
 A `GitBranch` is `{ name, ahead, behind, lastCommitMs, worktreePath }`. `ahead` is commits only on the branch, `behind` is commits only on the base.
+
+The response itself carries `fetch: FetchClock` beside `repos`: `intervalSecs` (the setting, `0` = off), `nextAtMs` (server clock of the next timer fetch,
+`null` when off or unwatched), `runningSinceMs` (`null` when idle) and `lastEndedMs` (`null` before the first fetch).
 
 ## The base (D8)
 
@@ -93,6 +127,9 @@ calls (`rev-parse`, `symbolic-ref`, `status`, `for-each-ref`, `remote`, the trun
   errored its toplevel is unknown, so that read prunes nothing and the next clean one does.
 - Repos are read **in parallel**; within one repo calls run **strictly one at a time**, so a pinned repo never has more than one git process alive. (Two pins
   that resolve to the same toplevel are shown twice and read concurrently; deduping would hide one pin's name, and it is rare.)
+- That rule is about the reader's own calls. The fetch is a second process per repo by design (D13): it can collide with your own git or with a Sync run's
+  `fetch --all --prune`, which then stops with `fetch-failed` and is pressed again. The window is one fetch (~0.5s) per repo per interval, accepted rather
+  than detected.
 - A request that arrives while a read is in flight gets the **same promise**, so a second tab or the ↻ button never starts a second round.
 
 ## Tests
@@ -101,6 +138,12 @@ calls (`rev-parse`, `symbolic-ref`, `status`, `for-each-ref`, `remote`, the trun
 tests and nothing else. `test/git-stats.test.ts` drives `readRepo` over real repos built by `test/git-fixture.ts`; `test/api-git-stats.test.ts` drives the
 route.
 
+The fetch has the same kind of seams: `overrideFetchRunner(run | null)` swaps its runner, `overrideFetchClock(now | null)` its clock, and `resetGitFetch()`
+clears the clock, the in-flight promise, the verdicts and the watched stamp. `test/git-fetch.test.ts` runs real fetches against `GitFixture` bare origins (no
+network) and pins the classifier table, the argv and env overlay, worktree dedupe, single flight, the timer rules and the process-group kill;
+`test/api-git-fetch.test.ts` drives the POST and the payload fields. The client's clock logic (`client/src/lib/gitClock.ts`) is pure and tested in
+`test/git-stats-client.test.ts`.
+
 ## Client
 
 Management › Git (`client/src/components/management/GitView.tsx`) draws the payload. `ManagementView` mounts it only while `managementTab` is `git`, so
@@ -108,10 +151,20 @@ the Pinned sub-view and every other section run no poll.
 
 **The poll.** `useGitStats` fetches on mount, then every **30s** while the page is visible; a `visibilitychange` back to visible polls at once and restarts
 the 30s, and going hidden drops the timer, so a backgrounded tab makes no requests. The schedule is `startGitPoll` in `client/src/lib/gitPoll.ts`, written
-against injected timer and visibility functions so `test/git-stats-client.test.ts` drives it with fakes; the hook only hands it `document` and `window`. A
-failed fetch keeps the last payload and sets `error`. Before the first payload the body reads a muted "Loading…", as Management › Pinned does; a first
-fetch that fails turns it into "Couldn't load git stats. Retrying every 30s.", and once there is a payload a failure shows only on the band's
-right side, as "couldn't update" in place of "updated Ns ago". The band's ↻ polls now, and is a no-op while a poll is in flight.
+against injected timer and visibility functions so `test/git-stats-client.test.ts` drives it with fakes; the hook only hands it `document` and `window`.
+`startGitPoll` also reports when it next fires, which the hook exposes as `nextPollAtMs` beside `polling` and `skewMs` (client receipt minus the payload's
+`generatedAt`; every server clock is read shifted by it). A `refresh()` asked while a poll is out queues one more poll after it, so a poll that predates a
+fetch is never the last word. A failed poll keeps the last payload and sets `error`. Before the first payload the body reads a muted "Loading…", as
+Management › Pinned does; a first poll that fails turns it into "Couldn't load git stats. Retrying every 30s."
+
+**The clock chip** (`GitClockChip.tsx`). The band has no right slot any more; beside the layout switcher, in `.git-toolbar`, sits one button holding two
+meters, SYNC (the 30s re-read) and FETCH (the server's timer), and a caret. Its readings are pure functions in `client/src/lib/gitClock.ts`: SYNC reads
+`syncing…`, `failed`, or the countdown; FETCH reads `fetching…` (payload running, or this tab's own POST out), `off`, `…` (no schedule known), `overdue`,
+`0s`, or the countdown. When FETCH first reaches `0s` for a given `nextAtMs` the chip asks for one early poll 3s later, and while a payload says a fetch is
+running it polls every 3s until it clears; both only while the tab is visible, since a hidden tab that kept polling would keep the server watched forever.
+The chip opens a popover (`.git-pop`, dismissed by `useDismiss`) with two rows — **Local sync** (`now` = the old ↻) and **Fetch all** (`now` = `POST
+/api/git-fetch` through `useGitFetch`, then a poll) — and, under them, one amber line per repo whose last fetch failed with anything but `lock`. The Fetch
+all key is disabled with a reason when the server wants an Answer token this device has not stored, or after a `403`.
 
 **The layouts.** A `.seg` switcher offers `gitLayoutsFor(narrow)` and stores the pick per device in `management.gitLayout` (default `cards`); what is drawn is
 `drawableGitLayout`, so a phone draws Cards while a stored Table waits for the next wide window (`client/src/lib/gitLayouts.ts`). All three shapes take the
@@ -134,8 +187,12 @@ on the branch's own counts (`gitBranchCounts`), not on `repo.trunk`, because a n
 show and "+N more" expands the rest inline (N = `branches.length − 5`); once expanded, a list the server capped adds "N more not shown (over 50)"; a
 non-zero `mergedCount` adds "N merged branches hidden". A non-`ok` repo shows its one sentence instead of a body.
 
-**The copy.** Every string is in `client/src/lib/gitStatsText.ts`, verbatim from spec §6's copy table; the components never build their own. The empty
-state's "Pinned" is a link that sets `managementTab: 'pinned'`.
+**The fetched text.** Each layout's "fetched" fact is `gitFetchedText(repo, clock)`: cyan `fetching…` while the payload says a fetch runs and the repo has an
+origin; the verdict and the age in amber (`offline · fetched 2m ago`, `needs auth · never fetched`) when its last fetch failed; else the plain age. Triage's
+Quiet summary is one plain string, so it carries the words without the colour. A failed fetch never moves a repo between Triage groups.
+
+**The copy.** Every string is in `client/src/lib/gitStatsText.ts`, verbatim from the copy tables of the git-stats spec §6 and the git-fetch spec §4; the
+components never build their own. The empty state's "Pinned" is a link that sets `managementTab: 'pinned'`.
 
 **Sync** (spec §9). Every `ok` repo with an origin gets a Sync button while `/api/health` reports `spawnAvailable` (`canSync` in `client/src/lib/gitSync.ts`):
 pinned to the first line at the right of a card's or busy Triage row's head (`.git-head-end` is a sibling of the wrapping `.git-head`, never an item in it, so
@@ -164,6 +221,10 @@ in flight, and only the clicked one reads "Starting…". The runs key is not a s
 <!-- docs-sync:
   sources:
     - server/lib/git-stats.ts
+    - server/lib/git-fetch.ts
+    - client/src/lib/gitClock.ts
+    - client/src/hooks/useGitFetch.ts
+    - client/src/components/management/GitClockChip.tsx
     - client/src/hooks/useGitStats.ts
     - client/src/components/management/GitView.tsx
     - client/src/components/management/GitCards.tsx

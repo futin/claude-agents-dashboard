@@ -323,9 +323,10 @@ takes the plain `wrap wide`, and each sub-view opens on a band titled `Managemen
 pages set). Pinned is the §8.2 Projects card under its own band, carrying the green "every device" scope pill because the pins are server-stored; it is
 the page that used to be Settings › Pinned, moved unchanged.
 
-Git is the Usage band with a right slot (`Band`'s optional `right`: "updated Ns ago", or an amber "couldn't update", and the `.icon-refresh` ↻), then a
-`.seg` switcher on the ground — the Sessions one, on `--hairline2` for the same §8.3 reason — and one of **three shapes** over the same repo list, in pin
-order:
+Git is the Usage band with no right slot, then a toolbar on the ground: a `.seg` switcher — the Sessions one, on `--hairline2` for the same §8.3 reason —
+and beside it the clock chip, a `--strip-hi` key at the switcher's 38px height holding two meters (SYNC and FETCH, a port of backlog-manager's `.ui-meter`:
+`--steel` track, `--green` fill, amber when off or failed, `--cyan` and pulsing while live, static under reduced motion) that opens a popover with the
+Local sync and Fetch all rows. Below the toolbar, one of **three shapes** over the same repo list, in pin order:
 
 - **Cards** — one borderless `--strip` card per repo (§8.2), auto-filling columns: two on a laptop, one on a phone. Header: a status dot, the name, the
   branch chip, the fetched age pushed right; then the uncommitted and trunk-vs-origin chips; then the branch rows.
@@ -337,7 +338,8 @@ order:
 Four inks carry the Triage rule wherever a repo appears: **amber** needs you (uncommitted work, or a diverged trunk), **mustard** in flight (and a diverged
 trunk's chip), **green** quiet (and "clean"), **`--ink3`** can't read. The branch row borrows GitHub's divergence bar — behind grows left in `--ink3`, ahead
 grows right in `--cyan`, one scale per repo so the largest count fills its half. Below `md` the bar drops and the two numbers stay; the worktree badge is
-the one cyan-outlined chip. Every class is `git-` prefixed and every colour a token or a `color-mix` over one.
+the one cyan-outlined chip. A repo's fetched text turns amber with the failed fetch's word and cyan while a fetch runs. Every class — meter and popover
+included — is `git-` prefixed and every colour a token or a `color-mix` over one.
 
 ### 8.5 Claude Configs — the scope is a destination, the rest is columns
 

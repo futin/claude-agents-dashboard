@@ -44,8 +44,9 @@ three seconds. Sharing these would make one device wrong.
 Only settings a *separate process* has to agree on: `idleSecs` (how long until you count as
 away) and `answerSecs` (how long a question, plan, or [reply window](remote-message.md)
 then waits here), read by the remote-answer hooks — now three of them — plus the `notify`
-policy, which the **server itself** acts on when it decides whether to send a push. This is
-the app's second and last write to disk, after [the remote-answer toggle](remote-answer.md).
+policy, which the **server itself** acts on when it decides whether to send a push. This file
+is one of the app's few writes to disk, beside [the remote-answer toggle](remote-answer.md)'s and
+the usage-recording files.
 
 `recordUsageHistory` (default **false**) is the fourth, and it is the clearest case of all:
 it starts a **server-side timer** that samples account usage once a minute so the weekly
@@ -56,6 +57,11 @@ it on makes the server call Anthropic for as long as the process lives, with nob
 necessarily watching — the honest place for that is a switch the user throws, and the help
 text in Settings says so in as many words. The server re-reads it on every tick, so flipping
 it takes effect without a restart.
+
+`gitFetchSecs` (default **0**, off; one of `0, 30, 60, 120, 300, 600`) is the same kind of key: it sets the interval of the server-side timer that runs
+`git fetch origin` over the pinned repos ([git-stats](git-stats.md#the-fetch)), so only the Shared file can hold it. Unlike `recordUsageHistory` it idles
+while nobody has Management › Git open — the timer fires only while the view was polled recently. A hand-edited value outside the six reads back as `0`, and a
+`POST /api/settings` patch carrying one is refused whole, like a bad `idleSecs`. It is the **Git fetch** card on the Shared page, after Usage forecast.
 
 `pinnedProjects` (#161, default `[]`) rides in the same file: encoded project dir names that
 stay listed past `LOOKBACK_HOURS` (see [configs](configs.md) §Pinned projects). It is
