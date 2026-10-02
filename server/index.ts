@@ -9,6 +9,7 @@
  *   GET/POST /api/settings      → the non-per-device settings (see lib/settings.ts)
  *   GET/POST /api/pins          → pinned projects, listed past LOOKBACK_HOURS (see api.ts)
  *   GET  /api/git-stats         → local git state of each pinned project (see lib/git-stats.ts)
+ *   POST /api/git-fetch         → fetch every pinned repo's origin now (see lib/git-fetch.ts)
  *   GET  /api/dismiss           → a tapped desk push lands here; the page closes itself
  *   everything else             → static files from client/dist (production build)
  *
@@ -31,10 +32,11 @@ import {
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
-  serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, serveGitStats, serveNotifyEvent, serveNotifyTest,
+  serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, serveGitStats, serveGitFetch, serveNotifyEvent, serveNotifyTest,
   serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates,
   serveAccount
 } from './api.js';
+import { startGitFetchTimer } from './lib/git-fetch.js';
 import { startUsageRecording } from './lib/usage-history.js';
 import { refreshUsageNow, setUsageAutoRefresh } from './lib/usage.js';
 
@@ -208,6 +210,11 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (u.pathname === '/api/git-stats') {
       return void serveGitStats(config, res);
     }
+    // The one route that makes git reach the network, so POST-only and token-guarded inside the handler.
+    if (u.pathname === '/api/git-fetch') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveGitFetch(config, req, res);
+    }
     // Who the CLI is signed in as + the two rate windows, on one small body the
     // header account chip polls on its own 30s clock from every section.
     if (u.pathname === '/api/account') {
@@ -223,7 +230,7 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (u.pathname === '/api/usage/rates') {
       return void serveUsageRates(res);
     }
-    // The only write endpoints in the app (see docs/subsystems/remote-answer.md).
+    // The other write endpoints in the app, beside `/api/git-fetch` above (see docs/subsystems/remote-answer.md).
     // `wait` holds its response open for minutes — that is by design.
     if (u.pathname === '/api/questions/wait') {
       if (req.method !== 'POST') return methodNotAllowed(res);
@@ -385,6 +392,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     // the recorded history describe when the dashboard was watched rather than
     // when work happened. See docs/subsystems/usage-limits.md.
     if (config.showUsage) startUsageRecording(refreshUsageNow);
+
+    // The git-fetch timer idles unless the Git view is open and an interval is set (both re-read each tick), so it starts unconditionally.
+    startGitFetchTimer(config);
   });
 }
 

@@ -1,8 +1,9 @@
 /**
  * git-stats.ts — read-only local git state of each pinned project, for the Management tab's Git sub-view.
  *
- * Design: `docs/superpowers/specs/2026-10-01-git-stats-design.md` §2. Node built-ins only, and git runs against local refs only: no fetch, no push, no `gh`,
- * nothing that writes to a repo (D4). This is the server's own reader, not git-sync's engine (§1): nothing under `plugin/` is imported here.
+ * Design: `docs/superpowers/specs/2026-10-01-git-stats-design.md` §2. Node built-ins only, and every git call here runs against local refs only: no fetch, no
+ * push, no `gh`, nothing that writes to a repo (D4). The one fetch the server makes lives in `git-fetch.ts`, which this file only reads the verdicts of. This is
+ * the server's own reader, not git-sync's engine (§1): nothing under `plugin/` is imported here.
  */
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
@@ -11,6 +12,7 @@ import path from 'node:path';
 import type { GitBranch, GitStatsResponse, PinRow, RepoGitStats } from '../../shared/types.js';
 import { archivedSessionIds } from './archived.js';
 import type { Config } from './config.js';
+import { getFetchClock, lastFetchFor } from './git-fetch.js';
 import { listPinRows } from './management.js';
 import { getPinnedProjects } from './settings.js';
 
@@ -323,7 +325,7 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
     trunkVsOrigin,
     trunkRefs: trunk === null ? null : { local: localTrunk !== undefined, origin: originTrunk !== null },
     fetchedAtMs: await newestFetchHead(commonDir),
-    lastFetch: null,
+    lastFetch: lastFetchFor(toplevel),
     branches,
     unmergedTotal: unmerged.length,
     mergedCount,
@@ -397,5 +399,5 @@ async function readAll(config: Partial<Config>): Promise<GitStatsResponse> {
     const live = new Set(repos.flatMap(r => (r.state === 'ok' ? [r.toplevel] : [])));
     for (const key of memo.keys()) if (!live.has(key.slice(0, key.indexOf('\0')))) memo.delete(key);
   }
-  return { repos, fetch: { intervalSecs: 0, nextAtMs: null, runningSinceMs: null, lastEndedMs: null }, generatedAt: Date.now() };
+  return { repos, fetch: getFetchClock(), generatedAt: Date.now() };
 }

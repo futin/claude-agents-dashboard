@@ -112,6 +112,12 @@ export function run(): number {
     assert.deepStrictEqual(scanOutbound(files), ALLOWED, 'server/ network surface changed — update ALLOWED and every doc its comment names');
   })) p++; else f++;
 
+  if (test('.claude/CLAUDE.md zero-deps rule names lib/git-fetch.ts, which launches the fetch', () => {
+    const md = fs.readFileSync(path.join(root, '.claude/CLAUDE.md'), 'utf8').replace(/\s+/g, ' ');
+    const rule = md.slice(md.indexOf('Keep new deps out of'));
+    assert.match(rule.slice(0, rule.indexOf('`client/dist/`')), /lib\/git-fetch\.ts/);
+  })) p++; else f++;
+
   if (test('no reference doc claims the server makes a single outbound call', () => {
     const docs = ['README.md', '.claude/CLAUDE.md', 'docs/overview.md'];
     const subsystems = path.join(root, 'docs', 'subsystems');
