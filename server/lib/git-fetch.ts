@@ -124,12 +124,15 @@ export function overrideFetchClock(fn: (() => number) | null): void {
   now = fn ?? Date.now;
 }
 
-// Module state. `nextAtMs` is only ever set by the schedule (the timer rules), which is not in this file yet; `fetchAll` leaves it null.
+// Module state. `nextAtMs` is owned by the schedule rules below and by the end of `fetchAll`; null while the interval is Off or nobody is watching.
 const lastFetch = new Map<string, RepoLastFetch>();
 let runningSinceMs: number | null = null;
 let lastEndedMs: number | null = null;
 let nextAtMs: number | null = null;
 let inFlight: Promise<FetchClock> | null = null;
+let watchedAtMs: number | null = null;
+// The interval the last tick (or the mark that entered the schedule) saw; 0 at boot, so a stored 300 reads as Off -> 300 and waits for a watcher.
+let seenIntervalSecs = 0;
 
 /** The verdict of the last fetch of the repo whose toplevel is `toplevel`; null before one ran, after its group was skipped, or once it is unpinned. */
 export function lastFetchFor(toplevel: string): RepoLastFetch | null {
@@ -149,6 +152,66 @@ export async function resetGitFetch(): Promise<void> {
   runningSinceMs = null;
   lastEndedMs = null;
   nextAtMs = null;
+  watchedAtMs = null;
+  seenIntervalSecs = 0;
+}
+
+/** The floor of the watched window: a 30s interval would otherwise expire between two polls of a slow tab. */
+export const WATCH_GRACE_MIN_MS = 90_000;
+
+/** `serveGitStats` calls this on every answer: the Git view is open, so the timer may run (D2). */
+export function markGitWatched(): void {
+  const secs = getGitFetchSecs();
+  const wasWatched = isGitWatched();
+  watchedAtMs = now();
+  // A read inside an already-watched stretch leaves the schedule alone, interval changes included: those belong to the tick, which compares against what
+  // it saw last.
+  if (wasWatched) return;
+  seenIntervalSecs = secs;
+  if (secs > 0) nextAtMs = scheduleFrom(now(), secs);
+}
+
+/**
+ * Whether a Git view polled within the grace window. Always derived from the stamp and the live setting, never stored, so a closed tab stops counting
+ * without anything having to notice it close.
+ */
+export function isGitWatched(): boolean {
+  return watchedAtMs !== null && now() - watchedAtMs <= Math.max(2 * getGitFetchSecs() * 1000, WATCH_GRACE_MIN_MS);
+}
+
+/** D11: a last fetch older than the interval (or none) is due at once; a fresh one keeps its own interval. Never fed a null `lastEndedMs`. */
+function scheduleFrom(at: number, secs: number): number {
+  return lastEndedMs === null || at - lastEndedMs >= secs * 1000 ? at : lastEndedMs + secs * 1000;
+}
+
+/** One pass of the 1s timer; exported so tests drive it with the injected clock. Starts a fetch without awaiting it. */
+export async function tickGitFetch(config: Partial<Config>): Promise<void> {
+  const secs = getGitFetchSecs();
+  const changed = secs !== seenIntervalSecs;
+  seenIntervalSecs = secs;
+  // The stamp is read here, not latched: a tab that closed stops being watched on the tick after its window ends.
+  if (secs === 0 || !isGitWatched()) {
+    nextAtMs = null;
+    return;
+  }
+  // Off -> on with nobody watching never reaches here; the next `markGitWatched` enters the schedule instead of a stale tick doing it.
+  if (changed || nextAtMs === null) nextAtMs = scheduleFrom(now(), secs);
+  if (inFlight === null && now() >= nextAtMs) void fetchAll(config);
+}
+
+let timer: NodeJS.Timeout | null = null;
+
+/** Called once from the server's main guard, never at import time (the API test harness imports `index.ts`). Replaces an earlier timer. */
+export function startGitFetchTimer(config: Config): void {
+  stopGitFetchTimer();
+  // A tick that throws must not become an unhandled rejection; the next second tries again.
+  timer = setInterval(() => { tickGitFetch(config).catch(() => undefined); }, 1000);
+  timer.unref();
+}
+
+export function stopGitFetchTimer(): void {
+  if (timer) clearInterval(timer);
+  timer = null;
 }
 
 /**
@@ -171,6 +234,10 @@ async function runFetch(config: Partial<Config>): Promise<FetchClock> {
   } finally {
     runningSinceMs = null;
     lastEndedMs = now();
+    // The interval is read now, not when the run started: an Off set while it ran must leave no next run behind, and a watcher that left mid-run no
+    // schedule either.
+    const secs = getGitFetchSecs();
+    nextAtMs = secs > 0 && isGitWatched() ? lastEndedMs + secs * 1000 : null;
   }
   return getFetchClock();
 }

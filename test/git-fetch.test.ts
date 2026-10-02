@@ -6,6 +6,9 @@
  * `fetchAll` reads its pins from `getPinnedProjects()` through `listPinRows`, so `withGitFetch` gives each case a tmp cwd (the settings store is
  * cwd-relative) and a tmp `$HOME` (the transcripts hang off it), turns the Claude-root filter off, and restores the runner, the clock override, the
  * settings and the module's own state either side. A case plants one transcript per repo and pins it with `setPinned`.
+ *
+ * The schedule cases drive `tickGitFetch` by hand with `overrideFetchClock(() => t)` and a `let t` the case advances; the timer's own `setInterval` is not
+ * tested (it is one line over the tick).
  */
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -15,12 +18,13 @@ import path from 'node:path';
 import { loadConfig } from '../server/lib/config.js';
 import type { Config } from '../server/lib/config.js';
 import {
-  FETCH_ARGS, classifyFetchError, fetchAll, getFetchClock, lastFetchFor, makeFetchRunner, overrideFetchClock, overrideFetchRunner, resetGitFetch,
+  FETCH_ARGS, classifyFetchError, fetchAll, getFetchClock, isGitWatched, lastFetchFor, makeFetchRunner, markGitWatched, overrideFetchClock, overrideFetchRunner,
+  resetGitFetch, tickGitFetch,
 } from '../server/lib/git-fetch.js';
 import type { FetchRunner } from '../server/lib/git-fetch.js';
 import { gitStatsMemoKeys, readGitStats } from '../server/lib/git-stats.js';
 import { encodeProjectDir, overrideClaudeRoots } from '../server/lib/management.js';
-import { resetSettings, setPinned } from '../server/lib/settings.js';
+import { resetSettings, setPinned, setSettings } from '../server/lib/settings.js';
 import type { FetchError, GitStatsResponse } from '../shared/types.js';
 import { GitFixture, withGitFixture } from './git-fixture.js';
 
@@ -54,6 +58,27 @@ function spy(canned?: (c: Call) => Promise<Answer> | undefined): Spy {
   };
   return { run, calls, fetches: () => calls.filter(isFetch) };
 }
+
+/** A spy whose `git fetch` waits on a gate the case opens; `seen` settles once the fetch argv has reached the runner. */
+function heldFetch(): Spy & { seen: Promise<void>; release(): void } {
+  let release!: () => void;
+  let seeing!: () => void;
+  const gate = new Promise<void>(r => { release = r; });
+  const seen = new Promise<void>(r => { seeing = r; });
+  const s = spy(c => (isFetch(c) ? (seeing(), gate.then(() => answer(0))) : undefined));
+  return { ...s, seen, release };
+}
+
+/** Polls a condition and fails with its description at the deadline, so a regression fails the case instead of hanging the suite. */
+async function until(cond: () => boolean, what: string, ms = 5000): Promise<void> {
+  const deadline = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > deadline) assert.fail(`timed out after ${ms}ms waiting for ${what}`);
+    await new Promise(r => setTimeout(r, 5));
+  }
+}
+
+const setSecs = (n: number): void => { assert.ok(setSettings({ gitFetchSecs: n }), `gitFetchSecs ${n} refused`); };
 
 interface Ctx {
   fx: GitFixture;
@@ -257,6 +282,8 @@ export async function run(): Promise<number> {
       ['error: cannot lock ref \'refs/remotes/origin/main\': is at x but expected y', 'lock'],
       ['fatal: Unable to create \'/r/.git/refs/remotes/origin/main.lock\': File exists.', 'lock'],
       ['error: unable to create /r/.git/FETCH_HEAD.lock', 'lock'],
+      // Only the `.lock': File exists` pattern matches this one: no "cannot lock ref", no "Unable to create".
+      ['fatal: could not write \'/r/.git/refs/remotes/origin/main.lock\': File exists', 'lock'],
       ['something new', 'other'],
       ['', 'other'],
     ];
@@ -278,10 +305,13 @@ export async function run(): Promise<number> {
         assert.deepStrictEqual(f.args, [...FETCH_ARGS]);
         return f.env;
       };
-      const saved = { cmd: process.env.GIT_SSH_COMMAND, ssh: process.env.GIT_SSH };
+      // The real runner spreads `process.env`, so the "no core.sshCommand" answer would otherwise depend on the machine's system or global git config.
+      const saved = { cmd: process.env.GIT_SSH_COMMAND, ssh: process.env.GIT_SSH, nosys: process.env.GIT_CONFIG_NOSYSTEM, global: process.env.GIT_CONFIG_GLOBAL };
       try {
         delete process.env.GIT_SSH_COMMAND;
         delete process.env.GIT_SSH;
+        process.env.GIT_CONFIG_NOSYSTEM = '1';
+        process.env.GIT_CONFIG_GLOBAL = '/dev/null';
 
         const clean = await fetchEnv();
         assert.strictEqual(clean.GIT_TERMINAL_PROMPT, '0');
@@ -304,6 +334,8 @@ export async function run(): Promise<number> {
       } finally {
         if (saved.cmd === undefined) delete process.env.GIT_SSH_COMMAND; else process.env.GIT_SSH_COMMAND = saved.cmd;
         if (saved.ssh === undefined) delete process.env.GIT_SSH; else process.env.GIT_SSH = saved.ssh;
+        if (saved.nosys === undefined) delete process.env.GIT_CONFIG_NOSYSTEM; else process.env.GIT_CONFIG_NOSYSTEM = saved.nosys;
+        if (saved.global === undefined) delete process.env.GIT_CONFIG_GLOBAL; else process.env.GIT_CONFIG_GLOBAL = saved.global;
       }
     });
   }));
@@ -320,7 +352,7 @@ export async function run(): Promise<number> {
       const started = Date.now();
       const p = fetchAll(cfg);
       // The pin is resolved and the fetch reached before the gate is the thing waited on.
-      while (s.fetches().length === 0) await new Promise(r => setTimeout(r, 5));
+      await until(() => s.fetches().length > 0, 'the held fetch to reach the runner');
       const during = getFetchClock();
       assert.strictEqual(typeof during.runningSinceMs, 'number');
       assert.ok(during.runningSinceMs! >= started);
@@ -332,6 +364,249 @@ export async function run(): Promise<number> {
       assert.ok(done.lastEndedMs! >= during.runningSinceMs!);
       assert.deepStrictEqual(getFetchClock(), done);
       assert.strictEqual(done.nextAtMs, null);
+    });
+  }));
+
+  check(await test('7b. nextAtMs is lastEndedMs + interval when watched and non-zero, null at interval 0 or once the stamp has expired', async () => {
+    await withGitFetch(async ({ fx, cfg, pin }) => {
+      pin(cloneOf(fx, 'a'));
+      overrideFetchRunner(spy().run);
+      let t = 1_000_000;
+      overrideFetchClock(() => t);
+
+      setSecs(60);
+      markGitWatched();
+      const end = await fetchAll(cfg);
+      assert.strictEqual(end.lastEndedMs, t);
+      assert.strictEqual(end.nextAtMs, t + 60_000);
+
+      setSecs(0);
+      assert.strictEqual((await fetchAll(cfg)).nextAtMs, null);
+
+      setSecs(60);
+      markGitWatched();
+      t += 121_000;
+      assert.strictEqual((await fetchAll(cfg)).nextAtMs, null);
+    });
+  }));
+
+  check(await test('8. tickGitFetch starts a fetch only at interval > 0, watched, due and idle, and re-plans on an interval change', async () => {
+    await withGitFetch(async ({ fx, cfg, pin }) => {
+      pin(cloneOf(fx, 'a'));
+      let t = 1_000_000;
+      overrideFetchClock(() => t);
+      const ticks = async (n: number, s: Spy): Promise<void> => {
+        for (let i = 0; i < n; i++) { t += 1000; await tickGitFetch(cfg); }
+        assert.strictEqual(s.fetches().length, 0);
+      };
+
+      // Off, or on but never marked: nothing, however often it ticks.
+      const idle = spy();
+      overrideFetchRunner(idle.run);
+      setSecs(0);
+      markGitWatched();
+      await ticks(10, idle);
+      await resetGitFetch();
+      setSecs(60);
+      await ticks(10, idle);
+      assert.strictEqual(getFetchClock().nextAtMs, null);
+
+      // Off -> on with nobody watching sets nothing; the next mark does.
+      await resetGitFetch();
+      setSecs(0);
+      await tickGitFetch(cfg);
+      setSecs(60);
+      await tickGitFetch(cfg);
+      assert.strictEqual(getFetchClock().nextAtMs, null);
+
+      // Due exactly at nextAtMs, and a second tick during the run does not start another.
+      await resetGitFetch();
+      overrideFetchRunner(spy().run);
+      markGitWatched();
+      await fetchAll(cfg);
+      const n = getFetchClock().nextAtMs!;
+      assert.strictEqual(n, t + 60_000);
+      const held = heldFetch();
+      overrideFetchRunner(held.run);
+      t = n - 1;
+      await tickGitFetch(cfg);
+      assert.strictEqual(getFetchClock().runningSinceMs, null);
+      t = n;
+      await tickGitFetch(cfg);
+      assert.strictEqual(getFetchClock().runningSinceMs, n);
+      await held.seen;
+      t = n + 500;
+      await tickGitFetch(cfg);
+      assert.strictEqual(held.fetches().length, 1);
+      assert.strictEqual(getFetchClock().runningSinceMs, n);
+      held.release();
+      const ended = await fetchAll(cfg);
+      assert.strictEqual(held.fetches().length, 1);
+      assert.strictEqual(ended.nextAtMs, ended.lastEndedMs! + 60_000);
+
+      // 60 -> 300 with a fetch 10s old keeps its own age.
+      await resetGitFetch();
+      overrideFetchRunner(spy().run);
+      markGitWatched();
+      await fetchAll(cfg);
+      const lastEnded = t;
+      t += 10_000;
+      setSecs(300);
+      const after = spy();
+      overrideFetchRunner(after.run);
+      await tickGitFetch(cfg);
+      assert.strictEqual(getFetchClock().nextAtMs, lastEnded + 300_000);
+      assert.strictEqual(after.fetches().length, 0);
+
+      // 600 -> 30 with one 100s old is stale at once, and that same tick starts the fetch.
+      await resetGitFetch();
+      setSecs(600);
+      overrideFetchRunner(spy().run);
+      markGitWatched();
+      await fetchAll(cfg);
+      t += 100_000;
+      markGitWatched();
+      setSecs(30);
+      const stale = heldFetch();
+      overrideFetchRunner(stale.run);
+      await tickGitFetch(cfg);
+      assert.strictEqual(getFetchClock().nextAtMs, t);
+      assert.strictEqual(getFetchClock().runningSinceMs, t);
+      stale.release();
+      await fetchAll(cfg);
+
+      // 60 -> 300 before any fetch: now.
+      await resetGitFetch();
+      setSecs(60);
+      markGitWatched();
+      t += 5000;
+      setSecs(300);
+      const first = heldFetch();
+      overrideFetchRunner(first.run);
+      await tickGitFetch(cfg);
+      assert.strictEqual(getFetchClock().nextAtMs, t);
+      first.release();
+      await fetchAll(cfg);
+
+      // The watched window: 120s at 60 (a tick inside it still plans, one past it does not), 90s at 30.
+      await resetGitFetch();
+      setSecs(60);
+      const t0 = t;
+      markGitWatched();
+      const window60 = heldFetch();
+      overrideFetchRunner(window60.run);
+      t = t0 + 119_999;
+      await tickGitFetch(cfg);
+      assert.notStrictEqual(getFetchClock().nextAtMs, null);
+      assert.strictEqual(isGitWatched(), true);
+      window60.release();
+      await fetchAll(cfg);
+      t = t0 + 120_001;
+      await tickGitFetch(cfg);
+      assert.strictEqual(getFetchClock().nextAtMs, null);
+      assert.strictEqual(isGitWatched(), false);
+
+      await resetGitFetch();
+      setSecs(30);
+      const t1 = t;
+      markGitWatched();
+      t = t1 + 90_000;
+      assert.strictEqual(isGitWatched(), true);
+      t = t1 + 90_001;
+      assert.strictEqual(isGitWatched(), false);
+      await tickGitFetch(cfg);
+      assert.strictEqual(getFetchClock().nextAtMs, null);
+    });
+  }));
+
+  check(await test('9. D11: entering the schedule fetches if stale, otherwise keeps lastEndedMs + interval', async () => {
+    await withGitFetch(async ({ fx, cfg, pin }) => {
+      pin(cloneOf(fx, 'a'));
+      let t = 1_000_000;
+      overrideFetchClock(() => t);
+      overrideFetchRunner(spy().run);
+
+      // First watched read, no prior fetch.
+      setSecs(60);
+      markGitWatched();
+      assert.strictEqual(getFetchClock().nextAtMs, t);
+
+      // First watched read after a fetch 10s old.
+      await resetGitFetch();
+      await fetchAll(cfg);
+      const ended = t;
+      t += 10_000;
+      markGitWatched();
+      assert.strictEqual(getFetchClock().nextAtMs, ended + 60_000);
+
+      // Off -> 60 by a tick while a watcher is there, no prior fetch (the tick starts the fetch, so hold it).
+      await resetGitFetch();
+      setSecs(0);
+      markGitWatched();
+      setSecs(60);
+      const held = heldFetch();
+      overrideFetchRunner(held.run);
+      await tickGitFetch(cfg);
+      assert.strictEqual(getFetchClock().nextAtMs, t);
+      held.release();
+      await fetchAll(cfg);
+
+      // The same with a fetch 30s old.
+      await resetGitFetch();
+      overrideFetchRunner(spy().run);
+      setSecs(0);
+      await fetchAll(cfg);
+      const old = t;
+      t += 30_000;
+      markGitWatched();
+      setSecs(60);
+      await tickGitFetch(cfg);
+      assert.strictEqual(getFetchClock().nextAtMs, old + 60_000);
+    });
+  }));
+
+  check(await test('10. a lock failure is recorded, the next run is the ordinary lastEndedMs + interval, and it fetches that group again', async () => {
+    await withGitFetch(async ({ fx, cfg, pin }) => {
+      const a = cloneOf(fx, 'a');
+      pin(a);
+      let t = 1_000_000;
+      overrideFetchClock(() => t);
+      const s = spy(c => (isFetch(c) ? answer(1, 'error: cannot lock ref \'refs/remotes/origin/main\': is at x but expected y\n') : undefined));
+      overrideFetchRunner(s.run);
+      setSecs(60);
+      markGitWatched();
+      const clock = await fetchAll(cfg);
+      assert.strictEqual(lastFetchFor(a)?.error, 'lock');
+      assert.strictEqual(clock.nextAtMs, clock.lastEndedMs! + 60_000);
+      assert.strictEqual(s.fetches().length, 1);
+
+      t = clock.nextAtMs!;
+      await tickGitFetch(cfg);
+      await until(() => s.fetches().length === 2 && getFetchClock().runningSinceMs === null, 'the second fetch to run and end');
+      assert.deepStrictEqual(s.fetches().map(c => c.cwd), [a, a]);
+    });
+  }));
+
+  check(await test('Review Focus 3. Off set while a fetch is in flight: it ends with no next run, intervalSecs 0, and nothing more starts', async () => {
+    await withGitFetch(async ({ fx, cfg, pin }) => {
+      pin(cloneOf(fx, 'a'));
+      let t = 1_000_000;
+      overrideFetchClock(() => t);
+      setSecs(60);
+      markGitWatched();
+      const held = heldFetch();
+      overrideFetchRunner(held.run);
+      await tickGitFetch(cfg);
+      await held.seen;
+      setSecs(0);
+      held.release();
+      const clock = await fetchAll(cfg);
+      assert.strictEqual(clock.intervalSecs, 0);
+      assert.strictEqual(clock.nextAtMs, null);
+      assert.strictEqual(clock.runningSinceMs, null);
+      for (let i = 0; i < 10; i++) { t += 1000; await tickGitFetch(cfg); }
+      assert.strictEqual(held.fetches().length, 1);
+      assert.strictEqual(getFetchClock().nextAtMs, null);
     });
   }));
 
