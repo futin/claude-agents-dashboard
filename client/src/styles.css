@@ -2601,15 +2601,57 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 }
 
 /* ── Management › Git ─────────────────────────────────────────────────────
-   DESIGN.md §8.4b: the Usage band (plus a right slot for the poll's age and
-   ↻), a `.seg` switcher, then one of three shapes over the same repo list —
+   DESIGN.md §8.4b: the Usage band, a toolbar of the `.seg` switcher and the
+   Sync/Fetch clock chip, then one of three shapes over the same repo list —
    Cards, Table, Triage. Every colour is a theme token or a `color-mix` over
    one. The four data inks are the Triage rule: amber needs you, mustard in
    flight, green quiet, ink3 can't read; the ahead half of a divergence bar is
    `--cyan` and the behind half `--ink3`, as on GitHub's branch list. */
-.git-band-act{margin-left:auto;flex:none;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink3);white-space:nowrap}
-.git-band-off{color:var(--amber)}
 .git-switch{align-self:flex-start}
+/* The toolbar (git-fetch spec §4). Mobile-first: the chip's root takes the whole row, so below `md` it sits on its own line under the switcher, and the
+   popover — absolutely positioned, with no positioned ancestor nearer than the toolbar — spans that row. From `md` the root is the anchor instead
+   (the `min-width:768px` block below). */
+.git-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;position:relative}
+.git-clock-root{flex-basis:100%}
+.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:12px;background:var(--strip-hi);color:var(--ink);font:inherit;font-family:var(--font);cursor:pointer;transition:background .15s}
+.git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--hairline2)}
+.git-clock:focus-visible,.git-pop-key:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+/* At an 11px label `fetching…` is wider than a fixed track, so the chip's meters grow to their content rather than wrap: a two-line head would change the
+   chip's height the moment a clock changes state. */
+.git-clock-meters{display:flex;gap:10px}
+.git-clock-meters>*{min-width:max-content}
+.git-clock-caret{font-size:11px;color:var(--ink3);transition:transform .15s}
+.git-clock[aria-expanded="true"] .git-clock-caret{transform:rotate(180deg)}
+/* Meter: label over value, both 11px, a flat 3.5px --steel track, and a fill with no transition — it advances once a second, and a tween would draw the
+   clock a second late. A port of backlog-manager's `.ui-meter`. Tone is the root's `data-tone`: amber for off / failed / overdue, live (cyan, pulsing) for a
+   request in flight. */
+.git-meter{display:inline-flex;flex-direction:column;gap:3px;flex:none}
+.git-meter-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;column-gap:6px}
+.git-meter-label{font-size:11px;font-weight:500;color:var(--ink3)}
+.git-meter-value{font-size:11px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.git-meter-track{height:3.5px;border-radius:4px;background:var(--steel);overflow:hidden}
+.git-meter-fill{display:block;height:100%;border-radius:4px;background:var(--green)}
+.git-meter[data-tone="amber"] .git-meter-fill{background:var(--amber)}
+.git-meter[data-tone="amber"] .git-meter-value{color:var(--amber)}
+.git-meter[data-tone="live"] .git-meter-fill{background:var(--cyan);animation:git-meter-pulse 1.6s ease-in-out infinite}
+.git-meter[data-tone="live"] .git-meter-value{color:var(--cyan)}
+@keyframes git-meter-pulse{50%{opacity:.35}}
+/* The popover: --strip paper lifted by the deep shadow, mounted only while open. Rows are name | meter | key. */
+.git-pop{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:20;width:auto;padding:14px 16px;border-radius:16px;background:var(--strip);color:var(--ink);box-shadow:0 24px 64px var(--shadow2);text-align:left}
+.git-pop-row{display:grid;grid-template-columns:minmax(0,1fr) 120px auto;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--hairline)}
+.git-pop-row:first-child{border-top:0;padding-top:0}
+.git-pop-row .git-meter{width:120px}
+.git-pop-text{display:flex;flex-direction:column;gap:1px;min-width:0}
+.git-pop-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.git-pop-sub{font-size:12px;color:var(--ink3);overflow-wrap:anywhere}
+.git-pop-sub.warn{color:var(--amber)}
+.git-pop-key{height:28px;padding:0 10px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:8px;cursor:pointer;white-space:nowrap}
+.git-pop-key:hover:not(:disabled){color:var(--ink);background:var(--hairline2)}
+.git-pop-key:disabled{color:var(--ink3);cursor:default}
+/* The failed-fetch repos, one line each under the rows. */
+.git-trouble{display:flex;flex-direction:column;gap:4px;margin-top:10px;padding-top:10px;border-top:1px solid var(--hairline);font-size:12px;color:var(--ink2)}
+.git-trouble-name{font-weight:500;color:var(--ink)}
+.git-trouble-word{color:var(--amber)}
 .git-empty{padding:48px 20px;text-align:center;font-size:13px;color:var(--ink2)}
 .git-link{font:inherit;color:var(--cyan);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 
@@ -2707,7 +2749,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-sync:disabled{cursor:default;color:var(--ink3)}
 .git-arow.quiet{--sync-paper:var(--strip)}
 @keyframes git-spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.git-sync.on svg{animation:none}}
+@media (prefers-reduced-motion:reduce){.git-sync.on svg{animation:none}.git-meter[data-tone="live"] .git-meter-fill{animation:none}}
 /* The head's facts wrap inside `.git-head`; `.git-head-end` is its sibling, never a wrapping item, so Sync holds the first line whatever the name's length.
    22px is the name's line box, so the key centres on that line. */
 .git-head-row{display:flex;align-items:flex-start;gap:8px;min-width:0}
@@ -2721,6 +2763,8 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 /* `md`: the bar comes back between name and numbers, and the paper gets the
    standard 20px of padding */
 @media (min-width:768px){
+  .git-clock-root{flex-basis:auto;position:relative}
+  .git-pop{right:auto;width:420px;max-width:calc(100vw - 32px)}
   .git-brow{grid-template-columns:minmax(0,1fr) 89px 72px 36px}
   .git-brow .git-bar{display:inline-grid}
   .git-card{padding:20px}
