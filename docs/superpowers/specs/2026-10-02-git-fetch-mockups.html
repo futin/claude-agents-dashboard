@@ -1,0 +1,282 @@
+<title>Git Fetch Controls</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+/* Dashboard tokens (client/src/styles.css). Layout: labelled boards, each a slice of Management › Git at desktop width, then at 375px. The chip, meter and
+   popover rules are backlog-manager's `.tracker-chip` / `.ui-meter` / `.tracker-pop` recipes on the dashboard's tokens; new rules are marked NEW. */
+:root{
+  --board:#f4f4f3;--steel:#ededec;--strip:#ffffff;--strip-hi:#f2f2f1;
+  --hairline:#eaeae8;--hairline2:#dcdcda;
+  --ink:#131313;--ink2:#6e6e6e;--ink3:#a0a0a0;
+  --green:#5fa92c;--amber:#c4761f;--mustard:#9a8712;--cyan:#3f8f14;--magenta:#b5527f;
+  --shadow:rgba(0,0,0,.06);--shadow2:rgba(0,0,0,.18);
+  --font:'Hanken Grotesk','Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--amber:#ffb03a;--mustard:#d1ba52;--cyan:#55d0dd;--magenta:#cf6f9e;
+  --shadow:rgba(0,0,0,.4);--shadow2:rgba(0,0,0,.6);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--amber:#ffb03a;--mustard:#d1ba52;--cyan:#55d0dd;--magenta:#cf6f9e;
+  --shadow:rgba(0,0,0,.4);--shadow2:rgba(0,0,0,.6);color-scheme:dark}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--board);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45;font-variant-numeric:tabular-nums}
+.page{max-width:1120px;margin:0 auto;padding-block:28px 80px;padding-inline:16px;display:flex;flex-direction:column;gap:44px}
+.lead{max-width:80ch;display:flex;flex-direction:column;gap:8px}
+.lead h1{font-size:26px;font-weight:600;letter-spacing:-.01em;margin:0;text-wrap:balance}
+.lead p{margin:0;color:var(--ink2)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:var(--steel);padding:1px 5px;border-radius:4px}
+section.v{display:flex;flex-direction:column;gap:12px}
+.vh{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.vh h2{margin:0;font-size:19px;font-weight:600;text-wrap:balance}
+.tag{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid var(--hairline2);color:var(--ink2)}
+.tag.rec{color:var(--green);border-color:var(--green)}
+.tag.now{color:var(--amber);border-color:var(--amber)}
+.note{max-width:84ch;color:var(--ink2);margin:0}
+.note b{color:var(--ink)}
+.board{border:1px solid var(--hairline);border-radius:12px;background:var(--board);padding:20px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.cap{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.cap em{font-style:normal;color:var(--ink2);text-transform:none;letter-spacing:0;font-weight:400;margin-left:6px}
+.pair{display:flex;gap:16px;flex-wrap:wrap;align-items:start}
+.pair .w340{flex:0 1 340px;min-width:0}
+.phone{width:100%;max-width:375px;min-width:0;display:flex;flex-direction:column;gap:12px;border:1px dashed var(--hairline2);border-radius:12px;padding:12px}
+.stage{position:relative;min-height:260px}
+.stage.short{min-height:0}
+@media (max-width:760px){.pair .w340{flex-basis:100%}}
+
+/* --- shipped rules, verbatim from styles.css --- */
+.usg-band{display:flex;align-items:flex-start;gap:16px}
+.usg-title{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
+.usg-sub{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:4px;max-width:92ch}
+.git-band-act{margin-left:auto;flex:none;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink3);white-space:nowrap}
+.icon-refresh{font-family:var(--font);font-size:12px;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;width:26px;height:26px;cursor:pointer}
+.seg{display:inline-flex;align-items:center;background:var(--hairline2);border-radius:12px;padding:3px}
+.seg>button{font-family:var(--font);font-size:13px;font-weight:500;white-space:nowrap;color:var(--ink2);background:none;border:0;border-radius:9px;padding:7px 12px;cursor:pointer}
+.seg>button.on{color:var(--ink);background:var(--strip);box-shadow:0 1px 2px var(--shadow)}
+.git-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ink3);margin-top:7px}
+.git-dot.needs{background:var(--amber)}.git-dot.quiet{background:var(--green)}
+.git-name{font-size:15px;font-weight:500;color:var(--ink);letter-spacing:-.01em;min-width:0;overflow-wrap:anywhere}
+.git-fetched{font-size:12px;color:var(--ink3);white-space:nowrap}
+.git-facts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.git-facts>.git-fetched{margin-left:auto}
+.git-chip{display:inline-block;font-size:12px;font-weight:500;line-height:1.4;padding:2px 9px;border-radius:999px;border:1px solid var(--hairline2);color:var(--ink2);white-space:nowrap}
+.git-chip.branch{color:var(--ink)}
+.git-chip.green{color:var(--green);border-color:transparent;background:color-mix(in srgb,var(--green) 16%,transparent)}
+.git-chip.mustard{color:var(--mustard);border-color:transparent;background:color-mix(in srgb,var(--mustard) 20%,transparent)}
+.git-branches{display:flex;flex-direction:column;border-top:1px solid var(--hairline)}
+.git-brow{display:grid;grid-template-columns:minmax(0,1fr) 36px 36px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--hairline);font-size:13px;color:var(--ink)}
+.git-bname-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.git-nums{font-size:12px;color:var(--ink3);white-space:nowrap}.git-nums-b{color:var(--ink2)}.git-nums-a{color:var(--cyan)}
+.git-age{font-size:12px;color:var(--ink3);text-align:right;white-space:nowrap}
+.git-note{font-size:12px;color:var(--ink3);padding-top:7px}
+.git-card{background:var(--strip);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.git-head-row{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.git-head{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;min-width:0;flex:1}
+.git-head-end{flex:none;display:flex;align-items:center;min-height:22px}
+.git-sync{flex:none;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px 0 9px;font-family:var(--font);font-size:12px;font-weight:500;line-height:1;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:8px;cursor:pointer;white-space:nowrap}
+.git-sync svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.set-band-title{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
+.set-scope{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:11px;font-weight:500;vertical-align:3px;margin-left:8px;background:color-mix(in srgb,var(--green) 22%,transparent);color:var(--green)}
+.set-scope i{width:6px;height:6px;border-radius:999px;background:currentColor}
+.set-group{background:var(--strip);border-radius:16px;padding:20px;max-width:560px}
+.set-group-title{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
+.set-group-sub{font-size:13px;color:var(--ink2);margin-top:4px}
+.set-rows{margin-top:8px}
+.set-row{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:16px 0}
+.set-label{display:flex;flex-direction:column;gap:3px;min-width:0}
+.set-name{font-size:15px;font-weight:500;color:var(--ink);line-height:1.35}
+.set-hint{font-size:13px;color:var(--ink2);line-height:1.45;max-width:56ch}
+.set-control{display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap}
+.set-seg{display:flex;background:var(--steel);border:1px solid var(--hairline);border-radius:12px;padding:3px;width:100%}
+.set-seg button{font-family:var(--font);font-size:13px;font-weight:500;white-space:nowrap;color:var(--ink2);background:none;border:0;border-radius:9px;padding:6px 8px;cursor:pointer;flex:1;min-height:34px}
+.set-seg button.on{color:var(--ink);background:var(--strip);box-shadow:0 1px 2px var(--shadow)}
+
+/* --- NEW: the toolbar row --- */
+.git-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+/* NEW: the meter — backlog-manager's .ui-meter, 1:1 */
+.ui-meter{display:inline-flex;flex-direction:column;gap:3px;flex:none;width:56px}
+.ui-meter-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;column-gap:6px}
+.ui-meter-label{font-size:11px;font-weight:500;color:var(--ink3)}
+.ui-meter-value{font-size:11px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.ui-meter-track{height:3.5px;border-radius:4px;background:var(--steel);overflow:hidden}
+.ui-meter-fill{display:block;height:100%;border-radius:4px;background:var(--green)}
+.ui-meter[data-tone="amber"] .ui-meter-fill{background:var(--amber)}
+.ui-meter[data-tone="amber"] .ui-meter-value{color:var(--amber)}
+.ui-meter[data-tone="live"] .ui-meter-fill{background:var(--cyan);animation:meter-pulse 1.2s ease-in-out infinite}
+.ui-meter[data-tone="live"] .ui-meter-value{color:var(--cyan)}
+@keyframes meter-pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.ui-meter-fill{animation:none}}
+/* NEW: the chip — backlog-manager's .tracker-chip at the seg's 38px height, square corners like the seg */
+.git-chip-root{position:relative;flex:none}
+.git-clock{display:inline-flex;align-items:center;gap:12px;height:38px;padding:0 10px 0 12px;border:0;border-radius:12px;background:var(--strip-hi);color:var(--ink);cursor:pointer;font:inherit;font-family:var(--font)}
+.git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--hairline2)}
+.git-clock .ui-meter{min-width:max-content}
+.git-clock-caret{font-size:11px;color:var(--ink3)}
+.git-clock[aria-expanded="true"] .git-clock-caret{transform:rotate(180deg)}
+.git-clock:focus-visible,.git-key:focus-visible,.seg>button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+/* NEW: a key the size of the chip, for P2 and P3 */
+.git-key{flex:none;display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 13px 0 11px;font-family:var(--font);font-size:13px;font-weight:500;line-height:1;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:12px;cursor:pointer;white-space:nowrap}
+.git-key svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.git-key:hover:not(:disabled){color:var(--ink);background:var(--hairline2)}
+.git-key.on{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 12%,transparent);cursor:default}
+.git-key.on svg{animation:git-drop 1.1s ease-in-out infinite}
+@keyframes git-drop{0%,100%{transform:translateY(-1px)}50%{transform:translateY(2px)}}
+@media (prefers-reduced-motion:reduce){.git-key.on svg{animation:none}}
+/* P2: each key carries its own meter — label + bar + value, no popover */
+.git-key.meter{gap:10px;padding:0 12px 0 11px}
+.git-key.meter .ui-meter{width:64px}
+/* NEW: the popover — backlog-manager's .tracker-pop, 420 wide */
+.git-pop{position:absolute;left:0;top:calc(100% + 6px);z-index:20;width:420px;max-width:calc(100vw - 32px);padding:14px 16px;border-radius:16px;background:var(--strip);color:var(--ink);box-shadow:0 24px 64px var(--shadow2);text-align:left}
+.git-pop-row{display:grid;grid-template-columns:minmax(0,1fr) 120px auto;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--hairline)}
+.git-pop-row:first-child{border-top:0;padding-top:0}
+.git-pop-row.ro{grid-template-columns:minmax(0,1fr) 120px}
+.git-pop-text{display:flex;flex-direction:column;gap:1px;min-width:0}
+.git-pop-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.git-pop-sub{font-size:12px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.git-pop-sub.warn{color:var(--amber)}
+.git-pop .ui-meter{width:120px}
+.git-pop-now{height:28px;padding:0 10px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:8px;cursor:pointer;white-space:nowrap}
+.git-pop-now:hover:not(:disabled){color:var(--ink);background:var(--hairline2)}
+.git-pop-now:disabled{color:var(--ink3);cursor:default}
+.git-pop-trouble{margin-top:10px;padding-top:10px;border-top:1px solid var(--hairline);display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink2)}
+.git-pop-trouble b{font-weight:500;color:var(--ink)}
+.git-pop-trouble .warn{color:var(--amber)}
+/* NEW: below md the popover anchors to the toolbar row, not the chip, so it spans the row (343px in a 375 phone) instead of the chip's ~190px */
+.phone .git-toolbar{position:relative}
+.phone .git-chip-root{position:static}
+.phone .git-pop{left:0;right:0;width:auto;max-width:none}
+.phone .git-pop-row{grid-template-columns:minmax(0,1fr) 96px auto}
+.phone .git-pop .ui-meter{width:96px}
+.git-fetched.warn{color:var(--amber)}
+.git-fetched.live{color:var(--cyan)}
+</style>
+
+<div class="page">
+  <header class="lead">
+    <h1>Git Fetch Controls</h1>
+    <p>The band goes back to title and one line. Everything that ticks or can be pressed sits beside the layout toggle, as backlog-manager's tracker chip does in
+       its header: a bar counting down to the next <b>Local sync</b> (the 30s re-read of disk) and the next <b>Fetch all</b> (the server's <code>git fetch origin</code>
+       over every pinned repo). Desktop and 375px; states: timer on, fetching, auto-fetch off.</p>
+  </header>
+
+  <section class="v">
+    <div class="vh"><h2>Now</h2><span class="tag now">today</span></div>
+    <div class="board" id="b-now"></div>
+  </section>
+
+  <section class="v">
+    <div class="vh"><h2>P1 · One chip, popover with the actions</h2><span class="tag rec">chosen</span></div>
+    <p class="note">The chip reads <b>SYNC 12s · FETCH 3:12</b> over two bars. Tap it: a popover with one row per clock, named in full, each with its bar and a <b>now</b> key
+       (↻ lives there now). A repo whose fetch failed is listed under the rows. One control on the row; the names and the buttons are a tap away.</p>
+    <div class="board" id="b-p1"></div>
+  </section>
+
+  <section class="v">
+    <div class="vh"><h2>Cards</h2></div>
+    <p class="note">"fetched X ago" stays at the end of the facts row; "fetching…" while that repo is in a fetch; a failure keeps the age with its reason in front, amber.</p>
+    <div class="board" id="b-cards"></div>
+  </section>
+
+  <section class="v">
+    <div class="vh"><h2>Settings › Shared · Git fetch</h2></div>
+    <div class="board" id="b-set"></div>
+  </section>
+</div>
+
+<script>
+(function(){
+  var SYNC = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 0 1-9.4 3.9M2.5 8a5.5 5.5 0 0 1 9.4-3.9"/><path d="M12 1.5v3h-3M4 14.5v-3h3"/></svg>';
+  var DROP = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5"/><path d="M3 13.5h10"/></svg>';
+  var REREAD = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8A5.5 5.5 0 1 1 11.9 4.1"/><path d="M12.5 1.5v3h-3"/></svg>';
+  function meter(label, value, frac, tone){
+    var pct = frac === null ? 0 : Math.round(frac * 100);
+    return '<span class="ui-meter" data-tone="' + (tone || 'green') + '"><span class="ui-meter-head"><span class="ui-meter-label">' + label + '</span><span class="ui-meter-value">' + value + '</span></span>' +
+      '<span class="ui-meter-track" aria-hidden="true"><span class="ui-meter-fill" style="width:' + pct + '%"></span></span></span>';
+  }
+  // st: 'on' (timer on, idle) | 'fetching' | 'off' (auto-fetch off)
+  function fetchMeter(label, st){
+    if (st === 'fetching') return meter(label, 'fetching…', 1, 'live');
+    if (st === 'off') return meter(label, 'off', null, 'amber');
+    return meter(label, '3:12', 0.36, 'green');
+  }
+  function seg(){ return '<div class="seg git-switch" role="tablist" aria-label="Layout"><button class="on">Cards</button><button>Table</button><button>Triage</button></div>'; }
+  function band(now){
+    var sub = now ? 'Local state of your pinned repos. Nothing here fetches — "fetched" says how old the remote data is.'
+                  : 'Local state of your pinned repos. Fetches from origin on the timer set in Settings; nothing here pulls or pushes.';
+    var right = now ? '<div class="git-band-act"><span>updated 4s ago</span><button type="button" class="icon-refresh" aria-label="Refresh now">↻</button></div>' : '';
+    return '<div class="usg-band"><div><div class="usg-title">Management · Git</div><div class="usg-sub">' + sub + '</div></div>' + right + '</div>';
+  }
+  function chip(st, open){
+    return '<button type="button" class="git-clock" aria-haspopup="dialog" aria-expanded="' + (open ? 'true' : 'false') + '" aria-label="Sync and fetch clocks">' +
+      meter('SYNC', '12s', 0.6) + fetchMeter('FETCH', st) + '<span class="git-clock-caret" aria-hidden="true">▾</span></button>';
+  }
+  function popActions(st){
+    var fetchNow = st === 'fetching' ? '<button type="button" class="git-pop-now" disabled>fetching…</button>' : '<button type="button" class="git-pop-now">now</button>';
+    var fetchSub = st === 'off' ? '<span class="git-pop-sub warn">auto-fetch off · Settings › Shared</span>' : '<span class="git-pop-sub">git fetch origin · every 5 min</span>';
+    return '<div class="git-pop" role="dialog" aria-label="Sync and fetch">' +
+      '<div class="git-pop-row"><span class="git-pop-text"><span class="git-pop-name">Local sync</span><span class="git-pop-sub">re-reads the repos on disk · every 30s</span></span>' + meter('next', '12s', 0.6) + '<button type="button" class="git-pop-now">now</button></div>' +
+      '<div class="git-pop-row"><span class="git-pop-text"><span class="git-pop-name">Fetch all</span>' + fetchSub + '</span>' + fetchMeter('next', st) + fetchNow + '</div>' +
+      (st === 'on' ? '<div class="git-pop-trouble"><span><b>backlog-manager</b> <span class="warn">needs auth</span> · fetched 2d ago</span></div>' : '') +
+      '</div>';
+  }
+  function popReading(st){
+    function r(name, age, st2){ return '<div class="git-pop-row ro"><span class="git-pop-text"><span class="git-pop-name">' + name + '</span><span class="git-pop-sub' + (st2 === 'auth' ? ' warn' : '') + '">' + (st2 === 'auth' ? 'needs auth · ' : '') + 'fetched ' + age + ' ago</span></span>' + (st2 === 'auth' ? meter('next', 'failing', 1, 'amber') : fetchMeter('next', st)) + '</div>'; }
+    return '<div class="git-pop" role="dialog" aria-label="Fetch clocks">' + r('claude-agents-dashboard', '40s', st) + r('backlog-manager', '2d', 'auth') + r('brickwright', '41s', st) + r('guide-manager', '41s', st) + '</div>';
+  }
+  function keys(st){
+    var fetchKey = st === 'fetching' ? '<button type="button" class="git-key on" disabled>' + DROP + 'Fetching…</button>' : '<button type="button" class="git-key">' + DROP + 'Fetch all</button>';
+    var reread = '<button type="button" class="git-key" aria-label="Local sync now" style="width:38px;padding:0;justify-content:center">' + REREAD + '</button>';
+    return fetchKey + reread;
+  }
+  function meterKeys(st){
+    return '<button type="button" class="git-key meter" aria-label="Local sync now">' + REREAD + meter('SYNC', '12s', 0.6) + '</button>' +
+      '<button type="button" class="git-key meter"' + (st === 'fetching' ? ' disabled' : '') + ' aria-label="Fetch all now">' + DROP + fetchMeter('FETCH', st) + '</button>';
+  }
+  function row(v, st, open){
+    if (v === 'p1') return '<div class="git-toolbar">' + seg() + '<div class="git-chip-root">' + chip(st, open) + (open ? popActions(st) : '') + '</div></div>';
+    if (v === 'p2') return '<div class="git-toolbar">' + seg() + meterKeys(st) + '</div>';
+    return '<div class="git-toolbar">' + seg() + '<div class="git-chip-root">' + chip(st, open) + (open ? popReading(st) : '') + '</div>' + keys(st) + '</div>';
+  }
+  function brow(name, b, a, age){
+    return '<div class="git-brow"><span class="git-bname-t">' + name + '</span><span class="git-nums"><span class="git-nums-b">' + b + '</span> | <span class="git-nums-a">' + a + '</span></span><span class="git-age">' + age + '</span></div>';
+  }
+  function fetched(s){
+    if (s === 'on') return '<span class="git-fetched live">fetching…</span>';
+    if (s === 'auth') return '<span class="git-fetched warn">needs auth · fetched 2d ago</span>';
+    return '<span class="git-fetched">fetched ' + s + ' ago</span>';
+  }
+  function card(name, dot, trunk, rows, fs){
+    return '<section class="git-card"><div class="git-head-row"><div class="git-head"><span class="git-dot ' + dot + '"></span><span class="git-name">' + name +
+      '</span><span class="git-chip branch">main</span></div><span class="git-head-end"><button type="button" class="git-sync">' + SYNC + 'Sync</button></span></div>' +
+      '<div class="git-facts"><span class="git-chip green">clean</span>' + trunk + fetched(fs) + '</div><div class="git-branches">' + rows + '</div></section>';
+  }
+  var BEHIND = '<span class="git-chip mustard">main 2 behind origin</span>', EVEN = '<span class="git-chip">main = origin</span>';
+  var DASH = brow('feat/git-fetch', 0, 3, '12m'), NONE = '<div class="git-note">no open branches</div>';
+  function set(id, html){ document.getElementById(id).innerHTML = html; }
+
+  set('b-now', band(true) + '<div class="git-toolbar">' + seg() + '</div>');
+  ['p1'].forEach(function(v){
+    var hasPop = v !== 'p2';
+    set('b-' + v,
+      '<div class="cap">Desktop<em>timer on' + (hasPop ? ', popover open' : '') + '</em></div>' + band(false) + '<div class="stage' + (hasPop ? '' : ' short') + '">' + row(v, 'on', true) + '</div>' +
+      '<div class="cap">Desktop<em>Fetch all running</em></div>' + row(v, 'fetching', false) +
+      '<div class="cap">Desktop<em>auto-fetch off</em></div>' + row(v, 'off', false) +
+      '<div class="cap">Phone<em>375px' + (hasPop ? ', popover open' : '') + '</em></div><div class="phone">' + band(false) + '<div class="stage' + (hasPop ? '' : ' short') + '">' + row(v, 'on', true) + '</div></div>' +
+      (hasPop ? '<div class="cap">Phone<em>375px, closed — the chip wraps under the toggle</em></div><div class="phone">' + row(v, 'on', false) + '</div>' : ''));
+  });
+  set('b-cards', '<div class="pair"><div class="w340">' + card('claude-agents-dashboard', 'needs', BEHIND, DASH, '40s') + '</div><div class="w340">' +
+    card('claude-agents-dashboard', 'needs', BEHIND, DASH, 'on') + '</div><div class="w340">' + card('backlog-manager', 'quiet', EVEN, NONE, 'auth') + '</div></div>');
+  set('b-set',
+    '<div><div class="set-band-title">Shared<span class="set-scope"><i></i>every device</span></div></div>' +
+    '<section class="set-group"><div class="set-group-title">Git fetch</div><div class="set-group-sub">How Management › Git learns what landed on origin.</div><div class="set-rows">' +
+    '<div class="set-row"><div class="set-label"><span class="set-name">Auto-fetch</span><span class="set-hint">Runs <code>git fetch origin</code> for each pinned repo on this interval, only while a Git view is open on some device. Never pulls, never asks for a password or passphrase: a repo that needs one shows "needs auth".</span></div>' +
+    '<div class="set-control"><div class="set-seg" role="group"><button>Off</button><button>30s</button><button>1m</button><button>2m</button><button class="on">5m</button><button>10m</button></div></div></div>' +
+    '</div></section>');
+})();
+</script>
