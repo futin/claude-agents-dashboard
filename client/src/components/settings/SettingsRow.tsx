@@ -72,14 +72,15 @@ function ScopePill({ scope }: { scope: SettingsScope }) {
 
 /**
  * Segmented picker. Used instead of a `<select>` wherever there are two to
- * four options and seeing them all at once is worth the width — density, text
- * scale, on/off — and, on the phone, as the sub-view switch of a section.
+ * six options and seeing them all at once is worth the width — density, text
+ * scale, on/off, the git-fetch interval — and, on the phone, as the sub-view
+ * switch of a section.
  */
 export function Segmented<T extends string | number>({
   value, options, onChange, disabled
 }: {
   value: T;
-  options: { value: T; label: string }[];
+  options: readonly { value: T; label: string }[];
   onChange: (v: T) => void;
   /** For a setting the server can't act on — the switch would flip and do nothing. */
   disabled?: boolean;

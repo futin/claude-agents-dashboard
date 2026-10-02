@@ -1,5 +1,5 @@
 /**
- * Client domain logic of the Git sub-view (`client/src/lib/gitLayouts.ts`, `gitTriage.ts`, `gitStatsText.ts`, `gitBar.ts`, `gitPoll.ts`): the layout switcher's
+ * Client domain logic of the Git sub-view (`client/src/lib/gitLayouts.ts`, `gitTriage.ts`, `gitStatsText.ts`, `gitBar.ts`, `gitPoll.ts`, `gitClock.ts`): the layout switcher's
  * rules, the Triage grouping precedence, every string of spec §6's copy table, the divergence bar's scale and the poll schedule. All pure, so no React and no
  * DOM.
  */
@@ -16,6 +16,7 @@ import {
 } from '../client/src/lib/gitStatsText.js';
 import { GIT_BAR_HALF_PX, GIT_BAR_MIN_PX, gitBarMax, gitBarWidth } from '../client/src/lib/gitBar.js';
 import { GIT_POLL_MS, startGitPoll } from '../client/src/lib/gitPoll.js';
+import { GIT_FETCH_OPTIONS } from '../client/src/lib/gitClock.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -295,6 +296,11 @@ export function run(): number {
     assert.strictEqual(s.listeners.size, 0);
     setVisible(true); fire();
     assert.strictEqual(s.polls, 1);
+  })) p++; else f++;
+
+  if (test('fetch options: the six intervals and their segment labels', () => {
+    assert.deepStrictEqual(GIT_FETCH_OPTIONS.map(o => o.value), [0, 30, 60, 120, 300, 600]);
+    assert.deepStrictEqual(GIT_FETCH_OPTIONS.map(o => o.label), ['Off', '30s', '1m', '2m', '5m', '10m']);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
