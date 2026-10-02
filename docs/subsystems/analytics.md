@@ -86,6 +86,9 @@ one of them at random — the same two-state rule the Sessions board follows.
   for a finished subagent whose transcript is missing or sums below it, counted in `subagentTotals.fallbackCount`. The
   metric's tooltip carries `subagentTotals.usage`'s billable / cache-read split. `/kaizen`'s `kaizen.mjs` does the
   same, and `test/analyze.test.ts` runs it against `analyzeSession` to keep the two in step.
+  One known gap in that parity: a compaction replays earlier records verbatim, and `kaizen.mjs` counts each `tool_use` id, `tool_result` and Agent launch
+  once and adds each subagent transcript once (#174), while `analyzeSession` and `lib/agents.ts` still count the replayed copies — so on a compacted
+  session the tab's `byTool`, error/retry counts and subagent figures read high. The parity tests use transcripts with no replay, so they stay green.
 - **Research & suggestions** — the one-line lesson `/kaizen` wrote for that session. The
   server does **no** LLM calls and invents no advice; the qualitative judgment is
   entirely `/kaizen`'s.
