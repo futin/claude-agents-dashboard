@@ -7,8 +7,8 @@ import {
   CHAT_MAX_WINDOW_BYTES, CHAT_WINDOW_BYTES, NO_CAPS, TEXT_CAP, TOOL_BODY_CAP,
   parseChatRecord, readChatAfter, readChatBefore, readChatTail
 } from '../server/lib/chat.js';
-// The real producer of the remote-message wrapper: importing it here is what
-// makes the unwrap tests fail if `composeReason`'s prose ever drifts.
+// The real producer of the remote-message wrapper, so the unwrap tests are a
+// round trip through the same path a drawer follow-up takes.
 import { composeReason } from '../server/lib/messages.js';
 import type { ChatMessage } from '../shared/types.js';
 
