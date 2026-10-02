@@ -53,24 +53,33 @@ export class GitTimeoutError extends Error {
   }
 }
 
-/** The real runner, with knobs only tests turn: a short timeout, or a `bin` that is not git. */
+/**
+ * The real runner, with knobs only tests turn: a short timeout, or a `bin` that is not git.
+ * The timer is its own because `execFile`'s `timeout` destroys stdout on a stalled event loop and still reports success with empty output (#168).
+ */
 export function makeGitRunner(opts: { timeoutMs?: number; bin?: string } = {}): GitRunner {
   const timeoutMs = opts.timeoutMs ?? GIT_TIMEOUT_MS;
   const bin = opts.bin ?? 'git';
   return (cwd, args) =>
     new Promise((resolve, reject) => {
-      execFile(
+      let timedOut = false;
+      const child = execFile(
         bin,
         args,
-        { cwd, timeout: timeoutMs, env: { ...process.env, ...GIT_ENV }, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
+        { cwd, env: { ...process.env, ...GIT_ENV }, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
         (err, stdout, stderr) => {
+          clearTimeout(timer);
           if (!err) return resolve({ code: 0, stdout, stderr });
-          const e = err as NodeJS.ErrnoException & { killed?: boolean };
+          const e = err as NodeJS.ErrnoException & { signal?: NodeJS.Signals | null };
           if (typeof e.code === 'number') return resolve({ code: e.code, stdout, stderr });
-          if (e.killed) return reject(new GitTimeoutError(timeoutMs));
+          if (timedOut && e.signal) return reject(new GitTimeoutError(timeoutMs));
           reject(err);
         },
       );
+      const timer = setTimeout(() => {
+        timedOut = true;
+        child.kill();
+      }, timeoutMs);
     });
 }
 
