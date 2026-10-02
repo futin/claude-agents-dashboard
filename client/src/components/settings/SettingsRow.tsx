@@ -77,16 +77,18 @@ function ScopePill({ scope }: { scope: SettingsScope }) {
  * switch of a section.
  */
 export function Segmented<T extends string | number>({
-  value, options, onChange, disabled
+  value, options, onChange, disabled, className
 }: {
   value: T;
   options: readonly { value: T; label: string }[];
   onChange: (v: T) => void;
   /** For a setting the server can't act on — the switch would flip and do nothing. */
   disabled?: boolean;
+  /** Appended to the root's `set-seg`, for a picker that needs its own sizing (the six-option git-fetch interval). */
+  className?: string;
 }) {
   return (
-    <div className="set-seg" role="group">
+    <div className={className ? `set-seg ${className}` : 'set-seg'} role="group">
       {options.map(o => (
         <button
           key={String(o.value)}

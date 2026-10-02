@@ -428,6 +428,7 @@ export default function SettingsView() {
                 <Segmented
                   value={server.state?.gitFetchSecs ?? 0}
                   options={GIT_FETCH_OPTIONS}
+                  className="git-fetch-seg"
                   onChange={v => void server.save({ gitFetchSecs: v })}
                 />
               </SettingsRow>

@@ -2015,6 +2015,9 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .set-seg button:hover:not(:disabled){color:var(--ink)}
 .set-seg button:disabled{cursor:default;opacity:.4}
 .set-seg button.on{color:var(--ink);background:var(--strip);box-shadow:0 1px 2px var(--shadow)}
+/* The git-fetch interval is six segments, not two to four: at 375px the 13px/14px-sided buttons overflow the row by 4px, so this one trims the type and the
+   sides at every width (no media query — the width ladder is fixed). The compound selector outranks `.set-seg button` whatever the source order. */
+.set-seg.git-fetch-seg button{font-size:12px;padding:6px 9px}
 /* theme picker: five swatches, each previewing its own palette so it is
    legible before you commit to it (the inline colours are SWATCHES). Selected
    is an ink border — the accent never marks state here (DESIGN.md §5). */
