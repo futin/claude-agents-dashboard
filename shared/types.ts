@@ -922,6 +922,11 @@ export interface ServerSettings {
    * necessarily watching. See docs/subsystems/usage-limits.md.
    */
   recordUsageHistory: boolean;
+  /**
+   * Seconds between the server's own `git fetch origin` over the pinned repos; one of 0, 30, 60, 120, 300, 600, where `0` is off. Shared, not per-device:
+   * one timer serves every browser, and it idles while nobody is watching the git view. See docs/subsystems/git-stats.md.
+   */
+  gitFetchSecs: number;
   /** False when the value couldn't be written to disk (won't survive a restart). */
   persisted: boolean;
   /**
@@ -1551,7 +1556,7 @@ interface RepoGitStatsPin {
 }
 
 /**
- * Local git state of one pinned project, read-only and with no network. `missing` is a dead pin or a folder that is gone, `not-git` a folder outside any
+ * Local git state of one pinned project, read-only. `missing` is a dead pin or a folder that is gone, `not-git` a folder outside any
  * repo, `error` a git call that failed or timed out.
  */
 export type RepoGitStats =
@@ -1578,6 +1583,8 @@ export type RepoGitStats =
       trunkRefs: { local: boolean; origin: boolean } | null;
       /** Newest `FETCH_HEAD` mtime across every worktree (epoch ms); null when never fetched. The client derives the age. */
       fetchedAtMs: number | null;
+      /** What this server's own last fetch said; null before it ran one. */
+      lastFetch: RepoLastFetch | null;
       /** Unmerged branches, trunk excluded, newest commit first, at most 50. */
       branches: GitBranch[];
       /** Every unmerged branch, before the cap. */
@@ -1586,9 +1593,28 @@ export type RepoGitStats =
       mergedCount: number;
     });
 
+/** Why a `git fetch origin` failed, as far as its stderr can be told apart. */
+export type FetchError = 'auth' | 'offline' | 'lock' | 'timeout' | 'other';
+
+/** The verdict of this server's last fetch of one repo: when it ended and how (null error = it worked). */
+export interface RepoLastFetch {
+  atMs: number;
+  error: FetchError | null;
+}
+
+/** The fetch timer's state, so the client can say when the next one is due or that one is running. Times are epoch ms; null when there is none. */
+export interface FetchClock {
+  /** The `gitFetchSecs` in force; 0 when fetching is off. */
+  intervalSecs: number;
+  nextAtMs: number | null;
+  runningSinceMs: number | null;
+  lastEndedMs: number | null;
+}
+
 /** Payload of `GET /api/git-stats`: one entry per pin, in pin order. */
 export interface GitStatsResponse {
   repos: RepoGitStats[];
+  fetch: FetchClock;
   generatedAt: number;
 }
 

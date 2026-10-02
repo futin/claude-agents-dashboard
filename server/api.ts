@@ -971,7 +971,7 @@ export async function serveSettingsWrite(
   const body = await readJsonBody(req);
   const next = setSettings(body);
   if (!next) {
-    return sendBadBody(res, { error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy}' });
+    return sendBadBody(res, { error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, gitFetchSecs?: 0|30|60|120|300|600}' });
   }
   sendJson(res, 200, { ...next, notifyAvailable: config.ntfyTopic !== '' });
 }

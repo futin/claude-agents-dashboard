@@ -4,7 +4,7 @@ import { usePersistedState } from './usePersistedState';
 import type { NotifyPatch, ServerSettings } from '../../../shared/types';
 
 /** What a caller can ask about: the two number fields, or the notify policy. */
-export type SavingKey = 'idleSecs' | 'answerSecs' | 'notify' | 'recordUsageHistory';
+export type SavingKey = 'idleSecs' | 'answerSecs' | 'notify' | 'recordUsageHistory' | 'gitFetchSecs';
 
 export interface ServerSettingsControl {
   state: ServerSettings | null;

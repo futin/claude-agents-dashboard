@@ -323,6 +323,7 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
     trunkVsOrigin,
     trunkRefs: trunk === null ? null : { local: localTrunk !== undefined, origin: originTrunk !== null },
     fetchedAtMs: await newestFetchHead(commonDir),
+    lastFetch: null,
     branches,
     unmergedTotal: unmerged.length,
     mergedCount,
@@ -396,5 +397,5 @@ async function readAll(config: Partial<Config>): Promise<GitStatsResponse> {
     const live = new Set(repos.flatMap(r => (r.state === 'ok' ? [r.toplevel] : [])));
     for (const key of memo.keys()) if (!live.has(key.slice(0, key.indexOf('\0')))) memo.delete(key);
   }
-  return { repos, generatedAt: Date.now() };
+  return { repos, fetch: { intervalSecs: 0, nextAtMs: null, runningSinceMs: null, lastEndedMs: null }, generatedAt: Date.now() };
 }

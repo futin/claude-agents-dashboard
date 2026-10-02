@@ -4,10 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  DEFAULT_ANSWER_SECS, DEFAULT_IDLE_SECS, DEFAULT_NOTIFY, MAX_ANSWER_SECS, MAX_IDLE_SECS,
+  DEFAULT_ANSWER_SECS, DEFAULT_GIT_FETCH_SECS, DEFAULT_IDLE_SECS, DEFAULT_NOTIFY, GIT_FETCH_SECS, MAX_ANSWER_SECS, MAX_IDLE_SECS,
   MAX_PINNED_PROJECTS, MIN_ANSWER_SECS, SETTINGS_FILE,
   clampAnswerSecs, clampIdleSecs, clampPinned, detectAnswerOverride, detectIdleOverride,
-  getPinnedProjects, getSettings, resetSettings, setPinned, setSettings
+  getGitFetchSecs, getPinnedProjects, getSettings, parseGitFetchSecs, resetSettings, setPinned, setSettings
 } from '../server/lib/settings.js';
 import { scanOverrides } from '../server/api.js';
 import type { Config } from '../server/lib/config.js';
@@ -321,6 +321,65 @@ export function run(): number {
       setSettings({ recordUsageHistory: true });
       setSettings({ recordUsageHistory: 3 });
       assert.strictEqual(getSettings().recordUsageHistory, true);
+    });
+  })) p++; else f++;
+
+  if (test('gitFetchSecs: the six values, in order, with 0 as the default', () => {
+    assert.deepStrictEqual(GIT_FETCH_SECS, [0, 30, 60, 120, 300, 600]);
+    assert.strictEqual(DEFAULT_GIT_FETCH_SECS, 0);
+  })) p++; else f++;
+
+  if (test('parseGitFetchSecs: returns each of the six, null for everything else', () => {
+    for (const v of [0, 30, 60, 120, 300, 600]) assert.strictEqual(parseGitFetchSecs(v), v);
+    for (const v of [45, -1, '300', null, undefined, true, 30.5]) assert.strictEqual(parseGitFetchSecs(v), null, String(v));
+  })) p++; else f++;
+
+  if (test('gitFetchSecs: a fresh store reads 0 through both the settings object and the getter', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(getSettings().gitFetchSecs, 0);
+      assert.strictEqual(getGitFetchSecs(), 0);
+    });
+  })) p++; else f++;
+
+  if (test('gitFetchSecs: a patch is returned, read back at once and written to disk', () => {
+    inTmpCwd(dir => {
+      assert.strictEqual(setSettings({ gitFetchSecs: 300 })?.gitFetchSecs, 300);
+      assert.strictEqual(getGitFetchSecs(), 300);
+      assert.ok(fs.readFileSync(path.join(dir, SETTINGS_FILE), 'utf8').includes('"gitFetchSecs":300'));
+    });
+  })) p++; else f++;
+
+  if (test('gitFetchSecs: patching 0 over a stored 300 persists 0 (0 is falsy, not absent)', () => {
+    inTmpCwd(() => {
+      setSettings({ gitFetchSecs: 300 });
+      assert.notStrictEqual(setSettings({ gitFetchSecs: 0 }), null);
+      assert.strictEqual(getGitFetchSecs(), 0);
+      resetSettings();
+      assert.strictEqual(getGitFetchSecs(), 0);
+    });
+  })) p++; else f++;
+
+  if (test('gitFetchSecs: an off-list value rejects the whole patch, including its siblings', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ gitFetchSecs: 45 }), null);
+      assert.strictEqual(setSettings({ idleSecs: 30, gitFetchSecs: 45 }), null);
+      assert.strictEqual(getSettings().idleSecs, DEFAULT_IDLE_SECS);
+      assert.strictEqual(getGitFetchSecs(), 0);
+    });
+  })) p++; else f++;
+
+  if (test('gitFetchSecs: a hand-edited off-list or non-number value reads back as 0 and the other keys keep their defaults', () => {
+    inTmpCwd(dir => {
+      for (const bad of ['{"gitFetchSecs":45}', '{"gitFetchSecs":"300"}']) {
+        fs.writeFileSync(path.join(dir, SETTINGS_FILE), bad, 'utf8');
+        resetSettings();
+        const s = getSettings();
+        assert.strictEqual(s.gitFetchSecs, 0, bad);
+        assert.strictEqual(s.idleSecs, DEFAULT_IDLE_SECS);
+        assert.strictEqual(s.answerSecs, DEFAULT_ANSWER_SECS);
+        assert.deepStrictEqual(s.notify, DEFAULT_NOTIFY);
+        assert.strictEqual(getGitFetchSecs(), 0);
+      }
     });
   })) p++; else f++;
 

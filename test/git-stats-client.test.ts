@@ -30,7 +30,7 @@ function okRepo(name: string, over: Partial<Ok> = {}): Ok {
     dirName: name, name, path: `/p/${name}`, state: 'ok', toplevel: `/p/${name}`,
     branch: 'main', detachedSha: null, onTrunk: true, uncommitted: 0,
     trunk: 'main', hasOrigin: true, trunkVsOrigin: { ahead: 0, behind: 0 }, trunkRefs: { local: true, origin: true },
-    fetchedAtMs: null, branches: [], unmergedTotal: 0, mergedCount: 0,
+    fetchedAtMs: null, lastFetch: null, branches: [], unmergedTotal: 0, mergedCount: 0,
     ...over,
   };
 }
