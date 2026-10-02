@@ -39,8 +39,8 @@ imports nothing from the reader and has its own runner. It is a module of its ow
   still appear.
 - **One fetch in flight** (D6): a call while one runs, timer or button, joins the same promise. `fetchAll` always resolves, and it owns the clock: it sets
   `runningSinceMs`, then `lastEndedMs` and the next `nextAtMs` when it ends.
-- **Per-repo verdicts** (D10): `classifyFetchError` reads stderr into `auth`, `offline`, `timeout`, `lock` or `other`. The first four but `lock` show amber
-  in the client; `lock` (a clash with another git process) shows nothing and the next scheduled fetch retries.
+- **Per-repo verdicts** (D10): `classifyFetchError` reads stderr into `auth`, `offline`, `timeout`, `lock` or `other`. All but `lock` show amber in the
+  client; `lock` (a clash with another git process) shows nothing and the next scheduled fetch retries.
 - **No memo work** (D12): a fetch that moves `origin/<trunk>` changes the base sha, so the reader's next read recounts on its own.
 
 `POST /api/git-fetch` runs one now: token-guarded by `tokenOk` like `POST /api/settings` (`403 { error: 'bad token' }`), marks the view watched, awaits

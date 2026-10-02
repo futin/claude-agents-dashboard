@@ -325,7 +325,7 @@ the page that used to be Settings › Pinned, moved unchanged.
 
 Git is the Usage band with no right slot, then a toolbar on the ground: a `.seg` switcher — the Sessions one, on `--hairline2` for the same §8.3 reason —
 and beside it the clock chip, a `--strip-hi` key at the switcher's 38px height holding two meters (SYNC and FETCH, a port of backlog-manager's `.ui-meter`:
-`--steel` track, `--green` fill, amber when off or failed, `--cyan` and pulsing while live, static under reduced motion) that opens a popover with the
+`--steel` track, `--green` fill, amber when off, overdue or failed, `--cyan` and pulsing while live, static under reduced motion) that opens a popover with the
 Local sync and Fetch all rows. Below the toolbar, one of **three shapes** over the same repo list, in pin order:
 
 - **Cards** — one borderless `--strip` card per repo (§8.2), auto-filling columns: two on a laptop, one on a phone. Header: a status dot, the name, the
