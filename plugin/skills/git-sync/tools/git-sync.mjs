@@ -1248,7 +1248,18 @@ export function rounds(survey) {
   questions.push(...o.stashes.map((s) => stashQuestion(survey, s)))
   questions.push(...o.worktrees.map((wt) => worktreeQuestion(survey, wt)))
   const picks = branchChunks(survey, o.merged, 'merged-pick', 'Merged', 'Delete which merged branches? Ticked ones are deleted, with their clean worktrees.')
-  return { rounds: chunks(questions, PER_CALL), followups: { merged: chunks(picks, PER_CALL) } }
+  return { rounds: chunks(questions, PER_CALL), followups: { merged: chunks(picks, PER_CALL) }, unattended: unattended(survey, o) }
+}
+
+// R37: the standing answers for a session with no AskUserQuestion. The user approved cleaning up merged work in advance, so the merged set goes, and
+// so does every offered worktree on a merged branch — dirty ones included, which takes the branch along with it. Everything else stays unanswered,
+// which means keep. Built from `offered` like the questions, so `buildPlan` accepts them by construction.
+function unattended(survey, o) {
+  const answers = {}
+  if (o.merged.length > 0) answers.merged = 'all'
+  const wts = o.worktrees.filter((wt) => wt.branch && o.byName.get(wt.branch)?.bucket === 'merged')
+  if (wts.length > 0) answers.worktrees = Object.fromEntries(wts.map((wt) => [wt.path, 'remove']))
+  return answers
 }
 
 const ANSWER_KEYS = new Set(['merged', 'asked', 'push', 'stashes', 'worktrees'])
