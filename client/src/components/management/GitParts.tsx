@@ -5,7 +5,7 @@ import { formatAgo } from '../../lib/format';
 import { gitBarMax, gitBarWidth } from '../../lib/gitBar';
 import {
   GIT_BRANCHES_SHOWN, GIT_BRANCH_CAP, GIT_NO_OPEN_BRANCHES,
-  gitBranchChipText, gitBranchCounts, gitFetchedText, gitMergedText, gitMoreText, gitNotShownText, gitTrunkVsOriginText, gitUncommittedText,
+  gitBranchChipText, gitBranchCounts, gitFetchedAgeText, gitMergedText, gitMoreText, gitNotShownText, gitTrunkVsOriginText, gitUncommittedText,
   gitVisibleBranches,
 } from '../../lib/gitStatsText';
 import { triageGitRepos, type GitTriageGroup } from '../../lib/gitTriage';
@@ -49,7 +49,7 @@ export function GitTrunkChip({ repo }: { repo: OkRepo }) {
 }
 
 export function GitFetched({ repo }: { repo: OkRepo }) {
-  return <span className="git-fetched">{gitFetchedText(repo.fetchedAtMs)}</span>;
+  return <span className="git-fetched">{gitFetchedAgeText(repo.fetchedAtMs)}</span>;
 }
 
 /** Behind grows left from the centre line, ahead grows right; `max` is the repo's scale (`gitBarMax`). */

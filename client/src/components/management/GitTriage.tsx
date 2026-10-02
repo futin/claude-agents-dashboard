@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import type { RepoGitStats } from '../../../../shared/types';
-import { gitBranchChipText, gitFetchedText, gitStateSentence, gitTrunkVsOriginText, gitUncommittedText } from '../../lib/gitStatsText';
+import { gitBranchChipText, gitFetchedAgeText, gitStateSentence, gitTrunkVsOriginText, gitUncommittedText } from '../../lib/gitStatsText';
 import { triageGitRepos, type GitTriageGroup } from '../../lib/gitTriage';
 import { GitBranchChip, GitBranchList, GitDot, GitFetched, GitSyncButton, GitTrunkChip, GitUncommittedChip, type OkRepo } from './GitParts';
 import type { GitSyncControl } from '../../hooks/useGitSync';
@@ -59,7 +59,7 @@ function GitBusyRow({ repo, group, sync }: { repo: OkRepo; group: GitTriageGroup
 
 function GitQuietRow({ repo, sync }: { repo: OkRepo; sync: GitSyncControl }) {
   const [open, setOpen] = useState(false);
-  const summary = [gitBranchChipText(repo), gitUncommittedText(repo.uncommitted), gitTrunkVsOriginText(repo), gitFetchedText(repo.fetchedAtMs)].join(' · ');
+  const summary = [gitBranchChipText(repo), gitUncommittedText(repo.uncommitted), gitTrunkVsOriginText(repo), gitFetchedAgeText(repo.fetchedAtMs)].join(' · ');
   return (
     <section className={`git-arow quiet${open ? ' open' : ''}`}>
       {/* A button cannot hold a button, so Sync sits beside the row toggle, not inside it. */}

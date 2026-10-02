@@ -5,18 +5,25 @@
  */
 import assert from 'node:assert';
 
-import type { GitBranch, RepoGitStats } from '../shared/types.js';
+import type { FetchClock, GitBranch, RepoGitStats } from '../shared/types.js';
 import { OWNED_KEYS } from '../client/src/hooks/useSettings.js';
 import { DEFAULT_GIT_LAYOUT, GIT_LAYOUTS, WIDE_ONLY_GIT_LAYOUTS, drawableGitLayout, gitLayoutsFor, isGitLayout } from '../client/src/lib/gitLayouts.js';
 import { triageGitRepos } from '../client/src/lib/gitTriage.js';
 import {
-  GIT_LOAD_FAILED, GIT_LOADING, GIT_NO_OPEN_BRANCHES, GIT_NO_PINS, GIT_UPDATE_FAILED,
-  gitBranchChipText, gitFirstLoadText, gitBranchCounts, gitFetchedText, gitMergedText, gitMoreText, gitNotShownText, gitStateSentence, gitTrunkVsOriginText,
-  gitUncommittedText, gitVisibleBranches,
+  FETCH_NEEDS_TOKEN, GIT_BAND_SUB, GIT_CLOCK_NAME, GIT_LOAD_FAILED, GIT_LOADING, GIT_NO_OPEN_BRANCHES, GIT_NO_PINS, GIT_POP_LABEL, GIT_UPDATE_FAILED,
+  KEY_NOW, METER_FETCH, METER_NEXT, METER_SYNC, READ_FAILED, READ_FETCHING, READ_OFF, READ_OVERDUE, READ_PENDING, READ_SYNCING, ROW_FETCH_ALL, ROW_LOCAL_SYNC,
+  SYNC_ROW_FAILED_SUB, SYNC_ROW_SUB,
+  fetchPeriodText, fetchRowSub, fetchTroubleWord,
+  gitBranchChipText, gitFirstLoadText, gitBranchCounts, gitFetchedAgeText, gitFetchedText, gitMergedText, gitMoreText, gitNotShownText, gitStateSentence,
+  gitTroubleLines, gitTrunkVsOriginText, gitUncommittedText, gitVisibleBranches,
 } from '../client/src/lib/gitStatsText.js';
 import { GIT_BAR_HALF_PX, GIT_BAR_MIN_PX, gitBarMax, gitBarWidth } from '../client/src/lib/gitBar.js';
 import { GIT_POLL_MS, startGitPoll } from '../client/src/lib/gitPoll.js';
-import { GIT_FETCH_OPTIONS } from '../client/src/lib/gitClock.js';
+import {
+  FETCH_FOLLOW_MS, GIT_FETCH_OPTIONS, countdownText, createFollowTracker, createPollGate, fetchFailureOf, fetchKeyState, fetchReading, followUp, skewOf,
+  syncReading,
+} from '../client/src/lib/gitClock.js';
+import { SYNC_NEEDS_TOKEN } from '../client/src/lib/gitSync.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -176,9 +183,9 @@ export function run(): number {
   })) p++; else f++;
 
   if (test('fetched: null → never fetched, 2h ago → "fetched 2h ago", a future mtime clamps to "fetched 0s ago"', () => {
-    assert.strictEqual(gitFetchedText(null), 'never fetched');
-    assert.strictEqual(gitFetchedText(Date.now() - 2 * 3_600_000), 'fetched 2h ago');
-    assert.strictEqual(gitFetchedText(Date.now() + 5 * 60_000), 'fetched 0s ago');
+    assert.strictEqual(gitFetchedAgeText(null), 'never fetched');
+    assert.strictEqual(gitFetchedAgeText(Date.now() - 2 * 3_600_000), 'fetched 2h ago');
+    assert.strictEqual(gitFetchedAgeText(Date.now() + 5 * 60_000), 'fetched 0s ago');
   })) p++; else f++;
 
   if (test('more / not shown / merged counters', () => {
@@ -301,6 +308,181 @@ export function run(): number {
   if (test('fetch options: the six intervals and their segment labels', () => {
     assert.deepStrictEqual(GIT_FETCH_OPTIONS.map(o => o.value), [0, 30, 60, 120, 300, 600]);
     assert.deepStrictEqual(GIT_FETCH_OPTIONS.map(o => o.label), ['Off', '30s', '1m', '2m', '5m', '10m']);
+  })) p++; else f++;
+
+  // ── fetch clock: readings, follow-ups, key state, copy ─────────────────────
+  const NOW = 1_000_000;
+  const clockOf = (over: Partial<FetchClock> = {}): FetchClock => ({ intervalSecs: 300, nextAtMs: null, runningSinceMs: null, lastEndedMs: null, ...over });
+  const fread = (over: Partial<FetchClock>, extra: { ownPost?: boolean; skewMs?: number; now?: number } = {}) =>
+    fetchReading({ clock: clockOf(over), ownPost: extra.ownPost ?? false, skewMs: extra.skewMs ?? 0, now: extra.now ?? NOW });
+
+  if (test('fetchReading: countdown, fraction and tone off the next-fetch time', () => {
+    const a = fread({ intervalSecs: 300, nextAtMs: NOW + 192_000 });
+    assert.strictEqual(a.value, '3:12'); assert.ok(Math.abs(a.fraction - 0.36) < 0.01); assert.strictEqual(a.tone, 'green');
+    assert.deepStrictEqual(fread({ intervalSecs: 30, nextAtMs: NOW + 12_000 }), { value: '12s', fraction: 0.6, tone: 'green' });
+    assert.deepStrictEqual(fread({ intervalSecs: 300, nextAtMs: NOW }), { value: '0s', fraction: 1, tone: 'green' });
+  })) p++; else f++;
+
+  if (test('fetchReading: overdue only past one whole interval; a hair inside it still reads 0s', () => {
+    assert.deepStrictEqual(fread({ intervalSecs: 300, nextAtMs: NOW - 300_001 }), { value: 'overdue', fraction: 1, tone: 'amber' });
+    assert.strictEqual(fread({ intervalSecs: 300, nextAtMs: NOW - 299_999 }).value, '0s');
+  })) p++; else f++;
+
+  if (test('fetchReading: off, running, own POST (beats off), pending, undefined clock — and never "overdue" off a null next time', () => {
+    assert.deepStrictEqual(fread({ intervalSecs: 0 }), { value: 'off', fraction: 0, tone: 'amber' });
+    assert.deepStrictEqual(fread({ intervalSecs: 300, runningSinceMs: NOW - 500 }), { value: 'fetching…', fraction: 1, tone: 'live' });
+    assert.strictEqual(fread({ intervalSecs: 0 }, { ownPost: true }).value, 'fetching…');
+    assert.deepStrictEqual(fread({ intervalSecs: 60, nextAtMs: null }), { value: '…', fraction: 0, tone: 'green' });
+    assert.strictEqual(fread({ intervalSecs: 60, nextAtMs: null }, { now: 9_000_000_000_000 }).value, '…');
+    assert.deepStrictEqual(fetchReading({ clock: undefined, ownPost: false, skewMs: 0, now: NOW }), { value: '…', fraction: 0, tone: 'green' });
+    assert.strictEqual(fetchReading({ clock: undefined, ownPost: true, skewMs: 0, now: NOW }).value, 'fetching…');
+  })) p++; else f++;
+
+  if (test('skew: a client clock behind the server reads the same countdown once corrected', () => {
+    const S = 5_000_000;
+    const skew = skewOf(S, S - 5_000);
+    assert.strictEqual(skew, -5_000);
+    assert.strictEqual(fetchReading({ clock: clockOf({ intervalSecs: 60, nextAtMs: S + 10_000 }), ownPost: false, skewMs: skew, now: S - 5_000 }).value, '10s');
+    assert.strictEqual(fetchReading({ clock: clockOf({ intervalSecs: 60, nextAtMs: S + 10_000 }), ownPost: false, skewMs: 0, now: S - 5_000 }).value, '15s');
+  })) p++; else f++;
+
+  if (test('countdownText: ceils to whole seconds, m:ss from a minute up, floors at 0s', () => {
+    const c = countdownText;
+    assert.deepStrictEqual([c(60_000), c(59_400), c(58_900), c(600_000), c(0), c(-5), c(3_599_000)], ['1:00', '1:00', '59s', '10:00', '0s', '0s', '59:59']);
+  })) p++; else f++;
+
+  if (test('syncReading: syncing beats failed beats pending; a countdown fills with elapsed time', () => {
+    const s = (over: Partial<Parameters<typeof syncReading>[0]>) => syncReading({ polling: false, error: false, nextPollAtMs: null, now: NOW, ...over });
+    assert.deepStrictEqual(s({ polling: true, error: true }), { value: 'syncing…', fraction: 1, tone: 'live' });
+    assert.deepStrictEqual(s({ error: true }), { value: 'failed', fraction: 1, tone: 'amber' });
+    assert.deepStrictEqual(s({ nextPollAtMs: NOW + 12_000 }), { value: '12s', fraction: 0.6, tone: 'green' });
+    assert.deepStrictEqual(s({}), { value: '…', fraction: 0, tone: 'green' });
+    assert.strictEqual(s({ nextPollAtMs: NOW - 2_000 }).fraction, 1, 'a late timer clamps to full');
+  })) p++; else f++;
+
+  if (test('followUp: hidden is always null; running re-keys on each payload; due keys on the next time; the rest is null', () => {
+    const fu = (over: Partial<FetchClock> | undefined, extra: { generatedAt?: number; skewMs?: number; visible?: boolean } = {}) =>
+      followUp({ clock: over === undefined ? undefined : clockOf(over), generatedAt: extra.generatedAt ?? 7, skewMs: extra.skewMs ?? 0, now: NOW, visible: extra.visible ?? true });
+    for (const over of [{ runningSinceMs: NOW - 1 }, { nextAtMs: NOW - 1 }, { intervalSecs: 0 }, undefined]) assert.strictEqual(fu(over, { visible: false }), null);
+    assert.deepStrictEqual(fu({ runningSinceMs: 42 }, { generatedAt: 9 }), { key: 'run:42:9', delayMs: 3_000 });
+    assert.notStrictEqual(fu({ runningSinceMs: 42 }, { generatedAt: 9 })!.key, fu({ runningSinceMs: 42 }, { generatedAt: 10 })!.key);
+    assert.deepStrictEqual(fu({ nextAtMs: NOW - 10 }), { key: `due:${NOW - 10}`, delayMs: 3_000 });
+    assert.deepStrictEqual(fu({ nextAtMs: NOW - 10 }, { generatedAt: 1 }), fu({ nextAtMs: NOW - 10 }, { generatedAt: 2 }));
+    assert.strictEqual(fu({ nextAtMs: NOW + 1 }), null);
+    assert.strictEqual(fu({ intervalSecs: 0, nextAtMs: NOW - 10 }), null);
+    assert.strictEqual(fu({ nextAtMs: null }), null);
+    assert.strictEqual(fu(undefined), null);
+    assert.notStrictEqual(fu({ nextAtMs: NOW + 1_000 }, { skewMs: -2_000 }), null, 'the skew moves a time that looks future into the past');
+    assert.strictEqual(FETCH_FOLLOW_MS, 3_000);
+  })) p++; else f++;
+
+  if (test('createFollowTracker: a key fires once per prefix until a different one arrives; prefixes are independent', () => {
+    const t = createFollowTracker();
+    assert.deepStrictEqual([t.arm('due:1'), t.arm('due:1'), t.arm('due:2'), t.arm('due:1')], [true, false, true, true]);
+    assert.strictEqual(t.arm('run:1:9'), true, 'independent of the due: state');
+    assert.strictEqual(t.arm('due:1'), false);
+    assert.strictEqual(t.arm('run:1:9'), false);
+  })) p++; else f++;
+
+  if (test('createPollGate: one in flight, one queued, the rest dropped; end() says whether to start the queued one', () => {
+    const g = createPollGate();
+    assert.deepStrictEqual([g.request(), g.request(), g.request()], ['run', 'queued', 'dropped']);
+    assert.strictEqual(g.end(), true);
+    assert.strictEqual(g.request(), 'run');
+    assert.strictEqual(g.end(), false);
+  })) p++; else f++;
+
+  if (test('fetchKeyState: the five states, against the literal copy', () => {
+    const k = (over: Partial<Parameters<typeof fetchKeyState>[0]>) =>
+      fetchKeyState({ tokenRequired: false, tokenStored: false, failure: null, pending: false, running: false, intervalSecs: 300, ...over });
+    assert.deepStrictEqual(k({ tokenRequired: true }), { disabled: true, label: 'now', sub: 'Fetch all needs the Answer token — set it under Settings › Local › Connection.', subTone: 'amber' });
+    assert.deepStrictEqual(k({ tokenRequired: true, tokenStored: true }), { disabled: false, label: 'now', sub: 'git fetch origin · every 5 min', subTone: null });
+    assert.deepStrictEqual(k({ failure: 'refused' }), { disabled: true, label: 'now', sub: 'fetch refused: bad token — check it under Settings › Local › Connection.', subTone: 'amber' });
+    assert.deepStrictEqual(k({ running: true }), { disabled: true, label: 'fetching…', sub: 'git fetch origin · every 5 min', subTone: null });
+    assert.deepStrictEqual(k({ pending: true, intervalSecs: 0 }), { disabled: true, label: 'fetching…', sub: 'auto-fetch off · Settings › Shared', subTone: 'amber' });
+    assert.deepStrictEqual(k({ failure: 'failed' }), { disabled: false, label: 'now', sub: "couldn't start the fetch", subTone: 'amber' });
+    assert.deepStrictEqual(k({}), { disabled: false, label: 'now', sub: 'git fetch origin · every 5 min', subTone: null });
+    assert.deepStrictEqual(k({ intervalSecs: 0 }), { disabled: false, label: 'now', sub: 'auto-fetch off · Settings › Shared', subTone: 'amber' });
+    assert.deepStrictEqual(k({ intervalSecs: undefined }), { disabled: false, label: 'now', sub: 'git fetch origin', subTone: null });
+    assert.deepStrictEqual(k({ tokenRequired: undefined, tokenStored: false }), { disabled: false, label: 'now', sub: 'git fetch origin · every 5 min', subTone: null });
+    assert.strictEqual(k({ tokenRequired: true, failure: 'refused' }).sub, 'Fetch all needs the Answer token — set it under Settings › Local › Connection.', 'no token outranks a refusal');
+    assert.deepStrictEqual([fetchFailureOf(403), fetchFailureOf(500), fetchFailureOf('network')], ['refused', 'failed', 'failed']);
+  })) p++; else f++;
+
+  if (test('gitFetchedText: trouble word with the age, lock and old payloads read plain, running + origin reads fetching…', () => {
+    const clock = clockOf();
+    const day2 = Date.now() - 2 * 86_400_000;
+    const err = (error: 'auth' | 'offline' | 'timeout' | 'other' | 'lock', fetchedAtMs: number | null = day2) => okRepo('a', { fetchedAtMs, lastFetch: { atMs: 1, error } });
+    assert.deepStrictEqual(gitFetchedText(err('auth'), clock), { text: 'needs auth · fetched 2d ago', tone: 'warn' });
+    assert.deepStrictEqual(gitFetchedText(err('auth', null), clock), { text: 'needs auth · never fetched', tone: 'warn' });
+    assert.strictEqual(gitFetchedText(err('offline'), clock).text, 'offline · fetched 2d ago');
+    assert.strictEqual(gitFetchedText(err('timeout'), clock).text, 'fetch timed out · fetched 2d ago');
+    assert.strictEqual(gitFetchedText(err('other'), clock).text, 'fetch failed · fetched 2d ago');
+    assert.deepStrictEqual(gitFetchedText(err('lock'), clock), { text: 'fetched 2d ago', tone: null });
+    const running = clockOf({ runningSinceMs: NOW });
+    assert.deepStrictEqual(gitFetchedText(err('auth'), running), { text: 'fetching…', tone: 'live' }, 'running outranks trouble');
+    assert.deepStrictEqual(gitFetchedText(okRepo('a', { fetchedAtMs: day2 }), running), { text: 'fetching…', tone: 'live' });
+    assert.deepStrictEqual(gitFetchedText(okRepo('a', { fetchedAtMs: day2, hasOrigin: false }), running), { text: 'fetched 2d ago', tone: null });
+    assert.deepStrictEqual(gitFetchedText(okRepo('a', { fetchedAtMs: day2, lastFetch: { atMs: 1, error: null } }), clock), { text: 'fetched 2d ago', tone: null });
+    // Review Focus 5: an older server's payload has neither `lastFetch` nor a clock.
+    const old = okRepo('a', { fetchedAtMs: day2 }) as Partial<Ok>; delete old.lastFetch;
+    assert.deepStrictEqual(gitFetchedText(old as Ok, undefined), { text: 'fetched 2d ago', tone: null });
+    assert.deepStrictEqual(gitTroubleLines([old as Ok], undefined), []);
+  })) p++; else f++;
+
+  if (test('fetchTroubleWord and gitTroubleLines: skips lock and non-ok repos, keeps pin order', () => {
+    assert.deepStrictEqual((['auth', 'offline', 'timeout', 'other', 'lock'] as const).map(fetchTroubleWord), ['needs auth', 'offline', 'fetch timed out', 'fetch failed', '']);
+    const gone: RepoGitStats = { dirName: 'g', name: 'g', path: null, state: 'missing' };
+    const lines = gitTroubleLines([
+      okRepo('z', { lastFetch: { atMs: 1, error: 'offline' }, fetchedAtMs: null }), gone, okRepo('lk', { lastFetch: { atMs: 1, error: 'lock' } }),
+      okRepo('fine', { lastFetch: { atMs: 1, error: null } }), okRepo('a', { lastFetch: { atMs: 1, error: 'auth' }, fetchedAtMs: Date.now() - 3_600_000 }),
+    ], clockOf());
+    assert.deepStrictEqual(lines, [
+      { dirName: 'z', name: 'z', word: 'offline', age: 'never fetched' },
+      { dirName: 'a', name: 'a', word: 'needs auth', age: 'fetched 1h ago' },
+    ]);
+  })) p++; else f++;
+
+  if (test('fetchRowSub and fetchPeriodText: exact strings; the two token sentences share their tail', () => {
+    assert.deepStrictEqual([30, 60, 120, 300, 600].map(fetchPeriodText), ['every 30s', 'every 1 min', 'every 2 min', 'every 5 min', 'every 10 min']);
+    assert.deepStrictEqual([undefined, 0, 30, 60, 600].map(fetchRowSub),
+      ['git fetch origin', 'auto-fetch off · Settings › Shared', 'git fetch origin · every 30s', 'git fetch origin · every 1 min', 'git fetch origin · every 10 min']);
+    assert.ok(FETCH_NEEDS_TOKEN.endsWith('Settings › Local › Connection.') && SYNC_NEEDS_TOKEN.endsWith('Settings › Local › Connection.'));
+  })) p++; else f++;
+
+  if (test('chip copy table: meter words, labels, row names, band sub', () => {
+    assert.deepStrictEqual([READ_SYNCING, READ_FETCHING, READ_FAILED, READ_OFF, READ_OVERDUE, READ_PENDING], ['syncing…', 'fetching…', 'failed', 'off', 'overdue', '…']);
+    assert.deepStrictEqual([METER_SYNC, METER_FETCH, METER_NEXT, ROW_LOCAL_SYNC, ROW_FETCH_ALL, KEY_NOW], ['SYNC', 'FETCH', 'next', 'Local sync', 'Fetch all', 'now']);
+    assert.deepStrictEqual([GIT_CLOCK_NAME, GIT_POP_LABEL], ['Sync and fetch clocks', 'Sync and fetch']);
+    assert.deepStrictEqual([SYNC_ROW_SUB, SYNC_ROW_FAILED_SUB], ['re-reads the repos on disk · every 30s', "couldn't update · retrying every 30s"]);
+    assert.strictEqual(GIT_BAND_SUB, 'Local state of your pinned repos. Fetches from origin on the timer set in Settings; nothing here pulls or pushes.');
+  })) p++; else f++;
+
+  if (test('poll schedule report: arm, every fire, hide, show and stop say when the next poll is — and null only when a timer was cleared', () => {
+    const { s, deps, setVisible, fire } = fakePoll(true);
+    let t = 500;
+    const seen: (number | null)[] = [];
+    const stop = startGitPoll({ ...deps, now: () => t, onSchedule: n => { seen.push(n); } });
+    assert.deepStrictEqual(seen, [30_500]);
+    t = 30_500; fire();
+    assert.deepStrictEqual(seen, [30_500, 60_500], 'a repeating timer reports again on each fire');
+    assert.strictEqual(s.polls, 2);
+    setVisible(false);
+    assert.deepStrictEqual(seen, [30_500, 60_500, null]);
+    t = 40_000; setVisible(true);
+    assert.deepStrictEqual(seen, [30_500, 60_500, null, 70_000], 'the show-side disarm found no timer, so no second null');
+    stop();
+    assert.deepStrictEqual(seen, [30_500, 60_500, null, 70_000, null]);
+    stop();
+    assert.strictEqual(seen.length, 5, 'a second stop clears nothing, so says nothing');
+  })) p++; else f++;
+
+  if (test('poll schedule report: both hooks are optional, and started hidden reports nothing', () => {
+    const { deps } = fakePoll(true);
+    startGitPoll(deps);
+    const seen: (number | null)[] = [];
+    startGitPoll({ ...fakePoll(false).deps, onSchedule: n => { seen.push(n); } });
+    assert.deepStrictEqual(seen, []);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
