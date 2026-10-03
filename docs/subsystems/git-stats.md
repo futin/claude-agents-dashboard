@@ -71,6 +71,7 @@ Every variant carries `dirName`, `name` and `path` (the pin's cwd). `state` is o
 | `hasOrigin`     | a remote named `origin` exists                                                                                                                   |
 | `trunkVsOrigin` | local trunk ahead/behind `origin/<trunk>`; `null` with no origin, no trunk, no `origin/<trunk>` or no local trunk                                |
 | `trunkRefs`     | `{ local, origin }` — whether the local `<trunk>` and `origin/<trunk>` exist; `null` exactly when `trunk` is `null`. It lets the client tell "not on origin" from "only on origin", which `trunkVsOrigin: null` cannot |
+| `currentVsUpstream` | the current branch against its configured upstream (`%(upstream)`): `{ upstream, counts: { ahead, behind } }`, `upstream` the short name (`origin/feat/x`), same orientation as `GitBranch`. `counts: null` = the upstream is configured but its ref does not resolve (gone, e.g. after `fetch --prune`), never an `error`. The whole field is `null` when detached, on the trunk (`trunkVsOrigin` covers it), on an unborn branch, or with no upstream configured. An upstream on a remote other than `origin` is counted too, but is only as fresh as your own fetch of that remote: the timer fetches `origin` alone |
 | `fetchedAtMs`   | newest mtime of `FETCH_HEAD` (see below); `null` = never fetched                                                                                 |
 | `branches`      | unmerged local branches, trunk excluded, newest commit first (ties by name), at most **50**                                                      |
 | `unmergedTotal` | all unmerged branches, before the 50 cap                                                                                                         |
@@ -125,7 +126,10 @@ the entries computed before the throw but pruning nothing until a read finishes.
 
 Ahead/behind (`rev-list --left-right --count <base>...<branch>`, with full `refs/heads/...` names, never a bare name) and the merged proof are the expensive
 calls, 2–3 per unmerged branch. They are **memoised by `(toplevel, branch sha, base sha)`**, so a poll in which no sha moved makes only the cheap per-poll
-calls (`rev-parse`, `symbolic-ref`, `status`, `for-each-ref`, `remote`, the trunk probes). The memo is module-level and outlives a request:
+calls (`rev-parse`, `symbolic-ref`, `status`, `for-each-ref`, `remote`, the trunk probes). The current branch's count against its upstream is one more
+memoised count, keyed the same way with the upstream's sha as the base; it adds one cheap `rev-parse --verify` per poll, and only when the checked-out branch
+has an upstream. The upstream itself rides on the `for-each-ref` call already made (`%(upstream)`, never `%(upstream:track)`, which would walk every tracked
+branch unmemoised). The memo is module-level and outlives a request:
 
 - Each read of a repo **replaces** that repo's entries with the ones it touched, so a deleted branch's key is gone after the next poll.
 - After a read in which no repo errored, keys of any toplevel that was not read are dropped too, so an **unpinned repo leaves nothing behind**. When a repo
@@ -173,7 +177,10 @@ all key is disabled with a reason when the server wants an Answer token this dev
 
 **The layouts.** A `.seg` switcher offers `gitLayoutsFor(narrow)` and stores the pick per device in `management.gitLayout` (default `cards`); what is drawn is
 `drawableGitLayout`, so a phone draws Cards while a stored Table waits for the next wide window (`client/src/lib/gitLayouts.ts`). All three shapes take the
-same repos in pin order and share `GitParts.tsx`:
+same repos in pin order and share `GitParts.tsx`. The upstream chip (`GitUpstreamChip`, text from `gitUpstreamText`: `2 behind origin/feat`, `1 ahead of
+origin/feat`, `1 ahead, 2 behind origin/feat`, `origin/feat gone`) sits right after the branch chip: in the Cards and Triage heads, and in the Table's On cell
+(no extra column). It hides when level, absent, or tracking `origin/<trunk>` — that branch's own row already shows those numbers — and is mustard only when
+behind. Triage's dashed Quiet rows do not carry it:
 
 | Layout | Shape |
 | ------ | ----- |
@@ -181,8 +188,9 @@ same repos in pin order and share `GitParts.tsx`:
 | Table  | one row per repo: On / Uncommitted / Trunk vs origin / Branches (`unmergedTotal`) / Fetched. A click opens the branches as sub-rows. Wide-only |
 | Triage | groups from `triageGitRepos`, drawn Needs you, In flight, Quiet, Can't read, empty groups omitted. Quiet rows are one dashed line, expanding on click |
 
-**The triage rule** (`client/src/lib/gitTriage.ts`), first match wins: any non-`ok` state is Can't read; uncommitted work or a non-zero `trunkVsOrigin` is
-Needs you; `unmergedTotal ≥ 1` is In flight, which includes a repo with no remote or no trunk; everything else is Quiet. Within a group repos keep pin
+**The triage rule** (`client/src/lib/gitTriage.ts`), first match wins: any non-`ok` state is Can't read; uncommitted work, a non-zero `trunkVsOrigin`, or the
+current branch behind its upstream (read through `gitUpstreamShown`, the same predicate the chip uses, so an upstream of `origin/<trunk>` never raises a
+repo; ahead-only and gone do not either) is Needs you; `unmergedTotal ≥ 1` is In flight, which includes a repo with no remote or no trunk; everything else is Quiet. Within a group repos keep pin
 order, so a repo moves between groups but never reorders inside one. The same group colours each repo's status dot in Cards and Triage.
 
 **A branch row** is the name (plus a "worktree" badge when `worktreePath` is set), the divergence bar, "behind | ahead", and the last-commit age. The bar

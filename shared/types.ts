@@ -1630,6 +1630,13 @@ export type RepoGitStats =
       trunkVsOrigin: { ahead: number; behind: number } | null;
       /** Which refs of the trunk exist; null exactly when `trunk` is null. Lets the client tell "<trunk> not on origin" from "<trunk> only on origin", which `trunkVsOrigin: null` alone cannot. */
       trunkRefs: { local: boolean; origin: boolean } | null;
+      /**
+       * The current branch against its configured upstream (`%(upstream)`), counted over local refs only. `upstream` is the short name (`origin/feat/x`);
+       * `counts` is null when the upstream is configured but its ref does not resolve (gone, e.g. after `fetch --prune`). The whole field is null when
+       * detached, on the trunk, on an unborn branch, or with no upstream configured. `ahead` = commits only on the branch, `behind` = commits only on the
+       * upstream, the same orientation as `GitBranch`.
+       */
+      currentVsUpstream: { upstream: string; counts: { ahead: number; behind: number } | null } | null;
       /** Newest `FETCH_HEAD` mtime across every worktree (epoch ms); null when never fetched. The client derives the age. */
       fetchedAtMs: number | null;
       /** What this server's own last fetch said; null before it ran one. */

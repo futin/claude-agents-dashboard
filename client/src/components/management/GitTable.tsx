@@ -8,7 +8,7 @@ import {
   GIT_BRANCHES_SHOWN, GIT_BRANCH_CAP, GIT_NO_OPEN_BRANCHES,
   gitBranchCounts, gitMergedText, gitMoreText, gitNotShownText, gitStateSentence, gitVisibleBranches,
 } from '../../lib/gitStatsText';
-import { GitBranchChip, GitDivergenceBar, GitFetched, GitNums, GitSyncButton, GitTrunkChip, GitUncommittedChip, GitWorktreeBadge, type OkRepo } from './GitParts';
+import { GitBranchChip, GitDivergenceBar, GitFetched, GitNums, GitSyncButton, GitTrunkChip, GitUncommittedChip, GitUpstreamChip, GitWorktreeBadge, type OkRepo } from './GitParts';
 
 const COLS = 7;
 
@@ -50,7 +50,7 @@ export default function GitTable({ repos, sync, clock }: { repos: RepoGitStats[]
                       <span className="git-caret" aria-hidden="true">{isOpen ? '▾' : '▸'}</span>{r.name}
                     </button>
                   </td>
-                  <td><GitBranchChip repo={r} /></td>
+                  <td><GitBranchChip repo={r} /> <GitUpstreamChip repo={r} /></td>
                   <td><GitUncommittedChip repo={r} /></td>
                   <td><GitTrunkChip repo={r} /></td>
                   <td className="n">{r.unmergedTotal}</td>

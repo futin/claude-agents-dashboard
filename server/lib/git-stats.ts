@@ -34,6 +34,8 @@ export type MemoEntry = AheadBehind & { merged?: boolean };
  */
 export type GitMemo = Map<string, MemoEntry>;
 
+type RepoGitStatsOk = Extract<RepoGitStats, { state: 'ok' }>;
+
 /** The most branches one repo serves; `unmergedTotal` counts the rest. */
 export const MAX_BRANCHES = 50;
 
@@ -138,16 +140,25 @@ interface LocalRef {
   committedMs: number;
   /** Set for a branch checked out in any worktree, the main one included. */
   worktreePath: string | null;
+  /** The configured upstream's full refname and short name; null when the branch tracks nothing. Set even when that ref is gone. */
+  upstream: { ref: string; short: string } | null;
 }
 
-const LOCAL_REF_FORMAT = '%(refname)%00%(objectname)%00%(committerdate:unix)%00%(worktreepath)';
+// Not `%(upstream:track)`: that walks ahead/behind for every tracked branch on every poll, unmemoised.
+const LOCAL_REF_FORMAT = '%(refname)%00%(objectname)%00%(committerdate:unix)%00%(worktreepath)%00%(upstream)%00%(upstream:short)';
 
 function parseLocalRefs(out: string): LocalRef[] {
   const refs: LocalRef[] = [];
   for (const line of out.split('\n')) {
     if (!line) continue;
-    const [refname, sha, unix, wt] = line.split('\0');
-    refs.push({ name: refname.replace(/^refs\/heads\//, ''), sha, committedMs: Number(unix) * 1000, worktreePath: wt || null });
+    const [refname, sha, unix, wt, up, upShort] = line.split('\0');
+    refs.push({
+      name: refname.replace(/^refs\/heads\//, ''),
+      sha,
+      committedMs: Number(unix) * 1000,
+      worktreePath: wt || null,
+      upstream: up ? { ref: up, short: upShort || up } : null,
+    });
   }
   return refs;
 }
@@ -282,6 +293,7 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
   const baseRef = originTrunk ?? (localTrunk ? { ref: `refs/heads/${localTrunk.name}`, sha: localTrunk.sha } : null);
   const unmerged: { ref: LocalRef; counts: AheadBehind | null }[] = [];
   let mergedCount = 0;
+  let currentVsUpstream: RepoGitStatsOk['currentVsUpstream'] = null;
   try {
     if (trunk !== null && hasOrigin && localTrunk && originTrunk) {
       const { ahead, behind } = await counts(`refs/heads/${trunk}`, localTrunk.sha, originTrunk);
@@ -299,6 +311,14 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
       if (entry.merged === undefined) entry.merged = entry.ahead === 0 || (await patchEquivalent(expect0, toplevel, baseRef.ref, full));
       if (entry.merged) mergedCount++;
       else unmerged.push({ ref, counts: entry });
+    }
+
+    // An unborn branch is not in `locals`, so it never gets here; the trunk is `trunkVsOrigin`'s to report.
+    const current = branch === null || branch === trunk ? undefined : locals.find(r => r.name === branch);
+    if (current?.upstream) {
+      const up = await resolveRef(git, toplevel, current.upstream.ref);
+      const c = up ? await counts(`refs/heads/${current.name}`, current.sha, up) : null;
+      currentVsUpstream = { upstream: current.upstream.short, counts: c ? { ahead: c.ahead, behind: c.behind } : null };
     }
   } finally {
     // Kept even when a call threw, so a read that errs part-way leaves its progress for the next poll; only a read that finished prunes, below.
@@ -333,6 +353,7 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
     hasOrigin,
     trunkVsOrigin,
     trunkRefs: trunk === null ? null : { local: localTrunk !== undefined, origin: originTrunk !== null },
+    currentVsUpstream,
     fetchedAtMs: await newestFetchHead(commonDir),
     lastFetch: lastFetchFor(toplevel),
     branches,

@@ -782,6 +782,133 @@ export async function run(): Promise<number> {
     });
   }));
 
+  // currentVsUpstream: the checked-out branch against the ref it tracks. "Another machine" is a second clone pushing to the same bare origin.
+  /** `feat` pushed with `-u` from `work`; a second clone `other` checks it out. */
+  const featTracked = (fx: GitFixture) => {
+    const bare = fx.bare('origin.git');
+    const work = fx.clone(bare, 'work');
+    fx.git(work, ['checkout', '-q', '-b', 'feat']);
+    fx.commit(work, 'feat start');
+    fx.git(work, ['push', '-q', '-u', 'origin', 'feat']);
+    const other = fx.clone(bare, 'other');
+    fx.git(other, ['checkout', '-q', 'feat']);
+    return { bare, work, other };
+  };
+  /** `feat` tracked, the other clone pushes 2 commits, `work` fetches: 2 behind origin/feat. */
+  const featBehindTwo = (fx: GitFixture) => {
+    const t = featTracked(fx);
+    fx.commit(t.other, 'other one');
+    fx.commit(t.other, 'other two');
+    fx.git(t.other, ['push', '-q', 'origin', 'feat']);
+    fx.git(t.work, ['fetch', '-q', 'origin']);
+    return t;
+  };
+
+  check(await test('upstream: another clone pushes 2 to feat, fetch → { origin/feat, 0 ahead, 2 behind }', async () => {
+    await withGitFixture(async fx => {
+      const { work } = featBehindTwo(fx);
+      assert.deepStrictEqual(ok(await read(work)).currentVsUpstream, { upstream: 'origin/feat', counts: { ahead: 0, behind: 2 } });
+    });
+  }));
+
+  check(await test('upstream: 2 behind plus 1 unpushed local commit → 1 ahead, 2 behind; calls one at a time', async () => {
+    await withGitFixture(async fx => {
+      const { work } = featBehindTwo(fx);
+      fx.commit(work, 'local only');
+      const s = spy();
+      assert.deepStrictEqual(ok(await read(work, s.run)).currentVsUpstream, { upstream: 'origin/feat', counts: { ahead: 1, behind: 2 } });
+      assert.strictEqual(s.maxInFlight, 1);
+    });
+  }));
+
+  check(await test('upstream: feat pushed with -u, nothing else → level, 0 / 0', async () => {
+    await withGitFixture(async fx => {
+      const { work } = featTracked(fx);
+      assert.deepStrictEqual(ok(await read(work)).currentVsUpstream, { upstream: 'origin/feat', counts: { ahead: 0, behind: 0 } });
+    });
+  }));
+
+  check(await test('upstream: never-pushed branch (no upstream) → null', async () => {
+    await withGitFixture(async fx => {
+      const work = cleanClone(fx);
+      fx.git(work, ['checkout', '-q', '-b', 'feat']);
+      fx.commit(work, 'feat work');
+      assert.strictEqual(ok(await read(work)).currentVsUpstream, null);
+    });
+  }));
+
+  check(await test('upstream: detached HEAD → null', async () => {
+    await withGitFixture(async fx => {
+      const { work } = featTracked(fx);
+      fx.git(work, ['checkout', '-q', '--detach']);
+      assert.strictEqual(ok(await read(work)).currentVsUpstream, null);
+    });
+  }));
+
+  check(await test('upstream: on main tracking origin/main, 1 behind → null; trunkVsOrigin still 0 / 1', async () => {
+    await withGitFixture(async fx => {
+      const bare = fx.bare('origin.git');
+      const work = fx.clone(bare, 'work');
+      const other = fx.clone(bare, 'other');
+      fx.commit(other, 'main moves');
+      fx.git(other, ['push', '-q', 'origin', 'main']);
+      fx.git(work, ['fetch', '-q', 'origin']);
+      const r = ok(await read(work));
+      assert.strictEqual(r.currentVsUpstream, null);
+      assert.deepStrictEqual(r.trunkVsOrigin, { ahead: 0, behind: 1 });
+    });
+  }));
+
+  check(await test('upstream: remote branch deleted, fetch --prune → ok, { origin/feat, counts: null }', async () => {
+    await withGitFixture(async fx => {
+      const { work } = featTracked(fx);
+      fx.git(work, ['push', '-q', 'origin', '--delete', 'feat']);
+      fx.git(work, ['fetch', '-q', '--prune', 'origin']);
+      assert.deepStrictEqual(ok(await read(work)).currentVsUpstream, { upstream: 'origin/feat', counts: null });
+    });
+  }));
+
+  check(await test('upstream: on remote fork, another clone of fork pushes 1, fetch fork → { fork/feat, 0 ahead, 1 behind }', async () => {
+    await withGitFixture(async fx => {
+      const work = cleanClone(fx);
+      const fork = fx.bare('fork.git');
+      fx.git(work, ['remote', 'add', 'fork', fork]);
+      fx.git(work, ['checkout', '-q', '-b', 'feat']);
+      fx.commit(work, 'feat start');
+      fx.git(work, ['push', '-q', '-u', 'fork', 'feat']);
+      const other = fx.clone(fork, 'other');
+      fx.git(other, ['checkout', '-q', 'feat']);
+      fx.commit(other, 'fork moves');
+      fx.git(other, ['push', '-q', 'origin', 'feat']);
+      fx.git(work, ['fetch', '-q', 'fork']);
+      assert.deepStrictEqual(ok(await read(work)).currentVsUpstream, { upstream: 'fork/feat', counts: { ahead: 0, behind: 1 } });
+    });
+  }));
+
+  check(await test('upstream: unborn branch → ok, null', async () => {
+    await withGitFixture(async fx => {
+      const repo = fx.init('unborn');
+      assert.strictEqual(ok(await read(repo)).currentVsUpstream, null);
+    });
+  }));
+
+  check(await test('upstream: memoised — a second read with no sha moved makes no rev-list or cherry; the cold one names both refs in full', async () => {
+    await withGitFixture(async fx => {
+      const { work } = featBehindTwo(fx);
+      const memo: GitMemo = new Map();
+      const first = spy();
+      const r1 = ok(await readRepo(pin(work), first.run, memo));
+      assert.ok(
+        first.calls.some(a => a[0] === 'rev-list' && a[a.length - 1] === 'refs/remotes/origin/feat...refs/heads/feat'),
+        `the cold read should count feat against refs/remotes/origin/feat: ${JSON.stringify(first.calls.filter(a => a[0] === 'rev-list'))}`,
+      );
+      const second = spy();
+      const r2 = ok(await readRepo(pin(work), second.run, memo));
+      assert.deepStrictEqual(second.calls.filter(a => a[0] === 'rev-list' || a[0] === 'cherry'), []);
+      assert.deepStrictEqual(r2, r1);
+    });
+  }));
+
   console.log(`\ngit-stats: ${ok_}/${total} passed`);
   return total - ok_;
 }
