@@ -2,7 +2,7 @@ import type { FetchClock, RepoGitStats } from '../../../../shared/types';
 import type { GitSyncControl } from '../../hooks/useGitSync';
 import { gitStateSentence } from '../../lib/gitStatsText';
 import {
-  GitBranchChip, GitBranchList, GitDot, GitFetched, GitSyncButton, GitTrunkChip, GitUncommittedChip, gitGroupsByDir,
+  GitBranchChip, GitBranchList, GitDot, GitFetched, GitSyncButton, GitTrunkChip, GitUncommittedChip, GitUpstreamChip, gitGroupsByDir,
 } from './GitParts';
 
 /**
@@ -21,6 +21,7 @@ export default function GitCards({ repos, sync, clock }: { repos: RepoGitStats[]
               <GitDot group={groups.get(r.dirName)} />
               <span className="git-name">{r.name}</span>
               {r.state === 'ok' && <GitBranchChip repo={r} />}
+              {r.state === 'ok' && <GitUpstreamChip repo={r} />}
             </div>
             {r.state === 'ok' && <span className="git-head-end"><GitSyncButton repo={r} sync={sync} /></span>}
           </div>

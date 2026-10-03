@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { FetchClock, RepoGitStats } from '../../../../shared/types';
 import { gitBranchChipText, gitFetchedText, gitStateSentence, gitTrunkVsOriginText, gitUncommittedText } from '../../lib/gitStatsText';
 import { triageGitRepos, type GitTriageGroup } from '../../lib/gitTriage';
-import { GitBranchChip, GitBranchList, GitDot, GitFetched, GitSyncButton, GitTrunkChip, GitUncommittedChip, type OkRepo } from './GitParts';
+import { GitBranchChip, GitBranchList, GitDot, GitFetched, GitSyncButton, GitTrunkChip, GitUncommittedChip, GitUpstreamChip, type OkRepo } from './GitParts';
 import type { GitSyncControl } from '../../hooks/useGitSync';
 
 /** Drawn in this order, Can't read last; an empty group draws nothing, header included. */
@@ -46,6 +46,7 @@ function GitBusyRow({ repo, group, sync, clock }: { repo: OkRepo; group: GitTria
           <GitDot group={group} />
           <span className="git-name">{repo.name}</span>
           <GitBranchChip repo={repo} />
+          <GitUpstreamChip repo={repo} />
           <GitUncommittedChip repo={repo} />
           <GitTrunkChip repo={repo} />
           <GitFetched repo={repo} clock={clock} />

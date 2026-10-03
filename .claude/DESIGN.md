@@ -329,14 +329,14 @@ and beside it the clock chip, a `--strip-hi` key at the switcher's 38px height h
 Local sync and Fetch all rows. Below the toolbar, one of **three shapes** over the same repo list, in pin order:
 
 - **Cards** — one borderless `--strip` card per repo (§8.2), auto-filling columns: two on a laptop, one on a phone. Header: a status dot, the name, the
-  branch chip, the fetched age pushed right; then the uncommitted and trunk-vs-origin chips; then the branch rows.
+  branch chip (and, beside it, the current branch against its upstream when that has diverged), the fetched age pushed right; then the uncommitted and trunk-vs-origin chips; then the branch rows.
 - **Table** — `.dt`'s rules (one rule per row, a heavier one under the head) in a sheet that scrolls inside itself; a row click opens that repo's branches
   as sub-rows on `--strip-hi`. Wide-only: a phone is never offered it, and a stored Table comes back with the width.
 - **Triage** — the Sessions triage idea, re-ruled for git: Needs you, In flight, Quiet, Can't read, in that order and only when non-empty, under small
   uppercase `--ink3` headers. Busy repos are paper cards with their branches; Quiet and Can't read are one dashed line each, Quiet expanding on click.
 
-Four inks carry the Triage rule wherever a repo appears: **amber** needs you (uncommitted work, or a diverged trunk), **mustard** in flight (and a diverged
-trunk's chip), **green** quiet (and "clean"), **`--ink3`** can't read. The branch row borrows GitHub's divergence bar — behind grows left in `--ink3`, ahead
+Four inks carry the Triage rule wherever a repo appears: **amber** needs you (uncommitted work, a diverged trunk, or the current branch behind its upstream), **mustard** in flight
+(and a diverged trunk's chip, or a behind-upstream chip), **green** quiet (and "clean"), **`--ink3`** can't read. The branch row borrows GitHub's divergence bar — behind grows left in `--ink3`, ahead
 grows right in `--cyan`, one scale per repo so the largest count fills its half. Below `md` the bar drops and the two numbers stay; the worktree badge is
 the one cyan-outlined chip. A repo's fetched text turns amber with the failed fetch's word and cyan while a fetch runs. Every class — meter and popover
 included — is `git-` prefixed and every colour a token or a `color-mix` over one.

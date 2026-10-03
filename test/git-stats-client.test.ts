@@ -15,7 +15,7 @@ import {
   SYNC_ROW_FAILED_SUB, SYNC_ROW_SUB,
   fetchPeriodText, fetchRowSub, fetchTroubleWord,
   gitBranchChipText, gitFirstLoadText, gitBranchCounts, gitFetchedAgeText, gitFetchedText, gitMergedText, gitMoreText, gitNotShownText, gitStateSentence,
-  gitTroubleLines, gitTrunkVsOriginText, gitUncommittedText, gitVisibleBranches,
+  gitTroubleLines, gitTrunkVsOriginText, gitUncommittedText, gitUpstreamText, gitVisibleBranches,
 } from '../client/src/lib/gitStatsText.js';
 import { GIT_BAR_HALF_PX, GIT_BAR_MIN_PX, gitBarMax, gitBarWidth } from '../client/src/lib/gitBar.js';
 import { GIT_POLL_MS, startGitPoll } from '../client/src/lib/gitPoll.js';
@@ -37,7 +37,7 @@ function okRepo(name: string, over: Partial<Ok> = {}): Ok {
   return {
     dirName: name, name, path: `/p/${name}`, state: 'ok', toplevel: `/p/${name}`,
     branch: 'main', detachedSha: null, onTrunk: true, uncommitted: 0,
-    trunk: 'main', hasOrigin: true, trunkVsOrigin: { ahead: 0, behind: 0 }, trunkRefs: { local: true, origin: true },
+    trunk: 'main', hasOrigin: true, trunkVsOrigin: { ahead: 0, behind: 0 }, trunkRefs: { local: true, origin: true }, currentVsUpstream: null,
     fetchedAtMs: null, lastFetch: null, branches: [], unmergedTotal: 0, mergedCount: 0,
     ...over,
   };
@@ -483,6 +483,35 @@ export function run(): number {
     const seen: (number | null)[] = [];
     startGitPoll({ ...fakePoll(false).deps, onSchedule: n => { seen.push(n); } });
     assert.deepStrictEqual(seen, []);
+  })) p++; else f++;
+
+  // ── current branch vs its upstream ─────────────────────────────────────────
+  const onFeat = (up: Ok['currentVsUpstream'], over: Partial<Ok> = {}) =>
+    okRepo('a', { branch: 'feat', onTrunk: false, currentVsUpstream: up, ...over });
+  const featUp = (ahead: number, behind: number): Ok['currentVsUpstream'] => ({ upstream: 'origin/feat', counts: { ahead, behind } });
+
+  if (test('gitUpstreamText: behind, ahead, both, gone; level, absent and origin/<trunk> hide; origin/main shown when there is no trunk', () => {
+    assert.strictEqual(gitUpstreamText(onFeat(featUp(0, 2))), '2 behind origin/feat');
+    assert.strictEqual(gitUpstreamText(onFeat(featUp(1, 0))), '1 ahead of origin/feat');
+    assert.strictEqual(gitUpstreamText(onFeat(featUp(1, 2))), '1 ahead, 2 behind origin/feat');
+    assert.strictEqual(gitUpstreamText(onFeat({ upstream: 'origin/feat', counts: null })), 'origin/feat gone');
+    assert.strictEqual(gitUpstreamText(onFeat(featUp(0, 0))), null);
+    assert.strictEqual(gitUpstreamText(onFeat(null)), null);
+    const older = onFeat(null) as Partial<Ok>;
+    delete older.currentVsUpstream; // a payload from a server that predates the field
+    assert.strictEqual(gitUpstreamText(older as Ok), null);
+    const onMain = { upstream: 'origin/main', counts: { ahead: 0, behind: 3 } };
+    assert.strictEqual(gitUpstreamText(onFeat(onMain, { trunk: 'main' })), null);
+    assert.strictEqual(gitUpstreamText(onFeat(onMain, { trunk: null, trunkVsOrigin: null, trunkRefs: null })), '3 behind origin/main');
+  })) p++; else f++;
+
+  if (test('triage: behind its upstream → needs; ahead-only, gone and origin/<trunk> → flight', () => {
+    const one = [branch('feat')];
+    assert.deepStrictEqual(names(triageGitRepos([onFeat(featUp(0, 1))]).needs), ['a']);
+    assert.deepStrictEqual(names(triageGitRepos([onFeat(featUp(2, 0), { branches: one, unmergedTotal: 1 })]).flight), ['a']);
+    assert.deepStrictEqual(names(triageGitRepos([onFeat({ upstream: 'origin/feat', counts: null }, { branches: one, unmergedTotal: 1 })]).flight), ['a']);
+    const onMain = { upstream: 'origin/main', counts: { ahead: 0, behind: 3 } };
+    assert.deepStrictEqual(names(triageGitRepos([onFeat(onMain, { branches: one, unmergedTotal: 1 })]).flight), ['a']);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

@@ -75,6 +75,30 @@ export function gitTrunkVsOriginText(r: OkRepo): string {
   return r.trunkRefs !== null && r.trunkRefs.origin ? `${r.trunk} only on origin` : `${r.trunk} not on origin`;
 }
 
+/**
+ * The current branch's upstream facts the page draws, or null when there is nothing to say: the field is absent (an older server), null, level (0 / 0),
+ * or the upstream is `origin/<trunk>` — that branch's own row already shows the same numbers against the same base. The chip and the Triage rule both read
+ * this, so they never disagree.
+ */
+export function gitUpstreamShown(r: OkRepo): NonNullable<OkRepo['currentVsUpstream']> | null {
+  const u = r.currentVsUpstream;
+  if (u === undefined || u === null) return null;
+  if (u.counts !== null && u.counts.ahead === 0 && u.counts.behind === 0) return null;
+  if (r.trunk !== null && u.upstream === `origin/${r.trunk}`) return null;
+  return u;
+}
+
+/** The upstream chip's text, in `gitTrunkVsOriginText`'s grammar; null when {@link gitUpstreamShown} hides it. */
+export function gitUpstreamText(r: OkRepo): string | null {
+  const u = gitUpstreamShown(r);
+  if (u === null) return null;
+  const c = u.counts;
+  if (c === null) return `${u.upstream} gone`;
+  if (c.ahead === 0) return `${c.behind} behind ${u.upstream}`;
+  if (c.behind === 0) return `${c.ahead} ahead of ${u.upstream}`;
+  return `${c.ahead} ahead, ${c.behind} behind ${u.upstream}`;
+}
+
 /** The age of the last fetch. `formatAgo` clamps a future mtime (clock skew) to "0s", so this never prints a negative age. */
 export function gitFetchedAgeText(fetchedAtMs: number | null): string {
   return fetchedAtMs === null ? 'never fetched' : `fetched ${formatAgo(fetchedAtMs)} ago`;

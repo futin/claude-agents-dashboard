@@ -6,7 +6,7 @@ import { gitBarMax, gitBarWidth } from '../../lib/gitBar';
 import {
   GIT_BRANCHES_SHOWN, GIT_BRANCH_CAP, GIT_NO_OPEN_BRANCHES,
   gitBranchChipText, gitBranchCounts, gitFetchedText, gitMergedText, gitMoreText, gitNotShownText, gitTrunkVsOriginText, gitUncommittedText,
-  gitVisibleBranches,
+  gitUpstreamShown, gitUpstreamText, gitVisibleBranches,
 } from '../../lib/gitStatsText';
 import { triageGitRepos, type GitTriageGroup } from '../../lib/gitTriage';
 
@@ -35,6 +35,14 @@ export function GitDot({ group }: { group: GitTriageGroup | undefined }) {
 
 export function GitBranchChip({ repo }: { repo: OkRepo }) {
   return <span className="git-chip branch">{gitBranchChipText(repo)}</span>;
+}
+
+/** The current branch against its upstream; nothing when level, absent or tracking `origin/<trunk>`. Mustard only when behind. */
+export function GitUpstreamChip({ repo }: { repo: OkRepo }) {
+  const text = gitUpstreamText(repo);
+  if (text === null) return null;
+  const behind = (gitUpstreamShown(repo)?.counts?.behind ?? 0) > 0;
+  return <span className={`git-chip${behind ? ' mustard' : ''}`}>{text}</span>;
 }
 
 export function GitUncommittedChip({ repo }: { repo: OkRepo }) {
