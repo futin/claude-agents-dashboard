@@ -7,6 +7,7 @@ import path from 'node:path';
 import * as scan from '../server/lib/scan.js';
 import { DEFAULTS, parseEnv, toPosInt, loadConfig } from '../server/lib/config.js';
 import { refreshCwd } from '../server/lib/token-refresh.js';
+import { holdKind, type HoldKind } from '../client/src/lib/holds.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -463,6 +464,145 @@ export function run(): number {
     assert.strictEqual(byId.get('sess-one')!.status, 'idle');
     assert.strictEqual(byId.get('sess-two')!.remoteQuestion, true);
     assert.strictEqual(byId.get('sess-two')!.status, 'question');
+  })) p++; else f++;
+
+  if (test('planIds: a held plan flags the row and turns it blue', () => {
+    const now = 1_700_000_000_000;
+    const staleTs = new Date(now - 60 * 60 * 1000).toISOString();
+    const root = makeRoot([
+      { dirName: '-a-pp', id: 'pp', mtimeMs: now - 60 * 60 * 1000, records: [metaRec('/a/pp', 'main'), at(assistantDone(), staleTs)] }
+    ]);
+    const flagged = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null, planIds: new Set(['pp']) });
+    assert.strictEqual(flagged.sessions[0].status, 'question');   // would be idle on the transcript alone
+    assert.strictEqual(flagged.sessions[0].remotePlan, true);
+    assert.strictEqual(flagged.sessions[0].remoteQuestion, false);
+    assert.strictEqual(flagged.sessions[0].remoteReply, false);
+    assert.strictEqual(flagged.totals.active, 0);
+    const bare = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null });
+    assert.strictEqual(bare.sessions[0].status, 'idle');
+    assert.strictEqual(bare.sessions[0].remotePlan, false);
+    const nulled = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null, planIds: null });
+    assert.strictEqual(nulled.sessions[0].remotePlan, false);
+  })) p++; else f++;
+
+  if (test('planIds: a held plan outranks the dead-process gate', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-ppd', id: 'ppd', mtimeMs: now - 60 * 1000, records: [metaRec('/a/ppd', 'main'), assistantDone()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: new Set(), planIds: new Set(['ppd']) });
+    assert.strictEqual(out.sessions[0].status, 'question');
+    assert.strictEqual(out.sessions[0].remotePlan, true);
+    // Without the plan the same dead cwd reads idle — the gate really was in play.
+    const gated = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: new Set() });
+    assert.strictEqual(gated.sessions[0].status, 'idle');
+  })) p++; else f++;
+
+  if (test('planIds: only the matching session id is flagged (no prefix match)', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-pl1', id: 'plan-one', mtimeMs: now - 60 * 60 * 1000, records: [metaRec('/a/pl1', 'main'), assistantDone()] },
+      { dirName: '-a-pl2', id: 'plan-two', mtimeMs: now - 90 * 60 * 1000, records: [metaRec('/a/pl2', 'main'), assistantDone()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null, planIds: new Set(['plan-two', 'plan-']) });
+    const byId = new Map(out.sessions.map(s => [s.id, s]));
+    assert.strictEqual(byId.get('plan-one')!.remotePlan, false);
+    assert.strictEqual(byId.get('plan-one')!.status, 'idle');
+    assert.strictEqual(byId.get('plan-two')!.remotePlan, true);
+    assert.strictEqual(byId.get('plan-two')!.status, 'question');
+  })) p++; else f++;
+
+  if (test('messageIds: a held reply window flags the row and turns it blue', () => {
+    const now = 1_700_000_000_000;
+    const staleTs = new Date(now - 60 * 60 * 1000).toISOString();
+    const root = makeRoot([
+      { dirName: '-a-pm', id: 'pm', mtimeMs: now - 60 * 60 * 1000, records: [metaRec('/a/pm', 'main'), at(assistantDone(), staleTs)] }
+    ]);
+    const flagged = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null, messageIds: new Set(['pm']) });
+    assert.strictEqual(flagged.sessions[0].status, 'question');
+    assert.strictEqual(flagged.sessions[0].remoteReply, true);
+    assert.strictEqual(flagged.sessions[0].remoteQuestion, false);
+    assert.strictEqual(flagged.sessions[0].remotePlan, false);
+    assert.strictEqual(flagged.totals.active, 0);
+    const bare = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null });
+    assert.strictEqual(bare.sessions[0].status, 'idle');
+    assert.strictEqual(bare.sessions[0].remoteReply, false);
+    const nulled = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null, messageIds: null });
+    assert.strictEqual(nulled.sessions[0].remoteReply, false);
+  })) p++; else f++;
+
+  if (test('messageIds: a held reply window outranks the dead-process gate', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-pmd', id: 'pmd', mtimeMs: now - 60 * 1000, records: [metaRec('/a/pmd', 'main'), assistantDone()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: new Set(), messageIds: new Set(['pmd']) });
+    assert.strictEqual(out.sessions[0].status, 'question');
+    assert.strictEqual(out.sessions[0].remoteReply, true);
+    const gated = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: new Set() });
+    assert.strictEqual(gated.sessions[0].status, 'idle');
+  })) p++; else f++;
+
+  if (test('messageIds: only the matching session id is flagged (no prefix match)', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-m1', id: 'msg-one', mtimeMs: now - 60 * 60 * 1000, records: [metaRec('/a/m1', 'main'), assistantDone()] },
+      { dirName: '-a-m2', id: 'msg-two', mtimeMs: now - 90 * 60 * 1000, records: [metaRec('/a/m2', 'main'), assistantDone()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, liveCwds: null, messageIds: new Set(['msg-two', 'msg-']) });
+    const byId = new Map(out.sessions.map(s => [s.id, s]));
+    assert.strictEqual(byId.get('msg-one')!.remoteReply, false);
+    assert.strictEqual(byId.get('msg-one')!.status, 'idle');
+    assert.strictEqual(byId.get('msg-two')!.remoteReply, true);
+    assert.strictEqual(byId.get('msg-two')!.status, 'question');
+  })) p++; else f++;
+
+  // One live session that can carry all four holds at once: its transcript ends
+  // on a pending tool call stamped BEFORE the permission notify, so the
+  // permission signal is genuinely open and only precedence can hide it.
+  type HoldSignal = 'pending' | 'plan' | 'message' | 'permission';
+  const ladderNow = 1_700_000_000_000;
+  const ladderRoot = makeRoot([
+    { dirName: '-a-hl', id: 'hl', mtimeMs: ladderNow - 30 * 1000,
+      records: [metaRec('/a/hl', 'main'), at(assistantPending(), new Date(ladderNow - 30 * 1000).toISOString())] }
+  ]);
+  const scanHolds = (signals: readonly HoldSignal[]) => {
+    const has = (s: HoldSignal) => signals.includes(s);
+    return scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, {
+      root: ladderRoot, now: ladderNow, liveCwds: null,
+      pendingIds: has('pending') ? new Set(['hl']) : null,
+      planIds: has('plan') ? new Set(['hl']) : null,
+      messageIds: has('message') ? new Set(['hl']) : null,
+      permissionWaits: has('permission') ? new Map([['hl', ladderNow - 20 * 1000]]) : null
+    }).sessions[0];
+  };
+  const holdFlags = (s: { remoteQuestion: boolean; remotePlan: boolean; remoteReply: boolean; permissionWait: boolean }) =>
+    [s.remoteQuestion, s.remotePlan, s.remoteReply, s.permissionWait];
+
+  if (test('hold ladder: question > plan > reply > permission, exactly one flag at each step', () => {
+    const steps: [HoldSignal[], boolean[]][] = [
+      [['pending', 'plan', 'message', 'permission'], [true, false, false, false]],
+      [['plan', 'message', 'permission'], [false, true, false, false]],
+      [['message', 'permission'], [false, false, true, false]],
+      [['permission'], [false, false, false, true]]
+    ];
+    for (const [signals, want] of steps) {
+      const s = scanHolds(signals);
+      assert.deepStrictEqual(holdFlags(s), want, `signals {${signals.join(', ')}}`);
+      assert.strictEqual(s.status, 'question', `signals {${signals.join(', ')}}`);
+    }
+  })) p++; else f++;
+
+  if (test('hold ladder: server flags read through holdKind agree with the ladder on all 16 combinations', () => {
+    const order: [HoldSignal, HoldKind][] = [['pending', 'question'], ['plan', 'plan'], ['message', 'reply'], ['permission', 'permission']];
+    for (let mask = 0; mask < 16; mask++) {
+      const signals = order.filter((_, i) => mask & (1 << i)).map(([sig]) => sig);
+      const label = `signals {${signals.join(', ')}}`;
+      const s = scanHolds(signals);
+      assert.ok(holdFlags(s).filter(Boolean).length <= 1, `${label}: more than one hold flag set ${JSON.stringify(holdFlags(s))}`);
+      const want = order.find(([sig]) => signals.includes(sig))?.[1] ?? null;
+      assert.strictEqual(holdKind(s), want, label);
+    }
   })) p++; else f++;
 
   if (test('permissionWaits: a notified session goes blue and carries the flag', () => {
