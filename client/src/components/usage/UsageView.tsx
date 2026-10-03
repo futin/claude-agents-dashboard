@@ -1,6 +1,7 @@
 import { useSettings } from '../../hooks/useSettings';
 import type { UsageTab } from '../../lib/settings';
 import { Band } from './Sheet';
+import { UsageHistory } from './UsageHistory';
 import { UsageProfile } from './UsageProfile';
 import { UsageRates } from './UsageRates';
 
@@ -23,7 +24,7 @@ import { UsageRates } from './UsageRates';
  * rest of the app uses: the phone on the desk tends to sit on one of these and
  * the laptop on the other.
  *
- * **The switch lives in the nav, not on the page.** These are two views of the
+ * **The switch lives in the nav, not on the page.** These are three views of the
  * section, which makes them navigation: they are the tree under Usage in
  * `SideRail`, on the desktop rail and in the phone menu alike. The page used to
  * carry a phone-only copy of it, from when the phone nav was a horizontal strip
@@ -34,13 +35,15 @@ import { UsageRates } from './UsageRates';
 
 const TABS: { value: UsageTab; label: string }[] = [
   { value: 'forecast', label: 'Forecast' },
-  { value: 'rates', label: 'Token value' }
+  { value: 'rates', label: 'Token value' },
+  { value: 'history', label: 'History' }
 ];
 
 const SUBS: Record<UsageTab, string> = {
   forecast: 'The duty cycle behind the weekly projection in the header · recorded on this '
     + 'machine, folded weekly',
-  rates: 'What one percent of the 5-hour window costs, per model · measured on this machine only'
+  rates: 'What one percent of the 5-hour window costs, per model · measured on this machine only',
+  history: '5-hour and weekly utilization as recorded on this machine · gaps are time nothing was recording'
 };
 
 export default function UsageView() {
@@ -50,7 +53,7 @@ export default function UsageView() {
   return (
     <div className="usage-section">
       <Band title={`Usage · ${TABS.find(t => t.value === tab)!.label}`} sub={SUBS[tab]} />
-      {tab === 'forecast' ? <UsageProfile /> : <UsageRates />}
+      {tab === 'forecast' ? <UsageProfile /> : tab === 'rates' ? <UsageRates /> : <UsageHistory />}
     </div>
   );
 }

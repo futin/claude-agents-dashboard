@@ -33,7 +33,7 @@ import {
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
   serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, serveGitStats, serveGitFetch, serveNotifyEvent, serveNotifyTest,
-  serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates,
+  serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates, serveUsageHistory,
   serveAccount
 } from './api.js';
 import { startGitFetchTimer } from './lib/git-fetch.js';
@@ -229,6 +229,10 @@ export function createRequestListener(config: Config): http.RequestListener {
     // that rate has drifted. Read-only, unpolled, empty-honest.
     if (u.pathname === '/api/usage/rates') {
       return void serveUsageRates(res);
+    }
+    // Recorded 5h and weekly utilization over the last N days, with recording gaps. Read-only, unpolled, served with recording off too.
+    if (u.pathname === '/api/usage/history') {
+      return void serveUsageHistory(res, u.searchParams);
     }
     // The other write endpoints in the app, beside `/api/git-fetch` above (see docs/subsystems/remote-answer.md).
     // `wait` holds its response open for minutes — that is by design.

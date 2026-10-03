@@ -580,6 +580,28 @@ export function readRecentSamples(dir?: string, maxBytes: number = TAIL_BYTES): 
 }
 
 /**
+ * Every parseable sample with `t >= sinceMs`, oldest first — the history view's read.
+ *
+ * Grows a tail read rather than reading the whole file: a 90-day view is about 1.6 MB at this machine's density (18 KB/day, measured 2026-10-01), and
+ * the doubling stops as soon as the oldest sample read predates `sinceMs` or the read covers the file. {@link MAX_HISTORY_BYTES} bounds the worst case.
+ */
+export function readSamplesSince(sinceMs: number, dir?: string): UsageSample[] {
+  let size: number;
+  try {
+    size = fs.statSync(historyPath(dir)).size;
+  } catch {
+    return [];
+  }
+  let bytes = TAIL_BYTES;
+  let samples = readRecentSamples(dir, bytes);
+  while (bytes < size && bytes < MAX_HISTORY_BYTES && (samples.length === 0 || samples[0].t >= sinceMs)) {
+    bytes = Math.min(bytes * 2, MAX_HISTORY_BYTES);
+    samples = readRecentSamples(dir, bytes);
+  }
+  return samples.filter(sample => sample.t >= sinceMs);
+}
+
+/**
  * Trim the log to its newest half once it passes `maxBytes`.
  *
  * The learned profile lives in its own file, so throwing away old raw samples

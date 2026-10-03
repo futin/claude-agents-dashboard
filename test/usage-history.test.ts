@@ -16,6 +16,7 @@ import {
   shouldWrite,
   appendSample,
   readRecentSamples,
+  readSamplesSince,
   rotateIfNeeded,
   loadProfileState,
   saveProfileState,
@@ -724,6 +725,20 @@ export function run(): number {
     const lines = fs.readFileSync(path.join(dir, HISTORY_FILE), 'utf8').trim().split('\n');
     assert.strictEqual(lines.length, 1, 'the unchanged sample must not be appended');
     assert.strictEqual(observedActiveMs(MON_09, MON_09 + MIN), 0, 'idle, but observed');
+  })) p++; else f++;
+
+  if (test('readSamplesSince: grows the tail read past 256 KB, filters to t >= sinceMs', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'since-'));
+    const pad = 'x'.repeat(100);
+    const lines: string[] = [];
+    for (let i = 0; i < 2000; i++) lines.push(JSON.stringify({ t: i * MIN, utilization: 1, resetsAt: R1, pad }));
+    fs.writeFileSync(path.join(dir, HISTORY_FILE), lines.join('\n') + '\n', 'utf8');
+    assert.ok(fs.statSync(path.join(dir, HISTORY_FILE)).size > 262_144, 'the fixture must exceed one tail read');
+    const all = readSamplesSince(0, dir);
+    assert.strictEqual(all.length, 2000);
+    assert.strictEqual(all[0].t, 0);
+    assert.strictEqual(readSamplesSince(1_990 * MIN, dir).length, 10);
+    assert.deepStrictEqual(readSamplesSince(0, fs.mkdtempSync(path.join(tmp, 'since-empty-'))), []);
   })) p++; else f++;
 
   resetRecorder();
