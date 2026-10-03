@@ -465,6 +465,55 @@ export interface ModelRateRow {
   daily: ModelDayRate[];
 }
 
+/** One drawn reading of a usage window: ms epoch and utilization percent. */
+export interface UsageHistoryPoint {
+  t: number;
+  pct: number;
+}
+
+/**
+ * One 5-hour or weekly window as it was recorded. Identity is the observed `resetsAt` only — never an assumed 5-hour or 7-day length.
+ *
+ * `segments` split wherever the series went silent for longer than the server's gap threshold, so the client never bridges an unrecorded stretch.
+ */
+export interface UsageHistoryWindow {
+  /** The window's reset stamp, from its first sample; null when the endpoint reported the window unscoped. */
+  resetsAt: string | null;
+  firstT: number;
+  lastT: number;
+  /** Highest in-range utilization, taken before downsampling — so a thinned line never hides a peak from this figure. */
+  peakPct: number;
+  segments: UsageHistoryPoint[][];
+}
+
+/** A span inside the requested range with no sample at all: the server down, the token expired, or recording switched off. */
+export interface UsageHistoryGap {
+  fromT: number;
+  toT: number;
+}
+
+/**
+ * `GET /api/usage/history?days=N` — read-only, unpolled, served whenever the log has data.
+ *
+ * Serves downsampled utilization only: never file paths, never token counts. It is a separate endpoint precisely so that `UsageProfileResponse`'s
+ * "never includes raw samples" stays true. Times are ms epoch rather than the ISO strings used elsewhere in this file, because a body carries
+ * thousands of points and ms epoch is the log's own unit.
+ */
+export interface UsageHistoryResponse {
+  /** The recording setting. False with data means the history stops where recording was switched off. */
+  recording: boolean;
+  days: number;
+  sinceT: number;
+  nowT: number;
+  /** Downsampling bucket width; each bucket keeps its peak. */
+  bucketMs: number;
+  fiveHour: UsageHistoryWindow[];
+  weekly: UsageHistoryWindow[];
+  gaps: UsageHistoryGap[];
+  /** Present only when the read failed; the series are then empty and one gap covers the range. */
+  error?: true;
+}
+
 /**
  * `GET /api/usage/rates` — read-only, unpolled, and honest when empty.
  *

@@ -35,7 +35,7 @@ export const THEMES = [
 export type ThemeId = (typeof THEMES)[number]['id'];
 export type Density = 'comfortable' | 'compact';
 /** Which sub-view the Usage section opens on. */
-export type UsageTab = 'forecast' | 'rates';
+export type UsageTab = 'forecast' | 'rates' | 'history';
 /**
  * Where a Settings page's values are stored: `local` is this browser's storage,
  * `shared` is the server's file. The scope of the *settings on the page*, not
@@ -232,7 +232,7 @@ const THEME_IDS = THEMES.map(t => t.id);
 const LANDINGS: Landing[] = LANDING_OPTIONS.map(o => o.value);
 const SPAWN_MODELS: SpawnDefaultModel[] = ['', ...MODELS];
 const SPAWN_EFFORTS: SpawnDefaultEffort[] = ['', ...EFFORTS];
-const USAGE_TABS: UsageTab[] = ['forecast', 'rates'];
+const USAGE_TABS: UsageTab[] = ['forecast', 'rates', 'history'];
 const SETTINGS_TABS: SettingsTab[] = ['local', 'shared'];
 const MANAGEMENT_TABS: ManagementTab[] = ['git', 'pinned'];
 /** Derived from the picker, so the offered set and the accepted set cannot drift. */

@@ -340,7 +340,8 @@ Consequence for the client: `ratePerHour × 24` overstates the daily figure by
 `GET /api/usage/profile` (read-only; `server/api.ts`'s `shapeUsageProfile` is the pure
 part) returns the 168 cells, the fallback mean, the confidence, and the walk behind the
 current projection — **never raw samples and never file paths**, the same posture as
-`NTFY_TOPIC` never leaving the server. It re-runs the *same* `walkForward` that produced
+`NTFY_TOPIC` never leaving the server. That still holds after the history view landed: the recorded series
+has its own endpoint, `GET /api/usage/history`, so this body never grows samples. It re-runs the *same* `walkForward` that produced
 the projection, so the inspector cannot drift from what it discloses.
 Since the re-skin pass it also carries the window's **own** two facts — `utilizationPct` and
 `resetsAt` — and the walk's `dutyCycle`. All three were already in scope at the call site
@@ -511,8 +512,8 @@ Two things the grid alone cannot do:
 
 It is a section of its own rather than a block inside Analytics: that tab is about
 *sessions* (the `/kaizen` report cards) and this is about the *account* — they share no
-data, no endpoint and no cadence. The obvious next tenant is idea-5's
-utilization-over-time charts, which read the same log this profile is learned from.
+data, no endpoint and no cadence. Its third tenant is the utilization-over-time history
+(§The history view below), which reads the same log this profile is learned from.
 
 Confidence is `none` (no trusted buckets — the projection is the flat one) / `thin` /
 `ok` (≥ 120 of 168 trusted, roughly two to three weeks of ordinary use). Below `ok` the
@@ -522,6 +523,34 @@ single tick would claim precision the data does not have.
 ⚠️ **The forecast's accuracy is unproven.** Every pure function is tested and the
 plumbing is verified, but the profile needs roughly two to three weeks of real samples
 before `confidence` leaves `thin`, and no test substitutes for that.
+
+### The history view
+
+Usage → **History** (`client/src/components/usage/UsageHistory.tsx`) answers "how full was the window last Tuesday": the 5-hour window's sawtooth and the
+weekly window over the last 24h / 7d / 30d / 90d (component state, default 7d, not persisted), read back from `.usage-history.jsonl`.
+
+- **Endpoint.** `GET /api/usage/history?days=N` (`server/api.ts` `serveUsageHistory`; read-only, unpolled, no token). `days` is accepted only as digits, clamped
+  to `[1, 365]`, and is 7 otherwise. The body is `UsageHistoryResponse` in `shared/types.ts`: downsampled utilization with ms-epoch times, never paths or token
+  counts. A throw still answers 200 with empty series, one gap over the range and `error: true` — the same fail-open posture as `/api/usage/rates`.
+- **Served with recording off.** Switching `recordUsageHistory` off stops new samples; it does not hide the past. The body carries `recording`, and the view
+  says "Recording is off — the history ends at …" rather than going blank. (`/api/usage/rates` does go empty with recording off, because its fit also needs the
+  ledger; this view needs only the log.)
+- **Reading.** `readSamplesSince` in `lib/usage-history.ts` grows a tail read from 256 KB, doubling until the oldest sample predates the range or the read covers
+  the file, bounded by the 32 MB cap. Measured on this machine 2026-10-01: about 18 KB/day, so a 90-day view reads roughly 1.6 MB.
+- **Series** (`lib/usage-history-series.ts`, pure). The 5-hour series is every sample; the weekly series is only the samples that carry `week` — absent is not 0%.
+  A window's identity is its **observed `resetsAt`** only, split wherever `classifyInterval` says `reset` (a stamp change beyond `sameWindow`'s 2-minute slack, or
+  a drop of more than 0.5 points). No 5-hour or 7-day length is assumed, because weekly resets have not always been 7 days apart.
+- **Gaps, and why 20 minutes.** `GAP_MS` is the 15-minute heartbeat plus 5 minutes of slack: a live recorder writes at least every 15 minutes even when nothing
+  changes, so a longer silence means nothing was recording — server down, token expired, or recording off. Inside a window a longer silence starts a new
+  segment, so the line is never bridged; recording gaps (leading, interior, trailing) are computed once, from the 5-hour list, because every line carries a 5-hour
+  reading. They are drawn as a hatched "not recorded" band across both panels.
+- **Step-after rendering.** Each reading is held flat until the next sample (`stepPath` in `client/src/lib/usageHistory.ts`). The log is write-on-change, so
+  between two lines the value stayed at the earlier reading; linear interpolation across a quiet heartbeat stretch would draw a ramp that never happened.
+- **Downsampling.** `bucketMs = max(1 min, ceil(range / 1440 points) rounded up to whole minutes)`. Each segment keeps its first and last sample plus, per bucket,
+  the highest reading (ties to the latest), so a thinned line never loses a peak. `peakPct` is taken before downsampling.
+
+The page is a range switch, a figure strip (Recorded %, 5h windows, Hit 100%, Weekly peak — `—`, never 0, with no weekly reading), the two-panel SVG chart drawn
+at the measured pixel width so strokes stay crisp at 390 px, and a weekly-windows table newest first. There is no hover tooltip yet.
 
 ## Token value per model (the exchange rate, and its drift)
 
@@ -1342,8 +1371,8 @@ absent. `coverage` is computed over `[now − BASELINE_MS, ∞)`, deliberately t
 **same horizon `externalSharePct` uses**: two disclosure figures on one card
 that quietly spanned different windows would be a defect, not a nuance.
 
-The **Usage** section is now two sub-tabs — `Forecast | Token value` — through
-the Settings page's `.set-seg` control, persisted per device as `usageTab`.
+The **Usage** section is now three sub-tabs — `Forecast | Token value | History` — chosen from
+the Usage tree in the side rail, persisted per device as `usageTab`.
 Each tab runs to several sheets on its own, so stacking would bury whichever one you did
 not come for; only the active sub-view mounts, which also means each one's fetch-per-mount
 hook fires when its tab is opened rather than on every visit to the section.

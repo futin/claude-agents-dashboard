@@ -76,6 +76,7 @@ export function run(): number {
   if (test('the Usage sub-tab defaults to the forecast and rejects anything else', () => {
     assert.strictEqual(DEFAULT_SETTINGS.usageTab, 'forecast');
     assert.strictEqual(clampSettings({ usageTab: 'rates' }).usageTab, 'rates');
+    assert.strictEqual(clampSettings({ usageTab: 'history' }).usageTab, 'history');
     assert.strictEqual(clampSettings({ usageTab: 'nonsense' }).usageTab, 'forecast');
     assert.strictEqual(clampSettings({ usageTab: 7 }).usageTab, 'forecast');
   })) p++; else f++;

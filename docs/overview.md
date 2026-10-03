@@ -98,6 +98,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/account` | who the CLI is signed in as (`~/.claude.json` → `oauthAccount`, as display strings) + the two rate windows — the header chip's own 30s poll, so it does not ride the 3s session scan |
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
 | `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, one cell per UTC day of the horizon, plus the coverage disclosure and the off-peak boost verdict (`lib/usage-boost.ts`) |
+| `GET /api/usage/history?days=N` | recorded 5h and weekly utilization over the last N days (default 7, clamped 1–365): windows by observed `resetsAt`, gap-split step segments downsampled to ~1440 points, and the recording gaps; served with recording off too (`lib/usage-history-series.ts`) |
 | anything else | static files from `client/dist` (production only) |
 
 ⚠️ The static catch-all resolves through `resolveStaticPath` in `index.ts`, which confines
@@ -171,6 +172,8 @@ server/
   lib/usage-history.ts  persisted samples → the learned 168-bucket duty-cycle profile;
                   each sample also carries an optional `week` reading (weekly
                   utilization + resetsAt) that profile learning never reads
+  lib/usage-history-series.ts  pure: history samples → the History tab's 5h and weekly
+                  windows, gap-split segments, recording gaps and downsampling
   lib/usage-ledger.ts  per-minute per-model token ledger: reads new transcript bytes,
                   appends one line a tick (`.usage-ledger.jsonl`) — tokens and
                   request counts per model, counts absent on pre-upgrade lines
@@ -240,14 +243,14 @@ client/src/
                   (band, switcher, poll owner), GitClockChip (the sync/fetch clock chip and
                   its popover), GitCards / GitTable / GitTriage (the three
                   shapes) and GitParts (chips, divergence bar, branch list they share)), analytics/,
-                  usage/ (UsageView + the two tabs, Sheet — the band / figure
+                  usage/ (UsageView + the three tabs, Sheet — the band / figure
                   strip / sheet / definitions
-                  chrome both tabs draw, and
+                  chrome the tabs draw, and
                   ReadingAids — the ⓘ button they both render), settings/
   hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
                   useConfigs, useConfigsScope (the scope + the one index
                   fetch, shared by the rail's tree and the page), useAnalytics,
-                  useUsageProfile, useUsageRates, usePendingQuestion, usePendingPlan,
+                  useUsageProfile, useUsageRates, useUsageHistory, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins,
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
                   Sync button: runs per device, a sessions poll only while one is live),
@@ -260,7 +263,7 @@ client/src/
   lib/            filterSort, analyticsFilterSort, chatFilter, markdown, configsEntries,
                   format, settings,
                   sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
-                  usageRatesFormat, panelCollapse, surface, walkChart (the headroom
+                  usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
                   webNotify, backClose, stopControl, triage (the board/triage piles),
                   stickyStrip, agentLabel (a subagent's type only when informative),

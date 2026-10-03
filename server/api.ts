@@ -15,7 +15,8 @@ import { readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
 import { readAccountProfile } from './lib/account.js';
-import { deriveProfile, profileSnapshot, RATES_HISTORY_BYTES, readRecentSamples } from './lib/usage-history.js';
+import { deriveProfile, profileSnapshot, RATES_HISTORY_BYTES, readRecentSamples, readSamplesSince } from './lib/usage-history.js';
+import { buildUsageHistory } from './lib/usage-history-series.js';
 import type { ProfileState, UsageSample } from './lib/usage-history.js';
 import { ledgerStartMs, readLedgerSince } from './lib/usage-ledger.js';
 import type { LedgerLine } from './lib/usage-ledger.js';
@@ -65,7 +66,7 @@ import type {
   AnalyticsResponse, ManagementIndex, MessageWaitResult, PinsResponse, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
   ModelRateRow, RateLimit, SpawnResponse, UsageCoverage, UsageProfileCell,
-  UsageProfileResponse, UsageRatesResponse, WaitResult
+  UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -957,6 +958,36 @@ export function serveUsageRates(res: ServerResponse, dir?: string): void {
     }));
   } catch {
     sendJson(res, 200, emptyRates(now, false, true));
+  }
+}
+
+/** `days` as `GET /api/usage/history` accepts it: digits only, clamped to [1, 365]; missing or anything else is 7. */
+function historyDays(raw: string | null): number {
+  if (raw === null || !/^\d+$/.test(raw)) return 7;
+  return Math.min(365, Math.max(1, Number(raw)));
+}
+
+/**
+ * `GET /api/usage/history?days=N` — recorded 5-hour and weekly utilization over the last N days, downsampled, with recording gaps.
+ *
+ * Served whenever the log has data, recording on or off: switching recording off stops new samples, it does not hide the past, and `recording`
+ * tells the view why the line stops. Fails open to a 200 with empty series and one gap over the range — the same posture as `serveUsageRates`.
+ * `dir` and `nowMs` are injectable for tests.
+ */
+export function serveUsageHistory(res: ServerResponse, query: URLSearchParams, dir?: string, nowMs: number = Date.now()): void {
+  const days = historyDays(query.get('days'));
+  const sinceMs = nowMs - days * 86_400_000;
+  const head = { days, sinceT: sinceMs, nowT: nowMs };
+  try {
+    const recording = getSettings().recordUsageHistory;
+    const series = buildUsageHistory(readSamplesSince(sinceMs, dir), { sinceMs, nowMs });
+    const body: UsageHistoryResponse = { recording, ...head, ...series };
+    sendJson(res, 200, body);
+  } catch {
+    const body: UsageHistoryResponse = {
+      recording: false, ...head, bucketMs: 60_000, fiveHour: [], weekly: [], gaps: [{ fromT: sinceMs, toT: nowMs }], error: true
+    };
+    sendJson(res, 200, body);
   }
 }
 

@@ -13,7 +13,7 @@ Which page is showing is
 picked from the tree under Settings in the nav — the rail on desktop, the menu on the
 phone, where every tree stands open (`.rail-sub`). The page band used to carry a
 phone-only pill switch of its own; it is gone, so `settingsTab` has exactly one control
-at any width, as Usage's Forecast / Token value does. Each page is a band
+at any width, as Usage's Forecast / Token value / History does. Each page is a band
 (title, a scope pill, one line) over sub-category cards: Local has Display, Live data,
 New sessions, Git Sync, Notify this browser, Connection and Reset; Shared has Push notifications,
 Remote answers and Usage forecast.
@@ -31,7 +31,7 @@ notifications, the launch panel's default model and default effort (`''` = send 
 the `claude` CLI choose; either way a launch can still override it), the Git Sync button's own
 model and effort (`syncModel` / `syncEffort`, default `''` each; the button never asks, so these are its whole say — its permission mode is the host's
 `SYNC_PERMISSION_MODE` and its remote control follows Remote answers, both shown read-only in the same card), which Usage sub-tab
-opens (`forecast` | `rates`), which Management sub-view is showing (`managementTab`: `git` |
+opens (`forecast` | `rates` | `history`), which Management sub-view is showing (`managementTab`: `git` |
 `pinned`, default `git`), and which Settings page is showing (`settingsTab`: `local` |
 `shared`). A `settingsTab: 'pinned'` stored by an older release fails the validator and falls back to
 `local`. The answer token is per browser too (`dashboard.answerToken`, its own key), which
