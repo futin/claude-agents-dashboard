@@ -127,6 +127,18 @@ export function run(): number {
     assert.strictEqual(chatTab(sess({ remoteQuestion: true, permissionWait: true })).label, 'Answer');
   })) p++; else f++;
 
+  if (test('chatTab: walks the hold ladder question → plan → reply → permission', () => {
+    const all = { remoteQuestion: true, remotePlan: true, remoteReply: true, permissionWait: true };
+    assert.strictEqual(chatTab(sess(all)).label, 'Answer');
+    assert.strictEqual(chatTab(sess({ ...all, remoteQuestion: false })).label, 'Plan?');
+    const reply = chatTab(sess({ ...all, remoteQuestion: false, remotePlan: false }));
+    assert.strictEqual(reply.label, 'Reply?');
+    assert.strictEqual(reply.tone, 'answer');
+    const permission = chatTab(sess({ ...all, remoteQuestion: false, remotePlan: false, remoteReply: false }));
+    assert.strictEqual(permission.label, 'Allow?');
+    assert.strictEqual(permission.tone, 'permission');
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }
