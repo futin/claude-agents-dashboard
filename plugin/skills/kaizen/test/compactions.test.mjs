@@ -1,12 +1,17 @@
 // Tests for kaizen's compaction stats: every compact_boundary in the main chain becomes one row (pre/post context, dropped, turns after), a boundary
 // replayed with the same timestamp is counted once, and the unbounded-window counterfactual is Σ dropped × turns after. Each world is a synthetic
 // transcript written to a temp file, since analyzeSession reads a path.
-import { test } from 'node:test'
+import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { analyzeSession } from '../kaizen.mjs'
+
+// Every fixture dir, removed once the file's tests finish — left behind they piled up in /tmp until it ran out of inodes (backlog #177).
+const dirs = []
+const fixtureDir = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'kaizen-')); dirs.push(d); return d }
+after(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }) })
 
 let seq = 0
 const ts = (n) => new Date(Date.UTC(2026, 8, 25, 10, 0, n)).toISOString()
@@ -24,7 +29,7 @@ const summary = (n, text) => ({ type: 'user', isSidechain: false, isCompactSumma
 const said = (n, text) => ({ type: 'user', isSidechain: false, timestamp: ts(n), message: { role: 'user', content: text } })
 
 function analyze(records) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaizen-'))
+  const dir = fixtureDir()
   const file = path.join(dir, 'x.jsonl')
   fs.writeFileSync(file, records.map(r => JSON.stringify(r)).join('\n') + '\n')
   return analyzeSession(file, 'x')
@@ -103,7 +108,7 @@ const result = (n, id, content, extra = {}) => ({
 const subUsage = { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 400, cache_read_input_tokens: 1000 }
 
 function analyzeWithSubagent(records) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaizen-'))
+  const dir = fixtureDir()
   const file = path.join(dir, 'x.jsonl')
   fs.writeFileSync(file, records.map(r => JSON.stringify(r)).join('\n') + '\n')
   fs.mkdirSync(path.join(dir, 'x', 'subagents'), { recursive: true })

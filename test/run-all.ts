@@ -1,4 +1,6 @@
 /** Run every test module and exit nonzero if any fail. */
+// Must stay the first import: it repoints os.tmpdir() before any test module evaluates, and removes every fixture at exit (tmp-root.ts).
+import './tmp-root.js';
 import { run as runTranscript } from './transcript.test.js';
 import { run as runTitleCache } from './title-cache.test.js';
 import { run as runCompactWindow } from './compact-window.test.js';
@@ -106,6 +108,7 @@ import { run as runChatPinnedPad } from './chat-pinned-pad.test.js';
 import { run as runKaizenTrend } from './kaizen-trend.test.js';
 import { run as runOutbound } from './outbound.test.js';
 import { run as runPluginManifest } from './plugin-manifest.test.js';
+import { run as runTmpRoot } from './tmp-root.test.js';
 import { run as runSyncPlugin } from './sync-plugin.test.js';
 
 let failed = 0;
@@ -217,6 +220,7 @@ failed += runKaizenTrend();
 failed += runOutbound();
 failed += runPluginManifest();
 failed += runSyncPlugin();
+failed += runTmpRoot();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);
