@@ -1,0 +1,1208 @@
+[
+  {
+    "view": "analytics",
+    "text": "○ open",
+    "fg": "#a0a0a0",
+    "bg": "#f2f2f1",
+    "ratio": 2.33,
+    "required": 4.5,
+    "selector": ".act-line > .an-status.open"
+  },
+  {
+    "view": "analytics",
+    "text": "○ open",
+    "fg": "#a0a0a0",
+    "bg": "#f2f2f1",
+    "ratio": 2.33,
+    "required": 4.5,
+    "selector": ".ins-meta > .an-status.open"
+  },
+  {
+    "view": "analytics",
+    "text": "✓ actioned",
+    "fg": "#5fa92c",
+    "bg": "#e2f0d9",
+    "ratio": 2.45,
+    "required": 4.5,
+    "selector": ".actioned.an-status"
+  },
+  {
+    "view": "analytics",
+    "text": "0d9c8b7a",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".an-id"
+  },
+  {
+    "view": "analytics",
+    "text": "119.6k in · 19.3k out · 62×",
+    "fg": "#a0a0a0",
+    "bg": "#f2f2f1",
+    "ratio": 2.33,
+    "required": 4.5,
+    "selector": ".an-col:nth-child(1) > .an-line:nth-child(2) > .an-line-meta"
+  },
+  {
+    "view": "analytics",
+    "text": "12.7k in · 13.3k out · 43×",
+    "fg": "#a0a0a0",
+    "bg": "#f2f2f1",
+    "ratio": 2.33,
+    "required": 4.5,
+    "selector": ".an-line:nth-child(4) > .an-line-meta"
+  },
+  {
+    "view": "analytics",
+    "text": "2026-09-24",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".lrow[role=\"button\"]:nth-child(4) > .act-line > .ago"
+  },
+  {
+    "view": "analytics",
+    "text": "2026-09-27",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".lrow[role=\"button\"]:nth-child(3) > .act-line > .ago"
+  },
+  {
+    "view": "analytics",
+    "text": "2026-09-29",
+    "fg": "#a0a0a0",
+    "bg": "#f2f2f1",
+    "ratio": 2.33,
+    "required": 4.5,
+    "selector": ".selected > .act-line > .ago"
+  },
+  {
+    "view": "analytics",
+    "text": "3 of 3 sessions",
+    "fg": "#a0a0a0",
+    "bg": "#f4f4f3",
+    "ratio": 2.37,
+    "required": 4.5,
+    "selector": ".an-hint"
+  },
+  {
+    "view": "analytics",
+    "text": "44.0k · 17⚒",
+    "fg": "#a0a0a0",
+    "bg": "#f2f2f1",
+    "ratio": 2.33,
+    "required": 4.5,
+    "selector": ".an-col:nth-child(2) > .an-line > .an-line-meta"
+  },
+  {
+    "view": "analytics",
+    "text": "487.8k",
+    "fg": "#5fa92c",
+    "bg": "#ffffff",
+    "ratio": 2.91,
+    "required": 3,
+    "selector": ".lead > .an-metric-v"
+  },
+  {
+    "view": "analytics",
+    "text": "53.3k in · 24.6k out · 79× · 5 err",
+    "fg": "#a0a0a0",
+    "bg": "#f2f2f1",
+    "ratio": 2.33,
+    "required": 4.5,
+    "selector": ".an-line:nth-child(3) > .an-line-meta"
+  },
+  {
+    "view": "analytics",
+    "text": "5H",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".m:nth-child(1) > .mtop > span"
+  },
+  {
+    "view": "analytics",
+    "text": "approx tokens · in = injected into context, out = assistant output",
+    "fg": "#a0a0a0",
+    "bg": "#f2f2f1",
+    "ratio": 2.33,
+    "required": 4.5,
+    "selector": ".an-approx"
+  },
+  {
+    "view": "analytics",
+    "text": "billable",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".lead > .an-metric-l"
+  },
+  {
+    "view": "analytics",
+    "text": "claude-opus-4-6",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".model"
+  },
+  {
+    "view": "analytics",
+    "text": "CLAUDE",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".rail-brand > span:nth-child(2) > .rail-kicker"
+  },
+  {
+    "view": "analytics",
+    "text": "context",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".an-metric:nth-child(2) > .an-metric-l"
+  },
+  {
+    "view": "analytics",
+    "text": "errors · 3 retry",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".an-metric:nth-child(5) > .an-metric-l"
+  },
+  {
+    "view": "analytics",
+    "text": "logged 2026-09-29 · 3h",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".an-when"
+  },
+  {
+    "view": "analytics",
+    "text": "RESEARCH & SUGGESTIONS",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".mdetail-label"
+  },
+  {
+    "view": "analytics",
+    "text": "Sort: Recency (desc)",
+    "fg": "#6e6e6e",
+    "bg": "#dcdcda",
+    "ratio": 3.71,
+    "required": 4.5,
+    "selector": ".sortlab"
+  },
+  {
+    "view": "analytics",
+    "text": "subagents · 1",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".an-metric:nth-child(3) > .an-metric-l"
+  },
+  {
+    "view": "analytics",
+    "text": "Tiles",
+    "fg": "#6e6e6e",
+    "bg": "#dcdcda",
+    "ratio": 3.71,
+    "required": 4.5,
+    "selector": "button[role=\"tab\"][type=\"button\"]:nth-child(2)"
+  },
+  {
+    "view": "analytics",
+    "text": "TOP SUBAGENTS",
+    "fg": "#a0a0a0",
+    "bg": "#f2f2f1",
+    "ratio": 2.33,
+    "required": 4.5,
+    "selector": ".an-col:nth-child(2) > .an-col-h"
+  },
+  {
+    "view": "analytics",
+    "text": "TOP TOOLS approx tokens · in = injected into context, out = assistant output",
+    "fg": "#a0a0a0",
+    "bg": "#f2f2f1",
+    "ratio": 2.33,
+    "required": 4.5,
+    "selector": ".an-col:nth-child(1) > .an-col-h"
+  },
+  {
+    "view": "analytics",
+    "text": "turns",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".an-metric:nth-child(4) > .an-metric-l"
+  },
+  {
+    "view": "analytics",
+    "text": "WK",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".m:nth-child(2) > .mtop > span"
+  },
+  {
+    "view": "configs",
+    "text": "· 1",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".msub-h:nth-child(4) > .msub-c"
+  },
+  {
+    "view": "configs",
+    "text": "· 2",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".msub-h:nth-child(1) > .msub-c"
+  },
+  {
+    "view": "configs",
+    "text": "5H",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".m:nth-child(1) > .mtop > span"
+  },
+  {
+    "view": "configs",
+    "text": "CLAUDE",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".rail-brand > span:nth-child(2) > .rail-kicker"
+  },
+  {
+    "view": "configs",
+    "text": "TYPE",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".mgmt-kick"
+  },
+  {
+    "view": "configs",
+    "text": "user",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".mitem:nth-child(2) > .mitem-label > .mitem-top > .msrc"
+  },
+  {
+    "view": "configs",
+    "text": "user",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".mitem:nth-child(3) > .mitem-label > .mitem-top > .msrc"
+  },
+  {
+    "view": "configs",
+    "text": "WK",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".m:nth-child(2) > .mtop > span"
+  },
+  {
+    "view": "management",
+    "text": "11 merged branches hidden",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "section:nth-child(1) > .git-branches > .git-note"
+  },
+  {
+    "view": "management",
+    "text": "14h",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".git-brow:nth-child(3) > .git-age"
+  },
+  {
+    "view": "management",
+    "text": "20m",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "section:nth-child(1) > .git-branches > .git-brow:nth-child(1) > .git-age"
+  },
+  {
+    "view": "management",
+    "text": "20m",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "section:nth-child(2) > .git-branches > .git-brow:nth-child(1) > .git-age"
+  },
+  {
+    "view": "management",
+    "text": "21h",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".git-brow:nth-child(4) > .git-age"
+  },
+  {
+    "view": "management",
+    "text": "3 uncommitted",
+    "fg": "#c4761f",
+    "bg": "#f7ece0",
+    "ratio": 3.02,
+    "required": 4.5,
+    "selector": ".amber"
+  },
+  {
+    "view": "management",
+    "text": "5H",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".m:nth-child(1) > .mtop > span"
+  },
+  {
+    "view": "management",
+    "text": "6 merged branches hidden",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "section:nth-child(2) > .git-branches > .git-note"
+  },
+  {
+    "view": "management",
+    "text": "7h",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "section:nth-child(1) > .git-branches > .git-brow:nth-child(2) > .git-age"
+  },
+  {
+    "view": "management",
+    "text": "7h",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "section:nth-child(2) > .git-branches > .git-brow:nth-child(2) > .git-age"
+  },
+  {
+    "view": "management",
+    "text": "CLAUDE",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".rail-brand > span:nth-child(2) > .rail-kicker"
+  },
+  {
+    "view": "management",
+    "text": "clean",
+    "fg": "#5fa92c",
+    "bg": "#e5f1dd",
+    "ratio": 2.49,
+    "required": 4.5,
+    "selector": ".green"
+  },
+  {
+    "view": "management",
+    "text": "FETCH",
+    "fg": "#a0a0a0",
+    "bg": "#f2f2f1",
+    "ratio": 2.33,
+    "required": 4.5,
+    "selector": ".git-meter[data-tone=\"green\"]:nth-child(2) > .git-meter-head > .git-meter-label"
+  },
+  {
+    "view": "management",
+    "text": "fetched 4m ago",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "section:nth-child(1) > .git-facts > .git-fetched"
+  },
+  {
+    "view": "management",
+    "text": "fetched 4m ago",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "section:nth-child(2) > .git-facts > .git-fetched"
+  },
+  {
+    "view": "management",
+    "text": "main 3 behind origin",
+    "fg": "#9a8712",
+    "bg": "#ebe7d0",
+    "ratio": 2.88,
+    "required": 4.5,
+    "selector": ".mustard"
+  },
+  {
+    "view": "management",
+    "text": "SYNC",
+    "fg": "#a0a0a0",
+    "bg": "#f2f2f1",
+    "ratio": 2.33,
+    "required": 4.5,
+    "selector": ".git-meter[data-tone=\"green\"]:nth-child(1) > .git-meter-head > .git-meter-label"
+  },
+  {
+    "view": "management",
+    "text": "Table",
+    "fg": "#6e6e6e",
+    "bg": "#dcdcda",
+    "ratio": 3.71,
+    "required": 4.5,
+    "selector": "button[role=\"tab\"][type=\"button\"]:nth-child(2)"
+  },
+  {
+    "view": "management",
+    "text": "Triage",
+    "fg": "#6e6e6e",
+    "bg": "#dcdcda",
+    "ratio": 3.71,
+    "required": 4.5,
+    "selector": "button[role=\"tab\"][type=\"button\"]:nth-child(3)"
+  },
+  {
+    "view": "management",
+    "text": "WK",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".m:nth-child(2) > .mtop > span"
+  },
+  {
+    "view": "management",
+    "text": "worktree",
+    "fg": "#3f8f14",
+    "bg": "#ffffff",
+    "ratio": 4.07,
+    "required": 4.5,
+    "selector": "section:nth-child(1) > .git-branches > .git-brow:nth-child(2) > .git-bname > .wt.git-chip"
+  },
+  {
+    "view": "management",
+    "text": "worktree",
+    "fg": "#3f8f14",
+    "bg": "#ffffff",
+    "ratio": 4.07,
+    "required": 4.5,
+    "selector": "section:nth-child(2) > .git-branches > .git-brow:nth-child(2) > .git-bname > .wt.git-chip"
+  },
+  {
+    "view": "sessions",
+    "text": "2m ago",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".idle.bcard > .bmain[role=\"button\"] > .act-line > .ago"
+  },
+  {
+    "view": "sessions",
+    "text": "3m ago",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".incomplete.bcard > .bmain[role=\"button\"] > .act-line > .ago"
+  },
+  {
+    "view": "sessions",
+    "text": "45s ago",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".question.bcard > .bmain[role=\"button\"] > .act-line > .ago"
+  },
+  {
+    "view": "sessions",
+    "text": "4s ago",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".working.bcard > .bmain[role=\"button\"] > .act-line > .ago"
+  },
+  {
+    "view": "sessions",
+    "text": "5H",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".m:nth-child(1) > .mtop > span"
+  },
+  {
+    "view": "sessions",
+    "text": "71%",
+    "fg": "#c4761f",
+    "bg": "#ffffff",
+    "ratio": 3.52,
+    "required": 4.5,
+    "selector": ".working.bcard > .bmain[role=\"button\"] > .bmeta > .pct.warn"
+  },
+  {
+    "view": "sessions",
+    "text": "88%",
+    "fg": "#c4761f",
+    "bg": "#ffffff",
+    "ratio": 3.52,
+    "required": 4.5,
+    "selector": ".incomplete.bcard > .bmain[role=\"button\"] > .bmeta > .pct.warn"
+  },
+  {
+    "view": "sessions",
+    "text": "claude-haiku-4-5-20251001",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".incomplete.bcard > .bmain[role=\"button\"] > .r1 > .model"
+  },
+  {
+    "view": "sessions",
+    "text": "claude-opus-4-6",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".question.bcard > .bmain[role=\"button\"] > .r1 > .model"
+  },
+  {
+    "view": "sessions",
+    "text": "claude-opus-4-6",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".working.bcard > .bmain[role=\"button\"] > .r1 > .model"
+  },
+  {
+    "view": "sessions",
+    "text": "claude-sonnet-4-5-20250929",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".idle.bcard > .bmain[role=\"button\"] > .r1 > .model"
+  },
+  {
+    "view": "sessions",
+    "text": "CLAUDE",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".rail-brand > span:nth-child(2) > .rail-kicker"
+  },
+  {
+    "view": "sessions",
+    "text": "kaizen",
+    "fg": "#5fa92c",
+    "bg": "#e2f0d9",
+    "ratio": 2.45,
+    "required": 4.5,
+    "selector": ".kaizen"
+  },
+  {
+    "view": "sessions",
+    "text": "List",
+    "fg": "#6e6e6e",
+    "bg": "#dcdcda",
+    "ratio": 3.71,
+    "required": 4.5,
+    "selector": "button[role=\"tab\"][type=\"button\"]:nth-child(2)"
+  },
+  {
+    "view": "sessions",
+    "text": "live · refreshing every 3s",
+    "fg": "#a0a0a0",
+    "bg": "#f4f4f3",
+    "ratio": 2.37,
+    "required": 4.5,
+    "selector": ".foot"
+  },
+  {
+    "view": "sessions",
+    "text": "no tool activity",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".none"
+  },
+  {
+    "view": "sessions",
+    "text": "Sort: Recency (desc)",
+    "fg": "#6e6e6e",
+    "bg": "#dcdcda",
+    "ratio": 3.71,
+    "required": 4.5,
+    "selector": ".sortlab"
+  },
+  {
+    "view": "sessions",
+    "text": "Split",
+    "fg": "#6e6e6e",
+    "bg": "#dcdcda",
+    "ratio": 3.71,
+    "required": 4.5,
+    "selector": "button[role=\"tab\"][type=\"button\"]:nth-child(3)"
+  },
+  {
+    "view": "sessions",
+    "text": "Tiles",
+    "fg": "#6e6e6e",
+    "bg": "#dcdcda",
+    "ratio": 3.71,
+    "required": 4.5,
+    "selector": "button[role=\"tab\"][type=\"button\"]:nth-child(4)"
+  },
+  {
+    "view": "sessions",
+    "text": "Triage",
+    "fg": "#6e6e6e",
+    "bg": "#dcdcda",
+    "ratio": 3.71,
+    "required": 4.5,
+    "selector": "button[role=\"tab\"][type=\"button\"]:nth-child(5)"
+  },
+  {
+    "view": "sessions",
+    "text": "waiting",
+    "fg": "#c4761f",
+    "bg": "#f7ece0",
+    "ratio": 3.02,
+    "required": 4.5,
+    "selector": ".question.spill"
+  },
+  {
+    "view": "sessions",
+    "text": "WK",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".m:nth-child(2) > .mtop > span"
+  },
+  {
+    "view": "sessions",
+    "text": "working",
+    "fg": "#5fa92c",
+    "bg": "#e2f0d9",
+    "ratio": 2.45,
+    "required": 4.5,
+    "selector": ".working.spill"
+  },
+  {
+    "view": "settings",
+    "text": "110%",
+    "fg": "#6e6e6e",
+    "bg": "#ededec",
+    "ratio": 4.35,
+    "required": 4.5,
+    "selector": ".set-seg[role=\"group\"] > button:nth-child(3)"
+  },
+  {
+    "view": "settings",
+    "text": "120%",
+    "fg": "#6e6e6e",
+    "bg": "#ededec",
+    "ratio": 4.35,
+    "required": 4.5,
+    "selector": ".set-seg[role=\"group\"] > button:nth-child(4)"
+  },
+  {
+    "view": "settings",
+    "text": "5H",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".m:nth-child(1) > .mtop > span"
+  },
+  {
+    "view": "settings",
+    "text": "90%",
+    "fg": "#6e6e6e",
+    "bg": "#ededec",
+    "ratio": 4.35,
+    "required": 4.5,
+    "selector": ".set-row:nth-child(3) > .set-control > .set-seg[role=\"group\"] > button:nth-child(1)"
+  },
+  {
+    "view": "settings",
+    "text": "CLAUDE",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".rail-brand > span:nth-child(2) > .rail-kicker"
+  },
+  {
+    "view": "settings",
+    "text": "Compact",
+    "fg": "#6e6e6e",
+    "bg": "#ededec",
+    "ratio": 4.35,
+    "required": 4.5,
+    "selector": ".set-row:nth-child(2) > .set-control > .set-seg[role=\"group\"] > button:nth-child(2)"
+  },
+  {
+    "view": "settings",
+    "text": "Full",
+    "fg": "#6e6e6e",
+    "bg": "#ededec",
+    "ratio": 4.35,
+    "required": 4.5,
+    "selector": ".set-row:nth-child(7) > .set-control > .set-seg[role=\"group\"] > button:nth-child(2)"
+  },
+  {
+    "view": "settings",
+    "text": "Fullscreen",
+    "fg": "#6e6e6e",
+    "bg": "#ededec",
+    "ratio": 4.35,
+    "required": 4.5,
+    "selector": ".set-row:nth-child(4) > .set-control > .set-seg[role=\"group\"] > button:nth-child(2)"
+  },
+  {
+    "view": "settings",
+    "text": "hours",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".set-row:nth-child(3) > .set-control > .set-field > .set-unit"
+  },
+  {
+    "view": "settings",
+    "text": "min",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".set-row:nth-child(4) > .set-control > .set-field > .set-unit"
+  },
+  {
+    "view": "settings",
+    "text": "On",
+    "fg": "#6e6e6e",
+    "bg": "#ededec",
+    "ratio": 4.35,
+    "required": 4.5,
+    "selector": ".set-row:nth-child(1) > .set-control > .set-seg[role=\"group\"] > button:nth-child(2)"
+  },
+  {
+    "view": "settings",
+    "text": "rows",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".set-row:nth-child(2) > .set-control > .set-field > .set-unit"
+  },
+  {
+    "view": "settings",
+    "text": "WK",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".m:nth-child(2) > .mtop > span"
+  },
+  {
+    "view": "usage",
+    "text": "· now",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".name > .cs"
+  },
+  {
+    "view": "usage",
+    "text": "−5",
+    "fg": "#c4761f",
+    "bg": "#ffffff",
+    "ratio": 3.52,
+    "required": 4.5,
+    "selector": "tr:nth-child(3) > .over.n[data-l=\"Left\"]"
+  },
+  {
+    "view": "usage",
+    "text": "−7",
+    "fg": "#c4761f",
+    "bg": "#ffffff",
+    "ratio": 3.52,
+    "required": 4.5,
+    "selector": "tr:nth-child(4) > .over.n[data-l=\"Left\"]"
+  },
+  {
+    "view": "usage",
+    "text": "−7",
+    "fg": "#c4761f",
+    "bg": "#ffffff",
+    "ratio": 3.52,
+    "required": 4.5,
+    "selector": ".tot > .over.n[data-l=\"Left\"]"
+  },
+  {
+    "view": "usage",
+    "text": "00",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".hrs > span:nth-child(1)"
+  },
+  {
+    "view": "usage",
+    "text": "01",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".hrs > span:nth-child(2)"
+  },
+  {
+    "view": "usage",
+    "text": "02",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".hrs > span:nth-child(3)"
+  },
+  {
+    "view": "usage",
+    "text": "03",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".hrs > span:nth-child(4)"
+  },
+  {
+    "view": "usage",
+    "text": "04",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".hrs > span:nth-child(5)"
+  },
+  {
+    "view": "usage",
+    "text": "05",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".hrs > span:nth-child(6)"
+  },
+  {
+    "view": "usage",
+    "text": "06",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".hrs > span:nth-child(7)"
+  },
+  {
+    "view": "usage",
+    "text": "07",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(8)"
+  },
+  {
+    "view": "usage",
+    "text": "08",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(9)"
+  },
+  {
+    "view": "usage",
+    "text": "09",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(10)"
+  },
+  {
+    "view": "usage",
+    "text": "10",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(11)"
+  },
+  {
+    "view": "usage",
+    "text": "11",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(12)"
+  },
+  {
+    "view": "usage",
+    "text": "12",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(13)"
+  },
+  {
+    "view": "usage",
+    "text": "13",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(14)"
+  },
+  {
+    "view": "usage",
+    "text": "14",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(15)"
+  },
+  {
+    "view": "usage",
+    "text": "15",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(16)"
+  },
+  {
+    "view": "usage",
+    "text": "156 carrying a weight · 156 at the floor",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "div:nth-child(5) > .s"
+  },
+  {
+    "view": "usage",
+    "text": "16",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(17)"
+  },
+  {
+    "view": "usage",
+    "text": "17",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(18)"
+  },
+  {
+    "view": "usage",
+    "text": "18",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(19)"
+  },
+  {
+    "view": "usage",
+    "text": "19",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(20)"
+  },
+  {
+    "view": "usage",
+    "text": "20",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(21)"
+  },
+  {
+    "view": "usage",
+    "text": "21",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(22)"
+  },
+  {
+    "view": "usage",
+    "text": "22",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(23)"
+  },
+  {
+    "view": "usage",
+    "text": "23",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "span:nth-child(24)"
+  },
+  {
+    "view": "usage",
+    "text": "24 of 60 hours worked",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "div:nth-child(3) > .s"
+  },
+  {
+    "view": "usage",
+    "text": "475h 00m recorded",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "div:nth-child(4) > .s"
+  },
+  {
+    "view": "usage",
+    "text": "5H",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".m:nth-child(1) > .mtop > span"
+  },
+  {
+    "view": "usage",
+    "text": "CLAUDE",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".rail-brand > span:nth-child(2) > .rail-kicker"
+  },
+  {
+    "view": "usage",
+    "text": "empty",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".ylab:nth-child(3)"
+  },
+  {
+    "view": "usage",
+    "text": "now",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".now"
+  },
+  {
+    "view": "usage",
+    "text": "Numbers",
+    "fg": "#6e6e6e",
+    "bg": "#dcdcda",
+    "ratio": 3.71,
+    "required": 4.5,
+    "selector": ".seg > button[type=\"button\"]:nth-child(2)"
+  },
+  {
+    "view": "usage",
+    "text": "Oct 2 · 2d 3h from now",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "div:nth-child(2) > .s"
+  },
+  {
+    "view": "usage",
+    "text": "resets Sat 02:00",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": "div:nth-child(1) > .s"
+  },
+  {
+    "view": "usage",
+    "text": "WK",
+    "fg": "#a0a0a0",
+    "bg": "#ffffff",
+    "ratio": 2.61,
+    "required": 4.5,
+    "selector": ".m:nth-child(2) > .mtop > span"
+  }
+]
