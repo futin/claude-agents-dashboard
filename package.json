@@ -13,6 +13,8 @@
     "tunnel": "tsx scripts/tailnet.ts",
     "test": "tsx test/run-all.ts; repo=$?; node --test plugin/skills/kaizen/test/*.test.mjs; skill=$?; [ $repo -eq 0 ] && [ $skill -eq 0 ]",
     "test:skills": "node --test plugin/skills/git-sync/test/*.test.mjs",
+    "test:visual": "playwright test",
+    "test:visual:report": "playwright show-report",
     "plugin:sync": "tsx scripts/sync-plugin.ts",
     "typecheck": "tsc --noEmit",
     "session-analytics": "tsx scripts/session-analytics.ts",
@@ -37,6 +39,8 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.63.0",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

@@ -40,6 +40,7 @@ Tests and types:
 pnpm test        # node-assert tests over the domain logic
 pnpm typecheck   # tsc --noEmit
 pnpm test:skills # git-sync's own suite, ~4 min — only needed when you change plugin/skills/git-sync/
+pnpm test:visual # screenshot/overflow/contrast suite, macOS only; --update-snapshots re-baselines (docs/subsystems/visual-tests.md)
 ```
 
 That's the whole basic setup. Everything below is optional.

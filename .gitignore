@@ -12,3 +12,5 @@ client/dist/
 .usage-history.jsonl
 .usage-ledger.jsonl
 .usage-profile.json
+test-results/
+playwright-report/
