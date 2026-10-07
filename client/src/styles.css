@@ -1950,8 +1950,10 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
   .chat-side .kv .track{flex-basis:auto;height:10px;margin-top:12px}
   /* the card takes the column's spare height and the list scrolls inside it; `.chat-facts` keeps its natural height below. The 200px floor keeps the
      list readable on a short viewport, where the column scrolls instead of squeezing it to nothing. `.folded` has no effect
-     here — the list always shows and the folded line gives way to the head row. */
-  .chat-side .tasks-kv{display:flex;flex-direction:column;flex:1;min-height:200px}
+     here — the list always shows and the folded line gives way to the head row. The phone `.kv` row's wrap and baseline alignment would otherwise
+     carry into this column: a wrapping column line is as wide as its widest child, so a long plan name pushes the count off the card, and the
+     empty track collapses to 0px. */
+  .chat-side .tasks-kv{display:flex;flex-direction:column;flex-wrap:nowrap;align-items:stretch;flex:1;min-height:200px}
   .chat-side .tasks-kv .k{display:flex;flex:none;justify-content:space-between;gap:8px}
   /* a long plan name ellipsises on one line; the count keeps its width so the column never widens */
   .chat-side .tasks-kv .k > :first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
