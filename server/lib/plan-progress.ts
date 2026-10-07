@@ -29,7 +29,9 @@ const TASK_ID = String.raw`\d+[a-z]?`;
 const SCRIPT_RE = new RegExp(String.raw`(?<![\w-])(task-brief|task-start|task-done)["']?\s+(\S+)\s+(${TASK_ID})(?![0-9A-Za-z])`, 'g');
 const REVIEW_PACKAGE_RE = /(?<![\w-])review-package["']?\s+(\S+)/g;
 const LEDGER_HEADER_RE = /SDD ledger — plan:[ \t]+(\S+)/g;
-const LEDGER_DONE_RE = new RegExp(String.raw`(?<![\w-])Task (${TASK_ID}): complete`, 'g');
+// A `printf 'Task 1: complete\nTask 2: complete\n'` puts the literal two characters `\n` before the second entry, and that `n` is a word character, so the
+// plain lookbehind would drop every entry after the first; `(?<=\\n)` lets exactly that escape through while `xTask` / `nTask` stay blocked.
+const LEDGER_DONE_RE = new RegExp(String.raw`(?:(?<![\w-])|(?<=\\n))Task (${TASK_ID}): complete`, 'g');
 const AGENT_TASK_RE = new RegExp(String.raw`(?<![\w-])Task (${TASK_ID})\b`, 'g');
 const LEADING_CD_RE = /^\s*cd\s+(?:"([^"]*)"|'([^']*)'|(\S+?))\s*(?:&&|;)/;
 const HEADING_RE = new RegExp(String.raw`^#{2,3} Task (${TASK_ID})(?: \([^)]*\))?\s*[:.—–-]\s*(.+?)\s*$`);
@@ -49,7 +51,7 @@ export function stripPlanToken(raw: string): string {
   }
 }
 
-/** A plan path from a raw token, or null when it is not a markdown path — which also drops `$PLAN` and the skill's `<plan file path>` template. */
+/** A plan path from a raw token, or null when it is not a markdown path — which also rejects `$PLAN` and the skill's `<plan file path>` template as plan names (a script call carrying one still yields its task id). */
 function planPath(raw: string): string | null {
   const s = stripPlanToken(raw);
   return s.endsWith('.md') ? s : null;
@@ -96,9 +98,8 @@ export function planSignals(name: string, input: Record<string, unknown>, record
         for (const m of command.matchAll(LEDGER_DONE_RE)) finished.push({ kind: 'done', id: m[1] });
       }
       for (const m of command.matchAll(SCRIPT_RE)) {
-        const p = planPath(m[2]);
-        if (!p) continue;
-        plans.push({ kind: 'plan', path: p, base });
+        // A plan passed as a shell variable (`task-done "$P" 3`) names no file here, but the task id is still literal: it counts without naming a plan.
+        addPlan(m[2], base);
         (m[1] === 'task-done' ? finished : running).push({ kind: m[1] === 'task-done' ? 'done' : 'live', id: m[3] });
       }
       for (const m of command.matchAll(REVIEW_PACKAGE_RE)) addPlan(m[1], base);

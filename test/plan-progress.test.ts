@@ -100,13 +100,13 @@ export function run(): number {
     assert.deepStrictEqual(planSignals('Edit', stale, '/r'), [done('3')]);
   });
 
-  t('U18 stripPlanToken, and an unresolved variable is ignored', () => {
+  t('U18 stripPlanToken, and an unresolved variable names no plan but keeps its task id', () => {
     assert.strictEqual(stripPlanToken("docs/p.md\\n'"), 'docs/p.md');
     assert.strictEqual(stripPlanToken('docs/x.md"'), 'docs/x.md');
     assert.strictEqual(stripPlanToken('`docs/y.md`'), 'docs/y.md');
     assert.strictEqual(stripPlanToken('"docs/z.md\\n"'), 'docs/z.md');
     assert.strictEqual(stripPlanToken('$PLAN'), '$PLAN');
-    assert.deepStrictEqual(bash('bash scripts/task-brief $PLAN 3'), []);
+    assert.deepStrictEqual(bash('bash scripts/task-brief $PLAN 3'), [live('3')]);
   });
 
   t('U-rp review-package names the plan and nothing else', () => {
@@ -116,6 +116,28 @@ export function run(): number {
   t('U19 task-start is running, task-done is done', () => {
     assert.deepStrictEqual(bash('task-start docs/p.md 2'), [plan('docs/p.md'), live('2')]);
     assert.deepStrictEqual(bash('"$EP/scripts/task-done" docs/p.md 2 abc1234 -- pnpm test'), [plan('docs/p.md'), done('2')]);
+  });
+
+  t('U-var a plan passed as a variable names no plan but its task id still counts', () => {
+    assert.deepStrictEqual(bash('"$EP/scripts/task-done" "$P" 4 abc1234 -- pnpm test'), [done('4')]);
+    assert.deepStrictEqual(bash('bash scripts/task-brief $P 3'), [live('3')]);
+    assert.deepStrictEqual(bash('bash scripts/task-start $P 3'), [live('3')]);
+    // A literal plan beside a variable one still signals only the literal plan.
+    assert.deepStrictEqual(bash('task-brief docs/p.md 2; task-done "$P" 2'), [plan('docs/p.md'), live('2'), done('2')]);
+  });
+
+  t('U-printf several ledger entries in one printf format all count', () => {
+    const W = 'W=.superpowers/sdd/p; ';
+    assert.deepStrictEqual(bash(W + String.raw`printf 'Task 1: complete\nTask 2: complete\n' >> "$W/progress.md"`), [done('1'), done('2')]);
+    assert.deepStrictEqual(bash(W + String.raw`printf 'Task 9: complete\nTask 10: complete\n' >> "$W/progress.md"`), [done('9'), done('10')]);
+    // The escape is the only word-character predecessor let through: a bare letter, an identifier tail or a hyphen still blocks the match.
+    assert.deepStrictEqual(bash(W + `echo 'xTask 1: complete' >> "$W/progress.md"`), []);
+    assert.deepStrictEqual(bash(W + `echo 'nTask 1: complete' >> "$W/progress.md"`), []);
+    assert.deepStrictEqual(bash(W + `echo 'sub-Task 1: complete' >> "$W/progress.md"`), []);
+    // `Task 40` is task 40 and never task 4.
+    assert.deepStrictEqual(bash(W + `echo 'Task 40: complete' >> "$W/progress.md"`), [done('40')]);
+    assert.deepStrictEqual(bash(W + String.raw`printf 'Task 40: complete\nTask 4: complete\n' >> "$W/progress.md"`), [done('40'), done('4')]);
+    assert.deepStrictEqual(planSignals('Write', { file_path: LEDGER, content: 'Task 1: complete\nxTask 2: complete\n' }, '/r'), [done('1')]);
   });
 
   t('U15 a leading cd decides the base; relative cd resolves against the record cwd', () => {
