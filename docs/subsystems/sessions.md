@@ -100,9 +100,9 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
 ### The task list, and why it folds the whole file
 
 `Session.tasks` is the session's own checklist — `SessionTask[]` (`id`, `subject`, `status`, `activeForm`): the executed plan's tasks in plan order (below),
-else the `TaskCreate` list in creation order, or `null` when there is neither. The server sends the items only; `done`, `total`, the running tasks and
-"all done" come from one pure client helper (`client/src/lib/tasks.ts`, `taskProgress`), which the pill and the [drawer's Tasks card](chat.md) both use, so there is no second count to keep consistent. No
-endpoint: the list rides the 3s sessions poll.
+else the `TaskCreate` list in creation order, or `null` when there is neither. The server sends the items only; `done`, `total`, the running tasks and "all
+done" come from one pure client helper (`client/src/lib/tasks.ts`, `taskProgress`), which the pill and the [drawer's Tasks card](chat.md) both use, so there is
+no second count to keep consistent. No endpoint: the list rides the 3s sessions poll.
 
 **The source is plan-first.** Since Claude Code v2.1.268 the task tools are provided by default only on Claude 3.x, Opus 4–4.7, Sonnet 4–4.6 and Haiku 4.5
 ([task-tool availability](https://code.claude.com/docs/en/tools.md#task-tool-availability)), and the models run here no longer call them: the last
@@ -129,9 +129,9 @@ uses it to label the card.
   the first and resets done/running (a session that runs two plans shows the last); done/running signals seen before any plan signal are held for the first
   plan. A plan token ends at a `printf`'s first literal `\n`, so one `printf` that writes the header and more lines still names its plan.
 - **Known limits.** Two different plans with the same basename in one session share progress. A run with a plan signal but no `### Task N:` headings and no ids
-  falls back to the `TaskCreate` list (no card without one). An inline `executing-plans` run that never writes a ledger line or runs `task-done` shows
-  `0/N`, and one that names its plan in no signal shows nothing. Backlog-orchestrate runs and native plan mode are not read. The ledger and script formats are those of the superpowers 6.4.1 skills as used here
-  through 2026-10-07; a renamed format degrades to 0 done rather than lying.
+  falls back to the `TaskCreate` list (no card without one). An inline `executing-plans` run that never writes a ledger line or runs `task-done` shows `0/N`,
+  and one that names its plan in no signal shows nothing. Backlog-orchestrate runs and native plan mode are not read. The ledger and script formats are those of
+  the superpowers 6.4.1 skills as used here through 2026-10-07; a renamed format degrades to 0 done rather than lying.
 - **Measured 2026-10-07, this machine:** of 52 runs since 2026-09-15, 30 resolve a plan and 29 carry a done signal; the fold's done count matches the raw
   ledger's distinct completed ids with no mismatch. Design: [the spec](../superpowers/specs/2026-10-07-plan-progress-design.md).
 
