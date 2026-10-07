@@ -99,9 +99,9 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
 
 ### The task list, and why it folds the whole file
 
-`Session.tasks` is the session's own checklist — `SessionTask[]` (`id`, `subject`, `status`, `activeForm`) in creation order, or `null` when the transcript
-holds no confirmed `TaskCreate`. The server sends the items only; `done`, `total`, the running tasks and "all done" come from one pure client helper
-(`client/src/lib/tasks.ts`, `taskProgress`), which the pill and the [drawer's Tasks card](chat.md) both use, so there is no second count to keep consistent. No
+`Session.tasks` is the session's own checklist — `SessionTask[]` (`id`, `subject`, `status`, `activeForm`): the executed plan's tasks in plan order (below),
+else the `TaskCreate` list in creation order, or `null` when there is neither. The server sends the items only; `done`, `total`, the running tasks and
+"all done" come from one pure client helper (`client/src/lib/tasks.ts`, `taskProgress`), which the pill and the [drawer's Tasks card](chat.md) both use, so there is no second count to keep consistent. No
 endpoint: the list rides the 3s sessions poll.
 
 **The source is plan-first.** Since Claude Code v2.1.268 the task tools are provided by default only on Claude 3.x, Opus 4–4.7, Sonnet 4–4.6 and Haiku 4.5
@@ -113,8 +113,8 @@ uses it to label the card.
 
 - **Titles come from the plan file, status from the transcript.** Rows are the plan's `## Task N:` / `### Task N:` headings in order (`### Task 5a:` and
   `### Task 7 (conditional):` count; headings inside a fenced block do not), re-read when the file's mtime changes, so an amended plan grows a row on the next
-  poll. An id seen in a signal but absent from the headings is appended as `Task <id>` — a finished run whose plan was removed with its worktree still shows its
-  done count.
+  poll. An id seen in a signal but absent from the headings is appended as `Task <id>` — a finished run whose plan was removed with its worktree still shows
+  its done count.
 - **Signals count only inside a `tool_use` block's `input`**, never in message text, compaction summaries, skill bodies or tool results, all of which quote
   `Task 1: complete` freely. A Write/Edit is a ledger input on its `file_path` alone, and an Edit's `old_string` is never read.
 
@@ -126,13 +126,14 @@ uses it to label the card.
 
 - **A plan is its basename.** The same plan is named relative from whichever directory the shell sits in, so state keys on the file name, not the resolved path.
   A relative path resolves against a leading `cd <dir> &&` of the command, else the record's `cwd`, then the session's `projectPath`. A different plan replaces
-  the first and resets done/running (a session that runs two plans shows the last); done/running signals seen before any plan signal are held for the first plan.
+  the first and resets done/running (a session that runs two plans shows the last); done/running signals seen before any plan signal are held for the first
+  plan. A plan token ends at a `printf`'s first literal `\n`, so one `printf` that writes the header and more lines still names its plan.
 - **Known limits.** Two different plans with the same basename in one session share progress. A run with a plan signal but no `### Task N:` headings and no ids
-  shows no card. An inline `executing-plans` run that never writes a ledger line or runs `task-done` shows `0/N`, and one that names its plan in no signal shows
-  nothing. Backlog-orchestrate runs and native plan mode are not read. The ledger and script formats are those of the superpowers 6.4.1 skills as used here
+  falls back to the `TaskCreate` list (no card without one). An inline `executing-plans` run that never writes a ledger line or runs `task-done` shows
+  `0/N`, and one that names its plan in no signal shows nothing. Backlog-orchestrate runs and native plan mode are not read. The ledger and script formats are those of the superpowers 6.4.1 skills as used here
   through 2026-10-07; a renamed format degrades to 0 done rather than lying.
-- **Measured 2026-10-07, this machine:** of 52 runs since 2026-09-15, 30 resolve a plan and 29 carry a done signal; the fold's done count matches the raw ledger's
-  distinct completed ids with no mismatch. Design: [the spec](../superpowers/specs/2026-10-07-plan-progress-design.md).
+- **Measured 2026-10-07, this machine:** of 52 runs since 2026-09-15, 30 resolve a plan and 29 carry a done signal; the fold's done count matches the raw
+  ledger's distinct completed ids with no mismatch. Design: [the spec](../superpowers/specs/2026-10-07-plan-progress-design.md).
 
 **It is rebuilt from the transcript, and only the whole file will do.** There is no on-disk task store to read. `readTranscript` sees the last 256 KB, and a
 `TaskCreate` is typically written at a session's start, far below that window, so `server/lib/tasks.ts` folds the file from byte 0 — once — and keeps, per file,
