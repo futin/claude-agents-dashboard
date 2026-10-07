@@ -191,6 +191,36 @@ export function run(): number {
     assert.strictEqual(out.maxSessions, 2);
   })) p++; else f++;
 
+  if (test('scanSessions: Session.tasks folds a transcript\'s task calls; no task records → null', () => {
+    const now = 1_700_000_000_000;
+    const taskCall = (id: string, name: string, input: unknown) =>
+      ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] } });
+    const taskResult = (id: string, toolUseResult: unknown) =>
+      ({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] }, toolUseResult });
+    const root = makeRoot([
+      {
+        dirName: '-a-tasks', id: 'tasks', mtimeMs: now - 60 * 1000,
+        records: [
+          metaRec('/a/tasks', 'main'),
+          taskCall('c1', 'TaskCreate', { subject: 'First', description: 'd' }), taskResult('c1', { task: { id: '1', subject: 'First' } }),
+          taskCall('c2', 'TaskCreate', { subject: 'Second', description: 'd' }), taskResult('c2', { task: { id: '2', subject: 'Second' } }),
+          taskCall('u1', 'TaskUpdate', { taskId: '1', status: 'completed' }),
+          taskResult('u1', { success: true, taskId: '1', updatedFields: ['status'], statusChange: { from: 'pending', to: 'completed' } }),
+          // makeRoot leaves its last record unterminated and the fold defers such a line, so end on one that carries no task.
+          assistantDone()
+        ]
+      },
+      { dirName: '-a-plain', id: 'plain', mtimeMs: now - 120 * 1000, records: [metaRec('/a/plain', 'main'), assistantDone()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
+    const byProject = (name: string) => out.sessions.find(s => s.project === name)!;
+    const tasks = byProject('tasks').tasks;
+    assert.ok(tasks);
+    assert.deepStrictEqual(tasks.map(t => t.status), ['completed', 'pending']);
+    assert.deepStrictEqual(tasks.map(t => t.subject), ['First', 'Second']);
+    assert.strictEqual(byProject('plain').tasks, null);
+  })) p++; else f++;
+
   if (test('working (recent + unfinished) vs idle (stale + finished)', () => {
     const now = 1_700_000_000_000;
     const root = makeRoot([

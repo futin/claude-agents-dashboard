@@ -12,6 +12,7 @@ import { readTranscript } from './transcript.js';
 import { readAgentsCached } from './agents-cache.js';
 import { SUBAGENT_DIR } from './subagent-usage.js';
 import { refreshCwd } from './token-refresh.js';
+import { readSessionTasks } from './tasks.js';
 import { readSessionAnalyticsLog, lessonForSession } from './sessionAnalyticsLog.js';
 import type { SessionAnalyticsLesson } from './sessionAnalyticsLog.js';
 import type { Config } from './config.js';
@@ -652,7 +653,8 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       lastTimestamp: parsed.lastTimestamp,
       updatedMs: c.mtimeMs,
       version: parsed.version || null,
-      kaizenLesson: lessons ? lessonForSession(lessons, c.id) : null
+      kaizenLesson: lessons ? lessonForSession(lessons, c.id) : null,
+      tasks: readSessionTasks(c.file)
     });
   }
 

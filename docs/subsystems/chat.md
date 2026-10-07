@@ -18,6 +18,13 @@ is off the same 3s poll rather than a second read, and it is there because a mod
 straight from a tapped push ([deep link](push-notify.md)) never showed the list, so this is
 the only place that reader sees how full the session is.
 
+**A Tasks card sits between the Context card and the facts**, for a session that has built a task list (`TaskCreate` / `TaskUpdate`; the fold is in
+[sessions](sessions.md#the-task-list-and-why-it-folds-the-whole-file)). `TasksCard` takes `session.tasks` off the same 3s poll and renders nothing for `null` or
+`[]`. On desktop it is a head row (`Tasks`, `done / total`), a 6px track and the checklist, and it takes the column's spare height so the list scrolls inside it
+while the facts keep their natural height below. Below `md` it follows the Context card's band shape: one baseline of `Tasks`, `done/total`, the first running
+task's `activeForm` (else its subject, else `Next: …` for the first pending one, else `All done`) and a `▾ list` cue, over a 4px track. Tapping the line unfolds
+the same list, capped at 40% of the viewport and scrolling inside.
+
 The **All / Text / You** filter is not in that column: it narrows the transcript, so it sits
 in the **foot** at the right edge, just past the `n of m shown` count it changes — control
 and readout on one line, and no chrome row spent on either. Still the board's segmented
@@ -101,6 +108,20 @@ drawer could not undo it after the fact — the bytes were never sent. See
 [settings](settings.md) for the switch that sets it. The uncapped page is still bounded: a
 page never reads more than one `CHAT_WINDOW_BYTES` window, so lifting the caps raises the
 worst case to the window size, not to the transcript size.
+
+**The Tasks card is not chat history.** It reads `session.tasks`, which the sessions poll already carries, so the drawer makes no request for it and
+`/api/sessions/:id/chat` knows nothing of it. Three behaviours are deliberate:
+
+- **One DOM serves both widths.** The drawer has no `matchMedia` and the stylesheet is mobile-first, so the `<ol>` is always rendered and folding is a `.folded`
+  class on the card: the base (band) tier hides the list under it, and a rule inside the `min-width:768px` block shows the list regardless, so on desktop the
+  class does nothing and the folded line gives way to the head row. A `max-width` query is not available — `test/breakpoints.test.ts` fails on one. Fold state
+  is component state, not persisted.
+- **The list scrolls to the running task once.** The first time the card has something to show, the first running task (else the first pending) is centred by
+  setting the list's own `scrollTop` — `scrollIntoView` would drag the drawer and the page — and never again, so a later poll does not fight a reader who
+  scrolled away. A folded phone list is `display:none`, has no geometry and cannot be scrolled, so the one scroll waits for the first unfold instead of being
+  spent.
+- **Never an empty card.** No tasks and an all-deleted list both render nothing; a list with nothing started says `Not started`, a finished one
+  `✓ All tasks done` with the bar in `--ink3`.
 
 ## Mechanism
 

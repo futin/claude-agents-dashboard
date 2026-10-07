@@ -6,6 +6,7 @@ import QuestionPanel from './QuestionPanel';
 import PlanPanel from './PlanPanel';
 import MessagePanel from './MessagePanel';
 import ResumePanel from './ResumePanel';
+import { TasksCard } from './TasksCard';
 import { useBackClose } from '../hooks/useBackClose';
 import { useSessionChat } from '../hooks/useSessionChat';
 import { usePendingQuestion } from '../hooks/usePendingQuestion';
@@ -226,6 +227,8 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                 <div className={`fill${ctxWarn ? ' warn' : ''}`} style={{ width: `${Math.min(ctxPct, 100)}%` }} />
               </div>
             </div>
+
+            <TasksCard tasks={session.tasks} />
 
             {/* Three of these are phone-hidden (`.f.wide`): Project repeats the
                 head's pill, Messages and Now are already on screen — the count
