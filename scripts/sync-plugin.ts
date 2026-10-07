@@ -21,7 +21,7 @@ export const PLUGIN_ID = `claude-agents-dashboard@${MARKETPLACE}`;
 export const MARKETPLACE_SOURCE = 'futin/claude-agents-dashboard';
 
 /** What a session loads from the install. Anything else in the install dir (`.in_use`, `.orphaned_at`) is Claude Code's bookkeeping. */
-export const PUBLISHED_PATHS = ['.claude-plugin', 'skills'];
+export const PUBLISHED_PATHS = ['.claude-plugin', 'hooks', 'skills'];
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PLUGIN_ROOT = path.join(REPO_ROOT, 'plugin');
@@ -34,6 +34,12 @@ export interface InstallRecord {
   gitCommitSha?: string;
 }
 
+/**
+ * The engine writes the hooks module's type declarations into `.claude-plugin/types/` whenever it loads the mod, on both sides of an install — never
+ * published, and never drift.
+ */
+const GENERATED_DIRS = [path.join('.claude-plugin', 'types')];
+
 /** sha256 over every file's relative path and bytes, so a rename or deletion moves it too. '' for a root that does not exist. */
 export function hashTree(root: string): string {
   if (!fs.existsSync(root)) return '';
@@ -41,7 +47,7 @@ export function hashTree(root: string): string {
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
+      if (entry.isDirectory()) { if (!GENERATED_DIRS.some((g) => full.endsWith(path.sep + g))) walk(full); }
       else if (entry.isFile()) files.push(full);
     }
   };

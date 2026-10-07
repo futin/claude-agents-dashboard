@@ -14,3 +14,6 @@ client/dist/
 .usage-profile.json
 test-results/
 playwright-report/
+# Engine contract types, generated per machine by /plugin-types (2.1.280) or on mod load (2.1.288+)
+plugin/.claude/types/
+plugin/.claude-plugin/types/
