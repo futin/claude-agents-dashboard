@@ -43,6 +43,17 @@ function session(over: Partial<Session> & Pick<Session, 'id' | 'status' | 'model
   };
 }
 
+const PLAN_TITLES = ['Token bucket store', 'Sliding window counter', 'Middleware wiring', 'Per-route limits', 'Burst allowance', 'Retry-After header',
+  'Redis failover', 'Metrics and alerts for throttled requests per tenant', 'Load test', 'Docs', 'Feature flag', 'Rollout', 'Clean up'];
+
+/** A plan run mid-way (7 done, Task 8 running) under a basename long enough to ellipsise the drawer card's head at every width. */
+const planTasks: Session['tasks'] = PLAN_TITLES.map((subject, i) => ({
+  id: String(i + 1),
+  subject,
+  status: i < 7 ? 'completed' : i === 7 ? 'in_progress' : 'pending',
+  activeForm: null
+}));
+
 const list: Session[] = [
   session({
     id: SESSION_IDS.working,
@@ -57,7 +68,9 @@ const list: Session[] = [
     lastTimestamp: agoIso(4 * SEC),
     updatedMs: ago(4 * SEC),
     stopState: 'ready',
-    surface: 'dashboard'
+    surface: 'dashboard',
+    tasks: planTasks,
+    taskPlan: '2026-09-28-orders-rate-limiting-with-sliding-window-buckets'
   }),
   session({
     id: SESSION_IDS.idle,
@@ -69,7 +82,10 @@ const list: Session[] = [
     contextWindow: 200_000,
     lastTimestamp: agoIso(2 * MIN),
     updatedMs: ago(2 * MIN),
-    kaizenLesson: 'Batch independent shell calls into one round-trip.'
+    kaizenLesson: 'Batch independent shell calls into one round-trip.',
+    // A finished TaskCreate list: the all-done pill, and the `Tasks` head rather than `Plan · …`.
+    tasks: ['Reproduce', 'Fix', 'Test', 'Ship'].map((subject, i) => ({ id: String(i + 1), subject, status: 'completed' as const, activeForm: null })),
+    taskPlan: null
   }),
   session({
     id: SESSION_IDS.question,

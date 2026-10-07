@@ -82,8 +82,9 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
 - **Activity line** — the most recent tool call (e.g. `Edit server.ts`,
   `Task Explore: map the codebase`).
 - **Task pill** — `7/13` with a mini bar, when the session has built a task list (`TaskCreate` / `TaskUpdate`); a finished list reads `13/13 ✓`, dimmed.
-  `TaskPill` renders last at **two** sites: inside `Tags` (Board, Triage, Split, Tiles) and in `ListView`'s `.name` cell, which draws its pills itself and never
-  uses `Tags`. It carries no handler, like the other pills, and nothing at all for a session without tasks. The list behind it is
+  `TaskPill` renders at **three** sites: last inside `Tags` (Board, Split, Tiles, and Triage's *Needs you* cards), last in `ListView`'s `.name` cell, and
+  after the name/branch in Triage's Working and Idle rows (`QRow`) — the last two draw their pieces themselves and never use `Tags`. `QRow` keeps the pill at
+  every width, while it drops the branch, gauge and age on a phone, because progress is what a working row is scanned for. It carries no handler, like the other pills, and nothing at all for a session without tasks. The list behind it is
   [below](#the-task-list-and-why-it-folds-the-whole-file).
 - **Relative time** — since the last conversational message.
 - **Chat button** — the one way into this session's [chat drawer](chat.md), and the place

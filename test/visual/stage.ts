@@ -5,6 +5,7 @@
 import type { Page } from '@playwright/test';
 
 import type { Section } from '../../client/src/lib/sections.js';
+import type { Layout } from '../../client/src/lib/filterSort.js';
 import type { Settings, ThemeId } from '../../client/src/lib/settings.js';
 
 import { EPOCH } from './fixtures/epoch.js';
@@ -19,6 +20,8 @@ export interface StageOpts {
   contentWidth: 'fixed' | 'full';
   /** Appended to `/`, e.g. `?session=<uuid>` to open the chat drawer. */
   query?: string;
+  /** The Sessions layout; `board` when omitted. */
+  layout?: Layout;
 }
 
 export const VIEWPORT_HEIGHT = 900;
@@ -47,7 +50,7 @@ function seededSettings(opts: StageOpts): Settings {
     settingsTab: 'local',
     managementTab: 'git',
     // Not the default 'last', which defers to `dashboard.layout` (SessionsView.tsx).
-    defaultLayout: 'board',
+    defaultLayout: opts.layout ?? 'board',
     contentWidth: opts.contentWidth
   };
 }

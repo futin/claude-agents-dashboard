@@ -2,7 +2,7 @@ import type { LaunchingSession, Session } from '../../../../shared/types';
 import { formatAgo } from '../../lib/format';
 import { chatTab } from '../../lib/holds';
 import { triageGroups } from '../../lib/triage';
-import { Act, ActLine, Bar, ChatButton, Dot, LaunchPill, Pct, Tags, Tok, launchState } from './atoms';
+import { Act, ActLine, Bar, ChatButton, Dot, LaunchPill, Pct, Tags, TaskPill, Tok, launchState } from './atoms';
 
 /**
  * What needs you, first and large; then what is working; then what is idle.
@@ -85,6 +85,8 @@ function QRow({ s, onOpenChat }: { s: Session; onOpenChat: () => void }) {
       <Dot status={s.status} />
       <span className="nm">{s.sessionName || s.project}</span>
       {s.sessionName ? <span className="proj-pill">{s.project}</span> : s.gitBranch && <span className="branch" title={s.gitBranch}>{s.gitBranch}</span>}
+      {/* Kept at every width, unlike the branch and gauge: progress is what a working row is scanned for, and `.nm` ellipsises to make room. */}
+      <TaskPill s={s} />
       <ActLine s={s} ago={false} />
       <span className="ctx"><Bar s={s} /><Pct s={s} /></span>
       <span className="when">{formatAgo(s.updatedMs)} ago</span>
