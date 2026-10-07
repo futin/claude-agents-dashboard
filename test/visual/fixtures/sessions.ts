@@ -38,6 +38,7 @@ function session(over: Partial<Session> & Pick<Session, 'id' | 'status' | 'model
     version: '2.1.250',
     kaizenLesson: null,
     tasks: null,
+    taskPlan: null,
     ...over
   };
 }

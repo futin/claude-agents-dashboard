@@ -18,12 +18,19 @@ is off the same 3s poll rather than a second read, and it is there because a mod
 straight from a tapped push ([deep link](push-notify.md)) never showed the list, so this is
 the only place that reader sees how full the session is.
 
-**A Tasks card sits between the Context card and the facts**, for a session that has built a task list (`TaskCreate` / `TaskUpdate`; the fold is in
-[sessions](sessions.md#the-task-list-and-why-it-folds-the-whole-file)). `TasksCard` takes `session.tasks` off the same 3s poll and renders nothing for `null` or
-`[]`. On desktop it is a head row (`Tasks`, `done / total`), a 6px track and the checklist, and it takes the column's spare height so the list scrolls inside it
-while the facts keep their natural height below. Below `md` it follows the Context card's band shape: one baseline of `Tasks`, `done/total`, the first running
-task's `activeForm` (else its subject, else `Next: …` for the first pending one, else `All done`) and a `▾ list` cue, over a 4px track. Tapping the line unfolds
-the same list, capped at 40% of the viewport and scrolling inside.
+**A Tasks card sits between the Context card and the facts**, for a session that is executing a plan or has built a task list (the plan's tasks first, else
+`TaskCreate` / `TaskUpdate`; the fold is in [sessions](sessions.md#the-task-list-and-why-it-folds-the-whole-file)). `TasksCard` takes `session.tasks` off the
+same 3s poll and renders nothing for `null` or `[]`. On desktop it is a head row (`Tasks`, `done / total`), a 6px track and the checklist, and it takes the
+column's spare height so the list scrolls inside it while the facts keep their natural height below. Below `md` it follows the Context card's band shape: one
+baseline of `Tasks`, `done/total`, the first running task's `activeForm` (else its subject, else `Next: …` for the first pending one, else `All done`) and a `▾
+list` cue, over a 4px track. Tapping the line unfolds the same list, capped at 40% of the viewport and scrolling inside.
+
+**The head names the plan.** When `session.taskPlan` is set the desktop head reads `Plan · <name>`, `<name>` being the plan's basename with a leading
+`YYYY-MM-DD-` removed (`2026-10-07-plan-progress` → `plan-progress`), and the full basename sits in the label's `title`; without a plan it reads `Tasks`. The
+phone's folded line reads `Plan` or `Tasks` the same way (no room for the name). A long name ellipsises on one line and the count never shrinks. The desktop
+card column is `flex-wrap:nowrap; align-items:stretch`: the phone `.kv` row's wrap and baseline alignment, carried into it, widened the head past the card and
+collapsed the gauge track to 0px. Rows are the plan's tasks with the status the transcript recorded;
+[sessions](sessions.md#the-task-list-and-why-it-folds-the-whole-file) has the signals and the cases that show no card.
 
 The **All / Text / You** filter is not in that column: it narrows the transcript, so it sits
 in the **foot** at the right edge, just past the `n of m shown` count it changes — control
@@ -109,8 +116,8 @@ drawer could not undo it after the fact — the bytes were never sent. See
 page never reads more than one `CHAT_WINDOW_BYTES` window, so lifting the caps raises the
 worst case to the window size, not to the transcript size.
 
-**The Tasks card is not chat history.** It reads `session.tasks`, which the sessions poll already carries, so the drawer makes no request for it and
-`/api/sessions/:id/chat` knows nothing of it. Three behaviours are deliberate:
+**The Tasks card is not chat history.** It reads `session.tasks` and `session.taskPlan`, which the sessions poll already carries, so the drawer makes no
+request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviours are deliberate:
 
 - **One DOM serves both widths.** The drawer has no `matchMedia` and the stylesheet is mobile-first, so the `<ol>` is always rendered and folding is a `.folded`
   class on the card: the base (band) tier hides the list under it, and a rule inside the `min-width:768px` block shows the list regardless, so on desktop the

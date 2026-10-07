@@ -38,3 +38,8 @@ export function taskLine(p: TaskProgress): { text: string; kind: 'live' | 'next'
 export function scrollTargetId(p: TaskProgress): string | null {
   return p.live[0]?.id ?? p.next?.id ?? null;
 }
+
+/** The date prefix is filing noise in a 290px head; only one is stripped so a plan named after a date still reads as itself. */
+export function planName(taskPlan: string): string {
+  return taskPlan.replace(/^\d{4}-\d{2}-\d{2}-/, '');
+}

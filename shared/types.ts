@@ -131,8 +131,11 @@ export interface Session {
   version: string | null;
   /** The `/kaizen` lesson logged for this session, or null if never inspected. */
   kaizenLesson: string | null;
-  /** The session's task checklist; null when no `TaskCreate` was ever confirmed. `[]` (all deleted) renders the same as null. */
+  /** The session's task checklist: the executed plan's tasks when a plan resolves, else the confirmed `TaskCreate` list; null when neither exists. `[]` (all
+   *  deleted) renders the same as null. */
   tasks: SessionTask[] | null;
+  /** Basename (no `.md`) of the superpowers plan `tasks` was read from; null when `tasks` is the `TaskCreate` list or absent. */
+  taskPlan: string | null;
 }
 
 /**

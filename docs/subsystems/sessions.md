@@ -99,10 +99,41 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
 
 ### The task list, and why it folds the whole file
 
-`Session.tasks` is the session's own checklist — `SessionTask[]` (`id`, `subject`, `status`, `activeForm`) in creation order, or `null` when the transcript
-holds no confirmed `TaskCreate`. The server sends the items only; `done`, `total`, the running tasks and "all done" come from one pure client helper
-(`client/src/lib/tasks.ts`, `taskProgress`), which the pill and the [drawer's Tasks card](chat.md) both use, so there is no second count to keep consistent. No
-endpoint: the list rides the 3s sessions poll.
+`Session.tasks` is the session's own checklist — `SessionTask[]` (`id`, `subject`, `status`, `activeForm`): the executed plan's tasks in plan order (below),
+else the `TaskCreate` list in creation order, or `null` when there is neither. The server sends the items only; `done`, `total`, the running tasks and "all
+done" come from one pure client helper (`client/src/lib/tasks.ts`, `taskProgress`), which the pill and the [drawer's Tasks card](chat.md) both use, so there is
+no second count to keep consistent. No endpoint: the list rides the 3s sessions poll.
+
+**The source is plan-first.** Since Claude Code v2.1.268 the task tools are provided by default only on Claude 3.x, Opus 4–4.7, Sonnet 4–4.6 and Haiku 4.5
+([task-tool availability](https://code.claude.com/docs/en/tools.md#task-tool-availability)), and the models run here no longer call them: the last
+`TaskCreate` / `TaskUpdate` / `TodoWrite` call on this machine is dated 2026-08-20. Multi-task runs do execute a superpowers plan, so the same fold also reads
+the plan's progress from the session's own tool calls, and **when a transcript names a plan the list is that plan's tasks**; `TaskCreate` / `TaskUpdate` is the
+fallback. `Session.taskPlan` is the plan's file basename without `.md` (`2026-10-07-plan-progress`) when `tasks` came from a plan, else `null`; the client only
+uses it to label the card.
+
+- **Titles come from the plan file, status from the transcript.** Rows are the plan's `## Task N:` / `### Task N:` headings in order (`### Task 5a:` and
+  `### Task 7 (conditional):` count; headings inside a fenced block do not), re-read when the file's mtime changes, so an amended plan grows a row on the next
+  poll. An id seen in a signal but absent from the headings is appended as `Task <id>` — a finished run whose plan was removed with its worktree still shows
+  its done count.
+- **Signals count only inside a `tool_use` block's `input`**, never in message text, compaction summaries, skill bodies or tool results, all of which quote
+  `Task 1: complete` freely. A Write/Edit is a ledger input on its `file_path` alone, and an Edit's `old_string` is never read.
+
+  | Signal | Reads | Effect |
+  | --- | --- | --- |
+  | Ledger header `SDD ledger — plan: <p>`, script `task-brief` / `task-start` / `task-done <p> <N>` / `review-package <p>`, or a Skill call of `subagent-driven-development` / `executing-plans` whose `args` has a `.md` token | a Bash command touching `…/sdd/…/progress.md`, a Write/Edit to that path, or the Skill call | names the plan (a `<p>` that is a shell variable never ends in `.md` and is ignored) |
+  | Ledger line `Task <N>: complete`, or `task-done <p> <N>` | the same ledger inputs; the script, since its own ledger line only shows in the tool result | N done |
+  | Agent `description` containing `Task <N>`, or `task-brief` / `task-start <p> <N>` | the dispatch's `description`, or the script command | N running (the latest one; a late `Review Task 4` never revives a done id) |
+
+- **A plan is its basename.** The same plan is named relative from whichever directory the shell sits in, so state keys on the file name, not the resolved path.
+  A relative path resolves against a leading `cd <dir> &&` of the command, else the record's `cwd`, then the session's `projectPath`. A different plan replaces
+  the first and resets done/running (a session that runs two plans shows the last); done/running signals seen before any plan signal are held for the first
+  plan. A plan token ends at a `printf`'s first literal `\n`, so one `printf` that writes the header and more lines still names its plan.
+- **Known limits.** Two different plans with the same basename in one session share progress. A run with a plan signal but no `### Task N:` headings and no ids
+  falls back to the `TaskCreate` list (no card without one). An inline `executing-plans` run that never writes a ledger line or runs `task-done` shows `0/N`,
+  and one that names its plan in no signal shows nothing. Backlog-orchestrate runs and native plan mode are not read. The ledger and script formats are those of
+  the superpowers 6.4.1 skills as used here through 2026-10-07; a renamed format degrades to 0 done rather than lying.
+- **Measured 2026-10-07, this machine:** of 52 runs since 2026-09-15, 30 resolve a plan and 29 carry a done signal; the fold's done count matches the raw
+  ledger's distinct completed ids with no mismatch. Design: [the spec](../superpowers/specs/2026-10-07-plan-progress-design.md).
 
 **It is rebuilt from the transcript, and only the whole file will do.** There is no on-disk task store to read. `readTranscript` sees the last 256 KB, and a
 `TaskCreate` is typically written at a session's start, far below that window, so `server/lib/tasks.ts` folds the file from byte 0 — once — and keeps, per file,
@@ -113,7 +144,8 @@ of 64 files; `scan.ts` shows `maxSessions` (default 5) at a time, so eviction on
 - **A result confirms the call.** A `TaskCreate` becomes a task only when its result carries `toolUseResult.task.id`, and a `TaskUpdate` applies only on
   `success: true` — a call that failed validation changes nothing. A call whose result never arrives (a session killed mid-call) stays pending and is never
   applied.
-- **Most of the file is never parsed.** A line is decoded only if it names `TaskCreate` / `TaskUpdate`, or contains the id of a pending call (a `TaskUpdate`'s
+- **Most of the file is never parsed.** A line is decoded only if it names `TaskCreate` / `TaskUpdate` or one of the plan markers (`progress.md`, `task-brief`,
+  `task-start`, `task-done`, `review-package`, an Agent call, the two executing skills), or contains the id of a pending call (a `TaskUpdate`'s
   result says `taskId`, not `Task`). The hit is then checked against the exact block shape, so the words in message text, or a pending id in some other record,
   count for nothing.
 - **Bytes are split on `0x0A` before decoding**, as in `chat.ts`, and a chunk's tail after its last newline is carried into the next chunk: single records run
@@ -128,6 +160,8 @@ The first fold of a file runs synchronously inside whichever `scanSessions` call
 cache). Measured 2026-10-07 on this machine: the largest transcript, 23,023,739 B with no task records, took 37.6 ms on the first call and 0.1 ms on the second;
 a 5,883,377 B transcript holding 4 tasks took 9.9 ms, then 0.0 ms. Design and the record shapes it was measured over:
 [the spec](../superpowers/specs/2026-10-07-task-progress-design.md).
+With the plan markers added the same 23.0 MB transcript's first call took 132–148 ms and the second under 0.1 ms (measured 2026-10-07; the Agent calls that
+carry whole dispatch prompts are the new cost; gate 1.5 s).
 
 ### The chat button is also where a session says it needs a human
 

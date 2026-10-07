@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 
-import { scrollTargetId, taskLine, taskProgress } from '../lib/tasks';
+import { planName, scrollTargetId, taskLine, taskProgress } from '../lib/tasks';
 import type { SessionTask } from '../../../shared/types';
 
 const GLYPH = { done: '✓', todo: '○' } as const;
@@ -13,7 +13,7 @@ function kindOf(t: SessionTask): 'done' | 'live' | 'todo' {
  * One DOM for both widths: on a phone the sidecar is a band and `.folded` hides the list, on desktop the stylesheet shows the list regardless and hides
  * the folded line, so the head row and the folded line each carry `done/total` for exactly one width (docs spec §4.2).
  */
-export function TasksCard({ tasks }: { tasks: SessionTask[] | null }) {
+export function TasksCard({ tasks, plan }: { tasks: SessionTask[] | null; plan: string | null }) {
   const p = taskProgress(tasks);
   const [folded, setFolded] = useState(true);
   const listRef = useRef<HTMLOListElement>(null);
@@ -40,11 +40,11 @@ export function TasksCard({ tasks }: { tasks: SessionTask[] | null }) {
   return (
     <div className={`kv tasks-kv${folded ? ' folded' : ''}`}>
       <div className="k">
-        <span>Tasks</span>
+        <span title={plan ?? undefined}>{plan === null ? 'Tasks' : `Plan · ${planName(plan)}`}</span>
         <span>{p.done} / {p.total}</span>
       </div>
       <button type="button" className="task-fold" aria-expanded={!folded} onClick={() => setFolded(f => !f)}>
-        <span className="tf-k">Tasks</span>
+        <span className="tf-k">{plan === null ? 'Tasks' : 'Plan'}</span>
         <span className="tf-n">{p.done}/{p.total}</span>
         <span className={`tf-line ${line.kind}`}>{line.text}</span>
         <span className="tf-cue">{folded ? '▾' : '▴'} list</span>

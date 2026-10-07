@@ -9,12 +9,17 @@
  * newline is carried into the next chunk rather than dropped, because single records run past a whole chunk (1.36 MB seen, 2026-10-07); only the file's
  * own unterminated last line is deferred to the next poll.
  *
- * Design: docs/superpowers/specs/2026-10-07-task-progress-design.md §2.
+ * The same fold also collects plan signals (`plan-progress.ts`): which superpowers plan the session executes and which of its tasks are running or done.
+ * Current models never call TaskCreate, so when a plan yields rows it is the list, and the TaskCreate list is the fallback.
+ *
+ * Design: docs/superpowers/specs/2026-10-07-task-progress-design.md §2; docs/superpowers/specs/2026-10-07-plan-progress-design.md §2.2, §2.4, §2.5.
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
 
 import type { SessionTask, TaskStatus } from '../../shared/types.js';
+import { composePlanTasks, planSignals, readPlanHeadings, resetPlanCache, resolvePlanFile, type PlanSignal } from './plan-progress.js';
 
 /** Most bytes read per `readSync` (MiB, as `record-cache.ts`). */
 export const CHUNK_BYTES = 1024 * 1024;
@@ -22,12 +27,30 @@ const MAX_ENTRIES = 64;
 
 const CREATE = 'TaskCreate';
 const UPDATE = 'TaskUpdate';
-const CALL_MARKERS = [`"${CREATE}"`, `"${UPDATE}"`];
+// The plan markers are what the signals in plan-progress.ts need present on a line; a line with none of them cannot hold a signal. `"name":"Agent"` lines
+// carry whole dispatch prompts (several KB), so parsing them is the new cost the first-call gate watches.
+const CALL_MARKERS = [
+  `"${CREATE}"`, `"${UPDATE}"`,
+  'progress.md', 'task-brief', 'task-start', 'task-done', 'review-package', '"name":"Agent"', 'subagent-driven-development', 'executing-plans'
+];
 const STATUSES: ReadonlySet<string> = new Set<TaskStatus>(['pending', 'in_progress', 'completed']);
 
 interface PendingCall {
   name: typeof CREATE | typeof UPDATE;
   input: Record<string, unknown>;
+}
+
+/**
+ * The plan being executed. `key` is the plan file's basename: the same plan is named relative from whichever directory the shell sits in (`/r`, `/r/server`,
+ * `/r/client`), and a lexical resolve against each of those would call it three plans and reset the run on every cwd change. `path` and `base` follow the
+ * newest signal so the file still resolves from where the session is now.
+ */
+interface PlanState {
+  path: string;
+  base: string | null;
+  key: string;
+  done: Set<string>;
+  live: string | null;
 }
 
 interface Entry {
@@ -41,6 +64,10 @@ interface Entry {
   tasks: Map<string, SessionTask>;
   /** A create was confirmed at some point, so an emptied list reads `[]`, not null. */
   created: boolean;
+  plan: PlanState | null;
+  /** Done and running signals seen before any plan: a ledger is often written before the first `task-brief`. The first plan takes them. */
+  heldDone: Set<string>;
+  heldLive: string | null;
 }
 
 const cache = new Map<string, Entry>();
@@ -77,6 +104,34 @@ function apply(entry: Entry, call: PendingCall, result: unknown): void {
   });
 }
 
+function applySignal(entry: Entry, sig: PlanSignal): void {
+  if (sig.kind === 'plan') {
+    const key = path.basename(sig.path);
+    if (entry.plan?.key === key) {
+      entry.plan.path = sig.path;
+      entry.plan.base = sig.base;
+      return;
+    }
+    // The held signals were consumed by the first plan, so a later plan starts empty.
+    const first = entry.plan === null;
+    entry.plan = {
+      path: sig.path, base: sig.base, key,
+      done: first ? entry.heldDone : new Set(), live: first ? entry.heldLive : null
+    };
+    entry.heldDone = new Set();
+    entry.heldLive = null;
+    return;
+  }
+  const state = entry.plan ?? { done: entry.heldDone, live: entry.heldLive };
+  if (sig.kind === 'done') {
+    state.done.add(sig.id);
+    if (state.live === sig.id) state.live = null;
+  } else if (!state.done.has(sig.id)) {
+    state.live = sig.id;
+  }
+  if (!entry.plan) entry.heldLive = state.live;
+}
+
 function foldLine(entry: Entry, line: Buffer): void {
   // Most lines are neither a Task call nor an answer to one; skip them without decoding.
   let hit = CALL_MARKERS.some((m) => line.includes(m));
@@ -89,10 +144,13 @@ function foldLine(entry: Entry, line: Buffer): void {
   if (!Array.isArray(content)) return;
 
   // The substring hit is not trusted: the words also turn up in message text and a pending id in progress records, so only the exact block shape counts.
+  const cwd = nonEmpty(rec.cwd);
   for (const block of content) {
     if (!isObject(block)) continue;
-    if (block.type === 'tool_use' && (block.name === CREATE || block.name === UPDATE) && typeof block.id === 'string') {
-      entry.pending.set(block.id, { name: block.name, input: isObject(block.input) ? block.input : {} });
+    if (block.type === 'tool_use' && (block.name === CREATE || block.name === UPDATE)) {
+      if (typeof block.id === 'string') entry.pending.set(block.id, { name: block.name, input: isObject(block.input) ? block.input : {} });
+    } else if (block.type === 'tool_use' && typeof block.name === 'string' && isObject(block.input)) {
+      for (const sig of planSignals(block.name, block.input, cwd)) applySignal(entry, sig);
     } else if (block.type === 'tool_result' && typeof block.tool_use_id === 'string') {
       const call = entry.pending.get(block.tool_use_id);
       if (!call) continue;
@@ -124,15 +182,31 @@ function foldFrom(fd: number, entry: Entry, size: number): void {
   }
 }
 
-function snapshot(entry: Entry): SessionTask[] | null {
-  return entry.created ? [...entry.tasks.values()] : null;
+/** The plan file is read here, not in the fold, so an amended plan shows on the next poll even when the transcript did not grow. */
+function snapshot(entry: Entry, projectPath: string | null): TaskState {
+  const { plan } = entry;
+  if (plan) {
+    const file = resolvePlanFile(plan.path, plan.base, projectPath);
+    const rows = composePlanTasks((file && readPlanHeadings(file)) || [], plan.done, plan.live);
+    if (rows.length > 0) return { tasks: rows, plan: path.basename(plan.path).replace(/\.md$/, '') };
+  }
+  return { tasks: entry.created ? [...entry.tasks.values()] : null, plan: null };
+}
+
+export interface TaskState {
+  tasks: SessionTask[] | null;
+  /** Basename (no `.md`) of the plan `tasks` came from; null when `tasks` is the `TaskCreate` list or absent. */
+  plan: string | null;
 }
 
 /**
- * The session's task list in creation order; null when the transcript holds no confirmed `TaskCreate` (an all-deleted list is `[]`). Never throws: a
- * missing file is null, any other I/O error returns what was remembered and retries next call.
+ * The session's task list; null when neither a plan with rows nor a confirmed `TaskCreate` exists (an all-deleted list is `[]`). A plan that yields rows
+ * wins over the `TaskCreate` list, in plan order; otherwise the list is in creation order. `projectPath` is the launch dir, where a relative plan path is
+ * looked for when the record's own cwd has drifted. Never throws: a missing file is null, any other I/O error returns what was remembered and retries
+ * next call.
  */
-export function readSessionTasks(filePath: string): SessionTask[] | null {
+export function readSessionTasks(filePath: string, projectPath: string | null): TaskState {
+  const none: TaskState = { tasks: null, plan: null };
   let entry = cache.get(filePath);
   if (entry) { cache.delete(filePath); cache.set(filePath, entry); }
 
@@ -140,23 +214,23 @@ export function readSessionTasks(filePath: string): SessionTask[] | null {
   try {
     size = fs.statSync(filePath).size;
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') { cache.delete(filePath); return null; }
-    return entry ? snapshot(entry) : null;
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') { cache.delete(filePath); return none; }
+    return entry ? snapshot(entry, projectPath) : none;
   }
 
   if (entry && size < entry.size) { cache.delete(filePath); entry = undefined; }
-  if (entry && size === entry.offset) return snapshot(entry);
+  if (entry && size === entry.offset) return snapshot(entry, projectPath);
 
   let fd: number;
   try {
     fd = fs.openSync(filePath, 'r');
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') { cache.delete(filePath); return null; }
-    return entry ? snapshot(entry) : null;
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') { cache.delete(filePath); return none; }
+    return entry ? snapshot(entry, projectPath) : none;
   }
 
   if (!entry) {
-    entry = { offset: 0, size: 0, pending: new Map(), tasks: new Map(), created: false };
+    entry = { offset: 0, size: 0, pending: new Map(), tasks: new Map(), created: false, plan: null, heldDone: new Set(), heldLive: null };
     cache.set(filePath, entry);
     if (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value!);
   }
@@ -168,12 +242,13 @@ export function readSessionTasks(filePath: string): SessionTask[] | null {
   } finally {
     try { fs.closeSync(fd); } catch { /* nothing left to do */ }
   }
-  return snapshot(entry);
+  return snapshot(entry, projectPath);
 }
 
 /** Test seam: forget every file. */
 export function resetTaskCache(): void {
   cache.clear();
+  resetPlanCache();
   bytesRead = 0;
 }
 
