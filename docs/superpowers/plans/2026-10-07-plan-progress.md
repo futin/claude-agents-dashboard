@@ -85,7 +85,9 @@ authority this plan argues from. The shipped design it extends: `docs/superpower
 - **`compareTaskIds`:** integer part ascending; bare id before its suffixed ids; suffixes alphabetical.
 - **Headings:** lines matching `^#{2,3} Task (\d+[a-z]?)(?: \([^)]*\))?\s*[:.—–-]\s*(.+?)\s*$`; skip lines inside ` ``` ` fenced blocks; strip `\r`;
   plan order; a duplicate id keeps its first heading.
-- **Plan cache:** keyed by absolute path; re-parse only when `mtimeMs` or `size` changed; at most 64 entries (evict oldest); never throws.
+- **Plan cache:** keyed by absolute path; re-parse only when `mtimeMs` or `size` changed; LRU of 64 entries as in `tasks.ts` (a hit refreshes recency);
+  never throws.
+- `base` here is what spec §2.2 calls the entry's `cwd` — renamed so it is not confused with a record's `cwd` field.
 - **Compose:** rows = headings in plan order, then ids in `done ∪ {live}` that have no heading, sorted by `compareTaskIds`, subject `Task <id>`. Status:
   in `done` → `completed`; else equal to `live` → `in_progress`; else `pending`. `activeForm: null` on every row.
 
@@ -109,6 +111,7 @@ authority this plan argues from. The shipped design it extends: `docs/superpower
     `[{done,'3'}]` only.
   - U18 [18] `stripPlanToken`: `docs/p.md\n'` → `docs/p.md`; `docs/x.md"` → `docs/x.md`; `` `docs/y.md` `` → `docs/y.md`; `"docs/z.md\n"` →
     `docs/z.md`; `$PLAN` → `$PLAN` (and `planSignals` ignores it: no `.md`).
+  - U-rp `"$SDD/scripts/review-package" docs/p.md abc1234 def5678` → `[{plan,'docs/p.md'}]` only (no running, no done).
   - U19 [19] `task-start docs/p.md 2` → `[{plan}, {live,'2'}]`; `"$EP/scripts/task-done" docs/p.md 2 abc1234 -- pnpm test` → `[{plan}, {done,'2'}]`.
   - U15 [15] `cd /wt/x && bash scripts/task-brief docs/p.md 3` with recordCwd `/elsewhere` → plan `base` `/wt/x`; `cd ../wt; task-brief docs/p.md 3`
     with recordCwd `/r/sub` → base `/r/wt`.
@@ -173,7 +176,8 @@ authority this plan argues from. The shipped design it extends: `docs/superpower
   - P8 [8] ledger `Task 1: complete` written before any plan signal, then `task-brief docs/p.md 2` → row 1 `completed`, row 2 live.
   - P9 [9] plan `docs/a.md` with 1 and 2 done, then header for `docs/b.md` → `plan` `b`, B's headings, none done.
   - P9b (Review Focus 4) A → B → A, with `Task 1: complete` only before the first switch → `plan` `a`, none done.
-  - P10 [10] header names `docs/gone.md` (no file), ledger completes `10`, `2`; Agent `Task 5a` → rows `2,5a,10`, subjects `Task 2`…, `plan` `gone`.
+  - P10 [10] header names `docs/gone.md` (no file at record `cwd` nor at `projectPath` = the temp root), ledger completes `10`, `2`; Agent `Task 5a` →
+    rows `2,5a,10`, subjects `Task 2`, `Task 5a`, `Task 10`, statuses `completed,in_progress,completed`, `plan` `gone`.
   - P11 [11] after a first call, append a heading to the plan file and bump mtime → next call shows the new row and `taskCacheStats().bytesRead` is
     unchanged.
   - P13 [13] plan file with zero headings and no ids seen, plus a confirmed `TaskCreate` `X` → `{ tasks: [X], plan: null }`; without the create →
@@ -186,13 +190,17 @@ authority this plan argues from. The shipped design it extends: `docs/superpower
   - P20 [20] after `Task 4: complete` and Agent `Implement Task 5: x`, an Agent `Review Task 4` → 5 stays `in_progress`.
   - Existing cases 1–14 and the named ones keep passing with `.tasks` on the new return value, and every existing case asserts `plan === null`.
 - [ ] **Step 2: Run** `pnpm test` → new cases fail.
-- [ ] **Step 3: Implement** types, fold changes, scan wiring and fixture `taskPlan: null` additions. In `test/scan.test.ts` add: a transcript with a
-  plan header and one completed task, its plan file under the session's launch cwd → `taskPlan` is the basename, `tasks` has the plan's rows.
+- [ ] **Step 3: Implement** types, fold changes, scan wiring and fixture `taskPlan: null` additions. In `test/scan.test.ts` add: a session whose `metaRec`
+  cwd is a **real** temp dir (a subdir of the case's `root`, not the fake `/a/...` paths other cases use — `scan.ts:571` takes it as `projectPath`), a
+  plan file `docs/p.md` written beneath it, and a transcript with a ledger header naming `docs/p.md` plus one ledger `Task 1: complete` → `taskPlan` `p`,
+  `tasks` = the plan's rows with row 1 `completed`.
 - [ ] **Step 4: Run** `pnpm typecheck` and `pnpm test` → clean / all pass. Mutation-prove: drop the plan-change reset → P9 red; skip the held-signal
   hand-over → P8 red. Restore.
 - [ ] **Step 5: Live probe (acceptance, spec §5)** — from the scratchpad directory, a one-off `tsx` script that, for every transcript first written since
-  2026-09-15 invoking `subagent-driven-development` or `executing-plans` (51 on 2026-10-07), calls `readSessionTasks(file, launchCwd)` and an
-  independent full-parse reference written in the script (same §2.1 rules, applied to all lines with `JSON.parse`, no prefilter, no chunking). Report: runs
+  2026-09-15 invoking `subagent-driven-development` or `executing-plans` (51 on 2026-10-07), calls `readSessionTasks(file, launchCwd)` — `launchCwd`
+  by the dashboard's own rule, the first record's `cwd` (`originCwd`, `server/lib/scan.ts:571`), never the newest — and an independent full-parse
+  reference written in the script (same §2.1 rules, applied to all lines with `JSON.parse`, no prefilter, no chunking). Also check the reference itself
+  against the raw count of distinct `Task N: complete` ids in ledger inputs plus `task-done` ids, so a rule bug shared by both cannot hide. Report: runs
   resolving a plan; runs with a done signal; runs where the fold's done count ≠ the reference's; mismatches listed by file. Any mismatch is fixed before
   the commit, not explained away. Figures go in the task report with the date.
 - [ ] **Step 6: Measure (Review Focus 5)** — same script: first-call and second-call time of `readSessionTasks` on the largest transcript on the machine

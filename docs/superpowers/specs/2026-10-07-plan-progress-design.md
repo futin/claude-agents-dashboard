@@ -88,7 +88,8 @@ At `readSessionTasks` time, when `entry.plan` is set: resolve `path` (absolute a
 mtime differs from the cached one (module-level cache by resolved path, bounded like the transcript LRU). Never throws: a missing or unreadable plan is an
 empty heading list.
 
-Heading rule: a line matching `^#{2,3} Task (\d+[a-z]?)(?: \([^)]*\))?\s*[:.—–-]\s*(.+?)\s*$`. Ids keep plan order; a duplicate id keeps the first heading.
+Heading rule: a line matching `^#{2,3} Task (\d+[a-z]?)(?: \([^)]*\))?\s*[:.—–-]\s*(.+?)\s*$`, outside ` ``` ` fenced blocks (plans quote example
+headings). Ids keep plan order; a duplicate id keeps the first heading.
 `## Task 1 findings` (no separator) does not match.
 
 ### 2.4 Composing the list
