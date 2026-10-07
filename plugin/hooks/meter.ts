@@ -99,8 +99,11 @@ const num = (obj: unknown, key: string): number | undefined => {
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined
 }
 
-/** The four lines the pane draws from `kaizen.mjs <session-id>`'s JSON, or null when the JSON is not that shape. */
-export function kaizenSummary(analysis: unknown): string[] | null {
+/** One label and its figure, drawn as a two-column row. */
+export type Figure = readonly [label: string, value: string]
+
+/** The four figures the pane draws from `kaizen.mjs <session-id>`'s JSON, or null when the JSON is not that shape. */
+export function kaizenSummary(analysis: unknown): Figure[] | null {
   if (typeof analysis !== 'object' || analysis === null || Array.isArray(analysis)) return null
   const a = analysis as Record<string, unknown>
   const billable = num(a.totals, 'billableApprox')
@@ -110,10 +113,10 @@ export function kaizenSummary(analysis: unknown): string[] | null {
   const turns = num(a.perTurn, 'count')
   if (billable === undefined || subCount === undefined || subTokens === undefined || compactions === undefined || turns === undefined) return null
   return [
-    `billable ≈ ${formatTokens(billable)}`,
-    `${plural(subCount, 'subagent')} · ${formatTokens(subTokens)}`,
-    plural(compactions, 'compaction'),
-    plural(turns, 'turn'),
+    ['billable', `≈ ${formatTokens(billable)}`],
+    ['subagents', `${subCount} · ${formatTokens(subTokens)}`],
+    ['compactions', String(compactions)],
+    ['turns', String(turns)],
   ]
 }
 
@@ -123,7 +126,7 @@ export function formatMs(ms: number): string {
 }
 
 /** The pane's transcript block: idle before the first open, reading while `kaizen.mjs` runs, then its summary or one failure. */
-export type Transcript = { kind: 'idle' } | { kind: 'reading' } | { kind: 'done'; lines: string[] } | { kind: 'failed'; reason: string }
+export type Transcript = { kind: 'idle' } | { kind: 'reading' } | { kind: 'done'; figures: Figure[] } | { kind: 'failed'; reason: string }
 
 /**
  * What one `kaizen.mjs` run comes to. `isStdoutTruncated` is read defensively: 2.1.280's `ProcessRunResult` does not declare it, and a cut-off JSON
@@ -141,6 +144,6 @@ export function transcriptOf(run: { exitCode: number; stdout: string; stderr: st
   } catch {
     return { kind: 'failed', reason: 'output was not JSON' }
   }
-  const lines = kaizenSummary(analysis)
-  return lines === null ? { kind: 'failed', reason: 'output was not the analyzer JSON' } : { kind: 'done', lines }
+  const figures = kaizenSummary(analysis)
+  return figures === null ? { kind: 'failed', reason: 'output was not the analyzer JSON' } : { kind: 'done', figures }
 }

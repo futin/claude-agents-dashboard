@@ -4,7 +4,7 @@ import type { On, ProcessRunResult, RenderElement, RenderInput, RenderNode, Sess
 export const NAME = 'claude-agents-dashboard'
 export const PANE_ID = 'kaizen-stats'
 export const SESSION_ID = 'sess-183'
-export const CAVEAT = 'subagent rows count what each returned, not what it spent — the transcript figures below have the full total'
+export const CAVEAT = '↳ returned size only, full below'
 
 export const SESSION: SessionStartInput = { surface: 'terminal', isInteractive: true, cwd: '/work' }
 
@@ -93,7 +93,7 @@ export function worldOf(on: On): World {
     submits: 0,
     invalidations: 0,
     runs: [],
-    answer: async () => ({ exitCode: 0, stdout: JSON.stringify(ANALYSIS), stderr: '' }),
+    answer: async () => ({ exitCode: 0, stdout: JSON.stringify(ANALYSIS), stderr: '', isStdoutTruncated: false, isStderrTruncated: false }),
     compacted: { messages: MESSAGES },
   }
 
@@ -152,19 +152,52 @@ function stringsOf(node: RenderNode | RenderElement | null | undefined): string[
   if (node === null || node === undefined || typeof node === 'boolean') return []
   if (typeof node === 'string' || typeof node === 'number') return [String(node)]
   if (Array.isArray(node)) return node.flatMap(child => stringsOf(child as RenderNode))
-  const element = node as { props?: { label?: unknown }; children?: readonly RenderNode[] }
+  const element = node as { props?: { label?: unknown; flexDirection?: unknown }; children?: readonly RenderNode[] }
   const label = typeof element.props?.label === 'string' ? [element.props.label] : []
   const own = (element.children ?? []).flatMap(child => stringsOf(child))
+  // A row Box is one table row: its cells read as one line, `a | b | c`.
+  if ((node as { type?: string }).type === 'Box' && element.props?.flexDirection === 'row') return [own.join(' | ')]
   // A Text's string children are one line; join them before they reach the outer list.
   return (node as { type?: string }).type === 'Text' ? [[...label, ...own].join('')] : [...label, ...own]
 }
 
-/** The lines of one section of the pane: from its heading up to the next blank-led heading. */
+/** A section title as the pane draws it: alone on its line, or first cell of its table's header row. */
+const isTitle = (line: string, title: string) => line === title || line.startsWith(`${title} | `)
+
+/** The lines of one section of the pane: after its title line, up to the next section title or the button. */
 export function sectionOf(text: string, heading: string): string[] {
   const lines = text.split('\n')
-  const start = lines.indexOf(heading)
+  const start = lines.findIndex(line => isTitle(line, heading))
   if (start < 0) return []
   const rest = lines.slice(start + 1)
-  const end = rest.findIndex(line => !line.startsWith(' '))
+  const end = rest.findIndex(line => ['TOOLS', 'SUBAGENTS', 'TRANSCRIPT'].some(title => isTitle(line, title)) || line === 'Run /kaizen')
   return end < 0 ? rest : rest.slice(0, end)
+}
+
+/** Every bold string in a drawn tree, in drawn order. */
+export function boldOf(node: RenderNode | RenderElement | null | undefined): string[] {
+  if (node === null || node === undefined || typeof node !== 'object') return []
+  if (Array.isArray(node)) return node.flatMap(child => boldOf(child as RenderNode))
+  const element = node as { type?: string; props?: { bold?: unknown }; children?: readonly RenderNode[] }
+  if (element.type === 'Text' && element.props?.bold === true) return [textOf(node)]
+  return (element.children ?? []).flatMap(child => boldOf(child))
+}
+
+/** The first row Box in a drawn tree whose cells read as `line`. */
+export function rowOf(node: RenderNode | RenderElement | null | undefined, line: string): RenderElement | undefined {
+  if (node === null || node === undefined || typeof node !== 'object') return undefined
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = rowOf(child as RenderNode, line)
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  const element = node as { type?: string; props?: { flexDirection?: unknown }; children?: readonly RenderNode[] }
+  if (element.type === 'Box' && element.props?.flexDirection === 'row' && textOf(node) === line) return node as RenderElement
+  for (const child of element.children ?? []) {
+    const found = rowOf(child, line)
+    if (found !== undefined) return found
+  }
+  return undefined
 }
