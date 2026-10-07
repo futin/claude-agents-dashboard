@@ -228,7 +228,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
               </div>
             </div>
 
-            <TasksCard tasks={session.tasks} />
+            <TasksCard tasks={session.tasks} plan={session.taskPlan} />
 
             {/* Three of these are phone-hidden (`.f.wide`): Project repeats the
                 head's pill, Messages and Now are already on screen — the count

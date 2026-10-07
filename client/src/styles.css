@@ -1953,6 +1953,9 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
      here — the list always shows and the folded line gives way to the head row. */
   .chat-side .tasks-kv{display:flex;flex-direction:column;flex:1;min-height:200px}
   .chat-side .tasks-kv .k{display:flex;flex:none;justify-content:space-between;gap:8px}
+  /* a long plan name ellipsises on one line; the count keeps its width so the column never widens */
+  .chat-side .tasks-kv .k > :first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chat-side .tasks-kv .k > :last-child{flex:none}
   .chat-side .tasks-kv .track{flex:none;height:6px;margin-top:8px}
   .task-fold{display:none}
   .task-status{display:block;flex:none;margin-top:8px;font-size:12px;color:var(--ink2)}

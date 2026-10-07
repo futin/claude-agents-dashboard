@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { scrollTargetId, taskLine, taskProgress } from '../client/src/lib/tasks.js';
+import { planName, scrollTargetId, taskLine, taskProgress } from '../client/src/lib/tasks.js';
 import type { SessionTask, TaskStatus } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -91,6 +91,13 @@ export function run(): number {
     assert.strictEqual(scrollTargetId(taskProgress(ts)!), '10');
     // List order, not id order, decides the first pending task.
     assert.strictEqual(scrollTargetId(taskProgress([task(10, 'pending'), task(2, 'pending')])!), '10');
+  })) p++; else f++;
+
+  if (test('planName strips one leading date and leaves anything else alone', () => {
+    assert.strictEqual(planName('2026-10-07-task-progress'), 'task-progress');
+    assert.strictEqual(planName('phase0-spike'), 'phase0-spike');
+    // No trailing dash after the date means nothing to strip.
+    assert.strictEqual(planName('2026-10-07'), '2026-10-07');
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
