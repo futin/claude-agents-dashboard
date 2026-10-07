@@ -311,11 +311,8 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   `surfaces` / `modifiers` / `offbook` / `gap` report; pipeline in lib/transcript-audit.ts
 .claude-plugin/marketplace.json  the repo as a plugin marketplace — one plugin, sourced from plugin/
 plugin/           the installable Claude Code plugin (`/plugin install`, README §Install the skills);
-                  plain JS skills plus one TypeScript hooks module, never imported by server/ or client/ at runtime
-  .claude-plugin/plugin.json  name + version + `nudgeAtTokens` userConfig
-  hooks/          live kaizen meter mod (function hooks, inert without CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1):
-                  register.ts wiring, meter.ts pure logic, view.tsx pane, kaizen-path.ts; docs/subsystems/analytics.md §Live meter
-  tests/          the mod's `claude plugin test` suite, run by `pnpm test:mod`; tsconfig.json beside it checks against generated engine types
+                  plain JS skills, never imported by server/ or client/ at runtime
+  .claude-plugin/plugin.json  name + version
   skills/git-sync/  repo chores across machines; engine tools/git-sync.mjs, own `node --test`
                   suite run by `pnpm test:skills` (~4 min, 2026-10-01)
   skills/kaizen/  session post-mortem; analyzer kaizen.mjs, own `node --test` suite run
