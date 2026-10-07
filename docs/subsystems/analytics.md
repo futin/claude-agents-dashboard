@@ -232,6 +232,30 @@ returned — no backend change, so the read-only invariant above still holds.
   silently. `AnalyticsReport.lessonStatus` is the newest status matching the session
   (prefix + newest-wins, mirroring `lessonForSession`); `null`/absent = still **open**.
 
+## Live meter (mod)
+
+`plugin/hooks/` is a function-hooks module (`hooks.json` → `"modules": ["./register.ts"]`) that shows, inside the session itself, a live version of what
+`/kaizen` reports afterwards. It is inert unless Claude Code runs with `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`, and it declares no command hooks
+(`test/plugin-manifest.test.ts` pins both).
+
+- **Status line,** always on while the mod loads: `live · ctx 42k · $1.23 · 2 turns · 1 compaction`, from `session.measure`, `turn.complete` and
+  `session.compact`. It says `live`, never `billable`: the engine's running figures drift from kaizen's transcript sum around a compaction, and only
+  the transcript sum is the billable one.
+- **One nudge** toward `/compact` when context first reaches `nudgeAtTokens` (plugin `userConfig`, default 150000, `0` turns it off). A real compaction
+  re-arms it; a declined one, a `precompute` dispatch or a subagent's own compaction does not.
+- **`/kaizen-stats`** toggles a pane: the top five tools and top five subagents (`Agent` / `Task` calls, labelled by `subagent_type`, else
+  `description`) by result tokens (chars ÷ 4, the same rule as `byTool.resultTokens`) and by wall time, then `kaizen.mjs <session-id>`'s billable total,
+  subagent total, compactions and turns. Subagent rows count what each subagent returned, not what it spent; the pane says so. **Run /kaizen** fills
+  the prompt and never submits it.
+- **Main thread only.** Any event carrying an `agentId` passes through uncounted. `/clear` and `/resume` reset the meter, the ledger and the nudge, and re-read the transcript block when the pane is open.
+- **It never writes `~/.claude/session-analytics-log.md`.** The log grammar above stays a contract between `/kaizen` and this tab alone; the mod reads
+  the transcript through `kaizen.mjs` and writes nothing.
+
+Pure logic lives in `hooks/meter.ts`, the pane in `hooks/view.tsx`, the wiring in `hooks/register.ts`; `pnpm test:mod` runs `plugin/tests/` under
+`claude plugin test`, outside `pnpm test` because it needs the flag. `plugin/tsconfig.json` checks the module against engine types generated per machine
+(`plugin/.claude/types/` from `/plugin-types`, or `plugin/.claude-plugin/types/` on newer engines; both gitignored, and `scripts/sync-plugin.ts` keeps
+the latter out of its digest).
+
 <!-- docs-sync:
   sources:
     - server/lib/analytics.ts
@@ -243,6 +267,7 @@ returned — no backend change, so the read-only invariant above still holds.
     - client/src/lib/analyticsFilterSort.ts
     - client/src/hooks/useSettings.tsx
     - plugin/skills/kaizen/
+    - plugin/hooks/
   kind: subsystem
   verified: 6c94cf297f325506268b1686ed8526816e9f8487
 -->

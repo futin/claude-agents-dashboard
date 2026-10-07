@@ -63,19 +63,32 @@ export function run(): number {
     assert.strictEqual(hashTree(path.join(os.tmpdir(), 'sync-plugin-does-not-exist')), '');
   })) p++; else f++;
 
-  if (test('publishedDigests covers .claude-plugin and skills, and ignores files beside them', () => {
-    assert.deepStrictEqual(PUBLISHED_PATHS, ['.claude-plugin', 'skills']);
+  if (test('publishedDigests covers .claude-plugin, hooks and skills, and ignores files beside them', () => {
+    assert.deepStrictEqual(PUBLISHED_PATHS, ['.claude-plugin', 'hooks', 'skills']);
     const clean = publishedDigests(tree(PLUGIN));
     const marked = publishedDigests(tree({ ...PLUGIN, '.in_use': '', '.orphaned_at': '1' }));
-    assert.deepStrictEqual(Object.keys(clean), ['.claude-plugin', 'skills']);
+    assert.deepStrictEqual(Object.keys(clean), ['.claude-plugin', 'hooks', 'skills']);
     assert.deepStrictEqual(marked, clean);
   })) p++; else f++;
 
+  if (test('publishedDigests: an edit under hooks/ is drift', () => {
+    const clean = publishedDigests(tree(PLUGIN));
+    const edited = publishedDigests(tree({ ...PLUGIN, 'hooks/register.ts': 'export const register = () => {}' }));
+    assert.notStrictEqual(edited.hooks, clean.hooks);
+    assert.deepStrictEqual(driftedPaths(edited, clean), ['hooks']);
+  })) p++; else f++;
+
+  if (test('publishedDigests: engine-written types under .claude-plugin/types/ are not drift', () => {
+    const clean = publishedDigests(tree(PLUGIN));
+    const typed = publishedDigests(tree({ ...PLUGIN, '.claude-plugin/types/claude-code.d.ts': 'declare module "claude-code" {}' }));
+    assert.deepStrictEqual(typed, clean);
+  })) p++; else f++;
+
   if (test('driftedPaths names only the differing paths, in PUBLISHED_PATHS order, and an absent path is drift', () => {
-    const repo = { '.claude-plugin': 'm', skills: 's' };
-    assert.deepStrictEqual(driftedPaths(repo, { '.claude-plugin': 'm', skills: 's' }), []);
-    assert.deepStrictEqual(driftedPaths(repo, { '.claude-plugin': 'm', skills: 'S' }), ['skills']);
-    assert.deepStrictEqual(driftedPaths(repo, { skills: '', '.claude-plugin': '' }), ['.claude-plugin', 'skills']);
+    const repo = { '.claude-plugin': 'm', hooks: 'h', skills: 's' };
+    assert.deepStrictEqual(driftedPaths(repo, { '.claude-plugin': 'm', hooks: 'h', skills: 's' }), []);
+    assert.deepStrictEqual(driftedPaths(repo, { '.claude-plugin': 'm', hooks: 'h', skills: 'S' }), ['skills']);
+    assert.deepStrictEqual(driftedPaths(repo, { skills: '', hooks: '', '.claude-plugin': '' }), ['.claude-plugin', 'hooks', 'skills']);
   })) p++; else f++;
 
   if (test('publishBlocker: a clean, pushed, up-to-date tree passes', () => {

@@ -176,6 +176,11 @@ claude plugin install claude-agents-dashboard@claude-agents-dashboard-marketplac
 - **`/git-sync`** — the repo's git chores in one pass: commit what's lying around behind a secret scan, sync and verify the trunk, push it, and prune
   branches proven merged. The trunk is pushed once it verifies; every deletion, branch push and stash change is asked first.
 
+The plugin also carries a live kaizen meter, a function-hooks module that loads only when Claude Code runs with `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`
+(early access). With it, every session gets a `live` status line (context, cost, turns, compactions), one toast suggesting `/compact` once context
+reaches `nudgeAtTokens` (plugin setting, default 150000, `0` turns it off), and **`/kaizen-stats`**, a pane ranking the session's tools and subagents by
+tokens and wall time beside `/kaizen`'s transcript totals. Without the flag nothing of it loads.
+
 The installed copy is a cached snapshot of GitHub's `main`, not a link to this checkout, so a skill edit in `plugin/` reaches a session only once it is
 committed and pushed and `pnpm plugin:sync` has run. The script compares `plugin/` with the installed copy, refuses a tree GitHub does not have (off
 `main`, uncommitted, unpushed or behind), reinstalls, and re-checks the result; restart Claude Code afterwards.
