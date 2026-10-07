@@ -15,10 +15,10 @@ task tools.
 | Plan headings | 28 of the 30 newest plan files across `~/Documents/custom-projects/*/docs/superpowers/plans/` have task headings. Heading forms over all plans: `### Task N:` 583, `## Task N:` 39, plus `### Task 5a:` and `### Task 7 (conditional):` |
 | Plan checkboxes | 1 of those 30 plans has any `- [x]`; checkboxes are not a progress signal |
 | Runs | 51 transcripts first written since 2026-09-15 invoke the skill: 18 `subagent-driven-development` (SDD), 33 `executing-plans` only |
-| Plan signal (§2.1) | SDD 18/18 (ledger header 13, `task-brief` 14, Skill args 4). `executing-plans`-only 6/33 — the other 27 name no plan in any signal and show no card |
-| `Task N: complete` ledger lines | SDD 14/18 (9 of the 12 since 2026-09-28 also wrote the header); `executing-plans`-only 2/33 |
-| Running signals | Agent description `Task N`: SDD 17/18; `task-brief <plan> N`: SDD 14/18; `executing-plans`-only 0/33 (it runs inline, no dispatches) |
-| Trap | the literal `SDD ledger — plan: <plan file path>` occurs 251 times — it is the skill's own template text, not a run |
+| Plan signal (§2.1 rules) | SDD 18/18. `executing-plans`-only 11/33 — the other 22 name no plan in any signal and show no card |
+| `Task N: complete` in a ledger input (§2.1) | SDD 16/18; `executing-plans`-only 4/33. 528 Bash inputs carry the line; 186 of them reach the ledger through a shell variable (`W=.superpowers/sdd/x; … >> $W/progress.md`), which a literal-path rule misses — it under-counts 15 of the 51 runs |
+| Running signals | Agent description `Task N` (the skill's own `Implement Task N:` template): SDD 17/18; `task-brief <plan> N`: 435 of 484 calls match §2.1; `executing-plans`-only 0/33 (it runs inline, no dispatches) |
+| Trap | the literal `SDD ledger — plan: <plan file path>` occurs in 178 records — it is the skill's own template text, not a run |
 
 ## Decisions
 
@@ -36,7 +36,10 @@ task tools.
 
 - `SessionTask` is unchanged. Plan rows use `id` = the task number as written (`"3"`, `"5a"`), `subject` = the heading title, `activeForm: null`.
 - New `Session.taskPlan: string | null` — the plan's file name without `.md` (e.g. `2026-10-07-task-progress`) when `tasks` came from a plan, else `null`.
-- `Session.tasks` keeps its meaning: `null` = nothing to show. A plan with no task headings and no task numbers seen in the transcript yields `null`.
+- `Session.tasks` keeps its meaning: `null` = nothing to show. A plan with no task headings and no task numbers seen in the transcript falls back to the
+  `TaskCreate` list (§2.4), so `null` only without one.
+- `taskPlan` is required, so every `Session` literal gains `taskPlan: null`: `test/visual/fixtures/sessions.ts`, `test/filter-sort.test.ts`,
+  `test/triage.test.ts`, `test/git-sync-client.test.ts` and any other the typecheck names.
 
 ## 2. Server — `server/lib/tasks.ts`
 
@@ -46,23 +49,33 @@ The raw line only feeds the prefilter (§2.5). Matching runs on these string val
 `content`; Edit `file_path` + `new_string` (never `old_string` — an Edit that turns `Task 3: dispatched` into `Task 3: complete` must not re-mark 3 running);
 Skill `skill` + `args`; Agent `description`. Within one input, done signals apply after running signals.
 
+A **ledger input** is a Bash `command` containing both `progress.md` and `sdd/` anywhere (a variable-built path counts), or a Write/Edit whose `file_path`
+contains `/sdd/` and ends in `/progress.md`. For Write/Edit only `file_path` qualifies — a Write of a spec, plan or test fixture that quotes ledger lines
+in its `content` is never a ledger input.
+
 | Signal | Matches when | Effect |
 | --- | --- | --- |
-| Plan, from ledger | input names a path matching `sdd/[^\s"']+/progress\.md` **and** contains `SDD ledger — plan: <p>` with `<p>` ending in `.md` | plan = `<p>` |
-| Plan, from script | Bash `command` runs `task-brief <p> <N>` or `review-package <p> …` with `<p>` ending in `.md` | plan = `<p>` (task-brief also marks N running) |
-| Plan, from skill | Skill `skill` ends with `subagent-driven-development` or `executing-plans` and `args` is a path ending in `.md` | plan = `args` |
-| Done | input names an `sdd/…/progress.md` path and contains `Task <N>: complete` | N done (every match in the input) |
-| Running | `Task <N>: dispatched` in an input naming `sdd/…/progress.md`; an Agent `description` containing `Task <N>` (word-bounded); a `task-brief <p> <N>` command | the latest such N is the running candidate |
+| Plan, from ledger | a ledger input contains `SDD ledger — plan: <p>` | plan = `<p>` |
+| Plan, from script | Bash `command` contains `task-brief <p> <N>` or `review-package <p>`; the word may be followed by a closing quote (`"$SDD/scripts/task-brief" …`) | plan = `<p>` (task-brief also marks N running) |
+| Plan, from skill | Skill `skill` ends with `subagent-driven-development` or `executing-plans` and `args` has a whitespace-separated token ending in `.md` (`Execute docs/…/p.md task by task`) | plan = the first such token |
+| Done | a ledger input contains `Task <N>: complete` | N done (every match in the input) |
+| Running | an Agent `description` containing `Task <N>` (word-bounded); a `task-brief <p> <N>` command | the latest such N is the running candidate |
 
-`<N>` is `\d+[a-z]?`. The `<plan file path>` template literal never matches because it does not end in `.md`.
+`<N>` is `\d+[a-z]?`. `<p>` is the run of non-whitespace after the marker with surrounding quotes and backticks and a trailing printf `\n` stripped; it
+must then end in `.md`, so the skill's template literal `<plan file path>` never matches. A `<p>` built from a shell variable (`$PLAN`) never ends in `.md`
+and is ignored. `Task <N>: dispatched` ledger lines are a controller habit seen here, not a superpowers 6.4.1 format, and are not a signal.
 
 ### 2.2 Entry state
 
 The per-file entry gains `plan: { path: string; cwd: string | null; done: Set<string>; live: string | null } | null`. `path` is as written; `cwd` is the
-`cwd` field of the record that carried the plan signal (records carry their own `cwd`; a run that `cd`s into a worktree resolves against the right root).
+base a relative `path` resolves against: for a Bash signal whose `command` starts with `cd <dir> &&` or `cd <dir>;`, that `<dir>` (itself resolved against
+the record's `cwd` when relative); otherwise the `cwd` field of the record that carried the signal. A record's `cwd` is the shell's cwd before the command
+runs, which drifts (seen: the SDD workspace dir itself), so a leading `cd` wins. If the file is missing at that base, §2.3 retries once against
+`Session.cwd` (the launch dir).
 
-- A plan signal naming the same resolved path as the current plan updates `cwd` only if it was null. A **different** path replaces the plan and resets `done`
-  and `live` — a session that runs two plans shows the latest.
+- A plan signal naming the same resolved path as the current plan changes nothing. A **different** path replaces the plan and resets `done` and `live` —
+  a session that runs two plans shows the latest.
+- A running signal for an id already in `done` (a late `Review Task 4`) is ignored; `live` keeps its value.
 - Done and running signals before any plan signal are held and applied to the first plan (a ledger is often written before the first `task-brief`), then
   dropped on any later plan change.
 - `live` is cleared when that N becomes done.
@@ -78,8 +91,8 @@ Heading rule: a line matching `^#{2,3} Task (\d+[a-z]?)(?: \([^)]*\))?\s*[:.—�
 
 ### 2.4 Composing the list
 
-Rows = the plan's headings in order, then any id seen in done/running signals but absent from the headings, appended in numeric order with subject
-`Task <id>`. Status per row: in `done` → `completed`; equal to `live` → `in_progress`; else `pending`. If the row list is empty → fall back to the
+Rows = the plan's headings in order, then any id seen in done/running signals but absent from the headings, appended in id order with subject
+`Task <id>`. Id order: integer part ascending, then a bare id before its suffixed ones, suffixes alphabetical (`2, 5, 5a, 5b, 10`). Status per row: in `done` → `completed`; equal to `live` → `in_progress`; else `pending`. If the row list is empty → fall back to the
 `TaskCreate` list (D2 only applies when the plan yields rows). `taskPlan` = basename without `.md` when the plan yields rows, else `null`.
 
 The return type widens to `{ tasks: SessionTask[] | null; plan: string | null }`; `scan.ts` sets `tasks` and `taskPlan` from it.
@@ -115,23 +128,28 @@ lines are common but short; the measured cost on the largest transcript must sta
 2. Same header written via Write `content`, and via Edit `new_string` — both resolve.
 3. The template literal `SDD ledger — plan: <plan file path>` in a tool input yields no plan.
 4. `Task 2: complete` in a Bash input naming `progress.md` → row 2 completed; the same string in assistant text, a user record, or a tool_result → no effect.
-5. `task-brief docs/…/p.md 3` → plan resolved **and** row 3 in_progress; a later `Task 3: complete` clears live.
+   4b. Variable path: `W=.superpowers/sdd/p; printf 'Task 2: complete (…)\n' >> "$W/progress.md"` → row 2 completed.
+   4c. A Write to `docs/…/spec.md` whose `content` quotes `…/sdd/x/progress.md` and `Task 1: complete` → no effect, held or applied.
+5. `task-brief docs/…/p.md 3` → plan resolved **and** row 3 in_progress; a later `Task 3: complete` clears live. Same with
+   `"$SDD/scripts/task-brief" "docs/…/p.md" 3`.
 6. Agent `description: "Implement Task 4: …"` → row 4 in_progress; `"Review Task 4 (spec + quality)"` keeps 4 live; a description without a number does not.
 7. Skill `subagent-driven-development` with `args` = plan path resolves the plan; empty args does not.
 8. Done lines before any plan signal apply once the plan appears.
 9. A second, different plan resets done/live; the list is the second plan's.
-10. Plan file missing → rows from done/running ids, subject `Task <id>`, numeric order.
+10. Plan file missing, ids seen in order `10, 5b, 2, 5a, 5` → rows `2, 5, 5a, 5b, 10`, subject `Task <id>`.
 11. Plan amended (append a heading, bump mtime) → new row on the next call; the transcript is not re-read (bytesRead unchanged).
 12. Heading forms: `## Task 1:`, `### Task 5a:`, `### Task 7 (conditional):`, `### Task 8 — x` match; `## Task 1 findings` does not; duplicate id keeps first.
 13. Plan with zero headings and no ids → falls back to the `TaskCreate` list (and to `null` without one).
 14. Plan and `TaskCreate` both present → plan rows win.
-15. Relative plan path resolves against the carrying record's `cwd`, not the process cwd.
-16. Chunk boundary: a ledger line straddling `CHUNK_BYTES` still counts (reuse case 13's construction).
-
-Mutation proofs to record: drop the `progress.md` requirement → 4's prose/tool_result variants stay green but a fixture with `Task 2: complete` in an
-unrelated Bash input must go red (add it as 4b); drop the `.md` check → 3 red; drop the reset → 9 red.
-
+15. Relative plan path resolves against the carrying record's `cwd`, not the process cwd; with `cd /wt/x && task-brief docs/p.md 3` on a record whose
+    `cwd` is elsewhere, against `/wt/x`; when neither has the file, against `Session.cwd`.
+16. Chunk boundary: a ledger line straddling `CHUNK_BYTES` still counts (reuse case 12's byte-exact straddle construction).
 17. Edit with `old_string` `Task 3: dispatched` and `new_string` `Task 3: complete` on a `progress.md` path → 3 completed, not live.
+18. Header with a printf escape — `printf '# SDD ledger — plan: docs/p.md\n' > "$W/progress.md"` → plan `docs/p.md`.
+19. Running signal for a done id (`Review Task 4` after `Task 4: complete`, while 5 is live) → 5 stays in_progress.
+
+Mutation proofs to record: let Write `content` qualify a ledger input → 4c red; require a literal `sdd/…/progress.md` path → 4b red; drop the `.md`
+check → 3 red; drop the reset → 9 red.
 
 **Live probe (acceptance):** run the fold over the 51 runs since 2026-09-15 (survey table). Report: runs that resolve a plan; of those with ledger `Task N: complete` lines,
 how many show a done count equal to the ledger's distinct completed ids; first-call time on the largest transcript. A mismatch is investigated before the PR,
@@ -146,7 +164,7 @@ updated.
 ## Out of scope
 
 - Inline runs that never write ledger lines getting progress (they show 0/N).
-- `executing-plans` runs that name their plan in no signal — 27 of 33 measured (2026-10-07). Inferring the plan from a `Read` of a plans file was weighed and
+- `executing-plans` runs that name their plan in no signal — 22 of 33 measured (2026-10-07). Inferring the plan from a `Read` of a plans file was weighed and
   left out: sessions read many plans they don't execute.
 - backlog-manager items and `backlog-orchestrate` runs (their progress lives in the backlog store, not a plan ledger).
 - Native plan mode (`~/.claude/plans/*.md`) and `ExitPlanMode`.
@@ -158,3 +176,5 @@ updated.
 - Ledger and script formats are those of superpowers 6.4.1 skills (`subagent-driven-development`, `executing-plans`) as used here through 2026-10-07; a skill
   revision that renames `Task N: complete` silently drops progress to 0 done (degrades, does not lie).
 - A plan edited after a run finished shows today's headings against yesterday's progress.
+- A plan that lived in a worktree removed after merge resolves only if `Session.cwd` also has it (the merged copy); otherwise a finished run's rows degrade to
+  `Task <id>`.
