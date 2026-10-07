@@ -107,7 +107,7 @@ endpoint: the list rides the 3s sessions poll.
 **It is rebuilt from the transcript, and only the whole file will do.** There is no on-disk task store to read. `readTranscript` sees the last 256 KB, and a
 `TaskCreate` is typically written at a session's start, far below that window, so `server/lib/tasks.ts` folds the file from byte 0 — once — and keeps, per file,
 the byte offset it reached plus the calls still waiting on a result and the tasks so far. Every later poll reads only the appended bytes; `size === offset`
-returns the remembered list without touching the disk. Transcripts are append-only, so a file that shrank is a rotated one and starts over. The cache is an LRU
+returns the remembered list without reading the file. Transcripts are append-only, so a file that shrank is a rotated one and starts over. The cache is an LRU
 of 64 files; `scan.ts` shows `maxSessions` (default 5) at a time, so eviction only reaches sessions no longer shown, and one that comes back re-folds in full.
 
 - **A result confirms the call.** A `TaskCreate` becomes a task only when its result carries `toolUseResult.task.id`, and a `TaskUpdate` applies only on

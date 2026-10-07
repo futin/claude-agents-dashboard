@@ -1,4 +1,4 @@
-import type { SessionTask } from '../../../shared/types.js';
+import type { SessionTask } from '../../../shared/types';
 
 export interface TaskProgress {
   done: number;

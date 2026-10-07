@@ -1948,9 +1948,10 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
   .chat-side .kv .v{margin-top:4px}
   .chat-side .kv .v .metric{font-size:24px}
   .chat-side .kv .track{flex-basis:auto;height:10px;margin-top:12px}
-  /* the card takes the column's spare height and the list scrolls inside it; `.chat-facts` keeps its natural height below. `.folded` has no effect
+  /* the card takes the column's spare height and the list scrolls inside it; `.chat-facts` keeps its natural height below. The 200px floor keeps the
+     list readable on a short viewport, where the column scrolls instead of squeezing it to nothing. `.folded` has no effect
      here — the list always shows and the folded line gives way to the head row. */
-  .chat-side .tasks-kv{display:flex;flex-direction:column;flex:1;min-height:0}
+  .chat-side .tasks-kv{display:flex;flex-direction:column;flex:1;min-height:200px}
   .chat-side .tasks-kv .k{display:flex;flex:none;justify-content:space-between;gap:8px}
   .chat-side .tasks-kv .track{flex:none;height:6px;margin-top:8px}
   .task-fold{display:none}

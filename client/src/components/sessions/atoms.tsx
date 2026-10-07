@@ -67,7 +67,7 @@ export function TaskPill({ s }: { s: Session }) {
   const p = taskProgress(s.tasks);
   if (!p) return null;
   return (
-    <span className={`ag-pill tasks${p.allDone ? ' all-done' : ''}`} aria-label={`${p.done} of ${p.total} tasks done`}>
+    <span className={`ag-pill tasks${p.allDone ? ' all-done' : ''}`} role="img" aria-label={`${p.done} of ${p.total} tasks done`}>
       {p.done}/{p.total}
       {p.allDone ? ' ✓' : <span className="mini"><i style={{ width: `${p.pct}%` }} /></span>}
     </span>
