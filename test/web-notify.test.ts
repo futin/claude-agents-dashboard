@@ -35,7 +35,8 @@ function sess(p: Partial<Session>): Session {
     lastTimestamp: null,
     updatedMs: 1_700_000_000_000,
     version: null,
-    kaizenLesson: null
+    kaizenLesson: null,
+    tasks: null
   };
 }
 
