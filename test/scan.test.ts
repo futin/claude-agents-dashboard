@@ -219,6 +219,34 @@ export function run(): number {
     assert.deepStrictEqual(tasks.map(t => t.status), ['completed', 'pending']);
     assert.deepStrictEqual(tasks.map(t => t.subject), ['First', 'Second']);
     assert.strictEqual(byProject('plain').tasks, null);
+    assert.strictEqual(byProject('tasks').taskPlan, null);
+    assert.strictEqual(byProject('plain').taskPlan, null);
+  })) p++; else f++;
+
+  if (test('scanSessions: a session executing a plan gets the plan\'s rows and taskPlan, resolved against the launch dir', () => {
+    const now = 1_700_000_000_000;
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-plan-'));
+    // A real directory: scan.ts hands the session's originCwd to the fold as the fallback a relative plan path resolves against.
+    const project = path.join(base, 'planproj');
+    fs.mkdirSync(path.join(project, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(project, 'docs', 'p.md'), '# p\n\n### Task 1: First\n\nx\n\n### Task 2: Second\n\ny\n');
+    const bash = (id: string, command: string) =>
+      ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] } });
+    const root = makeRoot([
+      {
+        dirName: '-a-planrun', id: 'planrun', mtimeMs: now - 60 * 1000,
+        records: [
+          metaRec(project, 'main'),
+          bash('b1', 'W=.superpowers/sdd/p; printf \'# SDD ledger — plan: docs/p.md\\n\' > "$W/progress.md"'),
+          bash('b2', 'W=.superpowers/sdd/p; printf \'Task 1: complete (abc1234)\\n\' >> "$W/progress.md"'),
+          assistantDone()
+        ]
+      }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
+    const s = out.sessions.find(x => x.project === 'planproj')!;
+    assert.strictEqual(s.taskPlan, 'p');
+    assert.deepStrictEqual(s.tasks!.map(t => [t.subject, t.status]), [['First', 'completed'], ['Second', 'pending']]);
   })) p++; else f++;
 
   if (test('working (recent + unfinished) vs idle (stale + finished)', () => {

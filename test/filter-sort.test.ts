@@ -54,7 +54,8 @@ function sess(p: Partial<Session>): Session {
     updatedMs: p.updatedMs ?? NOW,
     version: null,
     kaizenLesson: p.kaizenLesson ?? null,
-    tasks: null
+    tasks: null,
+    taskPlan: null
   };
 }
 

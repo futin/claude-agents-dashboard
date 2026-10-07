@@ -631,6 +631,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     // Only present when this server holds a live handle for the id — the field
     // is deliberately absent, not false, for every other row (see `stopState`).
     const stopState = options.stopStates?.get(c.id);
+    const taskState = readSessionTasks(c.file, projectPath);
     sessions.push({
       id: c.id,
       project,
@@ -654,7 +655,8 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       updatedMs: c.mtimeMs,
       version: parsed.version || null,
       kaizenLesson: lessons ? lessonForSession(lessons, c.id) : null,
-      tasks: readSessionTasks(c.file)
+      tasks: taskState.tasks,
+      taskPlan: taskState.plan
     });
   }
 

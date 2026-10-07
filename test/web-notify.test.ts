@@ -36,7 +36,8 @@ function sess(p: Partial<Session>): Session {
     updatedMs: 1_700_000_000_000,
     version: null,
     kaizenLesson: null,
-    tasks: null
+    tasks: null,
+    taskPlan: null
   };
 }
 
