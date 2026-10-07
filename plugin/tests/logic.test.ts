@@ -140,7 +140,12 @@ describe('kaizen summary', () => {
         compactions: { count: 1 },
         perTurn: { count: 87 },
       }),
-    ).toEqual(['billable ≈ 1.2M', '3 subagents · 450k', '1 compaction', '87 turns'])
+    ).toEqual([
+      ['billable', '≈ 1.2M'],
+      ['subagents', '3 · 450k'],
+      ['compactions', '1'],
+      ['turns', '87'],
+    ])
   })
 
   test('JSON that is not the analyzer shape answers null', () => {
