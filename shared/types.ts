@@ -40,6 +40,18 @@ export interface Activity {
  */
 export type SessionSurface = 'local' | 'dashboard' | 'cloud';
 
+/** A task's state as the client sees it. `deleted` is not one: a deleted task leaves the list. */
+export type TaskStatus = 'pending' | 'in_progress' | 'completed';
+
+/** One item of the session's own task list, folded from its `TaskCreate` / `TaskUpdate` calls (`server/lib/tasks.ts`). */
+export interface SessionTask {
+  id: string;
+  subject: string;
+  status: TaskStatus;
+  /** Present-tense label ("Building the sidecar"); null when the create carried none (14 of 445 creates, 2026-10-07). */
+  activeForm: string | null;
+}
+
 /** A single Claude Code session, as shown in one dashboard row. */
 export interface Session {
   id: string;
