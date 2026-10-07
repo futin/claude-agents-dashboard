@@ -60,7 +60,8 @@ it. Mobile-first CSS: the card is a band on phones (folded by default) and a fle
 - Produces:
   - `shared/types.ts`: `type TaskStatus = 'pending' | 'in_progress' | 'completed'`; `interface SessionTask { id: string; subject: string; status: TaskStatus; activeForm: string | null }`.
   - `server/lib/tasks.ts`: `readSessionTasks(filePath: string): SessionTask[] | null`; `resetTaskCache(): void`; `taskCacheStats(): { entries: number; bytesRead: number }`
-    (`bytesRead` is cumulative since the last reset).
+    (`bytesRead` is cumulative since the last reset); `export const CHUNK_BYTES = 1024 * 1024` (MiB, the `record-cache.ts:31` convention). Tests
+    import `CHUNK_BYTES` and compute boundary padding from it, so case 12 cannot pass vacuously.
 
 **Behaviour (spec §2 is authoritative; summary only):**
 - Per-file entry `{ offset, size, pending, tasks, order }`; LRU of 64 entries, every call refreshes recency.
@@ -77,7 +78,8 @@ it. Mobile-first CSS: the card is a band on phones (folded by default) and a fle
 - [ ] **Step 1: Write the failing tests** — `test/tasks.test.ts`, same module shape as `test/filter-sort.test.ts` (`test(name, fn)` helper, exported
   `run(): number` returning the failure count, prints the pass count). Fixtures: write JSONL into `fs.mkdtempSync(path.join(os.tmpdir(), …))`
   (`tmp-root.ts` cleans up). Build records with small local helpers: an assistant record holding a `tool_use` block, and a user record holding a
-  `tool_result` block plus a record-level `toolUseResult`. Call `resetTaskCache()` at the start of each case. Exact cases:
+  `tool_result` block plus a record-level `toolUseResult`. **Every fixture record ends with `\n`** unless the case says otherwise (an unterminated last
+  line is deferred by design). Call `resetTaskCache()` at the start of each case. Exact cases:
   1. 3 creates (ids `"1"`,`"2"`,`"3"`, subjects `A`,`B`,`C`) → update `1` to `in_progress` → update `1` to `completed`. Expect subjects `[A,B,C]`, statuses
      `[completed,pending,pending]`.
   2. A create call with no result line → `null`.
@@ -123,6 +125,9 @@ it. Mobile-first CSS: the card is a band on phones (folded by default) and a fle
 
 - [ ] **Step 1: Failing test** in `test/scan.test.ts`, using that file's existing fixture helpers: a transcript with 2 creates + 1 completed update →
   the scanned session's `tasks` has length 2 with statuses `[completed, pending]`; a second transcript with no task records → `tasks === null`.
+  **Watch the last line:** `makeRoot` (`test/scan.test.ts:31`) joins records with `\n` and writes no trailing newline, so its final record is an
+  unterminated line the fold correctly defers. End the task fixture with a plain assistant record after the completing result (or append `'\n'`),
+  otherwise a correct fold yields `[pending, pending]`.
 - [ ] **Step 2: Run** `pnpm test` → that case fails (`tasks` undefined).
 - [ ] **Step 3: Implement** the type field, the scan wiring and the `tasks: null` fixture updates.
 - [ ] **Step 4: Run** `pnpm typecheck` and `pnpm test` → clean / all pass.
@@ -178,9 +183,10 @@ it. Mobile-first CSS: the card is a band on phones (folded by default) and a fle
 (`color-mix` of `--green` like `.ag-pill.kaizen`), all-done = `--steel` ground, `--ink2` text. Do not reuse `.ag-pill.done` (`styles.css:737`).
 
 - [ ] **Step 1:** No DOM test harness exists for components; logic is pinned by Task 3. Write the component and CSS.
-- [ ] **Step 2: Run** `pnpm typecheck` and `pnpm test` (includes `breakpoints.test.ts` and the theme-literal checks) → pass.
+- [ ] **Step 2: Run** `pnpm typecheck` and `pnpm test` (includes `breakpoints.test.ts`) → pass. No test checks colour literals, so grep the new rules by
+  hand: no `#hex`, `rgb(`, `rgba(`, `hsl(`, or shadow without `var(--…)` in anything this task added to `styles.css`. Same check in Task 5.
 - [ ] **Step 3: Live check** in the preview pane against the dev server: one session with tasks shows the pill in Board **and** List layouts; one
-  finished session shows the dimmed `✓` pill — check in daylight and in the default navy theme (Review Focus 5). Screenshot for the PR.
+  finished session shows the dimmed `✓` pill — check in daylight and in the default `midnight` theme (Review Focus 5). Screenshot for the PR.
 - [ ] **Step 4: Commit** — `feat(sessions): task progress pill on the row`.
 
 ### Task 5: Drawer Tasks card + phone fold
@@ -200,6 +206,8 @@ it. Mobile-first CSS: the card is a band on phones (folded by default) and a fle
 - Card `.kv.tasks-kv`: head row `Tasks` · `done / total`; a track with fill at `pct` (fill `--ink3` when `allDone`); a status line — `✓ All tasks done`
   when all done, `Not started` when `done === 0` and no live task, else none on desktop; then `<ol class="task-list">` with one `<li>` per task, class
   `done` / `live` / `todo`, glyph `✓` / pulsing dot / `○`. Subjects wrap (`overflow-wrap:anywhere`), never ellipsised in the list.
+- **One count per width:** the base tier (phone) hides the card's head row and status line, and the folded line is the card's only header there;
+  inside `min-width:768px` the head row and status line show and the folded line is hidden. A phone never shows `done/total` twice.
 - Phone folded line (base tier): `Tasks`, `done/total`, `taskLine(p).text` ellipsised, `▾ list` cue (`▴ list` when unfolded), 4px track. The whole line
   is a button toggling `.folded` on the card (component state, default folded, not persisted). Unfolded list max-height 40vh, scrolls inside.
 - CSS per spec §4.2: base tier `.chat-side .tasks-kv.folded .task-list{display:none}`; inside `min-width:768px` the list shows regardless of `.folded`,
@@ -218,7 +226,7 @@ it. Mobile-first CSS: the card is a band on phones (folded by default) and a fle
   - `resize_window` mobile (375px): folded line shows, tap unfolds, list capped and scrolling; no horizontal page scroll.
   - Long-subject check (Review Focus 3): in a scratch session (or a fixture transcript under a temp `projects` root), create a task with a 200-char
     no-space subject and confirm the 290px column does not widen.
-  - Daylight and navy themes. Screenshots of desktop and 375px for the PR. Reset viewport to desktop after.
+  - `daylight` and `midnight` themes. Screenshots of desktop and 375px for the PR. Reset viewport to desktop after.
 - [ ] **Step 4: Commit** — `feat(chat): tasks card in the drawer sidecar`.
 
 ### Task 6: Docs
@@ -230,7 +238,7 @@ it. Mobile-first CSS: the card is a band on phones (folded by default) and a fle
 - Modify: `docs/overview.md` §Map — one line each for `server/lib/tasks.ts` and `client/src/lib/tasks.ts`.
 
 - [ ] **Step 1:** Write the doc changes; new prose wraps at 160; do not reflow untouched lines.
-- [ ] **Step 2: Run** `pnpm test` (doc-link checks, if any, run there) → pass.
+- [ ] **Step 2: Run** `pnpm test` (`test/docs-links.test.ts` checks every new link and anchor) → pass.
 - [ ] **Step 3: Commit** — `docs: task progress in chat and sessions subsystems`.
 
 ## Finish
