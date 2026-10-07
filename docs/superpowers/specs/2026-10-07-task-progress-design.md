@@ -19,7 +19,7 @@ mock and this spec disagree, **this spec wins**. Known differences:
 | --- | -------- |
 | D1  | **Source is the transcript, nothing else.** There is no on-disk task store on this machine (`~/.claude/tasks` does not exist, checked 2026-10-07). The list is rebuilt by folding the main transcript's `TaskCreate` / `TaskUpdate` tool calls and their results. |
 | D2  | **A whole-file fold, kept incrementally.** `readTranscript` reads only the last 256 KB, and `TaskCreate` records are typically written at a session's start, far below that window. A new module folds the whole file once, remembers the byte offset it reached, and on every later poll reads only the appended bytes. Transcripts are append-only; a file that shrank resets its entry. |
-| D3  | **Rides `Session`, no new endpoint.** `Session.tasks` carries the items; the drawer already receives the live `Session` as a prop and the row already renders from it. Payload cost is ~100 bytes a task. |
+| D3  | **Rides `Session`, no new endpoint.** `Session.tasks` carries the items; the drawer already receives the live `Session` as a prop and the row already renders from it. Payload cost is ~150 bytes a task. |
 | D4  | **Server sends items, client derives counts.** The contract carries the list only; `done`, `total`, the running item and "all done" are computed by one pure client helper that both the card and the pill use. One source of truth, no redundant fields to keep consistent. |
 | D5  | **A result confirms the call.** A `TaskCreate` becomes a task only when its tool result carries `toolUseResult.task.id`; a `TaskUpdate` applies only when its result is `success: true`. A call that failed validation (3 seen, 2026-10-07: a string `InputValidationError` result with `is_error`) changes nothing. |
 | D6  | **Main transcript only.** Subagent transcripts are not folded, and the legacy `TodoWrite` tool is ignored (no transcript on this machine calls it, 2026-10-07). |
@@ -32,7 +32,7 @@ New types, added before the server producer per the repo rule:
 - `TaskStatus` = `'pending' | 'in_progress' | 'completed'`. `deleted` is not a status the client sees: a deleted task is removed (§2.3).
 - `SessionTask` = `{ id: string; subject: string; status: TaskStatus; activeForm: string | null }`. `activeForm` is the present-tense label
   (`"Building the sidecar Tasks panel"`), absent on ~3% of creates (14 of 445, 2026-10-07), hence nullable.
-- `Session.tasks: SessionTask[] | null` — creation order (ascending by the order the create results were folded, which is also ascending id). `null`
+- `Session.tasks: SessionTask[] | null` — creation order (the order the create results were folded; never sort by `id`, which is a string — `"10"` sorts before `"2"`). `null`
   when the transcript holds no confirmed `TaskCreate`; an all-deleted list is `[]` and renders like `null` (§4.4).
 
 ## 2. Server — `server/lib/tasks.ts`
@@ -76,7 +76,8 @@ On each call:
 **It never throws.** Any `stat`, `open` or `read` error other than a missing file (EACCES, EBUSY…) returns the remembered list (or null with no entry)
 and leaves `offset` unchanged, so the next poll retries; one unreadable transcript must not fail the whole `/api/sessions` response.
 
-Cost: the first call per file reads it once in full, synchronously inside the `/api/sessions` handler (`api.ts:146`). The largest main transcript on
+Cost: the first call per file reads it once in full, synchronously inside whichever `scanSessions` caller gets there first — the `/api/sessions`
+handler (`api.ts:146`) or the notify loop (`notify.ts:233`); they share the cache. The largest main transcript on
 this machine is 23.0 MB (measured 2026-10-07; `record-cache.ts:11`'s 5.8 MB is stale). That one-off fold, once per shown session per server start, is
 accepted: the prefilter skips almost every line unparsed, and Verification times it on the largest file. Later polls read only what was appended in the
 last 3 s. Memory is bounded by an LRU cap of 64 entries, where every call refreshes its entry's recency; `scan.ts` shows `maxSessions` (default 5) at a
@@ -87,7 +88,7 @@ bounded by the file's own unanswered calls (7 across 61 transcripts, 2026-10-07)
 
 | Call | Result | Effect |
 | ---- | ------ | ------ |
-| `TaskCreate` | `toolUseResult.task.id` is a non-empty string | add `{ id, subject: input.subject, status: 'pending', activeForm: input.activeForm ?? null }`, append id to `order` |
+| `TaskCreate` | `toolUseResult.task.id` is a non-empty string | add `{ id, subject: input.subject, status: 'pending', activeForm: input.activeForm || null }` (an empty string becomes null), append id to `order` |
 | `TaskCreate` | anything else | nothing |
 | `TaskUpdate` | `success !== true` | nothing |
 | `TaskUpdate` | success, unknown `taskId` | nothing (a task created before a file split, or by another list — never invented) |
@@ -137,9 +138,16 @@ In `ChatDrawer`'s `.chat-side`, a `.kv.tasks-kv` card between the Context card a
 ### 4.2 Phone band (< `md`)
 
 The sidecar is a band there (`docs/subsystems/chat.md`'s intro, "Two columns inside it", and DESIGN.md §8.6), and the card follows the Context card's
-band shape. **One DOM serves both widths** — `ChatDrawer` has no `matchMedia`; the band is CSS under the `md` query (`styles.css:1854`). So the `<ol>` is
-always rendered, and folding is a class (`.folded`) that hides it **only inside the below-`md` media query**; on desktop the class has no effect and the
-list always shows.
+band shape. **One DOM serves both widths** — `ChatDrawer` has no `matchMedia`, and the stylesheet is mobile-first: the band is the **base tier**
+(`styles.css:1848-1870`) and the desktop column is rebuilt inside `@media (min-width:768px)` (`:1902`). A `max-width` query is not an option —
+`test/breakpoints.test.ts:209-215` fails the suite on one. So the `<ol>` is always rendered; folding is a class on the card, with
+`.chat-side .tasks-kv.folded .task-list{display:none}` in the base tier and, inside the existing `min-width:768px` block, a rule that shows the list
+regardless of `.folded`. On desktop the class therefore has no effect and the list always shows.
+
+Specificity, both tiers: the card's selector is `.chat-side .tasks-kv` (to beat `.chat-side .kv{display:block}` at `:1914`), and its 6px track is
+`.chat-side .tasks-kv .track` in the `min-width` block (to beat `.chat-side .kv .track{height:10px}` at `:1919`) — the base tier keeps the band's 4px
+(`:1862`). The live dot's fade is a **new** keyframe, `task-pulse` (opacity); the existing `pulse` (`styles.css:711-716`) is the `.sdot` box-shadow ring
+and is not reused.
 
 - Folded (default): one baseline — `Tasks`, `done/total`, then the first live task's `activeForm` (else its subject; else `next`'s subject prefixed
   `Next:`; else `All done`), ellipsised, a `▾ list` cue at the end (`▴ list` when unfolded), and a 4px track below.
@@ -149,8 +157,8 @@ list always shows.
 ### 4.3 Row pill
 
 A new `TaskPill` atom in `client/src/components/sessions/atoms.tsx` — `<span class="ag-pill tasks">7/13<span class="mini"><i/></span></span>` —
-rendered at **two** sites: inside `Tags` after the model pill (Board, Triage, Split, Tiles), and in `ListView.tsx`'s `.name` cell after the kaizen pill
-(`ListView.tsx:56-57`), which draws its pills itself and never uses `Tags`. Like the other pills it carries no handler. An accessible label reads
+rendered at **two** sites, last at both: inside `Tags` after the kaizen pill (`atoms.tsx:56-58`; Board, Triage, Split, Tiles), and in `ListView.tsx`'s
+`.name` cell after the kaizen pill (`ListView.tsx:56-57`), which draws its pills itself and never uses `Tags`. Like the other pills it carries no handler. An accessible label reads
 `7 of 13 tasks done`.
 
 ### 4.4 States
@@ -158,9 +166,9 @@ rendered at **two** sites: inside `Tags` after the model pill (Board, Triage, Sp
 | State | Card | Pill |
 | ----- | ---- | ---- |
 | `tasks` null or `[]` | not rendered | not rendered |
-| tasks exist, none started | `0 / 6`, empty bar, list all hollow | `0/6`, green like any unfinished list |
+| tasks exist, none started | `0 / 6`, empty bar, `Not started` line under it, list all hollow | `0/6`, green like any unfinished list |
 | some live | as drawn in the mock | `7/13` green |
-| all completed | bar in `--ink3`, head reads `13 / 13`, list all checked; folded phone line `All done` | `ag-pill tasks all-done`: `13/13 ✓`, dimmed (`--steel` ground, `--ink2` text) |
+| all completed | bar in `--ink3`, head reads `13 / 13`, `✓ All tasks done` line under it, list all checked; folded phone line `All done` | `ag-pill tasks all-done`: `13/13 ✓`, dimmed (`--steel` ground, `--ink2` text) |
 | tasks remain but none live (between tasks, or the session stopped) | as "some live" minus the pulse; phone line shows `Next:` | unchanged |
 
 ## 5. Testing
@@ -180,7 +188,10 @@ rendered at **two** sites: inside `Tags` after the model pill (Board, Triage, Sp
 11. A file with no task records at all: `null`, and a second call reads 0 new bytes.
 12. A multibyte subject (`"Übersicht — ✓ prüfen"`) split across the 1 MB chunk boundary decodes intact.
 13. A single 1.2 MB record (a padded `TaskCreate` result) spanning two chunks is assembled and applied, and the fold continues past it.
-14. A read error (fake the reader to throw EACCES once): the call returns the remembered list, does not throw, and the next call catches up.
+14. A read error, with no new seam: after a first read, append an update, then `fs.chmodSync(file, 0)` (stat still succeeds, open fails with EACCES).
+    The call returns the remembered list and does not throw; restore `0o644` and the next call applies the update. Skipped when the suite runs as
+    root, which ignores the mode. Errors swallowed this way: everything `fs.statSync` / `openSync` / `readSync` throws except `ENOENT`, which drops the
+    entry and returns null.
 
 `taskProgress` cases, in `test/client-tasks.test.ts` (also registered in `run-all.ts`): null and `[]` → null; 7 of 13 → `pct` 54; two `in_progress` → both in `live`;
 all completed → `allDone`; no live and some pending → `next` is the first pending.
