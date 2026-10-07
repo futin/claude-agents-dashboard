@@ -12,7 +12,6 @@
     "tailnet:local": "tsx scripts/tailnet.ts --http",
     "tunnel": "tsx scripts/tailnet.ts",
     "test": "tsx test/run-all.ts; repo=$?; node --test plugin/skills/kaizen/test/*.test.mjs; skill=$?; [ $repo -eq 0 ] && [ $skill -eq 0 ]",
-    "test:mod": "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude plugin test plugin",
     "test:skills": "node --test plugin/skills/git-sync/test/*.test.mjs",
     "test:visual": "playwright test",
     "test:visual:report": "playwright show-report",

@@ -4,17 +4,12 @@
  * A manifest that parses but does not install — a plugin name that disagrees with its marketplace entry, a source path that moved — only fails on a user's
  * machine, at `/plugin install`. And anything plugin-shaped that lands in `plugin/` (an `.mcp.json`, a `hooks/`) loads in every project on every machine
  * that installed it, which is the reason the plugin lives in a subfolder at all. Adding either on purpose means editing this file.
- *
- * `hooks/` is the one deliberate addition (#183): the live kaizen meter, a function-hooks module. Its `hooks.json` names that module and declares no
- * command hooks, so without `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` the engine never loads it and installing the plugin still adds nothing that runs in
- * every project. A command hook would run regardless of the flag, which is why the test below refuses a `hooks` key.
  */
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { kaizenScriptPath } from '../plugin/hooks/kaizen-path.js';
 import { parseFrontmatter } from '../shared/frontmatter.js';
 import { findRepoRoot } from './docs-links.test.js';
 
@@ -56,23 +51,9 @@ export function run(): number {
     assert.match(String(version), /^\d+\.\d+\.\d+$/);
   })) p++; else f++;
 
-  if (test('plugin/ holds only .claude-plugin, hooks, skills, tests and tsconfig.json — nothing else loads in every project', () => {
-    // `.claude/` holds the engine types `/plugin-types` writes; it is gitignored and never published.
-    const entries = fs.readdirSync(path.join(root, 'plugin')).filter((name) => name !== '.claude').sort();
-    assert.deepStrictEqual(entries, ['.claude-plugin', 'hooks', 'skills', 'tests', 'tsconfig.json']);
-  })) p++; else f++;
-
-  if (test('plugin/hooks/hooks.json declares exactly one module and no command hooks', () => {
-    const hooks = readJson(path.join(root, 'plugin', 'hooks', 'hooks.json'));
-    assert.deepStrictEqual(hooks.modules, ['./register.ts']);
-    assert.ok(!('hooks' in hooks), 'a `hooks` key would run command hooks in every project, flag or no flag');
-  })) p++; else f++;
-
-  if (test('kaizenScriptPath() is absolute and names the kaizen analyzer on disk', () => {
-    const script = kaizenScriptPath();
-    assert.ok(script.startsWith('/'), `absolute: ${script}`);
-    assert.strictEqual(script, path.join(root, 'plugin', 'skills', 'kaizen', 'kaizen.mjs'));
-    assert.ok(fs.existsSync(script), `exists: ${script}`);
+  if (test('plugin/ holds only .claude-plugin and skills — nothing else loads in every project', () => {
+    const entries = fs.readdirSync(path.join(root, 'plugin')).sort();
+    assert.deepStrictEqual(entries, ['.claude-plugin', 'skills']);
   })) p++; else f++;
 
   if (test('plugin/skills/ holds exactly the shipped skills, each SKILL.md named after its directory', () => {

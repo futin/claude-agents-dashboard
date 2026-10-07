@@ -1,13 +1,5 @@
 {
   "name": "claude-agents-dashboard",
-  "description": "Skills the Claude Agents Dashboard depends on: git-sync (repo chores across machines) and kaizen (session post-mortems feeding the Analytics tab), plus a live kaizen meter mod (status line, /compact nudge, /kaizen-stats pane)",
-  "version": "0.2.0",
-  "userConfig": {
-    "nudgeAtTokens": {
-      "type": "number",
-      "title": "Nudge at tokens",
-      "description": "Context size at which the live kaizen meter suggests /compact, once per compaction; 0 turns the nudge off",
-      "default": 150000
-    }
-  }
+  "description": "Skills the Claude Agents Dashboard depends on: git-sync (repo chores across machines) and kaizen (session post-mortems feeding the Analytics tab)",
+  "version": "0.3.0"
 }
