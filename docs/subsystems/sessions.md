@@ -81,6 +81,10 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   fills.
 - **Activity line** — the most recent tool call (e.g. `Edit server.ts`,
   `Task Explore: map the codebase`).
+- **Task pill** — `7/13` with a mini bar, when the session has built a task list (`TaskCreate` / `TaskUpdate`); a finished list reads `13/13 ✓`, dimmed.
+  `TaskPill` renders last at **two** sites: inside `Tags` (Board, Triage, Split, Tiles) and in `ListView`'s `.name` cell, which draws its pills itself and never
+  uses `Tags`. It carries no handler, like the other pills, and nothing at all for a session without tasks. The list behind it is
+  [below](#the-task-list-and-why-it-folds-the-whole-file).
 - **Relative time** — since the last conversational message.
 - **Chat button** — the one way into this session's [chat drawer](chat.md), and the place
   it names a hold. It stops the click from reaching the card it sits in, so opening the
@@ -92,6 +96,38 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   child handle for; `lib/stopControl.ts` decides every branch. Absent for every other
   row, deliberately — see
   [spawn](spawn.md#stopstate-and-why-it-is-absent-rather-than-false).
+
+### The task list, and why it folds the whole file
+
+`Session.tasks` is the session's own checklist — `SessionTask[]` (`id`, `subject`, `status`, `activeForm`) in creation order, or `null` when the transcript
+holds no confirmed `TaskCreate`. The server sends the items only; `done`, `total`, the running tasks and "all done" come from one pure client helper
+(`client/src/lib/tasks.ts`, `taskProgress`), which the pill and the [drawer's Tasks card](chat.md) both use, so there is no second count to keep consistent. No
+endpoint: the list rides the 3s sessions poll.
+
+**It is rebuilt from the transcript, and only the whole file will do.** There is no on-disk task store to read. `readTranscript` sees the last 256 KB, and a
+`TaskCreate` is typically written at a session's start, far below that window, so `server/lib/tasks.ts` folds the file from byte 0 — once — and keeps, per file,
+the byte offset it reached plus the calls still waiting on a result and the tasks so far. Every later poll reads only the appended bytes; `size === offset`
+returns the remembered list without touching the disk. Transcripts are append-only, so a file that shrank is a rotated one and starts over. The cache is an LRU
+of 64 files; `scan.ts` shows `maxSessions` (default 5) at a time, so eviction only reaches sessions no longer shown, and one that comes back re-folds in full.
+
+- **A result confirms the call.** A `TaskCreate` becomes a task only when its result carries `toolUseResult.task.id`, and a `TaskUpdate` applies only on
+  `success: true` — a call that failed validation changes nothing. A call whose result never arrives (a session killed mid-call) stays pending and is never
+  applied.
+- **Most of the file is never parsed.** A line is decoded only if it names `TaskCreate` / `TaskUpdate`, or contains the id of a pending call (a `TaskUpdate`'s
+  result says `taskId`, not `Task`). The hit is then checked against the exact block shape, so the words in message text, or a pending id in some other record,
+  count for nothing.
+- **Bytes are split on `0x0A` before decoding**, as in `chat.ts`, and a chunk's tail after its last newline is carried into the next chunk: single records run
+  past the 1 MB read size, so a record is assembled across chunks rather than stalling the fold. Only the file's own unterminated last line waits for the next
+  poll.
+- **It never throws.** A missing file is `null`; any other I/O error returns the remembered list and retries on the next poll, since one unreadable transcript
+  must not fail the whole `/api/sessions` response.
+- **Main transcript only.** Subagent transcripts are not folded and the legacy `TodoWrite` tool is ignored. A list whose tasks were all deleted is `[]`, which
+  renders like `null`.
+
+The first fold of a file runs synchronously inside whichever `scanSessions` caller reaches it first (the sessions handler or the notify loop; they share the
+cache). Measured 2026-10-07 on this machine: the largest transcript, 23,023,739 B with no task records, took 37.6 ms on the first call and 0.1 ms on the second;
+a 5,883,377 B transcript holding 4 tasks took 9.9 ms, then 0.0 ms. Design and the record shapes it was measured over:
+[the spec](../superpowers/specs/2026-10-07-task-progress-design.md).
 
 ### The chat button is also where a session says it needs a human
 

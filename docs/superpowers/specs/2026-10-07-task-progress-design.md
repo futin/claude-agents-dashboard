@@ -55,7 +55,9 @@ The result line of a `TaskUpdate` does **not** contain the text `Task` (it reads
 
 ### 2.2 The fold
 
-Per file, one cache entry: `{ offset, size, pending: Map<toolUseId, {name, input}>, tasks: Map<id, SessionTask>, order: string[] }`.
+Per file, one cache entry: `{ offset, size, pending: Map<toolUseId, {name, input}>, tasks: Map<id, SessionTask>, created: boolean }`. There is no separate
+`order` array: the `Map`'s insertion order is creation order, and a re-created id is replaced in place so it keeps its slot. `created` records that a create was
+confirmed at some point, so a file whose tasks were all deleted returns `[]` rather than `null`.
 
 On each call:
 
@@ -196,7 +198,8 @@ rendered at **two** sites, last at both: inside `Tags` after the kaizen pill (`a
 `taskProgress` cases, in `test/client-tasks.test.ts` (also registered in `run-all.ts`): null and `[]` → null; 7 of 13 → `pct` 54; two `in_progress` → both in `live`;
 all completed → `allDone`; no live and some pending → `next` is the first pending.
 
-Mutation-check case 3 and case 7: delete the `success` check, then the shape check, and confirm each test goes red.
+Mutation-check case 3 and case 7b: delete the `success` check, then the shape check, and confirm each test goes red. Case 7b (a hook attachment record carrying
+the pending `toolUseID` must not count as the result) is the one that proves the shape check; case 7 alone stays green without it.
 
 Then `pnpm typecheck`, `pnpm test`, and a live look in the preview pane at this very session's drawer (desktop and 375px), plus one other session's row.
 

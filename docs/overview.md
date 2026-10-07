@@ -164,6 +164,7 @@ server/
                   stay pure. Fails open (no store → nothing hidden)
   lib/agents.ts   whole-file subagent parser → AgentJob[]
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts
+  lib/tasks.ts    whole-file fold of TaskCreate/TaskUpdate → Session.tasks, incremental by byte offset (the creates sit below the 256 KB tail)
   lib/chat.ts     byte-offset paged chat history
   lib/usage.ts    account 5h/weekly limits from Anthropic (OAuth) — the other
                   outbound call
@@ -234,7 +235,7 @@ client/src/
                   dismiss primitive), sessions/ (atoms, Expanded, EmptyState, AsideStrip
                   — the phone's one-bar aside — and the five views: Board, List, Split,
                   Tiles, Triage), SessionDetail (the subagent timeline),
-                  ChatDrawer, QuestionPanel, PlanPanel,
+                  ChatDrawer, TasksCard (the sidecar's checklist card and its phone fold), QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   MicButton, SpawnPanel, PinPicker (projects to pin — older ones in
                   the launch sheet, recent + older in Management › Pinned), ResumePanel, PermissionBanner,
@@ -267,6 +268,7 @@ client/src/
                   chart's geometry), walkRows (the same walk as day rows), holds,
                   webNotify, backClose, stopControl, triage (the board/triage piles),
                   stickyStrip, agentLabel (a subagent's type only when informative),
+                  tasks (taskProgress — the one count the row pill and the Tasks card share),
                   gitLayouts / gitTriage / gitStatsText (the Git sub-view's switcher rules,
                   Triage grouping and copy table), gitBar (the divergence bar's scale),
                   gitPoll (its poll schedule, apart from the DOM), gitSync / gitSyncRuns
