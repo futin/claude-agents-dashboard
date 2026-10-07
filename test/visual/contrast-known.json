@@ -649,6 +649,24 @@
   },
   {
     "view": "sessions",
+    "text": "7/13",
+    "fg": "#5fa92c",
+    "bg": "#e5f1dd",
+    "ratio": 2.49,
+    "required": 4.5,
+    "selector": "span[aria-label=\"7 of 13 tasks done\"]"
+  },
+  {
+    "view": "sessions",
+    "text": "4/4 ✓",
+    "fg": "#6e6e6e",
+    "bg": "#ededec",
+    "ratio": 4.35,
+    "required": 4.5,
+    "selector": ".all-done"
+  },
+  {
+    "view": "sessions",
     "text": "List",
     "fg": "#6e6e6e",
     "bg": "#dcdcda",
