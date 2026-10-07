@@ -164,7 +164,8 @@ server/
                   stay pure. Fails open (no store → nothing hidden)
   lib/agents.ts   whole-file subagent parser → AgentJob[]
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts
-  lib/tasks.ts    whole-file fold of TaskCreate/TaskUpdate → Session.tasks, incremental by byte offset (the creates sit below the 256 KB tail)
+  lib/tasks.ts    whole-file fold of the plan signals and TaskCreate/TaskUpdate → Session.tasks / taskPlan (plan wins), incremental by byte offset (the creates sit below the 256 KB tail)
+  lib/plan-progress.ts  pure half of plan progress: signals from one tool_use input, the plan file's `Task N:` headings, the composed rows
   lib/chat.ts     byte-offset paged chat history
   lib/usage.ts    account 5h/weekly limits from Anthropic (OAuth) — the other
                   outbound call
