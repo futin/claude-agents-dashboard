@@ -48,6 +48,11 @@ export function run(): number {
     assert.deepStrictEqual(bash("printf '# SDD ledger — plan: docs/p.md\\n' >> .superpowers/sdd/p/progress.md"), [plan('docs/p.md')]);
   });
 
+  t('U1b one printf writing the header and more lines: the plan token ends at the first literal \\n', () => {
+    assert.deepStrictEqual(bash("printf '# SDD ledger — plan: docs/p.md\\nSpec: docs/s.md\\n' > .superpowers/sdd/p/progress.md"), [plan('docs/p.md')]);
+    assert.strictEqual(stripPlanToken("docs/p.md\\nbranch:"), 'docs/p.md');
+  });
+
   t('U2 ledger header via Write content and Edit new_string', () => {
     assert.deepStrictEqual(planSignals('Write', { file_path: LEDGER, content: HEADER }, '/r'), [plan('docs/p.md')]);
     assert.deepStrictEqual(planSignals('Edit', { file_path: LEDGER, old_string: 'x', new_string: HEADER }, '/r'), [plan('docs/p.md')]);

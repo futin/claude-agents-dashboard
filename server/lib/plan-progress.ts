@@ -41,7 +41,9 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** Strip what a shell quoting or printf escape leaves glued to a plan path, until nothing more comes off. */
 export function stripPlanToken(raw: string): string {
-  let s = raw;
+  // One printf writing the header and further lines glues them on with a literal `\n` and no whitespace (4 of 119 headers, 2026-10-07).
+  const nl = raw.indexOf('\\n');
+  let s = nl === -1 ? raw : raw.slice(0, nl);
   for (;;) {
     const before = s;
     if (/^["'`]/.test(s)) s = s.slice(1);
