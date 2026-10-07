@@ -2,7 +2,7 @@ import { Fragment } from 'react';
 
 import type { LaunchingSession, Session } from '../../../../shared/types';
 import { formatAgo } from '../../lib/format';
-import { Bar, ChatButton, Dot, LaunchPill, Pct, StatusPill, Tok, ToolChip, keyActivate, launchState } from './atoms';
+import { Bar, ChatButton, Dot, LaunchPill, Pct, StatusPill, TaskPill, Tok, ToolChip, keyActivate, launchState } from './atoms';
 import { stopControl } from '../../lib/stopControl';
 import { surfacePill } from '../../lib/surface';
 import { Expanded } from './Expanded';
@@ -55,6 +55,7 @@ function Row({ s, open, onToggle, onOpenChat }: { s: Session; open: boolean; onT
           {s.sessionName || s.project}
           {surface && <span className={`ag-pill surface ${s.surface}`} title={surface.title}>{surface.label}</span>}
           {s.kaizenLesson && <span className="ag-pill kaizen" title={s.kaizenLesson}>kaizen</span>}
+          <TaskPill s={s} />
         </div>
         {sub && <div className="sub" title={sub}>{sub}</div>}
       </td>

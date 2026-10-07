@@ -736,6 +736,11 @@ code,kbd,samp,pre{font-family:inherit}
 .ag-pill.running{color:var(--green);background:color-mix(in srgb,var(--green) 18%,transparent)}
 .ag-pill.done{color:var(--ink2);background:var(--strip-hi)}
 .ag-pill.kaizen{color:var(--green);background:color-mix(in srgb,var(--green) 18%,transparent)}
+.ag-pill.tasks{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums;color:var(--green);background:color-mix(in srgb,var(--green) 16%,transparent)}
+.ag-pill.tasks .mini{width:28px;height:4px;border-radius:3px;background:color-mix(in srgb,var(--green) 25%,transparent);overflow:hidden}
+.ag-pill.tasks .mini i{display:block;height:100%;background:var(--green)}
+/* its own class, not .done: .ag-pill.done above already means a finished session */
+.ag-pill.tasks.all-done{color:var(--ink2);background:var(--steel)}
 /* where the session lives (client/src/lib/surface.ts): magenta borrows the Task
    accent so a launched session stands apart from the pills around it; a future
    cloud session is deliberately the quieter tint */

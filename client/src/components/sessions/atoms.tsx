@@ -4,6 +4,7 @@ import { STATUS_LABEL } from '../../lib/filterSort';
 import { chatTab } from '../../lib/holds';
 import { stopControl } from '../../lib/stopControl';
 import { surfacePill } from '../../lib/surface';
+import { taskProgress } from '../../lib/tasks';
 
 /**
  * The pieces every view draws a session out of. State rides on the element
@@ -56,7 +57,20 @@ export function Tags({ s, withTitle = true }: { s: Session; withTitle?: boolean 
       <span className="model">{s.model}</span>
       {surface && <span className={`ag-pill surface ${s.surface}`} title={surface.title}>{surface.label}</span>}
       {s.kaizenLesson && <span className="ag-pill kaizen" title={s.kaizenLesson}>kaizen</span>}
+      <TaskPill s={s} />
     </>
+  );
+}
+
+/** Checklist progress, rendered last at both pill sites (Tags and ListView, which never uses Tags). No handler, like the other pills. */
+export function TaskPill({ s }: { s: Session }) {
+  const p = taskProgress(s.tasks);
+  if (!p) return null;
+  return (
+    <span className={`ag-pill tasks${p.allDone ? ' all-done' : ''}`} aria-label={`${p.done} of ${p.total} tasks done`}>
+      {p.done}/{p.total}
+      {p.allDone ? ' ✓' : <span className="mini"><i style={{ width: `${p.pct}%` }} /></span>}
+    </span>
   );
 }
 
