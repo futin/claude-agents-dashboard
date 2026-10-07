@@ -1,11 +1,16 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { ANALYSIS, CAVEAT, command, compaction, measure, NAME, PANE, PANE_ID, sectionOf, SESSION, SESSION_ID, textOf, turnDone, worldOf } from './fixtures'
+import { ANALYSIS, boldOf, CAVEAT, command, compaction, measure, NAME, PANE, PANE_ID, rowOf, sectionOf, SESSION, SESSION_ID, textOf, turnDone, worldOf } from './fixtures'
 
 /** The names of a section's rows, in drawn order; `+N more` lines included as they read. */
-const namesOf = (rows: string[]) => rows.map(row => row.trim().split(' · ')[0])
+const namesOf = (rows: string[]) => rows.map(row => row.split(' | ')[0])
 
-const paneText = async ($: { ui: { render: (e: typeof PANE) => Promise<unknown> } }) => textOf((await $.ui.render(PANE)) as never)
+const paneTree = async ($: { ui: { render: (e: typeof PANE) => Promise<unknown> } }) => (await $.ui.render(PANE)) as never
+
+const paneText = async ($: { ui: { render: (e: typeof PANE) => Promise<unknown> } }) => textOf(await paneTree($))
+
+/** The bold cells of a pane, section titles left out. */
+const boldCells = (tree: never) => boldOf(tree).filter(text => !['TOOLS', 'SUBAGENTS', 'TRANSCRIPT'].includes(text))
 
 const lastStatus = (statuses: (string | undefined)[]) => statuses[statuses.length - 1] ?? ''
 
@@ -119,7 +124,7 @@ describe('nudge', () => {
 })
 
 describe('tool ledger', () => {
-  test('tokens and wall time per tool, timed on the engine clock around the call', async ($, on) => {
+  test('one table of tokens, wall time and calls per tool, timed on the engine clock around the call', async ($, on) => {
     const { clock } = worldOf(on)
     const sizes: Record<string, { ms: number; chars: number }[]> = {
       Read: [
@@ -146,10 +151,51 @@ describe('tool ledger', () => {
     }
 
     await $.command.run(command('kaizen-stats'))
-    const text = await paneText($)
+    const tree = await paneTree($)
+    const text = textOf(tree)
 
-    expect(sectionOf(text, 'Tools by tokens')).toEqual(['  Read · 3k · 2 calls', '  Bash · 100 · 1 call'])
-    expect(sectionOf(text, 'Tools by wall time')).toEqual(['  Bash · 2s · 1 call', '  Read · 150ms · 2 calls'])
+    expect(text.split('\n')).toContain('TOOLS | tokens | time | calls')
+    expect(sectionOf(text, 'TOOLS')).toEqual(['Read | 3k | 150ms | 2', 'Bash | 100 | 2s | 1'])
+    // Each number column's sole leader is bold: Read leads tokens and calls, Bash leads wall time.
+    expect(boldCells(tree)).toEqual(['3k', '2', '2s'])
+    expect(boldOf(tree).filter(text => ['TOOLS', 'SUBAGENTS', 'TRANSCRIPT'].includes(text))).toEqual(['TOOLS', 'SUBAGENTS', 'TRANSCRIPT'])
+  })
+
+  test('a tie for a column leaves that column unbolded, and so does a table of one row', async ($, on) => {
+    worldOf(on)
+    on('tool.call', ($, e) => ({ result: 'x', text: 'x'.repeat(e.tool === 'Bash' ? 400 : 800) }))
+
+    await $.session.start(SESSION)
+    await $.tool.call({ tool: 'Read' } as never)
+    await $.command.run(command('kaizen-stats'))
+    expect(boldCells(await paneTree($)), 'one row').toEqual([])
+
+    await $.tool.call({ tool: 'Bash' } as never)
+    await $.tool.call({ tool: 'Bash' } as never)
+    // Read 200 tokens in 1 call, Bash 200 in 2: tokens and wall time tie, calls has a sole leader.
+    expect(boldCells(await paneTree($))).toEqual(['2'])
+  })
+
+  test('a long name is the cell that gives way: the number columns keep a fixed width', async ($, on) => {
+    worldOf(on)
+    on('tool.call', () => ({ result: 'x', text: 'x'.repeat(400) }))
+
+    await $.session.start(SESSION)
+    await $.tool.call({ tool: 'mcp__codegraph__codegraph_explore' } as never)
+    await $.command.run(command('kaizen-stats'))
+
+    const row = rowOf(await paneTree($), 'mcp__codegraph__codegraph_explore | 100 | 0ms | 1') as unknown as {
+      children: { props: { flexGrow?: number; flexShrink?: number; width?: number }; children: { props: { wrap?: string } }[] }[]
+    }
+    expect(row).toBeDefined()
+    const [name, ...figures] = row.children
+    expect(name?.props.flexGrow).toBe(1)
+    expect(name?.children[0]?.props.wrap).toBe('truncate-end')
+    expect(figures.length).toBe(3)
+    for (const cell of figures) {
+      expect(cell.props.flexShrink).toBe(0)
+      expect(typeof cell.props.width).toBe('number')
+    }
   })
 
   test('seven tools show five rows and a +2 more line', async ($, on) => {
@@ -162,7 +208,7 @@ describe('tool ledger', () => {
     }
     await $.command.run(command('kaizen-stats'))
 
-    const rows = sectionOf(await paneText($), 'Tools by tokens')
+    const rows = sectionOf(await paneText($), 'TOOLS')
     expect(namesOf(rows)).toEqual(['GGGGGGG', 'FFFFFF', 'EEEEE', 'DDDD', 'CCC', '+2 more'])
   })
 
@@ -175,7 +221,7 @@ describe('tool ledger', () => {
     await $.command.run(command('kaizen-stats'))
 
     expect(result).toEqual({ deny: 'no' })
-    expect(sectionOf(await paneText($), 'Tools by tokens')).toEqual(['  none yet'])
+    expect(sectionOf(await paneText($), 'TOOLS')).toEqual(['none yet'])
   })
 
   test('a call that throws is rethrown and leaves the ledger unchanged', async ($, on) => {
@@ -195,7 +241,7 @@ describe('tool ledger', () => {
 
     // The engine reports a beneath hook's throw as a skip and rejects the call; what matters is that the rejection reaches the caller.
     expect(caught).toBeDefined()
-    expect(sectionOf(await paneText($), 'Tools by tokens')).toEqual(['  none yet'])
+    expect(sectionOf(await paneText($), 'TOOLS')).toEqual(['none yet'])
   })
 
   test('a normal result comes back exactly as the engine produced it', async ($, on) => {
@@ -216,7 +262,7 @@ describe('tool ledger', () => {
     await $.tool.call({ tool: 'Bash' } as never)
     await $.command.run(command('kaizen-stats'))
 
-    expect(sectionOf(await paneText($), 'Tools by tokens')).toEqual(['  Bash · 100 · 1 call'])
+    expect(sectionOf(await paneText($), 'TOOLS')).toEqual(['Bash | 100 | 0ms | 1'])
   })
 
   test('Agent calls fill the subagent table only, under the caveat; a subagent own tool calls are not counted', async ($, on) => {
@@ -230,9 +276,8 @@ describe('tool ledger', () => {
     await $.command.run(command('kaizen-stats'))
     const text = await paneText($)
 
-    expect(sectionOf(text, 'Subagents by tokens')).toEqual(['  Explore · 500 · 1 call', '  audit docs · 500 · 1 call'])
-    expect(sectionOf(text, 'Tools by tokens')).toEqual(['  none yet'])
-    expect(text.split('\n')).toContain(CAVEAT)
+    expect(sectionOf(text, 'SUBAGENTS')).toEqual(['Explore | 500 | 0ms | 1', 'audit docs | 500 | 0ms | 1', CAVEAT])
+    expect(sectionOf(text, 'TOOLS')).toEqual(['none yet'])
   })
 })
 
@@ -318,10 +363,10 @@ describe('pane', () => {
     await $.session.start(SESSION)
     await $.command.run(command('kaizen-stats'))
     await clock.settle()
-    expect(sectionOf(await paneText($), 'Transcript')).toEqual(['  reading transcript…'])
+    expect(sectionOf(await paneText($), 'TRANSCRIPT')).toEqual(['reading transcript…'])
 
     await clock.advance(1000)
-    expect(sectionOf(await paneText($), 'Transcript')).toEqual(['  billable ≈ 1.2M', '  3 subagents · 450k', '  1 compaction', '  87 turns'])
+    expect(sectionOf(await paneText($), 'TRANSCRIPT')).toEqual(['billable | ≈ 1.2M', 'subagents | 3 · 450k', 'compactions | 1', 'turns | 87'])
 
     const argv = world.runs[0] ?? []
     expect(argv.length).toBe(3)
@@ -349,7 +394,7 @@ describe('pane', () => {
       await $.session.start(SESSION)
       await $.command.run(command('kaizen-stats'))
       await world.clock.settle()
-      const rows = sectionOf(await paneText($), 'Transcript')
+      const rows = sectionOf(await paneText($), 'TRANSCRIPT')
 
       expect(rows.length).toBe(1)
       expect(rows[0]).toContain('kaizen failed')
@@ -390,7 +435,7 @@ describe('reset', () => {
       expect(line).toContain('0 turns')
       expect(line).toContain('0 compactions')
       expect(line).not.toContain('$')
-      expect(sectionOf(await paneText($), 'Tools by tokens')).toEqual(['  none yet'])
+      expect(sectionOf(await paneText($), 'TOOLS')).toEqual(['none yet'])
 
       await $.session.measure(measure(160_000))
       expect(world.toasts.length, 'the reset re-armed the nudge').toBe(2)
@@ -402,15 +447,15 @@ describe('reset', () => {
       await $.session.start(SESSION)
       await $.command.run(command('kaizen-stats'))
       await world.clock.settle()
-      expect(sectionOf(await paneText($), 'Transcript')).toContain('  87 turns')
+      expect(sectionOf(await paneText($), 'TRANSCRIPT')).toContain('turns | 87')
 
-      world.answer = async () => ({ exitCode: 0, stdout: JSON.stringify({ ...ANALYSIS, perTurn: { count: 2 } }), stderr: '' })
+      world.answer = async () => ({ exitCode: 0, stdout: JSON.stringify({ ...ANALYSIS, perTurn: { count: 2 } }), stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
       await $.command.run(command(name))
       await world.clock.settle()
 
-      const transcript = sectionOf(await paneText($), 'Transcript')
-      expect(transcript).toContain('  2 turns')
-      expect(transcript).not.toContain('  87 turns')
+      const transcript = sectionOf(await paneText($), 'TRANSCRIPT')
+      expect(transcript).toContain('turns | 2')
+      expect(transcript).not.toContain('turns | 87')
       expect(world.runs.length).toBe(2)
     })
   }

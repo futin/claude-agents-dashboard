@@ -243,10 +243,11 @@ returned — no backend change, so the read-only invariant above still holds.
   the transcript sum is the billable one.
 - **One nudge** toward `/compact` when context first reaches `nudgeAtTokens` (plugin `userConfig`, default 150000, `0` turns it off). A real compaction
   re-arms it; a declined one, a `precompute` dispatch or a subagent's own compaction does not.
-- **`/kaizen-stats`** toggles a pane: the top five tools and top five subagents (`Agent` / `Task` calls, labelled by `subagent_type`, else
-  `description`) by result tokens (chars ÷ 4, the same rule as `byTool.resultTokens`) and by wall time, then `kaizen.mjs <session-id>`'s billable total,
-  subagent total, compactions and turns. Subagent rows count what each subagent returned, not what it spent; the pane says so. **Run /kaizen** fills
-  the prompt and never submits it.
+- **`/kaizen-stats`** toggles a pane: a TOOLS table and a SUBAGENTS table (`Agent` / `Task` calls, labelled by `subagent_type`, else `description`),
+  each the top five by result tokens (chars ÷ 4, the same rule as `byTool.resultTokens`) with tokens / time / calls columns and a `+N more` line past
+  five. A column's sole leader is bold; a tie or a one-row table bolds nothing. A long name truncates, the fixed-width number columns never do. Then
+  `kaizen.mjs <session-id>`'s billable total, subagent total, compactions and turns as label / value rows. Subagent rows count what each subagent
+  returned, not what it spent; the pane says so. **Run /kaizen** fills the prompt and never submits it.
 - **Main thread only.** Any event carrying an `agentId` passes through uncounted. `/clear` and `/resume` reset the meter, the ledger and the nudge, and re-read the transcript block when the pane is open.
 - **It never writes `~/.claude/session-analytics-log.md`.** The log grammar above stays a contract between `/kaizen` and this tab alone; the mod reads
   the transcript through `kaizen.mjs` and writes nothing.
