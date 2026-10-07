@@ -1,0 +1,338 @@
+<title>Task Progress Mocks</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one section per variant; each holds the same three frames — desktop sidecar (290px), phone band (375px), session row. */
+:root{
+  /* daylight theme tokens, verbatim from client/src/styles.css */
+  --board:#f4f4f3;--steel:#ededec;--strip:#ffffff;--strip-hi:#f2f2f1;
+  --hairline:#eaeae8;--hairline2:#dcdcda;
+  --ink:#131313;--ink2:#6e6e6e;--ink3:#a0a0a0;
+  --green:#5fa92c;--amber:#c4761f;--mustard:#9a8712;--cyan:#3f8f14;--red:#b03b28;--magenta:#6b52a8;
+  --shadow:rgba(0,0,0,.06);
+  --mark:#e0533f;
+  --font:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  /* default (navy) theme tokens */
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --hairline:#2a3752;--hairline2:#34435f;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--amber:#ffb03a;--mustard:#d1ba52;--cyan:#55d0dd;--red:#e0533f;--magenta:#cf6f9e;
+  --shadow:rgba(0,0,0,.4);--mark:#e0533f;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --hairline:#2a3752;--hairline2:#34435f;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--amber:#ffb03a;--mustard:#d1ba52;--cyan:#55d0dd;--red:#e0533f;--magenta:#cf6f9e;
+  --shadow:rgba(0,0,0,.4);--mark:#e0533f;color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--board);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:28px 64px}
+.page{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:36px}
+h1{font-size:26px;font-weight:700;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.lede{color:var(--ink2);max-width:72ch;margin:6px 0 0}
+.lede code,.note code{font-family:var(--mono);font-size:12px;background:var(--steel);padding:1px 5px;border-radius:5px}
+.themebar{display:flex;gap:6px;margin-top:12px}
+.themebar button{font:inherit;font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--hairline2);background:var(--strip);color:var(--ink2);cursor:pointer}
+.themebar button.on{background:var(--ink);color:var(--strip);border-color:var(--ink)}
+.themebar button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+
+section.v{display:flex;flex-direction:column;gap:14px;padding-top:22px;border-top:1px solid var(--hairline2)}
+.vhead{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px}
+.vhead h2{font-size:19px;margin:0;font-weight:700}
+.tagl{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--steel);color:var(--ink2)}
+.tagl.rec{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.tagl.yagni{background:color-mix(in srgb,var(--magenta) 16%,transparent);color:var(--magenta)}
+.tagl.now{background:color-mix(in srgb,var(--mark) 16%,transparent);color:var(--mark)}
+.note{color:var(--ink2);max-width:80ch;margin:0}
+.pros{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:6px 24px;font-size:13px;color:var(--ink2);max-width:900px}
+.pros b{color:var(--ink);font-weight:600}
+.frames{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
+.frame{display:flex;flex-direction:column;gap:6px;min-width:0;max-width:100%}
+.flabel{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+
+/* ---------- real app classes (ported from styles.css) ---------- */
+.chat-side{width:290px;max-width:100%;height:560px;display:flex;flex-direction:column;gap:18px;padding:22px;overflow:hidden;background:var(--strip-hi);border:1px solid var(--hairline);border-radius:18px}
+.kv{background:var(--strip);border-radius:12px;padding:14px 16px;min-width:0}
+.kv .k{font-size:12px;color:var(--ink2);display:flex;justify-content:space-between;gap:8px}
+.kv .v{display:flex;align-items:baseline;gap:8px;margin-top:4px}
+.kv .v .metric{font-size:24px;font-variant-numeric:tabular-nums}
+.kv .v .u{font-size:12px;color:var(--ink2)}
+.track{height:10px;border-radius:8px;background:var(--steel);overflow:hidden;margin-top:12px}
+.track .fill{height:100%;border-radius:8px;background:var(--green)}
+.kv .now{font-size:13px;font-weight:500;color:var(--ink);margin-top:10px;display:flex;align-items:flex-start;gap:8px;min-width:0;line-height:1.4}
+.kv .now .act{min-width:0;overflow-wrap:break-word}
+.chat-facts{display:grid;gap:10px;font-size:12px;color:var(--ink2)}
+.chat-facts .f{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-width:0}
+.chat-facts .f b{min-width:0;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ag-pill{font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
+
+/* the empty area the user boxed in red */
+.void{flex:1;min-height:40px;border:2px dashed var(--mark);border-radius:6px;display:grid;place-items:center;color:var(--mark);font-size:12px;font-weight:600}
+
+/* phone band: .chat-side lies down */
+.band{width:375px;max-width:100%;background:var(--strip);border:1px solid var(--hairline);border-radius:18px;overflow:hidden}
+.band .head{display:flex;align-items:center;gap:8px;padding:13px 14px;border-bottom:1px solid var(--hairline);font-weight:600;font-size:15px}
+.band .head .x{margin-left:auto;color:var(--ink3);font-weight:400}
+.band .side{display:flex;flex-direction:column;gap:10px;padding:10px 14px;border-bottom:1px solid var(--hairline)}
+.band .gauge{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px;font-size:11px;color:var(--ink2)}
+.band .gauge .metric{font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums}
+.band .gauge .tr{flex-basis:100%;height:4px;margin-top:6px;border-radius:4px;background:var(--steel);overflow:hidden}
+.band .gauge .tr i{display:block;height:100%;background:var(--green);border-radius:4px}
+.band .facts{display:flex;flex-wrap:wrap;gap:3px 14px;font-size:11px;color:var(--ink2)}
+.band .facts b{color:var(--ink);font-weight:600}
+.band .body{padding:12px 14px;font-size:12px;color:var(--ink3);height:84px;background:linear-gradient(var(--strip),var(--board))}
+
+/* session row (list view, simplified) */
+.row{width:640px;max-width:100%;display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--strip);border:1px solid var(--hairline);border-radius:14px;box-shadow:0 1px 2px var(--shadow);min-width:0}
+.row .dot{width:9px;height:9px;border-radius:50%;background:var(--green);flex:none}
+.row .main{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1}
+.row .tags{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.sname{font-weight:600;font-size:14px}
+.branch,.model{font-size:11px;color:var(--ink2);background:var(--steel);padding:2px 8px;border-radius:10px;white-space:nowrap}
+.row .act{font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .act b{color:var(--ink);font-weight:600}
+.row .ctx{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none;width:86px}
+.row .ctx span{font-size:13px;font-variant-numeric:tabular-nums}
+.row .ctx .tr{width:86px;height:5px;border-radius:4px;background:var(--steel);overflow:hidden}
+.row .ctx .tr i{display:block;height:100%;width:24%;background:var(--green)}
+
+/* ---------- new pieces (proposed class names) ---------- */
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--green);flex:none;margin-top:5px;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.pulse,.seg.live{animation:none}}
+.ag-pill.tasks{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}
+.ag-pill.tasks .mini{width:28px;height:4px;border-radius:3px;background:color-mix(in srgb,var(--green) 25%,transparent);overflow:hidden}
+.ag-pill.tasks .mini i{display:block;height:100%;background:var(--green)}
+.ag-pill.tasks.done{background:var(--steel);color:var(--ink2)}
+
+/* B: checklist */
+.tasks-kv{display:flex;flex-direction:column;min-height:0;flex:1}
+.task-list{list-style:none;margin:12px -6px 0;padding:0;display:flex;flex-direction:column;gap:1px;overflow:auto;min-height:0;flex:1;font-size:12.5px}
+.task-list li{display:flex;gap:8px;align-items:flex-start;padding:5px 6px;border-radius:8px;line-height:1.35}
+.task-list .g{width:14px;flex:none;text-align:center;font-size:11px;line-height:17px}
+.task-list .done{color:var(--ink3)}
+.task-list .done .g{color:var(--green)}
+.task-list .todo{color:var(--ink2)}
+.task-list .todo .g{color:var(--ink3)}
+.task-list .live{background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--ink);font-weight:600}
+.task-list .live .g{display:grid;place-items:center;height:17px}
+.task-list .live .g .pulse{margin:0}
+.fold{font-size:11.5px;color:var(--ink3);padding:4px 6px;cursor:default}
+
+/* C: segmented stepper (backlog-manager StageTrack idiom) */
+.segs{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:3px;margin-top:12px}
+.seg{height:10px;border-radius:3px;background:var(--steel)}
+.seg.done{background:var(--green)}
+.seg.live{background:var(--green);animation:pulse 1.6s ease-in-out infinite}
+.seg.sel{outline:2px solid var(--ink);outline-offset:1px}
+.nextl{font-size:12px;color:var(--ink2);margin-top:8px;display:flex;gap:6px;min-width:0}
+.nextl b{font-weight:500;color:var(--ink2);min-width:0}
+.band .segs{margin-top:6px;flex-basis:100%;gap:2px}
+.band .segs .seg{height:4px;border-radius:2px}
+.rsegs{display:grid;grid-auto-flow:column;grid-auto-columns:5px;gap:2px}
+.rsegs .seg{height:8px;border-radius:2px}
+
+/* D: YAGNI timings */
+.task-list .t{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink3);font-weight:400;white-space:nowrap;padding-left:6px}
+.task-list .desc{display:block;font-weight:400;color:var(--ink2);font-size:11.5px;margin-top:2px}
+.eta{font-size:11px;color:var(--ink3);margin-top:6px}
+
+.states{display:flex;flex-wrap:wrap;gap:16px}
+.state{display:flex;flex-direction:column;gap:6px;width:254px;max-width:100%}
+.state .kv{border:1px solid var(--hairline)}
+</style>
+
+<div class="page">
+  <header>
+    <h1>Task progress in the chat drawer</h1>
+    <p class="lede">Where a session's <code>TaskCreate</code> / <code>TaskUpdate</code> checklist could live. Every variant uses the same example: 13 tasks,
+      7 done, task 8 running. Each one is drawn three times: the desktop sidecar (290px), the phone band (375px), and the session row badge. Classes are the
+      app's real ones (<code>.kv</code>, <code>.track</code>, <code>.fill</code>, <code>.now</code>, <code>.chat-facts</code>, <code>.ag-pill</code>), so a pick ports straight into <code>styles.css</code>.</p>
+    <div class="themebar" role="group" aria-label="Theme">
+      <button type="button" id="th-sys" class="on">System</button>
+      <button type="button" id="th-light">Daylight</button>
+      <button type="button" id="th-dark">Navy</button>
+    </div>
+  </header>
+
+  <!-- NOW -->
+  <section class="v">
+    <div class="vhead"><h2>Now</h2><span class="tagl now">today</span></div>
+    <p class="note">The sidecar ends after the facts, and the rest of the column is empty. Nothing on the row or in the drawer says how far a 13-task job has got.</p>
+    <div class="frames">
+      <div class="frame"><span class="flabel">Desktop sidecar</span><div class="chat-side" data-side="none"></div></div>
+      <div class="frame"><span class="flabel">Phone band</span><div class="band" data-band="none"></div>
+        <span class="flabel" style="margin-top:14px">Session row</span><div class="row" data-row="none"></div></div>
+    </div>
+  </section>
+
+  <!-- A -->
+  <section class="v">
+    <div class="vhead"><h2>A · Gauge card</h2><span class="tagl">smallest</span></div>
+    <p class="note">A second <code>.kv</code> card styled like Context: the count, a bar, and the running task's <code>activeForm</code> on the <code>.now</code> line. No list.</p>
+    <div class="pros"><span><b>For:</b> reuses the Context card wholesale, so it is almost no new CSS. Works the same in every theme.</span>
+      <span><b>Against:</b> it tells you how far along the job is, but not what is left. Most of the red box stays empty.</span></div>
+    <div class="frames">
+      <div class="frame"><span class="flabel">Desktop sidecar</span><div class="chat-side" data-side="A"></div></div>
+      <div class="frame"><span class="flabel">Phone band</span><div class="band" data-band="A"></div>
+        <span class="flabel" style="margin-top:14px">Session row</span><div class="row" data-row="pill"></div></div>
+    </div>
+  </section>
+
+  <!-- B -->
+  <section class="v">
+    <div class="vhead"><h2>B · Checklist</h2><span class="tagl rec">recommended</span></div>
+    <p class="note">A gauge header over the full list, which fills the red box and scrolls inside it. Done tasks are grey with a check, the running one is
+      highlighted with a pulse, pending ones are hollow. When it opens, the list scrolls to the running task. On a phone the list starts folded to one line, and tapping it opens the list.</p>
+    <div class="pros"><span><b>For:</b> answers both "how far" and "what's left" at a glance, and it uses the empty space it was asked for.</span>
+      <span><b>Against:</b> it is the most new CSS of the three, and a 30-task list scrolls inside a 290px column.</span></div>
+    <div class="frames">
+      <div class="frame"><span class="flabel">Desktop sidecar</span><div class="chat-side" data-side="B"></div></div>
+      <div class="frame"><span class="flabel">Phone band, folded</span><div class="band" data-band="B"></div>
+        <span class="flabel" style="margin-top:14px">Session row</span><div class="row" data-row="pill"></div></div>
+    </div>
+  </section>
+
+  <!-- C -->
+  <section class="v">
+    <div class="vhead"><h2>C · Segmented track</h2><span class="tagl">backlog-manager idiom</span></div>
+    <p class="note">One segment per task, in the StageTrack style: the shape of the job at a glance. Below it are the running task and the next one. Tapping a
+      segment puts its subject on the now line (no <code>title</code> tooltip, because it does nothing on touch).</p>
+    <div class="pros"><span><b>For:</b> one compact unit that reads the same on desktop, phone and row. The row strip shows 13 ticks, not a number.</span>
+      <span><b>Against:</b> past about 25 tasks the segments get too thin to tap, and you still have to tap each one to find out what it is.</span></div>
+    <div class="frames">
+      <div class="frame"><span class="flabel">Desktop sidecar</span><div class="chat-side" data-side="C"></div></div>
+      <div class="frame"><span class="flabel">Phone band</span><div class="band" data-band="C"></div>
+        <span class="flabel" style="margin-top:14px">Session row</span><div class="row" data-row="segs"></div></div>
+    </div>
+  </section>
+
+  <!-- D -->
+  <section class="v">
+    <div class="vhead"><h2>D · Checklist with timings</h2><span class="tagl yagni">YAGNI'd</span></div>
+    <p class="note">B, plus how long each finished task took, how long the running one has been going, each task's description, and a rough ETA. Drawn here so it can be compared. Left out of the plan.</p>
+    <div class="pros"><span><b>For:</b> shows where a long job spent its time.</span>
+      <span><b>Against:</b> it has to pair every status change with the record's timestamp. The ETA would be a guess presented as a number, and the descriptions crowd the 290px column.</span></div>
+    <div class="frames">
+      <div class="frame"><span class="flabel">Desktop sidecar</span><div class="chat-side" data-side="D"></div></div>
+    </div>
+  </section>
+
+  <!-- states -->
+  <section class="v">
+    <div class="vhead"><h2>Edge states</h2><span class="tagl">every variant</span></div>
+    <p class="note">The rules behind these: a session with no tasks shows nothing, not an empty card. A <code>deleted</code> task leaves the count. When the list is all done, the bar turns grey and the row pill dims.</p>
+    <div class="states" id="states"></div>
+  </section>
+</div>
+
+<script>
+const T = [
+  ['Add SessionTasks to shared/types.ts','done','Adding SessionTasks type'],
+  ['Fold TaskCreate results into a task map','done',''],
+  ['Apply TaskUpdate status changes','done',''],
+  ['Drop deleted tasks from the count','done',''],
+  ['Expose tasks on the Session payload','done',''],
+  ['Unit tests for the fold','done',''],
+  ['Typecheck and run the suite','done',''],
+  ['Build the sidecar Tasks panel','live','Building the sidecar Tasks panel'],
+  ['Row badge in Tags','todo',''],
+  ['Phone band line','todo',''],
+  ['Port styles into styles.css','todo',''],
+  ['Update docs/subsystems/chat.md','todo',''],
+  ['Verify in the preview pane','todo',''],
+];
+const TIMES = ['1m','3m','2m','40s','1m','6m','2m','4m 12s'];
+const DESC = {7:'Gauge header over the full list; scroll the running task into view on open.'};
+const done = T.filter(t => t[1]==='done').length, total = T.length, pct = Math.round(done/total*100);
+const live = T.findIndex(t => t[1]==='live');
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+const ctxCard = `<div class="kv"><div class="k">Context</div><div class="v"><span class="metric">23.6%</span><span class="u">235.9k / 1M</span></div>
+  <div class="track"><div class="fill" style="width:24%"></div></div></div>`;
+const facts = `<div class="chat-facts"><div class="f"><span>Project</span><b>claude-agents-dashboard</b></div><div class="f"><span>Branch</span><b>main</b></div>
+  <div class="f"><span>Model</span><b>claude-opus-5-5</b></div><div class="f"><span>Messages</span><b>56 loaded</b></div><div class="f"><span>Now</span><b>Bash</b></div></div>`;
+
+function listItems(withTimes){
+  return T.map((t,i) => {
+    const g = t[1]==='done' ? '✓' : t[1]==='live' ? '<span class="pulse"></span>' : '○';
+    const tm = withTimes ? (i < TIMES.length ? `<span class="t">${TIMES[i]}</span>` : '') : '';
+    const d = withTimes && DESC[i] ? `<span class="desc">${esc(DESC[i])}</span>` : '';
+    return `<li class="${t[1]}"><span class="g">${g}</span><span>${esc(t[0])}${d}</span>${tm}</li>`;
+  }).join('');
+}
+const segs = (sel) => `<div class="segs" role="img" aria-label="${done} of ${total} tasks done">${T.map((t,i)=>`<span class="seg ${t[1]}${i===sel?' sel':''}"></span>`).join('')}</div>`;
+
+const SIDES = {
+  none: ctxCard + facts + `<div class="void">empty</div>`,
+  A: ctxCard + `<div class="kv"><div class="k"><span>Tasks</span><span>${pct}%</span></div><div class="v"><span class="metric">${done}</span><span class="u">of ${total} done</span></div>
+      <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+      <div class="now"><span class="pulse"></span><span class="act">${esc(T[live][2])}</span></div></div>` + facts,
+  B: ctxCard + `<div class="kv tasks-kv"><div class="k"><span>Tasks</span><span>${done} / ${total}</span></div>
+      <div class="track" style="height:6px;margin-top:8px"><div class="fill" style="width:${pct}%"></div></div>
+      <ol class="task-list">${listItems(false)}</ol></div>` + facts.replace('<div class="chat-facts">','<div class="chat-facts" style="flex:none">'),
+  C: ctxCard + `<div class="kv"><div class="k"><span>Tasks</span><span>${done} / ${total}</span></div>${segs(-1)}
+      <div class="now"><span class="pulse"></span><span class="act">${esc(T[live][2])}</span></div>
+      <div class="nextl"><span>Next</span><b>${esc(T[live+1][0])}</b></div></div>` + facts,
+  D: ctxCard + `<div class="kv tasks-kv"><div class="k"><span>Tasks</span><span>${done} / ${total} · 20m</span></div>
+      <div class="track" style="height:6px;margin-top:8px"><div class="fill" style="width:${pct}%"></div></div>
+      <div class="eta">~14m left at this pace</div>
+      <ol class="task-list">${listItems(true)}</ol></div>`,
+};
+
+const bandHead = `<div class="head">dashboard task bar<span class="x">✕</span></div>`;
+const ctxLine = `<div class="gauge"><span>Context</span><span class="metric">23.6%</span><span>235.9k / 1M</span><span class="tr"><i style="width:24%"></i></span></div>`;
+const factLine = `<div class="facts"><span>Branch <b>main</b></span><span>Model <b>claude-opus-5-5</b></span></div>`;
+const tLine = (extra) => `<div class="gauge"><span>Tasks</span><span class="metric">${done}/${total}</span><span style="color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(T[live][2])}</span>${extra}</div>`;
+const BANDS = {
+  none: ctxLine + factLine,
+  A: ctxLine + tLine(`<span class="tr"><i style="width:${pct}%"></i></span>`) + factLine,
+  B: ctxLine + tLine(`<span style="color:var(--ink3)">▾ list</span><span class="tr"><i style="width:${pct}%"></i></span>`) + factLine,
+  C: ctxLine + tLine(segs(-1)) + factLine,
+};
+
+const rowBase = (badge) => `<span class="dot"></span><div class="main"><div class="tags"><span class="sname">dashboard task bar</span><span class="branch">main</span><span class="model">claude-opus-5-5</span>${badge}</div>
+  <div class="act"><b>Bash</b> pnpm test</div></div><div class="ctx"><span>23.6%</span><span class="tr"><i></i></span></div>`;
+const ROWS = {
+  none: rowBase(''),
+  pill: rowBase(`<span class="ag-pill tasks">${done}/${total}<span class="mini"><i style="width:${pct}%"></i></span></span>`),
+  segs: rowBase(`<span class="ag-pill tasks" style="background:none;padding:0">${done}/${total}<span class="rsegs">${T.map(t=>`<span class="seg ${t[1]}"></span>`).join('')}</span></span>`),
+};
+
+document.querySelectorAll('[data-side]').forEach(el => el.innerHTML = SIDES[el.dataset.side]);
+document.querySelectorAll('[data-band]').forEach(el => el.innerHTML = bandHead + `<div class="side">${BANDS[el.dataset.band]}</div><div class="body">transcript…</div>`);
+document.querySelectorAll('[data-row]').forEach(el => el.innerHTML = ROWS[el.dataset.row]);
+
+// C: tap a segment → its subject on the now line
+document.querySelectorAll('[data-side="C"] .seg').forEach((s,i) => s.addEventListener('click', () => {
+  const card = s.closest('.kv');
+  card.querySelectorAll('.seg').forEach(x => x.classList.remove('sel'));
+  s.classList.add('sel');
+  card.querySelector('.now .act').textContent = T[i][0] + (T[i][1]==='done' ? ' (done)' : T[i][1]==='todo' ? ' (pending)' : '');
+}));
+// B: scroll running task into view, like the real panel would on open
+document.querySelectorAll('[data-side="B"] .task-list, [data-side="D"] .task-list').forEach(l => {
+  const li = l.querySelector('.live'); if (li) l.scrollTop = li.offsetTop - l.offsetTop - 60;
+});
+
+// edge states
+const st = document.getElementById('states');
+st.innerHTML = `
+ <div class="state"><span class="flabel">No tasks: nothing rendered</span><div class="kv" style="border-style:dashed;color:var(--ink3);font-size:12px">(no card, no row pill)</div></div>
+ <div class="state"><span class="flabel">All done</span><div class="kv"><div class="k"><span>Tasks</span><span>13 / 13</span></div>
+   <div class="track" style="height:6px;margin-top:8px"><div class="fill" style="width:100%;background:var(--ink3)"></div></div>
+   <div class="now" style="color:var(--ink2);font-weight:400">✓ All tasks done</div></div>
+   <div style="margin-top:6px"><span class="ag-pill tasks done">13/13 ✓</span></div></div>
+ <div class="state"><span class="flabel">Created, none started</span><div class="kv"><div class="k"><span>Tasks</span><span>0 / 6</span></div>
+   <div class="track" style="height:6px;margin-top:8px"><div class="fill" style="width:0"></div></div>
+   <div class="now" style="color:var(--ink3);font-weight:400">Not started</div></div></div>`;
+
+// theme switch
+const btns = {sys:'th-sys', light:'th-light', dark:'th-dark'};
+Object.entries(btns).forEach(([k,id]) => document.getElementById(id).addEventListener('click', () => {
+  if (k==='sys') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', k);
+  Object.values(btns).forEach(b => document.getElementById(b).classList.toggle('on', b===id));
+}));
+</script>
