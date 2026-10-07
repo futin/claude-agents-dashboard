@@ -1865,6 +1865,32 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .chat-side .kv .v{margin-top:0}
 .chat-side .kv .v .metric{font-size:16px}
 .chat-side .kv .track{flex-basis:100%;height:4px;margin-top:6px}
+/* The Tasks card is the one `.kv` with a list under its gauge. On a phone its head row and status line are hidden and the folded line is the only
+   header, so done/total shows once; the list opens under it, capped so the transcript keeps most of the screen. */
+.chat-side .tasks-kv .k,.task-status{display:none}
+.task-fold{display:flex;flex:1 1 100%;min-width:0;align-items:baseline;gap:8px;padding:0;background:none;border:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.task-fold .tf-k{flex:none;font-size:11px;color:var(--ink2)}
+.task-fold .tf-n{flex:none;font-size:16px;font-weight:700;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
+.task-fold .tf-line{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:var(--ink2)}
+.task-fold .tf-line.live{color:var(--ink)}
+.task-fold .tf-cue{flex:none;font-size:11px;color:var(--ink3)}
+.tasks-kv .fill.done{background:var(--ink3)}
+.task-list{position:relative;display:flex;flex:1 1 100%;flex-direction:column;gap:1px;min-width:0;max-height:40vh;margin:8px 0 0;padding:0;overflow:auto;list-style:none;font-size:12.5px}
+.chat-side .tasks-kv.folded .task-list{display:none}
+.task-list li{display:flex;align-items:flex-start;gap:8px;padding:5px 6px;border-radius:8px;line-height:1.35}
+/* a 200-character subject with no spaces must wrap, not widen a 290px column */
+.task-list .tsub{min-width:0;overflow-wrap:anywhere}
+.task-list .g{flex:none;width:14px;font-size:11px;line-height:17px;text-align:center}
+.task-list .done{color:var(--ink3)}
+.task-list .done .g{color:var(--green)}
+.task-list .todo{color:var(--ink2)}
+.task-list .todo .g{color:var(--ink3)}
+.task-list .live{background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--ink);font-weight:600}
+.task-list .live .g{display:grid;height:17px;place-items:center}
+/* `pulse` is the .sdot ring; a fade is all an 8px dot in a list row needs */
+.task-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:task-pulse 1.6s ease-in-out infinite}
+@keyframes task-pulse{0%,100%{opacity:.35}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.task-dot{animation:none}}
 .chat-facts{display:flex;flex-wrap:wrap;gap:3px 14px;font-size:11px}
 .chat-facts .f{justify-content:flex-start;gap:6px;max-width:100%}
 /* Project, Messages and Now: the head pill, the foot count and the last turn
@@ -1922,6 +1948,16 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
   .chat-side .kv .v{margin-top:4px}
   .chat-side .kv .v .metric{font-size:24px}
   .chat-side .kv .track{flex-basis:auto;height:10px;margin-top:12px}
+  /* the card takes the column's spare height and the list scrolls inside it; `.chat-facts` keeps its natural height below. `.folded` has no effect
+     here — the list always shows and the folded line gives way to the head row. */
+  .chat-side .tasks-kv{display:flex;flex-direction:column;flex:1;min-height:0}
+  .chat-side .tasks-kv .k{display:flex;flex:none;justify-content:space-between;gap:8px}
+  .chat-side .tasks-kv .track{flex:none;height:6px;margin-top:8px}
+  .task-fold{display:none}
+  .task-status{display:block;flex:none;margin-top:8px;font-size:12px;color:var(--ink2)}
+  .task-status.idle{color:var(--ink3)}
+  .task-list{flex:1;min-height:0;max-height:none;margin:12px -6px 0}
+  .chat-side .tasks-kv.folded .task-list{display:flex}
   .chat-facts{display:grid;gap:10px;font-size:12px}
   .chat-facts .f{justify-content:space-between;gap:12px;max-width:none}
   .chat-facts .f.wide{display:flex}
