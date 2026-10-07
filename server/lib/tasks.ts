@@ -40,7 +40,11 @@ interface PendingCall {
   input: Record<string, unknown>;
 }
 
-/** The plan being executed. `key` is its lexical identity, so two spellings of one path do not reset the run. */
+/**
+ * The plan being executed. `key` is the plan file's basename: the same plan is named relative from whichever directory the shell sits in (`/r`, `/r/server`,
+ * `/r/client`), and a lexical resolve against each of those would call it three plans and reset the run on every cwd change. `path` and `base` follow the
+ * newest signal so the file still resolves from where the session is now.
+ */
 interface PlanState {
   path: string;
   base: string | null;
@@ -100,14 +104,14 @@ function apply(entry: Entry, call: PendingCall, result: unknown): void {
   });
 }
 
-function planKey(p: string, base: string | null): string {
-  return path.isAbsolute(p) || !base ? p : path.resolve(base, p);
-}
-
 function applySignal(entry: Entry, sig: PlanSignal): void {
   if (sig.kind === 'plan') {
-    const key = planKey(sig.path, sig.base);
-    if (entry.plan?.key === key) return;
+    const key = path.basename(sig.path);
+    if (entry.plan?.key === key) {
+      entry.plan.path = sig.path;
+      entry.plan.base = sig.base;
+      return;
+    }
     // The held signals were consumed by the first plan, so a later plan starts empty.
     const first = entry.plan === null;
     entry.plan = {

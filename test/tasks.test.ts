@@ -372,7 +372,20 @@ export function run(): number {
     assert.deepStrictEqual(statuses(r.tasks), ['pending', 'pending']);
   })) p++; else f++;
 
-  if (test('P9c. the same plan spelled relative and then absolute is one plan: state is kept', () => {
+  if (test('P9c. one relative plan signalled from three shell cwds is one plan: done state survives the drift', () => {
+    const root = planRoot({ p: ['A', 'B', 'C'] });
+    fs.mkdirSync(path.join(root, 'server'));
+    fs.mkdirSync(path.join(root, 'client'));
+    const hdr = (cwd: string): string => bash(cwd, `W=.superpowers/sdd/p; mkdir -p $W; printf '# SDD ledger — plan: docs/p.md\\n' > "$W/progress.md"`);
+    const file = transcript(
+      hdr(root) + ledger(root, 'Task 1: complete (x)') + hdr(path.join(root, 'server')) + ledger(root, 'Task 2: complete (y)') + hdr(path.join(root, 'client'))
+    );
+    const r = readSessionTasks(file, root);
+    assert.strictEqual(r.plan, 'p');
+    assert.deepStrictEqual(statuses(r.tasks), ['completed', 'completed', 'pending']);
+  })) p++; else f++;
+
+  if (test('P9d. the same plan spelled relative and then absolute is one plan: state is kept', () => {
     const root = planRoot({ p: ['A', 'B'] });
     const file = transcript(header(root, 'docs/p.md') + ledger(root, 'Task 1: complete (x)') + header(root, path.join(root, 'docs/p.md')));
     assert.deepStrictEqual(statuses(readSessionTasks(file, null).tasks), ['completed', 'pending']);
@@ -446,7 +459,8 @@ export function run(): number {
     const root = planRoot({ p: ['A', 'B', 'C'] });
     const file = transcript(bash(root, 'task-start docs/p.md 2'));
     assert.deepStrictEqual(statuses(readSessionTasks(file, null).tasks), ['pending', 'in_progress', 'pending']);
-    fs.appendFileSync(file, bash(root, '"$EP/scripts/task-done" docs/p.md 2 abc1234 -- pnpm test'));
+    const doneId = 'toolu_td' + ++useSeq;
+    fs.appendFileSync(file, call('Bash', doneId, { command: '"$EP/scripts/task-done" docs/p.md 2 abc1234 -- pnpm test' }, root) + result(doneId, undefined, 'Task 2: complete'));
     assert.deepStrictEqual(statuses(readSessionTasks(file, null).tasks), ['pending', 'completed', 'pending']);
     const only = transcript(header(root, 'docs/p.md') + result('toolu_y', undefined, 'Task 2: complete (abc1234)'));
     assert.deepStrictEqual(statuses(readSessionTasks(only, null).tasks), ['pending', 'pending', 'pending']);
