@@ -261,7 +261,7 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
 - **Visible without the drawer.** `QuestionPanel` only exists inside `ChatDrawer`, so a
   held question used to be invisible unless you already had that exact session's drawer
   open, and the transcript-derived blue dot can't cover it (the wait is registered during
-  `PreToolUse`, before the `tool_use` record is written). So `serveSessions` passes
+  `PreToolUse`, before the `tool_use` record is written). So `scanSnapshot` (behind `serveSessions`) passes
   `pendingSessionIds()` into `scanSessions` as `pendingIds`: a flagged session gets
   `status: 'question'` plus `Session.remoteQuestion`, and the row's chat button (`sessions/atoms.tsx`) goes into
   a pulsing amber `Answer` — first in the `holdKind` precedence (`lib/holds.ts`) that
