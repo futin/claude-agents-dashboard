@@ -53,6 +53,17 @@ export function run(): number {
     assert.strictEqual(stripPlanToken("docs/p.md\\nbranch:"), 'docs/p.md');
   });
 
+  t('U1c a plan path takes the value of a variable assigned earlier in the same command', () => {
+    const ledger = 'W=/r/.superpowers/sdd/task; SP=/tmp/sp; cat > $W/progress.md <<EOF\n# SDD ledger — plan: $SP/task.md\nTask 1: complete\nEOF';
+    assert.deepStrictEqual(bash(ledger), [plan('/tmp/sp/task.md'), done('1')]);
+    assert.deepStrictEqual(bash('SP="/tmp/s p"; task-done "${SP}/p.md" 4'), [plan('/tmp/s p/p.md'), done('4')]);
+    assert.deepStrictEqual(bash("P='docs/p.md' && task-brief \"$P\" 2"), [plan('docs/p.md'), live('2')]);
+    // The latest assignment before the use wins; one after it does not apply.
+    assert.deepStrictEqual(bash('P=a.md; P=b.md; task-done $P 1; P=c.md'), [plan('b.md'), done('1')]);
+    // An unassigned variable is left as written.
+    assert.deepStrictEqual(bash('task-done $SP/p.md 4'), [plan('$SP/p.md'), done('4')]);
+  });
+
   t('U2 ledger header via Write content and Edit new_string', () => {
     assert.deepStrictEqual(planSignals('Write', { file_path: LEDGER, content: HEADER }, '/r'), [plan('docs/p.md')]);
     assert.deepStrictEqual(planSignals('Edit', { file_path: LEDGER, old_string: 'x', new_string: HEADER }, '/r'), [plan('docs/p.md')]);

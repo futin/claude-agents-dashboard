@@ -36,6 +36,9 @@ const AGENT_TASK_RE = new RegExp(String.raw`(?<![\w-])Task (${TASK_ID})\b`, 'g')
 const LEADING_CD_RE = /^\s*cd\s+(?:"([^"]*)"|'([^']*)'|(\S+?))\s*(?:&&|;)/;
 const HEADING_RE = new RegExp(String.raw`^#{2,3} Task (${TASK_ID})(?: \([^)]*\))?\s*[:.—–-]\s*(.+?)\s*$`);
 const EXECUTING_SKILLS = ['subagent-driven-development', 'executing-plans'];
+// A plain `NAME=value` in a command: unquoted, or quoted, with no expansion of its own in the value (that one is left unresolved).
+const ASSIGN_RE = /(?:^|[\s;&|(])([A-Za-z_]\w*)=("[^"$`]*"|'[^']*'|[^\s;&|'"`$()]+)(?=$|[\s;&|)])/g;
+const VAR_RE = /\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))/g;
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -53,9 +56,23 @@ export function stripPlanToken(raw: string): string {
   }
 }
 
+/**
+ * `$NAME` and `${NAME}` in `token`, from the last plain `NAME=value` assigned before `at` in `command`: a ledger written as `SP=/abs; … plan: $SP/p.md`
+ * names a file that can be read. Any other variable is left as written.
+ */
+function expandVars(token: string, command: string, at: number): string {
+  if (!token.includes('$')) return token;
+  const vars = new Map<string, string>();
+  for (const m of command.matchAll(ASSIGN_RE)) {
+    if ((m.index ?? 0) >= at) break;
+    vars.set(m[1], m[2].replace(/^(["'])([\s\S]*)\1$/, '$2'));
+  }
+  return token.replace(VAR_RE, (whole, braced: string | undefined, bare: string | undefined) => vars.get(braced ?? bare ?? '') ?? whole);
+}
+
 /** A plan path from a raw token, or null when it is not a markdown path — which also rejects `$PLAN` and the skill's `<plan file path>` template as plan names (a script call carrying one still yields its task id). */
-function planPath(raw: string): string | null {
-  const s = stripPlanToken(raw);
+function planPath(raw: string, expand: (token: string) => string = (token) => token): string | null {
+  const s = expand(stripPlanToken(raw));
   return s.endsWith('.md') ? s : null;
 }
 
@@ -87,24 +104,26 @@ export function planSignals(name: string, input: Record<string, unknown>, record
     const plans: PlanSignal[] = [];
     const running: PlanSignal[] = [];
     const finished: PlanSignal[] = [];
-    const addPlan = (raw: string, base: string | null): void => {
-      const p = planPath(raw);
+    // A Bash command's own assignments resolve its variables; `at` is where the token sits in `command`.
+    const command = name === 'Bash' ? str(input.command) : '';
+    const addPlan = (raw: string, base: string | null, at = 0): void => {
+      const p = planPath(raw, (token) => expandVars(token, command, at));
       if (p) plans.push({ kind: 'plan', path: p, base });
     };
 
     if (name === 'Bash') {
-      const command = str(input.command);
       const base = bashBase(command, recordCwd);
       if (isLedgerInput(name, input)) {
-        for (const m of command.matchAll(LEDGER_HEADER_RE)) addPlan(m[1], base);
+        for (const m of command.matchAll(LEDGER_HEADER_RE)) addPlan(m[1], base, m.index);
         for (const m of command.matchAll(LEDGER_DONE_RE)) finished.push({ kind: 'done', id: m[1] });
       }
       for (const m of command.matchAll(SCRIPT_RE)) {
-        // A plan passed as a shell variable (`task-done "$P" 3`) names no file here, but the task id is still literal: it counts without naming a plan.
-        addPlan(m[2], base);
+        // A plan passed as a shell variable (`task-done "$P" 3`) names a file only when the same command assigned it; otherwise the task id, which is
+        // still literal, counts without naming a plan.
+        addPlan(m[2], base, m.index);
         (m[1] === 'task-done' ? finished : running).push({ kind: m[1] === 'task-done' ? 'done' : 'live', id: m[3] });
       }
-      for (const m of command.matchAll(REVIEW_PACKAGE_RE)) addPlan(m[1], base);
+      for (const m of command.matchAll(REVIEW_PACKAGE_RE)) addPlan(m[1], base, m.index);
     } else if (name === 'Write' || name === 'Edit') {
       if (isLedgerInput(name, input)) {
         const text = str(name === 'Write' ? input.content : input.new_string);
