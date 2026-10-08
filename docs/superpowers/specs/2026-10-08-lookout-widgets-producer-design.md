@@ -15,7 +15,7 @@ with Lookout's own validator before it leaves the app.
 | Question | Decision |
 |---|---|
 | Where the pipeline lives | A separate, **public** package, new repo `futin/lookout-widgets`. Public because the dashboard repo is public: a private git dependency would break every clean install of it. |
-| What the package holds | The contract (`types.ts`, `paths.ts`, `validate.ts`, moved from `lookout/shared/contract/`, unchanged but for `.js` import suffixes; their jest tests are ported to `node:test` + `node:assert`, and the `lookout/shared/examples` fixtures they import move with them) plus the producer and the test kit. One source of truth for both sides of the wire. |
+| What the package holds | The contract (`types.ts`, `paths.ts`, `validate.ts`, copied from `lookout/shared/contract/`, unchanged but for `.js` import suffixes; their jest tests are ported to `node:test` + `node:assert`, and the `lookout/shared/examples` fixtures they import are copied with them. Lookout keeps its own copies untouched until its own backlog item switches it) plus the producer and the test kit. One source of truth for both sides of the wire. |
 | How the dashboard server consumes it | `"lookout-widgets": "github:futin/lookout-widgets#v0.1.0"` in `dependencies`. `.claude/CLAUDE.md` §Code rules gains one named exception to "keep new deps out of `server/`": this package, which itself has zero runtime deps. A test pins it as the only non-builtin bare import under `server/`. |
 | How it ships ESM and CJS | Committed `dist/esm` and `dist/cjs` (the latter with its own `{"type":"commonjs"}` `package.json`) behind an `exports` map with `types`. No install-time build: pnpm blocks dependency lifecycle scripts by default, and a git dep that needs `prepare` would need a TypeScript toolchain at install. A package test rebuilds and fails if `dist/` differs. |
 | Who owns contract version bumps | The package. `contract: 2` is a new major of `lookout-widgets`; each app bumps its pinned tag. Lookout switching to import from the package is filed in Lookout's own backlog, not done here. |
@@ -25,8 +25,9 @@ with Lookout's own validator before it leaves the app.
 
 ## 3. Package `lookout-widgets`
 
-Plain TypeScript, ESM source, Node ≥ 20 (the dashboard's Docker image is `node:20-alpine`), zero runtime dependencies, dev dependency `typescript` only. Relative imports
-carry a `.js` suffix (Node ESM requires it; the CJS build resolves the same specifier), so the files moved from Lookout change only their import specifiers.
+Plain TypeScript, ESM source, Node ≥ 20 (the dashboard's Docker image is `node:20-alpine`), zero runtime dependencies, dev dependencies `typescript` and `tsx` only (`tsx` runs the
+`.test.ts` files, which Node 20 cannot execute on its own). Relative imports
+carry a `.js` suffix (Node ESM requires it; the CJS build resolves the same specifier), so the files copied from Lookout change only their import specifiers.
 The producer imports nothing but `../contract/*`.
 
 ### 3.1 Declarations (`producer/declare`)
@@ -59,7 +60,7 @@ The row id lives in the path because the hub POSTs only `{ input }` to `action.p
 
 ### 3.3 Handler (`producer/handler`)
 
-`createHubHandler({ app, widgets, onDrop? })` → `handle({ method, path, query, body })` → `Promise<{ status, json } | null>`. `query` is a `URLSearchParams`;
+`createHubHandler({ app, widgets, onDrop?, now? })` (`now: () => Date`, default `() => new Date()`, the clock `updatedAt` reads) → `handle({ method, path, query, body })` → `Promise<{ status, json } | null>`. `query` is a `URLSearchParams`;
 `body` is the already-parsed JSON (or `undefined`). Framework-agnostic: the dashboard's `node:http` router, a NestJS controller and an Express route each mount
 it with a few lines of glue.
 
@@ -77,7 +78,8 @@ it with a few lines of glue.
 
 ### 3.4 Test kit (`testkit`)
 
-`checkWidgets(handler, cases?)` → `Promise<string[]>` (failure messages, empty when all pass). It fetches the catalog, asserts it validates with nothing
+`checkWidgets(handler, cases?)` → `Promise<string[]>` (failure messages, empty when all pass). `cases` is
+`{ widget: string; params: Record<string, string> }[]`; a widget with one or more cases is fetched once per case, any other widget once without params. It fetches the catalog, asserts it validates with nothing
 dropped, then for every widget (and every case's params, when given) fetches data and asserts a 200 that passes `validateData`. A widget with a
 non-optional param and no case is reported as a failure (`<widgetId>: param <paramId> needs a case`), never skipped and never guessed. Framework-agnostic, so jest
 (Lookout, backlog-manager) and the dashboard's node-assert runner both use it as `assert.deepStrictEqual(await checkWidgets(h), [])`.
@@ -85,7 +87,7 @@ non-optional param and no case is reported as a failure (`<widgetId>: param <par
 ### 3.5 Packaging
 
 `package.json`: `"type": "module"`, `exports` with `import` → `dist/esm/index.js`, `require` → `dist/cjs/index.js`, `types` → `dist/esm/index.d.ts`, plus a
-`./testkit` subpath. Two `tsconfig` builds. Tests run with `node --test` against `dist/`, including one ESM and one CJS smoke import, and the dist-drift test.
+`./testkit` subpath. Two `tsconfig` builds. Tests run with `node --import tsx --test`, and import the built `dist/` rather than `src/`, including one ESM and one CJS smoke import, and the dist-drift test.
 
 ## 4. Dashboard
 
@@ -96,8 +98,9 @@ non-optional param and no case is reported as a failure (`<widgetId>: param <par
   stay in `serveSessions` only.
   - `usage` — gauge, title "Claude usage", `refreshSeconds: 60` (the usage cache's own age). Bars "5-hour" and "Weekly" from `fiveHour` / `sevenDay`
     `utilization` with `resetsAt` when non-null; a window with `utilization: null` is omitted. No bar to show — `usage: null`, any non-`ok` status, or both
-    windows `null` under `ok` — → `load` throws `usage <status>` (or `usage has no windows`) → 500. Lookout treats a 500 as an `http` poller error: the
-    tile goes **Stale**, keeping the last good gauge with its age, and a tile that never had one stays empty. That is deliberate: a fabricated 0 % bar would
+    windows `null` under `ok` — → `load` throws `usage <status>` (or `usage has no windows`) → 500. Lookout treats a 500 as an `http` poller error: a
+    tile with a last good gauge keeps showing it and turns **Stale** (badge with its age) once 3 × the interval passes without a success; a tile that never
+    had one shows "No data yet" with "<app> answered 500" (Lookout spec §8 tile states). That is deliberate: a fabricated 0 % bar would
     read as real data, and the reason is still visible to anyone curling the route. Declared only when `config.showUsage` is on.
   - `sessions` — list, title "Sessions", `refreshSeconds: 10`, `open: "/"`. One row per session from the same scan `/api/sessions` uses: `id` = session id,
     `title` = `sessionName ?? project`, `subtitle` = `<gitBranch> · <model> · ctx <round(contextPct)>%` (`gitBranch` part omitted when null), `status` from `working→running`, `question→warn`,
