@@ -58,13 +58,16 @@ export function run(): number {
   }
 
   const offenders: string[] = [];
+  const seen = new Set<string>();
   for (const file of tsFiles(path.join(root, 'server'))) {
     for (const spec of bareSpecifiers(fs.readFileSync(file, 'utf8'))) {
+      seen.add(spec);
       if (!ALLOWED.includes(spec)) offenders.push(`${path.relative(root, file)}: ${spec}`);
     }
   }
-  // Subset until server/lib/hub-widgets.ts lands (Task 9 tightens this to equality).
   if (test('server/ imports no npm package but lookout-widgets', () => assert.deepStrictEqual(offenders, []))) p++; else f++;
+  // Equality, not just a subset: an exception nobody uses any more should be removed from CLAUDE.md, not left standing.
+  if (test('server/ does import lookout-widgets', () => assert.deepStrictEqual([...seen].sort(), ALLOWED))) p++; else f++;
 
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> };
   if (test(`package.json pins lookout-widgets to ${PINNED_SPEC}`, () => assert.strictEqual(pkg.dependencies?.['lookout-widgets'], PINNED_SPEC))) p++; else f++;
