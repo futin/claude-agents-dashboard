@@ -11,6 +11,9 @@
  *   GET  /api/git-stats         → local git state of each pinned project (see lib/git-stats.ts)
  *   POST /api/git-fetch         → fetch every pinned repo's origin now (see lib/git-fetch.ts)
  *   GET  /api/dismiss           → a tapped desk push lands here; the page closes itself
+ *   GET  /api/hub/widgets       → Lookout hub catalog (see lib/hub-widgets.ts)
+ *   GET  /api/hub/widgets/:id   → one widget's data
+ *   POST /api/hub/widgets/...   → action paths; 404, no actions are declared
  *   everything else             → static files from client/dist (production build)
  *
  * In development you visit the Vite dev server (default :5174), which proxies
@@ -34,8 +37,9 @@ import {
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
   serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, serveGitStats, serveGitFetch, serveNotifyEvent, serveNotifyTest,
   serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates, serveUsageHistory,
-  serveAccount
+  serveAccount, serveHub
 } from './api.js';
+import { createDashboardHub } from './lib/hub-widgets.js';
 import { startGitFetchTimer } from './lib/git-fetch.js';
 import { startUsageRecording } from './lib/usage-history.js';
 import { refreshUsageNow, setUsageAutoRefresh } from './lib/usage.js';
@@ -169,11 +173,24 @@ function badRequest(res: http.ServerResponse): void {
  * anything. The production server binds the module-level config, unchanged.
  */
 export function createRequestListener(config: Config): http.RequestListener {
-  return (req, res) => {
+  const hub = createDashboardHub(config);
+  // A request the hub declined re-enters the listener once, marked, and takes the table below exactly as it would have.
+  const declined = new WeakSet<http.IncomingMessage>();
+  const listener: http.RequestListener = (req, res) => {
     // Configs routes take query params — parse once. Handlers are async but
     // self-contained (they always end the response), so `void` keeps the
     // callback signature.
     const u = new URL(req.url || '/', 'http://local');
+    if (u.pathname.startsWith('/api/hub/') && !declined.has(req)) {
+      return void serveHub(hub, u, req, res).then(
+        served => { if (!served) { declined.add(req); listener(req, res); } },
+        (e: unknown) => {
+          console.error('[dashboard] hub failed:', e instanceof Error ? e.message : String(e));
+          res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+      );
+    }
     if (u.pathname === '/api/configs/file') {
       return void serveConfigsFile(config, u.searchParams.get('path') || '', res);
     }
@@ -366,6 +383,7 @@ export function createRequestListener(config: Config): http.RequestListener {
     }
     return serveStatic(req.url || '/', res);
   };
+  return listener;
 }
 
 const server = http.createServer(createRequestListener(config));

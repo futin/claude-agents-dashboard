@@ -7,6 +7,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import nodePath from 'node:path';
 
+import type { HubHandler } from 'lookout-widgets';
+
 import {
   scanSessions, lastMessageMs, listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionSurface
 } from './lib/scan.js';
@@ -1556,6 +1558,18 @@ export async function serveSessionStop(
 }
 
 /* -------------------------------------------------- configs endpoints */
+
+/**
+ * One request to the Lookout hub routes. Resolves `false` when the hub does not own the path, so the caller falls through to its own table. A POST body
+ * that is not JSON (or empty, or over the cap) reaches the hub as `undefined`; no action is declared, so every POST path answers 404 regardless.
+ */
+export async function serveHub(hub: HubHandler, u: URL, req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  const body = req.method === 'POST' ? ((await readJsonBody(req)) ?? undefined) : undefined;
+  const reply = await hub.handle({ method: req.method ?? 'GET', path: u.pathname, query: u.searchParams, body });
+  if (reply === null) return false;
+  sendJson(res, reply.status, reply.json);
+  return true;
+}
 
 function sendJson(res: ServerResponse, code: number, body: unknown): void {
   res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
