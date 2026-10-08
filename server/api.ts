@@ -124,37 +124,42 @@ function sweepTerminalDecisions(): void {
   sweepDecidedPlans(movedOn);
 }
 
-export function serveSessions(baseConfig: Config, res: ServerResponse, params?: URLSearchParams): void {
-  const config = scanOverrides(baseConfig, params);
+/** One scan of the session rows with every RAM-store injection applied — what `/api/sessions` serves before launches and usage are attached. */
+export function scanSnapshot(config: Config): SessionsResponse {
   // Before the scan, not after: a wait the terminal already decided must not
   // colour this tick's row blue either.
   sweepTerminalDecisions();
+  // pendingIds comes from the RAM store, not disk: a question held by the
+  // AskUserQuestion hook is flagged on its row before the transcript knows
+  // about it, so it's visible without opening the chat drawer. planIds and
+  // messageIds are the same thing, for a held ExitPlanMode call and a held
+  // Stop-hook reply window respectively.
+  // permissionWaits likewise: a terminal permission dialog is TUI-only and
+  // never reaches the transcript, so the Notification hook is the only way the
+  // scan can know a session is parked on one.
+  // archivedIds mirrors the desktop app's own list: "delete" there is an
+  // archive that leaves the transcript on disk, so without this the row keeps
+  // showing until it ages out of the lookback window. Read here, not in
+  // scan.ts, so the scan stays free of the app's store (see archived.ts).
+  return scanSessions(config, {
+    skipProcScan: config.skipProcScan,
+    pendingIds: pendingSessionIds(),
+    planIds: planSessionIds(),
+    messageIds: messageSessionIds(),
+    permissionWaits: permissionWaits(),
+    archivedIds: archivedSessionIds(),
+    // stopStates is the same injection again, and the only one that is not a
+    // hint about a wait: it says which rows this server can actually signal,
+    // so the Stop control is offered only where it would work.
+    stopStates: stopStates()
+  });
+}
+
+export function serveSessions(baseConfig: Config, res: ServerResponse, params?: URLSearchParams): void {
+  const config = scanOverrides(baseConfig, params);
   let data: SessionsResponse;
   try {
-    // pendingIds comes from the RAM store, not disk: a question held by the
-    // AskUserQuestion hook is flagged on its row before the transcript knows
-    // about it, so it's visible without opening the chat drawer. planIds and
-    // messageIds are the same thing, for a held ExitPlanMode call and a held
-    // Stop-hook reply window respectively.
-    // permissionWaits likewise: a terminal permission dialog is TUI-only and
-    // never reaches the transcript, so the Notification hook is the only way the
-    // scan can know a session is parked on one.
-    // archivedIds mirrors the desktop app's own list: "delete" there is an
-    // archive that leaves the transcript on disk, so without this the row keeps
-    // showing until it ages out of the lookback window. Read here, not in
-    // scan.ts, so the scan stays free of the app's store (see archived.ts).
-    data = scanSessions(config, {
-      skipProcScan: config.skipProcScan,
-      pendingIds: pendingSessionIds(),
-      planIds: planSessionIds(),
-      messageIds: messageSessionIds(),
-      permissionWaits: permissionWaits(),
-      archivedIds: archivedSessionIds(),
-      // stopStates is the same injection again, and the only one that is not a
-      // hint about a wait: it says which rows this server can actually signal,
-      // so the Stop control is offered only where it would work.
-      stopStates: stopStates()
-    });
+    data = scanSnapshot(config);
   } catch (e) {
     console.error('[dashboard] scan failed:', (e as Error).message);
     data = {
