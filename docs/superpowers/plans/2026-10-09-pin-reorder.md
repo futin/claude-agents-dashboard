@@ -214,15 +214,18 @@ Behaviour — spec §4.3 in full; the points an implementer most often gets wron
 - **Auto-scroll:** pointer within 48px of the viewport top/bottom while dragging → `window.scrollBy` toward that edge each animation frame; stop on end or
   on leaving the band. Re-evaluate the midpoint swap after each scroll step (the rows moved under a still pointer).
 - **Keyboard:** `ArrowUp`/`ArrowDown` on a focused grip → `preventDefault`; if `busy` is non-null drop the press; else `movePin` by one and, if the result is
-  a new array, `onReorder` it. Keep the moved dirName as "pending focus" until that `onReorder` resolves, and re-focus its grip (refs keyed by dirName, in a
+  a new array, `onReorder` it. Keep the moved dirName as "pending focus" (a ref) until the save has fully landed, and re-focus its grip (refs keyed by dirName, in a
   layout effect) on **every** `pinned` change while it is pending — not once. The rollback after a 403/409 moves rows again, and after ↑ it is the pressed
   row's own `<li>` that React moves back, so a one-shot re-focus loses focus on every refused save (every save in the pane). This refines the spec's
-  "once `pinned` carries the new order" (§4.3).
+  "once `pinned` carries the new order" (§4.3). **Clear the mark from a passive effect that sees `busy` return to null**, never in the code after
+  `await onReorder(...)`: `reorder` restores `pins` and clears `busy` before it resolves, React batches those with anything written in the await
+  continuation into one commit, and the layout effect of that commit — the one moving the `<li>` back — would then find no mark.
 - `aria-disabled="true"` on grips while `busy` is non-null; never the `disabled` attribute.
 - **Feedback:** success → `Saved` label beside the Pinned count, gone after ~1.5 s. Failure → the existing per-row error keyed by the moved dirName, or, if that
   row is absent from `pinned` after the reply, the same heading slot as `Saved`.
-- Only `.pin-head` and the pinned rows take `g`; "Not pinned" rows stay plain `pin-row`. The heading-slot failure text uses `pin-saved` plus the existing
-  `err` modifier (`PinPicker.tsx:127`) so it is not styled as a success.
+- Only `.pin-head` and the pinned rows take `g`; "Not pinned" rows stay plain `pin-row`. The heading-slot failure text uses `pin-saved err`, and a new
+  `.pin-saved.err{color:var(--red)}` rule sits beside `.pin-sub.err` (`styles.css:1831`, scoped to `.pin-sub`, so it does not reach the new class) — so a
+  failure is not styled as a success.
 - CSS per spec §4.4: `.pin-row.g` / `.pin-head.g` lead column 28px at both tiers; grip `grid-row:1/span 2` on phone, `grid-row:auto` at `md`; phone shifts of `.pin-age` (column 2) and `.qp-term` (column 3, both rows);
   `.pin-grip` 28px wide, min 36px tall, stretched to the row, `touch-action:none`, `cursor:grab`, `--ink3` → hover `--ink` on `--strip-hi`, `:focus-visible`
   outline `--cyan`; `.pin-row.drag` `--strip-hi` + `--shadow2` + `cursor:grabbing` with a `--cyan` grip; `.pin-saved` `--ink3` 12px with an opacity
