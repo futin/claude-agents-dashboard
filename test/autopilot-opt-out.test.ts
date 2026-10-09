@@ -168,6 +168,57 @@ export async function run(): Promise<number> {
     assert.strictEqual(waits[0].body.stopHookActive, true);
   }))) p++; else f++;
 
+  const [ask, plan, stop] = HOOKS;
+  const blockedWith = (blockPasses: number): Record<string, string> => ({ [`${SID}.json`]: JSON.stringify({ status: 'blocked', blockPasses }) });
+
+  // M2: autopilot's Stop guard blocks a `blocked` run whose one question is already asked (blockPasses 0), so stop-notify treats it as `running`.
+  if (await ok('stop-notify: blocked with blockPasses 0 + stop_hook_active false → silent exit 0, no request at all', () => withEnv(blockedWith(0), async (dash, home) => {
+    const r = await runHook(stop, dash.url, home, stop.stdin(SID));
+    assert.strictEqual(r.code, 0);
+    assert.strictEqual(r.stdout, '');
+    assert.deepStrictEqual(dash.reqs, []);
+  }))) p++; else f++;
+
+  if (await ok('stop-notify: blocked with blockPasses 0 + stop_hook_active true → holds as a first stop (stopHookActive: false)', () => withEnv(blockedWith(0), async (dash, home) => {
+    await runHook(stop, dash.url, home, { ...stop.stdin(SID), stop_hook_active: true });
+    const waits = dash.reqs.filter(q => q.path === '/api/messages/wait');
+    assert.strictEqual(waits.length, 1);
+    assert.strictEqual(waits[0].body.stopHookActive, false);
+  }))) p++; else f++;
+
+  if (await ok('stop-notify: blocked with blockPasses 1 → today\'s behaviour (holds)', () => withEnv(blockedWith(1), async (dash, home) => {
+    await runHook(stop, dash.url, home, stop.stdin(SID));
+    assert.ok(dash.reqs.some(q => q.path === '/api/messages/wait'));
+  }))) p++; else f++;
+
+  // M2's other half: ask-remote and plan-remote must NOT treat blocked/0 as running — it would race the gate's blockPasses 1→0 write.
+  for (const hook of [ask, plan]) {
+    if (await ok(`${hook.name}: blocked with blockPasses 0 → still reaches the dashboard`, () => withEnv(blockedWith(0), async (dash, home) => {
+      await runHook(hook, dash.url, home, hook.stdin(SID));
+      assert.ok(dash.reqs.some(q => q.path === hook.waitPath));
+    }))) p++; else f++;
+  }
+
+  // M3: a missing stop_hook_active is not "false" — autopilot does not block then, so the turn must not end silently.
+  if (await ok('stop-notify: running with stop_hook_active missing → today\'s behaviour (reaches the dashboard)', () => withEnv({ [`${SID}.json`]: state('running') }, async (dash, home) => {
+    const { stop_hook_active: _drop, ...noFlag } = stop.stdin(SID);
+    await runHook(stop, dash.url, home, noFlag);
+    assert.ok(dash.reqs.some(q => q.path === '/api/messages/wait'));
+  }))) p++; else f++;
+
+  // M5: in plan mode the autopilot gate lets ExitPlanMode through, so the approval card must still reach the phone.
+  if (await ok('plan-remote: running + permission_mode plan → reaches the dashboard', () => withEnv({ [`${SID}.json`]: state('running') }, async (dash, home) => {
+    await runHook(plan, dash.url, home, { ...plan.stdin(SID), permission_mode: 'plan' });
+    assert.ok(dash.reqs.some(q => q.path === '/api/plans/wait'));
+  }))) p++; else f++;
+
+  if (await ok('plan-remote: running without permission_mode → silent exit 0, no request at all', () => withEnv({ [`${SID}.json`]: state('running') }, async (dash, home) => {
+    const { permission_mode: _drop, ...noMode } = plan.stdin(SID);
+    const r = await runHook(plan, dash.url, home, noMode);
+    assert.strictEqual(r.code, 0);
+    assert.deepStrictEqual(dash.reqs, []);
+  }))) p++; else f++;
+
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }

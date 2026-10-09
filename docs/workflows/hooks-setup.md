@@ -131,7 +131,8 @@ Three of the six hooks, `ask-remote.sh`, `plan-remote.sh` and `stop-notify.sh`, 
 still reports the turn that actually ends the run). Hooks on one event run in parallel and the CLI applies a deny or block only after every one has returned, so
 without this each autopilot gate deny and guard block would idle for the answer window and push to the phone for a run that must not ask. Every other status, a
 missing file and a malformed one leave the hooks as they were, and none of them writes the file. Nothing to configure, but deployment order: on each machine the
-dashboard checkout must be pulled together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question. Per-hook detail:
+dashboard checkout must be pulled together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question. Merge this branch
+before claude-global's `autopilot` branch: alone it is inert, because no state file exists until the CLI writes one. Per-hook detail:
 [remote-answer](../subsystems/remote-answer.md), [remote-plan](../subsystems/remote-plan.md), [remote-message](../subsystems/remote-message.md).
 
 ## After installing

@@ -210,13 +210,15 @@ into a path; the store is keyed in memory, same as the other two.
 - **RAM-only.** A restart drops every hold; the parked sessions simply stop — the same
   degrade-never-wedge posture as `pending.ts`/`plans.ts`.
 - **An `autopilot` run in progress does not hold.** `stop-notify-hook.sh` reads `~/.claude/autopilot/<session_id>.json` (written by the `autopilot` CLI) right
-  after it parses `session_id`. With `status` `running` and `stop_hook_active` false (the turn autopilot's guard blocks) it exits 0 silently: no hold, no
-  "finished" push. With `running` and `stop_hook_active` true (the second Stop, which ends the turn) it sets the flag to false, so `notify_fallback` and the
-  hold body's `stopHookActive` treat it as a first stop and the server pushes (`server/api.ts` only pushes when that field is not true) — a run that dies
-  mid-way must still reach the phone. The reason is that hooks on one event run in parallel and the CLI applies a block only after every one has returned, so a
-  600 s hold here would stall every guard block. Every other status, a missing file and a malformed one keep today's behaviour; the hook never writes the file,
-  and a `session_id` outside `[A-Za-z0-9-]` skips the check. Deployment order: on each machine the dashboard checkout must be pulled together with the autopilot
-  CLI (`sync.sh pull`), or a `running` run still idles on every denied question.
+  after it parses `session_id`. With `status` `running` (or `blocked` with `blockPasses` 0, which the CLI's Stop guard blocks too; the two
+  PreToolUse/PermissionRequest hooks must not count it) and `stop_hook_active` exactly false (the turn autopilot's guard blocks) it exits 0 silently: no hold,
+  no "finished" push. A missing flag is not false: autopilot does not block then, so the stop reaches the phone as usual. With `running` and `stop_hook_active`
+  true (the second Stop, which ends the turn) it sets the flag to false, so `notify_fallback` and the hold body's `stopHookActive` treat it as a first stop and
+  the server pushes (`server/api.ts` only pushes when that field is not true) — a run that dies mid-way must still reach the phone. The reason is that hooks on
+  one event run in parallel and the CLI applies a block only after every one has returned, so a 600 s hold here would stall every guard block. Every other
+  status, a missing file and a malformed one keep today's behaviour; the hook never writes the file, and a `session_id` outside `[A-Za-z0-9-]` skips the check.
+  Deployment order: on each machine the dashboard checkout must be pulled together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on
+  every denied question. Merge this branch before claude-global's `autopilot` branch: alone it is inert, because no state file exists until the CLI writes one.
 
 ## Security posture
 

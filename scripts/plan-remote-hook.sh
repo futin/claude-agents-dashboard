@@ -58,9 +58,12 @@ autopilot_running() {
 }
 
 # The session id is parsed ahead of the probe so a `running` autopilot session costs no network call at all. (This hook runs on PermissionRequest, which
-# never fires for a call a PreToolUse hook denied, so here the opt-out is belt-and-braces.)
+# never fires for a call a PreToolUse hook denied, so here the opt-out is belt-and-braces — except in plan mode, where the gate passes ExitPlanMode.)
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
-autopilot_running "$SESSION_ID" && exit 0
+# In plan mode the autopilot gate lets ExitPlanMode through, so PermissionRequest does fire and the approval card should still reach the phone: no opt-out.
+if [ "$(printf '%s' "$INPUT" | jq -r '.permission_mode // empty')" != "plan" ] && autopilot_running "$SESSION_ID"; then
+  exit 0
+fi
 
 # 1. Reachability probe, hard 1s cap. Dashboard down, REMOTE_ANSWER=false, or the
 #    toggle switched off → fall straight through, no added latency.

@@ -107,8 +107,10 @@ remote as a held question.
   `~/.claude/autopilot/<session_id>.json` (written by the `autopilot` CLI) has `status` `running`; every other status, a missing file and a malformed one keep
   today's behaviour, and the hook never writes the file. This is belt-and-braces only: the hook runs on `PermissionRequest`, which never fires for a call a
   `PreToolUse` hook already denied, but it is kept in step with `ask-remote-hook.sh` and `stop-notify-hook.sh` so that all three parallel hooks agree about a
-  run that must not ask. A `session_id` outside `[A-Za-z0-9-]` skips the check. Deployment order: on each machine the dashboard checkout must be pulled together
-  with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question.
+  run that must not ask. In plan mode (stdin `permission_mode` is `plan`) it does not opt out: the autopilot gate lets `ExitPlanMode` through, so the approval
+  card still reaches the phone. A `session_id` outside `[A-Za-z0-9-]` skips the check. Deployment order: on each machine the dashboard checkout must be pulled
+  together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question. Merge this branch before claude-global's
+  `autopilot` branch: alone it is inert, because no state file exists until the CLI writes one.
 
 ## The away-mode alternative: skip plan mode entirely
 

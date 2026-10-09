@@ -54,19 +54,27 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 # `answerSecs` and push a question to the phone for a session that must not ask. Reads only `status == "running"`; any other status, a missing or malformed
 # file or a jq failure is "not running" and leaves today's behaviour untouched. Never writes the file. The id is checked against the CLI's own grammar first
 # so a crafted session_id cannot walk the path out of the state directory.
+#
+# NOT identical to the copies in ask-remote-hook.sh and plan-remote-hook.sh: this one also counts `blocked` with `blockPasses == 0` as running, because the
+# CLI's Stop guard blocks in that state too (a blocked run whose one question is already asked). Nothing writes state on Stop, so there is no race. The
+# PreToolUse/PermissionRequest copies must NOT do the same: there it would race the gate's own blockPasses 1→0 write on the same event and could hide the
+# one blocker question from the phone.
 autopilot_running() {
   local LC_ALL=C sid="$1"
   case "$sid" in ''|*[!A-Za-z0-9-]*) return 1 ;; esac
   local f="$HOME/.claude/autopilot/$sid.json"
   [ -f "$f" ] || return 1
-  [ "$(jq -r '.status // empty' "$f" 2>/dev/null)" = "running" ]
+  [ "$(jq -r 'if .status == "running" or (.status == "blocked" and .blockPasses == 0) then "yes" else "no" end' "$f" 2>/dev/null)" = "yes" ]
 }
 
-# `running`: the turn autopilot's guard blocks (stop_hook_active false) exits silently — no hold, no "finished" push. The second Stop (stop_hook_active true)
-# is the one that ends the turn, so it is treated as a FIRST stop: SHA=false makes both notify_fallback and the hold body (`stopHookActive`) behave as on a
-# first stop, because the server only pushes when that field is not true. A run that dies mid-way must still reach the phone.
+# `running`: the turn autopilot's guard blocks (stop_hook_active exactly false) exits silently — no hold, no "finished" push. A MISSING flag is not false: the
+# guard does not block then, so the turn ends here and must reach the phone like any other stop (SHA above defaults it to false, so it just falls through).
+# The second Stop (stop_hook_active true) is the one that ends the turn, so it is treated as a FIRST stop: SHA=false makes both notify_fallback and the hold
+# body (`stopHookActive`) behave as on a first stop, because the server only pushes when that field is not true. A run that dies mid-way must still reach
+# the phone.
 if autopilot_running "$SESSION_ID"; then
-  [ "$SHA" = "true" ] || exit 0
+  RAW_SHA=$(printf '%s' "$INPUT" | jq -r '.stop_hook_active | tostring')
+  [ "$RAW_SHA" = "false" ] && exit 0
   SHA=false
 fi
 PERM_MODE=$(printf '%s' "$INPUT" | jq -r '.permission_mode // empty')

@@ -219,7 +219,8 @@ already decide this?" versus "is the user back?".
   would idle for up to `answerSecs` and push a question to the phone for a run that must not ask. Only `running` counts: `blocked`, `wrap-up`, `done`, `off`, a
   missing file and a malformed one all keep today's behaviour, so the blocker question and the final batched question stay answerable from the phone. The hook
   never writes the file, and a `session_id` outside `[A-Za-z0-9-]` skips the check. Deployment order: on each machine the dashboard checkout must be pulled
-  together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question.
+  together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question. Merge this branch before claude-global's
+  `autopilot` branch: alone it is inert, because no state file exists until the CLI writes one.
 
 ## Security posture
 
