@@ -8,6 +8,7 @@
  *   GET  /api/sessions/:id/chat → a page of that session's chat history
  *   GET/POST /api/settings      → the non-per-device settings (see lib/settings.ts)
  *   GET/POST /api/pins          → pinned projects, listed past LOOKBACK_HOURS (see api.ts)
+ *   POST /api/pins/order        → the whole pin list in a new order (see api.ts)
  *   GET  /api/git-stats         → local git state of each pinned project (see lib/git-stats.ts)
  *   POST /api/git-fetch         → fetch every pinned repo's origin now (see lib/git-fetch.ts)
  *   GET  /api/dismiss           → a tapped desk push lands here; the page closes itself
@@ -35,7 +36,7 @@ import {
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
-  serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, serveGitStats, serveGitFetch, serveNotifyEvent, serveNotifyTest,
+  serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, servePinsOrder, serveGitStats, serveGitFetch, serveNotifyEvent, serveNotifyTest,
   serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates, serveUsageHistory,
   serveAccount, serveHub
 } from './api.js';
@@ -222,6 +223,10 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (u.pathname === '/api/pins') {
       if (req.method === 'POST') return void servePinsWrite(config, req, res);
       return void servePinsRead(config, res);
+    }
+    if (u.pathname === '/api/pins/order') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void servePinsOrder(config, req, res);
     }
     // Read-only git state of the pinned repos; the pins are the only input.
     if (u.pathname === '/api/git-stats') {

@@ -14,7 +14,7 @@ import { usePins } from '../../hooks/usePins';
  * be removed from. The card never disappears: with no pins it says so.
  */
 export default function PinnedProjectsGroup() {
-  const { pins, busy, setPin } = usePins();
+  const { pins, busy, setPin, reorder } = usePins();
   return (
     <SettingsGroup title="Projects" sub="Everything with a session in the last 30 days. Pin a project and it stays listed whatever the lookback.">
       {pins === null ? (
@@ -27,6 +27,7 @@ export default function PinnedProjectsGroup() {
           busy={busy}
           onPin={d => setPin(d, true)}
           onUnpin={d => setPin(d, false)}
+          onReorder={reorder}
         />
       )}
     </SettingsGroup>
