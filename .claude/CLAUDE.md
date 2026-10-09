@@ -9,7 +9,7 @@ usage and current tool activity per session. Polls every 3s.
 Monolith, three domains plus the plugin. The **only** things crossing the FE/BE boundary live in `shared/`:
 the typed JSON in `shared/types.ts`, plus the zero-dep parser in `shared/frontmatter.ts`.
 
-- `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only).
+- `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only) but one: `lookout-widgets`.
 - `client/` — Vite + React + TypeScript; side rail Sessions | Usage | Management |
   Claude Configs | Analytics | Settings, all lazy but Sessions.
 - `shared/` — `types.ts` is the API contract and the single source of truth for it;
@@ -71,6 +71,8 @@ config — see `docs/subsystems/remote-access.md` before touching any of it.
   a reason. `lib/token-refresh.ts` and `lib/spawn.ts` launch the `claude` CLI, which makes its
   own network calls — the server does not, so they are not a third kind. `lib/git-fetch.ts` launches `git fetch`, which makes its own network call —
   not a third kind either. `test/outbound.test.ts` pins the list.
+  One npm package is allowed, by name: `lookout-widgets`, the Lookout contract producer behind `/api/hub/widgets`, which has zero runtime deps of its own
+  and is pinned to a git tag. `test/server-deps.test.ts` pins both the name and the tag; any other bare import under `server/` fails it.
 - `client/dist/` and `.env` are gitignored.
 - `plugin/skills/kaizen/` is the only copy of `/kaizen`; its log path and line grammar are a
   contract with Analytics (`docs/subsystems/analytics.md`) — never change one side only.
