@@ -1866,11 +1866,15 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pj-tile.off .pj-name{color:var(--ink2)}
 .pj-tile.gone{border-color:var(--amber)}
 .pj-tfoot{display:flex;align-items:center;justify-content:space-between;gap:8px}
-/* The key is a 32px `.qp-term` in a tile or a list row, at every width: the phone's thumb-sized `.qp-term` rule does not
-   stretch it, and in a list row it keeps its own face over `.set-control>button`'s Settings one. */
-.pj-tile .qp-term,.pj-srw .set-control>.qp-term{flex:none;height:32px;min-height:0;padding:0 14px;color:var(--ink2)}
+/* The key in a tile or a list row is a `.qp-term` that never stretches (`flex:none`). On the phone it keeps the thumb-sized
+   44px min-height every `.qp-term` has there; from md, where that generic rule resets, it is the 32px key. In a list row it
+   keeps its own face over `.set-control>button`'s Settings one. */
+.pj-tile .qp-term,.pj-srw .set-control>.qp-term{flex:none;height:32px;min-height:44px;padding:0 14px;color:var(--ink2)}
 .pj-tile .qp-term:hover:not(:disabled),.pj-srw .set-control>.qp-term:hover:not(:disabled){color:var(--ink)}
 .pj-tile .qp-term:disabled,.pj-srw .set-control>.qp-term:disabled{color:var(--ink3);cursor:default;opacity:1}
+@media (min-width:768px){
+  .pj-tile .qp-term,.pj-srw .set-control>.qp-term{min-height:0}
+}
 /* Columns and Lists: the two groups stacked on the phone, side by side from lg (Not pinned left, Pinned right), one tile a row */
 .pj-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;align-items:start}
 .pj-cols>section{min-width:0}
