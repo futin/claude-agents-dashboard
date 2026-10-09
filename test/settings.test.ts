@@ -7,7 +7,7 @@ import {
   DEFAULT_ANSWER_SECS, DEFAULT_GIT_FETCH_SECS, DEFAULT_IDLE_SECS, DEFAULT_NOTIFY, GIT_FETCH_SECS, MAX_ANSWER_SECS, MAX_IDLE_SECS,
   MAX_PINNED_PROJECTS, MIN_ANSWER_SECS, SETTINGS_FILE,
   clampAnswerSecs, clampIdleSecs, clampPinned, detectAnswerOverride, detectIdleOverride,
-  getGitFetchSecs, getPinnedProjects, getSettings, parseGitFetchSecs, resetSettings, setPinned, setSettings
+  getGitFetchSecs, getPinnedProjects, getSettings, parseGitFetchSecs, resetSettings, setPinned, setPinOrder, setSettings
 } from '../server/lib/settings.js';
 import { scanOverrides } from '../server/api.js';
 import type { Config } from '../server/lib/config.js';
@@ -433,6 +433,48 @@ export function run(): number {
       setSettings({ idleSecs: 20 });
       resetSettings();
       assert.deepStrictEqual(getPinnedProjects(), ['-Users-x'], 'a settings save must not drop the pins');
+    });
+  })) p++; else f++;
+
+  /* setPinOrder: the user-set order, accepted only as an exact permutation of the stored pins. */
+  const seed = (...dirs: string[]): void => { for (const d of dirs) assert.ok(setPinned(d, true), d); };
+
+  if (test('setPinOrder: a permutation is stored, returned and survives a restart', () => {
+    inTmpCwd(() => {
+      seed('-a', '-b', '-c');
+      assert.deepStrictEqual(setPinOrder(['-c', '-a', '-b']), ['-c', '-a', '-b']);
+      assert.deepStrictEqual(getPinnedProjects(), ['-c', '-a', '-b']);
+      resetSettings(); // simulate the server restarting
+      assert.deepStrictEqual(getPinnedProjects(), ['-c', '-a', '-b']);
+    });
+  })) p++; else f++;
+
+  if (test('setPinOrder: the identical order and an empty order over no pins both succeed', () => {
+    inTmpCwd(() => {
+      assert.deepStrictEqual(setPinOrder([]), []);
+      seed('-a', '-b', '-c');
+      assert.deepStrictEqual(setPinOrder(['-a', '-b', '-c']), ['-a', '-b', '-c']);
+    });
+  })) p++; else f++;
+
+  if (test('setPinOrder: a missing, extra or duplicated pin, or a non-string-array, is null and changes nothing', () => {
+    inTmpCwd(() => {
+      seed('-a', '-b', '-c');
+      for (const bad of [['-a', '-b'], ['-a', '-b', '-c', '-d'], ['-a', '-b', '-b'], ['-a', '-b', 3], '-a,-b,-c', null]) {
+        assert.strictEqual(setPinOrder(bad), null, JSON.stringify(bad));
+        assert.deepStrictEqual(getPinnedProjects(), ['-a', '-b', '-c'], JSON.stringify(bad));
+      }
+    });
+  })) p++; else f++;
+
+  if (test('setPinOrder: a new pin still appends after a reorder, and the returned list is a copy', () => {
+    inTmpCwd(() => {
+      seed('-a', '-b');
+      const got = setPinOrder(['-b', '-a']);
+      got!.push('-mutated');
+      assert.deepStrictEqual(getPinnedProjects(), ['-b', '-a']);
+      setPinned('-c', true);
+      assert.deepStrictEqual(getPinnedProjects(), ['-b', '-a', '-c']);
     });
   })) p++; else f++;
 

@@ -321,7 +321,8 @@ Reference: `docs/subsystems/usage-limits.md`.
 A rail section with the same fixed two-row tree Usage and Settings draw: **Git** (the default) and **Pinned**, per device in `managementTab`. The page
 takes the plain `wrap wide`, and each sub-view opens on a band titled `Management · <sub-view>` (the `section · destination` convention the Usage
 pages set). Pinned is the §8.2 Projects card under its own band, carrying the green "every device" scope pill because the pins are server-stored; it is
-the page that used to be Settings › Pinned, moved unchanged.
+the page that used to be Settings › Pinned, plus a 28px `⠿` grip column leading each pinned row (drag, or ↑/↓ on the focused grip, to reorder) and a
+`Saved` label that fades in beside the Pinned count after each reorder.
 
 Git is the Usage band with no right slot, then a toolbar on the ground: a `.seg` switcher — the Sessions one, on `--hairline2` for the same §8.3 reason —
 and beside it the clock chip, a `--strip-hi` key at the switcher's 38px height holding two meters (SYNC and FETCH, a port of backlog-manager's `.ui-meter`:

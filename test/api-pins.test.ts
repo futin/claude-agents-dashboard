@@ -2,7 +2,8 @@
  * `GET/POST /api/pins` (#161), driven through the real route table: the token
  * gate, the body shape, the membership rule a pin must pass (a pinned dir
  * becomes spawnable and its config servable, so this is the gate), the dead-pin
- * row, and the knock-on effect on `GET /api/configs`.
+ * row, the knock-on effect on `GET /api/configs`, and `POST /api/pins/order`'s
+ * permutation rule.
  *
  * The harness `$HOME` is a tmpdir, and the older-projects list never offers a
  * cwd under one, so every case here lifts that filter with `overrideClaudeRoots`.
@@ -32,6 +33,10 @@ function plantProject(h: Harness, name: string, ageDays: number, cwd = path.join
   const at = (Date.now() - ageDays * DAY) / 1000;
   fs.utimesSync(file, at, at);
   return { dirName, cwd };
+}
+
+function postOrder(h: Harness, body: unknown, headers: Record<string, string> = {}) {
+  return h.req('/api/pins/order', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body), headers });
 }
 
 function post(h: Harness, body: unknown, headers: Record<string, string> = {}) {
@@ -163,6 +168,79 @@ export async function run(): Promise<number> {
       const reply = await post(h, { dirName: '-never-pinned', pinned: false });
       assert.equal(reply.status, 200);
       assert.deepStrictEqual(reply.json, before);
+    });
+  }));
+
+  /* POST /api/pins/order: the whole order, accepted only as an exact permutation of the stored pins. */
+  const pinAll = async (h: Harness, names: string[], headers: Record<string, string> = {}): Promise<string[]> => {
+    const dirs = names.map((n, i) => plantProject(h, n, 5 + i).dirName);
+    for (const dirName of dirs) assert.equal((await post(h, { dirName, pinned: true }, headers)).status, 200, dirName);
+    return dirs;
+  };
+
+  check(await testAsync('POST /api/pins/order with ANSWER_TOKEN set and no bearer is 403 and reorders nothing', async () => {
+    await withPins(ENV + 'ANSWER_TOKEN=s3cret\n', async h => {
+      const dirs = await pinAll(h, ['p', 'q'], { Authorization: 'Bearer s3cret' });
+      const reply = await postOrder(h, { order: [...dirs].reverse() });
+      assert.equal(reply.status, 403);
+      assert.equal(reply.json?.error, 'bad token');
+      assert.deepStrictEqual(getPinnedProjects(), dirs);
+    });
+  }));
+
+  check(await testAsync('POST /api/pins/order with a body that is not {order: string[]} is 400 and reorders nothing', async () => {
+    await withPins(ENV, async h => {
+      const dirs = await pinAll(h, ['p', 'q']);
+      for (const body of [{}, { order: 'x' }, { order: ['a', 3] }, { order: [dirs[1], 3] }, '{not json']) {
+        const reply = await postOrder(h, body);
+        assert.equal(reply.status, 400, JSON.stringify(body));
+        assert.equal(reply.json?.error, 'expected {order: string[]}', JSON.stringify(body));
+      }
+      assert.deepStrictEqual(getPinnedProjects(), dirs);
+    });
+  }));
+
+  check(await testAsync('POST /api/pins/order missing a stored pin is 409 and reorders nothing', async () => {
+    await withPins(ENV, async h => {
+      const [p, q] = await pinAll(h, ['p', 'q']);
+      const reply = await postOrder(h, { order: [p] });
+      assert.equal(reply.status, 409);
+      assert.equal(reply.json?.error, 'pins changed — reload');
+      assert.deepStrictEqual(getPinnedProjects(), [p, q]);
+    });
+  }));
+
+  check(await testAsync('POST /api/pins/order with a permutation is 200 with the reordered payload, and GET /api/pins agrees', async () => {
+    await withPins(ENV, async h => {
+      const [p, q, r] = await pinAll(h, ['p', 'q', 'r']);
+      const reply = await postOrder(h, { order: [r, p, q] });
+      assert.equal(reply.status, 200);
+      assert.deepStrictEqual((reply.json as unknown as PinsResponse).pinned.map(row => row.dirName), [r, p, q]);
+      const read = (await h.req('/api/pins')).json as unknown as PinsResponse;
+      assert.deepStrictEqual(read.pinned.map(row => row.dirName), [r, p, q]);
+      assert.deepStrictEqual(getPinnedProjects(), [r, p, q]);
+    });
+  }));
+
+  check(await testAsync('a dead pin must be in the order: leaving it out is 409, putting it first is 200', async () => {
+    await withPins(ENV, async h => {
+      const [p, q] = await pinAll(h, ['p', 'q']);
+      fs.rmSync(path.join(h.home, 'projs', 'p'), { recursive: true, force: true });
+      const dead = (await h.req('/api/pins')).json as unknown as PinsResponse;
+      assert.deepStrictEqual(dead.pinned.map(row => [row.dirName, row.listed]), [[p, false], [q, true]]);
+
+      assert.equal((await postOrder(h, { order: [q] })).status, 409);
+      assert.deepStrictEqual(getPinnedProjects(), [p, q]);
+      assert.equal((await postOrder(h, { order: [q, p] })).status, 200);
+      const reply = await postOrder(h, { order: [p, q] });
+      assert.equal(reply.status, 200);
+      assert.deepStrictEqual((reply.json as unknown as PinsResponse).pinned.map(row => row.dirName), [p, q]);
+    });
+  }));
+
+  check(await testAsync('GET /api/pins/order is 405', async () => {
+    await withPins(ENV, async h => {
+      assert.equal((await h.req('/api/pins/order')).status, 405);
     });
   }));
 

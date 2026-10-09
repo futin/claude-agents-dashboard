@@ -64,11 +64,12 @@ while nobody has Management › Git open — the timer fires only while the view
 `POST /api/settings` patch carrying one is refused whole, like a bad `idleSecs`. It is the **Git fetch** card on the Shared page, after Usage forecast.
 
 `pinnedProjects` (#161, default `[]`) rides in the same file: encoded project dir names that
-stay listed past `LOOKBACK_HOURS` (see [configs](configs.md) §Pinned projects). It is
+stay listed past `LOOKBACK_HOURS` (see [configs](configs.md) §Pinned projects). Its order is meaningful — Management › Pinned, Management › Git and the
+Lookout git-pending tile all draw in it. `setPinned` appends a new pin; `setPinOrder` rewrites the whole order, and only as an exact permutation of the stored list. It is
 shared because a pin is a server-side fact — the spawn membership check and the servable-path set
 both read it — not a view preference. The clamp keeps only `[A-Za-z0-9-]+` strings, deduped in
 first-seen order, at most 50; a non-array reads as `[]` without touching the other keys. It is
-**not** in the `ServerSettings` payload: the pins have their own route, `GET/POST /api/pins`, whose
+**not** in the `ServerSettings` payload: the pins have their own routes, `GET/POST /api/pins` and `POST /api/pins/order`, whose
 answer also carries the recent and older projects on offer — so the Settings page's merge/validate logic for
 `POST /api/settings` never sees them. Still one file: the app writes to disk only this store and
 the remote-answer toggle's.

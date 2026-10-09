@@ -54,7 +54,7 @@ import {
 import { notifyPermission, permissionWaits } from './lib/permissions.js';
 import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
-import { getPinnedProjects, getSettings, setPinned, setSettings } from './lib/settings.js';
+import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
 import { readGitStats } from './lib/git-stats.js';
 import { classifyOrigin } from './lib/origin.js';
@@ -1725,6 +1725,21 @@ export async function servePinsWrite(config: Config, req: IncomingMessage, res: 
     if (!known) return sendJson(res, 404, { error: 'no such project' });
   }
   if (setPinned(dirName, pinned) === null) return sendJson(res, 409, { error: 'pin limit reached' });
+  sendJson(res, 200, pinsPayload(config));
+}
+
+/**
+ * `POST /api/pins/order` `{order}` — the whole pin list in its new order. Same token gate as `POST /api/pins`, but no membership check against the
+ * enumerated projects: a permutation of the stored list cannot add a dir, which is the property that check protects. Anything but an exact permutation
+ * is a 409, so a stale tab can neither drop nor resurrect a pin. Success answers with the fresh `GET /api/pins` payload.
+ */
+export async function servePinsOrder(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  const body = await readJsonBody(req) as { order?: unknown } | null;
+  if (!body || !Array.isArray(body.order) || !body.order.every(d => typeof d === 'string')) {
+    return sendBadBody(res, { error: 'expected {order: string[]}' });
+  }
+  if (setPinOrder(body.order) === null) return sendJson(res, 409, { error: 'pins changed — reload' });
   sendJson(res, 200, pinsPayload(config));
 }
 

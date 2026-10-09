@@ -12,8 +12,9 @@ import PinnedProjectsGroup from './PinnedProjectsGroup';
  *
  * Git is the local state of the pinned repos (`GitView`, which owns the poll,
  * so showing Pinned stops it). Pinned is the project ledger that
- * used to be Settings › Pinned, moved here unchanged — a list that grows with
- * use belongs next to the repos it feeds, not among the policies.
+ * used to be Settings › Pinned, moved here and given drag grips that set the
+ * pin order Git draws in — a list that grows with use belongs next to the repos
+ * it feeds, not among the policies.
  *
  * Default export → its own lazy chunk, like every section but Sessions.
  */
