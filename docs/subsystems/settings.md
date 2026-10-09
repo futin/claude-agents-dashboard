@@ -39,7 +39,7 @@ the `claude` CLI choose; either way a launch can still override it), the Git Syn
 model and effort (`syncModel` / `syncEffort`, default `''` each; the button never asks, so these are its whole say — its permission mode is the host's
 `SYNC_PERMISSION_MODE` and its remote control follows Remote answers, both shown read-only in the same card), which Usage sub-tab
 opens (`forecast` | `rates` | `history`), which Management sub-view is showing (`managementTab`: `git` |
-`projects`, default `git`), and which Settings page is showing (`settingsTab`: `local` |
+`projects`, default `projects`, which is also where a main-row click on Management lands: `items[0]` of its tree), and which Settings page is showing (`settingsTab`: `local` |
 `shared`). A `settingsTab: 'pinned'` stored by an older release fails the validator and falls back to
 `local`. A `managementTab: 'pinned'` is the other case: that sub-view was renamed, not removed, so `clampSettings` reads it as `projects` and the device keeps its
 place. The answer token is per browser too (`dashboard.answerToken`, its own key), which

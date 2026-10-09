@@ -147,7 +147,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyBrowser: false,
   usageTab: 'forecast',
   settingsTab: 'local',
-  managementTab: 'git',
+  managementTab: 'projects',
   defaultLayout: 'last',
   contentWidth: 'fixed'
 };

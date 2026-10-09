@@ -92,10 +92,10 @@ export function run(): number {
   })) p++; else f++;
 
   // The Management section's sub-view (Projects | Git), picked like the other two.
-  if (test('the Management sub-tab defaults to git, accepts projects and git, and maps a stored pinned to projects', () => {
-    assert.strictEqual(DEFAULT_SETTINGS.managementTab, 'git');
-    assert.strictEqual(clampSettings({}).managementTab, 'git');
-    assert.strictEqual(clampSettings({ managementTab: 'nonsense' }).managementTab, 'git');
+  if (test('the Management sub-tab defaults to projects, accepts projects and git, and maps a stored pinned to projects', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.managementTab, 'projects');
+    assert.strictEqual(clampSettings({}).managementTab, 'projects');
+    assert.strictEqual(clampSettings({ managementTab: 'nonsense' }).managementTab, 'projects');
     assert.strictEqual(clampSettings({ managementTab: 'projects' }).managementTab, 'projects');
     assert.strictEqual(clampSettings({ managementTab: 'pinned' }).managementTab, 'projects', 'a stored \'pinned\' is the renamed sub-view');
     assert.strictEqual(clampSettings({ managementTab: 'git' }).managementTab, 'git');

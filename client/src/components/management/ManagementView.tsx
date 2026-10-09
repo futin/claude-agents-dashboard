@@ -7,7 +7,8 @@ import ProjectsView from './ProjectsView';
  *
  * Which one is showing is the per-device `managementTab`, picked from the
  * rail's tree at every width — the same swap Usage and Settings make, so there
- * is no switch on the page itself.
+ * is no switch on the page itself. Projects is the default, and what a click
+ * on Management in the rail lands on (the first item of its tree).
  *
  * Git is the local state of the pinned repos (`GitView`, which owns the poll,
  * so showing Projects stops it). Projects is the project ledger that
