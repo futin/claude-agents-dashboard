@@ -162,9 +162,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  lookout-widgets: link:../lookout-widgets
-
 importers:
 
   .:
@@ -179,8 +176,8 @@ importers:
         specifier: ^5.3.0
         version: 5.3.0
       lookout-widgets:
-        specifier: link:../lookout-widgets
-        version: link:../lookout-widgets
+        specifier: github:futin/lookout-widgets#v0.1.0
+        version: https://codeload.github.com/futin/lookout-widgets/tar.gz/4c33ee02c31525b0db9db3ca006b8ed170981ee7
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -938,6 +935,11 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
+  lookout-widgets@https://codeload.github.com/futin/lookout-widgets/tar.gz/4c33ee02c31525b0db9db3ca006b8ed170981ee7:
+    resolution: {gitHosted: true, integrity: sha512-OAzAbTCZLmKszH3iut3EaxdWz0NL9SK6AmE1xxnP9+/MuXPBOlOkDpE3lSLpU8ScKtNhjPQit0G9HHIGHjEZKQ==, tarball: https://codeload.github.com/futin/lookout-widgets/tar.gz/4c33ee02c31525b0db9db3ca006b8ed170981ee7}
+    version: 0.1.0
+    engines: {node: '>=20'}
+
   loose-envify@1.4.0:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
     hasBin: true
@@ -1690,6 +1692,8 @@ snapshots:
   jsesc@3.1.0: {}
 
   json5@2.2.3: {}
+
+  lookout-widgets@https://codeload.github.com/futin/lookout-widgets/tar.gz/4c33ee02c31525b0db9db3ca006b8ed170981ee7: {}
 
   loose-envify@1.4.0:
     dependencies:

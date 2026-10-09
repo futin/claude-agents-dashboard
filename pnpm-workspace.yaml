@@ -1,7 +1,2 @@
 allowBuilds:
   esbuild: true
-
-# TEMPORARY — remove once futin/lookout-widgets is public with tag v0.1.0 pushed, then `pnpm install`. Until then the pinned github spec in package.json
-# cannot resolve, so this links the sibling checkout. test/server-deps.test.ts pins package.json, not this.
-overrides:
-  lookout-widgets: link:../lookout-widgets
