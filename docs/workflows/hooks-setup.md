@@ -123,6 +123,7 @@ Stop event*; that belongs behind a command someone chose to run, not behind `git
   the one in `.env`, exactly as it would for the server. Every line the installer prints names
   whichever source actually won — "the ANSWER_TOKEN exported in this shell" or "this checkout's
   `.env` ANSWER_TOKEN" — so a `warn` never sends you to edit a `.env` that already matches.
+
 ## Autopilot runs
 
 Three of the six hooks, `ask-remote.sh`, `plan-remote.sh` and `stop-notify.sh`, step aside while an `autopilot` run is in progress: each reads

@@ -5,8 +5,8 @@
  * the run must not ask, and the CLI applies a deny/block only after every hook on the event has returned, so a hook holding for `answerSecs` would idle the
  * run and push a question to the phone for nothing. Every other status, a missing file and an unreadable one leave today's behaviour untouched.
  *
- * Driven the way the CLI drives each hook (one payload on stdin, `CLAUDECODE=1`) against an in-process fake dashboard that records every request except
- * the health probe. `answerSecs` is 1, so the complement cases (a hook that does reach the dashboard) hold for a second at most. Async `spawn`, never
+ * Driven the way the CLI drives each hook (one payload on stdin, `CLAUDECODE=1`) against an in-process fake dashboard that records every request, the
+ * health probe included, so a `running` hook that still probes fails. `answerSecs` is 1, so the complement cases (a hook that does reach the dashboard) hold for a second at most. Async `spawn`, never
  * `spawnSync`: the fake dashboard answers from this process's own event loop, which a sync child would block.
  */
 
@@ -49,7 +49,7 @@ const HOOKS: Hook[] = [
   },
 ];
 
-/** A fake dashboard: remote answers on, every request but the health probe recorded, every wait answered `timeout` at once. */
+/** A fake dashboard: remote answers on, every request recorded, the health probe included, every wait answered `timeout` at once. */
 async function fakeDashboard(): Promise<{ url: string; reqs: Recorded[]; close: () => Promise<void> }> {
   const reqs: Recorded[] = [];
   const server = http.createServer((req, res) => {
@@ -58,6 +58,7 @@ async function fakeDashboard(): Promise<{ url: string; reqs: Recorded[]; close: 
     req.on('end', () => {
       res.setHeader('Content-Type', 'application/json');
       if (req.method === 'GET' && req.url === '/api/health') {
+        reqs.push({ path: '/api/health', body: {} });
         res.end(JSON.stringify({ remoteAnswer: true, answerSecs: 1 }));
         return;
       }
@@ -124,7 +125,7 @@ export async function run(): Promise<number> {
       const r = await runHook(hook, dash.url, home, hook.stdin(SID));
       assert.strictEqual(r.code, 0);
       assert.strictEqual(r.stdout, '');
-      assert.deepStrictEqual(dash.reqs, [], 'a running autopilot session must not reach the dashboard');
+      assert.deepStrictEqual(dash.reqs, [], 'a running autopilot session must make no network call at all, the health probe included');
     }))) p++; else f++;
 
     const others: Array<[string, Record<string, string>]> = [
@@ -137,7 +138,7 @@ export async function run(): Promise<number> {
       if (await ok(`${hook.name}: ${label} → today's behaviour (reaches the dashboard)`, () => withEnv(files, async (dash, home) => {
         const r = await runHook(hook, dash.url, home, hook.stdin(SID));
         assert.strictEqual(r.code, 0);
-        assert.ok(dash.reqs.length >= 1, 'expected at least one request beyond GET /api/health');
+        assert.ok(dash.reqs.some(q => q.path !== '/api/health'), 'expected at least one request beyond GET /api/health');
         assert.ok(dash.reqs.some(q => q.path === hook.waitPath), `expected a POST ${hook.waitPath}`);
       }))) p++; else f++;
     }
