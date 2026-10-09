@@ -19,7 +19,7 @@ today is to unpin and re-pin every project that should come after. The user want
 | Where reordering is offered | Management › Pinned only. The launch sheet's picker has no pinned group and gets no grips. |
 | Write shape | One new route, `POST /api/pins/order`, carrying the **whole** new order — not a "move X to index i" delta. |
 | Stale writes | The server accepts the order only when it is an exact permutation of the stored pins. Anything else is a 409, so a tab that missed a pin or an unpin elsewhere can neither drop nor resurrect a pin by reordering. |
-| Drag library | None. Hand-rolled pointer events. The root `package.json` (the only one) carries no drag-and-drop dependency and this adds none. |
+| Drag library | None. Hand-rolled pointer events. The root `package.json` (no `client/package.json` exists) carries no drag-and-drop dependency and this adds none. |
 
 ## 3. Server
 
@@ -84,26 +84,35 @@ When `pinned`, `onUnpin` and `onReorder` are all present:
 
 - Each pinned row gets a leading `<button type="button" class="pin-grip">⠿</button>` with an `aria-label` naming the project and its position
   ("Move claude-agents-dashboard, position 5 of 5").
-- **Grips hide while the filter box has text.** A filtered list has gaps, so a drop position would be ambiguous. Rows keep their grip column (empty) so the
+- **Grips hide while the filter is non-blank** (`query.trim() !== ''`, the same test `matchesPinFilter` applies).
+  A filtered list has gaps, so a drop position would be ambiguous. Rows keep their grip column (empty) so the
   layout does not jump while typing.
-- **Pointer drag** (mouse, pen, touch alike — one `pointerdown` / `pointermove` / `pointerup` path, `setPointerCapture` on the grip, `touch-action: none` on the
-  grip only so the page still scrolls from anywhere else):
+- **Pointer drag** (mouse, pen, touch alike — `pointerdown` on the grip starts it; `pointermove` / `pointerup` / `pointercancel` are listened for on
+  `document` for the drag's lifetime and matched by `pointerId`; `touch-action: none` on the grip only so the page still scrolls from anywhere else). **No
+  `setPointerCapture`:** React re-places the dragged row's own `<li>` on a downward swap, and moving a node releases capture (`lostpointercapture`; measured
+  in Chrome by review 2), so a captured downward drag freezes after one swap and never writes. The mockup uses the same `document` listeners.
   - While dragging, the order is a local draft; the dragged row carries `.pin-row.drag` and moves live as the pointer crosses another row's vertical midpoint.
   - On `pointerup`, if the draft differs from the order at drag start, call `onReorder(draft)` once, then drop the draft — the optimistic `pinned` prop
-    (§4.2) already holds that order. One drag is one write.
+    (§4.2) already holds that order, because `reorder` sets it synchronously before its first `await`. One drag is one write.
   - `pointercancel`, or `Escape` (listened for on `document` for the drag's lifetime, since focus may not be on the grip), restores the start order and
     writes nothing.
-  - If the `pinned` prop changes mid-drag (a 3s poll or another tab), the draft resets to the new prop order and the drag continues from there.
+  - If the `pinned` prop changes mid-drag, the draft resets to the new prop order and the drag continues from there. `usePins` fetches once on mount and
+    never polls, so only this tab's own `setPin` reply can do that; another tab's change surfaces as the 409 on drop.
+  - If `busy` turns non-null mid-drag (a second finger tapped Pin or Unpin), the drag cancels like Escape: start order restored, nothing written. The
+    `setPin` reply then lands as an ordinary prop change. This keeps a reorder from ever starting under an in-flight pin/unpin (§4.2).
   - **Edge auto-scroll:** while dragging with the pointer within 48px of the viewport's top or bottom, the window scrolls toward that edge each animation frame
     (the Management page scrolls the document; `.main` has no `overflow-y`). Stops on drop, cancel, or leaving the band. Needed because 50 pins outgrow a phone
     screen.
 - **Keyboard:** on a focused grip, `ArrowUp` / `ArrowDown` move the row one place (via `movePin`) and call `onReorder` once per press; `preventDefault` so the
-  page does not scroll. Focus stays on the moved row's grip after the re-render. First row ↑ and last row ↓ do nothing and write nothing. A press that
+  page does not scroll. The moved row's grip is **explicitly re-focused** after the re-render (grip refs keyed by dirName, `.focus()` in a layout effect
+  once `pinned` carries the new order): React re-places the pressed row's own `<li>` on ↓, and moving a focused node drops focus to `<body>`, so without
+  this the second ↓ scrolls the page. First row ↑ and last row ↓ do nothing and write nothing. A press that
   arrives while `busy` is non-null is dropped (still `preventDefault`ed), not queued.
 - **Feedback:** after a successful write, a `Saved` label fades in beside the Pinned heading's count and out again after ~1.5 s. A failed write shows its text
-  where the per-row error already goes, under the dragged row (the existing `error` state, keyed by that dirName) — unless that row is no longer in
+  where the per-row error already goes, under the moved row (the existing `error` state, keyed by that dirName) — unless that row is no longer in
   `pinned` after the reply (the usual 409: it was unpinned in another tab), in which case the text shows beside the Pinned heading, where `Saved` goes.
-- While `busy` is non-null the grips carry `aria-disabled="true"` and ignore pointer and key input; they are **not** `disabled`. A `disabled` button loses
+- While `busy` is non-null the grips carry `aria-disabled="true"` and ignore `pointerdown` and key input (a drag already running is cancelled, above);
+  they are **not** `disabled`. A `disabled` button loses
   focus (Chrome drops it to `<body>`), and every key press sets `busy`, so the focused grip would lose focus on the first press and the next ↓ would scroll
   the page instead.
 - Dead pins (`listed: false`) are reorderable like any other: they are in the stored list, and the permutation rule requires them.
@@ -121,6 +130,7 @@ Ported from the mockup, tokens only (the theme rule in `.claude/CLAUDE.md`):
 - `.pin-row.drag` — `var(--strip-hi)` fill, `var(--shadow2)` lift, `cursor: grabbing`; its grip turns `var(--cyan)`.
 - The `Saved` label — `var(--ink3)`, 12px, opacity transition; no transition under `prefers-reduced-motion`.
 - **Dropped from the mockup:** the `.pin-row.moved` flash. The live move during the drag and the `Saved` label already confirm the drop.
+- **Also differs:** the grip stretches to the row height (mockup: fixed 36px, centred), per §4.4 above.
 - **Differs from the mockup:** the mockup swaps rows as soon as the pointer enters another row's box; the build swaps at the vertical midpoint (§4.3), which
   stops a row bouncing back and forth at a boundary.
 
@@ -156,7 +166,7 @@ Exact cases. No literal test code is provided here on purpose; the implementer w
 **`test/api-pins.test.ts` — `POST /api/pins/order`**
 
 - No token → 403, stored order unchanged.
-- `{}` / `{order: 'x'}` / non-JSON body → 400.
+- `{}` / `{order: 'x'}` / `{order: ['a', 3]}` / non-JSON body → 400.
 - Order missing one stored pin → 409 with `pins changed — reload`, unchanged.
 - Valid permutation → 200, `body.pinned.map(r => r.dirName)` equals the sent order, and a following `GET /api/pins` agrees.
 - A dead pin in the stored list must be included in the order; leaving it out → 409.
@@ -180,6 +190,8 @@ claim in §1.
 | `[a, b, c, d]` | `d` | -5 | `[d, a, b, c]` (clamped) |
 
 **Not unit-tested, verified in the browser pane:** the grip renders, hides under a filter, drags live, auto-scrolls, ↑/↓ move focus with the row, Escape cancels.
+Two cases by name, since each failed in a probe before its rule was written: drag the second row down two places (it must keep moving and write once on
+drop), and press ↓ three times on the first row then ↑ three times (focus stays on that grip throughout and the page never scrolls).
 The pane has no answer token, so the save itself only proves its 403 + rollback there (memory: browser-verification-limits); the 200 path is the user's click,
 stated in the PR's "not verified" line.
 
