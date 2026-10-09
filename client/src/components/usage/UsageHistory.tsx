@@ -126,7 +126,8 @@ function WeekFill({ history, tip }: { history: UsageHistoryResponse; tip: (text:
   const rowEl = (row: WeekRow, i: number) => {
     const y = TOP + i * (ROW_H + ROW_GAP);
     const preW = Math.max(1.5, x(row.prePct) - L - 1);
-    const title = row.current ? 'This week' : row.resetsAtMs === null ? 'Unscoped' : fmtDate(row.startT ?? row.firstT);
+    // No previous reset means the week's start is unknown: say where the record starts, not a date that reads as the start.
+    const title = row.current ? 'This week' : row.resetsAtMs === null ? 'Unscoped' : row.startT === null ? `from ${fmtDate(row.firstT)}` : fmtDate(row.startT);
     const hits = row.limitHits;
     return (
       <g key={row.key}>
