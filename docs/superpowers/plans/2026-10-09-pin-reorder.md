@@ -33,7 +33,7 @@ Mockups: `docs/superpowers/specs/2026-10-09-pin-reorder-mockups.html` (variant A
   - 403 body `{error: 'bad token'}`; bad body `{error: 'expected {order: string[]}'}`; 409 body `{error: 'pins changed — reload'}` (em dash).
   - Client 409 text `Pins changed in another tab — reloaded.`; 403 and network texts are the ones `setPin` already returns in `client/src/hooks/usePins.ts`.
   - Heading label `Saved`. Grip `aria-label` `Move <name>, position <i> of <n>` (1-based).
-- Busy sentinel for a reorder is the string `'order'` (cannot collide with a dirName, which always starts with `-`).
+- Busy sentinel for a reorder is the string `'order'` (real dirNames come from `encodeProjectDir` of an absolute cwd, so they start with `-`).
 - Authored prose and comments wrap at 160 columns; comments say *why* only.
 - Test runs stay in the foreground — no background wait loops. If you start a dev server, record its pid and kill only that pid.
 
@@ -94,7 +94,8 @@ Behaviour (spec §3):
   | `[a, b, c]` | `[c, a, b]`; mutate the returned array | `getPinnedProjects()` still `[c, a, b]` (returns a copy) |
 
   Use dirName-shaped strings (`-Users-x-a` etc.) if the file's other pin cases do; check before choosing.
-- [ ] **Step 3: Write the failing route cases** in `test/api-pins.test.ts` with its `withServer` / `plantProject` helpers and the token the harness uses:
+- [ ] **Step 3: Write the failing route cases** in `test/api-pins.test.ts` with its `withServer` / `plantProject` helpers. The harness defines no token: the 403 case sets
+  `ANSWER_TOKEN=s3cret` in its env string (as the existing one at ~line 60 does); the other cases run with plain `ENV` and send no Bearer.
   - No token → 403; stored order unchanged.
   - With token: body `{}` → 400; `{order: 'x'}` → 400; `{order: ['a', 3]}` → 400; a non-JSON body → 400. Each leaves the order unchanged.
   - Pins `[p, q]`, order `[p]` → 409, body `error` is exactly `pins changed — reload`, order unchanged.
@@ -108,7 +109,7 @@ Behaviour (spec §3):
 - [ ] **Step 5: Run `pnpm test`** — expect the new cases to fail (missing export / 404 or 405), nothing else.
 - [ ] **Step 6: Implement** `setPinOrder`, `servePinsOrder`, the `index.ts` wiring and route-list line, and the `PinsResponse` JSDoc line.
 - [ ] **Step 7: Run `pnpm test` and `pnpm typecheck`** — all green. Paste the case-count line in your report.
-- [ ] **Step 8: Commit** `feat(api): POST /api/pins/order saves a reordered pin list` with the five source files and three test files.
+- [ ] **Step 8: Commit** `feat(api): POST /api/pins/order saves a reordered pin list` with the four source files and three test files.
 
 ---
 
@@ -179,7 +180,7 @@ Behaviour (spec §4.2):
 - POST `{order}` to `/api/pins/order` with the same Bearer header `setPin` builds.
 - 200 → `pins` = reply. 403 → restore the remembered `pins`, return the existing token message. 409 → `GET /api/pins`; on success `pins` = that reply and
   return `Pins changed in another tab — reloaded.`; if the re-fetch fails, restore the remembered `pins` and return the network text. Any other failure →
-  restore and return the server's `error` string or the network text, exactly as `setPin` does.
+  restore and return what `setPin` returns for the same outcome (server `error`, else its `Failed (<status>).` fallback; the network text only on a throw).
 - Always clear `busy` at the end. Update the hook's JSDoc (it says the list changes "only when someone clicks" — a drag is now the other writer).
 - Do not change `setPin`.
 
@@ -203,7 +204,9 @@ Behaviour (spec §4.2):
 
 Behaviour — spec §4.3 in full; the points an implementer most often gets wrong:
 - Grips exist only when `pinned`, `onUnpin` and `onReorder` are all present. They hide (the empty column stays) when `query.trim() !== ''`.
-- **Drag:** `pointerdown` on a grip (primary button / any touch) starts it; `pointermove`, `pointerup`, `pointercancel` and `keydown` (Escape) listeners go on
+- **Drag:** `pointerdown` on a grip (primary button / any touch) starts it, unless `busy` is non-null — then it is ignored, the same early return `act`
+  has (`PinPicker.tsx:44`); `aria-disabled` blocks nothing by itself and `reorder` does not check `busy`, so without this guard a drag begun during an
+  in-flight Pin/Unpin writes an order under it; `pointermove`, `pointerup`, `pointercancel` and `keydown` (Escape) listeners go on
   `document` for the drag's lifetime, filtered by `pointerId`, and are removed when it ends. **Never call `setPointerCapture`.** The draft order swaps the
   dragged row past a neighbour when the pointer crosses that neighbour's vertical midpoint. Release with a changed draft → `onReorder(draft)` once, then clear
   the draft. Release unchanged, `pointercancel`, Escape, or `busy` becoming non-null → restore, write nothing. A `pinned` prop change mid-drag resets the draft
@@ -211,12 +214,16 @@ Behaviour — spec §4.3 in full; the points an implementer most often gets wron
 - **Auto-scroll:** pointer within 48px of the viewport top/bottom while dragging → `window.scrollBy` toward that edge each animation frame; stop on end or
   on leaving the band. Re-evaluate the midpoint swap after each scroll step (the rows moved under a still pointer).
 - **Keyboard:** `ArrowUp`/`ArrowDown` on a focused grip → `preventDefault`; if `busy` is non-null drop the press; else `movePin` by one and, if the result is
-  a new array, `onReorder` it. After the re-render, re-focus the same project's grip (refs keyed by dirName, focus in a layout effect once `pinned` reflects
-  the move).
+  a new array, `onReorder` it. Keep the moved dirName as "pending focus" until that `onReorder` resolves, and re-focus its grip (refs keyed by dirName, in a
+  layout effect) on **every** `pinned` change while it is pending — not once. The rollback after a 403/409 moves rows again, and after ↑ it is the pressed
+  row's own `<li>` that React moves back, so a one-shot re-focus loses focus on every refused save (every save in the pane). This refines the spec's
+  "once `pinned` carries the new order" (§4.3).
 - `aria-disabled="true"` on grips while `busy` is non-null; never the `disabled` attribute.
 - **Feedback:** success → `Saved` label beside the Pinned count, gone after ~1.5 s. Failure → the existing per-row error keyed by the moved dirName, or, if that
   row is absent from `pinned` after the reply, the same heading slot as `Saved`.
-- CSS per spec §4.4: `.pin-row.g` / `.pin-head.g` lead column 28px at both tiers; phone shifts of `.pin-age` (column 2) and `.qp-term` (column 3, both rows);
+- Only `.pin-head` and the pinned rows take `g`; "Not pinned" rows stay plain `pin-row`. The heading-slot failure text uses `pin-saved` plus the existing
+  `err` modifier (`PinPicker.tsx:127`) so it is not styled as a success.
+- CSS per spec §4.4: `.pin-row.g` / `.pin-head.g` lead column 28px at both tiers; grip `grid-row:1/span 2` on phone, `grid-row:auto` at `md`; phone shifts of `.pin-age` (column 2) and `.qp-term` (column 3, both rows);
   `.pin-grip` 28px wide, min 36px tall, stretched to the row, `touch-action:none`, `cursor:grab`, `--ink3` → hover `--ink` on `--strip-hi`, `:focus-visible`
   outline `--cyan`; `.pin-row.drag` `--strip-hi` + `--shadow2` + `cursor:grabbing` with a `--cyan` grip; `.pin-saved` `--ink3` 12px with an opacity
   transition removed under `prefers-reduced-motion`. No `.moved` flash.
@@ -246,11 +253,11 @@ Behaviour — spec §4.3 in full; the points an implementer most often gets wron
 **Files:**
 - Modify: `docs/overview.md` (API table row for `POST /api/pins/order` next to `/api/pins`)
 - Modify: `docs/subsystems/configs.md` (the "Pinned projects (#161)" bullet under §Mechanism: order is user-set, the permutation rule, why no membership check)
-- Modify: `docs/subsystems/settings.md` (~lines 21-22, stored `pinnedProjects`: order is meaningful, `setPinOrder` rewrites it)
+- Modify: `docs/subsystems/settings.md` (~line 66, the `pinnedProjects` paragraph: order is meaningful, `setPinOrder` rewrites it)
 - Modify: `docs/subsystems/git-stats.md` ("in pin order" stays; add that the order is set in Management › Pinned)
 - Modify: `.claude/DESIGN.md` §8.4b (~line 323: replace "moved unchanged" with one sentence on the grip column and the `Saved` label)
 
-- [ ] **Step 1: Make the five edits.** Only the lines that change; do not reflow neighbouring prose.
+- [ ] **Step 1: Make the five edits.** Only the lines that change; do not reflow neighbouring prose. Leave each file's trailing `docs-sync` stamp alone.
 - [ ] **Step 2: Commit** `docs: pinned project reordering`.
 
 ---
