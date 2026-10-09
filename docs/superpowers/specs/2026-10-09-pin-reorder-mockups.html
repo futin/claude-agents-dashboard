@@ -1,0 +1,334 @@
+<title>Pinned Project Reordering</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&display=swap">
+<style>
+/* Layout: one board per option, each drawn at laptop card width and phone width side by side; the app's own midnight tokens and .pin-* rules. */
+:root{
+  color-scheme:dark;
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--amber:#ffb03a;--mustard:#d1ba52;--cyan:#55d0dd;--red:#e0533f;
+  --shadow2:rgba(0,0,0,.5);
+  --font:'Hanken Grotesk','Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box}
+body{background:var(--board);color:var(--ink);font-family:var(--font);font-variant-numeric:tabular-nums;margin:0;padding-inline:16px;padding-block:24px 64px}
+.page{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:40px}
+h1{font-size:26px;font-weight:600;letter-spacing:-.01em;margin:0;text-wrap:balance}
+.lede{color:var(--ink2);font-size:14px;line-height:1.55;max-width:80ch;margin:8px 0 0}
+.lede code,.note code{font-size:12px;color:var(--ink);background:var(--strip-hi);border-radius:4px;padding:1px 5px}
+.board{display:flex;flex-direction:column;gap:14px}
+.board-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.board-h h2{font-size:19px;font-weight:600;margin:0}
+.tag{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);border:1px solid var(--hairline2);border-radius:999px;padding:2px 8px}
+.tag.rec{color:var(--green);border-color:var(--green)}
+.tag.yagni{color:var(--mustard);border-color:var(--mustard)}
+.note{font-size:13px;color:var(--ink2);line-height:1.55;max-width:90ch;margin:0}
+.note b{color:var(--ink);font-weight:500}
+.pair{display:grid;grid-template-columns:minmax(0,720px) 375px;gap:24px;align-items:start}
+@media (max-width:1180px){.pair{grid-template-columns:minmax(0,1fr)}.pair .phone{max-width:375px}}
+.frame-l{font-size:11px;color:var(--ink3);margin-bottom:6px;letter-spacing:.04em;text-transform:uppercase}
+.trade{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px 24px;font-size:13px;line-height:1.5;color:var(--ink2)}
+.trade div b{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:500;margin-bottom:2px}
+.trade .pro b{color:var(--green)} .trade .con b{color:var(--amber)}
+.trade ul{margin:0;padding-left:18px}
+
+/* ---- app rules, verbatim from client/src/styles.css ---- */
+.set-group{background:var(--strip);border-radius:16px;padding:20px}
+.set-group-title{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
+.set-group-sub{font-size:13px;color:var(--ink2);margin-top:4px}
+.set-rows{margin-top:14px}
+.qp-other{width:100%;font-family:var(--font);font-size:13px;color:var(--ink);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;height:36px;padding:0 12px}
+.qp-other:focus{outline:none;border-color:var(--ink3)}
+.qp-other:disabled{opacity:.45}
+.qp-term{height:36px;padding:0 14px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
+.qp-term:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
+.qp-term:disabled{opacity:.4;cursor:default}
+.sp-note{font-size:12px;line-height:1.45;color:var(--ink3)}
+.pin-pick{display:flex;flex-direction:column;gap:8px;min-width:0;width:100%}
+.pin-list{list-style:none;margin:0;padding:0}
+.pin-head{display:none;font-size:11px;color:var(--ink3);padding:6px 0 0}
+.pin-head span:nth-child(2){text-align:right}
+.pin-row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;row-gap:2px;align-items:center;padding:10px 0;border-top:1px solid var(--hairline)}
+.pin-row:first-child{border-top:0}
+.pin-head+.pin-list>.pin-row:first-child,.pin-group+.pin-list>.pin-row:first-child{border-top:1px solid var(--hairline)}
+.pin-path{font-size:13px;line-height:1.45;color:var(--ink2);min-width:0}
+.pin-seg,.pin-path b{display:inline-block;max-width:100%;overflow-wrap:anywhere}
+.pin-path b{font-size:15px;font-weight:500;color:var(--ink)}
+.pin-age{grid-column:1;font-size:12px;color:var(--ink3);white-space:nowrap}
+.pin-row .qp-term{grid-column:2;grid-row:1/span 2;justify-self:end}
+.pin-group{padding:14px 0 2px;font-size:13px;font-weight:500;color:var(--ink)}
+.pin-count{font-size:12px;font-weight:400;color:var(--ink3);margin-left:6px}
+.wide .pin-head,.wide .pin-row{display:grid;grid-template-columns:minmax(0,1fr) 64px 96px;gap:12px}
+.wide .pin-age{grid-column:auto;font-size:13px;color:var(--ink2);text-align:right}
+.wide .pin-row .qp-term{grid-column:auto;grid-row:auto}
+
+/* ---- proposed additions ---- */
+/* grip column: the row gains a 28px lead column in every variant that drags */
+.pin-row.g{grid-template-columns:28px minmax(0,1fr) auto}
+.pin-row.g .pin-age{grid-column:2}
+.pin-row.g .qp-term,.pin-row.g .pin-acts{grid-column:3;grid-row:1/span 2}
+.wide .pin-row.g,.wide .pin-head.g{grid-template-columns:28px minmax(0,1fr) 64px 96px}
+.wide .pin-row.g .pin-age{grid-column:auto}
+.wide .pin-row.g .qp-term,.wide .pin-row.g .pin-acts{grid-column:auto;grid-row:auto}
+.wide .pin-row.g.arrows,.wide .pin-head.g.arrows{grid-template-columns:minmax(0,1fr) 64px auto}
+.pin-row.arrows{grid-template-columns:minmax(0,1fr) auto}
+.pin-row.arrows .pin-age{grid-column:1}
+.pin-row.arrows .pin-acts{grid-column:2}
+.pin-grip{grid-row:1/span 2;align-self:center;width:28px;height:36px;display:grid;place-items:center;color:var(--ink3);background:none;border:0;border-radius:8px;cursor:grab;touch-action:none;font-size:16px;line-height:1;padding:0}
+.wide .pin-grip{grid-row:auto}
+.pin-grip:hover{color:var(--ink);background:var(--strip-hi)}
+.pin-grip:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+.pin-row.drag{background:var(--strip-hi);box-shadow:0 8px 24px var(--shadow2);border-radius:10px;position:relative;z-index:2;border-top-color:transparent}
+.pin-row.drag .pin-grip{cursor:grabbing;color:var(--cyan)}
+.pin-row.moved{animation:flash .9s ease-out}
+@keyframes flash{from{background:var(--strip-hi)}to{background:transparent}}
+.pin-acts{display:flex;gap:6px;justify-self:end;align-items:center}
+.qp-icon{width:36px;padding:0;font-size:14px}
+.pin-group{display:flex;align-items:baseline}
+.pin-group .grow{flex:1}
+.link-btn{font-family:var(--font);font-size:12px;font-weight:500;color:var(--cyan);background:none;border:0;padding:0;cursor:pointer}
+.link-btn:hover{text-decoration:underline;text-underline-offset:3px}
+.saved{font-size:12px;color:var(--ink3);margin-left:10px;transition:opacity .3s}
+.saved.off{opacity:0}
+.pin-sort{font-family:var(--font);font-size:12px;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline2);border-radius:8px;height:28px;padding:0 8px}
+.dimmed{opacity:.4;pointer-events:none}
+
+/* effect strip: what the order changes downstream */
+.effect{margin-top:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--ink3)}
+.effect .chip{background:var(--steel);border:1px solid var(--hairline);border-radius:8px;padding:3px 8px;color:var(--ink2)}
+.effect .chip:first-of-type{color:var(--ink);border-color:var(--hairline2)}
+.gitcard-mini{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+.gitcard-mini div{background:var(--steel);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--ink);display:flex;gap:8px;align-items:center}
+.gitcard-mini div span{width:7px;height:7px;border-radius:50%;background:var(--green)}
+.gitcard-mini div.warn span{background:var(--amber)}
+.gitcard-mini div i{margin-left:auto;font-style:normal;color:var(--ink3);cursor:grab;touch-action:none}
+@media (prefers-reduced-motion:reduce){.pin-row.moved{animation:none}}
+</style>
+
+<div class="page">
+  <header>
+    <h1>Pinned project reordering</h1>
+    <p class="lede">Management › Pinned today lists pins in the order they were pinned, and that same order is the order of Management › Git (Cards, Table, and inside each Triage group). Nothing can change it except unpinning and re-pinning. Each board below is live: drag, click, try it at both widths. The strip under each card shows the Git order your change produces. Example projects, not your real pins.</p>
+  </header>
+
+  <section class="board" data-variant="now">
+    <div class="board-h"><h2>Now</h2><span class="tag">today</span></div>
+    <p class="note">Order is pin time. To put <b>claude-agents-dashboard</b> first you would have to unpin and re-pin the four above it.</p>
+    <div class="pair"><div><div class="frame-l">Laptop · card 720px</div><div class="slot wide"></div></div><div class="phone"><div class="frame-l">Phone · 375px</div><div class="slot"></div></div></div>
+  </section>
+
+  <section class="board" data-variant="drag">
+    <div class="board-h"><h2>A · Drag grip, always on</h2><span class="tag rec">recommended</span></div>
+    <p class="note">A <b>⠿</b> grip leads every pinned row. Drag it (mouse or finger); the order saves on drop, with a quiet “Saved” beside the heading. Keyboard: focus the grip, <code>↑</code>/<code>↓</code> moves one place. Grips hide while the filter box has text, because a filtered list has gaps you cannot drop into.</p>
+    <div class="pair"><div><div class="frame-l">Laptop · card 720px</div><div class="slot wide"></div></div><div class="phone"><div class="frame-l">Phone · 375px</div><div class="slot"></div></div></div>
+    <div class="trade"><div class="pro"><b>For</b><ul><li>Direct: the thing you move is the thing you grab</li><li>Long jumps (5th → 1st) are one gesture</li><li>Same grip idiom as the other boards on your machine</li></ul></div><div class="con"><b>Against</b><ul><li>Most code: pointer drag + touch + keyboard path</li><li>A 28px column costs path width on the phone</li></ul></div></div>
+  </section>
+
+  <section class="board" data-variant="arrows">
+    <div class="board-h"><h2>B · Up / down buttons</h2><span class="tag">simplest</span></div>
+    <p class="note"><b>↑</b> and <b>↓</b> beside each Unpin; the top row’s ↑ and the bottom row’s ↓ are disabled. Each click saves. No drag code at all, works the same everywhere.</p>
+    <div class="pair"><div><div class="frame-l">Laptop · card 720px</div><div class="slot wide"></div></div><div class="phone"><div class="frame-l">Phone · 375px</div><div class="slot"></div></div></div>
+    <div class="trade"><div class="pro"><b>For</b><ul><li>Tiny: two buttons and one swap</li><li>Accessible by default, no gesture to learn</li></ul></div><div class="con"><b>Against</b><ul><li>Moving 5th → 1st is four clicks, four saves</li><li>Three buttons per row is busy; on the phone the path wraps more</li></ul></div></div>
+  </section>
+
+  <section class="board" data-variant="mode">
+    <div class="board-h"><h2>C · Reorder mode</h2><span class="tag">calmest at rest</span></div>
+    <p class="note">The list looks exactly like today until you press <b>Reorder</b> in the Pinned heading. Then rows get grips and ↑/↓, Unpin and the filter step aside, and <b>Done</b> saves the whole order in one write. <b>Cancel</b> throws it away.</p>
+    <div class="pair"><div><div class="frame-l">Laptop · card 720px</div><div class="slot wide"></div></div><div class="phone"><div class="frame-l">Phone · 375px</div><div class="slot"></div></div></div>
+    <div class="trade"><div class="pro"><b>For</b><ul><li>Resting page unchanged; no stray grabs while unpinning</li><li>One save, so Cancel is real</li><li>Phone gets the full width back outside the mode</li></ul></div><div class="con"><b>Against</b><ul><li>An extra click to start and one to finish</li><li>A mode is one more state to test</li></ul></div></div>
+  </section>
+
+  <section class="board" data-variant="yagni">
+    <div class="board-h"><h2>D · Sort modes + drag in Git</h2><span class="tag yagni">YAGNI’d</span></div>
+    <p class="note">The bigger version: a <b>Sort</b> select (Manual / Name / Last session) on the Pinned list, and the Git Cards themselves draggable, so you reorder where you actually look at the order. Shown for comparison. Two places that write one order, a sort setting that can silently override Manual, and drag inside Git cards that already hold buttons.</p>
+    <div class="pair"><div><div class="frame-l">Laptop · card 720px</div><div class="slot wide"></div></div><div class="phone"><div class="frame-l">Phone · 375px</div><div class="slot"></div></div></div>
+  </section>
+</div>
+
+<script>
+const BASE = [
+  { d: '~/Documents/custom-projects/', n: 'backlog-manager', a: '2h' },
+  { d: '~/Documents/custom-projects/', n: 'guide-manager', a: '1d' },
+  { d: '~/work/timify/', n: 'timify-backend', a: '3h' },
+  { d: '~/Documents/', n: 'ixray', a: '6d' },
+  { d: '~/Documents/custom-projects/', n: 'claude-agents-dashboard', a: '4m' }
+];
+const UNPINNED = [{ d: '~/work/timify/', n: 'timify-web', a: '5h' }, { d: '~/Documents/custom-projects/', n: 'lookout', a: '2d' }];
+const WARN = new Set(['timify-backend', 'ixray']);
+
+// one shared order per board, so laptop and phone stay in step
+const boards = {};
+document.querySelectorAll('.board').forEach(b => {
+  const v = b.dataset.variant;
+  boards[v] = { order: BASE.map(x => x.n), draft: null, mode: false, query: '', sort: 'manual', saved: false, moved: null, el: b };
+  render(v);
+});
+
+function byName(n) { return BASE.find(x => x.n === n); }
+function list(st) { return st.draft || st.order; }
+function viewOrder(v, st) {
+  if (v !== 'yagni' || st.sort === 'manual') return list(st);
+  const o = [...list(st)];
+  if (st.sort === 'name') o.sort((a, b) => a.localeCompare(b));
+  else { const m = s => ({ m: 1, h: 60, d: 1440 })[s.slice(-1)] * parseInt(s); o.sort((a, b) => m(byName(a).a) - m(byName(b).a)); }
+  return o;
+}
+function esc(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); }
+
+function rowHTML(v, st, n, i, total, wide) {
+  const p = byName(n);
+  const path = `<span class="pin-path">${p.d.split('/').filter(Boolean).map(s => `<span class="pin-seg">${esc(s)}/</span>`).join('')}<b>${esc(p.n)}</b></span>`;
+  const age = `<span class="pin-age">${p.a} ago</span>`;
+  const unpin = `<button type="button" class="qp-term">Unpin</button>`;
+  const moved = st.moved === n ? ' moved' : '';
+  const filtered = st.query !== '';
+  if (v === 'drag' || (v === 'yagni' && st.sort === 'manual')) {
+    const grip = filtered ? '<span></span>' : `<button type="button" class="pin-grip" aria-label="Move ${esc(n)}, position ${i + 1} of ${total}" data-n="${esc(n)}">⠿</button>`;
+    return `<li class="pin-row g${moved}" data-n="${esc(n)}">${grip}${path}${age}${unpin}</li>`;
+  }
+  if (v === 'arrows') {
+    const up = `<button type="button" class="qp-term qp-icon" data-up="${esc(n)}" aria-label="Move ${esc(n)} up" ${i === 0 || filtered ? 'disabled' : ''}>↑</button>`;
+    const dn = `<button type="button" class="qp-term qp-icon" data-dn="${esc(n)}" aria-label="Move ${esc(n)} down" ${i === total - 1 || filtered ? 'disabled' : ''}>↓</button>`;
+    return `<li class="pin-row g arrows${moved}" data-n="${esc(n)}">${path}${age}<span class="pin-acts">${up}${dn}${unpin}</span></li>`;
+  }
+  if (v === 'mode' && st.mode) {
+    const grip = `<button type="button" class="pin-grip" aria-label="Move ${esc(n)}" data-n="${esc(n)}">⠿</button>`;
+    const up = `<button type="button" class="qp-term qp-icon" data-up="${esc(n)}" aria-label="Move ${esc(n)} up" ${i === 0 ? 'disabled' : ''}>↑</button>`;
+    const dn = `<button type="button" class="qp-term qp-icon" data-dn="${esc(n)}" aria-label="Move ${esc(n)} down" ${i === total - 1 ? 'disabled' : ''}>↓</button>`;
+    return `<li class="pin-row g${moved}" data-n="${esc(n)}">${grip}${path}${age}<span class="pin-acts">${up}${dn}</span></li>`;
+  }
+  return `<li class="pin-row${moved}" data-n="${esc(n)}">${path}${age}${unpin}</li>`;
+}
+
+function cardHTML(v, st, wide) {
+  const ord = viewOrder(v, st).filter(n => n.includes(st.query.toLowerCase()));
+  const all = viewOrder(v, st);
+  const gripCol = v === 'drag' || v === 'arrows' || (v === 'mode' && st.mode) || (v === 'yagni' && st.sort === 'manual');
+  const headCls = gripCol ? (v === 'arrows' ? 'pin-head g arrows' : 'pin-head g') : 'pin-head';
+  const headLead = gripCol && v !== 'arrows' ? '<span></span>' : '';
+  let groupRight = '';
+  if (v === 'mode') groupRight = st.mode
+    ? `<span class="grow"></span><button type="button" class="link-btn" data-cancel style="color:var(--ink2);margin-right:14px">Cancel</button><button type="button" class="link-btn" data-done>Done</button>`
+    : `<span class="grow"></span><button type="button" class="link-btn" data-reorder>Reorder</button>`;
+  if (v === 'yagni') groupRight = `<span class="grow"></span><select class="pin-sort" data-sort aria-label="Sort pinned"><option value="manual"${st.sort === 'manual' ? ' selected' : ''}>Manual</option><option value="name"${st.sort === 'name' ? ' selected' : ''}>Name</option><option value="recent"${st.sort === 'recent' ? ' selected' : ''}>Last session</option></select>`;
+  const saved = (v === 'drag' || v === 'arrows' || v === 'mode') ? `<span class="saved ${st.saved ? '' : 'off'}">Saved</span>` : '';
+  const filterOff = v === 'mode' && st.mode;
+  const effect = v === 'yagni'
+    ? `<div class="gitcard-mini">${all.map(n => `<div class="${WARN.has(n) ? 'warn' : ''}" data-gn="${esc(n)}"><span></span>${esc(n)}<i class="git-grip" data-gn="${esc(n)}" ${st.sort === 'manual' ? '' : 'style="visibility:hidden"'}>⠿</i></div>`).join('')}</div>`
+    : `<div class="effect">Git › Cards order:${all.map(n => `<span class="chip">${esc(n)}</span>`).join('')}</div>`;
+  return `<section class="set-group">
+    <div class="set-group-title">Projects</div>
+    <div class="set-group-sub">Everything with a session in the last 30 days. Pin a project and it stays listed whatever the lookback.</div>
+    <div class="set-rows"><div class="pin-pick">
+      <input class="qp-other" type="text" placeholder="Filter by name or path" aria-label="Filter projects" value="${esc(st.query)}" data-q ${filterOff ? 'disabled' : ''}>
+      <div class="${headCls}">${headLead}<span>Project</span><span>Last session</span></div>
+      <div class="pin-group">Pinned<span class="pin-count">${all.length}</span>${saved}${groupRight}</div>
+      ${ord.length ? `<ul class="pin-list">${ord.map((n, i) => rowHTML(v, st, n, i, ord.length, wide)).join('')}</ul>` : '<span class="sp-note">No pinned project matches.</span>'}
+      <div class="${filterOff ? 'dimmed' : ''}">
+        <div class="pin-group">Not pinned<span class="pin-count">${UNPINNED.length}</span></div>
+        <ul class="pin-list">${UNPINNED.map(p => `<li class="pin-row"><span class="pin-path">${p.d.split('/').filter(Boolean).map(s => `<span class="pin-seg">${esc(s)}/</span>`).join('')}<b>${esc(p.n)}</b></span><span class="pin-age">${p.a} ago</span><button type="button" class="qp-term">Pin</button></li>`).join('')}</ul>
+      </div>
+    </div></div>
+  </section>${v === 'yagni' ? '<div class="frame-l" style="margin-top:14px">Management › Git · Cards (drag here too)</div>' : ''}${effect}`;
+}
+
+function render(v, keepFocus) {
+  const st = boards[v];
+  const active = document.activeElement;
+  const focusSel = keepFocus || (active && active.dataset && active.dataset.q !== undefined && st.el.contains(active) ? { q: true, wide: !!active.closest('.wide') } : null);
+  st.el.querySelectorAll('.slot').forEach(slot => { slot.innerHTML = cardHTML(v, st, slot.classList.contains('wide')); });
+  if (focusSel) {
+    const slot = st.el.querySelector(focusSel.wide ? '.slot.wide' : '.slot:not(.wide)');
+    const t = focusSel.q ? slot.querySelector('[data-q]') : slot.querySelector(`.pin-grip[data-n="${CSS.escape(focusSel.grip)}"]`);
+    if (t) { t.focus(); if (focusSel.q) t.setSelectionRange(t.value.length, t.value.length); }
+  }
+}
+
+let savedTimer = {};
+function commit(v, next, movedName) {
+  const st = boards[v];
+  if (st.draft) st.draft = next; else { st.order = next; st.saved = v !== 'now' && v !== 'yagni'; }
+  st.moved = movedName;
+  clearTimeout(savedTimer[v]);
+  savedTimer[v] = setTimeout(() => { st.saved = false; st.moved = null; render(v); }, 1400);
+}
+function move(v, name, delta) {
+  const st = boards[v];
+  const o = [...list(st)];
+  const i = o.indexOf(name), j = i + delta;
+  if (i < 0 || j < 0 || j >= o.length) return;
+  [o[i], o[j]] = [o[j], o[i]];
+  commit(v, o, name);
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('.board'); if (!b) return;
+  const v = b.dataset.variant, st = boards[v];
+  const t = e.target;
+  if (t.dataset.up) { move(v, t.dataset.up, -1); render(v); }
+  else if (t.dataset.dn) { move(v, t.dataset.dn, +1); render(v); }
+  else if (t.dataset.reorder !== undefined) { st.mode = true; st.draft = [...st.order]; st.query = ''; render(v); }
+  else if (t.dataset.done !== undefined) { st.order = st.draft; st.draft = null; st.mode = false; st.saved = true; commit(v, st.order, null); render(v); }
+  else if (t.dataset.cancel !== undefined) { st.draft = null; st.mode = false; render(v); }
+});
+document.addEventListener('input', e => {
+  const b = e.target.closest('.board'); if (!b) return;
+  const v = b.dataset.variant;
+  if (e.target.dataset.q !== undefined) { boards[v].query = e.target.value; render(v); }
+});
+document.addEventListener('change', e => {
+  const b = e.target.closest('.board'); if (!b) return;
+  if (e.target.dataset.sort !== undefined) { boards[b.dataset.variant].sort = e.target.value; render(b.dataset.variant); }
+});
+document.addEventListener('keydown', e => {
+  const g = e.target.closest && e.target.closest('.pin-grip'); if (!g) return;
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+  e.preventDefault();
+  const b = g.closest('.board'), v = b.dataset.variant;
+  move(v, g.dataset.n, e.key === 'ArrowUp' ? -1 : 1);
+  render(v, { grip: g.dataset.n, wide: !!g.closest('.wide') });
+});
+
+// pointer drag for row grips and (board D) git card grips
+let drag = null;
+document.addEventListener('pointerdown', e => {
+  const g = e.target.closest('.pin-grip, .git-grip'); if (!g) return;
+  const b = g.closest('.board'), v = b.dataset.variant;
+  const isGit = g.classList.contains('git-grip');
+  if (isGit && boards[v].sort !== 'manual') return;
+  e.preventDefault();
+  drag = { v, name: isGit ? g.dataset.gn : g.dataset.n, isGit, slot: g.closest('.slot') || b, wide: !!g.closest('.wide') };
+  markDrag();
+});
+function markDrag() {
+  if (!drag) return;
+  const sel = drag.isGit ? `.gitcard-mini [data-gn="${CSS.escape(drag.name)}"]:not(i)` : `.pin-row[data-n="${CSS.escape(drag.name)}"]`;
+  const el = drag.slot.querySelector(sel);
+  if (el) el.classList.add(drag.isGit ? 'x' : 'drag');
+  if (el && drag.isGit) el.style.outline = '2px solid var(--cyan)';
+}
+document.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const st = boards[drag.v];
+  const items = drag.isGit
+    ? [...drag.slot.querySelectorAll('.gitcard-mini > div')].map(el => ({ n: el.dataset.gn, r: el.getBoundingClientRect() }))
+    : [...drag.slot.querySelectorAll('.pin-list:first-of-type .pin-row[data-n]')].map(el => ({ n: el.dataset.n, r: el.getBoundingClientRect() }));
+  const target = items.find(it => e.clientY >= it.r.top && e.clientY <= it.r.bottom && (!drag.isGit || (e.clientX >= it.r.left && e.clientX <= it.r.right)));
+  if (!target || target.n === drag.name) return;
+  const o = [...list(st)];
+  o.splice(o.indexOf(drag.name), 1);
+  o.splice(o.indexOf(target.n) + (o.indexOf(target.n) >= list(st).indexOf(drag.name) ? 1 : 0), 0, drag.name);
+  if (st.draft) st.draft = o; else st.order = o;
+  render(drag.v);
+  drag.slot = boards[drag.v].el.querySelector(drag.isGit ? (drag.wide ? '.slot.wide' : '.slot:not(.wide)') : (drag.wide ? '.slot.wide' : '.slot:not(.wide)')) || boards[drag.v].el;
+  markDrag();
+});
+document.addEventListener('pointerup', () => {
+  if (!drag) return;
+  const st = boards[drag.v];
+  commit(drag.v, [...list(st)], drag.name);
+  const v = drag.v; drag = null; render(v);
+});
+document.addEventListener('pointercancel', () => { if (drag) { const v = drag.v; drag = null; render(v); } });
+</script>
