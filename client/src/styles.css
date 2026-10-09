@@ -1848,6 +1848,48 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
   .pin-row .qp-term{grid-column:auto;grid-row:auto}
 }
 
+/* Management › Projects (ProjectsView.tsx): the ledger on the app ground, no card around it — the band, a toolbar of the
+   Tiles | Columns | Lists `.seg` and the filter box, then the two groups under `.pin-group` heads. A pin is a paper tile, an
+   offer its dashed outline, a dead pin an amber edge. No lift: the live cards (`.set-group`, `.git-card`) carry none. */
+.pin-filter{height:36px;width:100%;padding:0 12px;font-family:var(--font);font-size:13px;color:var(--ink);border:1px solid var(--hairline2);border-radius:12px;background:var(--strip)}
+.pin-filter::placeholder{color:var(--ink3)}
+.pin-filter:focus{outline:none;border-color:var(--ink3)}
+.pj-toolbar .pin-filter{flex:1;width:auto;min-width:200px;height:38px}
+.pin-note{font-size:13px;color:var(--ink3);padding:10px 0}
+.pj-id{display:flex;flex-direction:column;min-width:0}
+.pj-name{font-size:15px;font-weight:500;color:var(--ink);overflow-wrap:anywhere}
+.pj-dir{font-size:12px;line-height:1.45;color:var(--ink3);overflow-wrap:anywhere}
+.pj-age{font-size:13px;color:var(--ink2);white-space:nowrap}
+.pj-tiles{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.pj-tile{display:flex;flex-direction:column;justify-content:space-between;gap:12px;padding:16px;min-width:0;background:var(--strip);border:1px solid var(--hairline);border-radius:16px}
+.pj-tile.off{background:transparent;border:1px dashed var(--hairline2)}
+.pj-tile.off .pj-name{color:var(--ink2)}
+.pj-tile.gone{border-color:var(--amber)}
+.pj-tfoot{display:flex;align-items:center;justify-content:space-between;gap:8px}
+/* The key is a 32px `.qp-term` in a tile or a list row, at every width: the phone's thumb-sized `.qp-term` rule does not
+   stretch it, and in a list row it keeps its own face over `.set-control>button`'s Settings one. */
+.pj-tile .qp-term,.pj-srw .set-control>.qp-term{flex:none;height:32px;min-height:0;padding:0 14px;color:var(--ink2)}
+.pj-tile .qp-term:hover:not(:disabled),.pj-srw .set-control>.qp-term:hover:not(:disabled){color:var(--ink)}
+.pj-tile .qp-term:disabled,.pj-srw .set-control>.qp-term:disabled{color:var(--ink3);cursor:default;opacity:1}
+/* Columns and Lists: the two groups stacked on the phone, side by side from lg (Not pinned left, Pinned right), one tile a row */
+.pj-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;align-items:start}
+.pj-cols>section{min-width:0}
+.pj-cols .pj-tiles{grid-template-columns:minmax(0,1fr)}
+.pj-cols .pj-tile{flex-direction:row;align-items:center}
+.pj-cols .pj-id{flex:1}
+.pj-cols .pj-tfoot{flex:none;gap:12px}
+/* Lists: each column a plain `.set-group` card of `.set-row`s — no Settings page grid around it */
+.pj-listcard{min-width:0}
+/* `.set-row.pj-srw`: the Settings row rules come later in the file and would win a tie */
+.set-row.pj-srw{gap:16px;padding:14px 0}
+.pj-srw .set-name,.pj-srw .set-hint{display:block;overflow-wrap:anywhere}
+.pj-srw .set-hint{font-size:12px;color:var(--ink3)}
+.pj-srw .set-control{gap:12px}
+.pj-srw.gone .set-name{color:var(--ink2)}
+@media (min-width:1024px){
+  .pj-cols{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+}
+
 /* A 1080px modal with margins does not fit a phone, so the presentation goes
    back to full-screen — which also takes the scrim away again, leaving ✕ and
    the browser's back as the exits there (docs/subsystems/chat.md). Phone is
@@ -2139,7 +2181,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    the floor — tapping one opens a native picker sheet rather than putting a
    caret in the page, which is the thing that triggers the zoom. */
 @media (pointer:coarse){
-  .qp-feedback,.qp-other,.mgmt-filter,
+  .qp-feedback,.qp-other,.mgmt-filter,.pin-filter,
   .set-control input[type=number],.set-control input[type=text]{font-size:max(16px,calc(16px / var(--font-scale,1)))}
 }
 

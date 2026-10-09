@@ -8,10 +8,14 @@ import type { SettingsScope } from '../../lib/settings';
  * swatches — which then spans the row under the label instead.
  */
 export function SettingsRow({
-  name, hint, below, children
-}: { name: string; hint?: ReactNode; below?: ReactNode; children?: ReactNode }) {
+  name, hint, below, children, className
+}: {
+  name: string; hint?: ReactNode; below?: ReactNode; children?: ReactNode;
+  /** Appended to the root's `set-row`, for a row with its own sizing (Management › Projects' `pj-srw`). */
+  className?: string;
+}) {
   return (
-    <div className="set-row">
+    <div className={className ? `set-row ${className}` : 'set-row'}>
       <div className="set-label">
         <span className="set-name">{name}</span>
         {hint && <span className="set-hint">{hint}</span>}
@@ -28,9 +32,15 @@ export function SettingsRow({
  * subtitle pair"), so `sub` is required — a card with a bare title reads as
  * unfinished there.
  */
-export function SettingsGroup({ title, sub, children }: { title: string; sub: string; children: ReactNode }) {
+export function SettingsGroup({
+  title, sub, children, className
+}: {
+  title: string; sub: string; children: ReactNode;
+  /** Appended to the root's `set-group`, for a card used outside a Settings page (Management › Projects' `pj-listcard`). */
+  className?: string;
+}) {
   return (
-    <section className="set-group">
+    <section className={className ? `set-group ${className}` : 'set-group'}>
       <div className="set-group-title">{title}</div>
       <div className="set-group-sub">{sub}</div>
       <div className="set-rows">{children}</div>

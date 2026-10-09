@@ -1,7 +1,6 @@
 import { useSettings } from '../../hooks/useSettings';
-import { SettingsBand } from '../settings/SettingsRow';
 import GitView from './GitView';
-import PinnedProjectsGroup from './PinnedProjectsGroup';
+import ProjectsView from './ProjectsView';
 
 /**
  * The Management section: two sub-views, **Projects** and **Git**.
@@ -12,30 +11,14 @@ import PinnedProjectsGroup from './PinnedProjectsGroup';
  *
  * Git is the local state of the pinned repos (`GitView`, which owns the poll,
  * so showing Projects stops it). Projects is the project ledger that
- * used to be Settings › Pinned, moved here unchanged — a list that grows with
- * use belongs next to the repos it feeds, not among the policies.
+ * used to be Settings › Pinned (`ProjectsView`: Tiles, Columns or Lists) — a
+ * list that grows with use belongs next to the repos it feeds, not among the
+ * policies.
  *
  * Default export → its own lazy chunk, like every section but Sessions.
  */
 export default function ManagementView() {
   const { settings } = useSettings();
 
-  if (settings.managementTab === 'projects') {
-    return (
-      <div className="set">
-        <SettingsBand
-          scope="shared"
-          title="Management · Projects"
-          sub="Projects that stay in the launch sheet however long ago their last session was. Stored by the dashboard server, so a pin shows up on every device."
-        />
-        {/* One full-width column: the list grows with every pin, so it gets
-            the page to itself rather than half of a two-column grid. */}
-        <div className="set-col">
-          <PinnedProjectsGroup />
-        </div>
-      </div>
-    );
-  }
-
-  return <GitView />;
+  return settings.managementTab === 'projects' ? <ProjectsView /> : <GitView />;
 }
