@@ -188,7 +188,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
                 <>
                   <PinPicker projects={older} home={pins.home} busy={pinBusy} onPin={pinAndSelect} />
                   <span className="sp-note">
-                    A pin keeps a project listed past the lookback, on every device. Unpin it under Management › Pinned.
+                    A pin keeps a project listed past the lookback, on every device. Unpin it under Management › Projects.
                   </span>
                 </>
               )}

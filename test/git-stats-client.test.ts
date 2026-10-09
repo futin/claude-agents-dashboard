@@ -195,15 +195,15 @@ export function run(): number {
   })) p++; else f++;
 
   if (test('non-ok states: missing with a path, missing without, not-git, error', () => {
-    assert.strictEqual(gitStateSentence({ dirName: 'a', name: 'a', path: '/x/y', state: 'missing' }), 'Folder is gone — /x/y. Unpin it under Pinned.');
-    assert.strictEqual(gitStateSentence({ dirName: 'a', name: 'a', path: null, state: 'missing' }), 'Folder is gone. Unpin it under Pinned.');
+    assert.strictEqual(gitStateSentence({ dirName: 'a', name: 'a', path: '/x/y', state: 'missing' }), 'Folder is gone — /x/y. Unpin it under Projects.');
+    assert.strictEqual(gitStateSentence({ dirName: 'a', name: 'a', path: null, state: 'missing' }), 'Folder is gone. Unpin it under Projects.');
     assert.strictEqual(gitStateSentence({ dirName: 'a', name: 'a', path: '/x', state: 'not-git' }), 'Not a git repository.');
     assert.strictEqual(gitStateSentence({ dirName: 'a', name: 'a', path: '/x', state: 'error', message: 'timed out' }), "Couldn't read: timed out");
   })) p++; else f++;
 
   if (test('page-level copy: no open branches, no pins, first fetch failed, later fetch failed', () => {
     assert.strictEqual(GIT_NO_OPEN_BRANCHES, 'no open branches');
-    assert.strictEqual(GIT_NO_PINS, 'No pinned projects yet. Pin one under Pinned.');
+    assert.strictEqual(GIT_NO_PINS, 'No pinned projects yet. Pin one under Projects.');
     assert.strictEqual(GIT_LOAD_FAILED, "Couldn't load git stats. Retrying every 30s.");
     assert.strictEqual(GIT_UPDATE_FAILED, "couldn't update");
   })) p++; else f++;

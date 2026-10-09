@@ -45,7 +45,7 @@ export type SettingsScope = 'local' | 'shared';
 /** Which page the Settings section shows: one per storage backend, nothing else. */
 export type SettingsTab = SettingsScope;
 /** Which sub-view the Management section opens on. */
-export type ManagementTab = 'git' | 'pinned';
+export type ManagementTab = 'git' | 'projects';
 /** Which section opens on load. `last` restores whatever you were on. */
 export type Landing = Section | 'last';
 /**
@@ -234,7 +234,7 @@ const SPAWN_MODELS: SpawnDefaultModel[] = ['', ...MODELS];
 const SPAWN_EFFORTS: SpawnDefaultEffort[] = ['', ...EFFORTS];
 const USAGE_TABS: UsageTab[] = ['forecast', 'rates', 'history'];
 const SETTINGS_TABS: SettingsTab[] = ['local', 'shared'];
-const MANAGEMENT_TABS: ManagementTab[] = ['git', 'pinned'];
+const MANAGEMENT_TABS: ManagementTab[] = ['git', 'projects'];
 /** Derived from the picker, so the offered set and the accepted set cannot drift. */
 const LAYOUT_IDS: DefaultLayout[] = LAYOUT_OPTIONS.map(o => o.value);
 const CONTENT_WIDTHS: ContentWidth[] = ['fixed', 'full'];
@@ -263,7 +263,8 @@ export function clampSettings(raw: unknown): Settings {
     notifyBrowser: pickBool(s.notifyBrowser, DEFAULT_SETTINGS.notifyBrowser),
     usageTab: pickOne(s.usageTab, USAGE_TABS, DEFAULT_SETTINGS.usageTab),
     settingsTab: pickOne(s.settingsTab, SETTINGS_TABS, DEFAULT_SETTINGS.settingsTab),
-    managementTab: pickOne(s.managementTab, MANAGEMENT_TABS, DEFAULT_SETTINGS.managementTab),
+    // The sub-view was called `pinned` before it became Projects; a device that stored the old id keeps its place.
+    managementTab: pickOne((s.managementTab as string) === 'pinned' ? 'projects' : s.managementTab, MANAGEMENT_TABS, DEFAULT_SETTINGS.managementTab),
     defaultLayout: pickOne(s.defaultLayout, LAYOUT_IDS, DEFAULT_SETTINGS.defaultLayout),
     contentWidth: pickOne(s.contentWidth, CONTENT_WIDTHS, DEFAULT_SETTINGS.contentWidth)
   };

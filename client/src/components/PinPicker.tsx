@@ -14,7 +14,7 @@ interface Props {
   /** Resolves null on success, else the reason to show under that row. */
   onPin: (dirName: string) => Promise<string | null>;
   /**
-   * Management › Pinned only: the stored pins, listed above the offers under a
+   * Management › Projects only: the stored pins, listed above the offers under a
    * heading of their own and filtered by the same box, each with an Unpin.
    * Absent in the launch sheet, which has nowhere to unpin from.
    */
@@ -28,7 +28,7 @@ type Act = (dirName: string) => Promise<string | null>;
  * The pin picker (#161): a filter box over name and path, then one row per
  * match — the `~` path with its basename as the title, the last-session age,
  * a **Pin** (or, for a stored pin, **Unpin**). Enter pins the first offered
- * match. Shared by the launch sheet and Management › Pinned, so both offer pins
+ * match. Shared by the launch sheet and Management › Projects, so both offer pins
  * the same way; Settings also hands it the pins, and the one filter runs over
  * both groups. A refusal shows inline under its row and changes nothing. A
  * click never moves a row by hand: the POST answers with the fresh payload

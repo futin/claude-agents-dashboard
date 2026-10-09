@@ -22,7 +22,7 @@ export interface GitStatsState {
 }
 
 /**
- * `GET /api/git-stats` for the Management › Git sub-view. Mounted only while that sub-view is, so switching to Pinned or leaving the section stops it. The
+ * `GET /api/git-stats` for the Management › Git sub-view. Mounted only while that sub-view is, so switching to Projects or leaving the section stops it. The
  * schedule — on mount, every 30s while the page is visible, at once on becoming visible — is `startGitPoll`'s, tested apart from the DOM; the in-flight
  * bookkeeping is `createPollGate`'s: a poll asked for during another runs once after it, because the one in flight may predate what the caller just did.
  */

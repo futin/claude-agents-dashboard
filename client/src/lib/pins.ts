@@ -1,7 +1,7 @@
 /**
  * pins.ts — the pure pieces of the pinned-projects UI (#161): the picker's
  * filter, `~` path shortening and the split a picker row sets its path from.
- * Shared by the launch sheet and Management › Pinned; unit-tested server-side.
+ * Shared by the launch sheet and Management › Projects; unit-tested server-side.
  */
 
 /**

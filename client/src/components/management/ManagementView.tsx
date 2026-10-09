@@ -4,14 +4,14 @@ import GitView from './GitView';
 import PinnedProjectsGroup from './PinnedProjectsGroup';
 
 /**
- * The Management section: two sub-views, **Git** and **Pinned**.
+ * The Management section: two sub-views, **Projects** and **Git**.
  *
  * Which one is showing is the per-device `managementTab`, picked from the
  * rail's tree at every width — the same swap Usage and Settings make, so there
  * is no switch on the page itself.
  *
  * Git is the local state of the pinned repos (`GitView`, which owns the poll,
- * so showing Pinned stops it). Pinned is the project ledger that
+ * so showing Projects stops it). Projects is the project ledger that
  * used to be Settings › Pinned, moved here unchanged — a list that grows with
  * use belongs next to the repos it feeds, not among the policies.
  *
@@ -20,12 +20,12 @@ import PinnedProjectsGroup from './PinnedProjectsGroup';
 export default function ManagementView() {
   const { settings } = useSettings();
 
-  if (settings.managementTab === 'pinned') {
+  if (settings.managementTab === 'projects') {
     return (
       <div className="set">
         <SettingsBand
           scope="shared"
-          title="Management · Pinned"
+          title="Management · Projects"
           sub="Projects that stay in the launch sheet however long ago their last session was. Stored by the dashboard server, so a pin shows up on every device."
         />
         {/* One full-width column: the list grows with every pin, so it gets

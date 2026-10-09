@@ -20,7 +20,7 @@ const ChatDrawer = lazy(() => import('../ChatDrawer'));
 
 /**
  * Management › Git: the band, a toolbar of the Cards | Table | Triage switcher and the Sync/Fetch clock chip, and the layout the switcher picks.
- * The poll lives in `useGitStats`, mounted with this view, so switching to Pinned or leaving the section stops it.
+ * The poll lives in `useGitStats`, mounted with this view, so switching to Projects or leaving the section stops it.
  *
  * The stored layout is per device (`management.gitLayout`); what is drawn is `drawableGitLayout`, so a phone draws Cards while a stored Table survives for
  * the next wide window.
@@ -70,13 +70,13 @@ function GitBody({ data, error, layout, sync, clock }: {
   const { update } = useSettings();
   if (data === null) return <div className="git-empty">{gitFirstLoadText(error)}</div>;
   if (data.repos.length === 0) {
-    // The last "Pinned" of the sentence becomes the link to the Pinned sub-view; the rest stays the copy table's text.
-    const at = GIT_NO_PINS.lastIndexOf('Pinned');
+    // The last "Projects" of the sentence becomes the link to the Projects sub-view; the rest stays the copy table's text.
+    const at = GIT_NO_PINS.lastIndexOf('Projects');
     return (
       <div className="git-empty">
         {GIT_NO_PINS.slice(0, at)}
-        <button type="button" className="git-link" onClick={() => update({ managementTab: 'pinned' })}>Pinned</button>
-        {GIT_NO_PINS.slice(at + 'Pinned'.length)}
+        <button type="button" className="git-link" onClick={() => update({ managementTab: 'projects' })}>Projects</button>
+        {GIT_NO_PINS.slice(at + 'Projects'.length)}
       </div>
     );
   }

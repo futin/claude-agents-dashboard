@@ -14,7 +14,7 @@ export const GIT_BRANCHES_SHOWN = 5;
 export const GIT_BRANCH_CAP = 50;
 
 export const GIT_NO_OPEN_BRANCHES = 'no open branches';
-export const GIT_NO_PINS = 'No pinned projects yet. Pin one under Pinned.';
+export const GIT_NO_PINS = 'No pinned projects yet. Pin one under Projects.';
 export const GIT_LOAD_FAILED = "Couldn't load git stats. Retrying every 30s.";
 export const GIT_UPDATE_FAILED = "couldn't update";
 export const GIT_BAND_SUB = 'Local state of your pinned repos. Fetches from origin on the timer set in Settings; nothing here pulls or pushes.';
@@ -41,7 +41,7 @@ export const FETCH_ROW_OFF_SUB = 'auto-fetch off · Settings › Shared';
 export const FETCH_NEEDS_TOKEN = 'Fetch all needs the Answer token — set it under Settings › Local › Connection.';
 export const FETCH_REFUSED = 'fetch refused: bad token — check it under Settings › Local › Connection.';
 export const FETCH_START_FAILED = "couldn't start the fetch";
-/** Before the first answer arrives — the same muted "Loading…" Management › Pinned shows while its scan runs. */
+/** Before the first answer arrives — the same muted "Loading…" Management › Projects shows while its scan runs. */
 export const GIT_LOADING = 'Loading…';
 
 /** The body's one line while there is no payload yet: still waiting, or the first fetch failed. */
@@ -173,7 +173,7 @@ export function gitMergedText(mergedCount: number): string {
 /** The one sentence that replaces a non-`ok` repo's body, so broken numbers are never drawn. */
 export function gitStateSentence(r: Exclude<RepoGitStats, { state: 'ok' }>): string {
   switch (r.state) {
-    case 'missing': return r.path === null ? 'Folder is gone. Unpin it under Pinned.' : `Folder is gone — ${r.path}. Unpin it under Pinned.`;
+    case 'missing': return r.path === null ? 'Folder is gone. Unpin it under Projects.' : `Folder is gone — ${r.path}. Unpin it under Projects.`;
     case 'not-git': return 'Not a git repository.';
     case 'error': return `Couldn't read: ${r.message}`;
   }

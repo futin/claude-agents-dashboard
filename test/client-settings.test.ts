@@ -91,12 +91,13 @@ export function run(): number {
     assert.strictEqual(clampSettings({ settingsTab: 7 }).settingsTab, 'local');
   })) p++; else f++;
 
-  // The Management section's sub-view (Git | Pinned), picked like the other two.
-  if (test('the Management sub-tab defaults to git and accepts only git and pinned', () => {
+  // The Management section's sub-view (Projects | Git), picked like the other two.
+  if (test('the Management sub-tab defaults to git, accepts projects and git, and maps a stored pinned to projects', () => {
     assert.strictEqual(DEFAULT_SETTINGS.managementTab, 'git');
     assert.strictEqual(clampSettings({}).managementTab, 'git');
     assert.strictEqual(clampSettings({ managementTab: 'nonsense' }).managementTab, 'git');
-    assert.strictEqual(clampSettings({ managementTab: 'pinned' }).managementTab, 'pinned');
+    assert.strictEqual(clampSettings({ managementTab: 'projects' }).managementTab, 'projects');
+    assert.strictEqual(clampSettings({ managementTab: 'pinned' }).managementTab, 'projects', 'a stored \'pinned\' is the renamed sub-view');
     assert.strictEqual(clampSettings({ managementTab: 'git' }).managementTab, 'git');
   })) p++; else f++;
 
