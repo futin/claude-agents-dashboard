@@ -14,12 +14,21 @@ export async function run(): Promise<number> {
   let ok = 0, total = 0;
   const check = (r: boolean): void => { total++; if (r) ok++; };
 
-  check(await testAsync('GET /api/hub/widgets serves contract 1 with only sessions when usage is off', async () => {
+  check(await testAsync('GET /api/hub/widgets serves contract 1 with sessions and git when usage is off', async () => {
     await withServer(ENV, async h => {
       const reply = await h.req('/api/hub/widgets');
       assert.equal(reply.status, 200);
       assert.equal(reply.json?.contract, 1);
-      assert.deepStrictEqual((reply.json?.widgets as { id: string }[]).map(w => w.id), ['sessions']);
+      assert.deepStrictEqual((reply.json?.widgets as { id: string }[]).map(w => w.id), ['sessions', 'git']);
+    });
+  }));
+
+  check(await testAsync('GET /api/hub/widgets/git with no pins serves no rows and a parseable updatedAt', async () => {
+    await withServer(ENV, async h => {
+      const reply = await h.req('/api/hub/widgets/git');
+      assert.equal(reply.status, 200);
+      assert.deepStrictEqual(reply.json?.rows, []);
+      assert.ok(!Number.isNaN(Date.parse(String(reply.json?.updatedAt))));
     });
   }));
 

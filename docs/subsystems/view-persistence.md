@@ -68,12 +68,14 @@ override it (see `dashboard.section` below).
   `management.gitLayout` (which of Management › Git's three shapes the switcher was left on, a bare `GitLayout` string guarded by `isGitLayout` on read;
   a phone draws Cards without overwriting a stored Table — see [git-stats](git-stats.md)).
 - **Client-only, zero deps** — no backend, and nothing here is shareable/bookmarkable by
-  design. The one URL param in the app is the opposite of persistence: `?session=<id>`, the
+  design. The URL params in the app are the opposite of persistence: `?session=<id>`, the
   deep link a tapped push notification opens (`lib/deepLink.ts`, put in ntfy's `Click` header
   by `server/lib/notify.ts` — see [push-notify](push-notify.md)). `deepLinkSession()` reads it
   once, memoises the answer for its two callers (`AppShell` picking the section,
   `SessionsView` opening the drawer), and strips it from the URL via `history.replaceState`,
-  precisely so a refresh or a bookmark does *not* replay it.
+  precisely so a refresh or a bookmark does *not* replay it. Its sibling `?view=git` is the same kind of one-shot: Lookout's Git pending tile opens it,
+  `deepLinkView()` reads it from the same single memoised parse (so neither caller can strip the other's param first), and `App.tsx` forces the
+  `management` section and sets `managementTab` to `git` — once per load (`takeDeepLinkManagementTab`), and not at all when a `?session=` beside it wins.
 - **Which of the five shapes draws the list is deliberately NOT in `dashboard.view`.** It
   used to be a `View` field, which made one click in the switcher the shape every future load
   opened in. The shape is not a filter, and it does not belong in the object the filters are

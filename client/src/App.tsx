@@ -1,9 +1,9 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 
 import { HeaderAccount } from './components/HeaderAccount';
 import { SideRail } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
-import { deepLinkSession } from './lib/deepLink';
+import { deepLinkSession, deepLinkView, takeDeepLinkManagementTab } from './lib/deepLink';
 import { isSection, type Section } from './lib/sections';
 import { useAccount } from './hooks/useAccount';
 import { useShellNarrow } from './hooks/useNarrow';
@@ -32,21 +32,30 @@ export function App() {
  * paint of a section — `useSettings` can't be called in `App` itself.
  */
 function AppShell() {
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
   const [stored, setStored] = usePersistedState<Section>('dashboard.section', 'sessions');
   // A `landing` other than 'last' pins the opening tab. Resolved once, in the
   // initializer, so there's no flash of the previously-open section; after that
   // navigation is normal and the last section is still remembered for next time.
   // A `?session=` deep link — a tapped push notification — beats both: it exists
-  // only to put you on that session's chat.
+  // only to put you on that session's chat. `?view=git` — Lookout's Git pending
+  // tile — does the same for Management › Git.
   // `isSection` filters a value left over from a release that had a section
   // this one doesn't (the removed Guides tab), which would otherwise render
   // the final `else` branch — Settings — instead of the sessions list.
   const [section, setSection] = useState<Section>(() => {
     if (deepLinkSession()) return 'sessions';
+    if (deepLinkView() === 'git') return 'management';
     const want = settings.landing === 'last' ? stored : settings.landing;
     return isSection(want) ? want : 'sessions';
   });
+
+  // The sub-view is a setting, so it is written after the first render, not in the initializer above. `update` changes with every settings write, so
+  // this effect re-runs; `takeDeepLinkManagementTab` answers only once, or a later pick of Pinned would snap back to Git.
+  useEffect(() => {
+    const tab = takeDeepLinkManagementTab();
+    if (tab) update({ managementTab: tab });
+  }, [update]);
 
   const change = (s: Section): void => {
     setSection(s);
