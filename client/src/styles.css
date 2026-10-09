@@ -1820,15 +1820,16 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    both, so the path keeps the width; from md it is one line of three grid columns
    under a column header, the two right columns fixed so the ages line up down the
    list. Management › Projects does not use it: it draws its own `.pj-*` shapes below,
-   sharing only the `.pin-group` / `.pin-count` heads, `.pin-sub` notes and the filter. */
+   sharing only the `.pin-group` / `.pin-count` heads, `.pin-sub` notes and `.pin-note`,
+   and the match function (`matchesPinFilter`) behind its own `.pin-filter` box. */
 .pin-pick{display:flex;flex-direction:column;gap:8px;min-width:0;width:100%}
 .pin-list{list-style:none;margin:0;padding:0;max-height:240px;overflow-y:auto;overscroll-behavior:contain}
 .pin-head{display:none;font-size:11px;color:var(--ink3);padding:6px 0 0}
 .pin-head span:nth-child(2){text-align:right}
 .pin-row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;row-gap:2px;align-items:center;padding:10px 0;border-top:1px solid var(--hairline)}
 .pin-row:first-child{border-top:0}
-/* a heading or the column header sits on the list's first hairline rather than floating over it */
-.pin-head+.pin-list>.pin-row:first-child,.pin-group+.pin-list>.pin-row:first-child{border-top:1px solid var(--hairline)}
+/* the column header sits on the list's first hairline rather than floating over it */
+.pin-head+.pin-list>.pin-row:first-child{border-top:1px solid var(--hairline)}
 .pin-path{font-size:13px;line-height:1.45;color:var(--ink2);min-width:0}
 /* each segment atomic: a line breaks only between them, and inside one only when it alone is wider than the column */
 .pin-seg,.pin-path b{display:inline-block;max-width:100%;overflow-wrap:anywhere}
@@ -1837,7 +1838,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pin-sub.err{color:var(--red)}
 .pin-age{grid-column:1;font-size:12px;color:var(--ink3);white-space:nowrap}
 .pin-row .qp-term{grid-column:2;grid-row:1/span 2;justify-self:end}
-/* The picker's and Projects' groups: a heading each, its count beside it */
+/* Projects' groups: a heading each, its count beside it */
 .pin-group{padding:14px 0 2px;font-size:13px;font-weight:500;color:var(--ink)}
 .pin-count{font-size:12px;font-weight:400;color:var(--ink3);margin-left:6px}
 @media (min-width:768px){
@@ -1872,14 +1873,16 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pj-tile .qp-term:disabled,.pj-srw .set-control>.qp-term:disabled{color:var(--ink3);cursor:default;opacity:1}
 @media (min-width:768px){
   .pj-tile .qp-term,.pj-srw .set-control>.qp-term{min-height:0}
+  .pj-cols .pj-tile{flex-direction:row;align-items:center}
+  .pj-cols .pj-id{flex:1}
+  .pj-cols .pj-tfoot{flex:none;gap:12px}
 }
-/* Columns and Lists: the two groups stacked on the phone, side by side from lg (Not pinned left, Pinned right), one tile a row */
+/* Columns and Lists: the two groups stacked on the phone, side by side from lg (Not pinned left, Pinned right). A Columns tile
+   stacks like a Tiles tile on the phone, where a row would leave the name ~60px; from md the single column is wide enough
+   for one row a tile. */
 .pj-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;align-items:start}
 .pj-cols>section{min-width:0}
 .pj-cols .pj-tiles{grid-template-columns:minmax(0,1fr)}
-.pj-cols .pj-tile{flex-direction:row;align-items:center}
-.pj-cols .pj-id{flex:1}
-.pj-cols .pj-tfoot{flex:none;gap:12px}
 /* Lists: each column a plain `.set-group` card of `.set-row`s — no Settings page grid around it */
 .pj-listcard{min-width:0}
 /* `.set-row.pj-srw`: the Settings row rules come later in the file and would win a tie */
