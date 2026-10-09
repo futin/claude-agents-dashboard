@@ -29,7 +29,7 @@ const ROW_GAP = 24;
 const TOP = 30;
 /** The label columns left and right of the track; the phone gets slimmer ones so the track keeps room. */
 const WIDE = { left: 128, right: 132 };
-const NARROW = { left: 72, right: 100 };
+const NARROW = { left: 88, right: 100 };
 const NARROW_BELOW = 560;
 /** A day label needs this much segment; the pre segment's `earlier` needs more. */
 const DAY_LABEL_MIN_PX = 30;
