@@ -22,13 +22,21 @@
    buttons open a popover. Five page layouts and six toolbar treatments were
    compared as artboards before this shape won.
 
-   Usage: two tabs. Forecast is the analyst's sheet — five figures, the
+   Usage: three tabs. Forecast is the analyst's sheet — five figures, the
    headroom chart, the same 117 hours as table rows, then the learned week —
    and Token value is the per-model fit as one table plus its evidence ledger.
    Both carry the live tab's reading aids: the ⓘ definitions (printed once in
    the script's DEFS table and quoted by the glyph and the Definitions sheet
    alike), the never→always ramp and the red 100% rule. Six page layouts and
    six chart treatments were compared as artboards before this shape won.
+   History is the live tab as shipped, redrawn in these tokens: a
+   7d | 30d | 90d pill, four figures, the utilization chart, and the
+   weekly windows as rows. The shipped two-panel step chart did not read, so
+   five charts were compared as artboards and the weekly fill won: one bar per
+   weekly window, filled day by day up to the limit. (Bars per 5-hour window,
+   day rows of 5-hour blocks, an annotated single panel and a card per day
+   were drawn and dropped.) Its bar drives recording on / off / never, loading
+   and a failed read.
 
    Settings: two scopes, Local (this browser's storage) and Shared (the server,
    so every device), each a rail sub-nav page like Usage. The page header is a
@@ -1844,6 +1852,51 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 }
 .inspect .an-empty{box-shadow:none;padding:32px 0}
 
+/* ── usage · history ─────────────────────────────────────────────────────
+   One bar per weekly window, filled day by day in alternating greens, on a
+   track whose right edge is the red limit rule. A day whose jump spans hours
+   nothing was recording wears the signature hatch over its green. */
+.hist-range{align-self:flex-start}
+.hist-chart{position:relative;width:100%;margin-top:16px}
+.hist-chart svg{display:block}
+.hist-tip{
+  position:absolute;display:none;pointer-events:none;z-index:5;white-space:pre;
+  background:var(--ink-inverse);color:var(--text-on-dark);font-size:12px;line-height:1.5;
+  padding:7px 10px;border-radius:var(--r-sm);box-shadow:var(--lift-float);
+}
+.hist-xlab{font-size:10px;fill:var(--text-tertiary);text-anchor:middle}
+.hist-xlab.lim{fill:var(--red-500)}
+.hist-grid{stroke:var(--border);stroke-width:1;stroke-dasharray:3 3}
+.hist-lim{stroke:var(--red-500);stroke-width:1;stroke-dasharray:4 3;opacity:.7}
+.hist-hatch{stroke:rgba(255,255,255,.55);stroke-width:1.5}
+.hist-track{fill:var(--bg-subtle)}
+.hist-seg.a{fill:var(--green-500)}
+.hist-seg.b{fill:var(--green-400)}
+.hist-seg.pre{fill:var(--border-strong)}
+.hist-bin{font-size:10px;font-weight:600;text-anchor:middle;fill:var(--text-primary);pointer-events:none}
+.hist-bin.inv{fill:var(--text-on-dark)}
+.hist-dlabel{font-size:11px;font-weight:500;fill:var(--text-primary);text-anchor:end}
+.hist-sub{font-size:10px;fill:var(--text-tertiary);text-anchor:end}
+.hist-sub.start{text-anchor:start}
+.hist-wk{font-size:13px;font-weight:600;fill:var(--text-primary)}
+.hist-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;font-size:12px;color:var(--text-secondary)}
+.hist-legend span{display:inline-flex;align-items:center;gap:6px}
+.hist-sw{display:inline-block;width:16px;height:10px;border-radius:2px}
+.hist-sw.seg.a{background:var(--green-500)}
+.hist-sw.seg.b{background:var(--green-400)}
+.hist-sw.seg.pre{background:var(--border-strong)}
+.hist-sw.lim{height:0;border-top:1.5px dashed var(--red-500);border-radius:0}
+.hist-sw.gap{
+  background-color:var(--green-500);
+  background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.55) 0 1.5px,transparent 1.5px 4px);
+}
+.dt td.lim{color:var(--red-500);font-weight:500}
+.up-off{
+  display:flex;gap:10px;font-size:13px;line-height:1.5;color:var(--text-secondary);
+  border-radius:var(--r-lg);background:#FDEEDF;padding:16px 20px;
+}
+.up-off b{color:var(--text-primary);font-weight:500}
+
 /* page switching */
 .page{display:none;flex-direction:column;gap:16px}
 .page.on{display:flex}
@@ -1884,6 +1937,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
       <div class="subnav" id="subnav">
         <button data-go="forecast" id="sub-forecast">Forecast</button>
         <button data-go="rates" id="sub-rates">Token value</button>
+        <button data-go="history" id="sub-history">History</button>
       </div>
       <button class="nav-item" id="nav-mgmt" data-go="mgmt">
         <svg class="ic" viewBox="0 0 20 20"><circle cx="6" cy="4.5" r="1.8"/><circle cx="6" cy="15.5" r="1.8"/><circle cx="14" cy="8" r="1.8"/><path d="M6 6.3v7.4M14 9.8c0 2.7-3 3.2-8 3.9"/></svg>
@@ -2053,6 +2107,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
           <div class="seg ground">
             <button class="on" data-go="forecast">Forecast</button>
             <button data-go="rates">Token value</button>
+            <button data-go="history">History</button>
           </div>
         </div>
       </div>
@@ -2191,6 +2246,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
           <div class="seg ground">
             <button data-go="forecast">Forecast</button>
             <button class="on" data-go="rates">Token value</button>
+            <button data-go="history">History</button>
           </div>
         </div>
       </div>
@@ -2356,6 +2412,14 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
       </div>
     </section>
 
+    <!-- ═══ PAGE: USAGE · HISTORY ════════════════════════════════════════
+         Backward-looking, where Forecast walks forward: the 5-hour and weekly
+         windows as recorded on this machine over a chosen range. The live tab
+         (UsageHistory.tsx), redrawn: a range pill, four figures, each weekly
+         window as a bar filled day by day, then the weekly windows as rows. The bar at the top drives the states the live fetch can be
+         in. Rendered by the USAGE HISTORY block in the <script>. -->
+    <section class="page" id="p-history"></section>
+
 
 
 
@@ -2436,18 +2500,18 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 
 <script>
 /* ── artboard switching ──────────────────────────────────────────────────
-   A page id is the artboard: `sessions`, `forecast`, `rates`, `set-local`,
+   A page id is the artboard: `sessions`, `forecast`, `rates`, `history`, `set-local`,
    `set-shared`, `mg-projects`, `mg-git`, `configs`. The mock bar picks the
-   section and the pill inside the Usage pages switches its two tabs, the same
+   section and the pill inside the Usage pages switches its three tabs, the same
    tree the rail draws. `mgmt` means "Management, on the last tab shown", the
    way `usage` does for Usage. */
-const PAGES = ['sessions', 'forecast', 'rates', 'set-local', 'set-shared', 'mg-projects', 'mg-git', 'configs', 'analytics', 'chat', 'spawn'];
+const PAGES = ['sessions', 'forecast', 'rates', 'history', 'set-local', 'set-shared', 'mg-projects', 'mg-git', 'configs', 'analytics', 'chat', 'spawn'];
 
 
 function go(page){
   if (page === 'usage') page = lastUsage;
   if (page === 'mgmt') page = lastMgmt;
-  const usage = page === 'forecast' || page === 'rates';
+  const usage = page === 'forecast' || page === 'rates' || page === 'history';
   if (usage) lastUsage = page;
   const mgmt = page === 'mg-git' || page === 'mg-projects';
   if (mgmt) lastMgmt = page;
@@ -2473,6 +2537,7 @@ function go(page){
   document.getElementById('subnav').style.display = usage ? 'flex' : 'none';
   document.getElementById('sub-forecast').classList.toggle('on', page === 'forecast');
   document.getElementById('sub-rates').classList.toggle('on', page === 'rates');
+  document.getElementById('sub-history').classList.toggle('on', page === 'history');
   document.getElementById('nav-settings').classList.toggle('on', settings);
   document.getElementById('subnav-set').style.display = settings ? 'flex' : 'none';
   document.getElementById('sub-local').classList.toggle('on', page === 'set-local');
@@ -5114,6 +5179,356 @@ unpersisted, since session ids churn.`;
   document.addEventListener('click', (e) => {
     if (S.pop && !e.target.closest('.pop, [data-anpop]')) { S.pop = null; render(); }
   });
+
+  render();
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════
+   USAGE HISTORY — the 5-hour and weekly windows as recorded, over a range.
+
+   The fixture mirrors `GET /api/usage/history?days=N`: every window carries
+   its readings split into segments at each gap, and `gaps` lists the stretches
+   nothing was recording. It is built once, for 90 days, by walking a working
+   week in 10-minute steps against a fixed "now" (Wed 9 Sep, the Forecast
+   page's now): weekday office hours burn the 5-hour window, a window opens on
+   the first activity after the last one reset and closes five hours later,
+   the weekly window resets Monday 09:00 and climbs with every 5-hour point.
+   Readings are write-on-change, so the line is step-after, never a ramp —
+   the same rule as `stepPath` in client/src/lib/usageHistory.ts. Each range
+   is a slice of the one walk, so 7d is exactly the right edge of 90d.
+
+   States on the bar: recording on (the default), off with data (the walk
+   stops 38h ago and the tail is a gap, with the "history ends at" note), off
+   and never recorded (the amber notice, the whole range hatched), loading and
+   a failed read (the range pill and a note, as the live tab draws them).
+   ═══════════════════════════════════════════════════════════════════════ */
+(function () {
+  const root = document.getElementById('p-history');
+  if (!root) return;
+
+  const MIN = 60_000, HOUR = 60 * MIN, DAY = 24 * HOUR, STEP = 10 * MIN;
+  const NOW = new Date(2026, 8, 9, 11, 40).getTime();
+  const RANGES = [{ days: 7, label: '7d' }, { days: 30, label: '30d' }, { days: 90, label: '90d' }];
+  const S = { days: 7, state: 'on' };   // on | off | never | loading | error
+
+  /* ── the walk ────────────────────────────────────────────────────────── */
+  let seed = 11;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+
+  /* laptop lid shut: [hours ago it started, hours long] — a long weekend
+     away, a few nights, one afternoon with the dashboard server down */
+  const GAPS = [[1490, 96], [1102, 11], [760, 30], [431, 14], [205, 9], [62, 13], [17.5, 2.5]]
+    .map(([ago, len]) => ({ fromT: NOW - ago * HOUR, toT: NOW - ago * HOUR + len * HOUR }));
+
+  const burnAt = (t) => {
+    const d = new Date(t), h = d.getHours() + d.getMinutes() / 60, wd = (d.getDay() + 6) % 7;
+    const weekend = wd >= 5;
+    if (h >= 9 && h < 13) return weekend ? .15 : .9;
+    if (h >= 14 && h < 18.5) return weekend ? .2 : .8;
+    if (h >= 20 && h < 23.5) return weekend ? .35 : .45;
+    return 0;
+  };
+  const weekStart = (t) => {
+    const d = new Date(t); d.setHours(9, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    if (d.getTime() > t) d.setDate(d.getDate() - 7);
+    return d.getTime();
+  };
+
+  /* every reading, recording or not; the gaps are cut out afterwards */
+  const five = [], weekly = [];
+  {
+    const T0 = NOW - 90 * DAY;
+    let win = null, wk = null;
+    for (let t = T0; t <= NOW; t += STEP) {
+      const burn = burnAt(t) * (.4 + rnd() * 1.2);
+      if (win && t >= win.resetT) win = null;
+      if (!win && burn > 0) { win = { resetT: t + 5 * HOUR, pct: 0, k: .5 + rnd() * rnd() * 2.6, pts: [] }; five.push(win); }
+      if (win) {
+        const add = burn * win.k * (1.6 + rnd() * 1.4);
+        win.pct = Math.min(100, win.pct + add);
+        win.pts.push({ t, pct: Math.round(win.pct * 10) / 10 });
+      }
+      const ws = weekStart(t);
+      if (!wk || wk.startT !== ws) { wk = { startT: ws, resetT: ws + 7 * DAY, pct: 0, k: .6 + rnd() * .7, pts: [] }; weekly.push(wk); }
+      if (win) wk.pct = Math.min(100, wk.pct + burn * wk.k * .2);
+      wk.pts.push({ t, pct: Math.round(wk.pct * 10) / 10 });
+    }
+    /* land the current week on the Forecast page's 61%, so the two tabs agree */
+    const cur = weekly[weekly.length - 1], k = 61 / cur.pct;
+    cur.pts.forEach(p => { p.pct = Math.round(p.pct * k * 10) / 10; });
+  }
+
+  /* ── the response for one range and state ────────────────────────────── */
+  function response(days, state) {
+    const sinceT = NOW - days * DAY;
+    const stopT = state === 'off' ? NOW - 38 * HOUR : state === 'never' ? sinceT : Infinity;
+    const gaps = GAPS.filter(g => g.toT > sinceT && g.fromT < stopT)
+      .map(g => ({ fromT: Math.max(g.fromT, sinceT), toT: Math.min(g.toT, NOW) }));
+    if (stopT < NOW) gaps.push({ fromT: Math.max(stopT, sinceT), toT: NOW });
+    const recorded = (t) => t >= sinceT && t < stopT && !GAPS.some(g => t >= g.fromT && t < g.toT);
+
+    /* split at gaps, then keep only the points that change the reading plus
+       each segment's last — write-on-change, held flat by the step path */
+    const shape = (wins) => wins.map(w => {
+      const segments = [];
+      let cur = null, prevT = -Infinity;
+      for (const p of w.pts) {
+        if (!recorded(p.t)) { cur = null; continue; }
+        if (!cur || p.t - prevT > STEP) { cur = []; segments.push(cur); }
+        if (!cur.length || cur[cur.length - 1].pct !== p.pct || p.t - prevT > STEP) cur.push(p);
+        else cur.lastT = p.t;
+        prevT = p.t;
+      }
+      segments.forEach(seg => { if (seg.lastT && seg.lastT > seg[seg.length - 1].t) seg.push({ t: seg.lastT, pct: seg[seg.length - 1].pct }); });
+      const all = segments.flat();
+      if (!all.length) return null;
+      return {
+        resetsAt: w.resetT, firstT: all[0].t, lastT: all[all.length - 1].t,
+        peakPct: Math.max(...all.map(p => p.pct)), segments
+      };
+    }).filter(Boolean);
+
+    return { days, sinceT, nowT: NOW, recording: state === 'on', fiveHour: shape(five), weekly: shape(weekly), gaps };
+  }
+
+  /* ── formatting ──────────────────────────────────────────────────────── */
+  const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const hm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const fmtWhen = (t) => { const d = new Date(t); return `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]} ${hm(d)}`; };
+  const fmtPct = (p) => String(Math.round(p * 10) / 10);
+  const rangeLabel = (days) => RANGES.find(r => r.days === days).label;
+
+  /* ── the chart: each weekly window, filled day by day ────────────────────
+     One bar per weekly window, newest on top, built from one segment per day:
+     a segment's length is how much of the week that day spent, so the bar
+     ends at the week's reading and its right edge is the weekly limit — a full
+     bar is a week you ran out. The right column prints the peak and how many
+     5-hour windows hit their limit inside the week.
+
+     The readings are write-on-change, so a day that ran past a stretch nothing
+     was recording takes the whole jump the next reading shows; that segment
+     wears the hatch and its tooltip says how many hours it covers.
+
+     Won over four other versions drawn on this page: one bar per 5-hour window
+     over a weekly band, day rows of 5-hour blocks, the shipped two-panel chart
+     folded onto one annotated scale, and a card per day with a sparkline. The
+     shipped two-panel step chart (a sawtooth of 5-hour teeth over a slow
+     weekly ramp) is what started the comparison: it did not read. */
+  const n = (v) => String(Math.round(v * 100) / 100);
+  const WEEK = 7 * DAY;
+  const clampP = (p) => Math.min(100, Math.max(0, p));
+  const dur = (ms) => ms >= DAY ? `${Math.round(ms / DAY * 10) / 10}d` : `${Math.max(1, Math.round(ms / HOUR))}h`;
+  const dayLabel = (t, long) => { const d = new Date(t); return long ? `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}` : `${DOW[d.getDay()]} ${d.getDate()}`; };
+  const HATCH = `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <pattern id="hist-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line class="hist-hatch" x1="0" y1="0" x2="0" y2="6"/></pattern></defs></svg>`;
+
+  /* the last reading at or before `t` inside one window, 0 before its first */
+  const heldAt = (win, t) => {
+    let v = 0;
+    for (const seg of win.segments) for (const p of seg) { if (p.t > t) return v; v = p.pct; }
+    return v;
+  };
+  /* when that reading was taken, null before the window's first */
+  const lastReadT = (win, t) => {
+    let lt = null;
+    for (const seg of win.segments) for (const p of seg) { if (p.t > t) return lt; lt = p.t; }
+    return lt;
+  };
+  const midnights = (from, to) => {
+    const d = new Date(from); d.setHours(0, 0, 0, 0);
+    const out = [];
+    for (; d.getTime() < to; d.setDate(d.getDate() + 1)) out.push(d.getTime());
+    return out;
+  };
+
+  function chart(r, w) {
+    const weeks = [...r.weekly].reverse();
+    if (!weeks.length) return '<p class="note">No weekly reading was recorded in this range.</p>';
+    const L = 128, R = 132, rowH = 26, gap = 24, top = 30, pw = w - L - R;
+    const xp = (p) => L + clampP(p) / 100 * pw;
+    const H = top + weeks.length * (rowH + gap) - gap + 8;
+    const grid = [0, 25, 50, 75, 100].map(p =>
+      `<line class="${p === 100 ? 'hist-lim' : 'hist-grid'}" x1="${n(xp(p))}" x2="${n(xp(p))}" y1="${top - 6}" y2="${H}"/>` +
+      `<text class="hist-xlab${p === 100 ? ' lim' : ''}" x="${n(xp(p))}" y="${top - 12}">${p === 100 ? 'limit' : p + '%'}</text>`).join('');
+    const rows = weeks.map((wk, i) => {
+      const y = top + i * (rowH + gap), ws = wk.resetsAt - WEEK, cur = wk.resetsAt > r.nowT;
+      let out = `<rect class="hist-track" x="${L}" y="${y}" width="${pw}" height="${rowH}" rx="4"/>`;
+      /* the oldest week usually opens before the range does: what it had
+         already spent by then is one grey segment, not the first day's gain */
+      const partial = ws < r.sinceT, start = partial ? r.sinceT : ws;
+      const pre = partial ? wk.segments[0][0].pct : 0;
+      const at = (t) => partial && t <= wk.firstT ? pre : heldAt(wk, t);
+      if (pre >= .3) {
+        const pw0 = Math.max(1.5, xp(pre) - L - 1);
+        out += `<rect class="hist-seg pre" x="${L}" y="${y}" width="${n(pw0)}" height="${rowH}" rx="3" data-tip="before this range\n${fmtPct(pre)}% of the week was already spent when the ${rangeLabel(r.days)} range opens"/>`;
+        if (pw0 >= 44) out += `<text class="hist-bin" x="${n(L + pw0 / 2)}" y="${y + rowH / 2 + 4}">earlier</text>`;
+      }
+      const bounds = [start, ...midnights(start, wk.resetsAt).filter(t => t > start), wk.resetsAt];
+      bounds.slice(0, -1).forEach((s, di) => {
+        const e = Math.min(bounds[di + 1], r.nowT);
+        if (s >= r.nowT) return;
+        const v0 = at(s), v1 = at(e);
+        const gain = v1 - v0;
+        if (gain < .3) return;
+        /* unrecorded time between the reading this day starts from and its end:
+           whatever was spent in it lands in this day's jump */
+        const from = lastReadT(wk, s) ?? start;
+        const offMs = r.gaps.reduce((m, g) => m + Math.max(0, Math.min(g.toT, e) - Math.max(g.fromT, from)), 0);
+        const off = offMs >= HOUR ? offMs : 0;
+        const sx = xp(v0) + (v0 > 0 ? 1 : 0), sw = Math.max(1.5, xp(v1) - xp(v0) - (v0 > 0 ? 2 : 1));
+        const tip = `${dayLabel(s, true)}${partial && s === start ? ` from ${hm(new Date(s))}` : ''}\n+${fmtPct(gain)}% of the week · ${fmtPct(v1)}% by the end of the day` +
+          (off ? `\nincludes ${dur(off)} not recorded — use from those hours lands here` : '');
+        out += `<rect class="hist-seg ${di % 2 ? 'b' : 'a'}" x="${n(sx)}" y="${y}" width="${n(sw)}" height="${rowH}" rx="3" data-tip="${tip}"/>`;
+        if (off) out += `<rect class="hist-seg-off" x="${n(sx)}" y="${y}" width="${n(sw)}" height="${rowH}" rx="3" fill="url(#hist-hatch)" data-tip="${tip}"/>`;
+        if (sw >= 30) out += `<text class="hist-bin${di % 2 ? '' : ' inv'}" x="${n(sx + sw / 2)}" y="${y + rowH / 2 + 4}">${DOW[new Date(s).getDay()]}</text>`;
+      });
+      const hits = r.fiveHour.filter(f => f.peakPct >= 100 && f.resetsAt - 5 * HOUR >= ws && f.resetsAt - 5 * HOUR < wk.resetsAt).length;
+      const d = new Date(ws);
+      out += `<text class="hist-dlabel" x="${L - 12}" y="${y + 11}">${cur ? 'This week' : `${d.getDate()} ${MON[d.getMonth()]}`}</text>` +
+        `<text class="hist-sub" x="${L - 12}" y="${y + 24}">resets ${dayLabel(wk.resetsAt)}</text>` +
+        `<text class="hist-wk" x="${w - R + 12}" y="${y + 13}">${fmtPct(wk.peakPct)}%${cur ? ' so far' : ''}</text>` +
+        `<text class="hist-sub start" x="${w - R + 12}" y="${y + 26}">${hits ? `${hits} × 5h limit hit` : 'no 5h limit hit'}</text>`;
+      return out;
+    }).join('');
+    return HATCH + `<svg width="${w}" height="${H}" role="img" aria-label="Each weekly window filled day by day">${grid}${rows}</svg>` +
+      '<div class="hist-tip" role="tooltip"></div>';
+  }
+
+  /* ── the page ────────────────────────────────────────────────────────── */
+  const varbar = () => `<div class="varbar">
+      <span class="tag">History · state</span>
+      ${[['on', 'recording on'], ['off', 'recording off'], ['never', 'never recorded'], ['loading', 'loading'], ['error', 'read failed']]
+        .map(([k, l]) => `<button data-hstate="${k}" aria-pressed="${S.state === k}">${l}</button>`).join('')}
+    </div>`;
+
+  const band = () => `<div class="band">
+      <div class="usg-head">
+        <div>
+          <div class="ct">Usage · History</div>
+          <div class="cs">5-hour and weekly utilization as recorded on this machine · gaps are time nothing was recording</div>
+        </div>
+        <span class="sp" style="flex:1"></span>
+        <div class="seg ground">
+          <button data-go="forecast">Forecast</button>
+          <button data-go="rates">Token value</button>
+          <button class="on" data-go="history">History</button>
+        </div>
+      </div>
+    </div>`;
+
+  const rangeSwitch = () => `<div class="seg ground hist-range" role="group" aria-label="History range">
+      ${RANGES.map(x => `<button class="${x.days === S.days ? 'on' : ''}" aria-pressed="${x.days === S.days}" data-hdays="${x.days}">${x.label}</button>`).join('')}
+    </div>`;
+
+  const strip = (r) => {
+    const missing = r.gaps.reduce((s, g) => s + (g.toT - g.fromT), 0);
+    const coverage = Math.round(100 * (1 - missing / (r.nowT - r.sinceT)));
+    const atLimit = r.fiveHour.filter(w => w.peakPct >= 100).length;
+    const peak = r.weekly.length ? Math.max(...r.weekly.map(w => w.peakPct)) : null;
+    return `<div class="statstrip" style="grid-template-columns:repeat(4,1fr)">
+      <div><div class="k">Recorded</div><div class="v">${coverage}%</div><div class="s">of the last ${rangeLabel(r.days)}</div></div>
+      <div><div class="k">5h windows</div><div class="v">${r.fiveHour.length}</div><div class="s">distinct resets seen</div></div>
+      <div><div class="k">Hit 100%</div><div class="v${atLimit ? ' warn' : ''}">${atLimit}</div><div class="s">5-hour windows at the limit</div></div>
+      ${peak === null
+        ? '<div><div class="k">Weekly peak</div><div class="v">—</div><div class="s">no weekly reading in range</div></div>'
+        : `<div><div class="k">Weekly peak</div><div class="v">${fmtPct(peak)}%</div><div class="s">highest weekly reading</div></div>`}
+    </div>`;
+  };
+
+  const weeklyTable = (r) => {
+    const rows = [...r.weekly].reverse();
+    if (!rows.length) return '<p class="note">No weekly reading was recorded in this range.</p>';
+    return `<table class="dt">
+      <thead><tr><th>Resets at</th><th>Recorded from</th><th class="n">Peak</th><th class="barcell"></th></tr></thead>
+      <tbody>${rows.map(w => `<tr>
+        <td class="name">${fmtWhen(w.resetsAt)}${w.resetsAt > NOW ? ' <span class="cs" style="display:inline">· current</span>' : ''}</td>
+        <td>${fmtWhen(w.firstT)}</td>
+        <td class="n${w.peakPct >= 100 ? ' lim' : ''}">${fmtPct(w.peakPct)}%</td>
+        <td class="barcell"><i class="bar" style="width:${Math.min(100, w.peakPct)}%;${w.peakPct >= 100 ? 'background:var(--red-500)' : ''}"></i></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  };
+
+  function body() {
+    if (S.state === 'loading') return rangeSwitch() + '<p class="note" style="margin-top:0">reading the usage history…</p>';
+    if (S.state === 'error') return rangeSwitch() + '<p class="note" style="margin-top:0">The usage history could not be read.</p>';
+    const r = response(S.days, S.state === 'never' ? 'never' : S.state);
+    const hasData = r.fiveHour.length > 0 || r.weekly.length > 0;
+    const lastT = r.fiveHour.reduce((m, w) => Math.max(m, w.lastT), 0);
+    return rangeSwitch() +
+      (!r.recording && !hasData ? `<div class="up-off"><span>⚠</span><span>Usage recording is <b>off</b>, so nothing has been recorded.
+        Turn on <b>Record usage history</b> in <a href="#set-shared" data-go="set-shared" style="color:inherit">Settings</a> — the history fills in from the next sample.</span></div>` : '') +
+      (!r.recording && hasData && lastT ? `<p class="note" style="margin-top:0">Recording is off — the history ends at ${fmtWhen(lastT)}.</p>` : '') +
+      strip(r) +
+      `<div class="sheet">
+        <div class="row-head"><div>
+          <div class="ct">Utilization over time</div>
+          <div class="cs">One bar per weekly window, filled day by day · the right edge is the weekly limit, so a full bar is a week you ran out</div>
+        </div></div>
+        <div class="hist-chart" data-hchart></div>
+        <div class="hist-legend">
+          <span><i class="hist-sw seg a"></i><i class="hist-sw seg b"></i>one day's share of the week</span>
+          <span><i class="hist-sw seg pre"></i>spent before the range starts</span>
+          <span><i class="hist-sw lim"></i>the weekly limit</span>
+          <span><i class="hist-sw gap"></i>holds hours nothing was recording</span>
+        </div>
+      </div>
+      <div class="sheet">
+        <div class="row-head"><div>
+          <div class="ct">Weekly windows</div>
+          <div class="cs">Newest first · peak is the highest weekly reading recorded in range</div>
+        </div></div>
+        ${weeklyTable(r)}
+      </div>`;
+  }
+
+  /* the chart is drawn at the measured pixel width, like the live tab, so a
+     resize redraws it rather than stretching the strokes */
+  let last = null;
+  function drawChart() {
+    const box = root.querySelector('[data-hchart]');
+    if (!box || !box.clientWidth) return;
+    last = last || response(S.days, S.state);
+    box.innerHTML = chart(last, box.clientWidth);
+  }
+  function render() {
+    last = null;
+    root.innerHTML = varbar() + band() + body();
+    root.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', (e) => { e.preventDefault(); go(el.dataset.go); }));
+    drawChart();
+  }
+
+  root.addEventListener('click', (ev) => {
+    const hit = (s) => ev.target.closest(s);
+    let el;
+    if ((el = hit('[data-hstate]'))) S.state = el.dataset.hstate;
+    else if ((el = hit('[data-hdays]'))) S.days = Number(el.dataset.hdays);
+    else return;
+    render();
+  });
+
+  /* one tooltip for the chart: the [data-tip] mark under the pointer */
+  root.addEventListener('mousemove', (ev) => {
+    const box = root.querySelector('[data-hchart]');
+    const tip = box && box.querySelector('.hist-tip');
+    if (!tip) return;
+    const el = ev.target.closest('[data-tip]');
+    if (!el || !box.contains(el)) { tip.style.display = 'none'; return; }
+    const at = box.getBoundingClientRect(), mx = ev.clientX - at.left, my = ev.clientY - at.top;
+    tip.textContent = el.dataset.tip;
+    tip.style.display = 'block';
+    tip.style.left = Math.max(4, Math.min(mx + 14, box.clientWidth - tip.offsetWidth - 4)) + 'px';
+    tip.style.top = (my + 16) + 'px';
+  });
+  root.addEventListener('mouseleave', () => {
+    const tip = root.querySelector('.hist-tip');
+    if (tip) tip.style.display = 'none';
+  });
+  new ResizeObserver(() => drawChart()).observe(root);
+  document.addEventListener('artboard', () => { if (root.classList.contains('on')) drawChart(); });
 
   render();
 })();
