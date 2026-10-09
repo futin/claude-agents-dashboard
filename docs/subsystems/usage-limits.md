@@ -526,8 +526,7 @@ before `confidence` leaves `thin`, and no test substitutes for that.
 
 ### The history view
 
-Usage → **History** (`client/src/components/usage/UsageHistory.tsx`) answers "how full was the window last Tuesday": the 5-hour window's sawtooth and the
-weekly window over the last 24h / 7d / 30d / 90d (component state, default 7d, not persisted), read back from `.usage-history.jsonl`.
+Usage → **History** (`client/src/components/usage/UsageHistory.tsx`) answers "how full was the week last Tuesday": the weekly windows, each filled day by day, over the last 7d / 30d / 90d (component state, default 7d, not persisted), read back from `.usage-history.jsonl`.
 
 - **Endpoint.** `GET /api/usage/history?days=N` (`server/api.ts` `serveUsageHistory`; read-only, unpolled, no token). `days` is accepted only as digits, clamped
   to `[1, 365]`, and is 7 otherwise. The body is `UsageHistoryResponse` in `shared/types.ts`: downsampled utilization with ms-epoch times, never paths or token
@@ -543,14 +542,20 @@ weekly window over the last 24h / 7d / 30d / 90d (component state, default 7d, n
 - **Gaps, and why 20 minutes.** `GAP_MS` is the 15-minute heartbeat plus 5 minutes of slack: a live recorder writes at least every 15 minutes even when nothing
   changes, so a longer silence means nothing was recording — server down, token expired, or recording off. Inside a window a longer silence starts a new
   segment, so the line is never bridged; recording gaps (leading, interior, trailing) are computed once, from the 5-hour list, because every line carries a 5-hour
-  reading. They are drawn as a hatched "not recorded" band across both panels.
-- **Step-after rendering.** Each reading is held flat until the next sample (`stepPath` in `client/src/lib/usageHistory.ts`). The log is write-on-change, so
-  between two lines the value stayed at the earlier reading; linear interpolation across a quiet heartbeat stretch would draw a ramp that never happened.
+  reading. The chart marks them only as the hatch on a day that spans one.
+- **Held readings.** `weekRows` (`client/src/lib/usageHistory.ts`) holds the last reading at each local-midnight day boundary, for the same write-on-change reason:
+  between two lines the value stayed at the earlier reading, and interpolating across a quiet heartbeat stretch would draw a ramp that never happened.
 - **Downsampling.** `bucketMs = max(1 min, ceil(range / 1440 points) rounded up to whole minutes)`. Each segment keeps its first and last sample plus, per bucket,
   the highest reading (ties to the latest), so a thinned line never loses a peak. `peakPct` is taken before downsampling.
 
-The page is a range switch, a figure strip (Recorded %, 5h windows, Hit 100%, Weekly peak — `—`, never 0, with no weekly reading), the two-panel SVG chart drawn
-at the measured pixel width so strokes stay crisp at 390 px, and a weekly-windows table newest first. There is no hover tooltip yet.
+The page is a range switch, a figure strip (Recorded %, 5h windows, Hit 100%, Weekly peak — `—`, never 0, with no weekly reading), the weekly-fill chart, and a
+weekly-windows table newest first. The chart is hand-drawn SVG at the measured pixel width (so it stays usable at 390 px, where the label columns slim down):
+one bar per weekly window, newest first, whose right edge is the weekly limit, so a full bar is a week you ran out. Each bar is filled day by day — a segment per
+local day, as long as the share of the week that day spent, days under 0.3 points left undrawn. A week the range opens on (or recording picked up late) starts
+with a grey pre segment for what it had already spent, never credited to its first visible day. A day whose reading jumped across at least an hour of
+unrecorded time wears a hatch, and its tooltip says how many hours its jump covers. A row starts at the previous weekly window's observed reset, never at
+`resetsAt` minus 7 days; the oldest window and an unscoped one (no `resetsAt`, labelled `Unscoped`) have no known start. Every segment has a real tooltip through
+`useFloatingTip`, never a `title` attribute.
 
 ## Token value per model (the exchange rate, and its drift)
 

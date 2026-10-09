@@ -2208,28 +2208,32 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .usg-band{display:flex;align-items:flex-start;gap:16px}
 .usg-title{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
 .usg-sub{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:4px;max-width:92ch}
-/* Usage → History: range switch, the two-panel step chart (drawn at measured pixel width, so strokes need no vector-effect), its legend. */
+/* Usage → History: range switch, the weekly-fill chart (one bar per weekly window, drawn at measured pixel width, so strokes need no vector-effect), its legend. */
 .usg-hist-range{align-self:flex-start}
-.usg-hist-chart{width:100%;margin-top:12px;overflow:hidden}
-.usg-hist-chart svg{display:block}
-.usg-hist-ptitle{font-size:12px;font-weight:500;fill:var(--ink2)}
-.usg-hist-ylab{font-size:10px;fill:var(--ink3);text-anchor:end;font-variant-numeric:tabular-nums}
-.usg-hist-xlab{font-size:10px;fill:var(--ink3);text-anchor:middle}
-.usg-hist-grid{stroke:var(--hairline);stroke-width:1;stroke-dasharray:3 3}
-.usg-hist-base,.usg-hist-tick{stroke:var(--hairline2);stroke-width:1}
-.usg-hist-line{fill:none;stroke-width:1.5;stroke-linejoin:round}
-.usg-hist-line.five{stroke:var(--accent)}
-.usg-hist-line.wk{stroke:var(--magenta)}
-.usg-hist-dot.five{fill:var(--accent)}
-.usg-hist-dot.wk{fill:var(--magenta)}
-.usg-hist-hatch{stroke:var(--ink3);stroke-width:1.5;opacity:.35}
-.usg-hist-gap{stroke:none}
+.usg-wf{position:relative;width:100%;margin-top:12px}
+.usg-wf svg{display:block}
+.usg-wf-axis{font-size:10px;fill:var(--ink3);text-anchor:middle}
+.usg-wf-axis.lim{fill:var(--red)}
+.usg-wf-grid{stroke:var(--hairline);stroke-width:1;stroke-dasharray:3 3}
+.usg-wf-limit{stroke:var(--red);stroke-width:1;stroke-dasharray:4 3;opacity:.7}
+.usg-wf-track{fill:var(--surface2)}
+.usg-wf-seg.a{fill:color-mix(in oklab,var(--green) 70%,var(--surface))}
+.usg-wf-seg.b{fill:color-mix(in oklab,var(--green) 45%,var(--surface))}
+.usg-wf-seg.pre{fill:var(--steel)}
+.usg-wf-hatch{stroke:var(--surface);stroke-width:1.5;opacity:.55}
+.usg-wf-day{font-size:10px;font-weight:600;fill:var(--ink);text-anchor:middle;pointer-events:none}
+.usg-wf-lab{font-size:11px;font-weight:500;fill:var(--ink);text-anchor:end}
+.usg-wf-sub{font-size:10px;fill:var(--ink3);text-anchor:end}
+.usg-wf-sub.start{text-anchor:start}
+.usg-wf-peak{font-size:13px;font-weight:600;fill:var(--ink)}
 .usg-hist-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:12px;color:var(--ink2)}
 .usg-hist-legend span{display:inline-flex;align-items:center;gap:6px}
 .usg-hist-sw{display:inline-block;width:14px;height:10px;border-radius:2px}
-.usg-hist-sw.five{height:2px;background:var(--accent)}
-.usg-hist-sw.wk{height:2px;background:var(--magenta)}
-.usg-hist-sw.gap{border:1px solid var(--hairline2);background:repeating-linear-gradient(45deg,var(--ink3) 0 1px,transparent 1px 4px)}
+.usg-hist-sw.a{background:color-mix(in oklab,var(--green) 70%,var(--surface))}
+.usg-hist-sw.b{background:color-mix(in oklab,var(--green) 45%,var(--surface))}
+.usg-hist-sw.pre{background:var(--steel)}
+.usg-hist-sw.lim{height:0;border-top:1.5px dashed var(--red);border-radius:0}
+.usg-hist-sw.off{background:repeating-linear-gradient(45deg,color-mix(in oklab,var(--surface) 55%,transparent) 0 1.5px,transparent 1.5px 4px),color-mix(in oklab,var(--green) 70%,var(--surface))}
 
 /* ── the figure strip ────────────────────────────────────────────────────
    One card the ground divides, not five cards with gaps: the five figures are
