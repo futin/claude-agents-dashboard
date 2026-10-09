@@ -47,7 +47,7 @@ override it (see `dashboard.section` below).
   flash of the previously-open one. Whichever of the two wins is passed through `isSection`
   first, so a value naming a section this build no longer has (the removed Guides tab) lands
   on `sessions` rather than falling through `App.tsx`'s chain to Settings. The id
-  `management` is the new Git | Pinned tab; before the Claude Configs rename it named what is now
+  `management` is the new Projects | Git tab; before the Claude Configs rename it named what is now
   Claude Configs, and a stored one is not migrated — it opens the new tab.
   A `?session=` deep link outranks both and forces
   `sessions` (see the URL-param note below);
@@ -66,7 +66,10 @@ override it (see `dashboard.section` below).
   so a scope that aged out, a type the filter emptied and a sub-group that no longer exists
   fall back rather than stranding the page);
   `management.gitLayout` (which of Management › Git's three shapes the switcher was left on, a bare `GitLayout` string guarded by `isGitLayout` on read;
-  a phone draws Cards without overwriting a stored Table — see [git-stats](git-stats.md)).
+  a phone draws Cards without overwriting a stored Table — see [git-stats](git-stats.md));
+  `management.projectsLayout` (which of Management › Projects' three shapes, Tiles | Columns | Lists, the switcher was left on, a bare `ProjectsLayout` string
+  guarded by `isProjectsLayout` on read, default `tiles`; per device, an `OWNED_KEYS` entry so Reset sweeps it, no Settings picker; unlike Git's, it is never
+  coerced on a narrow window — see [settings](settings.md)).
 - **Client-only, zero deps** — no backend, and nothing here is shareable/bookmarkable by
   design. The one URL param in the app is the opposite of persistence: `?session=<id>`, the
   deep link a tapped push notification opens (`lib/deepLink.ts`, put in ntfy's `Click` header

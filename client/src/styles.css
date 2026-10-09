@@ -1813,18 +1813,16 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .sp-more:disabled{cursor:default;opacity:.55}
 .sp-older .pin-pick{align-self:stretch}
 
-/* The picker itself (PinPicker.tsx), shared by the launch sheet and Management ›
-   Pinned: a filter box, then boxless rows split by hairlines. The path IS the
-   row's title — parents dim, basename bright, no second name line — with the
-   last-session age and §8.2's 36px button beside it. On the phone the row is
-   two lines, path over age, the button spanning both, so the path keeps the
-   width; from md it is one line of three grid columns under a column header,
-   the two right columns fixed so the ages line up across Settings' two groups,
-   whose buttons (Pin / Unpin) differ in width. */
+/* The picker itself (PinPicker.tsx), the launch sheet's: a filter box, then boxless
+   rows split by hairlines. The path IS the row's title — parents dim, basename
+   bright, no second name line — with the last-session age and §8.2's 36px button
+   beside it. On the phone the row is two lines, path over age, the button spanning
+   both, so the path keeps the width; from md it is one line of three grid columns
+   under a column header, the two right columns fixed so the ages line up down the
+   list. Management › Projects does not use it: it draws its own `.pj-*` shapes below,
+   sharing only the `.pin-group` / `.pin-count` heads, `.pin-sub` notes and the filter. */
 .pin-pick{display:flex;flex-direction:column;gap:8px;min-width:0;width:100%}
 .pin-list{list-style:none;margin:0;padding:0;max-height:240px;overflow-y:auto;overscroll-behavior:contain}
-/* Management › Pinned is the list's own page: it grows with the page scroll, not a boxed one. */
-.set .pin-list{max-height:none;overflow-y:visible}
 .pin-head{display:none;font-size:11px;color:var(--ink3);padding:6px 0 0}
 .pin-head span:nth-child(2){text-align:right}
 .pin-row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;row-gap:2px;align-items:center;padding:10px 0;border-top:1px solid var(--hairline)}
@@ -1839,7 +1837,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pin-sub.err{color:var(--red)}
 .pin-age{grid-column:1;font-size:12px;color:var(--ink3);white-space:nowrap}
 .pin-row .qp-term{grid-column:2;grid-row:1/span 2;justify-self:end}
-/* Settings' two groups: a heading each, its count beside it */
+/* The picker's and Projects' groups: a heading each, its count beside it */
 .pin-group{padding:14px 0 2px;font-size:13px;font-weight:500;color:var(--ink)}
 .pin-count{font-size:12px;font-weight:400;color:var(--ink3);margin-left:6px}
 @media (min-width:768px){

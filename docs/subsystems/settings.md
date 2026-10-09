@@ -8,7 +8,7 @@ shell export for is editable here and takes effect on the next tick.
 There are two backends, and the section is two pages — **Local** and **Shared** — one per
 backend, so the page *is* the scope and no card mixes the two. The pinned projects, server-stored
 like Shared but a list that grows with use rather than a policy, used to be a third page here; they
-now live under the Management section's **Pinned** sub-view (`management/PinnedProjectsGroup.tsx`).
+now live under the Management section's **Projects** sub-view (`management/ProjectsView.tsx`).
 Which page is showing is
 picked from the tree under Settings in the nav — the rail on desktop, the menu on the
 phone, where every tree stands open (`.rail-sub`). The page band used to carry a
@@ -18,9 +18,16 @@ at any width, as Usage's Forecast / Token value / History does. Each page is a b
 New sessions, Git Sync, Notify this browser, Connection and Reset; Shared has Push notifications,
 Remote answers and Usage forecast.
 
-The Management › Pinned page is the one Projects card, full width: every project of the last 30 days as one ledger, the pins under a heading of their own with an
-Unpin each, the rest under another with a Pin each, one filter over both. Its band reads "Management · Pinned", carries the "every device" scope pill (the
-pins are server-stored) and says the pins keep a project in the launch sheet however long ago its last session was.
+The Management › Projects page (`management/ProjectsView.tsx`) is no Settings card at all: it draws on the app ground under its own band, "Management ·
+Projects", which carries the "every device" scope pill (the pins are server-stored) and says a pin keeps a project in the launch sheet however long ago its
+last session was. Under the band a toolbar holds a Tiles | Columns | Lists `.seg` switcher and one filter box (Enter pins the first offered match and
+clears the box), then two groups: **Pinned**, the stored pins each with an Unpin, and **Not pinned**, every other project of the last 30 days each with a
+Pin. Tiles stacks the two groups full width, a pin a paper tile and an offer a dashed one; Columns sets Not pinned left and Pinned right, one tile a row,
+so Pin carries a project straight across; Lists is the same two columns as `.set-group` cards of `.set-row`s. Columns and Lists go two-up from `lg`
+(1024px) and stack below it, all three shapes are offered at every width, and the Pin / Unpin key is 44px high on the phone and 32px from `md`. The pick is
+per device, `management.projectsLayout` ([view-persistence](view-persistence.md)). Grouping, the filter match, the `~`-shortened dir line and every string
+are pure functions in `client/src/lib/projectsView.ts` (`test/projects-view.test.ts`); the launch sheet's own `PinPicker` is a separate component and stays
+what the sheet uses.
 
 **Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, content
 width, the default session view, landing tab
@@ -32,9 +39,10 @@ the `claude` CLI choose; either way a launch can still override it), the Git Syn
 model and effort (`syncModel` / `syncEffort`, default `''` each; the button never asks, so these are its whole say — its permission mode is the host's
 `SYNC_PERMISSION_MODE` and its remote control follows Remote answers, both shown read-only in the same card), which Usage sub-tab
 opens (`forecast` | `rates` | `history`), which Management sub-view is showing (`managementTab`: `git` |
-`pinned`, default `git`), and which Settings page is showing (`settingsTab`: `local` |
+`projects`, default `git`), and which Settings page is showing (`settingsTab`: `local` |
 `shared`). A `settingsTab: 'pinned'` stored by an older release fails the validator and falls back to
-`local`. The answer token is per browser too (`dashboard.answerToken`, its own key), which
+`local`. A `managementTab: 'pinned'` is the other case: that sub-view was renamed, not removed, so `clampSettings` reads it as `projects` and the device keeps its
+place. The answer token is per browser too (`dashboard.answerToken`, its own key), which
 is why it sits under **Local › Connection** and not beside the remote-answer switch it
 unlocks — a Shared page carrying it would break the promise the two pages make. A phone propped on the desk
 wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and
@@ -326,6 +334,8 @@ a value the rows never reflect.
     - client/src/hooks/useSettings.tsx
     - client/src/hooks/useServerSettings.ts
     - client/src/components/settings/
+    - client/src/components/management/ProjectsView.tsx
+    - client/src/lib/projectsView.ts
     - server/lib/settings.ts
     - client/index.html
   kind: subsystem

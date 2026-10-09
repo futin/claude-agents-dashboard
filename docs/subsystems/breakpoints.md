@@ -18,7 +18,7 @@ true complement of the CSS's `min-width`, with no gap at fractional viewport wid
 | (base) | 0 | Phone: rail is a top bar, board full-bleed, grids single-column |
 | `sm` | 640 | Desktop shell returns (rail, board radius, `.main` padding) |
 | `md` | 768 | Density: column counts, table columns, control fitting |
-| `lg` | 1024 | Analytics metrics reach 5-across |
+| `lg` | 1024 | Analytics metrics reach 5-across; Management › Projects' Columns and Lists go two-up |
 | `xl` | 1280 | Board/Tiles 3-col, Management 3-col, pinned panes |
 | `2xl` | 1536 | **The lock.** Measure reaches 1248; Sessions aside moves beside |
 | `3xl` | 1537 | Full content-width mode only: structural gains |

@@ -238,10 +238,11 @@ client/src/
                   Tiles, Triage), SessionDetail (the subagent timeline),
                   ChatDrawer, TasksCard (the sidecar's checklist card and its phone fold), QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
-                  MicButton, SpawnPanel, PinPicker (projects to pin — older ones in
-                  the launch sheet, recent + older in Management › Pinned), ResumePanel, PermissionBanner,
+                  MicButton, SpawnPanel, PinPicker (the launch sheet's older projects to
+                  pin), ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, configs/, management/ (ManagementView —
-                  the Git | Pinned section — PinnedProjectsGroup, and the Git sub-view: GitView
+                  the Projects | Git section — ProjectsView, the Projects sub-view: the pins and the
+                  projects on offer as Tiles, Columns or Lists; and the Git sub-view: GitView
                   (band, switcher, poll owner), GitClockChip (the sync/fetch clock chip and
                   its popover), GitCards / GitTable / GitTriage (the three
                   shapes) and GitParts (chips, divergence bar, branch list they share)), analytics/,
@@ -273,7 +274,8 @@ client/src/
                   gitLayouts / gitTriage / gitStatsText (the Git sub-view's switcher rules,
                   Triage grouping and copy table), gitBar (the divergence bar's scale),
                   gitPoll (its poll schedule, apart from the DOM), gitSync / gitSyncRuns
-                  (the Sync button's rules, copy and run reconciler)
+                  (the Sync button's rules, copy and run reconciler), projectsView (the
+                  Projects sub-view's layouts, pinned / offered split, dir line and copy)
 vite.config.ts    dev proxy /api → backend; reuses the server config loader;
                   allowedHosts = `.ts.net` + this node's bare MagicDNS short
                   name (probed via `tailscale status --json`), without which

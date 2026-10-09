@@ -156,7 +156,7 @@ network) and pins the classifier table, the argv and env overlay, worktree dedup
 ## Client
 
 Management › Git (`client/src/components/management/GitView.tsx`) draws the payload. `ManagementView` mounts it only while `managementTab` is `git`, so
-the Pinned sub-view and every other section run no poll.
+the Projects sub-view and every other section run no poll.
 
 **The poll.** `useGitStats` fetches on mount, then every **30s** while the page is visible; a `visibilitychange` back to visible polls at once and restarts
 the 30s, and going hidden drops the timer, so a backgrounded tab makes no requests. The schedule is `startGitPoll` in `client/src/lib/gitPoll.ts`, written
@@ -164,7 +164,7 @@ against injected timer and visibility functions so `test/git-stats-client.test.t
 `startGitPoll` also reports when it next fires, which the hook exposes as `nextPollAtMs` beside `polling` and `skewMs` (client receipt minus the payload's
 `generatedAt`; every server clock is read shifted by it). A `refresh()` asked while a poll is out queues one more poll after it, so a poll that predates a
 fetch is never the last word. A failed poll keeps the last payload and sets `error`. Before the first payload the body reads a muted "Loading…", as
-Management › Pinned does; a first poll that fails turns it into "Couldn't load git stats. Retrying every 30s."
+Management › Projects does; a first poll that fails turns it into "Couldn't load git stats. Retrying every 30s."
 
 **The clock chip** (`GitClockChip.tsx`). The band has no right slot any more; beside the layout switcher, in `.git-toolbar`, sits one button holding two
 meters, SYNC (the 30s re-read) and FETCH (the server's timer), and a caret. Its readings are pure functions in `client/src/lib/gitClock.ts`: SYNC reads
@@ -205,7 +205,7 @@ origin; the verdict and the age in amber (`offline · fetched 2m ago`, `needs au
 Quiet summary is one plain string, so it carries the words without the colour. A failed fetch never moves a repo between Triage groups.
 
 **The copy.** Every string is in `client/src/lib/gitStatsText.ts`, verbatim from the copy tables of the git-stats spec §6 and the git-fetch spec §4; the
-components never build their own. The empty state's "Pinned" is a link that sets `managementTab: 'pinned'`.
+components never build their own. The empty state's "Projects" is a link that sets `managementTab: 'projects'`.
 
 **Sync** (spec §9). Every `ok` repo with an origin gets a Sync button while `/api/health` reports `spawnAvailable` (`canSync` in `client/src/lib/gitSync.ts`):
 pinned to the first line at the right of a card's or busy Triage row's head (`.git-head-end` is a sibling of the wrapping `.git-head`, never an item in it, so
