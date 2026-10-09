@@ -11,8 +11,8 @@ opt-in features that need one ([remote answers](docs/subsystems/remote-answer.md
 [remote plan verdicts](docs/subsystems/remote-plan.md), the
 [`Allow?` tab](docs/subsystems/permission-notify.md), and the `Stop` hook behind both the
 finished-turn [push](docs/subsystems/push-notify.md) and
-[remote messages](docs/subsystems/remote-message.md)). Zero runtime dependencies on the backend (Node
-built-ins only), and exactly two kinds of outbound call — the ntfy push and the usage-bar read
+[remote messages](docs/subsystems/remote-message.md)). One runtime dependency on the backend, [`lookout-widgets`](docs/subsystems/hub-widgets.md#the-dependency-exception)
+(the rest is Node built-ins), and exactly two kinds of outbound call — the ntfy push and the usage-bar read
 from Anthropic's API — plus `git fetch` on the pinned repos when you turn the Git fetch timer on.
 
 ## Quick start
