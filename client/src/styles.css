@@ -206,7 +206,7 @@ code,kbd,samp,pre{font-family:inherit}
 .rail-brand{display:none;align-items:center;gap:9px;font-size:20px;font-weight:700;letter-spacing:.01em;line-height:1;color:var(--ink);padding:0 12px 24px}
 /* The one dot in the rail: a board that is live, in the colour `working` uses
    on a row. It is decoration, not status — the connection verdict is the
-   `.foot` line, which says it in words. */
+   `.foot` line at the bottom of the rail, which says it in words. */
 .rail-dot{flex:none;width:10px;height:10px;border-radius:999px;background:var(--green)}
 .rail-kicker{display:block;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3);margin-bottom:3px}
 /* Nav rows: 36px tall, 16px padding-x, 16px radius, sentence case at 14/500, a
@@ -261,6 +261,18 @@ code,kbd,samp,pre{font-family:inherit}
    about the work. 24px of air either side, as §3 measures it and the mock
    draws it. */
 .rail-div{height:1px;background:var(--hairline);margin:24px 4px}
+/* The live line, at the foot of the rail — the mock's `.live` under its side
+   card: left-aligned at the row labels' 12px, 12/400 in secondary ink, a 7px dot
+   before it in `working`'s green. `margin-top:auto` sinks it to the bottom of
+   the full-height rail from `sm`; in the phone menu the panel is only as tall
+   as its rows, so it is simply the last row, 16px under the tree above. Drawn
+   on Sessions only (SideRail.tsx), the view that owns the poll. A dropped link
+   turns the dot and the words red. `.foot.off` and never a bare `.off` — that
+   also matches the origin badge's `ra-pill off` and used to tint it red. */
+.foot{margin-top:auto;display:flex;align-items:center;gap:8px;padding:16px 12px 0;font-size:12px;color:var(--ink2)}
+.foot i{flex:none;width:7px;height:7px;border-radius:999px;background:var(--green)}
+.foot.off{color:var(--red)}
+.foot.off i{background:var(--red)}
 /* A phone widens its layout viewport to fit anything that overflows sideways,
    and `position:fixed` panels are sized against that widened box: the chat
    drawer's close button and its footer land off the visible screen, with no
@@ -1022,10 +1034,6 @@ code,kbd,samp,pre{font-family:inherit}
 .empty .e{font-size:34px;margin-bottom:10px;opacity:.3}
 .empty .clear-filters{margin-top:12px;height:32px;padding:0 12px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:border-color .15s,color .15s}
 .empty .clear-filters:hover{color:var(--ink);border-color:var(--ink3)}
-.foot{font-size:11px;color:var(--ink3);text-align:center}
-/* scoped to the footer note — a bare .off also matches the origin badge's
-   `ra-pill off` and used to tint it red */
-.foot .off{color:var(--red)}
 
 /* ── md: density and control-fitting turn ─────────────────────────────────
    768 is the tablet-portrait line: column counts, the table's model column

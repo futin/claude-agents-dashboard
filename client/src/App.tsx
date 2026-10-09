@@ -81,11 +81,21 @@ function AppShell() {
   const account = useAccount();
   const narrow = useShellNarrow();
   const chip = <HeaderAccount account={account} onGo={change} />;
+  // The sessions poll's link health, reported up by `SessionsView` so the rail
+  // can draw the live line at its foot. Only meaningful while Sessions is open —
+  // that view owns the poll and unmounting it stops it — so elsewhere the rail
+  // draws no line rather than claim a refresh that is not happening.
+  const [connected, setConnected] = useState(true);
 
   return (
     <ConfigsScopeProvider active>
       <div className="shell">
-        <SideRail section={section} onChange={change} accountSlot={narrow ? chip : null} />
+        <SideRail
+          section={section}
+          onChange={change}
+          accountSlot={narrow ? chip : null}
+          live={section === 'sessions' ? { connected, refreshMs: settings.refreshMs } : null}
+        />
         {/* `display:contents` below `sm`, so the board is the flex child of
             `.shell` it has always been there; from `sm` this is the column
             right of the rail: the header band, then the board tucked into the
@@ -95,7 +105,7 @@ function AppShell() {
           <main className="main">
             <div className={wrap}>
             {section === 'sessions' ? (
-              <SessionsView />
+              <SessionsView onLink={setConnected} />
             ) : section === 'management' ? (
               <Suspense fallback={<div className="an-empty">loading…</div>}>
                 <ManagementView />

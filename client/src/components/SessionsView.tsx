@@ -17,7 +17,7 @@ import { useSessions } from '../hooks/useSessions';
 import { useSettings } from '../hooks/useSettings';
 import { useWebNotify } from '../hooks/useWebNotify';
 import { applyView, clearFilters, describeEmpty, drawableLayout, pruneProjects, DEFAULT_LAYOUT, DEFAULT_VIEW, type Layout, type View } from '../lib/filterSort';
-import { formatInterval, resolveLayout } from '../lib/settings';
+import { resolveLayout } from '../lib/settings';
 
 /** Own chunk — the drawer only loads the first time a chat is opened. */
 const ChatDrawer = lazy(() => import('./ChatDrawer'));
@@ -37,8 +37,16 @@ const SpawnPanel = lazy(() => import('./SpawnPanel'));
  * below `md` (768px) the card is replaced outright by `AsideStrip`, one pinned
  * bar carrying its summary.
  */
-export function SessionsView() {
+export function SessionsView({ onLink }: {
+  /**
+   * Link health of the poll this view owns, handed up so the shell can draw the
+   * "live · refreshing every 3s" line at the foot of the rail (`SideRail`)
+   * instead of under the board. Reported on every change, mount included.
+   */
+  onLink?: (connected: boolean) => void;
+} = {}) {
   const { data, connected } = useSessions();
+  useEffect(() => { onLink?.(connected); }, [connected, onLink]);
   const { settings } = useSettings();
   const [view, setView] = usePersistedState<View>('dashboard.view', DEFAULT_VIEW);
   // The shape gets its own key rather than riding in `view`: it is not a
@@ -162,11 +170,6 @@ export function SessionsView() {
           </Suspense>
         )}
         <div className="s-body">{body}</div>
-        <div className="foot">
-          {connected
-            ? `live · refreshing every ${formatInterval(settings.refreshMs)}`
-            : <span className="off">disconnected — server stopped?</span>}
-        </div>
       </div>
       {chatSession && (
         <Suspense fallback={null}>

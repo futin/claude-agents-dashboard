@@ -5,7 +5,7 @@ import { useBackClose } from '../hooks/useBackClose';
 import { useHideOnScroll } from '../hooks/useHideOnScroll';
 import { useConfigsScope } from '../hooks/useConfigsScope';
 import { useSettings } from '../hooks/useSettings';
-import type { Settings } from '../lib/settings';
+import { formatInterval, type Settings } from '../lib/settings';
 
 interface Props {
   section: Section;
@@ -19,6 +19,12 @@ interface Props {
    * `display:none` button is still a tab stop and still clickable by script.
    */
   accountSlot?: ReactNode;
+  /**
+   * The sessions poll's state, for the "live · refreshing every 3s" line at the
+   * foot of the rail (the mock's `.live`, under its side card). Null outside
+   * Sessions, which owns that poll: nothing is refreshing there, so no line.
+   */
+  live?: { connected: boolean; refreshMs: number } | null;
 }
 
 /**
@@ -194,7 +200,7 @@ function MenuLayer({ onClose }: { onClose: () => void }) {
   return <div className="mnav-scrim" onClick={onClose} />;
 }
 
-export function SideRail({ section, onChange, accountSlot }: Props) {
+export function SideRail({ section, onChange, accountSlot, live }: Props) {
   // A section's sub-views are navigation, so they live in the nav: this is the
   // only control for them at every width, and the section renders whichever is
   // chosen. Per-device, like every other setting.
@@ -296,6 +302,15 @@ export function SideRail({ section, onChange, accountSlot }: Props) {
             )}
           </div>
         ))}
+        {/* `role="status"` so a dropped link is announced, not only tinted. */}
+        {live && (
+          <div className={live.connected ? 'foot' : 'foot off'} role="status">
+            <i aria-hidden="true" />
+            {live.connected
+              ? `live · refreshing every ${formatInterval(live.refreshMs)}`
+              : 'disconnected — server stopped?'}
+          </div>
+        )}
       </nav>
     </div>
   );
