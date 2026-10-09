@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { readSessionParam } from '../client/src/lib/deepLink.js';
+import { readSessionParam, readViewParam } from '../client/src/lib/deepLink.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -38,6 +38,19 @@ export function run(): number {
 
   if (test('survives a malformed query string', () => {
     assert.strictEqual(readSessionParam('?%'), null);
+  })) p++; else f++;
+
+  if (test('reads view=git, alone or beside a session', () => {
+    assert.strictEqual(readViewParam('?view=git'), 'git');
+    assert.strictEqual(readViewParam('?session=abc12345&view=git'), 'git');
+  })) p++; else f++;
+
+  if (test('any other view, or none, yields null', () => {
+    assert.strictEqual(readViewParam(''), null);
+    assert.strictEqual(readViewParam('?view='), null);
+    assert.strictEqual(readViewParam('?view=pinned'), null);
+    assert.strictEqual(readViewParam('?view=GIT'), null);
+    assert.strictEqual(readViewParam('?%'), null);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
