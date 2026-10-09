@@ -1585,7 +1585,7 @@ export interface PinRow {
   listed: boolean;
 }
 
-/** Payload of `GET /api/pins`, and of a successful `POST /api/pins` (#161). */
+/** Payload of `GET /api/pins`, and of a successful `POST /api/pins` (#161) or `POST /api/pins/order`. */
 export interface PinsResponse {
   /** Every stored pin, in pin order. */
   pinned: PinRow[];

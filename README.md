@@ -11,8 +11,8 @@ opt-in features that need one ([remote answers](docs/subsystems/remote-answer.md
 [remote plan verdicts](docs/subsystems/remote-plan.md), the
 [`Allow?` tab](docs/subsystems/permission-notify.md), and the `Stop` hook behind both the
 finished-turn [push](docs/subsystems/push-notify.md) and
-[remote messages](docs/subsystems/remote-message.md)). Zero runtime dependencies on the backend (Node
-built-ins only), and exactly two kinds of outbound call — the ntfy push and the usage-bar read
+[remote messages](docs/subsystems/remote-message.md)). One runtime dependency on the backend, [`lookout-widgets`](docs/subsystems/hub-widgets.md#the-dependency-exception)
+(the rest is Node built-ins), and exactly two kinds of outbound call — the ntfy push and the usage-bar read
 from Anthropic's API — plus `git fetch` on the pinned repos when you turn the Git fetch timer on.
 
 ## Quick start
@@ -175,11 +175,6 @@ claude plugin install claude-agents-dashboard@claude-agents-dashboard-marketplac
   tab reads; without it the tab stays empty.
 - **`/git-sync`** — the repo's git chores in one pass: commit what's lying around behind a secret scan, sync and verify the trunk, push it, and prune
   branches proven merged. The trunk is pushed once it verifies; every deletion, branch push and stash change is asked first.
-
-The plugin also carries a live kaizen meter, a function-hooks module that loads only when Claude Code runs with `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`
-(early access). With it, every session gets a `live` status line (context, cost, turns, compactions), one toast suggesting `/compact` once context
-reaches `nudgeAtTokens` (plugin setting, default 150000, `0` turns it off), and **`/kaizen-stats`**, a pane ranking the session's tools and subagents by
-tokens and wall time beside `/kaizen`'s transcript totals. Without the flag nothing of it loads.
 
 The installed copy is a cached snapshot of GitHub's `main`, not a link to this checkout, so a skill edit in `plugin/` reaches a session only once it is
 committed and pushed and `pnpm plugin:sync` has run. The script compares `plugin/` with the installed copy, refuses a tree GitHub does not have (off

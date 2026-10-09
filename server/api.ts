@@ -7,6 +7,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import nodePath from 'node:path';
 
+import type { HubHandler } from 'lookout-widgets';
+
 import {
   scanSessions, lastMessageMs, listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionSurface
 } from './lib/scan.js';
@@ -52,7 +54,7 @@ import {
 import { notifyPermission, permissionWaits } from './lib/permissions.js';
 import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
-import { getPinnedProjects, getSettings, setPinned, setSettings } from './lib/settings.js';
+import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
 import { readGitStats } from './lib/git-stats.js';
 import { classifyOrigin } from './lib/origin.js';
@@ -124,37 +126,42 @@ function sweepTerminalDecisions(): void {
   sweepDecidedPlans(movedOn);
 }
 
-export function serveSessions(baseConfig: Config, res: ServerResponse, params?: URLSearchParams): void {
-  const config = scanOverrides(baseConfig, params);
+/** One scan of the session rows with every RAM-store injection applied — what `/api/sessions` serves before launches and usage are attached. */
+export function scanSnapshot(config: Config): SessionsResponse {
   // Before the scan, not after: a wait the terminal already decided must not
   // colour this tick's row blue either.
   sweepTerminalDecisions();
+  // pendingIds comes from the RAM store, not disk: a question held by the
+  // AskUserQuestion hook is flagged on its row before the transcript knows
+  // about it, so it's visible without opening the chat drawer. planIds and
+  // messageIds are the same thing, for a held ExitPlanMode call and a held
+  // Stop-hook reply window respectively.
+  // permissionWaits likewise: a terminal permission dialog is TUI-only and
+  // never reaches the transcript, so the Notification hook is the only way the
+  // scan can know a session is parked on one.
+  // archivedIds mirrors the desktop app's own list: "delete" there is an
+  // archive that leaves the transcript on disk, so without this the row keeps
+  // showing until it ages out of the lookback window. Read here, not in
+  // scan.ts, so the scan stays free of the app's store (see archived.ts).
+  return scanSessions(config, {
+    skipProcScan: config.skipProcScan,
+    pendingIds: pendingSessionIds(),
+    planIds: planSessionIds(),
+    messageIds: messageSessionIds(),
+    permissionWaits: permissionWaits(),
+    archivedIds: archivedSessionIds(),
+    // stopStates is the same injection again, and the only one that is not a
+    // hint about a wait: it says which rows this server can actually signal,
+    // so the Stop control is offered only where it would work.
+    stopStates: stopStates()
+  });
+}
+
+export function serveSessions(baseConfig: Config, res: ServerResponse, params?: URLSearchParams): void {
+  const config = scanOverrides(baseConfig, params);
   let data: SessionsResponse;
   try {
-    // pendingIds comes from the RAM store, not disk: a question held by the
-    // AskUserQuestion hook is flagged on its row before the transcript knows
-    // about it, so it's visible without opening the chat drawer. planIds and
-    // messageIds are the same thing, for a held ExitPlanMode call and a held
-    // Stop-hook reply window respectively.
-    // permissionWaits likewise: a terminal permission dialog is TUI-only and
-    // never reaches the transcript, so the Notification hook is the only way the
-    // scan can know a session is parked on one.
-    // archivedIds mirrors the desktop app's own list: "delete" there is an
-    // archive that leaves the transcript on disk, so without this the row keeps
-    // showing until it ages out of the lookback window. Read here, not in
-    // scan.ts, so the scan stays free of the app's store (see archived.ts).
-    data = scanSessions(config, {
-      skipProcScan: config.skipProcScan,
-      pendingIds: pendingSessionIds(),
-      planIds: planSessionIds(),
-      messageIds: messageSessionIds(),
-      permissionWaits: permissionWaits(),
-      archivedIds: archivedSessionIds(),
-      // stopStates is the same injection again, and the only one that is not a
-      // hint about a wait: it says which rows this server can actually signal,
-      // so the Stop control is offered only where it would work.
-      stopStates: stopStates()
-    });
+    data = scanSnapshot(config);
   } catch (e) {
     console.error('[dashboard] scan failed:', (e as Error).message);
     data = {
@@ -1552,6 +1559,18 @@ export async function serveSessionStop(
 
 /* -------------------------------------------------- configs endpoints */
 
+/**
+ * One request to the Lookout hub routes. Resolves `false` when the hub does not own the path, so the caller falls through to its own table. A POST body
+ * that is not JSON (or empty, or over the cap) reaches the hub as `undefined`; no action is declared, so every POST path answers 404 regardless.
+ */
+export async function serveHub(hub: HubHandler, u: URL, req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  const body = req.method === 'POST' ? ((await readJsonBody(req)) ?? undefined) : undefined;
+  const reply = await hub.handle({ method: req.method ?? 'GET', path: u.pathname, query: u.searchParams, body });
+  if (reply === null) return false;
+  sendJson(res, reply.status, reply.json);
+  return true;
+}
+
 function sendJson(res: ServerResponse, code: number, body: unknown): void {
   res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(body));
@@ -1706,6 +1725,21 @@ export async function servePinsWrite(config: Config, req: IncomingMessage, res: 
     if (!known) return sendJson(res, 404, { error: 'no such project' });
   }
   if (setPinned(dirName, pinned) === null) return sendJson(res, 409, { error: 'pin limit reached' });
+  sendJson(res, 200, pinsPayload(config));
+}
+
+/**
+ * `POST /api/pins/order` `{order}` — the whole pin list in its new order. Same token gate as `POST /api/pins`, but no membership check against the
+ * enumerated projects: a permutation of the stored list cannot add a dir, which is the property that check protects. Anything but an exact permutation
+ * is a 409, so a stale tab can neither drop nor resurrect a pin. Success answers with the fresh `GET /api/pins` payload.
+ */
+export async function servePinsOrder(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  const body = await readJsonBody(req) as { order?: unknown } | null;
+  if (!body || !Array.isArray(body.order) || !body.order.every(d => typeof d === 'string')) {
+    return sendBadBody(res, { error: 'expected {order: string[]}' });
+  }
+  if (setPinOrder(body.order) === null) return sendJson(res, 409, { error: 'pins changed — reload' });
   sendJson(res, 200, pinsPayload(config));
 }
 

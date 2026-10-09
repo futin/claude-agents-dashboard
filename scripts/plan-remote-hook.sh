@@ -44,6 +44,27 @@ command -v jq > /dev/null 2>&1 || exit 0
 TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
 [ "$TOOL" = "ExitPlanMode" ] || exit 0
 
+# Autopilot opt-out. While an `autopilot` run is `running` (state file ~/.claude/autopilot/<session_id>.json, field `status`, written by the autopilot CLI)
+# the run must not ask, and the CLI applies a deny/block only after EVERY hook on the event has returned — so a hold here would idle the run for up to
+# `answerSecs` and push a question to the phone for a session that must not ask. Reads only `status == "running"`; any other status, a missing or malformed
+# file or a jq failure is "not running" and leaves today's behaviour untouched. Never writes the file. The id is checked against the CLI's own grammar first
+# so a crafted session_id cannot walk the path out of the state directory.
+autopilot_running() {
+  local LC_ALL=C sid="$1"
+  case "$sid" in ''|*[!A-Za-z0-9-]*) return 1 ;; esac
+  local f="$HOME/.claude/autopilot/$sid.json"
+  [ -f "$f" ] || return 1
+  [ "$(jq -r '.status // empty' "$f" 2>/dev/null)" = "running" ]
+}
+
+# The session id is parsed ahead of the probe so a `running` autopilot session costs no network call at all. (This hook runs on PermissionRequest, which
+# never fires for a call a PreToolUse hook denied, so here the opt-out is belt-and-braces — except in plan mode, where the gate passes ExitPlanMode.)
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
+# In plan mode the autopilot gate lets ExitPlanMode through, so PermissionRequest does fire and the approval card should still reach the phone: no opt-out.
+if [ "$(printf '%s' "$INPUT" | jq -r '.permission_mode // empty')" != "plan" ] && autopilot_running "$SESSION_ID"; then
+  exit 0
+fi
+
 # 1. Reachability probe, hard 1s cap. Dashboard down, REMOTE_ANSWER=false, or the
 #    toggle switched off → fall straight through, no added latency.
 HEALTH=$(curl -sf -m 1 "$DASH/api/health" 2>/dev/null) || exit 0
@@ -76,7 +97,6 @@ if [ "$IDLE_MIN_S" != "0" ]; then
   esac
 fi
 
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 [ -n "$SESSION_ID" ] || exit 0
 
 TOOL_INPUT=$(printf '%s' "$INPUT" | jq -c '.tool_input // empty')

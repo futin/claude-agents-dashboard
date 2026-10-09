@@ -1,6 +1,6 @@
 # Git Stats — read-only local git state per pinned project
 
-`GET /api/git-stats` answers, for every **pinned** project (`getPinnedProjects`, in pin order), whether its repo has uncommitted work, which local branches carry
+`GET /api/git-stats` answers, for every **pinned** project (`getPinnedProjects`, in pin order — the order the user sets by dragging in Management › Pinned), whether its repo has uncommitted work, which local branches carry
 unmerged work and how far they are from the trunk, and when the remote-tracking refs were last refreshed. The Management tab's Git sub-view draws it. The
 reader is `server/lib/git-stats.ts`; the payload types (`RepoGitStats`, `GitBranch`, `GitStatsResponse`) are in `shared/types.ts`. Design record:
 `docs/superpowers/specs/2026-10-01-git-stats-design.md`.
@@ -32,7 +32,9 @@ imports nothing from the reader and has its own runner. It is a module of its ow
 - **Off by default** (D3): `gitFetchSecs ∈ {0, 30, 60, 120, 300, 600}`, `0` = off, a Shared setting ([settings](settings.md)).
 - **Watched-only** (D2). Every `GET /api/git-stats` answer calls `markGitWatched()`; the timer fires only while the last one is younger than
   `max(2 × interval, 90s)`. After the last tab closes the server runs at most two more fetches (three at 30s), then none. A hidden tab stops polling, so it
-  stops watching too.
+  stops watching too. Lookout's Git pending tile counts as a watcher as well: every `GET /api/hub/widgets/git` calls `markGitWatched()`, and Lookout polls
+  a placed tile every 30 s whether or not anyone is looking, so with that tile on a board the timer keeps firing whenever `gitFetchSecs > 0` (see
+  [hub-widgets](hub-widgets.md)).
 - **Entering or changing the schedule fetches if stale** (D11): on the first watched read after an unwatched stretch, Off to a value, or one value to another,
   a last fetch older than the new interval (or none) runs at once; a fresh one keeps `lastEndedMs + interval`.
 - **What runs** (D4): `git -c core.hooksPath=/dev/null fetch origin --quiet --no-prune --no-recurse-submodules --no-auto-maintenance`, once per **common dir**

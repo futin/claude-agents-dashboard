@@ -1841,10 +1841,31 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 /* Projects' groups: a heading each, its count beside it */
 .pin-group{padding:14px 0 2px;font-size:13px;font-weight:500;color:var(--ink)}
 .pin-count{font-size:12px;font-weight:400;color:var(--ink3);margin-left:6px}
+.pin-saved{font-size:12px;font-weight:400;color:var(--ink3);margin-left:10px;transition:opacity .3s}
+.pin-saved.off{opacity:0}
+/* .pin-sub.err is scoped to .pin-sub, so a refused reorder shown here needs its own rule or it reads as a success */
+.pin-saved.err{color:var(--red)}
+@media (prefers-reduced-motion:reduce){.pin-saved{transition:none}}
+/* Management › Pinned's drag grip (pin-reorder spec §4.4): a 28px lead column on the pinned rows and the column header. On the phone the grip spans both
+   lines and the age and button shift one column right; stretched to the row so the touch target grows toward §8.2's 44px floor. */
+.pin-row.g{grid-template-columns:28px minmax(0,1fr) auto}
+.pin-row.g .pin-age{grid-column:2}
+.pin-row.g .qp-term{grid-column:3;grid-row:1/span 2}
+.pin-row.g>:first-child{grid-row:1/span 2}
+.pin-head.g span:nth-child(2){text-align:left}
+.pin-head.g span:nth-child(3){text-align:right}
+.pin-grip{align-self:stretch;width:28px;min-height:36px;display:grid;place-items:center;padding:0;font-size:16px;line-height:1;color:var(--ink3);background:none;border:0;border-radius:8px;cursor:grab;touch-action:none}
+.pin-grip:hover{color:var(--ink);background:var(--strip-hi)}
+.pin-grip:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+.pin-row.drag{background:var(--strip-hi);box-shadow:0 8px 24px var(--shadow2);border-radius:10px;position:relative;z-index:2;border-top-color:transparent;cursor:grabbing}
+.pin-row.drag .pin-grip{cursor:grabbing;color:var(--cyan)}
 @media (min-width:768px){
   .pin-head,.pin-row{display:grid;grid-template-columns:minmax(0,1fr) 64px 96px;gap:12px}
   .pin-age{grid-column:auto;font-size:13px;color:var(--ink2);text-align:right}
   .pin-row .qp-term{grid-column:auto;grid-row:auto}
+  .pin-head.g,.pin-row.g{grid-template-columns:28px minmax(0,1fr) 64px 96px}
+  .pin-row.g .pin-age,.pin-row.g .qp-term{grid-column:auto;grid-row:auto}
+  .pin-row.g>:first-child{grid-row:auto}
 }
 
 /* Management › Projects (ProjectsView.tsx): the ledger on the app ground, no card around it — the band, a toolbar of the

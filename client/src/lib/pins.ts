@@ -1,7 +1,7 @@
 /**
  * pins.ts — the pure pieces of the pinned-projects UI (#161): the picker's
- * filter, `~` path shortening and the split a picker row sets its path from.
- * Shared by the launch sheet and Management › Projects; unit-tested server-side.
+ * filter, `~` path shortening, the split a picker row sets its path from, and
+ * the reorder helpers behind `usePins.reorder`. Shared by the launch sheet and Management › Projects; unit-tested server-side.
  */
 
 /**
@@ -30,4 +30,32 @@ export function splitPath(p: string): { dirs: string[]; name: string } {
   const i = p.lastIndexOf('/');
   if (i < 0) return { dirs: [], name: p };
   return { dirs: p.slice(0, i + 1).match(/[^/]*\//g) ?? [], name: p.slice(i + 1) };
+}
+
+/**
+ * `order` with `name` moved so it sits at `toIndex` in the result (clamped to the list). An unknown name, or a move to where it already is, returns `order`
+ * itself, so a caller can skip the write by reference comparison.
+ */
+export function movePin(order: readonly string[], name: string, toIndex: number): string[] {
+  const from = order.indexOf(name);
+  if (from < 0) return order as string[];
+  const to = Math.min(Math.max(toIndex, 0), order.length - 1);
+  if (to === from) return order as string[];
+  const next = order.filter(d => d !== name);
+  next.splice(to, 0, name);
+  return next;
+}
+
+/**
+ * `rows` re-sorted into `order` — the optimistic list a reorder shows before the server answers. A row `order` does not name keeps its relative place
+ * after the named ones, and a name with no row is skipped, so a stale order can never drop or duplicate a row.
+ */
+export function applyPinOrder<T extends { dirName: string }>(rows: readonly T[], order: readonly string[]): T[] {
+  const byName = new Map(rows.map(r => [r.dirName, r]));
+  const named = order.flatMap(d => {
+    const r = byName.get(d);
+    byName.delete(d);
+    return r ? [r] : [];
+  });
+  return [...named, ...rows.filter(r => byName.has(r.dirName))];
 }

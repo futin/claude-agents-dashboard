@@ -5,7 +5,7 @@
     {
       "name": "claude-agents-dashboard",
       "source": "./plugin",
-      "description": "git-sync + kaizen, the skills the dashboard's Sync button and Analytics tab depend on, plus the live kaizen meter mod"
+      "description": "git-sync + kaizen, the skills the dashboard's Sync button and Analytics tab depend on"
     }
   ]
 }

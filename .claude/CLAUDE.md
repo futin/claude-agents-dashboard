@@ -9,15 +9,14 @@ usage and current tool activity per session. Polls every 3s.
 Monolith, three domains plus the plugin. The **only** things crossing the FE/BE boundary live in `shared/`:
 the typed JSON in `shared/types.ts`, plus the zero-dep parser in `shared/frontmatter.ts`.
 
-- `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only).
+- `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only) but one: `lookout-widgets`.
 - `client/` — Vite + React + TypeScript; side rail Sessions | Usage | Management |
   Claude Configs | Analytics | Settings, all lazy but Sessions.
 - `shared/` — `types.ts` is the API contract and the single source of truth for it;
   `frontmatter.ts` is the one module both sides run.
 - `test/` — node-assert tests over backend + client domain logic, tmpdir JSONL fixtures.
 - `plugin/` — the installable Claude Code plugin (the repo root's `.claude-plugin/marketplace.json` points at it): the skills the dashboard depends on, plain
-  JS, plus the live kaizen meter mod in `plugin/hooks/` (TypeScript function hooks, inert without `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`), never imported by
-  server or client at runtime. `test/plugin-manifest.test.ts` pins what may live in it.
+  JS, never imported by server or client at runtime. `test/plugin-manifest.test.ts` pins what may live in it.
 
 **The file-by-file map is `docs/overview.md`, not this file.** It is not auto-loaded —
 read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `docs/overview.md`
@@ -31,8 +30,6 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
 - `pnpm test` — `test/run-all.ts` via tsx; prints the case count.
 - `pnpm test:skills` — git-sync's own `node --test` suite (~4 min, 2026-10-01), kept out of `pnpm test` for its length. **Required green for any change
   under `plugin/skills/git-sync/`.**
-- `pnpm test:mod` — the kaizen meter mod's `claude plugin test` suite over `plugin/tests/`, with `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` set. Kept out of
-  `pnpm test` because it needs the early-access flag. **Required green for any change under `plugin/hooks/`.**
 - `pnpm test:visual` — Playwright screenshot, overflow and contrast suite over the built client with a mocked API (`docs/subsystems/visual-tests.md`).
   On demand, **macOS only**, not part of `pnpm test`; re-baseline with `pnpm test:visual --update-snapshots` (no `--`).
 - `pnpm plugin:sync` — reinstall the plugin once a `plugin/` change is pushed to `main`; the installed copy is a snapshot, not a link, so until this
@@ -74,6 +71,8 @@ config — see `docs/subsystems/remote-access.md` before touching any of it.
   a reason. `lib/token-refresh.ts` and `lib/spawn.ts` launch the `claude` CLI, which makes its
   own network calls — the server does not, so they are not a third kind. `lib/git-fetch.ts` launches `git fetch`, which makes its own network call —
   not a third kind either. `test/outbound.test.ts` pins the list.
+  One npm package is allowed, by name: `lookout-widgets`, the Lookout contract producer behind `/api/hub/widgets`, which has zero runtime deps of its own
+  and is pinned to a git tag. `test/server-deps.test.ts` pins both the name and the tag; any other bare import under `server/` fails it.
 - `client/dist/` and `.env` are gitignored.
 - `plugin/skills/kaizen/` is the only copy of `/kaizen`; its log path and line grammar are a
   contract with Analytics (`docs/subsystems/analytics.md`) — never change one side only.

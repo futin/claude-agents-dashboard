@@ -53,8 +53,8 @@ via `tsx`, dev and prod alike).
   The second thing that reaches outside the dashboard's own state is [the Git fetch timer](subsystems/git-stats.md#the-fetch): off by default, it runs
   `git fetch origin` over the pinned repos while Management › Git is open, which writes their remote-tracking refs and `FETCH_HEAD`, never a branch or a
   working tree.
-- **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only. Keep
-  new npm deps out of it.
+- **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only, with one pinned exception: `lookout-widgets`, which has none of its
+  own ([hub-widgets](subsystems/hub-widgets.md#the-dependency-exception)). Keep new npm deps out of it.
 - **Fail-open everywhere.** A missing token, an unreadable file, a failed probe — every
   auxiliary feature degrades to "not shown" rather than crashing the monitor.
 - **Path safety.** Endpoints never join request input into filesystem paths. IDs are
@@ -91,10 +91,12 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/health` | liveness + remote-answer state + connection origin + the two hook numbers (idle threshold, answer window) |
 | `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, plus `notifyAvailable` (never the ntfy topic itself); write path |
 | `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; write path (see [configs](subsystems/configs.md)) |
+| `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); token-guarded, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
 | `GET /api/git-stats` | local git state of every pinned project, in pin order, plus the fetch clock and each repo's last-fetch verdict; a repo that fails is its own `error` row (see [git-stats](subsystems/git-stats.md)) |
 | `POST /api/git-fetch` | `git fetch origin` over every pinned repo now, answering with the fetch clock; token-guarded write path (see [git-stats](subsystems/git-stats.md#the-fetch)) |
 | `GET /api/configs`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
+| `GET /api/hub/widgets`, `/:id` | the Lookout hub catalog and widget data — usage gauge, sessions list and Git pending list; `POST` action paths are 404 (see [hub-widgets](subsystems/hub-widgets.md)) |
 | `GET /api/account` | who the CLI is signed in as (`~/.claude.json` → `oauthAccount`, as display strings) + the two rate windows — the header chip's own 30s poll, so it does not ride the 3s session scan |
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
 | `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, one cell per UTC day of the horizon, plus the coverage disclosure and the off-peak boost verdict (`lib/usage-boost.ts`) |
@@ -193,6 +195,7 @@ server/
   lib/management.ts   config scanner + servable-path security set
   lib/git-stats.ts    read-only git reader for the pinned repos: runner, trunk, memoised branch counts + merged proof
   lib/git-fetch.ts    the Git fetch: detached `git fetch origin` per common dir, error classifier, watched-only timer + clock
+  lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
   lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
@@ -313,11 +316,8 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   `surfaces` / `modifiers` / `offbook` / `gap` report; pipeline in lib/transcript-audit.ts
 .claude-plugin/marketplace.json  the repo as a plugin marketplace — one plugin, sourced from plugin/
 plugin/           the installable Claude Code plugin (`/plugin install`, README §Install the skills);
-                  plain JS skills plus one TypeScript hooks module, never imported by server/ or client/ at runtime
-  .claude-plugin/plugin.json  name + version + `nudgeAtTokens` userConfig
-  hooks/          live kaizen meter mod (function hooks, inert without CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1):
-                  register.ts wiring, meter.ts pure logic, view.tsx pane, kaizen-path.ts; docs/subsystems/analytics.md §Live meter
-  tests/          the mod's `claude plugin test` suite, run by `pnpm test:mod`; tsconfig.json beside it checks against generated engine types
+                  plain JS skills, never imported by server/ or client/ at runtime
+  .claude-plugin/plugin.json  name + version
   skills/git-sync/  repo chores across machines; engine tools/git-sync.mjs, own `node --test`
                   suite run by `pnpm test:skills` (~4 min, 2026-10-01)
   skills/kaizen/  session post-mortem; analyzer kaizen.mjs, own `node --test` suite run
@@ -344,6 +344,7 @@ that area:
 - [analytics](subsystems/analytics.md) — kaizen-fed session post-mortems
 - [account-header](subsystems/account-header.md) — the shell's account chip: its two homes, the `oauthAccount` profile reader, and `GET /api/account`
 - [usage-limits](subsystems/usage-limits.md) — the rate-limit gauges the account chip draws, and the Usage tab behind them: pace, the duty-cycle forecast, and token value per model
+- [hub-widgets](subsystems/hub-widgets.md) — `/api/hub/widgets`: the three Lookout tiles, served through the `lookout-widgets` package, and its pinned dependency exception
 - [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold, answer window, push policy
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `Allow?` tab for terminal permission dialogs

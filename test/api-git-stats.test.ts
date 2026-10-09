@@ -17,7 +17,7 @@ import {
 } from '../server/lib/git-stats.js';
 import type { GitRunner } from '../server/lib/git-stats.js';
 import { encodeProjectDir, overrideClaudeRoots } from '../server/lib/management.js';
-import { resetSettings, setPinned } from '../server/lib/settings.js';
+import { resetSettings, setPinOrder, setPinned } from '../server/lib/settings.js';
 import type { GitStatsResponse } from '../shared/types.js';
 
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
@@ -87,6 +87,18 @@ export async function run(): Promise<number> {
       setPinned(a, false);
       setPinned(a, true);
       body = await get(h);
+      assert.deepStrictEqual(body.repos.map(r => r.dirName), [b, a]);
+    });
+  }));
+
+  check(await testAsync('follows a setPinOrder reorder', async () => {
+    await withGitStats(async (h, fx) => {
+      const a = plantProject(h, 'a', repoWithBranch(fx, 'repo-a'));
+      const b = plantProject(h, 'b', repoWithBranch(fx, 'repo-b'));
+      setPinned(a, true);
+      setPinned(b, true);
+      assert.deepStrictEqual(setPinOrder([b, a]), [b, a]);
+      const body = await get(h);
       assert.deepStrictEqual(body.repos.map(r => r.dirName), [b, a]);
     });
   }));

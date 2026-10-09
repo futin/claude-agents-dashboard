@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { matchesPinFilter, shortenHome, splitPath } from '../client/src/lib/pins.js';
+import { applyPinOrder, matchesPinFilter, movePin, shortenHome, splitPath } from '../client/src/lib/pins.js';
 import type { ProjectRef } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -50,6 +50,46 @@ export function run(): number {
   tally(test('splitPath: a bare name has no parents; the root has no name', () => {
     assert.deepStrictEqual(splitPath('~'), { dirs: [], name: '~' });
     assert.deepStrictEqual(splitPath('/'), { dirs: ['/'], name: '' });
+  }));
+
+  const abcd = ['a', 'b', 'c', 'd'];
+
+  tally(test('movePin: moves a name so it sits at toIndex in the result, without touching the input', () => {
+    const input = [...abcd];
+    assert.deepStrictEqual(movePin(input, 'd', 0), ['d', 'a', 'b', 'c']);
+    assert.deepStrictEqual(movePin(input, 'a', 3), ['b', 'c', 'd', 'a']);
+    assert.deepStrictEqual(movePin(input, 'b', 2), ['a', 'c', 'b', 'd']);
+    assert.deepStrictEqual(movePin(input, 'c', 1), ['a', 'c', 'b', 'd']);
+    assert.deepStrictEqual(input, abcd, 'the input is not mutated');
+  }));
+
+  tally(test('movePin: clamps toIndex to the list', () => {
+    assert.deepStrictEqual(movePin(abcd, 'a', 99), ['b', 'c', 'd', 'a']);
+    assert.deepStrictEqual(movePin(abcd, 'd', -5), ['d', 'a', 'b', 'c']);
+  }));
+
+  tally(test('movePin: no move, or an unknown name, returns the input itself', () => {
+    assert.strictEqual(movePin(abcd, 'b', 1), abcd, 'already there');
+    assert.strictEqual(movePin(abcd, 'x', 0), abcd, 'unknown name');
+    assert.strictEqual(movePin(abcd, 'x', 99), abcd, 'not-found wins over clamping');
+    assert.strictEqual(movePin(abcd, 'd', 99), abcd, 'clamps to its own index');
+  }));
+
+  tally(test('applyPinOrder: rows re-sorted into the order, the same objects in a new array', () => {
+    const rows = ['a', 'b', 'c'].map(dirName => ({ dirName }));
+    const got = applyPinOrder(rows, ['c', 'a', 'b']);
+    assert.deepStrictEqual(got.map(r => r.dirName), ['c', 'a', 'b']);
+    got.forEach(r => assert.strictEqual(r, rows.find(x => x.dirName === r.dirName)));
+    const same = applyPinOrder(rows, ['a', 'b', 'c']);
+    assert.deepStrictEqual(same.map(r => r.dirName), ['a', 'b', 'c']);
+    assert.notStrictEqual(same, rows, 'a new array');
+  }));
+
+  tally(test('applyPinOrder: never drops or duplicates a row when the order and the rows disagree', () => {
+    const rows = ['a', 'b', 'c'].map(dirName => ({ dirName }));
+    assert.deepStrictEqual(applyPinOrder(rows, ['c', 'a']).map(r => r.dirName), ['c', 'a', 'b'], 'an unnamed row is kept, after');
+    assert.deepStrictEqual(applyPinOrder(rows.slice(0, 2), ['b', 'x', 'a']).map(r => r.dirName), ['b', 'a'], 'an unknown name is skipped');
+    assert.deepStrictEqual(applyPinOrder([], ['a']), []);
   }));
 
   console.log(`\n  ${p} passed, ${f} failed`);

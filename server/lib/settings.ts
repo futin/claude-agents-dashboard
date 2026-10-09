@@ -14,7 +14,8 @@
  *
  * Plus `pinnedProjects` (#161): shared by every device, and read by the server
  * itself rather than a hook, so it cannot live in localStorage either. It has
- * its own route (`/api/pins`) and stays out of the `ServerSettings` payload.
+ * its own routes (`/api/pins`, `/api/pins/order`) and stays out of the
+ * `ServerSettings` payload.
  *
  * A web app can't set an environment variable inside Claude Code's process, so
  * the hooks read both off `GET /api/health` — a request they already make as
@@ -315,7 +316,7 @@ function persist(values: Stored): void {
   }
 }
 
-/** The pinned project dir names, in the order they were pinned. */
+/** The pinned project dir names, in the user's order: pin order until {@link setPinOrder} rewrites it. */
 export function getPinnedProjects(): string[] {
   if (cached === null) cached = readStored();
   return [...cached.pinnedProjects];
@@ -334,6 +335,25 @@ export function setPinned(dirName: string, pinned: boolean): string[] | null {
   if (pinned === has) return [...cur];
   if (pinned && cur.length >= MAX_PINNED_PROJECTS) return null;
   const next = pinned ? clampPinned([...cur, dirName]) : cur.filter(d => d !== dirName);
+  cached = { ...cached, pinnedProjects: next };
+  persist(cached);
+  return [...next];
+}
+
+/**
+ * Replace the stored pin order and return the new list — or null, storing nothing, unless `order` is an exact permutation of the stored pins. A tab that
+ * missed a pin or an unpin elsewhere would otherwise drop or resurrect one by reordering; the route answers null with a 409. String equality only.
+ */
+export function setPinOrder(order: unknown): string[] | null {
+  if (cached === null) cached = readStored();
+  const cur = cached.pinnedProjects;
+  if (!Array.isArray(order) || order.length !== cur.length) return null;
+  const seen = new Set<string>();
+  for (const d of order) {
+    if (typeof d !== 'string' || !cur.includes(d) || seen.has(d)) return null;
+    seen.add(d);
+  }
+  const next = [...order] as string[];
   cached = { ...cached, pinnedProjects: next };
   persist(cached);
   return [...next];
