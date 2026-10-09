@@ -316,12 +316,15 @@ board has no fifth data colour to give it, and amber is what it already calls a 
 Mock: `docs/guides/mockups/redesign-mock.html` `#forecast` / `#rates`.
 Reference: `docs/subsystems/usage-limits.md`.
 
-### 8.4b Management — Git | Pinned
+### 8.4b Management — Projects | Git
 
-A rail section with the same fixed two-row tree Usage and Settings draw: **Git** (the default) and **Pinned**, per device in `managementTab`. The page
+A rail section with the same fixed two-row tree Usage and Settings draw: **Projects** (first) and **Git**, per device in `managementTab` (default Projects, which is also where a click on Management in the rail lands). The page
 takes the plain `wrap wide`, and each sub-view opens on a band titled `Management · <sub-view>` (the `section · destination` convention the Usage
-pages set). Pinned is the §8.2 Projects card under its own band, carrying the green "every device" scope pill because the pins are server-stored; it is
-the page that used to be Settings › Pinned, moved unchanged.
+pages set). Projects is `ProjectsView` on the app ground, no card around it, its band carrying the green "every device" scope pill because the pins are
+server-stored. Under the band, a toolbar of a **Tiles | Columns | Lists** `.seg` switcher (per device in `management.projectsLayout`, default Tiles) and a
+filter box over name and path, then two groups, **Pinned** and **Not pinned**, each headed by its name and count. A pin is a paper tile, an offer a dashed
+outline, a pin whose folder is gone an amber edge. Columns sets Not pinned left of Pinned from lg so Pin carries a project straight across; Lists draws each
+group as a `.set-group` card of rows. Pin and Unpin are the tile's own key; the launch sheet's picker (§8.7) is no part of this page.
 
 Git is the Usage band with no right slot, then a toolbar on the ground: a `.seg` switcher — the Sessions one, on `--hairline2` for the same §8.3 reason —
 and beside it the clock chip, a `--strip-hi` key at the switcher's 38px height holding two meters (SYNC and FETCH, a port of backlog-manager's `.ui-meter`:
@@ -473,9 +476,9 @@ under it a link-styled button reads `Not listed? Show older projects · N` — h
 expands, **in place inside the sheet**, a filter box and one boxless row per older project (name, `~`
 path, `last session <age> ago`, a §8.2 36 px **Pin** button). No second surface and no new tint: the
 link is ink, cyan stays the launch button's. Pinning selects the project; its option reads the plain
-name, like any other. Management › Pinned draws the same
-picker under its Pinned projects card, where the Unpin lives, but offers recent projects too, so one in
-daily use can be pinned before it ages out; the sheet does not need them, they are already in its select.
+name, like any other. The picker (`PinPicker`) is the sheet's alone: Management › Projects (§8.4b)
+draws its own tiles and offers recent projects too, so one in daily use can be pinned before it ages
+out; the sheet does not need them, they are already in its select.
 
 Mock: `docs/guides/mockups/redesign-mock.html` `#spawn`.
 Reference: `docs/subsystems/spawn.md`.
