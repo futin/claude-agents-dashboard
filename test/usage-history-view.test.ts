@@ -111,6 +111,36 @@ export function run(): number {
     assert.strictEqual(rows[0].days[0].offMs, 0);
   })) p++; else f++;
 
+  if (test('weekRows: two windows sharing one reset stamp (a mid-week counter reset)', () => {
+    const reset = MON + 7 * DAY;
+    const five = (firstT: number, peakPct: number): UsageHistoryWindow => ({ resetsAt: null, firstT, lastT: firstT, peakPct, segments: [[{ t: firstT, pct: peakPct }]] });
+    const rows = weekRows(resp({
+      sinceT: MON, nowT: MON + 3 * DAY,
+      weekly: [
+        week(reset, [[MON + H, 0], [MON + DAY, 40]]),
+        week(reset, [[MON + DAY + 2 * H, 3], [MON + 2 * DAY, 20]])
+      ],
+      fiveHour: [five(MON + 5 * H, 100), five(MON + DAY + 5 * H, 100), five(MON + DAY + 9 * H, 100)]
+    }), 0);
+    assert.deepStrictEqual(rows.map(r => r.current), [true, false]);
+    assert.notStrictEqual(rows[0].key, rows[1].key);
+    assert.strictEqual(rows[0].startT, null);
+    assert.deepStrictEqual(rows.map(r => r.limitHits), [2, 1]);
+  })) p++; else f++;
+
+  if (test('weekRows: day boundaries follow offsetMinutes', () => {
+    const east = weekRows(resp({
+      sinceT: MON, nowT: MON + DAY,
+      weekly: [week(MON + 7 * DAY, [[MON + 18 * H, 0], [MON + 20 * H, 10], [MON + 22 * H, 25]])]
+    }), 180);
+    assert.deepStrictEqual(east[0].days.map(d => [d.fromT, d.toT]), [[MON + 18 * H, MON + 21 * H], [MON + 21 * H, MON + DAY]]);
+    const west = weekRows(resp({
+      sinceT: MON, nowT: MON + 8 * H,
+      weekly: [week(MON + 7 * DAY, [[MON + 2 * H, 0], [MON + 4 * H, 5], [MON + 6 * H, 12]])]
+    }), -300);
+    assert.deepStrictEqual(west[0].days.map(d => [d.fromT, d.toT]), [[MON + 2 * H, MON + 5 * H], [MON + 5 * H, MON + 8 * H]]);
+  })) p++; else f++;
+
   if (test("weekRows: startT is the previous window's reset, newest row first, hits counted per row", () => {
     const r1 = MON + 7 * DAY, r2 = MON + 14 * DAY;
     const five = (firstT: number, peakPct: number): UsageHistoryWindow => ({ resetsAt: null, firstT, lastT: firstT, peakPct, segments: [[{ t: firstT, pct: peakPct }]] });

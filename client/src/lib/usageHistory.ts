@@ -60,14 +60,14 @@ export interface WeekDay {
 }
 
 export interface WeekRow {
-  /** `resetsAt`, or `unscoped-<firstT>` for a window the endpoint reported without one. */
+  /** `<resetsAt>-<firstT>`, `unscoped` standing in for a missing `resetsAt`; the first reading keeps it unique when a counter reset splits one stamp into two windows. */
   key: string;
   /** `Date.parse(resetsAt)`; null when unscoped. */
   resetsAtMs: number | null;
-  /** The previous weekly window's reset; null for the oldest window or an unscoped one. Observed, never `resetsAt` minus 7 days. */
+  /** The previous weekly window's reset; null for the oldest window, an unscoped one, or a window opened by a mid-week counter reset (the previous reset is still ahead of it). Observed, never `resetsAt` minus 7 days. */
   startT: number | null;
   firstT: number;
-  /** The window has not reset yet. */
+  /** The window has not reset yet and no later window exists — only the newest row. */
   current: boolean;
   /** The first reading's pct — what the week had spent before this row's data; 0 when under {@link MIN_GAIN_PCT}. */
   prePct: number;
@@ -90,7 +90,10 @@ export function weekRows(resp: UsageHistoryResponse, offsetMinutes: number): Wee
   const resets = sorted.map(wk => (wk.resetsAt === null ? null : Date.parse(wk.resetsAt)));
   const rows = sorted.map((wk, i): WeekRow => {
     const resetsAtMs = resets[i];
-    const startT = i > 0 ? resets[i - 1] : null;
+    const prevReset = i > 0 ? resets[i - 1] : null;
+    // A counter reset can split one window in two under the same stamp; the previous "reset" is then still ahead of this row's own first reading.
+    const startT = prevReset !== null && prevReset <= wk.firstT ? prevReset : null;
+    const next = sorted[i + 1];
     const points = wk.segments.flat();
     /** The last reading at or before `t`; the first when `t` precedes them all. */
     const lastPoint = (t: number): UsageHistoryPoint | undefined => {
@@ -125,13 +128,13 @@ export function weekRows(resp: UsageHistoryResponse, offsetMinutes: number): Wee
     }
     const first = held(wk.firstT);
     const limitHits = resp.fiveHour.filter(f =>
-      f.peakPct >= 100 && f.firstT >= (startT ?? wk.firstT) && f.firstT < (resetsAtMs ?? wk.lastT)).length;
+      f.peakPct >= 100 && f.firstT >= (startT ?? wk.firstT) && f.firstT < Math.min(resetsAtMs ?? wk.lastT, next?.firstT ?? Infinity)).length;
     return {
-      key: wk.resetsAt ?? `unscoped-${wk.firstT}`,
+      key: `${wk.resetsAt ?? 'unscoped'}-${wk.firstT}`,
       resetsAtMs,
       startT,
       firstT: wk.firstT,
-      current: resetsAtMs !== null && resetsAtMs > resp.nowT,
+      current: next === undefined && resetsAtMs !== null && resetsAtMs > resp.nowT,
       prePct: first >= MIN_GAIN_PCT ? first : 0,
       preCause: wk.firstT - resp.sinceT <= 2 * resp.bucketMs ? 'range' : 'recording',
       days,

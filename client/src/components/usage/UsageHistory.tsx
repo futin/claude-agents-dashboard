@@ -125,7 +125,7 @@ function WeekFill({ history, tip }: { history: UsageHistoryResponse; tip: (text:
     const sw = Math.max(1.5, x(d.toPct) - x(d.fromPct) - (d.fromPct > 0 ? 2 : 1));
     return (
       <g key={d.fromT}>
-        <rect className={`usg-wf-seg ${di % 2 ? 'b' : 'a'}`} x={sx} y={y} width={sw} height={ROW_H} rx={3} tabIndex={0} aria-label={text.replace(/\n/g, ' — ')} {...tip(text)} />
+        <rect className={`usg-wf-seg ${di % 2 ? 'b' : 'a'}`} x={sx} y={y} width={sw} height={ROW_H} rx={3} role="img" tabIndex={0} aria-label={text.replace(/\n/g, ' — ')} {...tip(text)} />
         {d.offMs > 0 && <rect x={sx} y={y} width={sw} height={ROW_H} rx={3} fill={`url(#${hatchId})`} pointerEvents="none" />}
         {sw >= DAY_LABEL_MIN_PX && <text className="usg-wf-day" x={sx + sw / 2} y={y + mid}>{fmtHeld(d.fromT, offsetMs, { weekday: 'short' })}</text>}
       </g>
@@ -144,7 +144,7 @@ function WeekFill({ history, tip }: { history: UsageHistoryResponse; tip: (text:
         <rect className="usg-wf-track" x={L} y={y} width={pw} height={ROW_H} rx={4} />
         {row.prePct > 0 && (
           <>
-            <rect className="usg-wf-seg pre" x={L} y={y} width={preW} height={ROW_H} rx={3} tabIndex={0} aria-label={preText.replace(/\n/g, ' — ')} {...tip(preText)} />
+            <rect className="usg-wf-seg pre" x={L} y={y} width={preW} height={ROW_H} rx={3} role="img" tabIndex={0} aria-label={preText.replace(/\n/g, ' — ')} {...tip(preText)} />
             {preW >= PRE_LABEL_MIN_PX && <text className="usg-wf-day" x={L + preW / 2} y={y + mid}>earlier</text>}
           </>
         )}
@@ -160,7 +160,7 @@ function WeekFill({ history, tip }: { history: UsageHistoryResponse; tip: (text:
   return (
     <div className="usg-wf" ref={boxRef}>
       {width > 0 && (
-        <svg width={w} height={H} role="img" aria-label="Each weekly window filled day by day">
+        <svg width={w} height={H} role="group" aria-label="Each weekly window filled day by day">
           <defs>
             <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <line className="usg-wf-hatch" x1="0" y1="0" x2="0" y2="6" />
