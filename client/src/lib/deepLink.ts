@@ -34,21 +34,54 @@ export function readViewParam(search: string): 'git' | null {
   }
 }
 
-let consumed: { session: string | null; view: 'git' | null } | null = null;
+type Where = { location: Pick<Location, 'search' | 'pathname'>; history: Pick<History, 'replaceState'> };
 
-function consume(): { session: string | null; view: 'git' | null } {
-  if (consumed) return consumed;
-  const search = window.location.search;
-  consumed = { session: readSessionParam(search), view: readViewParam(search) };
-  if (consumed.session || consumed.view) {
-    try {
-      window.history.replaceState(null, '', window.location.pathname);
-    } catch {
-      /* older engines / file:// — the param staying put is harmless */
-    }
-  }
-  return consumed;
+export interface DeepLink {
+  /** The id this page was opened with, or null. */
+  session(): string | null;
+  /** The sub-view this page was opened with (`?view=git`), or null. */
+  view(): 'git' | null;
+  /**
+   * The Management tab the link asks for, at most once: null when a `?session=` outranks the view (that link lands on Sessions, so it must not rewrite
+   * the stored tab) and on every call after the first, so an effect that re-runs cannot re-apply it.
+   */
+  takeManagementTab(): 'git' | null;
 }
+
+/**
+ * The params are read once, on the first call to any accessor, and the URL is stripped then, so every caller sees the same answer no matter which renders
+ * first. Takes the window so a test can hand it a fake one; the app uses the module-level instance below.
+ */
+export function createDeepLink(where: Where): DeepLink {
+  let read: { session: string | null; view: 'git' | null } | null = null;
+  let tabTaken = false;
+  const consume = () => {
+    if (read) return read;
+    const search = where.location.search;
+    read = { session: readSessionParam(search), view: readViewParam(search) };
+    if (read.session || read.view) {
+      try {
+        where.history.replaceState(null, '', where.location.pathname);
+      } catch {
+        /* older engines / file:// — the param staying put is harmless */
+      }
+    }
+    return read;
+  };
+  return {
+    session: () => consume().session,
+    view: () => consume().view,
+    takeManagementTab: () => {
+      if (tabTaken) return null;
+      tabTaken = true;
+      const { session, view } = consume();
+      return session ? null : view;
+    }
+  };
+}
+
+let link: DeepLink | null = null;
+const page = (): DeepLink => (link ??= createDeepLink(window));
 
 /**
  * The id this page was opened with, or null.
@@ -58,10 +91,15 @@ function consume(): { session: string | null; view: 'git' | null } {
  * same answer no matter which renders first.
  */
 export function deepLinkSession(): string | null {
-  return consume().session;
+  return page().session();
 }
 
 /** The sub-view this page was opened with (`?view=git`), or null. Memoised with {@link deepLinkSession}. */
 export function deepLinkView(): 'git' | null {
-  return consume().view;
+  return page().view();
+}
+
+/** {@link DeepLink.takeManagementTab} for this page: `AppShell` applies it to the `managementTab` setting once. */
+export function takeDeepLinkManagementTab(): 'git' | null {
+  return page().takeManagementTab();
 }

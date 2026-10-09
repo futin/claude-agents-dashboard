@@ -75,7 +75,7 @@ override it (see `dashboard.section` below).
   `SessionsView` opening the drawer), and strips it from the URL via `history.replaceState`,
   precisely so a refresh or a bookmark does *not* replay it. Its sibling `?view=git` is the same kind of one-shot: Lookout's Git pending tile opens it,
   `deepLinkView()` reads it from the same single memoised parse (so neither caller can strip the other's param first), and `App.tsx` forces the
-  `management` section and sets `managementTab` to `git`.
+  `management` section and sets `managementTab` to `git` — once per load (`takeDeepLinkManagementTab`), and not at all when a `?session=` beside it wins.
 - **Which of the five shapes draws the list is deliberately NOT in `dashboard.view`.** It
   used to be a `View` field, which made one click in the switcher the shape every future load
   opened in. The shape is not a filter, and it does not belong in the object the filters are

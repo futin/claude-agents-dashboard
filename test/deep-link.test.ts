@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { readSessionParam, readViewParam } from '../client/src/lib/deepLink.js';
+import { createDeepLink, readSessionParam, readViewParam } from '../client/src/lib/deepLink.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -51,6 +51,40 @@ export function run(): number {
     assert.strictEqual(readViewParam('?view=pinned'), null);
     assert.strictEqual(readViewParam('?view=GIT'), null);
     assert.strictEqual(readViewParam('?%'), null);
+  })) p++; else f++;
+
+  const UUID = '0b6f2a4e-1c3d-4e5f-8a9b-0c1d2e3f4a5b';
+  const fake = (search: string) => {
+    const strips: string[] = [];
+    const where = { location: { search, pathname: '/app' }, history: { replaceState: (_s: unknown, _t: string, url?: string | URL | null) => { strips.push(String(url)); } } };
+    return { link: createDeepLink(where), strips };
+  };
+
+  if (test('both params are read in one pass, whichever accessor runs first, and the URL is stripped once', () => {
+    const { link, strips } = fake(`?session=${UUID}&view=git`);
+    assert.strictEqual(link.view(), 'git');
+    assert.strictEqual(link.session(), UUID);
+    assert.strictEqual(link.view(), 'git');
+    assert.deepStrictEqual(strips, ['/app']);
+  })) p++; else f++;
+
+  if (test('a URL with neither param is left alone', () => {
+    const { link, strips } = fake('?other=1');
+    assert.strictEqual(link.session(), null);
+    assert.strictEqual(link.view(), null);
+    assert.deepStrictEqual(strips, []);
+  })) p++; else f++;
+
+  if (test('view=git hands out the git Management tab once, then null', () => {
+    const { link } = fake('?view=git');
+    assert.strictEqual(link.takeManagementTab(), 'git');
+    assert.strictEqual(link.takeManagementTab(), null);
+    assert.strictEqual(link.view(), 'git');
+  })) p++; else f++;
+
+  if (test('a session param outranks view=git: no Management tab is handed out', () => {
+    const { link } = fake(`?session=${UUID}&view=git`);
+    assert.strictEqual(link.takeManagementTab(), null);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

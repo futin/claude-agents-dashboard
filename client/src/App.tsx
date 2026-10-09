@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { HeaderAccount } from './components/HeaderAccount';
 import { SideRail } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
-import { deepLinkSession, deepLinkView } from './lib/deepLink';
+import { deepLinkSession, deepLinkView, takeDeepLinkManagementTab } from './lib/deepLink';
 import { isSection, type Section } from './lib/sections';
 import { useAccount } from './hooks/useAccount';
 import { useShellNarrow } from './hooks/useNarrow';
@@ -50,9 +50,11 @@ function AppShell() {
     return isSection(want) ? want : 'sessions';
   });
 
-  // The sub-view is a setting, so it is written once after the first render, not in the initializer above.
+  // The sub-view is a setting, so it is written after the first render, not in the initializer above. `update` changes with every settings write, so
+  // this effect re-runs; `takeDeepLinkManagementTab` answers only once, or a later pick of Pinned would snap back to Git.
   useEffect(() => {
-    if (deepLinkView() === 'git') update({ managementTab: 'git' });
+    const tab = takeDeepLinkManagementTab();
+    if (tab) update({ managementTab: tab });
   }, [update]);
 
   const change = (s: Section): void => {

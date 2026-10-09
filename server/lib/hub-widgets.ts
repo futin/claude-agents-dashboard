@@ -1,6 +1,7 @@
 // The dashboard's Lookout hub widgets, served under /api/hub/widgets by lookout-widgets (docs/subsystems/hub-widgets.md).
 import { createHubHandler, type GaugeBar, type HubHandler, type RowStatus, type WidgetDecl } from 'lookout-widgets';
 
+import { gitUpstreamShown } from '../../shared/gitUpstream.js';
 import type { RepoGitStats, Session } from '../../shared/types.js';
 import { scanSnapshot } from '../api.js';
 import type { Config } from './config.js';
@@ -46,9 +47,10 @@ function unreadableReason(r: Exclude<RepoGitStats, { state: 'ok' }>): string {
 
 /**
  * One row per pinned repo with something to commit, push or pull, plus one per repo the reader could not read; clean repos are left out. Ahead and behind
- * add the local trunk against `origin/<trunk>` to the current branch against its upstream. An upstream of `origin/<trunk>` (that is "unmerged", not
- * "unpushed") and a gone upstream count for nothing, as in the Git view's triage rule. Rows go pull (warn), then commit/push (running), then unreadable
- * (error), each group in pin order, so a small tile's first rows are the most urgent.
+ * add the local trunk against `origin/<trunk>` to the current branch against its upstream, where the upstream counts only as far as `gitUpstreamShown`
+ * (the board's upstream chip) shows it: an upstream of `origin/<trunk>` (that is "unmerged", not "unpushed") and a gone upstream count for nothing. Unlike
+ * the Git view's triage, which never raises a repo for an ahead-only upstream, an upstream ahead here is a push row — this tile lists what to push too.
+ * Rows go pull (warn), then commit/push (running), then unreadable (error), each group in pin order, so a small tile's first rows are the most urgent.
  */
 export function gitPendingRows(repos: RepoGitStats[]): GitRow[] {
   const pull: GitRow[] = [], push: GitRow[] = [], bad: GitRow[] = [];
@@ -59,10 +61,10 @@ export function gitPendingRows(repos: RepoGitStats[]): GitRow[] {
       continue;
     }
     let ahead = r.trunkVsOrigin?.ahead ?? 0, behind = r.trunkVsOrigin?.behind ?? 0;
-    const up = r.currentVsUpstream;
-    if (up && up.counts && !(r.trunk !== null && up.upstream === `origin/${r.trunk}`)) {
-      ahead += up.counts.ahead;
-      behind += up.counts.behind;
+    const up = gitUpstreamShown(r)?.counts;
+    if (up) {
+      ahead += up.ahead;
+      behind += up.behind;
     }
     const parts = [r.uncommitted > 0 ? `${r.uncommitted} changed` : null, ahead > 0 ? `↑${ahead}` : null, behind > 0 ? `↓${behind}` : null];
     const subtitle = parts.filter((p): p is string => p !== null).join(' · ');
@@ -86,7 +88,12 @@ export function createDashboardHub(config: Config, sources: HubSources = {}): Hu
     id: 'git', title: 'Git pending', render: 'list', refreshSeconds: 30, open: GIT_OPEN,
     load: async () => {
       watchGit();
-      return { rows: gitPendingRows(await git()) };
+      try {
+        return { rows: gitPendingRows(await git()) };
+      } catch (e) {
+        console.error('[dashboard] git stats read failed:', (e as Error).message);
+        throw e;
+      }
     }
   });
   return createHubHandler({ app: { name: 'Claude Agents Dashboard' }, widgets });

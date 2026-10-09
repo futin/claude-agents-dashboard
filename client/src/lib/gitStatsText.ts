@@ -1,4 +1,5 @@
 import type { FetchClock, FetchError, GitBranch, RepoGitStats } from '../../../shared/types';
+import { gitUpstreamShown } from '../../../shared/gitUpstream';
 import { formatAgo } from './format';
 
 /**
@@ -75,18 +76,8 @@ export function gitTrunkVsOriginText(r: OkRepo): string {
   return r.trunkRefs !== null && r.trunkRefs.origin ? `${r.trunk} only on origin` : `${r.trunk} not on origin`;
 }
 
-/**
- * The current branch's upstream facts the page draws, or null when there is nothing to say: the field is absent (an older server), null, level (0 / 0),
- * or the upstream is `origin/<trunk>` — that branch's own row already shows the same numbers against the same base. The chip and the Triage rule both read
- * this, so they never disagree.
- */
-export function gitUpstreamShown(r: OkRepo): NonNullable<OkRepo['currentVsUpstream']> | null {
-  const u = r.currentVsUpstream;
-  if (u === undefined || u === null) return null;
-  if (u.counts !== null && u.counts.ahead === 0 && u.counts.behind === 0) return null;
-  if (r.trunk !== null && u.upstream === `origin/${r.trunk}`) return null;
-  return u;
-}
+/** Moved to `shared/` so the hub widget reads the same rule; re-exported so the board's imports stay put. */
+export { gitUpstreamShown };
 
 /** The upstream chip's text, in `gitTrunkVsOriginText`'s grammar; null when {@link gitUpstreamShown} hides it. */
 export function gitUpstreamText(r: OkRepo): string | null {
