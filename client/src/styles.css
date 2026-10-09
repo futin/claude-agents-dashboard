@@ -2219,7 +2219,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .usg-wf-track{fill:var(--surface2)}
 .usg-wf-seg.a{fill:color-mix(in oklab,var(--green) 70%,var(--surface))}
 .usg-wf-seg.b{fill:color-mix(in oklab,var(--green) 45%,var(--surface))}
-.usg-wf-seg.pre{fill:var(--steel)}
+.usg-wf-seg.pre{fill:color-mix(in oklab,var(--ink3) 40%,var(--surface2))}
 .usg-wf-hatch{stroke:var(--surface);stroke-width:1.5;opacity:.55}
 .usg-wf-day{font-size:10px;font-weight:600;fill:var(--ink);text-anchor:middle;pointer-events:none}
 .usg-wf-lab{font-size:11px;font-weight:500;fill:var(--ink);text-anchor:end}
@@ -2231,7 +2231,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .usg-hist-sw{display:inline-block;width:14px;height:10px;border-radius:2px}
 .usg-hist-sw.a{background:color-mix(in oklab,var(--green) 70%,var(--surface))}
 .usg-hist-sw.b{background:color-mix(in oklab,var(--green) 45%,var(--surface))}
-.usg-hist-sw.pre{background:var(--steel)}
+.usg-hist-sw.pre{background:color-mix(in oklab,var(--ink3) 40%,var(--surface2))}
 .usg-hist-sw.lim{height:0;border-top:1.5px dashed var(--red);border-radius:0}
 .usg-hist-sw.off{background:repeating-linear-gradient(45deg,color-mix(in oklab,var(--surface) 55%,transparent) 0 1.5px,transparent 1.5px 4px),color-mix(in oklab,var(--green) 70%,var(--surface))}
 

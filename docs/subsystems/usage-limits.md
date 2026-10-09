@@ -552,8 +552,8 @@ The page is a range switch, a figure strip (Recorded %, 5h windows, Hit 100%, We
 weekly-windows table newest first. The chart is hand-drawn SVG at the measured pixel width (so it stays usable at 390 px, where the label columns slim down):
 one bar per weekly window, newest first, whose right edge is the weekly limit, so a full bar is a week you ran out. Each bar is filled day by day — a segment per
 local day, as long as the share of the week that day spent, days under 0.3 points left undrawn. A week the range opens on (or recording picked up late) starts
-with a grey pre segment for what it had already spent, never credited to its first visible day. A day whose reading jumped across at least an hour of
-unrecorded time wears a hatch, and its tooltip says how many hours its jump covers. A row starts at the previous weekly window's observed reset, never at
+with a grey pre segment for what it had already spent, never credited to its first visible day. A day whose reading rose across a gap of at least an hour
+wears a hatch, and its tooltip says how many hours its jump covers; a gap the reading did not rise across is just the server being off and is not marked. A row starts at the previous weekly window's observed reset, never at
 `resetsAt` minus 7 days; the oldest window and an unscoped one (no `resetsAt`, labelled `Unscoped`) have no known start. Every segment has a real tooltip through
 `useFloatingTip`, never a `title` attribute.
 

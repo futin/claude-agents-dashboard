@@ -29,7 +29,7 @@ const ROW_GAP = 24;
 const TOP = 30;
 /** The label columns left and right of the track; the phone gets slimmer ones so the track keeps room. */
 const WIDE = { left: 128, right: 132 };
-const NARROW = { left: 76, right: 84 };
+const NARROW = { left: 72, right: 100 };
 const NARROW_BELOW = 560;
 /** A day label needs this much segment; the pre segment's `earlier` needs more. */
 const DAY_LABEL_MIN_PX = 30;
@@ -81,16 +81,23 @@ function fmtDur(ms: number): string {
   return ms >= DAY_MS ? `${Math.round((ms / DAY_MS) * 10) / 10}d` : `${Math.max(1, Math.round(ms / HOUR_MS))}h`;
 }
 
-const fmtDay = (ms: number, long: boolean) =>
-  new Date(ms).toLocaleDateString(undefined, long ? { weekday: 'short', day: 'numeric', month: 'short' } : { weekday: 'short', day: 'numeric' });
+/** A reset stamp's weekday and day, in real local time. */
+const fmtResets = (ms: number) => new Date(ms).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
+/**
+ * A day segment's date or weekday, read in the same held offset `weekRows` placed its midnights with — the browser's own zone would label a midnight
+ * from before a DST change a day early.
+ */
+const fmtHeld = (ms: number, offsetMs: number, opts: Intl.DateTimeFormatOptions) =>
+  new Date(ms + offsetMs).toLocaleDateString(undefined, { ...opts, timeZone: 'UTC' });
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 const fmtClock = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
-function dayTip(row: WeekRow, day: WeekDay): string {
+function dayTip(row: WeekRow, day: WeekDay, offsetMs: number): string {
   const gain = day.toPct - day.fromPct;
+  // Only a row's first reading starts a day mid-day; a first day that was dropped for gaining too little leaves the next one at midnight, with no `from`.
   const from = row.prePct > 0 && day.fromT === row.firstT ? ` from ${fmtClock(day.fromT)}` : '';
   const off = day.offMs > 0 ? `\nincludes ${fmtDur(day.offMs)} not recorded — use from those hours lands here` : '';
-  return `${fmtDay(day.fromT, true)}${from}\n+${fmtPct(gain)}% of the week · ${fmtPct(day.toPct)}% by the end of the day${off}`;
+  return `${fmtHeld(day.fromT, offsetMs, { weekday: 'short', day: 'numeric', month: 'short' })}${from}\n+${fmtPct(gain)}% of the week · ${fmtPct(day.toPct)}% by the end of the day${off}`;
 }
 
 function preTip(row: WeekRow, rangeText: string): string {
@@ -101,7 +108,9 @@ function preTip(row: WeekRow, rangeText: string): string {
 function WeekFill({ history, tip }: { history: UsageHistoryResponse; tip: (text: string) => TipHandlers }) {
   const [boxRef, width] = useWidth<HTMLDivElement>();
   const hatchId = useId();
-  const rows = weekRows(history, -new Date().getTimezoneOffset());
+  const offsetMinutes = -new Date().getTimezoneOffset();
+  const offsetMs = offsetMinutes * 60_000;
+  const rows = weekRows(history, offsetMinutes);
   const { left: L, right: R } = width < NARROW_BELOW ? NARROW : WIDE;
   const w = Math.max(width, L + R + 1);
   const pw = w - L - R;
@@ -111,14 +120,14 @@ function WeekFill({ history, tip }: { history: UsageHistoryResponse; tip: (text:
   const mid = ROW_H / 2 + 4;
 
   const day = (row: WeekRow, d: WeekDay, di: number, y: number) => {
-    const text = dayTip(row, d);
+    const text = dayTip(row, d, offsetMs);
     const sx = x(d.fromPct) + (d.fromPct > 0 ? 1 : 0);
     const sw = Math.max(1.5, x(d.toPct) - x(d.fromPct) - (d.fromPct > 0 ? 2 : 1));
     return (
       <g key={d.fromT}>
         <rect className={`usg-wf-seg ${di % 2 ? 'b' : 'a'}`} x={sx} y={y} width={sw} height={ROW_H} rx={3} tabIndex={0} aria-label={text.replace(/\n/g, ' — ')} {...tip(text)} />
         {d.offMs > 0 && <rect x={sx} y={y} width={sw} height={ROW_H} rx={3} fill={`url(#${hatchId})`} pointerEvents="none" />}
-        {sw >= DAY_LABEL_MIN_PX && <text className="usg-wf-day" x={sx + sw / 2} y={y + mid}>{new Date(d.fromT).toLocaleDateString(undefined, { weekday: 'short' })}</text>}
+        {sw >= DAY_LABEL_MIN_PX && <text className="usg-wf-day" x={sx + sw / 2} y={y + mid}>{fmtHeld(d.fromT, offsetMs, { weekday: 'short' })}</text>}
       </g>
     );
   };
@@ -126,6 +135,7 @@ function WeekFill({ history, tip }: { history: UsageHistoryResponse; tip: (text:
   const rowEl = (row: WeekRow, i: number) => {
     const y = TOP + i * (ROW_H + ROW_GAP);
     const preW = Math.max(1.5, x(row.prePct) - L - 1);
+    const preText = preTip(row, rangeText);
     // No previous reset means the week's start is unknown: say where the record starts, not a date that reads as the start.
     const title = row.current ? 'This week' : row.resetsAtMs === null ? 'Unscoped' : row.startT === null ? `from ${fmtDate(row.firstT)}` : fmtDate(row.startT);
     const hits = row.limitHits;
@@ -134,13 +144,13 @@ function WeekFill({ history, tip }: { history: UsageHistoryResponse; tip: (text:
         <rect className="usg-wf-track" x={L} y={y} width={pw} height={ROW_H} rx={4} />
         {row.prePct > 0 && (
           <>
-            <rect className="usg-wf-seg pre" x={L} y={y} width={preW} height={ROW_H} rx={3} tabIndex={0} aria-label={preTip(row, rangeText).replace(/\n/g, ' — ')} {...tip(preTip(row, rangeText))} />
+            <rect className="usg-wf-seg pre" x={L} y={y} width={preW} height={ROW_H} rx={3} tabIndex={0} aria-label={preText.replace(/\n/g, ' — ')} {...tip(preText)} />
             {preW >= PRE_LABEL_MIN_PX && <text className="usg-wf-day" x={L + preW / 2} y={y + mid}>earlier</text>}
           </>
         )}
         {row.days.map((d, di) => day(row, d, di, y))}
         <text className="usg-wf-lab" x={L - 12} y={y + 11}>{title}</text>
-        <text className="usg-wf-sub" x={L - 12} y={y + 24}>{row.resetsAtMs === null ? 'no reset stamp' : `resets ${fmtDay(row.resetsAtMs, false)}`}</text>
+        <text className="usg-wf-sub" x={L - 12} y={y + 24}>{row.resetsAtMs === null ? 'no reset stamp' : `resets ${fmtResets(row.resetsAtMs)}`}</text>
         <text className="usg-wf-peak" x={w - R + 12} y={y + 13}>{fmtPct(row.peakPct)}%{row.current ? ' so far' : ''}</text>
         <text className="usg-wf-sub start" x={w - R + 12} y={y + 26}>{hits > 0 ? `${hits} × 5h limit hit` : 'no 5h limit hit'}</text>
       </g>

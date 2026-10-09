@@ -101,6 +101,16 @@ export function run(): number {
     assert.strictEqual(short[0].days[0].offMs, 0);
   })) p++; else f++;
 
+  if (test('weekRows: a gap the reading did not rise across is not unrecorded use', () => {
+    const rows = weekRows(resp({
+      sinceT: MON, nowT: MON + DAY,
+      weekly: [week(MON + 7 * DAY, [[MON + 1 * H, 0], [MON + 4 * H, 5], [MON + 10 * H, 5], [MON + 12 * H, 9]])],
+      gaps: [{ fromT: MON + 5 * H, toT: MON + 8 * H }]
+    }), 0);
+    assert.strictEqual(rows[0].days.length, 1);
+    assert.strictEqual(rows[0].days[0].offMs, 0);
+  })) p++; else f++;
+
   if (test("weekRows: startT is the previous window's reset, newest row first, hits counted per row", () => {
     const r1 = MON + 7 * DAY, r2 = MON + 14 * DAY;
     const five = (firstT: number, peakPct: number): UsageHistoryWindow => ({ resetsAt: null, firstT, lastT: firstT, peakPct, segments: [[{ t: firstT, pct: peakPct }]] });

@@ -52,7 +52,10 @@ export interface WeekDay {
   fromPct: number;
   /** Reading held at `toT`. */
   toPct: number;
-  /** Unrecorded ms between the last reading at or before `fromT` and `toT`; 0 when under {@link OFF_MIN_MS}. */
+  /**
+   * Unrecorded ms between the last reading at or before `fromT` and `toT`, summed over the gaps the reading rose across (by at least {@link MIN_GAIN_PCT},
+   * on a reading taken inside this day) — a gap it did not rise across is the server being off, not use that went unseen. 0 when under {@link OFF_MIN_MS}.
+   */
   offMs: number;
 }
 
@@ -112,7 +115,12 @@ export function weekRows(resp: UsageHistoryResponse, offsetMinutes: number): Wee
       const fromPct = held(fromT), toPct = held(toT);
       if (toPct - fromPct < MIN_GAIN_PCT) continue;
       const from = lastRead(fromT);
-      const off = resp.gaps.reduce((sum, g) => sum + Math.max(0, Math.min(g.toT, toT) - Math.max(g.fromT, from)), 0);
+      const off = resp.gaps.reduce((sum, g) => {
+        const overlap = Math.min(g.toT, toT) - Math.max(g.fromT, from);
+        if (overlap <= 0) return sum;
+        const after = points.find(pt => pt.t >= g.toT);
+        return after !== undefined && after.t <= toT && after.pct - held(g.fromT) >= MIN_GAIN_PCT ? sum + overlap : sum;
+      }, 0);
       days.push({ fromT, toT, fromPct, toPct, offMs: off >= OFF_MIN_MS ? off : 0 });
     }
     const first = held(wk.firstT);
