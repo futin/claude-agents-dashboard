@@ -48,6 +48,27 @@ bg=$(printf '%s' "$INPUT" | jq '((.background_tasks // []) | length) + ((.sessio
 
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 [ -n "$SESSION_ID" ] || exit 0
+
+# Autopilot opt-out. While an `autopilot` run is `running` (state file ~/.claude/autopilot/<session_id>.json, field `status`, written by the autopilot CLI)
+# the run must not ask, and the CLI applies a deny/block only after EVERY hook on the event has returned — so a hold here would idle the run for up to
+# `answerSecs` and push a question to the phone for a session that must not ask. Reads only `status == "running"`; any other status, a missing or malformed
+# file or a jq failure is "not running" and leaves today's behaviour untouched. Never writes the file. The id is checked against the CLI's own grammar first
+# so a crafted session_id cannot walk the path out of the state directory.
+autopilot_running() {
+  local LC_ALL=C sid="$1"
+  case "$sid" in ''|*[!A-Za-z0-9-]*) return 1 ;; esac
+  local f="$HOME/.claude/autopilot/$sid.json"
+  [ -f "$f" ] || return 1
+  [ "$(jq -r '.status // empty' "$f" 2>/dev/null)" = "running" ]
+}
+
+# `running`: the turn autopilot's guard blocks (stop_hook_active false) exits silently — no hold, no "finished" push. The second Stop (stop_hook_active true)
+# is the one that ends the turn, so it is treated as a FIRST stop: SHA=false makes both notify_fallback and the hold body (`stopHookActive`) behave as on a
+# first stop, because the server only pushes when that field is not true. A run that dies mid-way must still reach the phone.
+if autopilot_running "$SESSION_ID"; then
+  [ "$SHA" = "true" ] || exit 0
+  SHA=false
+fi
 PERM_MODE=$(printf '%s' "$INPUT" | jq -r '.permission_mode // empty')
 
 # Headless detection. This hook inherits the `claude` process's controlling

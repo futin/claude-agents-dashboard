@@ -213,6 +213,13 @@ already decide this?" versus "is the user back?".
   so hand-editing it while the server runs does nothing until a restart — flip it through
   the pill or `POST /api/remote-answer`, which updates both. It is cwd-relative, so a
   server started from another directory keeps its own state file.
+- **An `autopilot` run in progress steps the hook aside.** `ask-remote-hook.sh` reads `~/.claude/autopilot/<session_id>.json` (written by the `autopilot` CLI in
+  claude-global) and exits 0 silently when its `status` is `running`, before the `/api/health` probe, so the session costs no network call and never registers a
+  pending question. Hooks on one event run in parallel and the CLI applies a deny only after every one has returned, so without this the autopilot gate's deny
+  would idle for up to `answerSecs` and push a question to the phone for a run that must not ask. Only `running` counts: `blocked`, `wrap-up`, `done`, `off`, a
+  missing file and a malformed one all keep today's behaviour, so the blocker question and the final batched question stay answerable from the phone. The hook
+  never writes the file, and a `session_id` outside `[A-Za-z0-9-]` skips the check. Deployment order: on each machine the dashboard checkout must be pulled
+  together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question.
 
 ## Security posture
 

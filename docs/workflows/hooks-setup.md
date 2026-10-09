@@ -123,6 +123,15 @@ Stop event*; that belongs behind a command someone chose to run, not behind `git
   the one in `.env`, exactly as it would for the server. Every line the installer prints names
   whichever source actually won — "the ANSWER_TOKEN exported in this shell" or "this checkout's
   `.env` ANSWER_TOKEN" — so a `warn` never sends you to edit a `.env` that already matches.
+## Autopilot runs
+
+Three of the six hooks, `ask-remote.sh`, `plan-remote.sh` and `stop-notify.sh`, step aside while an `autopilot` run is in progress: each reads
+`~/.claude/autopilot/<session_id>.json` (written by the `autopilot` CLI in claude-global) and does nothing when its `status` is `running` (`stop-notify.sh`
+still reports the turn that actually ends the run). Hooks on one event run in parallel and the CLI applies a deny or block only after every one has returned, so
+without this each autopilot gate deny and guard block would idle for the answer window and push to the phone for a run that must not ask. Every other status, a
+missing file and a malformed one leave the hooks as they were, and none of them writes the file. Nothing to configure, but deployment order: on each machine the
+dashboard checkout must be pulled together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question. Per-hook detail:
+[remote-answer](../subsystems/remote-answer.md), [remote-plan](../subsystems/remote-plan.md), [remote-message](../subsystems/remote-message.md).
 
 ## After installing
 
