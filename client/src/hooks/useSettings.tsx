@@ -27,6 +27,8 @@ export const OWNED_KEYS = [
   'configs.scope', 'configs.type', 'configs.collapsed',
   // The Git sub-view's layout: a live key despite the `management.` prefix the pre-rename keys below share.
   'management.gitLayout',
+  // Management › Projects' layout: live, like the Git one above.
+  'management.projectsLayout',
   // The pre-rename keys: nothing writes them now (D13, no migration), but Reset still sweeps what an older build left behind.
   'management.scope', 'management.type', 'management.collapsed'
 ];
