@@ -13,6 +13,7 @@ of `pnpm test`. Design and plan: [2026-10-01-visual-regression-design.md](../sup
 | `views.spec.ts` | 76 shots + 1 count check | each of the 6 `SECTIONS` views at 12 states, plus Sessions with the chat drawer open (`?session=`) at 375 and 1280 and in the Triage layout at 375 and 1280 |
 | `layout.spec.ts` | 48 overflow + 6 contrast | overflow: 6 views × 8 daylight tiers; contrast: 6 views, daylight, 1280, axe `color-contrast` |
 | `stage.spec.ts` | 16 | the staging itself: seeded theme beats the default, clock, UTC, DPR 1, font loaded, deep link, every section reachable |
+| `scroll-hit.spec.ts` | 9 + 1 mirror | Management › Projects with 60 offered projects, Tiles / Columns / Lists at 1280, 1536 and 1921 (`full`): scrolled to the bottom, every on-screen Pin must take the hit and `.wrap` must hold the whole view (#194); the mirror checks Analytics stays pinned to the viewport |
 | `mock-api.spec.ts` | 5 | the mock: 404 for no fixture, 405 for writes, query ignored, exact path beats `:param`, off-origin refused |
 
 The 12 states per view are daylight at the six `fixed` tiers (375, 640, 768, 1024, 1280, 1536 — each tier's `min-width` from [breakpoints](breakpoints.md),
@@ -23,6 +24,8 @@ The 12 states per view are daylight at the six `fixed` tiers (375, 640, 768, 102
 The Sessions fixture's working session runs a 13-task plan (7 done, Task 8 running) under a basename long enough to ellipsise, and the idle one holds a
 finished `TaskCreate` list, so the shots carry both task-pill states, the drawer card's `Plan · …` head and its phone fold. `StageOpts.layout` seeds the
 Sessions layout (`board` when omitted); the two Triage shots use it, because Triage's Working and Idle rows render the pill outside `Tags`.
+`StageOpts.managementTab` picks Management's sub-view (`git` when omitted), `storage` seeds further localStorage keys as JSON, and `fixtures` overrides
+entries of the fixture map for one test — `scroll-hit.spec.ts` uses all three to stage a long Projects list without touching the shared fixtures.
 
 ## How it runs
 
@@ -98,6 +101,7 @@ Dark-theme contrast is off: those themes are due for a redesign, and recording t
     - playwright.config.ts
     - test/visual/views.spec.ts
     - test/visual/layout.spec.ts
+    - test/visual/scroll-hit.spec.ts
     - test/visual/stage.ts
     - test/visual/mock-api.ts
     - test/visual/harness.ts

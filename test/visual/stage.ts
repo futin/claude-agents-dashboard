@@ -6,12 +6,12 @@ import type { Page } from '@playwright/test';
 
 import type { Section } from '../../client/src/lib/sections.js';
 import type { Layout } from '../../client/src/lib/filterSort.js';
-import type { Settings, ThemeId } from '../../client/src/lib/settings.js';
+import type { ManagementTab, Settings, ThemeId } from '../../client/src/lib/settings.js';
 
 import { EPOCH } from './fixtures/epoch.js';
 import { fixtures } from './fixtures/index.js';
 import { expect } from './harness.js';
-import { installMockApi, pendingApiRequests } from './mock-api.js';
+import { installMockApi, pendingApiRequests, type FixtureMap } from './mock-api.js';
 
 export interface StageOpts {
   section: Section;
@@ -22,6 +22,12 @@ export interface StageOpts {
   query?: string;
   /** The Sessions layout; `board` when omitted. */
   layout?: Layout;
+  /** Management's sub-view; `git` when omitted. */
+  managementTab?: ManagementTab;
+  /** Extra localStorage keys, each JSON-encoded the way usePersistedState reads them back. */
+  storage?: Record<string, unknown>;
+  /** Endpoints to answer differently from the shared fixtures, by pathname. */
+  fixtures?: FixtureMap;
 }
 
 export const VIEWPORT_HEIGHT = 900;
@@ -48,7 +54,7 @@ function seededSettings(opts: StageOpts): Settings {
     notifyBrowser: false,
     usageTab: 'forecast',
     settingsTab: 'local',
-    managementTab: 'git',
+    managementTab: opts.managementTab ?? 'git',
     // Not the default 'last', which defers to `dashboard.layout` (SessionsView.tsx).
     defaultLayout: opts.layout ?? 'board',
     contentWidth: opts.contentWidth
@@ -74,15 +80,16 @@ export async function isReady(page: Page): Promise<boolean> {
 }
 
 export async function stage(page: Page, opts: StageOpts): Promise<void> {
-  await installMockApi(page, fixtures);
+  await installMockApi(page, { ...fixtures, ...opts.fixtures });
   await page.clock.setFixedTime(EPOCH);
   // Both keys are JSON-encoded: usePersistedState JSON-parses, so the section is stored as `"usage"` with the quotes.
   await page.addInitScript(
-    ([settings, section]) => {
+    ([settings, section, extra]) => {
       localStorage.setItem('dashboard.settings', settings);
       localStorage.setItem('dashboard.section', section);
+      for (const [k, v] of Object.entries(extra)) localStorage.setItem(k, JSON.stringify(v));
     },
-    [JSON.stringify(seededSettings(opts)), JSON.stringify(opts.section)] as const
+    [JSON.stringify(seededSettings(opts)), JSON.stringify(opts.section), opts.storage ?? {}] as const
   );
   await page.setViewportSize({ width: opts.width, height: VIEWPORT_HEIGHT });
   await page.goto('/' + (opts.query ?? ''));

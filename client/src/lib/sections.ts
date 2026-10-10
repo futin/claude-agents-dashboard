@@ -24,3 +24,14 @@ export const SECTIONS: { id: Section; label: string }[] = [
 export function isSection(v: unknown): v is Section {
   return SECTIONS.some(s => s.id === v);
 }
+
+/**
+ * The `.wrap` classes a section's page renders inside. Analytics alone is an app shell: `wide` pins it to the viewport at xl and its tab is the scroller.
+ * Configs and Management want the same width but scroll as a page — neither has an inner scroller, so pinned they overflow `.main` and everything past the
+ * fold stops taking clicks (#194) — and `wide-mgmt` is what opts them out of the pinning. Settings, Sessions and Usage get `broad`: width only.
+ */
+export function wrapClass(section: Section): string {
+  if (section === 'analytics') return 'wrap wide';
+  if (section === 'configs' || section === 'management') return 'wrap wide wide-mgmt';
+  return section === 'settings' || section === 'sessions' || section === 'usage' ? 'wrap broad' : 'wrap';
+}
