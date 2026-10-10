@@ -19,7 +19,7 @@ true complement of the CSS's `min-width`, with no gap at fractional viewport wid
 | `sm` | 640 | Desktop shell returns (rail, board radius, `.main` padding) |
 | `md` | 768 | Density: column counts, table columns, control fitting |
 | `lg` | 1024 | Analytics metrics reach 5-across; Management › Projects' Columns and Lists go two-up |
-| `xl` | 1280 | Board/Tiles 3-col, Management 3-col, pinned panes |
+| `xl` | 1280 | Board/Tiles 3-col, Management 3-col, Analytics pinned to the viewport (its tab the scroller) |
 | `2xl` | 1536 | **The lock.** Measure reaches 1248; Sessions aside moves beside |
 | `3xl` | 1537 | Full content-width mode only: structural gains |
 | `4xl` | 1921 | Full content-width mode only: structural gains |

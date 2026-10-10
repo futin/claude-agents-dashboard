@@ -173,7 +173,8 @@ body{font-family:var(--font);font-variant-numeric:tabular-nums;background:var(--
 code,kbd,samp,pre{font-family:inherit}
 .wrap{max-width:820px;margin:0}
 /* `.wide` is an app shell: at `xl` (1280) it is pinned to the viewport and its
-   panes scroll (see the management block). `.broad` is only the width — a
+   panes scroll (see the management block) — unless `.wide-mgmt` opts it out,
+   as Claude Configs and Management do (#194). `.broad` is only the width — a
    page that scrolls normally but needs the room for two columns (Settings).
    Putting Settings on `.wide` pinned `.main` to the viewport and let the
    cards run out of the board onto the white body.
@@ -1347,9 +1348,11 @@ code,kbd,samp,pre{font-family:inherit}
      (set on `.main` above, in this same shell block) and `2 * --body-pad`
      is its top+bottom padding. Getting either wrong scrolls the page, which
      is exactly what the pane scrollers exist to avoid.
-     `:not(.wide-mgmt)` keeps Management out of it: its three columns size to
-     their content and the page body is the single scroller, so a long file is
-     read by scrolling the page rather than a pane inside a pane. */
+     `:not(.wide-mgmt)` keeps Claude Configs and Management out of it: neither
+     has an inner scroller, so the page body is the single scroller — Configs'
+     three columns size to their content and a long file is read by scrolling
+     the page, and a long Projects list pinned here overflowed `.main`, whose
+     `overflow-x:clip` then refused clicks past the fold (#194). */
   .wrap.wide:not(.wide-mgmt){display:flex;flex-direction:column;height:calc(100vh / var(--font-scale,1) - var(--main-gap) - 2 * var(--body-pad))}
   .wrap.wide .analytics{flex:1;min-height:0;overflow-y:auto} /* the tab is the scroller */
 }

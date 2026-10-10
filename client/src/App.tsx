@@ -4,7 +4,7 @@ import { HeaderAccount } from './components/HeaderAccount';
 import { SideRail } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
 import { deepLinkSession, deepLinkView, takeDeepLinkManagementTab } from './lib/deepLink';
-import { isSection, type Section } from './lib/sections';
+import { isSection, wrapClass, type Section } from './lib/sections';
 import { useAccount } from './hooks/useAccount';
 import { useShellNarrow } from './hooks/useNarrow';
 import { usePersistedState } from './hooks/usePersistedState';
@@ -62,17 +62,10 @@ function AppShell() {
     setStored(s);
   };
 
-  // The analytics cards are an app shell — `wide` pins them to the viewport and
-  // the tab scrolls. Settings, Sessions and Usage want the same width for their
-  // columns but scroll as a page, so they get `broad`: width only. Usage on the
-  // plain 820px `.wrap` read as a different app from Sessions sitting next to it
-  // in the rail. `wide-mgmt` is that same width and opts Claude Configs *out* of the
-  // pinning: its three columns size to their content and the page body is the
-  // single scroller, so a long file is read by scrolling the page.
-  const broad = section === 'settings' || section === 'sessions' || section === 'usage';
-  const wrap = section === 'configs' ? 'wrap wide wide-mgmt'
-    : section === 'analytics' || section === 'management' ? 'wrap wide'
-    : broad ? 'wrap broad' : 'wrap';
+  // Which sections are pinned, page-scrolled or width-only is `wrapClass`'s job (lib/sections.ts). Usage
+  // is on `broad` rather than the plain 820px `.wrap` because it read as a different app from Sessions
+  // sitting next to it in the rail.
+  const wrap = wrapClass(section);
 
   // Claude Configs' scope is a rail destination now (DESIGN.md §8.5), so the rail
   // and the page share one state and one `/api/configs` fetch. `active` is
