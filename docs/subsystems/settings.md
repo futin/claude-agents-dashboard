@@ -27,7 +27,12 @@ so Pin carries a project straight across; Lists is the same two columns as `.set
 (1024px) and stack below it, all three shapes are offered at every width, and the Pin / Unpin key is 44px high on the phone and 32px from `md`. The pick is
 per device, `management.projectsLayout` ([view-persistence](view-persistence.md)). Grouping, the filter match, the `~`-shortened dir line and every string
 are pure functions in `client/src/lib/projectsView.ts` (`test/projects-view.test.ts`); the launch sheet's own `PinPicker` is a separate component and stays
-what the sheet uses.
+what the sheet uses. Every Pinned project, in all three layouts, leads with a `⠿` drag grip (`hooks/usePinReorder.ts`, #193): drag it, or press ↑/← (one
+place earlier) or ↓/→ (one place later) on it focused, and the whole order saves at once through `usePins.reorder`, flashing `Saved` beside the Pinned count —
+beside the card's title in Lists. While the filter is non-blank the grips are hidden behind an empty cell of the same width, since a filtered list has gaps.
+Where a drop lands is `dropIndex` in `lib/pins.ts`: in one column (Columns, Lists, Tiles on the phone) the pointer passes an item at its vertical midpoint, as
+#191 had it; on a multi-column Tiles grid it goes by reading order — every row wholly above the pointer, plus the items in the pointer's row whose horizontal
+midpoint it has passed.
 
 **Per-device — `localStorage['dashboard.settings']`.** Theme, density, text scale, content
 width, the default session view, landing tab
@@ -72,7 +77,7 @@ while nobody has Management › Git open — the timer fires only while the view
 `POST /api/settings` patch carrying one is refused whole, like a bad `idleSecs`. It is the **Git fetch** card on the Shared page, after Usage forecast.
 
 `pinnedProjects` (#161, default `[]`) rides in the same file: encoded project dir names that
-stay listed past `LOOKBACK_HOURS` (see [configs](configs.md) §Pinned projects). Its order is meaningful — Management › Pinned, Management › Git and the
+stay listed past `LOOKBACK_HOURS` (see [configs](configs.md) §Pinned projects). Its order is meaningful — Management › Projects, Management › Git and the
 Lookout git-pending tile all draw in it. `setPinned` appends a new pin; `setPinOrder` rewrites the whole order, and only as an exact permutation of the stored list. It is
 shared because a pin is a server-side fact — the spawn membership check and the servable-path set
 both read it — not a view preference. The clamp keeps only `[A-Za-z0-9-]+` strings, deduped in

@@ -1,7 +1,8 @@
 /**
  * pins.ts — the pure pieces of the pinned-projects UI (#161): the picker's
  * filter, `~` path shortening, the split a picker row sets its path from, and
- * the reorder helpers behind `usePins.reorder`. Shared by the launch sheet and Management › Projects; unit-tested server-side.
+ * the reorder helpers behind `usePins.reorder`, and `dropIndex`, the drop rule Management › Projects' grip drags by. Shared by the launch sheet and
+ * Management › Projects; unit-tested server-side.
  */
 
 /**
@@ -58,4 +59,24 @@ export function applyPinOrder<T extends { dirName: string }>(rows: readonly T[],
     return r ? [r] : [];
   });
   return [...named, ...rows.filter(r => byName.has(r.dirName))];
+}
+
+/** An item's box in viewport pixels — the fields of a `DOMRect` that `dropIndex` reads. */
+export interface PinRect { left: number; top: number; right: number; bottom: number }
+
+/**
+ * Where a dragged pin belongs with the pointer at `pointer`: its index in the result, for `movePin`. `items` are the pins in their rendered order, the
+ * dragged one still in its slot. One column (every `left` within 1px of the first's) counts the other items whose vertical midpoint is above the pointer —
+ * where #191's swap-past-the-neighbour's-midpoint loop settled. A multi-column grid goes by reading order: an item counts when its row is wholly above the
+ * pointer, or the pointer is within its row band and right of its horizontal midpoint. -1 for a `dragged` name not in `items`.
+ */
+export function dropIndex(items: readonly { name: string; rect: PinRect }[], dragged: string, pointer: { x: number; y: number }): number {
+  if (!items.some(it => it.name === dragged)) return -1;
+  const others = items.filter(it => it.name !== dragged);
+  const left0 = items[0].rect.left;
+  if (items.every(it => Math.abs(it.rect.left - left0) <= 1)) {
+    return others.filter(({ rect: r }) => (r.top + r.bottom) / 2 < pointer.y).length;
+  }
+  return others.filter(({ rect: r }) =>
+    pointer.y > r.bottom || (r.top <= pointer.y && pointer.y <= r.bottom && pointer.x > (r.left + r.right) / 2)).length;
 }
