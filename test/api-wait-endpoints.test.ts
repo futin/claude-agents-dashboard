@@ -20,11 +20,17 @@
  */
 
 import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { testAsync, until, withServer } from './api-harness.js';
 import { messageSessionIds } from '../server/lib/messages.js';
 import { pendingSessionIds } from '../server/lib/pending.js';
 import { planSessionIds } from '../server/lib/plans.js';
+import { resetNotify, setIdleSource, setLabelResolver, setSender } from '../server/lib/notify.js';
+import type { NotifyPayload } from '../server/lib/notify.js';
+import { resetSettings, setSettings } from '../server/lib/settings.js';
+import { refreshCwd } from '../server/lib/token-refresh.js';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
@@ -288,6 +294,56 @@ export async function run(): Promise<number> {
       assert.equal(result.json?.status, 'answered');
       assert.match(String(result.json?.reason), /left/);
       assertNothingHeld('after the answer');
+    });
+  }));
+
+  /* ------------------------------------- #178: the token-renewal turn */
+
+  // A transcript in the project dir Claude Code names for `refreshCwd()` — where the dashboard's own `claude -p ok` turn writes.
+  const plantRefresh = (home: string, id: string): void => {
+    const dir = path.join(home, '.claude', 'projects', refreshCwd(home).replace(/[^A-Za-z0-9]/g, '-'));
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${id}.jsonl`), '{}\n');
+  };
+
+  check(await testAsync('a token-refresh session\'s message wait is answered `dismissed` at once and holds nothing', async () => {
+    await withServer(ENV, async h => {
+      plantRefresh(h.home, ID);
+      const reply = await h.req('/api/messages/wait', { method: 'POST', body: JSON.stringify({ sessionId: ID, timeoutMs: 600_000 }) });
+      assert.equal(reply.status, 200);
+      assert.equal(reply.json?.status, 'dismissed');
+      assertNothingHeld('refresh session');
+    });
+  }));
+
+  check(await testAsync('stop pushes: dropped for a token-refresh session, sent for any other (wait and notify/event)', async () => {
+    await withServer(`${ENV}NTFY_TOPIC=t178\n`, async h => {
+      const sent: NotifyPayload[] = [];
+      setSender(payload => { sent.push(payload); });
+      setLabelResolver(() => 'proj');
+      setIdleSource(() => null);
+      try {
+        setSettings({ notify: { enabled: true, events: { stop: true }, requireRemoteAnswer: false, requireAfk: false, requireAutoMode: false } });
+        const REFRESH = '22222222-2222-4222-8222-222222222222';
+        plantRefresh(h.home, REFRESH);
+
+        await h.req('/api/messages/wait', { method: 'POST', body: JSON.stringify({ sessionId: REFRESH }) });
+        const ev = await h.req('/api/notify/event', { method: 'POST', body: JSON.stringify({ sessionId: REFRESH, event: 'stop' }) });
+        assert.equal(ev.status, 200);
+        assert.equal(sent.length, 0, 'the refresh turn must never push');
+
+        // The mirror: an ordinary session through the same two routes pushes both times, so the zero above is the refresh check and not a dead policy.
+        const held = h.open('/api/messages/wait', { body: JSON.stringify({ sessionId: ID, timeoutMs: 600_000 }) });
+        await until(() => messageSessionIds().has(ID), 'the ordinary wait registers');
+        await h.req('/api/notify/event', { method: 'POST', body: JSON.stringify({ sessionId: ID, event: 'stop' }) });
+        assert.equal(sent.length, 2);
+        assert.match(sent[0].body, /finished — reply window open/);
+        held.abort();
+        await until(() => !messageSessionIds().has(ID), 'the ordinary wait is released');
+      } finally {
+        resetNotify();
+        resetSettings();
+      }
     });
   }));
 

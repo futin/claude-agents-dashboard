@@ -3,7 +3,7 @@
 # away, hold the turn open so a follow-up typed in the dashboard can continue
 # the model (docs/subsystems/remote-message.md).
 #
-# Two paths out of every run:
+# Two paths out of every run (the token-renewal turn, CLAUDE_DASHBOARD_REFRESH, takes neither — see below):
 #   at the desk / feature off → POST /api/notify/event (the old fire-and-forget
 #     push trigger) and exit 0 — byte-for-byte the pre-feature behaviour;
 #     ("at the desk" is skipped for headless sessions — see HEADLESS below:
@@ -35,6 +35,11 @@ INPUT=$(cat)
 # Only inside Claude Code (mirrors the other hooks in ~/.claude/settings.json).
 [ "$CLAUDECODE" = "1" ] || exit 0
 command -v jq > /dev/null 2>&1 || exit 0
+
+# The dashboard's own token-renewal turn (`claude -p ok` in ~/.claude/dashboard-refresh, server/lib/token-refresh.ts) stamps this on its child. Nobody started
+# that turn and nobody will reply to it, so it gets nothing: no hold and no push — unlike BM_ORCH_RUN and CLAUDE_DASHBOARD_ONESHOT below, which still push
+# "finished" because a person is waiting on that work. Without it every renewal, about every 8h, pushed "finished — reply window open" (#178).
+[ -n "$CLAUDE_DASHBOARD_REFRESH" ] && exit 0
 
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
 TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"

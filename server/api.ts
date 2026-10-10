@@ -16,6 +16,7 @@ import { archivedSessionIds } from './lib/archived.js';
 import { readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
+import { isRefreshSession } from './lib/token-refresh.js';
 import { readAccountProfile } from './lib/account.js';
 import { deriveProfile, profileSnapshot, RATES_HISTORY_BYTES, readRecentSamples, readSamplesSince } from './lib/usage-history.js';
 import { buildUsageHistory } from './lib/usage-history-series.js';
@@ -1204,6 +1205,9 @@ export async function serveMessageWait(config: Config, req: IncomingMessage, res
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
   if (!sessionId || !ID_RE.test(sessionId)) return sendJson(res, 400, { error: 'bad sessionId' });
+  // Backstop for a Stop hook installed before CLAUDE_DASHBOARD_REFRESH: the token-renewal turn is never held and never pushed (#178). `dismissed`, not an
+  // error — any non-`answered` 200 makes the hook exit 0, while a non-2xx sends it to `notify_fallback` for a second, pointless round trip.
+  if (isRefreshSession(sessionId)) return sendJson(res, 200, { status: 'dismissed' } satisfies MessageWaitResult);
 
   let messageId = '';
   res.on('close', () => { if (messageId) cancelMessage(sessionId, messageId); });
@@ -1328,6 +1332,8 @@ export async function serveNotifyEvent(
   if (event !== 'question' && event !== 'stop' && event !== 'permission' && event !== 'plan') {
     return sendJson(res, 400, { error: 'bad event' });
   }
+  // The token-renewal turn is plumbing nobody started — no event from it is worth a push (#178). Same backstop as `serveMessageWait`.
+  if (isRefreshSession(sessionId)) return sendJson(res, 200, { ok: true });
 
   maybeSend(config, event, {
     sessionId,

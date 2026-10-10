@@ -172,7 +172,9 @@ why an env var has to carry it — the tty and entrypoint the hook inspects both
 front end, and by those tests every one of these sessions is simply headless. Deliberately
 not a blanket headless exemption: a headless session a person started by hand is reachable
 on purpose and still holds. A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT`, set by the dashboard's Close when done and on every Git Sync run)
-takes the same `notify_fallback` route, so it still pushes "finished". Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
+takes the same `notify_fallback` route, so it still pushes "finished". The dashboard's own token-renewal turn
+(`CLAUDE_DASHBOARD_REFRESH`, [usage-limits](usage-limits.md)) is the one session that pushes nothing: the hook exits on the marker before the health probe,
+and the server drops `stop` events and message waits from the refresh cwd's transcripts as a backstop (#178). Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
 (and so which phrase and suppression rule apply), not whether `stop` pushes at all — see
 [remote-message](remote-message.md).
 

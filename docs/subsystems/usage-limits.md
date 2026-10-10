@@ -107,6 +107,12 @@ the process lifetime: that is the Docker case, and there is nothing to wait for.
 `scan.ts` drops any transcript whose cwd is that directory — otherwise the dashboard's own
 plumbing shows up as a phantom session row.
 
+**The turn is never held and never pushed** (#178). The child runs with `CLAUDE_DASHBOARD_REFRESH=1` (`refreshEnv()`), and
+`scripts/stop-notify-hook.sh` exits on it before anything else — no reply hold, no "finished" push, where `BM_ORCH_RUN` and `CLAUDE_DASHBOARD_ONESHOT`
+still push. Before the marker every renewal (about every 8h) pushed "finished — reply window open" for a session nobody started. The server backstops a hook
+installed before the marker: `isRefreshSession()` recognises a transcript in the refresh cwd's project dir, and `POST /api/messages/wait` answers it
+`dismissed` without holding while `POST /api/notify/event` drops it.
+
 **Kill switch:** `USAGE_AUTO_REFRESH=false` restores the old hint-only behaviour. It is a
 kill switch rather than a feature flag because renewal spawns a process and may spend one
 haiku turn; it is server-side, not a per-device UI toggle, for the same reason the usage

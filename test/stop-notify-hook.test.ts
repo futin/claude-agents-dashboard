@@ -1,5 +1,5 @@
 /**
- * `scripts/stop-notify-hook.sh` — the `CLAUDE_DASHBOARD_ONESHOT` exemption.
+ * `scripts/stop-notify-hook.sh` — the `CLAUDE_DASHBOARD_ONESHOT` exemption, and the `CLAUDE_DASHBOARD_REFRESH` exit (#178).
  *
  * A session the dashboard launched as one-shot (the Git Sync button, or the spawn form's "Close when done") must end when its last turn does, instead of
  * sitting in the reply hold for `answerSecs`. The hook is driven the way the CLI drives it — one Stop payload on stdin, `CLAUDECODE=1` — against an
@@ -44,13 +44,17 @@ async function fakeDashboard(remoteAnswer: boolean): Promise<{ url: string; post
   return { url: `http://127.0.0.1:${port}`, posts, close: () => new Promise(resolve => server.close(() => resolve())) };
 }
 
-/** Run the hook once. `oneShot` undefined leaves the variable out of the env entirely. */
-async function runHook(url: string, home: string, oneShot: string | undefined, stopHookActive = false): Promise<{ code: number | null; stdout: string }> {
+/** Run the hook once. `oneShot` undefined leaves the variable out of the env entirely; `extra` adds env on top. */
+async function runHook(
+  url: string, home: string, oneShot: string | undefined, stopHookActive = false, extra: NodeJS.ProcessEnv = {}
+): Promise<{ code: number | null; stdout: string }> {
   const env: NodeJS.ProcessEnv = { ...process.env, CLAUDECODE: '1', CLAUDE_DASHBOARD_URL: url, CLAUDE_DASHBOARD_IDLE_SECS: '0', HOME: home };
   delete env.BM_ORCH_RUN;
   delete env.CLAUDE_DASHBOARD_ONESHOT;
   delete env.CLAUDE_DASHBOARD_ANSWER_TIMEOUT;
+  delete env.CLAUDE_DASHBOARD_REFRESH;
   if (oneShot !== undefined) env.CLAUDE_DASHBOARD_ONESHOT = oneShot;
+  Object.assign(env, extra);
   const child = spawn('bash', [HOOK], { env, stdio: ['pipe', 'pipe', 'ignore'] });
   let stdout = '';
   child.stdout.on('data', c => { stdout += c; });
@@ -67,7 +71,7 @@ async function ok(name: string, fn: () => Promise<void>): Promise<boolean> {
 }
 
 export async function run(): Promise<number> {
-  console.log('\n=== stop-notify-hook.sh: CLAUDE_DASHBOARD_ONESHOT ===\n');
+  console.log('\n=== stop-notify-hook.sh: CLAUDE_DASHBOARD_ONESHOT / CLAUDE_DASHBOARD_REFRESH ===\n');
   let p = 0, f = 0;
 
   for (const tool of ['jq', 'curl']) {
@@ -122,6 +126,27 @@ export async function run(): Promise<number> {
         assert.strictEqual(r.code, 0);
         assert.strictEqual(count(dash.posts, '/api/notify/event'), 1);
         assert.strictEqual(count(dash.posts, '/api/messages/wait'), 0);
+      } finally { await dash.close(); }
+    })) p++; else f++;
+
+    // #178 — the dashboard's own token-renewal turn. Unlike one-shot it gets nothing at all: nobody started it, so even "finished" is noise.
+    if (await ok('token-refresh turn (CLAUDE_DASHBOARD_REFRESH=1): no hold and no push, whatever remote answers says', async () => {
+      for (const remote of [true, false]) {
+        const dash = await fakeDashboard(remote);
+        try {
+          const r = await runHook(dash.url, home, undefined, false, { CLAUDE_DASHBOARD_REFRESH: '1' });
+          assert.strictEqual(r.code, 0);
+          assert.strictEqual(r.stdout, '');
+          assert.deepStrictEqual(dash.posts.map(x => x.path), [], `remoteAnswer=${remote}: the refresh turn must POST nothing`);
+        } finally { await dash.close(); }
+      }
+    })) p++; else f++;
+
+    if (await ok('CLAUDE_DASHBOARD_REFRESH empty: an ordinary session, which holds', async () => {
+      const dash = await fakeDashboard(true);
+      try {
+        await runHook(dash.url, home, undefined, false, { CLAUDE_DASHBOARD_REFRESH: '' });
+        assert.strictEqual(count(dash.posts, '/api/messages/wait'), 1);
       } finally { await dash.close(); }
     })) p++; else f++;
   } finally {
