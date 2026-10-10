@@ -90,6 +90,12 @@
      bars and card faces. As *text* on white neither clears 3:1, so `--amber`
      and `--mustard` take the darkened cousins and the bright pair stays where
      the design puts it — behind the ink, never under it.
+   - Every token drawn as text clears WCAG AA (4.5:1): `--ink2`/`--ink3` on each
+     surface they sit on, and each accent on its own `color-mix` pill tint, which
+     darkens with it — composited over `--strip-hi`, not white, since pills sit
+     on hover rows and section heads too. The accents are fills too, so those darken with the text —
+     one token per role, no text-only twins. `test/daylight-contrast.test.ts`
+     recomputes every pair from this block.
 
    Shadows drop right down: a lift that reads as depth on black reads as dirt
    on paper. */
@@ -97,9 +103,9 @@
   color-scheme:light;
   --board:#f4f4f3;--steel:#ededec;--strip:#ffffff;--strip-hi:#f2f2f1;
   --edge:rgba(0,0,0,.03);--hairline:#eaeae8;--hairline2:#dcdcda;
-  --ink:#131313;--ink2:#6e6e6e;--ink3:#a0a0a0;
-  --green:#5fa92c;--amber:#c4761f;--mustard:#9a8712;--cyan:#3f8f14;
-  --red:#b03b28;--magenta:#6b52a8;
+  --ink:#131313;--ink2:#525252;--ink3:#6b6b6b;
+  --green:#38631a;--amber:#824e15;--mustard:#5f530b;--cyan:#306c0f;
+  --red:#aa3927;--magenta:#6950a5;
   --on-accent:#ffffff;--scrim:rgba(19,19,19,.28);
   --shadow:rgba(0,0,0,.06);--shadow2:rgba(0,0,0,.1);
 }
@@ -1390,7 +1396,7 @@ code,kbd,samp,pre{font-family:inherit}
    make every fresh entry shout. */
 .an-dot{width:9px;height:9px;border-radius:50%;background:var(--hairline2);display:inline-block;flex:none}
 .an-dot.actioned{background:var(--green)}
-/* ink, not the accent: Daylight's --cyan is a green (#3f8f14) a shade off
+/* ink, not the accent: Daylight's --cyan is a green (#306c0f) a shade off
    --green, so an accent-tinted `promoted` was unreadable next to `actioned`.
    Filled ink separates them in every theme, and it is the strongest mark on
    the board — which is what a lesson raised to global config has earned. */
