@@ -36,17 +36,6 @@ function recordView(view: string, entries: ContrastEntry[]): void {
 }
 
 /**
- * Content the app already cuts off at `.main`'s edge, found when this suite landed (2026-10-06), as `section|width` → the `.main` scrollWidth measured then.
- * A case fails if its clip grows past that, and fails too once the clip is gone, so a fix has to delete its entry. At md (768): usage's `table.dt`, analytics'
- * `.an-line-meta` spans and settings' `.set-control` each run 11–52px past the content edge.
- */
-const KNOWN_CLIPPED: Record<string, number> = {
-  'usage|768': 556,
-  'analytics|768': 539,
-  'settings|768': 540
-};
-
-/**
  * `isReady` can pass in the gap between a view's first data and a fetch it starts only once that data arrives (Usage's `table.dt` at 768 rendered after the
  * check in one full run, 2026-10-06). A screenshot waits for two identical frames on its own; these checks read once, so they wait for the same: element
  * count, document size and `.main`'s scroll width unchanged across 250ms.
@@ -88,13 +77,7 @@ for (const { id } of SECTIONS) {
       expect(m.scrollWidth, `${id} at ${width}px overflows: scrollWidth ${m.scrollWidth} > innerWidth ${m.innerWidth}`).toBeLessThanOrEqual(m.innerWidth);
       // `.main{overflow-x:clip}` keeps content overflow out of the document's scrollWidth — it is cut off instead, so measure the content area too.
       expect(m.mainClient, `${id} at ${width}px has no .main`).toBeGreaterThan(0);
-      const known = KNOWN_CLIPPED[`${id}|${width}`];
-      if (known === undefined) {
-        expect(m.mainScroll, `${id} at ${width}px clips content: .main scrollWidth ${m.mainScroll} > clientWidth ${m.mainClient}`).toBeLessThanOrEqual(m.mainClient);
-      } else {
-        expect(m.mainScroll, `${id} at ${width}px no longer clips — remove its KNOWN_CLIPPED entry`).toBeGreaterThan(m.mainClient);
-        expect(m.mainScroll, `${id} at ${width}px clips more than recorded: .main scrollWidth ${m.mainScroll} > ${known}`).toBeLessThanOrEqual(known);
-      }
+      expect(m.mainScroll, `${id} at ${width}px clips content: .main scrollWidth ${m.mainScroll} > clientWidth ${m.mainClient}`).toBeLessThanOrEqual(m.mainClient);
     });
   }
 }

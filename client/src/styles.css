@@ -1456,11 +1456,24 @@ code,kbd,samp,pre{font-family:inherit}
 /* the lesson is the thing the section exists to show, so it is set in ink
    rather than the secondary grey the ledgers beside it use */
 .an-lesson{margin-top:0}
-.an-lesson-body{font-size:13px;line-height:1.5;color:var(--ink);max-width:74ch;margin-top:10px}
+.an-lesson-body{font-size:13px;line-height:1.5;color:var(--ink);max-width:74ch;margin-top:10px;overflow-wrap:anywhere}
 .an-lesson-body.muted{font-size:12px;margin-top:8px}
 .an-lesson-body code{font-size:12px;font-weight:500;color:var(--ink);background:var(--strip-hi);border-radius:4px;padding:1px 5px}
 @media (min-width:768px){
   .an-cols{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* At md `.split`'s 280px list leaves the inspector 184px, too narrow for two
+   ledger columns and their `flex-shrink:0` meta spans, so the analytics split
+   stays one column until lg; Sessions keeps its two tracks there. The ladder
+   is min-width only, so lg and 2xl restate the shared `.split` tracks. */
+@media (min-width:768px){
+  .analytics .split{grid-template-columns:minmax(0,1fr)}
+}
+@media (min-width:1024px){
+  .analytics .split{grid-template-columns:280px minmax(0,1fr)}
+}
+@media (min-width:1536px){
+  .analytics .split{grid-template-columns:320px minmax(0,1fr)}
 }
 /* Five to a row, not three: below this the strip is two rows deep (see the
    seam comment above the base rules), and above it every cell has enough
@@ -2167,12 +2180,11 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .set-saving{font-size:11px;color:var(--ink3)}
 /* Settings holds its phone density as the base tier — a settings row is short
    text ending in a control, not a measure that needs width — and restores the
-   desktop shape at md: two columns, centred rows, and the fixed control
-   widths the phone traded for full-width wrapping. At 375px two stacked
+   desktop shape at md: centred rows and the fixed control widths the phone
+   traded for full-width wrapping. The two columns follow at lg, below. At 375px two stacked
    columns are ~155px each and the prose under every heading breaks to three
    words a line; that is the phone shape this block leaves alone. */
 @media (min-width:768px){
-  .set-cols{grid-template-columns:1fr 1fr}
   .set-group{padding:24px}
   .set-row{flex-direction:row;align-items:center;gap:24px}
   .set-control{width:auto;flex-wrap:nowrap}
@@ -2183,6 +2195,11 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
   .set-seg{display:inline-flex;width:auto}
   .set-seg button{flex:0 1 auto;min-height:auto}
   .set-themes{grid-template-columns:repeat(5,1fr)}
+}
+/* Two columns wait for lg: at md each would be 232px, a 184px row inside its
+   padding, and the 220px text input above would run past it. */
+@media (min-width:1024px){
+  .set-cols{grid-template-columns:1fr 1fr}
 }
 
 /* ---------------------------------------------- quality floor */
@@ -2722,6 +2739,8 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
      later in the file, so it would otherwise win at this tier and stop long
      model ids and prose notes from wrapping inside `.dt{width:100%}`. */
   .dt.stack td.mut{white-space:normal}
+  /* Weight source is prose too; left nowrap it took 195px of a 480px md table. */
+  .dt.stack td.src{white-space:normal}
   /* an empty cell is a real column again — hiding it would throw every
      column after it out of alignment with the header row */
   .dt.stack td:empty{display:table-cell}

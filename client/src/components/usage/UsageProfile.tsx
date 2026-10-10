@@ -294,7 +294,7 @@ function WalkTableRows({ table, globalMean }: { table: WalkTable; globalMean: nu
             </td>
             <td data-l="Hours" className="n">{hrs(r.hours)}</td>
             <td data-l="Active h" className="n">{r.activeHours.toFixed(1)}</td>
-            <td data-l="Weight source">{weightSource(r, globalMean)}</td>
+            <td data-l="Weight source" className="src">{weightSource(r, globalMean)}</td>
             <td data-l="Spent" className="n">{pts(r.spent)}</td>
             <td data-l="Left" className={r.endHead < 0 ? 'n over' : 'n'}>{left(r.endHead)}</td>
             <td className="barcell">
@@ -319,7 +319,7 @@ function WalkTableRows({ table, globalMean }: { table: WalkTable; globalMean: nu
           <td className="name">To the reset</td>
           <td data-l="Hours" className="n">{hrs(totals.hours)}</td>
           <td data-l="Active h" className="n">{totals.activeHours.toFixed(1)}</td>
-          <td data-l="Weight source">
+          <td data-l="Weight source" className="src">
             {totals.learned} measured · {totals.slices - totals.learned} at the mean
           </td>
           <td data-l="Spent" className="n">{pts(totals.spent)}</td>
