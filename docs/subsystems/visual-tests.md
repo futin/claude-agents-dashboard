@@ -88,6 +88,10 @@ prints `contrast fixed: <key>`, and its entry should then be deleted. The file o
 every view and passes, so **a run right after deleting the file proves nothing about contrast**. Axe's per-view `incomplete` count (nodes it could not judge,
 e.g. over images or gradients) is printed, not asserted.
 
+The file is empty since #179 (2026-10-10) retuned the daylight tokens to clear 4.5:1, so any violation the suite reports is new. The same ratios are pinned
+on every platform by `test/daylight-contrast.test.ts` in `pnpm test`, which computes them from the `[data-theme="daylight"]` block: text tokens on their
+surfaces, and every accent drawn as text on its own `color-mix` tint over `--strip`, `--strip-hi` and `--board`.
+
 Dark-theme contrast is off: those themes are due for a redesign, and recording their current violations would only freeze them.
 
 <!-- docs-sync:
