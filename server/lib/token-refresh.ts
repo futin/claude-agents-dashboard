@@ -51,6 +51,38 @@ export function refreshCwd(homeDir?: string): string {
   return path.join(homeDir || os.homedir(), '.claude', 'dashboard-refresh');
 }
 
+/**
+ * Env var stamped on every refresh child. The user-global Stop hook exits on it before doing anything — no reply hold, no "finished" push — because nobody
+ * started this turn and nobody will answer it (#178).
+ */
+export const REFRESH_MARKER_ENV = 'CLAUDE_DASHBOARD_REFRESH';
+
+/**
+ * The env a refresh child runs with. Strips API-key/proxy vars: with them the spawned turn could bill an API key or route to a gateway and exit 0 WITHOUT
+ * touching the OAuth creds this refresh exists to renew (same misroute class as the usage endpoint vs ANTHROPIC_BASE_URL — see CLAUDE.md "Usage limits").
+ */
+export function refreshEnv(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = { ...parent };
+  delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+  delete env.ANTHROPIC_BASE_URL;
+  delete env.CLAUDE_CODE_API_BASE_URL;
+  env[REFRESH_MARKER_ENV] = '1';
+  return env;
+}
+
+/**
+ * Is `sessionId` one of the refresh turns? True when its transcript sits in the project dir Claude Code names for {@link refreshCwd} (every character
+ * outside `[A-Za-z0-9]` → `-`, as `encodeProjectDir` in management.ts). The server-side backstop for a Stop hook that predates the marker: the turn's
+ * transcript exists from its first prompt, long before the Stop hook fires.
+ */
+export function isRefreshSession(sessionId: string, homeDir?: string): boolean {
+  if (!/^[A-Za-z0-9._-]+$/.test(sessionId)) return false;
+  const home = homeDir || os.homedir();
+  const dir = refreshCwd(home).replace(/[^A-Za-z0-9]/g, '-');
+  return fs.existsSync(path.join(home, '.claude', 'projects', dir, `${sessionId}.jsonl`));
+}
+
 export interface SpawnResult {
   /** Exit code; null when the process never ran or was killed (ENOENT/timeout). */
   code: number | null;
@@ -68,15 +100,7 @@ export type Spawner = (
 
 const defaultSpawner: Spawner = (cmd, args, opts) =>
   new Promise((resolve) => {
-    // Strip API-key/proxy vars: with them the spawned turn could bill an API
-    // key or route to a gateway and exit 0 WITHOUT touching the OAuth creds
-    // this refresh exists to renew (same misroute class as the usage endpoint
-    // vs ANTHROPIC_BASE_URL — see CLAUDE.md "Usage limits").
-    const env = { ...process.env };
-    delete env.ANTHROPIC_API_KEY;
-    delete env.ANTHROPIC_AUTH_TOKEN;
-    delete env.ANTHROPIC_BASE_URL;
-    delete env.CLAUDE_CODE_API_BASE_URL;
+    const env = refreshEnv(process.env);
     const child = execFile(cmd, args, { cwd: opts.cwd, timeout: opts.timeout, env }, (err) => {
       if (!err) return resolve({ code: 0 });
       const e = err as NodeJS.ErrnoException & { killed?: boolean };

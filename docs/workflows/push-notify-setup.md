@@ -75,7 +75,7 @@ exits in under a second — this cost is paid only by the *away* path. A session
 orchestrator run spawned (`BM_ORCH_RUN` set in its environment) never holds either: it sends
 the *task finished* push and exits, because nobody is going to answer a session that was
 dispatched to work one item unattended. A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT`: every Git Sync run, and the spawn form's
-*Close when done*) takes the same exit.
+*Close when done*) takes the same exit. The dashboard's own token-renewal turn (`CLAUDE_DASHBOARD_REFRESH`) gets neither the hold nor the push.
 
 **6. Verify.** Settings → **Test push**. It fires one push *ignoring every switch above*
 and reports what actually happened, because an off switch, a missing topic and a dropped

@@ -280,6 +280,45 @@ export async function run(): Promise<number> {
     assert.strictEqual(tr.refreshCwd('/h'), path.join('/h', '.claude', 'dashboard-refresh'));
   })) p++; else f++;
 
+  // ---- #178: the refresh turn must be told apart from a person's headless session ----
+
+  if (await test('refreshEnv stamps CLAUDE_DASHBOARD_REFRESH=1 and strips the API-key/proxy vars', () => {
+    const env = tr.refreshEnv({
+      PATH: '/bin', ANTHROPIC_API_KEY: 'k', ANTHROPIC_AUTH_TOKEN: 't', ANTHROPIC_BASE_URL: 'u', CLAUDE_CODE_API_BASE_URL: 'c'
+    });
+    assert.strictEqual(tr.REFRESH_MARKER_ENV, 'CLAUDE_DASHBOARD_REFRESH');
+    assert.strictEqual(env.CLAUDE_DASHBOARD_REFRESH, '1');
+    assert.strictEqual(env.PATH, '/bin');
+    for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_API_BASE_URL']) {
+      assert.ok(!(k in env), `${k} must not reach the refresh child`);
+    }
+  })) p++; else f++;
+
+  if (await test('refreshEnv overrides an inherited empty marker and leaves the parent env untouched', () => {
+    const parent: NodeJS.ProcessEnv = { CLAUDE_DASHBOARD_REFRESH: '' };
+    assert.strictEqual(tr.refreshEnv(parent).CLAUDE_DASHBOARD_REFRESH, '1');
+    assert.strictEqual(parent.CLAUDE_DASHBOARD_REFRESH, '', 'the server\'s own env is not mutated');
+  })) p++; else f++;
+
+  if (await test('isRefreshSession: true only for a transcript in the refresh cwd\'s project dir', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-refresh-home-'));
+    try {
+      const projects = path.join(home, '.claude', 'projects');
+      const refreshDir = path.join(projects, tr.refreshCwd(home).replace(/[^A-Za-z0-9]/g, '-'));
+      const otherDir = path.join(projects, '-some-project');
+      fs.mkdirSync(refreshDir, { recursive: true });
+      fs.mkdirSync(otherDir, { recursive: true });
+      fs.writeFileSync(path.join(refreshDir, 'r1.jsonl'), '{}\n');
+      fs.writeFileSync(path.join(otherDir, 'o1.jsonl'), '{}\n');
+      assert.strictEqual(tr.isRefreshSession('r1', home), true);
+      assert.strictEqual(tr.isRefreshSession('o1', home), false, 'a session in any other project is a real one');
+      assert.strictEqual(tr.isRefreshSession('missing', home), false);
+      assert.strictEqual(tr.isRefreshSession('../-some-project/o1', home), false, 'a path-shaped id never reaches the filesystem');
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  })) p++; else f++;
+
   console.log(`\ntoken-refresh: ${p} passed, ${f} failed`);
   return f;
 }
