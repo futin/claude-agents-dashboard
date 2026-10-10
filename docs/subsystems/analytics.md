@@ -36,7 +36,9 @@ scope path shared that line.
 
 The tab draws the Sessions **split** and the Sessions **tiles**, borrowed whole — `.split`,
 the `.list` card with its `.list-h` and `.lrow` rows, the `.inspect` card beside it, and
-the `.tiles` grid of `.tile` cards, shared verbatim down to the CSS. Only the subject
+the `.tiles` grid of `.tile` cards, shared verbatim down to the CSS — one exception: between
+md and lg the analytics split is one column (`.analytics .split`), because a 184px
+inspector cannot hold the ledger columns. Only the subject
 differs, so a report's lead dot carries what became of the lesson where Sessions carries
 a session's state, and the figure is billable tokens where Sessions shows context used.
 (Four other shapes were drawn as artboards first — a stack of collapsing cards, a ledger

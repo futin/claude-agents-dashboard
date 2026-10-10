@@ -75,9 +75,8 @@ That also covers `--update-snapshots`, which would otherwise overwrite every dar
 ## Overflow
 
 Each overflow case asserts `documentElement.scrollWidth <= innerWidth` (overflow in the shell or rail), and `.main`'s `scrollWidth <= clientWidth`: `.main`
-has `overflow-x:clip`, so content wider than the content area is cut off without ever reaching the document's scroll width. Three views already clip at 768
-(usage's `table.dt`, analytics' `.an-line-meta`, settings' `.set-control`); `KNOWN_CLIPPED` in `layout.spec.ts` records each with its measured width
-(2026-10-06). An entry fails if its clip grows, and fails again once it is gone, so the fix that removes one has to delete the entry too.
+has `overflow-x:clip`, so content wider than the content area is cut off without ever reaching the document's scroll width. There is no allowance list:
+the three md clips the suite found when it landed (usage, analytics, settings at 768) were fixed by #180, so any clip in any view fails its case.
 
 ## Contrast
 
