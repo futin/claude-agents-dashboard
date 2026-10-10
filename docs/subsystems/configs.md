@@ -113,7 +113,7 @@ control (the type is a column now, not a collapsible header) and the
   `recent` offers the same way; they stay on the rail and in the launch select, and a pin already made
   under one still lists under `pinned`. The 30 days cap only what is *offered*; a pin already made stays
   listed at any age.
-  **The order is user-set:** a new pin appends, and Management › Pinned's drag grip (or ↑/↓ on a focused grip) saves the whole list through
+  **The order is user-set:** a new pin appends, and Management › Projects' drag grip (or ↑/←/↓/→ on a focused grip) saves the whole list through
   `POST /api/pins/order`, which `setPinOrder` accepts only as an exact permutation of the stored pins — anything else is a 409, so a tab that missed a pin
   or an unpin elsewhere can neither drop nor resurrect one by reordering. A dead pin must be in the order like any other. There is no membership check
   against the enumerated projects, unlike pinning: a permutation of the stored list cannot add a dir, which is the property that check protects.

@@ -257,7 +257,7 @@ client/src/
                   useConfigs, useConfigsScope (the scope + the one index
                   fetch, shared by the rail's tree and the page), useAnalytics,
                   useUsageProfile, useUsageRates, useUsageHistory, usePendingQuestion, usePendingPlan,
-                  usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins,
+                  usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins, usePinReorder (Projects' pin grip),
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
                   Sync button: runs per device, a sessions poll only while one is live),
                   usePersistedState, useSettings, useServerSettings, useDictation, useFloatingTip

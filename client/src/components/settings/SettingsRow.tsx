@@ -8,14 +8,18 @@ import type { SettingsScope } from '../../lib/settings';
  * swatches — which then spans the row under the label instead.
  */
 export function SettingsRow({
-  name, hint, below, children, className
+  name, hint, below, children, className, lead, rowRef
 }: {
   name: string; hint?: ReactNode; below?: ReactNode; children?: ReactNode;
   /** Appended to the root's `set-row`, for a row with its own sizing (Management › Projects' `pj-srw`). */
   className?: string;
+  /** Drawn before the label: Management › Projects' pin grip, or the empty cell that holds its place. */
+  lead?: ReactNode;
+  rowRef?: (el: HTMLDivElement | null) => void;
 }) {
   return (
-    <div className={className ? `set-row ${className}` : 'set-row'}>
+    <div className={className ? `set-row ${className}` : 'set-row'} ref={rowRef}>
+      {lead}
       <div className="set-label">
         <span className="set-name">{name}</span>
         {hint && <span className="set-hint">{hint}</span>}
@@ -33,15 +37,17 @@ export function SettingsRow({
  * unfinished there.
  */
 export function SettingsGroup({
-  title, sub, children, className
+  title, sub, children, className, aside
 }: {
   title: string; sub: string; children: ReactNode;
   /** Appended to the root's `set-group`, for a card used outside a Settings page (Management › Projects' `pj-listcard`). */
   className?: string;
+  /** Drawn beside the title: Management › Projects' `Saved` after a pin reorder. */
+  aside?: ReactNode;
 }) {
   return (
     <section className={className ? `set-group ${className}` : 'set-group'}>
-      <div className="set-group-title">{title}</div>
+      <div className="set-group-title">{title}{aside}</div>
       <div className="set-group-sub">{sub}</div>
       <div className="set-rows">{children}</div>
     </section>

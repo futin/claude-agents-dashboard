@@ -324,7 +324,9 @@ pages set). Projects is `ProjectsView` on the app ground, no card around it, its
 server-stored. Under the band, a toolbar of a **Tiles | Columns | Lists** `.seg` switcher (per device in `management.projectsLayout`, default Tiles) and a
 filter box over name and path, then two groups, **Pinned** and **Not pinned**, each headed by its name and count. A pin is a paper tile, an offer a dashed
 outline, a pin whose folder is gone an amber edge. Columns sets Not pinned left of Pinned from lg so Pin carries a project straight across; Lists draws each
-group as a `.set-group` card of rows. Pin and Unpin are the tile's own key; the launch sheet's picker (§8.7) is no part of this page.
+group as a `.set-group` card of rows. Pin and Unpin are the tile's own key; the launch sheet's picker (§8.7) is no part of this page. Every Pinned tile or
+row, in all three layouts, leads with a 28px `⠿` grip column; dragging it, or ↑/←/↓/→ on it focused, reorders the pins and flashes `Saved` beside the count.
+The dragged item's `--strip-hi` fill and `--shadow2` lift are the one transient exception to "no lift".
 
 Git is the Usage band with no right slot, then a toolbar on the ground: a `.seg` switcher — the Sessions one, on `--hairline2` for the same §8.3 reason —
 and beside it the clock chip, a `--strip-hi` key at the switcher's 38px height holding two meters (SYNC and FETCH, a port of backlog-manager's `.ui-meter`:

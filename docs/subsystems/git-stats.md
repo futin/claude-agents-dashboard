@@ -1,6 +1,6 @@
 # Git Stats — read-only local git state per pinned project
 
-`GET /api/git-stats` answers, for every **pinned** project (`getPinnedProjects`, in pin order — the order the user sets by dragging in Management › Pinned), whether its repo has uncommitted work, which local branches carry
+`GET /api/git-stats` answers, for every **pinned** project (`getPinnedProjects`, in pin order — the order the user sets by dragging in Management › Projects), whether its repo has uncommitted work, which local branches carry
 unmerged work and how far they are from the trunk, and when the remote-tracking refs were last refreshed. The Management tab's Git sub-view draws it. The
 reader is `server/lib/git-stats.ts`; the payload types (`RepoGitStats`, `GitBranch`, `GitStatsResponse`) are in `shared/types.ts`. Design record:
 `docs/superpowers/specs/2026-10-01-git-stats-design.md`.

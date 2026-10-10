@@ -1865,26 +1865,15 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 /* .pin-sub.err is scoped to .pin-sub, so a refused reorder shown here needs its own rule or it reads as a success */
 .pin-saved.err{color:var(--red)}
 @media (prefers-reduced-motion:reduce){.pin-saved{transition:none}}
-/* Management › Pinned's drag grip (pin-reorder spec §4.4): a 28px lead column on the pinned rows and the column header. On the phone the grip spans both
-   lines and the age and button shift one column right; stretched to the row so the touch target grows toward §8.2's 44px floor. */
-.pin-row.g{grid-template-columns:28px minmax(0,1fr) auto}
-.pin-row.g .pin-age{grid-column:2}
-.pin-row.g .qp-term{grid-column:3;grid-row:1/span 2}
-.pin-row.g>:first-child{grid-row:1/span 2}
-.pin-head.g span:nth-child(2){text-align:left}
-.pin-head.g span:nth-child(3){text-align:right}
+/* The pin drag grip (pin-reorder spec §4.4), placed by Management › Projects' `.pj-tile.g` / `.pj-srw.g` below: stretched to its item so the touch target
+   grows toward §8.2's 44px floor, and the only element with `touch-action:none`, so the page still scrolls from the rest of the item. */
 .pin-grip{align-self:stretch;width:28px;min-height:36px;display:grid;place-items:center;padding:0;font-size:16px;line-height:1;color:var(--ink3);background:none;border:0;border-radius:8px;cursor:grab;touch-action:none}
 .pin-grip:hover{color:var(--ink);background:var(--strip-hi)}
 .pin-grip:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
-.pin-row.drag{background:var(--strip-hi);box-shadow:0 8px 24px var(--shadow2);border-radius:10px;position:relative;z-index:2;border-top-color:transparent;cursor:grabbing}
-.pin-row.drag .pin-grip{cursor:grabbing;color:var(--cyan)}
 @media (min-width:768px){
   .pin-head,.pin-row{display:grid;grid-template-columns:minmax(0,1fr) 64px 96px;gap:12px}
   .pin-age{grid-column:auto;font-size:13px;color:var(--ink2);text-align:right}
   .pin-row .qp-term{grid-column:auto;grid-row:auto}
-  .pin-head.g,.pin-row.g{grid-template-columns:28px minmax(0,1fr) 64px 96px}
-  .pin-row.g .pin-age,.pin-row.g .qp-term{grid-column:auto;grid-row:auto}
-  .pin-row.g>:first-child{grid-row:auto}
 }
 
 /* Management › Projects (ProjectsView.tsx): the ledger on the app ground, no card around it — the band, a toolbar of the
@@ -1931,6 +1920,22 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pj-srw .set-hint{font-size:12px;color:var(--ink3)}
 .pj-srw .set-control{gap:12px}
 .pj-srw.gone .set-name{color:var(--ink2)}
+/* Pinned's grip (#193): every pinned tile or list row leads with a 28px column — the `.pin-grip`, or an empty cell holding its place while the filter hides
+   it — spanning the item's full height. A tile, stacked, puts the id over the foot beside it; a phone list row, the label over the control. The dragged
+   item lifts: the one transient exception to "no lift" above. */
+.pj-tile.g{display:grid;grid-template-columns:28px minmax(0,1fr);grid-template-rows:1fr auto;column-gap:8px;padding-left:8px}
+.pj-tile.g>:first-child,.pj-srw.g>:first-child{grid-row:1/span 2}
+.set-row.pj-srw.g{display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:8px;row-gap:10px;align-items:start}
+.set-row.pj-srw.g>.set-control{grid-column:2}
+.pj-tile.drag,.pj-srw.drag{background:var(--strip-hi);box-shadow:0 8px 24px var(--shadow2);position:relative;z-index:2;cursor:grabbing}
+.pj-srw.drag{border-radius:10px;border-top-color:transparent}
+.pj-tile.drag .pin-grip,.pj-srw.drag .pin-grip{cursor:grabbing;color:var(--cyan)}
+@media (min-width:768px){
+  .pj-cols .pj-tile.g{grid-template-columns:28px minmax(0,1fr) auto;grid-template-rows:auto;align-items:center}
+  .set-row.pj-srw.g{grid-template-columns:28px minmax(0,1fr) auto;column-gap:16px;align-items:center}
+  .pj-cols .pj-tile.g>:first-child,.pj-srw.g>:first-child{grid-row:auto}
+  .set-row.pj-srw.g>.set-control{grid-column:auto}
+}
 @media (min-width:1024px){
   .pj-cols{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
 }

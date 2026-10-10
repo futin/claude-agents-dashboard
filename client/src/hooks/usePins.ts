@@ -71,7 +71,7 @@ export function usePins(): PinsControl {
   pinsRef.current = pins;
 
   const reorder = useCallback(async (order: string[]): Promise<string | null> => {
-    // Synchronous, before the first await: the picker drops its drag draft right after calling this and relies on the rows already holding `order`.
+    // Synchronous, before the first await: usePinReorder drops its drag draft right after calling this and relies on the rows already holding `order`.
     const before = pinsRef.current;
     setBusy('order');
     if (before) setPins({ ...before, pinned: applyPinOrder(before.pinned, order) });
