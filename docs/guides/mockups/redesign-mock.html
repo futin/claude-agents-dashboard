@@ -66,7 +66,12 @@
    folder that is not a repository. Projects is the list that used to live in
    Settings › Pinned, now on the app ground: a toolbar with the
    Tiles | Columns | Lists pills and a filter box, over the pinned and the
-   recent projects with Unpin and Pin. Tiles stacks the two groups as tiles,
+   recent projects with Unpin and Pin. Every pin leads with a ⠿ grip: drag
+   it, or ↑/←/↓/→ on it focused, to reorder the pins (Saved flashes beside
+   the count; a non-blank filter hides the grips). A bar above Projects
+   draws that reorder three ways: Lift (the live grip with its fixes), Drop
+   line (nothing moves until release) and Arrange (no drag, ↑ ↓ steppers
+   behind a Reorder key). Tiles stacks the two groups as tiles,
    Columns puts them side by side one tile a row, Lists draws each column as a
    Settings card of setting rows.
    The bar above Git drives the states the live tab can be in.
@@ -1580,6 +1585,88 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .pj-srw .btn{height:32px}
 .pj-srw .btn:disabled{color:var(--text-tertiary);cursor:default}
 .pj-srw.gone .nm{color:var(--text-secondary)}
+/* Pinned's reorder (live #193, usePinReorder.ts), drawn three ways — the
+   varbar above Projects picks one (mock chrome):
+   · Lift (the live grip, fixed) — the item moves under the pointer as you
+     drag. Fixes over #193: a green ring + float lift + 2% scale on the
+     dragged item and the other pins faded, so the moving one is unmistakable;
+     every pinned tile one height — the "folder gone" sentence moved into a
+     chip's tooltip, so no tile is taller and none is padded out to match —
+     so a swap never changes the boxes under a still pointer; in Lists
+     the lifted row hides its own hairline and the next row's, and bleeds
+     12px past the card's text edge, so no rule shows through the lift.
+   · Drop line — nothing moves until you let go: the source dims in place, a
+     ghost chip follows the pointer, a green bar marks the landing gap. Sizes
+     cannot matter, the layout never changes mid-drag.
+   · Arrange — no drag at all: Reorder in the Pinned head swaps each pin's
+     grip for its position and its Unpin for ↑ ↓ (← → on Tiles); Done saves
+     the batch, Cancel drops it. Touch- and keyboard-first. */
+.pin-group{display:flex;align-items:center;min-height:30px}
+.pj-listcard .ct{display:flex;align-items:center;gap:0}
+.pin-saved{font-size:12px;font-weight:400;color:var(--text-tertiary);margin-left:10px;letter-spacing:0;transition:opacity .3s}
+.pin-saved.off{opacity:0}
+.pin-saved.live{color:var(--cyan);font-weight:500}
+@media (prefers-reduced-motion:reduce){.pin-saved{transition:none}}
+.pj-arr{margin-left:auto;display:flex;gap:6px}
+.pj-arr .btn{height:28px;padding:0 10px;font-size:12px;letter-spacing:0}
+.pj-arr .btn.ink{background:var(--ink-inverse);border-color:var(--ink-inverse);color:var(--text-on-dark)}
+.pin-grip{align-self:stretch;width:28px;min-height:36px;display:grid;place-items:center;padding:0;font:inherit;font-size:16px;line-height:1;color:var(--text-tertiary);background:none;border:0;border-radius:var(--r-sm);cursor:grab;touch-action:none}
+.pin-grip:hover{color:var(--text-primary);background:var(--bg-subtle)}
+.pin-grip:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+.pin-grip[aria-disabled="true"]{cursor:default;color:var(--border-strong);background:none}
+.pj-tile.g{display:grid;grid-template-columns:28px minmax(0,1fr);grid-template-rows:1fr auto;column-gap:8px;row-gap:12px;padding-left:8px}
+.pj-tile.g>:first-child{grid-row:1/span 2}
+.pj-cols .pj-tile.g{grid-template-columns:28px minmax(0,1fr) auto;grid-template-rows:auto;align-items:center}
+.pj-cols .pj-tile.g>:first-child{grid-row:auto}
+/* fix 2: every pinned tile one height in the Tiles grid */
+.pin-pick[data-layout="tiles"] .pj-tiles.pins{grid-auto-rows:1fr}
+body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
+
+/* Lift — fix 1: the dragged item rings, lifts and scales; the rest fade */
+#pin-body.dragging [data-prow]{transition:opacity .15s}
+#pin-body.dragging.lift [data-prow]:not(.drag){opacity:.5}
+.pj-tile.drag,.pj-srw.drag{position:relative;z-index:2;background:var(--bg-surface);box-shadow:0 0 0 2px var(--cyan),var(--lift-float);transform:scale(1.02)}
+.pj-tile.drag{border-color:transparent}
+.pj-tile.drag .pin-grip,.pj-srw.drag .pin-grip,.pj-tile.src .pin-grip,.pj-srw.src .pin-grip{color:var(--cyan);background:var(--bg-subtle)}
+/* fix 3: no hairline above or below the lifted row, and the lift bleeds past the text edge */
+.pj-srw.drag{margin:0 -12px;padding-left:12px;padding-right:12px;border-radius:var(--r-md);border-top-color:transparent;transform:scale(1.01)}
+.pj-srw.drag+.pj-srw{border-top-color:transparent}
+@media (prefers-reduced-motion:reduce){.pj-tile.drag,.pj-srw.drag{transform:none}}
+
+/* Drop line — the source dims in place, a ghost follows, a bar marks the gap */
+.pj-tile.src{opacity:.45;border-style:dashed;border-color:var(--border-strong);box-shadow:none}
+.pj-srw.src{opacity:.45}
+.pj-ghost{position:fixed;z-index:50;pointer-events:none;display:flex;align-items:center;gap:8px;padding:8px 14px 8px 10px;background:var(--bg-surface);border-radius:var(--r-md);box-shadow:0 0 0 2px var(--cyan),var(--lift-float);font-size:14px;font-weight:500;color:var(--text-primary);white-space:nowrap;transform:rotate(-1.5deg)}
+.pj-ghost b{font-size:15px;font-weight:400;color:var(--cyan)}
+.pj-ghost i{font-style:normal;font-size:12px;font-weight:400;color:var(--text-tertiary)}
+.pj-mark{position:fixed;z-index:49;pointer-events:none;background:var(--cyan);border-radius:var(--r-full)}
+.pj-mark::before,.pj-mark::after{content:"";position:absolute;width:8px;height:8px;border-radius:var(--r-full);background:var(--cyan)}
+.pj-mark.h::before{left:-4px;top:-3px}.pj-mark.h::after{right:-4px;top:-3px}
+.pj-mark.v::before{top:-4px;left:-2.5px}.pj-mark.v::after{bottom:-4px;left:-2.5px}
+
+/* a gone tile's note: an amber chip in the foot, the sentence its tooltip */
+.pj-gone{position:relative;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:0;border-radius:var(--r-full);background:color-mix(in srgb,var(--amber) 12%,transparent);color:var(--amber);font-size:12px;font-weight:500;white-space:nowrap;cursor:help}
+.pj-gone:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.pj-tip{position:absolute;left:0;bottom:calc(100% + 8px);z-index:5;width:240px;padding:8px 10px;border-radius:var(--r-sm);background:var(--ink-inverse);color:var(--text-on-dark);box-shadow:var(--lift-float);font-size:12px;font-weight:400;line-height:1.45;white-space:normal;text-align:left;opacity:0;transform:translateY(4px);pointer-events:none;transition:opacity .15s,transform .15s}
+.pj-tip::after{content:"";position:absolute;left:16px;top:100%;border:5px solid transparent;border-top-color:var(--ink-inverse)}
+.pj-gone:hover .pj-tip,.pj-gone:focus .pj-tip{opacity:1;transform:none}
+/* a list row's chip sits at the card's right edge: the tip opens leftward */
+.pj-srw .pj-tip{left:auto;right:0}
+.pj-srw .pj-tip::after{left:auto;right:16px}
+@media (prefers-reduced-motion:reduce){.pj-tip{transition:none}}
+
+/* Arrange — position numbers in the grip's column, steppers in place of Unpin */
+.pj-pos{align-self:center;width:28px;height:28px;display:grid;place-items:center;border-radius:var(--r-full);background:var(--bg-subtle);font-size:12px;font-weight:600;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+.pj-step{display:inline-flex;border:1px solid var(--border-strong);border-radius:var(--r-md);overflow:hidden;flex:none}
+.pj-step button{width:34px;height:30px;padding:0;background:var(--bg-surface);border:0;font-size:14px;color:var(--text-primary)}
+.pj-step button+button{border-left:1px solid var(--border-strong)}
+.pj-step button:hover:not(:disabled){background:var(--bg-subtle)}
+.pj-step button:disabled{color:var(--border-strong);cursor:default}
+.pj-step button:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+#pin-body.arranging .pj-tile.g:not(.off){border-style:dashed;border-color:var(--text-tertiary)}
+.pj-tile.moved,.pj-srw.moved{box-shadow:0 0 0 2px var(--cyan),var(--lift-card);transition:box-shadow .2s}
+.pj-tile.moved .pj-pos,.pj-srw.moved .pj-pos{background:var(--cyan);color:var(--text-on-dark)}
+.pj-srw.moved{border-radius:var(--r-md)}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CHAT — the history drawer redrawn as a modal, five variants over one
@@ -4047,6 +4134,12 @@ At the start of every session, invoke /caveman.
     pick: 'cad',            // Inspector: the selected repo
     pinFilter: '',
     pinBusy: null,
+    pinDrag: null,          // the pin whose grip is being dragged
+    pinDropAt: null,        // Drop line: the index the bar marks, or null
+    pinSaved: false,        // `Saved` showing beside the Pinned count
+    pinReorder: 'lift',     // mock chrome: lift | line | arrange — the reorder design drawn
+    pinArrange: false,      // Arrange: Reorder is on
+    pinMoved: null,         // Arrange: the pin a step just moved, ringed for a beat
     pinLayout: 'tiles'      // tiles | columns | lists — `management.projectsLayout`
   };
 
@@ -4319,30 +4412,92 @@ At the start of every session, invoke /caveman.
     { dir: 'bm', path: '~/Projects/personal/backlog-manager', ago: '2d ago' },
     { dir: 'wk', path: '~/Projects/timify/widget-kit', ago: '9d ago' }
   ];
-  const pinned = new Set(PINS.map(p => p.dir));
+  /* the stored pin order — a Pin appends, the grip reorders, an Unpin drops */
+  let pinOrder = PINS.map(p => p.dir);
   const ALL = [...PINS, ...OFFERS];
+  const byDir = d => ALL.find(p => p.dir === d);
+  /* lib/pins.ts movePin, verbatim in shape: the same array back when nothing moves */
+  const movePin = (order, name, to) => {
+    const from = order.indexOf(name);
+    if (from < 0) return order;
+    to = Math.min(Math.max(to, 0), order.length - 1);
+    if (to === from) return order;
+    const next = order.filter(d => d !== name);
+    next.splice(to, 0, name);
+    return next;
+  };
+  /* lib/pins.ts dropIndex: one column counts the centres above the pointer,
+     a grid counts the boxes before it in reading order */
+  const dropIndex = (items, dragged, pt) => {
+    const others = items.filter(it => it.name !== dragged);
+    const left0 = items[0].rect.left;
+    if (items.every(it => Math.abs(it.rect.left - left0) <= 1)) return others.filter(({ rect: r }) => (r.top + r.bottom) / 2 < pt.y).length;
+    return others.filter(({ rect: r }) => pt.y > r.bottom || (r.top <= pt.y && pt.y <= r.bottom && pt.x > (r.left + r.right) / 2)).length;
+  };
   const nameOf = p => p.path.split('/').pop();
   const dirOf = p => p.path.split('/').slice(0, -1).join('/') + '/';
   const MISSING = 'Folder no longer exists. Hidden from every list until unpinned.';
-  const miss = p => p.listed === false ? `<span class="pin-sub">${MISSING}</span>` : '';
   const matches = p => { const q = S.pinFilter.trim().toLowerCase(); return q === '' || p.path.toLowerCase().includes(q); };
   const label = (p, on) => S.pinBusy === p.dir ? (on ? 'Unpinning…' : 'Pinning…') : (on ? 'Unpin' : 'Pin');
   const pinBtn = (p, on) => `<button class="btn" data-ppin="${p.dir}"${S.pinBusy ? ' disabled' : ''}>${label(p, on)}</button>`;
   const groups = () => {
-    const pins = ALL.filter(p => pinned.has(p.dir));
-    const offers = ALL.filter(p => !pinned.has(p.dir));
+    const pins = pinOrder.map(byDir);
+    const offers = ALL.filter(p => !pinOrder.includes(p.dir));
     return { pins, offers, pm: pins.filter(matches), om: offers.filter(matches) };
   };
   const noPins = n => `<div class="pin-note">${n === 0 ? 'No projects are pinned.' : 'No pinned project matches.'}</div>`;
   const noOffers = n => `<div class="pin-note">${n === 0 ? 'Every project active in the last 30 days is already pinned.' : 'No project matches.'}</div>`;
-  const groupHead = (title, n) => `<div class="pin-group">${title}<span class="pin-count">${n}</span></div>`;
+  const groupHead = (title, n, aside = '') => `<div class="pin-group">${title}<span class="pin-count">${n}</span>${aside}</div>`;
+  const filtering = () => S.pinFilter.trim() !== '';
+  const posOf = d => `${pinOrder.indexOf(d) + 1} of ${pinOrder.length}`;
+  /* the Pinned head's aside: mid-drag the live position of the moving pin,
+     else `Saved` for 1.5s after a reorder lands — it fades out in place
+     rather than re-rendering away — and, in Arrange, Reorder / Done · Cancel */
+  const saved = () => {
+    if (S.pinDrag) {
+      const p = byDir(S.pinDrag);
+      return `<span class="pin-saved live" role="status">${S.pinReorder === 'line' ? 'Drop' : 'Moving'} ${esc(nameOf(p))} · ${S.pinReorder === 'line' && S.pinDropAt !== null ? `${S.pinDropAt + 1} of ${pinOrder.length}` : posOf(p.dir)}</span>`;
+    }
+    const flash = `<span class="pin-saved${S.pinSaved ? '' : ' off'}" role="status"${S.pinSaved ? '' : ' aria-hidden="true"'}>Saved</span>`;
+    if (S.pinReorder !== 'arrange') return flash;
+    if (!S.pinArrange) return flash + `<span class="pj-arr"><button class="btn" data-parrange="on"${filtering() || S.pinBusy || pinOrder.length < 2 ? ' disabled' : ''}>Reorder</button></span>`;
+    return `<span class="pin-saved live" role="status">Arranging · ${pinOrder.length} pins</span><span class="pj-arr"><button class="btn" data-parrange="cancel">Cancel</button><button class="btn ink" data-parrange="done">Done</button></span>`;
+  };
+  /* a pin's lead column: in Lift and Drop line the grip, or — while the filter
+     leaves gaps a drop could not place — the empty cell that keeps the
+     columns lined up; in Arrange the position, once Reorder is on */
+  const grip = p => {
+    if (S.pinReorder === 'arrange') return S.pinArrange ? `<span class="pj-pos">${pinOrder.indexOf(p.dir) + 1}</span>` : '';
+    if (filtering()) return '<span aria-hidden="true"></span>';
+    return `<button type="button" class="pin-grip" data-pgrip="${p.dir}" aria-label="Move ${esc(nameOf(p))}, position ${posOf(p.dir)}"${S.pinBusy ? ' aria-disabled="true"' : ''}>⠿</button>`;
+  };
+  const dragCls = p => S.pinDrag !== p.dir ? '' : S.pinReorder === 'line' ? ' src' : ' drag';
+  const hasLead = () => S.pinReorder !== 'arrange' || S.pinArrange;
+  const lead = (p, on) => on ? `${hasLead() ? ' g' : ''}${dragCls(p)}${S.pinMoved === p.dir ? ' moved' : ''}" data-prow="${p.dir}` : '';
+  /* in Arrange the pin's key is the stepper: ↑ ↓ in one column, ← → on the Tiles grid */
+  const stepper = p => {
+    const i = pinOrder.indexOf(p.dir), n = pinOrder.length, grid = S.pinLayout === 'tiles', nm = esc(nameOf(p));
+    return `<span class="pj-step"><button data-pstep="-1" data-pdir="${p.dir}" aria-label="Move ${nm} earlier"${i === 0 ? ' disabled' : ''}>${grid ? '←' : '↑'}</button><button data-pstep="1" data-pdir="${p.dir}" aria-label="Move ${nm} later"${i === n - 1 ? ' disabled' : ''}>${grid ? '→' : '↓'}</button></span>`;
+  };
+  const key = (p, on) => on && S.pinArrange ? stepper(p) : S.pinArrange
+    ? `<button class="btn" disabled>${label(p, on)}</button>` : pinBtn(p, on);
+
+  /* a tile's gone note is a chip in the foot, where the age would sit (a gone
+     folder has no sessions to age), its sentence a tooltip on hover, focus or
+     tap — so a gone tile is the same size as every other and the grid holds
+     one height without padding the rest. Lists rows carry the same chip in
+     place of their age, so all three layouts read alike. */
+  const goneChip = p => `<button type="button" class="pj-gone" aria-describedby="pj-tip-${p.dir}">
+      <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M6 1.5 11 10.5H1z"/><path d="M6 5v2.2M6 8.6v.1"/></svg>Folder gone
+      <span class="pj-tip" role="tooltip" id="pj-tip-${p.dir}">${MISSING}</span></button>`;
+  const tileAge = p => p.listed === false ? goneChip(p) : `<span class="pj-age">${p.ago ? 'Last session ' + p.ago : 'No sessions'}</span>`;
 
   /* a pin is a white tile, a recent project its dashed outline */
-  const tile = (p, on) => `<li class="pj-tile${on ? '' : ' off'}${p.listed === false ? ' gone' : ''}">
-      <span class="pj-id"><span class="pj-name">${esc(nameOf(p))}</span><span class="pj-dir">${esc(dirOf(p))}</span>${miss(p)}</span>
-      <span class="pj-tfoot"><span class="pj-age">${p.ago ? 'Last session ' + p.ago : 'No sessions'}</span>${pinBtn(p, on)}</span></li>`;
-  const pinGroup = (pins, pm) => groupHead('Pinned', pins.length)
-    + (pm.length ? `<ul class="pj-tiles">${pm.map(p => tile(p, true)).join('')}</ul>` : noPins(pins.length));
+  const tile = (p, on) => `<li class="pj-tile${on ? '' : ' off'}${p.listed === false ? ' gone' : ''}${lead(p, on)}">${on ? grip(p) : ''}
+      <span class="pj-id"><span class="pj-name">${esc(nameOf(p))}</span><span class="pj-dir">${esc(dirOf(p))}</span></span>
+      <span class="pj-tfoot">${tileAge(p)}${key(p, on)}</span></li>`;
+  const pinGroup = (pins, pm) => groupHead('Pinned', pins.length, saved())
+    + (pm.length ? `<ul class="pj-tiles pins">${pm.map(p => tile(p, true)).join('')}</ul>` : noPins(pins.length));
   const offerGroup = (offers, om) => groupHead('Not pinned', offers.length)
     + (om.length ? `<ul class="pj-tiles">${om.map(p => tile(p, false)).join('')}</ul>` : noOffers(offers.length));
 
@@ -4362,11 +4517,11 @@ At the start of every session, invoke /caveman.
      tiles: the group is the card title, its count the subtitle, each project
      a setting row (name over its folder, last session and the key on the
      right, a hairline between), the way Claude Configs lists its items */
-  const listRow = (p, on) => `<div class="srw pj-srw${p.listed === false ? ' gone' : ''}">
-      <span class="lab"><span class="nm">${esc(nameOf(p))}</span><span class="hn">${esc(dirOf(p))}</span>${miss(p)}</span>
-      <span class="ctl"><span class="pj-age">${p.ago || 'No sessions'}</span>${pinBtn(p, on)}</span></div>`;
+  const listRow = (p, on) => `<div class="srw pj-srw${p.listed === false ? ' gone' : ''}${lead(p, on)}">${on ? grip(p) : ''}
+      <span class="lab"><span class="nm">${esc(nameOf(p))}</span><span class="hn">${esc(dirOf(p))}</span></span>
+      <span class="ctl">${p.listed === false ? goneChip(p) : `<span class="pj-age">${p.ago || 'No sessions'}</span>`}${key(p, on)}</span></div>`;
   const listCard = (title, all, shown, on, sub, empty) => `<div class="card pj-listcard">
-      <div class="ct">${title}</div>
+      <div class="ct">${title}${on ? saved() : ''}</div>
       <div class="cs">${shown.length} of ${all.length} · ${sub}</div>
       ${shown.length ? `<div class="srows">${shown.map(p => listRow(p, on)).join('')}</div>` : empty}</div>`;
   function lists() {
@@ -4378,39 +4533,205 @@ At the start of every session, invoke /caveman.
 
   const LAYOUTS = { tiles: ['Tiles', tiles], columns: ['Columns', columns], lists: ['Lists', lists] };
   const pinBody = () => LAYOUTS[S.pinLayout][1]();
-  const paintBody = () => { document.getElementById('pin-body').innerHTML = pinBody(); };
+  const paintBody = () => {
+    const body = document.getElementById('pin-body');
+    body.className = `${S.pinDrag ? 'dragging ' : ''}${S.pinArrange ? 'arranging ' : ''}${S.pinReorder}`;
+    body.innerHTML = pinBody();
+  };
   /* the layout is the page's own control, the same `.seg` pills Git's
      Inbox | Matrix | Inspector | Branches uses, persisted the same way */
   const pinSeg = () => `<div class="seg">${Object.entries(LAYOUTS)
     .map(([k, [l]]) => `<button class="${S.pinLayout === k ? 'on' : ''}" data-playout="${k}" aria-pressed="${S.pinLayout === k}">${l}</button>`).join('')}</div>`;
+  /* mock chrome: which of the three reorder designs the Pinned group draws */
+  const REORDERS = [['lift', 'Lift (live grip, fixed)'], ['line', 'Drop line'], ['arrange', 'Arrange mode']];
+  const pinBar = () => `<div class="varbar"><span class="tag">Management · Projects · reorder</span>
+      ${REORDERS.map(([v, l]) => tb('data-preorder', v, l, S.pinReorder === v)).join('')}</div>`;
 
   function renderPinned() {
-    pinRoot.innerHTML = `<div class="band"><div class="ct">Management · Projects <span class="scope shared"><i></i>every device</span></div>
+    pinRoot.innerHTML = pinBar() + `<div class="band"><div class="ct">Management · Projects <span class="scope shared"><i></i>every device</span></div>
         <div class="cs">Every project with a session in the last 30 days. Pin one to keep it in the launch sheet whatever the lookback; pins are stored by the dashboard server, so they show up on every device.</div></div>
       <div class="pin-pick" data-layout="${S.pinLayout}">
-        <div class="git-toolbar pj-toolbar">${pinSeg()}<input class="pin-filter" id="pin-filter" type="text" placeholder="Filter by name or path" value="${esc(S.pinFilter)}"></div>
-        <div id="pin-body">${pinBody()}</div></div>`;
+        <div class="git-toolbar pj-toolbar">${pinSeg()}<input class="pin-filter" id="pin-filter" type="text" placeholder="Filter by name or path" value="${esc(S.pinFilter)}"${S.pinArrange ? ' disabled' : ''}></div>
+        <div id="pin-body"></div></div>`;
+    paintBody();
   }
   pinRoot.addEventListener('input', ev => {
     if (ev.target.id !== 'pin-filter') return;
     S.pinFilter = ev.target.value;
     paintBody();
   });
+
+  /* the reorder writes at once: a short beat stands in for the PUT, then
+     `Saved` shows and fades — no undo, the next move is the undo */
+  let savedTimer = 0, movedTimer = 0;
+  const flashSaved = () => {
+    S.pinSaved = false;
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => {
+      S.pinSaved = true;
+      pinRoot.querySelectorAll('.pin-saved:not(.live)').forEach(el => { el.classList.remove('off'); el.removeAttribute('aria-hidden'); });
+      savedTimer = setTimeout(() => {
+        S.pinSaved = false;
+        pinRoot.querySelectorAll('.pin-saved:not(.live)').forEach(el => { el.classList.add('off'); el.setAttribute('aria-hidden', 'true'); });
+      }, 1500);
+    }, 200);
+  };
+  /* Arrange: ring the pin a step just moved, so the eye follows it */
+  const flashMoved = d => {
+    S.pinMoved = d;
+    clearTimeout(movedTimer);
+    movedTimer = setTimeout(() => { S.pinMoved = null; pinRoot.querySelectorAll('.moved').forEach(el => el.classList.remove('moved')); }, 700);
+  };
+  let arrangeStart = null;
+
   /* a click shows the in-flight label for a beat, then the row moves group —
      as the live POST answers with the fresh list rather than moving it by hand */
   pinRoot.addEventListener('click', ev => {
     let el;
+    if ((el = ev.target.closest('[data-preorder]'))) {
+      if (S.pinArrange) pinOrder = arrangeStart;
+      S.pinReorder = el.dataset.preorder; S.pinArrange = false; renderPinned(); return;
+    }
     if ((el = ev.target.closest('[data-playout]'))) { S.pinLayout = el.dataset.playout; renderPinned(); return; }
+    if ((el = ev.target.closest('[data-parrange]'))) {
+      const a = el.dataset.parrange;
+      if (a === 'on') { arrangeStart = pinOrder; S.pinArrange = true; S.pinSaved = false; }
+      else {
+        if (a === 'cancel') pinOrder = arrangeStart;
+        S.pinArrange = false;
+        if (a === 'done' && pinOrder.join() !== arrangeStart.join()) flashSaved();
+      }
+      renderPinned();
+      return;
+    }
+    if ((el = ev.target.closest('[data-pstep]'))) {
+      const d = el.dataset.pdir, next = movePin(pinOrder, d, pinOrder.indexOf(d) + Number(el.dataset.pstep));
+      if (next === pinOrder) return;
+      pinOrder = next;
+      flashMoved(d);
+      paintBody();
+      /* keep focus on the same key of the moved pin; at an end, its other key */
+      const keys = pinRoot.querySelectorAll(`[data-pdir="${d}"]`);
+      (keys[el.dataset.pstep === '-1' ? 0 : 1]?.disabled ? keys[el.dataset.pstep === '-1' ? 1 : 0] : keys[el.dataset.pstep === '-1' ? 0 : 1])?.focus({ preventScroll: true });
+      return;
+    }
     el = ev.target.closest('[data-ppin]');
-    if (!el || S.pinBusy) return;
+    if (!el || S.pinBusy || S.pinDrag || S.pinArrange) return;
     const d = el.dataset.ppin;
+    S.pinSaved = false;
     S.pinBusy = d;
     paintBody();
     setTimeout(() => {
-      pinned.has(d) ? pinned.delete(d) : pinned.add(d);
+      pinOrder = pinOrder.includes(d) ? pinOrder.filter(x => x !== d) : [...pinOrder, d];
       S.pinBusy = null;
       paintBody();
     }, 450);
+  });
+
+  /* the items' live boxes, in page order */
+  const boxes = () => [...pinRoot.querySelectorAll('[data-prow]')].map(el => ({ name: el.dataset.prow, rect: el.getBoundingClientRect() }));
+  const inside = (r, pt) => pt.x >= r.left && pt.x <= r.right && pt.y >= r.top && pt.y <= r.bottom;
+  /* Drop line's bar: the leading edge of the item it lands before — a
+     horizontal bar in one column, a vertical one in the grid's gap — or the
+     trailing edge of the last */
+  function placeMark(mark, items, name, to) {
+    const others = items.filter(it => it.name !== name);
+    const col = items.every(it => Math.abs(it.rect.left - items[0].rect.left) <= 1);
+    const end = to >= others.length, r = (end ? others[others.length - 1] : others[to]).rect;
+    const list = S.pinLayout === 'lists', gap = list ? 0 : 6;
+    if (col) Object.assign(mark.style, { left: `${r.left}px`, width: `${r.width}px`, height: '3px', top: `${(end ? r.bottom + gap : r.top - gap) - 1.5}px` });
+    else Object.assign(mark.style, { top: `${r.top}px`, height: `${r.height}px`, width: '3px', left: `${(end ? r.right + gap : r.left - gap) - 1.5}px` });
+    mark.className = `pj-mark ${col ? 'h' : 'v'}`;
+  }
+
+  /* drag: listens on document and never captures the pointer — re-rendering
+     the dragged item would release a capture. Lift re-runs the drop rule over
+     the live boxes on each move and repaints; a pointer still inside the
+     dragged item's own box is no move (the hysteresis that, with the equal
+     tile heights, ends the swap-back jitter). Drop line runs the same rule
+     over the frozen layout and only moves the bar. Only a release that
+     changed the order saves; Escape or pointercancel puts it back. */
+  pinRoot.addEventListener('pointerdown', ev => {
+    const g = ev.target.closest('[data-pgrip]');
+    if (!g || S.pinBusy || S.pinDrag || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
+    ev.preventDefault();
+    const name = g.dataset.pgrip, start = pinOrder, id = ev.pointerId, line = S.pinReorder === 'line';
+    S.pinDrag = name;
+    S.pinDropAt = null;
+    S.pinSaved = false;
+    document.body.classList.add('pj-dragging');
+    let ghost = null, mark = null;
+    if (line) {
+      ghost = document.createElement('div');
+      ghost.className = 'pj-ghost';
+      ghost.innerHTML = `<b>⠿</b>${esc(nameOf(byDir(name)))}<i>${posOf(name)}</i>`;
+      mark = document.createElement('div');
+      mark.style.display = 'none';
+      document.body.append(ghost, mark);
+    }
+    const putGhost = (x, y) => { if (ghost) Object.assign(ghost.style, { left: `${x + 14}px`, top: `${y - 18}px` }); };
+    putGhost(ev.clientX, ev.clientY);
+    paintBody();
+    const move = e => {
+      if (e.pointerId !== id) return;
+      const pt = { x: e.clientX, y: e.clientY }, items = boxes();
+      if (!items.length) return;
+      if (line) {
+        putGhost(pt.x, pt.y);
+        const to = dropIndex(items, name, pt), next = movePin(pinOrder, name, to);
+        S.pinDropAt = next === pinOrder ? null : to;
+        if (S.pinDropAt === null) mark.style.display = 'none';
+        else { mark.style.display = ''; placeMark(mark, items, name, to); }
+        ghost.querySelector('i').textContent = S.pinDropAt === null ? posOf(name) : `→ ${to + 1} of ${pinOrder.length}`;
+        pinRoot.querySelectorAll('.pin-saved.live').forEach(el => { el.outerHTML = saved(); });
+        return;
+      }
+      const own = items.find(it => it.name === name);
+      if (own && inside(own.rect, pt)) return;
+      const next = movePin(pinOrder, name, dropIndex(items, name, pt));
+      if (next === pinOrder) return;
+      pinOrder = next;
+      paintBody();
+    };
+    const end = commit => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', cancel);
+      document.removeEventListener('keydown', esc_);
+      document.body.classList.remove('pj-dragging');
+      ghost?.remove();
+      mark?.remove();
+      if (line && commit && S.pinDropAt !== null) pinOrder = movePin(pinOrder, name, S.pinDropAt);
+      S.pinDrag = null;
+      S.pinDropAt = null;
+      if (!commit) pinOrder = start;
+      paintBody();
+      if (commit && pinOrder.join() !== start.join()) flashSaved();
+    };
+    const up = e => { if (e.pointerId === id) end(true); };
+    const cancel = e => { if (e.pointerId === id) end(false); };
+    const esc_ = e => { if (e.key === 'Escape') { e.preventDefault(); end(false); } };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', cancel);
+    document.addEventListener('keydown', esc_);
+  });
+  /* ↑/← one place earlier, ↓/→ one later — a grid's left is earlier, and no
+     key jumps a row — saved at once, focus kept on the moved grip */
+  pinRoot.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape' && S.pinArrange) { pinOrder = arrangeStart; S.pinArrange = false; renderPinned(); return; }
+    const g = ev.target.closest('[data-pgrip]');
+    if (!g) return;
+    const k = ev.key, step = k === 'ArrowUp' || k === 'ArrowLeft' ? -1 : k === 'ArrowDown' || k === 'ArrowRight' ? 1 : 0;
+    if (!step) return;
+    ev.preventDefault();
+    if (S.pinBusy || S.pinDrag) return;
+    const d = g.dataset.pgrip, next = movePin(pinOrder, d, pinOrder.indexOf(d) + step);
+    if (next === pinOrder) return;
+    pinOrder = next;
+    paintBody();
+    pinRoot.querySelector(`[data-pgrip="${d}"]`)?.focus({ preventScroll: true });
+    flashSaved();
   });
 
   renderPinned();
