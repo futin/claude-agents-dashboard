@@ -39,6 +39,12 @@
   --text:var(--ink);--text2:var(--ink2);--text3:var(--ink3);
   --accent:var(--cyan);--blue:var(--amber);--orange:var(--amber);
   --yellow:var(--mustard);--pink:var(--magenta);
+  /* green as a data FILL (History's day segments), not as ink. On the dark
+     boards the ink green is already bright, so a mix toward the paper is the
+     fill; daylight's ink green is contrast-darkened for text and mixes to
+     olive, so it overrides these with the mock's brand fills. */
+  --green-fill:color-mix(in oklab,var(--green) 70%,var(--strip));
+  --green-fill2:color-mix(in oklab,var(--green) 45%,var(--strip));
 }
 /* Graphite — the same board with the blue cast taken out. For anyone who finds
    the navy too warm-shifted on a wide-gamut display. */
@@ -106,6 +112,7 @@
   --ink:#131313;--ink2:#525252;--ink3:#6b6b6b;
   --green:#38631a;--amber:#824e15;--mustard:#5f530b;--cyan:#306c0f;
   --red:#aa3927;--magenta:#6950a5;
+  --green-fill:#7dc242;--green-fill2:#9bd25c;  /* mock --green-500 / --green-400 */
   --on-accent:#ffffff;--scrim:rgba(19,19,19,.28);
   --shadow:rgba(0,0,0,.06);--shadow2:rgba(0,0,0,.1);
 }
@@ -2269,8 +2276,8 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .usg-wf-grid{stroke:var(--hairline);stroke-width:1;stroke-dasharray:3 3}
 .usg-wf-limit{stroke:var(--red);stroke-width:1;stroke-dasharray:4 3;opacity:.7}
 .usg-wf-track{fill:var(--surface2)}
-.usg-wf-seg.a{fill:color-mix(in oklab,var(--green) 70%,var(--surface))}
-.usg-wf-seg.b{fill:color-mix(in oklab,var(--green) 45%,var(--surface))}
+.usg-wf-seg.a{fill:var(--green-fill)}
+.usg-wf-seg.b{fill:var(--green-fill2)}
 .usg-wf-seg.pre{fill:color-mix(in oklab,var(--ink3) 40%,var(--surface2))}
 .usg-wf-hatch{stroke:var(--surface);stroke-width:1.5;opacity:.55}
 .usg-wf-day{font-size:10px;font-weight:600;fill:var(--ink);text-anchor:middle;pointer-events:none}
@@ -2281,11 +2288,11 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .usg-hist-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:12px;color:var(--ink2)}
 .usg-hist-legend span{display:inline-flex;align-items:center;gap:6px}
 .usg-hist-sw{display:inline-block;width:14px;height:10px;border-radius:2px}
-.usg-hist-sw.a{background:color-mix(in oklab,var(--green) 70%,var(--surface))}
-.usg-hist-sw.b{background:color-mix(in oklab,var(--green) 45%,var(--surface))}
+.usg-hist-sw.a{background:var(--green-fill)}
+.usg-hist-sw.b{background:var(--green-fill2)}
 .usg-hist-sw.pre{background:color-mix(in oklab,var(--ink3) 40%,var(--surface2))}
 .usg-hist-sw.lim{height:0;border-top:1.5px dashed var(--red);border-radius:0}
-.usg-hist-sw.off{background:repeating-linear-gradient(45deg,color-mix(in oklab,var(--surface) 55%,transparent) 0 1.5px,transparent 1.5px 4px),color-mix(in oklab,var(--green) 70%,var(--surface))}
+.usg-hist-sw.off{background:repeating-linear-gradient(45deg,color-mix(in oklab,var(--surface) 55%,transparent) 0 1.5px,transparent 1.5px 4px),var(--green-fill)}
 
 /* ── the figure strip ────────────────────────────────────────────────────
    One card the ground divides, not five cards with gaps: the five figures are
