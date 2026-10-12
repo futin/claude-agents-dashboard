@@ -47,20 +47,25 @@ function tint(fg: [number, number, number], pct: number, under: [number, number,
   return fg.map((v, i) => Math.round(v * pct / 100 + under[i] * (1 - pct / 100))) as [number, number, number];
 }
 
-interface TintPair { line: number; selector: string; token: string; pct: number }
+/** `bg` is the token the tint is mixed from: X itself, or a `--X-tint` token the theme sets as its own hex (pct 100). */
+interface TintPair { line: number; selector: string; token: string; bg: string; pct: number }
 
-/** Rules that set `color:var(--X)` and `background:color-mix(in srgb,var(--X) N%,transparent)` with the same X — text on its own tint. */
+/** Rules that set `color:var(--X)` over its own tint — `background:color-mix(in srgb,var(--X) N%,transparent)` or `background:var(--X-tint)`. */
 function tintPairs(css: string): TintPair[] {
   const out: TintPair[] = [];
   for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const color = /(?<![-\w])color:var\(--([\w-]+)\)/.exec(m[2]);
-    const bg = /background:color-mix\(in srgb,var\(--([\w-]+)\) *(\d+)%,transparent\)/.exec(m[2]);
-    if (!color || !bg || color[1] !== bg[1]) continue;
+    if (!color) continue;
+    const mix = /background:color-mix\(in srgb,var\(--([\w-]+)\) *(\d+)%,transparent\)/.exec(m[2]);
+    const named = /background:var\(--([\w-]+)-tint\)/.exec(m[2]);
+    const pair = mix && mix[1] === color[1] ? { bg: color[1], pct: Number(mix[2]) }
+      : named && named[1] === color[1] ? { bg: `${color[1]}-tint`, pct: 100 } : null;
+    if (!pair) continue;
     out.push({
       line: css.slice(0, m.index).split('\n').length,
       selector: m[1].trim().split('\n').pop()!.trim(),
       token: color[1],
-      pct: Number(bg[2])
+      ...pair
     });
   }
   return out;
@@ -100,7 +105,7 @@ export function run(): number {
     }
     const fails: string[] = [];
     for (const x of pairs) for (const under of ['strip', 'strip-hi', 'board']) {
-      check(x.token, `its ${x.pct}% tint over --${under} (${x.selector}, styles.css:${x.line})`, tint(at(x.token), x.pct, at(under)), fails);
+      check(x.token, `its ${x.pct}% --${x.bg} tint over --${under} (${x.selector}, styles.css:${x.line})`, tint(at(x.bg), x.pct, at(under)), fails);
     }
     assert.deepStrictEqual(fails, []);
   })) p++; else f++;
