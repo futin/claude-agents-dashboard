@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Git Tab Variants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   Management › Git — UX analysis of the shipped tab (as drawn in
+   docs/guides/mockups/redesign-mock.html) and five redesigns over the SAME
+   fixture of seven pinned repos, plus three live sessions so the variants
+   can show which branch an agent is working on (Session.gitBranch exists in
+   shared/types.ts; the join is client-side).
+
+   Tokens are the redesign mock's daylight set, verbatim. Every artboard is
+   live: click rows, carets and keys. Nothing here is wired to an API.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg-page:#D9D9D9;--bg-app:#F4F4F3;--bg-surface:#FFFFFF;--bg-subtle:#F2F2F1;--bg-track:#EDEDEC;
+  --border:#EAEAE8;--border-strong:#DCDCDA;--ink-inverse:#111111;
+  --text-primary:#131313;--text-secondary:#6E6E6E;--text-tertiary:#A0A0A0;--text-on-dark:#FFFFFF;
+  --green-600:#5FA92C;--green-500:#7DC242;--green-200:#CDE8A8;--orange-400:#F5A15C;--red-500:#E0533F;
+  --amber:#C4761F;--mustard:#9A8712;--cyan:#3F8F14;--blue:#3D6FB6;
+  --r-xs:4px;--r-sm:8px;--r-md:12px;--r-lg:16px;--r-xl:24px;--r-full:999px;
+  --font:"Hanken Grotesk",Helvetica,sans-serif;
+  --lift-card:0 1px 2px rgba(0,0,0,.03);--lift-float:0 8px 24px rgba(0,0,0,.10);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg-page);color:var(--text-primary);font-family:var(--font);font-variant-numeric:tabular-nums;padding:32px 16px 96px;font-size:14px}
+button{font:inherit;cursor:pointer}
+.page{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;margin:0;text-wrap:balance}
+h2{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:0}
+h3{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-secondary);margin:0 0 12px}
+.lede{color:var(--text-secondary);font-size:15px;line-height:1.55;max-width:78ch;margin:10px 0 0}
+code{font-size:12px;background:var(--bg-subtle);border-radius:4px;padding:1px 5px}
+.nav{display:flex;flex-wrap:wrap;gap:6px;margin-top:18px}
+.nav a{font-size:13px;color:var(--text-primary);text-decoration:none;background:var(--bg-surface);border-radius:var(--r-full);padding:6px 12px}
+.nav a:hover{background:var(--bg-app)}
+
+/* ── analysis ── */
+.sheet{background:var(--bg-surface);border-radius:var(--r-xl);padding:28px}
+.shot{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:24px}
+.shot div{background:var(--bg-app);border-radius:var(--r-md);padding:14px 16px;font-size:13px;line-height:1.5;color:var(--text-secondary)}
+.shot b{display:block;color:var(--text-primary);font-weight:600;margin-bottom:2px}
+.finds{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.finds li{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:14px;padding:14px 0;border-top:1px solid var(--border);align-items:start}
+.finds li:first-child{border-top:0}
+.fid{font-weight:700;color:var(--text-tertiary);font-size:13px;padding-top:1px}
+.ft{font-weight:600;margin-bottom:3px}
+.fd{color:var(--text-secondary);line-height:1.5;font-size:13px}
+.sev{font-size:11px;font-weight:600;border-radius:var(--r-full);padding:3px 9px;white-space:nowrap}
+.sev.hi{color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,transparent)}
+.sev.md{color:var(--mustard);background:color-mix(in srgb,var(--mustard) 16%,transparent)}
+.sev.lo{color:var(--text-secondary);background:var(--bg-subtle)}
+
+/* ── boards ── */
+.board{display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px}
+.board-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.vno{font-size:13px;font-weight:700;color:var(--text-tertiary)}
+.tag{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border-radius:var(--r-full);padding:3px 9px;background:var(--bg-surface);color:var(--text-secondary)}
+.tag.rec{background:var(--ink-inverse);color:var(--text-on-dark)}
+.fixes{display:flex;gap:4px;flex-wrap:wrap}
+.fixes span{font-size:11px;font-weight:600;color:var(--text-secondary);background:var(--bg-surface);border-radius:var(--r-xs);padding:2px 6px}
+.note{font-size:14px;color:var(--text-secondary);line-height:1.55;max-width:84ch;margin:0}
+.note b{color:var(--text-primary);font-weight:600}
+.art{background:var(--bg-app);border-radius:var(--r-xl);padding:24px;box-shadow:0 24px 64px rgba(0,0,0,.08);min-width:0}
+.trade{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px 28px;font-size:13px;line-height:1.5;color:var(--text-secondary)}
+.trade b{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;margin-bottom:3px}
+.trade .pro b{color:var(--green-600)}.trade .con b{color:var(--amber)}
+.trade ul{margin:0;padding-left:18px}
+
+/* ── shared app pieces (redesign mock language) ── */
+.band{padding:0 4px 14px}
+.band .ct{font-size:19px;font-weight:500;letter-spacing:-.01em}
+.band .cs{font-size:13px;color:var(--text-secondary);margin-top:4px}
+.bar-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.spacer{flex:1}
+.card{background:var(--bg-surface);border-radius:var(--r-lg);box-shadow:var(--lift-card);min-width:0}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--text-tertiary);display:inline-block}
+.dot.needs{background:var(--amber)}.dot.flight{background:var(--mustard)}.dot.quiet{background:var(--green-600)}
+.name{font-size:15px;font-weight:500;letter-spacing:-.01em;overflow-wrap:anywhere}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.muted{color:var(--text-tertiary)}.sec{color:var(--text-secondary)}
+.key{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;font-size:12px;font-weight:500;color:var(--text-secondary);background:var(--bg-subtle);border:0;border-radius:var(--r-sm);white-space:nowrap;flex:none}
+.key:hover{color:var(--text-primary);background:var(--border-strong)}
+.key.primary{background:var(--ink-inverse);color:var(--text-on-dark)}
+.key.primary:hover{background:#333}
+.key.live{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+.key svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;line-height:1.4;padding:2px 9px;border-radius:var(--r-full);border:1px solid var(--border-strong);color:var(--text-secondary);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.chip.amber{color:var(--amber);border-color:transparent;background:color-mix(in srgb,var(--amber) 14%,transparent)}
+.chip.mustard{color:var(--mustard);border-color:transparent;background:color-mix(in srgb,var(--mustard) 18%,transparent)}
+.chip.wt{font-size:11px;padding:0 7px;color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
+.chip.dim{color:var(--text-tertiary);border-style:dashed}
+/* an agent on the branch: the Sessions board's own ink — working green, waiting amber */
+.sess{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:var(--r-full);padding:1px 8px 1px 6px;white-space:nowrap}
+.sess::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.sess.working{color:var(--green-600);background:color-mix(in srgb,var(--green-600) 13%,transparent)}
+.sess.waiting{color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,transparent)}
+.sess.idle{color:var(--text-secondary);background:var(--bg-subtle)}
+/* labelled divergence: ↓ behind the base, ↑ ahead of it */
+.dv{display:inline-flex;gap:8px;font-size:12px;white-space:nowrap}
+.dv .b{color:var(--text-secondary)}.dv .a{color:var(--cyan);font-weight:600}
+.dv .z{color:var(--text-tertiary);font-weight:400}
+.dvbar{display:inline-grid;grid-template-columns:56px 2px 56px;align-items:center;height:12px}
+.dvbar i{display:block;height:6px;border-radius:2px}
+.dvbar .bb{justify-self:end;background:var(--text-tertiary)}
+.dvbar .ba{justify-self:start;background:var(--cyan)}
+.dvbar .bc{height:12px;background:var(--border-strong);border-radius:0}
+.fresh{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 6px 0 14px;border-radius:var(--r-md);background:var(--bg-subtle);font-size:13px;color:var(--text-secondary)}
+.fresh b{color:var(--text-primary);font-weight:600}
+.fresh .warn{color:var(--amber);font-weight:600}
+.fresh .key{background:var(--bg-surface)}
+.seg{display:inline-flex;background:var(--border-strong);border-radius:var(--r-md);padding:3px}
+.seg button{border:0;background:transparent;border-radius:9px;padding:7px 12px;font-size:13px;font-weight:500;color:var(--text-secondary);display:inline-flex;gap:6px;align-items:center}
+.seg button.on{background:var(--bg-surface);color:var(--text-primary);box-shadow:var(--lift-card)}
+.seg .n{font-size:11px;color:var(--text-tertiary)}
+.seg button.on .n.hot,.seg .n.hot{color:var(--amber);font-weight:700}
+.caret{display:inline-block;width:14px;color:var(--text-tertiary);font-size:11px;flex:none}
+
+/* ═══ V1 — Inbox ═══ */
+.v1-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.v1-sum button{border:0;text-align:left;background:var(--bg-surface);border-radius:var(--r-lg);padding:14px 16px;box-shadow:var(--lift-card);display:flex;flex-direction:column;gap:2px;outline:2px solid transparent}
+.v1-sum button.on{outline-color:var(--ink-inverse)}
+.v1-sum .big{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.v1-sum .lab{font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:6px}
+.v1-sum .needs .big{color:var(--amber)}
+@media (max-width:640px){.v1-sum{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.v1-list{display:flex;flex-direction:column;gap:10px}
+.v1-item{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.v1-top{display:flex;align-items:flex-start;gap:12px}
+.v1-top .dot{margin-top:7px}
+.v1-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.v1-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.v1-verdict{font-size:14px;color:var(--text-primary);line-height:1.45}
+.v1-verdict .why{color:var(--text-secondary)}
+.v1-steps{display:flex;flex-direction:column;gap:6px;margin:4px 0 0;padding:0;list-style:none}
+.v1-steps li{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--text-secondary)}
+.v1-steps li::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--border-strong);flex:none;transform:translateY(-2px)}
+.v1-steps li.hot{color:var(--text-primary)}
+.v1-steps li.hot::before{background:var(--amber)}
+.v1-steps li.calm::before{background:var(--green-600)}
+.v1-acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.v1-br{border-top:1px solid var(--border);padding-top:10px;margin-left:20px}
+.v1-brtog{border:0;background:none;padding:0;font-size:12px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:4px}
+.v1-brrow{display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:12px;align-items:center;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border)}
+.v1-brrow:last-child{border-bottom:0}
+.v1-brn{display:flex;gap:6px;align-items:center;min-width:0}
+.v1-brn > span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v1-quiet{display:flex;flex-direction:column;background:transparent;border:1px dashed var(--border-strong);border-radius:var(--r-lg);padding:4px 18px}
+.v1-qrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--border);font-size:13px;flex-wrap:wrap}
+.v1-qrow:first-child{border-top:0}
+.v1-qrow .name{font-size:14px}
+.v1-qrow .sec{flex:1;min-width:140px}
+.v1-gh{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);margin:16px 4px 8px}
+
+/* ═══ V2 — Health matrix ═══ */
+.v2-wrap{overflow-x:auto;padding:6px}
+.v2{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;min-width:760px}
+.v2 th{font-size:11px;font-weight:600;color:var(--text-secondary);text-align:left;padding:12px 10px 10px;border-bottom:1px solid var(--border-strong);white-space:nowrap;vertical-align:bottom}
+.v2 th .cnt{display:inline-block;margin-left:5px;min-width:18px;text-align:center;font-size:10px;font-weight:700;border-radius:var(--r-full);padding:1px 5px;color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,transparent)}
+.v2 th .cnt.z{color:var(--text-tertiary);background:var(--bg-subtle)}
+.v2 td{padding:0;border-bottom:1px solid var(--border);height:46px;vertical-align:middle}
+.v2 tbody tr.r{cursor:pointer}
+.v2 tbody tr.r:hover td{background:color-mix(in srgb,var(--bg-subtle) 60%,transparent)}
+.v2 .rn{padding:0 12px;white-space:nowrap}
+.v2 .rn .inner{display:flex;align-items:center;gap:8px}
+.v2 .rn .sub{font-size:12px;color:var(--text-tertiary);font-weight:400;display:block;margin-left:22px;margin-top:-1px}
+.v2 .c{padding:0 6px}
+.cell{display:flex;align-items:center;gap:6px;height:30px;padding:0 9px;border-radius:var(--r-sm);font-size:12px;white-space:nowrap}
+.cell.ok{color:var(--text-tertiary)}
+.cell.ok::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--green-200)}
+.cell.bad{color:var(--amber);background:color-mix(in srgb,var(--amber) 11%,transparent);font-weight:600}
+.cell.meh{color:var(--mustard);background:color-mix(in srgb,var(--mustard) 13%,transparent);font-weight:600}
+.cell.na{color:var(--text-tertiary)}
+.v2 .act{padding:0 12px 0 6px;text-align:right}
+.v2 tr.x td{background:var(--bg-subtle);height:auto;padding:10px 12px 14px 34px;border-bottom:1px solid var(--border-strong)}
+.v2 tr.off .rn .name{color:var(--text-secondary)}
+.v2-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin:12px 6px 0}
+.v2-legend span{display:inline-flex;gap:6px;align-items:center}
+
+/* ═══ V3 — Split inspector ═══ */
+.v3{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:820px){.v3{grid-template-columns:minmax(0,1fr)}}
+.v3-list{padding:6px;display:flex;flex-direction:column}
+.v3-it{border:0;background:none;text-align:left;display:grid;grid-template-columns:8px minmax(0,1fr);gap:4px 10px;align-items:center;padding:10px 12px;border-radius:var(--r-md)}
+.v3-it:hover{background:var(--bg-subtle)}
+.v3-it.on{background:var(--bg-app)}
+.v3-it .name{font-size:14px}
+.v3-it .why{grid-column:2;font-size:12px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v3-it .why.hot{color:var(--amber)}
+.v3-gh{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);padding:12px 12px 4px}
+.v3-ins{padding:22px;display:flex;flex-direction:column;gap:18px}
+.v3-head{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.v3-head .t{flex:1;min-width:200px}
+.v3-head .name{font-size:19px}
+.v3-path{font-size:12px;color:var(--text-tertiary);margin-top:2px}
+.v3-checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+.v3-ck{border-radius:var(--r-md);background:var(--bg-app);padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.v3-ck .k{font-size:11px;color:var(--text-tertiary);font-weight:500}
+.v3-ck .v{font-size:13px;font-weight:600}
+.v3-ck.bad{background:color-mix(in srgb,var(--amber) 10%,transparent)}.v3-ck.bad .v{color:var(--amber)}
+.v3-ck.meh{background:color-mix(in srgb,var(--mustard) 11%,transparent)}.v3-ck.meh .v{color:var(--mustard)}
+.v3-ck.ok .v{color:var(--text-primary)}
+.v3-ck .h{font-size:12px;color:var(--text-secondary)}
+.v3-sec{display:flex;flex-direction:column;gap:0}
+.v3-sec .hd{display:flex;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong)}
+.v3-sec .hd b{font-size:13px}
+.v3-sec .hd .muted{font-size:12px}
+.v3-br{display:grid;grid-template-columns:minmax(0,1fr) 116px 112px 40px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.v3-br.stale{color:var(--text-secondary)}
+.v3-br.stale .dvbar{opacity:.55}
+.v3-brn{display:flex;gap:6px;align-items:center;min-width:0;flex-wrap:wrap}
+.v3-brn .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+@media (max-width:560px){.v3-br{grid-template-columns:minmax(0,1fr) 40px}.v3-br .dvbar,.v3-br .dv{display:none}}
+.v3-foot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);padding-top:10px}
+
+/* ═══ V4 — Branch board ═══ */
+.v4-strip{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.v4-rp{display:inline-flex;align-items:center;gap:8px;background:var(--bg-surface);border-radius:var(--r-full);padding:5px 6px 5px 12px;font-size:13px;box-shadow:var(--lift-card)}
+.v4-rp .w{color:var(--amber);font-weight:600;font-size:12px}
+.v4-rp .ok{color:var(--text-tertiary);font-size:12px}
+.v4-rp .key{height:24px;padding:0 9px}
+.v4-cols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:start}
+@media (max-width:1000px){.v4-cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.v4-cols{grid-template-columns:minmax(0,1fr)}}
+.v4-col{display:flex;flex-direction:column;gap:8px}
+.v4-ch{display:flex;align-items:baseline;gap:8px;padding:0 4px}
+.v4-ch b{font-size:13px}
+.v4-ch .muted{font-size:12px}
+.v4-ch .hint{font-size:11px;color:var(--text-tertiary);display:block;margin-top:2px;font-weight:400}
+.v4-card{padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.v4-card .bn{font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.v4-card .rp{font-size:12px;color:var(--text-tertiary)}
+.v4-card .ln{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.v4-card.stale{background:transparent;border:1px dashed var(--border-strong);box-shadow:none}
+.v4-empty{font-size:12px;color:var(--text-tertiary);padding:12px 14px;border:1px dashed var(--border-strong);border-radius:var(--r-lg)}
+
+/* ═══ V5 — Refined cards ═══ */
+.v5-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr));gap:14px;align-items:start}
+.v5-card{padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.v5-card.needs{box-shadow:inset 3px 0 0 var(--amber),var(--lift-card)}
+.v5-head{display:flex;align-items:center;gap:8px;min-width:0}
+.v5-head .name{flex:1;min-width:0}
+.v5-verdict{font-size:13px;color:var(--text-secondary);margin-top:-6px;padding-left:16px}
+.v5-verdict.hot{color:var(--amber)}
+.v5-banner{display:flex;gap:10px;align-items:center;background:color-mix(in srgb,var(--amber) 10%,transparent);color:var(--amber);border-radius:var(--r-sm);padding:8px 10px;font-size:12px;font-weight:500}
+.v5-banner span{flex:1}
+.v5-banner .key{height:24px;background:var(--bg-surface);color:var(--amber)}
+.v5-chips{display:flex;gap:6px;flex-wrap:wrap}
+.v5-brs{display:flex;flex-direction:column;border-top:1px solid var(--border)}
+.v5-legend{display:grid;grid-template-columns:minmax(0,1fr) 116px 36px;gap:10px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-tertiary);padding:8px 0 2px}
+.v5-legend span:nth-child(2){text-align:center}
+.v5-br{display:grid;grid-template-columns:minmax(0,1fr) 116px 36px;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
+.v5-br.stale{color:var(--text-tertiary)}
+.v5-br.stale .dvbar{opacity:.45}
+.v5-br .age{font-size:12px;color:var(--text-tertiary);text-align:right}
+.v5-brn{display:flex;gap:6px;align-items:center;min-width:0}
+.v5-brn .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.v5-dvb{display:flex;flex-direction:column;align-items:center;gap:2px}
+.v5-dvb .nums{font-size:11px;display:flex;justify-content:space-between;width:116px;color:var(--text-tertiary)}
+.v5-dvb .nums .a{color:var(--cyan);font-weight:600}
+.v5-more{border:0;background:none;padding:8px 0 0;font-size:12px;color:var(--cyan);text-align:left}
+.v5-dead{display:flex;flex-direction:column;border:1px dashed var(--border-strong);border-radius:var(--r-lg);padding:4px 18px;margin-top:14px}
+.v5-dead .row{display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--border);font-size:13px;flex-wrap:wrap}
+.v5-dead .row:first-child{border-top:0}
+.v5-dead .row .sec{flex:1;min-width:160px}
+
+/* ── comparison ── */
+.cmp{width:100%;border-collapse:collapse;font-size:13px}
+.cmp th,.cmp td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+.cmp th{font-size:11px;font-weight:600;color:var(--text-secondary);letter-spacing:.04em;text-transform:uppercase;border-bottom-color:var(--border-strong)}
+.cmp td:first-child{font-weight:600;white-space:nowrap}
+.cmp .y{color:var(--green-600);font-weight:700}.cmp .p{color:var(--mustard);font-weight:700}.cmp .n{color:var(--text-tertiary)}
+.cmp-wrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<main class="page">
+
+<header>
+  <h1>Management › Git: five ways to make it answer “what needs me?”</h1>
+  <p class="lede">An analysis of the shipped Git tab, as drawn in <code>docs/guides/mockups/redesign-mock.html</code> (Cards, Table and Triage), then five redesigns. All five use the same fixture: seven pinned repos plus three live sessions. Every artboard responds to clicks. Git operations still go through <b>Sync</b> (the git-sync session); nothing here pulls or pushes on its own.</p>
+  <nav class="nav">
+    <a href="#analysis">Analysis</a><a href="#v1">1 · Inbox</a><a href="#v2">2 · Health matrix</a><a href="#v3">3 · Split inspector</a><a href="#v4">4 · Branch board</a><a href="#v5">5 · Refined cards</a><a href="#compare">Compare</a>
+  </nav>
+</header>
+
+<section class="board" id="analysis">
+  <h2>Analysis of the current tab</h2>
+  <div class="sheet">
+    <div class="shot">
+      <div><b>Cards (default)</b>One card per pin in pin order. The head carries the branch and upstream chips, a facts row holds the dirty, trunk and fetched chips, and up to five branch rows follow.</div>
+      <div><b>Table</b>Seven columns, and rows expand to show branches. At a 1280px window the Fetched and Sync columns sit behind a horizontal scroll.</div>
+      <div><b>Triage</b>Grouped into Needs you, In flight, Quiet and Can't read. It is the only layout that ranks repos, but it isn't the default.</div>
+      <div><b>Toolbar</b>Cards | Table | Triage, plus the <span class="mono">SYNC 12s · FETCH 3:12</span> clock chip and its popover.</div>
+    </div>
+    <h3>Findings</h3>
+    <ol class="finds" id="finds"></ol>
+  </div>
+</section>
+
+<section class="board" id="v1">
+  <div class="board-h"><span class="vno">V1</span><h2>Inbox</h2><span class="tag rec">Recommended</span><span class="fixes" data-fix="F1 F2 F3 F6 F7 F9 F10"></span></div>
+  <p class="note">One ranked list replaces the three layouts. Each repo that needs you gets a <b>verdict sentence</b>, its problems as steps, and <b>one primary key</b> worded for the problem. Repos with nothing wrong share one dashed line each. Dead pins get an inline <b>Unpin</b>. The counts at the top double as filters. The page also reads the sessions: uncommitted work on a branch where an agent is <i>working</i> is expected, so it gets <b>calm</b> wording and is not escalated.</p>
+  <div class="art" id="a1"></div>
+  <div class="trade"><div class="pro"><b>Gains</b><ul><li>One glance gives the answer, and the counts give the size of the problem.</li><li>No layout to choose, so the persisted <code>gitLayout</code> setting goes away.</li><li>Built on <code>gitTriage.ts</code> and <code>gitStatsText.ts</code> as they are, plus a problems → steps mapper.</li></ul></div><div class="con"><b>Costs</b><ul><li>Comparing repos side by side gets harder than in Table.</li><li>Branch lists sit behind a toggle by default.</li><li>The verdict copy needs a careful text table and tests.</li></ul></div></div>
+</section>
+
+<section class="board" id="v2">
+  <div class="board-h"><span class="vno">V2</span><h2>Health matrix</h2><span class="tag">Dense</span><span class="fixes" data-fix="F1 F3 F4 F10"></span></div>
+  <p class="note">This is Table with the chips taken out. Each column is one <b>health check</b> with a fixed meaning, and a healthy cell is a faint dot, so only problems carry colour and text. Column headers count the failures. The repo, check and action columns fit in 960px. Click a row to open its branches with labelled ↓/↑.</p>
+  <div class="art" id="a2"></div>
+  <div class="trade"><div class="pro"><b>Gains</b><ul><li>The fastest scan across many repos, and it scales to 20+ pins.</li><li>Problems pop out because healthy cells say nothing.</li><li>Small change to the existing <code>GitTable</code>.</li></ul></div><div class="con"><b>Costs</b><ul><li>It still says what is wrong but not what to do.</li><li>Needs a phone fallback, which here is an inner scroll.</li><li>Six columns to learn.</li></ul></div></div>
+</section>
+
+<section class="board" id="v3">
+  <div class="board-h"><span class="vno">V3</span><h2>Split inspector</h2><span class="tag">Matches Sessions</span><span class="fixes" data-fix="F1 F2 F4 F8 F9"></span></div>
+  <p class="note">This reuses the Sessions split pattern: a ranked list on the left, each repo with its <b>worst problem as a subtitle</b>, and an inspector on the right. The inspector shows four <b>check tiles</b> (Working tree, Your branch, Trunk, Origin data), each with a hint, then branches split into <b>Active</b> and <b>Stale</b>, with the session badges and a <b>Clean up via Sync</b> key for stale and merged branches.</p>
+  <div class="art" id="a3"></div>
+  <div class="trade"><div class="pro"><b>Gains</b><ul><li>Room for full detail and explanations without crowding the list.</li><li>Same mental model as Sessions, so nothing new to learn.</li><li>The natural home for future per-repo actions such as log, prune and open in editor.</li></ul></div><div class="con"><b>Costs</b><ul><li>One repo in depth at a time, so you click through.</li><li>Stacks on a phone, and the list → detail flow needs a back affordance.</li></ul></div></div>
+</section>
+
+<section class="board" id="v4">
+  <div class="board-h"><span class="vno">V4</span><h2>Branch board</h2><span class="tag">Branch-first</span><span class="fixes" data-fix="F4 F8 F9"></span></div>
+  <p class="note">The unit changes from repo to <b>branch</b>. Every open branch across every pin is placed in a column by what it needs: <b>Agent on it</b>, <b>Ready</b> (0 behind trunk), <b>Drifting</b> (behind trunk, recent) and <b>Stale</b> (≥ 20 behind or idle ≥ 7 days). Repo-level problems shrink to a pill strip above the board. This answers “what am I working on, and what should I land or delete?”</p>
+  <div class="art" id="a4"></div>
+  <div class="trade"><div class="pro"><b>Gains</b><ul><li>The only variant that makes branch hygiene a first-class view.</li><li>Mirrors the Sessions board, and the session badges make the link obvious.</li><li>Shows work in flight across repos at a glance.</li></ul></div><div class="con"><b>Costs</b><ul><li>Repo health (dirty, auth) is pushed to a strip and gets less weight.</li><li>The 50-branch cap per repo can overflow the columns.</li><li>Needs new thresholds (stale), and those need agreeing.</li></ul></div></div>
+</section>
+
+<section class="board" id="v5">
+  <div class="board-h"><span class="vno">V5</span><h2>Refined cards</h2><span class="tag">Lowest cost</span><span class="fixes" data-fix="F1 F4 F5 F6 F7"></span></div>
+  <p class="note">Keeps Cards and fixes what hurts. Cards are <b>sorted by severity</b>. Each gets a one-line <b>verdict</b> under the name and shows <b>only problem chips</b>, so “clean” and “main = origin” are gone. A fetch error becomes a <b>banner</b> with Retry. Branches get labelled columns (<b>↓ behind · ahead ↑</b>), and stale ones fade. Dead pins collapse into one footer with Unpin. The clock chip becomes a plain <b>freshness line</b>.</p>
+  <div class="art" id="a5"></div>
+  <div class="trade"><div class="pro"><b>Gains</b><ul><li>Smallest diff: <code>GitCards</code>, <code>GitParts</code> and <code>GitClockChip</code>.</li><li>Keeps the grid people already know.</li><li>Each fix can ship on its own.</li></ul></div><div class="con"><b>Costs</b><ul><li>The page still has no single answer or summary.</li><li>Cards stay tall, so with more than six pins you scroll.</li><li>Table and Triage remain, along with the choice between them.</li></ul></div></div>
+</section>
+
+<section class="board" id="compare">
+  <h2>Compare</h2>
+  <div class="sheet cmp-wrap">
+    <table class="cmp">
+      <thead><tr><th>Variant</th><th>Answers “what needs me?”</th><th>Says what to do</th><th>Branch hygiene</th><th>Sessions link</th><th>Scales to 20 pins</th><th>Build cost</th></tr></thead>
+      <tbody>
+        <tr><td>1 · Inbox</td><td class="y">yes</td><td class="y">yes</td><td class="p">toggle</td><td class="y">yes</td><td class="y">yes</td><td>M</td></tr>
+        <tr><td>2 · Health matrix</td><td class="y">yes</td><td class="n">no</td><td class="p">expand</td><td class="n">no</td><td class="y">best</td><td>S</td></tr>
+        <tr><td>3 · Split inspector</td><td class="p">list only</td><td class="y">yes</td><td class="y">yes</td><td class="y">yes</td><td class="y">yes</td><td>M–L</td></tr>
+        <tr><td>4 · Branch board</td><td class="p">strip</td><td class="p">partly</td><td class="y">best</td><td class="y">best</td><td class="p">columns grow</td><td>L</td></tr>
+        <tr><td>5 · Refined cards</td><td class="p">sorted</td><td class="p">banner only</td><td class="p">fade</td><td class="n">no</td><td class="n">tall</td><td>S</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note"><b>Suggested path:</b> ship <b>V1 Inbox</b> as the only layout, and give it V3's inspector as the expanded state of a row once per-repo detail grows. V5's three cheap fixes (labelled ↓/↑, problem-only chips, freshness line instead of the clock chip) carry over to whichever wins, so they can ship first.</p>
+</section>
+
+</main>
+<script>
+(function () {
+  /* ── fixture: the redesign mock's seven pins, plus days for staleness and three live sessions ── */
+  const br = (name, ahead, behind, ago, days, wt) => ({ name, ahead, behind, ago, days, wt: !!wt });
+  const REPOS = [
+    { dir: 'cad', name: 'claude-agents-dashboard', path: '~/Projects/personal/claude-agents-dashboard', state: 'ok', branch: 'management-redesign', sha: null,
+      upstream: { name: 'origin/management-redesign', ahead: 2, behind: 0 }, uncommitted: 3, trunk: 'main', hasOrigin: true, trunkVs: { ahead: 0, behind: 0 },
+      fetched: '2m', fetchError: null, merged: 11,
+      branches: [br('management-redesign', 4, 0, '12m', 0), br('feat/plan-progress', 9, 2, '2h', 0, true), br('fix/triage-task-pill', 1, 0, '5h', 0),
+        br('feat/usage-history', 14, 6, '1d', 1), br('spike/clock-chip', 3, 21, '4d', 4), br('docs/guides-move', 2, 40, '9d', 9), br('chore/deps', 1, 3, '12d', 12)] },
+    { dir: 'tw', name: 'timify-web', path: '~/Projects/timify/timify-web', state: 'ok', branch: 'develop', sha: null,
+      upstream: { name: 'origin/develop', ahead: 0, behind: 5 }, uncommitted: 0, trunk: 'main', hasOrigin: true, trunkVs: { ahead: 0, behind: 3 },
+      fetched: '3h', fetchError: 'auth', merged: 42,
+      branches: [br('TIMIFY-1423-booking-widget', 6, 0, '3h', 0, true), br('TIMIFY-1388-calendar-sync', 11, 18, '2d', 2)] },
+    { dir: 'gm', name: 'guide-manager', path: '~/Projects/personal/guide-manager', state: 'ok', branch: 'main', sha: null, upstream: null,
+      uncommitted: 0, trunk: 'main', hasOrigin: true, trunkVs: { ahead: 0, behind: 0 }, fetched: '4m', fetchError: null, merged: 0,
+      branches: [br('feat/register-cli', 5, 0, '1d', 1)] },
+    { dir: 'nr', name: 'ntfy-relay', path: '~/Projects/personal/ntfy-relay', state: 'ok', branch: 'main', sha: null, upstream: null,
+      uncommitted: 0, trunk: 'main', hasOrigin: true, trunkVs: { ahead: 0, behind: 0 }, fetched: '4m', fetchError: null, merged: 3, branches: [] },
+    { dir: 'df', name: 'dotfiles', path: '~/dotfiles', state: 'ok', branch: null, sha: 'a1b2c3d', upstream: null,
+      uncommitted: 0, trunk: 'main', hasOrigin: false, trunkVs: null, fetched: null, fetchError: null, merged: 0, branches: [] },
+    { dir: 'it', name: 'infra-terraform', path: '~/Work/infra-terraform', state: 'missing' },
+    { dir: 'sc', name: 'scratch', path: '~/scratch', state: 'not-git' }
+  ];
+  /* Session.gitBranch joined to the pin's cwd */
+  const SESS = [
+    { repo: 'cad', branch: 'management-redesign', state: 'working', label: 'working' },
+    { repo: 'cad', branch: 'feat/plan-progress', state: 'waiting', label: 'needs answer' },
+    { repo: 'tw', branch: 'TIMIFY-1423-booking-widget', state: 'idle', label: 'idle 40m' }
+  ];
+
+  /* ── derivations ── */
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const TROUBLE = { auth: 'needs auth', offline: 'offline', timeout: 'timed out', other: 'failed' };
+  const sessOn = (r, b) => SESS.find(s => s.repo === r.dir && s.branch === b);
+  const sessBadge = s => s ? `<span class="sess ${s.state}">${s.label}</span>` : '';
+  const isStale = b => b.behind >= 20 || b.days >= 7;
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+  /* every problem a repo has, ranked: sev 3 needs you, 2 worth a look, 1 note */
+  function problems(r) {
+    if (r.state === 'missing') return [{ sev: 2, k: 'gone', short: 'folder gone', text: `Folder is gone: ${r.path}` }];
+    if (r.state === 'not-git') return [{ sev: 1, k: 'notgit', short: 'not a repository', text: 'Not a git repository' }];
+    const p = [];
+    const agent = r.branch && sessOn(r, r.branch);
+    if (r.fetchError) p.push({ sev: 3, k: 'fetch', short: `fetch ${TROUBLE[r.fetchError]}`, text: `Fetch ${TROUBLE[r.fetchError]}, so the origin numbers below are ${r.fetched} old` });
+    if (r.uncommitted) p.push(agent && agent.state === 'working'
+      ? { sev: 1, k: 'dirty', calm: true, short: `${r.uncommitted} uncommitted`, text: `${plural(r.uncommitted, 'uncommitted change')}; an agent is working on this branch` }
+      : { sev: 3, k: 'dirty', short: `${r.uncommitted} uncommitted`, text: `${plural(r.uncommitted, 'uncommitted change')} on ${r.branch}` });
+    const u = r.upstream;
+    if (u && u.behind) p.push({ sev: 3, k: 'pull', short: `${u.behind} to pull`, text: `${r.branch} is ${u.behind} behind ${u.name}` });
+    if (u && u.ahead) p.push({ sev: 2, k: 'push', short: `${u.ahead} unpushed`, text: `${plural(u.ahead, 'commit')} on ${r.branch} not pushed yet` });
+    const d = r.trunkVs;
+    if (d && (d.ahead || d.behind)) p.push({ sev: 2, k: 'trunk', short: `${r.trunk} ${d.behind} behind`, text: `Local ${r.trunk} is ${d.behind} behind origin` });
+    if (!r.hasOrigin) p.push({ sev: 1, k: 'remote', short: 'no remote', text: 'No remote, so nothing here is backed up' });
+    if (r.branch === null) p.push({ sev: 1, k: 'detached', short: `detached at ${r.sha}`, text: `HEAD detached at ${r.sha}` });
+    const st = r.branches.filter(isStale).length;
+    if (st) p.push({ sev: 1, k: 'stale', short: plural(st, 'stale branch'), text: `${plural(st, 'stale branch')} (≥ 20 behind or idle a week)` });
+    return p.sort((a, b) => b.sev - a.sev);
+  }
+  const top = r => problems(r)[0];
+  const levelOf = r => {
+    if (r.state !== 'ok') return 'dead';
+    const s = problems(r).reduce((m, p) => Math.max(m, p.sev), 0);
+    return s >= 3 ? 'needs' : s === 2 ? 'look' : 'quiet';
+  };
+  const dotOf = l => l === 'needs' ? 'needs' : l === 'look' ? 'flight' : l === 'quiet' ? 'quiet' : '';
+  const ORDER = { needs: 0, look: 1, quiet: 2, dead: 3 };
+  const ranked = () => [...REPOS].sort((a, b) => ORDER[levelOf(a)] - ORDER[levelOf(b)] ||
+    problems(b).reduce((s, p) => s + p.sev, 0) - problems(a).reduce((s, p) => s + p.sev, 0));
+  const verdict = r => {
+    const l = levelOf(r), p = problems(r);
+    if (l === 'dead') return p[0].text;
+    if (l === 'quiet') return p.length ? `All good. ${p.map(x => x.short).join(' · ')}` : 'All good. Clean, in step with origin.';
+    return p[0].text + '.';
+  };
+  /* the key's label says what Sync would do here */
+  const primary = r => {
+    const l = levelOf(r);
+    if (l === 'dead') return { label: 'Unpin', kind: 'unpin' };
+    if (r.fetchError) return { label: 'Retry fetch', kind: 'fetch' };
+    if (!r.hasOrigin || r.branch === null) return null;
+    const ks = problems(r).filter(p => !p.calm).map(p => p.k);
+    const verbs = [ks.includes('dirty') && 'commit', ks.includes('pull') && 'pull', ks.includes('push') && 'push', ks.includes('trunk') && `update ${r.trunk}`].filter(Boolean);
+    return verbs.length ? { label: `Sync · ${verbs.join(' + ')}`, kind: 'sync' } : null;
+  };
+  const SYNC = '<svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 0 1-9.4 3.9M2.5 8a5.5 5.5 0 0 1 9.4-3.9"/><path d="M12 1.5v3h-3M4 14.5v-3h3"/></svg>';
+  const keyBtn = (a, prim) => a ? `<button class="key${prim ? ' primary' : ''}" data-act="${a.kind}">${a.kind === 'sync' ? SYNC : ''}${esc(a.label)}</button>` : '';
+  const dv = b => `<span class="dv"><span class="${b.behind ? 'b' : 'z'}">↓${b.behind}</span><span class="${b.ahead ? 'a' : 'z'}">↑${b.ahead}</span></span>`;
+  const barMax = bs => Math.max(1, ...bs.map(b => Math.max(b.ahead, b.behind)));
+  const bw = (n, m) => n === 0 ? '0px' : `${Math.max(2, Math.round(56 * n / m))}px`;
+  const dvbar = (b, m) => `<span class="dvbar" title="${b.behind} behind · ${b.ahead} ahead"><i class="bb" style="width:${bw(b.behind, m)}"></i><i class="bc"></i><i class="ba" style="width:${bw(b.ahead, m)}"></i></span>`;
+  const wt = b => b.wt ? '<span class="chip wt">worktree</span>' : '';
+  const fresh = () => {
+    const bad = REPOS.filter(r => r.fetchError).length;
+    return `<div class="fresh"><span>Origin data <b>2m</b> old · next fetch 3:12${bad ? ` · <span class="warn">${bad} failed</span>` : ''}</span><button class="key">Fetch now</button></div>`;
+  };
+  const band = sub => `<div class="band"><div class="ct">Management · Git</div><div class="cs">${sub}</div></div>`;
+  const mount = (id, render, onClick) => {
+    const el = document.getElementById(id);
+    const paint = () => { el.innerHTML = render(); };
+    el.addEventListener('click', ev => { if (onClick(ev, ev.target)) paint(); });
+    paint();
+  };
+
+  /* ── findings ── */
+  const FINDS = [
+    ['F1', 'hi', 'No verdict, only facts', 'Each repo shows four to six chips of equal weight. Healthy facts (“clean”, “main = origin”, “fetched 4m ago”) are drawn as loudly as problems, so the reader has to add them up to learn whether anything is wrong.'],
+    ['F2', 'hi', 'State without a next step', 'Sync is the only action, and nothing says what it would do for this repo. A fetch auth failure makes every origin number on the card stale, yet it shows as a 12px amber string at the right edge.'],
+    ['F3', 'hi', 'Three layouts split one job', 'Cards (the default) keep pin order and ignore urgency. Table overflows at a 1280px window, with Fetched and Sync behind a horizontal scroll. Triage is the only layout that ranks. The switcher hands the user a decision the page should make.'],
+    ['F4', 'md', 'Divergence numbers are cryptic', '“21 | 3” is behind | ahead with no label, and behind comes first, against the usual reading order. Bars disappear below 400px of card width, which is the usual Cards width, so the default view shows bare numbers.'],
+    ['F5', 'md', 'Clock chip spends prime space on timers', 'SYNC 12s and FETCH 3:12 are countdowns for internal timers. What matters is how old the origin data is and whether a fetch failed, and that sits inside a popover.'],
+    ['F6', 'md', 'Dead pins get full cards', 'Missing and not-git repos each take a whole card. Their fix (“Unpin it under Projects”) sends the user to another page when an inline Unpin would do.'],
+    ['F7', 'md', 'Unbacked work stays quiet', 'Being 2 ahead of upstream (unpushed commits) does not move a repo into Needs you, and dotfiles, with no remote at all, counts as quiet and green.'],
+    ['F8', 'lo', 'Branch hygiene has no next step', 'A branch 40 behind and idle 9 days looks the same as one from 12 minutes ago. “11 merged branches hidden” offers no way to clean them up.'],
+    ['F9', 'lo', 'No link to sessions', 'The dashboard knows which session is on which branch (Session.gitBranch), but the Git tab doesn’t show it. Uncommitted changes under a working agent are expected; uncommitted changes nobody is on are forgotten work. Today both look the same.'],
+    ['F10', 'lo', 'No page-level summary', 'Nothing shows “2 repos need you” at a glance: not the band, not the toolbar, not the rail.']
+  ];
+  document.getElementById('finds').innerHTML = FINDS.map(([id, sev, t, d]) =>
+    `<li><span class="fid">${id}</span><div><div class="ft">${t}</div><div class="fd">${d}</div></div><span class="sev ${sev}">${sev === 'hi' ? 'high' : sev === 'md' ? 'medium' : 'low'}</span></li>`).join('');
+  document.querySelectorAll('[data-fix]').forEach(el => { el.innerHTML = 'fixes ' + el.dataset.fix.split(' ').map(f => `<span>${f}</span>`).join(''); });
+
+  /* ═══ V1 — Inbox ═══ */
+  const s1 = { filter: 'all', open: new Set(['cad']) };
+  const LV = [['needs', 'need you'], ['look', 'worth a look'], ['quiet', 'all good'], ['dead', "can't read"]];
+  function v1() {
+    const rs = ranked();
+    const count = l => rs.filter(r => levelOf(r) === l).length;
+    const sum = '<div class="v1-sum">' + LV.map(([l, lab]) =>
+      `<button class="${l}${s1.filter === l ? ' on' : ''}" data-f="${l}"><span class="big">${count(l)}</span><span class="lab">${l === 'dead' ? '<span class="dot"></span>' : `<span class="dot ${dotOf(l)}"></span>`}${lab}</span></button>`).join('') + '</div>';
+    const show = l => s1.filter === 'all' || s1.filter === l;
+    const item = r => {
+      const l = levelOf(r), p = problems(r), a = primary(r);
+      const open = s1.open.has(r.dir);
+      const m = barMax(r.branches);
+      const brs = r.branches.length ? `<div class="v1-br"><button class="v1-brtog" data-o="${r.dir}"><span class="caret">${open ? '▾' : '▸'}</span>${plural(r.branches.length, 'open branch')}${r.merged ? ` · ${r.merged} merged hidden` : ''}</button>
+        ${open ? r.branches.map(b => `<div class="v1-brrow"><span class="v1-brn"><span>${esc(b.name)}</span>${wt(b)}${sessBadge(sessOn(r, b.name))}</span>${dv(b)}<span class="muted" style="text-align:right;font-size:12px">${b.ago}</span></div>`).join('') : ''}</div>` : '';
+      return `<article class="card v1-item"><div class="v1-top"><span class="dot ${dotOf(l)}"></span>
+        <div class="v1-main"><div class="v1-line"><span class="name">${esc(r.name)}</span><span class="chip">${esc(r.branch || 'detached ' + r.sha)}</span>${sessBadge(r.branch && sessOn(r, r.branch))}</div>
+        <div class="v1-verdict">${esc(verdict(r))}</div>
+        ${p.length > 1 ? `<ul class="v1-steps">${p.slice(1).map(x => `<li class="${x.calm ? 'calm' : x.sev >= 3 ? 'hot' : ''}">${esc(x.text)}</li>`).join('')}</ul>` : ''}</div>
+        <div class="v1-acts">${keyBtn(a, true)}</div></div>${brs}</article>`;
+    };
+    const qrow = r => {
+      const l = levelOf(r), a = primary(r);
+      return `<div class="v1-qrow"><span class="dot ${dotOf(l)}"></span><span class="name">${esc(r.name)}</span><span class="sec">${esc(l === 'dead' ? problems(r)[0].text : [...(r.branch ? [r.branch] : []), ...problems(r).map(p => p.short), r.fetched ? `fetched ${r.fetched} ago` : 'never fetched'].join(' · '))}</span>${keyBtn(a, false)}</div>`;
+    };
+    let out = '';
+    const loud = rs.filter(r => ['needs', 'look'].includes(levelOf(r)) && show(levelOf(r)));
+    if (loud.length) out += `<div class="v1-list">${loud.map(item).join('')}</div>`;
+    const calm = rs.filter(r => levelOf(r) === 'quiet' && show('quiet'));
+    if (calm.length) out += `<div class="v1-gh">All good</div><div class="v1-quiet">${calm.map(qrow).join('')}</div>`;
+    const dead = rs.filter(r => levelOf(r) === 'dead' && show('dead'));
+    if (dead.length) out += `<div class="v1-gh">Can't read</div><div class="v1-quiet">${dead.map(qrow).join('')}</div>`;
+    const nNeed = count('needs') + count('look'), nAgent = new Set(SESS.map(s => s.repo)).size;
+    return band(`${plural(nNeed, 'repo')} want${nNeed === 1 ? 's' : ''} a look. Agents are on branches in ${plural(nAgent, 'repo')}.`) +
+      `<div class="bar-row">${fresh()}<span class="spacer"></span>${s1.filter !== 'all' ? '<button class="key" data-f="all">Show all</button>' : ''}</div>` + sum + out;
+  }
+  mount('a1', v1, (ev, t) => {
+    let el;
+    if ((el = t.closest('[data-f]'))) { const f = el.dataset.f; s1.filter = s1.filter === f ? 'all' : f; return true; }
+    if ((el = t.closest('[data-o]'))) { const d = el.dataset.o; s1.open.has(d) ? s1.open.delete(d) : s1.open.add(d); return true; }
+    return false;
+  });
+
+  /* ═══ V2 — Health matrix ═══ */
+  const s2 = { open: null };
+  const CHECKS = [
+    ['tree', 'Working tree', r => r.uncommitted ? { c: 'bad', t: `${r.uncommitted} uncommitted` } : { c: 'ok', t: 'clean' }],
+    ['push', 'Pushed', r => !r.hasOrigin ? { c: 'meh', t: 'no remote' } : !r.upstream ? { c: 'na', t: '—' } : r.upstream.ahead ? { c: 'meh', t: `${r.upstream.ahead} unpushed` } : { c: 'ok', t: 'yes' }],
+    ['pull', 'Up to date', r => !r.upstream ? { c: 'na', t: '—' } : r.upstream.behind ? { c: 'bad', t: `${r.upstream.behind} to pull` } : { c: 'ok', t: 'yes' }],
+    ['trunk', 'Trunk', r => !r.trunkVs ? { c: 'na', t: '—' } : r.trunkVs.behind || r.trunkVs.ahead ? { c: 'meh', t: `${r.trunk} ↓${r.trunkVs.behind}` } : { c: 'ok', t: `${r.trunk} = origin` }],
+    ['fetch', 'Origin data', r => r.fetchError ? { c: 'bad', t: `${TROUBLE[r.fetchError]} · ${r.fetched}` } : r.fetched ? { c: 'ok', t: r.fetched } : { c: 'na', t: 'never' }],
+    ['br', 'Branches', r => { const s = r.branches.filter(isStale).length; return s ? { c: 'meh', t: `${r.branches.length} · ${s} stale` } : r.branches.length ? { c: 'ok', t: `${r.branches.length}` } : { c: 'na', t: '0' }; }]
+  ];
+  function v2() {
+    const rs = ranked();
+    const ok = rs.filter(r => r.state === 'ok');
+    const head = CHECKS.map(([k, lab, f]) => { const n = ok.filter(r => ['bad', 'meh'].includes(f(r).c)).length; return `<th>${lab}<span class="cnt${n ? '' : ' z'}">${n}</span></th>`; }).join('');
+    let rows = '';
+    for (const r of rs) {
+      const l = levelOf(r);
+      if (r.state !== 'ok') {
+        rows += `<tr class="off"><td class="rn"><span class="inner"><span class="caret"></span><span class="dot"></span><span class="name">${esc(r.name)}</span></span></td><td class="c" colspan="${CHECKS.length}"><span class="cell na">${esc(problems(r)[0].text)}</span></td><td class="act"><button class="key">Unpin</button></td></tr>`;
+        continue;
+      }
+      const open = s2.open === r.dir, a = primary(r);
+      rows += `<tr class="r" data-r="${r.dir}"><td class="rn"><span class="inner"><span class="caret">${open ? '▾' : '▸'}</span><span class="dot ${dotOf(l)}"></span><span class="name">${esc(r.name)}</span></span><span class="sub">${esc(r.branch || 'detached ' + r.sha)}</span></td>` +
+        CHECKS.map(([, , f]) => { const v = f(r); return `<td class="c"><span class="cell ${v.c}">${esc(v.t)}</span></td>`; }).join('') +
+        `<td class="act">${a ? `<button class="key${l === 'needs' ? ' primary' : ''}" data-act>${a.kind === 'sync' ? SYNC + 'Sync' : esc(a.label)}</button>` : ''}</td></tr>`;
+      if (open) {
+        const m = barMax(r.branches);
+        rows += `<tr class="x"><td colspan="${CHECKS.length + 2}">${r.branches.length ? r.branches.map(b =>
+          `<div class="v3-br${isStale(b) ? ' stale' : ''}" style="grid-template-columns:minmax(0,1fr) 116px 90px 40px"><span class="v3-brn"><span class="t">${esc(b.name)}</span>${wt(b)}${sessBadge(sessOn(r, b.name))}</span>${dvbar(b, m)}${dv(b)}<span class="muted" style="text-align:right;font-size:12px">${b.ago}</span></div>`).join('') : '<span class="muted">No open branches.</span>'}
+          ${r.merged ? `<div class="muted" style="font-size:12px;padding-top:8px">${r.merged} merged branches hidden</div>` : ''}</td></tr>`;
+      }
+    }
+    return band('One row per pin, one column per check. Only failing checks carry colour.') +
+      `<div class="bar-row">${fresh()}</div><div class="card v2-wrap"><table class="v2"><thead><tr><th>Repo</th>${head}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="v2-legend"><span><span class="cell ok" style="padding:0;height:auto"></span>healthy</span><span><span class="cell bad" style="height:18px">needs you</span></span><span><span class="cell meh" style="height:18px">worth a look</span></span><span>— not applicable</span><span>↓ behind · ↑ ahead</span></div>`;
+  }
+  mount('a2', v2, (ev, t) => {
+    if (t.closest('button')) return false;
+    const el = t.closest('[data-r]');
+    if (!el) return false;
+    s2.open = s2.open === el.dataset.r ? null : el.dataset.r;
+    return true;
+  });
+
+  /* ═══ V3 — Split inspector ═══ */
+  const s3 = { sel: 'cad' };
+  function v3() {
+    const rs = ranked();
+    const groups = [['needs', 'Needs you'], ['look', 'Worth a look'], ['quiet', 'All good'], ['dead', "Can't read"]];
+    const list = groups.map(([l, lab]) => {
+      const g = rs.filter(r => levelOf(r) === l);
+      if (!g.length) return '';
+      return `<div class="v3-gh">${lab}</div>` + g.map(r => {
+        const t = top(r);
+        const why = l === 'quiet' ? (t ? t.short : 'clean · in step') : t.text;
+        return `<button class="v3-it${s3.sel === r.dir ? ' on' : ''}" data-s="${r.dir}"><span class="dot ${dotOf(l)}"></span><span class="name">${esc(r.name)}</span><span class="why${l === 'needs' ? ' hot' : ''}">${esc(why)}</span></button>`;
+      }).join('');
+    }).join('');
+    const r = REPOS.find(x => x.dir === s3.sel);
+    const l = levelOf(r), a = primary(r);
+    let ins;
+    if (r.state !== 'ok') {
+      ins = `<div class="v3-head"><div class="t"><div class="name">${esc(r.name)}</div><div class="v3-path">${esc(r.path)}</div></div><button class="key primary">Unpin</button></div>
+        <div class="v3-checks"><div class="v3-ck meh"><span class="k">State</span><span class="v">${esc(problems(r)[0].text)}</span><span class="h">${r.state === 'missing' ? 'The folder moved or was deleted. Unpin it, or re-pin it at its new path under Projects.' : 'No .git above this folder. Pin the repo root instead.'}</span></div></div>`;
+    } else {
+      const u = r.upstream, d = r.trunkVs;
+      const ck = (k, c, v, h) => `<div class="v3-ck ${c}"><span class="k">${k}</span><span class="v">${esc(v)}</span><span class="h">${esc(h)}</span></div>`;
+      const agent = r.branch && sessOn(r, r.branch);
+      const checks = [
+        r.uncommitted ? ck('Working tree', agent ? 'meh' : 'bad', `${r.uncommitted} uncommitted`, agent ? 'An agent is working here, so this is expected.' : 'Nobody is on this branch. Commit or stash.') : ck('Working tree', 'ok', 'Clean', 'Nothing to commit.'),
+        r.branch === null ? ck('Your branch', 'meh', `Detached at ${r.sha}`, 'Check out a branch before committing.')
+          : !u ? ck('Your branch', 'ok', r.branch, r.branch === r.trunk ? 'On trunk, tracked below.' : 'No upstream set.')
+          : ck('Your branch', u.behind ? 'bad' : u.ahead ? 'meh' : 'ok', `↓${u.behind}  ↑${u.ahead} vs ${u.name}`, u.behind ? 'Pull before you push.' : u.ahead ? 'Commits only on this machine.' : 'In step.'),
+        !d ? ck('Trunk', r.hasOrigin ? 'ok' : 'meh', r.hasOrigin ? r.trunk : 'No remote', r.hasOrigin ? '' : 'Nothing here is backed up.')
+          : ck('Trunk', d.behind || d.ahead ? 'meh' : 'ok', d.behind || d.ahead ? `${r.trunk} ↓${d.behind} ↑${d.ahead}` : `${r.trunk} = origin`, d.behind ? `Local ${r.trunk} is stale, and new branches would start old.` : 'In step with origin.'),
+        r.fetchError ? ck('Origin data', 'bad', `${r.fetched} old · ${TROUBLE[r.fetchError]}`, 'Run gh auth login in a terminal, then Retry.')
+          : ck('Origin data', 'ok', r.fetched ? `${r.fetched} old` : 'Never fetched', r.fetched ? 'Auto-fetch every 5 min.' : 'No remote to fetch.')
+      ].join('');
+      const m = barMax(r.branches);
+      const row = b => `<div class="v3-br${isStale(b) ? ' stale' : ''}"><span class="v3-brn"><span class="t">${esc(b.name)}</span>${wt(b)}${sessBadge(sessOn(r, b.name))}</span>${dvbar(b, m)}${dv(b)}<span class="muted" style="text-align:right;font-size:12px">${b.ago}</span></div>`;
+      const act = r.branches.filter(b => !isStale(b)), st = r.branches.filter(isStale);
+      ins = `<div class="v3-head"><span class="dot ${dotOf(l)}" style="margin-top:9px"></span><div class="t"><div class="name">${esc(r.name)}</div><div class="v3-path">${esc(r.path)}</div></div>
+        <button class="key">Open folder</button>${a ? keyBtn(a, true) : ''}</div>
+        <div class="v3-checks">${checks}</div>
+        <div class="v3-sec"><div class="hd"><b>Active branches</b><span class="muted">${act.length} · ↓ behind ${esc(r.trunk)} · ↑ ahead</span></div>${act.length ? act.map(row).join('') : '<div class="muted" style="padding:10px 0;font-size:13px">None.</div>'}</div>
+        ${st.length ? `<div class="v3-sec"><div class="hd"><b>Stale</b><span class="muted">${st.length} · ≥ 20 behind or idle a week</span></div>${st.map(row).join('')}</div>` : ''}
+        ${st.length || r.merged ? `<div class="v3-foot"><span>${r.merged ? `${r.merged} merged branches can be deleted.` : ''} ${st.length ? `${plural(st.length, 'stale branch')} to review.` : ''}</span><button class="key">${SYNC}Clean up via Sync</button></div>` : ''}`;
+    }
+    return band('Ranked list on the left. The inspector explains each check and says what to do.') +
+      `<div class="bar-row">${fresh()}</div><div class="v3"><nav class="card v3-list">${list}</nav><section class="card v3-ins">${ins}</section></div>`;
+  }
+  mount('a3', v3, (ev, t) => { const el = t.closest('[data-s]'); if (!el) return false; s3.sel = el.dataset.s; return true; });
+
+  /* ═══ V4 — Branch board ═══ */
+  function v4() {
+    const all = REPOS.filter(r => r.state === 'ok').flatMap(r => r.branches.map(b => ({ r, b, s: sessOn(r, b.name) })));
+    const col = x => x.s ? 'agent' : isStale(x.b) ? 'stale' : x.b.behind === 0 ? 'ready' : 'drift';
+    const COLS = [['agent', 'Agent on it', 'a live session has it checked out'], ['ready', 'Ready', '0 behind trunk, nothing to rebase'], ['drift', 'Drifting', 'behind trunk, still recent'], ['stale', 'Stale', '≥ 20 behind or idle a week']];
+    const strip = REPOS.map(r => {
+      const l = levelOf(r);
+      const hot = problems(r).filter(p => p.sev >= 2 || l === 'dead');
+      if (!hot.length) return '';
+      const a = primary(r);
+      return `<span class="v4-rp"><span class="dot ${dotOf(l)}"></span><b style="font-weight:500">${esc(r.name)}</b><span class="w">${esc(hot.map(p => p.short).join(' · '))}</span>${a ? `<button class="key${l === 'needs' ? ' primary' : ''}">${esc(a.kind === 'sync' ? 'Sync' : a.label)}</button>` : ''}</span>`;
+    }).join('');
+    const okN = REPOS.filter(r => levelOf(r) === 'quiet').length;
+    const cols = COLS.map(([k, lab, hint]) => {
+      const items = all.filter(x => col(x) === k);
+      const card = ({ r, b, s }) => `<div class="card v4-card${k === 'stale' ? ' stale' : ''}"><span class="bn">${esc(b.name)}</span>
+        <span class="ln"><span class="rp">${esc(r.name)}</span>${wt(b)}</span>
+        <span class="ln">${dv(b)}<span class="muted" style="font-size:12px">${b.ago}</span></span>${s ? `<span class="ln">${sessBadge(s)}</span>` : ''}
+        ${k === 'ready' ? '<span class="ln"><span></span><button class="key">Open PR</button></span>' : k === 'stale' ? '<span class="ln"><span></span><button class="key">Delete…</button></span>' : ''}</div>`;
+      return `<div class="v4-col"><div class="v4-ch"><div><b>${lab}</b> <span class="muted">${items.length}</span><span class="hint">${hint}</span></div></div>${items.length ? items.map(card).join('') : '<div class="v4-empty">Nothing here.</div>'}</div>`;
+    }).join('');
+    return band('Every open branch across your pins, sorted by what it needs. Repo problems sit in the strip.') +
+      `<div class="bar-row">${fresh()}</div><div class="v4-strip">${strip}<span class="v4-rp"><span class="dot quiet"></span><span class="ok">${okN} repos all good</span></span></div><div class="v4-cols">${cols}</div>`;
+  }
+  mount('a4', v4, () => false);
+
+  /* ═══ V5 — Refined cards ═══ */
+  const s5 = { more: new Set() };
+  function v5() {
+    const rs = ranked();
+    const live = rs.filter(r => r.state === 'ok');
+    const dead = rs.filter(r => r.state !== 'ok');
+    const card = r => {
+      const l = levelOf(r), p = problems(r), a = primary(r);
+      const chips = p.filter(x => !['fetch', 'stale', 'detached'].includes(x.k)).map(x => `<span class="chip ${x.calm ? 'dim' : x.sev >= 3 ? 'amber' : x.sev === 2 ? 'mustard' : ''}">${esc(x.short)}</span>`).join('');
+      const m = barMax(r.branches);
+      const shown = s5.more.has(r.dir) ? r.branches : r.branches.slice(0, 4);
+      const brs = r.branches.length ? `<div class="v5-brs"><div class="v5-legend"><span>Branch</span><span>↓ behind · ahead ↑</span><span></span></div>${shown.map(b =>
+        `<div class="v5-br${isStale(b) ? ' stale' : ''}"><span class="v5-brn"><span class="t">${esc(b.name)}</span>${wt(b)}${sessBadge(sessOn(r, b.name))}</span><span class="v5-dvb">${dvbar(b, m)}<span class="nums"><span>${b.behind}</span><span class="a">${b.ahead}</span></span></span><span class="age">${b.ago}</span></div>`).join('')}
+        ${r.branches.length > 4 && !s5.more.has(r.dir) ? `<button class="v5-more" data-m="${r.dir}">+${r.branches.length - 4} more</button>` : ''}
+        ${r.merged ? `<span class="muted" style="font-size:12px;padding-top:8px">${r.merged} merged hidden</span>` : ''}</div>` : '';
+      const fe = r.fetchError ? `<div class="v5-banner"><span>Fetch ${TROUBLE[r.fetchError]}. The origin numbers are ${r.fetched} old.</span><button class="key">Retry</button></div>` : '';
+      const vt = { needs: 'Needs you', look: 'Worth a look', quiet: 'All good' }[l];
+      return `<section class="card v5-card ${l}"><div class="v5-head"><span class="dot ${dotOf(l)}"></span><span class="name">${esc(r.name)}</span>${a && a.kind === 'sync' ? `<button class="key${l === 'needs' ? ' primary' : ''}">${SYNC}Sync</button>` : ''}</div>
+        <div class="v5-verdict${l === 'needs' ? ' hot' : ''}">${esc(vt)}</div>${fe}
+        <div class="v5-chips"><span class="chip">${esc(r.branch || 'detached ' + r.sha)}</span>${sessBadge(r.branch && sessOn(r, r.branch))}${chips}</div>${brs}</section>`;
+    };
+    return band('Same grid, sorted by severity. Each card shows only what is wrong.') +
+      `<div class="bar-row"><div class="seg"><button class="on">Cards</button><button>Table</button><button>Triage</button></div>${fresh()}</div>
+      <div class="v5-grid">${live.map(card).join('')}</div>
+      <div class="v5-dead">${dead.map(r => `<div class="row"><span class="dot"></span><span class="name" style="font-size:14px">${esc(r.name)}</span><span class="sec">${esc(problems(r)[0].text)}</span><button class="key">Unpin</button></div>`).join('')}</div>`;
+  }
+  mount('a5', v5, (ev, t) => { const el = t.closest('[data-m]'); if (!el) return false; s5.more.add(el.dataset.m); return true; });
+})();
+</script>
+</body>
+</html>
