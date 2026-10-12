@@ -47,9 +47,19 @@
    Management is the section for the projects you keep pinned, and it has two
    tabs on the rail, like Usage and Settings: Projects and Git. It is a starting
    point that later work will build on, not a design that won a comparison.
-   Git is the live tab as shipped: the Usage band, a toolbar with the
-   Cards | Table | Triage switcher and the Sync/Fetch clock chip with its
-   popover, then the chosen layout over one fixture of pinned repos. That
+   Git keeps the live tab's band, toolbar and Sync/Fetch clock chip with its
+   popover, but its Cards | Table | Triage switcher is replaced by four
+   layouts picked from five drawn in
+   docs/superpowers/specs/2026-10-12-management-git-ux-mockups.html:
+   Inbox (count tiles that filter, one ranked list, a verdict sentence and a
+   key worded for the problem per repo), Matrix (a row per repo, a column per
+   health check, colour only where a check fails), Inspector (the Sessions
+   split: ranked list beside one repo's check tiles and active / stale
+   branches) and Branches (every open branch across the pins in Agent on it /
+   Ready / Drifting / Stale columns, repo problems in a strip). All four read
+   one problems → levels table, and join the live sessions' branches so
+   uncommitted work under a working agent reads as expected. (Refined Cards
+   was drawn and dropped.) They render one fixture of pinned repos. That
    fixture covers every repo state: dirty, trunk diverged from origin, behind
    its own upstream, in flight, quiet, a detached HEAD, a worktree branch, more
    than five branches, merged branches hidden, a folder that is gone and a
@@ -1303,14 +1313,24 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
    ═══════════════════════════════════════════════════════════════════════ */
 .git-view{display:flex;flex-direction:column;gap:16px}
 .git-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;position:relative}
-.git-toolbar .seg button{box-shadow:none}
+/* on the app ground the live .seg track is --hairline2 (= --border-strong),
+   not --bg-subtle, which vanishes against --bg-app */
+.git-toolbar .seg{background:var(--border-strong)}
+.git-toolbar .seg button{box-shadow:none;padding:7px 12px}
 .git-toolbar .seg button.on{box-shadow:var(--lift-card)}
-.git-clock-root{position:relative}
-.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:var(--r-md);background:var(--bg-subtle);color:var(--text-primary)}
-.git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--border-strong)}
+/* the clock sits at the toolbar's right end, the layout pills at its left;
+   its popover opens leftwards from that edge */
+.git-clock-root{position:relative;margin-left:auto}
+.git-clock-root .git-pop{left:auto;right:0;max-width:calc(100vw - 32px)}
+/* white with the card lift: the live --strip-hi (= --bg-subtle) fill all but
+   vanished on the --bg-app ground; white won over the pills' grey */
+.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:var(--r-md);background:var(--bg-surface);color:var(--text-primary);box-shadow:var(--lift-card),0 0 0 1px var(--border)}
+.git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--bg-subtle)}
 .git-clock-meters{display:flex;gap:10px}
 .git-clock-meters>*{min-width:max-content}
-.git-clock-caret{font-size:11px;color:var(--text-tertiary);transition:transform .15s}
+/* the account chip's own chevron (.acct .cv), so every dropdown chip in the
+   header and toolbar opens with the same mark */
+.git-clock-caret{width:9px;height:9px;flex:none;color:var(--text-tertiary);transition:transform .16s}
 .git-clock[aria-expanded="true"] .git-clock-caret{transform:rotate(180deg)}
 .git-meter{display:inline-flex;flex-direction:column;gap:3px;flex:none}
 .git-meter-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;column-gap:6px}
@@ -1347,74 +1367,12 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-dot.quiet{background:var(--green-600)}
 .git-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .git-name{font-size:15px;font-weight:500;letter-spacing:-.01em;min-width:0;overflow-wrap:anywhere}
-.git-fetched{margin-left:auto;font-size:12px;color:var(--text-tertiary);white-space:nowrap}
-.git-fetched.warn{color:var(--amber)}
-.git-fetched.live{color:var(--cyan)}
-.git-facts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .git-chip{display:inline-block;font-size:12px;font-weight:500;line-height:1.4;padding:2px 9px;border-radius:var(--r-full);border:1px solid var(--border-strong);color:var(--text-secondary);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .git-chip.branch{color:var(--text-primary);max-width:240px}
 .git-chip.amber{color:var(--amber);border-color:transparent;background:color-mix(in srgb,var(--amber) 14%,transparent)}
 .git-chip.green{color:var(--green-600);border-color:transparent;background:color-mix(in srgb,var(--green-600) 16%,transparent)}
 .git-chip.mustard{color:var(--mustard);border-color:transparent;background:color-mix(in srgb,var(--mustard) 20%,transparent)}
 .git-chip.wt{flex:none;font-size:11px;padding:0 7px;color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
-.git-state{font-size:13px;color:var(--text-secondary);overflow-wrap:anywhere}
-
-.git-branches{display:flex;flex-direction:column;border-top:1px solid var(--border);container:git-branches/inline-size}
-.git-brow{display:grid;grid-template-columns:minmax(0,1fr) 89px 72px 36px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
-.git-bname{display:flex;align-items:center;gap:6px;min-width:0}
-.git-bname-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.git-bar{display:inline-grid;grid-template-columns:44px 1px 44px;align-items:center;height:12px;vertical-align:middle}
-.git-bar i{display:block}
-.git-bar-b,.git-bar-a{height:6px;border-radius:2px}
-.git-bar-b{justify-self:end;background:var(--text-tertiary)}
-.git-bar-a{justify-self:start;background:var(--cyan)}
-.git-bar-c{height:12px;background:var(--border-strong)}
-.git-nums{font-size:12px;color:var(--text-tertiary);white-space:nowrap}
-.git-nums-b{color:var(--text-secondary)}
-.git-nums-a{color:var(--cyan)}
-.git-age{font-size:12px;color:var(--text-tertiary);text-align:right;white-space:nowrap}
-.git-more{align-self:flex-start;font-size:12px;color:var(--cyan);background:none;border:0;padding:7px 0 0}
-.git-note{font-size:12px;color:var(--text-tertiary);padding-top:7px}
-@container git-branches (width < 400px){
-  .git-brow{grid-template-columns:minmax(0,1fr) 72px 36px}
-  .git-brow .git-bar{display:none}
-}
-
-.git-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:16px;align-items:start}
-.git-card{background:var(--bg-surface);border-radius:var(--r-lg);padding:20px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:var(--lift-card)}
-
-.git-table-wrap{background:var(--bg-surface);border-radius:var(--r-lg);padding:8px;overflow-x:auto;box-shadow:var(--lift-card)}
-.git-table{width:100%;border-collapse:collapse;font-size:13px}
-.git-table th{text-align:left;font-size:11px;font-weight:500;color:var(--text-secondary);padding:12px 10px 8px;border-bottom:1px solid var(--border-strong);white-space:nowrap}
-.git-table td{padding:10px;border-bottom:1px solid var(--border);vertical-align:middle}
-.git-table th.n,.git-table td.n{text-align:right}
-.git-table td:first-child,.git-table th:first-child{padding-left:12px}
-.git-table td:last-child,.git-table th:last-child{padding-right:12px}
-.git-table tbody tr:last-child td{border-bottom:0}
-.git-table .git-tname{font-weight:500;white-space:nowrap}
-.git-tr:not(.off){cursor:pointer}
-.git-tr:not(.off):hover td{background:color-mix(in srgb,var(--bg-subtle) 50%,transparent)}
-.git-tr.off .git-tname{color:var(--text-secondary)}
-.git-rowbtn{font:inherit;color:inherit;text-align:left;background:none;border:0;padding:0;display:inline-flex;align-items:center}
-.git-caret{display:inline-block;width:16px;flex:none;color:var(--text-tertiary)}
-.git-table .git-sub td{padding-top:6px;padding-bottom:6px;font-size:12px;color:var(--text-secondary);background:var(--bg-subtle)}
-.git-table .git-sub td:first-child{padding-left:28px}
-.git-table .git-sub .git-more{padding:0}
-.git-table .git-sub .git-note{padding-top:6px}
-.git-table .git-bname{contain:inline-size}
-.git-div{display:inline-flex;align-items:center;gap:10px}
-
-.git-tri{display:flex;flex-direction:column;gap:20px}
-.git-tri-group{display:flex;flex-direction:column;gap:8px}
-.git-tri-h{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary)}
-.git-arow{background:var(--bg-surface);border-radius:var(--r-lg);padding:16px 20px;display:flex;flex-direction:column;gap:10px;min-width:0;box-shadow:var(--lift-card)}
-.git-arow .git-branches{border-top:0;padding-left:16px;border-left:1px solid var(--border-strong)}
-.git-arow.quiet{background:transparent;border:1px dashed var(--border-strong);padding:8px 16px;box-shadow:none;--sync-paper:var(--bg-surface)}
-.git-arow.quiet .git-name{font-size:14px}
-.git-arow.quiet .git-caret{margin-left:auto;text-align:right}
-.git-arow.unreadable .git-name{color:var(--text-secondary)}
-.git-summary{font-size:13px;color:var(--text-tertiary);min-width:0;overflow-wrap:anywhere}
-
 .git-sync{flex:none;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px 0 9px;font-size:12px;font-weight:500;line-height:1;color:var(--text-secondary);background:var(--sync-paper,var(--bg-subtle));border:0;border-radius:var(--r-sm);white-space:nowrap;transition:color .15s,background .15s}
 .git-sync svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .git-sync:hover:not(:disabled){color:var(--text-primary);background:var(--border-strong)}
@@ -1423,12 +1381,165 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-sync:disabled{cursor:default;color:var(--text-tertiary)}
 @keyframes git-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.git-sync.on svg{animation:none}.git-meter[data-tone="live"] .git-meter-fill{animation:none}}
-.git-head-row{display:flex;align-items:flex-start;gap:8px;min-width:0}
-.git-head-row>.git-head{flex:1}
-.git-head-end{flex:none;display:flex;align-items:center;min-height:22px}
-.git-sync-td{width:1%;text-align:right;white-space:nowrap}
-.git-qhead{display:flex;align-items:center;gap:8px;min-width:0}
-.git-qhead>.git-rowbtn{display:flex;flex:1;min-width:0;gap:8px;align-items:center}
+
+/* Inbox | Matrix | Inspector | Branches — the four layouts that replaced
+   Cards | Table | Triage (compared in
+   docs/superpowers/specs/2026-10-12-management-git-ux-mockups.html). These
+   rules are the mock's own, `git-` prefixed so they can move to styles.css
+   as they stand. */
+.git-panel{background:var(--bg-surface);border-radius:var(--r-lg);box-shadow:var(--lift-card);min-width:0}
+.git-gh{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);margin:16px 4px 8px}
+.git-age{font-size:12px;color:var(--text-tertiary);text-align:right;white-space:nowrap}
+.git-caret{display:inline-block;width:14px;flex:none;font-size:11px;color:var(--text-tertiary)}
+.git-key{flex:none;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;font-size:12px;font-weight:500;line-height:1;color:var(--text-secondary);background:var(--bg-subtle);border:0;border-radius:var(--r-sm);white-space:nowrap;transition:color .15s,background .15s}
+.git-key:hover{color:var(--text-primary);background:var(--border-strong)}
+.git-key.primary,.git-sync.primary{color:var(--text-on-dark);background:var(--ink-inverse)}
+.git-key.primary:hover,.git-sync.primary:hover:not(:disabled){color:var(--text-on-dark);background:var(--text-primary)}
+.git-chip.dim{color:var(--text-tertiary);border-style:dashed}
+.git-origin{font-size:12px;color:var(--text-tertiary);white-space:nowrap}
+.git-origin.warn{color:var(--amber)}.git-origin.live{color:var(--cyan)}
+/* an agent on the branch, in the Sessions board's own inks */
+.git-sess{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:var(--r-full);padding:1px 8px 1px 6px;white-space:nowrap;flex:none}
+.git-sess::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.git-sess.working{color:var(--green-600);background:color-mix(in srgb,var(--green-600) 13%,transparent)}
+.git-sess.waiting{color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,transparent)}
+.git-sess.idle{color:var(--text-secondary);background:var(--bg-subtle)}
+/* ↓ behind · ↑ ahead, labelled, and the bar drawn the same way round */
+.git-dv{display:inline-flex;gap:8px;font-size:12px;white-space:nowrap}
+.git-dv .b{color:var(--text-secondary)}
+.git-dv .a{color:var(--cyan);font-weight:600}
+.git-dv .z{color:var(--text-tertiary)}
+.git-dvbar{display:inline-grid;grid-template-columns:56px 2px 56px;align-items:center;height:12px}
+.git-dvbar i{display:block;height:6px;border-radius:2px}
+.git-dvbar .bb{justify-self:end;background:var(--text-tertiary)}
+.git-dvbar .ba{justify-self:start;background:var(--cyan)}
+.git-dvbar .bc{height:12px;border-radius:0;background:var(--border-strong)}
+.git-bname{display:flex;align-items:center;gap:6px;min-width:0}
+.git-bname-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* chips wrap under the name rather than squeeze it */
+.git-in-br .git-bname,.git-ib-brow .git-bname{flex-wrap:wrap;row-gap:4px}
+.git-in-br .git-bname-t,.git-ib-brow .git-bname-t{flex:none;max-width:100%}
+
+/* Inbox — count tiles that filter, a verdict and a key per repo */
+.git-ib-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.git-ib-tile{border:0;text-align:left;font:inherit;background:var(--bg-surface);border-radius:var(--r-lg);padding:14px 16px;box-shadow:var(--lift-card);display:flex;flex-direction:column;gap:2px;outline:2px solid transparent;outline-offset:-2px}
+.git-ib-tile.on{outline-color:var(--ink-inverse)}
+.git-ib-tile .big{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.git-ib-tile.needs .big{color:var(--amber)}
+.git-ib-tile .lab{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)}
+@media (max-width:640px){.git-ib-sum{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.git-ib-list{display:flex;flex-direction:column;gap:10px}
+.git-ib-item{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.git-ib-top{display:flex;align-items:flex-start;gap:12px}
+.git-ib-top>.git-dot{margin-top:7px}
+.git-ib-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.git-ib-verdict{font-size:14px;line-height:1.45}
+.git-ib-steps{display:flex;flex-direction:column;gap:6px;margin:4px 0 0;padding:0;list-style:none}
+.git-ib-steps li{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--text-secondary)}
+.git-ib-steps li::before{content:"";width:5px;height:5px;border-radius:50%;flex:none;background:var(--border-strong);transform:translateY(-2px)}
+.git-ib-steps li.hot{color:var(--text-primary)}
+.git-ib-steps li.hot::before{background:var(--amber)}
+.git-ib-steps li.calm::before{background:var(--green-600)}
+.git-ib-keys{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:640px){.git-ib-top{flex-wrap:wrap}.git-ib-keys{width:100%;justify-content:flex-start;padding-left:20px}}
+.git-ib-br{margin-left:20px;padding-top:10px;border-top:1px solid var(--border)}
+.git-ib-tog{display:inline-flex;align-items:center;gap:4px;padding:0;font:inherit;font-size:12px;color:var(--text-secondary);background:none;border:0}
+.git-ib-brow{display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
+.git-ib-brow:last-child{border-bottom:0}
+.git-ib-quiet{display:flex;flex-direction:column;padding:4px 18px;border:1px dashed var(--border-strong);border-radius:var(--r-lg);--sync-paper:var(--bg-surface)}
+.git-ib-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 0;border-top:1px solid var(--border);font-size:13px}
+.git-ib-line:first-child{border-top:0}
+.git-ib-line .git-name{font-size:14px}
+.git-ib-facts{flex:1;min-width:140px;color:var(--text-secondary);overflow-wrap:anywhere}
+.git-ib-quiet .git-key{background:var(--bg-surface)}
+
+/* Matrix — a row per repo, a column per check, colour only on failure */
+.git-mx-wrap{padding:6px;overflow-x:auto}
+.git-mx{width:100%;min-width:760px;border-collapse:collapse;font-size:13px}
+.git-mx th{padding:12px 4px 10px;font-size:11px;font-weight:500;text-align:left;white-space:nowrap;vertical-align:bottom;color:var(--text-secondary);border-bottom:1px solid var(--border-strong)}
+.git-mx th:first-child{padding-left:12px}
+.git-mx-cnt{display:inline-block;min-width:18px;margin-left:5px;padding:1px 5px;font-size:10px;font-weight:700;text-align:center;border-radius:var(--r-full);color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,transparent)}
+.git-mx-cnt.z{color:var(--text-tertiary);background:var(--bg-subtle)}
+.git-mx td{height:46px;padding:0 4px;vertical-align:middle;border-bottom:1px solid var(--border)}
+.git-mx tbody tr:last-child td{border-bottom:0}
+.git-mx-r{cursor:pointer}
+.git-mx-r:hover td{background:color-mix(in srgb,var(--bg-subtle) 60%,transparent)}
+.git-mx-rn{padding-left:12px!important;min-width:150px}
+.git-mx-rn .git-head{flex-wrap:nowrap;align-items:baseline}
+.git-mx-rn .git-name{font-size:14px;overflow-wrap:normal}
+.git-mx-sub{display:block;margin:-1px 0 0 22px;font-size:12px;color:var(--text-tertiary)}
+.git-mx tr.off .git-name{color:var(--text-secondary)}
+.git-mx-act{padding-right:12px!important;text-align:right;white-space:nowrap}
+.git-mx-act>*+*{margin-left:6px}
+.git-mx-x td{height:auto;padding:10px 12px 14px 34px;background:var(--bg-subtle);border-bottom:1px solid var(--border-strong)}
+.git-mx-note{text-align:left;padding-top:8px}
+.git-cell{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;font-size:12px;white-space:nowrap;border-radius:var(--r-sm)}
+.git-cell.ok{color:var(--text-tertiary)}
+.git-cell.ok::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--green-200)}
+.git-cell.bad{font-weight:600;color:var(--amber);background:color-mix(in srgb,var(--amber) 11%,transparent)}
+.git-cell.meh{font-weight:600;color:var(--mustard);background:color-mix(in srgb,var(--mustard) 13%,transparent)}
+.git-cell.live{color:var(--cyan)}
+.git-cell.na{color:var(--text-tertiary)}
+.git-mx-legend{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:12px 6px 0;font-size:12px;color:var(--text-secondary)}
+.git-mx-legend .git-cell{height:20px}
+.git-mx-legend .git-cell.ok{padding:0}
+.git-mx th:nth-child(n+2){padding-left:12px}
+
+/* Inspector — the Sessions split: ranked list beside one repo in depth */
+.git-in{grid-template-columns:400px minmax(0,1fr)}
+@media (max-width:1100px){.git-in{grid-template-columns:320px minmax(0,1fr)}}
+@media (max-width:860px){.git-in{grid-template-columns:minmax(0,1fr)}}
+.git-in .lrow:not(.selected):hover{background:color-mix(in srgb,var(--bg-subtle) 50%,transparent)}
+.git-in .lrow .git-dot{width:9px;height:9px}
+.git-in .lrow .act.hot{color:var(--amber)}
+.git-in .lrow .ago.warn{color:var(--amber)}.git-in .lrow .ago.live{color:var(--cyan)}
+.git-in-fig{font-weight:400}
+/* the level as the Sessions .status pill, in the Git inks */
+.status.g-needs{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.status.g-look{background:color-mix(in srgb,var(--mustard) 16%,transparent);color:var(--mustard)}
+.status.g-quiet{background:var(--green-200);color:var(--green-600)}
+.git-in-pane{display:flex;flex-direction:column;gap:20px}
+.git-in-pane .ins-meta{margin-top:6px}
+.git-in-path{font-size:12px;color:var(--text-tertiary);overflow-wrap:anywhere}
+.git-in-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:560px){.git-in-checks{grid-template-columns:minmax(0,1fr)}}
+/* the checks are the inspector's .kv boxes, the value at row size */
+.git-in-ck{display:flex;flex-direction:column;gap:2px}
+.git-in-ck .v{display:block;margin-top:4px;font-size:14px;font-weight:600;letter-spacing:0;line-height:1.35;overflow-wrap:anywhere}
+.git-in-ck .h{font-size:12px;color:var(--text-secondary)}
+.git-in-ck.bad{background:color-mix(in srgb,var(--amber) 10%,transparent)}
+.git-in-ck.bad .v{color:var(--amber)}
+.git-in-ck.meh{background:color-mix(in srgb,var(--mustard) 11%,transparent)}
+.git-in-ck.meh .v{color:var(--mustard)}
+.git-in-ck.live .v{color:var(--cyan)}
+.git-in-sec{display:flex;flex-direction:column}
+.git-in-hd{display:flex;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:12px;color:var(--text-tertiary)}
+.git-in-hd b{font-size:13px;font-weight:600;color:var(--text-primary)}
+.git-in-br{display:grid;grid-template-columns:minmax(0,1fr) 116px 90px 40px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.git-in-br.stale{color:var(--text-secondary)}
+.git-in-br.stale .git-dvbar{opacity:.55}
+@media (max-width:560px){.git-in-br{grid-template-columns:minmax(0,1fr) auto 40px}.git-in-br .git-dvbar{display:none}}
+.git-in-none{text-align:left;padding:10px 0}
+.git-in-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary)}
+
+/* Branches — every open branch across the pins, a column per need */
+.git-bb-cols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:start}
+@media (max-width:1100px){.git-bb-cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.git-bb-cols{grid-template-columns:minmax(0,1fr)}}
+.git-bb-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.git-bb-ch{padding:0 4px;font-size:13px}
+.git-bb-ch .git-age{text-align:left}
+.git-bb-hint{display:block;margin-top:2px;font-size:11px;color:var(--text-tertiary)}
+.git-bb-card{display:flex;flex-direction:column;gap:7px;padding:12px 14px}
+.git-bb-card.stale{background:transparent;border:1px dashed var(--border-strong);box-shadow:none}
+.git-bb-bn{font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.git-bb-ln{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.git-bb-ln.end{justify-content:flex-end;gap:6px}
+.git-bb-ln.start{justify-content:flex-start;gap:6px}
+.git-bb-warn{font-size:12px;font-weight:500;color:var(--amber)}
+.git-bb-note{font-size:12px;color:var(--text-tertiary);padding:0 4px}
+.git-bb-repo{font-size:12px;color:var(--text-tertiary)}
+.git-bb-empty{padding:12px 14px;font-size:12px;color:var(--text-tertiary);border:1px dashed var(--border-strong);border-radius:var(--r-lg)}
 
 /* Projects: PinPicker on the app ground, no card around it, the projects as
    tiles (mock-only `.pj-*`) */
@@ -2445,9 +2556,10 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
     <!-- ═══ PAGE: MANAGEMENT · PROJECTS / GIT ═════════════════════════════
          The new Management section's two tabs, picked in the rail. Projects
          is the pin list that moved here from Settings, on the app ground,
-         with its own Tiles | Columns | Lists pills. Git is the live tab: band,
-         the Cards | Table | Triage switcher, the Sync/Fetch clock chip and its
-         popover, over one fixture of pinned repos; the bar at its top drives
+         with its own Tiles | Columns | Lists pills. Git is the live tab's band
+         and Sync/Fetch clock chip over the proposed Inbox | Matrix |
+         Inspector | Branches switcher and one fixture of pinned repos; the
+         bar at its top drives
          the states the live tab can be in.
          Rendered by the MANAGEMENT block in the <script>; a starting point for
          the work that follows. -->
@@ -3799,11 +3911,12 @@ At the start of every session, invoke /caveman.
 /* ═══════════════════════════════════════════════════════════════════════════
    MANAGEMENT — Projects and Git, the new section's two tabs.
 
-   Git renders the components in client/src/components/management/ from one
-   fixture of pinned repos: GitView, GitCards, GitTable, GitTriage, GitParts
-   and GitClockChip. The text comes from lib/gitStatsText.ts and the grouping
-   from lib/gitTriage.ts, both copied below, so the mock and the live tab say
-   the same things. Projects is PinPicker without its Settings card, as
+   Git keeps GitView's band and toolbar and GitClockChip from
+   client/src/components/management/, and the text helpers of
+   lib/gitStatsText.ts, copied below. Its four layouts — Inbox, Matrix,
+   Inspector, Branches — are proposals that replace GitCards, GitTable and
+   GitTriage; their grouping is the problems → levels table below, the
+   proposed successor to lib/gitTriage.ts. Projects is PinPicker without its Settings card, as
    tiles or Settings-card lists, three layouts its own Tiles | Columns |
    Lists pills switch between.
 
@@ -3819,34 +3932,40 @@ At the start of every session, invoke /caveman.
   /* ── fixture: pin order, the RepoGitStats shapes /api/git-stats returns ── */
   const br = (name, ahead, behind, ago, wt) => ({ name, ahead, behind, ago, wt: !!wt });
   const REPOS = [
-    { dirName: 'cad', name: 'claude-agents-dashboard', state: 'ok', branch: 'management-redesign', detachedSha: null,
+    { dirName: 'cad', name: 'claude-agents-dashboard', path: '~/Projects/personal/claude-agents-dashboard', state: 'ok', branch: 'management-redesign', detachedSha: null,
       upstream: { upstream: 'origin/management-redesign', counts: { ahead: 2, behind: 0 } },
       uncommitted: 3, trunk: 'main', hasOrigin: true, trunkVsOrigin: { ahead: 0, behind: 0 }, originOnly: false,
       fetched: '2m', fetchError: null, mergedCount: 11, unmergedTotal: 7,
       branches: [br('management-redesign', 4, 0, '12m'), br('feat/plan-progress', 9, 2, '2h', true), br('fix/triage-task-pill', 1, 0, '5h'),
         br('feat/usage-history', 14, 6, '1d'), br('spike/clock-chip', 3, 21, '4d'), br('docs/guides-move', 2, 40, '9d'), br('chore/deps', 1, 3, '12d')] },
-    { dirName: 'tw', name: 'timify-web', state: 'ok', branch: 'develop', detachedSha: null,
+    { dirName: 'tw', name: 'timify-web', path: '~/Projects/timify/timify-web', state: 'ok', branch: 'develop', detachedSha: null,
       upstream: { upstream: 'origin/develop', counts: { ahead: 0, behind: 5 } },
       uncommitted: 0, trunk: 'main', hasOrigin: true, trunkVsOrigin: { ahead: 0, behind: 3 }, originOnly: false,
       fetched: '3h', fetchError: 'auth', mergedCount: 42, unmergedTotal: 2,
       branches: [br('TIMIFY-1423-booking-widget', 6, 0, '3h', true), br('TIMIFY-1388-calendar-sync', 11, 18, '2d')] },
-    { dirName: 'gm', name: 'guide-manager', state: 'ok', branch: 'main', detachedSha: null, upstream: { upstream: 'origin/main', counts: { ahead: 0, behind: 0 } },
+    { dirName: 'gm', name: 'guide-manager', path: '~/Projects/personal/guide-manager', state: 'ok', branch: 'main', detachedSha: null, upstream: { upstream: 'origin/main', counts: { ahead: 0, behind: 0 } },
       uncommitted: 0, trunk: 'main', hasOrigin: true, trunkVsOrigin: { ahead: 0, behind: 0 }, originOnly: false,
       fetched: '4m', fetchError: null, mergedCount: 0, unmergedTotal: 1, branches: [br('feat/register-cli', 5, 0, '1d')] },
-    { dirName: 'nr', name: 'ntfy-relay', state: 'ok', branch: 'main', detachedSha: null, upstream: null,
+    { dirName: 'nr', name: 'ntfy-relay', path: '~/Projects/personal/ntfy-relay', state: 'ok', branch: 'main', detachedSha: null, upstream: null,
       uncommitted: 0, trunk: 'main', hasOrigin: true, trunkVsOrigin: { ahead: 0, behind: 0 }, originOnly: false,
       fetched: '4m', fetchError: null, mergedCount: 3, unmergedTotal: 0, branches: [] },
-    { dirName: 'df', name: 'dotfiles', state: 'ok', branch: null, detachedSha: 'a1b2c3d', upstream: null,
+    { dirName: 'df', name: 'dotfiles', path: '~/dotfiles', state: 'ok', branch: null, detachedSha: 'a1b2c3d', upstream: null,
       uncommitted: 0, trunk: 'main', hasOrigin: false, trunkVsOrigin: null, originOnly: false,
       fetched: null, fetchError: null, mergedCount: 0, unmergedTotal: 0, branches: [] },
     { dirName: 'it', name: 'infra-terraform', state: 'missing', path: '~/Work/infra-terraform' },
-    { dirName: 'sc', name: 'scratch', state: 'not-git' }
+    { dirName: 'sc', name: 'scratch', state: 'not-git', path: '~/scratch' }
+  ];
+  /* the live sessions' Session.gitBranch, joined to the pin's repo on the
+     client: an agent on a branch turns its uncommitted changes from
+     forgotten work into expected work */
+  const GIT_SESS = [
+    { repo: 'cad', branch: 'management-redesign', kind: 'working', label: 'working' },
+    { repo: 'cad', branch: 'feat/plan-progress', kind: 'waiting', label: 'needs answer' },
+    { repo: 'tw', branch: 'TIMIFY-1423-booking-widget', kind: 'idle', label: 'idle 40m' }
   ];
 
   /* ── lib/gitStatsText.ts, as JS ──────────────────────────────────────── */
-  const SHOWN = 5;
   const branchChip = r => r.branch === null ? `detached at ${r.detachedSha}` : r.branch;
-  const uncommittedText = n => n > 0 ? `${n} uncommitted` : 'clean';
   const trunkText = r => {
     if (r.trunk === null) return 'no main branch';
     if (!r.hasOrigin) return 'no remote';
@@ -3859,22 +3978,6 @@ At the start of every session, invoke /caveman.
     }
     return r.originOnly ? `${r.trunk} only on origin` : `${r.trunk} not on origin`;
   };
-  const upstreamShown = r => {
-    const u = r.upstream;
-    if (!u) return null;
-    if (u.counts && u.counts.ahead === 0 && u.counts.behind === 0) return null;
-    if (r.trunk !== null && u.upstream === `origin/${r.trunk}`) return null;
-    return u;
-  };
-  const upstreamText = r => {
-    const u = upstreamShown(r);
-    if (!u) return null;
-    const c = u.counts;
-    if (c === null) return `${u.upstream} gone`;
-    if (c.ahead === 0) return `${c.behind} behind ${u.upstream}`;
-    if (c.behind === 0) return `${c.ahead} ahead of ${u.upstream}`;
-    return `${c.ahead} ahead, ${c.behind} behind ${u.upstream}`;
-  };
   const TROUBLE = { auth: 'needs auth', offline: 'offline', timeout: 'fetch timed out', other: 'fetch failed' };
   const ageText = r => r.fetched === null ? 'never fetched' : `fetched ${r.fetched} ago`;
   const fetchedText = r => {
@@ -3883,129 +3986,249 @@ At the start of every session, invoke /caveman.
     return { text: ageText(r), tone: null };
   };
   const stateSentence = r =>
-    r.state === 'missing' ? `Folder is gone — ${r.path}. Unpin it under Projects.`
-    : r.state === 'not-git' ? 'Not a git repository.' : `Couldn't read: ${r.message}`;
+    r.state === 'missing' ? `Folder is gone: ${r.path}`
+    : r.state === 'not-git' ? 'Not a git repository' : `Couldn't read: ${r.message}`;
 
-  /* ── lib/gitTriage.ts ────────────────────────────────────────────────── */
-  const groupOf = r => {
-    if (r.state !== 'ok') return 'unreadable';
+  /* ── problems → levels: the proposed successor to lib/gitTriage.ts ─────
+     Every fact that is NOT fine becomes a problem with a severity (3 needs
+     you, 2 worth a look, 1 a note) and the sentence the page says about it;
+     a healthy fact says nothing. The repo's level is its worst problem. Two
+     shifts from the shipped grouping: unpushed commits are worth a look (they
+     exist on this machine only), and uncommitted changes under a WORKING
+     agent drop to a calm note. */
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : /(ch|sh|s|x)$/.test(w) ? 'es' : 's'}`;
+  const daysOf = ago => ago.endsWith('d') ? parseInt(ago, 10) : 0;
+  const isStale = b => b.behind >= 20 || daysOf(b.ago) >= 7;
+  const sessOn = (r, b) => GIT_SESS.find(s => s.repo === r.dirName && s.branch === b);
+  function problems(r) {
+    if (r.state === 'missing') return [{ sev: 2, k: 'gone', short: 'folder gone', text: stateSentence(r) }];
+    if (r.state !== 'ok') return [{ sev: 1, k: 'notgit', short: 'not a repository', text: stateSentence(r) }];
+    const p = [];
+    const agent = r.branch && sessOn(r, r.branch);
+    if (r.fetchError) p.push({ sev: 3, k: 'fetch', short: TROUBLE[r.fetchError], text: `Fetch ${TROUBLE[r.fetchError].replace(/^fetch /, '')}, so the origin numbers are ${r.fetched} old` });
+    if (r.uncommitted) p.push(agent && agent.kind === 'working'
+      ? { sev: 1, k: 'dirty', calm: true, short: `${r.uncommitted} uncommitted`, text: `${plural(r.uncommitted, 'uncommitted change')}, and an agent is working on this branch` }
+      : { sev: 3, k: 'dirty', short: `${r.uncommitted} uncommitted`, text: `${plural(r.uncommitted, 'uncommitted change')} on ${r.branch}` });
+    const c = r.upstream && r.upstream.counts;
+    if (c && c.behind) p.push({ sev: 3, k: 'pull', short: `${c.behind} to pull`, text: `${r.branch} is ${c.behind} behind ${r.upstream.upstream}` });
+    if (c && c.ahead) p.push({ sev: 2, k: 'push', short: `${c.ahead} unpushed`, text: `${plural(c.ahead, 'commit')} on ${r.branch} not pushed yet` });
     const d = r.trunkVsOrigin;
-    const diverged = d !== null && (d.ahead > 0 || d.behind > 0);
-    const behindUp = ((upstreamShown(r) || {}).counts || {}).behind > 0;
-    if (r.uncommitted > 0 || diverged || behindUp) return 'needs';
-    if (r.unmergedTotal >= 1) return 'flight';
-    return 'quiet';
+    if (d && (d.ahead || d.behind)) p.push({ sev: 2, k: 'trunk', short: `${r.trunk} ${d.behind} behind`, text: `Local ${trunkText(r)}` });
+    if (!r.hasOrigin) p.push({ sev: 1, k: 'remote', short: 'no remote', text: 'No remote, so nothing here is backed up' });
+    if (r.branch === null) p.push({ sev: 1, k: 'detached', short: `detached at ${r.detachedSha}`, text: `HEAD detached at ${r.detachedSha}` });
+    const st = r.branches.filter(isStale).length;
+    if (st) p.push({ sev: 1, k: 'stale', short: plural(st, 'stale branch'), text: `${plural(st, 'stale branch')} (≥ 20 behind or idle a week)` });
+    return p.sort((a, b) => b.sev - a.sev);
+  }
+  const levelOf = r => {
+    if (r.state !== 'ok') return 'dead';
+    const s = problems(r).reduce((m, p) => Math.max(m, p.sev), 0);
+    return s >= 3 ? 'needs' : s === 2 ? 'look' : 'quiet';
   };
-  const GROUPS = [['needs', 'Needs you'], ['flight', 'In flight'], ['quiet', 'Quiet'], ['unreadable', "Can't read"]];
+  const STATUS = { needs: 'needs you', look: 'worth a look', quiet: 'all good', dead: "can't read" };
+  const LEVELS = [['needs', 'Needs you'], ['look', 'Worth a look'], ['quiet', 'All good'], ['dead', "Can't read"]];
+  const DOT = { needs: 'needs', look: 'flight', quiet: 'quiet', dead: '' };
+  const RANK = { needs: 0, look: 1, quiet: 2, dead: 3 };
+  const weight = r => problems(r).reduce((s, p) => s + p.sev, 0);
+  const ranked = () => [...REPOS].sort((a, b) => RANK[levelOf(a)] - RANK[levelOf(b)] || weight(b) - weight(a));
 
   /* ── state the bar drives ────────────────────────────────────────────── */
   const S = {
-    layout: 'cards',        // cards | table | triage — `management.gitLayout`
+    layout: 'inbox',        // inbox | matrix | inspector | branches — `management.gitLayout`
     load: 'ok',             // ok | loading | failed | nopins
     poll: 'ok',             // ok | failed — a later poll did not answer
     clock: 'idle',          // idle | fetching | off
     syncing: 'cad',         // the repo whose git-sync session is running, or null
     spawn: true,            // host can spawn: no Sync keys when false
     pop: false,             // the clock popover
-    open: new Set(['cad']), // expanded Table rows
-    more: new Set(),        // "+N more" expanded, per repo
-    quietOpen: new Set(),   // expanded quiet Triage rows
+    filter: 'all',          // Inbox: the count tile picked, or all
+    open: new Set(['cad']), // Inbox: repos with their branches shown
+    row: null,              // Matrix: the expanded row
+    pick: 'cad',            // Inspector: the selected repo
     pinFilter: '',
     pinBusy: null,
     pinLayout: 'tiles'      // tiles | columns | lists — `management.projectsLayout`
   };
 
-  /* ── GitParts ────────────────────────────────────────────────────────── */
+  /* ── parts ───────────────────────────────────────────────────────────── */
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const dot = g => `<span class="git-dot ${g}"></span>`;
-  const chipBranch = r => `<span class="git-chip branch">${esc(branchChip(r))}</span>`;
-  const chipUp = r => {
-    const t = upstreamText(r);
-    if (t === null) return '';
-    const behind = ((upstreamShown(r) || {}).counts || {}).behind > 0;
-    return `<span class="git-chip${behind ? ' mustard' : ''}">${esc(t)}</span>`;
-  };
-  const chipDirty = r => `<span class="git-chip ${r.uncommitted > 0 ? 'amber' : 'green'}">${uncommittedText(r.uncommitted)}</span>`;
-  const chipTrunk = r => {
-    const d = r.trunkVsOrigin;
-    return `<span class="git-chip${d && (d.ahead || d.behind) ? ' mustard' : ''}">${esc(trunkText(r))}</span>`;
-  };
-  const fetched = r => { const f = fetchedText(r); return `<span class="git-fetched${f.tone ? ' ' + f.tone : ''}">${f.text}</span>`; };
-  const barMax = bs => Math.max(1, ...bs.map(b => Math.max(b.ahead, b.behind)));
-  const barW = (n, max) => n === 0 ? '0px' : `${Math.max(2, Math.round(44 * n / max))}px`;
-  const bar = (b, max) => `<span class="git-bar"><i class="git-bar-b" style="width:${barW(b.behind, max)}"></i><i class="git-bar-c"></i><i class="git-bar-a" style="width:${barW(b.ahead, max)}"></i></span>`;
-  const nums = b => `<span class="git-nums"><span class="git-nums-b">${b.behind}</span> | <span class="git-nums-a">${b.ahead}</span></span>`;
+  const dot = l => `<span class="git-dot ${DOT[l]}"></span>`;
+  const sess = s => s ? `<span class="git-sess ${s.kind}">${s.label}</span>` : '';
   const wt = b => b.wt ? '<span class="git-chip wt">worktree</span>' : '';
-  const bname = b => `<span class="git-bname"><span class="git-bname-t">${esc(b.name)}</span>${wt(b)}</span>`;
-  const visible = r => S.more.has(r.dirName) ? r.branches : r.branches.slice(0, SHOWN);
-  const branchList = r => {
-    const max = barMax(r.branches);
-    const rows = r.branches.length === 0 ? '<div class="git-note">no open branches</div>'
-      : visible(r).map(b => `<div class="git-brow">${bname(b)}${bar(b, max)}${nums(b)}<span class="git-age">${b.ago}</span></div>`).join('');
-    const more = r.branches.length > SHOWN && !S.more.has(r.dirName)
-      ? `<button class="git-more" data-gmore="${r.dirName}">+${r.branches.length - SHOWN} more</button>` : '';
-    const merged = r.mergedCount > 0 ? `<div class="git-note">${r.mergedCount} merged branches hidden</div>` : '';
-    return `<div class="git-branches">${rows}${more}${merged}</div>`;
-  };
+  /* ↓ behind the base, ↑ ahead of it — labelled, in reading order */
+  const dv = b => `<span class="git-dv"><span class="${b.behind ? 'b' : 'z'}">↓${b.behind}</span><span class="${b.ahead ? 'a' : 'z'}">↑${b.ahead}</span></span>`;
+  const barMax = bs => Math.max(1, ...bs.map(b => Math.max(b.ahead, b.behind)));
+  const barW = (n, max) => n === 0 ? '0px' : `${Math.max(2, Math.round(56 * n / max))}px`;
+  const dvbar = (b, max) => `<span class="git-dvbar" title="${b.behind} behind · ${b.ahead} ahead"><i class="bb" style="width:${barW(b.behind, max)}"></i><i class="bc"></i><i class="ba" style="width:${barW(b.ahead, max)}"></i></span>`;
+  const bname = (r, b) => `<span class="git-bname"><span class="git-bname-t">${esc(b.name)}</span>${wt(b)}${sess(sessOn(r, b.name))}</span>`;
   const SYNC_GLYPH = '<svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 0 1-9.4 3.9M2.5 8a5.5 5.5 0 0 1 9.4-3.9"/><path d="M12 1.5v3h-3M4 14.5v-3h3"/></svg>';
-  /* GitSyncButton: nothing when the host cannot spawn or git-sync would refuse
-     the repo (no origin, detached) */
-  const syncBtn = r => {
-    if (!S.spawn || r.state !== 'ok' || !r.hasOrigin || r.branch === null) return '';
-    const on = S.syncing === r.dirName;
-    return `<button class="git-sync${on ? ' on' : ''}" data-gsync="${r.dirName}" title="${on ? 'Open the git-sync chat' : 'Sync ' + esc(r.name)}">${SYNC_GLYPH}${on ? 'Syncing' : 'Sync'}</button>`;
+  /* what Sync would do here, as its label: nothing when the host cannot spawn
+     or git-sync would refuse the repo (no origin, detached) */
+  const syncVerbs = r => {
+    const ks = problems(r).filter(p => !p.calm).map(p => p.k);
+    return [ks.includes('dirty') && 'commit', ks.includes('pull') && 'pull', ks.includes('push') && 'push', ks.includes('trunk') && `update ${r.trunk}`].filter(Boolean);
   };
-  const headRow = (r, g, inner) => `<div class="git-head-row"><div class="git-head">${dot(g)}<span class="git-name">${esc(r.name)}</span>${inner}</div>` +
-    (r.state === 'ok' && syncBtn(r) ? `<span class="git-head-end">${syncBtn(r)}</span>` : '') + '</div>';
+  const syncKey = (r, prim, bare) => {
+    if (!S.spawn || r.state !== 'ok' || !r.hasOrigin || r.branch === null) return '';
+    const on = S.syncing === r.dirName, v = syncVerbs(r);
+    const label = on ? 'Syncing' : v.length && !bare ? `Sync · ${v.join(' + ')}` : 'Sync';
+    return `<button class="git-sync${on ? ' on' : prim ? ' primary' : ''}" data-gsync="${r.dirName}" title="${on ? 'Open the git-sync chat' : 'Sync ' + esc(r.name)}">${SYNC_GLYPH}${esc(label)}</button>`;
+  };
+  /* the repo's keys, the one its worst problem calls for first */
+  const keys = (r, bare) => {
+    const l = levelOf(r);
+    if (l === 'dead') return `<button class="git-key${bare ? '' : ' primary'}">Unpin</button>`;
+    const retry = r.fetchError ? `<button class="git-key${bare ? '' : ' primary'}" data-gretry>Retry fetch</button>` : '';
+    const prim = !bare && !retry && l !== 'quiet' && syncVerbs(r).length > 0;
+    return retry + syncKey(r, prim, bare);
+  };
+  const origin = r => { const f = fetchedText(r); return `<span class="git-origin${f.tone ? ' ' + f.tone : ''}">${f.text}</span>`; };
 
-  /* ── the three layouts ───────────────────────────────────────────────── */
-  const cards = () => '<div class="git-cards">' + REPOS.map(r => {
-    const g = groupOf(r);
-    if (r.state !== 'ok') return `<section class="git-card">${headRow(r, g, '')}<div class="git-state">${esc(stateSentence(r))}</div></section>`;
-    return `<section class="git-card">${headRow(r, g, chipBranch(r) + chipUp(r))}
-      <div class="git-facts">${chipDirty(r)}${chipTrunk(r)}${fetched(r)}</div>${branchList(r)}</section>`;
-  }).join('') + '</div>';
+  /* ── Inbox: one ranked list, a verdict and a key per repo ─────────────── */
+  function inbox() {
+    const rs = ranked();
+    const n = l => rs.filter(r => levelOf(r) === l).length;
+    const show = l => S.filter === 'all' || S.filter === l;
+    const tiles = '<div class="git-ib-sum">' + LEVELS.map(([l, lab]) =>
+      `<button class="git-ib-tile ${l}${S.filter === l ? ' on' : ''}" data-gfilter="${l}" aria-pressed="${S.filter === l}"><span class="big">${n(l)}</span><span class="lab">${dot(l)}${lab}</span></button>`).join('') + '</div>';
+    const item = r => {
+      const l = levelOf(r), p = problems(r), open = S.open.has(r.dirName);
+      const brs = r.branches.length ? `<div class="git-ib-br"><button class="git-ib-tog" data-gopen="${r.dirName}" aria-expanded="${open}"><span class="git-caret">${open ? '▾' : '▸'}</span>${plural(r.branches.length, 'open branch')}${r.mergedCount ? ` · ${r.mergedCount} merged hidden` : ''}</button>
+        ${open ? r.branches.map(b => `<div class="git-ib-brow">${bname(r, b)}${dv(b)}<span class="git-age">${b.ago}</span></div>`).join('') : ''}</div>` : '';
+      return `<article class="git-panel git-ib-item"><div class="git-ib-top">${dot(l)}
+        <div class="git-ib-main"><div class="git-head"><span class="git-name">${esc(r.name)}</span><span class="git-chip branch">${esc(branchChip(r))}</span>${sess(r.branch && sessOn(r, r.branch))}</div>
+        <div class="git-ib-verdict">${esc(p[0].text)}.</div>
+        ${p.length > 1 ? `<ul class="git-ib-steps">${p.slice(1).map(x => `<li class="${x.calm ? 'calm' : x.sev >= 3 ? 'hot' : ''}">${esc(x.text)}</li>`).join('')}</ul>` : ''}</div>
+        <div class="git-ib-keys">${keys(r)}</div></div>${brs}</article>`;
+    };
+    const line = r => {
+      const l = levelOf(r);
+      const facts = l === 'dead' ? stateSentence(r) : [...(r.branch ? [r.branch] : []), ...problems(r).map(p => p.short), fetchedText(r).text].join(' · ');
+      return `<div class="git-ib-line">${dot(l)}<span class="git-name">${esc(r.name)}</span><span class="git-ib-facts">${esc(facts)}</span>${keys(r, true)}</div>`;
+    };
+    const loud = rs.filter(r => (levelOf(r) === 'needs' || levelOf(r) === 'look') && show(levelOf(r)));
+    const calm = rs.filter(r => levelOf(r) === 'quiet' && show('quiet'));
+    const dead = rs.filter(r => levelOf(r) === 'dead' && show('dead'));
+    return tiles + (loud.length ? `<div class="git-ib-list">${loud.map(item).join('')}</div>` : '')
+      + (calm.length ? `<div class="git-gh">All good</div><div class="git-ib-quiet">${calm.map(line).join('')}</div>` : '')
+      + (dead.length ? `<div class="git-gh">Can't read</div><div class="git-ib-quiet">${dead.map(line).join('')}</div>` : '');
+  }
 
-  const COLS = 7;
-  const table = () => {
+  /* ── Matrix: a row per repo, a column per check, colour only on failure ── */
+  const CHECKS = [
+    ['Working tree', r => r.uncommitted ? { c: sessOn(r, r.branch) ? 'meh' : 'bad', t: `${r.uncommitted} uncommitted` } : { c: 'ok', t: 'clean' }],
+    ['Pushed', r => !r.hasOrigin ? { c: 'meh', t: 'no remote' } : !(r.upstream && r.upstream.counts) ? { c: 'na', t: '—' } : r.upstream.counts.ahead ? { c: 'meh', t: `${r.upstream.counts.ahead} unpushed` } : { c: 'ok', t: 'yes' }],
+    ['Up to date', r => !(r.upstream && r.upstream.counts) ? { c: 'na', t: '—' } : r.upstream.counts.behind ? { c: 'bad', t: `${r.upstream.counts.behind} to pull` } : { c: 'ok', t: 'yes' }],
+    ['Trunk', r => !r.trunkVsOrigin ? { c: 'na', t: '—' } : r.trunkVsOrigin.ahead || r.trunkVsOrigin.behind ? { c: 'meh', t: delta(r.trunkVsOrigin, r.trunk) } : { c: 'ok', t: `${r.trunk} = origin` }],
+    ['Origin data', r => S.clock === 'fetching' && r.hasOrigin ? { c: 'live', t: 'fetching…' } : r.fetchError ? { c: 'bad', t: `${TROUBLE[r.fetchError]} · ${r.fetched}` } : r.fetched ? { c: 'ok', t: r.fetched } : { c: 'na', t: 'never' }],
+    ['Branches', r => { const s = r.branches.filter(isStale).length; return s ? { c: 'meh', t: `${r.branches.length} · ${s} stale` } : r.branches.length ? { c: 'ok', t: `${r.branches.length}` } : { c: 'na', t: '0' }; }]
+  ];
+  /* one compact key a row: Retry when the fetch failed, else a bare Sync */
+  const mxKey = (r, prim) => r.fetchError ? `<button class="git-key${prim ? ' primary' : ''}" data-gretry>Retry</button>` : syncKey(r, prim, true);
+  const delta = (d, trunk) => `${trunk}${d.behind ? ` ↓${d.behind}` : ''}${d.ahead ? ` ↑${d.ahead}` : ''}`;
+  function matrix() {
+    const rs = ranked(), ok = rs.filter(r => r.state === 'ok');
+    const head = CHECKS.map(([lab, f]) => { const n = ok.filter(r => ['bad', 'meh'].includes(f(r).c)).length; return `<th>${lab}<span class="git-mx-cnt${n ? '' : ' z'}">${n}</span></th>`; }).join('');
     let rows = '';
-    for (const r of REPOS) {
+    for (const r of rs) {
+      const l = levelOf(r);
       if (r.state !== 'ok') {
-        rows += `<tr class="git-tr off"><td class="git-tname"><span class="git-caret"></span>${esc(r.name)}</td><td colspan="${COLS - 1}" class="git-state">${esc(stateSentence(r))}</td></tr>`;
+        rows += `<tr class="off"><td class="git-mx-rn"><span class="git-head"><span class="git-caret"></span>${dot(l)}<span class="git-name">${esc(r.name)}</span></span></td><td colspan="${CHECKS.length}"><span class="git-cell na">${esc(stateSentence(r))}</span></td><td class="git-mx-act">${keys(r, true)}</td></tr>`;
         continue;
       }
-      const open = S.open.has(r.dirName);
-      rows += `<tr class="git-tr${open ? ' open' : ''}" data-gtoggle="${r.dirName}">
-        <td class="git-tname"><button class="git-rowbtn" aria-expanded="${open}"><span class="git-caret">${open ? '▾' : '▸'}</span>${esc(r.name)}</button></td>
-        <td>${chipBranch(r)} ${chipUp(r)}</td><td>${chipDirty(r)}</td><td>${chipTrunk(r)}</td>
-        <td class="n">${r.unmergedTotal}</td><td>${fetched(r)}</td><td class="git-sync-td">${syncBtn(r)}</td></tr>`;
+      const open = S.row === r.dirName;
+      rows += `<tr class="git-mx-r" data-grow="${r.dirName}"><td class="git-mx-rn"><span class="git-head"><span class="git-caret">${open ? '▾' : '▸'}</span>${dot(l)}<span class="git-name">${esc(r.name)}</span></span><span class="git-mx-sub">${esc(branchChip(r))}</span></td>` +
+        CHECKS.map(([, f]) => { const v = f(r); return `<td><span class="git-cell ${v.c}">${esc(v.t)}</span></td>`; }).join('') +
+        `<td class="git-mx-act">${mxKey(r, l === 'needs')}</td></tr>`;
       if (!open) continue;
       const max = barMax(r.branches);
-      if (r.branches.length === 0) rows += `<tr class="git-sub"><td colspan="${COLS}" class="git-note">no open branches</td></tr>`;
-      for (const b of visible(r)) rows += `<tr class="git-sub"><td colspan="2">${bname(b)}</td>
-        <td colspan="${COLS - 3}"><span class="git-div">${bar(b, max)}${nums(b)}</span></td><td class="git-age">${b.ago}</td></tr>`;
-      if (r.branches.length > SHOWN && !S.more.has(r.dirName))
-        rows += `<tr class="git-sub"><td colspan="${COLS}"><button class="git-more" data-gmore="${r.dirName}">+${r.branches.length - SHOWN} more</button></td></tr>`;
-      if (r.mergedCount > 0) rows += `<tr class="git-sub"><td colspan="${COLS}" class="git-note">${r.mergedCount} merged branches hidden</td></tr>`;
+      rows += `<tr class="git-mx-x"><td colspan="${CHECKS.length + 2}">${r.branches.length ? r.branches.map(b =>
+        `<div class="git-in-br${isStale(b) ? ' stale' : ''}">${bname(r, b)}${dvbar(b, max)}${dv(b)}<span class="git-age">${b.ago}</span></div>`).join('') : '<span class="git-age">No open branches.</span>'}
+        ${r.mergedCount ? `<div class="git-age git-mx-note">${r.mergedCount} merged branches hidden</div>` : ''}</td></tr>`;
     }
-    return `<div class="git-table-wrap"><table class="git-table"><thead><tr><th>Repo</th><th>On</th><th>Uncommitted</th><th>Trunk vs origin</th><th class="n">Branches</th><th>Fetched</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  };
+    return `<div class="git-panel git-mx-wrap"><table class="git-mx"><thead><tr><th>Repo</th>${head}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="git-mx-legend"><span class="git-cell ok">healthy</span><span class="git-cell bad">needs you</span><span class="git-cell meh">worth a look</span><span>— not applicable</span><span>↓ behind · ↑ ahead</span></div>`;
+  }
 
-  const triage = () => '<div class="git-tri">' + GROUPS.map(([key, label]) => {
-    const rs = REPOS.filter(r => groupOf(r) === key);
-    if (rs.length === 0) return '';
-    return `<div class="git-tri-group"><div class="git-tri-h">${label}</div>` + rs.map(r => {
-      if (r.state !== 'ok') return `<section class="git-arow quiet unreadable"><div class="git-head">${dot('unreadable')}<span class="git-name">${esc(r.name)}</span><span class="git-summary">${esc(stateSentence(r))}</span></div></section>`;
-      if (key === 'quiet') {
-        const open = S.quietOpen.has(r.dirName);
-        const sum = [branchChip(r), uncommittedText(r.uncommitted), trunkText(r), fetchedText(r).text].join(' · ');
-        return `<section class="git-arow quiet${open ? ' open' : ''}"><div class="git-qhead">
-          <button class="git-head git-rowbtn" data-gquiet="${r.dirName}" aria-expanded="${open}">${dot('quiet')}<span class="git-name">${esc(r.name)}</span><span class="git-summary">${esc(sum)}</span><span class="git-caret">${open ? '▾' : '▸'}</span></button>
-          ${syncBtn(r)}</div>${open ? branchList(r) : ''}</section>`;
-      }
-      return `<section class="git-arow">${headRow(r, key, chipBranch(r) + chipUp(r) + chipDirty(r) + chipTrunk(r) + fetched(r))}${branchList(r)}</section>`;
-    }).join('') + '</div>';
-  }).join('') + '</div>';
+  /* ── Inspector: the Sessions split — ranked list, one repo in depth ───── */
+  function inspector() {
+    const rs = ranked();
+    /* the list is the Sessions split's own `.card.list` of `.lrow`s: the dot,
+       the name with its branch pill, a figure on the right (the checked-out
+       branch against its upstream, where Sessions puts context %), and an
+       act-line of status pill · what is wrong · how old origin's data is */
+    const row = r => {
+      const l = levelOf(r), p = problems(r)[0];
+      const why = l === 'quiet' ? (p ? p.short : 'clean · in step') : p.text;
+      const c = r.state === 'ok' && r.upstream && r.upstream.counts;
+      const f = r.state === 'ok' && fetchedText(r);
+      return `<div class="lrow${S.pick === r.dirName ? ' selected' : ''}" data-gpick="${r.dirName}">${dot(l)}
+        <span class="nm"><span class="t">${esc(r.name)}</span>${r.state === 'ok' ? `<span class="tagpill branch">${esc(branchChip(r))}</span>` : ''}</span>
+        <span class="pct git-in-fig">${c ? dv(c) : ''}</span>
+        <div class="act-line"><span class="status g-${l}">${STATUS[l]}</span><span>·</span><span class="act${l === 'needs' ? ' hot' : ''}">${esc(why)}</span>${f ? `<span class="ago${f.tone ? ' ' + f.tone : ''}">${f.tone === 'live' ? 'fetching…' : r.fetched || 'never'}</span>` : ''}</div></div>`;
+    };
+    const list = `<div class="card list"><div class="list-h"><span class="ct">Repos</span><span class="tagpill">${rs.length}</span></div>${rs.map(row).join('')}</div>`;
+    const r = REPOS.find(x => x.dirName === S.pick) || rs[0];
+    const l = levelOf(r);
+    const ck = (k, c, v, h) => `<div class="kv git-in-ck ${c}"><span class="k">${k}</span><span class="v">${esc(v)}</span>${h ? `<span class="h">${esc(h)}</span>` : ''}</div>`;
+    let body;
+    if (r.state !== 'ok') {
+      body = `<div class="git-in-checks">${ck('State', 'meh', stateSentence(r), r.state === 'missing' ? 'The folder moved or was deleted. Unpin it, or pin it again at its new path under Projects.' : 'No .git above this folder. Pin the repo root instead.')}</div>`;
+    } else {
+      const c = r.upstream && r.upstream.counts, d = r.trunkVsOrigin, agent = r.branch && sessOn(r, r.branch), f = fetchedText(r);
+      const checks = [
+        r.uncommitted ? ck('Working tree', agent ? 'meh' : 'bad', `${r.uncommitted} uncommitted`, agent ? 'An agent is working here, so this is expected.' : 'Nobody is on this branch. Commit or stash.') : ck('Working tree', 'ok', 'Clean', 'Nothing to commit.'),
+        r.branch === null ? ck('Your branch', 'meh', `Detached at ${r.detachedSha}`, 'Check out a branch before committing.')
+          : !c || r.branch === r.trunk ? ck('Your branch', 'ok', r.branch, r.branch === r.trunk ? 'On trunk, tracked beside.' : 'No upstream set.')
+          : ck('Your branch', c.behind ? 'bad' : c.ahead ? 'meh' : 'ok', `↓${c.behind} ↑${c.ahead} vs ${r.upstream.upstream}`, c.behind ? 'Pull before you push.' : c.ahead ? 'Commits on this machine only.' : 'In step.'),
+        !d ? ck('Trunk', r.hasOrigin ? 'ok' : 'meh', r.hasOrigin ? r.trunk : 'No remote', r.hasOrigin ? '' : 'Nothing here is backed up.')
+          : ck('Trunk', d.behind || d.ahead ? 'meh' : 'ok', d.behind || d.ahead ? `${r.trunk} ↓${d.behind} ↑${d.ahead}` : `${r.trunk} = origin`, d.behind ? `Local ${r.trunk} is stale; new branches would start old.` : 'In step with origin.'),
+        r.fetchError ? ck('Origin data', 'bad', `${r.fetched} old · ${TROUBLE[r.fetchError]}`, 'Run gh auth login in a terminal, then Retry fetch.')
+          : ck('Origin data', f.tone === 'live' ? 'live' : 'ok', f.tone === 'live' ? 'fetching…' : r.fetched ? `${r.fetched} old` : 'Never fetched', r.fetched ? 'Auto-fetch every 5 min.' : 'No remote to fetch.')
+      ].join('');
+      const max = barMax(r.branches);
+      const row = b => `<div class="git-in-br${isStale(b) ? ' stale' : ''}">${bname(r, b)}${dvbar(b, max)}${dv(b)}<span class="git-age">${b.ago}</span></div>`;
+      const act = r.branches.filter(b => !isStale(b)), st = r.branches.filter(isStale);
+      body = `<div class="git-in-checks">${checks}</div>
+        <div class="git-in-sec"><div class="git-in-hd"><b>Active branches</b><span>${act.length} · ↓ behind ${esc(r.trunk)} · ↑ ahead</span></div>${act.length ? act.map(row).join('') : '<div class="git-age git-in-none">None.</div>'}</div>
+        ${st.length ? `<div class="git-in-sec"><div class="git-in-hd"><b>Stale</b><span>${st.length} · ≥ 20 behind or idle a week</span></div>${st.map(row).join('')}</div>` : ''}
+        ${st.length || r.mergedCount ? `<div class="git-in-foot"><span>${r.mergedCount ? `${r.mergedCount} merged branches can be deleted.` : ''} ${st.length ? `${plural(st.length, 'stale branch')} to review.` : ''}</span>${S.spawn && r.hasOrigin ? `<button class="git-sync">${SYNC_GLYPH}Clean up via Sync</button>` : ''}</div>` : ''}`;
+    }
+    return `<div class="split git-in">${list}<div class="card inspect git-in-pane">
+      <div class="ins-head"><div class="who2"><div class="ct">${esc(r.name)}</div>
+        <div class="ins-meta">${dot(l)}<span class="status g-${l}">${STATUS[l]}</span>${r.state === 'ok' ? `<span class="tagpill branch">${esc(branchChip(r))}</span>` : ''}<span class="git-in-path">${esc(r.path)}</span></div></div>
+        ${r.state === 'ok' ? '<button class="git-key">Open folder</button>' : ''}${keys(r)}</div>
+      ${body}</div></div>`;
+  }
+
+  /* ── Branches: every open branch across the pins, by what it needs ────── */
+  function branches() {
+    const all = REPOS.filter(r => r.state === 'ok').flatMap(r => r.branches.map(b => ({ r, b, s: sessOn(r, b.name) })));
+    const col = x => x.s ? 'agent' : isStale(x.b) ? 'stale' : x.b.behind === 0 ? 'ready' : 'drift';
+    const COLS = [['agent', 'Agent on it', 'a live session has it checked out'], ['ready', 'Ready', '0 behind trunk, nothing to rebase'], ['drift', 'Drifting', 'behind trunk, still recent'], ['stale', 'Stale', '≥ 20 behind or idle a week']];
+    /* no repo strip: what the repo knows lands on its branches' cards — the
+       checked-out branch carries the working tree and upstream facts and the
+       Sync key, and a failed fetch marks every card whose numbers it froze */
+    const card = (k, { r, b, s }) => {
+      const head = r.branch === b.name;
+      const facts = head ? '<span class="git-chip">checked out</span>' + problems(r).filter(p => ['dirty', 'push', 'pull'].includes(p.k))
+        .map(p => `<span class="git-chip ${p.calm ? 'dim' : p.sev >= 3 ? 'amber' : 'mustard'}">${esc(p.short)}</span>`).join('') : '';
+      const stale = r.fetchError ? `<span class="git-bb-warn">${TROUBLE[r.fetchError]} · origin ${r.fetched} old</span>` : '';
+      const act = [head && syncKey(r, false, true), k === 'ready' && '<button class="git-key">Open PR</button>', k === 'stale' && '<button class="git-key">Delete…</button>'].filter(Boolean).join('');
+      return `<div class="git-panel git-bb-card${k === 'stale' ? ' stale' : ''}"><span class="git-bb-bn">${esc(b.name)}</span>
+        <span class="git-bb-ln"><span class="git-bb-repo">${esc(r.name)}</span>${wt(b)}</span>
+        <span class="git-bb-ln">${dv(b)}<span class="git-age">${b.ago}</span></span>
+        ${facts ? `<span class="git-bb-ln start">${facts}</span>` : ''}${stale}${s ? `<span class="git-bb-ln start">${sess(s)}</span>` : ''}
+        ${act ? `<span class="git-bb-ln end">${act}</span>` : ''}</div>`;
+    };
+    /* a pin with no branch to draw gets one line, not a card */
+    const off = REPOS.filter(r => r.state !== 'ok');
+    const cols = COLS.map(([k, lab, hint]) => {
+      const items = all.filter(x => col(x) === k);
+      return `<div class="git-bb-col"><div class="git-bb-ch"><b>${lab}</b> <span class="git-age">${items.length}</span><span class="git-bb-hint">${hint}</span></div>${items.length ? items.map(x => card(k, x)).join('') : '<div class="git-bb-empty">Nothing here.</div>'}</div>`;
+    }).join('');
+    return `<div class="git-bb-cols">${cols}</div>` + (off.length ? `<div class="git-bb-note">Not on the board: ${off.map(r => `${esc(r.name)} (${esc(problems(r)[0].short)})`).join(', ')}. <button class="git-link" data-glayout="inbox">Open Inbox</button></div>` : '');
+  }
 
   /* ── GitClockChip: two meters and the popover ────────────────────────── */
   const meter = (label, value, fraction, tone) =>
@@ -4021,7 +4244,7 @@ At the start of every session, invoke /caveman.
     return rows.length ? `<div class="git-trouble">${rows.join('')}</div>` : '';
   };
   const clockChip = () => `<div class="git-clock-root">
-      <button class="git-clock" data-gpop aria-expanded="${S.pop}"><span class="git-clock-meters">${syncMeter('SYNC')} ${fetchMeter('FETCH')}</span><span class="git-clock-caret">▾</span></button>
+      <button class="git-clock" data-gpop aria-expanded="${S.pop}"><span class="git-clock-meters">${syncMeter('SYNC')} ${fetchMeter('FETCH')}</span><svg class="git-clock-caret" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg></button>
       ${S.pop ? `<div class="git-pop">
         <div class="git-pop-row"><span class="git-pop-text"><span class="git-pop-name">Local sync</span>
           <span class="git-pop-sub${S.poll === 'failed' ? ' warn' : ''}">${S.poll === 'failed' ? "couldn't update · retrying every 30s" : 're-reads the repos on disk · every 30s'}</span></span>
@@ -4041,16 +4264,17 @@ At the start of every session, invoke /caveman.
       <span class="vsp"></span>${tb('data-gspawn', 'x', 'host can spawn', S.spawn)}
     </div>`;
 
+  const GIT_LAYOUTS = { inbox: ['Inbox', inbox], matrix: ['Matrix', matrix], inspector: ['Inspector', inspector], branches: ['Branches', branches] };
   const body = () => {
     if (S.load === 'loading') return '<div class="git-empty">Loading…</div>';
     if (S.load === 'failed') return `<div class="git-empty">Couldn't load git stats. Retrying every 30s.</div>`;
     if (S.load === 'nopins') return '<div class="git-empty">No pinned projects yet. Pin one under <button class="git-link" data-go="mg-projects">Projects</button>.</div>';
-    return S.layout === 'table' ? table() : S.layout === 'triage' ? triage() : cards();
+    return GIT_LAYOUTS[S.layout][1]();
   };
 
   function renderGit() {
-    const sw = [['cards', 'Cards'], ['table', 'Table'], ['triage', 'Triage']]
-      .map(([k, l]) => `<button class="${S.layout === k ? 'on' : ''}" data-glayout="${k}">${l}</button>`).join('');
+    const sw = Object.entries(GIT_LAYOUTS)
+      .map(([k, [l]]) => `<button class="${S.layout === k ? 'on' : ''}" data-glayout="${k}" aria-pressed="${S.layout === k}">${l}</button>`).join('');
     gitRoot.innerHTML = gitBar() + `<div class="git-view">
       <div class="band"><div class="ct">Management · Git</div>
         <div class="cs">Local state of your pinned repos. Fetches from origin on the timer set in Settings; nothing here pulls or pushes.</div></div>
@@ -4070,9 +4294,11 @@ At the start of every session, invoke /caveman.
     else if (hit('[data-gpop]')) S.pop = !S.pop;
     else if (hit('.git-pop')) return;
     else if ((el = hit('[data-gsync]'))) { const d = el.dataset.gsync; S.syncing = S.syncing === d ? null : d; }
-    else if ((el = hit('[data-gmore]'))) S.more.add(el.dataset.gmore);
-    else if ((el = hit('[data-gquiet]'))) { const d = el.dataset.gquiet; S.quietOpen.has(d) ? S.quietOpen.delete(d) : S.quietOpen.add(d); }
-    else if ((el = hit('[data-gtoggle]'))) { const d = el.dataset.gtoggle; S.open.has(d) ? S.open.delete(d) : S.open.add(d); }
+    else if ((el = hit('[data-gfilter]'))) { const f = el.dataset.gfilter; S.filter = S.filter === f ? 'all' : f; }
+    else if ((el = hit('[data-gopen]'))) { const d = el.dataset.gopen; S.open.has(d) ? S.open.delete(d) : S.open.add(d); }
+    else if ((el = hit('[data-gpick]'))) S.pick = el.dataset.gpick;
+    else if (hit('button')) { if (!S.pop) return; S.pop = false; }
+    else if ((el = hit('[data-grow]'))) { const d = el.dataset.grow; S.row = S.row === d ? null : d; }
     else if (S.pop) S.pop = false;
     else return;
     renderGit();
@@ -4154,7 +4380,7 @@ At the start of every session, invoke /caveman.
   const pinBody = () => LAYOUTS[S.pinLayout][1]();
   const paintBody = () => { document.getElementById('pin-body').innerHTML = pinBody(); };
   /* the layout is the page's own control, the same `.seg` pills Git's
-     Cards | Table | Triage uses, persisted the same way */
+     Inbox | Matrix | Inspector | Branches uses, persisted the same way */
   const pinSeg = () => `<div class="seg">${Object.entries(LAYOUTS)
     .map(([k, [l]]) => `<button class="${S.pinLayout === k ? 'on' : ''}" data-playout="${k}" aria-pressed="${S.pinLayout === k}">${l}</button>`).join('')}</div>`;
 
