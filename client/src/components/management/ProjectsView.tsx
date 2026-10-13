@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import { usePinReorder } from '../../hooks/usePinReorder';
 import { usePins } from '../../hooks/usePins';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import { formatAgo } from '../../lib/format';
-import { applyPinOrder } from '../../lib/pins';
 import {
   DEFAULT_PROJECTS_LAYOUT, LIST_SUB_OFFERS, LIST_SUB_PINNED, PROJECTS_BAND_SUB, PROJECTS_LAYOUTS, PROJECTS_MISSING,
   isProjectsLayout, noOffersText, noPinsText, projectDir, splitProjects, type ProjectsLayout,
@@ -28,8 +28,8 @@ interface Item {
   onClick: () => void;
   /** A pin's lead column: its grip, or the empty cell holding the grip's place while the filter hides it. Undefined for an offer, which has none. */
   grip?: ReactNode;
-  /** The pin being dragged. */
-  drag: boolean;
+  /** The pin being dragged: it dims in its slot until release. */
+  src: boolean;
   /** A pin's element, whose box the drop rule reads. */
   ref?: (el: HTMLElement | null) => void;
 }
@@ -45,8 +45,9 @@ const NO_PINS: PinRow[] = [];
  * offered match and clears the box, as in the launch sheet's picker.
  *
  * Every Pinned project, in all three layouts, leads with a grip (`usePinReorder`, pin-reorder spec §4.3): drag it, or ↑/← and ↓/→ on it focused, and the
- * new order saves at once, flashing `Saved` beside the Pinned count. A filtered list has gaps, so while the filter is non-blank each pin keeps an empty
- * cell in the grip's place and nothing can be dragged.
+ * new order saves, flashing `Saved` beside the Pinned count. The drag is a drop line (redesign spec §3): nothing moves until release, the source dims,
+ * a bar marks the gap and the Pinned head reads `Moving <name> · <n> of <N>`. A filtered list has gaps, so while the filter is non-blank each pin keeps an
+ * empty cell in the grip's place and nothing can be dragged.
  */
 export default function ProjectsView() {
   const { pins, busy, setPin, reorder } = usePins();
@@ -55,7 +56,8 @@ export default function ProjectsView() {
   const [query, setQuery] = useState('');
   const [error, setError] = useState<{ dirName: string; text: string } | null>(null);
   const filterBlank = query.trim() === '';
-  const moves = usePinReorder(pins?.pinned ?? NO_PINS, busy, reorder, filterBlank);
+  // The gap the drop line centres in: Lists rows abut, Tiles and Columns sit 6px apart.
+  const moves = usePinReorder(pins?.pinned ?? NO_PINS, busy, reorder, filterBlank, layout === 'lists' ? 0 : 6);
 
   async function act(dirName: string, pinned: boolean, clearQuery: boolean): Promise<void> {
     if (busy) return;
@@ -91,14 +93,16 @@ export default function ProjectsView() {
     grip: !on ? undefined : filterBlank
       ? <button type="button" className="pin-grip" {...moves.grip(r.dirName)}>⠿</button>
       : <span aria-hidden="true" />,
-    drag: moves.dragging === r.dirName,
+    src: moves.dragging === r.dirName,
     ref: on ? moves.rowRef(r.dirName) : undefined,
   });
-  const pinItems = (moves.dragOrder ? applyPinOrder(pinned, moves.dragOrder) : pinnedShown).map(r => item(r, true));
+  const pinItems = pinnedShown.map(r => item(r, true));
   const offerItems = offersShown.map(r => item(r, false));
   const noPins = <div className="pin-note">{noPinsText(pinned.length)}</div>;
   const noOffers = <div className="pin-note">{noOffersText(offers.length)}</div>;
-  const saved = moves.headError
+  const saved = moves.headLabel
+    ? <span className="pin-saved live" role="status">{moves.headLabel}</span>
+    : moves.headError
     ? <span className="pin-saved err" role="status">{moves.headError}</span>
     : <span className={moves.saved ? 'pin-saved' : 'pin-saved off'} role="status" aria-hidden={!moves.saved}>Saved</span>;
   const pinGroup = <TileGroup title="Pinned" total={pinned.length} items={pinItems} empty={noPins} aside={saved} />;
@@ -146,6 +150,19 @@ export default function ProjectsView() {
         />
       </div>
       <div>{body}</div>
+      {/* On body, outside `.shell`: its zoom would scale a fixed box away from the viewport pixels the pointer and the boxes are measured in. */}
+      {createPortal(
+        <>
+          {moves.ghost && <div className="pj-ghost" ref={moves.ghostRef}><b>⠿</b>{moves.ghost.name}<i>{moves.ghost.pos}</i></div>}
+          {moves.mark && (
+            <div
+              className={`pj-mark ${moves.mark.orient}`}
+              style={{ left: moves.mark.left, top: moves.mark.top, width: moves.mark.width, height: moves.mark.height }}
+            />
+          )}
+        </>,
+        document.body
+      )}
     </div>
   );
 }
@@ -164,8 +181,8 @@ function PinButton({ it }: { it: Item }) {
   return <button type="button" className="qp-term" disabled={it.disabled} onClick={it.onClick}>{it.label}</button>;
 }
 
-/** The class suffix for a pin's lead column and its drag lift. */
-const leadCls = (it: Item): string => `${it.grip === undefined ? '' : ' g'}${it.drag ? ' drag' : ''}`;
+/** The class suffix for a pin's lead column and the dimmed drag source. */
+const leadCls = (it: Item): string => `${it.grip === undefined ? '' : ' g'}${it.src ? ' src' : ''}`;
 
 /** A group head — with `Saved` after it on Pinned — and its tiles — a pin a paper tile, an offer its dashed outline — or the group's empty note. */
 function TileGroup({ title, total, items, empty, aside }: { title: string; total: number; items: Item[]; empty: ReactNode; aside?: ReactNode }) {

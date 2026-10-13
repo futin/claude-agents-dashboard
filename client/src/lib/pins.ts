@@ -1,8 +1,8 @@
 /**
  * pins.ts — the pure pieces of the pinned-projects UI (#161): the picker's
  * filter, `~` path shortening, the split a picker row sets its path from, and
- * the reorder helpers behind `usePins.reorder`, and `dropIndex`, the drop rule Management › Projects' grip drags by. Shared by the launch sheet and
- * Management › Projects; unit-tested server-side.
+ * the reorder helpers behind `usePins.reorder`, `dropIndex`, the drop rule Management › Projects' grip drags by, and `dropMark`, where that drag draws its
+ * drop line. Shared by the launch sheet and Management › Projects; unit-tested server-side.
  */
 
 /**
@@ -79,4 +79,24 @@ export function dropIndex(items: readonly { name: string; rect: PinRect }[], dra
   }
   return others.filter(({ rect: r }) =>
     pointer.y > r.bottom || (r.top <= pointer.y && pointer.y <= r.bottom && pointer.x > (r.left + r.right) / 2)).length;
+}
+
+/** The drop line's box in viewport pixels: a 3px bar, horizontal between list rows, vertical between grid tiles. */
+export interface DropMark { orient: 'h' | 'v'; left: number; top: number; width: number; height: number }
+
+/**
+ * Where to draw the drop line for a drag `dropIndex` put at `to`: centred in the `gap` before the item the pin would land ahead of, or after the last one
+ * for an end drop. The bar sits in the gap rather than over an item's edge so it never covers a neighbour's text. Same one-column test as `dropIndex`. Null
+ * for a `dragged` name not in `items`, or when no other item exists to mark against.
+ */
+export function dropMark(items: readonly { name: string; rect: PinRect }[], dragged: string, to: number, gap: number): DropMark | null {
+  if (!items.some(it => it.name === dragged)) return null;
+  const others = items.filter(it => it.name !== dragged);
+  if (others.length === 0) return null;
+  const left0 = items[0].rect.left;
+  const column = items.every(it => Math.abs(it.rect.left - left0) <= 1);
+  const end = to >= others.length;
+  const r = end ? others[others.length - 1].rect : others[to].rect;
+  if (column) return { orient: 'h', left: r.left, width: r.right - r.left, height: 3, top: (end ? r.bottom + gap : r.top - gap) - 1.5 };
+  return { orient: 'v', top: r.top, height: r.bottom - r.top, width: 3, left: (end ? r.right + gap : r.left - gap) - 1.5 };
 }

@@ -1888,6 +1888,8 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pin-saved.off{opacity:0}
 /* .pin-sub.err is scoped to .pin-sub, so a refused reorder shown here needs its own rule or it reads as a success */
 .pin-saved.err{color:var(--red)}
+/* the drag's `Moving … · n of N` in place of `Saved` */
+.pin-saved.live{color:var(--cyan);font-weight:500}
 @media (prefers-reduced-motion:reduce){.pin-saved{transition:none}}
 /* The pin drag grip (pin-reorder spec §4.4), placed by Management › Projects' `.pj-tile.g` / `.pj-srw.g` below: stretched to its item so the touch target
    grows toward §8.2's 44px floor, and the only element with `touch-action:none`, so the page still scrolls from the rest of the item. */
@@ -1945,15 +1947,27 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pj-srw .set-control{gap:12px}
 .pj-srw.gone .set-name{color:var(--ink2)}
 /* Pinned's grip (#193): every pinned tile or list row leads with a 28px column — the `.pin-grip`, or an empty cell holding its place while the filter hides
-   it — spanning the item's full height. A tile, stacked, puts the id over the foot beside it; a phone list row, the label over the control. The dragged
-   item lifts: the one transient exception to "no lift" above. */
+   it — spanning the item's full height. A tile, stacked, puts the id over the foot beside it; a phone list row, the label over the control. A drag lifts
+   nothing (spec §3 drop line): the source dims in its slot, a ghost chip follows the pointer, and a bar marks the gap. Ghost and bar are portalled to
+   body, outside `.shell`'s zoom, because they are fixed boxes in viewport pixels. */
 .pj-tile.g{display:grid;grid-template-columns:28px minmax(0,1fr);grid-template-rows:1fr auto;column-gap:8px;padding-left:8px}
 .pj-tile.g>:first-child,.pj-srw.g>:first-child{grid-row:1/span 2}
 .set-row.pj-srw.g{display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:8px;row-gap:10px;align-items:start}
 .set-row.pj-srw.g>.set-control{grid-column:2}
-.pj-tile.drag,.pj-srw.drag{background:var(--strip-hi);box-shadow:0 8px 24px var(--shadow2);position:relative;z-index:2;cursor:grabbing}
-.pj-srw.drag{border-radius:10px;border-top-color:transparent}
-.pj-tile.drag .pin-grip,.pj-srw.drag .pin-grip{cursor:grabbing;color:var(--cyan)}
+.pj-tile.src{opacity:.45;border-style:dashed;border-color:var(--hairline2)}
+.pj-srw.src{opacity:.45}
+.pj-tile.src .pin-grip,.pj-srw.src .pin-grip{color:var(--cyan);background:var(--strip-hi)}
+body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
+.pj-ghost{position:fixed;z-index:50;pointer-events:none;display:flex;align-items:center;gap:8px;padding:8px 14px 8px 10px;background:var(--strip);border-radius:12px;box-shadow:0 0 0 2px var(--cyan),0 8px 24px var(--shadow2);font-family:var(--font);font-size:14px;font-weight:500;color:var(--ink);white-space:nowrap;transform:rotate(-1.5deg)}
+.pj-ghost b{font-size:15px;font-weight:400;color:var(--cyan)}
+.pj-ghost i{font-style:normal;font-size:12px;font-weight:400;color:var(--ink3)}
+.pj-mark{position:fixed;z-index:49;pointer-events:none;background:var(--cyan);border-radius:999px}
+.pj-mark::before,.pj-mark::after{content:"";position:absolute;width:8px;height:8px;border-radius:999px;background:var(--cyan)}
+.pj-mark.h::before{left:-4px;top:-3px}
+.pj-mark.h::after{right:-4px;top:-3px}
+.pj-mark.v::before{top:-4px;left:-2.5px}
+.pj-mark.v::after{bottom:-4px;left:-2.5px}
+@media (prefers-reduced-motion:reduce){.pj-ghost{transform:none}}
 @media (min-width:768px){
   .pj-cols .pj-tile.g{grid-template-columns:28px minmax(0,1fr) auto;grid-template-rows:auto;align-items:center}
   .set-row.pj-srw.g{grid-template-columns:28px minmax(0,1fr) auto;column-gap:16px;align-items:center}
