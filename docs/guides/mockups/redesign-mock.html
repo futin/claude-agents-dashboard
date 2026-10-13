@@ -624,7 +624,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
   background:var(--bg-surface);color:var(--text-primary);
   vertical-align:3px;margin-left:8px;
 }
-.scope.shared{background:var(--green-200);color:var(--green-600)}
+.scope.shared{background:var(--green-200);color:var(--green-ink)}
 .scope i{width:6px;height:6px;border-radius:var(--r-full);background:var(--text-secondary)}
 .scope.shared i{background:currentColor}
 .setcols{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
@@ -1601,7 +1601,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 /* Projects: PinPicker on the app ground, no card around it, the projects as
    tiles (mock-only `.pj-*`) */
 .pin-pick{display:flex;flex-direction:column;gap:8px;min-width:0}
-.pin-filter{height:36px;width:100%;padding:0 12px;font-family:inherit;font-size:13px;border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--bg-surface)}
+.pin-filter{height:36px;width:100%;padding:0 12px;font-family:inherit;font-size:13px;color:var(--text-primary);border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--bg-surface)}
 .pin-filter:focus{outline:none;border-color:var(--text-tertiary)}
 .pj-toolbar .pin-filter{flex:1;width:auto;min-width:200px;height:38px}
 .pin-group{padding:14px 0 2px;font-size:13px;font-weight:500}
@@ -1613,12 +1613,13 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .pj-dir{font-size:12px;line-height:1.45;color:var(--text-tertiary);overflow-wrap:anywhere}
 .pj-age{font-size:13px;color:var(--text-secondary);white-space:nowrap}
 .pj-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
-.pj-tile{display:flex;flex-direction:column;justify-content:space-between;gap:12px;padding:16px;min-width:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--lift-card)}
-.pj-tile.off{background:transparent;border:1px dashed var(--border-strong);box-shadow:none}
+.pj-tile{display:flex;flex-direction:column;justify-content:space-between;gap:12px;padding:16px;min-width:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-lg)}
+.pj-tile.off{background:transparent;border:1px dashed var(--border-strong)}
 .pj-tile.off .pj-name{color:var(--text-secondary)}
 .pj-tile.gone{border-color:var(--amber)}
 .pj-tfoot{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.pj-tile .btn{height:32px}
+.pj-tile .btn,.pj-srw .btn{display:block;height:32px;padding:0 14px;color:var(--text-secondary)}   /* styles.css .qp-term in a pin */
+.pj-tile .btn:hover:not(:disabled),.pj-srw .btn:hover:not(:disabled){color:var(--text-primary)}
 .pj-tile .btn:disabled{color:var(--text-tertiary);cursor:default}
 /* Columns: the two groups side by side, one tile a row */
 .pj-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;align-items:start}
@@ -1634,15 +1635,12 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .pj-srw .nm,.pj-srw .hn{display:block;overflow-wrap:anywhere}
 .pj-srw .hn{color:var(--text-tertiary);font-size:12px}
 .pj-srw .ctl{gap:12px}
-.pj-srw .btn{height:32px}
 .pj-srw .btn:disabled{color:var(--text-tertiary);cursor:default}
 .pj-srw.gone .nm{color:var(--text-secondary)}
 /* Pinned's reorder (live #193, usePinReorder.ts) is a drop line: nothing moves until you let go. The source dims in place (.src), a ghost chip follows
    the pointer (.pj-ghost), and a green bar marks the landing gap (.pj-mark.h in one column, .pj-mark.v in the Tiles grid). The layout never changes
    mid-drag, so tile sizes cannot matter. (Lift and Arrange were drawn and dropped.) */
-.pin-group{display:flex;align-items:center;min-height:30px}
-.pj-listcard .ct{display:flex;align-items:center;gap:0}
-.pin-saved{font-size:12px;font-weight:400;color:var(--text-tertiary);margin-left:10px;letter-spacing:0;transition:opacity .3s}
+.pin-saved{font-size:12px;font-weight:400;color:var(--text-tertiary);margin-left:10px;transition:opacity .3s}
 .pin-saved.off{opacity:0}
 .pin-saved.live{color:var(--cyan);font-weight:500}
 @media (prefers-reduced-motion:reduce){.pin-saved{transition:none}}
@@ -1657,7 +1655,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 
 /* Drop line — the source dims in place, a ghost follows, a bar marks the gap */
-.pj-tile.src{opacity:.45;border-style:dashed;border-color:var(--border-strong);box-shadow:none}
+.pj-tile.src{opacity:.45;border-style:dashed;border-color:var(--border-strong)}
 .pj-srw.src{opacity:.45}
 .pj-tile.src .pin-grip,.pj-srw.src .pin-grip{color:var(--cyan);background:var(--bg-subtle)}
 .pj-ghost{position:fixed;z-index:50;pointer-events:none;display:flex;align-items:center;gap:8px;padding:8px 14px 8px 10px;background:var(--bg-surface);border-radius:var(--r-md);box-shadow:0 0 0 2px var(--cyan),var(--lift-float);font-size:14px;font-weight:500;color:var(--text-primary);white-space:nowrap;transform:rotate(-1.5deg)}
