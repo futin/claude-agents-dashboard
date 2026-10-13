@@ -1419,11 +1419,11 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-dv .b{color:var(--text-secondary)}
 .git-dv .a{color:var(--cyan);font-weight:600}
 .git-dv .z{color:var(--text-tertiary)}
-.git-dvbar{display:inline-grid;grid-template-columns:56px 2px 56px;align-items:center;height:12px}
+.git-dvbar{display:inline-grid;grid-template-columns:56px 2px 56px;column-gap:3px;align-items:center;height:12px}
 .git-dvbar i{display:block;height:6px;border-radius:2px}
-.git-dvbar .bb{justify-self:end;background:var(--text-tertiary)}
-.git-dvbar .ba{justify-self:start;background:var(--cyan)}
-.git-dvbar .bc{height:12px;border-radius:0;background:var(--border-strong)}
+.git-dvbar .bb{justify-self:end;border-radius:2px 0 0 2px;background:var(--text-tertiary)}
+.git-dvbar .ba{justify-self:start;border-radius:0 2px 2px 0;background:var(--cyan)}
+.git-dvbar .bc{height:12px;border-radius:0;background:var(--text-secondary)}
 .git-bname{display:flex;align-items:center;gap:6px;min-width:0}
 .git-bname-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* chips wrap under the name rather than squeeze it */
