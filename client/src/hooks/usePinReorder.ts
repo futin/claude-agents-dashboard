@@ -199,10 +199,13 @@ export function usePinReorder(
       ev.preventDefault();
       finishDrag(false);
     };
+    // A wheel or trackpad scroll moves the items under a still pointer and fires no pointermove; capture also catches an inner scroller.
+    const onScroll = (): void => track();
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
     document.addEventListener('pointercancel', onCancel);
     document.addEventListener('keydown', onKey);
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
     const drag: Drag = {
       id, name, start, x: e.clientX, y: e.clientY, frame: 0, dropAt: null,
       detach: () => {
@@ -210,6 +213,7 @@ export function usePinReorder(
         document.removeEventListener('pointerup', onUp);
         document.removeEventListener('pointercancel', onCancel);
         document.removeEventListener('keydown', onKey);
+        document.removeEventListener('scroll', onScroll, { capture: true });
         cancelAnimationFrame(drag.frame);
       }
     };
