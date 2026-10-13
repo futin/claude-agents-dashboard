@@ -2836,9 +2836,9 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 
 /* ── Management › Git ─────────────────────────────────────────────────────
    DESIGN.md §8.4b: the Usage band, a toolbar of the `.seg` switcher and the
-   Sync/Fetch clock chip, then one of three shapes over the same repo list —
-   Cards, Table, Triage. Every colour is a theme token or a `color-mix` over
-   one. The four data inks are the Triage rule: amber needs you, mustard in
+   Sync/Fetch clock chip, then one of four layouts over the same repo list —
+   Inbox, Matrix, Inspector, Branches. Every colour is a theme token or a
+   `color-mix` over one. The four data inks are the level rule: amber needs you, mustard in
    flight, green quiet, ink3 can't read; the ahead half of a divergence bar is
    `--cyan` and the behind half `--ink3`, as on GitHub's branch list. */
 .git-switch{align-self:flex-start}
@@ -3007,7 +3007,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-mx-wrap{padding:6px;overflow-x:auto}
 .git-mx{width:100%;min-width:760px;border-collapse:collapse;font-size:13px;color:var(--ink)}
 .git-mx th{padding:12px 4px 10px;font-size:11px;font-weight:500;text-align:left;white-space:nowrap;vertical-align:bottom;color:var(--ink2);border-bottom:1px solid var(--hairline2)}
-.git-mx th:first-child,.git-mx th:nth-child(n+2){padding-left:12px}
+.git-mx th{padding-left:12px}
 .git-mx-cnt{display:inline-block;min-width:18px;margin-left:5px;padding:1px 5px;font-size:10px;font-weight:700;text-align:center;border-radius:999px;color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,transparent)}
 .git-mx-cnt.z{color:var(--ink3);background:var(--strip-hi)}
 .git-mx td{height:46px;padding:0 4px;vertical-align:middle;border-bottom:1px solid var(--hairline)}

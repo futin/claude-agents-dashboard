@@ -56,7 +56,7 @@ export default function GitInbox(props: GitLayoutProps) {
               <div key={a.repo.dirName} className="git-ib-line">
                 <GitLevelDot level="quiet" />
                 <span className="git-name">{a.repo.name}</span>
-                <span className="git-ib-facts">{[gitBranchChipText(a.repo), ...a.problems.map(p => p.short), gitFetchedText(a.repo, clock).text].join(' · ')}</span>
+                <span className="git-ib-facts">{[gitBranchChipText(a.repo), ...a.problems.filter(p => p.k !== 'detached').map(p => p.short), gitFetchedText(a.repo, clock).text].join(' · ')}</span>
                 <GitKeys a={a} ctx={props} bare />
               </div>
             ))}

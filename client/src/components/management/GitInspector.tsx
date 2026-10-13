@@ -150,7 +150,7 @@ function Pane({ a, ctx }: { a: GitAssessed; ctx: GitLayoutProps }) {
   const st = listed.filter(b => isStaleBranch(b, nowMs));
   const max = gitBarMax(listed);
   const merged = ok?.mergedCount ?? 0;
-  const footText = [merged > 0 && `${merged} merged branches can be deleted.`, st.length > 0 && `${gitPlural(st.length, 'stale branch')} to review.`].filter(Boolean).join(' ');
+  const footText = [merged > 0 && `${gitPlural(merged, 'merged branch')} can be deleted.`, st.length > 0 && `${gitPlural(st.length, 'stale branch')} to review.`].filter(Boolean).join(' ');
 
   return (
     <>

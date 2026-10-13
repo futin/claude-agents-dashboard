@@ -5,7 +5,8 @@ import { fetchTroubleWord, gitShownFetchError, gitStateSentence, gitTrunkVsOrigi
 
 /**
  * The Git view's one rule, replacing the Triage grouping: every repo is read into problems, each with a severity, and the worst severity is its level
- * (spec §5). Pure: no React, no DOM, and the clock arrives as an argument. Every layout draws from these exports so none can disagree about a repo.
+ * (spec §5). Pure: no React, no DOM, and the caller passes `nowMs`; only `formatAgo` reads `Date.now()`. Every layout draws from these exports so none can
+ * disagree about a repo.
  */
 
 type OkRepo = Extract<RepoGitStats, { state: 'ok' }>;
