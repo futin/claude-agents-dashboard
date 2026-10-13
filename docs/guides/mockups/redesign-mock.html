@@ -1722,13 +1722,13 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 
 /* head */
 .ch-head{display:flex;align-items:center;gap:10px;padding:20px 24px;border-bottom:1px solid var(--border);flex-wrap:wrap}
-.ch-title{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.ch-title{font-size:17px;font-weight:600;letter-spacing:-.01em;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ch-head .sp{flex:1}
 .ch-x{
   width:32px;height:32px;border-radius:var(--r-md);border:1px solid var(--border-strong);
-  background:var(--bg-surface);display:grid;place-items:center;font-size:12px;color:var(--text-secondary);flex:none;
+  background:var(--bg-surface);display:grid;place-items:center;font-size:12px;line-height:1;padding:0;color:var(--text-secondary);flex:none;
 }
-.ch-esc{font-size:10px;color:var(--text-tertiary);border:1px solid var(--border);border-radius:var(--r-xs);padding:2px 6px}
+.ch-x:hover{color:var(--text-primary);border-color:var(--text-tertiary)}
 
 /* ── the message filter, in the foot ─────────────────────────────────────
    The filter narrows the transcript, so the facts sidecar was the wrong home
@@ -1756,7 +1756,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .cm{min-width:0}
 .cm-head{display:flex;align-items:baseline;gap:8px}
 .cm-role{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-secondary)}
-.cm.user .cm-role{color:var(--green-600)}
+.cm.user .cm-role{color:var(--green-ink)}
 .cm-ts{font-size:11px;color:var(--text-tertiary)}
 .cm-text{font-size:14px;line-height:1.6;margin-top:7px}
 .cm-text p{margin:0 0 8px}
@@ -1774,10 +1774,11 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .cm-plan .cm-text{font-size:13px}
 
 /* the pinned wait panels */
-.pbanner{display:flex;align-items:center;gap:10px;padding:13px 24px;background:#FCE7E3;font-size:13px;flex-wrap:wrap}
-.pb-badge{font-size:11px;font-weight:500;padding:3px 9px;border-radius:var(--r-md);background:#F7D2CC;color:#B03B28}
-.pb-text .tool{font-weight:500}
-.pb-note{margin-left:auto;font-size:12px;color:#B03B28}
+.pbanner{display:flex;align-items:center;gap:10px;padding:13px 24px;font-size:13px;flex-wrap:wrap;color:var(--text-secondary);background:color-mix(in srgb,var(--mustard) 10%,var(--bg-surface));border-top:1px solid var(--border)}
+.pb-badge{flex:none;font-size:11px;font-weight:500;padding:3px 9px;border-radius:var(--r-md);background:var(--mustard-tint);color:var(--mustard-ink)}
+.pb-text{min-width:0;overflow-wrap:anywhere}
+.pb-text .tool{font-weight:500;color:var(--text-primary)}
+.pb-note{margin-left:auto;font-size:12px;color:var(--mustard)}
 .qpanel{
   border-top:1px solid var(--border);background:var(--bg-surface);
   padding:18px 24px;display:flex;flex-direction:column;gap:12px;
@@ -1785,18 +1786,18 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .qpanel.min{flex-direction:row;align-items:center;gap:10px;padding:12px 24px}
 .qp-head{display:flex;align-items:center;gap:10px}
 .qp-head .spacer,.qp-minrow .spacer{flex:1}
-.qp-badge{font-size:11px;font-weight:500;padding:3px 9px;border-radius:var(--r-md);background:#FDEEDF;color:var(--amber-ink);flex:none}
-.qpanel.plan .qp-badge{background:#F0ECFA;color:#6B52A8}
-.qpanel.msg .qp-badge{background:var(--green-200);color:var(--green-600)}
+.qp-badge{font-size:11px;font-weight:500;padding:3px 9px;border-radius:var(--r-md);background:var(--amber-tint);color:var(--amber-ink);flex:none}
+.qpanel.plan .qp-badge{background:color-mix(in srgb,var(--magenta) 16%,transparent);color:var(--magenta)}
+.qpanel.msg .qp-badge{background:var(--green-200);color:var(--green-ink)}
 .qpanel.resume .qp-badge{background:var(--bg-subtle);color:var(--text-secondary)}
 .qp-hint{font-size:12px;color:var(--text-secondary)}
 .qp-min{
   width:28px;height:28px;border:1px solid var(--border-strong);border-radius:var(--r-sm);
-  background:var(--bg-surface);color:var(--text-secondary);font-size:11px;display:grid;place-items:center;flex:none;
+  background:var(--bg-surface);color:var(--text-secondary);font-size:11px;line-height:1;display:grid;place-items:center;flex:none;
 }
-.qp-minrow{display:flex;align-items:center;gap:10px;flex:1;background:none;border:0;text-align:left;padding:0}
+.qp-minrow{display:flex;align-items:center;gap:10px;flex:1;min-width:0;background:none;border:0;text-align:left;padding:0;color:inherit}
 .qp-note{font-size:13px;color:var(--text-secondary)}
-.qpanel.sent .qp-note{color:var(--green-600)}
+.qpanel.sent .qp-note{color:var(--green-ink)}
 .qp-q{display:flex;flex-direction:column;gap:9px}
 /* The question body is the terminal's own AskUserQuestion dialog: the question
    as the heading, then one full-width row per option — label over a grey
@@ -1805,7 +1806,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
    under them. Rows rather than chips, because that is the layout the reader
    already answers at the keyboard; a phone gets a full-width target for free. */
 .qp-qtext{font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:1.35;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-.qp-chip{font-size:10px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--text-secondary);background:var(--bg-subtle);border-radius:var(--r-xs);padding:2px 7px}
+.qp-chip{font-size:11px;font-weight:500;color:var(--text-secondary);background:var(--bg-subtle);border-radius:var(--r-sm);padding:2px 7px}
 .qp-multi{font-size:11px;color:var(--text-tertiary);font-weight:400}
 .qp-opts{display:flex;flex-direction:column;gap:8px}
 .qp-opt{
@@ -1855,7 +1856,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
    transcript area, and scrolls from there. Same rule the questions follow. */
 .qp-planblock{display:flex;flex-direction:column;gap:8px}
 .qp-planhead{display:flex;align-items:baseline;gap:10px;min-width:0}
-.qp-kick{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);flex:none}
+.qp-kick{font-size:11px;letter-spacing:.02em;color:var(--text-tertiary);flex:none}
 .qp-plantitle{font-size:14px;font-weight:500;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .qp-fold{
   margin-left:auto;flex:none;border:0;background:none;padding:0;
@@ -1866,7 +1867,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .qp-plan.clip{max-height:104px;overflow:hidden}
 .qp-plan.clip::after{
   content:"";position:absolute;left:0;right:0;bottom:0;height:56px;
-  background:linear-gradient(to bottom,rgba(242,242,241,0),var(--bg-subtle));
+  background:linear-gradient(to bottom,transparent,var(--bg-subtle));
 }
 .qp-plan .cm-text{font-size:13px}
 .qp-plan .cm-text p:first-child{margin-top:0}
@@ -1878,8 +1879,9 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .qp-send{height:36px;padding:0 16px;border:0;border-radius:var(--r-md);background:var(--ink-inverse);color:var(--text-on-dark);font-size:13px;font-weight:500}
 .qp-send:disabled{background:var(--border-strong);color:var(--text-tertiary)}
 .qp-term{height:36px;padding:0 14px;border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--bg-surface);font-size:13px;font-weight:500;color:var(--text-secondary)}
-.qp-mic{width:36px;height:36px;border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--bg-surface);display:grid;place-items:center;flex:none}
-.qp-mic.rec{background:#FCE7E3;border-color:transparent;color:#B03B28}
+.qp-mic{width:36px;height:36px;border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--bg-surface);color:var(--text-secondary);font-size:13px;display:grid;place-items:center;flex:none}
+.qp-mic:hover{color:var(--text-primary);border-color:var(--text-tertiary)}
+.qp-mic.rec{background:var(--red-500);border-color:transparent;color:var(--text-on-dark);animation:qpulse 1.4s ease-in-out infinite}
 .qp-mic svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round}
 
 /* The wait panel FLOATS over the transcript rather than pushing it: the body
@@ -1902,7 +1904,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .ch-stack .ch-body{padding-bottom:40px}
 
 /* foot */
-.ch-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 24px;border-top:1px solid var(--border);font-size:12px;color:var(--text-secondary)}
+.ch-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;row-gap:12px;padding:10px 24px;border-top:1px solid var(--border);font-size:12px;color:var(--text-secondary)}
 .ch-foot .live{padding:0}
 
 /* The modal: a facts column on the left, the transcript on the right. Picked
@@ -1942,16 +1944,19 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
    the server's error line, dictation, and launch / cancel with their pending
    and launched states.
    ═══════════════════════════════════════════════════════════════════════ */
-.qp-badge.cyan{background:#DDF0F3;color:#1C7683}
 
 .ns-modal{
   position:relative;background:var(--bg-surface);border-radius:var(--r-xl);box-shadow:var(--lift-shell);
   width:620px;max-width:100%;max-height:820px;display:flex;flex-direction:column;overflow:hidden;
 }
-.ns-head{display:flex;align-items:center;gap:10px;padding:20px 24px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.ns-head{display:flex;align-items:center;gap:10px;padding:20px 24px;border-bottom:1px solid var(--border);min-width:0}
+/* the spawn badge is the cyan one — a session is being made, not waited on */
+.ns-head .qp-badge{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 16%,transparent)}
+.ns-head .qp-hint{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ns-head .sp{flex:1}
 .ns-body{flex:1;min-height:0;overflow:auto;padding:22px 24px;display:flex;flex-direction:column;gap:18px}
-.ns-foot{display:flex;align-items:center;gap:8px;padding:14px 24px;border-top:1px solid var(--border);background:var(--bg-surface);flex-wrap:wrap}
+.ns-foot{display:flex;align-items:center;gap:8px;padding:14px 24px;border-top:1px solid var(--border)}
+.ns-foot .qp-send:not(:disabled){background:var(--cyan)}
 .ns-foot .sp{flex:1}
 
 /* field atoms — one label voice for every field */
@@ -1967,34 +1972,31 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .ns-ta:disabled,.ns-input:disabled,.ns-sel select:disabled{color:var(--text-tertiary);background:var(--bg-subtle)}
 .ns-sel{position:relative;display:inline-flex;align-items:center;width:100%}
 .ns-sel select{
-  appearance:none;-webkit-appearance:none;width:100%;height:36px;padding:0 28px 0 12px;
+  appearance:none;-webkit-appearance:none;width:100%;height:36px;padding:0 34px 0 12px;
   border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--bg-surface);
   font:inherit;font-size:13px;font-weight:500;color:var(--text-primary);
 }
-.ns-sel::after{content:"▾";position:absolute;right:11px;font-size:9px;color:var(--text-tertiary);pointer-events:none}
-.ns-count{font-size:11px;color:var(--text-tertiary);text-align:right}
-.ns-count.over{color:var(--orange-400)}
+.ns-sel select:hover:not(:disabled){border-color:var(--text-tertiary)}
+.ns-sel::after{content:"";position:absolute;right:15px;top:50%;width:6px;height:6px;border-right:1.5px solid var(--text-secondary);border-bottom:1.5px solid var(--text-secondary);transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.ns-count{align-self:flex-end;font-size:11px;color:var(--text-tertiary);font-variant-numeric:tabular-nums}
 /* name owns a line; the three flags share the next one */
 .ns-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 
-/* the remote-control switch */
-.ns-switch{
-  display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-subtle);
-  border-radius:var(--r-md);text-align:left;width:100%;border:1px solid transparent;
-}
-.ns-switch .t{flex:1;min-width:0}
-.ns-switch .nm{display:block;font-size:13px;font-weight:500}
-.ns-switch .hn{display:block;font-size:11px;color:var(--text-secondary);line-height:1.45;margin-top:2px}
-.ns-sw{position:relative;flex:none;width:38px;height:22px;padding:0;border-radius:var(--r-full);
-  background:var(--bg-track);border:1px solid var(--border-strong)}
-.ns-sw i{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--bg-surface);box-shadow:var(--lift-card)}
-.ns-sw.on{background:var(--green-500);border-color:transparent}
-.ns-sw.on i{left:18px}
+/* the two launch toggles — live's .sp-toggle: a steel row, name over hint,
+   and an Off | On pill switch on the right */
+.ns-toggle{display:flex;align-items:center;gap:16px;padding:12px 14px;background:var(--bg-track);border-radius:var(--r-md)}
+.ns-toggle .t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ns-toggle .nm{font-size:13px;font-weight:500;color:var(--text-primary)}
+.ns-toggle .hn{font-size:11px;line-height:1.45;color:var(--text-secondary)}
+.ns-toggle .sw{flex:none;margin-left:auto;background:var(--border-strong);border-color:var(--border-strong)}
+.ns-toggle .sw button{padding:5px 12px;font-size:12px}
+/* "Not listed?" — the older-projects reveal under the picker */
+.ns-older{display:flex;flex-direction:column;align-items:flex-start;gap:10px;margin-top:-8px}
+.ns-more{font-size:12px;font-weight:500;color:var(--text-secondary);background:none;border:0;padding:0;text-decoration:underline;text-decoration-color:var(--border-strong);text-underline-offset:3px}
+.ns-more:hover{color:var(--text-primary)}
 
 /* notes: the error, the ceiling line, the launched confirmation */
-.ns-err{display:flex;align-items:center;gap:9px;background:#FCE7E3;color:#B03B28;border-radius:var(--r-md);padding:10px 13px;font-size:12px}
-.ns-err b{font-weight:600}
-.ns-ok{display:flex;align-items:center;gap:9px;background:var(--green-200);color:var(--green-600);border-radius:var(--r-md);padding:10px 13px;font-size:12px;font-weight:500}
+.ns-err{color:var(--red-500)}   /* live: a plain .qp-note in red, no box */
 /* ── analytics page ──────────────────────────────────────────────────────
    The section IS the Sessions split with a different subject — `.split`, the
    `.card.list` with its `.list-h` and `.lrow` rows, and the `.card.inspect`
@@ -4879,7 +4881,7 @@ unpersisted, since session ids churn.`;
     <span class="model">${SESSION.model}</span>
     <span class="tagpill surface" title="launched from the dashboard — it has no terminal">${SESSION.surface}</span>`;
 
-  const closeBits = () => `<span class="ch-esc">esc</span><button class="ch-x" data-chclose aria-label="Close">✕</button>`;
+  const closeBits = () => `<button class="ch-x" data-chclose aria-label="Close">✕</button>`;
 
   /* the seg, at foot scale — the only place the filter lives */
   const segFilter = () => `<div class="seg ground sm" role="group" aria-label="Message filter">
@@ -5187,7 +5189,7 @@ unpersisted, since session ids churn.`;
     project: null,          // null = untouched — falls back to the newest project
     prompt: '', name: '', model: '', effort: '',
     perm: null,             // null = untouched — falls back to the ceiling-aware default
-    remote: true, rec: false,
+    remote: true, oneShot: false, rec: false,
     phase: 'idle',          // idle · pending · launched
     needsToken: false, error: false,
     ceiling: 'bypassPermissions',
@@ -5222,7 +5224,7 @@ unpersisted, since session ids churn.`;
       ${projects().map(p => `<option value="${esc(p.name)}"${selectedProject() === p.name ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}
     </select></div>`;
 
-  const counter = () => `<span class="ns-count${S.prompt.length > PROMPT_CAP - 200 ? ' over' : ''}" data-scount>${S.prompt.length} / ${PROMPT_CAP}</span>`;
+  const counter = () => `<span class="ns-count" data-scount>${S.prompt.length} / ${PROMPT_CAP}</span>`;
 
   const promptField = () => `<div class="ns-f">
       <span class="ns-lab">prompt</span>
@@ -5250,21 +5252,25 @@ unpersisted, since session ids churn.`;
     : '';
 
   const REMOTE_HINT = 'Register the session with your account so the Claude phone app can see and drive it. It still runs on this machine.';
-  const remoteSwitch = () => `<button type="button" class="ns-switch" data-sremote ${dis()}
-      role="switch" aria-checked="${S.remote}" title="${REMOTE_HINT}">
-      <span class="t"><span class="nm">remote control</span><span class="hn">${REMOTE_HINT}</span></span>
-      <span class="ns-sw${S.remote ? ' on' : ''}"><i></i></span></button>`;
+  const toggle = (key, name, hint, on) => `<div class="ns-toggle">
+      <span class="t"><span class="nm">${name}</span><span class="hn">${hint}</span></span>
+      <span class="sw" role="group" aria-label="${name}">
+        <button type="button" class="${on ? '' : 'on'}" data-stoggle="${key}|0" ${dis()}>Off</button><button type="button" class="${on ? 'on' : ''}" data-stoggle="${key}|1" ${dis()}>On</button></span></div>`;
+  const remoteSwitch = () => toggle('remote', 'Remote control', REMOTE_HINT, S.remote) +
+    toggle('oneShot', 'Close when done', 'End the session when its work is done instead of waiting for a reply. Follow up with Resume.', S.oneShot);
+  /* live lists only recent projects; older ones sit behind this link */
+  const olderLink = () => projects().length ? `<div class="ns-older"><button type="button" class="ns-more" title="Older projects are not drawn in this mock">Not listed? Show older projects · 3</button></div>` : '';
 
   const tokenRow = () => S.needsToken ? `<div class="qp-token">
       <span class="qp-note">This dashboard needs its answer token.</span>
       <input class="qp-other" type="password" placeholder="ANSWER_TOKEN" data-stoken>
-      <button class="qp-send" type="button" data-stokensave>save</button></div>` : '';
+      <button class="qp-send" type="button" data-stokensave>Save</button></div>` : '';
 
   const errorRow = () => S.error
-    ? `<div class="ns-err"><b>Launch failed</b> unknown project — it may have been archived since the last scan.</div>` : '';
+    ? `<span class="qp-note ns-err">unknown project — it may have been archived since the last scan</span>` : '';
 
-  const okRow = () => S.phase === 'launched'
-    ? `<div class="ns-ok">✓ Launched · opening the chat drawer for it</div>` : '';
+  /* live has no launched row: a launch closes this panel and opens the chat drawer */
+  const okRow = () => '';
 
   const mic = () => `<button class="qp-mic${S.rec ? ' rec' : ''}" data-smic type="button" ${dis()}
       aria-label="${S.rec ? 'stop recording' : 'dictate the prompt'}"
@@ -5272,21 +5278,20 @@ unpersisted, since session ids churn.`;
       <svg viewBox="0 0 20 20"><rect x="7.5" y="2.5" width="5" height="10" rx="2.5"/><path d="M4.5 9a5.5 5.5 0 0011 0M10 14.5V17"/></svg></button>`;
 
   const launchBtn = () => `<button class="qp-send" type="button" data-slaunch ${canLaunch() ? '' : 'disabled'}>
-      ${pending() ? 'launching…' : S.phase === 'launched' ? 'launched' : 'launch'}</button>`;
+      ${pending() ? 'Launching…' : 'Launch'}</button>`;
 
-  const cancelBtn = () => `<button class="qp-term" type="button" data-sclose ${pending() ? 'disabled' : ''}>cancel</button>`;
+  const cancelBtn = () => `<button class="qp-term" type="button" data-sclose ${pending() ? 'disabled' : ''}>Cancel</button>`;
 
   /* ── the modal ────────────────────────────────────────────────────────── */
   const modal = () => `<div class="ns-modal" role="dialog" aria-label="New session">
       <div class="ns-head">
-        <span class="qp-badge cyan">new session</span>
+        <span class="qp-badge">new session</span>
         <span class="qp-hint">spawns a headless session in the picked project</span>
         <span class="sp"></span>
-        <span class="ch-esc">esc</span>
         <button class="ch-x" type="button" data-sclose aria-label="Close">✕</button>
       </div>
       <div class="ns-body">
-        <div class="ns-f"><span class="ns-lab">project</span>${projectSelect()}</div>
+        <div class="ns-f"><span class="ns-lab">project</span>${projectSelect()}</div>${olderLink()}
         ${promptField()}
         ${nameField()}
         <div class="ns-grid">
@@ -5304,7 +5309,6 @@ unpersisted, since session ids churn.`;
   const varbar = () => `<div class="varbar">
       <span class="tag">New session · state</span>
       <button data-sstate="pending" aria-pressed="${pending()}">launching</button>
-      <button data-sstate="launched" aria-pressed="${S.phase === 'launched'}">launched</button>
       <button data-sstate="token" aria-pressed="${S.needsToken}">token prompt</button>
       <button data-sstate="error" aria-pressed="${S.error}">error</button>
       <span class="vsp"></span>
@@ -5349,14 +5353,15 @@ unpersisted, since session ids churn.`;
       else if (k === 'noproj') S.projects = S.projects === 'none' ? 'ready' : 'none';
       else if (k === 'ceiling') S.ceiling = ceilingLimited() ? 'bypassPermissions' : 'acceptEdits';
     }
-    else if (hit('[data-sremote]')) S.remote = !S.remote;
+    else if ((el = hit('[data-stoggle]'))) { const [k, v] = el.dataset.stoggle.split('|'); S[k] = v === '1'; }
     else if (hit('[data-smic]')) S.rec = !S.rec;
     else if (hit('[data-stokensave]')) S.needsToken = false;
     else if (hit('[data-slaunch]')) {
       if (!canLaunch()) return;
       S.phase = 'pending'; S.error = false; S.rec = false;
       clearTimeout(launchTimer);
-      launchTimer = setTimeout(() => { S.phase = 'launched'; render(); }, 1100);
+      // live closes the panel and opens the new session's chat; the mock resets the form
+      launchTimer = setTimeout(() => { S.phase = 'idle'; S.prompt = ''; S.name = ''; render(); }, 1100);
     }
     else if (hit('[data-sclose]')) {   // mock: the exits clear the draft rather than leaving
       if (pending()) return;
