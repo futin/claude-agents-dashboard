@@ -1114,25 +1114,26 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
    the refresh share a line and centre on each other, and the subtitle runs the
    full width under them. Aligning a 36px button to the top of a 2-line block
    leaves it floating against nothing. */
-.mg-band{display:flex;flex-direction:column;gap:6px}
-.mg-bandrow{display:flex;align-items:center;gap:16px}
+.mg-band{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
+.mg-bandrow{display:flex;align-items:flex-start;gap:12px}
+.mg-band .cs{margin-top:0}
+.mg-itemcard .cs{line-height:1.45}
 .mg-band .sp{flex:1}
 .refresh{
   height:36px;padding:0 14px;border:1px solid var(--border-strong);border-radius:var(--r-md);
   background:var(--bg-surface);font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:8px;flex:none;
 }
-.scanfail{
-  font-size:12px;color:var(--amber-ink);background:#FDEEDF;border-radius:var(--r-md);
-  padding:7px 12px;flex:none;
-}
-.mg-empty{font-size:13px;color:var(--text-tertiary);padding:28px 20px;text-align:center;line-height:1.5}
-.mg-empty.off{color:#B4601E}
+/* live .icon-refresh: the glyph-only round ↻ the Configs and Analytics bands share */
+.refresh.icon{width:26px;height:26px;padding:0;justify-content:center;border-radius:var(--r-full);font-size:12px;font-weight:400;line-height:1;color:var(--text-secondary);align-self:center;margin-left:auto}
+.refresh.icon:hover{color:var(--text-primary);border-color:var(--text-tertiary)}
+.scanfail{font-size:12px;color:var(--amber);flex:none}
+.mg-empty{font-size:13px;color:var(--text-tertiary);padding:6px 2px}
 
 /* The scope left the page for the rail sub-nav, so nothing here draws it — the
    page only names it, in the band, with the .scope pill Settings already uses
    for Local / Shared. What is left below is the two levels under the scope. */
 .mg-kick{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);padding:0 12px 10px}
-.mg-band .scope{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px}
+.mg-band .scope .p{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* filter box — the one control that types */
 .mg-filter{
@@ -1141,8 +1142,6 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 }
 .mg-filter::placeholder{color:var(--text-tertiary)}
 .mg-search{position:relative;display:flex;align-items:center;gap:10px}
-.mg-search .mg-filter{padding-left:34px}
-.mg-search svg{position:absolute;left:11px;width:16px;height:16px;stroke:var(--text-tertiary);fill:none;stroke-width:1.5;pointer-events:none}
 .mg-count{font-size:12px;color:var(--text-tertiary);white-space:nowrap;flex:none}
 
 /* groups, sub-groups, entries */
@@ -1150,74 +1149,92 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .mg-gh,.mg-sub{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:none}
 .mg-gh{font-size:12px;font-weight:500;color:var(--text-secondary);padding:12px 8px 6px}
 .mg-sub{font-size:11px;color:var(--text-tertiary);padding:6px 8px 6px 22px}
-.mg-caret{display:inline-block;font-size:9px;color:var(--text-tertiary);transition:transform .12s}
+.mg-caret{display:inline-flex;font-size:11px;color:var(--text-tertiary);transition:transform .12s}
 .mg-caret.open{transform:rotate(90deg)}
+/* live Chevron atom: a 9px stroked chevron, pointed right, the caret's rotation turns it down */
+.chev{flex:none;display:inline-block;width:9px;height:9px;vertical-align:middle;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .16s}
+.chev-right{transform:rotate(-90deg)}
+.chev-up{transform:rotate(180deg)}
 .mg-item{display:block;width:100%;text-align:left;border:0;background:none;border-radius:var(--r-md);padding:9px 12px;min-width:0}
 .mg-item.on{background:var(--bg-subtle);box-shadow:inset 3px 0 0 var(--ink-inverse)}
 .mg-top{display:flex;align-items:center;gap:8px;min-width:0}
 .mg-name{font-size:13px;font-weight:500;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .mg-top .msrc{margin-left:auto}
 .msrc{
-  font-size:10px;font-weight:500;padding:2px 7px;border-radius:var(--r-xs);flex:none;
-  background:var(--bg-subtle);color:var(--text-secondary);white-space:nowrap;
+  font-size:11px;font-weight:500;padding:1px 8px;border-radius:var(--r-full);flex:none;
+  border:1px solid var(--border-strong);color:var(--text-tertiary);white-space:nowrap;
 }
-.msrc.plugin{background:#F0ECFA;color:#6B52A8}
+.msrc.plugin{color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
 .mg-desc{
   font-size:12px;color:var(--text-secondary);line-height:1.4;margin-top:3px;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
 }
 
-/* detail pane */
-.mg-type{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary)}
+/* detail pane — the live .mdetail card: kicker, title + source, summary, then
+   one rule over FILE and the file itself as a foldable block on the card's own
+   surface. 13px is the floor for everything in it. */
+.mg-type{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary)}
 .mg-head{display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap}
-.mg-h1{font-size:19px;font-weight:500;letter-spacing:-.01em}
-.mg-sum{font-size:13px;color:var(--text-secondary);line-height:1.5;margin-top:6px;max-width:76ch}
-.mg-path{
-  font-size:11px;color:var(--text-secondary);background:var(--bg-subtle);border-radius:var(--r-xs);
-  padding:7px 10px;margin-top:14px;overflow-x:auto;white-space:nowrap;
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-}
-.mg-label{
-  font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);
-  margin-top:20px;display:flex;align-items:center;gap:10px;
-}
-.mg-label .refresh{height:26px;padding:0 10px;font-size:11px;letter-spacing:0;text-transform:none;color:var(--text-secondary)}
+.mg-h1{font-size:19px;font-weight:500;letter-spacing:-.01em;line-height:1.35;min-width:0;overflow-wrap:anywhere}
+.mg-detail .msrc{font-size:13px}
+.mg-sum{font-size:13px;color:var(--text-secondary);line-height:1.45;margin-top:6px;max-width:76ch;overflow-wrap:anywhere}
+.mg-path{font-size:13px;color:var(--text-secondary);margin-top:8px;overflow-wrap:anywhere}
+.mg-path .lab{color:var(--text-tertiary);margin-right:6px}
+.mg-label{display:flex;align-items:center;gap:10px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);margin-top:20px}
+.mg-label.rule{border-top:1px solid var(--border);padding-top:20px}
+.mg-kv{display:flex;flex-direction:column;gap:4px;font-size:13px;margin-top:8px}
+.mg-kv .k{color:var(--text-tertiary);margin-right:6px}
+.mg-kv .v{color:var(--text-secondary);overflow-wrap:anywhere}
 .mg-file{
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.65;
-  background:var(--bg-subtle);border-radius:var(--r-md);padding:16px;margin-top:10px;
-  max-height:460px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+  font-family:inherit;font-size:13px;line-height:1.65;color:var(--text-secondary);
+  background:var(--bg-track);border-radius:var(--r-md);padding:16px;margin:4px 0 0;white-space:pre-wrap;word-break:break-word;
 }
-.mg-file.cmd{background:var(--ink-inverse);color:var(--text-on-dark);max-height:none}
-.mg-trunc{font-size:11px;color:var(--amber-ink);background:#FDEEDF;border-radius:var(--r-xs);padding:7px 10px;margin-top:10px}
-/* the rendered markdown a .md file gets, next to the raw pre a script gets */
-.mg-md{margin-top:10px;max-height:460px;overflow:auto;padding-right:6px}
-.mg-md h2{font-size:17px;font-weight:600;letter-spacing:-.01em;margin:18px 0 6px}
-.mg-md h3{font-size:14px;font-weight:600;margin:16px 0 4px}
-.mg-md h2:first-child,.mg-md h3:first-child{margin-top:0}
-.mg-md p{font-size:13px;line-height:1.6;color:var(--text-secondary);margin:6px 0}
-.mg-md li{font-size:13px;line-height:1.6;color:var(--text-secondary);margin:4px 0 4px 18px;list-style:disc}
-.mg-md hr{border:0;border-top:1px solid var(--border);margin:16px 0}
-.mg-md code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.mg-md b{color:var(--text-primary);font-weight:600}
+.mg-trunc{font-size:13px;color:var(--amber-ink);background:var(--amber-tint);border-radius:var(--r-xs);padding:7px 10px;margin-top:8px}
+.mfileblock{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.mfilehead{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap}
+.mfile-title{min-width:0;font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mfile-seg{margin-left:auto;flex:none}
+/* live declares 4px 10px here, but its later `.set-seg button` (same specificity) wins — this is what renders */
+.mfile-seg button{font-size:13px;padding:6px 14px}
+.mfile-seg+.mfile-fold{margin-left:0}
+.mfile-fold{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-secondary);background:none;border:0;padding:0}
+.mfile-fold:hover{color:var(--text-primary)}
+.mfile-fold .cv{font-size:9px;color:var(--text-tertiary)}
+.mfile-box{position:relative;display:block;width:100%;text-align:left;background:var(--bg-surface);border:1px solid var(--border-strong);border-radius:var(--r-md);padding:16px;cursor:pointer}
+.mfile-box .mg-file{background:none;border-radius:0;padding:0;margin:0}
+.mfile-box.plain{cursor:auto}
+.mfile-box.clip{max-height:200px;overflow:hidden}
+.mfile-box.clip::after{content:"";position:absolute;left:0;right:0;bottom:0;height:64px;background:linear-gradient(to bottom,transparent,var(--bg-surface))}
+/* the rendered markdown — live's shared .md atoms at the 13px floor */
+.mg-md{display:flex;flex-direction:column;gap:7px;font-size:13px}
+.mg-md h2,.mg-md h3{font-weight:600;color:var(--text-primary);letter-spacing:-.01em;margin-top:3px}
+.mg-md h2{font-size:15px}
+.mg-md h3{font-size:13px;color:var(--text-secondary)}
+.mg-md p{white-space:pre-wrap}
+.mg-md ul{padding-left:17px;display:flex;flex-direction:column;gap:3px}
+.mg-md li{list-style:disc;white-space:pre-wrap}
+.mg-md li::marker{color:var(--text-tertiary)}
+.mg-md hr{border:0;border-top:1px solid var(--border);margin:2px 0}
+.mg-md code{font-family:inherit;font-size:12px;color:var(--text-primary);background:var(--bg-track);border-radius:var(--r-xs);padding:1px 5px}
+.mg-md b{font-weight:600}
+.mg-md>:first-child{margin-top:0}
 
-/* the file rail a multi-file skill gets beside its viewer */
-.mg-skill{display:grid;grid-template-columns:190px minmax(0,1fr);gap:16px;margin-top:14px;align-items:start}
-.frail{background:var(--bg-subtle);border-radius:var(--r-md);padding:8px;min-width:0}
-.frail-h{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-tertiary);padding:6px 8px 8px}
-.fdir{font-size:11px;color:var(--text-tertiary);padding:10px 8px 4px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+/* the skill's file strip, one file per line, full width ABOVE the viewer */
+.frail{background:var(--bg-track);border-radius:var(--r-md);padding:8px;display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:0;margin-top:8px}
+.fdir{font-size:13px;color:var(--text-tertiary);padding:8px 8px 3px;overflow-wrap:anywhere}
 .ffile{
-  display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:none;
-  border-radius:var(--r-sm);padding:6px 8px;font-size:12px;color:var(--text-secondary);min-width:0;
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:1px solid transparent;background:none;
+  border-radius:var(--r-sm);padding:6px 8px;font-size:13px;color:var(--text-secondary);min-width:0;
 }
 .ffile.ind{padding-left:18px}
-.ffile.on{background:var(--bg-surface);color:var(--text-primary);font-weight:500;box-shadow:var(--lift-card)}
-.ffile-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.fsize{margin-left:auto;flex:none;font-size:10px;color:var(--text-tertiary)}
-.mg-skill .mg-path{margin-top:0}
+.ffile:hover{background:var(--bg-surface);color:var(--text-primary)}
+.ffile.on{background:var(--bg-surface);color:var(--text-primary);font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.ffile-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.fsize{margin-left:auto;flex:none;font-size:13px;color:var(--text-tertiary);font-variant-numeric:tabular-nums}
 
 .mg-pane{padding:16px;min-width:0}
 .mg-pane.scroll{max-height:900px;overflow:auto}
-.mg-detail{padding:24px;min-width:0}
+.mg-detail{display:flex;flex-direction:column;gap:6px;padding:24px;min-width:0}
 
 /* A · two panes — the grouped list beside the detail */
 .mg-2pane{display:grid;grid-template-columns:360px minmax(0,1fr);gap:16px;align-items:start}
@@ -1272,18 +1289,19 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .mg-col-row.on::before{
   content:"";position:absolute;left:-16px;top:0;bottom:0;width:3px;background:var(--ink-inverse);
 }
+.mg-col-row .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mg-col-row .c{
-  margin-left:auto;font-size:11px;color:var(--text-tertiary);
-  background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-full);padding:1px 8px;
+  margin-left:auto;flex:none;font-size:11px;font-weight:500;color:var(--text-tertiary);
+  background:var(--bg-app);border:0;border-radius:var(--r-full);padding:1px 8px;
 }
-.mg-col-row.on .c{background:var(--bg-surface);border-color:var(--border-strong);color:var(--text-secondary)}
+.mg-col-row.on .c{background:var(--bg-surface);color:var(--text-secondary)}
 
 /* The item column is a Settings card: the type is the category title, and each
    item is one setting row — name over its hint, its source on the right, a
    hairline between. Same furniture as §8.2, so "a skill" and "a preference"
    read as the same kind of thing: something named, described and sourced. */
 .mg-itemcard .mg-search{margin-top:14px}
-.mg-itemcard .srows{margin-top:4px}
+.mg-itemcard .srows{margin-top:8px}
 .mg-srw{
   position:relative;display:flex;align-items:flex-start;gap:16px;width:100%;text-align:left;
   border:0;border-top:1px solid var(--border);background:none;padding:14px 0;
@@ -1292,8 +1310,9 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 /* spans, not divs — a button's content model is phrasing — so the two lines
    are made blocks here rather than by the tag */
 .mg-srw .lab{display:block;flex:1;min-width:0}
-.mg-srw .nm{display:block;font-size:15px;font-weight:500;letter-spacing:-.01em;line-height:1.35}
-.mg-srw .hn{display:block;font-size:13px;color:var(--text-secondary);line-height:1.45;margin-top:3px}
+.mg-srw .top{display:flex;align-items:baseline;gap:8px;min-width:0;flex-wrap:wrap}
+.mg-srw .nm{display:block;min-width:0;font-size:15px;font-weight:500;letter-spacing:-.01em;line-height:1.35;overflow-wrap:anywhere}
+.mg-srw .hn{font-size:13px;color:var(--text-secondary);line-height:1.45;margin-top:3px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .mg-srw .ctl{flex:none;display:flex;align-items:center;gap:8px;padding-top:2px}
 /* the picked row bleeds to the card's edge, so the fill reads as the row and
    not as a box floating inside it */
@@ -3560,7 +3579,11 @@ At the start of every session, invoke /caveman.
   /* Entry factory. `kind` picks the viewer: markdown, json, text or the
      structured hook card. `files` turns the viewer into a rail + viewer. */
   let seq = 0;
-  const E = (o) => ({ key: 'e' + (++seq), files: undefined, ...o });
+  /* a hook's row is named by its event (· matcher) and described by its command, as live's fromHooks does */
+  const E = (o) => {
+    if (o.kind === 'hook') o = { ...o, label: o.hook.matcher ? `${o.hook.event} · ${o.hook.matcher}` : o.hook.event, sub: o.hook.command };
+    return { key: 'e' + (++seq), files: undefined, ...o };
+  };
 
   const KAIZEN_FILES = [
     { rel: 'SKILL.md', size: 6280 },
@@ -3628,6 +3651,8 @@ At the start of every session, invoke /caveman.
     E({ type: 'Settings', kind: 'json', label: 'settings.json', sub: 'Status line, seven hook entries, one env override, permissions', badge: 'user', path: '~/.claude/settings.json', body: SETTINGS_JSON }),
     E({ type: 'Settings', kind: 'json', label: 'settings.local.json', sub: 'Machine-local overrides, not synced', badge: 'user', path: '~/.claude/settings.local.json', body: '{"permissions":{"allow":["Bash(gh pr view:*)","Bash(tailscale serve:*)"]},"enableAllProjectMcpServers":false}' }),
 
+    E({ type: 'MCP servers', kind: 'mcp', label: 'mcp-search', sub: 'stdio · npx', badge: 'user',
+        mcp: { transport: 'stdio', command: 'npx', args: ['claude-mem', 'mcp'], declaredIn: '~/.claude.json' } }),
     E({ type: 'Plugins', kind: 'json', label: 'caveman', sub: '4 skills · 1 agent · 2 hooks · v0.4.1', badge: 'user', path: '~/.claude/plugins/cache/caveman/plugin.json', body: PLUGIN_JSON }),
     E({ type: 'Plugins', kind: 'json', label: 'superpowers', sub: '12 skills · 2 agents · 1 rule · v2.1.0', badge: 'user', path: '~/.claude/plugins/cache/superpowers/plugin.json', body: '{"name":"superpowers","version":"2.1.0","skills":["brainstorming","writing-plans","test-driven-development","systematic-debugging","using-superpowers"],"agents":["Explore","Plan"]}' }),
     E({ type: 'Plugins', kind: 'json', label: 'claude-mem', sub: '18 skills · 1 MCP server · v6.0.3', badge: 'user', path: '~/.claude/plugins/cache/claude-mem/plugin.json', body: '{"name":"claude-mem","version":"6.0.3","mcpServers":{"mcp-search":{"command":"npx","args":["claude-mem","mcp"]}}}' }),
@@ -3658,7 +3683,8 @@ At the start of every session, invoke /caveman.
     ]
   };
 
-  const TYPES = ['Skills', 'Agents', 'Commands', 'Rules', 'Hooks', 'Memory', 'Settings', 'Plugins'];
+  /* live order: Plugins (global only) and MCP servers first, then the file types */
+  const TYPES = ['Plugins', 'MCP servers', 'Skills', 'Agents', 'Commands', 'Rules', 'Hooks', 'Memory', 'Settings'];
   const entriesFor = (scope) => scope === 'global' ? GLOBAL : (PROJECT[scope] || []);
 
   /* file bodies — canned where it matters, generated where it doesn't, so the
@@ -3686,7 +3712,8 @@ At the start of every session, invoke /caveman.
     scope: 'global', sel: null, filter: '', type: 'Skills',
     toggled: new Set(),          // groups/sub-groups toggled off their default
     file: {},                    // entry key → picked file path
-    declaring: false,            // hook card: show the declaring settings file
+    preview: true,               // markdown files: Preview (true) or Code
+    open: new Set(),             // file paths read in full rather than clipped
     stale: false                 // the "scan failed — showing last snapshot" note
   };
 
@@ -3725,7 +3752,7 @@ At the start of every session, invoke /caveman.
 
   /* ── shared chrome ───────────────────────────────────────────────────── */
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const caret = (open) => `<span class="mg-caret${open ? ' open' : ''}">▸</span>`;
+  const caret = (open) => `<span class="mg-caret${open ? ' open' : ''}"><svg class="chev chev-right" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4l3 3 3-3"/></svg></span>`;
   const srcBadge = (b) => `<span class="msrc${b.startsWith('plugin:') ? ' plugin' : ''}">${b.startsWith('plugin:') ? b.slice(7) : b}</span>`;
 
   const varbar = () => `<div class="varbar">
@@ -3747,20 +3774,18 @@ At the start of every session, invoke /caveman.
   const band = () => `<div class="band mg-band">
       <div class="mg-bandrow">
         <!-- section · destination, the convention the Usage pages set -->
-        <div class="ct">Claude Configs · ${scopeNow().name}
-          <span class="scope"><i></i>${scopeNow().path}</span></div>
-        <span class="sp"></span>
+        <div class="ct"><span class="n">Claude Configs · ${scopeNow().name}</span>
+          <span class="scope"><i></i><span class="p">${scopeNow().path}</span></span></div>
         ${S.stale ? '<span class="scanfail">scan failed — showing last snapshot</span>' : ''}
-        <button class="refresh" data-mrefresh title="Reload">↻</button>
+        <button class="refresh icon" data-mrefresh title="Reload">↻</button>
       </div>
-      <div class="cs">Every skill, agent, command, rule, hook, memory file, settings file and installed plugin in this scope. Read-only — nothing here is ever written. Config changes over days, so this section does not poll.</div>
+      <div class="cs">Every skill, agent, command, rule, hook, memory file, settings file and installed plugin in this scope. Read-only — nothing here is ever written, and config changes over days, so this section does not poll.</div>
     </div>`;
 
   const filterBox = (showCount) => {
     const gs = groups();
     const n = gs.reduce((a, g) => a + g.entries.length, 0);
     return `<div class="mg-search">
-      <svg viewBox="0 0 20 20"><circle cx="9" cy="9" r="5.5"/><path d="M13 13l4 4" stroke-linecap="round"/></svg>
       <input class="mg-filter" id="mg-filter" type="text" placeholder="filter…" value="${esc(S.filter)}">
       ${showCount ? `<span class="mg-count">${n} item${n === 1 ? '' : 's'}</span>` : ''}
     </div>`;
@@ -3850,16 +3875,39 @@ At the start of every session, invoke /caveman.
     return out.join('');
   }
 
-  function viewer(entry, path) {
-    const kind = kindOf(entry, path);
-    const raw = bodyFor(entry, path);
-    const size = sizeOf(entry, path);
+  /* frontmatter: name and description are the card's own title and summary,
+     so only the keys left over are printed, as label + value lines */
+  function splitFront(raw) {
+    const m = /^---\n([\s\S]*?)\n---\n?/.exec(raw);
+    if (!m) return { meta: [], body: raw };
+    const meta = m[1].split('\n').map(l => { const i = l.indexOf(':'); return i < 0 ? null : [l.slice(0, i).trim(), l.slice(i + 1).trim()]; })
+      .filter(kv => kv && !/^(name|description)$/i.test(kv[0]));
+    return { meta, body: raw.slice(m[0].length).replace(/^\n+/, '') };
+  }
+
+  /* one file: the Path line, the leftover frontmatter, then the file as a
+     block — its name, a Code / Preview switch for markdown, a `read all` fold
+     once it runs past 12 lines, and the opening lines clipped under a fade */
+  function fileBlock(entry, path, kind, rawOver) {
+    kind = kind || kindOf(entry, path);
+    const raw = rawOver !== undefined ? rawOver : bodyFor(entry, path);
+    const size = rawOver !== undefined ? rawOver.length : sizeOf(entry, path);
     const truncated = size > 262144;
-    const pretty = kind === 'json' ? JSON.stringify(JSON.parse(raw), null, 2) : raw;
-    return (truncated ? `<div class="mg-trunc">showing first 256 kB of ${bytes(size)}</div>` : '') +
-      (kind === 'markdown'
-        ? `<div class="mg-md">${mdRender(raw)}</div>`
-        : `<pre class="mg-file">${esc(pretty)}</pre>`);
+    const fm = kind === 'markdown' ? splitFront(raw) : { meta: [], body: raw };
+    const text = kind === 'json' ? JSON.stringify(JSON.parse(raw), null, 2) : fm.body;
+    const md = kind === 'markdown';
+    const rendered = md && S.preview;
+    const rows = text.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / 64)), 0);
+    const foldable = rows > 12;
+    const open = S.open.has(path);
+    return `<div class="mg-path"><span class="lab">Path:</span><span>${path}</span></div>` +
+      (fm.meta.length ? `<div class="mg-kv">${fm.meta.map(([k, v]) => `<div><span class="k">${esc(k)}:</span><span class="v">${esc(v)}</span></div>`).join('')}</div>` : '') +
+      `<div class="mfileblock"><div class="mfilehead"><span class="mfile-title" title="${path}">${path.split('/').pop()}</span>
+        ${md ? `<div class="sw mfile-seg"><button class="${rendered ? '' : 'on'}" data-mpreview="0">Code</button><button class="${rendered ? 'on' : ''}" data-mpreview="1">Preview</button></div>` : ''}
+        ${foldable ? `<button class="mfile-fold" data-mfold="${path}">${open ? 'collapse' : 'read all'}<span class="cv"><svg class="chev${open ? ' chev-up' : ''}" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4l3 3 3-3"/></svg></span></button>` : ''}</div>
+        ${truncated ? `<div class="mg-trunc">showing first 256 kB of ${bytes(size)}</div>` : ''}
+        <div class="mfile-box${foldable && !open ? ' clip' : ''}${foldable ? '' : ' plain'}"${foldable ? ` data-mfold="${path}"` : ''}>
+          ${rendered ? `<div class="mg-md">${mdRender(text)}</div>` : `<pre class="mg-file">${esc(text)}</pre>`}</div></div>`;
   }
 
   function fileRail(entry) {
@@ -3875,39 +3923,50 @@ At the start of every session, invoke /caveman.
     Object.keys(dirs).sort().forEach(d => {
       rows += `<div class="fdir">${d}/</div>` + dirs[d].map(f => fileBtn(f, cur, true)).join('');
     });
-    return `<div class="frail"><div class="frail-h">files · ${files.length}</div>${rows}</div>`;
+    return `<div class="frail">${rows}</div>`;
   }
   const fileBtn = (f, cur, nested) =>
     `<button class="ffile${f.path === cur ? ' on' : ''}${nested ? ' ind' : ''}" data-mfile="${f.path}">
       <span class="ffile-name">${f.rel.split('/').pop()}</span><span class="fsize">${bytes(f.size)}</span></button>`;
+  /* the inspector spells the source out in full — plugin:caveman, not caveman */
+  const fullBadge = (b) => `<span class="msrc${b.startsWith('plugin:') ? ' plugin' : ''}">${b}</span>`;
 
   function hookCard(entry) {
     const h = entry.hook;
     return `<div class="mg-type">hook</div>
       <div class="mg-head"><span class="mg-h1">${h.event}</span>
-        <span class="msrc">${h.matcher || 'all tools'}</span>${srcBadge(h.source)}</div>
+        <span class="msrc">${h.matcher || 'all tools'}</span>${fullBadge(h.source)}</div>
       <div class="mg-label">command</div>
-      <pre class="mg-file cmd">${esc(h.command)}</pre>
-      ${h.scriptPath ? `<div class="mg-label">script</div><div class="mg-path">${h.scriptPath}</div><pre class="mg-file">${esc(HOOK_SH)}</pre>` : ''}
-      <div class="mg-label">declared in
-        <button class="refresh" data-mdeclaring>${S.declaring ? 'hide file' : 'show file'}</button></div>
-      <div class="mg-path">${h.declaredIn}</div>
-      ${S.declaring ? `<pre class="mg-file">${esc(JSON.stringify(JSON.parse(SETTINGS_JSON), null, 2))}</pre>` : ''}`;
+      <pre class="mg-file">${esc(h.command)}</pre>
+      ${h.scriptPath ? `<div class="mg-label">script</div>${fileBlock(entry, h.scriptPath, 'text', HOOK_SH)}` : ''}
+      <div class="mg-label">declared in</div>
+      ${fileBlock(entry, h.declaredIn, 'json', SETTINGS_JSON)}`;
+  }
+
+  function mcpCard(entry) {
+    const m = entry.mcp;
+    return `<div class="mg-type">mcp server</div>
+      <div class="mg-head"><span class="mg-h1">${entry.label}</span>
+        <span class="msrc">${m.transport}</span>${fullBadge(entry.badge)}</div>
+      <div class="mg-label">command</div>
+      <pre class="mg-file">${esc([m.command, ...m.args].join('\n'))}</pre>
+      <div class="mg-label">declared in</div>
+      <div class="mg-sum">${m.declaredIn}</div>`;
   }
 
   function detail() {
     const e = selected();
     if (e === null) return '<div class="mg-empty">select an item to inspect it</div>';
     if (e.kind === 'hook') return hookCard(e);
+    if (e.kind === 'mcp') return mcpCard(e);
     const path = shownPath(e);
     const type = e.type.toLowerCase().replace(/s$/, '');
     const head = `<div class="mg-type">${type}</div>
-      <div class="mg-head"><span class="mg-h1">${e.label}</span>${srcBadge(e.badge)}</div>
+      <div class="mg-head"><span class="mg-h1">${e.label}</span>${fullBadge(e.badge)}</div>
       ${e.sub ? `<div class="mg-sum">${e.sub}</div>` : ''}`;
     if (!e.path) return head + '<div class="mg-empty">no file to show for this item</div>';
-    if (!e.files) return head + `<div class="mg-path">${path}</div>${viewer(e, path)}`;
-    return head + `<div class="mg-skill">${fileRail(e)}
-      <div><div class="mg-path">${path}</div>${viewer(e, path)}</div></div>`;
+    if (!e.files) return head + `<div class="mg-label rule">file</div>${fileBlock(e, path)}`;
+    return head + `<div class="mg-label rule">files · ${filesOf(e).length}</div>${fileRail(e)}${fileBlock(e, path)}`;
   }
 
   /* ── the page ─────────────────────────────────────────────────────────────
@@ -3958,8 +4017,7 @@ At the start of every session, invoke /caveman.
       }
       if (subCollapsed) continue;
       rows += `<button class="mg-srw${S.sel === e.key ? ' on' : ''}" data-mitem="${e.key}">
-        <span class="lab"><span class="nm">${e.label}</span>${e.sub ? `<span class="hn">${e.sub}</span>` : ''}</span>
-        <span class="ctl">${srcBadge(e.badge)}</span></button>`;
+        <span class="lab"><span class="top"><span class="nm">${e.label}</span>${srcBadge(e.badge)}</span>${e.sub ? `<span class="hn">${e.sub}</span>` : ''}</span></button>`;
     }
     return head + `<div class="srows">${rows}</div>`;
   };
@@ -3991,11 +4049,11 @@ At the start of every session, invoke /caveman.
       S.toggled.has(k) ? S.toggled.delete(k) : S.toggled.add(k);
     }
     else if ((el = hit('[data-mfile]'))) { const e = selected(); if (e) S.file[e.key] = el.dataset.mfile; }
-    else if (hit('[data-mdeclaring]')) S.declaring = !S.declaring;
+    else if ((el = hit('[data-mpreview]'))) S.preview = el.dataset.mpreview === '1';
+    else if ((el = hit('[data-mfold]'))) { const k = el.dataset.mfold; S.open.has(k) ? S.open.delete(k) : S.open.add(k); }
     else if ((el = hit('[data-mitem]'))) {
       const k = el.dataset.mitem;
       S.sel = S.sel === k ? null : k;           // clicking the open item clears it
-      S.declaring = false;
     }
     else return;
     render(false);
