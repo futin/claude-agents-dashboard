@@ -3152,3 +3152,22 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 @media (min-width:640px){.git-in-checks{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (min-width:1024px){.split.git-in{grid-template-columns:320px minmax(0,1fr)}}
 @media (min-width:1280px){.split.git-in{grid-template-columns:400px minmax(0,1fr)}}
+
+/* Branches — every open branch across the pins, a column per need (management-redesign spec §4.6) */
+.git-bb-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
+.git-bb-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.git-bb-ch{padding:0 4px;font-size:13px;color:var(--ink)}
+.git-bb-ch .git-age{text-align:left}
+.git-bb-hint{display:block;margin-top:2px;font-size:11px;color:var(--ink3)}
+.git-bb-card{display:flex;flex-direction:column;gap:7px;padding:12px 14px}
+.git-bb-card.stale{background:transparent;border:1px dashed var(--hairline2)}
+.git-bb-bn{font-size:13px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.git-bb-ln{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.git-bb-ln.end{justify-content:flex-end;gap:6px}
+.git-bb-ln.start{justify-content:flex-start;gap:6px}
+.git-bb-warn{font-size:12px;font-weight:500;color:var(--amber)}
+.git-bb-note{font-size:12px;color:var(--ink3);padding:0 4px}
+.git-bb-repo{font-size:12px;color:var(--ink3)}
+.git-bb-empty{padding:12px 14px;font-size:12px;color:var(--ink3);border:1px dashed var(--hairline2);border-radius:16px}
+@media (min-width:640px){.git-bb-cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1280px){.git-bb-cols{grid-template-columns:repeat(4,minmax(0,1fr))}}
