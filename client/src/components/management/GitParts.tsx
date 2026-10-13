@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import type { FetchClock, GitBranch, RepoGitStats } from '../../../../shared/types';
+import type { FetchClock, GitBranch, RepoGitStats, Session } from '../../../../shared/types';
 import { formatAgo } from '../../lib/format';
 import { gitBarMax, gitBarWidth } from '../../lib/gitBar';
 import {
@@ -16,7 +16,9 @@ import { triageGitRepos, type GitTriageGroup } from '../../lib/gitTriage';
  */
 
 import type { GitSyncControl } from '../../hooks/useGitSync';
-import { canSync, syncButtonText, type OkRepo } from '../../lib/gitSync';
+import { GIT_LEVEL_DOT, agentOn, type GitAgent, type GitAssessed, type GitLevel } from '../../lib/gitLevels';
+import { canSync, syncKeyLabel, type OkRepo } from '../../lib/gitSync';
+import type { GitLayoutProps } from './gitLayoutProps';
 
 export type { OkRepo };
 
@@ -142,7 +144,13 @@ function GitSyncGlyph() {
  * or git-sync would refuse the repo. Idle it launches; running it opens the chat; launching, unseen or mid-POST it is disabled. Its click never bubbles, so
  * the Table row it sits in does not toggle.
  */
-export function GitSyncButton({ repo, sync }: { repo: RepoGitStats; sync: GitSyncControl }) {
+export function GitSyncButton({ repo, sync, verbs, primary, label }: {
+  repo: RepoGitStats;
+  sync: GitSyncControl;
+  verbs?: readonly string[];
+  primary?: boolean;
+  label?: string;
+}) {
   if (!sync.available || !canSync(repo)) return null;
   // `canSync` narrowed `repo` to an ok one, so `toplevel` is there.
   const phase = sync.phaseFor(repo);
@@ -151,7 +159,7 @@ export function GitSyncButton({ repo, sync }: { repo: RepoGitStats; sync: GitSyn
   return (
     <button
       type="button"
-      className={`git-sync${running ? ' on' : ''}`}
+      className={`git-sync${running ? ' on' : primary ? ' primary' : ''}`}
       disabled={!running && (!idle || sync.pending)}
       aria-label={running ? `Open the git-sync chat for ${repo.name}` : `Sync ${repo.name}`}
       onClick={e => {
@@ -161,7 +169,102 @@ export function GitSyncButton({ repo, sync }: { repo: RepoGitStats; sync: GitSyn
       }}
     >
       <GitSyncGlyph />
-      {syncButtonText(phase, sync.starting === repo.toplevel)}
+      {syncKeyLabel(phase, sync.starting === repo.toplevel, { verbs, label })}
     </button>
+  );
+}
+
+/* The parts of Inbox | Matrix | Inspector | Branches (management-redesign spec §4.2). */
+
+export function GitLevelDot({ level }: { level: GitLevel }) {
+  return <span className={`git-dot ${GIT_LEVEL_DOT[level]}`} aria-hidden="true" />;
+}
+
+export function GitAgentChip({ agent }: { agent: GitAgent | null }) {
+  return agent ? <span className={`git-sess ${agent.kind}`}>{agent.label}</span> : null;
+}
+
+/** Behind then ahead as words-free arrows; a zero is muted so the eye lands on the side that has something. */
+export function GitDv({ ahead, behind }: { ahead: number; behind: number }) {
+  return (
+    <span className="git-dv" aria-label={`${behind} behind, ${ahead} ahead`}>
+      <span className={behind ? 'b' : 'z'}>↓{behind}</span>
+      <span className={ahead ? 'a' : 'z'}>↑{ahead}</span>
+    </span>
+  );
+}
+
+/** The bar half is 56px, matching `.git-dvbar`'s grid columns. */
+export function GitDvBar({ ahead, behind, max }: { ahead: number; behind: number; max: number }) {
+  return (
+    <span className="git-dvbar" aria-hidden="true">
+      <i className="bb" style={{ width: gitBarWidth(behind, max, 56) }} />
+      <i className="bc" />
+      <i className="ba" style={{ width: gitBarWidth(ahead, max, 56) }} />
+    </span>
+  );
+}
+
+export function GitBranchDv({ b }: { b: GitBranch }) {
+  const c = gitBranchCounts(b);
+  return c ? <GitDv ahead={c.ahead} behind={c.behind} /> : <span className="git-dv"><span className="z">—</span></span>;
+}
+
+/** The count-less case keeps the element so the grid column and the phone rule that hides the bar still apply. */
+export function GitBranchDvBar({ b, max }: { b: GitBranch; max: number }) {
+  const c = gitBranchCounts(b);
+  return c ? <GitDvBar ahead={c.ahead} behind={c.behind} max={max} /> : <span className="git-dvbar" aria-hidden="true" />;
+}
+
+export function GitBranchLabel({ repo, b, sessions }: { repo: RepoGitStats; b: GitBranch; sessions: readonly Session[] }) {
+  return (
+    <span className="git-bname">
+      <span className="git-bname-t">{b.name}</span>
+      <GitWorktreeBadge b={b} />
+      <GitAgentChip agent={agentOn(repo, b.name, sessions)} />
+    </span>
+  );
+}
+
+/**
+ * The action keys of a repo, shared by every layout. `bare` drops the primary styling and the verb list (a row that already carries its own call to action),
+ * `compact` shortens Retry and lets Sync take the primary only for a repo that needs you. A dead repo gets Unpin and nothing else.
+ */
+export function GitKeys({ a, ctx, bare = false, compact = false }: { a: GitAssessed; ctx: GitLayoutProps; bare?: boolean; compact?: boolean }) {
+  if (a.level === 'dead') {
+    return (
+      <button
+        type="button"
+        className={`git-key${bare ? '' : ' primary'}`}
+        disabled={ctx.unpin.busy !== null}
+        onClick={e => {
+          e.stopPropagation();
+          ctx.unpin.run(a.repo.dirName);
+        }}
+      >
+        {ctx.unpin.busy === a.repo.dirName ? 'Unpinning…' : 'Unpin'}
+      </button>
+    );
+  }
+  const retry = a.problems.some(p => p.k === 'fetch');
+  const retryPrimary = compact ? a.level === 'needs' : !bare;
+  const syncPrimary = compact ? !retry && a.level === 'needs' : !bare && !retry && a.level !== 'quiet' && a.verbs.length > 0;
+  return (
+    <>
+      {retry && (
+        <button
+          type="button"
+          className={`git-key${retryPrimary ? ' primary' : ''}`}
+          disabled={ctx.fetchCtl.pending || ctx.clock?.runningSinceMs != null || (ctx.sync.tokenRequired === true && !ctx.fetchCtl.tokenStored)}
+          onClick={e => {
+            e.stopPropagation();
+            ctx.fetchCtl.start();
+          }}
+        >
+          {compact ? 'Retry' : 'Retry fetch'}
+        </button>
+      )}
+      <GitSyncButton repo={a.repo} sync={ctx.sync} verbs={bare || compact ? [] : a.verbs} primary={syncPrimary} />
+    </>
   );
 }

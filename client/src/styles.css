@@ -2991,6 +2991,43 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-sync-td{width:1%;text-align:right;white-space:nowrap}
 .git-qhead{display:flex;align-items:center;gap:8px;min-width:0}
 .git-qhead>.git-rowbtn{display:flex;flex:1;min-width:0}
+/* Inbox | Matrix | Inspector | Branches — the parts they share (management-redesign spec §4.2) */
+.git-panel{background:var(--strip);border-radius:16px;min-width:0}
+.git-gh{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin:16px 4px 8px}
+.git-key{flex:none;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;font-family:var(--font);font-size:12px;font-weight:500;line-height:1;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:8px;cursor:pointer;white-space:nowrap;text-decoration:none;transition:color .15s,background .15s}
+.git-key:hover:not(:disabled){color:var(--ink);background:var(--hairline2)}
+.git-key:disabled{color:var(--ink3);cursor:default}
+.git-key:focus-visible,.git-sync:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.git-key.primary,.git-sync.primary{color:var(--strip);background:var(--ink)}
+.git-key.primary:hover:not(:disabled),.git-sync.primary:hover:not(:disabled){color:var(--strip);background:color-mix(in srgb,var(--ink) 85%,var(--strip))}
+.git-key.primary:disabled,.git-sync.primary:disabled{color:var(--strip);opacity:.55}
+.git-chip.dim{color:var(--ink3);border-style:dashed}
+.git-sess{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:999px;padding:1px 8px 1px 6px;white-space:nowrap;flex:none}
+.git-sess::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.git-sess.working{color:var(--green);background:var(--green-tint)}
+.git-sess.waiting{color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,transparent)}
+.git-sess.idle{color:var(--ink2);background:var(--strip-hi)}
+.git-dv{display:inline-flex;gap:8px;font-size:12px;white-space:nowrap}
+.git-dv .b{color:var(--ink2)}
+.git-dv .a{color:var(--cyan);font-weight:600}
+.git-dv .z{color:var(--ink3)}
+.git-dvbar{display:inline-grid;grid-template-columns:56px 2px 56px;align-items:center;height:12px}
+.git-dvbar i{display:block;height:6px;border-radius:2px}
+.git-dvbar .bb{justify-self:end;background:var(--ink3)}
+.git-dvbar .ba{justify-self:start;background:var(--cyan)}
+.git-dvbar .bc{height:12px;border-radius:0;background:var(--hairline2)}
+/* a branch row of Matrix's expanded row and of Inspector: the bar joins from sm */
+.git-in-br{display:grid;grid-template-columns:minmax(0,1fr) auto 40px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--hairline);font-size:13px;color:var(--ink)}
+.git-in-br .git-dvbar{display:none}
+.git-in-br.stale{color:var(--ink2)}
+.git-in-br.stale .git-dvbar{opacity:.55}
+/* chips wrap under the name rather than squeeze it */
+.git-in-br .git-bname,.git-ib-brow .git-bname{flex-wrap:wrap;row-gap:4px}
+.git-in-br .git-bname-t,.git-ib-brow .git-bname-t{flex:none;max-width:100%}
+@media (min-width:640px){
+  .git-in-br{grid-template-columns:minmax(0,1fr) 116px 90px 40px}
+  .git-in-br .git-dvbar{display:inline-grid}
+}
 
 /* `md`: the bar comes back between name and numbers, and the paper gets the
    standard 20px of padding */
