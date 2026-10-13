@@ -53,7 +53,9 @@
    docs/superpowers/specs/2026-10-12-management-git-ux-mockups.html:
    Inbox (count tiles that filter, one ranked list, a verdict sentence and a
    key worded for the problem per repo), Matrix (a row per repo, a column per
-   health check, colour only where a check fails), Inspector (the Sessions
+   health check, colour only where a check fails, in the Sessions list's
+   table language: a dot column, name over branch, the row the toggle),
+   Inspector (the Sessions
    split: ranked list beside one repo's check tiles and active / stale
    branches) and Branches (every open branch across the pins in Agent on it /
    Ready / Drifting / Stale columns, repo problems in a strip). All four read
@@ -1456,37 +1458,52 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-ib-facts{flex:1;min-width:140px;color:var(--text-secondary);overflow-wrap:anywhere}
 .git-ib-quiet .git-key{background:var(--bg-surface)}
 
-/* Matrix — a row per repo, a column per check, colour only on failure */
-.git-mx-wrap{padding:6px;overflow-x:auto}
+/* Matrix — a row per repo, a column per check, colour only on failure. Drawn
+   in the Sessions list's table language (C · ledger above, plus the live
+   app's hover, open-row bar and expand rule), ported into `.git-mx`'s own
+   rules: hairline rules, a 41px dot column, name over branch, the whole row
+   the toggle, pills only where a check fails, `.cbtn`-shaped keys. The
+   wrapper scrolls the 760px table sideways and clips the card's corners. */
+.git-mx-wrap{padding:0 0 16px;overflow-x:auto}
 .git-mx{width:100%;min-width:760px;border-collapse:collapse;font-size:13px}
-.git-mx th{padding:12px 4px 10px;font-size:11px;font-weight:500;text-align:left;white-space:nowrap;vertical-align:bottom;color:var(--text-secondary);border-bottom:1px solid var(--border-strong)}
-.git-mx th:first-child{padding-left:12px}
-.git-mx-cnt{display:inline-block;min-width:18px;margin-left:5px;padding:1px 5px;font-size:10px;font-weight:700;text-align:center;border-radius:var(--r-full);color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,transparent)}
-.git-mx-cnt.z{color:var(--text-tertiary);background:var(--bg-subtle)}
-.git-mx td{height:46px;padding:0 4px;vertical-align:middle;border-bottom:1px solid var(--border)}
-.git-mx tbody tr:last-child td{border-bottom:0}
+.git-mx th{font-size:12px;font-weight:400;color:var(--text-secondary);text-align:left;padding:14px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+.git-mx td{padding:14px 12px;border-top:1px solid var(--border);vertical-align:middle}
+.git-mx tbody tr:first-child td{border-top:0}
+.git-mx th:first-child,.git-mx td:first-child{padding-left:20px}
+.git-mx th:last-child,.git-mx td:last-child{padding-right:20px}
+.git-mx .git-mx-dot{width:9px}
+.git-mx .git-dot{width:9px;height:9px;display:block}
+.git-mx-cnt{color:var(--text-tertiary)}
 .git-mx-r{cursor:pointer}
-.git-mx-r:hover td{background:color-mix(in srgb,var(--bg-subtle) 60%,transparent)}
-.git-mx-rn{padding-left:12px!important;min-width:150px}
-.git-mx-rn .git-head{flex-wrap:nowrap;align-items:baseline}
-.git-mx-rn .git-name{font-size:14px;overflow-wrap:normal}
-.git-mx-sub{display:block;margin:-1px 0 0 22px;font-size:12px;color:var(--text-tertiary)}
+.git-mx-r:not([aria-expanded="true"]):hover td{background:color-mix(in srgb,var(--bg-subtle) 50%,transparent)}
+.git-mx-r[aria-expanded="true"] td{background:var(--bg-subtle);border-top-color:transparent;padding-bottom:12px}
+.git-mx-r[aria-expanded="true"] td:first-child,.git-mx tr.git-mx-x td{box-shadow:inset 3px 0 0 var(--text-primary)}
+.git-mx tr.git-mx-x td{padding:0 20px 18px 45px;border-top:0;background:var(--bg-subtle)}
+.git-mx tr.git-mx-x+tr td{border-top-color:transparent}
+.git-mx-xin{padding-top:14px;border-top:1px solid var(--border-strong)}
+.git-mx-rn{width:100%;min-width:150px}
+.git-mx-rn .git-name,.git-mx-sub{width:0;min-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.git-mx-rn .git-name{font-size:14px;font-weight:500;letter-spacing:-.01em;overflow-wrap:normal}
+.git-mx-sub{margin-top:3px;font-size:12px;color:var(--text-secondary)}
 .git-mx tr.off .git-name{color:var(--text-secondary)}
-.git-mx-act{padding-right:12px!important;text-align:right;white-space:nowrap}
+.git-mx-act{text-align:right;white-space:nowrap}
 .git-mx-act>*+*{margin-left:6px}
-.git-mx-x td{height:auto;padding:10px 12px 14px 34px;background:var(--bg-subtle);border-bottom:1px solid var(--border-strong)}
 .git-mx-note{text-align:left;padding-top:8px}
-.git-cell{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;font-size:12px;white-space:nowrap;border-radius:var(--r-sm)}
-.git-cell.ok{color:var(--text-tertiary)}
-.git-cell.ok::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--green-200)}
-.git-cell.bad{font-weight:600;color:var(--amber);background:color-mix(in srgb,var(--amber) 11%,transparent)}
-.git-cell.meh{font-weight:600;color:var(--mustard);background:color-mix(in srgb,var(--mustard) 13%,transparent)}
-.git-cell.live{color:var(--cyan)}
-.git-cell.na{color:var(--text-tertiary)}
+/* the keys take `.cbtn`'s shape; the primary is `.cbtn.answer`'s tint, no pulse */
+.git-mx-act .git-key,.git-mx-act .git-sync{height:30px;padding:0 10px;border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--bg-surface);color:var(--text-secondary)}
+.git-mx-act .git-key:hover,.git-mx-act .git-sync:hover:not(:disabled){color:var(--text-primary);border-color:var(--text-tertiary);background:var(--bg-surface)}
+.git-mx-act .git-key.primary,.git-mx-act .git-sync.primary,
+.git-mx-act .git-key.primary:hover,.git-mx-act .git-sync.primary:hover:not(:disabled){background:#FDEEDF;border-color:transparent;color:#B4601E}
+.git-mx-act .git-sync.on,.git-mx-act .git-sync.on:hover:not(:disabled){color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+/* cells: a failing check is a pill in `.status`'s shape with the soft Git
+   tints; everything else plain 12px text, no dot */
+.git-mx .git-cell,.git-mx-legend .git-cell{font-size:12px;white-space:nowrap}
+.git-mx .git-cell.ok,.git-mx .git-cell.na,.git-mx-legend .git-cell.ok,.git-mx-legend .git-cell.na{color:var(--text-tertiary)}
+.git-mx .git-cell.live,.git-mx-legend .git-cell.live{color:var(--cyan)}
+.git-mx .git-cell.bad,.git-mx .git-cell.meh,.git-mx-legend .git-cell.bad,.git-mx-legend .git-cell.meh{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:var(--r-md)}
+.git-mx .git-cell.bad,.git-mx-legend .git-cell.bad{color:var(--amber);background:color-mix(in srgb,var(--amber) 11%,transparent)}
+.git-mx .git-cell.meh,.git-mx-legend .git-cell.meh{color:var(--mustard);background:color-mix(in srgb,var(--mustard) 13%,transparent)}
 .git-mx-legend{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:12px 6px 0;font-size:12px;color:var(--text-secondary)}
-.git-mx-legend .git-cell{height:20px}
-.git-mx-legend .git-cell.ok{padding:0}
-.git-mx th:nth-child(n+2){padding-left:12px}
 
 /* Inspector — the Sessions split: ranked list beside one repo in depth */
 .git-in{grid-template-columns:400px minmax(0,1fr)}
@@ -4175,25 +4192,27 @@ At the start of every session, invoke /caveman.
   const delta = (d, trunk) => `${trunk}${d.behind ? ` ↓${d.behind}` : ''}${d.ahead ? ` ↑${d.ahead}` : ''}`;
   function matrix() {
     const rs = ranked(), ok = rs.filter(r => r.state === 'ok');
-    const head = CHECKS.map(([lab, f]) => { const n = ok.filter(r => ['bad', 'meh'].includes(f(r).c)).length; return `<th>${lab}<span class="git-mx-cnt${n ? '' : ' z'}">${n}</span></th>`; }).join('');
+    /* a check's count is plain tertiary text after its label, and only above 0 */
+    const head = CHECKS.map(([lab, f]) => { const n = ok.filter(r => ['bad', 'meh'].includes(f(r).c)).length; return `<th>${lab}${n ? ` <span class="git-mx-cnt">${n}</span>` : ''}</th>`; }).join('');
     let rows = '';
     for (const r of rs) {
       const l = levelOf(r);
       if (r.state !== 'ok') {
-        rows += `<tr class="off"><td class="git-mx-rn"><span class="git-head"><span class="git-caret"></span>${dot(l)}<span class="git-name">${esc(r.name)}</span></span></td><td colspan="${CHECKS.length}"><span class="git-cell na">${esc(stateSentence(r))}</span></td><td class="git-mx-act">${keys(r, true)}</td></tr>`;
+        rows += `<tr class="off"><td class="git-mx-dot">${dot(l)}</td><td class="git-mx-rn"><div class="git-name">${esc(r.name)}</div></td><td colspan="${CHECKS.length}"><span class="git-cell na">${esc(stateSentence(r))}</span></td><td class="git-mx-act">${keys(r, true)}</td></tr>`;
         continue;
       }
       const open = S.row === r.dirName;
-      rows += `<tr class="git-mx-r" data-grow="${r.dirName}"><td class="git-mx-rn"><span class="git-head"><span class="git-caret">${open ? '▾' : '▸'}</span>${dot(l)}<span class="git-name">${esc(r.name)}</span></span><span class="git-mx-sub">${esc(branchChip(r))}</span></td>` +
+      /* the whole row is the toggle, as in the Sessions list: click, Enter or Space */
+      rows += `<tr class="git-mx-r" data-grow="${r.dirName}" tabindex="0" aria-expanded="${open}"><td class="git-mx-dot">${dot(l)}</td><td class="git-mx-rn"><div class="git-name">${esc(r.name)}</div><div class="git-mx-sub" title="${esc(branchChip(r))}">${esc(branchChip(r))}</div></td>` +
         CHECKS.map(([, f]) => { const v = f(r); return `<td><span class="git-cell ${v.c}">${esc(v.t)}</span></td>`; }).join('') +
         `<td class="git-mx-act">${mxKey(r, l === 'needs')}</td></tr>`;
       if (!open) continue;
       const max = barMax(r.branches);
-      rows += `<tr class="git-mx-x"><td colspan="${CHECKS.length + 2}">${r.branches.length ? r.branches.map(b =>
+      rows += `<tr class="git-mx-x"><td colspan="${CHECKS.length + 3}"><div class="git-mx-xin">${r.branches.length ? r.branches.map(b =>
         `<div class="git-in-br${isStale(b) ? ' stale' : ''}">${bname(r, b)}${dvbar(b, max)}${dv(b)}<span class="git-age">${b.ago}</span></div>`).join('') : '<span class="git-age">No open branches.</span>'}
-        ${r.mergedCount ? `<div class="git-age git-mx-note">${r.mergedCount} merged branches hidden</div>` : ''}</td></tr>`;
+        ${r.mergedCount ? `<div class="git-age git-mx-note">${r.mergedCount} merged branches hidden</div>` : ''}</div></td></tr>`;
     }
-    return `<div class="git-panel git-mx-wrap"><table class="git-mx"><thead><tr><th>Repo</th>${head}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    return `<div class="git-panel git-mx-wrap"><table class="git-mx"><thead><tr><th class="git-mx-dot"></th><th>Repo</th>${head}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
       <div class="git-mx-legend"><span class="git-cell ok">healthy</span><span class="git-cell bad">needs you</span><span class="git-cell meh">worth a look</span><span>— not applicable</span><span>↓ behind · ↑ ahead</span></div>`;
   }
 
@@ -4349,6 +4368,18 @@ At the start of every session, invoke /caveman.
     else if (S.pop) S.pop = false;
     else return;
     renderGit();
+  });
+  /* Enter or Space on a focused Matrix row toggles it; a key inside the row
+     handles its own keys */
+  gitRoot.addEventListener('keydown', ev => {
+    const tr = ev.target;
+    if (!tr.matches || !tr.matches('tr[data-grow]') || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+    ev.preventDefault();
+    const d = tr.dataset.grow;
+    S.row = S.row === d ? null : d;
+    renderGit();
+    const back = gitRoot.querySelector(`tr[data-grow="${d}"]`);
+    if (back) back.focus();
   });
 
   /* ── Projects: PinPicker on the ground, as tiles ──────────────────── */
