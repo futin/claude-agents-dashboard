@@ -638,9 +638,11 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .srw .ctl{flex:none;display:flex;align-items:center;gap:8px}
 code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(--r-xs);padding:1px 5px}
 /* segmented switch */
-.sw{display:inline-flex;background:var(--bg-subtle);border-radius:var(--r-md);padding:3px}
-.sw button{border:0;background:transparent;border-radius:9px;padding:7px 14px;font-size:13px;font-weight:500;color:var(--text-secondary)}
-.sw button.on{background:var(--bg-surface);color:var(--text-primary);box-shadow:var(--lift-card)}
+.sw{display:inline-flex;background:var(--bg-track);border:1px solid var(--border);border-radius:var(--r-md);padding:3px}   /* styles.css .set-seg */
+.sw button{border:0;background:transparent;border-radius:9px;padding:6px 14px;font-size:13px;font-weight:500;white-space:nowrap;color:var(--text-secondary)}
+.sw button.on{background:var(--bg-surface);color:var(--text-primary);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.sw.git-fetch-seg button{font-size:12px;padding:6px 9px}
+.fixed{font-size:13px;font-weight:500;color:var(--text-secondary);white-space:nowrap}   /* styles.css .set-fixed: a host-pinned value, not a control */
 /* select · number · text · button — one 36px control family */
 .sel,.num,.txt,.btn{
   height:36px;border:1px solid var(--border-strong);border-radius:var(--r-md);
@@ -649,7 +651,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 }
 .sel{min-width:150px}
 .sel svg{margin-left:auto;color:var(--text-secondary)}
-.num{width:120px;font-weight:600}
+.num{width:120px;gap:8px;font-weight:600}
 .num .u{margin-left:auto;font-weight:400;color:var(--text-tertiary);font-size:12px}
 .txt{width:220px;color:var(--text-tertiary);font-weight:400}
 .btn.danger{color:var(--red-500)}
@@ -659,16 +661,17 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
    block clipped to its 8px track. */
 .callout{
   display:flex;gap:10px;margin:0 0 16px;padding:12px 14px;border-radius:var(--r-md);
-  background:#FDEEDF;font-size:12px;line-height:1.5;color:var(--text-secondary);
+  background:color-mix(in srgb,var(--amber) 12%,transparent);font-size:12px;line-height:1.5;color:var(--text-secondary);
 }
 .callout b{color:var(--text-primary);font-weight:500}
 /* theme picker */
 .themes{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px}
-.theme{border:1px solid var(--border-strong);border-radius:var(--r-md);padding:8px;background:var(--bg-surface);text-align:left}
+.theme{display:flex;flex-direction:column;gap:8px;border:1px solid var(--border-strong);border-radius:var(--r-md);padding:8px;background:var(--bg-surface);text-align:left}
 .theme.on{border-color:var(--ink-inverse);box-shadow:0 0 0 1px var(--ink-inverse)}
 .theme .sw3{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;height:28px}
-.theme .sw3 i{border-radius:3px;display:block}
-.theme .tn{font-size:12px;font-weight:500;margin-top:8px}
+.theme .sw3 i{border-radius:8px;display:block}
+.theme .tn{font-size:12px;font-weight:500;line-height:1.25;color:var(--text-secondary)}
+.theme.on .tn{color:var(--text-primary)}
 /* page header: a band on the app ground, not a card */
 .band{padding:0}   /* styles.css .usg-band / .set-band: flush with the board's 24px gutter */
 .band .cs{max-width:92ch;line-height:1.45}
@@ -928,7 +931,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 }
 .pick.on{background:var(--ink-inverse);border-color:var(--ink-inverse);color:var(--text-on-dark)}
 .pick i{width:7px;height:7px;border-radius:var(--r-full);display:inline-block}
-.pop .sw{display:flex;background:var(--bg-track);border-radius:var(--r-md);padding:3px}
+.pop .sw{display:flex;background:var(--bg-track);border:0;border-radius:var(--r-md);padding:3px}
 .pop .sw button{flex:1;padding:6px 0}
 .opt{
   display:flex;align-items:center;gap:10px;width:100%;height:36px;padding:0 10px;border:0;
@@ -2622,7 +2625,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
     <!-- ═══ PAGE: SETTINGS · LOCAL ═══════════════════════════════════════ -->
     <section class="page" id="p-set-local">
       <div class="band">
-        <div class="ct">Local <span class="scope"><i></i>this browser</span></div>
+        <div class="ct">Settings · Local <span class="scope"><i></i>this browser</span></div>
         <div class="cs">Kept in this browser's storage and never sent anywhere. A phone on the desk and the laptop each keep their own — set these again on the next device.</div>
       </div>
       <div class="setcols" data-render="local"></div>
@@ -2631,7 +2634,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
     <!-- ═══ PAGE: SETTINGS · SHARED ══════════════════════════════════════ -->
     <section class="page" id="p-set-shared">
       <div class="band">
-        <div class="ct">Shared <span class="scope shared"><i></i>every device</span></div>
+        <div class="ct">Settings · Shared <span class="scope shared"><i></i>every device</span></div>
         <div class="cs">Stored by the dashboard server. One change here shows up on every device, and steers the hooks that run outside any browser.</div>
       </div>
       <div class="setcols" data-render="shared"></div>
@@ -2762,23 +2765,25 @@ document.querySelectorAll('[data-go]').forEach(el =>
 
   // the five real themes; swatches mirror SettingsView.tsx SWATCHES
   const THEMES = [
+    ['Daylight',       ['#f4f4f3', '#ffffff', '#131313']],   // the default, listed first (settings.ts THEMES)
     ['Midnight Radar', ['#0c1220', '#182238', '#55d0dd']],
     ['Graphite',       ['#111214', '#1f2124', '#6fc5cf']],
     ['Amber CRT',      ['#0a0805', '#1a150c', '#ffb03a']],
-    ['Nightshift',     ['#07120d', '#12251b', '#4fe09a']],
-    ['Daylight',       ['#f4f4f3', '#ffffff', '#131313']]
+    ['Nightshift',     ['#07120d', '#12251b', '#4fe09a']]
   ];
   const themes = () => `<div class="themes">${THEMES.map(([n, c], i) =>
-    `<button class="theme${i === 4 ? ' on' : ''}"><span class="sw3">${c.map(x => `<i style="background:${x}"></i>`).join('')}</span><span class="tn">${n}</span></button>`
+    `<button class="theme${i === 0 ? ' on' : ''}"><span class="sw3">${c.map(x => `<i style="background:${x}"></i>`).join('')}</span><span class="tn">${n}</span></button>`
   ).join('')}</div>`;
 
   // sub-categories. Copy is the real SettingsView hint text, trimmed to a line or two.
   const GROUPS = {
     display: { title: 'Display', sub: 'How the board looks in this browser', body:
-      row('Theme', 'Daylight — the reference light board: warm grey, white cards, green ramp.', null, themes()) +
+      row('Theme', 'the reference light board — warm grey, white cards, green ramp', null, themes()) +
       row('Density', 'Compact tightens row padding and spacing — more sessions per screen.', seg(['Comfortable', 'Compact'], 0)) +
       row('Text size', 'Scales the whole board, not just type.', seg(['90%', '100%', '110%', '120%'], 1)) +
+      row('Content width', 'Fixed keeps the drawn measure — 820px, or 1280px where a section has two columns. Fullscreen drops the cap and lets every section span the window.', seg(['Fixed', 'Fullscreen'], 0)) +
       row('Opens on', 'Which section this browser lands on when you load the page.', sel('Last used')) +
+      row('Default session view', 'Which of the five shapes the Sessions list opens in. Last used reopens whatever the toolbar’s switcher was left on; pick a shape instead and every load comes back to it.', sel('Last used')) +
       row('Chat messages', 'Truncated cuts a message at 2 000 characters and a tool body at 20 000. Full sends the whole thing; changing it re-tails an open drawer.', seg(['Truncated', 'Full'], 0)) },
     live: { title: 'Live data', sub: 'How hard this browser polls the transcripts', body:
       row('Refresh rate', 'How often the sessions list, subagent detail and open chat re-read the transcripts. Faster costs disk reads, not tokens.', sel('every 3s')) +
@@ -2788,6 +2793,11 @@ document.querySelectorAll('[data-go]').forEach(el =>
     spawn: { title: 'New sessions', sub: 'Preselected in the launch panel; override per launch', body:
       row('Default model', '“CLI default” sends no --model flag and lets Claude Code pick.', sel('CLI default')) +
       row('Default effort', '“CLI default” sends no --effort flag.', sel('CLI default')) },
+    gitsync: { title: 'Git Sync', sub: 'Used by the Sync button on Management › Git; no launch sheet', body:
+      row('Model', '“CLI default” sends no --model flag. Separate from New sessions, so a sync can run on a cheaper model.', sel('CLI default')) +
+      row('Effort', '“CLI default” sends no --effort flag.', sel('CLI default')) +
+      row('Permission mode', 'Set on the host by SYNC_PERMISSION_MODE in .env, capped by SPAWN_MAX_PERMISSION.', '<span class="fixed">auto</span>') +
+      row('Remote control', 'Follows Remote answers under Shared, so a sync can be answered from the phone exactly when the dashboard can.', '<span class="fixed">On</span>') },
     browser: { title: 'Notify this browser', sub: 'For sessions launched from the dashboard — they have no terminal', body:
       row('Notify this browser', 'An OS banner and one beep when a dashboard-launched session has a question, a plan waiting for review, or an open reply window. Only fires while this tab is open on Sessions.', onoff(true)) +
       row('Test notification', 'Fires one banner and one beep right now, ignoring the switch above, and says what the browser did with each.', btn('Send test notification')) },
@@ -2798,6 +2808,8 @@ document.querySelectorAll('[data-go]').forEach(el =>
 
     forecast: { title: 'Usage forecast', sub: 'Feeds the weekly projection on the Usage page', body:
       row('Record usage history', 'Samples your account usage to disk so the forecast learns which hours you work. While on, the server contacts Anthropic about once a minute even with no browser open. Needs ~2 weeks before it improves.', onoff(true)) },
+    gitfetch: { title: 'Git fetch', sub: 'How Management › Git learns what landed on origin', body:
+      row('Auto-fetch', 'Runs git fetch origin for each pinned repo on this interval, only while a Git view is open on some device. Never pulls, never asks for a password or passphrase: a repo that needs one shows "needs auth".', seg(['Off', '30s', '1m', '2m', '5m', '10m'], 4).replace('class="sw"', 'class="sw git-fetch-seg"')) },
     remote: { title: 'Remote answers', sub: 'Questions wait here instead of the terminal while you are away', body:
       row('Remote answers', 'On, a question asked while you are away from the keyboard waits here instead of the terminal. At your desk it still goes straight to the terminal.', onoff(true)) +
       row('Away after', 'Keyboard and mouse idle before you count as away. Below it a question goes to the terminal dialog and no question or plan push is sent. 0 skips the check.', num(60, 'sec')) +
@@ -2818,8 +2830,8 @@ document.querySelectorAll('[data-go]').forEach(el =>
 
   // which cards go in which column, per scope — balanced by hand
   const SCOPES = {
-    local:  [['display', 'spawn', 'reset'], ['live', 'browser', 'conn']],
-    shared: [['push'], ['remote', 'forecast']]
+    local:  [['display', 'spawn', 'gitsync', 'reset'], ['live', 'browser', 'conn']],
+    shared: [['push'], ['remote', 'forecast', 'gitfetch']]
   };
 
   const card = id => {
