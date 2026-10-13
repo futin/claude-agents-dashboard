@@ -235,7 +235,7 @@ function errorMessage(err: unknown): string {
 
 /**
  * Drops a URL's username and password so a token in `origin` never reaches the client. An scp-like `user@host:path` has no scheme for `URL` to parse, so
- * it is cut by hand; a local path passes through. null for an empty or unparseable value.
+ * it is cut by hand; a local path passes through. null for an empty or unparseable value, and for any other scheme-less value with an `@` before its first `/`.
  */
 export function stripUserinfo(url: string): string | null {
   if (url.trim() === '') return null;
@@ -248,7 +248,12 @@ export function stripUserinfo(url: string): string | null {
     return u.href;
   }
   const scp = /^[^@/:]+@([^/:]+):(.+)$/.exec(url);
-  return scp ? `${scp[1]}:${scp[2]}` : url;
+  if (scp) return `${scp[1]}:${scp[2]}`;
+  // An `@` ahead of the first `/` that the scp shape rejects (`user:token@host:path`) may still carry a credential: drop it rather than pass it on.
+  const at = url.indexOf('@');
+  const slash = url.indexOf('/');
+  if (at !== -1 && (slash === -1 || at < slash)) return null;
+  return url;
 }
 
 async function readGitFacts(base: { dirName: string; name: string; path: string | null }, cwd: string, run: GitRunner, memo: GitMemo): Promise<RepoGitStats> {

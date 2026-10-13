@@ -956,6 +956,10 @@ export async function run(): Promise<number> {
       ['ssh://git@github.com:2222/o/r.git', 'ssh://github.com:2222/o/r.git'],
       ['http://[bad', null],
       ['/tmp/x/origin.git', '/tmp/x/origin.git'],
+      ['git@github.com:o/r.git', 'github.com:o/r.git'],
+      ['user:pw@host:o/r.git', null],
+      ['https://:pw@github.com/o/r.git', 'https://github.com/o/r.git'],
+      ['https://u:p@github.com/o/r.git', 'https://github.com/o/r.git'],
     ];
     for (const [input, want] of table) assert.strictEqual(stripUserinfo(input), want, JSON.stringify(input));
   }));
