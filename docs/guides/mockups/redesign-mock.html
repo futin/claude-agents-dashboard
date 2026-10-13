@@ -177,32 +177,33 @@
   --bg-track:#EDEDEC;
   --border:#EAEAE8;
   --border-strong:#DCDCDA;
-  --ink-inverse:#111111;
+  --ink-inverse:#131313;
   /* text */
   --text-primary:#131313;
-  --text-secondary:#6E6E6E;
-  --text-tertiary:#A0A0A0;
+  --text-secondary:#525252;
+  --text-tertiary:#6B6B6B;
   --text-on-dark:#FFFFFF;
   /* ramp */
   --green-600:#5FA92C;
   --green-500:#7DC242;
   --green-400:#9BD25C;
   --green-200:#CDE8A8;
+  --green-ink:#38631A;   /* styles.css daylight --green: green as TEXT (the ramp greens are fills) */
   --yellow-400:#F2E635;
   --orange-400:#F5A15C;
   --orange-300:#F9C79A;
-  --red-500:#E0533F;
+  --red-500:#AA3927;
   /* data inks: Daylight's --amber / --mustard / --cyan from styles.css,
      read by Management › Git (amber needs you, mustard in flight, cyan the
      ahead half of a divergence bar and a request in flight) */
-  --amber:#C4761F;
-  --mustard:#9A8712;
+  --amber:#824E15;
+  --mustard:#5F530B;
   /* the soft pill: the fill as the Git rules mix it, and the text — the same
      hue, darkened only as far as 4.5:1 on the fill over the darkest surface
      a pill sits on. styles.css carries the same pair as daylight tokens. */
-  --amber-tint:color-mix(in srgb,var(--amber) 11%,transparent);--amber-ink:#945917;
-  --mustard-tint:color-mix(in srgb,var(--mustard) 13%,transparent);--mustard-ink:#74660e;
-  --cyan:#3F8F14;
+  --amber-tint:color-mix(in srgb,#C4761F 11%,transparent);--amber-ink:#945917;
+  --mustard-tint:color-mix(in srgb,#9A8712 13%,transparent);--mustard-ink:#74660e;
+  --cyan:#306C0F;
   /* radii */
   --r-xs:4px; --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-full:999px;
   /* type */
@@ -227,11 +228,14 @@ body{
   color:var(--text-primary);
   font-variant-numeric:tabular-nums;
   -webkit-font-smoothing:antialiased;
+  line-height:1.4;   /* styles.css body */
   padding:40px;
 }
 h1,h2,h3,h4,p,ul,ol,dl,dd{margin:0;padding:0}
 ul,ol{list-style:none}
-button{font:inherit;color:inherit;cursor:pointer}
+/* styles.css has no global button reset: a button keeps the UA's 13.33px / normal
+   line-height unless its own rule sets them, so the mock does the same */
+button{font-family:inherit;color:inherit;cursor:pointer}
 
 /* ── mock chrome: the artboard switcher (not part of the design) ─────────── */
 .mockbar{
@@ -252,7 +256,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 
 /* ── app shell ───────────────────────────────────────────────────────────── */
 .shell{
-  display:grid;grid-template-columns:300px 1fr;
+  display:grid;grid-template-columns:240px 1fr;   /* styles.css .rail flex:0 0 240px */
   background:var(--bg-surface);
   border-radius:var(--r-xl);
   box-shadow:var(--lift-shell);
@@ -262,28 +266,29 @@ button{font:inherit;color:inherit;cursor:pointer}
 
 /* ── sidebar ─────────────────────────────────────────────────────────────── */
 .side{
-  padding:32px 20px;display:flex;flex-direction:column;gap:8px;
+  padding:24px;display:flex;flex-direction:column;gap:4px;
 }
+/* the wordmark as styles.css .rail-brand draws it: a terminal prompt — the
+   kicker over "› dashboard" and a green block cursor */
 .brand{
-  font-size:20px;font-weight:700;letter-spacing:.01em;line-height:1;
-  padding:0 12px 24px;display:flex;align-items:center;gap:9px;
+  display:flex;flex-direction:column;align-items:flex-start;gap:4px;line-height:1;
+  padding:0 12px 24px;
 }
-.brand .dot{width:10px;height:10px;border-radius:var(--r-full);background:var(--green-500)}
-.brand small{
-  display:block;font-size:11px;font-weight:500;letter-spacing:.1em;
-  text-transform:uppercase;color:var(--text-tertiary);margin-bottom:3px;
-}
-.nav{display:flex;flex-direction:column;gap:8px}
+.brand .kick{display:block;font-size:11px;font-weight:400;text-transform:uppercase;letter-spacing:.16em;color:var(--text-tertiary)}
+.brand .prompt{display:flex;align-items:center;gap:8px;font-size:22px;font-weight:600;letter-spacing:-.03em}
+.brand .caret{color:var(--green-500)}
+.brand .cur{flex:none;width:10px;height:22px;border-radius:1px;background:var(--green-500)}
+.nav{display:flex;flex-direction:column;gap:4px}
 .nav-item{
   position:relative;display:flex;align-items:center;gap:12px;
-  height:44px;padding:0 16px;border:0;background:transparent;
-  border-radius:var(--r-lg);font-size:16px;font-weight:500;text-align:left;
+  height:36px;padding:0 16px;border:0;background:transparent;
+  border-radius:var(--r-lg);font-size:14px;font-weight:500;text-align:left;color:var(--text-secondary);
 }
-.nav-item .ic{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
-.nav-item.on{background:var(--bg-subtle)}
+.nav-item .ic{width:16px;height:16px;flex:none;color:var(--text-primary);stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.nav-item.on{background:var(--bg-subtle);color:var(--text-primary)}
 .nav-item.on::before{
   content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
-  width:3px;height:22px;border-radius:var(--r-full);background:var(--ink-inverse);
+  width:3px;height:16px;border-radius:var(--r-full);background:var(--ink-inverse);
 }
 .nav-item .count{
   margin-left:auto;min-width:22px;height:20px;padding:0 7px;
@@ -294,14 +299,17 @@ button{font:inherit;color:inherit;cursor:pointer}
 .nav-item .count.attn{background:var(--orange-400);color:var(--text-primary)}
 
 /* sub-nav with the L-shaped tree rule */
-.subnav{margin:2px 0 2px 36px;padding-left:12px;border-left:1px solid var(--border-strong);display:flex;flex-direction:column}
+/* styles.css .rail-sublink: each row paints its own trunk + elbow, the last
+   row only the top half of the trunk, so the rule never trails past it */
+.subnav{margin:2px 0 2px 24px;display:flex;flex-direction:column}
 .subnav button{
-  position:relative;background:none;border:0;text-align:left;
-  padding:7px 0 7px 14px;font-size:14px;color:var(--text-secondary);
+  position:relative;border:0;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  padding:7px 0 7px 20px;font-size:14px;font-weight:400;color:var(--text-secondary);
+  background-color:transparent;
+  background-image:linear-gradient(var(--border-strong),var(--border-strong)),linear-gradient(var(--border-strong),var(--border-strong));
+  background-repeat:no-repeat;background-size:1px 100%,12px 1px;background-position:0 0,0 50%;
 }
-.subnav button::before{
-  content:"";position:absolute;left:-12px;top:50%;width:12px;height:1px;background:var(--border-strong);
-}
+.subnav button:last-child{background-size:1px 50%,12px 1px}
 .subnav button.on{color:var(--text-primary);font-weight:500}
 
 .side-div{height:1px;background:var(--border);margin:24px 4px}
@@ -324,10 +332,10 @@ button{font:inherit;color:inherit;cursor:pointer}
   border-radius:var(--r-lg);font-size:14px;font-weight:500;
 }
 .live{
-  display:flex;align-items:center;gap:8px;padding:0 12px;
+  display:flex;align-items:center;gap:8px;padding:16px 12px 0;
   font-size:12px;color:var(--text-secondary);
 }
-.live i{width:7px;height:7px;border-radius:var(--r-full);background:var(--green-500);display:inline-block}
+.live i{flex:none;width:7px;height:7px;border-radius:var(--r-full);background:var(--green-500);display:inline-block}
 
 /* ── main column ─────────────────────────────────────────────────────────── */
 /* the column right of the rail: the white header strip, then the board */
@@ -353,9 +361,9 @@ button{font:inherit;color:inherit;cursor:pointer}
      rather than the band to the chip — 36 tall, 26px avatar, 52px meters. The
      24px right inset is the board's own gutter, so chip and board content hang
      off one right margin. */
-  height:50px;padding:7px 24px;
+  height:50px;padding:0 24px;
 }
-.acct-anchor{position:relative}
+.acct-anchor{position:relative;flex:none}
 /* T2 — bare: no fill, no border, no shadow. A white pill on a white band is
    held together by a hairline, which is the weakest mark in the design and the
    first to vanish on a dim screen; here the avatar, the name and the meters sit
@@ -380,8 +388,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 .acct .mtop span{font-size:9.5px;color:var(--text-tertiary);letter-spacing:.04em}
 .acct .mtop b{font-size:11px;font-weight:700}
 .acct .mini{position:relative;height:3.5px;border-radius:var(--r-full);background:var(--bg-track);overflow:hidden}
-.acct .mini i{position:absolute;inset:0 auto 0 0;border-radius:var(--r-full);background:var(--green-600)}
-.acct .mini i.mid{background:var(--yellow-400)}
+.acct .mini i{position:absolute;inset:0 auto 0 0;border-radius:var(--r-full);background:var(--green-500)}
+.acct .mini i.mid{background:var(--amber)}
 .acct .mini i.high{background:var(--red-500)}
 .acct .cv{width:9px;height:9px;flex:none;color:var(--text-tertiary);transition:transform .16s}
 .acct[aria-expanded="true"] .cv{transform:rotate(180deg)}
@@ -427,7 +435,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .ring.lg{width:34px;height:34px}
 .ring.lg svg{width:17px;height:17px}
 .acct.out .nm{color:var(--text-secondary);font-weight:500}
-.acct.out .dotwarn{flex:none;width:6px;height:6px;border-radius:var(--r-full);background:var(--orange-400)}
+.acct.out .dotwarn{flex:none;width:6px;height:6px;border-radius:var(--r-full);background:var(--amber)}
 
 /* the signed-out popover: no gauges to show, so it is the sentence and the fix */
 .acct-pop .out-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
@@ -441,8 +449,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 
 /* the popover: profile block over the two gauges the aside card used to draw */
 .acct-pop{
-  position:absolute;right:0;top:calc(100% + 8px);z-index:40;width:320px;display:none;
-  background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-lg);
+  position:absolute;right:0;top:calc(100% + 8px);z-index:40;width:min(372px,calc(100vw - 24px));display:none;
+  background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-md);
   box-shadow:var(--lift-float);padding:16px;
 }
 .acct-pop.open{display:block}
@@ -452,23 +460,24 @@ button{font:inherit;color:inherit;cursor:pointer}
 .acct-id .n{display:block;font-size:14px;font-weight:600;line-height:1.25}
 .acct-id .e{display:block;font-size:12px;color:var(--text-secondary);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .acct-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
-.acct-tags span{font-size:10.5px;font-weight:600;letter-spacing:.03em;color:var(--text-secondary);background:var(--bg-track);border-radius:var(--r-full);padding:2.5px 8px}
-.acct-tags span.on{color:var(--green-600);background:var(--green-200)}
-.acct-g{margin-bottom:14px}
+.acct-tags span{font-size:10.5px;font-weight:600;letter-spacing:.03em;color:var(--text-secondary);background:var(--bg-subtle);border-radius:var(--r-full);padding:2.5px 8px}
+.acct-tags span.on{color:var(--green-ink)}
+/* the gauges as styles.css `.acct-pop .usage` draws them (the `.usage .u-*` rules) */
+.acct-g{margin-bottom:20px}
 .acct-g:last-of-type{margin-bottom:0}
-.acct-grow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px}
-.acct-grow .l{font-size:12px;color:var(--text-secondary)}
-.acct-grow .l b{color:var(--text-primary);font-weight:600;font-size:13px;margin-left:5px}
-.acct-grow .r{font-size:11px;color:var(--text-tertiary)}
-.acct-bar{position:relative;height:6px;border-radius:var(--r-full);background:var(--bg-track);overflow:hidden}
-.acct-bar i{position:absolute;inset:0 auto 0 0;border-radius:var(--r-full);background:var(--green-600)}
-.acct-time{position:relative;height:3px;border-radius:var(--r-full);background:var(--bg-track);margin-top:7px}
+.acct-grow{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:13px}
+.acct-grow .l{display:flex;align-items:baseline;gap:5px;font-size:13px;font-weight:500;color:var(--text-primary)}
+.acct-grow .l b{color:var(--text-primary);font-weight:600;font-size:13px}
+.acct-grow .r{font-size:12px;color:var(--text-secondary);white-space:nowrap}
+.acct-bar{position:relative;height:10px;border-radius:8px;background:var(--bg-track);overflow:hidden;margin-top:8px}
+.acct-bar i{position:absolute;inset:0 auto 0 0;border-radius:8px;background:var(--green-500)}
+.acct-time{position:relative;height:3px;border-radius:var(--r-full);background:var(--bg-track);margin-top:12px}
 .acct-time i{position:absolute;inset:0 auto 0 0;background:var(--border-strong);border-radius:var(--r-full)}
-.acct-time u{position:absolute;top:-2px;width:1.5px;height:7px;background:var(--text-secondary);border-radius:1px}
-.acct-tl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--text-tertiary);margin-top:5px}
-.acct-tl .ok{color:var(--green-600);font-weight:600}
+.acct-time u{position:absolute;top:-3px;width:1px;height:9px;background:var(--text-primary)}
+.acct-tl{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--text-tertiary);margin-top:6px}
+.acct-tl .ok{color:var(--green-ink)}
 .acct-foot{display:flex;gap:6px;margin-top:14px;padding-top:13px;border-top:1px solid var(--border)}
-.acct-foot button{flex:1;font-size:12px;font-weight:500;color:var(--text-secondary);background:var(--bg-track);border:0;border-radius:var(--r-md);padding:8px}
+.acct-foot button{flex:1;font-size:12px;font-weight:500;color:var(--text-secondary);background:var(--bg-subtle);border:0;border-radius:var(--r-md);padding:8px}
 .acct-foot button:hover{color:var(--text-primary)}
 
 .newbtn{
@@ -653,8 +662,8 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .theme .sw3 i{border-radius:3px;display:block}
 .theme .tn{font-size:12px;font-weight:500;margin-top:8px}
 /* page header: a band on the app ground, not a card */
-.band{padding:8px 4px 0}
-.band .cs{max-width:92ch}
+.band{padding:0}   /* styles.css .usg-band / .set-band: flush with the board's 24px gutter */
+.band .cs{max-width:92ch;line-height:1.45}
 
 /* ── sessions page ───────────────────────────────────────────────────────── */
 .odot{width:7px;height:7px;border-radius:var(--r-full);background:var(--green-500);display:inline-block}
@@ -1334,7 +1343,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-clock-root .git-pop{left:auto;right:0;max-width:calc(100vw - 32px)}
 /* white, no ring and no lift: the live --strip-hi (= --bg-subtle) fill all but
    vanished on the --bg-app ground; white won over the pills' grey */
-.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:var(--r-md);background:var(--bg-surface);color:var(--text-primary)}
+.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:var(--r-md);font:inherit;background:var(--bg-surface);color:var(--text-primary)}
 .git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--bg-subtle)}
 .git-clock-meters{display:flex;gap:10px}
 .git-clock-meters>*{min-width:max-content}
@@ -1347,13 +1356,13 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-meter-label{font-size:11px;font-weight:500;color:var(--text-tertiary)}
 .git-meter-value{font-size:11px;font-weight:700;color:var(--text-primary)}
 .git-meter-track{height:3.5px;border-radius:4px;background:var(--bg-track);overflow:hidden}
-.git-meter-fill{display:block;height:100%;border-radius:4px;background:var(--green-600)}
+.git-meter-fill{display:block;height:100%;border-radius:4px;background:var(--green-500)}
 .git-meter[data-tone="amber"] .git-meter-fill{background:var(--amber)}
 .git-meter[data-tone="amber"] .git-meter-value{color:var(--amber)}
 .git-meter[data-tone="live"] .git-meter-fill{background:var(--cyan);animation:git-meter-pulse 1.6s ease-in-out infinite}
 .git-meter[data-tone="live"] .git-meter-value{color:var(--cyan)}
 @keyframes git-meter-pulse{50%{opacity:.35}}
-.git-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:20;width:420px;padding:14px 16px;border-radius:var(--r-lg);background:var(--bg-surface);box-shadow:var(--lift-shell)}
+.git-pop{position:absolute;top:calc(100% + 6px);left:auto;right:0;z-index:20;width:420px;max-width:calc(100vw - 32px);padding:14px 16px;border-radius:var(--r-lg);background:var(--bg-surface);box-shadow:var(--lift-shell);text-align:left}
 .git-pop-row{display:grid;grid-template-columns:minmax(0,1fr) 120px auto;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--border)}
 .git-pop-row:first-child{border-top:0;padding-top:0}
 .git-pop-row .git-meter{width:120px}
@@ -1374,13 +1383,13 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--text-tertiary)}
 .git-dot.needs{background:var(--amber)}
 .git-dot.flight{background:var(--mustard)}
-.git-dot.quiet{background:var(--green-600)}
+.git-dot.quiet{background:var(--green-500)}
 .git-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .git-name{font-size:15px;font-weight:500;letter-spacing:-.01em;min-width:0;overflow-wrap:anywhere}
 .git-chip{display:inline-block;font-size:12px;font-weight:500;line-height:1.4;padding:2px 9px;border-radius:var(--r-full);border:1px solid var(--border-strong);color:var(--text-secondary);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .git-chip.branch{color:var(--text-primary);max-width:240px}
 .git-chip.amber{color:var(--amber-ink);border-color:transparent;background:var(--amber-tint)}
-.git-chip.green{color:var(--green-600);border-color:transparent;background:color-mix(in srgb,var(--green-600) 16%,transparent)}
+.git-chip.green{color:var(--green-ink);border-color:transparent;background:var(--green-200)}
 .git-chip.mustard{color:var(--mustard-ink);border-color:transparent;background:var(--mustard-tint)}
 .git-chip.wt{flex:none;font-size:11px;padding:0 7px;color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
 .git-sync{flex:none;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px 0 9px;font-size:12px;font-weight:500;line-height:1;color:var(--text-secondary);background:var(--sync-paper,var(--bg-subtle));border:0;border-radius:var(--r-sm);white-space:nowrap;transition:color .15s,background .15s}
@@ -1397,21 +1406,21 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
    docs/superpowers/specs/2026-10-12-management-git-ux-mockups.html). These
    rules are the mock's own, `git-` prefixed so they can move to styles.css
    as they stand. */
-.git-panel{background:var(--bg-surface);border-radius:var(--r-lg);box-shadow:var(--lift-card);min-width:0}
+.git-panel{background:var(--bg-surface);border-radius:var(--r-lg);min-width:0}
 .git-gh{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);margin:16px 4px 8px}
 .git-age{font-size:12px;color:var(--text-tertiary);text-align:right;white-space:nowrap}
-.git-caret{display:inline-block;width:14px;flex:none;font-size:11px;color:var(--text-tertiary)}
+.git-caret{display:inline-block;width:16px;flex:none;color:var(--text-tertiary)}
 .git-key{flex:none;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;font-size:12px;font-weight:500;line-height:1;color:var(--text-secondary);background:var(--bg-subtle);border:0;border-radius:var(--r-sm);white-space:nowrap;transition:color .15s,background .15s}
 .git-key:hover{color:var(--text-primary);background:var(--border-strong)}
 .git-key.primary,.git-sync.primary{color:var(--text-on-dark);background:var(--ink-inverse)}
-.git-key.primary:hover,.git-sync.primary:hover:not(:disabled){color:var(--text-on-dark);background:var(--text-primary)}
+.git-key.primary:hover,.git-sync.primary:hover:not(:disabled){color:var(--text-on-dark);background:color-mix(in srgb,var(--text-primary) 85%,var(--bg-surface))}
 .git-chip.dim{color:var(--text-tertiary);border-style:dashed}
 .git-origin{font-size:12px;color:var(--text-tertiary);white-space:nowrap}
 .git-origin.warn{color:var(--amber)}.git-origin.live{color:var(--cyan)}
 /* an agent on the branch, in the Sessions board's own inks */
 .git-sess{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:var(--r-full);padding:1px 8px 1px 6px;white-space:nowrap;flex:none}
 .git-sess::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
-.git-sess.working{color:var(--green-600);background:color-mix(in srgb,var(--green-600) 13%,transparent)}
+.git-sess.working{color:var(--green-ink);background:var(--green-200)}
 .git-sess.waiting{color:var(--amber-ink);background:var(--amber-tint)}
 .git-sess.idle{color:var(--text-secondary);background:var(--bg-subtle)}
 /* ↓ behind · ↑ ahead, labelled, and the bar drawn the same way round */
@@ -1432,12 +1441,12 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 
 /* Inbox — count tiles that filter, a verdict and a key per repo */
 .git-ib-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-.git-ib-tile{border:0;text-align:left;font:inherit;background:var(--bg-surface);border-radius:var(--r-lg);padding:14px 16px;box-shadow:var(--lift-card);display:flex;flex-direction:column;gap:2px;outline:2px solid transparent;outline-offset:-2px}
+.git-ib-tile{border:0;text-align:left;background:var(--bg-surface);border-radius:var(--r-lg);padding:14px 16px;display:flex;flex-direction:column;gap:2px;outline:2px solid transparent;outline-offset:-2px}
 .git-ib-tile.on{outline-color:var(--ink-inverse)}
 .git-ib-tile .big{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
 .git-ib-tile.needs .big{color:var(--amber)}
 .git-ib-tile .lab{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)}
-@media (max-width:640px){.git-ib-sum{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:639px){.git-ib-sum{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .git-ib-list{display:flex;flex-direction:column;gap:10px}
 .git-ib-item{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
 .git-ib-top{display:flex;align-items:flex-start;gap:12px}
@@ -1449,11 +1458,11 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-ib-steps li::before{content:"";width:5px;height:5px;border-radius:50%;flex:none;background:var(--border-strong);transform:translateY(-2px)}
 .git-ib-steps li.hot{color:var(--text-primary)}
 .git-ib-steps li.hot::before{background:var(--amber)}
-.git-ib-steps li.calm::before{background:var(--green-600)}
+.git-ib-steps li.calm::before{background:var(--green-500)}
 .git-ib-keys{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-@media (max-width:640px){.git-ib-top{flex-wrap:wrap}.git-ib-keys{width:100%;justify-content:flex-start;padding-left:20px}}
+@media (max-width:767px){.git-ib-top{flex-wrap:wrap}.git-ib-keys{width:100%;justify-content:flex-start;padding-left:20px}}
 .git-ib-br{margin-left:20px;padding-top:10px;border-top:1px solid var(--border)}
-.git-ib-tog{display:inline-flex;align-items:center;gap:4px;padding:0;font:inherit;font-size:12px;color:var(--text-secondary);background:none;border:0}
+.git-ib-tog{display:inline-flex;align-items:center;gap:4px;padding:0;font-size:12px;color:var(--text-secondary);background:none;border:0}
 .git-ib-brow{display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
 .git-ib-brow:last-child{border-bottom:0}
 .git-ib-quiet{display:flex;flex-direction:column;padding:4px 18px;border:1px dashed var(--border-strong);border-radius:var(--r-lg);--sync-paper:var(--bg-surface)}
@@ -1498,7 +1507,8 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-mx-act .git-key,.git-mx-act .git-sync{height:30px;padding:0 10px;border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--bg-surface);color:var(--text-secondary)}
 .git-mx-act .git-key:hover,.git-mx-act .git-sync:hover:not(:disabled){color:var(--text-primary);border-color:var(--text-tertiary);background:var(--bg-surface)}
 .git-mx-act .git-key.primary,.git-mx-act .git-sync.primary,
-.git-mx-act .git-key.primary:hover,.git-mx-act .git-sync.primary:hover:not(:disabled){background:#FDEEDF;border-color:transparent;color:var(--amber-ink)}
+.git-mx-act .git-key.primary:hover,.git-mx-act .git-sync.primary:hover:not(:disabled){background:var(--amber-tint);border-color:transparent;color:var(--amber-ink)}
+.git-mx-act .git-key.primary:hover,.git-mx-act .git-sync.primary:hover:not(:disabled){color:var(--text-primary)}
 .git-mx-act .git-sync.on,.git-mx-act .git-sync.on:hover:not(:disabled){color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
 /* cells: a failing check is a pill in `.status`'s shape with the soft Git
    tints; everything else plain 12px text, no dot */
@@ -1512,8 +1522,8 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 
 /* Inspector — the Sessions split: ranked list beside one repo in depth */
 .git-in{grid-template-columns:400px minmax(0,1fr)}
-@media (max-width:1100px){.git-in{grid-template-columns:320px minmax(0,1fr)}}
-@media (max-width:860px){.git-in{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1279px){.git-in{grid-template-columns:320px minmax(0,1fr)}}
+@media (max-width:1023px){.git-in{grid-template-columns:minmax(0,1fr)}}
 .git-in .lrow:not(.selected):hover{background:color-mix(in srgb,var(--bg-subtle) 50%,transparent)}
 .git-in .lrow .git-dot{width:9px;height:9px}
 .git-in .lrow .act.hot{color:var(--amber)}
@@ -1527,7 +1537,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-in-pane .ins-meta{margin-top:6px}
 .git-in-path{font-size:12px;color:var(--text-tertiary);overflow-wrap:anywhere}
 .git-in-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-@media (max-width:560px){.git-in-checks{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:639px){.git-in-checks{grid-template-columns:minmax(0,1fr)}}
 /* the checks are the inspector's .kv boxes, the value at row size */
 .git-in-ck{display:flex;flex-direction:column;gap:2px}
 .git-in-ck .v{display:block;margin-top:4px;font-size:14px;font-weight:600;letter-spacing:0;line-height:1.35;overflow-wrap:anywhere}
@@ -1543,20 +1553,20 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-in-br{display:grid;grid-template-columns:minmax(0,1fr) 116px 90px 40px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
 .git-in-br.stale{color:var(--text-secondary)}
 .git-in-br.stale .git-dvbar{opacity:.55}
-@media (max-width:560px){.git-in-br{grid-template-columns:minmax(0,1fr) auto 40px}.git-in-br .git-dvbar{display:none}}
+@media (max-width:639px){.git-in-br{grid-template-columns:minmax(0,1fr) auto 40px}.git-in-br .git-dvbar{display:none}}
 .git-in-none{text-align:left;padding:10px 0}
 .git-in-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary)}
 
 /* Branches — every open branch across the pins, a column per need */
 .git-bb-cols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:start}
-@media (max-width:1100px){.git-bb-cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:560px){.git-bb-cols{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1279px){.git-bb-cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:639px){.git-bb-cols{grid-template-columns:minmax(0,1fr)}}
 .git-bb-col{display:flex;flex-direction:column;gap:8px;min-width:0}
 .git-bb-ch{padding:0 4px;font-size:13px}
 .git-bb-ch .git-age{text-align:left}
 .git-bb-hint{display:block;margin-top:2px;font-size:11px;color:var(--text-tertiary)}
 .git-bb-card{display:flex;flex-direction:column;gap:7px;padding:12px 14px}
-.git-bb-card.stale{background:transparent;border:1px dashed var(--border-strong);box-shadow:none}
+.git-bb-card.stale{background:transparent;border:1px dashed var(--border-strong)}
 .git-bb-bn{font-size:13px;font-weight:600;overflow-wrap:anywhere}
 .git-bb-ln{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .git-bb-ln.end{justify-content:flex-end;gap:6px}
@@ -1569,7 +1579,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 /* Projects: PinPicker on the app ground, no card around it, the projects as
    tiles (mock-only `.pj-*`) */
 .pin-pick{display:flex;flex-direction:column;gap:8px;min-width:0}
-.pin-filter{height:36px;width:100%;padding:0 12px;font:inherit;font-size:13px;border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--bg-surface)}
+.pin-filter{height:36px;width:100%;padding:0 12px;font-family:inherit;font-size:13px;border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--bg-surface)}
 .pin-filter:focus{outline:none;border-color:var(--text-tertiary)}
 .pj-toolbar .pin-filter{flex:1;width:auto;min-width:200px;height:38px}
 .pin-group{padding:14px 0 2px;font-size:13px;font-weight:500}
@@ -1614,7 +1624,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .pin-saved.off{opacity:0}
 .pin-saved.live{color:var(--cyan);font-weight:500}
 @media (prefers-reduced-motion:reduce){.pin-saved{transition:none}}
-.pin-grip{align-self:stretch;width:28px;min-height:36px;display:grid;place-items:center;padding:0;font:inherit;font-size:16px;line-height:1;color:var(--text-tertiary);background:none;border:0;border-radius:var(--r-sm);cursor:grab;touch-action:none}
+.pin-grip{align-self:stretch;width:28px;min-height:36px;display:grid;place-items:center;padding:0;font-size:16px;line-height:1;color:var(--text-tertiary);background:none;border:0;border-radius:var(--r-sm);cursor:grab;touch-action:none}
 .pin-grip:hover{color:var(--text-primary);background:var(--bg-subtle)}
 .pin-grip:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
 .pin-grip[aria-disabled="true"]{cursor:default;color:var(--border-strong);background:none}
@@ -2097,9 +2107,9 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 
   <!-- ── sidebar ──────────────────────────────────────────────────────── -->
   <aside class="side">
-    <h1 class="brand">
-      <span class="dot"></span>
-      <span><small>Claude</small>Dashboard</span>
+    <h1 class="brand" aria-label="Claude Dashboard">
+      <span class="kick">Claude</span>
+      <span class="prompt"><span class="caret">›</span>dashboard<span class="cur"></span></span>
     </h1>
 
     <nav class="nav">
