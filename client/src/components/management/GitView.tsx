@@ -1,29 +1,35 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useState } from 'react';
 
 import { useGitFetch } from '../../hooks/useGitFetch';
 import { useGitStats } from '../../hooks/useGitStats';
-import { useGitSync, type GitSyncControl } from '../../hooks/useGitSync';
-import type { FetchClock, GitStatsResponse } from '../../../../shared/types';
+import { useGitSync } from '../../hooks/useGitSync';
+import type { GitStatsResponse } from '../../../../shared/types';
 import { useNarrow } from '../../hooks/useNarrow';
+import { useOpenFolder } from '../../hooks/useOpenFolder';
 import { usePersistedState } from '../../hooks/usePersistedState';
+import { usePins } from '../../hooks/usePins';
+import { useSessions } from '../../hooks/useSessions';
 import { useSettings } from '../../hooks/useSettings';
-import { DEFAULT_GIT_LAYOUT, drawableGitLayout, gitLayoutsFor, isGitLayout, type GitLayout } from '../../lib/gitLayouts';
+import { DEFAULT_GIT_LAYOUT, drawableGitLayout, gitLayoutsFor, parseGitLayout, type GitLayout } from '../../lib/gitLayouts';
+import { SYNC_SCAN_LIMIT } from '../../lib/gitSync';
 import { GIT_BAND_SUB, GIT_NO_PINS, gitFirstLoadText } from '../../lib/gitStatsText';
 import { Band } from '../usage/Sheet';
-import GitCards from './GitCards';
 import GitClockChip from './GitClockChip';
-import GitTable from './GitTable';
 import GitTriage from './GitTriage';
+import type { GitLayoutProps } from './gitLayoutProps';
 
 /** Own chunk, as in SessionsView: most visits never open a sync's chat. */
 const ChatDrawer = lazy(() => import('../ChatDrawer'));
 
 /**
- * Management › Git: the band, a toolbar of the Cards | Table | Triage switcher and the Sync/Fetch clock chip, and the layout the switcher picks.
+ * Management › Git: the band, a toolbar of the Inbox | Matrix | Inspector | Branches switcher and the Sync/Fetch clock chip, and the layout the switcher picks.
  * The poll lives in `useGitStats`, mounted with this view, so switching to Projects or leaving the section stops it.
  *
- * The stored layout is per device (`management.gitLayout`); what is drawn is `drawableGitLayout`, so a phone draws Cards while a stored Table survives for
- * the next wide window.
+ * The live sessions payload rides along (`useSessions`) so a layout can join agents to branches, as do Unpin (`usePins`, over the shared pins endpoint) and
+ * Open folder (`useOpenFolder`); each layout gets all of it through one `GitLayoutProps`, and their failure notes show under the toolbar beside Sync's.
+ *
+ * The stored layout is per device (`management.gitLayout`); what is drawn is `drawableGitLayout(parseGitLayout(stored))`, so a stored `cards`, `table` or
+ * `triage` reads as Inbox and a phone draws Inbox while a stored Matrix survives for the next wide window.
  */
 export default function GitView() {
   const stats = useGitStats();
@@ -32,7 +38,26 @@ export default function GitView() {
   const fetchCtl = useGitFetch(sync.tokenRequired, stats.refresh);
   const narrow = useNarrow();
   const [stored, setStored] = usePersistedState<string>('management.gitLayout', DEFAULT_GIT_LAYOUT);
-  const layout = drawableGitLayout(isGitLayout(stored) ? stored : DEFAULT_GIT_LAYOUT, narrow);
+  const layout = drawableGitLayout(parseGitLayout(stored), narrow);
+  const sessionsState = useSessions({ limit: SYNC_SCAN_LIMIT });
+  const sessions = sessionsState.data?.sessions ?? [];
+  const pins = usePins();
+  const [unpinNote, setUnpinNote] = useState<string | null>(null);
+  const folder = useOpenFolder();
+
+  const unpin = {
+    busy: pins.busy,
+    run: (dirName: string) => {
+      if (pins.busy !== null) return;
+      void pins.setPin(dirName, false).then(note => {
+        setUnpinNote(note);
+        if (note === null) stats.refresh();
+      });
+    },
+  };
+  const props: GitLayoutProps = {
+    repos: data?.repos ?? [], sessions, nowMs: Date.now(), clock: data?.fetch, sync, fetchCtl, unpin, openFolder: folder.open, narrow, setLayout: setStored,
+  };
 
   return (
     <div className="usage-section git-view">
@@ -49,7 +74,9 @@ export default function GitView() {
         {(data !== null || error) && <GitClockChip stats={stats} fetchCtl={fetchCtl} tokenRequired={sync.tokenRequired} clock={data?.fetch} />}
       </div>
       {sync.note && <div className="git-sync-note">{sync.note}</div>}
-      <GitBody data={data} error={error} layout={layout} sync={sync} clock={data?.fetch} />
+      {unpinNote && <div className="git-sync-note">{unpinNote}</div>}
+      {folder.note && <div className="git-sync-note">{folder.note}</div>}
+      <GitBody data={data} error={error} layout={layout} props={props} />
       {sync.chat && (
         <Suspense fallback={null}>
           {/* keyed by id, as in SessionsView: another sync's chat remounts the tail cleanly */}
@@ -60,13 +87,7 @@ export default function GitView() {
   );
 }
 
-function GitBody({ data, error, layout, sync, clock }: {
-  data: GitStatsResponse | null;
-  error: boolean;
-  layout: GitLayout;
-  sync: GitSyncControl;
-  clock: FetchClock | undefined;
-}) {
+function GitBody({ data, error, layout, props }: { data: GitStatsResponse | null; error: boolean; layout: GitLayout; props: GitLayoutProps }) {
   const { update } = useSettings();
   if (data === null) return <div className="git-empty">{gitFirstLoadText(error)}</div>;
   if (data.repos.length === 0) {
@@ -80,7 +101,7 @@ function GitBody({ data, error, layout, sync, clock }: {
       </div>
     );
   }
-  if (layout === 'table') return <GitTable repos={data.repos} sync={sync} clock={clock} />;
-  if (layout === 'triage') return <GitTriage repos={data.repos} sync={sync} clock={clock} />;
-  return <GitCards repos={data.repos} sync={sync} clock={clock} />;
+  // Placeholder for every key until Tasks 9-12 give each layout its own component; Task 13 deletes GitTriage, so nothing may still draw it by then.
+  void layout;
+  return <GitTriage repos={props.repos} sync={props.sync} clock={props.clock} />;
 }

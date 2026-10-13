@@ -7,7 +7,7 @@ import assert from 'node:assert';
 
 import type { FetchClock, GitBranch, RepoGitStats } from '../shared/types.js';
 import { OWNED_KEYS } from '../client/src/hooks/useSettings.js';
-import { DEFAULT_GIT_LAYOUT, GIT_LAYOUTS, WIDE_ONLY_GIT_LAYOUTS, drawableGitLayout, gitLayoutsFor, isGitLayout } from '../client/src/lib/gitLayouts.js';
+import { DEFAULT_GIT_LAYOUT, GIT_LAYOUTS, WIDE_ONLY_GIT_LAYOUTS, drawableGitLayout, gitLayoutsFor, isGitLayout, parseGitLayout } from '../client/src/lib/gitLayouts.js';
 import { triageGitRepos } from '../client/src/lib/gitTriage.js';
 import {
   FETCH_NEEDS_TOKEN, GIT_BAND_SUB, GIT_CLOCK_NAME, GIT_LOAD_FAILED, GIT_LOADING, GIT_NO_OPEN_BRANCHES, GIT_NO_PINS, GIT_POP_LABEL, GIT_UPDATE_FAILED,
@@ -55,30 +55,36 @@ export function run(): number {
   console.log('\ngit stats client logic');
 
   // ── layouts ────────────────────────────────────────────────────────────────
-  if (test('GIT_LAYOUTS lists Cards, Table, Triage in that order; cards is the default; table is wide-only', () => {
+  if (test('GIT_LAYOUTS lists Inbox, Matrix, Inspector, Branches in order; inbox is the default; matrix is wide-only', () => {
     assert.deepStrictEqual(GIT_LAYOUTS, [
-      { key: 'cards', label: 'Cards' }, { key: 'table', label: 'Table' }, { key: 'triage', label: 'Triage' },
+      { key: 'inbox', label: 'Inbox' }, { key: 'matrix', label: 'Matrix' }, { key: 'inspector', label: 'Inspector' }, { key: 'branches', label: 'Branches' },
     ]);
-    assert.strictEqual(DEFAULT_GIT_LAYOUT, 'cards');
-    assert.deepStrictEqual([...WIDE_ONLY_GIT_LAYOUTS], ['table']);
+    assert.strictEqual(DEFAULT_GIT_LAYOUT, 'inbox');
+    assert.deepStrictEqual([...WIDE_ONLY_GIT_LAYOUTS], ['matrix']);
   })) p++; else f++;
 
-  if (test('drawableGitLayout: table on a phone draws cards, on a laptop table; cards and triage are never coerced', () => {
-    assert.strictEqual(drawableGitLayout('table', true), 'cards');
-    assert.strictEqual(drawableGitLayout('table', false), 'table');
-    assert.strictEqual(drawableGitLayout('triage', true), 'triage');
-    assert.strictEqual(drawableGitLayout('cards', true), 'cards');
+  if (test('drawableGitLayout: matrix on a phone draws inbox, on a laptop matrix; inbox, inspector and branches are never coerced', () => {
+    assert.strictEqual(drawableGitLayout('matrix', true), 'inbox');
+    assert.strictEqual(drawableGitLayout('matrix', false), 'matrix');
+    assert.strictEqual(drawableGitLayout('inbox', true), 'inbox');
+    assert.strictEqual(drawableGitLayout('inspector', true), 'inspector');
+    assert.strictEqual(drawableGitLayout('branches', true), 'branches');
   })) p++; else f++;
 
-  if (test('gitLayoutsFor: narrow drops table, wide keeps all three', () => {
-    assert.deepStrictEqual(gitLayoutsFor(true).map(l => l.key), ['cards', 'triage']);
-    assert.deepStrictEqual(gitLayoutsFor(false).map(l => l.key), ['cards', 'table', 'triage']);
+  if (test('gitLayoutsFor: narrow drops matrix (inbox, inspector, branches), wide keeps all four', () => {
+    assert.deepStrictEqual(gitLayoutsFor(true).map(l => l.key), ['inbox', 'inspector', 'branches']);
+    assert.deepStrictEqual(gitLayoutsFor(false).map(l => l.key), ['inbox', 'matrix', 'inspector', 'branches']);
   })) p++; else f++;
 
-  if (test('isGitLayout accepts the three keys and rejects anything else', () => {
-    assert.strictEqual(isGitLayout('grid'), false);
-    assert.strictEqual(isGitLayout(undefined), false);
-    assert.strictEqual(isGitLayout('table'), true);
+  if (test('isGitLayout accepts the four keys and rejects cards, table, triage, grid and undefined', () => {
+    for (const k of ['inbox', 'matrix', 'inspector', 'branches']) assert.strictEqual(isGitLayout(k), true);
+    for (const k of ['cards', 'table', 'triage', 'grid', undefined]) assert.strictEqual(isGitLayout(k), false);
+  })) p++; else f++;
+
+  if (test('parseGitLayout: cards, table and triage read as inbox; matrix stays matrix; "grid", 42, null and undefined read as inbox', () => {
+    for (const k of ['cards', 'table', 'triage', 'grid', 42, null, undefined]) assert.strictEqual(parseGitLayout(k), 'inbox');
+    assert.strictEqual(parseGitLayout('matrix'), 'matrix');
+    assert.strictEqual(parseGitLayout('branches'), 'branches');
   })) p++; else f++;
 
   if (test('OWNED_KEYS contains management.gitLayout, so Reset clears the choice', () => {
