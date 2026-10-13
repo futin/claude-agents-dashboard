@@ -686,7 +686,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .ra-track i{position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--bg-surface);display:block}
 .ra.on .ra-track{background:var(--ink-inverse)}
 .ra.on .ra-track i{left:14px}
-.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:10px}
 .toolbar .tb-spacer,.tb-spacer{flex:1}
 .stop-badge{flex:none;font-size:12px;color:var(--amber)}
 .rc-mark{font-size:11px;color:var(--text-secondary)}
@@ -809,7 +809,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .ledger .dash{color:var(--text-tertiary)}
 
 /* D · split — a compact list, one inspector */
-.split{display:grid;grid-template-columns:400px 1fr;gap:16px;align-items:start}
+.split{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}   /* styles.css 2xl tier */
 .list{padding:0 0 16px;overflow:hidden}
 .list-h{display:flex;align-items:center;gap:8px;padding:14px 20px;border-bottom:1px solid var(--border)}
 .list-h .ct{font-size:16px}
@@ -2001,83 +2001,85 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
    beside it — so almost none of its CSS is here. What is below is only what
    Analytics has and Sessions does not: the section band, the lesson's status
    in its two shapes, and the report the inspector holds. ───────────────── */
-.an-band{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.an-band .sp{flex:1}
-.an-hint{font-size:12px;color:var(--text-secondary)}
-.an-hint code,.an-lesson-body code,.an-empty code{
-  font-family:inherit;font-weight:500;color:var(--text-primary);
+.an-band{display:flex;flex-direction:column;gap:5px}
+.an-bandrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.an-bandrow .sp{flex:1}
+.an-title{font-size:19px;font-weight:500;color:var(--text-primary);letter-spacing:-.01em;line-height:1.3}
+.an-sub{font-size:13px;color:var(--text-secondary);line-height:1.45;max-width:92ch}
+.an-hint{font-size:13px;color:var(--text-tertiary)}
+.an-hint code,.an-sub code,.an-empty code{
+  font-family:inherit;font-size:12px;font-weight:500;color:var(--text-primary);
   background:var(--bg-subtle);border-radius:var(--r-xs);padding:1px 5px;
 }
 .an-review{
-  font-size:11px;font-weight:500;border-radius:var(--r-full);padding:5px 11px;
-  background:var(--orange-300);color:var(--text-primary);cursor:help;
+  display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;white-space:nowrap;
+  font-size:11px;font-weight:500;border-radius:var(--r-full);
+  background:var(--amber-tint);color:var(--amber-ink);cursor:help;
 }
-.an-review code{background:var(--bg-surface)}
+.an-review i{width:6px;height:6px;border-radius:var(--r-full);flex:none;background:currentColor}
+/* the glyph-only round ↻, live's .icon-refresh */
 .an-refresh{
   border:1px solid var(--border-strong);background:var(--bg-surface);border-radius:var(--r-full);
-  width:30px;height:30px;font-size:14px;color:var(--text-secondary);line-height:1;
+  width:26px;height:26px;padding:0;font-size:12px;color:var(--text-secondary);line-height:1;align-self:center;
 }
-
-/* What became of the lesson, twice: the row states it as the dot Sessions
-   uses for a session's state, and everywhere with room it is a pill. Open is
-   the quiet one — it is the default, and a loud default would make every
-   fresh entry shout. */
-.ldot.s-actioned{background:var(--green-500)}
-.ldot.s-promoted{background:var(--ink-inverse)}
-.ldot.s-dropped{background:var(--bg-track)}
-.an-status{font-size:11px;font-weight:500;border-radius:var(--r-full);padding:3px 9px;white-space:nowrap}
-.an-status.open{background:var(--bg-subtle);color:var(--text-tertiary)}
-.an-status.actioned{background:var(--green-200);color:var(--green-600)}
+.an-refresh:hover{color:var(--text-primary);border-color:var(--text-tertiary)}
+/* What became of the lesson, twice: the row states it as a dot, and
+   everywhere with room it is a pill. Open is the quiet one — it is the
+   default, and a loud default would make every fresh entry shout. */
+.an-dot{width:9px;height:9px;border-radius:50%;background:var(--border-strong);display:inline-block;flex:none}
+.an-dot.actioned{background:var(--green-500)}
+.an-dot.promoted{background:var(--ink-inverse)}
+.an-dot.dropped{background:var(--text-tertiary)}
+.an-status{flex:none;font-size:11px;font-weight:500;border-radius:12px;padding:2px 8px;white-space:nowrap;background:var(--bg-subtle);color:var(--text-secondary)}
+.an-status.open{color:var(--text-tertiary)}
+.an-status.actioned{background:var(--green-200);color:var(--green-ink)}
 .an-status.promoted{background:var(--ink-inverse);color:var(--text-on-dark)}
-.an-status.dropped{background:var(--bg-track);color:var(--text-secondary)}
-.lrow .an-status{padding:1px 7px}
-
-.an-model{
-  font-size:11px;font-weight:500;color:var(--text-secondary);
-  background:var(--bg-subtle);border-radius:var(--r-full);padding:3px 9px;
-}
-.an-id{font-size:12px;color:var(--text-tertiary)}
-.an-when{font-size:12px;color:var(--text-secondary);white-space:nowrap}
-.inspect .ins-meta .an-id,.inspect .ins-meta .an-when{font-size:12px}
-
+.lrow .act-line .an-status{padding:1px 7px}
+/* the inspector's models: plain 11px labels, not pills */
+.an-model{font-size:11px;font-weight:500;color:var(--text-tertiary);white-space:nowrap}
+.an-id{font-size:11px;color:var(--text-tertiary);font-variant-numeric:tabular-nums}
+.an-when{font-size:12px;color:var(--text-tertiary);font-variant-numeric:tabular-nums}
 /* the report the inspector holds: five figures, the two ledgers under them,
    then the lesson /kaizen wrote */
-.an-metrics{display:grid;grid-template-columns:repeat(5,1fr);margin-top:20px}
-.an-metrics > div{padding:14px 16px}
-.an-metrics > div + div{border-left:2px solid var(--bg-app)}
-.an-metrics > div:first-child{padding-left:0}
+.an-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-top:20px}
+.an-metric{padding:12px 14px;min-width:0}
+.an-metric + .an-metric{border-left:2px solid var(--bg-app)}
+.an-metric:first-child{padding-left:0}
 /* one figure per cell and never two lines: the strip sits in the inspector,
    which is narrower than a full-width card, and a wrapped value drops its
    label out of line with the other four */
-.an-metric-v{font-size:19px;font-weight:700;letter-spacing:-.02em;line-height:1.1;white-space:nowrap}
-.an-metric.lead .an-metric-v{font-size:25px}
-.an-metric-l{white-space:nowrap}
-.an-metric-v.warn{color:var(--orange-400)}
-.an-metric-l{font-size:11px;color:var(--text-secondary);margin-top:5px}
-
-.an-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
-.an-col{background:var(--bg-app);border-radius:var(--r-md);padding:14px 16px}
+.an-metric-v{font-size:19px;font-weight:700;color:var(--text-primary);letter-spacing:-.02em;line-height:1.1;white-space:nowrap;font-variant-numeric:tabular-nums}
+.an-metric.lead .an-metric-v{font-size:25px;color:var(--green-ink)}
+.an-metric-v.warn{color:var(--amber)}
+.an-metric-l{font-size:11px;font-weight:500;color:var(--text-tertiary);margin-top:5px;white-space:nowrap}
+.an-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}
+.an-col{background:var(--bg-subtle);border-radius:var(--r-md);padding:14px 16px;min-width:0}
 .an-col-h{
-  display:flex;align-items:baseline;gap:8px;font-size:11px;font-weight:500;
-  text-transform:uppercase;letter-spacing:.06em;color:var(--text-secondary);margin-bottom:8px;
+  display:flex;align-items:baseline;gap:6px;font-size:11px;font-weight:500;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--text-tertiary);margin-bottom:8px;
 }
-.an-approx{text-transform:none;letter-spacing:0;font-weight:400;color:var(--text-tertiary)}
-.an-line{display:flex;align-items:baseline;gap:10px;font-size:13px;padding:5px 0}
+.an-approx{font-size:11px;font-style:italic;text-transform:none;letter-spacing:0;font-weight:400;color:var(--text-tertiary)}
+.an-line{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px;padding:4px 0}
 .an-line + .an-line{border-top:1px solid var(--border)}
-.an-line-name{font-weight:500}
-.an-line-meta{margin-left:auto;font-size:12px;color:var(--text-secondary);white-space:nowrap}
+.an-line-name{color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.an-line-meta{font-size:12px;color:var(--text-tertiary);flex-shrink:0;font-variant-numeric:tabular-nums}
 .an-line.muted{color:var(--text-tertiary)}
-
-.an-lesson{margin-top:16px}
-.an-lesson-body{font-size:14px;line-height:1.55;max-width:74ch}
-.an-lesson-body.muted{font-size:12px;color:var(--text-secondary);margin-top:8px}
+.an-lesson{margin-top:0}
+.an-lesson-body{font-size:13px;line-height:1.5;color:var(--text-primary);max-width:74ch;margin-top:10px;overflow-wrap:anywhere}
+.an-lesson-body.muted{font-size:12px;color:var(--text-tertiary);margin-top:8px}
+.an-lesson-body code{font-family:inherit;font-size:12px;font-weight:500;background:var(--bg-subtle);border-radius:var(--r-xs);padding:1px 5px}
 .an-gone{
-  font-size:12px;color:var(--text-secondary);background:var(--bg-app);
+  font-size:12px;color:var(--text-tertiary);background:var(--bg-subtle);
   border-radius:var(--r-md);padding:10px 14px;margin-top:20px;
 }
+/* Live scopes its .ct heading rule to .sessions and .git-in, so on Analytics
+   the list header and the inspector title fall back to the 16px regular
+   body face (suspected live regression, drawn as it renders). */
+#p-analytics .ct{font-size:16px;font-weight:400;letter-spacing:normal;line-height:1.4}
+#p-analytics .toolbar{margin-bottom:6px}
 .an-empty{
-  background:var(--bg-surface);border-radius:var(--r-lg);box-shadow:var(--lift-card);
-  padding:40px 24px;text-align:center;font-size:14px;color:var(--text-secondary);
+  background:var(--bg-surface);border-radius:var(--r-lg);
+  padding:40px 24px;text-align:center;font-size:13px;color:var(--text-tertiary);
 }
 .inspect .an-empty{box-shadow:none;padding:32px 0}
 
@@ -5554,11 +5556,12 @@ unpersisted, since session ids churn.`;
   }
 
   /* ── formatting ──────────────────────────────────────────────────────── */
+  /* live's fmtTok / fmtDuration: 1.42M, 212.4k; 2h41m, 54m */
   const tk = (n) => n >= 1_000_000 ? (n / 1_000_000).toFixed(2) + 'M'
-    : n >= 1000 ? Math.round(n / 1000) + 'k' : String(n);
+    : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
   const dur = (ms) => {
     const m = Math.round(ms / 60000);
-    return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`;
+    return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? (m % 60) + 'm' : ''}` : `${m}m`;
   };
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const short = (r) => r.id.slice(0, 8);
@@ -5569,6 +5572,7 @@ unpersisted, since session ids churn.`;
     ? `<span class="an-status ${r.status.status}" title="${esc(r.status.note || '')} — ${r.status.date}">${MARK[r.status.status]} ${r.status.status}</span>`
     : '<span class="an-status open" title="No status line yet — still open.">○ open</span>';
   const modelTags = (r) => r.models.map(m => `<span class="an-model">${m}</span>`).join('');
+  const dot = (r) => `<span class="an-dot ${r.status ? r.status.status : 'open'}"></span>`;
 
   const metrics = (a) => `<div class="an-metrics">
       <div class="an-metric lead"><div class="an-metric-v">${tk(a.billable)}</div><div class="an-metric-l">billable</div></div>
@@ -5580,9 +5584,9 @@ unpersisted, since session ids churn.`;
 
   const cols = (a) => `<div class="an-cols">
       <div class="an-col">
-        <div class="an-col-h">Top tools <span class="an-approx">approx tokens</span></div>
+        <div class="an-col-h">Top tools <span class="an-approx">approx tokens · in = injected into context, out = assistant output</span></div>
         ${a.tools.length ? a.tools.slice(0, 3).map(([t, tok, n, e]) =>
-          `<div class="an-line"><span class="an-line-name">${t}</span><span class="an-line-meta">${tk(tok)} · ${n}×${e ? ` · ${e} err` : ''}</span></div>`).join('')
+          `<div class="an-line"><span class="an-line-name">${t}</span><span class="an-line-meta">${tk(tok)} in · ${tk(Math.round(tok * .3))} out · ${n}×${e ? ` · ${e} err` : ''}</span></div>`).join('')
         : '<div class="an-line muted">none</div>'}
       </div>
       <div class="an-col">
@@ -5594,7 +5598,7 @@ unpersisted, since session ids churn.`;
     </div>`;
 
   const lesson = (r) => `<div class="an-lesson">
-      <div class="an-col-h">Research &amp; suggestions</div>
+      <div class="mg-label">Research &amp; suggestions</div>
       <p class="an-lesson-body">${esc(r.lesson)}</p>
       ${r.status ? `<p class="an-lesson-body muted">${r.status.status} ${r.status.date}${r.status.note ? ` — ${esc(r.status.note)}` : ''}</p>` : ''}
     </div>`;
@@ -5606,15 +5610,15 @@ unpersisted, since session ids churn.`;
     : `<div class="an-gone">Transcript no longer on disk — showing the logged lesson only.</div>` + lesson(r);
 
   /* ── page chrome ─────────────────────────────────────────────────────── */
-  const band = () => `<div class="band">
-      <div class="an-band">
-        <div class="ct">Analytics</div>
-        <span class="an-hint">last ${KEEP} sessions logged by <code>/kaizen</code></span>
+  const due = () => S.reviewDue && S.body === 'list';
+  const band = () => `<div class="band an-band">
+      <div class="an-bandrow">
+        <div class="an-title">Analytics</div>
+        ${due() ? `<span class="an-review" title="Last swept ${LAST_REVIEW} — lessons have accumulated since."><i></i>Review due</span>` : ''}
         <span class="sp"></span>
-        ${S.reviewDue && S.body === 'list' ? `<span class="an-review" title="Last swept ${LAST_REVIEW} — lessons have accumulated since.">review due — run <code>/kaizen review</code></span>` : ''}
         <button class="an-refresh" data-anrefresh title="Reload">↻</button>
       </div>
-      <div class="cs">Each session the <code>/kaizen</code> skill logged, pairing its one-line lesson with a live re-run of the deterministic analyzer. Read-only — the dashboard never writes the log, and the list only changes when <code>/kaizen</code> runs, so this section does not poll.</div>
+      <div class="an-sub">The last ${KEEP} sessions <code>/kaizen</code> logged, each lesson beside a live re-run of the analyzer. Read-only — the list changes only when <code>/kaizen</code> runs.${due() ? ' Lessons have piled up — run <code>/kaizen review</code>.' : ''}</div>
     </div>`;
 
   const filterCount = () => S.F.projects.size + S.F.models.size + (S.F.win !== 'all' ? 1 : 0);
@@ -5642,7 +5646,9 @@ unpersisted, since session ids churn.`;
      on the left, and the same filter / sort track the Sessions board uses. */
   const toolbar = () => {
     const n = filterCount(), list = shown();
+    /* live's Split | Tiles switch; only the split is drawn in this mock */
     return `<div class="toolbar">
+      <div class="seg view"><button class="on">Split</button><button title="The Tiles shape is not drawn in this mock">Tiles</button></div>
       <span class="an-hint">${list.length} of ${REPORTS.length} sessions</span>
       <span class="tb-spacer"></span>
       <div class="ctlwrap"><div class="seg ctl">
@@ -5668,12 +5674,12 @@ unpersisted, since session ids churn.`;
   const split = (list) => {
     const r = list.find(x => x.id === S.sel);
     const row = (x) => `<div class="lrow${x.id === S.sel ? ' selected' : ''}" data-ansel="${x.id}">
-        <span class="ldot ${x.status ? 's-' + x.status.status : ''}"></span>
-        <span class="nm"><span class="t">${x.project}</span>${x.models.map(m => `<span class="tagpill">${m}</span>`).join('')}</span>
+        ${dot(x)}
+        <span class="nm"><span class="t">${x.project}</span></span>
         <span class="pct">${x.analysis ? tk(x.analysis.billable) : '—'}</span>
         <span class="act-line">
           ${status(x)}
-          <span class="act">${short(x)}${x.analysis ? ` · ${dur(x.analysis.durationMs)}` : ' · transcript gone'}</span>
+          <span class="act">${x.analysis ? short(x) : 'transcript gone'}</span>
           <span class="ago">${x.loggedAt}</span>
         </span>
       </div>`;
@@ -5682,7 +5688,7 @@ unpersisted, since session ids churn.`;
           <div class="ins-head">
             <div class="who2">
               <div class="ct">${r.project}</div>
-              <div class="ins-meta">${status(r)}${modelTags(r)}<span class="an-id">${short(r)}</span>
+              <div class="ins-meta">${dot(r)}${status(r)}${modelTags(r)}<span class="an-id">${short(r)}</span>
                 <span class="an-when">logged ${r.loggedAt}${r.analysis ? ` · ${dur(r.analysis.durationMs)}` : ''}</span></div>
             </div>
           </div>
