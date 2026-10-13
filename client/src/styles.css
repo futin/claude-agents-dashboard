@@ -2856,8 +2856,8 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
    from the chip's right edge and is capped to the viewport. */
 .git-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;position:relative}
 .git-clock-root{position:relative;margin-left:auto}
-/* --strip paper with the pills' own lift and a --hairline ring: the --strip-hi fill it had all but vanished on the board. */
-.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:12px;background:var(--strip);color:var(--ink);font:inherit;font-family:var(--font);cursor:pointer;box-shadow:0 1px 2px var(--shadow),0 0 0 1px var(--hairline);transition:background .15s}
+/* --strip paper, no ring and no lift: the --strip-hi fill it had all but vanished on the board. */
+.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:12px;background:var(--strip);color:var(--ink);font:inherit;font-family:var(--font);cursor:pointer;transition:background .15s}
 .git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--strip-hi)}
 .git-clock:focus-visible,.git-pop-key:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 /* At an 11px label `fetching…` is wider than a fixed track, so the chip's meters grow to their content rather than wrap: a two-line head would change the

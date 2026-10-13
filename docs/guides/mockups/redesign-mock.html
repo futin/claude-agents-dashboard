@@ -1332,9 +1332,9 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
    its popover opens leftwards from that edge */
 .git-clock-root{position:relative;margin-left:auto}
 .git-clock-root .git-pop{left:auto;right:0;max-width:calc(100vw - 32px)}
-/* white with the card lift: the live --strip-hi (= --bg-subtle) fill all but
+/* white, no ring and no lift: the live --strip-hi (= --bg-subtle) fill all but
    vanished on the --bg-app ground; white won over the pills' grey */
-.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:var(--r-md);background:var(--bg-surface);color:var(--text-primary);box-shadow:var(--lift-card),0 0 0 1px var(--border)}
+.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:var(--r-md);background:var(--bg-surface);color:var(--text-primary)}
 .git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--bg-subtle)}
 .git-clock-meters{display:flex;gap:10px}
 .git-clock-meters>*{min-width:max-content}
