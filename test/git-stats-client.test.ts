@@ -1,6 +1,6 @@
 /**
- * Client domain logic of the Git sub-view (`client/src/lib/gitLayouts.ts`, `gitTriage.ts`, `gitStatsText.ts`, `gitBar.ts`, `gitPoll.ts`, `gitClock.ts`): the layout switcher's
- * rules, the Triage grouping precedence, every string of spec §6's copy table, the divergence bar's scale and the poll schedule. All pure, so no React and no
+ * Client domain logic of the Git sub-view (`client/src/lib/gitLayouts.ts`, `gitStatsText.ts`, `gitBar.ts`, `gitPoll.ts`, `gitClock.ts`): the layout switcher's
+ * rules, every string of spec §6's copy table, the divergence bar's scale and the poll schedule. All pure, so no React and no
  * DOM.
  */
 import assert from 'node:assert';
@@ -8,7 +8,6 @@ import assert from 'node:assert';
 import type { FetchClock, GitBranch, RepoGitStats } from '../shared/types.js';
 import { OWNED_KEYS } from '../client/src/hooks/useSettings.js';
 import { DEFAULT_GIT_LAYOUT, GIT_LAYOUTS, WIDE_ONLY_GIT_LAYOUTS, drawableGitLayout, gitLayoutsFor, isGitLayout, parseGitLayout } from '../client/src/lib/gitLayouts.js';
-import { triageGitRepos } from '../client/src/lib/gitTriage.js';
 import {
   FETCH_NEEDS_TOKEN, GIT_BAND_SUB, GIT_CLOCK_NAME, GIT_LOAD_FAILED, GIT_LOADING, GIT_NO_OPEN_BRANCHES, GIT_NO_PINS, GIT_POP_LABEL, GIT_UPDATE_FAILED,
   KEY_NOW, METER_FETCH, METER_NEXT, METER_SYNC, READ_FAILED, READ_FETCHING, READ_OFF, READ_OVERDUE, READ_PENDING, READ_SYNCING, ROW_FETCH_ALL, ROW_LOCAL_SYNC,
@@ -47,8 +46,6 @@ function okRepo(name: string, over: Partial<Ok> = {}): Ok {
 function branch(name: string, over: Partial<GitBranch> = {}): GitBranch {
   return { name, ahead: 1, behind: 0, lastCommitMs: 0, worktreePath: null, ...over };
 }
-
-const names = (rs: RepoGitStats[]) => rs.map(r => r.name);
 
 export function run(): number {
   let p = 0, f = 0;
@@ -89,69 +86,6 @@ export function run(): number {
 
   if (test('OWNED_KEYS contains management.gitLayout, so Reset clears the choice', () => {
     assert.ok(OWNED_KEYS.includes('management.gitLayout'));
-  })) p++; else f++;
-
-  // ── triage ─────────────────────────────────────────────────────────────────
-  const group = (r: RepoGitStats) => {
-    const g = triageGitRepos([r]);
-    return (Object.keys(g) as (keyof typeof g)[]).find(k => g[k].length === 1);
-  };
-
-  if (test('triage: dirty repo with branches → needs (uncommitted beats in-flight)', () => {
-    assert.strictEqual(group(okRepo('a', { uncommitted: 2, branches: [branch('x')], unmergedTotal: 1 })), 'needs');
-  })) p++; else f++;
-
-  if (test('triage: clean, trunk 0 ahead 1 behind origin → needs; 1 ahead 0 behind → needs', () => {
-    assert.strictEqual(group(okRepo('a', { trunkVsOrigin: { ahead: 0, behind: 1 } })), 'needs');
-    assert.strictEqual(group(okRepo('a', { trunkVsOrigin: { ahead: 1, behind: 0 } })), 'needs');
-  })) p++; else f++;
-
-  if (test('triage: clean, trunkVsOrigin null, 1 unmerged → flight', () => {
-    assert.strictEqual(group(okRepo('a', { trunkVsOrigin: null, branches: [branch('x')], unmergedTotal: 1 })), 'flight');
-  })) p++; else f++;
-
-  if (test('triage: no trunk with 2 branches → flight', () => {
-    const r = okRepo('a', {
-      trunk: null, trunkRefs: null, trunkVsOrigin: null, onTrunk: false,
-      branches: [branch('x', { ahead: null, behind: null }), branch('y', { ahead: null, behind: null })], unmergedTotal: 2,
-    });
-    assert.strictEqual(group(r), 'flight');
-  })) p++; else f++;
-
-  if (test('triage: clean, no remote, no branches → quiet', () => {
-    assert.strictEqual(group(okRepo('a', { hasOrigin: false, trunkVsOrigin: null, trunkRefs: { local: true, origin: false } })), 'quiet');
-  })) p++; else f++;
-
-  if (test('triage: level with origin and no branches → quiet', () => {
-    assert.strictEqual(group(okRepo('a')), 'quiet');
-  })) p++; else f++;
-
-  if (test('triage: missing, not-git and error → unreadable', () => {
-    assert.strictEqual(group({ dirName: 'a', name: 'a', path: null, state: 'missing' }), 'unreadable');
-    assert.strictEqual(group({ dirName: 'a', name: 'a', path: '/x', state: 'not-git' }), 'unreadable');
-    assert.strictEqual(group({ dirName: 'a', name: 'a', path: '/x', state: 'error', message: 'timed out' }), 'unreadable');
-  })) p++; else f++;
-
-  if (test('triage: unreadable wins over every other rule (rule 1 is first)', () => {
-    // An `error` repo carries none of the ok fields, so the only way to prove precedence is that the other rules never get to read them.
-    const g = triageGitRepos([{ dirName: 'a', name: 'a', path: '/x', state: 'error', message: 'boom' }]);
-    assert.deepStrictEqual({ n: g.needs.length, f: g.flight.length, q: g.quiet.length, u: g.unreadable.length }, { n: 0, f: 0, q: 0, u: 1 });
-  })) p++; else f++;
-
-  if (test('triage: input order [C, A, B], all quiet → output order [C, A, B]', () => {
-    const g = triageGitRepos([okRepo('C'), okRepo('A'), okRepo('B')]);
-    assert.deepStrictEqual(names(g.quiet), ['C', 'A', 'B']);
-  })) p++; else f++;
-
-  if (test('triage: pin order is kept within each group across a mixed list', () => {
-    const g = triageGitRepos([
-      okRepo('q1'), okRepo('n1', { uncommitted: 1 }), okRepo('f1', { trunkVsOrigin: null, unmergedTotal: 1, branches: [branch('x')] }),
-      { dirName: 'u1', name: 'u1', path: null, state: 'missing' }, okRepo('n2', { uncommitted: 3 }), okRepo('q2'),
-    ]);
-    assert.deepStrictEqual(
-      { needs: names(g.needs), flight: names(g.flight), quiet: names(g.quiet), unreadable: names(g.unreadable) },
-      { needs: ['n1', 'n2'], flight: ['f1'], quiet: ['q1', 'q2'], unreadable: ['u1'] },
-    );
   })) p++; else f++;
 
   // ── copy ───────────────────────────────────────────────────────────────────
@@ -510,15 +444,6 @@ export function run(): number {
     const onMain = { upstream: 'origin/main', counts: { ahead: 0, behind: 3 } };
     assert.strictEqual(gitUpstreamText(onFeat(onMain, { trunk: 'main' })), null);
     assert.strictEqual(gitUpstreamText(onFeat(onMain, { trunk: null, trunkVsOrigin: null, trunkRefs: null })), '3 behind origin/main');
-  })) p++; else f++;
-
-  if (test('triage: behind its upstream → needs; ahead-only, gone and origin/<trunk> → flight', () => {
-    const one = [branch('feat')];
-    assert.deepStrictEqual(names(triageGitRepos([onFeat(featUp(0, 1))]).needs), ['a']);
-    assert.deepStrictEqual(names(triageGitRepos([onFeat(featUp(2, 0), { branches: one, unmergedTotal: 1 })]).flight), ['a']);
-    assert.deepStrictEqual(names(triageGitRepos([onFeat({ upstream: 'origin/feat', counts: null }, { branches: one, unmergedTotal: 1 })]).flight), ['a']);
-    const onMain = { upstream: 'origin/main', counts: { ahead: 0, behind: 3 } };
-    assert.deepStrictEqual(names(triageGitRepos([onFeat(onMain, { branches: one, unmergedTotal: 1 })]).flight), ['a']);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
