@@ -169,14 +169,15 @@ against injected timer and visibility functions so `test/git-stats-client.test.t
 fetch is never the last word. A failed poll keeps the last payload and sets `error`. Before the first payload the body reads a muted "Loading…", as
 Management › Projects does; a first poll that fails turns it into "Couldn't load git stats. Retrying every 30s."
 
-**The clock chip** (`GitClockChip.tsx`). The band has no right slot any more; beside the layout switcher, in `.git-toolbar`, sits one button holding two
-meters, SYNC (the 30s re-read) and FETCH (the server's timer), and a caret. Its readings are pure functions in `client/src/lib/gitClock.ts`: SYNC reads
-`syncing…`, `failed`, or the countdown; FETCH reads `fetching…` (payload running, or this tab's own POST out), `off`, `…` (no schedule known), `overdue`,
-`0s`, or the countdown. When FETCH first reaches `0s` for a given `nextAtMs` the chip asks for one early poll 3s later, and while a payload says a fetch is
-running it polls every 3s until it clears; both only while the tab is visible, since a hidden tab that kept polling would keep the server watched forever.
-The chip opens a popover (`.git-pop`, dismissed by `useDismiss`) with two rows — **Local sync** (`now` = the old ↻) and **Fetch all** (`now` = `POST
-/api/git-fetch` through `useGitFetch`, then a poll) — and, under them, one amber line per repo whose last fetch failed with anything but `lock`. The Fetch
-all key is disabled with a reason when the server wants an Answer token this device has not stored, or after a `403`.
+**The clock chip** (`GitClockChip.tsx`). The band has no right slot any more; at the right end of `.git-toolbar`, across from the layout switcher (under it on a
+phone), sits one button holding two meters, SYNC (the 30s re-read) and FETCH (the server's timer), and a caret. Its readings are pure functions in
+`client/src/lib/gitClock.ts`: SYNC reads `syncing…`, `failed`, or the countdown; FETCH reads `fetching…` (payload running, or this tab's own POST out), `off`,
+`…` (no schedule known), `overdue`, `0s`, or the countdown. When FETCH first reaches `0s` for a given `nextAtMs` the chip asks for one early poll 3s later, and
+while a payload says a fetch is running it polls every 3s until it clears; both only while the tab is visible, since a hidden tab that kept polling would keep
+the server watched forever. The chip opens a popover (`.git-pop`, dismissed by `useDismiss`, anchored to the chip's right edge and capped at `100vw - 32px`)
+with two rows — **Local sync** (`now` = the old ↻) and **Fetch all** (`now` = `POST /api/git-fetch` through `useGitFetch`, then a poll) — and, under them, one
+amber line per repo whose last fetch failed with anything but `lock`. The Fetch all key is disabled with a reason when the server wants an Answer token this
+device has not stored, or after a `403`.
 
 **The layouts.** A `.seg` switcher offers `gitLayoutsFor(narrow)` and stores the pick per device in `management.gitLayout` (default `inbox`), read through
 `parseGitLayout`; what is drawn is `drawableGitLayout`, so a phone draws Inbox while a stored Matrix waits for the next wide window

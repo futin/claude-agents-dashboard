@@ -2842,13 +2842,14 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
    flight, green quiet, ink3 can't read; the ahead half of a divergence bar is
    `--cyan` and the behind half `--ink3`, as on GitHub's branch list. */
 .git-switch{align-self:flex-start}
-/* The toolbar (git-fetch spec §4). Mobile-first: the chip's root takes the whole row, so below `md` it sits on its own line under the switcher, and the
-   popover — absolutely positioned, with no positioned ancestor nearer than the toolbar — spans that row. From `md` the root is the anchor instead
-   (the `min-width:768px` block below). */
+/* The toolbar (git-fetch spec §4), as the redesign mock draws it: the layout pills at its left, the clock chip pushed to its right end (on a phone that
+   wraps, it drops under the pills and stays right-aligned), and the chip's root is the popover's anchor at every width, so the popover opens leftwards
+   from the chip's right edge and is capped to the viewport. */
 .git-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;position:relative}
-.git-clock-root{flex-basis:100%}
-.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:12px;background:var(--strip-hi);color:var(--ink);font:inherit;font-family:var(--font);cursor:pointer;transition:background .15s}
-.git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--hairline2)}
+.git-clock-root{position:relative;margin-left:auto}
+/* --strip paper with the pills' own lift and a --hairline ring: the --strip-hi fill it had all but vanished on the board. */
+.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:12px;background:var(--strip);color:var(--ink);font:inherit;font-family:var(--font);cursor:pointer;box-shadow:0 1px 2px var(--shadow),0 0 0 1px var(--hairline);transition:background .15s}
+.git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--strip-hi)}
 .git-clock:focus-visible,.git-pop-key:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 /* At an 11px label `fetching…` is wider than a fixed track, so the chip's meters grow to their content rather than wrap: a two-line head would change the
    chip's height the moment a clock changes state. */
@@ -2871,7 +2872,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-meter[data-tone="live"] .git-meter-value{color:var(--cyan)}
 @keyframes git-meter-pulse{50%{opacity:.35}}
 /* The popover: --strip paper lifted by the deep shadow, mounted only while open. Rows are name | meter | key. */
-.git-pop{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:20;width:auto;padding:14px 16px;border-radius:16px;background:var(--strip);color:var(--ink);box-shadow:0 24px 64px var(--shadow2);text-align:left}
+.git-pop{position:absolute;top:calc(100% + 6px);left:auto;right:0;z-index:20;width:420px;max-width:calc(100vw - 32px);padding:14px 16px;border-radius:16px;background:var(--strip);color:var(--ink);box-shadow:0 24px 64px var(--shadow2);text-align:left}
 .git-pop-row{display:grid;grid-template-columns:minmax(0,1fr) 120px auto;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--hairline)}
 .git-pop-row:first-child{border-top:0;padding-top:0}
 .git-pop-row .git-meter{width:120px}
@@ -2954,12 +2955,6 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 @media (min-width:640px){
   .git-in-br{grid-template-columns:minmax(0,1fr) 116px 90px 40px}
   .git-in-br .git-dvbar{display:inline-grid}
-}
-
-/* `md`: the clock chip's popover floats at its own width instead of filling the row */
-@media (min-width:768px){
-  .git-clock-root{flex-basis:auto;position:relative}
-  .git-pop{right:auto;width:420px;max-width:calc(100vw - 32px)}
 }
 
 /* Inbox — count tiles that filter, then one ranked list (management-redesign spec §4.3) */
