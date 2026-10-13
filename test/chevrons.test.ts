@@ -56,6 +56,15 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  if (test('styles.css draws no text triangle through content:', () => {
+    const lines = fs.readFileSync(path.join(ROOT, 'client/src/styles.css'), 'utf8').split('\n');
+    lines.forEach((line, i) => {
+      const m = /content\s*:\s*("[^"]*"|'[^']*')/.exec(line);
+      const hit = m ? TRIANGLES.find(g => m[1].includes(g)) : undefined;
+      assert.strictEqual(hit, undefined, `client/src/styles.css:${i + 1} draws the text triangle ${hit} through content:; use <Chevron />`);
+    });
+  })) p++; else f++;
+
   if (test('Chevron keeps the account chip path', () => {
     const src = fs.readFileSync(path.join(COMPONENTS, 'Chevron.tsx'), 'utf8');
     assert.ok(src.includes('M2 4l3 3 3-3'), 'Chevron.tsx lost the account chip path');

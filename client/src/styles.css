@@ -1671,8 +1671,8 @@ code,kbd,samp,pre{font-family:inherit}
 .cmsg-plan{margin-top:9px;min-width:0;background:var(--strip);border:1px solid var(--hairline);border-radius:12px;padding:12px 14px}
 .cmsg-plan>summary{font-size:12px;color:var(--ink2);cursor:pointer;user-select:none;list-style:none}
 .cmsg-plan>summary::-webkit-details-marker{display:none}
-.cmsg-plan>summary::before{content:"▾ ";color:var(--ink3)}
-.cmsg-plan:not([open])>summary::before{content:"▸ "}
+.cmsg-plan>summary .cmsg-chev{color:var(--ink3);margin-right:6px}
+.cmsg-plan:not([open])>summary .cmsg-chev{transform:rotate(-90deg)}
 .cmsg-plan>summary .tool{font-weight:500;color:var(--ink)}
 .cmsg-plan>.cmsg-text{font-size:13px}
 
