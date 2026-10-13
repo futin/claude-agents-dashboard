@@ -15,6 +15,7 @@ import {
   makeGitRunner,
   memoKeys,
   readRepo,
+  stripUserinfo,
   trunkOf,
 } from '../server/lib/git-stats.js';
 import type { GitMemo, GitRunner } from '../server/lib/git-stats.js';
@@ -907,6 +908,56 @@ export async function run(): Promise<number> {
       assert.deepStrictEqual(second.calls.filter(a => a[0] === 'rev-list' || a[0] === 'cherry'), []);
       assert.deepStrictEqual(r2, r1);
     });
+  }));
+
+  check(await test('originUrl: a clone of a local bare repo reports the bare path unchanged', async () => {
+    await withGitFixture(async fx => {
+      const bare = fx.bare('origin.git');
+      const work = fx.clone(bare, 'work');
+      assert.strictEqual(ok(await read(work)).originUrl, bare);
+    });
+  }));
+
+  check(await test('originUrl: https with credentials comes back without them', async () => {
+    await withGitFixture(async fx => {
+      const work = cleanClone(fx);
+      fx.git(work, ['remote', 'set-url', 'origin', 'https://alice:s3cret@github.com/o/r.git']);
+      const r = ok(await read(work));
+      assert.strictEqual(r.originUrl, 'https://github.com/o/r.git');
+      assert.ok(!JSON.stringify(r).includes('s3cret'), 'the password must not appear anywhere in the result');
+      assert.ok(!JSON.stringify(r).includes('alice'), 'the username must not appear anywhere in the result');
+    });
+  }));
+
+  check(await test('originUrl: scp-like git@github.com:o/r.git → github.com:o/r.git', async () => {
+    await withGitFixture(async fx => {
+      const work = cleanClone(fx);
+      fx.git(work, ['remote', 'set-url', 'origin', 'git@github.com:o/r.git']);
+      assert.strictEqual(ok(await read(work)).originUrl, 'github.com:o/r.git');
+    });
+  }));
+
+  check(await test('originUrl: no origin → null and no get-url call', async () => {
+    await withGitFixture(async fx => {
+      const repo = fx.init('solo');
+      fx.commit(repo, 'first');
+      const s = spy();
+      assert.strictEqual(ok(await read(repo, s.run)).originUrl, null);
+      assert.deepStrictEqual(s.calls.filter(a => a[0] === 'remote' && a[1] === 'get-url'), []);
+    });
+  }));
+
+  check(await test('stripUserinfo: userinfo goes, everything else stays', async () => {
+    const table: [string, string | null][] = [
+      ['', null],
+      ['https://github.com/o/r.git', 'https://github.com/o/r.git'],
+      ['https://tok@gitlab.com/g/s/r.git', 'https://gitlab.com/g/s/r.git'],
+      ['ssh://git@github.com/o/r.git', 'ssh://github.com/o/r.git'],
+      ['ssh://git@github.com:2222/o/r.git', 'ssh://github.com:2222/o/r.git'],
+      ['http://[bad', null],
+      ['/tmp/x/origin.git', '/tmp/x/origin.git'],
+    ];
+    for (const [input, want] of table) assert.strictEqual(stripUserinfo(input), want, JSON.stringify(input));
   }));
 
   console.log(`\ngit-stats: ${ok_}/${total} passed`);

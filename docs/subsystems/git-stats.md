@@ -71,6 +71,7 @@ Every variant carries `dirName`, `name` and `path` (the pin's cwd). `state` is o
 | `uncommitted`   | entries of `status --porcelain=v1 -z`, counted as `git status` lists them: a rename or copy is one entry, an untracked directory is one, ignored files none |
 | `trunk`         | `origin/HEAD`'s branch, else `main`, else `master`, the remote-tracking ref checked before the local one (`trunkOf`, copied from git-sync, not imported). `null` = none |
 | `hasOrigin`     | a remote named `origin` exists                                                                                                                   |
+| `originUrl`     | `remote get-url origin`, local config only, with any userinfo removed (`stripUserinfo`) so no credential reaches the client; `null` without an origin or when unreadable. The client's compare link (`gitCompareUrl`) is built from it |
 | `trunkVsOrigin` | local trunk ahead/behind `origin/<trunk>`; `null` with no origin, no trunk, no `origin/<trunk>` or no local trunk                                |
 | `trunkRefs`     | `{ local, origin }` — whether the local `<trunk>` and `origin/<trunk>` exist; `null` exactly when `trunk` is `null`. It lets the client tell "not on origin" from "only on origin", which `trunkVsOrigin: null` cannot |
 | `currentVsUpstream` | the current branch against its configured upstream (`%(upstream)`): `{ upstream, counts: { ahead, behind } }`, `upstream` the short name (`origin/feat/x`), same orientation as `GitBranch`. `counts: null` = the upstream is configured but its ref does not resolve (gone, e.g. after `fetch --prune`), never an `error`. The whole field is `null` when detached, on the trunk (`trunkVsOrigin` covers it), on an unborn branch, or with no upstream configured. An upstream on a remote other than `origin` is counted too, but is only as fresh as your own fetch of that remote: the timer fetches `origin` alone |
@@ -128,7 +129,7 @@ the entries computed before the throw but pruning nothing until a read finishes.
 
 Ahead/behind (`rev-list --left-right --count <base>...<branch>`, with full `refs/heads/...` names, never a bare name) and the merged proof are the expensive
 calls, 2–3 per unmerged branch. They are **memoised by `(toplevel, branch sha, base sha)`**, so a poll in which no sha moved makes only the cheap per-poll
-calls (`rev-parse`, `symbolic-ref`, `status`, `for-each-ref`, `remote`, the trunk probes). The current branch's count against its upstream is one more
+calls (`rev-parse`, `symbolic-ref`, `status`, `for-each-ref`, `remote`, `remote get-url origin`, the trunk probes). The current branch's count against its upstream is one more
 memoised count, keyed the same way with the upstream's sha as the base; it adds one cheap `rev-parse --verify` per poll, and only when the checked-out branch
 has an upstream. The upstream itself rides on the `for-each-ref` call already made (`%(upstream)`, never `%(upstream:track)`, which would walk every tracked
 branch unmemoised). The memo is module-level and outlives a request:

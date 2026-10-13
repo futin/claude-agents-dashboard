@@ -1643,6 +1643,8 @@ export type RepoGitStats =
       /** `origin/HEAD`'s branch, else `main`, else `master`; null when there is none. */
       trunk: string | null;
       hasOrigin: boolean;
+      /** `git remote get-url origin` from local config (no network), with any userinfo removed so no credential leaves the server; null without an origin or when it cannot be read. */
+      originUrl: string | null;
       /** Local trunk vs `origin/<trunk>`; null without an origin, a trunk, an `origin/<trunk>` or a local `<trunk>`. */
       trunkVsOrigin: { ahead: number; behind: number } | null;
       /** Which refs of the trunk exist; null exactly when `trunk` is null. Lets the client tell "<trunk> not on origin" from "<trunk> only on origin", which `trunkVsOrigin: null` alone cannot. */
