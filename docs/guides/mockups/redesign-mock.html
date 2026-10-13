@@ -500,15 +500,15 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .metric.hero{font-size:44px;line-height:1.05}
 .delta{font-size:12px;margin-top:6px;color:var(--text-secondary)}
 .delta b{font-weight:400}
-.delta .up{color:var(--green-600)}
-.delta .down{color:var(--orange-400)}
+.delta .up{color:var(--green-ink)}
+.delta .down{color:var(--amber)}
 .chip{
-  height:32px;padding:0 12px;background:var(--bg-surface);border:1px solid var(--border-strong);
-  border-radius:var(--r-md);font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:7px;
+  height:30px;padding:0 12px;background:var(--bg-surface);border:1px solid var(--border-strong);color:var(--text-secondary);
+  border-radius:var(--r-md);font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px;
   white-space:nowrap;flex:none;
 }
 .chip.sq{width:32px;padding:0;justify-content:center}
-.chip.on{background:var(--bg-subtle)}
+.chip.on{background:var(--bg-subtle);color:var(--text-primary)}
 .row-head{display:flex;align-items:flex-start;gap:12px}
 .row-head .sp{flex:1}
 
@@ -549,7 +549,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .u-band{position:absolute;top:-3px;height:9px;background:var(--red-500);opacity:.14}
 .u-lab{display:flex;justify-content:space-between;font-size:11px;color:var(--text-tertiary);margin:6px 52px 0 0}
 .u-verdict.wall{color:var(--red-500)}
-.u-verdict.lasts{color:var(--green-600)}
+.u-verdict.lasts{color:var(--green-ink)}
 
 /* the open row: stop control, then the subagent timeline */
 .expanded{margin-top:14px;padding-top:14px;border-top:1px solid var(--border);cursor:default}
@@ -596,25 +596,25 @@ button{font-family:inherit;color:inherit;cursor:pointer}
   width:16px;height:16px;border-radius:var(--r-full);border:1px solid var(--border-strong);
   background:var(--bg-surface);font-size:10px;font-weight:600;color:var(--text-secondary);
   display:inline-grid;place-items:center;vertical-align:2px;
-}/* heatmap */.cell{aspect-ratio:1;border-radius:var(--r-xs);background:var(--bg-track);border:1px solid var(--border)}
-.cell.q1{background:var(--green-200);border-color:transparent}
-.cell.q2{background:#B9DE8A;border-color:transparent}
-.cell.q3{background:var(--green-400);border-color:transparent}
-.cell.q4{background:var(--green-500);border-color:transparent}
-.cell.q5{background:var(--green-600);border-color:transparent}
+}/* heatmap *//* styles.css .up-cell: the ramp is the accent mixed toward paper in fifths, every cell keeps its hairline, and no evidence is a dashed, hatched cell */
+.cell{position:relative;aspect-ratio:1;min-width:0;border-radius:2px;border:1px solid var(--border)}
+.cell.q1{background:color-mix(in oklab,var(--cyan) 20%,var(--bg-surface))}
+.cell.q2{background:color-mix(in oklab,var(--cyan) 40%,var(--bg-surface))}
+.cell.q3{background:color-mix(in oklab,var(--cyan) 60%,var(--bg-surface))}
+.cell.q4{background:color-mix(in oklab,var(--cyan) 80%,var(--bg-surface))}
+.cell.q5{background:var(--cyan)}
 .cell.none{
-  background:var(--bg-subtle);border-color:var(--border);
-  background-image:repeating-linear-gradient(45deg,var(--border-strong) 0 1px,transparent 1px 5px);
+  background:repeating-linear-gradient(135deg,var(--border) 0 2px,transparent 2px 5px);border-style:dashed;
 }/* walk chart */
 .walk{margin-top:18px}
-.walkwrap{position:relative;height:250px}
-.walkwrap svg{width:100%;height:100%;display:block}.wk-day{stroke:#EFEFEE;stroke-width:1}.walkdays{position:relative;height:18px;margin-top:6px;font-size:11px;color:var(--text-secondary)}
+.walkwrap{position:relative;height:220px}
+.walkwrap svg{width:100%;height:100%;display:block}.wk-day{stroke:var(--border);stroke-width:1}.walkdays{position:relative;height:18px;margin-top:6px;font-size:11px;color:var(--text-secondary)}
 .walkdays span{position:absolute;transform:translateX(-50%)}
 .note{font-size:12px;color:var(--text-secondary);line-height:1.5;margin-top:14px}/* how-to-read drawer *//* token-value rows */.badge{font-size:11px;font-weight:500;padding:4px 10px;border-radius:var(--r-md)}
-.badge.stable{background:var(--green-200);color:var(--green-600)}
-.badge.drift{background:#FDEEDF;color:var(--amber-ink)}
+.badge.stable{background:var(--green-200);color:var(--green-ink)}
+.badge.drift{background:var(--amber-tint);color:var(--amber-ink)}
 .badge.thin{background:var(--bg-subtle);color:var(--text-secondary)}
-.badge.mix{background:#FCF7D2;color:#8A7A12}/* ── settings pages ──────────────────────────────────────────────────────── */
+.badge.mix{background:var(--mustard-tint);color:var(--mustard-ink)}/* ── settings pages ──────────────────────────────────────────────────────── */
 .set-head{display:flex;align-items:flex-start;gap:16px}
 /* sits on the app ground, so a --bg-subtle fill would vanish (2 points apart);
    Local is a plain white pill, Shared the green kaizen fill */
@@ -959,20 +959,21 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .combo .ledger .ctx{min-width:0}.combo .ledger .ctx + .tok{display:none}
 .combo .ledger th:not(:first-child),.combo .ledger td:not(:first-child){padding-left:8px;padding-right:8px}/* B's rates: one line per model, the figures behind a fold *//* ── C · the analyst's read: rules and figures, no cards ─────────────────── */
 .statstrip{
-  display:grid;grid-template-columns:repeat(5,1fr);
-  background:var(--bg-surface);border-radius:var(--r-lg);box-shadow:var(--lift-card);overflow:hidden;
+  display:grid;grid-template-columns:repeat(5,1fr);   /* styles.css 2xl; 2 across on a phone, 3 from md */
+  background:var(--bg-surface);border-radius:var(--r-lg);overflow:hidden;
 }
-.statstrip > div{padding:18px 20px}
+.statstrip > div{padding:18px 20px;min-width:0}
 /* the ground, not a hairline: the five cells read as tiles the page shows
    between, the way the cards on this board are separated */
 .statstrip > div + div{border-left:2px solid var(--bg-app)}
-.statstrip .k{font-size:12px;color:var(--text-secondary)}
-.statstrip .v{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:6px;line-height:1.1}
-.statstrip .v.warn{color:var(--orange-400)}
+.statstrip .k{font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:8px}
+.statstrip .v{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:6px;line-height:1.1;overflow-wrap:anywhere}
+.statstrip .v.warn{color:var(--amber)}
+.statstrip .v .u{font-size:14px;font-weight:400;color:var(--text-secondary)}
 .statstrip .s{font-size:11px;color:var(--text-tertiary);margin-top:5px}
-.sheet{background:var(--bg-surface);border-radius:var(--r-lg);box-shadow:var(--lift-card);padding:22px 24px}
-.sheet + .sheet{margin-top:16px}
-.sheet .ct{font-size:16px}
+.sheet{background:var(--bg-surface);border-radius:var(--r-lg);padding:22px 24px}
+.sheet .ct{font-size:16px;font-weight:500;letter-spacing:-.01em;line-height:1.3}
+.sheet .cs{line-height:1.45;max-width:92ch}
 .dt{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
 .dt th{
   text-align:left;font-size:11px;font-weight:500;color:var(--text-secondary);
@@ -983,19 +984,22 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .dt tr:last-child td{border-bottom:0}
 .dt td:first-child,.dt th:first-child{padding-left:0}
 .dt td:last-child,.dt th:last-child{padding-right:0}
-.dt td.name{font-weight:500}
+.dt td.name{font-weight:500;white-space:normal;overflow-wrap:anywhere}
+.dt td .cs{display:inline;font-size:11px;color:var(--text-tertiary);margin:0}
 .dt td.mut{color:var(--text-secondary);white-space:normal}
 .dt tr.tot td{border-top:1px solid var(--border-strong);border-bottom:0;font-weight:600;padding-top:12px}
 .dt .bar{display:block;height:6px;border-radius:var(--r-xs);background:var(--green-500)}
-.dt .bar.assumed{background:var(--green-200)}
+/* no evidence: a steel bar under the hairline hatch, not a hatched green one (styles.css .dt .bar.hatch) */
+.dt .bar.hatch{background:var(--bg-track);background-image:repeating-linear-gradient(45deg,var(--border-strong) 0 1px,transparent 1px 5px)}
+.dt .bar.assumed{background:color-mix(in oklab,var(--green-500) 35%,var(--bg-track))}
 .dt .barcell{width:120px}
-.dt .dev{font-weight:500;color:var(--green-600)}
-.dt .dev.bad{color:var(--orange-400)}
+.dt .dev{font-weight:500;color:var(--green-ink)}
+.dt .dev.bad{color:var(--amber)}
 .dt .dev.flat{color:var(--text-tertiary)}
-.tag-v{font-size:11px;font-weight:500;border-radius:var(--r-full);padding:3px 9px;background:var(--bg-subtle)}
-.tag-v.stable{background:var(--green-200)}
-.tag-v.drift{background:var(--orange-300)}
-.tag-v.mix{background:var(--bg-track);color:var(--text-secondary)}
+.tag-v{display:inline-block;font-size:11px;font-weight:500;border-radius:var(--r-full);padding:3px 9px;background:var(--bg-track);color:var(--text-secondary);white-space:nowrap}
+.tag-v.stable{background:var(--green-200);color:var(--green-ink)}
+.tag-v.drift{background:var(--amber-tint);color:var(--amber-ink)}
+.tag-v.mix{background:var(--mustard-tint);color:var(--mustard-ink)}
 
 .hmx{display:grid;grid-template-columns:34px 1fr;gap:6px;margin-top:18px;font-size:10px}
 .hmx .hrs{grid-column:2;display:grid;grid-template-columns:repeat(24,1fr);gap:3px;color:var(--text-tertiary);text-align:center;margin-bottom:5px}
@@ -1034,14 +1038,13 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .uplegend .cell{width:16px;height:16px;aspect-ratio:auto}
 .uplegend .gap{width:20px}
 /* the walk's three states, drawn as the ramp's swatches are */
-.uplegend .rule{width:18px;height:0;border-top:2.5px solid var(--green-500)}
-.uplegend .rule.dash{border-top-style:dashed;border-color:var(--green-400)}
-.uplegend .rule.dash.warn{border-color:var(--orange-400)}/* the ceiling is the one red rule on the board: 100% of the weekly window */.sheet-div{height:1px;background:var(--border);margin:24px 0}
+.uplegend .rule{width:18px;height:0;flex:none;border-top:2.5px solid var(--green-500)}
+.uplegend .rule.dash{border-top-style:dashed}/* the ceiling is the one red rule on the board: 100% of the weekly window */.sheet-div{height:1px;background:var(--border);margin:24px 0}
 .sheet .ct.sub{font-size:15px}
 /* the glyph is a separate thing from the title it annotates, so it gets air;
    the legends space theirs with the row's own flex gap instead */
 .ct .idot.def,.statstrip .k .idot.def,.dt th .idot.def{margin-left:8px}
-.dt th .idot{vertical-align:1px}
+.dt th .idot{vertical-align:1px;margin-left:6px}
 
 /* ── the headroom chart ──────────────────────────────────────────────────
    The walk drawn as what is *left* of the weekly window rather than what is
@@ -1061,21 +1064,22 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .crosstag{
   position:absolute;transform:translate(-50%,-140%);white-space:nowrap;
   font-size:11px;font-weight:500;color:var(--red-500);
-  background:var(--bg-surface);border-radius:var(--r-xs);padding:1px 6px;box-shadow:var(--lift-card);
+  background:var(--bg-surface);border-radius:var(--r-xs);padding:1px 6px;box-shadow:0 1px 2px rgba(0,0,0,.06);
 }/* C · band: the assumed hours as an envelope rather than a dashed line *//* D · bricks: one column per hour *//* E · burn: each hour's own cost as a bar, the running total as a thin line *//* F · headroom: what is left, draining to zero and then past it */
 .hr-area{fill:color-mix(in oklab, var(--green-500) 18%, transparent)}
 /* the deficit, in two halves: red under the measured run, orange and hatched
    under the run walked at the weekly mean — the hatch being this board's mark
    for "no evidence", the same one an unmeasured hour cell wears */
-.hr-debt.measured{fill:color-mix(in oklab, var(--red-500) 20%, transparent)}
-.hr-debt{fill:color-mix(in oklab, var(--orange-400) 28%, transparent)}
-.hr-line{fill:none;stroke:var(--green-600);stroke-width:2;vector-effect:non-scaling-stroke}
+.hr-debt.measured{fill:color-mix(in oklab, var(--red-500) 22%, transparent)}
+.hr-debt{fill:color-mix(in oklab, var(--amber) 28%, transparent)}
+.hr-line{fill:none;stroke:var(--green-500);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .hr-line.debt{stroke:var(--red-500)}
 /* the dashed run takes the colour of the fill under it: past the evidence the
    deficit is a guess, and orange is what this board calls a guessed overrun */
-.hr-line.assumed{stroke-dasharray:5 4;stroke-width:1.6;stroke:var(--orange-400)}
+.hr-line.assumed{stroke-dasharray:5 4;stroke-width:1.6}
+.hr-line.debt.assumed{stroke:var(--amber)}
 .hr-zero{stroke:var(--text-primary);stroke-width:1.2;vector-effect:non-scaling-stroke}
-.uplegend .rule.brick{width:14px;height:14px;border:0;border-radius:2px;background:var(--green-500)}.uplegend .rule.brick.debt{background:color-mix(in oklab, var(--orange-400) 45%, var(--bg-surface))}
+.uplegend .rule.brick{width:14px;height:14px;border:0;border-radius:2px;background:var(--green-500)}.uplegend .rule.brick.debt{background:color-mix(in oklab, var(--amber) 45%, var(--bg-surface))}
 .uplegend .rule.brick.debt.red{background:color-mix(in oklab, var(--red-500) 32%, var(--bg-surface))}/* ── the variant switcher (mock chrome, not part of the design) ──────────── *//* ═══════════════════════════════════════════════════════════════════════════
    CLAUDE CONFIGS (was Management) — five layout variants over one config
    fixture. The `mg-` class prefix is kept from the old name.
@@ -1550,7 +1554,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 /* the level as the Sessions .status pill, in the Git inks */
 .status.g-needs{background:var(--amber-tint);color:var(--amber-ink)}
 .status.g-look{background:var(--mustard-tint);color:var(--mustard-ink)}
-.status.g-quiet{background:var(--green-200);color:var(--green-600)}
+.status.g-quiet{background:var(--green-200);color:var(--green-ink)}
 .git-in-pane{display:flex;flex-direction:column;gap:20px}
 .git-in-pane .ins-meta{margin-top:6px}
 .git-in-path{font-size:12px;color:var(--text-tertiary);overflow-wrap:anywhere}
@@ -2062,7 +2066,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
    track whose right edge is the red limit rule. A day whose jump spans hours
    nothing was recording wears the signature hatch over its green. */
 .hist-range{align-self:flex-start}
-.hist-chart{position:relative;width:100%;margin-top:16px}
+.hist-chart{position:relative;width:100%;margin-top:12px}
 .hist-chart svg{display:block}
 .hist-tip{
   position:absolute;display:none;pointer-events:none;z-index:5;white-space:pre;
@@ -2074,22 +2078,22 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .hist-grid{stroke:var(--border);stroke-width:1;stroke-dasharray:3 3}
 .hist-lim{stroke:var(--red-500);stroke-width:1;stroke-dasharray:4 3;opacity:.7}
 .hist-hatch{stroke:rgba(255,255,255,.55);stroke-width:1.5}
-.hist-track{fill:var(--bg-subtle)}
+.hist-track{fill:var(--bg-track)}
 .hist-seg.a{fill:var(--green-500)}
 .hist-seg.b{fill:var(--green-400)}
-.hist-seg.pre{fill:var(--border-strong)}
+.hist-seg.pre{fill:color-mix(in oklab,var(--text-tertiary) 40%,var(--bg-track))}
 .hist-bin{font-size:10px;font-weight:600;text-anchor:middle;fill:var(--text-primary);pointer-events:none}
-.hist-bin.inv{fill:var(--text-on-dark)}
+.hist-bin.inv{fill:var(--text-primary)}   /* live .usg-wf-day: ink on every segment */
 .hist-dlabel{font-size:11px;font-weight:500;fill:var(--text-primary);text-anchor:end}
 .hist-sub{font-size:10px;fill:var(--text-tertiary);text-anchor:end}
 .hist-sub.start{text-anchor:start}
 .hist-wk{font-size:13px;font-weight:600;fill:var(--text-primary)}
-.hist-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;font-size:12px;color:var(--text-secondary)}
+.hist-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:12px;color:var(--text-secondary)}
 .hist-legend span{display:inline-flex;align-items:center;gap:6px}
-.hist-sw{display:inline-block;width:16px;height:10px;border-radius:2px}
+.hist-sw{display:inline-block;width:14px;height:10px;border-radius:2px}
 .hist-sw.seg.a{background:var(--green-500)}
 .hist-sw.seg.b{background:var(--green-400)}
-.hist-sw.seg.pre{background:var(--border-strong)}
+.hist-sw.seg.pre{background:color-mix(in oklab,var(--text-tertiary) 40%,var(--bg-track))}
 .hist-sw.lim{height:0;border-top:1.5px dashed var(--red-500);border-radius:0}
 .hist-sw.gap{
   background-color:var(--green-500);
@@ -2098,7 +2102,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .dt td.lim{color:var(--red-500);font-weight:500}
 .up-off{
   display:flex;gap:10px;font-size:13px;line-height:1.5;color:var(--text-secondary);
-  border-radius:var(--r-lg);background:#FDEEDF;padding:16px 20px;
+  border-radius:var(--r-lg);background:color-mix(in srgb,var(--amber) 12%,transparent);padding:16px 20px;
 }
 .up-off b{color:var(--text-primary);font-weight:500}
 
@@ -2308,12 +2312,6 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
             <div class="ct">Usage · Forecast</div>
             <div class="cs">The duty cycle behind the weekly projection in the header · recorded on this machine, folded weekly</div>
           </div>
-          <span class="sp" style="flex:1"></span>
-          <div class="seg ground">
-            <button class="on" data-go="forecast">Forecast</button>
-            <button data-go="rates">Token value</button>
-            <button data-go="history">History</button>
-          </div>
         </div>
       </div>
 
@@ -2446,12 +2444,6 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
           <div>
             <div class="ct">Usage · Token value</div>
             <div class="cs">What one percent of the 5-hour window costs, per model · measured on this machine only</div>
-          </div>
-          <span class="sp" style="flex:1"></span>
-          <div class="seg ground">
-            <button data-go="forecast">Forecast</button>
-            <button class="on" data-go="rates">Token value</button>
-            <button data-go="history">History</button>
           </div>
         </div>
       </div>
@@ -3039,7 +3031,7 @@ document.querySelectorAll('[data-go]').forEach(el =>
           <td class="n">${r.active.toFixed(1)}</td>
           <td>${src}</td>
           <td class="n">+${r.gain.toFixed(1)}%</td>
-          <td class="n"${over ? ' style="color:var(--orange-400);font-weight:600"' : ''}>${r.end.toFixed(0)}%</td>
+          <td class="n"${over ? ' style="color:var(--amber);font-weight:600"' : ''}>${r.end.toFixed(0)}%</td>
           <td class="barcell"><i class="bar${r.learned === 0 ? ' assumed' : ''}" style="width:${Math.min(100, r.end / CEIL_PCT * 100).toFixed(0)}%"></i></td>
           <td class="mut">${r.cross !== null ? `crosses 100% at ${String(r.cross).padStart(2, '0')}:00` : NOTES[k] || ''}</td>
         </tr>`);
@@ -3052,7 +3044,7 @@ document.querySelectorAll('[data-go]').forEach(el =>
         <td class="n">${active.toFixed(1)}</td>
         <td>${learned} measured · ${N - learned} at the mean</td>
         <td class="n">+${gain.toFixed(0)}%</td>
-        <td class="n" style="color:var(--orange-400)">${PTS[N - 1].cum.toFixed(0)}%</td>
+        <td class="n" style="color:var(--amber)">${PTS[N - 1].cum.toFixed(0)}%</td>
         <td class="barcell"><i class="bar hatch" style="width:100%"></i></td>
         <td class="mut">${N - CROSS} hours past the crossing the window cannot pay for</td>
       </tr>`);
@@ -3407,7 +3399,7 @@ document.querySelectorAll('[data-go]').forEach(el =>
   const F = { statuses: new Set(), project: 'all', win: '24h' };
   const SORT = { key: 'recency', dir: 'asc' };
   const PROJECTS = ['claude-agents-dashboard', 'timify-web', 'guide-manager', 'infra-terraform'];
-  const STATUSES = [['working', 'var(--green-500)'], ['question', 'var(--orange-400)'], ['incomplete', 'var(--yellow-400)'], ['idle', 'var(--border-strong)']];
+  const STATUSES = [['working', 'var(--green-500)'], ['question', 'var(--amber)'], ['incomplete', 'var(--mustard)'], ['idle', 'var(--border-strong)']];
   const STATUS_LABEL = { working: 'working', question: 'waiting', incomplete: 'pending', idle: 'idle' };
   const SORTS = [['recency', 'Recency', 'last activity'], ['needs', 'Needs you first', 'then recency'], ['context', 'Context used', '% of window'], ['name', 'Name', 'A → Z'], ['project', 'Project', 'then name']];
   const filterCount = () => F.statuses.size + (F.project !== 'all' ? 1 : 0) + (F.win !== '24h' ? 1 : 0);
@@ -5916,12 +5908,6 @@ unpersisted, since session ids churn.`;
           <div class="ct">Usage · History</div>
           <div class="cs">5-hour and weekly utilization as recorded on this machine · gaps are time nothing was recording</div>
         </div>
-        <span class="sp" style="flex:1"></span>
-        <div class="seg ground">
-          <button data-go="forecast">Forecast</button>
-          <button data-go="rates">Token value</button>
-          <button class="on" data-go="history">History</button>
-        </div>
       </div>
     </div>`;
 
@@ -5948,12 +5934,11 @@ unpersisted, since session ids churn.`;
     const rows = [...r.weekly].reverse();
     if (!rows.length) return '<p class="note">No weekly reading was recorded in this range.</p>';
     return `<table class="dt">
-      <thead><tr><th>Resets at</th><th>Recorded from</th><th class="n">Peak</th><th class="barcell"></th></tr></thead>
+      <thead><tr><th>Resets at</th><th>Recorded from</th><th class="n">Peak</th></tr></thead>
       <tbody>${rows.map(w => `<tr>
         <td class="name">${fmtWhen(w.resetsAt)}${w.resetsAt > NOW ? ' <span class="cs" style="display:inline">· current</span>' : ''}</td>
         <td>${fmtWhen(w.firstT)}</td>
         <td class="n${w.peakPct >= 100 ? ' lim' : ''}">${fmtPct(w.peakPct)}%</td>
-        <td class="barcell"><i class="bar" style="width:${Math.min(100, w.peakPct)}%;${w.peakPct >= 100 ? 'background:var(--red-500)' : ''}"></i></td>
       </tr>`).join('')}</tbody>
     </table>`;
   };
