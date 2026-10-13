@@ -170,7 +170,7 @@ reader does not "correct" them back:
 
 Everything else is the spec's: 32 px sidebar padding, rows at 16/500, 20 px
 icons 12 px from the label, 16 px row padding-x and radius, a 3 px active bar
-22 px tall, a 20/700 wordmark over an 11 px kicker, 14 px sub-nav labels, and a
+22 px tall, a `› dashboard▌` prompt at 22/600 under an 11 px kicker (design handoff "1h": one face, its cursor blinks while a session works), 14 px sub-nav labels, and a
 divider with 24 px either side.
 
 Hover is the one state that is not the mock's: it darkens the label and leaves the

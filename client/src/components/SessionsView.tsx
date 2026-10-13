@@ -42,11 +42,14 @@ export function SessionsView({ onLink }: {
    * Link health of the poll this view owns, handed up so the shell can draw the
    * "live · refreshing every 3s" line at the foot of the rail (`SideRail`)
    * instead of under the board. Reported on every change, mount included.
+   * `working` is whether any session is mid-turn — the wordmark's cursor
+   * blinks on it.
    */
-  onLink?: (connected: boolean) => void;
+  onLink?: (link: { connected: boolean; working: boolean }) => void;
 } = {}) {
   const { data, connected } = useSessions();
-  useEffect(() => { onLink?.(connected); }, [connected, onLink]);
+  const working = data?.sessions.some(s => s.status === 'working') ?? false;
+  useEffect(() => { onLink?.({ connected, working }); }, [connected, working, onLink]);
   const { settings } = useSettings();
   const [view, setView] = usePersistedState<View>('dashboard.view', DEFAULT_VIEW);
   // The shape gets its own key rather than riding in `view`: it is not a
