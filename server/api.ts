@@ -57,6 +57,7 @@ import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
+import { openFolder, openFolderPlatform } from './lib/open-folder.js';
 import { readGitStats } from './lib/git-stats.js';
 import { classifyOrigin } from './lib/origin.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
@@ -66,7 +67,7 @@ import {
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import type {
-  AnalyticsResponse, ManagementIndex, MessageWaitResult, PinsResponse, PlanWaitResult, ScopeConfig,
+  AnalyticsResponse, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
   ModelRateRow, RateLimit, SpawnResponse, UsageCoverage, UsageProfileCell,
   UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult
@@ -1747,6 +1748,31 @@ export async function servePinsOrder(config: Config, req: IncomingMessage, res: 
   }
   if (setPinOrder(body.order) === null) return sendJson(res, 409, { error: 'pins changed — reload' });
   sendJson(res, 200, pinsPayload(config));
+}
+
+/**
+ * `POST /api/open-folder` `{path}` — open a pinned project's folder in Finder on the server host (management redesign spec §6.3). The method check is the
+ * router's. This launches a process on the host from a request that may come over LAN or the tailnet, so beyond the token the path must string-equal the
+ * path of a pin listed now: nothing is joined or normalised, so the request can name only a folder the pin list already shows. The platform gate sits before
+ * the pin read so a non-macOS host answers 501 without listing anything.
+ */
+export async function serveOpenFolder(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  const body = await readJsonBody(req) as { path?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.path !== 'string' || body.path === '') {
+    return sendBadBody(res, { error: 'expected {path: string}' });
+  }
+  const { path } = body;
+  if (openFolderPlatform() !== 'darwin') return sendJson(res, 501, { error: 'open folder needs macOS' });
+  const rows = listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), ...pinOptions() });
+  if (!rows.some(r => r.listed === true && r.path === path)) return sendJson(res, 403, { error: 'not a pinned project' });
+  try {
+    await openFolder(path);
+  } catch (e) {
+    console.error(`[dashboard] open folder failed: ${(e as Error).message}`);
+    return sendJson(res, 500, { error: 'open failed' });
+  }
+  sendJson(res, 200, { ok: true } satisfies OpenFolderResponse);
 }
 
 /* -------------------------------------------------- analytics endpoint */
