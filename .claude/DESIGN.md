@@ -337,7 +337,8 @@ Local sync and Fetch all rows. Below the toolbar, one of **four layouts** over t
 
 - **Inbox** — four level tiles that filter on click, then the repos that need you or are worth a look as paper panels (verdict, steps, keys, a closed branch
   list); All good and Can't read are one dashed box of lines under small uppercase `--ink3` headers.
-- **Matrix** — `.dt`'s rules in a sheet that scrolls inside itself: one row per repo against six check cells, a click opens its branches. Wide-only: a phone
+- **Matrix** — Sessions › List's table (the `.ledger` values, ported into `.git-mx`'s own rules) in a sheet that scrolls sideways inside itself: one row
+  per repo against six check cells, a click opens its branches. Wide-only: a phone
   draws Inbox, and a stored Matrix comes back with the width.
 - **Inspector** — a ranked repo list beside a pane for the picked one: four check tiles, its active and stale branches, Open folder and the keys. The pane
   stacks under the list on a phone.

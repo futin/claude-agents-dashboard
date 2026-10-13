@@ -8,7 +8,7 @@ import { fetchTroubleWord, gitBranchChipText, gitMergedText, gitShownFetchError,
 import type { OkRepo } from '../../lib/gitSync';
 import { GitInBranchRow, GitKeys, GitLevelDot, gitTracked } from './GitParts';
 import type { GitLayoutProps } from './gitLayoutProps';
-import Chevron from '../Chevron';
+import { keyActivate } from '../sessions/atoms';
 
 type Tone = 'ok' | 'bad' | 'meh' | 'live' | 'na';
 interface Cell { c: Tone; t: string }
@@ -73,7 +73,10 @@ const CHECKS: { label: string; cell: (i: CellInput) => Cell }[] = [
   },
 ];
 
-/** Matrix (management-redesign spec §4.4): a row per repo, a column per check, colour only where a check fails; open one row to read its branches. */
+/**
+ * Matrix (management-redesign spec §4.4): a row per repo, a column per check, colour only where a check fails; open one row to read its branches. It is drawn
+ * in Sessions › List's table language (the `.ledger` values, ported into `.git-mx`'s own rules): a dot column, name over branch, the whole row the toggle.
+ */
 export default function GitMatrix(props: GitLayoutProps) {
   const { repos, sessions, nowMs, clock } = props;
   const ranked = rankGitRepos(repos, sessions, nowMs);
@@ -93,9 +96,10 @@ export default function GitMatrix(props: GitLayoutProps) {
         <table className="git-mx">
           <thead>
             <tr>
+              <th className="git-mx-dot" />
               <th>Repo</th>
               {CHECKS.map((ch, i) => (
-                <th key={ch.label}>{ch.label}<span className={`git-mx-cnt${counts[i] ? '' : ' z'}`}>{counts[i]}</span></th>
+                <th key={ch.label}>{ch.label}{counts[i] > 0 && <>{' '}<span className="git-mx-cnt">{counts[i]}</span></>}</th>
               ))}
               <th />
             </tr>
@@ -106,9 +110,8 @@ export default function GitMatrix(props: GitLayoutProps) {
               if (repo.state !== 'ok') {
                 return (
                   <tr key={repo.dirName} className="off">
-                    <td className="git-mx-rn">
-                      <span className="git-head"><span className="git-caret" /><GitLevelDot level="dead" /><span className="git-name">{repo.name}</span></span>
-                    </td>
+                    <td className="git-mx-dot"><GitLevelDot level="dead" /></td>
+                    <td className="git-mx-rn"><div className="git-name">{repo.name}</div></td>
                     <td colSpan={CHECKS.length}><span className="git-cell na">{gitStateSentence(repo)}</span></td>
                     <td className="git-mx-act"><GitKeys a={a} ctx={props} bare /></td>
                   </tr>
@@ -117,28 +120,28 @@ export default function GitMatrix(props: GitLayoutProps) {
               const open = row === repo.dirName;
               const toggle = () => setRow(open ? null : repo.dirName);
               const max = gitBarMax(repo.branches);
+              const sub = gitBranchChipText(repo);
               return (
                 <Fragment key={repo.dirName}>
-                  <tr className="git-mx-r" onClick={toggle}>
+                  {/* The row is the toggle, as in Sessions › List: a key's click stops at the key, and `keyActivate` ignores Enter / Space aimed at one. */}
+                  <tr className="git-mx-r" onClick={toggle} onKeyDown={keyActivate(toggle)} tabIndex={0} aria-expanded={open}>
+                    <td className="git-mx-dot"><GitLevelDot level={a.level} /></td>
                     <td className="git-mx-rn">
-                      {/* No handler of its own: a click or Enter on the button bubbles to the row once. */}
-                      <button type="button" className="git-head git-rowbtn" aria-expanded={open}>
-                        <span className="git-caret" aria-hidden="true"><Chevron dir={open ? 'down' : 'right'} /></span>
-                        <GitLevelDot level={a.level} />
-                        <span className="git-name">{repo.name}</span>
-                      </button>
-                      <span className="git-mx-sub">{gitBranchChipText(repo)}</span>
+                      <div className="git-name">{repo.name}</div>
+                      <div className="git-mx-sub" title={sub}>{sub}</div>
                     </td>
                     {cells.get(repo.dirName)!.map((v, i) => <td key={CHECKS[i].label}><span className={`git-cell ${v.c}`}>{v.t}</span></td>)}
                     <td className="git-mx-act"><GitKeys a={a} ctx={props} compact /></td>
                   </tr>
                   {open && (
                     <tr className="git-mx-x">
-                      <td colSpan={CHECKS.length + 2}>
-                        {repo.branches.length === 0
-                          ? <span className="git-age">No open branches.</span>
-                          : repo.branches.map(b => <GitInBranchRow key={b.name} repo={repo} b={b} max={max} nowMs={nowMs} sessions={sessions} />)}
-                        {repo.mergedCount > 0 && <div className="git-age git-mx-note">{gitMergedText(repo.mergedCount)}</div>}
+                      <td colSpan={CHECKS.length + 3}>
+                        <div className="git-mx-xin">
+                          {repo.branches.length === 0
+                            ? <span className="git-age">No open branches.</span>
+                            : repo.branches.map(b => <GitInBranchRow key={b.name} repo={repo} b={b} max={max} nowMs={nowMs} sessions={sessions} />)}
+                          {repo.mergedCount > 0 && <div className="git-age git-mx-note">{gitMergedText(repo.mergedCount)}</div>}
+                        </div>
                       </td>
                     </tr>
                   )}

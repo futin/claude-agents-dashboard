@@ -2905,7 +2905,6 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-bname{display:flex;align-items:center;gap:6px;min-width:0}
 .git-bname-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .git-age{font-size:12px;color:var(--ink3);text-align:right;white-space:nowrap}
-.git-rowbtn{font:inherit;color:inherit;text-align:left;background:none;border:0;padding:0;cursor:pointer;display:inline-flex;align-items:center}
 .git-caret{display:inline-block;width:16px;flex:none;color:var(--ink3)}
 /* Sync (git-stats spec §9): a raised key — --strip-hi paper, 8px corners, a two-arrow glyph — where the fact chips are round and outlined, so the two never
    read alike. `.on` is a running sync whose chat it opens: cyan tint, glyph turning. A surface that sits on the board, where --strip-hi would vanish, lifts the
@@ -3003,36 +3002,58 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   .git-ib-keys{width:auto;justify-content:flex-end;padding-left:0}
 }
 
-/* Matrix — a row per repo, a column per check, colour only on failure (management-redesign spec §4.4). Wide-only: the table's floor is 760px. */
-.git-mx-wrap{padding:6px;overflow-x:auto}
+/* Matrix — a row per repo, a column per check, colour only on failure (management-redesign spec §4.4). Wide-only: the table's floor is 760px, and the wrapper
+   scrolls it sideways while its own overflow clips the card's corners, as `.s-card.ledger` does. The table is drawn in Sessions › List's language — the
+   `.ledger` values, ported here rather than shared, because `.ledger th:nth-child(3)` hides a column below md: hairline rules, a 41px dot column, name over
+   branch, the open row and its body one --strip-hi block with an --ink bar down the left, pills only where a check fails, `.cbtn`-shaped keys. */
+.git-mx-wrap{padding:0 0 16px;overflow-x:auto}
 .git-mx{width:100%;min-width:760px;border-collapse:collapse;font-size:13px;color:var(--ink)}
-.git-mx th{padding:12px 4px 10px;font-size:11px;font-weight:500;text-align:left;white-space:nowrap;vertical-align:bottom;color:var(--ink2);border-bottom:1px solid var(--hairline2)}
-.git-mx th{padding-left:12px}
-.git-mx-cnt{display:inline-block;min-width:18px;margin-left:5px;padding:1px 5px;font-size:10px;font-weight:700;text-align:center;border-radius:999px;color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,transparent)}
-.git-mx-cnt.z{color:var(--ink3);background:var(--strip-hi)}
-.git-mx td{height:46px;padding:0 4px;vertical-align:middle;border-bottom:1px solid var(--hairline)}
-.git-mx tbody tr:last-child td{border-bottom:0}
+.git-mx th{font-size:12px;font-weight:400;color:var(--ink2);text-align:left;padding:14px 12px;border-bottom:1px solid var(--hairline);white-space:nowrap}
+.git-mx td{padding:14px 12px;border-top:1px solid var(--hairline);vertical-align:middle}
+.git-mx tbody tr:first-child td{border-top:0}
+.git-mx th:first-child,.git-mx td:first-child{padding-left:20px}
+.git-mx th:last-child,.git-mx td:last-child{padding-right:20px}
+/* 9px of dot + 20px + 12px of padding: the ledger's 41px column */
+.git-mx .git-mx-dot{width:9px}
+.git-mx .git-dot{width:9px;height:9px;display:block}
+.git-mx-cnt{color:var(--ink3)}
 .git-mx-r{cursor:pointer}
-.git-mx-r:hover td{background:color-mix(in srgb,var(--strip-hi) 60%,transparent)}
-.git-mx-rn{padding-left:12px!important;min-width:150px}
-.git-mx-rn .git-head{flex-wrap:nowrap;align-items:baseline}
-.git-mx-rn .git-name{font-size:14px;overflow-wrap:normal}
-.git-mx-sub{display:block;margin:-1px 0 0 24px;font-size:12px;color:var(--ink3)}
+.git-mx-r:not([aria-expanded="true"]):hover td{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
+.git-mx-r[aria-expanded="true"] td{background:var(--strip-hi);border-top-color:transparent;padding-bottom:12px}
+.git-mx-r[aria-expanded="true"] td:first-child,.git-mx tr.git-mx-x td{box-shadow:inset 3px 0 0 var(--ink)}
+.git-mx tr.git-mx-x td{padding:0 20px 18px 45px;border-top:0;background:var(--strip-hi)}
+.git-mx tr.git-mx-x+tr td{border-top-color:transparent}
+.git-mx-xin{padding-top:14px;border-top:1px solid var(--hairline2)}
+/* The Repo column takes whatever the checks leave, as the ledger's flexible Session column does, and its two lines ellipsise there: a zero-width box held
+   open by `min-width:100%` adds nothing to the column's intrinsic width, so a long branch name can never push the keys out of the card. */
+.git-mx-rn{width:100%;min-width:150px}
+.git-mx-rn .git-name,.git-mx-sub{width:0;min-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.git-mx-rn .git-name{font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--ink);overflow-wrap:normal}
+.git-mx-sub{margin-top:3px;font-size:12px;color:var(--ink2)}
 .git-mx tr.off .git-name{color:var(--ink2)}
-.git-mx-act{padding-right:12px!important;text-align:right;white-space:nowrap}
+.git-mx-act{text-align:right;white-space:nowrap}
 .git-mx-act>*+*{margin-left:6px}
-.git-mx-x td{height:auto;padding:10px 12px 14px 36px;background:var(--strip-hi);border-bottom:1px solid var(--hairline2)}
 .git-mx-note{text-align:left;padding-top:8px}
-.git-cell{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;font-size:12px;white-space:nowrap;border-radius:8px}
-.git-cell.ok{color:var(--ink3)}
-.git-cell.ok::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--green-tint)}
-.git-cell.bad{font-weight:600;color:var(--amber);background:color-mix(in srgb,var(--amber) 11%,transparent)}
-.git-cell.meh{font-weight:600;color:var(--mustard);background:color-mix(in srgb,var(--mustard) 13%,transparent)}
-.git-cell.live{color:var(--cyan)}
-.git-cell.na{color:var(--ink3)}
+/* The keys take `.cbtn`'s shape: 30px, a --hairline2 ring on --strip, 12px corners. The primary is `.cbtn.answer`'s amber tint, without its pulse — a repo
+   that needs you stays that way for hours, and a pulse that long is noise. Scoped to the action column, so Inbox, Inspector and Branches keep their keys. */
+.git-mx-act .git-key,.git-mx-act .git-sync{height:30px;padding:0 10px;border:1px solid var(--hairline2);border-radius:12px;background:var(--strip);color:var(--ink2);transition:color .15s,border-color .15s}
+.git-mx-act .git-key:hover:not(:disabled),.git-mx-act .git-sync:hover:not(:disabled){color:var(--ink);border-color:var(--ink3);background:var(--strip)}
+.git-mx-act .git-key:disabled,.git-mx-act .git-sync:disabled{color:var(--ink3)}
+.git-mx-act .git-key.primary,.git-mx-act .git-sync.primary,
+.git-mx-act .git-key.primary:hover:not(:disabled),.git-mx-act .git-sync.primary:hover:not(:disabled){background:color-mix(in srgb,var(--amber) 14%,transparent);border-color:transparent;color:var(--amber)}
+.git-mx-act .git-key.primary:hover:not(:disabled),.git-mx-act .git-sync.primary:hover:not(:disabled){color:var(--ink)}
+.git-mx-act .git-key.primary:disabled,.git-mx-act .git-sync.primary:disabled{color:var(--amber);opacity:.55}
+.git-mx-act .git-sync.on,.git-mx-act .git-sync.on:hover:not(:disabled){color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+/* Cells: a failing check is a pill in `.spill`'s shape (11px, 500, 2px 8px, 12px corners) with the mock's soft colours — the check's own ink on an 11%
+   amber (`bad`) or 13% mustard (`meh`) tint — and everything else plain 12px text, `--ink3` (`live` --cyan), with no dot, so the eye goes only where a
+   check failed. Scoped to the table and its legend. */
+.git-mx .git-cell,.git-mx-legend .git-cell{font-size:12px;white-space:nowrap}
+.git-mx .git-cell.ok,.git-mx .git-cell.na,.git-mx-legend .git-cell.ok,.git-mx-legend .git-cell.na{color:var(--ink3)}
+.git-mx .git-cell.live,.git-mx-legend .git-cell.live{color:var(--cyan)}
+.git-mx .git-cell.bad,.git-mx .git-cell.meh,.git-mx-legend .git-cell.bad,.git-mx-legend .git-cell.meh{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px}
+.git-mx .git-cell.bad,.git-mx-legend .git-cell.bad{color:var(--amber);background:color-mix(in srgb,var(--amber) 11%,transparent)}
+.git-mx .git-cell.meh,.git-mx-legend .git-cell.meh{color:var(--mustard);background:color-mix(in srgb,var(--mustard) 13%,transparent)}
 .git-mx-legend{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:12px 6px 0;font-size:12px;color:var(--ink2)}
-.git-mx-legend .git-cell{height:20px}
-.git-mx-legend .git-cell.ok{padding:0}
 
 /* Inspector — the Sessions split: ranked list beside one repo in depth (management-redesign spec §4.5) */
 .split.git-in{grid-template-columns:minmax(0,1fr)}

@@ -187,7 +187,7 @@ Sync / Fetch / Unpin / Open folder controls), so none fetches for itself, and th
 | Layout    | Shape |
 | --------- | ----- |
 | Inbox     | the default. Four level tiles that filter on click, then the loud repos (Needs you, Worth a look) as ranked panels with a verdict, the rest of the problems as steps and keys, and a closed-by-default branch list; All good and Can't read are one dashed box of lines |
-| Matrix    | wide-only. One ranked row per repo against six check columns, each cell `ok`, `bad`, `meh`, `live` or `na`; a click opens that repo's branches as one expanded row; a dead repo is one `na` cell and Unpin |
+| Matrix    | wide-only, and drawn in Sessions › List's table (a dot column, name over branch, hairline rules, `.cbtn`-shaped keys). One ranked row per repo against six check columns, each cell `ok`, `bad`, `meh`, `live` or `na`, only `bad` and `meh` as pills; a click, Enter or Space on the row opens that repo's branches as one expanded row; a dead repo is one `na` cell and Unpin |
 | Inspector | the ranked repo list beside a pane for the picked one: four check tiles, Active and Stale branches, a footer of merged and stale counts, Open folder and the keys. The pick defaults to the top repo; on a phone the pane stacks under the list and scrolls into view |
 | Branches  | a board of every listed branch of every `ok` repo in four columns, first fit wins: Agent on it, Stale, Ready (0 behind), Drifting; non-`ok` pins fall into one note line with an Open Inbox link |
 
