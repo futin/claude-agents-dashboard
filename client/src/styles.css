@@ -50,6 +50,11 @@
      with the mock's brand greens, and only the text keeps the dark --green. */
   --green-solid:var(--green);
   --green-tint:color-mix(in srgb,var(--green) 18%,transparent);
+  /* amber and mustard as a soft pill: the fill behind the text (11% amber, 13% mustard — the redesign mock's Git tints) and the text on it. On the dark
+     boards both are the accent itself, which clears 4.5:1 on its own tint in every dark theme; daylight overrides them with the mock's own hues, the
+     fill as the mock mixes it and the text the lightest shade of that hue that clears 4.5:1 on the fill (`test/daylight-contrast.test.ts`). */
+  --amber-tint:color-mix(in srgb,var(--amber) 11%,transparent);--amber-ink:var(--amber);
+  --mustard-tint:color-mix(in srgb,var(--mustard) 13%,transparent);--mustard-ink:var(--mustard);
 }
 /* Graphite — the same board with the blue cast taken out. For anyone who finds
    the navy too warm-shifted on a wide-gamut display. */
@@ -119,6 +124,10 @@
   --red:#aa3927;--magenta:#6950a5;
   --green-fill:#7dc242;--green-fill2:#9bd25c;  /* mock --green-500 / --green-400 */
   --green-solid:#7dc242;--green-tint:#cde8a8;   /* mock --green-500 / --green-200 */
+  /* the mock's #C4761F / #9A8712 at its 11% / 13% for the fill; the text is the same hue darkened only as far as 4.5:1 over the fill on --strip-hi, the
+     darkest surface a pill sits on (on --strip it is ~5:1) */
+  --amber-tint:color-mix(in srgb,#c4761f 11%,transparent);--amber-ink:#945917;
+  --mustard-tint:color-mix(in srgb,#9a8712 13%,transparent);--mustard-ink:#74660e;
   --on-accent:#ffffff;--scrim:rgba(19,19,19,.28);
   --shadow:rgba(0,0,0,.06);--shadow2:rgba(0,0,0,.1);
 }
@@ -618,7 +627,7 @@ code,kbd,samp,pre{font-family:inherit}
 /* Named apart from `.board`, which is the board view's grid. */
 .s-strip-tap.s-tap-board{margin-left:auto}
 .s-strip-tap:active{background:var(--strip-hi)}
-.s-strip-badge{flex:none;white-space:nowrap;font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.s-strip-badge{flex:none;white-space:nowrap;font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;background:var(--amber-tint);color:var(--amber-ink)}
 .s-strip-clock{font-size:13px;color:var(--ink2);white-space:nowrap}
 /* The launch action, promoted out of the Board card: on a phone the board's
    one write action should not be two taps and a scroll away. Filled ink, like
@@ -637,7 +646,7 @@ code,kbd,samp,pre{font-family:inherit}
 .ra-pill .ra-dot{width:6px;height:6px;border-radius:50%;background:var(--ink3);flex-shrink:0}
 .ra-pill.origin.o-tailnet .ra-dot{background:var(--cyan)}
 .ra-pill.origin.o-lan .ra-dot,.ra-pill.origin.o-local .ra-dot{background:var(--green-solid)}
-.ra-pill.origin.o-unknown{color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,transparent)}
+.ra-pill.origin.o-unknown{color:var(--amber-ink);background:var(--amber-tint)}
 .ra-pill.origin.o-unknown .ra-dot{background:var(--amber)}
 .ra-warn{color:var(--amber);font-size:11px}
 /* remote-answer switch: on = allowed while you're away, not instead of the
@@ -764,8 +773,8 @@ code,kbd,samp,pre{font-family:inherit}
 /* the status word as a tinted pill */
 .spill{font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;background:var(--strip-hi);color:var(--ink2);white-space:nowrap;flex:none}
 .spill.working{background:var(--green-tint);color:var(--green)}
-.spill.question{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
-.spill.incomplete{background:color-mix(in srgb,var(--mustard) 22%,transparent);color:var(--ink)}
+.spill.question{background:var(--amber-tint);color:var(--amber-ink)}
+.spill.incomplete{background:var(--mustard-tint);color:var(--mustard-ink)}
 .spill.launching{background:var(--ink);color:var(--strip)}
 .spill.failed{background:color-mix(in srgb,var(--red) 14%,transparent);color:var(--red)}
 /* A long session name clips with an ellipsis rather than pushing out of the
@@ -842,8 +851,8 @@ code,kbd,samp,pre{font-family:inherit}
 .cbtn{height:30px;padding:0 10px;border:1px solid var(--hairline2);background:var(--strip);border-radius:12px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;flex:none;cursor:pointer;transition:color .15s,border-color .15s}
 .cbtn:hover{color:var(--ink);border-color:var(--ink3)}
 .cbtn .rc-mark{font-size:10px}
-.cbtn.answer{background:color-mix(in srgb,var(--amber) 14%,transparent);border-color:transparent;color:var(--amber);animation:qpulse 1.6s ease-in-out infinite}
-.cbtn.permission{background:color-mix(in srgb,var(--mustard) 20%,transparent);border-color:transparent;color:var(--mustard);animation:qpulse 1.6s ease-in-out infinite}
+.cbtn.answer{background:var(--amber-tint);border-color:transparent;color:var(--amber-ink);animation:qpulse 1.6s ease-in-out infinite}
+.cbtn.permission{background:var(--mustard-tint);border-color:transparent;color:var(--mustard-ink);animation:qpulse 1.6s ease-in-out infinite}
 .cbtn.answer:hover,.cbtn.permission:hover{color:var(--ink)}
 .cbtn.wide{flex:1}
 @keyframes qpulse{0%,100%{opacity:1}50%{opacity:.55}}
@@ -906,7 +915,7 @@ code,kbd,samp,pre{font-family:inherit}
 .bcol{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;align-content:start;min-width:0}
 .col-h{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--ink2);padding:0 4px 4px}
 .col-h .n{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--strip);color:var(--ink2);font-variant-numeric:tabular-nums}
-.col-h.ask .n{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.col-h.ask .n{background:var(--amber-tint);color:var(--amber-ink)}
 .col-h.run .n{background:var(--green-tint);color:var(--green)}
 .bcard{background:var(--strip);border-radius:16px;padding:16px;min-width:0;transition:box-shadow .15s}
 /* 2px ink ring — same weight as the selected Settings theme card
@@ -1294,7 +1303,7 @@ code,kbd,samp,pre{font-family:inherit}
 .mdetail-path{font-size:13px;color:var(--ink2);margin-top:8px;overflow-wrap:anywhere}
 .mdetail-pathlab{color:var(--ink3);margin-right:6px}
 .mgmt-file{font-size:13px;line-height:1.65;color:var(--ink2);background:var(--steel);border-radius:12px;padding:16px;margin-top:4px;white-space:pre-wrap;word-break:break-word}
-.mgmt-trunc{font-size:13px;color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,transparent);border-radius:4px;padding:7px 10px;margin-top:8px}
+.mgmt-trunc{font-size:13px;color:var(--amber-ink);background:var(--amber-tint);border-radius:4px;padding:7px 10px;margin-top:8px}
 .mgmt-empty{font-size:13px;color:var(--ink3);padding:6px 2px}
 /* Detail pane: frontmatter lines, section labels, type chip */
 /* What is LEFT of the frontmatter once `name` and `description` are dropped in
@@ -1414,7 +1423,7 @@ code,kbd,samp,pre{font-family:inherit}
    worn: a filled 24px capsule with a dot, centred on the title rather than
    sitting on its baseline. An outline chip read as a control you could press,
    which this is not — it states a fact and holds the dates in its tooltip. */
-.an-review{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:11px;font-weight:500;background:color-mix(in srgb,var(--amber) 20%,transparent);color:var(--amber);cursor:help;white-space:nowrap}
+.an-review{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:11px;font-weight:500;background:var(--amber-tint);color:var(--amber-ink);cursor:help;white-space:nowrap}
 .an-review i{width:6px;height:6px;border-radius:999px;flex:none;background:currentColor}
 .an-review code{text-transform:none;letter-spacing:0;color:inherit}
 
@@ -1694,7 +1703,7 @@ code,kbd,samp,pre{font-family:inherit}
 /* the badge names the kind of wait, and its tint is the board's existing
    meaning for it: amber "you can act from here", magenta the Task/plan accent,
    green a turn that finished cleanly, neutral for a session that has ended */
-.qp-badge{flex:none;font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.qp-badge{flex:none;font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink)}
 .qpanel.plan .qp-badge{background:color-mix(in srgb,var(--magenta) 16%,transparent);color:var(--magenta)}
 .qpanel.msg .qp-badge{background:var(--green-tint);color:var(--green)}
 .qpanel.resume .qp-badge{background:var(--strip-hi);color:var(--ink2)}
@@ -1782,7 +1791,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    `allow?` button already uses for "only that terminal can answer this"), no
    buttons, one line. Pinned like .qpanel so it survives scrolling the history. */
 .pbanner{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:13px 24px;font-size:13px;color:var(--ink2);background:color-mix(in srgb,var(--mustard) 10%,var(--strip));border-top:1px solid var(--hairline)}
-.pb-badge{flex:none;font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:color-mix(in srgb,var(--mustard) 26%,transparent);color:var(--mustard)}
+.pb-badge{flex:none;font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:var(--mustard-tint);color:var(--mustard-ink)}
 .pb-text{min-width:0;overflow-wrap:anywhere}
 .pb-text .tool{font-weight:500;color:var(--ink)}
 .pb-note{margin-left:auto;font-size:12px;color:var(--mustard)}
@@ -1924,10 +1933,10 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pj-tile.off .pj-name{color:var(--ink2)}
 .pj-tile.gone{border-color:var(--amber)}
 /* The dead pin's chip and its tooltip: the sentence lives in the tooltip so a gone tile is no taller than a live one. */
-.pj-gone{position:relative;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:0;border-radius:999px;background:color-mix(in srgb,var(--amber) 12%,transparent);color:var(--amber);font-family:var(--font);font-size:12px;font-weight:500;white-space:nowrap;cursor:help}
+.pj-gone{position:relative;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:0;border-radius:999px;background:var(--amber-tint);color:var(--amber-ink);font-family:var(--font);font-size:12px;font-weight:500;white-space:nowrap;cursor:help}
 .pj-gone svg{flex:none}
 /* In a Lists row the chip is a `.set-control>button`, whose Settings face (36px, bordered, ink on strip) would outrank the chip's own. */
-.pj-srw .set-control>.pj-gone{height:26px;padding:0 10px;border:0;border-radius:999px;background:color-mix(in srgb,var(--amber) 12%,transparent);color:var(--amber);font-size:12px;cursor:help}
+.pj-srw .set-control>.pj-gone{height:26px;padding:0 10px;border:0;border-radius:999px;background:var(--amber-tint);color:var(--amber-ink);font-size:12px;cursor:help}
 .pj-gone:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .pj-tip{position:absolute;left:0;bottom:calc(100% + 8px);z-index:5;width:240px;padding:8px 10px;border-radius:8px;background:var(--ink);color:var(--strip);box-shadow:0 8px 24px var(--shadow2);font-size:12px;font-weight:400;line-height:1.45;white-space:normal;text-align:left;opacity:0;transform:translateY(4px);pointer-events:none;transition:opacity .15s,transform .15s}
 .pj-tip::after{content:"";position:absolute;left:16px;top:100%;border:5px solid transparent;border-top-color:var(--ink)}
@@ -2512,8 +2521,8 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   background:var(--steel);color:var(--ink2);white-space:nowrap;
 }
 .tag-v.stable{background:var(--green-tint);color:var(--green)}
-.tag-v.drift{background:color-mix(in srgb,var(--amber) 20%,transparent);color:var(--amber)}
-.tag-v.mix{background:color-mix(in srgb,var(--mustard) 18%,transparent);color:var(--mustard)}
+.tag-v.drift{background:var(--amber-tint);color:var(--amber-ink)}
+.tag-v.mix{background:var(--mustard-tint);color:var(--mustard-ink)}
 
 /* ── the ⓘ and its floating panel ────────────────────────────────────────
    Neutral, not accented: on the forecast page green is the weight ramp's
@@ -2899,9 +2908,9 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-name{font-size:15px;font-weight:500;color:var(--ink);letter-spacing:-.01em;min-width:0;overflow-wrap:anywhere}
 .git-chip{display:inline-block;font-size:12px;font-weight:500;line-height:1.4;padding:2px 9px;border-radius:999px;border:1px solid var(--hairline2);color:var(--ink2);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .git-chip.branch{color:var(--ink);max-width:240px}
-.git-chip.amber{color:var(--amber);border-color:transparent;background:color-mix(in srgb,var(--amber) 14%,transparent)}
+.git-chip.amber{color:var(--amber-ink);border-color:transparent;background:var(--amber-tint)}
 .git-chip.green{color:var(--green);border-color:transparent;background:var(--green-tint)}
-.git-chip.mustard{color:var(--mustard);border-color:transparent;background:color-mix(in srgb,var(--mustard) 20%,transparent)}
+.git-chip.mustard{color:var(--mustard-ink);border-color:transparent;background:var(--mustard-tint)}
 .git-chip.wt{flex:none;font-size:11px;padding:0 7px;color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
 .git-bname{display:flex;align-items:center;gap:6px;min-width:0}
 .git-bname-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2933,7 +2942,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-sess{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:999px;padding:1px 8px 1px 6px;white-space:nowrap;flex:none}
 .git-sess::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .git-sess.working{color:var(--green);background:var(--green-tint)}
-.git-sess.waiting{color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,transparent)}
+.git-sess.waiting{color:var(--amber-ink);background:var(--amber-tint)}
 .git-sess.idle{color:var(--ink2);background:var(--strip-hi)}
 .git-dv{display:inline-flex;gap:8px;font-size:12px;white-space:nowrap}
 .git-dv .b{color:var(--ink2)}
@@ -3035,9 +3044,9 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-mx-act .git-key:hover:not(:disabled),.git-mx-act .git-sync:hover:not(:disabled){color:var(--ink);border-color:var(--ink3);background:var(--strip)}
 .git-mx-act .git-key:disabled,.git-mx-act .git-sync:disabled{color:var(--ink3)}
 .git-mx-act .git-key.primary,.git-mx-act .git-sync.primary,
-.git-mx-act .git-key.primary:hover:not(:disabled),.git-mx-act .git-sync.primary:hover:not(:disabled){background:color-mix(in srgb,var(--amber) 14%,transparent);border-color:transparent;color:var(--amber)}
+.git-mx-act .git-key.primary:hover:not(:disabled),.git-mx-act .git-sync.primary:hover:not(:disabled){background:var(--amber-tint);border-color:transparent;color:var(--amber-ink)}
 .git-mx-act .git-key.primary:hover:not(:disabled),.git-mx-act .git-sync.primary:hover:not(:disabled){color:var(--ink)}
-.git-mx-act .git-key.primary:disabled,.git-mx-act .git-sync.primary:disabled{color:var(--amber);opacity:.55}
+.git-mx-act .git-key.primary:disabled,.git-mx-act .git-sync.primary:disabled{color:var(--amber-ink);opacity:.55}
 .git-mx-act .git-sync.on,.git-mx-act .git-sync.on:hover:not(:disabled){color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
 /* Cells: a failing check is a pill in `.spill`'s shape (11px, 500, 2px 8px, 12px corners) with the mock's soft colours — the check's own ink on an 11%
    amber (`bad`) or 13% mustard (`meh`) tint — and everything else plain 12px text, `--ink3` (`live` --cyan), with no dot, so the eye goes only where a
@@ -3046,8 +3055,8 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-mx .git-cell.ok,.git-mx .git-cell.na,.git-mx-legend .git-cell.ok,.git-mx-legend .git-cell.na{color:var(--ink3)}
 .git-mx .git-cell.live,.git-mx-legend .git-cell.live{color:var(--cyan)}
 .git-mx .git-cell.bad,.git-mx .git-cell.meh,.git-mx-legend .git-cell.bad,.git-mx-legend .git-cell.meh{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px}
-.git-mx .git-cell.bad,.git-mx-legend .git-cell.bad{color:var(--amber);background:color-mix(in srgb,var(--amber) 11%,transparent)}
-.git-mx .git-cell.meh,.git-mx-legend .git-cell.meh{color:var(--mustard);background:color-mix(in srgb,var(--mustard) 13%,transparent)}
+.git-mx .git-cell.bad,.git-mx-legend .git-cell.bad{color:var(--amber-ink);background:var(--amber-tint)}
+.git-mx .git-cell.meh,.git-mx-legend .git-cell.meh{color:var(--mustard-ink);background:var(--mustard-tint)}
 .git-mx-legend{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:12px 6px 0;font-size:12px;color:var(--ink2)}
 
 /* Inspector — the Sessions split: ranked list beside one repo in depth (management-redesign spec §4.5) */
@@ -3063,8 +3072,8 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-in .lrow .ago.live{color:var(--cyan)}
 .git-in .lrow:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
 .git-in-fig{font-weight:400}
-.spill.g-needs{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
-.spill.g-look{background:color-mix(in srgb,var(--mustard) 16%,transparent);color:var(--mustard)}
+.spill.g-needs{background:var(--amber-tint);color:var(--amber-ink)}
+.spill.g-look{background:var(--mustard-tint);color:var(--mustard-ink)}
 .spill.g-quiet{background:var(--green-tint);color:var(--green)}
 .git-in-pane{display:flex;flex-direction:column;gap:20px}
 .git-in-pane .ins-meta{margin-top:6px}
@@ -3076,10 +3085,10 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-in-ck{display:flex;flex-direction:column;gap:2px}
 .git-in-ck .v{display:block;margin-top:4px;font-size:14px;font-weight:600;letter-spacing:0;line-height:1.35;overflow-wrap:anywhere;color:var(--ink)}
 .git-in-ck .h{font-size:12px;color:var(--ink2)}
-.git-in-ck.bad{background:color-mix(in srgb,var(--amber) 10%,transparent)}
-.git-in-ck.bad .v{color:var(--amber)}
-.git-in-ck.meh{background:color-mix(in srgb,var(--mustard) 11%,transparent)}
-.git-in-ck.meh .v{color:var(--mustard)}
+.git-in-ck.bad{background:var(--amber-tint)}
+.git-in-ck.bad .v{color:var(--amber-ink)}
+.git-in-ck.meh{background:var(--mustard-tint)}
+.git-in-ck.meh .v{color:var(--mustard-ink)}
 .git-in-ck.live .v{color:var(--cyan)}
 .git-in-sec{display:flex;flex-direction:column}
 .git-in-hd{display:flex;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--hairline2);font-size:12px;color:var(--ink3)}

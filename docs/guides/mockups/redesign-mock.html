@@ -197,6 +197,11 @@
      ahead half of a divergence bar and a request in flight) */
   --amber:#C4761F;
   --mustard:#9A8712;
+  /* the soft pill: the fill as the Git rules mix it, and the text — the same
+     hue, darkened only as far as 4.5:1 on the fill over the darkest surface
+     a pill sits on. styles.css carries the same pair as daylight tokens. */
+  --amber-tint:color-mix(in srgb,var(--amber) 11%,transparent);--amber-ink:#945917;
+  --mustard-tint:color-mix(in srgb,var(--mustard) 13%,transparent);--mustard-ink:#74660e;
   --cyan:#3F8F14;
   /* radii */
   --r-xs:4px; --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-full:999px;
@@ -590,7 +595,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .walkdays span{position:absolute;transform:translateX(-50%)}
 .note{font-size:12px;color:var(--text-secondary);line-height:1.5;margin-top:14px}/* how-to-read drawer *//* token-value rows */.badge{font-size:11px;font-weight:500;padding:4px 10px;border-radius:var(--r-md)}
 .badge.stable{background:var(--green-200);color:var(--green-600)}
-.badge.drift{background:#FDEEDF;color:#B4601E}
+.badge.drift{background:#FDEEDF;color:var(--amber-ink)}
 .badge.thin{background:var(--bg-subtle);color:var(--text-secondary)}
 .badge.mix{background:#FCF7D2;color:#8A7A12}/* ── settings pages ──────────────────────────────────────────────────────── */
 .set-head{display:flex;align-items:flex-start;gap:16px}
@@ -706,8 +711,8 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 @keyframes tlpulse{0%,100%{opacity:.85}50%{opacity:.5}}
 @media (prefers-reduced-motion:reduce){.ldot,.cbtn,.need::before,.tl-bar{animation:none}}
 .status.working{background:var(--green-200);color:var(--green-600)}
-.status.question{background:#FDEEDF;color:#B4601E}
-.status.incomplete{background:color-mix(in srgb,var(--yellow-400) 30%,var(--bg-surface));color:var(--text-primary)}
+.status.question{background:#FDEEDF;color:var(--amber-ink)}
+.status.incomplete{background:var(--mustard-tint);color:var(--mustard-ink)}
 .status.launching{background:var(--ink-inverse);color:var(--text-on-dark)}
 /* the small chat / answer / allow button — chip-sized, tinted when it needs you */
 .cbtn{
@@ -716,7 +721,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
   display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;flex:none;
 }
 .cbtn .rc-mark{font-size:10px}
-.cbtn.answer{background:#FDEEDF;border-color:transparent;color:#B4601E}
+.cbtn.answer{background:#FDEEDF;border-color:transparent;color:var(--amber-ink)}
 .cbtn.permission{background:#FCE7E3;border-color:transparent;color:#B03B28}
 .cbtn.wide{flex:1}
 .act-line{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-secondary);min-width:0}
@@ -731,7 +736,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .bcol{display:flex;flex-direction:column;gap:10px}
 .col-h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--text-secondary);padding:0 4px 4px}
 .col-h .n{font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-full);padding:2px 8px}
-.col-h.ask .n{background:#FDEEDF;border-color:transparent;color:#B4601E}
+.col-h.ask .n{background:#FDEEDF;border-color:transparent;color:var(--amber-ink)}
 .col-h.run .n{background:var(--green-200);border-color:transparent;color:var(--green-600)}
 .bcard{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;box-shadow:var(--lift-card);min-width:0}
 .bcard.selected{border-color:var(--ink-inverse);box-shadow:0 0 0 1px var(--ink-inverse)}
@@ -1083,7 +1088,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
   background:var(--bg-surface);font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:8px;flex:none;
 }
 .scanfail{
-  font-size:12px;color:#B4601E;background:#FDEEDF;border-radius:var(--r-md);
+  font-size:12px;color:var(--amber-ink);background:#FDEEDF;border-radius:var(--r-md);
   padding:7px 12px;flex:none;
 }
 .mg-empty{font-size:13px;color:var(--text-tertiary);padding:28px 20px;text-align:center;line-height:1.5}
@@ -1149,7 +1154,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
   max-height:460px;overflow:auto;white-space:pre-wrap;word-break:break-word;
 }
 .mg-file.cmd{background:var(--ink-inverse);color:var(--text-on-dark);max-height:none}
-.mg-trunc{font-size:11px;color:#B4601E;background:#FDEEDF;border-radius:var(--r-xs);padding:7px 10px;margin-top:10px}
+.mg-trunc{font-size:11px;color:var(--amber-ink);background:#FDEEDF;border-radius:var(--r-xs);padding:7px 10px;margin-top:10px}
 /* the rendered markdown a .md file gets, next to the raw pre a script gets */
 .mg-md{margin-top:10px;max-height:460px;overflow:auto;padding-right:6px}
 .mg-md h2{font-size:17px;font-weight:600;letter-spacing:-.01em;margin:18px 0 6px}
@@ -1374,9 +1379,9 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-name{font-size:15px;font-weight:500;letter-spacing:-.01em;min-width:0;overflow-wrap:anywhere}
 .git-chip{display:inline-block;font-size:12px;font-weight:500;line-height:1.4;padding:2px 9px;border-radius:var(--r-full);border:1px solid var(--border-strong);color:var(--text-secondary);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .git-chip.branch{color:var(--text-primary);max-width:240px}
-.git-chip.amber{color:var(--amber);border-color:transparent;background:color-mix(in srgb,var(--amber) 14%,transparent)}
+.git-chip.amber{color:var(--amber-ink);border-color:transparent;background:var(--amber-tint)}
 .git-chip.green{color:var(--green-600);border-color:transparent;background:color-mix(in srgb,var(--green-600) 16%,transparent)}
-.git-chip.mustard{color:var(--mustard);border-color:transparent;background:color-mix(in srgb,var(--mustard) 20%,transparent)}
+.git-chip.mustard{color:var(--mustard-ink);border-color:transparent;background:var(--mustard-tint)}
 .git-chip.wt{flex:none;font-size:11px;padding:0 7px;color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
 .git-sync{flex:none;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px 0 9px;font-size:12px;font-weight:500;line-height:1;color:var(--text-secondary);background:var(--sync-paper,var(--bg-subtle));border:0;border-radius:var(--r-sm);white-space:nowrap;transition:color .15s,background .15s}
 .git-sync svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
@@ -1407,7 +1412,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-sess{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:var(--r-full);padding:1px 8px 1px 6px;white-space:nowrap;flex:none}
 .git-sess::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .git-sess.working{color:var(--green-600);background:color-mix(in srgb,var(--green-600) 13%,transparent)}
-.git-sess.waiting{color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,transparent)}
+.git-sess.waiting{color:var(--amber-ink);background:var(--amber-tint)}
 .git-sess.idle{color:var(--text-secondary);background:var(--bg-subtle)}
 /* ↓ behind · ↑ ahead, labelled, and the bar drawn the same way round */
 .git-dv{display:inline-flex;gap:8px;font-size:12px;white-space:nowrap}
@@ -1493,7 +1498,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-mx-act .git-key,.git-mx-act .git-sync{height:30px;padding:0 10px;border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--bg-surface);color:var(--text-secondary)}
 .git-mx-act .git-key:hover,.git-mx-act .git-sync:hover:not(:disabled){color:var(--text-primary);border-color:var(--text-tertiary);background:var(--bg-surface)}
 .git-mx-act .git-key.primary,.git-mx-act .git-sync.primary,
-.git-mx-act .git-key.primary:hover,.git-mx-act .git-sync.primary:hover:not(:disabled){background:#FDEEDF;border-color:transparent;color:#B4601E}
+.git-mx-act .git-key.primary:hover,.git-mx-act .git-sync.primary:hover:not(:disabled){background:#FDEEDF;border-color:transparent;color:var(--amber-ink)}
 .git-mx-act .git-sync.on,.git-mx-act .git-sync.on:hover:not(:disabled){color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
 /* cells: a failing check is a pill in `.status`'s shape with the soft Git
    tints; everything else plain 12px text, no dot */
@@ -1501,8 +1506,8 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-mx .git-cell.ok,.git-mx .git-cell.na,.git-mx-legend .git-cell.ok,.git-mx-legend .git-cell.na{color:var(--text-tertiary)}
 .git-mx .git-cell.live,.git-mx-legend .git-cell.live{color:var(--cyan)}
 .git-mx .git-cell.bad,.git-mx .git-cell.meh,.git-mx-legend .git-cell.bad,.git-mx-legend .git-cell.meh{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:var(--r-md)}
-.git-mx .git-cell.bad,.git-mx-legend .git-cell.bad{color:var(--amber);background:color-mix(in srgb,var(--amber) 11%,transparent)}
-.git-mx .git-cell.meh,.git-mx-legend .git-cell.meh{color:var(--mustard);background:color-mix(in srgb,var(--mustard) 13%,transparent)}
+.git-mx .git-cell.bad,.git-mx-legend .git-cell.bad{color:var(--amber-ink);background:var(--amber-tint)}
+.git-mx .git-cell.meh,.git-mx-legend .git-cell.meh{color:var(--mustard-ink);background:var(--mustard-tint)}
 .git-mx-legend{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:12px 6px 0;font-size:12px;color:var(--text-secondary)}
 
 /* Inspector — the Sessions split: ranked list beside one repo in depth */
@@ -1515,8 +1520,8 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-in .lrow .ago.warn{color:var(--amber)}.git-in .lrow .ago.live{color:var(--cyan)}
 .git-in-fig{font-weight:400}
 /* the level as the Sessions .status pill, in the Git inks */
-.status.g-needs{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
-.status.g-look{background:color-mix(in srgb,var(--mustard) 16%,transparent);color:var(--mustard)}
+.status.g-needs{background:var(--amber-tint);color:var(--amber-ink)}
+.status.g-look{background:var(--mustard-tint);color:var(--mustard-ink)}
 .status.g-quiet{background:var(--green-200);color:var(--green-600)}
 .git-in-pane{display:flex;flex-direction:column;gap:20px}
 .git-in-pane .ins-meta{margin-top:6px}
@@ -1527,10 +1532,10 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-in-ck{display:flex;flex-direction:column;gap:2px}
 .git-in-ck .v{display:block;margin-top:4px;font-size:14px;font-weight:600;letter-spacing:0;line-height:1.35;overflow-wrap:anywhere}
 .git-in-ck .h{font-size:12px;color:var(--text-secondary)}
-.git-in-ck.bad{background:color-mix(in srgb,var(--amber) 10%,transparent)}
-.git-in-ck.bad .v{color:var(--amber)}
-.git-in-ck.meh{background:color-mix(in srgb,var(--mustard) 11%,transparent)}
-.git-in-ck.meh .v{color:var(--mustard)}
+.git-in-ck.bad{background:var(--amber-tint)}
+.git-in-ck.bad .v{color:var(--amber-ink)}
+.git-in-ck.meh{background:var(--mustard-tint)}
+.git-in-ck.meh .v{color:var(--mustard-ink)}
 .git-in-ck.live .v{color:var(--cyan)}
 .git-in-sec{display:flex;flex-direction:column}
 .git-in-hd{display:flex;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:12px;color:var(--text-tertiary)}
@@ -1632,7 +1637,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .pj-mark.v::before{top:-4px;left:-2.5px}.pj-mark.v::after{bottom:-4px;left:-2.5px}
 
 /* a gone tile's note: an amber chip in the foot, the sentence its tooltip */
-.pj-gone{position:relative;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:0;border-radius:var(--r-full);background:color-mix(in srgb,var(--amber) 12%,transparent);color:var(--amber);font-size:12px;font-weight:500;white-space:nowrap;cursor:help}
+.pj-gone{position:relative;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:0;border-radius:var(--r-full);background:var(--amber-tint);color:var(--amber-ink);font-size:12px;font-weight:500;white-space:nowrap;cursor:help}
 .pj-gone:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .pj-tip{position:absolute;left:0;bottom:calc(100% + 8px);z-index:5;width:240px;padding:8px 10px;border-radius:var(--r-sm);background:var(--ink-inverse);color:var(--text-on-dark);box-shadow:var(--lift-float);font-size:12px;font-weight:400;line-height:1.45;white-space:normal;text-align:left;opacity:0;transform:translateY(4px);pointer-events:none;transition:opacity .15s,transform .15s}
 .pj-tip::after{content:"";position:absolute;left:16px;top:100%;border:5px solid transparent;border-top-color:var(--ink-inverse)}
@@ -1728,7 +1733,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .qpanel.min{flex-direction:row;align-items:center;gap:10px;padding:12px 24px}
 .qp-head{display:flex;align-items:center;gap:10px}
 .qp-head .spacer,.qp-minrow .spacer{flex:1}
-.qp-badge{font-size:11px;font-weight:500;padding:3px 9px;border-radius:var(--r-md);background:#FDEEDF;color:#B4601E;flex:none}
+.qp-badge{font-size:11px;font-weight:500;padding:3px 9px;border-radius:var(--r-md);background:#FDEEDF;color:var(--amber-ink);flex:none}
 .qpanel.plan .qp-badge{background:#F0ECFA;color:#6B52A8}
 .qpanel.msg .qp-badge{background:var(--green-200);color:var(--green-600)}
 .qpanel.resume .qp-badge{background:var(--bg-subtle);color:var(--text-secondary)}
