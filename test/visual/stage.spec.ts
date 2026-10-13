@@ -20,7 +20,7 @@ test('a seeded midnight is applied', async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('midnight');
 });
 
-// midnight is DEFAULT_SETTINGS.theme, so only a non-default theme proves the seed decides rather than the default.
+// daylight is DEFAULT_SETTINGS.theme, so only a non-default theme proves the seed decides rather than the default.
 test('the seeded theme beats the default', async ({ page }) => {
   await stage(page, { ...BASE, theme: 'amber' });
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('amber');

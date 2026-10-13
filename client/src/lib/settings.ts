@@ -25,11 +25,11 @@ import { SECTIONS, type Section } from './sections';
 import { EFFORTS, MODELS } from './spawnOptions';
 
 export const THEMES = [
+  { id: 'daylight', label: 'Daylight', hint: 'the reference light board — warm grey, white cards, green ramp' },
   { id: 'midnight', label: 'Midnight Radar', hint: 'the original — deep navy scope room' },
   { id: 'graphite', label: 'Graphite', hint: 'neutral dark, no blue cast' },
   { id: 'amber', label: 'Amber CRT', hint: 'black glass and amber phosphor' },
-  { id: 'nightshift', label: 'Nightshift', hint: 'deep green radar scope' },
-  { id: 'daylight', label: 'Daylight', hint: 'the reference light board — warm grey, white cards, green ramp' }
+  { id: 'nightshift', label: 'Nightshift', hint: 'deep green radar scope' }
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]['id'];
@@ -131,7 +131,7 @@ export type SpawnDefaultModel = '' | (typeof MODELS)[number];
 export type SpawnDefaultEffort = '' | (typeof EFFORTS)[number];
 
 export const DEFAULT_SETTINGS: Settings = {
-  theme: 'midnight',
+  theme: 'daylight',
   density: 'comfortable',
   fontScale: 100,
   refreshMs: 3000,

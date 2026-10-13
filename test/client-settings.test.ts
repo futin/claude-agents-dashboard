@@ -73,6 +73,20 @@ export function run(): number {
     assert.strictEqual(ids.length, 5);
   })) p++; else f++;
 
+  if (test('Daylight is the default theme and the first one listed', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.theme, 'daylight');
+    assert.strictEqual(THEMES[0].id, 'daylight', 'the picker follows THEMES order');
+    assert.strictEqual(clampSettings({}).theme, 'daylight', 'no stored theme -> the default');
+    assert.strictEqual(clampSettings({ theme: 'midnight' }).theme, 'midnight', 'a stored theme still wins');
+  })) p++; else f++;
+
+  if (test('the pre-paint stamp in index.html defaults to DEFAULT_SETTINGS.theme', () => {
+    const html = readFileSync(resolve(CLIENT_SRC, '..', 'index.html'), 'utf8');
+    const stamp = /r\.dataset\.theme\s*=\s*'([a-z]+)'\s*;\s*try\b/.exec(html);
+    assert.ok(stamp, 'a default is stamped before the try that reads storage');
+    assert.strictEqual(stamp![1], DEFAULT_SETTINGS.theme, 'else a fresh browser flashes the :root palette');
+  })) p++; else f++;
+
   if (test('the Usage sub-tab defaults to the forecast and rejects anything else', () => {
     assert.strictEqual(DEFAULT_SETTINGS.usageTab, 'forecast');
     assert.strictEqual(clampSettings({ usageTab: 'rates' }).usageTab, 'rates');
