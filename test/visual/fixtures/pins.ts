@@ -16,3 +16,12 @@ export const pins: PinsResponse = {
   older: [{ dirName: '-Users-dev-code-atlas-docs', name: 'atlas-docs', path: `${HOME}/code/atlas-docs`, lastActiveMs: ago(9 * DAY + 40 * MIN) }],
   home: HOME
 };
+
+/** `pins` plus a pinned project whose folder is gone, so Projects draws the `Folder gone` chip. Git-stats lists the same dir as `missing`. */
+export const pinsWithGone: PinsResponse = {
+  ...pins,
+  pinned: [
+    ...pins.pinned,
+    { dirName: '-Users-dev-code-old-scripts', name: 'old-scripts', path: `${HOME}/code/old-scripts`, lastActiveMs: null, listed: false }
+  ]
+};

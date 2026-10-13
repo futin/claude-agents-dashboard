@@ -2992,6 +2992,9 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-ib-facts{flex:1;min-width:140px;color:var(--ink2);overflow-wrap:anywhere}
 @media (min-width:640px){
   .git-ib-sum{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+/* The keys sit beside the verdict only once the content column can spare them: at 640 the rail leaves ~376px, which squeezed the verdict to ~100px. */
+@media (min-width:768px){
   .git-ib-top{flex-wrap:nowrap}
   .git-ib-keys{width:auto;justify-content:flex-end;padding-left:0}
 }
@@ -3045,6 +3048,9 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .spill.g-quiet{background:var(--green-tint);color:var(--green)}
 .git-in-pane{display:flex;flex-direction:column;gap:20px}
 .git-in-pane .ins-meta{margin-top:6px}
+/* The head carries up to three keys beside the name, so on a phone the name column was squeezed to a sliver; let the keys drop under it. */
+.git-in-pane .ins-head{flex-wrap:wrap}
+.git-in-pane .ins-head .who2{flex:1 1 220px}
 .git-in-path{font-size:12px;color:var(--ink3);overflow-wrap:anywhere}
 .git-in-checks{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 .git-in-ck{display:flex;flex-direction:column;gap:2px}
