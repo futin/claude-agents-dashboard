@@ -3084,3 +3084,34 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   .git-ib-top{flex-wrap:nowrap}
   .git-ib-keys{width:auto;justify-content:flex-end;padding-left:0}
 }
+
+/* Matrix — a row per repo, a column per check, colour only on failure (management-redesign spec §4.4). Wide-only: the table's floor is 760px. */
+.git-mx-wrap{padding:6px;overflow-x:auto}
+.git-mx{width:100%;min-width:760px;border-collapse:collapse;font-size:13px;color:var(--ink)}
+.git-mx th{padding:12px 4px 10px;font-size:11px;font-weight:500;text-align:left;white-space:nowrap;vertical-align:bottom;color:var(--ink2);border-bottom:1px solid var(--hairline2)}
+.git-mx th:first-child,.git-mx th:nth-child(n+2){padding-left:12px}
+.git-mx-cnt{display:inline-block;min-width:18px;margin-left:5px;padding:1px 5px;font-size:10px;font-weight:700;text-align:center;border-radius:999px;color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,transparent)}
+.git-mx-cnt.z{color:var(--ink3);background:var(--strip-hi)}
+.git-mx td{height:46px;padding:0 4px;vertical-align:middle;border-bottom:1px solid var(--hairline)}
+.git-mx tbody tr:last-child td{border-bottom:0}
+.git-mx-r{cursor:pointer}
+.git-mx-r:hover td{background:color-mix(in srgb,var(--strip-hi) 60%,transparent)}
+.git-mx-rn{padding-left:12px!important;min-width:150px}
+.git-mx-rn .git-head{flex-wrap:nowrap;align-items:baseline}
+.git-mx-rn .git-name{font-size:14px;overflow-wrap:normal}
+.git-mx-sub{display:block;margin:-1px 0 0 24px;font-size:12px;color:var(--ink3)}
+.git-mx tr.off .git-name{color:var(--ink2)}
+.git-mx-act{padding-right:12px!important;text-align:right;white-space:nowrap}
+.git-mx-act>*+*{margin-left:6px}
+.git-mx-x td{height:auto;padding:10px 12px 14px 36px;background:var(--strip-hi);border-bottom:1px solid var(--hairline2)}
+.git-mx-note{text-align:left;padding-top:8px}
+.git-cell{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;font-size:12px;white-space:nowrap;border-radius:8px}
+.git-cell.ok{color:var(--ink3)}
+.git-cell.ok::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--green-tint)}
+.git-cell.bad{font-weight:600;color:var(--amber);background:color-mix(in srgb,var(--amber) 11%,transparent)}
+.git-cell.meh{font-weight:600;color:var(--mustard);background:color-mix(in srgb,var(--mustard) 13%,transparent)}
+.git-cell.live{color:var(--cyan)}
+.git-cell.na{color:var(--ink3)}
+.git-mx-legend{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:12px 6px 0;font-size:12px;color:var(--ink2)}
+.git-mx-legend .git-cell{height:20px}
+.git-mx-legend .git-cell.ok{padding:0}
