@@ -71,7 +71,7 @@ Every variant carries `dirName`, `name` and `path` (the pin's cwd). `state` is o
 | `uncommitted`   | entries of `status --porcelain=v1 -z`, counted as `git status` lists them: a rename or copy is one entry, an untracked directory is one, ignored files none |
 | `trunk`         | `origin/HEAD`'s branch, else `main`, else `master`, the remote-tracking ref checked before the local one (`trunkOf`, copied from git-sync, not imported). `null` = none |
 | `hasOrigin`     | a remote named `origin` exists                                                                                                                   |
-| `originUrl`     | `remote get-url origin`, local config only, with any userinfo removed (`stripUserinfo`) so no credential reaches the client; `null` without an origin or when unreadable. The client's compare link (`gitCompareUrl`) is built from it |
+| `originUrl`     | `git remote get-url origin`, local config only (no network). URL-form userinfo is cleared and an scp-like `user@` is dropped (`stripUserinfo`), so no credential reaches the client; `null` without an origin or when unreadable. The client's compare link (`gitCompareUrl`) is built from it |
 | `trunkVsOrigin` | local trunk ahead/behind `origin/<trunk>`; `null` with no origin, no trunk, no `origin/<trunk>` or no local trunk                                |
 | `trunkRefs`     | `{ local, origin }` — whether the local `<trunk>` and `origin/<trunk>` exist; `null` exactly when `trunk` is `null`. It lets the client tell "not on origin" from "only on origin", which `trunkVsOrigin: null` cannot |
 | `currentVsUpstream` | the current branch against its configured upstream (`%(upstream)`): `{ upstream, counts: { ahead, behind } }`, `upstream` the short name (`origin/feat/x`), same orientation as `GitBranch`. `counts: null` = the upstream is configured but its ref does not resolve (gone, e.g. after `fetch --prune`), never an `error`. The whole field is `null` when detached, on the trunk (`trunkVsOrigin` covers it), on an unborn branch, or with no upstream configured. An upstream on a remote other than `origin` is counted too, but is only as fresh as your own fetch of that remote: the timer fetches `origin` alone |
@@ -178,45 +178,64 @@ The chip opens a popover (`.git-pop`, dismissed by `useDismiss`) with two rows �
 /api/git-fetch` through `useGitFetch`, then a poll) — and, under them, one amber line per repo whose last fetch failed with anything but `lock`. The Fetch
 all key is disabled with a reason when the server wants an Answer token this device has not stored, or after a `403`.
 
-**The layouts.** A `.seg` switcher offers `gitLayoutsFor(narrow)` and stores the pick per device in `management.gitLayout` (default `cards`); what is drawn is
-`drawableGitLayout`, so a phone draws Cards while a stored Table waits for the next wide window (`client/src/lib/gitLayouts.ts`). All three shapes take the
-same repos in pin order and share `GitParts.tsx`. The upstream chip (`GitUpstreamChip`, text from `gitUpstreamText`: `2 behind origin/feat`, `1 ahead of
-origin/feat`, `1 ahead, 2 behind origin/feat`, `origin/feat gone`) sits right after the branch chip: in the Cards and Triage heads, and in the Table's On cell
-(no extra column). It hides when level, absent, or tracking `origin/<trunk>` — that branch's own row already shows those numbers — and is mustard only when
-behind. Triage's dashed Quiet rows do not carry it:
+**The layouts.** A `.seg` switcher offers `gitLayoutsFor(narrow)` and stores the pick per device in `management.gitLayout` (default `inbox`), read through
+`parseGitLayout`; what is drawn is `drawableGitLayout`, so a phone draws Inbox while a stored Matrix waits for the next wide window
+(`client/src/lib/gitLayouts.ts`). GitView hands every layout one `GitLayoutProps` (`gitLayoutProps.ts`: the repos in pin order, the sessions, the clock, the
+Sync / Fetch / Unpin / Open folder controls), so none fetches for itself, and they share `GitParts.tsx` (level dot, agent chip, `GitDv`, `GitDvBar`, `GitKeys`,
+`gitTracked`, `GitInBranchRow`):
 
-| Layout | Shape |
-| ------ | ----- |
-| Cards  | one card per repo, auto-filling columns. Below `md` (768px), or in a branch list narrower than 400px (a container query), the divergence bar drops and the numbers stay |
-| Table  | one row per repo: On / Uncommitted / Trunk vs origin / Branches (`unmergedTotal`) / Fetched. A click opens the branches as sub-rows. Wide-only |
-| Triage | groups from `triageGitRepos`, drawn Needs you, In flight, Quiet, Can't read, empty groups omitted. Quiet rows are one dashed line, expanding on click |
+| Layout    | Shape |
+| --------- | ----- |
+| Inbox     | the default. Four level tiles that filter on click, then the loud repos (Needs you, Worth a look) as ranked panels with a verdict, the rest of the problems as steps and keys, and a closed-by-default branch list; All good and Can't read are one dashed box of lines |
+| Matrix    | wide-only. One ranked row per repo against six check columns, each cell `ok`, `bad`, `meh`, `live` or `na`; a click opens that repo's branches as one expanded row; a dead repo is one `na` cell and Unpin |
+| Inspector | the ranked repo list beside a pane for the picked one: four check tiles, Active and Stale branches, a footer of merged and stale counts, Open folder and the keys. The pick defaults to the top repo; on a phone the pane stacks under the list and scrolls into view |
+| Branches  | a board of every listed branch of every `ok` repo in four columns, first fit wins: Agent on it, Stale, Ready (0 behind), Drifting; non-`ok` pins fall into one note line with an Open Inbox link |
 
-**The triage rule** (`client/src/lib/gitTriage.ts`), first match wins: any non-`ok` state is Can't read; uncommitted work, a non-zero `trunkVsOrigin`, or the
-current branch behind its upstream (read through `gitUpstreamShown`, the same predicate the chip uses, so an upstream of `origin/<trunk>` never raises a
-repo; ahead-only and gone do not either) is Needs you; `unmergedTotal ≥ 1` is In flight, which includes a repo with no remote or no trunk; everything else is Quiet. Within a group repos keep pin
-order, so a repo moves between groups but never reorders inside one. The same group colours each repo's status dot in Cards and Triage.
+**The levels rule** (`client/src/lib/gitLevels.ts`, replacing the old triage grouping). Each repo is read into problems, each with a severity: **3** needs you
+(a failed fetch other than `lock`, uncommitted work, the current branch behind its upstream), **2** worth a look (unpushed commits, a diverged trunk, a gone
+folder), **1** a note (no remote, a detached HEAD, a gone upstream, stale branches, an unreadable or not-a-repo pin). The worst severity is the level: 3 is
+`needs`, 2 is `look`, 1 or none is `quiet`, and any non-`ok` state is `dead`. The rank is `needs`, `look`, `quiet`, `dead`, then the summed severity
+descending, then pin order, so a repo moves between levels but equal repos never reorder. A branch is **stale** at `behind >= 20` or untouched for 7 days.
+**Calm:** uncommitted work under a session whose status is `working`, on the repo's checked-out branch, is sev 1 with `calm: true` and adds no Sync verb. Only a
+`working` agent calms it: a waiting or idle one does not.
 
-**A branch row** is the name (plus a "worktree" badge when `worktreePath` is set), the divergence bar, "behind | ahead", and the last-commit age. The bar
-grows behind to the left and ahead to the right on one scale per repo: the largest count among the repo's listed branches fills its 44px half, and a
-non-zero count never drops below 2px (`client/src/lib/gitBar.ts`). A branch whose `ahead`/`behind` are null draws neither bar nor numbers; that is keyed
-on the branch's own counts (`gitBranchCounts`), not on `repo.trunk`, because a named trunk with no base ref also yields null counts. The newest five rows
-show and "+N more" expands the rest inline (N = `branches.length − 5`); once expanded, a list the server capped adds "N more not shown (over 50)"; a
-non-zero `mergedCount` adds "N merged branches hidden". A non-`ok` repo shows its one sentence instead of a body.
+**The session join** (`agentOn`). `GitView` reads `useSessions({limit: 50})`, the same cap Sync's run scan uses. A session sits on a branch when its
+`projectPath` equals or lies under the repo's `toplevel`, its pin `path`, or that branch's `worktreePath`, **and** its `gitBranch` is that branch. Status
+`working` reads `working`, `question` reads `waiting` (`needs answer`), `idle` reads `idle <age>`, and `incomplete` is no agent; several sessions on one
+branch pick working over waiting over idle, then the most recent.
+
+**The keys** (`GitKeys`). **Sync** is labelled with its verbs (`Sync · commit + pull + push`, from `gitSyncVerbs`, calm problems excluded). **Retry fetch**
+shows
+for a failed fetch and runs Fetch all, since no per-repo fetch route exists. **Unpin** is the only key on a dead repo and goes through `usePins`. **Open PR**
+is a link on a Ready card in Branches, from `gitCompareUrl` (`client/src/lib/gitLinks.ts`) over `originUrl`, for `github.com` and `gitlab.com` only: any other
+host gets no key. **Open folder** is on the Inspector pane for an `ok` repo with a path: `useOpenFolder` posts `POST /api/open-folder` `{path}` with the Answer
+token, and the server runs macOS `open` on it only when the path string-equals a listed pin's (`server/lib/open-folder.ts`, argv through `execFile`, no
+shell). The order of its answers is `405` for a non-POST, `403 bad token`, `400`, `501 open folder needs macOS`, `403 not a pinned project`, `500 open failed`,
+then `200 {ok: true}`; the hook turns each into a note under the toolbar. It is not a third kind of outbound call: `open` makes none.
+
+**A branch row** is the name (plus a "worktree" badge when `worktreePath` is set and the agent chip when a session sits on it), the divergence bar, `.git-dv`
+(`↓ behind ↑ ahead`, a zero muted), and the last-commit age. The bar grows behind to the left and ahead to the right on one scale per repo: the largest count
+among the repo's listed branches fills its 56px half, and a non-zero count never drops below 2px (`client/src/lib/gitBar.ts`). A branch whose
+`ahead`/`behind` are null draws neither bar nor numbers; that is keyed on the branch's own counts (`gitBranchCounts`), not on `repo.trunk`, because a named
+trunk with no base ref also yields null counts. Below `md` the bar drops and the numbers stay. The newest five rows show and "+N more" expands the rest
+inline (N = `branches.length − 5`); once expanded, a list the server capped adds "N more not shown (over 50)"; a non-zero `mergedCount` adds "N merged
+branches hidden". A non-`ok` repo shows its one sentence instead of a body.
 
 **The fetched text.** Each layout's "fetched" fact is `gitFetchedText(repo, clock)`: cyan `fetching…` while the payload says a fetch runs and the repo has an
-origin; the verdict and the age in amber (`offline · fetched 2m ago`, `needs auth · never fetched`) when its last fetch failed; else the plain age. Triage's
-Quiet summary is one plain string, so it carries the words without the colour. A failed fetch never moves a repo between Triage groups.
+origin; the verdict and the age in amber (`offline · fetched 2m ago`, `needs auth · never fetched`) when its last fetch failed; else the plain age. A line that
+joins its facts into one plain string, such as an All good line, carries the words without the colour. A failed fetch other than `lock` is a sev 3 problem, so
+it does raise the repo's level.
 
 **The copy.** Every string is in `client/src/lib/gitStatsText.ts`, verbatim from the copy tables of the git-stats spec §6 and the git-fetch spec §4; the
 components never build their own. The empty state's "Projects" is a link that sets `managementTab: 'projects'`.
 
 **Sync** (spec §9). Every `ok` repo with an origin gets a Sync button while `/api/health` reports `spawnAvailable` (`canSync` in `client/src/lib/gitSync.ts`):
-pinned to the first line at the right of a card's or busy Triage row's head (`.git-head-end` is a sibling of the wrapping `.git-head`, never an item in it, so
-the button holds its place however long the name), in the Table's seventh column, and beside a quiet row's line. It is drawn as a raised key — `--strip-hi`
+drawn by `GitKeys` in every layout, beside the repo's verdict in Inbox, in the action column in Matrix, in the Inspector pane's head and footer, and on the
+checked-out
+branch's card in Branches. It is drawn as a raised key — `--strip-hi`
 paper, 8px corners, a two-arrow glyph that turns while a run is live — where the fact chips are round and outlined, so the two never read alike
-([mockups](../superpowers/specs/2026-10-01-git-sync-button-mockups.html)). "fetched" is a fact, so on a card it ends the facts row and on a busy Triage row it
-trails the chips. A click launches at once,
-with no sheet: `POST /api/spawn` with the repo's `dirName`, the prompt `/claude-agents-dashboard:git-sync`, the session name `git-sync <repo>` (characters
+([mockups](../superpowers/specs/2026-10-01-git-sync-button-mockups.html)). A click launches at once, with no sheet: `POST /api/spawn` with the repo's
+`dirName`, the prompt `/claude-agents-dashboard:git-sync`, the session name `git-sync <repo>` (characters
 the server's `NAME_RE` would reject become `-`, cut at 60, because a bad name is dropped without a word), the Settings › Local › Git Sync model and effort,
 the host's `SYNC_PERMISSION_MODE` (default `auto`, published on `/api/health` as `syncPermissionMode` already clamped to `SPAWN_MAX_PERMISSION`), and
 remote control on exactly when Remote answers is (`remoteAnswer`, so the `REMOTE_ANSWER` kill switch turns it off too) (`syncRequest`). The session runs in the pin's path, the cwd the server resolves for that `dirName`.
@@ -243,17 +262,22 @@ in flight, and only the clicked one reads "Starting…". The runs key is not a s
     - client/src/components/management/GitClockChip.tsx
     - client/src/hooks/useGitStats.ts
     - client/src/components/management/GitView.tsx
-    - client/src/components/management/GitCards.tsx
-    - client/src/components/management/GitTable.tsx
-    - client/src/components/management/GitTriage.tsx
+    - client/src/components/management/GitInbox.tsx
+    - client/src/components/management/GitMatrix.tsx
+    - client/src/components/management/GitInspector.tsx
+    - client/src/components/management/GitBranches.tsx
+    - client/src/components/management/gitLayoutProps.ts
     - client/src/components/management/GitParts.tsx
     - client/src/lib/gitLayouts.ts
-    - client/src/lib/gitTriage.ts
+    - client/src/lib/gitLevels.ts
+    - client/src/lib/gitLinks.ts
     - client/src/lib/gitStatsText.ts
     - client/src/lib/gitBar.ts
     - client/src/lib/gitPoll.ts
     - client/src/lib/gitSync.ts
     - client/src/lib/gitSyncRuns.ts
     - client/src/hooks/useGitSync.ts
+    - client/src/hooks/useOpenFolder.ts
+    - server/lib/open-folder.ts
   kind: subsystem
 -->

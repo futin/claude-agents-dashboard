@@ -29,7 +29,10 @@ per device, `management.projectsLayout` ([view-persistence](view-persistence.md)
 are pure functions in `client/src/lib/projectsView.ts` (`test/projects-view.test.ts`); the launch sheet's own `PinPicker` is a separate component and stays
 what the sheet uses. Every Pinned project, in all three layouts, leads with a `⠿` drag grip (`hooks/usePinReorder.ts`, #193): drag it, or press ↑/← (one
 place earlier) or ↓/→ (one place later) on it focused, and the whole order saves at once through `usePins.reorder`, flashing `Saved` beside the Pinned count —
-beside the card's title in Lists. While the filter is non-blank the grips are hidden behind an empty cell of the same width, since a filtered list has gaps.
+beside the card's title in Lists. The drag is a drop line: nothing moves until release, the source dims, a ghost follows the pointer, a bar from `dropMark`
+(`lib/pins.ts`) marks the gap it would land in, and the head reads `Moving <name> · n of N`. A dead pin shows a `Folder gone` chip whose tooltip holds the
+sentence, so every tile keeps one height. While the filter is non-blank the grips are hidden behind an empty cell of the same width, since a filtered list has
+gaps.
 Where a drop lands is `dropIndex` in `lib/pins.ts`: in one column (Columns, Lists, Tiles on the phone) the pointer passes an item at its vertical midpoint, as
 #191 had it; on a multi-column Tiles grid it goes by reading order — every row wholly above the pointer, plus the items in the pointer's row whose horizontal
 midpoint it has passed.
