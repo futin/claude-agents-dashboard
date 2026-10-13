@@ -16,7 +16,7 @@ import { triageGitRepos, type GitTriageGroup } from '../../lib/gitTriage';
  */
 
 import type { GitSyncControl } from '../../hooks/useGitSync';
-import { GIT_LEVEL_DOT, agentOn, type GitAgent, type GitAssessed, type GitLevel } from '../../lib/gitLevels';
+import { GIT_LEVEL_DOT, agentOn, isStaleBranch, type GitAgent, type GitAssessed, type GitLevel } from '../../lib/gitLevels';
 import { canSync, syncKeyLabel, type OkRepo } from '../../lib/gitSync';
 import type { GitLayoutProps } from './gitLayoutProps';
 
@@ -266,5 +266,27 @@ export function GitKeys({ a, ctx, bare = false, compact = false }: { a: GitAsses
       )}
       <GitSyncButton repo={a.repo} sync={ctx.sync} verbs={bare || compact ? [] : a.verbs} primary={syncPrimary} />
     </>
+  );
+}
+
+/**
+ * The branch's upstream, unless it is absent or is `origin/<trunk>` itself, whose numbers the Trunk column already carries. Unlike `gitUpstreamShown`, a
+ * level (0 / 0) upstream stays: Matrix's Pushed and Up to date cells and Inspector's list figure read it.
+ */
+export function gitTracked(r: OkRepo): NonNullable<OkRepo['currentVsUpstream']> | null {
+  const u = r.currentVsUpstream ?? null;
+  if (u === null || (r.trunk !== null && u.upstream === `origin/${r.trunk}`)) return null;
+  return u;
+}
+
+/** One branch as a `.git-in-br` row, shared by Matrix's expanded row and Inspector's two sections; a stale one reads quieter. */
+export function GitInBranchRow({ repo, b, max, nowMs, sessions }: { repo: OkRepo; b: GitBranch; max: number; nowMs: number; sessions: readonly Session[] }) {
+  return (
+    <div className={`git-in-br${isStaleBranch(b, nowMs) ? ' stale' : ''}`}>
+      <GitBranchLabel repo={repo} b={b} sessions={sessions} />
+      <GitBranchDvBar b={b} max={max} />
+      <GitBranchDv b={b} />
+      <span className="git-age">{formatAgo(b.lastCommitMs)}</span>
+    </div>
   );
 }

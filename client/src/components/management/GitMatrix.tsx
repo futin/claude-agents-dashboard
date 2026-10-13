@@ -6,22 +6,12 @@ import { gitBarMax } from '../../lib/gitBar';
 import { isStaleBranch, rankGitRepos, type GitAssessed } from '../../lib/gitLevels';
 import { fetchTroubleWord, gitBranchChipText, gitMergedText, gitShownFetchError, gitStateSentence } from '../../lib/gitStatsText';
 import type { OkRepo } from '../../lib/gitSync';
-import { GitBranchDv, GitBranchDvBar, GitBranchLabel, GitKeys, GitLevelDot } from './GitParts';
+import { GitInBranchRow, GitKeys, GitLevelDot, gitTracked } from './GitParts';
 import type { GitLayoutProps } from './gitLayoutProps';
 
 type Tone = 'ok' | 'bad' | 'meh' | 'live' | 'na';
 interface Cell { c: Tone; t: string }
 interface CellInput { a: GitAssessed; repo: OkRepo; nowMs: number; clock: FetchClock | undefined }
-
-/**
- * The branch's upstream, unless it is absent or is `origin/<trunk>` itself, whose numbers the Trunk column already carries. Unlike `gitUpstreamShown`, a
- * level (0 / 0) upstream stays: the Pushed and Up to date cells read "yes" for it.
- */
-function tracked(r: OkRepo): NonNullable<OkRepo['currentVsUpstream']> | null {
-  const u = r.currentVsUpstream ?? null;
-  if (u === null || (r.trunk !== null && u.upstream === `origin/${r.trunk}`)) return null;
-  return u;
-}
 
 const NA: Cell = { c: 'na', t: '—' };
 
@@ -38,7 +28,7 @@ const CHECKS: { label: string; cell: (i: CellInput) => Cell }[] = [
     label: 'Pushed',
     cell: ({ repo }) => {
       if (!repo.hasOrigin) return { c: 'meh', t: 'no remote' };
-      const u = tracked(repo);
+      const u = gitTracked(repo);
       if (u === null) return NA;
       if (u.counts === null) return { c: 'meh', t: `${u.upstream} gone` };
       if (u.counts.ahead > 0) return { c: 'meh', t: `${u.counts.ahead} unpushed` };
@@ -48,7 +38,7 @@ const CHECKS: { label: string; cell: (i: CellInput) => Cell }[] = [
   {
     label: 'Up to date',
     cell: ({ repo }) => {
-      const u = tracked(repo);
+      const u = gitTracked(repo);
       if (u === null || u.counts === null) return NA;
       return u.counts.behind > 0 ? { c: 'bad', t: `${u.counts.behind} to pull` } : { c: 'ok', t: 'yes' };
     },
@@ -146,14 +136,7 @@ export default function GitMatrix(props: GitLayoutProps) {
                       <td colSpan={CHECKS.length + 2}>
                         {repo.branches.length === 0
                           ? <span className="git-age">No open branches.</span>
-                          : repo.branches.map(b => (
-                            <div key={b.name} className={`git-in-br${isStaleBranch(b, nowMs) ? ' stale' : ''}`}>
-                              <GitBranchLabel repo={repo} b={b} sessions={sessions} />
-                              <GitBranchDvBar b={b} max={max} />
-                              <GitBranchDv b={b} />
-                              <span className="git-age">{formatAgo(b.lastCommitMs)}</span>
-                            </div>
-                          ))}
+                          : repo.branches.map(b => <GitInBranchRow key={b.name} repo={repo} b={b} max={max} nowMs={nowMs} sessions={sessions} />)}
                         {repo.mergedCount > 0 && <div className="git-age git-mx-note">{gitMergedText(repo.mergedCount)}</div>}
                       </td>
                     </tr>

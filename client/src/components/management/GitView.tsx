@@ -16,6 +16,7 @@ import { GIT_BAND_SUB, GIT_NO_PINS, gitFirstLoadText } from '../../lib/gitStatsT
 import { Band } from '../usage/Sheet';
 import GitClockChip from './GitClockChip';
 import GitInbox from './GitInbox';
+import GitInspector from './GitInspector';
 import GitMatrix from './GitMatrix';
 import GitTriage from './GitTriage';
 import type { GitLayoutProps } from './gitLayoutProps';
@@ -105,6 +106,7 @@ function GitBody({ data, error, layout, props }: { data: GitStatsResponse | null
   }
   if (layout === 'inbox') return <GitInbox {...props} />;
   if (layout === 'matrix') return <GitMatrix {...props} />;
-  // Placeholder for the other keys until Tasks 11-12 give each layout its own component; Task 13 deletes GitTriage, so nothing may still draw it by then.
+  if (layout === 'inspector') return <GitInspector {...props} />;
+  // Placeholder for the other keys until Task 12 gives Branches its own component; Task 13 deletes GitTriage, so nothing may still draw it by then.
   return <GitTriage repos={props.repos} sync={props.sync} clock={props.clock} />;
 }

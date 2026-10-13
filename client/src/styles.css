@@ -3115,3 +3115,40 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-mx-legend{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:12px 6px 0;font-size:12px;color:var(--ink2)}
 .git-mx-legend .git-cell{height:20px}
 .git-mx-legend .git-cell.ok{padding:0}
+
+/* Inspector — the Sessions split: ranked list beside one repo in depth (management-redesign spec §4.5) */
+.split.git-in{grid-template-columns:minmax(0,1fr)}
+.git-in .ct{font-size:19px;font-weight:500;letter-spacing:-.01em;line-height:1.3;color:var(--ink)}
+.git-in .list-h .ct{font-size:16px}
+.git-in .lrow .git-dot{width:9px;height:9px}
+/* a long branch name must not squeeze the repo's own name out of the row */
+.git-in .lrow .nm .t{flex:none;max-width:60%}
+.git-in .lrow .nm .proj-pill{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.git-in .lrow .act.hot{color:var(--amber)}
+.git-in .lrow .ago.warn{color:var(--amber)}
+.git-in .lrow .ago.live{color:var(--cyan)}
+.git-in .lrow:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+.git-in-fig{font-weight:400}
+.spill.g-needs{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.spill.g-look{background:color-mix(in srgb,var(--mustard) 16%,transparent);color:var(--mustard)}
+.spill.g-quiet{background:var(--green-tint);color:var(--green)}
+.git-in-pane{display:flex;flex-direction:column;gap:20px}
+.git-in-pane .ins-meta{margin-top:6px}
+.git-in-path{font-size:12px;color:var(--ink3);overflow-wrap:anywhere}
+.git-in-checks{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.git-in-ck{display:flex;flex-direction:column;gap:2px}
+.git-in-ck .v{display:block;margin-top:4px;font-size:14px;font-weight:600;letter-spacing:0;line-height:1.35;overflow-wrap:anywhere;color:var(--ink)}
+.git-in-ck .h{font-size:12px;color:var(--ink2)}
+.git-in-ck.bad{background:color-mix(in srgb,var(--amber) 10%,transparent)}
+.git-in-ck.bad .v{color:var(--amber)}
+.git-in-ck.meh{background:color-mix(in srgb,var(--mustard) 11%,transparent)}
+.git-in-ck.meh .v{color:var(--mustard)}
+.git-in-ck.live .v{color:var(--cyan)}
+.git-in-sec{display:flex;flex-direction:column}
+.git-in-hd{display:flex;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--hairline2);font-size:12px;color:var(--ink3)}
+.git-in-hd b{font-size:13px;font-weight:600;color:var(--ink)}
+.git-in-none{text-align:left;padding:10px 0}
+.git-in-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--ink2)}
+@media (min-width:640px){.git-in-checks{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1024px){.split.git-in{grid-template-columns:320px minmax(0,1fr)}}
+@media (min-width:1280px){.split.git-in{grid-template-columns:400px minmax(0,1fr)}}
