@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 
 import { planName, scrollTargetId, taskLine, taskProgress } from '../lib/tasks';
 import type { SessionTask } from '../../../shared/types';
+import Chevron from './Chevron';
 
 const GLYPH = { done: '✓', todo: '○' } as const;
 
@@ -47,7 +48,7 @@ export function TasksCard({ tasks, plan }: { tasks: SessionTask[] | null; plan: 
         <span className="tf-k">{plan === null ? 'Tasks' : 'Plan'}</span>
         <span className="tf-n">{p.done}/{p.total}</span>
         <span className={`tf-line ${line.kind}`}>{line.text}</span>
-        <span className="tf-cue">{folded ? '▾' : '▴'} list</span>
+        <span className="tf-cue"><Chevron dir={folded ? 'down' : 'up'} /> list</span>
       </button>
       <div className="track">
         <div className={`fill${p.allDone ? ' done' : ''}`} style={{ width: `${p.pct}%` }} />

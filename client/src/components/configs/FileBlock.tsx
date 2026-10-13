@@ -5,6 +5,7 @@ import { useFileContent } from '../../hooks/useConfigs';
 import { fmtTok } from '../../lib/format';
 import { Markdown } from '../Markdown';
 import type { FileKind } from '../../lib/configsEntries';
+import Chevron from '../Chevron';
 
 interface Props {
   path: string;
@@ -162,7 +163,7 @@ export function FileBlock({ path, kind }: Props) {
               onClick={() => setOpen(o => !o)}
             >
               {open ? 'collapse' : 'read all'}
-              <span className="cv" aria-hidden="true">{open ? '▴' : '▾'}</span>
+              <span className="cv" aria-hidden="true"><Chevron dir={open ? 'up' : 'down'} /></span>
             </button>
           ) : null}
         </div>

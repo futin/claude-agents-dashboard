@@ -12,6 +12,7 @@
  */
 
 import type { ReactNode } from 'react';
+import Chevron from './Chevron';
 
 export function PanelHead({ badge, hint, onMinimise }: {
   badge: string;
@@ -32,7 +33,7 @@ export function PanelHead({ badge, hint, onMinimise }: {
         title="Minimise — read the chat, then expand to answer"
         onClick={onMinimise}
       >
-        ▾
+        <Chevron />
       </button>
     </div>
   );
@@ -65,7 +66,7 @@ export function MinimisedPanel({ badge, summary, tone, onExpand }: {
       >
         <span className="qp-hint">{summary}</span>
         <span className="spacer" />
-        <span className="qp-min" aria-hidden="true">▴</span>
+        <span className="qp-min" aria-hidden="true"><Chevron dir="up" /></span>
       </button>
     </div>
   );

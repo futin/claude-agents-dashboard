@@ -5,6 +5,7 @@ import { parseInline, type Inline } from '../lib/markdown';
 import { MinimisedPanel, PanelHead } from './PanelChrome';
 import { collapsedSummary } from '../lib/panelCollapse';
 import type { PendingPlanState } from '../hooks/usePendingPlan';
+import Chevron from './Chevron';
 
 /** Same shape `lib/markdown.ts` accepts for an ATX heading, so the two agree. */
 const HEADING_RE = /^(#{1,6})\s+(.*)$/;
@@ -156,7 +157,7 @@ export default function PlanPanel({ state }: { state: PendingPlanState }) {
             onClick={() => setOpen(o => !o)}
           >
             {open ? 'collapse' : 'read all'}
-            <span className="cv" aria-hidden="true">{open ? '▴' : '▾'}</span>
+            <span className="cv" aria-hidden="true"><Chevron dir={open ? 'up' : 'down'} /></span>
           </button>
         </div>
         {/* A div rather than a <button>: a plan's markdown carries links, and an

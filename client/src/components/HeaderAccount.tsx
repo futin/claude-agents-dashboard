@@ -5,6 +5,7 @@ import { formatResetTime } from '../lib/format';
 import { paceView, FIVE_HOUR_MS, SEVEN_DAY_MS } from '../lib/pace';
 import type { Section } from '../lib/sections';
 import { useDismiss } from './Popover';
+import Chevron from './Chevron';
 
 /**
  * The account chip in the shell's header band — who you are and both rate
@@ -213,7 +214,7 @@ function PersonRing({ large }: { large?: boolean }) {
 
 function Caret() {
   return (
-    <svg className="cv" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4l3 3 3-3" /></svg>
+    <Chevron className="cv" />
   );
 }
 

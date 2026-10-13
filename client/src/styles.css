@@ -443,6 +443,10 @@ code,kbd,samp,pre{font-family:inherit}
 .acct .mini i.high{background:var(--red)}
 .acct .cv{flex:none;width:9px;height:9px;color:var(--ink3);fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .16s}
 .acct[aria-expanded="true"] .cv{transform:rotate(180deg)}
+.chev{flex:none;display:inline-block;width:9px;height:9px;vertical-align:middle;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .16s}
+.chev-up{transform:rotate(180deg)}
+.chev-right{transform:rotate(-90deg)}
+@media (prefers-reduced-motion:reduce){.chev{transition:none}}
 
 /* signed out · token expired — the credential is readable but blank (or stale),
    so there are no windows to draw and the account has no name. The chip keeps
@@ -1275,7 +1279,7 @@ code,kbd,samp,pre{font-family:inherit}
 .msub-h{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-family:var(--font);font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--ink2);background:none;border:0;border-top:1px solid var(--hairline);padding:13px 0;cursor:pointer;user-select:none;transition:color .15s}
 .msub-h:hover{color:var(--ink)}
 .msub-c{font-size:13px;font-weight:400;color:var(--ink3)}
-.msub-caret{display:inline-block;font-size:11px;color:var(--ink3);transition:transform .12s}
+.msub-caret{display:inline-flex;font-size:11px;color:var(--ink3);transition:transform .12s}
 .msub-caret.open{transform:rotate(90deg)}
 /* Column 3 — the file. Drawn only when something is selected, so there is no
    "select an item to inspect it" empty state to style. */
@@ -2850,7 +2854,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
    chip's height the moment a clock changes state. */
 .git-clock-meters{display:flex;gap:10px}
 .git-clock-meters>*{min-width:max-content}
-.git-clock-caret{font-size:11px;color:var(--ink3);transition:transform .15s}
+.git-clock-caret{display:inline-flex;font-size:11px;color:var(--ink3);transition:transform .15s}
 .git-clock[aria-expanded="true"] .git-clock-caret{transform:rotate(180deg)}
 /* Meter: label over value, both 11px, a flat 3.5px --steel track, and a fill with no transition — it advances once a second, and a tween would draw the
    clock a second late. A port of backlog-manager's `.ui-meter`. Tone is the root's `data-tone`: amber for off / failed / overdue, live (cyan, pulsing) for a

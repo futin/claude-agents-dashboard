@@ -8,6 +8,7 @@ import { fetchTroubleWord, gitBranchChipText, gitMergedText, gitShownFetchError,
 import type { OkRepo } from '../../lib/gitSync';
 import { GitInBranchRow, GitKeys, GitLevelDot, gitTracked } from './GitParts';
 import type { GitLayoutProps } from './gitLayoutProps';
+import Chevron from '../Chevron';
 
 type Tone = 'ok' | 'bad' | 'meh' | 'live' | 'na';
 interface Cell { c: Tone; t: string }
@@ -122,7 +123,7 @@ export default function GitMatrix(props: GitLayoutProps) {
                     <td className="git-mx-rn">
                       {/* No handler of its own: a click or Enter on the button bubbles to the row once. */}
                       <button type="button" className="git-head git-rowbtn" aria-expanded={open}>
-                        <span className="git-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
+                        <span className="git-caret" aria-hidden="true"><Chevron dir={open ? 'down' : 'right'} /></span>
                         <GitLevelDot level={a.level} />
                         <span className="git-name">{repo.name}</span>
                       </button>

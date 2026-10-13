@@ -5,6 +5,7 @@ import { GIT_LEVELS, agentOn, gitPlural, gitSentence, rankGitRepos, type GitAsse
 import { GIT_BRANCH_CAP, gitBranchChipText, gitFetchedText, gitNotShownText, gitStateSentence } from '../../lib/gitStatsText';
 import { GitAgentChip, GitBranchChip, GitBranchDv, GitBranchLabel, GitKeys, GitLevelDot } from './GitParts';
 import type { GitLayoutProps } from './gitLayoutProps';
+import Chevron from '../Chevron';
 
 /**
  * Inbox (management-redesign spec §4.3): four count tiles that filter, then one ranked list. Repos that need a look get a full item with a verdict, the
@@ -109,7 +110,7 @@ function InboxItem({ a, ctx, isOpen, onToggle }: { a: GitAssessed; ctx: GitLayou
       {repo.unmergedTotal > 0 && (
         <div className="git-ib-br">
           <button type="button" className="git-ib-tog" aria-expanded={isOpen} onClick={onToggle}>
-            <span className="git-caret" aria-hidden="true">{isOpen ? '▾' : '▸'}</span>
+            <span className="git-caret" aria-hidden="true"><Chevron dir={isOpen ? 'down' : 'right'} /></span>
             {gitPlural(repo.unmergedTotal, 'open branch')}
             {mergedCount > 0 && ` · ${mergedCount} merged hidden`}
           </button>
