@@ -7,7 +7,7 @@ import { usePins } from '../../hooks/usePins';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import { formatAgo } from '../../lib/format';
 import {
-  DEFAULT_PROJECTS_LAYOUT, LIST_SUB_OFFERS, LIST_SUB_PINNED, PROJECTS_BAND_SUB, PROJECTS_LAYOUTS, PROJECTS_MISSING,
+  DEFAULT_PROJECTS_LAYOUT, LIST_SUB_OFFERS, LIST_SUB_PINNED, PROJECTS_BAND_SUB, PROJECTS_GONE_CHIP, PROJECTS_LAYOUTS, PROJECTS_MISSING,
   isProjectsLayout, noOffersText, noPinsText, projectDir, splitProjects, type ProjectsLayout,
 } from '../../lib/projectsView';
 import { SettingsBand, SettingsGroup, SettingsRow } from '../settings/SettingsRow';
@@ -48,6 +48,8 @@ const NO_PINS: PinRow[] = [];
  * new order saves, flashing `Saved` beside the Pinned count. The drag is a drop line (redesign spec §3): nothing moves until release, the source dims,
  * a bar marks the gap and the Pinned head reads `Moving <name> · <n> of <N>`. A filtered list has gaps, so while the filter is non-blank each pin keeps an
  * empty cell in the grip's place and nothing can be dragged.
+ *
+ * A dead pin's note is the `Folder gone` chip's tooltip, not a line under its dir, so every tile keeps one height.
  */
 export default function ProjectsView() {
   const { pins, busy, setPin, reorder } = usePins();
@@ -167,13 +169,23 @@ export default function ProjectsView() {
   );
 }
 
-/** The dead-pin and refusal lines under a project's dir. */
+/** The refusal line under a project's dir; a dead pin's sentence is its chip's tooltip, so a tile's height never depends on it. */
 function Notes({ it }: { it: Item }) {
+  return <>{it.error && <span className="pin-sub err">{it.error}</span>}</>;
+}
+
+/** A dead pin's chip, drawn where a live one shows its age. The tooltip opens on hover and on focus, so a keyboard reaches the sentence too. */
+function GoneChip({ dirName }: { dirName: string }) {
+  const tipId = `pj-tip-${dirName}`;
   return (
-    <>
-      {it.gone && <span className="pin-sub">{PROJECTS_MISSING}</span>}
-      {it.error && <span className="pin-sub err">{it.error}</span>}
-    </>
+    <button type="button" className="pj-gone" aria-describedby={tipId}>
+      <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+        <path d="M6 1.5 11 10.5H1z" />
+        <path d="M6 5v2.2M6 8.6v.1" />
+      </svg>
+      {PROJECTS_GONE_CHIP}
+      <span className="pj-tip" role="tooltip" id={tipId}>{PROJECTS_MISSING}</span>
+    </button>
   );
 }
 
@@ -200,7 +212,9 @@ function TileGroup({ title, total, items, empty, aside }: { title: string; total
                 <Notes it={it} />
               </span>
               <span className="pj-tfoot">
-                <span className="pj-age">{it.lastActiveMs === null ? 'No sessions' : `Last session ${formatAgo(it.lastActiveMs)} ago`}</span>
+                {it.gone ? <GoneChip dirName={it.dirName} /> : (
+                  <span className="pj-age">{it.lastActiveMs === null ? 'No sessions' : `Last session ${formatAgo(it.lastActiveMs)} ago`}</span>
+                )}
                 <PinButton it={it} />
               </span>
             </li>
@@ -218,7 +232,7 @@ function ListCard({ title, total, items, sub, empty, aside }: {
   return (
     <SettingsGroup className="pj-listcard" title={title} sub={`${items.length} of ${total} · ${sub}`} aside={aside}>
       {items.length > 0 ? items.map(it => {
-        const hint = it.dir || it.gone || it.error ? <>{it.dir}<Notes it={it} /></> : undefined;
+        const hint = it.dir || it.error ? <>{it.dir}<Notes it={it} /></> : undefined;
         return (
           <SettingsRow
             key={it.dirName}
@@ -228,7 +242,9 @@ function ListCard({ title, total, items, sub, empty, aside }: {
             lead={it.grip}
             rowRef={it.ref}
           >
-            <span className="pj-age">{it.lastActiveMs === null ? 'No sessions' : `${formatAgo(it.lastActiveMs)} ago`}</span>
+            {it.gone ? <GoneChip dirName={it.dirName} /> : (
+              <span className="pj-age">{it.lastActiveMs === null ? 'No sessions' : `${formatAgo(it.lastActiveMs)} ago`}</span>
+            )}
             <PinButton it={it} />
           </SettingsRow>
         );

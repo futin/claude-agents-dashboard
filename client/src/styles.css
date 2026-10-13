@@ -1919,6 +1919,16 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pj-tile.off{background:transparent;border:1px dashed var(--hairline2)}
 .pj-tile.off .pj-name{color:var(--ink2)}
 .pj-tile.gone{border-color:var(--amber)}
+/* The dead pin's chip and its tooltip: the sentence lives in the tooltip so a gone tile is no taller than a live one. */
+.pj-gone{position:relative;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:0;border-radius:999px;background:color-mix(in srgb,var(--amber) 12%,transparent);color:var(--amber);font-family:var(--font);font-size:12px;font-weight:500;white-space:nowrap;cursor:help}
+.pj-gone svg{flex:none}
+/* In a Lists row the chip is a `.set-control>button`, whose Settings face (36px, bordered, ink on strip) would outrank the chip's own. */
+.pj-srw .set-control>.pj-gone{height:26px;padding:0 10px;border:0;border-radius:999px;background:color-mix(in srgb,var(--amber) 12%,transparent);color:var(--amber);font-size:12px;cursor:help}
+.pj-gone:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.pj-tip{position:absolute;left:0;bottom:calc(100% + 8px);z-index:5;width:240px;padding:8px 10px;border-radius:8px;background:var(--ink);color:var(--strip);box-shadow:0 8px 24px var(--shadow2);font-size:12px;font-weight:400;line-height:1.45;white-space:normal;text-align:left;opacity:0;transform:translateY(4px);pointer-events:none;transition:opacity .15s,transform .15s}
+.pj-tip::after{content:"";position:absolute;left:16px;top:100%;border:5px solid transparent;border-top-color:var(--ink)}
+.pj-gone:hover .pj-tip,.pj-gone:focus .pj-tip{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.pj-tip{transition:none}}
 .pj-tfoot{display:flex;align-items:center;justify-content:space-between;gap:8px}
 /* The key in a tile or a list row is a `.qp-term` that never stretches (`flex:none`). On the phone it keeps the thumb-sized
    44px min-height every `.qp-term` has there; from md, where that generic rule resets, it is the 32px key. In a list row it
@@ -1931,6 +1941,9 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
   .pj-cols .pj-tile{flex-direction:row;align-items:center}
   .pj-cols .pj-id{flex:1}
   .pj-cols .pj-tfoot{flex:none;gap:12px}
+  /* From md the chip sits at a Lists row's and a Columns tile's right edge, so the tip opens leftward; below md both put it at the left. */
+  .pj-srw .pj-tip,.pj-cols .pj-tile .pj-tip{left:auto;right:0}
+  .pj-srw .pj-tip::after,.pj-cols .pj-tile .pj-tip::after{left:auto;right:16px}
 }
 /* Columns and Lists: the two groups stacked on the phone, side by side from lg (Not pinned left, Pinned right). A Columns tile
    stacks like a Tiles tile on the phone, where a row would leave the name ~60px; from md the single column is wide enough
