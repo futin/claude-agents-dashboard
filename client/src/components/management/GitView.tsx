@@ -15,6 +15,7 @@ import { SYNC_SCAN_LIMIT } from '../../lib/gitSync';
 import { GIT_BAND_SUB, GIT_NO_PINS, gitFirstLoadText } from '../../lib/gitStatsText';
 import { Band } from '../usage/Sheet';
 import GitClockChip from './GitClockChip';
+import GitInbox from './GitInbox';
 import GitTriage from './GitTriage';
 import type { GitLayoutProps } from './gitLayoutProps';
 
@@ -101,7 +102,7 @@ function GitBody({ data, error, layout, props }: { data: GitStatsResponse | null
       </div>
     );
   }
-  // Placeholder for every key until Tasks 9-12 give each layout its own component; Task 13 deletes GitTriage, so nothing may still draw it by then.
-  void layout;
+  if (layout === 'inbox') return <GitInbox {...props} />;
+  // Placeholder for the other keys until Tasks 10-12 give each layout its own component; Task 13 deletes GitTriage, so nothing may still draw it by then.
   return <GitTriage repos={props.repos} sync={props.sync} clock={props.clock} />;
 }
