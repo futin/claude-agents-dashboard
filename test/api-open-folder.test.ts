@@ -112,6 +112,18 @@ export async function run(): Promise<number> {
     }, 'linux');
   }));
 
+  check(await testAsync('a relative or dash-prefixed path is 403 not a pinned project, and open never runs', async () => {
+    await withOpen(ENV, async (h, calls) => {
+      pinOne(h);
+      for (const p of ['-a', '--help', 'projs/proj', './proj', '.']) {
+        const reply = await post(h, { path: p });
+        assert.equal(reply.status, 403, p);
+        assert.equal(reply.json?.error, 'not a pinned project', p);
+      }
+      assert.deepStrictEqual(calls, []);
+    });
+  }));
+
   check(await testAsync('a planted but unpinned path is 403 not a pinned project', async () => {
     await withOpen(ENV, async (h, calls) => {
       pinOne(h, 'pinned');

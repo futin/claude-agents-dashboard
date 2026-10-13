@@ -1764,6 +1764,8 @@ export async function serveOpenFolder(config: Config, req: IncomingMessage, res:
   }
   const { path } = body;
   if (openFolderPlatform() !== 'darwin') return sendJson(res, 501, { error: 'open folder needs macOS' });
+  // A pin's path is absolute; a relative or `-`-prefixed value never names one, so it is refused before the pin list is even read.
+  if (!nodePath.isAbsolute(path)) return sendJson(res, 403, { error: 'not a pinned project' });
   const rows = listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), ...pinOptions() });
   if (!rows.some(r => r.listed === true && r.path === path)) return sendJson(res, 403, { error: 'not a pinned project' });
   try {
