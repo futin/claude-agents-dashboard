@@ -7,7 +7,7 @@ import assert from 'node:assert';
 import type { PinRow, PinsResponse, ProjectRef } from '../shared/types.js';
 import { OWNED_KEYS } from '../client/src/hooks/useSettings.js';
 import {
-  DEFAULT_PROJECTS_LAYOUT, LIST_SUB_OFFERS, LIST_SUB_PINNED, PROJECTS_BAND_SUB, PROJECTS_LAYOUTS, PROJECTS_MISSING,
+  DEFAULT_PROJECTS_LAYOUT, LIST_SUB_OFFERS, LIST_SUB_PINNED, PROJECTS_BAND_SUB, PROJECTS_GONE_CHIP, PROJECTS_LAYOUTS, PROJECTS_MISSING,
   isProjectsLayout, noOffersText, noPinsText, projectDir, splitProjects,
 } from '../client/src/lib/projectsView.js';
 
@@ -83,6 +83,7 @@ export function run(): number {
 
   if (test('copy constants are verbatim', () => {
     assert.strictEqual(PROJECTS_BAND_SUB, 'Every project with a session in the last 30 days. Pin one to keep it in the launch sheet whatever the lookback; pins are stored by the dashboard server, so they show up on every device.');
+    assert.strictEqual(PROJECTS_GONE_CHIP, 'Folder gone');
     assert.strictEqual(PROJECTS_MISSING, 'Folder no longer exists. Hidden from every list until unpinned.');
     assert.strictEqual(LIST_SUB_OFFERS, 'a session in the last 30 days, gone from the launch sheet once it ages out');
     assert.strictEqual(LIST_SUB_PINNED, 'kept in the launch sheet whatever the lookback');

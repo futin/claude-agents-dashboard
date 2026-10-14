@@ -65,7 +65,7 @@ hand and a laptop in the other.
 **The banner's only styling is its icon.** Title, body, `tag`, `silent` and `icon` are the
 entire surface a Web Notification exposes; the banner itself is drawn by the OS and no CSS
 reaches it. So the icon carries the whole visual signal: a 64×64 canvas disc in the live theme
-token (`--amber` question, `--cyan` plan, `--mustard` reply) with a solid glyph on it — `?`,
+token (`--amber-solid` question, `--cyan` plan, `--mustard` reply) with a solid glyph on it — `?`,
 `▸` for the plan going out, `◂` for the reply coming back. Anything hairline vanishes at the
 ~20px the OS draws it at. `silent: true` is deliberate and paired with our own single `beep()`
 per batch: one sound per batch whatever the OS would have done, and the beep still fires when

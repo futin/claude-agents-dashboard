@@ -29,7 +29,10 @@ per device, `management.projectsLayout` ([view-persistence](view-persistence.md)
 are pure functions in `client/src/lib/projectsView.ts` (`test/projects-view.test.ts`); the launch sheet's own `PinPicker` is a separate component and stays
 what the sheet uses. Every Pinned project, in all three layouts, leads with a `⠿` drag grip (`hooks/usePinReorder.ts`, #193): drag it, or press ↑/← (one
 place earlier) or ↓/→ (one place later) on it focused, and the whole order saves at once through `usePins.reorder`, flashing `Saved` beside the Pinned count —
-beside the card's title in Lists. While the filter is non-blank the grips are hidden behind an empty cell of the same width, since a filtered list has gaps.
+beside the card's title in Lists. The drag is a drop line: nothing moves until release, the source dims, a ghost follows the pointer, a bar from `dropMark`
+(`lib/pins.ts`) marks the gap it would land in, and the head reads `Moving <name> · n of N`. A dead pin shows a `Folder gone` chip whose tooltip holds the
+sentence, so every tile keeps one height. While the filter is non-blank the grips are hidden behind an empty cell of the same width, since a filtered list has
+gaps.
 Where a drop lands is `dropIndex` in `lib/pins.ts`: in one column (Columns, Lists, Tiles on the phone) the pointer passes an item at its vertical midpoint, as
 #191 had it; on a multi-column Tiles grid it goes by reading order — every row wholly above the pointer, plus the items in the pointer's row whose horizontal
 midpoint it has passed.
@@ -207,13 +210,16 @@ draws nothing; a test asserts both lists literally. See
 rule below consuming them. So a theme is one override block and nothing else — no component
 churn, no JS, no bundle cost.
 
+In `THEMES` order, which is the order the Settings picker lists them. **Daylight is the default** (`DEFAULT_SETTINGS.theme`) and comes first; a
+browser with a stored theme keeps it, only one with none (fresh, cleared, or a blob that never held a theme) opens on Daylight.
+
 | id | look | scheme |
 |---|---|---|
+| `daylight` | manila paper, dark ink — the actual thing the strip metaphor comes from | light |
 | `midnight` | the original deep-navy scope room | dark |
 | `graphite` | neutral dark, blue cast removed | dark |
 | `amber` | black glass, amber phosphor (statuses become amber tints, not hues) | dark |
 | `nightshift` | deep green radar scope | dark |
-| `daylight` | manila paper, dark ink — the actual thing the strip metaphor comes from | light |
 
 Adding one means: copy a `[data-theme=…]` block, set `color-scheme`, add the id to `THEMES` in
 `client/src/lib/settings.ts`, and add its three preview colors to `SWATCHES` in `SettingsView`.
@@ -225,9 +231,12 @@ reads as depth on black reads as dirt on paper). **No color or shadow may be har
 token block** — that is the invariant the whole theme system rests on.
 
 **Anti-flash:** an inline script in `client/index.html` stamps `data-theme` / `data-density` /
-`--font-scale` from localStorage before first paint. Without it every load renders in Midnight
-until React mounts, which is very visible on the light theme. It duplicates three lines of
-`useSettings.tsx` on purpose — it has to run before the module graph loads, so it cannot be one.
+`--font-scale` from localStorage before first paint. The `:root` token block (no `data-theme`) still holds
+Midnight, so without the stamp every load renders in Midnight until React mounts. The script therefore sets
+`data-theme="daylight"` *before* it reads storage, so a fresh browser, a corrupt blob or no storage paints the
+default; a stored theme then overrides it. That literal must equal `DEFAULT_SETTINGS.theme` —
+`test/client-settings.test.ts` pins the two. It duplicates a few lines of `useSettings.tsx` on purpose — it has
+to run before the module graph loads, so it cannot be one.
 
 ## Density and text scale
 

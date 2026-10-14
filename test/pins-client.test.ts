@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { applyPinOrder, dropIndex, matchesPinFilter, movePin, shortenHome, splitPath } from '../client/src/lib/pins.js';
+import { applyPinOrder, dropIndex, dropMark, matchesPinFilter, movePin, shortenHome, splitPath } from '../client/src/lib/pins.js';
 import type { PinRect } from '../client/src/lib/pins.js';
 import type { ProjectRef } from '../shared/types.js';
 
@@ -17,6 +17,11 @@ function at(name: string, left: number, top: number, w: number, h: number): { na
 /** `names` laid out in reading order over `cols` columns at lefts 0/110/220…, width 100, rows 90 apart, height 80 — the grid case from #193's plan. */
 function grid(names: readonly string[], cols: number): { name: string; rect: PinRect }[] {
   return names.map((n, i) => at(n, (i % cols) * 110, Math.floor(i / cols) * 90, 100, 80));
+}
+
+/** One item by its four edges, as `dropMark` reads it. */
+function box(name: string, left: number, top: number, right: number, bottom: number): { name: string; rect: PinRect } {
+  return { name, rect: { left, top, right, bottom } };
 }
 
 function ref(name: string, path: string): ProjectRef {
@@ -154,6 +159,27 @@ export function run(): number {
     assert.strictEqual(dropIndex(column, 'X', { x: 0, y: 50 }), -1, 'dragged name not in the list');
     const phone = ['A', 'B', 'C'].map((n, i) => at(n, 0, i * 100, 340, 90));
     assert.strictEqual(dropIndex(phone, 'A', { x: 330, y: 160 }), 1, 'Tiles at phone width: all at left 0, the one-column rule');
+  }));
+
+  const stack = [box('a', 0, 0, 200, 40), box('b', 0, 50, 200, 90), box('c', 0, 100, 200, 140)];
+
+  tally(test('dropMark, one column: a horizontal bar centred in the gap before the item it lands ahead of', () => {
+    assert.deepStrictEqual(dropMark(stack, 'a', 1, 6), { orient: 'h', left: 0, width: 200, height: 3, top: 92.5 }, 'before c');
+    assert.deepStrictEqual(dropMark(stack, 'a', 2, 6), { orient: 'h', left: 0, width: 200, height: 3, top: 144.5 }, 'after c, the end');
+    assert.deepStrictEqual(dropMark(stack, 'c', 0, 0), { orient: 'h', left: 0, width: 200, height: 3, top: -1.5 }, 'before a, no gap');
+    assert.deepStrictEqual(dropMark(stack, 'b', 0, 6), { orient: 'h', left: 0, width: 200, height: 3, top: -7.5 });
+  }));
+
+  tally(test('dropMark, grid: a vertical bar in the gap beside the item', () => {
+    const pair = [box('a', 0, 0, 240, 100), box('b', 250, 0, 490, 100)];
+    assert.deepStrictEqual(dropMark(pair, 'a', 1, 6), { orient: 'v', top: 0, height: 100, width: 3, left: 494.5 }, 'after b, the end');
+    const three = [...pair, box('c', 0, 110, 240, 210)];
+    assert.deepStrictEqual(dropMark(three, 'c', 1, 6), { orient: 'v', left: 242.5, top: 0, height: 100, width: 3 }, 'before b');
+    assert.strictEqual(dropMark(three, 'x', 0, 6), null, 'dragged name not in the list');
+  }));
+
+  tally(test('dropMark: only the dragged item draws no bar', () => {
+    assert.strictEqual(dropMark([box('a', 0, 0, 200, 40)], 'a', 0, 6), null);
   }));
 
   console.log(`\n  ${p} passed, ${f} failed`);

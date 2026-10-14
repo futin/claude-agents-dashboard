@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
+import Chevron from './Chevron';
 import { Markdown } from './Markdown';
 import { PermissionBanner } from './PermissionBanner';
 import QuestionPanel from './QuestionPanel';
@@ -53,6 +54,7 @@ function Message({ m }: { m: ChatMessage }) {
         t.body ? (
           <details open className="cmsg-plan" key={i}>
             <summary>
+              <Chevron className="cmsg-chev" />
               <span className="tool">{t.name}</span>
               {' ' + (TOOL_HINT[t.name] ?? '')}
             </summary>

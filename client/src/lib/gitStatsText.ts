@@ -107,7 +107,7 @@ export function fetchTroubleWord(error: FetchError): string {
 }
 
 /** The error a card shows, or null. Reads `lastFetch?.` because an older server's payload has no such property at all. */
-function shownFetchError(r: OkRepo): Exclude<FetchError, 'lock'> | null {
+export function gitShownFetchError(r: OkRepo): Exclude<FetchError, 'lock'> | null {
   const e = r.lastFetch?.error;
   return e === undefined || e === null || e === 'lock' ? null : e;
 }
@@ -118,7 +118,7 @@ function shownFetchError(r: OkRepo): Exclude<FetchError, 'lock'> | null {
  */
 export function gitFetchedText(repo: OkRepo, clock: FetchClock | undefined): { text: string; tone: 'live' | 'warn' | null } {
   if (clock?.runningSinceMs != null && repo.hasOrigin) return { text: READ_FETCHING, tone: 'live' };
-  const error = shownFetchError(repo);
+  const error = gitShownFetchError(repo);
   if (error !== null) return { text: `${fetchTroubleWord(error)} · ${gitFetchedAgeText(repo.fetchedAtMs)}`, tone: 'warn' };
   return { text: gitFetchedAgeText(repo.fetchedAtMs), tone: null };
 }
@@ -131,7 +131,7 @@ export function gitTroubleLines(repos: RepoGitStats[], _clock: FetchClock | unde
   const out: { dirName: string; name: string; word: string; age: string }[] = [];
   for (const r of repos) {
     if (r.state !== 'ok') continue;
-    const error = shownFetchError(r);
+    const error = gitShownFetchError(r);
     if (error !== null) out.push({ dirName: r.dirName, name: r.name, word: fetchTroubleWord(error), age: gitFetchedAgeText(r.fetchedAtMs) });
   }
   return out;

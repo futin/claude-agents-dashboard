@@ -8,6 +8,7 @@ import {
   GIT_CLOCK_NAME, GIT_POP_LABEL, KEY_NOW, METER_FETCH, METER_NEXT, METER_SYNC, ROW_FETCH_ALL, ROW_LOCAL_SYNC, SYNC_ROW_FAILED_SUB, SYNC_ROW_SUB, gitTroubleLines,
 } from '../../lib/gitStatsText';
 import { useDismiss } from '../Popover';
+import Chevron from '../Chevron';
 
 /** The chip's and the popover rows' bar: label over value, a flat track, the fill's width inline. The tone is the root's `data-tone`. */
 function GitMeter({ label, reading }: { label: string; reading: MeterReading }) {
@@ -94,7 +95,7 @@ export default function GitClockChip({ stats, fetchCtl, tokenRequired, clock }: 
           <GitMeter label={METER_SYNC} reading={sync} />{' '}
           <GitMeter label={METER_FETCH} reading={fetched} />
         </span>
-        <span className="git-clock-caret" aria-hidden="true">▾</span>
+        <span className="git-clock-caret" aria-hidden="true"><Chevron /></span>
       </button>
       {open && (
         <div className="git-pop" role="dialog" aria-label={GIT_POP_LABEL}>

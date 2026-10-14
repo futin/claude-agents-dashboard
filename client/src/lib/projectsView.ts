@@ -53,7 +53,10 @@ export function projectDir(path: string, home: string): string {
 export const PROJECTS_BAND_SUB =
   'Every project with a session in the last 30 days. Pin one to keep it in the launch sheet whatever the lookback; pins are stored by the dashboard server, so they show up on every device.';
 
-/** A dead pin's note: its cwd is gone, so every list hides it until it is unpinned. */
+/** The chip a dead pin wears where a live one shows its age; its sentence is `PROJECTS_MISSING`, the chip's tooltip. */
+export const PROJECTS_GONE_CHIP = 'Folder gone';
+
+/** The gone chip's tooltip: the pin's cwd is gone, so every list hides it until it is unpinned. */
 export const PROJECTS_MISSING = 'Folder no longer exists. Hidden from every list until unpinned.';
 
 /** The pinned group's empty state; `total` is the unfiltered count, so a filter that matches nothing reads differently from no pins at all. */

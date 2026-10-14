@@ -23,8 +23,9 @@ interface Props {
    * The sessions poll's state, for the "live · refreshing every 3s" line at the
    * foot of the rail (the mock's `.live`, under its side card). Null outside
    * Sessions, which owns that poll: nothing is refreshing there, so no line.
+   * `working` drives the wordmark's cursor (see `Brand`).
    */
-  live?: { connected: boolean; refreshMs: number } | null;
+  live?: { connected: boolean; working: boolean; refreshMs: number } | null;
 }
 
 /**
@@ -144,21 +145,28 @@ function Icon({ section }: { section: Section }) {
 }
 
 /**
- * The app's only wordmark — the sessions page deliberately has no <h1>. The
- * mock's own shape: the dot outside the two-line text block and centred against
- * it. No <br> — the kicker is a block, and a break after it opened a second,
- * empty line that pushed the name away.
+ * The app's only wordmark — the sessions page deliberately has no <h1>. A
+ * terminal prompt: a kicker over `› dashboard▌` (design handoff "1h", Prompt
+ * cursor). Set in the one UI face, not a mono — DESIGN.md §1 allows exactly one.
+ *
+ * The cursor is the only part that moves, and only on Sessions, where the poll
+ * that knows is running: it blinks while any session is `working`, stands
+ * solid while none is, and goes grey once the poll has lost the server. Off
+ * Sessions there is no poll, so it stands solid green — a cursor that claims
+ * nothing. Reduced motion stops the blink, never the colour.
  *
  * Rendered once per breakpoint, never twice at once: the rail's copy is hidden
  * below `sm` (640px) and the top bar's above it, so there is exactly one <h1>.
  */
-function Brand({ className }: { className: string }) {
+function Brand({ className, live }: { className: string; live?: Props['live'] }) {
+  const cursor = !live ? 'rail-cursor' : !live.connected ? 'rail-cursor off' : live.working ? 'rail-cursor blink' : 'rail-cursor';
   return (
-    <h1 className={className}>
-      <span className="rail-dot" aria-hidden="true" />
-      <span>
-        <span className="rail-kicker">Claude</span>
-        Dashboard
+    <h1 className={className} aria-label="Claude Dashboard">
+      <span className="rail-kicker" aria-hidden="true">Claude</span>
+      <span className="rail-prompt" aria-hidden="true">
+        <span className="rail-caret">›</span>
+        dashboard
+        <span className={cursor} />
       </span>
     </h1>
   );
@@ -243,7 +251,7 @@ export function SideRail({ section, onChange, accountSlot, live }: Props) {
        the bar sits in and the menu drops out of. */
     <div className={barOff ? 'nav hid' : 'nav'}>
       <div className="mnav">
-        <Brand className="mnav-brand" />
+        <Brand className="mnav-brand" live={live} />
         {accountSlot}
         <button
           className="mnav-burger"
@@ -257,7 +265,7 @@ export function SideRail({ section, onChange, accountSlot, live }: Props) {
       </div>
       {open && <MenuLayer onClose={() => setOpen(false)} />}
       <nav id="rail-nav" className={open ? 'rail open' : 'rail'} aria-label="Sections">
-        <Brand className="rail-brand" />
+        <Brand className="rail-brand" live={live} />
         {SECTIONS.map(t => (
           <div key={t.id} className={section === t.id ? 'rail-group here' : 'rail-group'}>
             {/* Settings is the one section that is about the board rather than

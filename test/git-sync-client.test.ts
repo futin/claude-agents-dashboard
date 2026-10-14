@@ -13,7 +13,7 @@ import { DEFAULT_SETTINGS } from '../client/src/lib/settings.js';
 import { EFFORTS, MODELS, NAME_CAP, NAME_RE } from '../client/src/lib/spawnOptions.js';
 import {
   GIT_SYNC_PROMPT, SYNC_NEEDS_TOKEN, SYNC_NEVER_SEEN_TTL_MS, SYNC_RUNS_KEY, SYNC_UNSEEN_TTL_MS,
-  canSync, parseSyncRuns, runFor, syncButtonText, syncFailedText, syncLaunchErrorText, syncPhase, syncRequest, syncSessionName,
+  canSync, parseSyncRuns, runFor, syncButtonText, syncFailedText, syncKeyLabel, syncLaunchErrorText, syncPhase, syncRequest, syncSessionName,
   type SyncPhase, type SyncRun,
 } from '../client/src/lib/gitSync.js';
 
@@ -30,7 +30,8 @@ function okRepo(name: string, over: Partial<Ok> = {}): Ok {
   return {
     dirName: name, name, path: `/p/${name}`, state: 'ok', toplevel: `/p/${name}`,
     branch: 'main', detachedSha: null, onTrunk: true, uncommitted: 0,
-    trunk: 'main', hasOrigin: true, trunkVsOrigin: { ahead: 0, behind: 0 }, trunkRefs: { local: true, origin: true }, currentVsUpstream: null,
+    trunk: 'main', hasOrigin: true, originUrl: null,
+    trunkVsOrigin: { ahead: 0, behind: 0 }, trunkRefs: { local: true, origin: true }, currentVsUpstream: null,
     fetchedAtMs: null, lastFetch: null, branches: [], unmergedTotal: 0, mergedCount: 0,
     ...over,
   };
@@ -299,6 +300,24 @@ export function run(): number {
   if (test('a stored entry without a boolean seen parses as never seen', () => {
     const { seen: _seen, ...old } = RUN;
     assert.deepStrictEqual(parseSyncRuns({ '/p/a': old, '/p/b': { ...old, seen: 'yes' } }), { '/p/a': RUN_NEW, '/p/b': RUN_NEW });
+  })) p++; else f++;
+
+  if (test('syncKeyLabel: pending, running, launching and unseen ignore verbs and label', () => {
+    const running: SyncPhase = { kind: 'running', session: session('s1', 'working') };
+    assert.strictEqual(syncKeyLabel(null, true), 'Starting…');
+    assert.strictEqual(syncKeyLabel(running, true), 'Starting…');
+    assert.strictEqual(syncKeyLabel(running, false), 'Syncing');
+    assert.strictEqual(syncKeyLabel(running, false, { verbs: ['commit'], label: 'x' }), 'Syncing');
+    assert.strictEqual(syncKeyLabel({ kind: 'launching' }, false), 'Syncing…');
+    assert.strictEqual(syncKeyLabel({ kind: 'unseen' }, false), 'Syncing…');
+  })) p++; else f++;
+
+  if (test('syncKeyLabel: idle reads the label, else the verbs, else Sync', () => {
+    assert.strictEqual(syncKeyLabel(null, false), 'Sync');
+    assert.strictEqual(syncKeyLabel(null, false, { verbs: ['commit', 'pull'] }), 'Sync · commit + pull');
+    assert.strictEqual(syncKeyLabel({ kind: 'ended' }, false, { verbs: [] }), 'Sync');
+    assert.strictEqual(syncKeyLabel({ kind: 'failed', error: null }, false, { label: 'Clean up via Sync' }), 'Clean up via Sync');
+    assert.strictEqual(syncKeyLabel(null, false, { verbs: ['push'], label: 'Clean up via Sync' }), 'Clean up via Sync');
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

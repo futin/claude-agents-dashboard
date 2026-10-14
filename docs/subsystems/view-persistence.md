@@ -65,8 +65,9 @@ override it (see `dashboard.section` below).
   `configs.collapsed` (see [configs](configs.md) — all three resolve during render,
   so a scope that aged out, a type the filter emptied and a sub-group that no longer exists
   fall back rather than stranding the page);
-  `management.gitLayout` (which of Management › Git's three shapes the switcher was left on, a bare `GitLayout` string guarded by `isGitLayout` on read;
-  a phone draws Cards without overwriting a stored Table — see [git-stats](git-stats.md));
+  `management.gitLayout` (which of Inbox | Matrix | Inspector | Branches the Git switcher was left on, a bare string read through `parseGitLayout`; a stored
+  legacy `cards` / `table` / `triage` reads as `inbox` (the default) and the next pick overwrites it; a phone draws Inbox without overwriting a stored
+  `matrix` — see [git-stats](git-stats.md));
   `management.projectsLayout` (which of Management › Projects' three shapes, Tiles | Columns | Lists, the switcher was left on, a bare `ProjectsLayout` string
   guarded by `isProjectsLayout` on read, default `tiles`; per device, an `OWNED_KEYS` entry so Reset sweeps it, no Settings picker; unlike Git's, it is never
   coerced on a narrow window — see [settings](settings.md)).

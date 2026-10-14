@@ -170,7 +170,7 @@ reader does not "correct" them back:
 
 Everything else is the spec's: 32 px sidebar padding, rows at 16/500, 20 px
 icons 12 px from the label, 16 px row padding-x and radius, a 3 px active bar
-22 px tall, a 20/700 wordmark over an 11 px kicker, 14 px sub-nav labels, and a
+22 px tall, a `› dashboard▌` prompt at 22/600 under an 11 px kicker (design handoff "1h": one face, its cursor blinks while a session works), 14 px sub-nav labels, and a
 divider with 24 px either side.
 
 Hover is the one state that is not the mock's: it darkens the label and leaves the
@@ -323,28 +323,34 @@ takes the plain `wrap wide`, and each sub-view opens on a band titled `Managemen
 pages set). Projects is `ProjectsView` on the app ground, no card around it, its band carrying the green "every device" scope pill because the pins are
 server-stored. Under the band, a toolbar of a **Tiles | Columns | Lists** `.seg` switcher (per device in `management.projectsLayout`, default Tiles) and a
 filter box over name and path, then two groups, **Pinned** and **Not pinned**, each headed by its name and count. A pin is a paper tile, an offer a dashed
-outline, a pin whose folder is gone an amber edge. Columns sets Not pinned left of Pinned from lg so Pin carries a project straight across; Lists draws each
+outline, a pin whose folder is gone an amber edge and a `Folder gone` chip in place of its age. Columns sets Not pinned left of Pinned from lg so Pin carries a
+project straight across; Lists draws each
 group as a `.set-group` card of rows. Pin and Unpin are the tile's own key; the launch sheet's picker (§8.7) is no part of this page. Every Pinned tile or
 row, in all three layouts, leads with a 28px `⠿` grip column; dragging it, or ↑/←/↓/→ on it focused, reorders the pins and flashes `Saved` beside the count.
-The dragged item's `--strip-hi` fill and `--shadow2` lift are the one transient exception to "no lift".
+The drag is a drop line: nothing moves until release, the dragged item dims, a ghost follows the pointer, and a 3px cyan bar in the gap marks where it would
+land.
 
 Git is the Usage band with no right slot, then a toolbar on the ground: a `.seg` switcher — the Sessions one, on `--hairline2` for the same §8.3 reason —
-and beside it the clock chip, a `--strip-hi` key at the switcher's 38px height holding two meters (SYNC and FETCH, a port of backlog-manager's `.ui-meter`:
-`--steel` track, `--green` fill, amber when off, overdue or failed, `--cyan` and pulsing while live, static under reduced motion) that opens a popover with the
-Local sync and Fetch all rows. Below the toolbar, one of **three shapes** over the same repo list, in pin order:
+and at the toolbar's right end the clock chip, a `--strip` key with the pills' lift and a `--hairline` ring, at the switcher's 38px height, holding two meters
+(SYNC and FETCH, a port of backlog-manager's `.ui-meter`: `--steel` track, `--green` fill, amber when off, overdue or failed, `--cyan` and pulsing while live,
+static under reduced motion) that opens a popover, leftwards from the chip's right edge, with the Local sync and Fetch all rows. Below the toolbar, one of
+**four layouts** over the same repo list, ranked by level (Inbox is the default):
 
-- **Cards** — one borderless `--strip` card per repo (§8.2), auto-filling columns: two on a laptop, one on a phone. Header: a status dot, the name, the
-  branch chip (and, beside it, the current branch against its upstream when that has diverged), the fetched age pushed right; then the uncommitted and trunk-vs-origin chips; then the branch rows.
-- **Table** — `.dt`'s rules (one rule per row, a heavier one under the head) in a sheet that scrolls inside itself; a row click opens that repo's branches
-  as sub-rows on `--strip-hi`. Wide-only: a phone is never offered it, and a stored Table comes back with the width.
-- **Triage** — the Sessions triage idea, re-ruled for git: Needs you, In flight, Quiet, Can't read, in that order and only when non-empty, under small
-  uppercase `--ink3` headers. Busy repos are paper cards with their branches; Quiet and Can't read are one dashed line each, Quiet expanding on click.
+- **Inbox** — four level tiles that filter on click, then the repos that need you or are worth a look as paper panels (verdict, steps, keys, a closed branch
+  list); All good and Can't read are one dashed box of lines under small uppercase `--ink3` headers.
+- **Matrix** — Sessions › List's table (the `.ledger` values, ported into `.git-mx`'s own rules) in a sheet that scrolls sideways inside itself: one row
+  per repo against six check cells, a click opens its branches. Wide-only: a phone
+  draws Inbox, and a stored Matrix comes back with the width.
+- **Inspector** — a ranked repo list beside a pane for the picked one: four check tiles, its active and stale branches, Open folder and the keys. The pane
+  stacks under the list on a phone.
+- **Branches** — a board of every branch in four columns (Agent on it, Ready, Drifting, Stale), each branch a paper card.
 
-Four inks carry the Triage rule wherever a repo appears: **amber** needs you (uncommitted work, a diverged trunk, or the current branch behind its upstream), **mustard** in flight
-(and a diverged trunk's chip, or a behind-upstream chip), **green** quiet (and "clean"), **`--ink3`** can't read. The branch row borrows GitHub's divergence bar — behind grows left in `--ink3`, ahead
-grows right in `--cyan`, one scale per repo so the largest count fills its half. Below `md` the bar drops and the two numbers stay; the worktree badge is
-the one cyan-outlined chip. A repo's fetched text turns amber with the failed fetch's word and cyan while a fetch runs. Every class — meter and popover
-included — is `git-` prefixed and every colour a token or a `color-mix` over one.
+Four levels carry one rule wherever a repo appears: **amber** needs you (uncommitted work, a failed fetch, or the current branch behind its upstream),
+**mustard** worth a look (unpushed commits, a diverged trunk), **green** all good, **`--ink3`** can't read. Uncommitted work under a working agent is
+expected, so it drops to a note instead of raising the repo. The branch row borrows GitHub's divergence bar — behind grows left in `--ink3`, ahead
+grows right in `--cyan`, one scale per repo so the largest count fills its half, with `↓ behind ↑ ahead` beside it. Below `md` the bar drops and the two
+numbers stay; the worktree badge is the one cyan-outlined chip. A repo's fetched text turns amber with the failed fetch's word and cyan while a fetch runs.
+Every class — meter and popover included — is `git-` prefixed and every colour a token or a `color-mix` over one.
 
 ### 8.5 Claude Configs — the scope is a destination, the rest is columns
 

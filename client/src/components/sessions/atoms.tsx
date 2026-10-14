@@ -5,6 +5,7 @@ import { chatTab } from '../../lib/holds';
 import { stopControl } from '../../lib/stopControl';
 import { surfacePill } from '../../lib/surface';
 import { taskProgress } from '../../lib/tasks';
+import Chevron from '../Chevron';
 
 /**
  * The pieces every view draws a session out of. State rides on the element
@@ -162,7 +163,7 @@ export function ChatButton({ s, onOpenChat, wide = false }: { s: Session; onOpen
       title={tab.title}
       aria-label={tab.title}
     >
-      {tab.label} <span className="rc-mark" aria-hidden="true">▸</span>
+      {tab.label} <span className="rc-mark" aria-hidden="true"><Chevron dir="right" /></span>
     </button>
   );
 }

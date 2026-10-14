@@ -24,7 +24,8 @@ endpoint — `grep -c 'tokenOk(config, req)' server/api.ts` for the current coun
 answering a session that already asked something, plus [dictation](dictation.md) and the
 [push](push-notify.md) endpoints the hooks POST to) may stay empty. Set `ANSWER_TOKEN` only if you **share the
 tailnet** with other people — inside a tailnet it means exactly what it meant on a shared
-LAN.
+LAN. `POST /api/open-folder`, like every write route, is open to any client on the LAN or tailnet when no `ANSWER_TOKEN` is set; it can only open a folder
+that is already a listed pin, on the host's screen.
 
 The trade-off: every connecting device needs the Tailscale app, so you can't hand the URL
 to someone who isn't on your tailnet.

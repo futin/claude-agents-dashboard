@@ -37,8 +37,28 @@
   --bg:var(--board);--surface:var(--strip);--surface2:var(--steel);
   --border:var(--hairline);--border2:var(--hairline2);
   --text:var(--ink);--text2:var(--ink2);--text3:var(--ink3);
-  --accent:var(--cyan);--blue:var(--amber);--orange:var(--amber);
+  --accent:var(--cyan);--blue:var(--amber-solid);--orange:var(--amber-solid);
   --yellow:var(--mustard);--pink:var(--magenta);
+  /* green as a data FILL (History's day segments), not as ink. On the dark
+     boards the ink green is already bright, so a mix toward the paper is the
+     fill; daylight's ink green is contrast-darkened for text and mixes to
+     olive, so it overrides these with the mock's brand fills. */
+  --green-fill:color-mix(in oklab,var(--green) 70%,var(--strip));
+  --green-fill2:color-mix(in oklab,var(--green) 45%,var(--strip));
+  /* green as a solid mark (status dots, progress bars, meters) and as a pill
+     tint behind green text. Same story as the fills: daylight overrides them
+     with the mock's brand greens, and only the text keeps the dark --green. */
+  --green-solid:var(--green);
+  --green-tint:color-mix(in srgb,var(--green) 18%,transparent);
+  /* amber and mustard as a soft pill: the fill behind the text (11% amber, 13% mustard — the redesign mock's Git tints) and the text on it. On the dark
+     boards both are the accent itself, which clears 4.5:1 on its own tint in every dark theme; daylight overrides them with the mock's own hues, the
+     fill as the mock mixes it and the text the lightest shade of that hue that clears 4.5:1 on the fill (`test/daylight-contrast.test.ts`). */
+  --amber-tint:color-mix(in srgb,var(--amber) 11%,transparent);--amber-ink:var(--amber);
+  /* amber as a solid mark (context bars, status dots, meters, borders, tinted notices) and as text on the bare card. On the dark boards both are the accent
+     itself; daylight splits them — the mark takes the mock's bright #C4761F, which clears 3:1 as a non-text object, and the text takes the ink, because no
+     amber light enough to look like amber clears 4.5:1 on white and the darkened one reads as brown. The pill text stays `--amber-ink` on `--amber-tint`. */
+  --amber-solid:var(--amber);--amber-text:var(--amber);
+  --mustard-tint:color-mix(in srgb,var(--mustard) 13%,transparent);--mustard-ink:var(--mustard);
 }
 /* Graphite — the same board with the blue cast taken out. For anyone who finds
    the navy too warm-shifted on a wide-gamut display. */
@@ -87,9 +107,11 @@
      bar, not a colour change), so that one rule names `--ink` rather than the
      accent.
    - The ramp's own values (#F5A15C orange, #F2E635 yellow) are fills, drawn on
-     bars and card faces. As *text* on white neither clears 3:1, so `--amber`
-     and `--mustard` take the darkened cousins and the bright pair stays where
-     the design puts it — behind the ink, never under it.
+     bars and card faces. As *text* on white neither clears 3:1, so `--mustard`
+     takes the darkened cousin and the bright pair stays where the design puts
+     it — behind the ink, never under it. Amber splits the other way: `--amber-solid`
+     is the bright mock fill (3:1 as a mark) and amber *text* is simply the ink, so
+     no darkened amber is left to read as brown.
    - Every token drawn as text clears WCAG AA (4.5:1): `--ink2`/`--ink3` on each
      surface they sit on, and each accent on its own `color-mix` pill tint, which
      darkens with it — composited over `--strip-hi`, not white, since pills sit
@@ -104,8 +126,15 @@
   --board:#f4f4f3;--steel:#ededec;--strip:#ffffff;--strip-hi:#f2f2f1;
   --edge:rgba(0,0,0,.03);--hairline:#eaeae8;--hairline2:#dcdcda;
   --ink:#131313;--ink2:#525252;--ink3:#6b6b6b;
-  --green:#38631a;--amber:#824e15;--mustard:#5f530b;--cyan:#306c0f;
+  --green:#38631a;--mustard:#5f530b;--cyan:#306c0f;
   --red:#aa3927;--magenta:#6950a5;
+  --green-fill:#7dc242;--green-fill2:#9bd25c;  /* mock --green-500 / --green-400 */
+  --green-solid:#7dc242;--green-tint:#cde8a8;   /* mock --green-500 / --green-200 */
+  /* the mock's #C4761F / #9A8712 at its 11% / 13% for the fill; the text is the same hue darkened only as far as 4.5:1 over the fill on --strip-hi, the
+     darkest surface a pill sits on (on --strip it is ~5:1) */
+  --amber-solid:#c4761f;--amber-text:var(--ink);  /* mock --amber: the fill; text is the ink (see the root block) */
+  --amber-tint:color-mix(in srgb,#c4761f 11%,transparent);--amber-ink:#945917;
+  --mustard-tint:color-mix(in srgb,#9a8712 13%,transparent);--mustard-ink:#74660e;
   --on-accent:#ffffff;--scrim:rgba(19,19,19,.28);
   --shadow:rgba(0,0,0,.06);--shadow2:rgba(0,0,0,.1);
 }
@@ -205,17 +234,24 @@ code,kbd,samp,pre{font-family:inherit}
    110% a plain 100vh rail overhangs by 10%. */
 .rail{display:none;position:absolute;left:0;right:0;top:100%;z-index:5;flex:none;flex-direction:column;width:auto;height:auto;max-height:calc(100vh / var(--font-scale,1) - 60px);align-self:stretch;gap:2px;padding:8px 10px 14px;overflow-y:auto;overflow-x:hidden;background:var(--strip);border-bottom:1px solid var(--hairline);box-shadow:0 12px 24px var(--shadow2)}
 .rail.open{display:flex}
-/* the app's wordmark, in the rail rather than the page — a kicker over the name,
-   20/700 over 11px, the dot outside the pair and centred against it. Sizes are
-   the mock's (docs/guides/mockups/redesign-mock.html, `.brand`). Drawn from
-   `sm` up only: below it the phone bar carries the wordmark (`.mnav-brand`),
-   and two of them is two <h1>s. */
-.rail-brand{display:none;align-items:center;gap:9px;font-size:20px;font-weight:700;letter-spacing:.01em;line-height:1;color:var(--ink);padding:0 12px 24px}
-/* The one dot in the rail: a board that is live, in the colour `working` uses
-   on a row. It is decoration, not status — the connection verdict is the
-   `.foot` line at the bottom of the rail, which says it in words. */
-.rail-dot{flex:none;width:10px;height:10px;border-radius:999px;background:var(--green)}
-.rail-kicker{display:block;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3);margin-bottom:3px}
+/* the app's wordmark, in the rail rather than the page: a terminal prompt — an
+   11px kicker over `› dashboard▌` at 22/600, 4px apart (design handoff "1h",
+   Prompt cursor). One face, not a mono (DESIGN.md §1). Drawn from `sm` up
+   only: below it the phone bar carries the wordmark (`.mnav-brand`), and two of
+   them is two <h1>s. */
+.rail-brand{display:none;flex-direction:column;align-items:flex-start;gap:4px;line-height:1;color:var(--ink);padding:0 12px 24px}
+.rail-kicker{display:block;font-size:11px;font-weight:400;text-transform:uppercase;letter-spacing:.16em;color:var(--ink3)}
+.rail-prompt{display:flex;align-items:center;gap:8px;font-size:22px;font-weight:600;letter-spacing:-.03em}
+.rail-caret{color:var(--green-solid)}
+/* The cursor, in the colour `working` uses on a row. Solid by default; it
+   blinks (530ms on, 530ms off) while a session is working and goes grey once
+   the poll has lost the server — `Brand` picks the class. Status as a hint
+   only: the `.foot` line at the bottom of the rail says it in words. */
+.rail-cursor{flex:none;width:10px;height:22px;border-radius:1px;background:var(--green-solid)}
+.rail-cursor.off{background:var(--hairline2)}
+.rail-cursor.blink{animation:cursor-blink 1.06s steps(1) infinite}
+@keyframes cursor-blink{0%{opacity:1}50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.rail-cursor.blink{animation:none}}
 /* Nav rows: 36px tall, 16px padding-x, 16px radius, sentence case at 14/500, a
    16px icon 12px from its label — the row is the hit target, so the fill and
    the radius belong to it rather than to the label (DESIGN.md §3, §7). Every
@@ -277,7 +313,7 @@ code,kbd,samp,pre{font-family:inherit}
    turns the dot and the words red. `.foot.off` and never a bare `.off` — that
    also matches the origin badge's `ra-pill off` and used to tint it red. */
 .foot{margin-top:auto;display:flex;align-items:center;gap:8px;padding:16px 12px 0;font-size:12px;color:var(--ink2)}
-.foot i{flex:none;width:7px;height:7px;border-radius:999px;background:var(--green)}
+.foot i{flex:none;width:7px;height:7px;border-radius:999px;background:var(--green-solid)}
 .foot.off{color:var(--red)}
 .foot.off i{background:var(--red)}
 /* A phone widens its layout viewport to fit anything that overflows sideways,
@@ -320,11 +356,12 @@ code,kbd,samp,pre{font-family:inherit}
    against this element instead of the viewport. */
 .nav.hid{transform:translateY(-100%)}
 .mnav{display:flex;align-items:center;gap:12px;height:var(--mnav-h);padding:0 14px;background:var(--strip);border-bottom:1px solid var(--hairline)}
-/* the rail's 20px wordmark is a page heading; in a bar it is a label, so it
-   drops to 16px and the dot with it */
-.mnav-brand{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:.01em;line-height:1.1;color:var(--ink);min-width:0}
-.mnav-brand .rail-dot{width:8px;height:8px}
-.mnav-brand .rail-kicker{font-size:10px;margin-bottom:2px}
+/* the rail's 22px wordmark is a page heading; in a bar it is a label, so the
+   prompt drops to 17px and the cursor scales with it */
+.mnav-brand{display:flex;flex-direction:column;align-items:flex-start;gap:3px;line-height:1;color:var(--ink);min-width:0}
+.mnav-brand .rail-kicker{font-size:10px}
+.mnav-brand .rail-prompt{font-size:17px;gap:6px}
+.mnav-brand .rail-cursor{width:8px;height:17px}
 /* 44px square: the one control on the bar is a thumb target (§3). Ink, no fill
    — the fill in this design marks a selection, and a menu button is never
    selected. */
@@ -417,11 +454,15 @@ code,kbd,samp,pre{font-family:inherit}
 /* Same ramp as the card's bars, a quarter of the height: this is a glance, and
    the popover is where the same number is read properly. */
 .acct .mini{position:relative;height:3.5px;border-radius:999px;background:var(--steel);overflow:hidden}
-.acct .mini i{position:absolute;inset:0 auto 0 0;border-radius:999px;background:var(--green);transition:width .5s ease}
-.acct .mini i.mid{background:var(--amber)}
+.acct .mini i{position:absolute;inset:0 auto 0 0;border-radius:999px;background:var(--green-solid);transition:width .5s ease}
+.acct .mini i.mid{background:var(--amber-solid)}
 .acct .mini i.high{background:var(--red)}
 .acct .cv{flex:none;width:9px;height:9px;color:var(--ink3);fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .16s}
 .acct[aria-expanded="true"] .cv{transform:rotate(180deg)}
+.chev{flex:none;display:inline-block;width:9px;height:9px;vertical-align:middle;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .16s}
+.chev-up{transform:rotate(180deg)}
+.chev-right{transform:rotate(-90deg)}
+@media (prefers-reduced-motion:reduce){.chev{transition:none}}
 
 /* signed out · token expired — the credential is readable but blank (or stale),
    so there are no windows to draw and the account has no name. The chip keeps
@@ -436,7 +477,7 @@ code,kbd,samp,pre{font-family:inherit}
 .ring.lg{width:34px;height:34px}
 .ring.lg svg{width:17px;height:17px}
 .acct.out .nm{color:var(--ink2);font-weight:500}
-.acct.out .dotwarn{flex:none;width:6px;height:6px;border-radius:999px;background:var(--amber)}
+.acct.out .dotwarn{flex:none;width:6px;height:6px;border-radius:999px;background:var(--amber-solid)}
 
 /* the popover: the identity block over the two gauges the aside card drew.
    Floating paper, per DESIGN.md §5 — the same stroke, radius and lift as the
@@ -532,7 +573,7 @@ code,kbd,samp,pre{font-family:inherit}
 .facts{display:grid;gap:12px;margin-top:12px;font-size:13px;color:var(--ink2)}
 .fact{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .fact b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
-.fact b.hot{color:var(--amber)}
+.fact b.hot{color:var(--amber-text)}
 .s-aside .ra-switch,.s-strip-panel .ra-switch{width:100%;justify-content:space-between;margin-top:20px}
 .s-aside .ra-pill.off:not(.origin),.s-strip-panel .ra-pill.off:not(.origin){margin-top:20px}
 /* the one write action on the board — filled ink, so it never reads as a filter */
@@ -593,7 +634,7 @@ code,kbd,samp,pre{font-family:inherit}
 /* Named apart from `.board`, which is the board view's grid. */
 .s-strip-tap.s-tap-board{margin-left:auto}
 .s-strip-tap:active{background:var(--strip-hi)}
-.s-strip-badge{flex:none;white-space:nowrap;font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.s-strip-badge{flex:none;white-space:nowrap;font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;background:var(--amber-tint);color:var(--amber-ink)}
 .s-strip-clock{font-size:13px;color:var(--ink2);white-space:nowrap}
 /* The launch action, promoted out of the Board card: on a phone the board's
    one write action should not be two taps and a scroll away. Filled ink, like
@@ -611,10 +652,10 @@ code,kbd,samp,pre{font-family:inherit}
 .ra-pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;font-size:11px;font-weight:500;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:999px}
 .ra-pill .ra-dot{width:6px;height:6px;border-radius:50%;background:var(--ink3);flex-shrink:0}
 .ra-pill.origin.o-tailnet .ra-dot{background:var(--cyan)}
-.ra-pill.origin.o-lan .ra-dot,.ra-pill.origin.o-local .ra-dot{background:var(--green)}
-.ra-pill.origin.o-unknown{color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,transparent)}
-.ra-pill.origin.o-unknown .ra-dot{background:var(--amber)}
-.ra-warn{color:var(--amber);font-size:11px}
+.ra-pill.origin.o-lan .ra-dot,.ra-pill.origin.o-local .ra-dot{background:var(--green-solid)}
+.ra-pill.origin.o-unknown{color:var(--amber-ink);background:var(--amber-tint)}
+.ra-pill.origin.o-unknown .ra-dot{background:var(--amber-solid)}
+.ra-warn{color:var(--amber-text);font-size:11px}
 /* remote-answer switch: on = allowed while you're away, not instead of the
    terminal. One of the 36px control family (§8.2). Two things this rule got
    wrong first time round, kept written down: (1) the off track is --ink3, not
@@ -642,11 +683,11 @@ code,kbd,samp,pre{font-family:inherit}
 .usage .u-reset{font-size:12px;color:var(--ink2);white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .usage .u-row{display:flex;align-items:center;margin-top:8px}
 .usage .u-bar{flex:1;height:10px;border-radius:8px;background:var(--steel);overflow:hidden}
-.usage .u-fill{height:100%;border-radius:8px;background:var(--green);transition:width .5s ease}
-.usage .u-fill.mid{background:var(--amber)}
+.usage .u-fill{height:100%;border-radius:8px;background:var(--green-solid);transition:width .5s ease}
+.usage .u-fill.mid{background:var(--amber-solid)}
 .usage .u-fill.high{background:var(--red)}
 .usage .u-pct{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink)}
-.usage .u-pct.mid{color:var(--amber)}
+.usage .u-pct.mid{color:var(--amber-text)}
 .usage .u-pct.high{color:var(--red)}
 .usage .u-msg{font-size:13px;color:var(--ink2)}
 /* Time strip: the same bar width, but the axis is the window's clock rather
@@ -727,20 +768,20 @@ code,kbd,samp,pre{font-family:inherit}
 
 /* ── row atoms ─────────────────────────────────────────────────────────────── */
 .sdot{width:9px;height:9px;border-radius:50%;background:var(--hairline2);display:inline-block;flex:none}
-.sdot.working{background:var(--green);box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 50%,transparent);animation:pulse 1.8s infinite}
-.sdot.question{background:var(--amber);box-shadow:0 0 0 0 color-mix(in srgb,var(--amber) 50%,transparent);animation:pulse-amber 1.8s infinite}
+.sdot.working{background:var(--green-solid);box-shadow:0 0 0 0 color-mix(in srgb,var(--green-solid) 50%,transparent);animation:pulse 1.8s infinite}
+.sdot.question{background:var(--amber-solid);box-shadow:0 0 0 0 color-mix(in srgb,var(--amber-solid) 50%,transparent);animation:pulse-amber 1.8s infinite}
 .sdot.incomplete{background:var(--mustard);box-shadow:0 0 0 0 color-mix(in srgb,var(--mustard) 50%,transparent);animation:pulse-mustard 1.8s infinite}
 .sdot.launching{background:var(--ink);box-shadow:0 0 0 0 color-mix(in srgb,var(--ink) 35%,transparent);animation:pulse-ink 1.8s infinite}
 .sdot.failed{background:var(--red)}
-@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green-solid) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes pulse-ink{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ink) 35%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
-@keyframes pulse-amber{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--amber) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes pulse-amber{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--amber-solid) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes pulse-mustard{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--mustard) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 /* the status word as a tinted pill */
 .spill{font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;background:var(--strip-hi);color:var(--ink2);white-space:nowrap;flex:none}
-.spill.working{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
-.spill.question{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
-.spill.incomplete{background:color-mix(in srgb,var(--mustard) 22%,transparent);color:var(--ink)}
+.spill.working{background:var(--green-tint);color:var(--green)}
+.spill.question{background:var(--amber-tint);color:var(--amber-ink)}
+.spill.incomplete{background:var(--mustard-tint);color:var(--mustard-ink)}
 .spill.launching{background:var(--ink);color:var(--strip)}
 .spill.failed{background:color-mix(in srgb,var(--red) 14%,transparent);color:var(--red)}
 /* A long session name clips with an ellipsis rather than pushing out of the
@@ -752,12 +793,12 @@ code,kbd,samp,pre{font-family:inherit}
 .branch{font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;border:1px solid var(--hairline2);color:var(--ink2);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
 .model{font-size:11px;font-weight:500;color:var(--ink3);white-space:nowrap}
 .ag-pill{flex-shrink:0;font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;white-space:nowrap}
-.ag-pill.running{color:var(--green);background:color-mix(in srgb,var(--green) 18%,transparent)}
+.ag-pill.running{color:var(--green);background:var(--green-tint)}
 .ag-pill.done{color:var(--ink2);background:var(--strip-hi)}
-.ag-pill.kaizen{color:var(--green);background:color-mix(in srgb,var(--green) 18%,transparent)}
-.ag-pill.tasks{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums;color:var(--green);background:color-mix(in srgb,var(--green) 16%,transparent)}
-.ag-pill.tasks .mini{width:28px;height:4px;border-radius:3px;background:color-mix(in srgb,var(--green) 25%,transparent);overflow:hidden}
-.ag-pill.tasks .mini i{display:block;height:100%;background:var(--green)}
+.ag-pill.kaizen{color:var(--green);background:var(--green-tint)}
+.ag-pill.tasks{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums;color:var(--green);background:var(--green-tint)}
+.ag-pill.tasks .mini{width:28px;height:4px;border-radius:3px;background:color-mix(in srgb,var(--green-solid) 25%,transparent);overflow:hidden}
+.ag-pill.tasks .mini i{display:block;height:100%;background:var(--green-solid)}
 /* its own class, not .done: .ag-pill.done above already means a finished session */
 .ag-pill.tasks.all-done{color:var(--ink2);background:var(--steel)}
 /* where the session lives (client/src/lib/surface.ts): magenta borrows the Task
@@ -774,14 +815,14 @@ code,kbd,samp,pre{font-family:inherit}
 .spacer{flex:1}
 .tok{font-size:13px;color:var(--ink2);font-variant-numeric:tabular-nums;white-space:nowrap}
 .pct{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
-.pct.warn{color:var(--amber)}
+.pct.warn{color:var(--amber-text)}
 .sessions .metric{font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
-.sessions .metric.warn{color:var(--amber)}
+.sessions .metric.warn{color:var(--amber-text)}
 /* the context gauge: 8px bar on rows, 10px track on the metric tiles */
 .bar{height:8px;border-radius:8px;background:var(--steel);overflow:hidden}
 .track{height:10px;border-radius:8px;background:var(--steel);overflow:hidden}
-.bar .fill,.track .fill{height:100%;border-radius:8px;background:var(--green);transition:width .5s ease}
-.bar .fill.warn,.track .fill.warn{background:var(--amber)}
+.bar .fill,.track .fill{height:100%;border-radius:8px;background:var(--green-solid);transition:width .5s ease}
+.bar .fill.warn,.track .fill.warn{background:var(--amber-solid)}
 /* …but --steel is a *recessed* well, and it only reads as one on paper. On a
    --strip-hi ground — an open ledger row, a selected list row, a .kv gauge
    tile — the two are a couple of points apart on daylight and the empty half
@@ -810,15 +851,15 @@ code,kbd,samp,pre{font-family:inherit}
 .act-line .ago{margin-left:auto;flex:none;color:var(--ink3);font-variant-numeric:tabular-nums}
 /* Real text, not a `title` — a tooltip never appears on touch, and the phone is
    the surface the stop control exists for. */
-.stop-badge{flex-shrink:0;font-size:12px;color:var(--amber)}
+.stop-badge{flex-shrink:0;font-size:12px;color:var(--amber-text)}
 /* the chat button — the way into a session's drawer, and where it names a
    hold. Tinted amber when you can act from here, mustard when only that
    terminal can, so the two kinds of "needs you" stay apart down a whole column. */
 .cbtn{height:30px;padding:0 10px;border:1px solid var(--hairline2);background:var(--strip);border-radius:12px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;flex:none;cursor:pointer;transition:color .15s,border-color .15s}
 .cbtn:hover{color:var(--ink);border-color:var(--ink3)}
 .cbtn .rc-mark{font-size:10px}
-.cbtn.answer{background:color-mix(in srgb,var(--amber) 14%,transparent);border-color:transparent;color:var(--amber);animation:qpulse 1.6s ease-in-out infinite}
-.cbtn.permission{background:color-mix(in srgb,var(--mustard) 20%,transparent);border-color:transparent;color:var(--mustard);animation:qpulse 1.6s ease-in-out infinite}
+.cbtn.answer{background:var(--amber-tint);border-color:transparent;color:var(--amber-ink);animation:qpulse 1.6s ease-in-out infinite}
+.cbtn.permission{background:var(--mustard-tint);border-color:transparent;color:var(--mustard-ink);animation:qpulse 1.6s ease-in-out infinite}
 .cbtn.answer:hover,.cbtn.permission:hover{color:var(--ink)}
 .cbtn.wide{flex:1}
 @keyframes qpulse{0%,100%{opacity:1}50%{opacity:.55}}
@@ -863,7 +904,7 @@ code,kbd,samp,pre{font-family:inherit}
    agent's name. It inverts with the theme either way — dark grey on daylight,
    light grey on the four dark boards. */
 .tl-bar{position:absolute;top:0;height:100%;min-width:3px;border-radius:4px;background:var(--ink2)}
-.tl-bar.running{background:var(--green);animation:tlpulse 1.8s ease-in-out infinite}
+.tl-bar.running{background:var(--green-solid);animation:tlpulse 1.8s ease-in-out infinite}
 @keyframes tlpulse{0%,100%{opacity:.85}50%{opacity:.5}}
 .tl-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums;margin-top:8px}
 
@@ -881,8 +922,8 @@ code,kbd,samp,pre{font-family:inherit}
 .bcol{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;align-content:start;min-width:0}
 .col-h{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--ink2);padding:0 4px 4px}
 .col-h .n{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--strip);color:var(--ink2);font-variant-numeric:tabular-nums}
-.col-h.ask .n{background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
-.col-h.run .n{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.col-h.ask .n{background:var(--amber-tint);color:var(--amber-ink)}
+.col-h.run .n{background:var(--green-tint);color:var(--green)}
 .bcard{background:var(--strip);border-radius:16px;padding:16px;min-width:0;transition:box-shadow .15s}
 /* 2px ink ring — same weight as the selected Settings theme card
    (`.set-theme.on`, 1px border + 1px ring). A ring costs no layout. */
@@ -1159,7 +1200,7 @@ code,kbd,samp,pre{font-family:inherit}
 .mgmt-title{display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-width:0;font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
 .mgmt-title .set-scope{margin-left:0;vertical-align:0;max-width:100%}
 .mgmt-sub{font-size:13px;color:var(--ink2);line-height:1.45;max-width:92ch}
-.mgmt-bar .off{flex:none;font-size:12px;color:var(--amber)}
+.mgmt-bar .off{flex:none;font-size:12px;color:var(--amber-text)}
 /* the 36px control family §8.2 put every Settings control on */
 .mgmt-bar .icon-refresh{margin-left:auto;flex:none}
 /* One column below `md`. Columns 1 and 2 are FIXED once both are on screen —
@@ -1254,7 +1295,7 @@ code,kbd,samp,pre{font-family:inherit}
 .msub-h{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-family:var(--font);font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--ink2);background:none;border:0;border-top:1px solid var(--hairline);padding:13px 0;cursor:pointer;user-select:none;transition:color .15s}
 .msub-h:hover{color:var(--ink)}
 .msub-c{font-size:13px;font-weight:400;color:var(--ink3)}
-.msub-caret{display:inline-block;font-size:11px;color:var(--ink3);transition:transform .12s}
+.msub-caret{display:inline-flex;font-size:11px;color:var(--ink3);transition:transform .12s}
 .msub-caret.open{transform:rotate(90deg)}
 /* Column 3 — the file. Drawn only when something is selected, so there is no
    "select an item to inspect it" empty state to style. */
@@ -1269,7 +1310,7 @@ code,kbd,samp,pre{font-family:inherit}
 .mdetail-path{font-size:13px;color:var(--ink2);margin-top:8px;overflow-wrap:anywhere}
 .mdetail-pathlab{color:var(--ink3);margin-right:6px}
 .mgmt-file{font-size:13px;line-height:1.65;color:var(--ink2);background:var(--steel);border-radius:12px;padding:16px;margin-top:4px;white-space:pre-wrap;word-break:break-word}
-.mgmt-trunc{font-size:13px;color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,transparent);border-radius:4px;padding:7px 10px;margin-top:8px}
+.mgmt-trunc{font-size:13px;color:var(--amber-ink);background:var(--amber-tint);border-radius:4px;padding:7px 10px;margin-top:8px}
 .mgmt-empty{font-size:13px;color:var(--ink3);padding:6px 2px}
 /* Detail pane: frontmatter lines, section labels, type chip */
 /* What is LEFT of the frontmatter once `name` and `description` are dropped in
@@ -1389,7 +1430,7 @@ code,kbd,samp,pre{font-family:inherit}
    worn: a filled 24px capsule with a dot, centred on the title rather than
    sitting on its baseline. An outline chip read as a control you could press,
    which this is not — it states a fact and holds the dates in its tooltip. */
-.an-review{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:11px;font-weight:500;background:color-mix(in srgb,var(--amber) 20%,transparent);color:var(--amber);cursor:help;white-space:nowrap}
+.an-review{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:11px;font-weight:500;background:var(--amber-tint);color:var(--amber-ink);cursor:help;white-space:nowrap}
 .an-review i{width:6px;height:6px;border-radius:999px;flex:none;background:currentColor}
 .an-review code{text-transform:none;letter-spacing:0;color:inherit}
 
@@ -1398,7 +1439,7 @@ code,kbd,samp,pre{font-family:inherit}
    out. Open is the quiet one — it is the default, and a loud default would
    make every fresh entry shout. */
 .an-dot{width:9px;height:9px;border-radius:50%;background:var(--hairline2);display:inline-block;flex:none}
-.an-dot.actioned{background:var(--green)}
+.an-dot.actioned{background:var(--green-solid)}
 /* ink, not the accent: Daylight's --cyan is a green (#306c0f) a shade off
    --green, so an accent-tinted `promoted` was unreadable next to `actioned`.
    Filled ink separates them in every theme, and it is the strongest mark on
@@ -1406,7 +1447,7 @@ code,kbd,samp,pre{font-family:inherit}
 .an-dot.promoted{background:var(--ink)}
 .an-dot.dropped{background:var(--ink3)}
 .an-status{flex:none;font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;background:var(--strip-hi);color:var(--ink2);white-space:nowrap}
-.an-status.actioned{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.an-status.actioned{background:var(--green-tint);color:var(--green)}
 .an-status.promoted{background:var(--ink);color:var(--strip)}
 .an-status.open{color:var(--ink3)}
 /* the row's second line is dense — match what `.spill` gets there */
@@ -1436,7 +1477,7 @@ code,kbd,samp,pre{font-family:inherit}
 .an-metric:nth-child(5){grid-column:span 2}
 .an-metric-v{font-size:19px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.1;white-space:nowrap}
 .an-metric.lead .an-metric-v{font-size:25px;color:var(--green)}
-.an-metric-v.warn{color:var(--amber)}
+.an-metric-v.warn{color:var(--amber-text)}
 .an-metric-l{font-size:11px;font-weight:500;color:var(--ink3);margin-top:5px;white-space:nowrap}
 /* One column below `md`: two 16px-gapped columns are tight before the
    tablet width, and both cards can afford to drop to a single column rather
@@ -1553,7 +1594,7 @@ code,kbd,samp,pre{font-family:inherit}
 .chat-side .kv .track{background:var(--steel)}
 .chat .metric{font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
 /* the same 70% threshold the row uses — one context reading, two places */
-.chat .metric.warn{color:var(--amber)}
+.chat .metric.warn{color:var(--amber-text)}
 .chat-facts{display:grid;gap:10px;font-size:12px;color:var(--ink2)}
 .chat-facts .f{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-width:0}
 .chat-facts .f b{min-width:0;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1646,8 +1687,8 @@ code,kbd,samp,pre{font-family:inherit}
 .cmsg-plan{margin-top:9px;min-width:0;background:var(--strip);border:1px solid var(--hairline);border-radius:12px;padding:12px 14px}
 .cmsg-plan>summary{font-size:12px;color:var(--ink2);cursor:pointer;user-select:none;list-style:none}
 .cmsg-plan>summary::-webkit-details-marker{display:none}
-.cmsg-plan>summary::before{content:"▾ ";color:var(--ink3)}
-.cmsg-plan:not([open])>summary::before{content:"▸ "}
+.cmsg-plan>summary .cmsg-chev{color:var(--ink3);margin-right:6px}
+.cmsg-plan:not([open])>summary .cmsg-chev{transform:rotate(-90deg)}
 .cmsg-plan>summary .tool{font-weight:500;color:var(--ink)}
 .cmsg-plan>.cmsg-text{font-size:13px}
 
@@ -1669,9 +1710,9 @@ code,kbd,samp,pre{font-family:inherit}
 /* the badge names the kind of wait, and its tint is the board's existing
    meaning for it: amber "you can act from here", magenta the Task/plan accent,
    green a turn that finished cleanly, neutral for a session that has ended */
-.qp-badge{flex:none;font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber)}
+.qp-badge{flex:none;font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink)}
 .qpanel.plan .qp-badge{background:color-mix(in srgb,var(--magenta) 16%,transparent);color:var(--magenta)}
-.qpanel.msg .qp-badge{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.qpanel.msg .qp-badge{background:var(--green-tint);color:var(--green)}
 .qpanel.resume .qp-badge{background:var(--strip-hi);color:var(--ink2)}
 .qp-hint{font-size:12px;color:var(--ink2)}
 .qp-note{font-size:13px;color:var(--ink2)}
@@ -1757,7 +1798,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    `allow?` button already uses for "only that terminal can answer this"), no
    buttons, one line. Pinned like .qpanel so it survives scrolling the history. */
 .pbanner{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:13px 24px;font-size:13px;color:var(--ink2);background:color-mix(in srgb,var(--mustard) 10%,var(--strip));border-top:1px solid var(--hairline)}
-.pb-badge{flex:none;font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:color-mix(in srgb,var(--mustard) 26%,transparent);color:var(--mustard)}
+.pb-badge{flex:none;font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:var(--mustard-tint);color:var(--mustard-ink)}
 .pb-text{min-width:0;overflow-wrap:anywhere}
 .pb-text .tool{font-weight:500;color:var(--ink)}
 .pb-note{margin-left:auto;font-size:12px;color:var(--mustard)}
@@ -1769,7 +1810,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    track), sized down to foot scale. */
 .chat-foot{display:flex;align-items:center;gap:12px;padding:10px 24px;border-top:1px solid var(--hairline);font-size:12px;color:var(--ink2);flex:none}
 .chat-live{display:flex;align-items:center;gap:8px}
-.chat-live i{width:7px;height:7px;flex:none;border-radius:999px;background:var(--green)}
+.chat-live i{width:7px;height:7px;flex:none;border-radius:999px;background:var(--green-solid)}
 .chat-count{margin-left:auto;font-variant-numeric:tabular-nums}
 .chat-foot .seg{flex:none}
 .chat-foot .seg>button{padding:4px 10px;font-size:11px}
@@ -1856,7 +1897,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 /* each segment atomic: a line breaks only between them, and inside one only when it alone is wider than the column */
 .pin-seg,.pin-path b{display:inline-block;max-width:100%;overflow-wrap:anywhere}
 .pin-path b{font-size:15px;font-weight:500;color:var(--ink)}
-.pin-sub{display:block;font-size:12px;line-height:1.45;color:var(--amber);margin-top:2px}
+.pin-sub{display:block;font-size:12px;line-height:1.45;color:var(--amber-text);margin-top:2px}
 .pin-sub.err{color:var(--red)}
 .pin-age{grid-column:1;font-size:12px;color:var(--ink3);white-space:nowrap}
 .pin-row .qp-term{grid-column:2;grid-row:1/span 2;justify-self:end}
@@ -1867,6 +1908,8 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pin-saved.off{opacity:0}
 /* .pin-sub.err is scoped to .pin-sub, so a refused reorder shown here needs its own rule or it reads as a success */
 .pin-saved.err{color:var(--red)}
+/* the drag's `Moving … · n of N` in place of `Saved` */
+.pin-saved.live{color:var(--cyan);font-weight:500}
 @media (prefers-reduced-motion:reduce){.pin-saved{transition:none}}
 /* The pin drag grip (pin-reorder spec §4.4), placed by Management › Projects' `.pj-tile.g` / `.pj-srw.g` below: stretched to its item so the touch target
    grows toward §8.2's 44px floor, and the only element with `touch-action:none`, so the page still scrolls from the rest of the item. */
@@ -1881,7 +1924,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 
 /* Management › Projects (ProjectsView.tsx): the ledger on the app ground, no card around it — the band, a toolbar of the
    Tiles | Columns | Lists `.seg` and the filter box, then the two groups under `.pin-group` heads. A pin is a paper tile, an
-   offer its dashed outline, a dead pin an amber edge. No lift: the live cards (`.set-group`, `.git-card`) carry none. */
+   offer its dashed outline, a dead pin an amber edge. No lift: the live cards (`.set-group`) carry none. */
 .pin-filter{height:36px;width:100%;padding:0 12px;font-family:var(--font);font-size:13px;color:var(--ink);border:1px solid var(--hairline2);border-radius:12px;background:var(--strip)}
 .pin-filter::placeholder{color:var(--ink3)}
 .pin-filter:focus{outline:none;border-color:var(--ink3)}
@@ -1895,7 +1938,17 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pj-tile{display:flex;flex-direction:column;justify-content:space-between;gap:12px;padding:16px;min-width:0;background:var(--strip);border:1px solid var(--hairline);border-radius:16px}
 .pj-tile.off{background:transparent;border:1px dashed var(--hairline2)}
 .pj-tile.off .pj-name{color:var(--ink2)}
-.pj-tile.gone{border-color:var(--amber)}
+.pj-tile.gone{border-color:var(--amber-solid)}
+/* The dead pin's chip and its tooltip: the sentence lives in the tooltip so a gone tile is no taller than a live one. */
+.pj-gone{position:relative;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:0;border-radius:999px;background:var(--amber-tint);color:var(--amber-ink);font-family:var(--font);font-size:12px;font-weight:500;white-space:nowrap;cursor:help}
+.pj-gone svg{flex:none}
+/* In a Lists row the chip is a `.set-control>button`, whose Settings face (36px, bordered, ink on strip) would outrank the chip's own. */
+.pj-srw .set-control>.pj-gone{height:26px;padding:0 10px;border:0;border-radius:999px;background:var(--amber-tint);color:var(--amber-ink);font-size:12px;cursor:help}
+.pj-gone:focus-visible{outline:2px solid var(--amber-solid);outline-offset:2px}
+.pj-tip{position:absolute;left:0;bottom:calc(100% + 8px);z-index:5;width:240px;padding:8px 10px;border-radius:8px;background:var(--ink);color:var(--strip);box-shadow:0 8px 24px var(--shadow2);font-size:12px;font-weight:400;line-height:1.45;white-space:normal;text-align:left;opacity:0;transform:translateY(4px);pointer-events:none;transition:opacity .15s,transform .15s}
+.pj-tip::after{content:"";position:absolute;left:16px;top:100%;border:5px solid transparent;border-top-color:var(--ink)}
+.pj-gone:hover .pj-tip,.pj-gone:focus .pj-tip{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.pj-tip{transition:none}}
 .pj-tfoot{display:flex;align-items:center;justify-content:space-between;gap:8px}
 /* The key in a tile or a list row is a `.qp-term` that never stretches (`flex:none`). On the phone it keeps the thumb-sized
    44px min-height every `.qp-term` has there; from md, where that generic rule resets, it is the 32px key. In a list row it
@@ -1908,6 +1961,9 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
   .pj-cols .pj-tile{flex-direction:row;align-items:center}
   .pj-cols .pj-id{flex:1}
   .pj-cols .pj-tfoot{flex:none;gap:12px}
+  /* From md the chip sits at a Lists row's and a Columns tile's right edge, so the tip opens leftward; below md both put it at the left. */
+  .pj-srw .pj-tip,.pj-cols .pj-tile .pj-tip{left:auto;right:0}
+  .pj-srw .pj-tip::after,.pj-cols .pj-tile .pj-tip::after{left:auto;right:16px}
 }
 /* Columns and Lists: the two groups stacked on the phone, side by side from lg (Not pinned left, Pinned right). A Columns tile
    stacks like a Tiles tile on the phone, where a row would leave the name ~60px; from md the single column is wide enough
@@ -1924,15 +1980,27 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pj-srw .set-control{gap:12px}
 .pj-srw.gone .set-name{color:var(--ink2)}
 /* Pinned's grip (#193): every pinned tile or list row leads with a 28px column — the `.pin-grip`, or an empty cell holding its place while the filter hides
-   it — spanning the item's full height. A tile, stacked, puts the id over the foot beside it; a phone list row, the label over the control. The dragged
-   item lifts: the one transient exception to "no lift" above. */
+   it — spanning the item's full height. A tile, stacked, puts the id over the foot beside it; a phone list row, the label over the control. A drag lifts
+   nothing (spec §3 drop line): the source dims in its slot, a ghost chip follows the pointer, and a bar marks the gap. Ghost and bar are portalled to
+   body, outside `.shell`'s zoom, because they are fixed boxes in viewport pixels. */
 .pj-tile.g{display:grid;grid-template-columns:28px minmax(0,1fr);grid-template-rows:1fr auto;column-gap:8px;padding-left:8px}
 .pj-tile.g>:first-child,.pj-srw.g>:first-child{grid-row:1/span 2}
 .set-row.pj-srw.g{display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:8px;row-gap:10px;align-items:start}
 .set-row.pj-srw.g>.set-control{grid-column:2}
-.pj-tile.drag,.pj-srw.drag{background:var(--strip-hi);box-shadow:0 8px 24px var(--shadow2);position:relative;z-index:2;cursor:grabbing}
-.pj-srw.drag{border-radius:10px;border-top-color:transparent}
-.pj-tile.drag .pin-grip,.pj-srw.drag .pin-grip{cursor:grabbing;color:var(--cyan)}
+.pj-tile.src{opacity:.45;border-style:dashed;border-color:var(--hairline2)}
+.pj-srw.src{opacity:.45}
+.pj-tile.src .pin-grip,.pj-srw.src .pin-grip{color:var(--cyan);background:var(--strip-hi)}
+body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
+.pj-ghost{position:fixed;z-index:50;pointer-events:none;display:flex;align-items:center;gap:8px;padding:8px 14px 8px 10px;background:var(--strip);border-radius:12px;box-shadow:0 0 0 2px var(--cyan),0 8px 24px var(--shadow2);font-family:var(--font);font-size:14px;font-weight:500;color:var(--ink);white-space:nowrap;transform:rotate(-1.5deg)}
+.pj-ghost b{font-size:15px;font-weight:400;color:var(--cyan)}
+.pj-ghost i{font-style:normal;font-size:12px;font-weight:400;color:var(--ink3)}
+.pj-mark{position:fixed;z-index:49;pointer-events:none;background:var(--cyan);border-radius:999px}
+.pj-mark::before,.pj-mark::after{content:"";position:absolute;width:8px;height:8px;border-radius:999px;background:var(--cyan)}
+.pj-mark.h::before{left:-4px;top:-3px}
+.pj-mark.h::after{right:-4px;top:-3px}
+.pj-mark.v::before{top:-4px;left:-2.5px}
+.pj-mark.v::after{bottom:-4px;left:-2.5px}
+@media (prefers-reduced-motion:reduce){.pj-ghost{transform:none}}
 @media (min-width:768px){
   .pj-cols .pj-tile.g{grid-template-columns:28px minmax(0,1fr) auto;grid-template-rows:auto;align-items:center}
   .set-row.pj-srw.g{grid-template-columns:28px minmax(0,1fr) auto;column-gap:16px;align-items:center}
@@ -1988,10 +2056,10 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .task-list .done .g{color:var(--green)}
 .task-list .todo{color:var(--ink2)}
 .task-list .todo .g{color:var(--ink3)}
-.task-list .live{background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--ink);font-weight:600}
+.task-list .live{background:color-mix(in srgb,var(--green-solid) 12%,transparent);color:var(--ink);font-weight:600}
 .task-list .live .g{display:grid;height:17px;place-items:center}
 /* `pulse` is the .sdot ring; a fade is all an 8px dot in a list row needs */
-.task-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:task-pulse 1.6s ease-in-out infinite}
+.task-dot{width:8px;height:8px;border-radius:50%;background:var(--green-solid);animation:task-pulse 1.6s ease-in-out infinite}
 @keyframes task-pulse{0%,100%{opacity:.35}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){.task-dot{animation:none}}
 .chat-facts{display:flex;flex-wrap:wrap;gap:3px 14px;font-size:11px}
@@ -2117,7 +2185,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    is its own element so it, and not the dot beside it, is what gets clipped —
    an anonymous flex item cannot carry `text-overflow`. */
 .set-scope .p{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.set-scope.shared{background:color-mix(in srgb,var(--green) 22%,transparent);color:var(--green)}
+.set-scope.shared{background:var(--green-tint);color:var(--green)}
 .set-scope.shared i{background:currentColor}
 .set-cols{display:grid;grid-template-columns:1fr;gap:16px;align-items:start}
 .set-col{display:flex;flex-direction:column;gap:16px;min-width:0}
@@ -2180,7 +2248,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .set-theme-name{font-size:12px;font-weight:500;color:var(--ink2);line-height:1.25}
 .set-theme.on .set-theme-name{color:var(--ink)}
 /* a warning that something outside the app overrides a setting */
-.set-warn{display:flex;gap:10px;font-size:12px;line-height:1.5;color:var(--ink2);border-radius:12px;background:color-mix(in srgb,var(--amber) 12%,transparent);padding:12px 14px;margin:0 0 16px}
+.set-warn{display:flex;gap:10px;font-size:12px;line-height:1.5;color:var(--ink2);border-radius:12px;background:color-mix(in srgb,var(--amber-solid) 12%,transparent);padding:12px 14px;margin:0 0 16px}
 .set-warn b{color:var(--ink);font-weight:500}
 /* a value the host decides, shown where a control would sit */
 .set-fixed{font-size:13px;font-weight:500;color:var(--ink2);white-space:nowrap}
@@ -2269,8 +2337,8 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .usg-wf-grid{stroke:var(--hairline);stroke-width:1;stroke-dasharray:3 3}
 .usg-wf-limit{stroke:var(--red);stroke-width:1;stroke-dasharray:4 3;opacity:.7}
 .usg-wf-track{fill:var(--surface2)}
-.usg-wf-seg.a{fill:color-mix(in oklab,var(--green) 70%,var(--surface))}
-.usg-wf-seg.b{fill:color-mix(in oklab,var(--green) 45%,var(--surface))}
+.usg-wf-seg.a{fill:var(--green-fill)}
+.usg-wf-seg.b{fill:var(--green-fill2)}
 .usg-wf-seg.pre{fill:color-mix(in oklab,var(--ink3) 40%,var(--surface2))}
 .usg-wf-hatch{stroke:var(--surface);stroke-width:1.5;opacity:.55}
 .usg-wf-day{font-size:10px;font-weight:600;fill:var(--ink);text-anchor:middle;pointer-events:none}
@@ -2281,11 +2349,11 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .usg-hist-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:12px;color:var(--ink2)}
 .usg-hist-legend span{display:inline-flex;align-items:center;gap:6px}
 .usg-hist-sw{display:inline-block;width:14px;height:10px;border-radius:2px}
-.usg-hist-sw.a{background:color-mix(in oklab,var(--green) 70%,var(--surface))}
-.usg-hist-sw.b{background:color-mix(in oklab,var(--green) 45%,var(--surface))}
+.usg-hist-sw.a{background:var(--green-fill)}
+.usg-hist-sw.b{background:var(--green-fill2)}
 .usg-hist-sw.pre{background:color-mix(in oklab,var(--ink3) 40%,var(--surface2))}
 .usg-hist-sw.lim{height:0;border-top:1.5px dashed var(--red);border-radius:0}
-.usg-hist-sw.off{background:repeating-linear-gradient(45deg,color-mix(in oklab,var(--surface) 55%,transparent) 0 1.5px,transparent 1.5px 4px),color-mix(in oklab,var(--green) 70%,var(--surface))}
+.usg-hist-sw.off{background:repeating-linear-gradient(45deg,color-mix(in oklab,var(--surface) 55%,transparent) 0 1.5px,transparent 1.5px 4px),var(--green-fill)}
 
 /* ── the figure strip ────────────────────────────────────────────────────
    One card the ground divides, not five cards with gaps: the five figures are
@@ -2322,7 +2390,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .statstrip>div:last-child:nth-child(2n+1){grid-column:1/-1}
 .statstrip .k{font-size:12px;color:var(--ink2);display:flex;align-items:center;gap:8px}
 .statstrip .v{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:6px;line-height:1.1;color:var(--ink);overflow-wrap:anywhere}
-.statstrip .v.warn{color:var(--amber)}
+.statstrip .v.warn{color:var(--amber-text)}
 .statstrip .v .u{font-size:14px;font-weight:400;color:var(--ink2)}
 .statstrip .s{font-size:11px;color:var(--ink3);margin-top:5px}
 
@@ -2372,18 +2440,18 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .dt td.name{font-weight:500;white-space:normal;overflow-wrap:anywhere}
 .dt td.mut{color:var(--ink2);white-space:normal}
 .dt td .cs{display:inline;font-size:11px;color:var(--ink3);margin:0}
-.dt td.over{color:var(--amber);font-weight:600}
+.dt td.over{color:var(--amber-text);font-weight:600}
 .dt tr.tot td{border-top:1px solid var(--hairline2);border-bottom:0;font-weight:600;padding-top:12px}
-.dt .bar{display:block;height:6px;border-radius:4px;background:var(--green)}
+.dt .bar{display:block;height:6px;border-radius:4px;background:var(--green-solid)}
 /* assumed, not measured: the same mark the walk's dashed run wears */
-.dt .bar.assumed{background:color-mix(in oklab,var(--green) 35%,var(--steel))}
+.dt .bar.assumed{background:color-mix(in oklab,var(--green-solid) 35%,var(--steel))}
 .dt .bar.hatch{
   background:var(--steel);
   background-image:repeating-linear-gradient(45deg,var(--hairline2) 0 1px,transparent 1px 5px);
 }
 .dt .barcell{width:120px}
 .dt .dev{font-weight:500;color:var(--green)}
-.dt .dev.bad{color:var(--amber)}
+.dt .dev.bad{color:var(--amber-text)}
 .dt th .idot{vertical-align:1px;margin-left:6px}
 .up-tablewrap{overflow-x:auto}
 
@@ -2431,10 +2499,10 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .rates-day.far-above{background:color-mix(in oklab,var(--cyan) 75%,var(--strip))}
 .rates-cut{
   position:absolute;top:-3px;bottom:-3px;width:0;
-  border-left:1px dashed var(--amber);pointer-events:none;z-index:3;
+  border-left:1px dashed var(--amber-solid);pointer-events:none;z-index:3;
 }
 .rates-cut span{
-  position:absolute;top:100%;left:0;margin-top:2px;font-size:10px;color:var(--amber);
+  position:absolute;top:100%;left:0;margin-top:2px;font-size:10px;color:var(--amber-text);
   white-space:nowrap;transform:translateX(-50%);
 }
 .rates-dayaxis{
@@ -2459,9 +2527,9 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   display:inline-block;font-size:11px;font-weight:500;border-radius:999px;padding:3px 9px;
   background:var(--steel);color:var(--ink2);white-space:nowrap;
 }
-.tag-v.stable{background:color-mix(in srgb,var(--green) 20%,transparent);color:var(--green)}
-.tag-v.drift{background:color-mix(in srgb,var(--amber) 20%,transparent);color:var(--amber)}
-.tag-v.mix{background:color-mix(in srgb,var(--mustard) 18%,transparent);color:var(--mustard)}
+.tag-v.stable{background:var(--green-tint);color:var(--green)}
+.tag-v.drift{background:var(--amber-tint);color:var(--amber-ink)}
+.tag-v.mix{background:var(--mustard-tint);color:var(--mustard-ink)}
 
 /* ── the ⓘ and its floating panel ────────────────────────────────────────
    Neutral, not accented: on the forecast page green is the weight ramp's
@@ -2507,7 +2575,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 /* ── the recording-off notice ────────────────────────────────────────────*/
 .up-off{
   display:flex;gap:10px;font-size:13px;line-height:1.5;color:var(--ink2);
-  border-radius:16px;background:color-mix(in srgb,var(--amber) 12%,transparent);padding:16px 20px;
+  border-radius:16px;background:color-mix(in srgb,var(--amber-solid) 12%,transparent);padding:16px 20px;
 }
 .up-off b{color:var(--ink);font-weight:500}
 
@@ -2523,18 +2591,18 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .hrchart{width:100%;height:100%;display:block}
 .hrchart line,.hrchart polyline{vector-effect:non-scaling-stroke;fill:none}
 .wk-day{stroke:var(--hairline);stroke-width:1}
-.hr-area{fill:color-mix(in oklab,var(--green) 18%,transparent);stroke:none}
+.hr-area{fill:color-mix(in oklab,var(--green-solid) 18%,transparent);stroke:none}
 /* the deficit, in two halves: red under the measured run, amber and hatched
    under the run walked at the weekly mean — the hatch being this board's mark
    for "no evidence", the same one an unmeasured hour cell wears */
-.hr-debt{fill:color-mix(in oklab,var(--amber) 28%,transparent);stroke:none}
+.hr-debt{fill:color-mix(in oklab,var(--amber-solid) 28%,transparent);stroke:none}
 .hr-debt.measured{fill:color-mix(in oklab,var(--red) 22%,transparent)}
-.hr-line{stroke:var(--green);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.hr-line{stroke:var(--green-solid);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
 .hr-line.debt{stroke:var(--red)}
 /* the dashed run takes the colour of the fill under it: past the evidence the
    deficit is a guess, and amber is what this board calls a guessed overrun */
 .hr-line.assumed{stroke-dasharray:5 4;stroke-width:1.6}
-.hr-line.debt.assumed{stroke:var(--amber)}
+.hr-line.debt.assumed{stroke:var(--amber-solid)}
 .hr-zero{stroke:var(--ink);stroke-width:1.2}
 .up-hit-col{
   fill:transparent;stroke:none;cursor:crosshair;
@@ -2580,11 +2648,11 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .uplegend .ramp-sw{display:inline-flex;gap:3px}
 .uplegend .up-cell{width:16px;height:16px;aspect-ratio:auto;flex:none}
 .uplegend .gap{width:20px}
-.uplegend .rule{width:18px;height:0;flex:none;border-top:2.5px solid var(--green)}
+.uplegend .rule{width:18px;height:0;flex:none;border-top:2.5px solid var(--green-solid)}
 .uplegend .rule.dash{border-top-style:dashed}
 .uplegend .rule.brick{
   width:14px;height:14px;flex:none;border:0;border-radius:2px;
-  background:color-mix(in oklab,var(--amber) 45%,var(--strip));
+  background:color-mix(in oklab,var(--amber-solid) 45%,var(--strip));
 }
 .uplegend .rule.brick.red{background:color-mix(in oklab,var(--red) 32%,var(--strip))}
 
@@ -2784,25 +2852,26 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 
 /* ── Management › Git ─────────────────────────────────────────────────────
    DESIGN.md §8.4b: the Usage band, a toolbar of the `.seg` switcher and the
-   Sync/Fetch clock chip, then one of three shapes over the same repo list —
-   Cards, Table, Triage. Every colour is a theme token or a `color-mix` over
-   one. The four data inks are the Triage rule: amber needs you, mustard in
+   Sync/Fetch clock chip, then one of four layouts over the same repo list —
+   Inbox, Matrix, Inspector, Branches. Every colour is a theme token or a
+   `color-mix` over one. The four data inks are the level rule: amber needs you, mustard in
    flight, green quiet, ink3 can't read; the ahead half of a divergence bar is
    `--cyan` and the behind half `--ink3`, as on GitHub's branch list. */
 .git-switch{align-self:flex-start}
-/* The toolbar (git-fetch spec §4). Mobile-first: the chip's root takes the whole row, so below `md` it sits on its own line under the switcher, and the
-   popover — absolutely positioned, with no positioned ancestor nearer than the toolbar — spans that row. From `md` the root is the anchor instead
-   (the `min-width:768px` block below). */
+/* The toolbar (git-fetch spec §4), as the redesign mock draws it: the layout pills at its left, the clock chip pushed to its right end (on a phone that
+   wraps, it drops under the pills and stays right-aligned), and the chip's root is the popover's anchor at every width, so the popover opens leftwards
+   from the chip's right edge and is capped to the viewport. */
 .git-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;position:relative}
-.git-clock-root{flex-basis:100%}
-.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:12px;background:var(--strip-hi);color:var(--ink);font:inherit;font-family:var(--font);cursor:pointer;transition:background .15s}
-.git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--hairline2)}
+.git-clock-root{position:relative;margin-left:auto}
+/* --strip paper, no ring and no lift: the --strip-hi fill it had all but vanished on the board. */
+.git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:12px;background:var(--strip);color:var(--ink);font:inherit;font-family:var(--font);cursor:pointer;transition:background .15s}
+.git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--strip-hi)}
 .git-clock:focus-visible,.git-pop-key:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 /* At an 11px label `fetching…` is wider than a fixed track, so the chip's meters grow to their content rather than wrap: a two-line head would change the
    chip's height the moment a clock changes state. */
 .git-clock-meters{display:flex;gap:10px}
 .git-clock-meters>*{min-width:max-content}
-.git-clock-caret{font-size:11px;color:var(--ink3);transition:transform .15s}
+.git-clock-caret{display:inline-flex;font-size:11px;color:var(--ink3);transition:transform .15s}
 .git-clock[aria-expanded="true"] .git-clock-caret{transform:rotate(180deg)}
 /* Meter: label over value, both 11px, a flat 3.5px --steel track, and a fill with no transition — it advances once a second, and a tween would draw the
    clock a second late. A port of backlog-manager's `.ui-meter`. Tone is the root's `data-tone`: amber for off / failed / overdue, live (cyan, pulsing) for a
@@ -2812,153 +2881,246 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-meter-label{font-size:11px;font-weight:500;color:var(--ink3)}
 .git-meter-value{font-size:11px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
 .git-meter-track{height:3.5px;border-radius:4px;background:var(--steel);overflow:hidden}
-.git-meter-fill{display:block;height:100%;border-radius:4px;background:var(--green)}
-.git-meter[data-tone="amber"] .git-meter-fill{background:var(--amber)}
-.git-meter[data-tone="amber"] .git-meter-value{color:var(--amber)}
+.git-meter-fill{display:block;height:100%;border-radius:4px;background:var(--green-solid)}
+.git-meter[data-tone="amber"] .git-meter-fill{background:var(--amber-solid)}
+.git-meter[data-tone="amber"] .git-meter-value{color:var(--amber-text)}
 .git-meter[data-tone="live"] .git-meter-fill{background:var(--cyan);animation:git-meter-pulse 1.6s ease-in-out infinite}
 .git-meter[data-tone="live"] .git-meter-value{color:var(--cyan)}
 @keyframes git-meter-pulse{50%{opacity:.35}}
 /* The popover: --strip paper lifted by the deep shadow, mounted only while open. Rows are name | meter | key. */
-.git-pop{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:20;width:auto;padding:14px 16px;border-radius:16px;background:var(--strip);color:var(--ink);box-shadow:0 24px 64px var(--shadow2);text-align:left}
+.git-pop{position:absolute;top:calc(100% + 6px);left:auto;right:0;z-index:20;width:420px;max-width:calc(100vw - 32px);padding:14px 16px;border-radius:16px;background:var(--strip);color:var(--ink);box-shadow:0 24px 64px var(--shadow2);text-align:left}
 .git-pop-row{display:grid;grid-template-columns:minmax(0,1fr) 120px auto;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--hairline)}
 .git-pop-row:first-child{border-top:0;padding-top:0}
 .git-pop-row .git-meter{width:120px}
 .git-pop-text{display:flex;flex-direction:column;gap:1px;min-width:0}
 .git-pop-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .git-pop-sub{font-size:12px;color:var(--ink3);overflow-wrap:anywhere}
-.git-pop-sub.warn{color:var(--amber)}
+.git-pop-sub.warn{color:var(--amber-text)}
 .git-pop-key{height:28px;padding:0 10px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:8px;cursor:pointer;white-space:nowrap}
 .git-pop-key:hover:not(:disabled){color:var(--ink);background:var(--hairline2)}
 .git-pop-key:disabled{color:var(--ink3);cursor:default}
 /* The failed-fetch repos, one line each under the rows. */
 .git-trouble{display:flex;flex-direction:column;gap:4px;margin-top:10px;padding-top:10px;border-top:1px solid var(--hairline);font-size:12px;color:var(--ink2)}
 .git-trouble-name{font-weight:500;color:var(--ink)}
-.git-trouble-word{color:var(--amber)}
+.git-trouble-word{color:var(--amber-text)}
 .git-empty{padding:48px 20px;text-align:center;font-size:13px;color:var(--ink2)}
 .git-link{font:inherit;color:var(--cyan);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 
-/* the repo facts, shared by all three shapes */
+/* the repo facts, shared by the four layouts */
 .git-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ink3)}
-.git-dot.needs{background:var(--amber)}
+.git-dot.needs{background:var(--amber-solid)}
 .git-dot.flight{background:var(--mustard)}
-.git-dot.quiet{background:var(--green)}
+.git-dot.quiet{background:var(--green-solid)}
 .git-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .git-name{font-size:15px;font-weight:500;color:var(--ink);letter-spacing:-.01em;min-width:0;overflow-wrap:anywhere}
-.git-fetched{margin-left:auto;font-size:12px;color:var(--ink3);white-space:nowrap}
-.git-fetched.warn{color:var(--amber)}
-.git-fetched.live{color:var(--cyan)}
-.git-facts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .git-chip{display:inline-block;font-size:12px;font-weight:500;line-height:1.4;padding:2px 9px;border-radius:999px;border:1px solid var(--hairline2);color:var(--ink2);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .git-chip.branch{color:var(--ink);max-width:240px}
-.git-chip.amber{color:var(--amber);border-color:transparent;background:color-mix(in srgb,var(--amber) 14%,transparent)}
-.git-chip.green{color:var(--green);border-color:transparent;background:color-mix(in srgb,var(--green) 16%,transparent)}
-.git-chip.mustard{color:var(--mustard);border-color:transparent;background:color-mix(in srgb,var(--mustard) 20%,transparent)}
+.git-chip.amber{color:var(--amber-ink);border-color:transparent;background:var(--amber-tint)}
+.git-chip.green{color:var(--green);border-color:transparent;background:var(--green-tint)}
+.git-chip.mustard{color:var(--mustard-ink);border-color:transparent;background:var(--mustard-tint)}
 .git-chip.wt{flex:none;font-size:11px;padding:0 7px;color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
-.git-state{font-size:13px;color:var(--ink2);overflow-wrap:anywhere}
-
-/* a branch row: name, numbers, age — and from `md` the bar (89px = two 44px
-   halves and the centre rule) before the numbers. Phone first: below `md`
-   the bar drops and the numbers stay (spec §6); 768 is the same tier
-   `useNarrow` withholds the Table at. */
-.git-branches{display:flex;flex-direction:column;border-top:1px solid var(--hairline);container:git-branches/inline-size}
-.git-brow{display:grid;grid-template-columns:minmax(0,1fr) 72px 36px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--hairline);font-size:13px;color:var(--ink)}
 .git-bname{display:flex;align-items:center;gap:6px;min-width:0}
 .git-bname-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.git-bar{display:inline-grid;grid-template-columns:44px 1px 44px;align-items:center;height:12px;vertical-align:middle}
-.git-brow .git-bar{display:none}
-.git-bar-b,.git-bar-a{height:6px;border-radius:2px}
-.git-bar-b{justify-self:end;background:var(--ink3)}
-.git-bar-a{justify-self:start;background:var(--cyan)}
-.git-bar-c{height:12px;background:var(--hairline2)}
-.git-nums{font-size:12px;color:var(--ink3);white-space:nowrap}
-.git-nums-b{color:var(--ink2)}
-.git-nums-a{color:var(--cyan)}
 .git-age{font-size:12px;color:var(--ink3);text-align:right;white-space:nowrap}
-.git-more{align-self:flex-start;font-family:var(--font);font-size:12px;color:var(--cyan);background:none;border:0;padding:7px 0 0;cursor:pointer}
-.git-note{font-size:12px;color:var(--ink3);padding-top:7px}
-
-/* Cards: §8.2's borderless paper, auto-filling — two columns on a laptop,
-   one on a phone; `min()` keeps a 340px track from overflowing a phone */
-.git-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:16px;align-items:start}
-.git-card{background:var(--strip);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
-
-/* Table: `.dt`'s rules (one rule per row, a heavier one under the head), in
-   its own sheet that scrolls rather than the page */
-/* The sheet keeps 8px; the outer cells carry the other 12px, so a tinted row (hover, an expanded branch) keeps its text off the tint's edge */
-.git-table-wrap{background:var(--strip);border-radius:16px;padding:8px;overflow-x:auto}
-.git-table{width:100%;border-collapse:collapse;font-size:13px;color:var(--ink)}
-.git-table th{text-align:left;font-size:11px;font-weight:500;color:var(--ink2);padding:12px 10px 8px;border-bottom:1px solid var(--hairline2);white-space:nowrap}
-.git-table td{padding:10px;border-bottom:1px solid var(--hairline);vertical-align:middle}
-.git-table th.n,.git-table td.n{text-align:right}
-.git-table td:first-child,.git-table th:first-child{padding-left:12px}
-.git-table td:last-child,.git-table th:last-child{padding-right:12px}
-.git-table tbody tr:last-child td{border-bottom:0}
-.git-table .git-tname{font-weight:500;white-space:nowrap}
-.git-table .git-state{font-size:13px}
-.git-tr:not(.off){cursor:pointer}
-.git-tr:not(.off):hover td{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
-.git-tr.off .git-tname{color:var(--ink2)}
-.git-rowbtn{font:inherit;color:inherit;text-align:left;background:none;border:0;padding:0;cursor:pointer;display:inline-flex;align-items:center}
 .git-caret{display:inline-block;width:16px;flex:none;color:var(--ink3)}
-.git-table .git-sub td{padding-top:6px;padding-bottom:6px;font-size:12px;color:var(--ink2);background:var(--strip-hi)}
-.git-table .git-sub td:first-child{padding-left:28px}
-.git-table .git-sub .git-more{padding:0}
-.git-table .git-sub .git-note{padding-top:6px}
-/* Contributes no width of its own, so a long branch name ellipsizes inside Repo + On instead of widening the table when a row expands */
-.git-table .git-bname{contain:inline-size}
-.git-div{display:inline-flex;align-items:center;gap:10px}
-
-/* Triage: the four groups in order, Can't read last; busy repos on paper
-   with their branches, quiet and unreadable ones as one dashed line */
-.git-tri{display:flex;flex-direction:column;gap:20px}
-.git-tri-group{display:flex;flex-direction:column;gap:8px}
-.git-tri-h{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
-.git-arow{background:var(--strip);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
-.git-arow .git-branches{border-top:0;padding-left:16px;border-left:1px solid var(--hairline2)}
-.git-arow.quiet{background:transparent;border:1px dashed var(--hairline2);padding:8px 12px}
-.git-arow.quiet>.git-rowbtn{display:flex;width:100%}
-.git-arow.quiet .git-name{font-size:14px}
-.git-arow.quiet .git-caret{margin-left:auto;text-align:right}
-.git-arow.unreadable .git-name{color:var(--ink2)}
-.git-summary{font-size:13px;color:var(--ink3);min-width:0;overflow-wrap:anywhere}
-
 /* Sync (git-stats spec §9): a raised key — --strip-hi paper, 8px corners, a two-arrow glyph — where the fact chips are round and outlined, so the two never
-   read alike. `.on` is a running sync whose chat it opens: cyan tint, glyph turning. The quiet Triage row's dashed line sits on the board, where --strip-hi
-   would vanish, so the row lifts the paper to --strip through the variable rather than a heavier selector that would also beat `.on`. */
+   read alike. `.on` is a running sync whose chat it opens: cyan tint, glyph turning. A surface that sits on the board, where --strip-hi would vanish, lifts the
+   paper to --strip through `--sync-paper` rather than a heavier selector that would also beat `.on`. */
 .git-sync{flex:none;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px 0 9px;font-family:var(--font);font-size:12px;font-weight:500;line-height:1;color:var(--ink2);background:var(--sync-paper,var(--strip-hi));border:0;border-radius:8px;cursor:pointer;white-space:nowrap;transition:color .15s,background .15s}
 .git-sync svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .git-sync:hover:not(:disabled){color:var(--ink);background:var(--hairline2)}
 .git-sync.on{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 12%,transparent)}
 .git-sync.on svg{animation:git-spin 1.6s linear infinite}
 .git-sync:disabled{cursor:default;color:var(--ink3)}
-.git-arow.quiet{--sync-paper:var(--strip)}
 @keyframes git-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.git-sync.on svg{animation:none}.git-meter[data-tone="live"] .git-meter-fill{animation:none}}
-/* The head's facts wrap inside `.git-head`; `.git-head-end` is its sibling, never a wrapping item, so Sync holds the first line whatever the name's length.
-   22px is the name's line box, so the key centres on that line. */
-.git-head-row{display:flex;align-items:flex-start;gap:8px;min-width:0}
-.git-head-row>.git-head{flex:1}
-.git-head-end{flex:none;display:flex;align-items:center;min-height:22px}
-.git-sync-note{font-size:12px;color:var(--amber);overflow-wrap:anywhere}
-.git-sync-td{width:1%;text-align:right;white-space:nowrap}
-.git-qhead{display:flex;align-items:center;gap:8px;min-width:0}
-.git-qhead>.git-rowbtn{display:flex;flex:1;min-width:0}
+.git-sync-note{font-size:12px;color:var(--amber-text);overflow-wrap:anywhere}
+/* Inbox | Matrix | Inspector | Branches — the parts they share (management-redesign spec §4.2) */
+.git-panel{background:var(--strip);border-radius:16px;min-width:0}
+.git-gh{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin:16px 4px 8px}
+.git-key{flex:none;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;font-family:var(--font);font-size:12px;font-weight:500;line-height:1;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:8px;cursor:pointer;white-space:nowrap;text-decoration:none;transition:color .15s,background .15s}
+.git-key:hover:not(:disabled){color:var(--ink);background:var(--hairline2)}
+.git-key:disabled{color:var(--ink3);cursor:default}
+.git-key:focus-visible,.git-sync:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.git-key.primary,.git-sync.primary{color:var(--strip);background:var(--ink)}
+.git-key.primary:hover:not(:disabled),.git-sync.primary:hover:not(:disabled){color:var(--strip);background:color-mix(in srgb,var(--ink) 85%,var(--strip))}
+.git-key.primary:disabled,.git-sync.primary:disabled{color:var(--strip);opacity:.55}
+.git-chip.dim{color:var(--ink3);border-style:dashed}
+.git-sess{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:999px;padding:1px 8px 1px 6px;white-space:nowrap;flex:none}
+.git-sess::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.git-sess.working{color:var(--green);background:var(--green-tint)}
+.git-sess.waiting{color:var(--amber-ink);background:var(--amber-tint)}
+.git-sess.idle{color:var(--ink2);background:var(--strip-hi)}
+.git-dv{display:inline-flex;gap:8px;font-size:12px;white-space:nowrap}
+.git-dv .b{color:var(--ink2)}
+.git-dv .a{color:var(--cyan);font-weight:600}
+.git-dv .z{color:var(--ink3)}
+.git-dvbar{display:inline-grid;grid-template-columns:56px 2px 56px;column-gap:3px;align-items:center;height:12px}
+.git-dvbar i{display:block;height:6px;border-radius:2px}
+.git-dvbar .bb{justify-self:end;border-radius:2px 0 0 2px;background:var(--ink3)}
+.git-dvbar .ba{justify-self:start;border-radius:0 2px 2px 0;background:var(--cyan)}
+.git-dvbar .bc{height:12px;border-radius:0;background:var(--ink2)}
+/* a branch row of Matrix's expanded row and of Inspector: the bar joins from sm */
+.git-in-br{display:grid;grid-template-columns:minmax(0,1fr) auto 40px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--hairline);font-size:13px;color:var(--ink)}
+.git-in-br .git-dvbar{display:none}
+.git-in-br.stale{color:var(--ink2)}
+.git-in-br.stale .git-dvbar{opacity:.55}
+/* chips wrap under the name rather than squeeze it */
+.git-in-br .git-bname,.git-ib-brow .git-bname{flex-wrap:wrap;row-gap:4px}
+.git-in-br .git-bname-t,.git-ib-brow .git-bname-t{flex:none;max-width:100%}
+@media (min-width:640px){
+  .git-in-br{grid-template-columns:minmax(0,1fr) 116px 90px 40px}
+  .git-in-br .git-dvbar{display:inline-grid}
+}
 
-/* `md`: the bar comes back between name and numbers, and the paper gets the
-   standard 20px of padding */
+/* Inbox — count tiles that filter, then one ranked list (management-redesign spec §4.3) */
+.git-ib-sum{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.git-ib-tile{border:0;text-align:left;font-family:var(--font);color:var(--ink);background:var(--strip);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:2px;cursor:pointer;outline:2px solid transparent;outline-offset:-2px}
+.git-ib-tile.on{outline-color:var(--ink)}
+.git-ib-tile:focus-visible{outline-color:var(--cyan)}
+.git-ib-tile .big{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.git-ib-tile.needs .big{color:var(--amber-text)}
+.git-ib-tile .lab{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2)}
+.git-ib-list{display:flex;flex-direction:column;gap:10px}
+.git-ib-item{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.git-ib-top{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px}
+.git-ib-top>.git-dot{margin-top:7px}
+.git-ib-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.git-ib-verdict{font-size:14px;line-height:1.45;color:var(--ink)}
+.git-ib-steps{display:flex;flex-direction:column;gap:6px;margin:4px 0 0;padding:0;list-style:none}
+.git-ib-steps li{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--ink2)}
+.git-ib-steps li::before{content:"";width:5px;height:5px;border-radius:50%;flex:none;background:var(--hairline2);transform:translateY(-2px)}
+.git-ib-steps li.hot{color:var(--ink)}
+.git-ib-steps li.hot::before{background:var(--amber-solid)}
+.git-ib-steps li.calm::before{background:var(--green-solid)}
+.git-ib-keys{display:flex;gap:6px;flex-wrap:wrap;width:100%;justify-content:flex-start;padding-left:20px}
+.git-ib-br{margin-left:20px;padding-top:10px;border-top:1px solid var(--hairline)}
+.git-ib-tog{display:inline-flex;align-items:center;gap:4px;padding:0;font-family:var(--font);font-size:12px;color:var(--ink2);background:none;border:0;cursor:pointer}
+.git-ib-brow{display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid var(--hairline);font-size:13px;color:var(--ink)}
+.git-ib-brow:last-child{border-bottom:0}
+.git-ib-quiet{display:flex;flex-direction:column;padding:4px 18px;border:1px dashed var(--hairline2);border-radius:16px;--sync-paper:var(--strip)}
+.git-ib-quiet .git-key{background:var(--strip)}
+.git-ib-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 0;border-top:1px solid var(--hairline);font-size:13px}
+.git-ib-line:first-child{border-top:0}
+.git-ib-line .git-name{font-size:14px}
+.git-ib-facts{flex:1;min-width:140px;color:var(--ink2);overflow-wrap:anywhere}
+@media (min-width:640px){
+  .git-ib-sum{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+/* The keys sit beside the verdict only once the content column can spare them: at 640 the rail leaves ~376px, which squeezed the verdict to ~100px. */
 @media (min-width:768px){
-  .git-clock-root{flex-basis:auto;position:relative}
-  .git-pop{right:auto;width:420px;max-width:calc(100vw - 32px)}
-  .git-brow{grid-template-columns:minmax(0,1fr) 89px 72px 36px}
-  .git-brow .git-bar{display:inline-grid}
-  .git-card{padding:20px}
-  .git-arow{padding:16px 20px}
-  .git-arow.quiet{padding:8px 16px}
+  .git-ib-top{flex-wrap:nowrap}
+  .git-ib-keys{width:auto;justify-content:flex-end;padding-left:0}
 }
 
-/* A list narrower than this keeps the phone grid at any viewport: with the bar's 89px column a two-up laptop card leaves the name ~50px, too little for a
-   branch name beside its worktree badge. Comes after the `md` rule so it wins. */
-@container git-branches (width < 400px){
-  .git-brow{grid-template-columns:minmax(0,1fr) 72px 36px}
-  .git-brow .git-bar{display:none}
-}
+/* Matrix — a row per repo, a column per check, colour only on failure (management-redesign spec §4.4). Wide-only: the table's floor is 760px, and the wrapper
+   scrolls it sideways while its own overflow clips the card's corners, as `.s-card.ledger` does. The table is drawn in Sessions › List's language — the
+   `.ledger` values, ported here rather than shared, because `.ledger th:nth-child(3)` hides a column below md: hairline rules, a 41px dot column, name over
+   branch, the open row and its body one --strip-hi block with an --ink bar down the left, pills only where a check fails, `.cbtn`-shaped keys. */
+.git-mx-wrap{padding:0 0 16px;overflow-x:auto}
+.git-mx{width:100%;min-width:760px;border-collapse:collapse;font-size:13px;color:var(--ink)}
+.git-mx th{font-size:12px;font-weight:400;color:var(--ink2);text-align:left;padding:14px 12px;border-bottom:1px solid var(--hairline);white-space:nowrap}
+.git-mx td{padding:14px 12px;border-top:1px solid var(--hairline);vertical-align:middle}
+.git-mx tbody tr:first-child td{border-top:0}
+.git-mx th:first-child,.git-mx td:first-child{padding-left:20px}
+.git-mx th:last-child,.git-mx td:last-child{padding-right:20px}
+/* 9px of dot + 20px + 12px of padding: the ledger's 41px column */
+.git-mx .git-mx-dot{width:9px}
+.git-mx .git-dot{width:9px;height:9px;display:block}
+.git-mx-cnt{color:var(--ink3)}
+.git-mx-r{cursor:pointer}
+.git-mx-r:not([aria-expanded="true"]):hover td{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
+.git-mx-r[aria-expanded="true"] td{background:var(--strip-hi);border-top-color:transparent;padding-bottom:12px}
+.git-mx-r[aria-expanded="true"] td:first-child,.git-mx tr.git-mx-x td{box-shadow:inset 3px 0 0 var(--ink)}
+.git-mx tr.git-mx-x td{padding:0 20px 18px 45px;border-top:0;background:var(--strip-hi)}
+.git-mx tr.git-mx-x+tr td{border-top-color:transparent}
+.git-mx-xin{padding-top:14px;border-top:1px solid var(--hairline2)}
+/* The Repo column takes whatever the checks leave, as the ledger's flexible Session column does, and its two lines ellipsise there: a zero-width box held
+   open by `min-width:100%` adds nothing to the column's intrinsic width, so a long branch name can never push the keys out of the card. */
+.git-mx-rn{width:100%;min-width:150px}
+.git-mx-rn .git-name,.git-mx-sub{width:0;min-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.git-mx-rn .git-name{font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--ink);overflow-wrap:normal}
+.git-mx-sub{margin-top:3px;font-size:12px;color:var(--ink2)}
+.git-mx tr.off .git-name{color:var(--ink2)}
+.git-mx-act{text-align:right;white-space:nowrap}
+.git-mx-act>*+*{margin-left:6px}
+.git-mx-note{text-align:left;padding-top:8px}
+/* The keys take `.cbtn`'s shape: 30px, a --hairline2 ring on --strip, 12px corners. The primary is `.cbtn.answer`'s amber tint, without its pulse — a repo
+   that needs you stays that way for hours, and a pulse that long is noise. Scoped to the action column, so Inbox, Inspector and Branches keep their keys. */
+.git-mx-act .git-key,.git-mx-act .git-sync{height:30px;padding:0 10px;border:1px solid var(--hairline2);border-radius:12px;background:var(--strip);color:var(--ink2);transition:color .15s,border-color .15s}
+.git-mx-act .git-key:hover:not(:disabled),.git-mx-act .git-sync:hover:not(:disabled){color:var(--ink);border-color:var(--ink3);background:var(--strip)}
+.git-mx-act .git-key:disabled,.git-mx-act .git-sync:disabled{color:var(--ink3)}
+.git-mx-act .git-key.primary,.git-mx-act .git-sync.primary,
+.git-mx-act .git-key.primary:hover:not(:disabled),.git-mx-act .git-sync.primary:hover:not(:disabled){background:var(--amber-tint);border-color:transparent;color:var(--amber-ink)}
+.git-mx-act .git-key.primary:hover:not(:disabled),.git-mx-act .git-sync.primary:hover:not(:disabled){color:var(--ink)}
+.git-mx-act .git-key.primary:disabled,.git-mx-act .git-sync.primary:disabled{color:var(--amber-ink);opacity:.55}
+.git-mx-act .git-sync.on,.git-mx-act .git-sync.on:hover:not(:disabled){color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+/* Cells: a failing check is a pill in `.spill`'s shape (11px, 500, 2px 8px, 12px corners) with the mock's soft colours — the check's own ink on an 11%
+   amber (`bad`) or 13% mustard (`meh`) tint — and everything else plain 12px text, `--ink3` (`live` --cyan), with no dot, so the eye goes only where a
+   check failed. Scoped to the table and its legend. */
+.git-mx .git-cell,.git-mx-legend .git-cell{font-size:12px;white-space:nowrap}
+.git-mx .git-cell.ok,.git-mx .git-cell.na,.git-mx-legend .git-cell.ok,.git-mx-legend .git-cell.na{color:var(--ink3)}
+.git-mx .git-cell.live,.git-mx-legend .git-cell.live{color:var(--cyan)}
+.git-mx .git-cell.bad,.git-mx .git-cell.meh,.git-mx-legend .git-cell.bad,.git-mx-legend .git-cell.meh{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px}
+.git-mx .git-cell.bad,.git-mx-legend .git-cell.bad{color:var(--amber-ink);background:var(--amber-tint)}
+.git-mx .git-cell.meh,.git-mx-legend .git-cell.meh{color:var(--mustard-ink);background:var(--mustard-tint)}
+.git-mx-legend{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:12px 6px 0;font-size:12px;color:var(--ink2)}
+
+/* Inspector — the Sessions split: ranked list beside one repo in depth (management-redesign spec §4.5) */
+.split.git-in{grid-template-columns:minmax(0,1fr)}
+.git-in .ct{font-size:19px;font-weight:500;letter-spacing:-.01em;line-height:1.3;color:var(--ink)}
+.git-in .list-h .ct{font-size:16px}
+.git-in .lrow .git-dot{width:9px;height:9px}
+/* a long branch name must not squeeze the repo's own name out of the row */
+.git-in .lrow .nm .t{flex:none;max-width:60%}
+.git-in .lrow .nm .proj-pill{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.git-in .lrow .act.hot{color:var(--amber-text)}
+.git-in .lrow .ago.warn{color:var(--amber-ink)}
+.git-in .lrow .ago.live{color:var(--cyan)}
+.git-in .lrow:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+.git-in-fig{font-weight:400}
+.spill.g-needs{background:var(--amber-tint);color:var(--amber-ink)}
+.spill.g-look{background:var(--mustard-tint);color:var(--mustard-ink)}
+.spill.g-quiet{background:var(--green-tint);color:var(--green)}
+.git-in-pane{display:flex;flex-direction:column;gap:20px}
+.git-in-pane .ins-meta{margin-top:6px}
+/* The head carries up to three keys beside the name, so on a phone the name column was squeezed to a sliver; let the keys drop under it. */
+.git-in-pane .ins-head{flex-wrap:wrap}
+.git-in-pane .ins-head .who2{flex:1 1 220px}
+.git-in-path{font-size:12px;color:var(--ink3);overflow-wrap:anywhere}
+.git-in-checks{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.git-in-ck{display:flex;flex-direction:column;gap:2px}
+.git-in-ck .v{display:block;margin-top:4px;font-size:14px;font-weight:600;letter-spacing:0;line-height:1.35;overflow-wrap:anywhere;color:var(--ink)}
+.git-in-ck .h{font-size:12px;color:var(--ink2)}
+.git-in-ck.bad{background:var(--amber-tint)}
+.git-in-ck.bad .v{color:var(--amber-ink)}
+.git-in-ck.meh{background:var(--mustard-tint)}
+.git-in-ck.meh .v{color:var(--mustard-ink)}
+.git-in-ck.live .v{color:var(--cyan)}
+.git-in-sec{display:flex;flex-direction:column}
+.git-in-hd{display:flex;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--hairline2);font-size:12px;color:var(--ink3)}
+.git-in-hd b{font-size:13px;font-weight:600;color:var(--ink)}
+.git-in-none{text-align:left;padding:10px 0}
+.git-in-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--ink2)}
+@media (min-width:640px){.git-in-checks{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1024px){.split.git-in{grid-template-columns:320px minmax(0,1fr)}}
+@media (min-width:1280px){.split.git-in{grid-template-columns:400px minmax(0,1fr)}}
+
+/* Branches — every open branch across the pins, a column per need (management-redesign spec §4.6) */
+.git-bb-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
+.git-bb-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.git-bb-ch{padding:0 4px;font-size:13px;color:var(--ink)}
+.git-bb-ch .git-age{text-align:left}
+.git-bb-hint{display:block;margin-top:2px;font-size:11px;color:var(--ink3)}
+.git-bb-card{display:flex;flex-direction:column;gap:7px;padding:12px 14px}
+.git-bb-card.stale{background:transparent;border:1px dashed var(--hairline2)}
+.git-bb-bn{font-size:13px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.git-bb-ln{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.git-bb-ln.end{justify-content:flex-end;gap:6px}
+.git-bb-ln.start{justify-content:flex-start;gap:6px}
+.git-bb-warn{font-size:12px;font-weight:500;color:var(--amber-text)}
+.git-bb-note{font-size:12px;color:var(--ink3);padding:0 4px}
+.git-bb-repo{font-size:12px;color:var(--ink3)}
+.git-bb-empty{padding:12px 14px;font-size:12px;color:var(--ink3);border:1px dashed var(--hairline2);border-radius:16px}
+@media (min-width:640px){.git-bb-cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1280px){.git-bb-cols{grid-template-columns:repeat(4,minmax(0,1fr))}}

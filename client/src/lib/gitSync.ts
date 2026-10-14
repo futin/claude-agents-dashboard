@@ -117,6 +117,15 @@ export function syncButtonText(phase: SyncPhase | null, pending: boolean): strin
   return 'Sync';
 }
 
+/** The label on the redesigned Git keys: the verbs the repo needs when idle, a caller's own wording beating them; the live phases read as `syncButtonText` does. */
+export function syncKeyLabel(phase: SyncPhase | null, pending: boolean, opts: { verbs?: readonly string[]; label?: string } = {}): string {
+  if (pending) return 'Starting…';
+  if (phase?.kind === 'running') return 'Syncing';
+  if (phase?.kind === 'launching' || phase?.kind === 'unseen') return 'Syncing…';
+  if (opts.label) return opts.label;
+  return opts.verbs && opts.verbs.length > 0 ? `Sync · ${opts.verbs.join(' + ')}` : 'Sync';
+}
+
 export function syncFailedText(name: string, error: string | null): string {
   return error ? `git-sync in ${name} failed to start: ${error}` : `git-sync in ${name} failed to start.`;
 }

@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from 'react';
 
 import { usePersistedState } from '../../hooks/usePersistedState';
 import type { Entry, EntryGroup } from '../../lib/configsEntries';
+import Chevron from '../Chevron';
 
 interface Props {
   /** The picked type's entries, already filtered; null when nothing matches. */
@@ -64,7 +65,7 @@ export function ItemList({ group, type, total, filter, onFilter, selectedKey, on
         collapsed = !filtered && (collapsedByDefault(g.title, e.subgroup) !== toggled.has(subKey));
         out.push(
           <button className="msub-h" key={`sub:${subKey}`} onClick={() => toggle(subKey)}>
-            <span className={collapsed ? 'msub-caret' : 'msub-caret open'}>▸</span>
+            <span className={collapsed ? 'msub-caret' : 'msub-caret open'}><Chevron dir="right" /></span>
             {e.subgroup}
             <span className="msub-c">· {count}</span>
           </button>

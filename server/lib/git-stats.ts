@@ -233,6 +233,29 @@ function errorMessage(err: unknown): string {
   return typeof e.message === 'string' && e.message ? e.message : `git ${sub} failed`;
 }
 
+/**
+ * Drops a URL's username and password so a token in `origin` never reaches the client. An scp-like `user@host:path` has no scheme for `URL` to parse, so
+ * it is cut by hand; a local path passes through. null for an empty or unparseable value, and for any other scheme-less value with an `@` before its first `/`.
+ */
+export function stripUserinfo(url: string): string | null {
+  if (url.trim() === '') return null;
+  if (url.includes('://')) {
+    let u: URL;
+    try { u = new URL(url); } catch { return null; }
+    if (u.username === '' && u.password === '') return url;
+    u.username = '';
+    u.password = '';
+    return u.href;
+  }
+  const scp = /^[^@/:]+@([^/:]+):(.+)$/.exec(url);
+  if (scp) return `${scp[1]}:${scp[2]}`;
+  // An `@` ahead of the first `/` that the scp shape rejects (`user:token@host:path`) may still carry a credential: drop it rather than pass it on.
+  const at = url.indexOf('@');
+  const slash = url.indexOf('/');
+  if (at !== -1 && (slash === -1 || at < slash)) return null;
+  return url;
+}
+
 async function readGitFacts(base: { dirName: string; name: string; path: string | null }, cwd: string, run: GitRunner, memo: GitMemo): Promise<RepoGitStats> {
   // Tags a rejection with the args it came from, so a timeout message can name the subcommand.
   const git = async (dir: string, args: string[]) => {
@@ -268,6 +291,12 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
 
   const locals = parseLocalRefs(await expect0(toplevel, ['for-each-ref', `--format=${LOCAL_REF_FORMAT}`, 'refs/heads']));
   const hasOrigin = (await expect0(toplevel, ['remote'])).split('\n').includes('origin');
+  // Read from local config, no network. Not `expect0`: an unreadable URL costs the Open PR link, not the whole repo.
+  let originUrl: string | null = null;
+  if (hasOrigin) {
+    const got = await git(toplevel, ['remote', 'get-url', 'origin']);
+    if (got.code === 0 && got.stdout.trim() !== '') originUrl = stripUserinfo(got.stdout.trim());
+  }
   const trunk = await trunkOf(git, toplevel);
 
   // The local trunk comes from the for-each-ref list, so a trunk that exists only as `origin/<trunk>` is never named as `refs/heads/<trunk>` (§2).
@@ -351,6 +380,7 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
     uncommitted,
     trunk,
     hasOrigin,
+    originUrl,
     trunkVsOrigin,
     trunkRefs: trunk === null ? null : { local: localTrunk !== undefined, origin: originTrunk !== null },
     currentVsUpstream,

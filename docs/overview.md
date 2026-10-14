@@ -92,6 +92,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, plus `notifyAvailable` (never the ntfy topic itself); write path |
 | `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; write path (see [configs](subsystems/configs.md)) |
 | `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); token-guarded, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
+| `POST /api/open-folder` | open a pinned project's folder with macOS `open`. Token-guarded, path must be a listed pin's, 501 off macOS (see [git-stats](subsystems/git-stats.md)) |
 | `GET /api/git-stats` | local git state of every pinned project, in pin order, plus the fetch clock and each repo's last-fetch verdict; a repo that fails is its own `error` row (see [git-stats](subsystems/git-stats.md)) |
 | `POST /api/git-fetch` | `git fetch origin` over every pinned repo now, answering with the fetch clock; token-guarded write path (see [git-stats](subsystems/git-stats.md#the-fetch)) |
 | `GET /api/configs`, `/project`, `/file` | config browser index / scope / file body |
@@ -195,6 +196,7 @@ server/
   lib/management.ts   config scanner + servable-path security set
   lib/git-stats.ts    read-only git reader for the pinned repos: runner, trunk, memoised branch counts + merged proof
   lib/git-fetch.ts    the Git fetch: detached `git fetch origin` per common dir, error classifier, watched-only timer + clock
+  lib/open-folder.ts  `open <path>` through `execFile`, behind POST /api/open-folder (the pin-membership gate is in api.ts)
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
   lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
@@ -247,8 +249,8 @@ client/src/
                   the Projects | Git section — ProjectsView, the Projects sub-view: the pins and the
                   projects on offer as Tiles, Columns or Lists; and the Git sub-view: GitView
                   (band, switcher, poll owner), GitClockChip (the sync/fetch clock chip and
-                  its popover), GitCards / GitTable / GitTriage (the three
-                  shapes) and GitParts (chips, divergence bar, branch list they share)), analytics/,
+                  its popover), GitInbox / GitMatrix / GitInspector /
+                  GitBranches (the four shapes, fed one `GitLayoutProps`) and GitParts (chips, divergence bar, branch list they share)), analytics/,
                   usage/ (UsageView + the three tabs, Sheet — the band / figure
                   strip / sheet / definitions
                   chrome the tabs draw, and
@@ -257,7 +259,8 @@ client/src/
                   useConfigs, useConfigsScope (the scope + the one index
                   fetch, shared by the rail's tree and the page), useAnalytics,
                   useUsageProfile, useUsageRates, useUsageHistory, usePendingQuestion, usePendingPlan,
-                  usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins, usePinReorder (Projects' pin grip),
+                  usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins, usePinReorder (Projects' pin grip), useOpenFolder (Git's Open folder
+                  key),
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
                   Sync button: runs per device, a sessions poll only while one is live),
                   usePersistedState, useSettings, useServerSettings, useDictation, useFloatingTip
@@ -274,8 +277,8 @@ client/src/
                   webNotify, backClose, stopControl, triage (the board/triage piles),
                   stickyStrip, agentLabel (a subagent's type only when informative),
                   tasks (taskProgress — the one count the row pill and the Tasks card share),
-                  gitLayouts / gitTriage / gitStatsText (the Git sub-view's switcher rules,
-                  Triage grouping and copy table), gitBar (the divergence bar's scale),
+                  gitLayouts / gitLevels / gitLinks / gitStatsText (the Git sub-view's switcher rules,
+                  the problems → levels rule and session join, the compare link, the copy table), gitBar (the divergence bar's scale),
                   gitPoll (its poll schedule, apart from the DOM), gitSync / gitSyncRuns
                   (the Sync button's rules, copy and run reconciler), projectsView (the
                   Projects sub-view's layouts, pinned / offered split, dir line and copy)

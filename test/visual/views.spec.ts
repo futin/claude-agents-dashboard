@@ -6,12 +6,14 @@ import { SECTIONS, type Section } from '../../client/src/lib/sections.js';
 import type { ThemeId } from '../../client/src/lib/settings.js';
 
 import { FIXTURE_SESSION_ID } from './fixtures/index.js';
+import { gitSessions } from './fixtures/git-sessions.js';
+import { pinsWithGone } from './fixtures/pins.js';
 import { expect, test } from './harness.js';
 import { stage, type StageOpts } from './stage.js';
 import { DAYLIGHT_TIERS } from './tiers.js';
 
 interface ShotCase extends StageOpts {
-  kind: 'shot' | 'detail' | 'triage';
+  kind: 'shot' | 'detail' | 'triage' | 'git-matrix' | 'git-inspector' | 'git-branches' | 'projects-tiles' | 'projects-columns' | 'projects-lists';
 }
 
 const OTHER_THEMES: ThemeId[] = ['midnight', 'amber', 'graphite', 'nightshift'];
@@ -23,6 +25,20 @@ function casesFor(section: Section): ShotCase[] {
   ];
 }
 
+const GIT = {
+  section: 'management' as Section,
+  theme: 'daylight' as ThemeId,
+  contentWidth: 'fixed' as const,
+  fixtures: { '/api/sessions': gitSessions }
+};
+const PROJ = {
+  section: 'management' as Section,
+  theme: 'daylight' as ThemeId,
+  contentWidth: 'fixed' as const,
+  managementTab: 'projects' as const,
+  fixtures: { '/api/pins': pinsWithGone }
+};
+
 const CASES: ShotCase[] = [
   ...SECTIONS.flatMap((s) => casesFor(s.id)),
   { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID, kind: 'detail' },
@@ -30,11 +46,22 @@ const CASES: ShotCase[] = [
   { section: 'sessions', theme: 'daylight', width: 375, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID, kind: 'detail' },
   // Triage draws its Working and Idle rows without `Tags`, so the task pill there has its own render site to pin.
   { section: 'sessions', theme: 'daylight', width: 375, contentWidth: 'fixed', layout: 'triage', kind: 'triage' },
-  { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', layout: 'triage', kind: 'triage' }
+  { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', layout: 'triage', kind: 'triage' },
+  // Git's default layout (Inbox) is what the management shots above show; the other layouts are seeded through the persisted key. The sessions fixture adds
+  // an idle session on lumen-cli so the join draws all three chips.
+  { ...GIT, width: 1280, storage: { 'management.gitLayout': 'matrix' }, kind: 'git-matrix' },
+  { ...GIT, width: 375, storage: { 'management.gitLayout': 'inspector' }, kind: 'git-inspector' },
+  { ...GIT, width: 1280, storage: { 'management.gitLayout': 'inspector' }, kind: 'git-inspector' },
+  { ...GIT, width: 375, storage: { 'management.gitLayout': 'branches' }, kind: 'git-branches' },
+  { ...GIT, width: 1280, storage: { 'management.gitLayout': 'branches' }, kind: 'git-branches' },
+  // Projects with a pinned folder that is gone, so every layout shows the `Folder gone` chip.
+  { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'tiles' }, kind: 'projects-tiles' },
+  { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'columns' }, kind: 'projects-columns' },
+  { ...PROJ, width: 375, storage: { 'management.projectsLayout': 'lists' }, kind: 'projects-lists' }
 ];
 
-/** 12 per view × 6 views + 2 drawer details + 2 triage. A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered. */
-const EXPECTED_SHOTS = 76;
+/** 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts. A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered. */
+const EXPECTED_SHOTS = 84;
 
 const title = (c: ShotCase): string => `${c.section} · ${c.theme} · ${c.width} · ${c.kind}`;
 
