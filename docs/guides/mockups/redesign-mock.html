@@ -193,10 +193,15 @@
   --orange-400:#F5A15C;
   --orange-300:#F9C79A;
   --red-500:#AA3927;
-  /* data inks: Daylight's --amber / --mustard / --cyan from styles.css,
-     read by Management › Git (amber needs you, mustard in flight, cyan the
-     ahead half of a divergence bar and a request in flight) */
-  --amber:#824E15;
+  /* data inks: Daylight's --amber-solid / --amber-text / --mustard / --cyan from
+     styles.css, read by Management › Git (amber needs you, mustard in flight,
+     cyan the ahead half of a divergence bar and a request in flight).
+     Amber is split: the FILL (bars, dots, meters, borders) is the bright
+     #C4761F, which clears 3:1 as a mark; amber TEXT is the ink, because the
+     darkened amber that cleared 4.5:1 read as brown. The soft pill below keeps
+     its own tint and text. */
+  --amber-solid:#C4761F;
+  --amber-text:var(--text-primary);
   --mustard:#5F530B;
   /* the soft pill: the fill as the Git rules mix it, and the text — the same
      hue, darkened only as far as 4.5:1 on the fill over the darkest surface
@@ -390,7 +395,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .acct .mtop b{font-size:11px;font-weight:700}
 .acct .mini{position:relative;height:3.5px;border-radius:var(--r-full);background:var(--bg-track);overflow:hidden}
 .acct .mini i{position:absolute;inset:0 auto 0 0;border-radius:var(--r-full);background:var(--green-500)}
-.acct .mini i.mid{background:var(--amber)}
+.acct .mini i.mid{background:var(--amber-solid)}
 .acct .mini i.high{background:var(--red-500)}
 .acct .cv{width:9px;height:9px;flex:none;color:var(--text-tertiary);transition:transform .16s}
 .acct[aria-expanded="true"] .cv{transform:rotate(180deg)}
@@ -436,7 +441,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .ring.lg{width:34px;height:34px}
 .ring.lg svg{width:17px;height:17px}
 .acct.out .nm{color:var(--text-secondary);font-weight:500}
-.acct.out .dotwarn{flex:none;width:6px;height:6px;border-radius:var(--r-full);background:var(--amber)}
+.acct.out .dotwarn{flex:none;width:6px;height:6px;border-radius:var(--r-full);background:var(--amber-solid)}
 
 /* the signed-out popover: no gauges to show, so it is the sentence and the fix */
 .acct-pop .out-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
@@ -501,7 +506,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .delta{font-size:12px;margin-top:6px;color:var(--text-secondary)}
 .delta b{font-weight:400}
 .delta .up{color:var(--green-ink)}
-.delta .down{color:var(--amber)}
+.delta .down{color:var(--amber-text)}
 .chip{
   height:30px;padding:0 12px;background:var(--bg-surface);border:1px solid var(--border-strong);color:var(--text-secondary);
   border-radius:var(--r-md);font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px;
@@ -531,7 +536,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 /* 10px progress track — usage gauges here, limits on the Usage pages */
 .track{height:10px;border-radius:var(--r-sm);background:var(--bg-track);margin-top:8px;overflow:hidden}
 .track i{display:block;height:100%;border-radius:var(--r-sm);background:var(--green-500)}
-.track i.warn{background:var(--amber)}
+.track i.warn{background:var(--amber-solid)}
 .track i.hot{background:var(--red-500)}
 .cap{font-size:11px;color:var(--text-secondary);margin-top:6px}/* account gauges: 5-hour and weekly windows, tokens on one axis, time on the other */
 .usage{display:grid;grid-template-columns:1fr 1fr;gap:32px}
@@ -661,7 +666,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
    block clipped to its 8px track. */
 .callout{
   display:flex;gap:10px;margin:0 0 16px;padding:12px 14px;border-radius:var(--r-md);
-  background:color-mix(in srgb,var(--amber) 12%,transparent);font-size:12px;line-height:1.5;color:var(--text-secondary);
+  background:color-mix(in srgb,var(--amber-solid) 12%,transparent);font-size:12px;line-height:1.5;color:var(--text-secondary);
 }
 .callout b{color:var(--text-primary);font-weight:500}
 /* theme picker */
@@ -688,7 +693,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .ra.on .ra-track i{left:14px}
 .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:10px}
 .toolbar .tb-spacer,.tb-spacer{flex:1}
-.stop-badge{flex:none;font-size:12px;color:var(--amber)}
+.stop-badge{flex:none;font-size:12px;color:var(--amber-text)}
 .rc-mark{font-size:11px;color:var(--text-secondary)}
 /* row atoms: name, pills, model, context figures, the 8px context bar */
 .r1{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap;row-gap:6px}
@@ -708,10 +713,10 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .model{font-size:11px;font-weight:500;color:var(--text-tertiary);white-space:nowrap}
 .tok{font-size:13px;color:var(--text-secondary);white-space:nowrap}
 .pct{font-size:14px;font-weight:600;min-width:42px;text-align:right}
-.pct.warn{color:var(--amber)}
+.pct.warn{color:var(--amber-text)}
 .bar{height:8px;border-radius:var(--r-sm);background:var(--bg-track);margin-top:12px;overflow:hidden}
 .bar .fill{display:block;height:100%;border-radius:var(--r-sm);background:var(--green-500)}
-.bar .fill.warn{background:var(--amber)}
+.bar .fill.warn{background:var(--amber-solid)}
 .status{font-size:11px;font-weight:500;padding:2px 8px;border-radius:var(--r-md);background:var(--bg-subtle);color:var(--text-secondary);white-space:nowrap;flex:none}
 
 /* Shared atoms the view renderers emit. State lives on the element itself here
@@ -719,18 +724,18 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
    the same session sits in a card, a table cell, a list row and a tile. */
 .ldot{width:9px;height:9px;border-radius:50%;background:var(--border-strong);display:inline-block;flex:none}
 .ldot.working{background:var(--green-500)}
-.ldot.question{background:var(--amber)}
+.ldot.question{background:var(--amber-solid)}
 .ldot.incomplete{background:var(--mustard)}
 .ldot.launching{background:var(--ink-inverse)}
 /* motion, as on the live board: a working dot breathes a ring, a launching dot
    the same in ink, a needs-you button and a running timeline bar fade in place */
 .ldot.working{box-shadow:0 0 0 0 color-mix(in srgb,var(--green-500) 50%,transparent);animation:pulse 1.8s infinite}
 .ldot.launching{box-shadow:0 0 0 0 color-mix(in srgb,var(--ink-inverse) 35%,transparent);animation:pulse-ink 1.8s infinite}
-.ldot.question{box-shadow:0 0 0 0 color-mix(in srgb,var(--amber) 50%,transparent);animation:pulse-amber 1.8s infinite}
+.ldot.question{box-shadow:0 0 0 0 color-mix(in srgb,var(--amber-solid) 50%,transparent);animation:pulse-amber 1.8s infinite}
 .ldot.incomplete{box-shadow:0 0 0 0 color-mix(in srgb,var(--mustard) 50%,transparent);animation:pulse-mustard 1.8s infinite}
 .ldot.failed{background:var(--red-500)}
 @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green-500) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
-@keyframes pulse-amber{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--amber) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes pulse-amber{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--amber-solid) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes pulse-mustard{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--mustard) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes pulse-ink{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ink-inverse) 35%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 .cbtn.answer,.cbtn.permission{animation:qpulse 1.6s ease-in-out infinite}
@@ -837,7 +842,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .kv{background:var(--bg-subtle);border-radius:var(--r-md);padding:14px 16px;min-width:0}
 .kv .k{font-size:12px;color:var(--text-secondary)}
 .kv .v{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:4px;line-height:1.1;display:flex;align-items:baseline;gap:8px}
-.kv .v.warn{color:var(--amber)}
+.kv .v.warn{color:var(--amber-text)}
 .kv .v .u{font-size:12px;font-weight:400;color:var(--text-secondary);letter-spacing:0}
 .kv .track{margin-top:12px;background:var(--border-strong)}
 .kv .cap{margin-top:10px}
@@ -854,7 +859,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .tile-h .nm{font-size:15px;font-weight:500;letter-spacing:-.01em;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tile-sub{margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-height:20px}
 .tile-metric{display:flex;align-items:baseline;gap:8px;margin-top:16px}
-.tile-metric .metric.warn{color:var(--amber)}
+.tile-metric .metric.warn{color:var(--amber-text)}
 .tile-metric .of{font-size:12px;color:var(--text-secondary)}
 .tile .track{margin-top:12px}
 .tile .act-line{margin-top:14px}
@@ -894,7 +899,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .facts{display:grid;gap:12px;margin-top:12px;font-size:13px;color:var(--text-secondary)}
 .fact{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .fact b{color:var(--text-primary);font-weight:600}
-.fact b.hot{color:var(--amber)}
+.fact b.hot{color:var(--amber-text)}
 .aside .ra{width:100%;justify-content:space-between;height:36px;margin-top:20px}
 .aside .newbtn{width:100%;justify-content:center;margin-top:10px;height:36px;font-size:13px;border-radius:var(--r-md)}
 
@@ -971,7 +976,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .statstrip > div + div{border-left:2px solid var(--bg-app)}
 .statstrip .k{font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:8px}
 .statstrip .v{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:6px;line-height:1.1;overflow-wrap:anywhere}
-.statstrip .v.warn{color:var(--amber)}
+.statstrip .v.warn{color:var(--amber-text)}
 .statstrip .v .u{font-size:14px;font-weight:400;color:var(--text-secondary)}
 .statstrip .s{font-size:11px;color:var(--text-tertiary);margin-top:5px}
 .sheet{background:var(--bg-surface);border-radius:var(--r-lg);padding:22px 24px}
@@ -997,7 +1002,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .dt .bar.assumed{background:color-mix(in oklab,var(--green-500) 35%,var(--bg-track))}
 .dt .barcell{width:120px}
 .dt .dev{font-weight:500;color:var(--green-ink)}
-.dt .dev.bad{color:var(--amber)}
+.dt .dev.bad{color:var(--amber-text)}
 .dt .dev.flat{color:var(--text-tertiary)}
 .tag-v{display:inline-block;font-size:11px;font-weight:500;border-radius:var(--r-full);padding:3px 9px;background:var(--bg-track);color:var(--text-secondary);white-space:nowrap}
 .tag-v.stable{background:var(--green-200);color:var(--green-ink)}
@@ -1074,15 +1079,15 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
    under the run walked at the weekly mean — the hatch being this board's mark
    for "no evidence", the same one an unmeasured hour cell wears */
 .hr-debt.measured{fill:color-mix(in oklab, var(--red-500) 22%, transparent)}
-.hr-debt{fill:color-mix(in oklab, var(--amber) 28%, transparent)}
+.hr-debt{fill:color-mix(in oklab, var(--amber-solid) 28%, transparent)}
 .hr-line{fill:none;stroke:var(--green-500);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .hr-line.debt{stroke:var(--red-500)}
 /* the dashed run takes the colour of the fill under it: past the evidence the
    deficit is a guess, and orange is what this board calls a guessed overrun */
 .hr-line.assumed{stroke-dasharray:5 4;stroke-width:1.6}
-.hr-line.debt.assumed{stroke:var(--amber)}
+.hr-line.debt.assumed{stroke:var(--amber-solid)}
 .hr-zero{stroke:var(--text-primary);stroke-width:1.2;vector-effect:non-scaling-stroke}
-.uplegend .rule.brick{width:14px;height:14px;border:0;border-radius:2px;background:var(--green-500)}.uplegend .rule.brick.debt{background:color-mix(in oklab, var(--amber) 45%, var(--bg-surface))}
+.uplegend .rule.brick{width:14px;height:14px;border:0;border-radius:2px;background:var(--green-500)}.uplegend .rule.brick.debt{background:color-mix(in oklab, var(--amber-solid) 45%, var(--bg-surface))}
 .uplegend .rule.brick.debt.red{background:color-mix(in oklab, var(--red-500) 32%, var(--bg-surface))}/* ── the variant switcher (mock chrome, not part of the design) ──────────── *//* ═══════════════════════════════════════════════════════════════════════════
    CLAUDE CONFIGS (was Management) — five layout variants over one config
    fixture. The `mg-` class prefix is kept from the old name.
@@ -1126,7 +1131,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 /* live .icon-refresh: the glyph-only round ↻ the Configs and Analytics bands share */
 .refresh.icon{width:26px;height:26px;padding:0;justify-content:center;border-radius:var(--r-full);font-size:12px;font-weight:400;line-height:1;color:var(--text-secondary);align-self:center;margin-left:auto}
 .refresh.icon:hover{color:var(--text-primary);border-color:var(--text-tertiary)}
-.scanfail{font-size:12px;color:var(--amber);flex:none}
+.scanfail{font-size:12px;color:var(--amber-text);flex:none}
 .mg-empty{font-size:13px;color:var(--text-tertiary);padding:6px 2px}
 
 /* The scope left the page for the rail sub-nav, so nothing here draws it — the
@@ -1401,8 +1406,8 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-meter-value{font-size:11px;font-weight:700;color:var(--text-primary)}
 .git-meter-track{height:3.5px;border-radius:4px;background:var(--bg-track);overflow:hidden}
 .git-meter-fill{display:block;height:100%;border-radius:4px;background:var(--green-500)}
-.git-meter[data-tone="amber"] .git-meter-fill{background:var(--amber)}
-.git-meter[data-tone="amber"] .git-meter-value{color:var(--amber)}
+.git-meter[data-tone="amber"] .git-meter-fill{background:var(--amber-solid)}
+.git-meter[data-tone="amber"] .git-meter-value{color:var(--amber-text)}
 .git-meter[data-tone="live"] .git-meter-fill{background:var(--cyan);animation:git-meter-pulse 1.6s ease-in-out infinite}
 .git-meter[data-tone="live"] .git-meter-value{color:var(--cyan)}
 @keyframes git-meter-pulse{50%{opacity:.35}}
@@ -1413,19 +1418,19 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-pop-text{display:flex;flex-direction:column;gap:1px;min-width:0}
 .git-pop-name{font-size:13px;font-weight:500}
 .git-pop-sub{font-size:12px;color:var(--text-tertiary)}
-.git-pop-sub.warn{color:var(--amber)}
+.git-pop-sub.warn{color:var(--amber-text)}
 .git-pop-key{height:28px;padding:0 10px;font-size:12px;font-weight:500;color:var(--text-secondary);background:var(--bg-subtle);border:0;border-radius:var(--r-sm)}
 .git-pop-key:hover:not(:disabled){color:var(--text-primary);background:var(--border-strong)}
 .git-pop-key:disabled{color:var(--text-tertiary);cursor:default}
 .git-trouble{display:flex;flex-direction:column;gap:4px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--text-secondary)}
 .git-trouble-name{font-weight:500;color:var(--text-primary)}
-.git-trouble-word{color:var(--amber)}
+.git-trouble-word{color:var(--amber-text)}
 .git-empty{padding:48px 20px;text-align:center;font-size:13px;color:var(--text-secondary)}
 .git-link{font:inherit;color:var(--cyan);background:none;border:0;padding:0;text-decoration:underline;text-underline-offset:2px}
-.git-sync-note{font-size:12px;color:var(--amber)}
+.git-sync-note{font-size:12px;color:var(--amber-text)}
 
 .git-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--text-tertiary)}
-.git-dot.needs{background:var(--amber)}
+.git-dot.needs{background:var(--amber-solid)}
 .git-dot.flight{background:var(--mustard)}
 .git-dot.quiet{background:var(--green-500)}
 .git-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
@@ -1460,7 +1465,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-key.primary:hover,.git-sync.primary:hover:not(:disabled){color:var(--text-on-dark);background:color-mix(in srgb,var(--text-primary) 85%,var(--bg-surface))}
 .git-chip.dim{color:var(--text-tertiary);border-style:dashed}
 .git-origin{font-size:12px;color:var(--text-tertiary);white-space:nowrap}
-.git-origin.warn{color:var(--amber)}.git-origin.live{color:var(--cyan)}
+.git-origin.warn{color:var(--amber-text)}.git-origin.live{color:var(--cyan)}
 /* an agent on the branch, in the Sessions board's own inks */
 .git-sess{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:var(--r-full);padding:1px 8px 1px 6px;white-space:nowrap;flex:none}
 .git-sess::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
@@ -1488,7 +1493,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-ib-tile{border:0;text-align:left;background:var(--bg-surface);border-radius:var(--r-lg);padding:14px 16px;display:flex;flex-direction:column;gap:2px;outline:2px solid transparent;outline-offset:-2px}
 .git-ib-tile.on{outline-color:var(--ink-inverse)}
 .git-ib-tile .big{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
-.git-ib-tile.needs .big{color:var(--amber)}
+.git-ib-tile.needs .big{color:var(--amber-text)}
 .git-ib-tile .lab{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)}
 @media (max-width:639px){.git-ib-sum{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .git-ib-list{display:flex;flex-direction:column;gap:10px}
@@ -1501,7 +1506,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-ib-steps li{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--text-secondary)}
 .git-ib-steps li::before{content:"";width:5px;height:5px;border-radius:50%;flex:none;background:var(--border-strong);transform:translateY(-2px)}
 .git-ib-steps li.hot{color:var(--text-primary)}
-.git-ib-steps li.hot::before{background:var(--amber)}
+.git-ib-steps li.hot::before{background:var(--amber-solid)}
 .git-ib-steps li.calm::before{background:var(--green-500)}
 .git-ib-keys{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 @media (max-width:767px){.git-ib-top{flex-wrap:wrap}.git-ib-keys{width:100%;justify-content:flex-start;padding-left:20px}}
@@ -1570,8 +1575,8 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 @media (max-width:1023px){.git-in{grid-template-columns:minmax(0,1fr)}}
 .git-in .lrow:not(.selected):hover{background:color-mix(in srgb,var(--bg-subtle) 50%,transparent)}
 .git-in .lrow .git-dot{width:9px;height:9px}
-.git-in .lrow .act.hot{color:var(--amber)}
-.git-in .lrow .ago.warn{color:var(--amber)}.git-in .lrow .ago.live{color:var(--cyan)}
+.git-in .lrow .act.hot{color:var(--amber-text)}
+.git-in .lrow .ago.warn{color:var(--amber-ink)}.git-in .lrow .ago.live{color:var(--cyan)}
 .git-in-fig{font-weight:400}
 /* the level as the Sessions .status pill, in the Git inks */
 .status.g-needs{background:var(--amber-tint);color:var(--amber-ink)}
@@ -1615,7 +1620,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .git-bb-ln{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .git-bb-ln.end{justify-content:flex-end;gap:6px}
 .git-bb-ln.start{justify-content:flex-start;gap:6px}
-.git-bb-warn{font-size:12px;font-weight:500;color:var(--amber)}
+.git-bb-warn{font-size:12px;font-weight:500;color:var(--amber-text)}
 .git-bb-note{font-size:12px;color:var(--text-tertiary);padding:0 4px}
 .git-bb-repo{font-size:12px;color:var(--text-tertiary)}
 .git-bb-empty{padding:12px 14px;font-size:12px;color:var(--text-tertiary);border:1px dashed var(--border-strong);border-radius:var(--r-lg)}
@@ -1628,7 +1633,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .pj-toolbar .pin-filter{flex:1;width:auto;min-width:200px;height:38px}
 .pin-group{padding:14px 0 2px;font-size:13px;font-weight:500}
 .pin-count{font-size:12px;font-weight:400;color:var(--text-tertiary);margin-left:6px}
-.pin-sub{display:block;font-size:12px;line-height:1.45;color:var(--amber);margin-top:2px}
+.pin-sub{display:block;font-size:12px;line-height:1.45;color:var(--amber-text);margin-top:2px}
 .pin-note{font-size:13px;color:var(--text-tertiary);padding:10px 0}
 .pj-id{display:flex;flex-direction:column;min-width:0}
 .pj-name{font-size:15px;font-weight:500;color:var(--text-primary);overflow-wrap:anywhere}
@@ -1638,7 +1643,7 @@ code{font:inherit;font-size:12px;background:var(--bg-subtle);border-radius:var(-
 .pj-tile{display:flex;flex-direction:column;justify-content:space-between;gap:12px;padding:16px;min-width:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-lg)}
 .pj-tile.off{background:transparent;border:1px dashed var(--border-strong)}
 .pj-tile.off .pj-name{color:var(--text-secondary)}
-.pj-tile.gone{border-color:var(--amber)}
+.pj-tile.gone{border-color:var(--amber-solid)}
 .pj-tfoot{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .pj-tile .btn,.pj-srw .btn{display:block;height:32px;padding:0 14px;color:var(--text-secondary)}   /* styles.css .qp-term in a pin */
 .pj-tile .btn:hover:not(:disabled),.pj-srw .btn:hover:not(:disabled){color:var(--text-primary)}
@@ -1690,7 +1695,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 
 /* a gone tile's note: an amber chip in the foot, the sentence its tooltip */
 .pj-gone{position:relative;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:0;border-radius:var(--r-full);background:var(--amber-tint);color:var(--amber-ink);font-size:12px;font-weight:500;white-space:nowrap;cursor:help}
-.pj-gone:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.pj-gone:focus-visible{outline:2px solid var(--amber-solid);outline-offset:2px}
 .pj-tip{position:absolute;left:0;bottom:calc(100% + 8px);z-index:5;width:240px;padding:8px 10px;border-radius:var(--r-sm);background:var(--ink-inverse);color:var(--text-on-dark);box-shadow:var(--lift-float);font-size:12px;font-weight:400;line-height:1.45;white-space:normal;text-align:left;opacity:0;transform:translateY(4px);pointer-events:none;transition:opacity .15s,transform .15s}
 .pj-tip::after{content:"";position:absolute;left:16px;top:100%;border:5px solid transparent;border-top-color:var(--ink-inverse)}
 .pj-gone:hover .pj-tip,.pj-gone:focus .pj-tip{opacity:1;transform:none}
@@ -2052,7 +2057,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
    label out of line with the other four */
 .an-metric-v{font-size:19px;font-weight:700;color:var(--text-primary);letter-spacing:-.02em;line-height:1.1;white-space:nowrap;font-variant-numeric:tabular-nums}
 .an-metric.lead .an-metric-v{font-size:25px;color:var(--green-ink)}
-.an-metric-v.warn{color:var(--amber)}
+.an-metric-v.warn{color:var(--amber-text)}
 .an-metric-l{font-size:11px;font-weight:500;color:var(--text-tertiary);margin-top:5px;white-space:nowrap}
 .an-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}
 .an-col{background:var(--bg-subtle);border-radius:var(--r-md);padding:14px 16px;min-width:0}
@@ -2126,7 +2131,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .dt td.lim{color:var(--red-500);font-weight:500}
 .up-off{
   display:flex;gap:10px;font-size:13px;line-height:1.5;color:var(--text-secondary);
-  border-radius:var(--r-lg);background:color-mix(in srgb,var(--amber) 12%,transparent);padding:16px 20px;
+  border-radius:var(--r-lg);background:color-mix(in srgb,var(--amber-solid) 12%,transparent);padding:16px 20px;
 }
 .up-off b{color:var(--text-primary);font-weight:500}
 
@@ -3064,7 +3069,7 @@ document.querySelectorAll('[data-go]').forEach(el =>
           <td class="n">${r.active.toFixed(1)}</td>
           <td>${src}</td>
           <td class="n">+${r.gain.toFixed(1)}%</td>
-          <td class="n"${over ? ' style="color:var(--amber);font-weight:600"' : ''}>${r.end.toFixed(0)}%</td>
+          <td class="n"${over ? ' style="color:var(--amber-text);font-weight:600"' : ''}>${r.end.toFixed(0)}%</td>
           <td class="barcell"><i class="bar${r.learned === 0 ? ' assumed' : ''}" style="width:${Math.min(100, r.end / CEIL_PCT * 100).toFixed(0)}%"></i></td>
           <td class="mut">${r.cross !== null ? `crosses 100% at ${String(r.cross).padStart(2, '0')}:00` : NOTES[k] || ''}</td>
         </tr>`);
@@ -3077,7 +3082,7 @@ document.querySelectorAll('[data-go]').forEach(el =>
         <td class="n">${active.toFixed(1)}</td>
         <td>${learned} measured · ${N - learned} at the mean</td>
         <td class="n">+${gain.toFixed(0)}%</td>
-        <td class="n" style="color:var(--amber)">${PTS[N - 1].cum.toFixed(0)}%</td>
+        <td class="n" style="color:var(--amber-text)">${PTS[N - 1].cum.toFixed(0)}%</td>
         <td class="barcell"><i class="bar hatch" style="width:100%"></i></td>
         <td class="mut">${N - CROSS} hours past the crossing the window cannot pay for</td>
       </tr>`);
@@ -3432,7 +3437,7 @@ document.querySelectorAll('[data-go]').forEach(el =>
   const F = { statuses: new Set(), project: 'all', win: '24h' };
   const SORT = { key: 'recency', dir: 'asc' };
   const PROJECTS = ['claude-agents-dashboard', 'timify-web', 'guide-manager', 'infra-terraform'];
-  const STATUSES = [['working', 'var(--green-500)'], ['question', 'var(--amber)'], ['incomplete', 'var(--mustard)'], ['idle', 'var(--border-strong)']];
+  const STATUSES = [['working', 'var(--green-500)'], ['question', 'var(--amber-solid)'], ['incomplete', 'var(--mustard)'], ['idle', 'var(--border-strong)']];
   const STATUS_LABEL = { working: 'working', question: 'waiting', incomplete: 'pending', idle: 'idle' };
   const SORTS = [['recency', 'Recency', 'last activity'], ['needs', 'Needs you first', 'then recency'], ['context', 'Context used', '% of window'], ['name', 'Name', 'A → Z'], ['project', 'Project', 'then name']];
   const filterCount = () => F.statuses.size + (F.project !== 'all' ? 1 : 0) + (F.win !== '24h' ? 1 : 0);
