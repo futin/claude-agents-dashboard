@@ -462,7 +462,7 @@ export function readTranscript(
   const originCwd = resolveOriginCwd(filePath, tail, lines, first);
 
   const win = resolveWindow(
-    tokens, model, undefined, identityModel, frozenCompactWindow(filePath, tail.size, originCwd), compactedAt
+    tokens, model, undefined, identityModel, frozenCompactWindow(filePath, tail.size, originCwd, identityModel || model), compactedAt
   );
   const contextPct = win > 0 ? Math.min(100, Math.round((tokens / win) * 1000) / 10) : 0;
 

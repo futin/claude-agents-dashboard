@@ -74,10 +74,12 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   finds the same way the title is found below — or when the model id carries `[1m]`. Otherwise it is the model's native window: 1M for Opus, Sonnet,
   Fable and Mythos from 4.6 on, 200k for Haiku, anything older and any id that doesn't parse. The id is the session's own model attachment
   (`{"type":"attachment","attachment":{"type":"model","identity":{"modelId":"claude-opus-5-5"}}}`, newest wins, found by `model-identity.ts`), else
-  `message.model`. That maximum is then capped at the session's own `autoCompactWindow` (or an `env` `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), read by
-  `compact-window.ts` from its user, project, local and managed settings files, as Claude Code caps it — unless context has already passed the cap, which
-  proves it is not in force. The cap is pinned per transcript the first time it is resolved, because a session loads its settings once, at start: a later
-  edit moves only sessions first seen after it. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the dashboard's own env overrides all of it. Turns orange/red as it
+  `message.model`. That maximum is then capped at the session's own `autoCompactWindow` — an `env` `CLAUDE_CODE_AUTO_COMPACT_WINDOW` first, then
+  `modelSettings[<model id>].autoCompactWindow` (tried as given, then without `[1m]`), then the top-level setting — read by `compact-window.ts` from its
+  user, project, local and managed settings files, as Claude Code caps it — unless context has already passed the cap, which proves it is not in force.
+  Missing the per-model entry is what put an Opus 5.5 session at 201k on a 1M gauge: the top-level 200k was the only cap read, and 201k "proved" it gone.
+  The settings are pinned per transcript the first time they are resolved, because a session loads its settings once, at start: a later edit moves only
+  sessions first seen after it. The model is not pinned, so a `/model` switch moves the cap with it. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the dashboard's own env overrides all of it. Turns orange/red as it
   fills.
 - **Activity line** — the most recent tool call (e.g. `Edit server.ts`,
   `Task Explore: map the codebase`).
