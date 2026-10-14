@@ -110,7 +110,7 @@ export function notifyBody(t: NotifyTarget): string {
  * stays pure.
  */
 export function iconColorVar(kind: NotifyKind): string {
-  if (kind === 'question') return '--amber';
+  if (kind === 'question') return '--amber-solid';
   if (kind === 'plan') return '--cyan';
   return '--mustard';
 }

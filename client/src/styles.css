@@ -37,7 +37,7 @@
   --bg:var(--board);--surface:var(--strip);--surface2:var(--steel);
   --border:var(--hairline);--border2:var(--hairline2);
   --text:var(--ink);--text2:var(--ink2);--text3:var(--ink3);
-  --accent:var(--cyan);--blue:var(--amber);--orange:var(--amber);
+  --accent:var(--cyan);--blue:var(--amber-solid);--orange:var(--amber-solid);
   --yellow:var(--mustard);--pink:var(--magenta);
   /* green as a data FILL (History's day segments), not as ink. On the dark
      boards the ink green is already bright, so a mix toward the paper is the
@@ -54,6 +54,10 @@
      boards both are the accent itself, which clears 4.5:1 on its own tint in every dark theme; daylight overrides them with the mock's own hues, the
      fill as the mock mixes it and the text the lightest shade of that hue that clears 4.5:1 on the fill (`test/daylight-contrast.test.ts`). */
   --amber-tint:color-mix(in srgb,var(--amber) 11%,transparent);--amber-ink:var(--amber);
+  /* amber as a solid mark (context bars, status dots, meters, borders, tinted notices) and as text on the bare card. On the dark boards both are the accent
+     itself; daylight splits them — the mark takes the mock's bright #C4761F, which clears 3:1 as a non-text object, and the text takes the ink, because no
+     amber light enough to look like amber clears 4.5:1 on white and the darkened one reads as brown. The pill text stays `--amber-ink` on `--amber-tint`. */
+  --amber-solid:var(--amber);--amber-text:var(--amber);
   --mustard-tint:color-mix(in srgb,var(--mustard) 13%,transparent);--mustard-ink:var(--mustard);
 }
 /* Graphite — the same board with the blue cast taken out. For anyone who finds
@@ -103,9 +107,11 @@
      bar, not a colour change), so that one rule names `--ink` rather than the
      accent.
    - The ramp's own values (#F5A15C orange, #F2E635 yellow) are fills, drawn on
-     bars and card faces. As *text* on white neither clears 3:1, so `--amber`
-     and `--mustard` take the darkened cousins and the bright pair stays where
-     the design puts it — behind the ink, never under it.
+     bars and card faces. As *text* on white neither clears 3:1, so `--mustard`
+     takes the darkened cousin and the bright pair stays where the design puts
+     it — behind the ink, never under it. Amber splits the other way: `--amber-solid`
+     is the bright mock fill (3:1 as a mark) and amber *text* is simply the ink, so
+     no darkened amber is left to read as brown.
    - Every token drawn as text clears WCAG AA (4.5:1): `--ink2`/`--ink3` on each
      surface they sit on, and each accent on its own `color-mix` pill tint, which
      darkens with it — composited over `--strip-hi`, not white, since pills sit
@@ -120,12 +126,13 @@
   --board:#f4f4f3;--steel:#ededec;--strip:#ffffff;--strip-hi:#f2f2f1;
   --edge:rgba(0,0,0,.03);--hairline:#eaeae8;--hairline2:#dcdcda;
   --ink:#131313;--ink2:#525252;--ink3:#6b6b6b;
-  --green:#38631a;--amber:#824e15;--mustard:#5f530b;--cyan:#306c0f;
+  --green:#38631a;--mustard:#5f530b;--cyan:#306c0f;
   --red:#aa3927;--magenta:#6950a5;
   --green-fill:#7dc242;--green-fill2:#9bd25c;  /* mock --green-500 / --green-400 */
   --green-solid:#7dc242;--green-tint:#cde8a8;   /* mock --green-500 / --green-200 */
   /* the mock's #C4761F / #9A8712 at its 11% / 13% for the fill; the text is the same hue darkened only as far as 4.5:1 over the fill on --strip-hi, the
      darkest surface a pill sits on (on --strip it is ~5:1) */
+  --amber-solid:#c4761f;--amber-text:var(--ink);  /* mock --amber: the fill; text is the ink (see the root block) */
   --amber-tint:color-mix(in srgb,#c4761f 11%,transparent);--amber-ink:#945917;
   --mustard-tint:color-mix(in srgb,#9a8712 13%,transparent);--mustard-ink:#74660e;
   --on-accent:#ffffff;--scrim:rgba(19,19,19,.28);
@@ -448,7 +455,7 @@ code,kbd,samp,pre{font-family:inherit}
    the popover is where the same number is read properly. */
 .acct .mini{position:relative;height:3.5px;border-radius:999px;background:var(--steel);overflow:hidden}
 .acct .mini i{position:absolute;inset:0 auto 0 0;border-radius:999px;background:var(--green-solid);transition:width .5s ease}
-.acct .mini i.mid{background:var(--amber)}
+.acct .mini i.mid{background:var(--amber-solid)}
 .acct .mini i.high{background:var(--red)}
 .acct .cv{flex:none;width:9px;height:9px;color:var(--ink3);fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .16s}
 .acct[aria-expanded="true"] .cv{transform:rotate(180deg)}
@@ -470,7 +477,7 @@ code,kbd,samp,pre{font-family:inherit}
 .ring.lg{width:34px;height:34px}
 .ring.lg svg{width:17px;height:17px}
 .acct.out .nm{color:var(--ink2);font-weight:500}
-.acct.out .dotwarn{flex:none;width:6px;height:6px;border-radius:999px;background:var(--amber)}
+.acct.out .dotwarn{flex:none;width:6px;height:6px;border-radius:999px;background:var(--amber-solid)}
 
 /* the popover: the identity block over the two gauges the aside card drew.
    Floating paper, per DESIGN.md §5 — the same stroke, radius and lift as the
@@ -566,7 +573,7 @@ code,kbd,samp,pre{font-family:inherit}
 .facts{display:grid;gap:12px;margin-top:12px;font-size:13px;color:var(--ink2)}
 .fact{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .fact b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
-.fact b.hot{color:var(--amber)}
+.fact b.hot{color:var(--amber-text)}
 .s-aside .ra-switch,.s-strip-panel .ra-switch{width:100%;justify-content:space-between;margin-top:20px}
 .s-aside .ra-pill.off:not(.origin),.s-strip-panel .ra-pill.off:not(.origin){margin-top:20px}
 /* the one write action on the board — filled ink, so it never reads as a filter */
@@ -647,8 +654,8 @@ code,kbd,samp,pre{font-family:inherit}
 .ra-pill.origin.o-tailnet .ra-dot{background:var(--cyan)}
 .ra-pill.origin.o-lan .ra-dot,.ra-pill.origin.o-local .ra-dot{background:var(--green-solid)}
 .ra-pill.origin.o-unknown{color:var(--amber-ink);background:var(--amber-tint)}
-.ra-pill.origin.o-unknown .ra-dot{background:var(--amber)}
-.ra-warn{color:var(--amber);font-size:11px}
+.ra-pill.origin.o-unknown .ra-dot{background:var(--amber-solid)}
+.ra-warn{color:var(--amber-text);font-size:11px}
 /* remote-answer switch: on = allowed while you're away, not instead of the
    terminal. One of the 36px control family (§8.2). Two things this rule got
    wrong first time round, kept written down: (1) the off track is --ink3, not
@@ -677,10 +684,10 @@ code,kbd,samp,pre{font-family:inherit}
 .usage .u-row{display:flex;align-items:center;margin-top:8px}
 .usage .u-bar{flex:1;height:10px;border-radius:8px;background:var(--steel);overflow:hidden}
 .usage .u-fill{height:100%;border-radius:8px;background:var(--green-solid);transition:width .5s ease}
-.usage .u-fill.mid{background:var(--amber)}
+.usage .u-fill.mid{background:var(--amber-solid)}
 .usage .u-fill.high{background:var(--red)}
 .usage .u-pct{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink)}
-.usage .u-pct.mid{color:var(--amber)}
+.usage .u-pct.mid{color:var(--amber-text)}
 .usage .u-pct.high{color:var(--red)}
 .usage .u-msg{font-size:13px;color:var(--ink2)}
 /* Time strip: the same bar width, but the axis is the window's clock rather
@@ -762,13 +769,13 @@ code,kbd,samp,pre{font-family:inherit}
 /* ── row atoms ─────────────────────────────────────────────────────────────── */
 .sdot{width:9px;height:9px;border-radius:50%;background:var(--hairline2);display:inline-block;flex:none}
 .sdot.working{background:var(--green-solid);box-shadow:0 0 0 0 color-mix(in srgb,var(--green-solid) 50%,transparent);animation:pulse 1.8s infinite}
-.sdot.question{background:var(--amber);box-shadow:0 0 0 0 color-mix(in srgb,var(--amber) 50%,transparent);animation:pulse-amber 1.8s infinite}
+.sdot.question{background:var(--amber-solid);box-shadow:0 0 0 0 color-mix(in srgb,var(--amber-solid) 50%,transparent);animation:pulse-amber 1.8s infinite}
 .sdot.incomplete{background:var(--mustard);box-shadow:0 0 0 0 color-mix(in srgb,var(--mustard) 50%,transparent);animation:pulse-mustard 1.8s infinite}
 .sdot.launching{background:var(--ink);box-shadow:0 0 0 0 color-mix(in srgb,var(--ink) 35%,transparent);animation:pulse-ink 1.8s infinite}
 .sdot.failed{background:var(--red)}
 @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green-solid) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes pulse-ink{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ink) 35%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
-@keyframes pulse-amber{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--amber) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes pulse-amber{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--amber-solid) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes pulse-mustard{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--mustard) 50%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 /* the status word as a tinted pill */
 .spill{font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;background:var(--strip-hi);color:var(--ink2);white-space:nowrap;flex:none}
@@ -808,14 +815,14 @@ code,kbd,samp,pre{font-family:inherit}
 .spacer{flex:1}
 .tok{font-size:13px;color:var(--ink2);font-variant-numeric:tabular-nums;white-space:nowrap}
 .pct{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
-.pct.warn{color:var(--amber)}
+.pct.warn{color:var(--amber-text)}
 .sessions .metric{font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
-.sessions .metric.warn{color:var(--amber)}
+.sessions .metric.warn{color:var(--amber-text)}
 /* the context gauge: 8px bar on rows, 10px track on the metric tiles */
 .bar{height:8px;border-radius:8px;background:var(--steel);overflow:hidden}
 .track{height:10px;border-radius:8px;background:var(--steel);overflow:hidden}
 .bar .fill,.track .fill{height:100%;border-radius:8px;background:var(--green-solid);transition:width .5s ease}
-.bar .fill.warn,.track .fill.warn{background:var(--amber)}
+.bar .fill.warn,.track .fill.warn{background:var(--amber-solid)}
 /* …but --steel is a *recessed* well, and it only reads as one on paper. On a
    --strip-hi ground — an open ledger row, a selected list row, a .kv gauge
    tile — the two are a couple of points apart on daylight and the empty half
@@ -844,7 +851,7 @@ code,kbd,samp,pre{font-family:inherit}
 .act-line .ago{margin-left:auto;flex:none;color:var(--ink3);font-variant-numeric:tabular-nums}
 /* Real text, not a `title` — a tooltip never appears on touch, and the phone is
    the surface the stop control exists for. */
-.stop-badge{flex-shrink:0;font-size:12px;color:var(--amber)}
+.stop-badge{flex-shrink:0;font-size:12px;color:var(--amber-text)}
 /* the chat button — the way into a session's drawer, and where it names a
    hold. Tinted amber when you can act from here, mustard when only that
    terminal can, so the two kinds of "needs you" stay apart down a whole column. */
@@ -1193,7 +1200,7 @@ code,kbd,samp,pre{font-family:inherit}
 .mgmt-title{display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-width:0;font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
 .mgmt-title .set-scope{margin-left:0;vertical-align:0;max-width:100%}
 .mgmt-sub{font-size:13px;color:var(--ink2);line-height:1.45;max-width:92ch}
-.mgmt-bar .off{flex:none;font-size:12px;color:var(--amber)}
+.mgmt-bar .off{flex:none;font-size:12px;color:var(--amber-text)}
 /* the 36px control family §8.2 put every Settings control on */
 .mgmt-bar .icon-refresh{margin-left:auto;flex:none}
 /* One column below `md`. Columns 1 and 2 are FIXED once both are on screen —
@@ -1470,7 +1477,7 @@ code,kbd,samp,pre{font-family:inherit}
 .an-metric:nth-child(5){grid-column:span 2}
 .an-metric-v{font-size:19px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.1;white-space:nowrap}
 .an-metric.lead .an-metric-v{font-size:25px;color:var(--green)}
-.an-metric-v.warn{color:var(--amber)}
+.an-metric-v.warn{color:var(--amber-text)}
 .an-metric-l{font-size:11px;font-weight:500;color:var(--ink3);margin-top:5px;white-space:nowrap}
 /* One column below `md`: two 16px-gapped columns are tight before the
    tablet width, and both cards can afford to drop to a single column rather
@@ -1587,7 +1594,7 @@ code,kbd,samp,pre{font-family:inherit}
 .chat-side .kv .track{background:var(--steel)}
 .chat .metric{font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
 /* the same 70% threshold the row uses — one context reading, two places */
-.chat .metric.warn{color:var(--amber)}
+.chat .metric.warn{color:var(--amber-text)}
 .chat-facts{display:grid;gap:10px;font-size:12px;color:var(--ink2)}
 .chat-facts .f{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-width:0}
 .chat-facts .f b{min-width:0;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1890,7 +1897,7 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 /* each segment atomic: a line breaks only between them, and inside one only when it alone is wider than the column */
 .pin-seg,.pin-path b{display:inline-block;max-width:100%;overflow-wrap:anywhere}
 .pin-path b{font-size:15px;font-weight:500;color:var(--ink)}
-.pin-sub{display:block;font-size:12px;line-height:1.45;color:var(--amber);margin-top:2px}
+.pin-sub{display:block;font-size:12px;line-height:1.45;color:var(--amber-text);margin-top:2px}
 .pin-sub.err{color:var(--red)}
 .pin-age{grid-column:1;font-size:12px;color:var(--ink3);white-space:nowrap}
 .pin-row .qp-term{grid-column:2;grid-row:1/span 2;justify-self:end}
@@ -1931,13 +1938,13 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .pj-tile{display:flex;flex-direction:column;justify-content:space-between;gap:12px;padding:16px;min-width:0;background:var(--strip);border:1px solid var(--hairline);border-radius:16px}
 .pj-tile.off{background:transparent;border:1px dashed var(--hairline2)}
 .pj-tile.off .pj-name{color:var(--ink2)}
-.pj-tile.gone{border-color:var(--amber)}
+.pj-tile.gone{border-color:var(--amber-solid)}
 /* The dead pin's chip and its tooltip: the sentence lives in the tooltip so a gone tile is no taller than a live one. */
 .pj-gone{position:relative;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:0;border-radius:999px;background:var(--amber-tint);color:var(--amber-ink);font-family:var(--font);font-size:12px;font-weight:500;white-space:nowrap;cursor:help}
 .pj-gone svg{flex:none}
 /* In a Lists row the chip is a `.set-control>button`, whose Settings face (36px, bordered, ink on strip) would outrank the chip's own. */
 .pj-srw .set-control>.pj-gone{height:26px;padding:0 10px;border:0;border-radius:999px;background:var(--amber-tint);color:var(--amber-ink);font-size:12px;cursor:help}
-.pj-gone:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.pj-gone:focus-visible{outline:2px solid var(--amber-solid);outline-offset:2px}
 .pj-tip{position:absolute;left:0;bottom:calc(100% + 8px);z-index:5;width:240px;padding:8px 10px;border-radius:8px;background:var(--ink);color:var(--strip);box-shadow:0 8px 24px var(--shadow2);font-size:12px;font-weight:400;line-height:1.45;white-space:normal;text-align:left;opacity:0;transform:translateY(4px);pointer-events:none;transition:opacity .15s,transform .15s}
 .pj-tip::after{content:"";position:absolute;left:16px;top:100%;border:5px solid transparent;border-top-color:var(--ink)}
 .pj-gone:hover .pj-tip,.pj-gone:focus .pj-tip{opacity:1;transform:none}
@@ -2241,7 +2248,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .set-theme-name{font-size:12px;font-weight:500;color:var(--ink2);line-height:1.25}
 .set-theme.on .set-theme-name{color:var(--ink)}
 /* a warning that something outside the app overrides a setting */
-.set-warn{display:flex;gap:10px;font-size:12px;line-height:1.5;color:var(--ink2);border-radius:12px;background:color-mix(in srgb,var(--amber) 12%,transparent);padding:12px 14px;margin:0 0 16px}
+.set-warn{display:flex;gap:10px;font-size:12px;line-height:1.5;color:var(--ink2);border-radius:12px;background:color-mix(in srgb,var(--amber-solid) 12%,transparent);padding:12px 14px;margin:0 0 16px}
 .set-warn b{color:var(--ink);font-weight:500}
 /* a value the host decides, shown where a control would sit */
 .set-fixed{font-size:13px;font-weight:500;color:var(--ink2);white-space:nowrap}
@@ -2383,7 +2390,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .statstrip>div:last-child:nth-child(2n+1){grid-column:1/-1}
 .statstrip .k{font-size:12px;color:var(--ink2);display:flex;align-items:center;gap:8px}
 .statstrip .v{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:6px;line-height:1.1;color:var(--ink);overflow-wrap:anywhere}
-.statstrip .v.warn{color:var(--amber)}
+.statstrip .v.warn{color:var(--amber-text)}
 .statstrip .v .u{font-size:14px;font-weight:400;color:var(--ink2)}
 .statstrip .s{font-size:11px;color:var(--ink3);margin-top:5px}
 
@@ -2433,7 +2440,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .dt td.name{font-weight:500;white-space:normal;overflow-wrap:anywhere}
 .dt td.mut{color:var(--ink2);white-space:normal}
 .dt td .cs{display:inline;font-size:11px;color:var(--ink3);margin:0}
-.dt td.over{color:var(--amber);font-weight:600}
+.dt td.over{color:var(--amber-text);font-weight:600}
 .dt tr.tot td{border-top:1px solid var(--hairline2);border-bottom:0;font-weight:600;padding-top:12px}
 .dt .bar{display:block;height:6px;border-radius:4px;background:var(--green-solid)}
 /* assumed, not measured: the same mark the walk's dashed run wears */
@@ -2444,7 +2451,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 }
 .dt .barcell{width:120px}
 .dt .dev{font-weight:500;color:var(--green)}
-.dt .dev.bad{color:var(--amber)}
+.dt .dev.bad{color:var(--amber-text)}
 .dt th .idot{vertical-align:1px;margin-left:6px}
 .up-tablewrap{overflow-x:auto}
 
@@ -2492,10 +2499,10 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .rates-day.far-above{background:color-mix(in oklab,var(--cyan) 75%,var(--strip))}
 .rates-cut{
   position:absolute;top:-3px;bottom:-3px;width:0;
-  border-left:1px dashed var(--amber);pointer-events:none;z-index:3;
+  border-left:1px dashed var(--amber-solid);pointer-events:none;z-index:3;
 }
 .rates-cut span{
-  position:absolute;top:100%;left:0;margin-top:2px;font-size:10px;color:var(--amber);
+  position:absolute;top:100%;left:0;margin-top:2px;font-size:10px;color:var(--amber-text);
   white-space:nowrap;transform:translateX(-50%);
 }
 .rates-dayaxis{
@@ -2568,7 +2575,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 /* ── the recording-off notice ────────────────────────────────────────────*/
 .up-off{
   display:flex;gap:10px;font-size:13px;line-height:1.5;color:var(--ink2);
-  border-radius:16px;background:color-mix(in srgb,var(--amber) 12%,transparent);padding:16px 20px;
+  border-radius:16px;background:color-mix(in srgb,var(--amber-solid) 12%,transparent);padding:16px 20px;
 }
 .up-off b{color:var(--ink);font-weight:500}
 
@@ -2588,14 +2595,14 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 /* the deficit, in two halves: red under the measured run, amber and hatched
    under the run walked at the weekly mean — the hatch being this board's mark
    for "no evidence", the same one an unmeasured hour cell wears */
-.hr-debt{fill:color-mix(in oklab,var(--amber) 28%,transparent);stroke:none}
+.hr-debt{fill:color-mix(in oklab,var(--amber-solid) 28%,transparent);stroke:none}
 .hr-debt.measured{fill:color-mix(in oklab,var(--red) 22%,transparent)}
 .hr-line{stroke:var(--green-solid);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
 .hr-line.debt{stroke:var(--red)}
 /* the dashed run takes the colour of the fill under it: past the evidence the
    deficit is a guess, and amber is what this board calls a guessed overrun */
 .hr-line.assumed{stroke-dasharray:5 4;stroke-width:1.6}
-.hr-line.debt.assumed{stroke:var(--amber)}
+.hr-line.debt.assumed{stroke:var(--amber-solid)}
 .hr-zero{stroke:var(--ink);stroke-width:1.2}
 .up-hit-col{
   fill:transparent;stroke:none;cursor:crosshair;
@@ -2645,7 +2652,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .uplegend .rule.dash{border-top-style:dashed}
 .uplegend .rule.brick{
   width:14px;height:14px;flex:none;border:0;border-radius:2px;
-  background:color-mix(in oklab,var(--amber) 45%,var(--strip));
+  background:color-mix(in oklab,var(--amber-solid) 45%,var(--strip));
 }
 .uplegend .rule.brick.red{background:color-mix(in oklab,var(--red) 32%,var(--strip))}
 
@@ -2875,8 +2882,8 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-meter-value{font-size:11px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
 .git-meter-track{height:3.5px;border-radius:4px;background:var(--steel);overflow:hidden}
 .git-meter-fill{display:block;height:100%;border-radius:4px;background:var(--green-solid)}
-.git-meter[data-tone="amber"] .git-meter-fill{background:var(--amber)}
-.git-meter[data-tone="amber"] .git-meter-value{color:var(--amber)}
+.git-meter[data-tone="amber"] .git-meter-fill{background:var(--amber-solid)}
+.git-meter[data-tone="amber"] .git-meter-value{color:var(--amber-text)}
 .git-meter[data-tone="live"] .git-meter-fill{background:var(--cyan);animation:git-meter-pulse 1.6s ease-in-out infinite}
 .git-meter[data-tone="live"] .git-meter-value{color:var(--cyan)}
 @keyframes git-meter-pulse{50%{opacity:.35}}
@@ -2888,20 +2895,20 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-pop-text{display:flex;flex-direction:column;gap:1px;min-width:0}
 .git-pop-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .git-pop-sub{font-size:12px;color:var(--ink3);overflow-wrap:anywhere}
-.git-pop-sub.warn{color:var(--amber)}
+.git-pop-sub.warn{color:var(--amber-text)}
 .git-pop-key{height:28px;padding:0 10px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:8px;cursor:pointer;white-space:nowrap}
 .git-pop-key:hover:not(:disabled){color:var(--ink);background:var(--hairline2)}
 .git-pop-key:disabled{color:var(--ink3);cursor:default}
 /* The failed-fetch repos, one line each under the rows. */
 .git-trouble{display:flex;flex-direction:column;gap:4px;margin-top:10px;padding-top:10px;border-top:1px solid var(--hairline);font-size:12px;color:var(--ink2)}
 .git-trouble-name{font-weight:500;color:var(--ink)}
-.git-trouble-word{color:var(--amber)}
+.git-trouble-word{color:var(--amber-text)}
 .git-empty{padding:48px 20px;text-align:center;font-size:13px;color:var(--ink2)}
 .git-link{font:inherit;color:var(--cyan);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 
 /* the repo facts, shared by the four layouts */
 .git-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ink3)}
-.git-dot.needs{background:var(--amber)}
+.git-dot.needs{background:var(--amber-solid)}
 .git-dot.flight{background:var(--mustard)}
 .git-dot.quiet{background:var(--green-solid)}
 .git-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
@@ -2927,7 +2934,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-sync:disabled{cursor:default;color:var(--ink3)}
 @keyframes git-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.git-sync.on svg{animation:none}.git-meter[data-tone="live"] .git-meter-fill{animation:none}}
-.git-sync-note{font-size:12px;color:var(--amber);overflow-wrap:anywhere}
+.git-sync-note{font-size:12px;color:var(--amber-text);overflow-wrap:anywhere}
 /* Inbox | Matrix | Inspector | Branches — the parts they share (management-redesign spec §4.2) */
 .git-panel{background:var(--strip);border-radius:16px;min-width:0}
 .git-gh{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin:16px 4px 8px}
@@ -2972,7 +2979,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-ib-tile.on{outline-color:var(--ink)}
 .git-ib-tile:focus-visible{outline-color:var(--cyan)}
 .git-ib-tile .big{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
-.git-ib-tile.needs .big{color:var(--amber)}
+.git-ib-tile.needs .big{color:var(--amber-text)}
 .git-ib-tile .lab{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2)}
 .git-ib-list{display:flex;flex-direction:column;gap:10px}
 .git-ib-item{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
@@ -2984,7 +2991,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-ib-steps li{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--ink2)}
 .git-ib-steps li::before{content:"";width:5px;height:5px;border-radius:50%;flex:none;background:var(--hairline2);transform:translateY(-2px)}
 .git-ib-steps li.hot{color:var(--ink)}
-.git-ib-steps li.hot::before{background:var(--amber)}
+.git-ib-steps li.hot::before{background:var(--amber-solid)}
 .git-ib-steps li.calm::before{background:var(--green-solid)}
 .git-ib-keys{display:flex;gap:6px;flex-wrap:wrap;width:100%;justify-content:flex-start;padding-left:20px}
 .git-ib-br{margin-left:20px;padding-top:10px;border-top:1px solid var(--hairline)}
@@ -3067,8 +3074,8 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 /* a long branch name must not squeeze the repo's own name out of the row */
 .git-in .lrow .nm .t{flex:none;max-width:60%}
 .git-in .lrow .nm .proj-pill{min-width:0;overflow:hidden;text-overflow:ellipsis}
-.git-in .lrow .act.hot{color:var(--amber)}
-.git-in .lrow .ago.warn{color:var(--amber)}
+.git-in .lrow .act.hot{color:var(--amber-text)}
+.git-in .lrow .ago.warn{color:var(--amber-ink)}
 .git-in .lrow .ago.live{color:var(--cyan)}
 .git-in .lrow:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
 .git-in-fig{font-weight:400}
@@ -3111,7 +3118,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-bb-ln{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .git-bb-ln.end{justify-content:flex-end;gap:6px}
 .git-bb-ln.start{justify-content:flex-start;gap:6px}
-.git-bb-warn{font-size:12px;font-weight:500;color:var(--amber)}
+.git-bb-warn{font-size:12px;font-weight:500;color:var(--amber-text)}
 .git-bb-note{font-size:12px;color:var(--ink3);padding:0 4px}
 .git-bb-repo{font-size:12px;color:var(--ink3)}
 .git-bb-empty{padding:12px 14px;font-size:12px;color:var(--ink3);border:1px dashed var(--hairline2);border-radius:16px}
