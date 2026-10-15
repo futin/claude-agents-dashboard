@@ -148,3 +148,63 @@ test('T14.5 idempotence: a second run on the result changes nothing', (t) => {
   assert.deepEqual(out.apply.results, [])
   assert.deepEqual(snapshot(), before)
 })
+
+// A PR-only trunk with two local commits on it. One gh stub carries every call the flow makes (a second `stub` call would overwrite the first): the
+// rules read says PR-only, `pr list` finds nothing, `pr create` prints the PR's URL.
+const PR_URL = 'https://github.com/example/repo/pull/7'
+function prOnlyWorld(t) {
+  const w = world(t)
+  w.stub('gh', {
+    byArgs: {
+      'rules/branches': { stdout: JSON.stringify([{ type: 'pull_request' }]) },
+      'pr list': { stdout: '[]' },
+      'pr create': { stdout: `${PR_URL}\n` },
+    },
+  })
+  const tip = w.commit(w.a, { file: 'one.txt', content: '1\n', msg: 'feat: first local' })
+  w.commit(w.a, { file: 'two.txt', content: '2\n', msg: 'fix: second local' })
+  return { w, tip }
+}
+
+test('B6.1 a PR-only trunk with local commits: answering `pr` carries them to a branch on origin, resets the trunk and reports the PR', (t) => {
+  const { w } = prOnlyWorld(t)
+  const base = w.git(w.origin, 'rev-parse', 'refs/heads/main')
+  const localTip = w.git(w.a, 'rev-parse', 'refs/heads/main')
+  const out = run(w, { carry: 'pr' })
+
+  assert.equal(out.survey.trunkPrOnly, true)
+  assert.equal(out.survey.trunkPrOnlyReason, 'ruleset')
+  assert.equal(out.survey.trunkAhead, 2)
+  assert.deepEqual(out.survey.rounds.flat().map((q) => q.id), ['carry'])
+  assert.equal(out.pushTrunk.pushed, false)
+  assert.equal(out.pushTrunk.reason, 'pr-only')
+  assert.deepEqual(out.apply.results.map((r) => [r.kind, r.status, r.reason]), [['carry-trunk', 'done', 'carried']])
+
+  const branch = out.survey.carry.branch
+  assert.match(branch, /^sync\/main-\d{8}-\d{4}$/)
+  assert.equal(w.git(w.origin, 'rev-parse', `refs/heads/${branch}`), localTip)
+  assert.equal(w.git(w.origin, 'rev-parse', 'refs/heads/main'), base, 'origin main is untouched')
+  assert.equal(w.git(w.a, 'rev-parse', 'refs/heads/main'), base, 'local main equals origin')
+  assert.equal(w.git(w.a, 'symbolic-ref', '--short', 'HEAD'), 'main')
+  assert.ok(w.calls().some((c) => c.name === 'gh' && c.argv.includes('pr') && c.argv.includes('create')), 'gh pr create ran')
+
+  assert.ok(out.report.markdown.includes(PR_URL), out.report.markdown)
+  assert.ok(out.report.markdown.includes(`git reset --keep ${localTip}`), 'the report prints the way back')
+  assert.doesNotMatch(out.report.markdown, /stay unpushed/)
+})
+
+test('B6.2 the same world with no answer pushes nothing and warns the commits stay unpushed', (t) => {
+  const { w } = prOnlyWorld(t)
+  const originBefore = refs(w, w.origin)
+  const localTip = w.git(w.a, 'rev-parse', 'refs/heads/main')
+  const out = run(w, {})
+
+  assert.deepEqual(out.plan.actions, [])
+  assert.deepEqual(out.apply.results, [])
+  assert.equal(out.pushTrunk.pushed, false)
+  assert.equal(out.pushTrunk.reason, 'pr-only')
+  assert.deepEqual(refs(w, w.origin), originBefore)
+  assert.equal(w.git(w.a, 'rev-parse', 'refs/heads/main'), localTip, 'local main keeps its commits')
+  assert.ok(!w.calls().some((c) => c.name === 'gh' && c.argv.includes('create')), 'gh pr create never ran')
+  assert.match(out.report.markdown, /2 local main commit\(s\) stay unpushed/)
+})
