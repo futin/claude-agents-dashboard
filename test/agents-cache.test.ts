@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import type { AgentJob } from '../shared/types.js';
 import { readAgents } from '../server/lib/agents.js';
 import { readAgentsCached, _resetAgentsCache, _agentsCacheSize } from '../server/lib/agents-cache.js';
 
@@ -239,6 +240,24 @@ export function run(): number {
       readAgentsCached(file);
     }
     assert.ok(_agentsCacheSize() <= 32, `cache size ${_agentsCacheSize()} > 32`);
+  })) p++; else f++;
+
+  // A hit on an unchanged file returns the entry's stored `jobs` array itself, while a miss re-reads and builds a new one — so reference identity tells
+  // a cached entry from an evicted one.
+  if (test('LRU cap: 33rd insert stays cached and evicts the oldest entry', () => {
+    _resetAgentsCache();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-agents-lru-'));
+    const files: string[] = [];
+    const first: (AgentJob[] | null)[] = [];
+    for (let i = 0; i < 33; i++) {
+      const file = path.join(dir, `s${i}.jsonl`);
+      fs.writeFileSync(file, JSON.stringify(taskRec('t' + i, 'Explore', 'x', '2026-07-01T10:00:00Z')) + '\n');
+      files.push(file);
+      first.push(readAgentsCached(file));
+    }
+    assert.strictEqual(readAgentsCached(files[32]), first[32], '33rd transcript was not cached — it evicted itself');
+    assert.strictEqual(readAgentsCached(files[1]), first[1], 'second-oldest entry was evicted instead of the oldest');
+    assert.notStrictEqual(readAgentsCached(files[0]), first[0], 'oldest entry was not evicted');
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
