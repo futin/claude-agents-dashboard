@@ -2247,6 +2247,14 @@ const REASON_TEXT = {
   red: 'checks are red',
   rejected: 'the push was rejected',
   'nothing-to-push': 'the trunk is already up to date on the remote',
+  // carry-trunk's skip and fail reasons: each says what held the carry back, and `reset-failed` also says where the work is, since that is the
+  // one outcome where the branch is on `origin` but the trunk was not moved.
+  'tip-moved': 'the trunk moved since the survey',
+  'not-on-trunk': 'HEAD is not on the trunk',
+  'trunk-diverged': 'the local trunk no longer descends from origin',
+  'branch-exists': 'the carry branch name is already taken',
+  'push-failed': 'the carry branch could not be pushed',
+  'reset-failed': 'the trunk could not be moved back; the carry branch is on origin',
 }
 
 function describeReason(reason) {
@@ -2283,7 +2291,7 @@ function commitsSince(ctx, preflightState) {
 // §12 "Trunk": commits pulled, each discovered check's verdict, then whether the trunk push
 // landed. Each piece is independent — a `sync` stop before `verify` ever ran still gets its own
 // "pulled" line, an unverified repo (no checks discovered) still gets its push line.
-function trunkLines(syncState, verifyState, pushTrunkState) {
+function trunkLines(syncState, verifyState, pushTrunkState, surveyState, applyState) {
   const lines = []
   if (syncState) lines.push(`- pulled ${syncState.pulled} commit${syncState.pulled === 1 ? '' : 's'}`)
   if (verifyState) {
@@ -2299,7 +2307,30 @@ function trunkLines(syncState, verifyState, pushTrunkState) {
         : `- not pushed: ${describeReason(pushTrunkState.reason)}${pushTrunkState.detail ? ` (${pushTrunkState.detail})` : ''}`,
     )
   }
+  lines.push(...carryLines(surveyState, applyState))
   return lines
+}
+
+// The `carry-trunk` result, if the plan had one. A `done` carry names the branch and the PR, and always prints the line that undoes the trunk move: the
+// reset is the one thing in this skill that rewinds a branch the user did not name, so the way back sits next to it. A null `pr` (gh absent, or
+// `gh pr create` failing after the branch was pushed) prints the exact command to open it by hand, built from the title the survey offered, shell-quoted
+// like every other recovery line since a commit subject can hold `$(…)` or a quote. A skipped or failed carry says why, so the reasons REASON_TEXT
+// glosses for it are shown somewhere.
+function carryLines(surveyState, applyState) {
+  const result = applyState?.results?.find((r) => r.kind === 'carry-trunk')
+  if (!result) return []
+  const trunk = surveyState?.trunk ?? 'main'
+  if (result.status !== 'done') {
+    return [`- carry to ${result.target}: ${result.status} (${describeReason(result.reason)})${result.detail ? `: ${result.detail}` : ''}`]
+  }
+  const branch = shQuote(result.target)
+  const title = surveyState?.carry?.title
+  const byHand = `open it by hand: gh pr create --base ${shQuote(trunk)} --head ${branch} --title ${shQuote(title ?? '')}`
+  const detail = result.detail ? ` (${result.detail})` : ''
+  return [
+    `- carried to ${result.target}: ${result.pr ?? byHand}${result.pr ? '' : detail}`,
+    `  undo the trunk move with \`git reset --keep ${result.tip}\` (run on ${trunk})`,
+  ]
 }
 
 // §12 "Deleted"/"Kept". R30: built entirely from *this run's* apply.json, never from deleted.log — the log is a cross-run ledger (preflight's reset
@@ -2410,6 +2441,17 @@ function warningLines(preflightState, verifyState, surveyState, applyState) {
   if (surveyState?.remoteKind === 'github' && surveyState?.gh === 'absent') {
     lines.push('gh absent: open-PR protection was off; merged branches were judged by git proofs only')
   }
+  // A PR-only trunk the survey could not read the rules of is PR-only by the safe default, not by fact — say so, so a user whose trunk takes pushes
+  // knows why nothing was pushed.
+  const reason = surveyState?.trunkPrOnlyReason
+  const trunk = surveyState?.trunk ?? 'main'
+  if (surveyState?.trunkPrOnly && (reason === 'gh-absent' || reason === 'gh-failed')) {
+    lines.push(`could not read ${trunk}'s rules (${reason}): treated as PR-only`)
+  }
+  const carryDone = applyState?.results?.some((r) => r.kind === 'carry-trunk' && r.status === 'done')
+  if (surveyState?.trunkPrOnly && surveyState.trunkAhead > 0 && !carryDone) {
+    lines.push(`${surveyState.trunkAhead} local ${trunk} commit(s) stay unpushed: ${trunk} only accepts pull requests here`)
+  }
   return lines
 }
 
@@ -2456,7 +2498,7 @@ function report(ctx) {
 
   const sections = [
     ['Committed', commitsSince(ctx, preflightState)],
-    ['Trunk', trunkLines(syncState, verifyState, pushTrunkState)],
+    ['Trunk', trunkLines(syncState, verifyState, pushTrunkState, surveyState, applyState)],
     ['Deleted', deleted],
     ['Kept', kept],
     ['Pushed branches', pushedBranchLines(applyState)],

@@ -356,3 +356,126 @@ test('T13.15 I4/R30: after a second, no-op apply, ## Kept never claims an alread
   // This run's own apply.json has no `done` deletes to report (they all happened on the prior run).
   assert.ok(!markdown.includes('## Deleted'), markdown)
 })
+
+// B5: the report for a trunk that only accepts PRs, and for the commits `carry-trunk` moved off it. Each case writes the state files the earlier phases
+// would have left, since the report is a pure render of them and the worlds that make a real carry are already built in apply.test.mjs.
+function writeStates(w, states) {
+  const dir = w.ctx(w.a).stateDir
+  fs.mkdirSync(dir, { recursive: true })
+  for (const [name, state] of Object.entries(states)) fs.writeFileSync(path.join(dir, `${name}.json`), `${JSON.stringify({ ok: true, cmd: name, ...state })}\n`)
+}
+const prOnlyPush = { pushed: false, reason: 'pr-only', ahead: null, detail: 'ruleset' }
+const carryOf = (title) => ({ branch: 'sync/main-20261015-1030', tip: 'a'.repeat(40), ahead: 2, commits: [], title })
+function surveyPrOnly(trunkAhead, carry, reason = 'ruleset') {
+  return { trunk: 'main', trunkPrOnly: true, trunkPrOnlyReason: reason, trunkAhead, carry, branches: [], downgraded: false }
+}
+const carried = (extra) => ({ kind: 'carry-trunk', target: 'sync/main-20261015-1030', status: 'done', reason: 'carried', tip: 'a'.repeat(40), ...extra })
+
+test('B5.1 a carried trunk reports the branch, the PR URL and the reset line that undoes the trunk move', (t) => {
+  const w = world(t)
+  const title = 'chore(git-sync): carry 2 local main commits'
+  writeStates(w, {
+    survey: surveyPrOnly(2, carryOf(title)),
+    'push-trunk': prOnlyPush,
+    apply: { results: [carried({ pr: 'https://github.com/o/r/pull/12' })], pruned: [] },
+  })
+
+  const { markdown } = reportOf(w)
+  assert.ok(markdown.includes('- not pushed: pr-only (the trunk only accepts pull requests here) (ruleset)'), markdown)
+  assert.ok(markdown.includes('- carried to sync/main-20261015-1030: https://github.com/o/r/pull/12'), markdown)
+  assert.ok(markdown.includes(`\`git reset --keep ${'a'.repeat(40)}\` (run on main)`), markdown)
+  assert.ok(!markdown.includes('## Warnings'), markdown)
+})
+
+test('B5.2 a carry with no PR URL prints the gh line to open it by hand, with the title shell-quoted', (t) => {
+  const w = world(t)
+  const title = "chore(git-sync): it's $(whoami)"
+  writeStates(w, {
+    survey: surveyPrOnly(2, carryOf(title)),
+    'push-trunk': prOnlyPush,
+    apply: { results: [carried({ pr: null, detail: 'gh pr create failed: HTTP 502' })], pruned: [] },
+  })
+
+  const { markdown } = reportOf(w)
+  const line = `gh pr create --base main --head sync/main-20261015-1030 --title 'chore(git-sync): it'\\''s $(whoami)'`
+  assert.ok(markdown.includes(`open it by hand: ${line}`), markdown)
+  assert.ok(markdown.includes('gh pr create failed: HTTP 502'), markdown)
+  assert.ok(markdown.includes(`git reset --keep ${'a'.repeat(40)}`), markdown)
+  // The hand-open line must survive sh: running it through `echo` proves the quoting leaves `$(whoami)` unexpanded.
+  const echoed = spawnSync('sh', ['-c', `echo ${line.slice(line.indexOf('--title ') + 8)}`], { encoding: 'utf8' })
+  assert.equal(echoed.stdout.trim(), "chore(git-sync): it's $(whoami)")
+})
+
+test('B5.3 a PR-only trunk ahead of origin with no done carry warns that the commits stay unpushed', (t) => {
+  for (const results of [undefined, [{ kind: 'carry-trunk', target: 'sync/main-20261015-1030', status: 'skipped', reason: 'tip-moved' }]]) {
+    const w = world(t)
+    writeStates(w, {
+      survey: surveyPrOnly(3, carryOf('chore(git-sync): carry 3 local main commits')),
+      'push-trunk': prOnlyPush,
+      ...(results ? { apply: { results, pruned: [] } } : {}),
+    })
+
+    const { markdown } = reportOf(w)
+    assert.ok(markdown.includes('## Warnings\n3 local main commit(s) stay unpushed: main only accepts pull requests here\n'), markdown)
+    assert.ok(!markdown.includes('carried to'), markdown)
+  }
+})
+
+test('B5.4 a carry that was skipped or failed is listed under ## Trunk with its glossed reason', (t) => {
+  const cases = [
+    ['skipped', 'tip-moved', undefined, 'tip-moved (the trunk moved since the survey)'],
+    ['skipped', 'not-on-trunk', undefined, 'not-on-trunk (HEAD is not on the trunk)'],
+    ['skipped', 'trunk-diverged', undefined, 'trunk-diverged (the local trunk no longer descends from origin)'],
+    ['skipped', 'branch-exists', undefined, 'branch-exists (the carry branch name is already taken)'],
+    ['failed', 'push-failed', 'rejected by hook', 'push-failed (the carry branch could not be pushed)'],
+    ['failed', 'reset-failed', 'dirty tree', 'reset-failed (the trunk could not be moved back; the carry branch is on origin)'],
+  ]
+  for (const [status, reason, detail, text] of cases) {
+    const w = world(t)
+    writeStates(w, {
+      survey: surveyPrOnly(2, carryOf('chore(git-sync): carry 2 local main commits')),
+      'push-trunk': prOnlyPush,
+      apply: { results: [{ kind: 'carry-trunk', target: 'sync/main-20261015-1030', status, reason, ...(detail ? { detail } : {}) }], pruned: [] },
+    })
+
+    const { markdown } = reportOf(w)
+    assert.ok(markdown.includes(`- carry to sync/main-20261015-1030: ${status} (${text})${detail ? `: ${detail}` : ''}`), markdown)
+    assert.ok(markdown.includes('2 local main commit(s) stay unpushed'), markdown)
+  }
+})
+
+test('B5.5 an unreadable ruleset warns that the trunk was treated as PR-only', (t) => {
+  for (const reason of ['gh-absent', 'gh-failed']) {
+    const w = world(t)
+    writeStates(w, { survey: surveyPrOnly(0, null, reason), 'push-trunk': prOnlyPush })
+
+    const { markdown } = reportOf(w)
+    assert.ok(markdown.includes(`could not read main's rules (${reason}): treated as PR-only`), markdown)
+    assert.ok(!markdown.includes('commit(s) stay unpushed'), markdown)
+  }
+  // A readable ruleset that says PR-only is not a read failure.
+  const ok = world(t)
+  writeStates(ok, { survey: surveyPrOnly(0, null, 'ruleset'), 'push-trunk': prOnlyPush })
+  assert.ok(!reportOf(ok).markdown.includes('could not read'), 'ruleset')
+})
+
+test('B5.6 a run on a trunk that takes pushes reports exactly what it did before PR-only existed', (t) => {
+  const w = world(t)
+  writeStates(w, {
+    survey: {
+      trunk: 'main',
+      trunkPrOnly: false,
+      trunkPrOnlyReason: 'no-rule',
+      trunkAhead: 2,
+      carry: null,
+      remoteKind: 'github',
+      gh: 'present',
+      downgraded: false,
+      branches: [],
+    },
+    'push-trunk': { pushed: true, reason: null, ahead: 2 },
+    apply: { results: [], pruned: [] },
+  })
+
+  assert.equal(reportOf(w).markdown, '# git-sync report\n\n## Trunk\n- pushed\n')
+})
