@@ -108,9 +108,10 @@ behaviour change below lands there too (Task 6).
 - [ ] **Step 2: Run** `node --test test/survey.test.mjs` from `plugin/skills/git-sync/`. Expected: the B1 cases fail (missing fields / helper).
 - [ ] **Step 3: Implement** `githubSlugOf`, `trunkRules`, the survey fields, the proof-ref switch and `rules()` in `world.mjs`.
 - [ ] **Step 4: Run** `pnpm test:skills` from the repo root. Expect existing failures from Review Focus 1 (e.g. `survey.test.mjs` ~line 190
-  `mergedLocallyOnly` on a github world now reads PR-only). Fix each by adding `w.rules([])` where the test is not about `gh`; where it is (e.g. the
-  `s.gh === 'absent'` case ~line 341), keep the world and add an assertion that `trunkPrOnlyReason` is `gh-absent`. List every touched existing test in
-  the task report. Re-run until green.
+  `mergedLocallyOnly` on a github world now reads PR-only). Fix each by adding `w.rules([])` where the test is not about `gh`. T7.10 (~line 292) asserts both
+  `s.gh === 'absent'` and an M3 proof of `sq` against a squash present only in local `main`, which gh-absent ⇒ PR-only ⇒ `origin/main` proof would
+  break: give T7.10 `w.rules([])` and change its `gh` assertion to `'ok'` — gh-absent is covered by B1.3. List every touched existing test in the task
+  report. Re-run until green.
 - [ ] **Step 5: Commit** `feat(git-sync): read the trunk's ruleset once per survey`.
 
 ### Task 2: Carry offer, question and plan action
@@ -142,7 +143,8 @@ behaviour change below lands there too (Task 6).
   - `prTitleOk`: true for `feat: a`, `fix(x-1): a`, `perf!: a`, `docs(y): a`; false for `chore!: a`, `Feat: a`, `feat(X): a`, `feat a`, `revert: a`.
   - plan: `{ carry: 'pr' }` → one `carry-trunk` action with those fields; `{ carry: 'keep' }` → no action; `{ carry: 'pr' }` against a survey with
     `carry: null` → stop `bad-answers`; `{ carry: 'yes' }` → `bad-answers`; a plan with a `delete-local` and a `carry-trunk` sorts `carry-trunk` last.
-  - readPlan: a hand-written `carry-trunk` with `target: 'a b'` or `expectTip: 'main'` → stop `bad-plan`.
+  - readPlan: a hand-written `carry-trunk` with `target: 'a b'` or `expectTip: 'main'` → stop `bad-plan` with `detail.why` `not a branch name` / `expectTip must be a full sha` (today both already
+    stop on `unknown action kind`, so assert the `why`, or the red step stays green).
 - [ ] **Step 2: Run** the two files; expect B2 failures.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** `pnpm test:skills`; green.
@@ -162,8 +164,9 @@ behaviour change below lands there too (Task 6).
   unchanged. No survey run → `pr-only`, `detail: 'no survey this run'`. Mirror: `w.rules([])` + survey + green verify → pushes (`reason: 'pushed'`).
   Downgraded world with no survey → still `not-allowed` (order).
 - [ ] **Step 2: Run** `node --test test/push.test.mjs`; expect B3 failures.
-- [ ] **Step 3: Implement.** Then fix the existing push and e2e cases that expect a push: add `w.rules([])` and a `survey` call before `push-trunk`.
-  Do not change what they assert.
+- [ ] **Step 3: Implement.** Then fix the existing cases: every non-downgraded `push-trunk` test (T10.1, T10.2 red/stale/no-verify, T10.3,
+  T10.5, T10.6, T10.7) and the e2e cases gain `w.rules([])` and a `survey` call before `push-trunk`; only the downgraded `not-allowed` case (T10.4) does
+  not. Do not change what they assert.
 - [ ] **Step 4: Run** `pnpm test:skills`; green.
 - [ ] **Step 5: Commit** `feat(git-sync): never push a trunk that only accepts PRs`.
 
@@ -217,7 +220,7 @@ Logic-heavy (moves the trunk, pushes, spawns `gh`): this task gets its own revie
   the branch, the PR URL (or `open it by hand: gh pr create --base <trunk> --head <branch>`), and a recovery line `git reset --keep <tip>` (run on
   `<trunk>`) to undo the trunk move.
 - Warnings: `trunkPrOnlyReason` `gh-absent` / `gh-failed` → `could not read <trunk>'s rules (<reason>): treated as PR-only`. PR-only, `trunkAhead > 0`
-  and no `carry-trunk` result → `<n> local <trunk> commit(s) stay unpushed: <trunk> only accepts pull requests here`.
+  and no `carry-trunk` result with `status: 'done'` (none, `skipped` or `failed`) → `<n> local <trunk> commit(s) stay unpushed: <trunk> only accepts pull requests here`.
 
 - [ ] **Step 1: Write the failing tests** (`B5.`) over state files written directly, as the existing report tests do: carried with URL; carried with
   `pr: null`; `pr-only` with no carry and `trunkAhead: 3` (warning text exact); `gh-absent` warning; a non-PR-only run's report byte-identical to
@@ -232,7 +235,9 @@ Logic-heavy (moves the trunk, pushes, spawns `gh`): this task gets its own revie
 - SKILL.md: step 3 — when `trunkPrOnlyReason` is `gh-absent` or `gh-failed`, say in one line before the decision round that the trunk is treated as
   PR-only and why. Step 4 table — row `carry` | `Open a PR` / `Leave on <trunk>` | `"carry": "pr"` / `"carry": "keep"`. Step 6 — add `pr-only` to the
   reason list and one sentence: on `pr-only` never offer to push by other means. The hard rule "Destructive operations happen only in `apply`…" gains
-  "moving the trunk's local commits onto a PR branch" in its list; update `skill.test.mjs` T14.3's verbatim copy to match, and nothing else in it.
+  "moving the trunk's local commits onto a PR branch" in its list. `skill.test.mjs` T14.3 does not copy that rule, so it stays untouched; T14.6's
+  `everyKindSurvey()` fixture gains a `carry` offer (and `trunkPrOnly: true`) and `carry` joins its pinned question-id prefix list, so the new labels
+  are proven mapped in SKILL.md.
 - design.md: §4 phase 6 row mentions PR-only; §6 gains a "PR-only trunk" bullet (the probe, the reasons, safe side, proof ref); §7 gains the `carry` row
   and `carry-trunk` in the action list; §10 gains invariant 11 (Task 4 text) and invariant 9's order gains `carry-trunk` last; §11 nothing; §12 gains the
   carry/pr-only lines; §16 gains one ruling "Phase B (2026-10-15): PR-only trunks" pointing at the release-pipeline spec.
