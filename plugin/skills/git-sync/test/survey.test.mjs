@@ -524,6 +524,7 @@ test('T7.18 ahead counts against origin/<name> when it exists, whatever the upst
 
 test('T7.19 a prunable worktree whose directory still exists counts as dirty', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one would read as PR-only and move every proof to origin/main
   const wtPath = mergedInWorktree(w, 'orphan')
   fs.writeFileSync(path.join(wtPath, 'notes.txt'), 'mine\n')
   fs.rmSync(path.join(wtPath, '.git'))
@@ -533,6 +534,10 @@ test('T7.19 a prunable worktree whose directory still exists counts as dirty', (
   const wt = result.json.worktrees.find((x) => x.path === wtPath)
   assert.equal(wt.prunable, true)
   assert.equal(wt.dirty, 1)
+  // The precondition the next line leans on: `orphan` is proven merged, so only the dirty prunable worktree keeps it out of the deletion set.
+  const orphan = result.json.branches.find((b) => b.name === 'orphan')
+  assert.equal(orphan.bucket, 'merged')
+  assert.equal(orphan.proof, 'M1')
   assert.deepEqual(result.json.mergedSet, [])
 })
 
