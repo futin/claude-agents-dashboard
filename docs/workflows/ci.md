@@ -44,5 +44,6 @@ detection and fails its default-value test. The runner is a VM with git and jq, 
 ## The ruleset
 
 The `main-pr-only` ruleset (PR required, the three contexts above, linear history, no force push or deletion, no bypass) and the squash-only merge
-settings are applied by release-kit's `scripts/apply-repo-settings.sh futin/claude-agents-dashboard`. **State on 2026-10-15: not applied yet** — it
-goes on only after the first PR has reported all three contexts green.
+settings are applied by release-kit's `scripts/apply-repo-settings.sh futin/claude-agents-dashboard`. **Applied on 2026-10-15** (ruleset id 25157835),
+after PR #204 reported all three contexts green. Re-running the script updates the ruleset in place. Until phase B, direct pushes to `main` — git-sync's
+trunk push, backlog-orchestrate, plan docs — are refused.
