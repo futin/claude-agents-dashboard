@@ -22,6 +22,7 @@ function branch(w, name, { push = false, daysAgo } = {}) {
 // whose `test` script verify runs against the npm stub.
 function setup(t) {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   branch(w, 'old', { push: true, daysAgo: 31 })
   branch(w, 'solo')
   branch(w, 'm1', { push: true })

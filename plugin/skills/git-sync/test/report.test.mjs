@@ -85,6 +85,7 @@ const branchAction = (sha, baseSha, push = false) => ({ kind: 'stash-branch', ta
 // T11.12's world (apply.test.mjs): `m1` merged locally (never published), verify forced red or green by the `npm` stub, then push-trunk run.
 function mergedLocallyOnly(t, checks) {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   branch(w, 'm1', { push: true })
   w.git(w.a, 'merge', '--no-ff', '-m', 'merge m1', 'm1')
   fs.writeFileSync(path.join(w.a, 'package.json'), JSON.stringify({ scripts: { test: 'x' } }))
@@ -98,6 +99,7 @@ function mergedLocallyOnly(t, checks) {
 
 test('T13.1 after a merged branch is fully deleted, ## Deleted carries both recovery lines', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = mergedInWorktree(w, 'm1')
   surveyOf(w)
   planCli(w, { merged: 'all' })
@@ -245,6 +247,7 @@ test('T13.10 C1/R28: a truncated preflight.json is treated as missing, with a na
 
 test('T13.11 I1/R29: a branch name with shell metacharacters is quoted, and round-trips through sh -c', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const name = "a$(x);'z" // valid per `git check-ref-format --branch`; carries both a command substitution and a literal quote
   const tip = mergedInWorktree(w, name)
   surveyOf(w)
@@ -314,6 +317,7 @@ test('T13.13 I2/I3: ## Stashes shows a done branch with a rejected push, and a k
 
 test('T13.14 I3: ## Worktrees lists a removed worktree and a pruned path together', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   mergedInWorktree(w, 'm1')
   w.git(w.a, 'worktree', 'add', path.join(w.root, 'wt x'), '-b', 'x')
   fs.rmSync(realWt(w, 'x'), { recursive: true, force: true }) // vanished by hand: apply prunes it before any planned action runs
@@ -330,6 +334,7 @@ test('T13.14 I3: ## Worktrees lists a removed worktree and a pruned path togethe
 
 test('T13.15 I4/R30: after a second, no-op apply, ## Kept never claims an already-deleted branch is merely skipped', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   mergedInWorktree(w, 'm1')
   surveyOf(w)
   planCli(w, { merged: 'all' })

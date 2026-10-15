@@ -88,6 +88,7 @@ const logLines = (w) => (fs.existsSync(logFile(w)) ? fs.readFileSync(logFile(w),
 
 test('T11.1 T8.4 plan: the worktree, the remote copy and the local branch all go, and deleted.log records both deletions', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = mergedInWorktree(w, 'm1')
   surveyOf(w)
   planCli(w, { merged: 'all' })
@@ -129,6 +130,7 @@ test('T11.1 T8.4 plan: the worktree, the remote copy and the local branch all go
 // `name` pushed and fast-forwarded into a's local main, with no worktree — the survey offers it merged, the plan deletes both copies.
 function mergedBranch(t, name) {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = branch(w, name, { push: true })
   w.git(w.a, 'merge', '--ff-only', name)
   surveyOf(w)
@@ -315,6 +317,7 @@ test('T11.8 one failed action does not stop the rest', (t) => {
 
 test('T11.9 actions run in §10.9 order whatever order the plan lists them in', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   mergedInWorktree(w, 'm1')
   surveyOf(w)
   const actions = planCli(w, { merged: 'all' })
@@ -360,6 +363,7 @@ test('T11.11 a downgraded repo never pushes or deletes a remote branch', (t) => 
 // offers it; whether apply may delete it depends on whether phase 6 actually did.
 function mergedLocallyOnly(t, checks) {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = branch(w, 'm1', { push: true })
   w.git(w.a, 'merge', '--no-ff', '-m', 'merge m1', 'm1')
   fs.writeFileSync(path.join(w.a, 'package.json'), JSON.stringify({ scripts: { test: 'x' } }))
@@ -622,6 +626,7 @@ test('T11.21 an engine failure outside any action still leaves a partial apply.j
 // same way (R16): its HEAD must be merged on `origin/<trunk>`, not just on the local trunk the survey saw.
 test('T11.22 a merged-basis worktree removal is re-proved on origin: kept while the trunk is unpublished, removed once it is', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = mergedInWorktree(w, 'm1')
   surveyOf(w)
   const actions = planCli(w, { merged: 'all' })

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { repo, branchRecords, listWorktrees, listStashes } from '../tools/git-sync.mjs'
+import { repo, branchRecords, listWorktrees, listStashes, githubSlugOf } from '../tools/git-sync.mjs'
 import { world } from './world.mjs'
 
 // A new branch off `a`'s current `main` with one commit (backdated when `daysAgo` is given), optionally pushed with an upstream, then back to `main`
@@ -194,6 +194,7 @@ test('T7.7 a downgraded (GitLab) repo: no remote-only records, no unpushed, proo
 
 test('T7.8 worktrees: locked protects, a clean merged one joins mergedSet, a dirty one does not; detached and prunable', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one would read as PR-only and move every proof to origin/main
   branch(w, 'lk')
   branch(w, 'm1')
   w.git(w.a, 'merge', '--ff-only', 'm1')
@@ -292,6 +293,7 @@ function snapshot(gitDir) {
 
 test('T7.10 survey is read-only: refs, stashes, worktrees and every index are unchanged; only survey.json is written', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one would read as PR-only and move every proof to origin/main
   // A two-commit squash-merged branch so the M3 probe (the one proof that writes an object) actually runs; one commit would already prove M2.
   branch(w, 'sq')
   w.git(w.a, 'checkout', 'sq')
@@ -338,7 +340,7 @@ test('T7.10 survey is read-only: refs, stashes, worktrees and every index are un
   assert.equal(s.pushAllowed, true)
   assert.equal(s.downgraded, false)
   assert.equal(s.staleDays, 30)
-  assert.equal(s.gh, 'absent')
+  assert.equal(s.gh, 'ok')
   // The decision round is Task 8's (plan.test.mjs); here only that the payload carries it, built from this same survey.
   assert.equal(s.rounds[0][0].id, 'merged')
   assert.deepEqual(s.followups.merged.flat().map((q) => q.id), ['merged-pick:0'])
@@ -419,6 +421,7 @@ function mergedInWorktree(w, name) {
 
 test('T7.14 ignored files count as dirty unless they sit under a junk directory (R14)', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one would read as PR-only and move every proof to origin/main
   w.commit(w.a, { file: '.gitignore', content: 'node_modules/\n.env\nsecrets/\n', msg: 'ignore more' })
   const env = mergedInWorktree(w, 'env')
   fs.writeFileSync(path.join(env, '.env'), 'TOKEN=local\n')
@@ -447,6 +450,7 @@ test('T7.14 ignored files count as dirty unless they sit under a junk directory 
 
 test('T7.15 a branch checked out in several worktrees: protected if any is locked, in mergedSet only if all are clean', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one would read as PR-only and move every proof to origin/main
   const lockedDirty = mergedInWorktree(w, 'multi')
   w.git(w.a, 'worktree', 'lock', lockedDirty)
   fs.writeFileSync(path.join(lockedDirty, 'multi.txt'), 'changed\n')
@@ -559,10 +563,13 @@ test('T7.21 gh absent: an M1-merged branch stays merged and the payload says gh 
   const w = world(t)
   branch(w, 'done')
   w.git(w.a, 'merge', '--ff-only', 'done')
+  // gh absent reads as a PR-only trunk, whose proofs run against origin/main — so the merge has to be there, not only in the local trunk.
+  w.git(w.a, 'push', 'origin', 'main')
 
   const result = w.cli(w.a, ['survey'])
   assert.equal(result.status, 0, result.stderr)
   assert.equal(result.json.gh, 'absent')
+  assert.equal(result.json.trunkPrOnly, true)
   const [done] = result.json.branches
   assert.equal(done.bucket, 'merged')
   assert.equal(done.proof, 'M1')
@@ -593,4 +600,121 @@ test('T7.22 a branch mid-rebase or mid-bisect in the main tree is protected even
   const bs = records(w).get('bs')
   assert.equal(bs.bucket, 'protected')
   assert.equal(bs.reason, 'mid-bisect in the main tree')
+})
+
+// B1: the survey reads the trunk's ruleset once, so later phases know whether a push to the trunk can land at all.
+const apiCalls = (w) => w.calls().filter((c) => c.name === 'gh' && c.argv.includes('api'))
+const surveyOf = (w) => {
+  const result = w.cli(w.a, ['survey'])
+  assert.equal(result.status, 0, result.stdout + result.stderr)
+  return result.json
+}
+
+test('B1.1 a pull_request rule on the trunk makes it PR-only', (t) => {
+  const w = world(t)
+  w.rules([{ type: 'pull_request' }])
+  const s = surveyOf(w)
+  assert.equal(s.trunkPrOnly, true)
+  assert.equal(s.trunkPrOnlyReason, 'ruleset')
+  assert.equal(s.carry, null)
+})
+
+test('B1.2 rules without a pull_request rule, or none at all, leave the trunk pushable', (t) => {
+  const w = world(t)
+  w.rules([{ type: 'deletion' }, { type: 'non_fast_forward' }])
+  const s = surveyOf(w)
+  assert.equal(s.trunkPrOnly, false)
+  assert.equal(s.trunkPrOnlyReason, 'no-rule')
+  const e = world(t)
+  e.rules([])
+  const none = surveyOf(e)
+  assert.equal(none.trunkPrOnly, false)
+  assert.equal(none.trunkPrOnlyReason, 'no-rule')
+})
+
+test('B1.3 gh absent on a GitHub remote reads as PR-only', (t) => {
+  const w = world(t)
+  const s = surveyOf(w)
+  assert.equal(s.trunkPrOnly, true)
+  assert.equal(s.trunkPrOnlyReason, 'gh-absent')
+})
+
+test('B1.4 a failing rules call, or an answer that is not an array, reads as PR-only', (t) => {
+  const w = world(t)
+  w.stub('gh', { stdout: '[]', byArgs: { api: { exit: 1, stderr: 'HTTP 404' } } })
+  const failed = surveyOf(w)
+  assert.equal(failed.trunkPrOnly, true)
+  assert.equal(failed.trunkPrOnlyReason, 'gh-failed')
+
+  const o = world(t)
+  o.stub('gh', { stdout: '[]', byArgs: { api: { stdout: '{"message":"x"}' } } })
+  const obj = surveyOf(o)
+  assert.equal(obj.trunkPrOnly, true)
+  assert.equal(obj.trunkPrOnlyReason, 'gh-failed')
+
+  const j = world(t)
+  j.stub('gh', { stdout: '[]', byArgs: { api: { stdout: 'not json' } } })
+  assert.equal(surveyOf(j).trunkPrOnlyReason, 'gh-failed')
+})
+
+test('B1.5 a non-GitHub remote is never PR-only and never asks gh', (t) => {
+  const w = world(t, { host: 'gitlab.com' })
+  w.rules([{ type: 'pull_request' }])
+  const s = surveyOf(w)
+  assert.equal(s.trunkPrOnly, false)
+  assert.equal(s.trunkPrOnlyReason, 'not-github')
+  assert.equal(apiCalls(w).length, 0)
+})
+
+test('B1.6 a downgraded GitHub repo (git-sync.push=false) is never PR-only and never asks gh', (t) => {
+  const w = world(t)
+  w.rules([{ type: 'pull_request' }])
+  w.git(w.a, 'config', 'git-sync.push', 'false')
+  const s = surveyOf(w)
+  assert.equal(s.trunkPrOnly, false)
+  assert.equal(s.trunkPrOnlyReason, 'downgraded')
+  assert.equal(apiCalls(w).length, 0)
+})
+
+test('B1.7 one rules call per survey, against the origin slug and the trunk; githubSlugOf parses both URL shapes', (t) => {
+  const w = world(t)
+  w.rules([])
+  surveyOf(w)
+  const calls = apiCalls(w)
+  assert.equal(calls.length, 1)
+  assert.ok(calls[0].argv.includes('repos/example/demo/rules/branches/main'), calls[0].argv.join(' '))
+
+  const urlOf = (url) => {
+    const x = world(t)
+    x.git(x.a, 'config', 'remote.origin.url', url)
+    return githubSlugOf(x.ctx(x.a))
+  }
+  assert.equal(urlOf('https://github.com/o/r.git'), 'o/r')
+  assert.equal(urlOf('git@github.com:o/r.git'), 'o/r')
+  assert.equal(urlOf('https://github.com/o/r'), 'o/r')
+  assert.equal(urlOf('https://github.com/o/r/'), 'o/r')
+  assert.equal(urlOf('https://gitlab.com/o/r.git'), null)
+})
+
+test('B1.8 trunkAhead counts local trunk commits missing from origin/<trunk>', (t) => {
+  const w = world(t)
+  w.rules([])
+  assert.equal(surveyOf(w).trunkAhead, 0)
+  w.commit(w.a, { file: 'one.txt', content: '1\n', msg: 'one' })
+  w.commit(w.a, { file: 'two.txt', content: '2\n', msg: 'two' })
+  assert.equal(surveyOf(w).trunkAhead, 2)
+})
+
+test('B1.9 a branch merged only into unpushed trunk commits is not merged when the trunk is PR-only, and still is when it is not', (t) => {
+  const w = world(t)
+  w.rules([{ type: 'pull_request' }])
+  mergedLocallyOnly(w)
+  const prOnly = surveyOf(w).branches.find((b) => b.name === 'm1')
+  assert.notEqual(prOnly.bucket, 'merged')
+  assert.equal(prOnly.proof, null)
+
+  const open = world(t)
+  open.rules([])
+  mergedLocallyOnly(open)
+  assert.equal(surveyOf(open).branches.find((b) => b.name === 'm1').bucket, 'merged')
 })

@@ -210,6 +210,30 @@ export function remoteKindOf(ctx) {
   return host === 'github.com' ? 'github' : 'other'
 }
 
+// `owner/repo` from the raw `remote.origin.url` when it names github.com (https or scp form, trailing `.git` and `/` stripped), else `null` — the
+// path `gh api` needs. Reads the raw URL for the same reason `remoteKindOf` does.
+export function githubSlugOf(ctx) {
+  const url = stringConfig(ctx, 'remote.origin.url') ?? ''
+  const scp = /^[^/]+@([^:/]+):(.*)$/.exec(url)
+  let host = ''
+  let slugPath = ''
+  if (scp) {
+    host = scp[1]
+    slugPath = scp[2]
+  } else {
+    try {
+      const parsed = new URL(url)
+      host = parsed.hostname
+      slugPath = parsed.pathname
+    } catch {
+      return null
+    }
+  }
+  if (host !== 'github.com') return null
+  const parts = slugPath.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\.git$/, '').split('/')
+  return parts.length === 2 && parts.every(Boolean) ? parts.join('/') : null
+}
+
 // §6: the three per-machine local-config overrides, plus any warning their values earn. staleDays
 // falls back to 30 both when unset (silently — that's just the documented default) and when set
 // to something that isn't a positive integer (with a warning, since that's a typo the user should
@@ -818,6 +842,34 @@ export function prLookup(repo, branch, tip) {
   return { state: 'none', number: null }
 }
 
+// Is the trunk reachable only through a pull request? One `gh api` read of the branch's active rules — the endpoint merges every ruleset that applies,
+// so a `pull_request` rule anywhere shows up in the one array. A non-GitHub remote or a downgraded repo answers without spawning anything and is never
+// PR-only, since it never pushes the trunk anyway. When the answer can't be had (no `gh`, a failed or timed-out call, output that isn't an array) the
+// trunk is treated as PR-only: the wrong guess on the other side is a push that is refused, or worse a push that was meant to be a PR.
+export function trunkRules(repo) {
+  if (repo.remoteKind !== 'github') return { prOnly: false, reason: 'not-github' }
+  if (repo.downgraded) return { prOnly: false, reason: 'downgraded' }
+  const slug = githubSlugOf(repo)
+  if (slug === null) return { prOnly: true, reason: 'gh-failed' }
+  const env = { ...process.env, ...repo.env }
+  const result = spawnSync('gh', ['api', `repos/${slug}/rules/branches/${encodeURIComponent(repo.trunk)}`], {
+    cwd: repo.root,
+    env,
+    encoding: 'utf8',
+    timeout: GH_TIMEOUT_MS,
+  })
+  if (result.error) return { prOnly: true, reason: result.error.code === 'ENOENT' ? 'gh-absent' : 'gh-failed' }
+  if (result.status !== 0) return { prOnly: true, reason: 'gh-failed' }
+  let rules
+  try {
+    rules = JSON.parse(result.stdout)
+  } catch {
+    return { prOnly: true, reason: 'gh-failed' }
+  }
+  if (!Array.isArray(rules)) return { prOnly: true, reason: 'gh-failed' }
+  return rules.some((rule) => rule?.type === 'pull_request') ? { prOnly: true, reason: 'ruleset' } : { prOnly: false, reason: 'no-rule' }
+}
+
 // Directory names whose ignored contents are regenerable build or tool output, so they don't make a worktree dirty (R14). Matched against every
 // path component, so `packages/x/node_modules/` is junk at any depth while `.env` or `config/local.yml` never are. Deliberately wider than the
 // stage-scan's JUNK_DIR_SEGMENTS: that list decides what may never be committed, this one what may be thrown away with a removed worktree.
@@ -968,8 +1020,8 @@ function refsUnder(repo, prefix) {
 // sides (`origin/HEAD` is a symref, and a local `refs/heads/HEAD` is a pathological ref no user means as a branch).
 //
 // Proof ref: the local trunk when the repo may push, since phase 6 publishes it before `apply` (which re-proves every deletion against
-// `origin/<trunk>`, Task 11); `origin/<trunk>` when downgraded, because that trunk is never pushed here and a proof against it would only offer
-// deletions apply must refuse. Either may be missing (a fresh clone, a pruned remote): then nothing is proven — `mergeProof` throws on a missing ref
+// `origin/<trunk>`, Task 11); `origin/<trunk>` when downgraded or `trunkPrOnly` (the survey's `trunkRules` answer, passed in so it is asked once),
+// because that trunk is never pushed here and a proof against it would only offer deletions apply must refuse. Either may be missing (a fresh clone, a pruned remote): then nothing is proven — `mergeProof` throws on a missing ref
 // (R12), and no proof is the safe answer, never a crash.
 //
 // Merged means every present tip is proven (Review Focus 1): this box can have merged `feat` while the other one pushed more onto `origin/feat`, and
@@ -988,13 +1040,13 @@ function refsUnder(repo, prefix) {
 // be unset (pushed without `-u`) or point elsewhere (a branch tracking `origin/main`); either would hide unpushed work or invent it. Without a
 // remote copy it falls back to the upstream's own count, and is 0 with neither. `unpushed` is set only for active records (R4) and never in a
 // downgraded repo, which neither pushes branches nor lists remote-only ones (§6).
-export function branchRecords(repo, worktrees = listWorktrees(repo)) {
+export function branchRecords(repo, worktrees = listWorktrees(repo), trunkPrOnly = false) {
   const opts = { env: repo.env }
   const locals = refsUnder(repo, 'refs/heads/')
   const remotes = refsUnder(repo, 'refs/remotes/origin/')
   locals.delete('HEAD')
   remotes.delete('HEAD')
-  const proofRef = repo.pushAllowed ? `refs/heads/${repo.trunk}` : `refs/remotes/origin/${repo.trunk}`
+  const proofRef = repo.downgraded || trunkPrOnly ? `refs/remotes/origin/${repo.trunk}` : `refs/heads/${repo.trunk}`
   const canProve = refExists(repo, proofRef)
   const headRef = git(repo.root, ['symbolic-ref', '-q', 'HEAD'], opts)
   const current = headRef.status === 0 ? headRef.stdout.trim().replace(/^refs\/heads\//, '') : null
@@ -1087,8 +1139,13 @@ export function branchRecords(repo, worktrees = listWorktrees(repo)) {
 function survey(ctx) {
   const r = repo(ctx.root, { env: ctx.env })
   const worktrees = listWorktrees(r)
-  const branches = branchRecords(r, worktrees)
+  const rules = trunkRules(r)
+  const branches = branchRecords(r, worktrees, rules.prOnly)
   const stashes = listStashes(r)
+  const trunkAhead =
+    refExists(r, `refs/heads/${r.trunk}`) && refExists(r, `refs/remotes/origin/${r.trunk}`)
+      ? Number(gitOk(r.root, ['rev-list', '--count', `refs/remotes/origin/${r.trunk}..refs/heads/${r.trunk}`], { env: r.env }))
+      : 0
   const gh = r.remoteKind === 'github' ? ghStatus(r) : 'unavailable'
   const mergedSet = branches
     .filter((b) => b.bucket === 'merged' && worktrees.every((wt) => wt.branch !== b.name || wt.dirty === 0))
@@ -1100,6 +1157,10 @@ function survey(ctx) {
     downgraded: r.downgraded,
     staleDays: r.config.staleDays,
     gh,
+    trunkPrOnly: rules.prOnly,
+    trunkPrOnlyReason: rules.reason,
+    trunkAhead,
+    carry: null,
     branches,
     worktrees,
     stashes,

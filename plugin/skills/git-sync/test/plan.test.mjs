@@ -141,6 +141,7 @@ function mergedInWorktree(w, name) {
 
 test('T8.4 merged: all deletes the clean worktree, then the remote copy, then the local branch', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = mergedInWorktree(w, 'm1')
   const s = surveyOf(w)
   assert.deepEqual(s.mergedSet, ['m1'])
@@ -207,6 +208,7 @@ test('T8.6 no answers is an empty plan', (t) => {
 
 test('T8.7 removing a dirty worktree on a merged branch forces it and then deletes the branch', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = mergedInWorktree(w, 'm2')
   fs.writeFileSync(path.join(w.root, 'wt m2', 'm2.txt'), 'changed\n')
   const s = surveyOf(w)
@@ -335,6 +337,7 @@ test('T8.11 balanced chunks: every split keeps 2–4 options per question in can
 
 test('T8.12 unattended answers remove merged work only: the merged set, and every worktree on a merged branch, dirty or clean', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const m1 = mergedInWorktree(w, 'm1')
   const m2 = mergedInWorktree(w, 'm2')
   fs.writeFileSync(path.join(w.root, 'wt m2', 'm2.txt'), 'changed\n')
