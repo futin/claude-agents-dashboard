@@ -171,8 +171,9 @@ model reads a log tail only when a check fails. A `.nvmrc` that does not match t
 7. Every deleted branch's name and tip SHA is appended to `deleted.log`, and the report prints one `git branch <name> <sha>` recovery line per deleted
    local branch and one `git push origin <sha>:refs/heads/<name>` per deleted remote branch.
 8. The script waits only on processes it started for checks; it starts no servers and never kills by pattern.
-9. Apply order: stash actions, worktree removals, branch pushes, remote deletions, local deletions. One failed action does not stop the rest.
+9. Apply order: stash actions, worktree removals, branch pushes, remote deletions, local deletions, `carry-trunk`. One failed action does not stop the rest.
 10. Re-running the whole skill is always safe; a second run on a tidy repo changes nothing.
+11. `carry-trunk` moves the trunk only after its carry branch is on `origin`, only by `reset --keep`, and only when HEAD is the trunk at the surveyed tip.
 
 ## 11. Errors
 

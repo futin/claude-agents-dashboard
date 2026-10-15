@@ -2106,6 +2106,64 @@ function stashBranch(r, a) {
   return ['done', name, notes.length > 0 ? notes.join('\n') : undefined, extra]
 }
 
+const CARRY_PR_LEAD =
+  'only accepts pull requests here, so these local commits moved to this branch. Retitle before merging if they deserve a release.'
+
+// HEAD must name the trunk itself: a detached HEAD at the trunk's tip is not enough, since `reset --keep` there would move HEAD and leave the trunk.
+function onTrunkAt(r, tip) {
+  const head = git(r.root, ['symbolic-ref', '-q', 'HEAD'], { env: r.env })
+  if (head.status !== 0 || head.stdout.trim() !== `refs/heads/${r.trunk}`) return 'not-on-trunk'
+  return localTipNow(r, r.trunk) === tip ? null : 'tip-moved'
+}
+
+// Invariant 11: the trunk moves only after its commits are safe on `origin` under the carry branch, only by `reset --keep` (which refuses to throw
+// away an uncommitted edit), and only while HEAD is still the trunk at the surveyed tip — re-proved just before the reset as well as up front, since
+// the push in between may take long enough for a commit to land. A `reset --keep` on the wrong branch would rewind someone's feature branch (Review
+// Focus 3). Every re-proof that fails before the branch exists is a skip with nothing touched; a refused push removes the just-made local branch,
+// which points at the trunk's own tip, so nothing is lost (Review Focus 4). Once the trunk is reset the carry is done whatever `gh` does: the work is
+// on `origin`, and a missing PR is something the report tells the user to open by hand (Review Focus 5). Nothing here is a deletion, so
+// deleted.log is not written. `gh` gets an argv array like every other child, so a title or subject never crosses a shell.
+function carryTrunk(r, a) {
+  if (r.downgraded) return ['skipped', 'downgraded']
+  const moved = onTrunkAt(r, a.expectTip)
+  if (moved !== null) return ['skipped', moved]
+  const originTrunk = `refs/remotes/origin/${r.trunk}`
+  if (!refExists(r, originTrunk) || git(r.root, ['merge-base', '--is-ancestor', originTrunk, a.expectTip], { env: r.env }).status !== 0) {
+    return ['skipped', 'trunk-diverged']
+  }
+  if (refExists(r, `refs/heads/${a.target}`) || refExists(r, `refs/remotes/origin/${a.target}`)) return ['skipped', 'branch-exists']
+
+  const opts = { env: r.env }
+  const created = git(r.root, [...SAFE_MUTATE_CONFIG, 'branch', '--no-track', '--', a.target, a.expectTip], opts)
+  if (created.status !== 0) return ['failed', 'git-failed', created.stderr.trim()]
+  const pushed = pushWithUpstream(r, a.target)
+  if (pushed.status !== 0) {
+    git(r.root, [...SAFE_MUTATE_CONFIG, 'update-ref', '-d', `refs/heads/${a.target}`, a.expectTip], opts)
+    return ['failed', 'push-failed', pushed.stderr.trim()]
+  }
+
+  const movedSince = onTrunkAt(r, a.expectTip)
+  if (movedSince !== null) return ['failed', 'reset-failed', `${movedSince} while the carry branch was pushed; the trunk was not reset`]
+  const reset = git(r.root, [...SAFE_MUTATE_CONFIG, 'reset', '--keep', originTrunk], opts)
+  if (reset.status !== 0) return ['failed', 'reset-failed', reset.stderr.trim()]
+
+  const commits = Array.isArray(a.commits) ? a.commits : []
+  const body = [`Opened by /git-sync: ${r.trunk} ${CARRY_PR_LEAD}`, '', ...commits.map((c) => `- ${String(c?.sha).slice(0, 7)} ${c?.subject}`)]
+  const gh = spawnSync('gh', ['pr', 'create', '--base', r.trunk, '--head', a.target, '--title', a.title, '--body', body.join('\n')], {
+    cwd: r.root,
+    env: { ...process.env, ...r.env },
+    encoding: 'utf8',
+    timeout: GH_TIMEOUT_MS,
+  })
+  const extra = { pr: null, tip: a.expectTip }
+  if (gh.error?.code === 'ENOENT') return ['done', 'carried', 'gh absent', extra]
+  const firstLine = (s) => (s ?? '').trim().split('\n')[0].trim()
+  if (gh.error || gh.status !== 0) return ['done', 'carried', `gh pr create failed: ${firstLine(gh.stderr) || gh.error?.message || `exit ${gh.status}`}`, extra]
+  const pr = firstLine(gh.stdout)
+  if (pr === '') return ['done', 'carried', 'gh pr create failed: it printed no PR URL', extra]
+  return ['done', 'carried', undefined, { ...extra, pr }]
+}
+
 const APPLY_STEPS = {
   'stash-branch': (ctx, r, a) => stashBranch(r, a),
   'stash-drop': (ctx, r, a) => dropStash(r, a.target),
@@ -2113,6 +2171,7 @@ const APPLY_STEPS = {
   'push-branch': (ctx, r, a) => pushBranch(r, a),
   'delete-remote': deleteRemote,
   'delete-local': deleteLocal,
+  'carry-trunk': (ctx, r, a) => carryTrunk(r, a),
 }
 
 // R20: `worktree prune` runs first, so a worktree whose directory was deleted by hand no longer holds its branch when the deletions come to it;
