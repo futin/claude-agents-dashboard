@@ -70,7 +70,8 @@ function everyKindSurvey() {
   ]
   const worktrees = [{ path: '/wt/kept', branch: 'kept', head: 'a'.repeat(40), dirty: 0, locked: false, prunable: false, inProgress: null }]
   const stashes = [{ sha: 'c'.repeat(40), base: 'main', files: 1, date: 0 }]
-  return { trunk: 'main', downgraded: false, branches, worktrees, stashes, mergedSet: ['done'] }
+  const carry = { branch: 'sync/main-20261015-1200', ahead: 2, tip: 'b'.repeat(40), title: 'chore(git-sync): carry 2 local main commits', commits: [] }
+  return { trunk: 'main', downgraded: false, trunkPrOnly: true, carry, branches, worktrees, stashes, mergedSet: ['done'] }
 }
 
 test('T14.6 every fixed label the decision round emits is mapped in SKILL.md, and every question id prefix is named', () => {
@@ -79,9 +80,11 @@ test('T14.6 every fixed label the decision round emits is mapped in SKILL.md, an
   const qs = r.rounds.flat().concat(r.followups.merged.flat())
   const names = new Set(s.branches.map((b) => b.name))
   const prefixes = new Set(qs.map((q) => q.id.split(':')[0]))
-  assert.deepEqual([...prefixes].sort(), ['asked', 'merged', 'merged-pick', 'push', 'stash', 'worktree'], 'the fixture reaches every kind')
+  assert.deepEqual([...prefixes].sort(), ['asked', 'carry', 'merged', 'merged-pick', 'push', 'stash', 'worktree'], 'the fixture reaches every kind')
   const text = skill()
-  for (const label of new Set(qs.flatMap((q) => q.options.map((o) => o.label)).filter((l) => !names.has(l)))) {
+  // The carry question's second label names the trunk; SKILL.md writes it with the placeholder.
+  const asWritten = (l) => (l === `Leave on ${s.trunk}` ? 'Leave on <trunk>' : l)
+  for (const label of new Set(qs.flatMap((q) => q.options.map((o) => asWritten(o.label))).filter((l) => !names.has(l)))) {
     assert.ok(text.includes(`\`${label}\``), `label not mapped in SKILL.md: ${label}`)
   }
   for (const prefix of prefixes) assert.ok(text.includes(`\`${prefix}`), `question id not named in SKILL.md: ${prefix}`)

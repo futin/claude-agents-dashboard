@@ -53,6 +53,8 @@ build it yourself: it sits under the git common dir, which is not always `<root>
    `gone-unproven`, `abandoned` or `active`, lists stashes and worktrees, and hands back the decision round ready to ask: `rounds` (a list of calls,
    each a list of at most 4 questions), `followups.merged`, and `unattended`, the answers to use when there is no AskUserQuestion. When
    `remoteKind` is `github` and `gh` is `absent`, open-PR protection was off for this run — a branch with an open PR can be offered as merged — so say that in one line right before the decision round, not only at the end.
+   Likewise when `trunkPrOnlyReason` is `gh-absent` or `gh-failed`: the survey could not read the trunk's rules, so it treats the trunk as PR-only, and
+   one line right before the decision round says that and why.
 
 4. **Decision round.** Ask every call in `survey.rounds`, in order, back to back, with nothing else in between. Pass each call to AskUserQuestion as
    given: each question's `header`, `question`, `multiSelect` and `options` (labels and descriptions) unchanged, and its `id` kept aside to map the
@@ -64,6 +66,7 @@ build it yourself: it sits under the git common dir, which is not always `<root>
 
    | Question id | Chosen label(s) | answers.json |
    | --- | --- | --- |
+   | `carry` | `Open a PR` / `Leave on <trunk>` | `"carry": "pr"` / `"carry": "keep"` |
    | `merged` | `Delete all` / `Keep all` / `Let me pick` | `"merged": "all"` / `"merged": "none"` / from the follow-up, below |
    | `merged-pick:<n>` (follow-up) | ticked branch names, across every chunk | `"merged": [names]`; `Keep all` adds nothing, so only it ticked is `[]` |
    | `asked:<n>` | ticked branch names, across every chunk | `"asked": [names]`; `Keep all` adds nothing |
@@ -83,9 +86,11 @@ build it yourself: it sits under the git common dir, which is not always `<root>
    Never fix checks inside this skill, never re-run them, and carry on: red blocks the trunk push, not the rest.
 
 6. **Push the trunk.** `node "${CLAUDE_PLUGIN_ROOT}/skills/git-sync/tools/git-sync.mjs" push-trunk`. Not pushing is `ok: true` with a `reason`
-   (`not-allowed`, `no-verify`, `stale-verify`, `red`, `rejected`, `nothing-to-push`). `rejected` covers every failed push: quote its `detail`.
-   Suggest re-running /git-sync only when `detail` reads as a non-fast-forward (`fetch first`, `non-fast-forward`), which means the other machine
-   pushed first; for anything else (auth, a protected branch, a missing `origin/<trunk>`) say what `detail` names instead. Never retry it here.
+   (`not-allowed`, `pr-only`, `no-verify`, `stale-verify`, `red`, `rejected`, `nothing-to-push`). `pr-only` means the trunk only accepts pull
+   requests: never offer to push it by other means, since the carry question is the way those commits reach `origin`. `rejected` covers every failed
+   push: quote its `detail`. Suggest re-running /git-sync only when `detail` reads as a non-fast-forward (`fetch first`, `non-fast-forward`), which
+   means the other machine pushed first; for anything else (auth, a protected branch, a missing `origin/<trunk>`) say what `detail` names instead.
+   Never retry it here.
 
 7. **Apply.** `node "${CLAUDE_PLUGIN_ROOT}/skills/git-sync/tools/git-sync.mjs" apply`. It prunes stale worktree metadata, then carries out `plan.json` in a
    fixed order, re-proving each action against the live repo first. Each result is `done`, `skipped` or `failed` with a reason; one refusal never
@@ -133,8 +138,8 @@ add a choice they did not make — and run `plan` again, once. Correcting your o
 - The only git command you run yourself is git commit -F, in phase 1.
 - Without AskUserQuestion, plan with survey.unattended unchanged, run every phase, and ask the rest in prose after the report.
 - Never kill a process by pattern.
-- **Destructive operations happen only in `apply`, and only for what the user chose.** Deleting a branch, removing a worktree, dropping a stash and
-  pushing a branch all go through the plan built from the user's answers — or, with no AskUserQuestion, from `survey.unattended`, the merged-work
-  cleanup the user approved in advance; nothing is removed on inference.
+- **Destructive operations happen only in `apply`, and only for what the user chose.** Deleting a branch, removing a worktree, dropping a stash,
+  pushing a branch and moving the trunk's local commits onto a PR branch all go through the plan built from the user's answers — or, with no
+  AskUserQuestion, from `survey.unattended`, the merged-work cleanup the user approved in advance; nothing is removed on inference.
 - **Ask the survey's questions, not your own.** Never add, merge, reword or reorder questions or options: `buildPlan` accepts only what `rounds`
   offered, and the counts in the `merged` question are exactly what `Delete all` does.

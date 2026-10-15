@@ -210,6 +210,30 @@ export function remoteKindOf(ctx) {
   return host === 'github.com' ? 'github' : 'other'
 }
 
+// `owner/repo` from the raw `remote.origin.url` when it names github.com (https or scp form, trailing `.git` and `/` stripped), else `null` — the
+// path `gh api` needs. Reads the raw URL for the same reason `remoteKindOf` does.
+export function githubSlugOf(ctx) {
+  const url = stringConfig(ctx, 'remote.origin.url') ?? ''
+  const scp = /^[^/]+@([^:/]+):(.*)$/.exec(url)
+  let host = ''
+  let slugPath = ''
+  if (scp) {
+    host = scp[1]
+    slugPath = scp[2]
+  } else {
+    try {
+      const parsed = new URL(url)
+      host = parsed.hostname
+      slugPath = parsed.pathname
+    } catch {
+      return null
+    }
+  }
+  if (host !== 'github.com') return null
+  const parts = slugPath.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\.git$/, '').split('/')
+  return parts.length === 2 && parts.every(Boolean) ? parts.join('/') : null
+}
+
 // §6: the three per-machine local-config overrides, plus any warning their values earn. staleDays
 // falls back to 30 both when unset (silently — that's just the documented default) and when set
 // to something that isn't a positive integer (with a warning, since that's a typo the user should
@@ -818,6 +842,34 @@ export function prLookup(repo, branch, tip) {
   return { state: 'none', number: null }
 }
 
+// Is the trunk reachable only through a pull request? One `gh api` read of the branch's active rules — the endpoint merges every ruleset that applies,
+// so a `pull_request` rule anywhere shows up in the one array. A non-GitHub remote or a downgraded repo answers without spawning anything and is never
+// PR-only, since it never pushes the trunk anyway. When the answer can't be had (no `gh`, a failed or timed-out call, output that isn't an array) the
+// trunk is treated as PR-only: the wrong guess on the other side is a push that is refused, or worse a push that was meant to be a PR.
+export function trunkRules(repo) {
+  if (repo.remoteKind !== 'github') return { prOnly: false, reason: 'not-github' }
+  if (repo.downgraded) return { prOnly: false, reason: 'downgraded' }
+  const slug = githubSlugOf(repo)
+  if (slug === null) return { prOnly: true, reason: 'gh-failed' }
+  const env = { ...process.env, ...repo.env }
+  const result = spawnSync('gh', ['api', `repos/${slug}/rules/branches/${encodeURIComponent(repo.trunk)}`], {
+    cwd: repo.root,
+    env,
+    encoding: 'utf8',
+    timeout: GH_TIMEOUT_MS,
+  })
+  if (result.error) return { prOnly: true, reason: result.error.code === 'ENOENT' ? 'gh-absent' : 'gh-failed' }
+  if (result.status !== 0) return { prOnly: true, reason: 'gh-failed' }
+  let rules
+  try {
+    rules = JSON.parse(result.stdout)
+  } catch {
+    return { prOnly: true, reason: 'gh-failed' }
+  }
+  if (!Array.isArray(rules)) return { prOnly: true, reason: 'gh-failed' }
+  return rules.some((rule) => rule?.type === 'pull_request') ? { prOnly: true, reason: 'ruleset' } : { prOnly: false, reason: 'no-rule' }
+}
+
 // Directory names whose ignored contents are regenerable build or tool output, so they don't make a worktree dirty (R14). Matched against every
 // path component, so `packages/x/node_modules/` is junk at any depth while `.env` or `config/local.yml` never are. Deliberately wider than the
 // stage-scan's JUNK_DIR_SEGMENTS: that list decides what may never be committed, this one what may be thrown away with a removed worktree.
@@ -968,8 +1020,8 @@ function refsUnder(repo, prefix) {
 // sides (`origin/HEAD` is a symref, and a local `refs/heads/HEAD` is a pathological ref no user means as a branch).
 //
 // Proof ref: the local trunk when the repo may push, since phase 6 publishes it before `apply` (which re-proves every deletion against
-// `origin/<trunk>`, Task 11); `origin/<trunk>` when downgraded, because that trunk is never pushed here and a proof against it would only offer
-// deletions apply must refuse. Either may be missing (a fresh clone, a pruned remote): then nothing is proven — `mergeProof` throws on a missing ref
+// `origin/<trunk>`, Task 11); `origin/<trunk>` when downgraded or `trunkPrOnly` (the survey's `trunkRules` answer, passed in so it is asked once),
+// because that trunk is never pushed here and a proof against it would only offer deletions apply must refuse. Either may be missing (a fresh clone, a pruned remote): then nothing is proven — `mergeProof` throws on a missing ref
 // (R12), and no proof is the safe answer, never a crash.
 //
 // Merged means every present tip is proven (Review Focus 1): this box can have merged `feat` while the other one pushed more onto `origin/feat`, and
@@ -988,13 +1040,13 @@ function refsUnder(repo, prefix) {
 // be unset (pushed without `-u`) or point elsewhere (a branch tracking `origin/main`); either would hide unpushed work or invent it. Without a
 // remote copy it falls back to the upstream's own count, and is 0 with neither. `unpushed` is set only for active records (R4) and never in a
 // downgraded repo, which neither pushes branches nor lists remote-only ones (§6).
-export function branchRecords(repo, worktrees = listWorktrees(repo)) {
+export function branchRecords(repo, worktrees = listWorktrees(repo), trunkPrOnly = false) {
   const opts = { env: repo.env }
   const locals = refsUnder(repo, 'refs/heads/')
   const remotes = refsUnder(repo, 'refs/remotes/origin/')
   locals.delete('HEAD')
   remotes.delete('HEAD')
-  const proofRef = repo.pushAllowed ? `refs/heads/${repo.trunk}` : `refs/remotes/origin/${repo.trunk}`
+  const proofRef = repo.downgraded || trunkPrOnly ? `refs/remotes/origin/${repo.trunk}` : `refs/heads/${repo.trunk}`
   const canProve = refExists(repo, proofRef)
   const headRef = git(repo.root, ['symbolic-ref', '-q', 'HEAD'], opts)
   const current = headRef.status === 0 ? headRef.stdout.trim().replace(/^refs\/heads\//, '') : null
@@ -1079,6 +1131,29 @@ export function branchRecords(repo, worktrees = listWorktrees(repo)) {
   return records
 }
 
+// The PR-title rule the repo's `ci / pr-title` check enforces: `!` (a breaking change) belongs to the release-cutting types only.
+const PR_TITLE_RELEASE = /^(feat|fix|perf)(\([a-z0-9-]+\))?!?: .+/
+const PR_TITLE_OTHER = /^(docs|chore|test|refactor|ci|build)(\([a-z0-9-]+\))?: .+/
+export const prTitleOk = (title) => PR_TITLE_RELEASE.test(title) || PR_TITLE_OTHER.test(title)
+
+// What a PR-only trunk's local-only commits would travel as: a branch named for the trunk and the local minute (computed here once, so the question
+// shows exactly the name the plan carries), and a PR title that is the lone commit's own subject when that already passes the title rule — the
+// squash commit then keeps the author's words — else a generic chore title. `n` reads plural even at 1: a failing lone subject is the only way to get
+// there, and singular wording for it is not worth a branch of its own.
+function carryOf(r, trunkAhead) {
+  const trunkRef = `refs/heads/${r.trunk}`
+  const log = gitOk(r.root, ['log', '--reverse', '--format=%H%x00%s', `refs/remotes/origin/${r.trunk}..${trunkRef}`], { env: r.env })
+  const commits = log === '' ? [] : log.split('\n').map((line) => {
+    const [sha, subject] = line.split('\0')
+    return { sha, subject }
+  })
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const branch = `sync/${r.trunk}-${localYmd(now.getTime() / 1000)}-${pad(now.getHours())}${pad(now.getMinutes())}`
+  const title = commits.length === 1 && prTitleOk(commits[0].subject) ? commits[0].subject : `chore(git-sync): carry ${commits.length} local ${r.trunk} commits`
+  return { branch, tip: gitOk(r.root, ['rev-parse', trunkRef], { env: r.env }), ahead: trunkAhead, commits, title }
+}
+
 // Phase 3 (§4): the read-only picture the decision round is built from. Writes nothing itself — `main` mirrors the envelope into survey.json, the
 // only state this phase leaves (T7.10). `gh` is read after the branch loop so its cached answer is the loop's own (R13); a remote that isn't GitHub
 // never had a PR lookup to run, so it reports `unavailable` without spawning `gh` just to learn that. A merged branch joins `mergedSet` only when
@@ -1087,9 +1162,15 @@ export function branchRecords(repo, worktrees = listWorktrees(repo)) {
 function survey(ctx) {
   const r = repo(ctx.root, { env: ctx.env })
   const worktrees = listWorktrees(r)
-  const branches = branchRecords(r, worktrees)
+  const rules = trunkRules(r)
+  const branches = branchRecords(r, worktrees, rules.prOnly)
   const stashes = listStashes(r)
+  const trunkAhead =
+    refExists(r, `refs/heads/${r.trunk}`) && refExists(r, `refs/remotes/origin/${r.trunk}`)
+      ? Number(gitOk(r.root, ['rev-list', '--count', `refs/remotes/origin/${r.trunk}..refs/heads/${r.trunk}`], { env: r.env }))
+      : 0
   const gh = r.remoteKind === 'github' ? ghStatus(r) : 'unavailable'
+  const carry = rules.prOnly && !r.downgraded && trunkAhead > 0 ? carryOf(r, trunkAhead) : null
   const mergedSet = branches
     .filter((b) => b.bucket === 'merged' && worktrees.every((wt) => wt.branch !== b.name || wt.dirty === 0))
     .map((b) => b.name)
@@ -1100,6 +1181,10 @@ function survey(ctx) {
     downgraded: r.downgraded,
     staleDays: r.config.staleDays,
     gh,
+    trunkPrOnly: rules.prOnly,
+    trunkPrOnlyReason: rules.reason,
+    trunkAhead,
+    carry,
     branches,
     worktrees,
     stashes,
@@ -1227,6 +1312,20 @@ function worktreeQuestion(survey, wt) {
 export function rounds(survey) {
   const o = offered(survey)
   const questions = []
+  // First: it is about the trunk itself, the most consequential thing the run does, so it is not left to scroll past after the housekeeping.
+  if (survey.carry) {
+    const { branch, ahead, title } = survey.carry
+    questions.push({
+      id: 'carry',
+      header: 'PR-only',
+      question: `${survey.trunk} only accepts pull requests here and ${plural(ahead, 'local commit')} ${ahead === 1 ? 'is' : 'are'} not on origin. Move them to ${branch} and open a PR?`,
+      multiSelect: false,
+      options: [
+        { label: 'Open a PR', description: `push ${branch}, reset local ${survey.trunk} to origin/${survey.trunk}, open "${title}"` },
+        { label: `Leave on ${survey.trunk}`, description: 'keep them local; nothing is pushed' },
+      ],
+    })
+  }
   if (o.merged.length > 0) {
     const remotes = survey.downgraded ? 0 : o.merged.filter((b) => b.remote).length
     const wts = o.merged.reduce((n, b) => n + holdersOf(survey, b.name).length, 0)
@@ -1253,7 +1352,8 @@ export function rounds(survey) {
 
 // R37: the standing answers for a session with no AskUserQuestion. The user approved cleaning up merged work in advance, so the merged set goes, and
 // so does every offered worktree on a merged branch — dirty ones included, which takes the branch along with it. Everything else stays unanswered,
-// which means keep. Built from `offered` like the questions, so `buildPlan` accepts them by construction.
+// which means keep. Built from `offered` like the questions, so `buildPlan` accepts them by construction. The trunk carry is never answered here:
+// opening a PR is publishing work, which an absent user has not approved.
 function unattended(survey, o) {
   const answers = {}
   if (o.merged.length > 0) answers.merged = 'all'
@@ -1262,13 +1362,13 @@ function unattended(survey, o) {
   return answers
 }
 
-const ANSWER_KEYS = new Set(['merged', 'asked', 'push', 'stashes', 'worktrees'])
+const ANSWER_KEYS = new Set(['carry', 'merged', 'asked', 'push', 'stashes', 'worktrees'])
 const STASH_CHOICES = new Set(['branch-push', 'branch-local', 'drop', 'keep'])
 const WORKTREE_CHOICES = new Set(['keep', 'remove'])
 // §10.9: stash actions, worktree removals, branch pushes, remote deletions, local deletions. Stash first so a stash's branch exists before anything
 // else runs; worktrees before branches because git refuses to delete a branch a worktree still holds; remote before local so the local copy — the
-// recovery point — is the last thing to go.
-const ACTION_RANK = { 'stash-branch': 0, 'stash-drop': 0, 'remove-worktree': 1, 'push-branch': 2, 'delete-remote': 3, 'delete-local': 4 }
+// recovery point — is the last thing to go. The trunk carry is last of all: it rewrites the one branch every earlier action may have proved against.
+const ACTION_RANK = { 'stash-branch': 0, 'stash-drop': 0, 'remove-worktree': 1, 'push-branch': 2, 'delete-remote': 3, 'delete-local': 4, 'carry-trunk': 5 }
 const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x)
 
 // Answers → plan actions (§7). The answers file is JSON the SKILL layer writes from the model's reading of AskUserQuestion, so it is validated as
@@ -1320,6 +1420,8 @@ export function buildPlan(survey, answers) {
   const stashAnswers = choices('stashes', new Set(o.stashes.map((s) => s.sha)), STASH_CHOICES)
   if (survey.downgraded && Object.values(stashAnswers).includes('branch-push')) bad('a downgraded repo pushes no branches', 'branch-push')
   const wtAnswers = choices('worktrees', new Set(o.worktrees.map((wt) => wt.path)), WORKTREE_CHOICES)
+  if (answers.carry !== undefined && answers.carry !== 'pr' && answers.carry !== 'keep') bad('carry must be pr or keep', answers.carry)
+  if (answers.carry === 'pr' && !survey.carry) bad('carry was not offered', answers.carry)
 
   const actions = []
   const deleting = new Set()
@@ -1352,6 +1454,10 @@ export function buildPlan(survey, answers) {
   for (const wt of o.worktrees.filter((x) => removed.has(x.path) && x.branch)) {
     const rec = o.byName.get(wt.branch)
     if (rec?.bucket === 'merged' && holdersOf(survey, rec.name).every((x) => removed.has(x.path))) deleteBranch(rec, 'merged')
+  }
+  if (answers.carry === 'pr') {
+    const { branch, tip, title, commits } = survey.carry
+    actions.push({ kind: 'carry-trunk', target: branch, expectTip: tip, title, commits })
   }
   // Array#sort is stable, so within one kind the answers' own order survives.
   return actions.sort((a, b) => ACTION_RANK[a.kind] - ACTION_RANK[b.kind])
@@ -1605,7 +1711,7 @@ function verify(ctx) {
 // isn't red. `ahead` is read straight off the last-known `refs/remotes/origin/<trunk>` — this
 // never fetches first (that's sync's job), so a push race with another machine surfaces as an
 // ordinary rejection below rather than something this phase tries to detect in advance. Ordered
-// per §10.6: not-allowed, then no-verify, then stale-verify, then red, then (R21) the
+// per §10.6: not-allowed, then pr-only, then no-verify, then stale-verify, then red, then (R21) the
 // remote-tracking ref itself, then nothing-to-push, then the push. The verify gates never need
 // `ahead`, so they report `null` for it rather than paying for a `rev-list` before it's known the
 // range is even resolvable — that range is exactly what R21 exists to guard: without a local
@@ -1614,11 +1720,20 @@ function verify(ctx) {
 // intercept (only `Stop` is), crashing the process instead of emitting the one JSON envelope every
 // subcommand owes. That's reported the same way any other unpushable state is: `ok:true`,
 // `reason:'rejected'`, with `detail` naming what's missing.
+//
+// `pr-only` comes from this run's survey (`trunkPrOnly`), not a fresh rules call: the survey asked once and the SKILL layer already built its carry
+// offer on that answer. A missing or unsuccessful survey.json reads as PR-only too — a push that a PR-only trunk would reject is cheaper to skip
+// than to attempt, and a run that never surveyed has not shown the trunk accepts direct pushes. It sits before the verify gates so a PR-only trunk
+// never reports a verify reason for a push that could not have happened.
 function pushTrunk(ctx) {
   const r = repo(ctx.root, { env: ctx.env })
   const head = gitOk(ctx.root, ['rev-parse', `refs/heads/${r.trunk}`], { env: ctx.env })
 
   if (!r.pushAllowed) return { pushed: false, reason: 'not-allowed', ahead: null }
+
+  const surveyState = readState(ctx, 'survey')
+  if (!surveyState?.ok) return { pushed: false, reason: 'pr-only', ahead: null, detail: 'no survey this run' }
+  if (surveyState.trunkPrOnly) return { pushed: false, reason: 'pr-only', ahead: null, detail: surveyState.trunkPrOnlyReason }
 
   const verifyState = readState(ctx, 'verify')
   if (!verifyState) return { pushed: false, reason: 'no-verify', ahead: null }
@@ -1656,7 +1771,7 @@ function pushTrunk(ctx) {
 // A full object name (sha-1 or sha-256). `expectTip` becomes the lease's expected value and a comparison target, so a ref name like `main` there
 // would be resolved locally at push time — refused as a malformed plan instead.
 const FULL_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/
-const BRANCH_ACTIONS = new Set(['push-branch', 'delete-remote', 'delete-local'])
+const BRANCH_ACTIONS = new Set(['push-branch', 'delete-remote', 'delete-local', 'carry-trunk'])
 
 // The plan to apply: `--plan <file>` when given (the SKILL layer's escape hatch, and the tests' hand-written plans), else the plan.json this run's
 // `plan` wrote. Validated in full before anything runs, as strictly as `buildPlan` validates answers: a malformed plan stops with `bad-plan`
@@ -1686,6 +1801,7 @@ function readPlan(ctx, planFile) {
     if (BRANCH_ACTIONS.has(a.kind) && git(ctx.root, ['check-ref-format', `refs/heads/${a.target}`], { env: ctx.env }).status !== 0) {
       bad('not a branch name', a)
     }
+    if (a.kind === 'carry-trunk' && (typeof a.title !== 'string' || a.title === '')) bad('carry-trunk needs a title', a)
     // A stash is only ever named by its own SHA (§10.5); a `stash@{n}` or a short name would be resolved against whatever sits there now.
     if (a.kind.startsWith('stash-') && a.target !== a.expectTip) bad('a stash action targets the stash sha it expects', a)
     if (a.kind === 'stash-branch' && a.baseSha !== undefined && (typeof a.baseSha !== 'string' || !FULL_SHA.test(a.baseSha))) {
@@ -1990,6 +2106,64 @@ function stashBranch(r, a) {
   return ['done', name, notes.length > 0 ? notes.join('\n') : undefined, extra]
 }
 
+const CARRY_PR_LEAD =
+  'only accepts pull requests here, so these local commits moved to this branch. Retitle before merging if they deserve a release.'
+
+// HEAD must name the trunk itself: a detached HEAD at the trunk's tip is not enough, since `reset --keep` there would move HEAD and leave the trunk.
+function onTrunkAt(r, tip) {
+  const head = git(r.root, ['symbolic-ref', '-q', 'HEAD'], { env: r.env })
+  if (head.status !== 0 || head.stdout.trim() !== `refs/heads/${r.trunk}`) return 'not-on-trunk'
+  return localTipNow(r, r.trunk) === tip ? null : 'tip-moved'
+}
+
+// Invariant 11: the trunk moves only after its commits are safe on `origin` under the carry branch, only by `reset --keep` (which refuses to throw
+// away an uncommitted edit), and only while HEAD is still the trunk at the surveyed tip — re-proved just before the reset as well as up front, since
+// the push in between may take long enough for a commit to land. A `reset --keep` on the wrong branch would rewind someone's feature branch (Review
+// Focus 3). Every re-proof that fails before the branch exists is a skip with nothing touched; a refused push removes the just-made local branch,
+// which points at the trunk's own tip, so nothing is lost (Review Focus 4). Once the trunk is reset the carry is done whatever `gh` does: the work is
+// on `origin`, and a missing PR is something the report tells the user to open by hand (Review Focus 5). Nothing here is a deletion, so
+// deleted.log is not written. `gh` gets an argv array like every other child, so a title or subject never crosses a shell.
+function carryTrunk(r, a) {
+  if (r.downgraded) return ['skipped', 'downgraded']
+  const moved = onTrunkAt(r, a.expectTip)
+  if (moved !== null) return ['skipped', moved]
+  const originTrunk = `refs/remotes/origin/${r.trunk}`
+  if (!refExists(r, originTrunk) || git(r.root, ['merge-base', '--is-ancestor', originTrunk, a.expectTip], { env: r.env }).status !== 0) {
+    return ['skipped', 'trunk-diverged']
+  }
+  if (refExists(r, `refs/heads/${a.target}`) || refExists(r, `refs/remotes/origin/${a.target}`)) return ['skipped', 'branch-exists']
+
+  const opts = { env: r.env }
+  const created = git(r.root, [...SAFE_MUTATE_CONFIG, 'branch', '--no-track', '--', a.target, a.expectTip], opts)
+  if (created.status !== 0) return ['failed', 'git-failed', created.stderr.trim()]
+  const pushed = pushWithUpstream(r, a.target)
+  if (pushed.status !== 0) {
+    git(r.root, [...SAFE_MUTATE_CONFIG, 'update-ref', '-d', `refs/heads/${a.target}`, a.expectTip], opts)
+    return ['failed', 'push-failed', pushed.stderr.trim()]
+  }
+
+  const movedSince = onTrunkAt(r, a.expectTip)
+  if (movedSince !== null) return ['failed', 'reset-failed', `${movedSince} while the carry branch was pushed; the trunk was not reset`]
+  const reset = git(r.root, [...SAFE_MUTATE_CONFIG, 'reset', '--keep', originTrunk], opts)
+  if (reset.status !== 0) return ['failed', 'reset-failed', reset.stderr.trim()]
+
+  const commits = Array.isArray(a.commits) ? a.commits : []
+  const body = [`Opened by /git-sync: ${r.trunk} ${CARRY_PR_LEAD}`, '', ...commits.map((c) => `- ${String(c?.sha).slice(0, 7)} ${c?.subject}`)]
+  const gh = spawnSync('gh', ['pr', 'create', '--base', r.trunk, '--head', a.target, '--title', a.title, '--body', body.join('\n')], {
+    cwd: r.root,
+    env: { ...process.env, ...r.env },
+    encoding: 'utf8',
+    timeout: GH_TIMEOUT_MS,
+  })
+  const extra = { pr: null, tip: a.expectTip }
+  if (gh.error?.code === 'ENOENT') return ['done', 'carried', 'gh absent', extra]
+  const firstLine = (s) => (s ?? '').trim().split('\n')[0].trim()
+  if (gh.error || gh.status !== 0) return ['done', 'carried', `gh pr create failed: ${firstLine(gh.stderr) || gh.error?.message || `exit ${gh.status}`}`, extra]
+  const pr = firstLine(gh.stdout)
+  if (pr === '') return ['done', 'carried', 'gh pr create failed: it printed no PR URL', extra]
+  return ['done', 'carried', undefined, { ...extra, pr }]
+}
+
 const APPLY_STEPS = {
   'stash-branch': (ctx, r, a) => stashBranch(r, a),
   'stash-drop': (ctx, r, a) => dropStash(r, a.target),
@@ -1997,6 +2171,7 @@ const APPLY_STEPS = {
   'push-branch': (ctx, r, a) => pushBranch(r, a),
   'delete-remote': deleteRemote,
   'delete-local': deleteLocal,
+  'carry-trunk': (ctx, r, a) => carryTrunk(r, a),
 }
 
 // R20: `worktree prune` runs first, so a worktree whose directory was deleted by hand no longer holds its branch when the deletions come to it;
@@ -2066,11 +2241,20 @@ const REASON_TEXT = {
   'stash-gone': 'the stash no longer exists',
   // push-trunk's own refusal reasons (§10.6).
   'not-allowed': 'pushing the trunk is disabled for this repo',
+  'pr-only': 'the trunk only accepts pull requests here',
   'no-verify': 'no verify has run for this commit',
   'stale-verify': 'verify is for a different commit',
   red: 'checks are red',
   rejected: 'the push was rejected',
   'nothing-to-push': 'the trunk is already up to date on the remote',
+  // carry-trunk's skip and fail reasons: each says what held the carry back, and `reset-failed` also says where the work is, since that is the
+  // one outcome where the branch is on `origin` but the trunk was not moved.
+  'tip-moved': 'the trunk moved since the survey',
+  'not-on-trunk': 'HEAD is not on the trunk',
+  'trunk-diverged': 'the local trunk no longer descends from origin',
+  'branch-exists': 'the carry branch name is already taken',
+  'push-failed': 'the carry branch could not be pushed',
+  'reset-failed': 'the trunk could not be moved back; the carry branch is on origin',
 }
 
 function describeReason(reason) {
@@ -2107,7 +2291,7 @@ function commitsSince(ctx, preflightState) {
 // §12 "Trunk": commits pulled, each discovered check's verdict, then whether the trunk push
 // landed. Each piece is independent — a `sync` stop before `verify` ever ran still gets its own
 // "pulled" line, an unverified repo (no checks discovered) still gets its push line.
-function trunkLines(syncState, verifyState, pushTrunkState) {
+function trunkLines(syncState, verifyState, pushTrunkState, surveyState, applyState) {
   const lines = []
   if (syncState) lines.push(`- pulled ${syncState.pulled} commit${syncState.pulled === 1 ? '' : 's'}`)
   if (verifyState) {
@@ -2123,7 +2307,30 @@ function trunkLines(syncState, verifyState, pushTrunkState) {
         : `- not pushed: ${describeReason(pushTrunkState.reason)}${pushTrunkState.detail ? ` (${pushTrunkState.detail})` : ''}`,
     )
   }
+  lines.push(...carryLines(surveyState, applyState))
   return lines
+}
+
+// The `carry-trunk` result, if the plan had one. A `done` carry names the branch and the PR, and always prints the line that undoes the trunk move: the
+// reset is the one thing in this skill that rewinds a branch the user did not name, so the way back sits next to it. A null `pr` (gh absent, or
+// `gh pr create` failing after the branch was pushed) prints the exact command to open it by hand, built from the title the survey offered, shell-quoted
+// like every other recovery line since a commit subject can hold `$(…)` or a quote. A skipped or failed carry says why, so the reasons REASON_TEXT
+// glosses for it are shown somewhere.
+function carryLines(surveyState, applyState) {
+  const result = applyState?.results?.find((r) => r.kind === 'carry-trunk')
+  if (!result) return []
+  const trunk = surveyState?.trunk ?? 'main'
+  if (result.status !== 'done') {
+    return [`- carry to ${result.target}: ${result.status} (${describeReason(result.reason)})${result.detail ? `: ${result.detail}` : ''}`]
+  }
+  const branch = shQuote(result.target)
+  const title = surveyState?.carry?.title
+  const byHand = `open it by hand: gh pr create --base ${shQuote(trunk)} --head ${branch} --title ${shQuote(title ?? '')}`
+  const detail = result.detail ? ` (${result.detail})` : ''
+  return [
+    `- carried to ${result.target}: ${result.pr ?? byHand}${result.pr ? '' : detail}`,
+    `  undo the trunk move with \`git reset --keep ${result.tip}\` (run on ${trunk})`,
+  ]
 }
 
 // §12 "Deleted"/"Kept". R30: built entirely from *this run's* apply.json, never from deleted.log — the log is a cross-run ledger (preflight's reset
@@ -2234,6 +2441,17 @@ function warningLines(preflightState, verifyState, surveyState, applyState) {
   if (surveyState?.remoteKind === 'github' && surveyState?.gh === 'absent') {
     lines.push('gh absent: open-PR protection was off; merged branches were judged by git proofs only')
   }
+  // A PR-only trunk the survey could not read the rules of is PR-only by the safe default, not by fact — say so, so a user whose trunk takes pushes
+  // knows why nothing was pushed.
+  const reason = surveyState?.trunkPrOnlyReason
+  const trunk = surveyState?.trunk ?? 'main'
+  if (surveyState?.trunkPrOnly && (reason === 'gh-absent' || reason === 'gh-failed')) {
+    lines.push(`could not read ${trunk}'s rules (${reason}): treated as PR-only`)
+  }
+  const carryDone = applyState?.results?.some((r) => r.kind === 'carry-trunk' && r.status === 'done')
+  if (surveyState?.trunkPrOnly && surveyState.trunkAhead > 0 && !carryDone) {
+    lines.push(`${surveyState.trunkAhead} local ${trunk} commit(s) stay unpushed: ${trunk} only accepts pull requests here`)
+  }
   return lines
 }
 
@@ -2280,7 +2498,7 @@ function report(ctx) {
 
   const sections = [
     ['Committed', commitsSince(ctx, preflightState)],
-    ['Trunk', trunkLines(syncState, verifyState, pushTrunkState)],
+    ['Trunk', trunkLines(syncState, verifyState, pushTrunkState, surveyState, applyState)],
     ['Deleted', deleted],
     ['Kept', kept],
     ['Pushed branches', pushedBranchLines(applyState)],
