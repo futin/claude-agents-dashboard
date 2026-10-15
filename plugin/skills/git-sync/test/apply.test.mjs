@@ -649,3 +649,21 @@ test('T11.22 a merged-basis worktree removal is re-proved on origin: kept while 
   ])
   assert.equal(fs.existsSync(realWt(w, 'm1')), false)
 })
+
+test('B2.9 a hand-written carry-trunk is validated by readPlan: a branch name, a full-sha expectTip and a title', (t) => {
+  const w = world(t)
+  w.rules([])
+  const tip = w.git(w.a, 'rev-parse', 'main')
+  const good = { kind: 'carry-trunk', target: 'sync/main-20261015-1200', expectTip: tip, title: 'feat: x', commits: [] }
+  for (const [patch, why] of [
+    [{ target: 'a b' }, 'not a branch name'],
+    [{ expectTip: 'main' }, 'expectTip must be a full sha'],
+    [{ title: '' }, 'carry-trunk needs a title'],
+    [{ title: undefined }, 'carry-trunk needs a title'],
+  ]) {
+    const refused = applyCli(w, [{ ...good, ...patch }])
+    assert.equal(refused.status, 2, why)
+    assert.equal(refused.json.stop, 'bad-plan')
+    assert.equal(refused.json.detail.why, why)
+  }
+})

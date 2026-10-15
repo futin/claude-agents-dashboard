@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { repo, branchRecords, listWorktrees, listStashes, githubSlugOf } from '../tools/git-sync.mjs'
+import { repo, branchRecords, listWorktrees, listStashes, githubSlugOf, prTitleOk } from '../tools/git-sync.mjs'
 import { world } from './world.mjs'
 
 // A new branch off `a`'s current `main` with one commit (backdated when `daysAgo` is given), optionally pushed with an upstream, then back to `main`
@@ -717,4 +717,68 @@ test('B1.9 a branch merged only into unpushed trunk commits is not merged when t
   open.rules([])
   mergedLocallyOnly(open)
   assert.equal(surveyOf(open).branches.find((b) => b.name === 'm1').bucket, 'merged')
+})
+
+// B2: a PR-only trunk with local-only commits offers to carry them to a branch and a PR.
+const PR_ONLY = [{ type: 'pull_request' }]
+const aheadWorld = (t, msgs, rules = PR_ONLY) => {
+  const w = world(t)
+  w.rules(rules)
+  msgs.forEach((msg, i) => w.commit(w.a, { file: `ahead-${i}.txt`, content: `${i}\n`, msg }))
+  return w
+}
+
+test('B2.1 a PR-only trunk ahead of origin carries a branch, tip, commits oldest first, a title and the first question', (t) => {
+  const w = aheadWorld(t, ['first change', 'second change'])
+  const tip = w.git(w.a, 'rev-parse', 'main')
+  const s = surveyOf(w)
+  assert.match(s.carry.branch, /^sync\/main-\d{8}-\d{4}$/)
+  assert.equal(s.carry.ahead, 2)
+  assert.equal(s.carry.tip, tip)
+  assert.deepEqual(s.carry.commits.map((c) => c.subject), ['first change', 'second change'])
+  assert.equal(s.carry.commits[1].sha, tip)
+  assert.equal(s.carry.title, 'chore(git-sync): carry 2 local main commits')
+  const q = s.rounds[0][0]
+  assert.equal(q.id, 'carry')
+  assert.equal(q.header, 'PR-only')
+  assert.equal(q.multiSelect, false)
+  assert.equal(q.question, `main only accepts pull requests here and 2 local commits are not on origin. Move them to ${s.carry.branch} and open a PR?`)
+  assert.deepEqual(q.options, [
+    { label: 'Open a PR', description: `push ${s.carry.branch}, reset local main to origin/main, open "chore(git-sync): carry 2 local main commits"` },
+    { label: 'Leave on main', description: 'keep them local; nothing is pushed' },
+  ])
+})
+
+test('B2.2 the title is the lone commit subject only when it passes the PR-title rule', (t) => {
+  assert.equal(surveyOf(aheadWorld(t, ['fix(api): x'])).carry.title, 'fix(api): x')
+  assert.equal(surveyOf(aheadWorld(t, ['WIP stuff'])).carry.title, 'chore(git-sync): carry 1 local main commits')
+  assert.equal(surveyOf(aheadWorld(t, ['chore!: x'])).carry.title, 'chore(git-sync): carry 1 local main commits')
+  const one = surveyOf(aheadWorld(t, ['fix(api): x']))
+  assert.match(one.rounds[0][0].question, /^main only accepts pull requests here and 1 local commit is not on origin\./)
+})
+
+test('B2.3 no carry when the trunk is not ahead, or not PR-only', (t) => {
+  const level = world(t)
+  level.rules(PR_ONLY)
+  const s = surveyOf(level)
+  assert.equal(s.trunkPrOnly, true)
+  assert.equal(s.carry, null)
+  assert.ok(!s.rounds.flat().some((q) => q.id === 'carry'))
+
+  const open = aheadWorld(t, ['feat: x'], [])
+  const o = surveyOf(open)
+  assert.equal(o.trunkAhead, 1)
+  assert.equal(o.carry, null)
+  assert.ok(!o.rounds.flat().some((q) => q.id === 'carry'))
+})
+
+test('B2.4 unattended never answers the carry question', (t) => {
+  const s = surveyOf(aheadWorld(t, ['feat: x']))
+  assert.ok(s.rounds.flat().some((q) => q.id === 'carry'))
+  assert.ok(!Object.hasOwn(s.unattended, 'carry'))
+})
+
+test('B2.5 prTitleOk is the repo PR-title rule', () => {
+  for (const ok of ['feat: a', 'fix(x-1): a', 'perf!: a', 'docs(y): a']) assert.equal(prTitleOk(ok), true, ok)
+  for (const no of ['chore!: a', 'Feat: a', 'feat(X): a', 'feat a', 'revert: a']) assert.equal(prTitleOk(no), false, no)
 })

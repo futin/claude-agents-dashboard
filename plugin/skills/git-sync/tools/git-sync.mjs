@@ -1131,6 +1131,29 @@ export function branchRecords(repo, worktrees = listWorktrees(repo), trunkPrOnly
   return records
 }
 
+// The PR-title rule the repo's `ci / pr-title` check enforces: `!` (a breaking change) belongs to the release-cutting types only.
+const PR_TITLE_RELEASE = /^(feat|fix|perf)(\([a-z0-9-]+\))?!?: .+/
+const PR_TITLE_OTHER = /^(docs|chore|test|refactor|ci|build)(\([a-z0-9-]+\))?: .+/
+export const prTitleOk = (title) => PR_TITLE_RELEASE.test(title) || PR_TITLE_OTHER.test(title)
+
+// What a PR-only trunk's local-only commits would travel as: a branch named for the trunk and the local minute (computed here once, so the question
+// shows exactly the name the plan carries), and a PR title that is the lone commit's own subject when that already passes the title rule — the
+// squash commit then keeps the author's words — else a generic chore title. `n` reads plural even at 1: a failing lone subject is the only way to get
+// there, and singular wording for it is not worth a branch of its own.
+function carryOf(r, trunkAhead) {
+  const trunkRef = `refs/heads/${r.trunk}`
+  const log = gitOk(r.root, ['log', '--reverse', '--format=%H%x00%s', `refs/remotes/origin/${r.trunk}..${trunkRef}`], { env: r.env })
+  const commits = log === '' ? [] : log.split('\n').map((line) => {
+    const [sha, subject] = line.split('\0')
+    return { sha, subject }
+  })
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const branch = `sync/${r.trunk}-${localYmd(now.getTime() / 1000)}-${pad(now.getHours())}${pad(now.getMinutes())}`
+  const title = commits.length === 1 && prTitleOk(commits[0].subject) ? commits[0].subject : `chore(git-sync): carry ${commits.length} local ${r.trunk} commits`
+  return { branch, tip: gitOk(r.root, ['rev-parse', trunkRef], { env: r.env }), ahead: trunkAhead, commits, title }
+}
+
 // Phase 3 (§4): the read-only picture the decision round is built from. Writes nothing itself — `main` mirrors the envelope into survey.json, the
 // only state this phase leaves (T7.10). `gh` is read after the branch loop so its cached answer is the loop's own (R13); a remote that isn't GitHub
 // never had a PR lookup to run, so it reports `unavailable` without spawning `gh` just to learn that. A merged branch joins `mergedSet` only when
@@ -1147,6 +1170,7 @@ function survey(ctx) {
       ? Number(gitOk(r.root, ['rev-list', '--count', `refs/remotes/origin/${r.trunk}..refs/heads/${r.trunk}`], { env: r.env }))
       : 0
   const gh = r.remoteKind === 'github' ? ghStatus(r) : 'unavailable'
+  const carry = rules.prOnly && !r.downgraded && trunkAhead > 0 ? carryOf(r, trunkAhead) : null
   const mergedSet = branches
     .filter((b) => b.bucket === 'merged' && worktrees.every((wt) => wt.branch !== b.name || wt.dirty === 0))
     .map((b) => b.name)
@@ -1160,7 +1184,7 @@ function survey(ctx) {
     trunkPrOnly: rules.prOnly,
     trunkPrOnlyReason: rules.reason,
     trunkAhead,
-    carry: null,
+    carry,
     branches,
     worktrees,
     stashes,
@@ -1288,6 +1312,20 @@ function worktreeQuestion(survey, wt) {
 export function rounds(survey) {
   const o = offered(survey)
   const questions = []
+  // First: it is about the trunk itself, the most consequential thing the run does, so it is not left to scroll past after the housekeeping.
+  if (survey.carry) {
+    const { branch, ahead, title } = survey.carry
+    questions.push({
+      id: 'carry',
+      header: 'PR-only',
+      question: `${survey.trunk} only accepts pull requests here and ${plural(ahead, 'local commit')} ${ahead === 1 ? 'is' : 'are'} not on origin. Move them to ${branch} and open a PR?`,
+      multiSelect: false,
+      options: [
+        { label: 'Open a PR', description: `push ${branch}, reset local ${survey.trunk} to origin/${survey.trunk}, open "${title}"` },
+        { label: `Leave on ${survey.trunk}`, description: 'keep them local; nothing is pushed' },
+      ],
+    })
+  }
   if (o.merged.length > 0) {
     const remotes = survey.downgraded ? 0 : o.merged.filter((b) => b.remote).length
     const wts = o.merged.reduce((n, b) => n + holdersOf(survey, b.name).length, 0)
@@ -1314,7 +1352,8 @@ export function rounds(survey) {
 
 // R37: the standing answers for a session with no AskUserQuestion. The user approved cleaning up merged work in advance, so the merged set goes, and
 // so does every offered worktree on a merged branch — dirty ones included, which takes the branch along with it. Everything else stays unanswered,
-// which means keep. Built from `offered` like the questions, so `buildPlan` accepts them by construction.
+// which means keep. Built from `offered` like the questions, so `buildPlan` accepts them by construction. The trunk carry is never answered here:
+// opening a PR is publishing work, which an absent user has not approved.
 function unattended(survey, o) {
   const answers = {}
   if (o.merged.length > 0) answers.merged = 'all'
@@ -1323,13 +1362,13 @@ function unattended(survey, o) {
   return answers
 }
 
-const ANSWER_KEYS = new Set(['merged', 'asked', 'push', 'stashes', 'worktrees'])
+const ANSWER_KEYS = new Set(['carry', 'merged', 'asked', 'push', 'stashes', 'worktrees'])
 const STASH_CHOICES = new Set(['branch-push', 'branch-local', 'drop', 'keep'])
 const WORKTREE_CHOICES = new Set(['keep', 'remove'])
 // §10.9: stash actions, worktree removals, branch pushes, remote deletions, local deletions. Stash first so a stash's branch exists before anything
 // else runs; worktrees before branches because git refuses to delete a branch a worktree still holds; remote before local so the local copy — the
-// recovery point — is the last thing to go.
-const ACTION_RANK = { 'stash-branch': 0, 'stash-drop': 0, 'remove-worktree': 1, 'push-branch': 2, 'delete-remote': 3, 'delete-local': 4 }
+// recovery point — is the last thing to go. The trunk carry is last of all: it rewrites the one branch every earlier action may have proved against.
+const ACTION_RANK = { 'stash-branch': 0, 'stash-drop': 0, 'remove-worktree': 1, 'push-branch': 2, 'delete-remote': 3, 'delete-local': 4, 'carry-trunk': 5 }
 const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x)
 
 // Answers → plan actions (§7). The answers file is JSON the SKILL layer writes from the model's reading of AskUserQuestion, so it is validated as
@@ -1381,6 +1420,8 @@ export function buildPlan(survey, answers) {
   const stashAnswers = choices('stashes', new Set(o.stashes.map((s) => s.sha)), STASH_CHOICES)
   if (survey.downgraded && Object.values(stashAnswers).includes('branch-push')) bad('a downgraded repo pushes no branches', 'branch-push')
   const wtAnswers = choices('worktrees', new Set(o.worktrees.map((wt) => wt.path)), WORKTREE_CHOICES)
+  if (answers.carry !== undefined && answers.carry !== 'pr' && answers.carry !== 'keep') bad('carry must be pr or keep', answers.carry)
+  if (answers.carry === 'pr' && !survey.carry) bad('carry was not offered', answers.carry)
 
   const actions = []
   const deleting = new Set()
@@ -1413,6 +1454,10 @@ export function buildPlan(survey, answers) {
   for (const wt of o.worktrees.filter((x) => removed.has(x.path) && x.branch)) {
     const rec = o.byName.get(wt.branch)
     if (rec?.bucket === 'merged' && holdersOf(survey, rec.name).every((x) => removed.has(x.path))) deleteBranch(rec, 'merged')
+  }
+  if (answers.carry === 'pr') {
+    const { branch, tip, title, commits } = survey.carry
+    actions.push({ kind: 'carry-trunk', target: branch, expectTip: tip, title, commits })
   }
   // Array#sort is stable, so within one kind the answers' own order survives.
   return actions.sort((a, b) => ACTION_RANK[a.kind] - ACTION_RANK[b.kind])
@@ -1717,7 +1762,7 @@ function pushTrunk(ctx) {
 // A full object name (sha-1 or sha-256). `expectTip` becomes the lease's expected value and a comparison target, so a ref name like `main` there
 // would be resolved locally at push time — refused as a malformed plan instead.
 const FULL_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/
-const BRANCH_ACTIONS = new Set(['push-branch', 'delete-remote', 'delete-local'])
+const BRANCH_ACTIONS = new Set(['push-branch', 'delete-remote', 'delete-local', 'carry-trunk'])
 
 // The plan to apply: `--plan <file>` when given (the SKILL layer's escape hatch, and the tests' hand-written plans), else the plan.json this run's
 // `plan` wrote. Validated in full before anything runs, as strictly as `buildPlan` validates answers: a malformed plan stops with `bad-plan`
@@ -1747,6 +1792,7 @@ function readPlan(ctx, planFile) {
     if (BRANCH_ACTIONS.has(a.kind) && git(ctx.root, ['check-ref-format', `refs/heads/${a.target}`], { env: ctx.env }).status !== 0) {
       bad('not a branch name', a)
     }
+    if (a.kind === 'carry-trunk' && (typeof a.title !== 'string' || a.title === '')) bad('carry-trunk needs a title', a)
     // A stash is only ever named by its own SHA (§10.5); a `stash@{n}` or a short name would be resolved against whatever sits there now.
     if (a.kind.startsWith('stash-') && a.target !== a.expectTip) bad('a stash action targets the stash sha it expects', a)
     if (a.kind === 'stash-branch' && a.baseSha !== undefined && (typeof a.baseSha !== 'string' || !FULL_SHA.test(a.baseSha))) {
