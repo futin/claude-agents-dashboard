@@ -8,6 +8,7 @@ import {
   LEDGER_FILE,
   LEDGER_UNROTATED_MAX_BYTES,
   MAX_LEDGER_BYTES,
+  ledgerReadStats,
   ledgerStartMs,
   readLedgerSince,
   recordLedgerTick,
@@ -100,6 +101,37 @@ export function run(): number {
       fs.appendFileSync(fx.transcript, assistantLine(T0 - 30_000, 'opus-5', 'm1', { in: 1, out: 1, cc: 1, cr: 1 }) + '\n');
       recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
       assert.deepStrictEqual(fx.ledgerLines(), [], 'the seeding tick must write nothing');
+    });
+  })) p++; else f++;
+
+  if (test('the seeding tick stats transcripts but reads none — only bytes appended after it are read', () => {
+    withFixture(fx => {
+      // Stamped inside the first real window, so only "never read" keeps it out of the line.
+      const history = assistantLine(T0 + 10_000, 'opus-5', 'm0', { in: 900, out: 0, cc: 0, cr: 0 }) + '\n';
+      fs.appendFileSync(fx.transcript, history.repeat(50));
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+      assert.strictEqual(ledgerReadStats().bytes, 0, 'a restart must not re-read every transcript (a 2.7 GB block on 2026-10-15)');
+
+      const fresh = assistantLine(T0 + 20_000, 'opus-5', 'm1', { in: 4, out: 0, cc: 0, cr: 0 }) + '\n';
+      fs.appendFileSync(fx.transcript, fresh);
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
+      assert.strictEqual(ledgerReadStats().bytes, Buffer.byteLength(fresh));
+      assert.deepStrictEqual(JSON.parse(fx.ledgerLines()[0]).tok, { 'opus-5': { in: 4, out: 0, cc: 0, cr: 0 } });
+    });
+  })) p++; else f++;
+
+  if (test('a transcript caught mid-line at seeding drops only that fragment', () => {
+    withFixture(fx => {
+      const partial = assistantLine(T0 - 5_000, 'opus-5', 'm0', { in: 900, out: 0, cc: 0, cr: 0 });
+      const cut = Math.floor(partial.length / 2);
+      fs.appendFileSync(fx.transcript, partial.slice(0, cut));
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+
+      fs.appendFileSync(fx.transcript, partial.slice(cut) + '\n' +
+        assistantLine(T0 + 20_000, 'opus-5', 'm1', { in: 4, out: 0, cc: 0, cr: 0 }) + '\n');
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
+      assert.deepStrictEqual(JSON.parse(fx.ledgerLines()[0]).tok, { 'opus-5': { in: 4, out: 0, cc: 0, cr: 0 } },
+        'the tail of the cut line is junk and skipped; the next whole line still counts');
     });
   })) p++; else f++;
 
