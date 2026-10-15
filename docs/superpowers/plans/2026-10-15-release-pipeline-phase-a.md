@@ -64,7 +64,7 @@ plus whatever test fixes Linux needs. Nothing is pushed and no GitHub setting ch
 
 - [ ] **Step 1: Scaffold the repo.** `git init` in `/Users/andrejajevtic/Documents/custom-projects/release-kit` (it does not exist yet — check first).
   `package.json`: `name` `release-kit`, `version` `0.0.0`, `private: true`, `type: module`, `scripts.test` = `node --test 'test/**/*.test.mjs'`, no dependencies,
-  `engines.node` `>=20`. `.gitignore`: `node_modules/`.
+  `engines.node` `>=22` (`node --test` takes globs only from Node 21; 20.x prints "Could not find"). `.gitignore`: `node_modules/`.
 - [ ] **Step 2: Write the failing tests** — one `test()` per case:
 
   | Title | ok | type | scope | breaking |
@@ -111,7 +111,8 @@ Behaviour:
   requires — `required_approving_review_count: 0`, `dismiss_stale_reviews_on_push: false`, `require_code_owner_review: false`,
   `require_last_push_approval: false`, `required_review_thread_resolution: false` (a missing one makes the POST fail with 422),
   `required_status_checks` (the three contexts, `strict_required_status_checks_policy: true`), `required_linear_history`, `non_fast_forward`, `deletion`.
-- The script: (1) `gh api -X PATCH repos/<r>` with the six merge fields — `allow_squash_merge=true`, `allow_merge_commit=false`,
+- The script: (1) `gh api -X PATCH repos/<r>` with the six merge fields — the four booleans via `-F` (typed; `-f` would send the string `"true"`,
+  which the API rejects) and the two enum strings via `-f`, and the PATCH log test asserts the exact `-F key=value` / `-f key=value` tokens — `allow_squash_merge=true`, `allow_merge_commit=false`,
   `allow_rebase_merge=false`, `squash_merge_commit_title=PR_TITLE`, `squash_merge_commit_message=PR_BODY`, `delete_branch_on_merge=true`; (2) `gh api repos/<r>/rulesets` → find the id of the one named
   `main-pr-only`; found → `gh api -X PUT repos/<r>/rulesets/<id> --input rulesets/main.json`, else `-X POST repos/<r>/rulesets --input …`; (3) print
   what it did, one line per call. `--dry-run` prints every call it would make and makes only the read call. Missing argument or `gh` not on PATH → exit 2
@@ -149,7 +150,8 @@ Behaviour:
 
 Behaviour:
 - `checks`: checkout, set up Node at `node-version`, enable corepack (pnpm comes from the caller's `packageManager`), run `install-command` when given, else install with the lockfile frozen
-  (`pnpm install --frozen-lockfile` when `pnpm-lock.yaml` exists, else `npm ci`), then run each line of `check-commands` as its own step-equivalent so a
+  (`pnpm-lock.yaml` → `pnpm install --frozen-lockfile`; else `package-lock.json` → `npm ci`; neither → echo "no lockfile — install skipped" and
+  succeed, which is release-kit's own case: zero deps, no lockfile, and `npm ci` without one exits EUSAGE), then run each line of `check-commands` as its own step-equivalent so a
   failure names the command. Never conditioned on the event action.
 - `pr-title`: runs only for `pull_request` events (on `push` it is skipped, which reports success); checks out `futin/release-kit` at `kit-ref` into
   `.release-kit/`, then runs `node .release-kit/scripts/pr-title.mjs` with `PR_TITLE: ${{ github.event.pull_request.title }}` in `env:` only.
@@ -174,7 +176,8 @@ Behaviour:
   - top-level `permissions` is `{ contents: read }`
   - no job in `ci-node.yml` or `self.yml` has a `name` key
   - `ci-node.yml` has the `install-command` input with an empty default
-  - the `skills` job's script handles `push` without reading a PR base sha (grep its `run:` for the push branch)
+  - the `skills` job's `run:` contains the literal `push — skills gate is PR-only`, and its base-sha read sits inside a branch on `github.event_name`
+  - the `checks` install `run:` names both `pnpm-lock.yaml` and `package-lock.json` and contains the literal `no lockfile — install skipped`
   - `self.yml` calls `./.github/workflows/ci-node.yml` from a job whose id is `ci`
 - [ ] **Step 2: Run** `node --test 'test/**/*.test.mjs'` — the new cases fail (files missing).
 - [ ] **Step 3: Write both workflows.**
