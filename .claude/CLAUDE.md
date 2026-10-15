@@ -35,6 +35,8 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
 - `pnpm plugin:sync` — reinstall the plugin once a `plugin/` change is pushed to `main`; the installed copy is a snapshot, not a link, so until this
   runs the edit reaches no session. Refuses an unpushed tree (`scripts/sync-plugin.ts`).
 - `pnpm typecheck` — `tsc --noEmit`.
+- CI (`.github/workflows/ci.yml`) runs `pnpm typecheck`, `pnpm build`, `pnpm test` on every PR into `main`, plus `pnpm test:skills` when the PR touches
+  `plugin/skills/git-sync/**` (`docs/workflows/ci.md`).
 - `pnpm hooks:install` — symlinks the six hook scripts into `~/.claude/hooks`, merges the
   seven `settings.json` entries. Idempotent; `-- --dry-run` / `-- --uninstall` / `-- --force`.
   Registration is user-global **on purpose** — project-scoped hooks would answer only
@@ -108,6 +110,8 @@ Two rules are load-bearing:
 - **State what you did NOT verify.** Every merged PR here carries a "not verified, needs a
   human" line or an explicit *Unproven* row.
 - **Never claim green without the command output.**
+- **The PR title is the squash commit and must pass `ci / pr-title`:** `feat|fix|perf` (`!` allowed) or `docs|chore|test|refactor|ci|build`, optional
+  lowercase `(scope)`, `: `, a description. `feat`/`fix`/`perf` cut a release once Phase C lands.
 
 Optional template sections are commented out — delete the ones that don't apply rather than
 filling them with nothing.

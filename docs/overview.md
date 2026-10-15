@@ -355,6 +355,7 @@ that area:
 - [breakpoints](subsystems/breakpoints.md) — the seven-tier mobile-first ladder in `styles.css`, the rail+measure lock, and the capped/full content-width matrix
 - [visual-tests](subsystems/visual-tests.md) — `pnpm test:visual`: Playwright screenshots of every view against fixture data, overflow and daylight contrast, macOS only
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
+- [ci](workflows/ci.md) — the PR gate: `ci / checks`, `ci / pr-title`, `ci / skills` from release-kit's reusable workflow, and the `main-pr-only` ruleset
 - [docker](workflows/docker.md) — running in containers, dev + prod
 - [hooks-setup](workflows/hooks-setup.md) — `pnpm hooks:install`: all six hooks (seven `settings.json` entries — permission-notify registers twice), one command
 - [remote-answer-setup](workflows/remote-answer-setup.md) — per-machine hook install
