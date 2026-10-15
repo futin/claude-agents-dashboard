@@ -90,7 +90,7 @@ behaviour change below lands there too (Task 6).
   `branchRecords`.
 - `branchRecords` proof ref: `origin/<trunk>` when downgraded **or** `trunkPrOnly`; the local trunk otherwise. Pass the decision in rather than calling
   `trunkRules` again.
-- `world.mjs` gains `rules(list)`: stubs `gh` so that argv containing `api` prints `JSON.stringify(list)` and argv containing `pr list` prints `[]`,
+- `world.mjs` gains `rules(list)`: stubs `gh` so that argv containing `rules/branches` (not bare `api`, which a branch named `feat/api` would also match) prints `JSON.stringify(list)` and argv containing `pr list` prints `[]`,
   both exit 0. (`pr list` must answer `[]`, not empty stdout, or every branch becomes "PR status unknown".)
 
 - [ ] **Step 1: Write the failing tests** in `survey.test.mjs` (one `test()` each, names prefixed `B1.`):
@@ -156,7 +156,7 @@ behaviour change below lands there too (Task 6).
 
 **Interfaces:**
 - Consumes `survey.json` (`readState(ctx, 'survey')`). Gate order: `not-allowed`, then **`pr-only`**, then the existing `no-verify` … chain.
-- `pr-only` when `survey.json` says `trunkPrOnly: true` (`detail`: the reason), **or** when there is no readable `survey.json` this run (safe side;
+- `pr-only` when `survey.json` says `trunkPrOnly: true` (`detail`: the reason), **or** when there is no readable `survey.json` with `ok: true` this run (safe side;
   `detail: 'no survey this run'`). Shape `{ pushed: false, reason: 'pr-only', ahead: null, detail }`.
 - `REASON_TEXT['pr-only'] = 'the trunk only accepts pull requests here'`.
 
@@ -194,7 +194,8 @@ Logic-heavy (moves the trunk, pushes, spawns `gh`): this task gets its own revie
   `reset --keep`, and only when HEAD is the trunk at the surveyed tip."
 
 - [ ] **Step 1: Write the failing tests** (`B4.`, each with a real bare origin from `world`, `gh` stubbed with `byArgs: { 'pr create': { stdout:
-  'https://github.com/o/r/pull/7\n' } }` unless stated):
+  'https://github.com/o/r/pull/7\n' } }` unless stated — one `stub('gh')` per test carrying every `byArgs` key it needs, since a second `stub` or a
+  `rules()` call overwrites the first):
   1. Happy path: origin has `refs/heads/<target>` at the old tip; local trunk equals `origin/main`; `w.calls()` holds one `gh` call whose argv
      includes `pr`, `create`, `--base`, `main`, `--head`, `<target>`, `--title`, `<title>`; result `done`/`carried`, `pr` = the URL.
   2. An extra commit on the trunk after the plan → `skipped`/`tip-moved`; origin has no `<target>`; trunk tip unchanged.
@@ -217,7 +218,7 @@ Logic-heavy (moves the trunk, pushes, spawns `gh`): this task gets its own revie
 - `REASON_TEXT` gains `not-on-trunk`, `tip-moved` (if absent), `trunk-diverged`, `branch-exists`, `push-failed`, `reset-failed` glosses, each one short
   clause in the existing voice.
 - Trunk section, when push-trunk said `pr-only`: the existing "not pushed: pr-only (…)" line, plus — when a `carry-trunk` result is `done` — a line naming
-  the branch, the PR URL (or `open it by hand: gh pr create --base <trunk> --head <branch>`), and a recovery line `git reset --keep <tip>` (run on
+  the branch, the PR URL (or `open it by hand: gh pr create --base <trunk> --head <branch> --title <title, shell-quoted>`), and a recovery line `git reset --keep <tip>` (run on
   `<trunk>`) to undo the trunk move.
 - Warnings: `trunkPrOnlyReason` `gh-absent` / `gh-failed` → `could not read <trunk>'s rules (<reason>): treated as PR-only`. PR-only, `trunkAhead > 0`
   and no `carry-trunk` result with `status: 'done'` (none, `skipped` or `failed`) → `<n> local <trunk> commit(s) stay unpushed: <trunk> only accepts pull requests here`.
