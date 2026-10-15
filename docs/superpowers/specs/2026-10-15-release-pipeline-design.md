@@ -48,12 +48,14 @@ on `pull_request` against `main`.
   changes). The job must report success when skipped so it can be a required check — the filter decides inside the job, not with a workflow-level `paths:`
   filter, because a workflow that never starts leaves a required check pending forever.
 - **`test:visual` stays out.** It is macOS-only and on demand.
-- **`pr-title` job.** Fails unless the PR title matches `^(feat|fix|perf|docs|chore|test|refactor|ci|build)(\([a-z0-9-]+\))?!?: .+`. A plain regex step,
+- **`pr-title` job.** Fails unless the PR title matches `^(feat|fix|perf)(\([a-z0-9-]+\))?!?: .+` or `^(docs|chore|test|refactor|ci|build)(\([a-z0-9-]+\))?: .+`
+  — `!` only on a releasing type (breaking `chore!` would otherwise be a release type nothing can display). A plain regex step,
   no third-party action. It re-runs on `edited` so fixing the title clears it. Phase C reads the type from this title, so the check is load-bearing.
 
 Required check names are fixed by release-kit so the ruleset JSON is identical across apps. A reusable workflow's jobs report as
 `<caller job id> / <called job id>`, so every app's `ci.yml` uses the caller job id `ci` and the contexts are `ci / checks`, `ci / pr-title` and
-`ci / skills` (when present). Before `apply-repo-settings.sh` runs, the names are read off the first real PR's checks and compared with `main.json`: a
+`ci / skills`. `ci-node.yml` **always** runs a `skills` job: an app that passes no `skills-command` input (or whose path filter does not match) gets a job
+that reports success without running anything, so all three contexts exist in every app and `main.json` needs no per-app variant. Before `apply-repo-settings.sh` runs, the names are read off the first real PR's checks and compared with `main.json`: a
 required context that never reports leaves every PR pending forever, and with no bypass actor (D9) that locks `main`.
 
 ### Ruleset and repo settings
@@ -61,7 +63,7 @@ required context that never reports leaves every PR pending forever, and with no
 `release-kit/rulesets/main.json`, applied by `release-kit/scripts/apply-repo-settings.sh <owner/repo>` through `gh api`:
 
 - target `main`; require a pull request; required approvals 0; dismiss nothing
-- required status checks `ci / checks` and `ci / pr-title` (and `ci / skills` where the app declares it), strict = branch must be up to date
+- required status checks `ci / checks`, `ci / pr-title` and `ci / skills`, strict = branch must be up to date
 - require linear history; block force pushes and deletion; no bypass actors (D9)
 
 The same script sets repo merge options: squash only (merge commits and rebase off), `squash_merge_commit_title=PR_TITLE`,
@@ -77,10 +79,12 @@ before the ruleset is switched on; the ruleset goes on last so a red first run n
 Everything that writes `main` directly today changes:
 
 - **`git-sync`** (this repo, `plugin/skills/git-sync/`) runs in many repos, so the trunk push is **gated per repo, not removed**: when
-  `gh api repos/{owner}/{repo}/rules/branches/{trunk}` lists a `pull_request` rule, the trunk is PR-only and `push-trunk` returns `ok: true` with reason
-  `pr-only` without pushing. In that case, when local trunk is ahead of `origin/<trunk>`, it offers — inside its existing single decision round — to move
-  those commits onto a new branch, reset local trunk to `origin/<trunk>`, push the branch and open a PR; unattended runs report and leave the commits where
-  they are. Repos without that rule keep today's behaviour, and the existing `git-sync.push=false` downgrade is unchanged. `gh` absent or the rules call
+  `gh api repos/{owner}/{repo}/rules/branches/{trunk}` lists a `pull_request` rule, the trunk is PR-only. **`survey` makes that one call** and records
+  `trunkPrOnly` (boolean) plus its reason in the run state, so `plan` (the decision round) and `push-trunk` both read it and no later phase calls out.
+  `push-trunk` then returns `ok: true` with reason `pr-only` without pushing. When local trunk is ahead of `origin/<trunk>`, the decision round offers to
+  move those commits onto branch `sync/<trunk>-<YYYYMMDD-HHMM>`, reset local trunk to `origin/<trunk>`, push the branch and open a PR. PR title: the
+  commit subject when there is exactly one commit and it already passes `pr-title`; otherwise `chore(git-sync): carry <n> local <trunk> commits`, which the
+  user retitles before merging if the commits deserve a release. Unattended runs report and leave the commits where they are. Repos without that rule keep today's behaviour, and the existing `git-sync.push=false` downgrade is unchanged. `gh` absent or the rules call
   failing → treat the trunk as PR-only (the safe side) and say so. `pnpm test:skills` must stay green.
 - **`backlog-orchestrate`** (separate repo `futin/backlog-manager`, separate plan there): a `--pr` mode. It cuts `backlog/run-<YYYY-MM-DD>-<n>` from
   `main`, drains onto it through the existing `--base`, and at the end pushes the branch and runs `gh pr create`. PR title type = the highest-ranked item
@@ -94,11 +98,15 @@ Everything that writes `main` directly today changes:
 ### Release workflow
 
 `.github/workflows/release.yml` calls `futin/release-kit/.github/workflows/release.yml@v1` on `push` to `main`, with `concurrency: release` and
-`cancel-in-progress: false`, `permissions: contents: write`, checkout with full history. Also `workflow_dispatch` with a `sha` input for re-runs.
+`cancel-in-progress: false`, `permissions: contents: write, pull-requests: read` (setting `contents` alone drops `pull-requests` to none, and the PR lookup
+in step 2 then fails on a private repo). Also `workflow_dispatch` with a `sha` input for re-runs. The called workflow does two checkouts: the app repo with
+full history (`fetch-depth: 0`), and `futin/release-kit` into `.release-kit/` at the `kit-ref` input (default `v1`, set to the same ref as the caller's
+`uses:` line) — a reusable workflow runs in the caller's checkout, so the compiled `dist` it executes has to be fetched explicitly.
 
 `cancel-in-progress: false` does not mean "never drop": GitHub keeps one running and one pending run per group and cancels an older *pending* run when a
 newer one queues. So a run never assumes it only sees its own commit. **The target** is the pushed sha (or the dispatch `sha`, checked out and described
-from itself, never from `HEAD`); **the range** is every first-parent commit after the newest `v*` tag reachable from the target, up to and including the
+from itself, never from `HEAD`); **the range** is every first-parent commit from the commit of the newest `vX.Y.Z` tag reachable from the target (inclusive, so a tag whose Release is
+missing gets repaired by step 1) up to and including the
 target, oldest first. Steps 1–6 run once per commit in the range, so a cancelled pending run's commit is released by the next run. A dispatch whose target
 already has a `v*` tag on a descendant commit fails with "a newer release exists" — versions are never assigned out of order.
 
@@ -106,11 +114,14 @@ Behaviour per commit, in order:
 
 1. **Skip if already released:** a `v*` tag points at the commit **and** its GitHub Release exists → next commit. Tag present but release missing (step 6
    failed earlier) → run step 6 only.
-2. **Find the PR:** `GET /repos/{repo}/commits/{sha}/pulls`, keeping the merged PR whose `merge_commit_sha` is the commit (the call can list several); fall back to the trailing `(#N)` of the commit subject. No PR found → exit 0 with a notice
+2. **Find the PR:** `GET /repos/{repo}/commits/{sha}/pulls`, keeping the merged PR whose `merge_commit_sha` is the commit (the call can list several); fall back to the trailing `(#N)` of the commit subject. No PR found → a warning annotation naming the sha, skip this commit and continue with the
+   next one (never end the run: one direct push must not block every later commit). Notice text: "no PR for <sha>"
    (a ruleset bypass happened; not this workflow's job to fix).
-3. **Classify the title** with the same regex as `pr-title`. A breaking change (`!` after type/scope, or `BREAKING CHANGE:` in the body) releases whatever
-   its type (`chore!:` included). Otherwise a type not in `feat|fix|perf` → no release for this commit.
-4. **Compute the next version** from `git describe --tags --abbrev=0 --match 'v[0-9]*'`:
+3. **Classify the title** with the same regex as `pr-title`. Type not in `feat|fix|perf` → no release for this commit. Breaking changes can only be
+   `feat|fix|perf` because `pr-title` rejects `!` on any other type (below), so `Release-Type`, the API `type` and the badges stay three values; a
+   `BREAKING CHANGE:` line in the body of a non-releasing type is ignored.
+4. **Compute the next version** from `git describe --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*'` run at the commit. No `--tags`: plain `describe`
+   sees annotated tags only, so a lightweight tag or release-kit's floating `v1` can never become the base version:
 
    | Title | While major = 0 | From 1.0.0 |
    |---|---|---|
@@ -146,7 +157,10 @@ Release-Breaking: true            (omitted unless breaking)
   section → empty body; the title alone is the entry.
 - Trailers are standard git trailers so `git interpret-trailers --parse` reads them.
 
-`.github/pull_request_template.md` gains an optional `## What's new` section: one to three lines in user terms, deleted for PRs with nothing user-visible.
+`.github/pull_request_template.md` gains a `## What's new` section, **uncommented**, directly above `## Why this shape`: one to three lines in user terms,
+deleted for PRs with nothing user-visible. Extraction strips every `<!-- … -->` block from the body first — the template's optional sections are
+commented-out blocks that themselves contain `## ` headings, and a commented `## What's new` must count as absent — then takes the section as above.
+Its placeholder hint lives in an HTML comment so an untouched template yields empty notes.
 
 ### Baseline
 
@@ -169,7 +183,7 @@ is the source of truth. `plugin.json` keeps its own version (out of scope).
 
 - releases from `git for-each-ref --sort=-creatordate refs/tags/v[0-9]*`, keeping only annotated tags whose name is a full `vX.Y.Z` (lightweight tags and a floating major such as release-kit's own `v1`
   are ignored); `git describe` and the release workflow use the same `vX.Y.Z` filter
-- `current` from `git describe --tags --match 'v[0-9]*'`: `v0.5.0` → `{ version: "0.5.0", ahead: 0 }`; `v0.5.0-3-gabc123` → `ahead: 3`
+- `current` from `git describe --match 'v[0-9]*.[0-9]*.[0-9]*'` (no `--tags`, same filter as the release workflow): `v0.5.0` → `{ version: "0.5.0", ahead: 0 }`; `v0.5.0-3-gabc123` → `ahead: 3`
 - not a git checkout, git missing, or no `v*` tags → `{ current: null, releases: [] }`, never an error status
 - cached in memory, keyed on the output of `git rev-parse HEAD` plus the mtimes of `packed-refs` and `refs/tags` under `git rev-parse --git-common-dir`
   (a worktree's `.git` is a file, and `.git/HEAD` does not change when a commit lands on the same branch); the full tag read runs only when the key changes
@@ -227,7 +241,10 @@ release-kit (`node --test`, tmpdir git repos as fixtures):
   sub-headings and a line starting `#123`; a baseline tag
 - release range: three unreleased commits after the last tag (a cancelled pending run) → three tags in order; a dispatch on an older sha whose descendant
   is tagged → fails; tag present but release missing → release only
-- `## What's new` extraction: present, absent, last section in the body, followed by another `##` section
+- `## What's new` extraction: present, absent, last section in the body, followed by another `##` section, inside an HTML comment (→ absent), the
+  untouched template (→ empty), followed by the `🤖 Generated with` footer line
+- version filter: annotated `v0.1.0` plus a lightweight `v9.9.9` and a lightweight floating `v1` → base version and `current` are both `0.1.0`
+- release range: a commit with no PR in the middle of the range → warned and skipped, later commits still released
 - `readReleases`: no git dir; no tags; only lightweight tags; HEAD exactly on a tag; HEAD 3 commits ahead; origin remote non-GitHub → no `url`
 
 Dashboard:
