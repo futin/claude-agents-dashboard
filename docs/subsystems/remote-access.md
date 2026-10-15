@@ -40,6 +40,25 @@ to someone who isn't on your tailnet.
 > Access), or add an app-level gate. The origin badge reads **`public`** on such a
 > connection, which is the reminder. ngrok's free tier also interposes an interstitial
 > page, and a stable Cloudflare hostname needs an owned domain.
+>
+> A public tunnel's hostname also has to go in **`ALLOWED_HOSTS`** (e.g. `ALLOWED_HOSTS=.ngrok.app`), or every request through it is a 403 from the
+> Host guard below — in prod and dev alike, since the same list feeds Vite's `allowedHosts`.
+
+## Browser-side guards
+
+Two refusals run in the request listener (`server/index.ts`) before any route, both from `server/lib/request-guard.ts`. Neither is about other machines —
+the LAN/tailnet trust model above is unchanged — they stop a web page in *your own* browser from using the dashboard as a back door.
+
+- **Host allowlist (DNS rebinding).** A page on `evil.example` can re-point its own name at `127.0.0.1` and then read every open GET route as
+  same-origin; the browser still sends `Host: evil.example`. Allowed without config: a missing `Host`, IP literals, single-label names (`localhost`, a
+  tailnet short name, a LAN hostname), and `*.localhost`, `*.local`, `*.ts.net`. Anything else is a 403 naming `ALLOWED_HOSTS` — comma-separated exact
+  names, `.suffix` rules (which also match the apex) or `*` to switch the check off. This is the prod twin of the Vite guard described below.
+- **Cross-site writes (CSRF).** With `ANSWER_TOKEN` empty the write routes are open and `readJsonBody` ignores Content-Type, so a `no-cors`
+  `text/plain` POST from any site would reach them without a preflight. Any non-GET/HEAD/OPTIONS request is refused when `Sec-Fetch-Site` is present and
+  is not `same-origin` or `none`, or — when it is absent — when `Origin` is present and its host differs from `Host` (`Origin: null` included). A request
+  carrying neither header is not a browser and passes, which is how the hooks and `curl` keep working. Another port on localhost counts as cross-site.
+
+The listener also turns a target `new URL` cannot parse (`GET //`, `//%zz`) into a 400 instead of an uncaught throw that took the process down.
 
 ## Which route am I on? (the origin badge)
 
@@ -75,7 +94,7 @@ static-serves the built `client/dist`, so every change needs a `pnpm build` *and
 > guard), so a MagicDNS name 403s with *"Blocked request. This host is not allowed."* —
 > LAN access never hit this because a LAN URL is an IP. The leading dot on `.ts.net`
 > allows subdomains and scopes the exemption to tailnet hostnames instead of disabling
-> the check (`allowedHosts: true`). Delete that entry and phone-over-tailnet dev breaks
+> the check (`allowedHosts: true`); `ALLOWED_HOSTS` entries are appended, and `*` there does mean `true`. Delete that entry and phone-over-tailnet dev breaks
 > with a 403, not a hang.
 >
 > **A suffix rule is not enough on its own.** `tailscale serve --http` advertises this

@@ -43,6 +43,7 @@ import {
 } from './api.js';
 import { createDashboardHub } from './lib/hub-widgets.js';
 import { startGitFetchTimer } from './lib/git-fetch.js';
+import { crossSiteWrite, hostAllowed } from './lib/request-guard.js';
 import { startUsageRecording } from './lib/usage-history.js';
 import { refreshUsageNow, setUsageAutoRefresh } from './lib/usage.js';
 
@@ -159,10 +160,25 @@ export function decodePath(raw: string): string | null {
   }
 }
 
+/** `new URL` on the raw request target, or null where it would throw (see the listener). */
+export function parseRequestUrl(raw: string | undefined): URL | null {
+  try {
+    return new URL(raw || '/', 'http://local');
+  } catch {
+    return null;
+  }
+}
+
 /** A URL segment that failed to decode (see `decodePath`). */
 function badRequest(res: http.ServerResponse): void {
   res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify({ error: 'bad path encoding' }));
+}
+
+/** A request refused by `lib/request-guard.ts`. */
+function refuse(res: http.ServerResponse, error: string): void {
+  res.writeHead(403, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify({ error }));
 }
 
 /**
@@ -179,10 +195,18 @@ export function createRequestListener(config: Config): http.RequestListener {
   // A request the hub declined re-enters the listener once, marked, and takes the table below exactly as it would have.
   const declined = new WeakSet<http.IncomingMessage>();
   const listener: http.RequestListener = (req, res) => {
+    // Rebinding and CSRF refusals come before routing, so no handler — hub included — can be reached around them (lib/request-guard.ts).
+    if (!hostAllowed(req.headers.host, config.allowedHosts)) {
+      return refuse(res, 'host not allowed — add it to ALLOWED_HOSTS (docs/subsystems/remote-access.md)');
+    }
+    if (crossSiteWrite(req.method, req.headers)) return refuse(res, 'cross-site request refused');
     // Configs routes take query params — parse once. Handlers are async but
     // self-contained (they always end the response), so `void` keeps the
-    // callback signature.
-    const u = new URL(req.url || '/', 'http://local');
+    // callback signature. A target starting `//` parses as an authority and can
+    // throw here (`//`, `//%zz`, `//[`) — the same synchronous, process-killing
+    // class as `decodePath`, so it gets the same 400.
+    const u = parseRequestUrl(req.url);
+    if (!u) return badRequest(res);
     if (u.pathname.startsWith('/api/hub/') && !declined.has(req)) {
       return void serveHub(hub, u, req, res).then(
         served => { if (!served) { declined.add(req); listener(req, res); } },
