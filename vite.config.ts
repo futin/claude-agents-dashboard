@@ -10,7 +10,7 @@ import { findCli } from './scripts/tailnet.js';
 // API server actually listens on (.env / process.env / default 4173), and the
 // dev UI itself honours WEB_PORT (default 5174, not Vite's stock 5173, which
 // another project usually holds — set it if 5174 is taken too).
-const { port, webPort } = loadConfig();
+const { port, webPort, allowedHosts } = loadConfig();
 
 /**
  * This node's MagicDNS *short* name, if it has one.
@@ -80,9 +80,13 @@ export default defineConfig({
     // rather than disabling the check — see docs/subsystems/remote-access.md.
     // The second entry is this node's bare short name, which `tailscale serve`
     // prints and `.ts.net` cannot match; absent when there is no tailnet.
-    allowedHosts: ['.ts.net', magicDnsShortName()].filter(
-      (host): host is string => host !== undefined
-    ),
+    // ALLOWED_HOSTS (a public tunnel's name) is appended, and `*` turns the
+    // check off, matching the prod guard in server/lib/request-guard.ts.
+    allowedHosts: allowedHosts.includes('*')
+      ? true
+      : ['.ts.net', magicDnsShortName(), ...allowedHosts].filter(
+        (host): host is string => host !== undefined
+      ),
     proxy: {
       // xfwd adds X-Forwarded-For. The dev proxy reaches the API over loopback,
       // so without it every dev client — including a phone on the LAN — would

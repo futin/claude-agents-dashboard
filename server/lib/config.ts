@@ -116,6 +116,11 @@ export interface Config {
    * whole choice; `/api/health` publishes it clamped to `spawnMaxPermission`, never above.
    */
   syncPermissionMode: PermissionMode;
+  /**
+   * Extra `Host` names the server answers to (`ALLOWED_HOSTS`, comma-separated: exact names, `.suffix` rules, or `*` for any). Loopback, IP literals,
+   * single-label names and `.localhost`/`.local`/`.ts.net` are always allowed — this is for public tunnels. See `lib/request-guard.ts`.
+   */
+  allowedHosts: string[];
 }
 
 export const DEFAULTS = {
@@ -142,7 +147,8 @@ export const DEFAULTS = {
   FFMPEG_BIN: 'ffmpeg',
   CLAUDE_BIN: '',
   SPAWN_MAX_PERMISSION: 'auto',
-  SYNC_PERMISSION_MODE: 'auto'
+  SYNC_PERMISSION_MODE: 'auto',
+  ALLOWED_HOSTS: ''
 } as const;
 
 /** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
@@ -324,6 +330,7 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     ffmpegBin: (src('FFMPEG_BIN') || DEFAULTS.FFMPEG_BIN).trim(),
     claudeBin: (src('CLAUDE_BIN') || DEFAULTS.CLAUDE_BIN).trim(),
     spawnMaxPermission: toPermissionMode(src('SPAWN_MAX_PERMISSION'), DEFAULTS.SPAWN_MAX_PERMISSION),
-    syncPermissionMode: toPermissionMode(src('SYNC_PERMISSION_MODE'), DEFAULTS.SYNC_PERMISSION_MODE, 'SYNC_PERMISSION_MODE')
+    syncPermissionMode: toPermissionMode(src('SYNC_PERMISSION_MODE'), DEFAULTS.SYNC_PERMISSION_MODE, 'SYNC_PERMISSION_MODE'),
+    allowedHosts: (src('ALLOWED_HOSTS') || DEFAULTS.ALLOWED_HOSTS).split(',').map(h => h.trim()).filter(Boolean)
   };
 }
