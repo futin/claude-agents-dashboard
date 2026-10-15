@@ -1711,7 +1711,7 @@ function verify(ctx) {
 // isn't red. `ahead` is read straight off the last-known `refs/remotes/origin/<trunk>` — this
 // never fetches first (that's sync's job), so a push race with another machine surfaces as an
 // ordinary rejection below rather than something this phase tries to detect in advance. Ordered
-// per §10.6: not-allowed, then no-verify, then stale-verify, then red, then (R21) the
+// per §10.6: not-allowed, then pr-only, then no-verify, then stale-verify, then red, then (R21) the
 // remote-tracking ref itself, then nothing-to-push, then the push. The verify gates never need
 // `ahead`, so they report `null` for it rather than paying for a `rev-list` before it's known the
 // range is even resolvable — that range is exactly what R21 exists to guard: without a local
@@ -1720,11 +1720,20 @@ function verify(ctx) {
 // intercept (only `Stop` is), crashing the process instead of emitting the one JSON envelope every
 // subcommand owes. That's reported the same way any other unpushable state is: `ok:true`,
 // `reason:'rejected'`, with `detail` naming what's missing.
+//
+// `pr-only` comes from this run's survey (`trunkPrOnly`), not a fresh rules call: the survey asked once and the SKILL layer already built its carry
+// offer on that answer. A missing or unsuccessful survey.json reads as PR-only too — a push that a PR-only trunk would reject is cheaper to skip
+// than to attempt, and a run that never surveyed has not shown the trunk accepts direct pushes. It sits before the verify gates so a PR-only trunk
+// never reports a verify reason for a push that could not have happened.
 function pushTrunk(ctx) {
   const r = repo(ctx.root, { env: ctx.env })
   const head = gitOk(ctx.root, ['rev-parse', `refs/heads/${r.trunk}`], { env: ctx.env })
 
   if (!r.pushAllowed) return { pushed: false, reason: 'not-allowed', ahead: null }
+
+  const surveyState = readState(ctx, 'survey')
+  if (!surveyState?.ok) return { pushed: false, reason: 'pr-only', ahead: null, detail: 'no survey this run' }
+  if (surveyState.trunkPrOnly) return { pushed: false, reason: 'pr-only', ahead: null, detail: surveyState.trunkPrOnlyReason }
 
   const verifyState = readState(ctx, 'verify')
   if (!verifyState) return { pushed: false, reason: 'no-verify', ahead: null }
@@ -2173,6 +2182,7 @@ const REASON_TEXT = {
   'stash-gone': 'the stash no longer exists',
   // push-trunk's own refusal reasons (§10.6).
   'not-allowed': 'pushing the trunk is disabled for this repo',
+  'pr-only': 'the trunk only accepts pull requests here',
   'no-verify': 'no verify has run for this commit',
   'stale-verify': 'verify is for a different commit',
   red: 'checks are red',
