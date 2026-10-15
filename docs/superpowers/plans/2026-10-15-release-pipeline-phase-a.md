@@ -5,6 +5,10 @@
 > **Override of the writing-plans template:** this plan specifies behaviour, signatures, exact values and exact test *cases* — never literal code. Handed
 > code gets transcribed verbatim and a bug in the plan becomes a bug in the branch. Where a step says "implement", the implementer writes the code and may
 > disagree with the plan; say so in the task report rather than bending the code to the text.
+>
+> **Override of spec §Rollout ("workflow and ruleset files are dictated for the user to type"):** this plan was written and is executed under
+> `/autopilot` while the user is away, so the implementer writes those files. The final report walks the user through each workflow and ruleset file so
+> the learning the dictation rule protects still happens.
 
 **Goal:** Every PR into `main` of `claude-agents-dashboard` runs typecheck + tests on Linux and a PR-title check through reusable workflows that live in a
 new `futin/release-kit` repo, ready for a ruleset that makes those checks required.
@@ -59,7 +63,7 @@ plus whatever test fixes Linux needs. Nothing is pushed and no GitHub setting ch
   Phase C's `conventional` module imports `checkTitle` rather than re-declaring the regex.
 
 - [ ] **Step 1: Scaffold the repo.** `git init` in `/Users/andrejajevtic/Documents/custom-projects/release-kit` (it does not exist yet — check first).
-  `package.json`: `name` `release-kit`, `version` `0.0.0`, `private: true`, `type: module`, `scripts.test` = `node --test test/`, no dependencies,
+  `package.json`: `name` `release-kit`, `version` `0.0.0`, `private: true`, `type: module`, `scripts.test` = `node --test 'test/**/*.test.mjs'`, no dependencies,
   `engines.node` `>=20`. `.gitignore`: `node_modules/`.
 - [ ] **Step 2: Write the failing tests** — one `test()` per case:
 
@@ -69,6 +73,11 @@ plus whatever test fixes Linux needs. Nothing is pushed and no GitHub setting ch
   | `fix(api): guard y` | true | fix | api | false |
   | `perf(scan)!: drop z` | true | perf | scan | true |
   | `docs: spec` | true | docs | — | false |
+  | `chore: bump` | true | chore | — | false |
+  | `test(scan): cover z` | true | test | scan | false |
+  | `refactor: split x` | true | refactor | — | false |
+  | `build: pnpm 12` | true | build | — | false |
+  | `feat add x` (missing colon) | false | | | |
   | `ci(release): add workflow` | true | ci | release | false |
   | `chore!: drop node 18` | false (reason names `!` on a non-releasing type) | | | |
   | `Feat: x` | false | | | |
@@ -81,9 +90,9 @@ plus whatever test fixes Linux needs. Nothing is pushed and no GitHub setting ch
 
   Plus a CLI test: spawn `node scripts/pr-title.mjs` with `PR_TITLE='feat: $(touch <tmpdir>/pwned)'` → exit 0, and `<tmpdir>/pwned` does not exist; with
   `PR_TITLE` unset → exit 1 with a reason naming `PR_TITLE`.
-- [ ] **Step 3: Run** `node --test test/` — expect every case to fail (module missing).
+- [ ] **Step 3: Run** `node --test 'test/**/*.test.mjs'` — expect every case to fail (module missing).
 - [ ] **Step 4: Implement** `checkTitle` + the CLI guard (`import.meta.url` vs `process.argv[1]`). No regex flags; anchored both ends.
-- [ ] **Step 5: Run** `node --test test/` — all pass. Record the case count.
+- [ ] **Step 5: Run** `node --test 'test/**/*.test.mjs'` — all pass. Record the case count.
 - [ ] **Step 6: Commit** in release-kit: `feat: pr-title checker` (separate `git add <files>` and `git commit`).
 
 ### Task 2: Ruleset JSON + idempotent settings script
@@ -98,9 +107,12 @@ plus whatever test fixes Linux needs. Nothing is pushed and no GitHub setting ch
 
 Behaviour:
 - `main.json` is a ruleset body for `POST /repos/{o}/{r}/rulesets`: `name` `main-pr-only`, `target` `branch`, `enforcement` `active`, conditions
-  `ref_name.include` `["~DEFAULT_BRANCH"]`, `bypass_actors` `[]`, rules: `pull_request` (0 approvals, no code-owner/last-push/thread requirements),
+  `ref_name.include` `["~DEFAULT_BRANCH"]` and `ref_name.exclude` `[]`, `bypass_actors` `[]`, rules: `pull_request` with all five parameters the API
+  requires — `required_approving_review_count: 0`, `dismiss_stale_reviews_on_push: false`, `require_code_owner_review: false`,
+  `require_last_push_approval: false`, `required_review_thread_resolution: false` (a missing one makes the POST fail with 422),
   `required_status_checks` (the three contexts, `strict_required_status_checks_policy: true`), `required_linear_history`, `non_fast_forward`, `deletion`.
-- The script: (1) `gh api -X PATCH repos/<r>` with the four merge settings; (2) `gh api repos/<r>/rulesets` → find the id of the one named
+- The script: (1) `gh api -X PATCH repos/<r>` with the six merge fields — `allow_squash_merge=true`, `allow_merge_commit=false`,
+  `allow_rebase_merge=false`, `squash_merge_commit_title=PR_TITLE`, `squash_merge_commit_message=PR_BODY`, `delete_branch_on_merge=true`; (2) `gh api repos/<r>/rulesets` → find the id of the one named
   `main-pr-only`; found → `gh api -X PUT repos/<r>/rulesets/<id> --input rulesets/main.json`, else `-X POST repos/<r>/rulesets --input …`; (3) print
   what it did, one line per call. `--dry-run` prints every call it would make and makes only the read call. Missing argument or `gh` not on PATH → exit 2
   with usage. It resolves `main.json` relative to its own location, never the cwd.
@@ -108,17 +120,17 @@ Behaviour:
 - [ ] **Step 1: Write the fake gh.** A shell script that appends its argv (one line per call) to `$FAKE_GH_LOG` and, for a `GET …/rulesets` call, prints
   the contents of `$FAKE_GH_RULESETS` (a JSON array). Every other call prints `{}`.
 - [ ] **Step 2: Write the failing tests**, running the script with `PATH` prefixed by a tmpdir holding the fake as `gh`:
-  - no existing ruleset (`[]`) → log has exactly: one `PATCH repos/o/r` with the four settings, one rulesets GET, one `POST repos/o/r/rulesets`
+  - no existing ruleset (`[]`) → log has exactly: one `PATCH repos/o/r` carrying each of the six fields with its value (assert each), one rulesets GET, one `POST repos/o/r/rulesets`
   - existing `[{"id":42,"name":"main-pr-only"}]` → `PUT repos/o/r/rulesets/42`, no POST
   - existing `[{"id":7,"name":"other"}]` → POST (a differently named ruleset is not touched)
   - `--dry-run` → log has only the GET; stdout names the PATCH and the POST it would make
   - no argument → exit 2; `PATH` without `gh` → exit 2
   - run from a different cwd → still finds `rulesets/main.json`
   - `main.json` parses as JSON and its `required_status_checks` contexts equal exactly `["ci / checks","ci / pr-title","ci / skills"]`; `bypass_actors`
-    is `[]`
-- [ ] **Step 3: Run** `node --test test/` — the new cases fail.
+    is `[]`; `conditions.ref_name.exclude` is `[]`; the `pull_request` rule carries all five parameters with the values listed above
+- [ ] **Step 3: Run** `node --test 'test/**/*.test.mjs'` — the new cases fail.
 - [ ] **Step 4: Implement** `main.json` and the script.
-- [ ] **Step 5: Run** `node --test test/` — all pass. If `shellcheck` is on PATH run it; it is not installed on this machine (2026-10-15), so otherwise
+- [ ] **Step 5: Run** `node --test 'test/**/*.test.mjs'` — all pass. If `shellcheck` is on PATH run it; it is not installed on this machine (2026-10-15), so otherwise
   note "shellcheck not run" in the task report.
 - [ ] **Step 6: Commit** `feat: ruleset and repo settings script`.
 
@@ -130,35 +142,43 @@ Behaviour:
 - Test: `release-kit/test/workflows.test.mjs`
 
 **Interfaces:**
-- Produces: `on: workflow_call` with inputs `node-version` (string, default `22`), `check-commands` (string, newline-separated, required),
+- Produces: `on: workflow_call` with inputs `node-version` (string, default `22`), `install-command` (string, default empty = auto-detect, below),
+  `check-commands` (string, newline-separated, required),
   `skills-command` (string, default empty), `skills-paths` (string, newline-separated globs, default empty), `kit-ref` (string, default `v1`).
   Jobs `checks`, `pr-title`, `skills`.
 
 Behaviour:
-- `checks`: checkout, set up Node at `node-version`, enable corepack (pnpm comes from the caller's `packageManager`), install with the lockfile frozen
+- `checks`: checkout, set up Node at `node-version`, enable corepack (pnpm comes from the caller's `packageManager`), run `install-command` when given, else install with the lockfile frozen
   (`pnpm install --frozen-lockfile` when `pnpm-lock.yaml` exists, else `npm ci`), then run each line of `check-commands` as its own step-equivalent so a
   failure names the command. Never conditioned on the event action.
 - `pr-title`: runs only for `pull_request` events (on `push` it is skipped, which reports success); checks out `futin/release-kit` at `kit-ref` into
   `.release-kit/`, then runs `node .release-kit/scripts/pr-title.mjs` with `PR_TITLE: ${{ github.event.pull_request.title }}` in `env:` only.
 - `skills`: always runs. If `skills-command` is empty → one step that echoes "no skills suite" and succeeds. Otherwise it computes the changed files of the
-  PR (`git diff --name-only <base sha>...<head sha>` with a full-history checkout) and runs the command only when any path matches a `skills-paths` glob;
+  PR (`git diff --name-only <base sha>...<head sha>` with a full-history checkout) and runs the command only when any path matches a `skills-paths` glob.
+  On a `push` event there is no PR base: echo "push — skills gate is PR-only" and succeed (the suite already ran on the PR that produced the push);
   no match → echo and succeed.
 - Least privilege: `permissions: contents: read` at workflow level.
-- `self.yml`: on `pull_request` and `push` to `main`, job id `ci` calling `./.github/workflows/ci-node.yml` with `check-commands: node --test test/` and
+- **No job sets `name:`** — in `ci-node.yml`, `self.yml` or any app's `ci.yml`. A job name replaces the id in the reported context (`ci / Checks`), the
+  ruleset's contexts never report, and `main` locks.
+- `self.yml`: on `pull_request` and `push` to `main`, job id `ci` calling `./.github/workflows/ci-node.yml` with `check-commands: node --test 'test/**/*.test.mjs'` and
   `kit-ref: ${{ github.head_ref || github.ref_name }}`, so release-kit's own PRs check titles with the checker from the branch under review, not from `v1`.
 
 - [ ] **Step 1: Write the failing tests** in `workflows.test.mjs`, parsing each YAML file with a tiny check (no YAML dependency: shell out to
-  `python3 -c 'import sys,yaml,json; print(json.dumps(yaml.safe_load(sys.stdin)))'` when `python3` with PyYAML exists, else `t.skip` with the reason):
-  - `ci-node.yml` has `on.workflow_call` with exactly the five inputs above and their defaults
+  `python3` + PyYAML loading with `yaml.BaseLoader` and dumping JSON, when available, else `t.skip` with the reason. `BaseLoader` matters: the default
+  loaders parse the bare key `on` as boolean `true`, so a test reading `on.workflow_call` would fail against a correct file):
+  - `ci-node.yml` has `on.workflow_call` with exactly the six inputs above and their defaults
   - jobs are exactly `checks`, `pr-title`, `skills`
   - no `run:` value anywhere in either file contains `${{ github.event.pull_request.title` (injection guard)
   - `checks` has no `if:` (Review Focus 1)
   - `skills` has no job-level `if:` (Review Focus 4)
   - top-level `permissions` is `{ contents: read }`
+  - no job in `ci-node.yml` or `self.yml` has a `name` key
+  - `ci-node.yml` has the `install-command` input with an empty default
+  - the `skills` job's script handles `push` without reading a PR base sha (grep its `run:` for the push branch)
   - `self.yml` calls `./.github/workflows/ci-node.yml` from a job whose id is `ci`
-- [ ] **Step 2: Run** `node --test test/` — the new cases fail (files missing).
+- [ ] **Step 2: Run** `node --test 'test/**/*.test.mjs'` — the new cases fail (files missing).
 - [ ] **Step 3: Write both workflows.**
-- [ ] **Step 4: Run** `node --test test/` — all pass. The workflows' runtime behaviour is **unverified** until the held push (record it so).
+- [ ] **Step 4: Run** `node --test 'test/**/*.test.mjs'` — all pass. The workflows' runtime behaviour is **unverified** until the held push (record it so).
 - [ ] **Step 5: Commit** `feat: reusable node CI workflow`.
 
 ### Task 4: Dashboard tests green on Linux
@@ -204,11 +224,21 @@ Behaviour:
 - [ ] **Step 3:** Commit in the dashboard worktree: `ci: run typecheck and tests on every PR` and in release-kit: `docs: adoption checklist`.
 - [ ] **Step 4: Held steps — do not run them; list each for the user with the exact command:**
   1. Create and push release-kit: `gh repo create futin/release-kit --public --source /Users/andrejajevtic/Documents/custom-projects/release-kit --push`
+  1b. Wait for release-kit's own `self.yml` run on that push to go green (`gh run list -R futin/release-kit`) — the spec puts self-CI before the tag.
   2. Tag it: `git -C …/release-kit tag -a v1.0.0 -m "CI parts" && git -C …/release-kit tag v1 v1.0.0 && git -C …/release-kit push origin v1.0.0 v1`
      (`v1` lightweight, per the spec)
   3. Push the dashboard branch and open the PR: `git push -u origin ci/phase-a-gate` then `gh pr create --title "ci: run typecheck and tests on every PR"`
   4. When the PR is green, read the contexts: `gh pr checks <n>` — they must read `ci / checks`, `ci / pr-title`, `ci / skills`
   5. Only then: `…/release-kit/scripts/apply-repo-settings.sh futin/claude-agents-dashboard --dry-run`, then without `--dry-run`
+
+  Which real run proves which behaviour (fill in the run URLs as they happen; until then each row is unverified):
+
+  | Behaviour | Proved by |
+  |---|---|
+  | `ci / checks`, `ci / pr-title`, `ci / skills` report under exactly those names | held step 4, `gh pr checks` on the dashboard PR |
+  | Title edit re-runs `checks` instead of skipping it (Review Focus 1) | edit the dashboard PR title once while it is open; `checks` shows a second run |
+  | Hostile title stays literal in the workflow (Review Focus 2) | a release-kit PR titled `` ci: test `id` $(id) `` — `pr-title` passes, the log shows the text unexpanded |
+  | `ci / skills` green with no suite (Review Focus 4) | release-kit's own `self.yml` run (no `skills-command`) |
 
 ## Not in this plan
 

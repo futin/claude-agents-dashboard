@@ -267,7 +267,8 @@ Workflows are verified by real runs on release-kit itself and then on a throwawa
    failure cannot fire), then tag `v0.1.0` on that merge commit by hand; then the API + UI PR (after mockups), whose `feat` merge becomes `v0.2.0`.
 6. Other apps adopt A + C from the README, each building its own chip and panel.
 
-Workflow and ruleset files are dictated for the user to type; mechanical code edits are done directly.
+Workflow and ruleset files are dictated for the user to type; mechanical code edits are done directly. A plan run under `/autopilot` may write them
+instead, and then says so in its header and walks the user through them in its final report.
 
 ## Out of scope
 
