@@ -756,6 +756,9 @@ Seven things are deliberate:
 - **The first tick after start writes nothing**, and switching recording off
   drops the offsets so switching it back on reseeds the same way. One lost
   minute, rather than a backlog dumped into a single interval.
+- **Seeding stats, it never reads.** Each offset starts at the transcript's current size, so a restart costs one `stat` per file. Reading to the end
+  instead — which the seeding tick then discarded — blocked the event loop for ~4.5 min on every `tsx watch` restart (2026-10-15: 4,158 transcripts,
+  2.7 GB). A file caught mid-line loses only that record, which predates the seed.
 - **`req` is a parallel map, and absent is not zero.** One assistant message is
   one request, so the count is free — it is what `sumWindow` already discards
   after summing. It lives beside `tok` rather than as a fifth key inside it

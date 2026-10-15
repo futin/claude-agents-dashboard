@@ -322,11 +322,18 @@ interface FileCursor {
 
 let cursors = new Map<string, FileCursor>();
 let prevTickMs: number | null = null;
+let bytesRead = 0;
 
 /** Test seam, and what a recording toggle does: forget every offset. */
 export function resetLedgerRecorder(): void {
   cursors = new Map();
   prevTickMs = null;
+  bytesRead = 0;
+}
+
+/** Test seam: transcript bytes the recorder has read since the last reset. */
+export function ledgerReadStats(): { bytes: number } {
+  return { bytes: bytesRead };
 }
 
 function ledgerPath(dir?: string): string {
@@ -422,7 +429,7 @@ function collectEvents(root: string): UsageEvent[] {
       fd = fs.openSync(ref.file, 'r');
       const length = size - cursor.offset;
       const buf = Buffer.alloc(length);
-      fs.readSync(fd, buf, 0, length, cursor.offset);
+      bytesRead += fs.readSync(fd, buf, 0, length, cursor.offset);
       const lastNewline = buf.lastIndexOf(NEWLINE);
       if (lastNewline === -1) continue; // no complete line yet — re-read next tick
       const complete = buf.subarray(0, lastNewline);
@@ -447,6 +454,21 @@ function collectEvents(root: string): UsageEvent[] {
     }
   }
   return events;
+}
+
+/**
+ * The seeding tick: point every cursor at its transcript's current end, one `stat` each. Everything before it falls outside the first window anyway, so
+ * reading it — every transcript, synchronously, on the event loop — bought nothing and froze the server for ~4.5 min per restart (2026-10-15: 4,158
+ * transcripts, 2.7 GB). An end that lands mid-line costs only that record, which predates the seed.
+ */
+function seedCursors(root: string): void {
+  for (const ref of listUsageTranscripts(root)) {
+    try {
+      cursors.set(ref.file, { offset: fs.statSync(ref.file).size, seen: [], seenSet: new Set() });
+    } catch {
+      /* gone between listing and stat — a later tick starts it from 0 */
+    }
+  }
 }
 
 /** Best-effort append, exactly like `appendSample`. */
@@ -502,10 +524,16 @@ export function recordLedgerTick(opts?: { dir?: string; root?: string; nowMs?: n
       return;
     }
     const nowMs = opts?.nowMs ?? Date.now();
-    const events = collectEvents(opts?.root ?? projectsRoot());
+    const root = opts?.root ?? projectsRoot();
+    if (prevTickMs === null) {
+      seedCursors(root);
+      prevTickMs = nowMs;
+      return;
+    }
+    const events = collectEvents(root);
 
-    if (prevTickMs === null || nowMs <= prevTickMs) {
-      prevTickMs = nowMs; // seeding tick (or a clock that went backwards)
+    if (nowMs <= prevTickMs) {
+      prevTickMs = nowMs; // a clock that went backwards
       return;
     }
     const { tok, req, sur } = sumWindow(events, prevTickMs, nowMs);
