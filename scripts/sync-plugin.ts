@@ -8,6 +8,9 @@
  * uninstall + install rather than update. The marketplace is the GitHub repo, so the installer sees pushed `main` and nothing else; this script refuses any
  * tree that is less than that rather than reinstalling stale code and reporting success. Ported from backlog-manager's `scripts/sync-plugin.mjs`, minus its
  * sparse-checkout and version-pruning halves: this plugin is a subfolder, so neither problem exists here.
+ *
+ * The checkout is brought level with origin/main *before* the digests are compared, never after: plugin/ in a checkout that has not pulled a merged PR
+ * still matches the old install byte for byte, so a drift check against it reports "in sync" and the newer skills never land (2026-10-15, #207).
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -70,18 +73,66 @@ export function driftedPaths(repo: Record<string, string>, installed: Record<str
   return PUBLISHED_PATHS.filter((p) => repo[p] !== installed[p]);
 }
 
-/** Why this tree cannot be published, or undefined when it can. Most fundamental first: off main, every later answer is about the wrong branch. */
-export function publishBlocker({ branch, dirty, ahead, behind }: { branch: string; dirty: string[]; ahead: number; behind: number }): string | undefined {
+export interface CheckoutState { branch: string; dirty: string[]; ahead: number; behind: number }
+
+export type CheckoutGate = { kind: 'ok' } | { kind: 'fast-forward' } | { kind: 'refuse'; message: string };
+
+/**
+ * What to do with this checkout before comparing it to the install. Most fundamental refusal first: off main, every later answer is about the wrong branch.
+ * Behind but otherwise clean is the one case fixed rather than refused — a fast-forward cannot lose work, and refusing it is how a merged PR gets skipped.
+ */
+export function checkoutGate({ branch, dirty, ahead, behind }: CheckoutState): CheckoutGate {
   if (branch !== 'main') {
-    return `on branch ${branch}, but the marketplace installs main — merge to main and sync from there.`;
+    return { kind: 'refuse', message: `on branch ${branch}, but the marketplace installs main — merge to main and sync from there.` };
   }
   if (dirty.length > 0) {
-    return `uncommitted changes under plugin/ or .claude-plugin/:\n${dirty.map((l) => `  ${l}`).join('\n')}\n`
-      + 'The installer reads GitHub, not the working tree — commit and push these first.';
+    return {
+      kind: 'refuse',
+      message: `uncommitted changes under plugin/ or .claude-plugin/:\n${dirty.map((l) => `  ${l}`).join('\n')}\n`
+        + 'The installer reads GitHub, not the working tree — commit and push these first.',
+    };
   }
-  if (ahead > 0) return `main is ${ahead} commit(s) ahead of origin/main. The marketplace clones from GitHub, so push first:\n  git push`;
-  if (behind > 0) return `main is ${behind} commit(s) behind origin/main — pull first, or the install would not match this checkout:\n  git pull --ff-only`;
-  return undefined;
+  if (ahead > 0) {
+    return { kind: 'refuse', message: `main is ${ahead} commit(s) ahead of origin/main. The marketplace clones from GitHub, so push first:\n  git push` };
+  }
+  if (behind > 0) return { kind: 'fast-forward' };
+  return { kind: 'ok' };
+}
+
+export type CheckoutResult = { refused: string } | { refused?: undefined; fastForwarded: number; head: string };
+
+/**
+ * Fetch origin/main and bring the checkout at `cwd` level with it, fast-forwarding when it is merely behind. Returns the refusal, or how many commits were
+ * fast-forwarded (0 when already level) and the resulting HEAD.
+ */
+export function bringCheckoutCurrent(cwd: string): CheckoutResult {
+  const git = (args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const stderr = (error: unknown): string => String((error as { stderr?: unknown }).stderr ?? (error as Error).message).trim();
+  try {
+    git(['fetch', '--quiet', 'origin', 'main']);
+  } catch (error) {
+    return { refused: `could not fetch origin/main, so there is no telling whether this checkout has every merged PR:\n  ${stderr(error)}` };
+  }
+  const behind = Number(git(['rev-list', '--count', 'HEAD..origin/main']).trim());
+  const gate = checkoutGate({
+    branch: git(['branch', '--show-current']).trim(),
+    dirty: git(['status', '--porcelain', '--', 'plugin', '.claude-plugin']).split('\n').filter(Boolean),
+    ahead: Number(git(['rev-list', '--count', 'origin/main..HEAD']).trim()),
+    behind,
+  });
+  if (gate.kind === 'refuse') return { refused: gate.message };
+  if (gate.kind === 'fast-forward') {
+    try {
+      // --ff-only plus git's own overwrite check: an uncommitted edit elsewhere in the tree survives, or the merge refuses and nothing moves.
+      git(['merge', '--ff-only', '--quiet', 'origin/main']);
+    } catch (error) {
+      return {
+        refused: `main is ${behind} commit(s) behind origin/main and could not be fast-forwarded:\n  ${stderr(error)}\n`
+          + 'Resolve that, then:\n  git pull --ff-only',
+      };
+    }
+  }
+  return { fastForwarded: gate.kind === 'fast-forward' ? behind : 0, head: git(['rev-parse', 'HEAD']).trim() };
 }
 
 /** The user-scope install record for this plugin, else its first record; undefined when it is not installed. */
@@ -92,7 +143,6 @@ export function readInstall(installedPath = INSTALLED): InstallRecord | undefine
   return entries.find((e: InstallRecord) => e.scope === 'user') ?? entries[0];
 }
 
-const git = (args: string[]): string => execFileSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8' });
 const short = (sha?: string): string => sha?.slice(0, 7) ?? '?';
 
 function main(): void {
@@ -104,27 +154,23 @@ function main(): void {
     process.exit(1);
   }
 
+  const checkout = bringCheckoutCurrent(REPO_ROOT);
+  if (checkout.refused !== undefined) {
+    console.error(checkout.refused);
+    process.exit(1);
+  }
+  if (checkout.fastForwarded > 0) console.log(`fast-forwarded main ${checkout.fastForwarded} commit(s) to origin/main @ ${short(checkout.head)}`);
+
   const repo = publishedDigests(PLUGIN_ROOT);
   const drifted = driftedPaths(repo, publishedDigests(install.installPath));
-  // Digests only, not the install's commit: most commits never touch plugin/, and reinstalling identical bytes after each would be noise.
+  // Digests only, not the install's commit: most commits never touch plugin/, and reinstalling identical bytes after each would be noise. So the install's
+  // sha is the last commit a reinstall ran at, routinely older than HEAD — name both, or the mismatch reads as a stale install.
   if (drifted.length === 0) {
-    console.log(`in sync — installed v${install.version} @ ${short(install.gitCommitSha)} carries the same ${PUBLISHED_PATHS.join(', ')} as plugin/`);
+    console.log(`in sync — installed v${install.version} @ ${short(install.gitCommitSha)} carries the same ${PUBLISHED_PATHS.join(', ')}`
+      + ` as plugin/ at origin/main @ ${short(checkout.head)}`);
     return;
   }
   console.log(`reinstalling — ${drifted.join(', ')} differ(s) from plugin/`);
-
-  // Fetch first, or a stale origin/main makes a pushed tree look unpushed.
-  git(['fetch', '--quiet', 'origin', 'main']);
-  const blocker = publishBlocker({
-    branch: git(['branch', '--show-current']).trim(),
-    dirty: git(['status', '--porcelain', '--', 'plugin', '.claude-plugin']).split('\n').filter(Boolean),
-    ahead: Number(git(['rev-list', '--count', 'origin/main..HEAD']).trim()),
-    behind: Number(git(['rev-list', '--count', 'HEAD..origin/main']).trim()),
-  });
-  if (blocker) {
-    console.error(blocker);
-    process.exit(1);
-  }
 
   const claude = (args: string[]): void => { execFileSync('claude', args, { stdio: 'inherit' }); };
   claude(['plugin', 'marketplace', 'update', MARKETPLACE]);
