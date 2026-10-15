@@ -105,13 +105,13 @@ config — see `docs/subsystems/remote-access.md` before touching any of it.
 Bodies follow `.github/pull_request_template.md`: Conventional Commits title
 (`feat(spawn):`, `fix(api):`, `docs:`), a lead in user terms, then *Why this shape* /
 *What changed* grouped by boundary (Server / Client / Hook / Docs) / *Verification*.
-Two rules are load-bearing:
+Three rules are load-bearing:
 
 - **State what you did NOT verify.** Every merged PR here carries a "not verified, needs a
   human" line or an explicit *Unproven* row.
 - **Never claim green without the command output.**
-- **The PR title is the squash commit and must pass `ci / pr-title`:** `feat|fix|perf` (`!` allowed) or `docs|chore|test|refactor|ci|build`, optional
-  lowercase `(scope)`, `: `, a description. `feat`/`fix`/`perf` cut a release once Phase C lands.
+- **The PR title must pass `ci / pr-title`** (it becomes the squash commit once squash-only merges are applied): `feat|fix|perf` (`!` allowed) or
+  `docs|chore|test|refactor|ci|build`, optional lowercase `(scope)`, `: `, a description. `feat`/`fix`/`perf` cut a release once Phase C lands.
 
 Optional template sections are commented out — delete the ones that don't apply rather than
 filling them with nothing.
