@@ -61,13 +61,18 @@ const CASES: ShotCase[] = [
   { ...PROJ, width: 375, storage: { 'management.projectsLayout': 'lists' }, kind: 'projects-lists' }
 ];
 
-/** 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts = 84 counted shots; the 2 Trace shots (below) sit outside the count. A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered. */
+/** 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts = 84 counted shots; the 3 Trace shots (below) sit outside the count. A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered. */
 const EXPECTED_SHOTS = 84;
 
-/** The drawer's Trace mode with a step picked — not in `CASES`, because each needs a click first. 1280 picks a row (a retry, so the arcs run back to its failure); 375 follows a chat tool line's `why?`. */
+/**
+ * The drawer's Trace mode with a step picked — not in `CASES`, because each needs a click first. 1280 picks a row (a retry, so the arcs run back to its
+ * failure); 375 follows a chat tool line's `why?`; the `fold` shot picks the subagent's Task row, which scrolls turn 1 into view with the Task's run
+ * folded shut under it (a pick of the Task itself does not open it): the summary, its six ticks with the red failure, and the lane's elbow.
+ */
 const TRACE_SHOTS = [
-  { width: 1280, pick: 'row' as const, step: 'toolu_11' },
-  { width: 375, pick: 'why' as const, step: TRACE_IDS.editLimiter }
+  { width: 1280, pick: 'row' as const, step: 'toolu_11', label: 'row', suffix: '' },
+  { width: 375, pick: 'why' as const, step: TRACE_IDS.editLimiter, label: 'why', suffix: '' },
+  { width: 1280, pick: 'row' as const, step: 'toolu_04', label: 'fold', suffix: '-fold' }
 ];
 
 const title = (c: ShotCase): string => `${c.section} · ${c.theme} · ${c.width} · ${c.kind}`;
@@ -84,8 +89,8 @@ for (const c of CASES) {
 }
 
 for (const t of TRACE_SHOTS) {
-  const name = `sessions-daylight-${t.width}-trace`;
-  test(`sessions · daylight · ${t.width} · trace (${t.pick})`, async ({ page }) => {
+  const name = `sessions-daylight-${t.width}-trace${t.suffix}`;
+  test(`sessions · daylight · ${t.width} · trace (${t.label})`, async ({ page }) => {
     await stage(page, { section: 'sessions', theme: 'daylight', width: t.width, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID });
     const drawer = page.locator('aside.chat');
     if (t.pick === 'why') {
@@ -99,6 +104,7 @@ for (const t of TRACE_SHOTS) {
     await expect(picked).toBeVisible();
     // The arcs are drawn into the SVG after layout; a picked step with causes has at least one.
     await expect(drawer.locator('.tr-arcs path').first()).toBeAttached();
+    if (t.label === 'fold') await expect(drawer.locator('.tr-sum .tr-fold[aria-expanded="false"]')).toBeVisible();
     await expect.poll(() => isReady(page)).toBe(true);
     await expect(page).toHaveScreenshot(name + '.png', { fullPage: true });
   });

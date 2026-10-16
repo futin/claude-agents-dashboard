@@ -1,6 +1,6 @@
 /**
  * `GET /api/sessions/:id/trace` — the working session's causal trace: two turns on the rate-limiting task the chat fixture tells, from the first grep to a
- * question still waiting on the user. The chat fixture's tool lines carry the ids of the steps here (`TRACE_IDS`), so `why?` has somewhere to land.
+ * question still waiting on the user. The subagent's six steps (one failed Read) are finished, so its run renders folded: one summary, six ticks. The chat fixture's tool lines carry the ids of the steps here (`TRACE_IDS`), so `why?` has somewhere to land.
  *
  * Every `at` is an absolute ISO string off `EPOCH`; the clock and zone are pinned, so the facts the inspector renders from them never move.
  */
@@ -46,7 +46,7 @@ const steps: TraceStep[] = [
     at: at(5 * MIN + 25 * SEC), status: 'ok', result: 'No matches found', task: 'Token bucket store', why: [{ id: PROMPT_IDS.first, rel: 'asked' }], thinking: null
   },
   {
-    id: 'toolu_04', turn: 1, kind: 'agent', tool: 'Task · cavecrew-investigator', detail: 'find how API clients are identified per request',
+    id: 'toolu_04', turn: 1, kind: 'agent', tool: 'Agent · cavecrew-investigator', detail: 'find how API clients are identified per request',
     intent: 'Map client identity without reading every middleware here', intentFrom: 'description', at: at(5 * MIN), status: 'ok', result: '2 files · file:line table',
     task: 'Sliding window counter', why: [{ id: PROMPT_IDS.first, rel: 'asked' }], thinking: 'signature'
   },
@@ -57,6 +57,22 @@ const steps: TraceStep[] = [
   {
     id: 'toolu_04b', turn: 1, kind: 'read', tool: 'Read', detail: 'src/middleware/auth.ts', intent: null, intentFrom: null, agent: 'toolu_04',
     at: at(4 * MIN + 48 * SEC), status: 'ok', result: '74 lines', task: 'Sliding window counter', why: [{ id: 'toolu_04a', rel: 'informed' }], thinking: null
+  },
+  {
+    id: 'toolu_04c', turn: 1, kind: 'read', tool: 'Glob', detail: 'src/**/client*.ts', intent: null, intentFrom: null, agent: 'toolu_04',
+    at: at(4 * MIN + 40 * SEC), status: 'ok', result: '2 files', task: 'Sliding window counter', why: [{ id: 'toolu_04', rel: 'delegated' }], thinking: null
+  },
+  {
+    id: 'toolu_04d', turn: 1, kind: 'read', tool: 'Read', detail: 'src/lib/clientId.ts', intent: null, intentFrom: null, agent: 'toolu_04',
+    at: at(4 * MIN + 32 * SEC), status: 'error', result: 'File does not exist.', task: 'Sliding window counter', why: [{ id: 'toolu_04c', rel: 'informed' }], thinking: null
+  },
+  {
+    id: 'toolu_04e', turn: 1, kind: 'read', tool: 'Read', detail: 'src/lib/client-id.ts', intent: null, intentFrom: null, agent: 'toolu_04',
+    at: at(4 * MIN + 26 * SEC), status: 'ok', result: '31 lines', task: 'Sliding window counter', why: [{ id: 'toolu_04d', rel: 'retry' }], thinking: null
+  },
+  {
+    id: 'toolu_04f', turn: 1, kind: 'bash', tool: 'Bash', detail: 'git log --oneline -5 -- src/middleware/auth.ts', intent: null, intentFrom: null, agent: 'toolu_04',
+    at: at(4 * MIN + 18 * SEC), status: 'ok', result: 'a41c9e2 auth: read the key from x-api-key', task: 'Sliding window counter', why: [{ id: 'toolu_04', rel: 'delegated' }], thinking: null
   },
   {
     id: 'toolu_05', turn: 1, kind: 'decide', tool: 'ExitPlanMode', detail: 'Token-bucket limiter on /v1/orders', intent: 'One bucket per client id, mounted before the router', intentFrom: 'text',
@@ -118,7 +134,7 @@ const steps: TraceStep[] = [
 export const sessionTrace: SessionTrace = {
   id: SESSION_IDS.working,
   steps,
-  cursor: 19,
+  cursor: 23,
   epoch: 'visual-fixture',
   thinking: { recorded: 8, readable: 2 },
   dropped: 0
