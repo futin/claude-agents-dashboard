@@ -9,9 +9,25 @@
 import path from 'node:path';
 
 import type { TraceRel, TraceWhy } from '../../shared/types.js';
-import { COMMIT_RE, type StepRecord } from './trace.js';
+import type { StepRecord } from './trace.js';
+
+/** A `git commit` command; also what `trace.ts` reads a commit's sha for. Lives here so `trace.ts` and this module share no import cycle. */
+export const COMMIT_RE = /\bgit\s+commit\b/;
 
 export const TEST_RE = /\b(test|tests|typecheck|tsc|vitest|jest|pytest|playwright|lint|eslint|mypy|ruff)\b|\bcargo\s+(test|check|clippy)\b|\bgo\s+(test|vet)\b/;
+
+const QUOTED_RE = /'[^']*'|"[^"]*"/g;
+
+/**
+ * Whether a bash command runs a check (tests, types, lint). TEST_RE alone reads `foo.test.ts` in a sed, `git add test/x.ts` and "tests" in a commit message
+ * as a check, so it runs over the command with quoted strings removed and path-like tokens (containing `/` or `.`) dropped. A commit is never a check.
+ * `node --test a/b.test.ts`, `pnpm test:visual` and `npx tsc --noEmit` still count.
+ */
+export function isCheck(command: string): boolean {
+  if (COMMIT_RE.test(command)) return false;
+  const bare = command.replace(QUOTED_RE, ' ').split(/\s+/).filter((t) => !t.includes('/') && !t.includes('.')).join(' ');
+  return TEST_RE.test(bare);
+}
 
 const VERIFIES_CAP = 8;
 const COMMITS_CAP = 12;
@@ -45,8 +61,8 @@ function editsSince(earlier: readonly StepRecord[], inScope: (e: StepRecord) => 
 }
 
 function verifies(step: StepRecord, earlier: readonly StepRecord[]): StepRecord[] {
-  if (step.command === null || !TEST_RE.test(step.command)) return [];
-  const isTest = (e: StepRecord): boolean => e.kind === 'bash' && e.command !== null && TEST_RE.test(e.command);
+  if (step.command === null || !isCheck(step.command)) return [];
+  const isTest = (e: StepRecord): boolean => e.kind === 'bash' && e.command !== null && isCheck(e.command);
   return editsSince(earlier, (e) => e.scope === step.scope, isTest, VERIFIES_CAP);
 }
 
@@ -101,7 +117,11 @@ function answer(step: StepRecord, earlier: readonly StepRecord[]): StepRecord[] 
   if (step.scope !== 'main') return [];
   for (let i = earlier.length - 1; i >= 0; i--) {
     const e = earlier[i];
-    if (e.scope === 'main' && e.turn === step.turn && e.kind === 'decide' && e.status === 'ok') return [e];
+    if (e.scope !== 'main') continue;
+    // Main-scope turns only grow in fold order: nothing earlier can be in this turn.
+    if (e.turn < step.turn) break;
+    // EnterPlanMode resolves without a user verdict; the other two are the user's answer.
+    if (e.turn === step.turn && e.status === 'ok' && (e.tool === 'AskUserQuestion' || e.tool === 'ExitPlanMode')) return [e];
   }
   return [];
 }
@@ -125,8 +145,10 @@ export function inferWhy(step: StepRecord, earlier: readonly StepRecord[], turnP
   if (out.length > 0) return out;
 
   if (step.scope !== 'main') {
-    const task = earlier.find((e) => e.id === step.scope);
-    if (task) add('delegated', [task]);
+    // The Task step is recent: look from the end.
+    for (let i = earlier.length - 1; i >= 0; i--) {
+      if (earlier[i].id === step.scope) { add('delegated', [earlier[i]]); break; }
+    }
   } else if (turnPrompt) {
     add('asked', [turnPrompt]);
   }

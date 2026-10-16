@@ -14,7 +14,7 @@ import path from 'node:path';
 
 import type { TraceKind, TraceStep, TraceWhy } from '../../shared/types.js';
 import { DEFAULT_CAPS, parseChatRecord } from './chat.js';
-import { inferWhy } from './trace-why.js';
+import { COMMIT_RE, inferWhy } from './trace-why.js';
 import { foldTaskRecord, liveTaskSubject, newTaskFold, type TaskFold } from './tasks.js';
 import { describeTool, LOCAL_PLUMBING } from './transcript.js';
 
@@ -37,7 +37,6 @@ const KINDS: Record<string, TraceKind> = {
   AskUserQuestion: 'decide', ExitPlanMode: 'decide', EnterPlanMode: 'decide'
 };
 
-export const COMMIT_RE = /\bgit\s+commit\b/;
 const SHA_RE = /\[[^\]\s]+(?: \([^)]*\))? ([0-9a-f]{7,40})\]/;
 const ANSWER_RE = /"([^"]*)"="([^"]*)"/g;
 const SYSTEM_REMINDER_RE = /<system-reminder>[\s\S]*?<\/system-reminder>/g;

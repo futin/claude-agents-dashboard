@@ -2,7 +2,7 @@ import assert from 'node:assert';
 
 import type { TraceStep, TraceWhy } from '../shared/types.js';
 import { TraceBuilder } from '../server/lib/trace.js';
-import { inferWhy, TEST_RE } from '../server/lib/trace-why.js';
+import { inferWhy, isCheck, TEST_RE } from '../server/lib/trace-why.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -235,6 +235,47 @@ export function run(): number {
     const b = build(use('b1', 'Bash', { command: 'ls' }, T(1)), edit('e1', '/r/a.ts', 2), result('b1', 'x', true));
     assert.deepStrictEqual(why(b, 'e1'), []);
     assert.strictEqual(typeof inferWhy, 'function');
+  })) p++; else f++;
+
+  if (test('25. a sed over foo.test.ts is not a check: no verifies, and it does not reset the window', () => {
+    const b = build(edit('e1', '/r/a.ts', 1), bash('s1', 'sed -n 1,5p foo.test.ts', 2), edit('e2', '/r/b.ts', 3), bash('t1', 'pnpm test', 4));
+    assert.ok(!why(b, 's1').some((w) => w.rel === 'verifies'));
+    assert.deepStrictEqual(why(b, 't1'), [{ id: 'e2', rel: 'verifies' }, { id: 'e1', rel: 'verifies' }]);
+  })) p++; else f++;
+
+  if (test('26. a commit with "tests" in its message gets only commits edges and does not reset the verifies window', () => {
+    const b = build(edit('e1', '/r/a.ts', 1), bash('c1', 'git commit -m "add tests"', 2), edit('e2', '/r/b.ts', 3), bash('t1', 'pnpm test', 4));
+    assert.deepStrictEqual(why(b, 'c1'), [{ id: 'e1', rel: 'commits' }]);
+    assert.deepStrictEqual(why(b, 't1'), [{ id: 'e2', rel: 'verifies' }, { id: 'e1', rel: 'verifies' }]);
+  })) p++; else f++;
+
+  if (test('27. git add test/x.ts is not a check; node --test test/a.test.ts is', () => {
+    const b = build(edit('e1', '/r/a.ts', 1), bash('a1', 'git add test/x.ts', 2), bash('n1', 'node --test test/a.test.ts', 3));
+    assert.ok(!why(b, 'a1').some((w) => w.rel === 'verifies'));
+    assert.deepStrictEqual(why(b, 'n1'), [{ id: 'e1', rel: 'verifies' }]);
+  })) p++; else f++;
+
+  if (test('28. isCheck: runners count, paths, quoted text and commits do not', () => {
+    for (const c of ['pnpm test', 'pnpm test:visual', 'npx tsc --noEmit', 'cd /r && pnpm lint', 'node --test test/a.test.ts', 'go test ./...']) assert.ok(isCheck(c), c);
+    for (const c of ['sed -n 1,5p foo.test.ts', 'git add test/x.ts', 'git commit -m "add tests"', "grep 'test' a.ts", 'cat test/run-all.ts', 'ls']) assert.ok(!isCheck(c), c);
+  })) p++; else f++;
+
+  if (test('29. answer: EnterPlanMode resolving ok is not the user\'s verdict', () => {
+    const b = build(
+      prompt('p1', 'go', T(1)),
+      use('n1', 'EnterPlanMode', {}, T(2)), result('n1', 'entered'),
+      use('r1', 'Read', { file_path: '/r/a.ts' }, T(3))
+    );
+    assert.deepStrictEqual(why(b, 'r1'), [{ id: 'p1', rel: 'asked' }]);
+  })) p++; else f++;
+
+  if (test('30. answer: a decision from an earlier turn is not scanned past, and a subagent step before it does not stop the scan', () => {
+    const b = build(
+      prompt('p1', 'one', T(1)), use('q1', 'AskUserQuestion', { questions: [] }, T(2)), result('q1', '"A"="B"'),
+      prompt('p2', 'two', T(3)), use('a1', 'Agent', { description: 'd' }, T(4)), bash('b1', 'ls', 5, 'a1'),
+      use('r1', 'Read', { file_path: '/r/a.ts' }, T(6))
+    );
+    assert.deepStrictEqual(why(b, 'r1'), [{ id: 'p2', rel: 'asked' }]);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
