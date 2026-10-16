@@ -2067,15 +2067,23 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 /* ── Trace spine variants: the bar's "spine" switch, for long subagent runs ──
    "as built" is the rules above. Each variant below is scoped by a
    .tr-v-<name> class on the body, so "as built" never sees it. */
-/* lanes: one straight magenta lane per agent, concurrent agents 12px apart */
-.tr-v-lanes .tr-row.tr-child,.tr-v-folded .tr-row.tr-child{grid-template-columns:calc(84px + var(--lanes,0) * 12px) minmax(0,1fr)}
-.tr-v-lanes .tr-row.tr-child .tr-dot,.tr-v-folded .tr-row.tr-child .tr-dot{left:calc(54px + var(--lane,0) * 12px)}
-/* folded: a run is one summary row with a tick per step, and its chevron opens it */
+/* lanes: one straight magenta lane per agent, concurrent agents 12px apart.
+   Depth geometry, shared with folded: the main dots sit at x 36, each nesting
+   level is one --tr-depth further right, and a card starts 24px right of the
+   line it hangs from. The lane's vertical runs in that 24px gutter. */
+.tr-v-lanes,.tr-v-folded{--tr-depth:28px}
+.tr-v-lanes .tr-row.tr-child,.tr-v-folded .tr-row.tr-child{
+  --x:calc(36px + var(--depth,1) * var(--tr-depth) + var(--lane,0) * 12px);
+  grid-template-columns:calc(60px + var(--depth,1) * var(--tr-depth) + var(--lanes,0) * 12px) minmax(0,1fr)}
+.tr-v-lanes .tr-row.tr-child .tr-dot,.tr-v-folded .tr-row.tr-child .tr-dot{left:calc(var(--x) - 5px)}
+/* folded: a run is one summary row with a tick per step, and its toggle (a
+   solid dot in the lane's colour, sitting on the lane) opens it */
 .tr-sum{display:grid;grid-template-columns:60px minmax(0,1fr);align-items:start;cursor:pointer;transition:opacity .15s}
-.tr-sum.tr-sub{grid-template-columns:84px minmax(0,1fr)}
-.tr-sum .tr-dot.tr-fold{left:28px;top:8px;width:16px;height:16px;border-width:1.5px;padding:0;display:grid;place-items:center;font-size:8px;line-height:1;color:var(--c);cursor:pointer;transition:transform .15s}
-.tr-sum.tr-sub .tr-dot.tr-fold{left:51px}
-.tr-fold[aria-expanded="true"]{transform:rotate(90deg)}
+.tr-sum.tr-sub{grid-template-columns:calc(60px + var(--depth,1) * var(--tr-depth)) minmax(0,1fr)}
+.tr-sum .tr-dot.tr-fold{left:27px;top:7px;width:18px;height:18px;border:0;padding:0;display:grid;place-items:center;background:var(--c);color:var(--text-on-dark);cursor:pointer}
+.tr-sum.tr-sub .tr-dot.tr-fold{left:calc(27px + var(--depth,1) * var(--tr-depth))}
+.tr-fold .chev{width:10px;height:10px;stroke-width:1.6;transform:rotate(-90deg)}
+.tr-fold[aria-expanded="true"] .chev{transform:none}
 .tr-sumcard{padding:6px 10px 6px 6px;border-radius:var(--r-sm);min-width:0}
 .tr-sum:hover .tr-sumcard{background:var(--bg-subtle)}
 .tr-sum.tr-anc .tr-sumcard{background:color-mix(in srgb,var(--c) 8%,transparent)}
@@ -2090,7 +2098,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .tr-tick.tr-terr{background:var(--red-500);opacity:1}
 .tr-tick.tr-trun{opacity:1;animation:tr-blink 1.2s ease-in-out infinite}
 .tr-more{display:block;margin:0 0 2px 60px;padding:2px 6px;border:0;background:none;font-size:11.5px;color:var(--text-tertiary);cursor:pointer}
-.tr-more.tr-sub{margin-left:84px}
+.tr-more.tr-sub{margin-left:calc(60px + var(--depth,1) * var(--tr-depth))}
 .tr-more:hover{color:var(--text-primary);text-decoration:underline}
 .tr-spine.tr-dim .tr-sum:not(.tr-anc),.tr-spine.tr-dim .tr-more{opacity:.6}
 .tr-spine.tr-focus .tr-sum:not(.tr-anc),.tr-spine.tr-focus .tr-more{opacity:.25}
@@ -2118,12 +2126,15 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .tr-nest .tr-row{grid-template-columns:22px minmax(0,1fr)}
 .tr-nest .tr-dot{left:7px;width:8px;height:8px}
 @container (max-width:479px){.tr-lres{max-width:34%}.tr-lat{display:none}}
-@media (prefers-reduced-motion:reduce){.tr-tick.tr-trun{animation:none}.tr-sum,.tr-fold{transition:none}}
-/* phone: Trace stacks the sidecar under the spine, so nothing scrolls
-   sideways. A container query, not a media query: the mock's own shell (body
+@media (prefers-reduced-motion:reduce){.tr-tick.tr-trun{animation:none}.tr-sum,.tr-fold .chev{transition:none}}
+/* the foot: live text, the why toggle and the filter, each on one line */
+.tr-foot .live,.tr-foot .tr-tog{white-space:nowrap}
+/* narrow: Trace stacks the sidecar under the spine, so nothing scrolls
+   sideways. The 290px sidecar beside the spine needs about 900px. This is a
+   container query, not a media query, because the mock's own shell (body
    padding, 240px rail) is desktop-only, so the chat page is what goes narrow. */
 #p-chat{container-type:inline-size}
-@container (max-width:639px){
+@container (max-width:899px){
   .ch-stage.tr-mode{padding:8px;min-height:0;grid-template-columns:minmax(0,1fr)}
   .tr-mode .ch-modal{max-height:none}
   .tr-mode .ch-head{padding:14px 16px}
@@ -2131,7 +2142,6 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
   .tr-mode .ch-side{order:2;border-right:0;border-top:1px solid var(--border);padding:14px}
   .tr-mode .ch-col{height:560px}
   .tr-mode .ch-foot{flex-wrap:wrap;padding:10px 16px}
-  .tr-mode .ch-count{white-space:normal}
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -5362,13 +5372,18 @@ unpersisted, since session ids churn.`;
     + (s.thinking === 'text' ? '<span class="tr-flag think">thinking</span>' : '');
   const resLine = (s, st) => st === 'running' ? 'waiting for its result…' : '→ ' + esc(resultOf(s));
 
+  /* how many agents deep a step runs: 0 on the main thread */
+  const depthOf = (s) => s.agent && stepById[s.agent] ? 1 + depthOf(stepById[s.agent]) : 0;
+  /* the header account chip's chevron (.acct .cv), pointing down */
+  const CHEV = '<svg class="chev" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4l3 3 3-3"/></svg>';
+
   /* One spine row. With no options it is the row as built; `dedupe` drops an
      intent that only repeats the detail, and `lane` puts a child's dot on its
-     agent's lane. */
+     agent's lane, one depth step right of the line it hangs from. */
   function stepRow(s, hl, o = {}) {
     const st = status(s);
     const intent = s.intent && !(o.dedupe && s.intent === s.detail) ? `<div class="tr-intent">${esc(s.intent)}</div>` : '';
-    const lane = o.lane != null ? ` style="--lane:${o.lane}" data-agent="${s.agent}"` : '';
+    const lane = o.lane != null ? ` style="--lane:${o.lane};--depth:${depthOf(s)}" data-agent="${s.agent}"` : '';
     return `<div class="${rowCls(s, st, hl, stepTool(s))}"${lane} data-trn="${s.id}" tabindex="0" role="button" aria-pressed="${s.id === S.sel}">
           <div class="tr-dotcell"><span class="tr-dot"></span></div>
           <div class="tr-card"><div class="tr-line"><span class="tr-tool">${esc(s.tool)}</span><span class="tr-detail">${esc(s.detail)}</span>${flagsOf(s, st)}</div>
@@ -5428,12 +5443,13 @@ unpersisted, since session ids churn.`;
     const ticks = members.map((m, i) => `<button class="tr-tick tr-k-${m.kind}${sts[i] === 'error' ? ' tr-terr' : ''}${sts[i] === 'running' ? ' tr-trun' : ''}${m.id === S.sel ? ' tr-on' : ''}"
         data-trtick="${m.id}" data-trkey="${key}" title="${escA(m.tool + ' · ' + m.detail)}" aria-label="${escA(m.tool + ' ' + m.detail)}"></button>`).join('');
     const anc = members.some(m => hl.anc.has(m.id) || m.id === S.sel);
-    let h = `<div class="tr-sum tr-k-${task ? 'agent' : members[0].kind}${sub ? ' tr-sub' : ''}${anc ? ' tr-anc' : ''}" data-trfold="${key}" data-members="${members.map(m => m.id).join(' ')}">
-        <div class="tr-dotcell"><button class="tr-dot tr-fold" data-trfold="${key}" aria-expanded="${open}" aria-label="${open ? 'Fold' : 'Unfold'} these ${n} steps">▶</button></div>
+    const depth = sub ? ` style="--depth:${depthOf(task) + 1}"` : '';
+    let h = `<div class="tr-sum tr-k-${task ? 'agent' : members[0].kind}${sub ? ' tr-sub' : ''}${anc ? ' tr-anc' : ''}"${depth} data-trfold="${key}" data-members="${members.map(m => m.id).join(' ')}">
+        <div class="tr-dotcell"><button class="tr-dot tr-fold" data-trfold="${key}" aria-expanded="${open}" aria-label="${open ? 'Fold' : 'Unfold'} these ${n} steps">${CHEV}</button></div>
         <div class="tr-sumcard"><div class="tr-sumline">${parts.filter(Boolean).join('<i>·</i>')}</div>
         <div class="tr-strip" role="group" aria-label="One tick per step">${ticks}</div></div></div>`;
     const rows = open ? members : tail;
-    if (!open && rows.length && n > rows.length) h += `<button class="tr-more${sub ? ' tr-sub' : ''}" data-trfold="${key}">${n - rows.length} earlier ${n - rows.length === 1 ? 'step' : 'steps'}</button>`;
+    if (!open && rows.length && n > rows.length) h += `<button class="tr-more${sub ? ' tr-sub' : ''}"${depth} data-trfold="${key}">${n - rows.length} earlier ${n - rows.length === 1 ? 'step' : 'steps'}</button>`;
     return h + rows.map(m => stepRow(m, hl, { dedupe: true, lane: sub ? 0 : null })).join('');
   }
 
@@ -5461,10 +5477,11 @@ unpersisted, since session ids churn.`;
   function traceBody() {
     const hl = { anc: S.sel ? causes(S.sel) : new Map(), desc: new Set(S.sel ? ledTo(S.sel).map(s => s.id) : []) };
     const all = delivered(), shows = (s) => trPasses(s) || s.id === S.sel;
-    /* a step filter already thins the spine, so folded gives way to lanes
-       under one; lanes and ledger keep a Task whose child passes the filter,
-       so the child still has a parent to hang from */
-    const v = S.spine === 'folded' && S.trFilter !== 'all' ? 'lanes' : S.spine;
+    /* A step filter already thins the spine, so folded opens every run under
+       one: each passing child sits under its own Task at the same single depth
+       indent as an opened fold. Lanes, folded and ledger keep a Task whose
+       child passes the filter, so the child still has a parent to hang from. */
+    const v = S.spine;
     const vis = all.filter(s => shows(s) || (v !== 'built' && s.kind === 'agent' && all.some(k => k.agent === s.id && shows(k))));
     let h = '', turn = 0, style = '';
     const head = (s) => {
@@ -5482,6 +5499,11 @@ unpersisted, since session ids churn.`;
       h += head(s) + ledgerRow(s, hl);
       const kids = s.kind === 'agent' ? vis.filter(k => k.agent === s.id) : [];
       if (kids.length) h += `<div class="tr-nest" role="group" aria-label="${escA(s.tool)} steps">${kids.map(k => ledgerRow(k, hl)).join('')}</div>`;
+    }
+    else if (S.trFilter !== 'all') {
+      const emit = (s) => stepRow(s, hl, { dedupe: true, lane: s.agent ? 0 : null })
+        + (s.kind === 'agent' ? vis.filter(k => k.agent === s.id).map(emit).join('') : '');
+      for (const s of vis) if (!s.agent) h += head(s) + emit(s);
     }
     else h = foldedRows(all, hl, head);
     return `<div class="ch-body tr-body tr-v-${v}" data-trbody data-spine="${v}">
@@ -5533,12 +5555,12 @@ unpersisted, since session ids churn.`;
       </div>`;
   }
 
+  /* the foot carries no step count: next to the live text, the toggle and
+     the filter it pushed both onto two lines */
   function traceFoot() {
-    const steps = delivered().filter(s => s.kind !== 'prompt').length;
-    return `<div class="ch-foot">
+    return `<div class="ch-foot tr-foot">
       <span class="live"><i></i> live · refreshing every 3s</span>
       <span class="sp"></span>
-      <span class="ch-count">${steps} steps · ${S.running.size} running · thinking readable in ${TR.thinking.readable} of ${TR.thinking.recorded}</span>
       <button class="tr-tog${S.trFocus ? ' on' : ''}" data-trfocus aria-pressed="${S.trFocus}">Only this step's why</button>
       <div class="seg ground sm" role="group" aria-label="Step filter">
         ${TR_FILTERS.map(([k, l]) => `<button class="${S.trFilter === k ? 'on' : ''}" data-trfilter="${k}" aria-pressed="${S.trFilter === k}">${l}</button>`).join('')}
@@ -5560,7 +5582,7 @@ unpersisted, since session ids churn.`;
     const main = delivered().filter(s => pos[s.id] && !s.agent);
     for (let i = 1; i < main.length; i++) if (main[i].turn === main[i - 1].turn) {
       const a = pos[main[i - 1].id], b = pos[main[i].id];
-      p += `<path d="M${a[0]} ${a[1]}L${b[0]} ${b[1]}" stroke="var(--border-strong)" stroke-width="2"/>`;
+      p += `<path d="M${a[0]} ${a[1]}L${b[0]} ${b[1]}"${a[0] === b[0] ? ` data-vx="${a[0]}" data-vy="${a[1]} ${b[1]}"` : ''} stroke="var(--border-strong)" stroke-width="2"/>`;
     }
     if (spine === 'built') delivered().filter(s => s.agent && pos[s.id] && pos[s.agent]).forEach(s => {
       const a = pos[s.agent], b = pos[s.id];
@@ -5574,10 +5596,14 @@ unpersisted, since session ids churn.`;
         const id = r.dataset.agent || r.dataset.trfold, [x, y] = mid(r.querySelector('.tr-dot'));
         ends[id] = ends[id] ? { x: ends[id].x, y: Math.max(ends[id].y, y) } : { x, y };
       });
+      /* the lane leaves the Task dot downward, turns right only below the
+         Task's own card, then runs straight in the gutter left of the children */
       for (const [id, e] of Object.entries(ends)) {
-        const a = sp.querySelector(`.tr-row[data-trn="${id}"]`) && pos[id];
-        if (!a || e.y <= a[1] + 6) continue;
-        p += `<path d="M${a[0] + 6} ${a[1]}H${e.x - 6}Q${e.x} ${a[1]} ${e.x} ${a[1] + 6}V${e.y}" fill="none" stroke="var(--magenta)" stroke-width="1.5" stroke-linecap="round"/>`;
+        const row = sp.querySelector(`.tr-row[data-trn="${id}"]`), a = row && pos[id];
+        if (!a) continue;
+        const yb = row.getBoundingClientRect().bottom - box.top;
+        if (e.y <= yb + 12) continue;
+        p += `<path d="M${a[0]} ${a[1] + 6}V${yb}C${a[0]} ${yb + 8} ${e.x} ${yb + 2} ${e.x} ${yb + 12}V${e.y}" data-vx="${e.x}" data-vy="${yb + 12} ${e.y}" fill="none" stroke="var(--magenta)" stroke-width="1.5" stroke-linecap="round"/>`;
       }
     }
     if (S.sel && pos[S.sel]) for (const [id, m] of causes(S.sel)) {
