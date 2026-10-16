@@ -5007,7 +5007,7 @@ unpersisted, since session ids churn.`;
     ['message', 'reply window'], ['resume', 'resume'], ['permission', 'permission']
   ];
   const S = {
-    filter: 'all', panel: 'question', phase: 'live',
+    filter: 'all', panel: 'none', phase: 'live',
     minimised: false, needsToken: false, planOpen: false, rec: false,
     picked: { 0: [], 1: [] }, other: { 0: '', 1: '' }, text: '', loadingOlder: false,
     /* Trace: `shown` is how many steps the tail has delivered, `running` the
@@ -5171,7 +5171,7 @@ unpersisted, since session ids churn.`;
       ${s.intent ? `<div class="tr-sec"><h4>Intent <span>from ${from}</span></h4><p>${esc(s.intent)}</p></div>` : ''}
       ${chain.length ? `<div class="tr-sec"><h4>Why <span>${chain.length} inferred ${chain.length === 1 ? 'cause' : 'causes'}</span></h4><ol class="tr-chain">${chain.map(([id, m]) => item(stepById[id], m.rel, m.d)).join('')}</ol></div>` : ''}
       ${think ? `<div class="tr-sec"><h4>Thinking</h4>${think}</div>` : ''}
-      ${s.kind !== 'prompt' ? `<div class="tr-sec"><h4>Result</h4><div class="tr-pre">${st === 'running' ? (s.kind === 'decide' ? 'waiting for your answer — it is in the panel below' : 'waiting for its tool_result…') : esc(resultOf(s))}</div></div>` : ''}
+      ${s.kind !== 'prompt' ? `<div class="tr-sec"><h4>Result</h4><div class="tr-pre">${st === 'running' ? (s.kind === 'decide' ? (S.panel === 'question' ? 'waiting for your answer — it is in the panel below' : 'waiting for your answer') : 'waiting for its tool_result…') : esc(resultOf(s))}</div></div>` : ''}
       ${led.length ? `<div class="tr-sec"><h4>Led to</h4><ol class="tr-chain">${led.map(a => item(a, a.why.find(w => w.id === s.id).rel, 1)).join('')}</ol></div>` : ''}`;
   }
 
