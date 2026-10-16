@@ -2,6 +2,8 @@
  * The screenshot matrix (spec §4): every `SECTIONS` view at the six daylight breakpoint tiers (`fixed`), the two full-width tiers (`full`) and the four other
  * themes at 1280, plus one Sessions shot with the chat drawer open. Zero tolerance — the config's `maxDiffPixels: 0` and `threshold: 0`.
  */
+import type { Page } from '@playwright/test';
+
 import { SECTIONS, type Section } from '../../client/src/lib/sections.js';
 import type { ThemeId } from '../../client/src/lib/settings.js';
 
@@ -9,11 +11,11 @@ import { FIXTURE_SESSION_ID } from './fixtures/index.js';
 import { gitSessions } from './fixtures/git-sessions.js';
 import { pinsWithGone } from './fixtures/pins.js';
 import { expect, test } from './harness.js';
-import { stage, type StageOpts } from './stage.js';
+import { isReady, stage, type StageOpts } from './stage.js';
 import { DAYLIGHT_TIERS } from './tiers.js';
 
 interface ShotCase extends StageOpts {
-  kind: 'shot' | 'detail' | 'triage' | 'git-matrix' | 'git-inspector' | 'git-branches' | 'projects-tiles' | 'projects-columns' | 'projects-lists';
+  kind: 'shot' | 'detail' | 'triage' | 'git-matrix' | 'git-inspector' | 'git-branches' | 'projects-tiles' | 'projects-columns' | 'projects-lists' | 'releases';
 }
 
 const OTHER_THEMES: ThemeId[] = ['midnight', 'amber', 'graphite', 'nightshift'];
@@ -57,11 +59,23 @@ const CASES: ShotCase[] = [
   // Projects with a pinned folder that is gone, so every layout shows the `Folder gone` chip.
   { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'tiles' }, kind: 'projects-tiles' },
   { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'columns' }, kind: 'projects-columns' },
-  { ...PROJ, width: 375, storage: { 'management.projectsLayout': 'lists' }, kind: 'projects-lists' }
+  { ...PROJ, width: 375, storage: { 'management.projectsLayout': 'lists' }, kind: 'projects-lists' },
+  // What's new, opened from the version chip: full screen on the phone (reached through the menu, whose last row the chip is), the 400px panel from `md`.
+  { section: 'sessions', theme: 'daylight', width: 375, contentWidth: 'fixed', kind: 'releases' },
+  { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', kind: 'releases' }
 ];
 
-/** 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts. A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered. */
-const EXPECTED_SHOTS = 84;
+/** 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts + 2 What's new drawers. A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered. */
+const EXPECTED_SHOTS = 86;
+
+/** Click the version chip — through the phone menu below `md`, where the rail is folded away — and wait until the drawer is drawn and settled. */
+async function openReleases(page: Page): Promise<void> {
+  const menu = page.getByRole('button', { name: 'Open menu' });
+  if (await menu.isVisible()) await menu.click();
+  await page.locator('.rel-chip').click();
+  await expect(page.locator('.rel-drawer')).toBeVisible();
+  await expect.poll(() => isReady(page), { timeout: 5000, message: 'the releases drawer never settled' }).toBe(true);
+}
 
 const title = (c: ShotCase): string => `${c.section} · ${c.theme} · ${c.width} · ${c.kind}`;
 
@@ -72,6 +86,8 @@ test('the matrix holds the expected number of shots', () => {
 for (const c of CASES) {
   test(title(c), async ({ page }) => {
     await stage(page, c);
-    await expect(page).toHaveScreenshot(title(c).replaceAll(' · ', '-') + '.png', { fullPage: true });
+    if (c.kind === 'releases') await openReleases(page);
+    // The drawer is `position: fixed`, so its shots are the viewport: a full-page shot would append the board scrolled out beneath it.
+    await expect(page).toHaveScreenshot(title(c).replaceAll(' · ', '-') + '.png', { fullPage: c.kind !== 'releases' });
   });
 }

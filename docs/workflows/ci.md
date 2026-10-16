@@ -59,7 +59,8 @@ fails on a private repo. The group is `release` with `cancel-in-progress: false`
 run releases every unreleased commit since the last tag, not only its own.
 
 **The tag is the record.** The version exists only as an annotated `vX.Y.Z` tag whose message carries the PR title, the notes and `Release-*` trailers.
-`package.json` `version` is not read and is not bumped; the same tags feed the GitHub Release.
+`package.json` `version` is not read and is not bumped; the same tags feed the GitHub Release. The dashboard reads these tags back at `GET /api/releases` for its version chip and What's new drawer
+([releases](../subsystems/releases.md)).
 
 **What cuts one.** The PR title decides, and the version is bumped from the newest `vX.Y.Z` tag reachable from the commit:
 
