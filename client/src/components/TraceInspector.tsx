@@ -112,7 +112,11 @@ export function TraceInspector({ steps, sel, questionPending, onPick }: {
             ? chain.map(([id, m]) => (
               <Row key={'w-' + id} step={steps[idx.get(id)!]} label={REL_LABEL[m.rel]} near={m.d === 1} onPick={onPick} />
             ))
-            : <li className="tr-nil">A prompt is where a turn starts; nothing comes before it.</li>}
+            : <li className="tr-nil">
+                {s.kind === 'prompt'
+                  ? 'A prompt is where a turn starts; nothing comes before it.'
+                  : 'Its causes are older than the steps loaded.'}
+              </li>}
           {led.length > 0 && (
             <>
               <li className="tr-led">Led to</li>

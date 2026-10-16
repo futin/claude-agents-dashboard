@@ -90,6 +90,15 @@ function Message({ m, onWhy }: { m: ChatMessage; onWhy(id: string): void }) {
               <Chevron className="cmsg-chev" />
               <span className="tool">{t.name}</span>
               {' ' + (TOOL_HINT[t.name] ?? '')}
+              {t.id && (
+                // a click inside <summary> would toggle the details: the link only opens Trace
+                <button
+                  type="button"
+                  className="cmsg-why"
+                  title="Open this step in Trace"
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); onWhy(t.id!); }}
+                >why?</button>
+              )}
             </summary>
             <div className="cmsg-text">
               <Markdown text={t.body} />

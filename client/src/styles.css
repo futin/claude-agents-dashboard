@@ -1922,6 +1922,8 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .cmsg-what{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cmsg-why{flex:none;border:0;background:none;padding:0 0 0 6px;font-family:var(--font);font-size:11.5px;font-weight:500;color:var(--magenta);cursor:pointer}
 .cmsg-why:hover{text-decoration:underline}
+/* the same link on a plan or question card's summary line, after its hint */
+.cmsg-plan>summary .cmsg-why{padding-left:4px;line-height:inherit;vertical-align:baseline}
 
 /* Spawn modal (SpawnPanel.tsx) — the launch form floated like the chat modal
    (.claude/DESIGN.md §8.7, mock `#spawn`) rather than pinned into the Sessions

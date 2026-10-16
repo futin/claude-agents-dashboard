@@ -121,6 +121,9 @@ export function TraceSpine({ steps, sel, filter, focus, follow, onPick, onFollow
     seen.current = { steps, ids, fresh: arrivals(seen.current.ids, ids) };
   }
   const fresh = seen.current.fresh;
+  // Dim (or focus) only around a pick that is on the spine: a `why?` on a chat
+  // line older than the loaded steps must not grey out every row.
+  const picked = sel != null && seen.current.ids.has(sel);
 
   const anc = useMemo(() => (sel ? causesOf(steps, sel) : new Map()), [steps, sel]);
   const desc = useMemo(() => new Set(sel ? ledTo(steps, sel).map(s => s.id) : []), [steps, sel]);
@@ -184,13 +187,17 @@ export function TraceSpine({ steps, sel, filter, focus, follow, onPick, onFollow
     pick(id);
   }
 
+  // A turn's header leads its first rendered row only: a subagent's rows keep
+  // the turn of their Agent step, so a background agent interleaves by `at`
+  // with later turns and would otherwise repeat an earlier header. Turn 0
+  // (steps before any prompt) gets none.
   const rows: ReactNode[] = [];
-  let turn = 0;
+  const headed = new Set<number>([0]);
   for (const s of steps) {
     if (!passesFilter(s, filter) && s.id !== sel) continue;
-    if (s.turn !== turn) {
-      turn = s.turn;
-      rows.push(<div className="tr-turn" key={'h-' + s.id}>Turn {turn}<span>{labels.get(turn)}</span></div>);
+    if (!headed.has(s.turn)) {
+      headed.add(s.turn);
+      rows.push(<div className="tr-turn" key={'h-' + s.id}>Turn {s.turn}<span>{labels.get(s.turn)}</span></div>);
     }
     const st = s.status;
     const cls = [
@@ -232,7 +239,7 @@ export function TraceSpine({ steps, sel, filter, focus, follow, onPick, onFollow
 
   return (
     <div className="chat-body tr-body" ref={bodyRef} onScroll={onScroll}>
-      <div className={`tr-spine${focus ? ' tr-focus' : sel ? ' tr-dim' : ''}`} ref={spineRef}>
+      <div className={`tr-spine${!picked ? '' : focus ? ' tr-focus' : ' tr-dim'}`} ref={spineRef}>
         {/* the gutter: turn segments, subagent curves and the picked step's cause arcs (`drawArcs`) */}
         <svg className="tr-arcs" aria-hidden="true" ref={arcsRef} />
         {rows}
