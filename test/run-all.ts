@@ -125,6 +125,7 @@ import { run as runHubWidgets } from './hub-widgets.test.js';
 import { run as runApiHub } from './api-hub.test.js';
 import { run as runPluginManifest } from './plugin-manifest.test.js';
 import { run as runTmpRoot } from './tmp-root.test.js';
+import { run as runAnswerToken } from './answer-token.test.js';
 import { run as runSyncPlugin } from './sync-plugin.test.js';
 
 let failed = 0;
@@ -253,6 +254,7 @@ failed += await runApiHub();
 failed += runPluginManifest();
 failed += runSyncPlugin();
 failed += runTmpRoot();
+failed += runAnswerToken();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);
