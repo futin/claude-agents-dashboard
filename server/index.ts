@@ -148,7 +148,7 @@ function methodNotAllowed(res: http.ServerResponse): void {
  * `uncaughtException` handler anywhere in this process. Left unguarded, one
  * unauthenticated request (`POST /api/spawn/%ZZ/stop`, or the same against
  * any other id-scoped route below) throws before any handler — before even
- * `tokenOk` — and takes the whole dashboard process down for every session
+ * `refuseWrite` — and takes the whole dashboard process down for every session
  * it was watching. Every site that pulls an id out of the URL below goes
  * through this instead of calling `decodeURIComponent` directly.
  */

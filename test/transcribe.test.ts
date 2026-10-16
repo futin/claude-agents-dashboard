@@ -87,7 +87,8 @@ function post(
     srv.listen(0, () => {
       const port = (srv.address() as { port: number }).port;
       const headers: Record<string, string> = { 'Content-Type': contentType };
-      if (token) headers.Authorization = `Bearer ${token}`;
+      // A token case plays a LAN peer: from loopback the gate would pass without one.
+      if (token) { headers.Authorization = `Bearer ${token}`; headers['X-Forwarded-For'] = '192.168.1.5'; }
       if (contentLength !== undefined) headers['Content-Length'] = String(contentLength);
       const req = http.request({ port, method: 'POST', path: '/api/transcribe', headers }, res => {
         let raw = '';

@@ -19,6 +19,8 @@ import type { FetchClock, GitStatsResponse } from '../shared/types.js';
 
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\nANSWER_TOKEN=secret\n';
 const AUTH = { Authorization: 'Bearer secret' };
+/** A LAN peer as Vite would deliver one: loopback writes need no token. */
+const LAN = { 'X-Forwarded-For': '192.168.1.5' };
 
 /** One transcript whose records carry `cwd`, the way `api-git-stats.test.ts` `plantProject` does. Returns the project's dirName. */
 function plantProject(h: Harness, name: string, cwd: string): string {
@@ -83,12 +85,12 @@ export async function run(): Promise<number> {
       const s = spy();
       overrideFetchRunner(s.run);
 
-      const refused = await post(h);
+      const refused = await post(h, LAN);
       assert.equal(refused.status, 403, refused.raw);
       assert.deepStrictEqual(refused.json, { error: 'bad token' });
       assert.equal(s.fetches(), 0, 'a refused request must not reach git');
 
-      const wrong = await post(h, { Authorization: 'Bearer nope' });
+      const wrong = await post(h, { ...LAN, Authorization: 'Bearer nope' });
       assert.equal(wrong.status, 403);
       assert.equal(s.fetches(), 0);
 
