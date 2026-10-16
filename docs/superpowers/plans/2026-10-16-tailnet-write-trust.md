@@ -6,7 +6,7 @@
 LAN-IP client with no token set becomes read-only.
 
 **Architecture:** a pure right-to-left `X-Forwarded-For` walk in `server/lib/origin.ts` resolves the peer; a pure `writeAccessFor` turns peer + switch +
-token-set into `open | token | none`; one `refuseWrite` in `server/api.ts` replaces the 19 `tokenOk` sites and also feeds `GET /api/health`. The client learns
+token-set into `open | token | none`; one `refuseWrite` in `server/api.ts` replaces the 19 `tokenOk` sites, and `writeAccessFor` also feeds `GET /api/health`. The client learns
 "read-only" from the 403 body and from health.
 
 **Tech Stack:** Node + TypeScript via `tsx` (server, zero deps), Vite + React (client), node-assert tests (`test/run-all.ts`).
@@ -94,7 +94,7 @@ residual risks this plan does not repeat.
 
 **Files:**
 - Modify: `shared/types.ts` (`ServerSettings.trustTailnet: boolean`, JSDoc pointing at the spec), `server/lib/settings.ts` (`Stored`, defaults, read,
-  `setSettings` validator), `client/src/hooks/useServerSettings.ts` (`SavingKey` gains `'trustTailnet'`)
+  `setSettings` validator), `client/src/hooks/useServerSettings.ts` (`SavingKey` gains `'trustTailnet'`; its JSDoc list of shared settings names it)
 - Test: `test/settings.test.ts`
 
 **Interfaces:**
@@ -116,8 +116,8 @@ residual risks this plan does not repeat.
 
 **Files:**
 - Modify: `shared/types.ts` (`export type WriteAccess = 'open' | 'token' | 'none'`; `HealthResponse.writeAccess?: WriteAccess`; rewrite the `tokenRequired`
-  JSDoc to the new meaning), `server/api.ts` (replace `tokenOk` and its 19 call sites; `logRejectedWrite`; `serveHealth`), `server/index.ts` only if
-  `serveHealth`'s signature change needs it
+  JSDoc to the new meaning), `server/api.ts` (replace `tokenOk` and its 19 call sites; `logRejectedWrite`; `serveHealth`), `server/index.ts` (a comment
+  names `tokenOk`), `docs/overview.md` if it names `tokenOk`
 - Create: `test/api-write-trust.test.ts` (register in `test/run-all.ts`)
 - Modify tests: `api-answer-endpoints`, `api-git-fetch`, `api-open-folder`, `api-pins`, `api-reject-log`, `api-remote-toggle`, `api-wait-endpoints`,
   `spawn-endpoint`, `transcribe` (`.test.ts` each)
@@ -138,7 +138,8 @@ residual risks this plan does not repeat.
 - [ ] **Step 1: New tests in `test/api-write-trust.test.ts`**, via `withServer` (loopback socket). "lan" means header `X-Forwarded-For: 192.168.1.5`,
   "tailnet" means `X-Forwarded-For: 100.101.102.103`. Use `POST /api/remote-answer` with `{ "enabled": true }` as the write probe unless a case names
   another route; `TOKEN` is any fixed string set as `ANSWER_TOKEN` in the env body. The harness runs the server in this process, so the settings cache
-  in `server/lib/settings.ts` is shared across test modules: every case that turns `trustTailnet` off turns it back on before it ends, even on failure.
+  in `server/lib/settings.ts` is shared across test modules: follow the existing pattern (`api-pins`, `api-git-fetch`) of calling `resetSettings()` at the
+  start and end of the module. Copy the env-body prefix the other api tests use (`SHOW_USAGE=false`, `SKIP_PROC_SCAN=true`).
   - local, no token set → 200
   - local, token set, no bearer → 200
   - tailnet, switch on (default), no token set → 200
@@ -154,13 +155,15 @@ residual risks this plan does not repeat.
     tailnet+switch off+token → `token, true, tailnet`; lan+token → `token, true, lan`; lan+no token → `none, false, lan`; lan+token+valid bearer still
     reports `token, true` (health never checks the bearer)
   - direct call, no server: `refuseWrite` with a stub `req` (`socket.remoteAddress: '192.168.1.5'`, `headers: { 'x-forwarded-for': '100.101.102.103' }`, a
-    method and url) and a stub `res` that records status and body, config with no token → returns true, status 403, body `read-only from this network`
+    method and url) and a stub `res` implementing `writeHead(code, headers)` and `end(body)` that records both, config with no token → returns true, status 403, body `read-only from this network`
   - `writeAccessFor` truth table: the 6 rows of the spec's rule table, minus the bearer column, give `open/open/token/none/token/none` for
     (local,any,any) (tailnet,on,any) (tailnet,off,yes) (tailnet,off,no) (lan,any,yes) (lan,any,no); `unknown` behaves as lan.
 - [ ] **Step 2: Update the existing token tests.** Each "token set, no/wrong bearer → 403" case adds `X-Forwarded-For: 192.168.1.5` so it still tests a
   refusal; its asserted body stays `bad token`. Cases that send the right bearer keep passing either way; leave them. `test/api-reject-log.test.ts`'s line
   assertion becomes `^\[dashboard] rejected write: POST \/api\/remote-answer from lan \(bad or missing token\)$`, plus one new case with no token set
-  expecting `… from lan (read-only, no token set)`; the "line carries no part of the token" case stays.
+  expecting `… from lan (read-only, no token set)`; the "line carries no part of the token" case stays. `test/api-remote-toggle.test.ts`'s health case "`tokenRequired: true` when ANSWER_TOKEN is set" adds
+  the LAN header too (it keeps testing a caller that needs the token), and its comment stops claiming health is the only endpoint a hook reaches without a
+  token; its no-token sibling passes unchanged.
 - [ ] **Step 3:** run `test/api-write-trust.test.ts` and the nine modified modules; expect the new module to fail (no `writeAccessFor` export) and the
   refusal cases to fail where they already have the LAN header.
 - [ ] **Step 4:** implement. Remove `tokenOk`. `logRejectedWrite(req)` gains the peer class and the refusal kind; keep its rate limit and key.
@@ -173,7 +176,8 @@ residual risks this plan does not repeat.
 - Create: `client/src/lib/writeRefusal.ts`
 - Modify: the write hooks `usePendingQuestion`, `usePendingPlan`, `usePendingMessage`, `useSpawn`, `useStopSession`, `useRemoteAnswer`, `useServerSettings`,
   `useOpenFolder`, `usePins`, `useDictation` (all under `client/src/hooks/`), and the panels that render their `needsToken` (`QuestionPanel`, `PlanPanel`,
-  `MessagePanel`, `ResumePanel`, `SpawnPanel`, `RemoteAnswerToggle`, `sessions/Expanded`, `settings/SettingsView`)
+  `MessagePanel`, `ResumePanel`, `SpawnPanel`, `RemoteAnswerToggle`, `sessions/Expanded`, `settings/SettingsView`), and `useGitSync`, which turns
+  `useSpawn().needsToken` into its note: on `useSpawn().readOnly` it sets the note to `READ_ONLY_TEXT`
 - Test: `test/write-refusal.test.ts` (register in `test/run-all.ts`)
 
 **Interfaces:**
@@ -208,7 +212,7 @@ residual risks this plan does not repeat.
 - Consumes: `HealthResponse.origin`, `.writeAccess` (Task 3), `ServerSettings.trustTailnet` (Task 2), `READ_ONLY_TEXT` (Task 4).
 - Produces: `export function writeStatusLine(origin: ConnectionOrigin | undefined, writeAccess: WriteAccess | undefined, trustTailnet: boolean | undefined):
   string | null`, built exactly as spec §The switch describes; `null` when `origin` or `writeAccess` is undefined.
-- `fetchKeyState`'s input gains `writeAccess: WriteAccess | undefined`; `useGitSync` carries `writeAccess` off health next to `tokenRequired`, and
+- `fetchKeyState`'s input gains `writeAccess: WriteAccess | undefined` (`tokenRequired` stays in the input on purpose, so the existing cases hold); `useGitSync` carries `writeAccess` off health next to `tokenRequired`, and
   `useGitFetch` / `GitClockChip` / `GitParts` pass it on.
 
 - [ ] **Step 1: Tests.**
@@ -217,16 +221,17 @@ residual risks this plan does not repeat.
     trust is off — writes need the answer token.`; `(tailnet, none, false)` → `… via tailnet, and tailnet trust is off — read-only: no answer token is set.`;
     `(lan, token, true)` → `This device reaches the dashboard via LAN — writes need the answer token.`; `(lan, none, true)` → `… via LAN — read-only: no
     answer token is set.`; `(unknown, token, true)` → `… from an unrecognised address — writes need the answer token.`; `(lan, undefined, true)` → null;
-    `(undefined, open, true)` → null. (Write the `…` rows out in full in the test.)
+    `(undefined, open, true)` → null; `(tailnet, token, undefined)` → no switch note (`… via tailnet — writes need the answer token.`). (Write the `…` rows out in full in the test.)
   - `fetchKeyState`: `writeAccess: 'none'` → `{ disabled: true, label: 'now', sub: READ_ONLY_TEXT, subTone: 'amber' }`, and it outranks a `'refused'`
     failure; every existing case passes unchanged with `writeAccess: undefined` added to the helper's defaults (including the `tokenRequired: undefined →
     enabled` row).
 - [ ] **Step 2:** run both modules; expect failures.
-- [ ] **Step 3:** implement. In `SettingsView`: under the Shared band, beside `recordUsageHistory`, a row named `Trust tailnet devices`, `Segmented` on/off
+- [ ] **Step 3:** implement. In `SettingsView`: a new Shared-band `SettingsGroup` titled `Write access`, sub `Who may change things without the answer token`, placed after
+  `Remote answers`, holding one row named `Trust tailnet devices`, `Segmented` on/off
   saving `{ trustTailnet }`, hint: `Writes from any device on your tailnet need no token, tagged devices and users this machine is shared with included.
   Lookout reaches the dashboard over the tailnet, so with this off it needs its token.` Under Local › Connection, above the Answer token row, render
   `writeStatusLine(remote.state?.origin, remote.state?.writeAccess, server.state?.trustTailnet)` when non-null. The Answer token hint becomes `Only needed
-  when the line above says so. Stored in this browser and sent with every write.` `OriginBadge`'s `public` tooltip: replace `set ANSWER_TOKEN and consider
+  when the status line above says so, or when the server runs with ANSWER_TOKEN set and shows none. Stored in this browser and sent with every write.` `OriginBadge`'s `public` tooltip: replace `set ANSWER_TOKEN and consider
   auth at the edge` with `writes need ANSWER_TOKEN here; consider auth at the edge too`.
 - [ ] **Step 4:** run both modules, `pnpm typecheck`, `pnpm build`; expect pass.
 - [ ] **Step 5:** commit `feat(settings): show this device's write access and the tailnet switch`.
@@ -237,8 +242,9 @@ residual risks this plan does not repeat.
 - Modify: `scripts/install-hooks.sh` (the `TODO no ANSWER_TOKEN in .env` branch), `test/install-hooks-token.test.ts`, `docker-compose.yml`,
   `docker-compose.dev.yml`, `.env.example`, `README.md`, `scripts/tailnet.ts` (header), `server/lib/request-guard.ts` (header), `server/lib/config.ts`
   (`answerToken` JSDoc), `scripts/remote-decision-hook.sh` (comment only), `docs/subsystems/remote-access.md`, and every other hit of
-  `git grep -n -e ANSWER_TOKEN -e tokenRequired -e 'dashboard token'` whose sentence is no longer true, plus `.github/pull_request_template.md`
-  and `docs/overview.md` if it describes the gate
+  `git grep -n -e ANSWER_TOKEN -e tokenRequired -e 'dashboard token'` whose sentence is no longer true, plus `.github/pull_request_template.md`,
+  `docs/overview.md` (it describes the gate), and `docs/subsystems/settings.md`, whose enumeration of Shared keys gains a `trustTailnet` paragraph (default
+  **true**, why it must be shared, the lock-out note from spec §The switch); the grep cannot find that one
 
 - [ ] **Step 1: Installer test.** In `test/install-hooks-token.test.ts`, the "genuinely no token anywhere" case now expects the line
   `ok       no token file needed — hooks reach the dashboard on loopback (set ANSWER_TOKEN only for a container or a non-loopback CLAUDE_DASHBOARD_URL)`
@@ -260,3 +266,10 @@ residual risks this plan does not repeat.
   per the worktree `.env`. A `POST /api/remote-answer` through `http://<LAN IP>:5273` from this machine → `lan` refusal (Vite appends the LAN address).
   Record the outputs for the PR's Verification section. The real phone path through `tailscale serve` cannot be exercised from a worktree without
   re-registering serve, which belongs to the user's running dashboard: list it as unverified.
+
+### Task 8: PR
+
+- [ ] Push the branch and open the PR per `.github/pull_request_template.md` and the repo's PR rules (title `feat(api): …`, lead in user terms, *Why this
+  shape*, *What changed* by boundary, *Verification* with command output, an explicit not-verified line). The body states the LAN behaviour change, and
+  says, per spec §Lookout: Lookout needs no change to ship this; its per-app token field becomes optional, and it is still how Lookout keeps writing on a
+  dashboard with tailnet trust off.
