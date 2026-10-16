@@ -84,3 +84,4 @@ on the `main` commit that contains the workflow (`git tag -a v0.1.0 <sha> -m "Ba
 It is idempotent: a commit with its tag and its Release is left alone, and a tag whose Release is missing only gets the Release. That is also how the
 baseline gets its GitHub Release. A dispatch whose target has a later version tag fails with `a newer release exists: <tag>`, since versions are never
 assigned out of order; a push run in the same state ends green with `a newer release exists: <tag> — nothing to do`, because it can only be a superseded run.
+A dispatch `sha` must be a commit on `main`; any other commit fails with `target <sha> is not on origin/main` and nothing is tagged.
