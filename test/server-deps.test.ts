@@ -1,6 +1,7 @@
 /**
- * Pins the server's npm dependencies to the one named exception in `.claude/CLAUDE.md` (§Code rules, "Keep new deps out of `server/`"): `lookout-widgets`,
- * which has no runtime deps of its own. Any other bare specifier under `server/` — static, re-export, side-effect or dynamic — fails here, naming the file.
+ * Pins the server's npm dependencies to the two named exceptions in `.claude/CLAUDE.md` (§Code rules, "Keep new deps out of `server/`"): `lookout-widgets`
+ * and `release-kit`, neither of which has runtime deps of its own. Any other bare specifier under `server/` — static, re-export, side-effect or dynamic —
+ * fails here, naming the file.
  */
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -14,8 +15,12 @@ function test(name: string, fn: () => void): boolean {
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
 }
 
-const ALLOWED = ['lookout-widgets'];
-const PINNED_SPEC = 'github:futin/lookout-widgets#v0.1.0';
+/** Each allowed package and the git tag it is pinned to. A floating ref (`#v1`, a branch) would let the server's code change without a lockfile diff. */
+const PINNED: Record<string, string> = {
+  'lookout-widgets': 'github:futin/lookout-widgets#v0.1.0',
+  'release-kit': 'github:futin/release-kit#v1.1.0',
+};
+const ALLOWED = Object.keys(PINNED).sort();
 
 const STATIC = /(?:^|[^\w$.])(?:import|export)\s*(?:[^'"`;]*?\sfrom\s*)?['"]([^'"\n]+)['"]/g;
 const DYNAMIC = /(?:^|[^\w$.])import\(\s*['"]([^'"\n]+)['"]\s*\)/g;
@@ -65,12 +70,14 @@ export function run(): number {
       if (!ALLOWED.includes(spec)) offenders.push(`${path.relative(root, file)}: ${spec}`);
     }
   }
-  if (test('server/ imports no npm package but lookout-widgets', () => assert.deepStrictEqual(offenders, []))) p++; else f++;
+  if (test(`server/ imports no npm package but ${ALLOWED.join(' and ')}`, () => assert.deepStrictEqual(offenders, []))) p++; else f++;
   // Equality, not just a subset: an exception nobody uses any more should be removed from CLAUDE.md, not left standing.
-  if (test('server/ does import lookout-widgets', () => assert.deepStrictEqual([...seen].sort(), ALLOWED))) p++; else f++;
+  if (test(`server/ does import ${ALLOWED.join(' and ')}`, () => assert.deepStrictEqual([...seen].sort(), ALLOWED))) p++; else f++;
 
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> };
-  if (test(`package.json pins lookout-widgets to ${PINNED_SPEC}`, () => assert.strictEqual(pkg.dependencies?.['lookout-widgets'], PINNED_SPEC))) p++; else f++;
+  for (const [name, spec] of Object.entries(PINNED)) {
+    if (test(`package.json pins ${name} to ${spec}`, () => assert.strictEqual(pkg.dependencies?.[name], spec))) p++; else f++;
+  }
 
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
