@@ -130,10 +130,10 @@
    Trace is the modal's second mode (Chat | Trace in the head), a proposal not
    yet built: every tool call as a row on a spine, with the causes we can infer
    for it, because the thinking text that would say why is almost never in the
-   transcript. The sidecar keeps live's card stack — Context on top, as in
-   Chat — and swaps the Tasks card for two of the same shape: the picked
-   Step (intent, outcome, the plan task it served, thinking when readable)
-   and Why (its causes, nearest first, then what it led to); the wait panel and
+   transcript. The sidecar keeps Chat's structure — Context, one card in the
+   Tasks card's place, facts under it: the card is the picked step (intent,
+   outcome, thinking when readable, its causes nearest first, what it led
+   to), the facts its status, turn, time and plan task; the wait panel and
    the foot keep their places, the foot carrying the step filter instead. Each
    chat tool line has a "why?" into it. Its fixture is the chat's own session,
    shaped as the `GET /api/sessions/:id/trace` contract it would need, and the
@@ -2013,14 +2013,16 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 @keyframes task-pulse{50%{opacity:.35}}
 @media (prefers-reduced-motion:reduce){.task-dot{animation:none}}
 
-/* ── Trace's sidecar: the same cards, about the picked step ─────────────
-   Context stays on top so the switch never moves it. The Step card is the
-   picked row read in full; the Why card is the Tasks card's shape — head with
-   a count, a list that takes the spare height and scrolls inside — with the
-   kind dot as the glyph, nearest cause first, then what the step led to. */
-.tr-step .k{display:flex;justify-content:space-between;gap:8px}
-.tr-step .k .tr-tool{font-size:12px}
-.tr-step .k span:last-child{color:var(--text-tertiary);font-variant-numeric:tabular-nums;flex:none}
+/* ── Trace's sidecar: Chat's structure, about the picked step ───────────
+   Context, then one card in the Tasks card's place — the step read in full,
+   its causes nearest first, then what it led to — scrolling as a whole, so
+   no box ever holds a short window onto a long list. The step's fields sit
+   under it as facts, where Chat lists the session's. */
+.ch-side .tr-one{overflow:auto}
+.tr-one .task-list{flex:none;overflow:visible;margin-top:10px}
+.tr-one .k .tr-tool{font-size:12px}
+.tr-led{margin:8px 0 2px 6px;padding:0 !important;font-size:11px;color:var(--text-tertiary)}
+.tr-nil{font-size:12px;color:var(--text-tertiary)}
 .tr-title{margin-top:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;font-weight:500;line-height:1.45;overflow-wrap:anywhere}
 .tr-title.prose{font-family:inherit;font-size:14px}
 .tr-say{margin-top:6px;font-size:12.5px;line-height:1.45;color:var(--text-secondary)}
@@ -2031,17 +2033,14 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .tr-stat.you b{color:var(--amber-ink)}
 .tr-think{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12.5px;line-height:1.5}
 .tr-think .lbl{display:block;font-size:11px;color:var(--magenta);font-weight:600;margin-bottom:3px}
-.tr-think.sig{color:var(--text-tertiary);font-size:12px}
-.tr-think.sig .lbl{color:var(--text-tertiary)}
-.tr-why .task-list li{padding:0}
-.tr-why .task-list button{display:flex;align-items:flex-start;gap:8px;width:100%;padding:5px 6px;border:0;background:none;border-radius:var(--r-sm);text-align:left;line-height:1.35;color:var(--text-secondary)}
-.tr-why .task-list button:hover{background:var(--bg-subtle);color:var(--text-primary)}
-.tr-why .task-list .near button{color:var(--text-primary)}
-.tr-why .g i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c);vertical-align:1px}
-.tr-why .tr-k-prompt .g i{border-radius:2px}
+.tr-one .task-list li{padding:0}
+.tr-one .task-list button{display:flex;align-items:flex-start;gap:8px;width:100%;padding:5px 6px;border:0;background:none;border-radius:var(--r-sm);text-align:left;line-height:1.35;color:var(--text-secondary)}
+.tr-one .task-list button:hover{background:var(--bg-subtle);color:var(--text-primary)}
+.tr-one .task-list .near button{color:var(--text-primary)}
+.tr-one .g i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c);vertical-align:1px}
+.tr-one .tr-k-prompt .g i{border-radius:2px}
 .tr-rel{display:block;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-tertiary)}
-.tr-why .tsub .tr-tool{margin-right:5px}
-.tr-why .tr-led{margin:10px 0 2px 6px;font-size:11px;color:var(--text-tertiary)}
+.tr-one .tsub .tr-tool{margin-right:5px}
 .tr-none{font-size:13px;color:var(--text-tertiary);text-align:center;padding:24px 8px;line-height:1.6}
 /* the chat's tool line links into the trace */
 .cm-why{border:0;background:none;padding:0 0 0 6px;font-size:11.5px;font-weight:500;color:var(--magenta)}
@@ -5205,40 +5204,46 @@ unpersisted, since session ids churn.`;
       </div>`;
   }
 
-  /* the sidecar in Trace: Context, then the picked step as a card, then its
-     causes in the Tasks card's shape */
+  /* the sidecar in Trace keeps Chat's structure: Context, then ONE card
+     taking the spare height — the picked step, its causes, what it led to —
+     then the step's fields as facts under it, where Chat has the session's */
   function inspector() {
-    if (!S.sel || stepIdx[S.sel] >= S.shown) return contextCard() + '<div class="kv"><div class="tr-none">Pick a step to see why it happened.</div></div>';
+    if (!S.sel || stepIdx[S.sel] >= S.shown) return contextCard() + '<div class="kv tasks-kv tr-one"><div class="tr-none">Pick a step to see why it happened.</div></div>';
     const s = stepById[S.sel], st = status(s);
     const chain = [...causes(s.id).entries()].sort((a, b) => a[1].d - b[1].d || stepIdx[a[0]] - stepIdx[b[0]]);
     const led = ledTo(s.id);
     const task = s.task && TASKS.find(t => t.id === s.task);
-    const from = { description: "the call's description", text: "Claude's text before it" }[s.intentFrom];
-    const stat = s.kind === 'prompt' ? ''
-      : st === 'running' ? `<div class="tr-stat">${s.kind === 'decide' ? (S.panel === 'question' ? 'Waiting for your answer — it is in the panel below' : 'Waiting for your answer') : 'Running · waiting for its tool_result'}</div>`
+    const outcome = s.kind === 'prompt' ? ''
+      : st === 'running' ? `<div class="tr-stat">${s.kind === 'decide' ? (S.panel === 'question' ? 'Waiting for your answer — it is in the panel below' : 'Waiting for your answer') : 'Waiting for its tool_result…'}</div>`
       : st === 'error' ? `<div class="tr-stat err">✕ ${esc(resultOf(s))}</div>`
       : answerOf(s) ? `<div class="tr-stat you">You answered <b>${esc(answerOf(s))}</b></div>`
       : `<div class="tr-stat ok">✓ ${esc(resultOf(s))}${s.sha ? ' · ' + s.sha : ''}</div>`;
-    const think = s.thinking === 'text' ? `<div class="tr-think"><span class="lbl">Thinking</span>${esc(s.thinkingText)}</div>`
-      : s.thinking === 'signature' ? '<div class="tr-think sig"><span class="lbl">Thinking</span>Recorded, but only as an encrypted signature. The text is not in the transcript.</div>' : '';
     const row = (a, label, near) => `<li class="tr-k-${a.kind}${near ? ' near' : ''}"><button data-trn="${a.id}">
         <span class="g" aria-hidden="true"><i></i></span>
         <span class="tsub"><span class="tr-rel">${label}</span><span class="tr-tool">${esc(a.tool)}</span>${esc(a.detail.length > 64 ? a.detail.slice(0, 63) + '…' : a.detail)}</span></button></li>`;
+    const statusFact = s.kind === 'prompt' ? 'prompt' : st === 'running' ? (s.kind === 'decide' ? 'waiting on you' : 'running') : st === 'error' ? 'failed' : 'ok';
+    const from = { description: 'call description', text: "Claude's text" }[s.intentFrom] || '—';
+    const thinking = s.thinking === 'text' ? 'readable' : s.thinking === 'signature' ? 'signature only' : 'none';
     return contextCard() + `
-      <div class="kv tr-step tr-k-${s.kind}">
-        <div class="k"><span class="tr-tool">${esc(s.tool)}</span><span>T${s.turn} · ${s.at}</span></div>
+      <div class="kv tasks-kv tr-one tr-k-${s.kind}">
+        <div class="k"><span class="tr-tool">${esc(s.tool)}</span><span>${chain.length} ${chain.length === 1 ? 'cause' : 'causes'}</span></div>
         <div class="tr-title${s.kind === 'prompt' || s.kind === 'decide' ? ' prose' : ''}">${esc(s.detail)}</div>
-        ${s.intent ? `<div class="tr-say">${esc(s.intent)} <i>· from ${from}</i></div>` : ''}
-        ${stat}
-        ${task ? `<div class="tr-say"><i>Plan task ·</i> ${esc(task.subject)}</div>` : ''}
-        ${think}
-      </div>
-      <div class="kv tasks-kv tr-why">
-        <div class="k"><span>Why</span><span>${chain.length ? `${chain.length} inferred` : 'none'}</span></div>
+        ${s.intent ? `<div class="tr-say">${esc(s.intent)}</div>` : ''}
+        ${outcome}
+        ${s.thinking === 'text' ? `<div class="tr-think"><span class="lbl">Thinking</span>${esc(s.thinkingText)}</div>` : ''}
         <ol class="task-list">
-          ${chain.length ? chain.map(([id, m]) => row(stepById[id], REL[m.rel], m.d === 1)).join('') : '<li><span class="tsub">A prompt is where a turn starts; nothing comes before it.</span></li>'}
+          <li class="tr-led">Why</li>
+          ${chain.length ? chain.map(([id, m]) => row(stepById[id], REL[m.rel], m.d === 1)).join('') : '<li class="tr-nil">A prompt is where a turn starts; nothing comes before it.</li>'}
           ${led.length ? `<li class="tr-led">Led to</li>${led.map(a => row(a, REL_FWD[a.why.find(w => w.id === s.id).rel], true)).join('')}` : ''}
         </ol>
+      </div>
+      <div class="ch-facts">
+        <div class="f"><span>Status</span><b>${statusFact}</b></div>
+        <div class="f"><span>Turn</span><b>${s.turn} · ${esc(TURNS[s.turn])}</b></div>
+        <div class="f"><span>At</span><b>${s.at}</b></div>
+        <div class="f"><span>Plan task</span><b title="${task ? esc(task.subject) : ''}">${task ? esc(task.subject) : '—'}</b></div>
+        <div class="f"><span>Intent from</span><b>${from}</b></div>
+        <div class="f"><span>Thinking</span><b title="${s.thinking === 'signature' ? 'Recorded as an encrypted signature; the text is not in the transcript' : ''}">${thinking}</b></div>
       </div>`;
   }
 
