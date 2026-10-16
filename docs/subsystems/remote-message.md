@@ -219,7 +219,7 @@ into a path; the store is keyed in memory, same as the other two.
   one event run in parallel and the CLI applies a block only after every one has returned, so a 600 s hold here would stall every guard block. Every other
   status, a missing file and a malformed one keep today's behaviour; the hook never writes the file, and a `session_id` outside `[A-Za-z0-9-]` skips the check.
   Deployment order: on each machine the dashboard checkout must be pulled together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on
-  every denied question. Merge this branch before claude-global's `autopilot` branch: alone it is inert, because no state file exists until the CLI writes one.
+  every denied question.
 
 ## Security posture
 
@@ -269,6 +269,7 @@ state, reset on a new `messageId`, never persisted.
 <!-- docs-sync:
   sources:
     - server/lib/messages.ts
+    - server/lib/remote-message-prose.ts
     - server/api.ts
     - server/index.ts
     - server/lib/scan.ts

@@ -227,8 +227,8 @@ origin; the verdict and the age in amber (`offline · fetched 2m ago`, `needs au
 joins its facts into one plain string, such as an All good line, carries the words without the colour. A failed fetch other than `lock` is a sev 3 problem, so
 it does raise the repo's level.
 
-**The copy.** Every string is in `client/src/lib/gitStatsText.ts`, verbatim from the copy tables of the git-stats spec §6 and the git-fetch spec §4; the
-components never build their own. The empty state's "Projects" is a link that sets `managementTab: 'projects'`.
+**The copy.** The spec'd strings are in `client/src/lib/gitStatsText.ts`, verbatim from the copy tables of the git-stats spec §6 and the git-fetch spec §4;
+the exceptions are short labels and hints kept beside their one use, such as `GitInspector.tsx`'s per-verdict fetch-failure hints and its `Open folder` key. The empty state's "Projects" is a link that sets `managementTab: 'projects'`.
 
 **Sync** (spec §9). Every `ok` repo with an origin gets a Sync button while `/api/health` reports `spawnAvailable` (`canSync` in `client/src/lib/gitSync.ts`):
 drawn by `GitKeys` in every layout, beside the repo's verdict in Inbox, in the action column in Matrix, in the Inspector pane's head and footer, and on the

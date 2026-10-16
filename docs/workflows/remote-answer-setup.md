@@ -81,6 +81,8 @@ without waiting for a real question.
   `CLAUDE_DASHBOARD_IDLE_SECS` beats it, most often from the `env` block of
   `~/.claude/settings.json`. The Settings page detects this and names the file; remove it
   there. (Or you copied the hook instead of symlinking it — see step 2.)
+- **Silent for one session only** — that session is an `autopilot` run whose `~/.claude/autopilot/<session_id>.json` says `status: "running"`: the hook
+  exits before the health probe by design (see [remote-answer](../subsystems/remote-answer.md)). Any other status, or no file, routes as usual.
 - **The window feels shorter than configured** — the `settings.json` `timeout` is below
   the wait window; the CLI kills the hook first (see the warning in step 3).
 - **403 from the POSTs** — `ANSWER_TOKEN` is set server-side but missing/wrong in

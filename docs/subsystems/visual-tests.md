@@ -43,7 +43,8 @@ A fixture body may be a function of the request URL. One uses it: the chat trans
 tail poll would otherwise append the whole transcript again on every tick.
 
 `stage.ts` puts a page into a known state: fixed clock at `EPOCH` (2026-09-30T14:00:00Z, `fixtures/epoch.ts`), UTC, `en-US`, DPR 1, sRGB, the viewport at
-the case's width × 900, and the full `Settings` object seeded into `localStorage` (theme, landing section, content width; everything else at its default).
+the case's width × 900, and the full `Settings` object seeded into `localStorage` (theme, landing section, content width, Sessions layout and Management
+sub-view; everything else at its default).
 It then waits until the page is ready: `document.fonts.ready`, a Hanken Grotesk face with `status === 'loaded'`, no `/api` request in flight, and no text node
 starting with "loading". Specs poll that predicate rather than reading it once, because a poll can be in flight right after staging.
 

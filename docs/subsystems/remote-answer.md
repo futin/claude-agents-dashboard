@@ -104,7 +104,7 @@ Handlers `serveHealth` / `serveQuestionWait` / `serveSessionQuestion` /
 
 | Method | Path | Codes |
 |---|---|---|
-| `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?, idleSecs?, answerSecs?, tokenRequired?, transcribe?}` (`transcribe` is [dictation](dictation.md)'s engine-availability flag, unrelated to the gates) — the hook's probe (all three gates *and* the wait window off one round trip), the pill's read, and the origin badge's source |
+| `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?, idleSecs?, answerSecs?, tokenRequired?, transcribe?, spawnAvailable?, spawnMaxPermission?, syncPermissionMode?}` (`transcribe` is [dictation](dictation.md)'s engine-availability flag and the `spawn*`/`sync*` fields are [spawn](spawn.md)'s, all unrelated to the gates) — the hook's probe (all three gates *and* the wait window off one round trip), the pill's read, and the origin badge's source |
 | `POST` | `/api/remote-answer` | `{enabled}` → 200 `{...state, released}`; 400 non-boolean; 403 bad token; 409 `REMOTE_ANSWER=false`; 405 non-POST |
 | `POST` | `/api/questions/wait` | held → 200 `WaitResult`; 400 malformed / no usable questions; 403 bad token; 404 unknown session or feature off; 405 non-POST |
 | `GET` | `/api/sessions/:id/question` | 200 `SessionQuestion` (`pending: null` when idle); 400 bad id |
@@ -219,8 +219,7 @@ already decide this?" versus "is the user back?".
   would idle for up to `answerSecs` and push a question to the phone for a run that must not ask. Only `running` counts: `blocked`, `wrap-up`, `done`, `off`, a
   missing file and a malformed one all keep today's behaviour, so the blocker question and the final batched question stay answerable from the phone. The hook
   never writes the file, and a `session_id` outside `[A-Za-z0-9-]` skips the check. Deployment order: on each machine the dashboard checkout must be pulled
-  together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question. Merge this branch before claude-global's
-  `autopilot` branch: alone it is inert, because no state file exists until the CLI writes one.
+  together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question.
 
 ## Security posture
 
@@ -237,6 +236,8 @@ private `usePersistedState` copies once each needed a remount to see it (#200). 
 query string, and throttled to once per path per minute — because the hooks swallow a 403
 (`curl -sf` then `exit 0`), so nothing otherwise distinguished a missing token file from a
 feature nobody had switched on. HTTP + a static token is a tripwire, not real auth.
+Ahead of any route, `server/lib/request-guard.ts` 403s an unrecognised `Host` (DNS rebinding) and a cross-site browser write, so with the token empty a page
+on another origin still cannot reach these POSTs; the hooks' `curl` sends neither `Sec-Fetch-Site` nor `Origin` and passes (see [remote-access](remote-access.md)).
 `REMOTE_ANSWER=false` turns the feature off server-side. Over a tailnet the network
 itself is the perimeter, so `ANSWER_TOKEN` can stay empty unless you share the tailnet —
 behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md)).
@@ -314,6 +315,8 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
     - client/src/components/RemoteAnswerToggle.tsx
     - client/src/hooks/usePendingQuestion.ts
     - client/src/hooks/useRemoteAnswer.ts
+    - client/src/hooks/useAnswerToken.ts
+    - client/src/lib/answerToken.ts
     - client/src/components/sessions/atoms.tsx
     - client/src/lib/holds.ts
   kind: subsystem

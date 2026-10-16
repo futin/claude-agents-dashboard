@@ -246,6 +246,7 @@ what is registered.
 <!-- docs-sync:
   sources:
     - server/lib/origin.ts
+    - server/lib/request-guard.ts
     - client/src/components/OriginBadge.tsx
     - vite.config.ts
     - server/api.ts

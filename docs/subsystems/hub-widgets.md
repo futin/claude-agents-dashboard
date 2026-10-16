@@ -68,10 +68,11 @@ shows "No data yet" with "Claude Agents Dashboard answered 500". The reason stay
 
 ## The dependency exception
 
-`server/` is otherwise Node built-ins only. `lookout-widgets` is the one named exception (`.claude/CLAUDE.md`, "Keep new deps out of `server/`"): it has no
-runtime dependencies of its own and is pinned to a git tag, `github:futin/lookout-widgets#v0.1.0`, with `dist/` committed so nothing builds at install.
-`test/server-deps.test.ts` holds both ends: every bare import under `server/` must be exactly `lookout-widgets`, and `package.json` must carry that spec. The
-package makes no network calls, so `test/outbound.test.ts` is unchanged.
+`server/` is otherwise Node built-ins only. `lookout-widgets` is one of two named exceptions (`.claude/CLAUDE.md`, "Keep new deps out of `server/`"; the
+other is `release-kit`, see [releases](releases.md)): it has no runtime dependencies of its own and is pinned to a git tag,
+`github:futin/lookout-widgets#v0.1.0`, with `dist/` committed so nothing builds at install. `test/server-deps.test.ts` holds both ends: every bare import
+under `server/` must be one of the named packages, and `package.json` must carry each one's pinned spec. The package makes no network calls, so
+`test/outbound.test.ts` is unchanged.
 
 ## Adding a widget
 
@@ -83,3 +84,14 @@ package makes no network calls, so `test/outbound.test.ts` is unchanged.
 
 The package also supports actions (a POST route per declared action, with confirm and text input). None are declared here on purpose: the tiles only read
 data the dashboard already exposes, and a write path through Lookout would need the token gate the dashboard's own writes carry.
+
+<!-- docs-sync:
+  sources:
+    - server/lib/hub-widgets.ts
+    - server/api.ts
+    - server/index.ts
+    - shared/gitUpstream.ts
+    - test/hub-widgets.test.ts
+    - test/server-deps.test.ts
+  kind: subsystem
+-->
