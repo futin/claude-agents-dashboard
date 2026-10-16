@@ -36,7 +36,8 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
   runs the edit reaches no session. Refuses an unpushed tree (`scripts/sync-plugin.ts`).
 - `pnpm typecheck` — `tsc --noEmit`.
 - CI (`.github/workflows/ci.yml`) runs `pnpm typecheck`, `pnpm build`, `pnpm test` on every PR into `main`, plus `pnpm test:skills` when the PR touches
-  `plugin/skills/git-sync/**` (`docs/workflows/ci.md`).
+  `plugin/skills/git-sync/**` (`docs/workflows/ci.md`). **CI is the full-suite gate — never re-run the whole `pnpm test` locally just before a push.** Push
+  and let CI run it; locally run only the suites the change (or a merge of `main`) touched. Why: `~/.claude/session-analytics-log.md`, 2026-10-15.
 - `pnpm hooks:install` — symlinks the six hook scripts into `~/.claude/hooks`, merges the
   seven `settings.json` entries. Idempotent; `-- --dry-run` / `-- --uninstall` / `-- --force`.
   Registration is user-global **on purpose** — project-scoped hooks would answer only
@@ -112,6 +113,8 @@ Three rules are load-bearing:
 - **Never claim green without the command output.**
 - **The PR title must pass `ci / pr-title`** (it becomes the squash commit once squash-only merges are applied): `feat|fix|perf` (`!` allowed) or
   `docs|chore|test|refactor|ci|build`, optional lowercase `(scope)`, `: `, a description. `feat`/`fix`/`perf` cut a release once Phase C lands.
+- **`main` is PR-only** (ruleset `main-pr-only`, `docs/workflows/ci.md`): every change reaches it through a PR, docs included. Specs, plans and notes go
+  through a `docs:` PR, which passes CI and cuts no release. Never bypass the ruleset.
 
 Optional template sections are commented out — delete the ones that don't apply rather than
 filling them with nothing.

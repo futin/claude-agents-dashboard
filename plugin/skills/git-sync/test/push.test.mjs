@@ -19,10 +19,12 @@ function originTip(w, branch) {
 
 test('T10.1 one unpushed trunk commit, green verify: pushed, origin catches up to a', (t) => {
   const w = world(t)
+  w.rules([])
   writePackageJson(w.a, { test: 'x' })
   fs.mkdirSync(path.join(w.a, 'node_modules'), { recursive: true })
   w.stub('npm', { stdout: 'ok\n' })
   const sha = w.commit(w.a, { file: 'feature.txt', content: 'x\n', msg: 'add feature' })
+  assert.equal(w.cli(w.a, ['survey']).json.ok, true) // push-trunk reads this run's survey: no survey reads as PR-only
 
   const verifyResult = w.cli(w.a, ['verify'])
   assert.equal(verifyResult.json.status, 'green')
@@ -37,11 +39,13 @@ test('T10.1 one unpushed trunk commit, green verify: pushed, origin catches up t
 
 test('T10.2 red, stale, and missing verify all refuse without touching origin', (t) => {
   const w = world(t)
+  w.rules([])
   const before = originTip(w, 'main')
   writePackageJson(w.a, { test: 'x' })
   fs.mkdirSync(path.join(w.a, 'node_modules'), { recursive: true })
   w.stub('npm', { stdout: 'ok\n', byArgs: { 'run test': { exit: 1, stderr: 'boom\n' } } })
   w.commit(w.a, { file: 'feature.txt', content: 'x\n', msg: 'add feature' })
+  assert.equal(w.cli(w.a, ['survey']).json.ok, true) // push-trunk reads this run's survey: no survey reads as PR-only
 
   const redVerify = w.cli(w.a, ['verify'])
   assert.equal(redVerify.json.status, 'red')
@@ -73,7 +77,9 @@ test('T10.2 red, stale, and missing verify all refuse without touching origin', 
 
 test('T10.3 unverified (no discoverable checks) still pushes', (t) => {
   const w = world(t)
+  w.rules([])
   const sha = w.commit(w.a, { file: 'feature.txt', content: 'x\n', msg: 'add feature' })
+  assert.equal(w.cli(w.a, ['survey']).json.ok, true) // push-trunk reads this run's survey: no survey reads as PR-only
 
   const verifyResult = w.cli(w.a, ['verify'])
   assert.equal(verifyResult.json.status, 'unverified')
@@ -109,6 +115,8 @@ test('T10.4 push not allowed: GitLab remote, and GitHub remote with git-sync.pus
 
 test('T10.5 nothing ahead: nothing-to-push, ahead 0', (t) => {
   const w = world(t)
+  w.rules([])
+  assert.equal(w.cli(w.a, ['survey']).json.ok, true) // push-trunk reads this run's survey: no survey reads as PR-only
   w.cli(w.a, ['verify'])
   const before = originTip(w, 'main')
 
@@ -122,7 +130,9 @@ test('T10.5 nothing ahead: nothing-to-push, ahead 0', (t) => {
 
 test('T10.6 b pushed to origin in the meantime: rejected, origin keeps b\'s tip', (t) => {
   const w = world(t)
+  w.rules([])
   const aSha = w.commit(w.a, { file: 'feature.txt', content: 'x\n', msg: 'add feature' })
+  assert.equal(w.cli(w.a, ['survey']).json.ok, true) // push-trunk reads this run's survey: no survey reads as PR-only
   w.cli(w.a, ['verify']) // unverified, sha == aSha, recorded before b's push below
 
   // b, a second clone of the same origin, pushes its own commit first — a never fetches, so its
@@ -143,8 +153,10 @@ test('T10.6 b pushed to origin in the meantime: rejected, origin keeps b\'s tip'
 // must not crash `rev-list`'s unresolvable `A..B` range — it's reported as an ordinary refusal.
 test('T10.7 no remote-tracking ref for the trunk: rejected, ahead null, origin unchanged', (t) => {
   const w = world(t)
+  w.rules([])
   const before = originTip(w, 'main')
   w.commit(w.a, { file: 'feature.txt', content: 'x\n', msg: 'add feature' })
+  assert.equal(w.cli(w.a, ['survey']).json.ok, true) // push-trunk reads this run's survey: no survey reads as PR-only
   w.cli(w.a, ['verify'])
   w.git(w.a, 'update-ref', '-d', 'refs/remotes/origin/main')
 
@@ -155,4 +167,66 @@ test('T10.7 no remote-tracking ref for the trunk: rejected, ahead null, origin u
   assert.equal(pushResult.json.ahead, null)
   assert.equal(pushResult.json.detail, 'no remote-tracking ref origin/main')
   assert.equal(originTip(w, 'main'), before)
+})
+
+// B3: a trunk whose ruleset demands pull requests would reject the push after the checks already ran; refusing here keeps the verdict honest and
+// leaves the commits for carry-trunk. The gate sits right after not-allowed, before any verify gate, so a PR-only trunk never reads as "red".
+test('B3.1 PR-only trunk, green verify, one ahead: pr-only with the ruleset reason, origin unchanged', (t) => {
+  const w = world(t)
+  w.rules([{ type: 'pull_request' }])
+  writePackageJson(w.a, { test: 'x' })
+  fs.mkdirSync(path.join(w.a, 'node_modules'), { recursive: true })
+  w.stub('npm', { stdout: 'ok\n' })
+  const before = originTip(w, 'main')
+  w.commit(w.a, { file: 'feature.txt', content: 'x\n', msg: 'add feature' })
+  assert.equal(w.cli(w.a, ['survey']).json.trunkPrOnly, true)
+  assert.equal(w.cli(w.a, ['verify']).json.status, 'green')
+
+  const pushResult = w.cli(w.a, ['push-trunk'])
+  assert.equal(pushResult.json.ok, true)
+  assert.equal(pushResult.json.pushed, false)
+  assert.equal(pushResult.json.reason, 'pr-only')
+  assert.equal(pushResult.json.ahead, null)
+  assert.equal(pushResult.json.detail, 'ruleset')
+  assert.equal(originTip(w, 'main'), before)
+})
+
+test('B3.2 no survey this run: pr-only on the safe side, origin unchanged', (t) => {
+  const w = world(t)
+  w.rules([])
+  const before = originTip(w, 'main')
+  w.commit(w.a, { file: 'feature.txt', content: 'x\n', msg: 'add feature' })
+  w.cli(w.a, ['verify'])
+
+  const pushResult = w.cli(w.a, ['push-trunk'])
+  assert.equal(pushResult.json.ok, true)
+  assert.equal(pushResult.json.pushed, false)
+  assert.equal(pushResult.json.reason, 'pr-only')
+  assert.equal(pushResult.json.ahead, null)
+  assert.equal(pushResult.json.detail, 'no survey this run')
+  assert.equal(originTip(w, 'main'), before)
+})
+
+test('B3.3 mirror: not PR-only, surveyed, green verify: pushes', (t) => {
+  const w = world(t)
+  w.rules([])
+  const sha = w.commit(w.a, { file: 'feature.txt', content: 'x\n', msg: 'add feature' })
+  assert.equal(w.cli(w.a, ['survey']).json.trunkPrOnly, false)
+  w.cli(w.a, ['verify'])
+
+  const pushResult = w.cli(w.a, ['push-trunk'])
+  assert.equal(pushResult.json.pushed, true)
+  assert.equal(pushResult.json.reason, 'pushed')
+  assert.equal(originTip(w, 'main'), sha)
+})
+
+test('B3.4 a downgraded repo with no survey is still not-allowed, not pr-only (gate order)', (t) => {
+  const w = world(t)
+  w.git(w.a, 'config', 'git-sync.push', 'false')
+  w.commit(w.a, { file: 'feature.txt', content: 'x\n', msg: 'add feature' })
+  w.cli(w.a, ['verify'])
+
+  const pushResult = w.cli(w.a, ['push-trunk'])
+  assert.equal(pushResult.json.reason, 'not-allowed')
+  assert.equal(pushResult.json.detail, undefined)
 })

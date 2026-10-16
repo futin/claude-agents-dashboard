@@ -45,5 +45,7 @@ detection and fails its default-value test. The runner is a VM with git and jq, 
 
 The `main-pr-only` ruleset (PR required, the three contexts above, linear history, no force push or deletion, no bypass) and the squash-only merge
 settings are applied by release-kit's `scripts/apply-repo-settings.sh futin/claude-agents-dashboard`. **Applied on 2026-10-15** (ruleset id 25157835),
-after PR #204 reported all three contexts green. Re-running the script updates the ruleset in place. Until phase B, direct pushes to `main` — git-sync's
-trunk push, backlog-orchestrate, plan docs — are refused.
+after PR #204 reported all three contexts green. Re-running the script updates the ruleset in place. Direct pushes to `main` are refused, so every change reaches it
+through a PR. git-sync reads the rule (one `gh api` call per survey), never pushes the trunk, and offers to carry local trunk commits to a PR branch
+([design §6](../../plugin/skills/git-sync/references/design.md)). backlog-orchestrate's `--pr` mode, which gives it the same path, is pending in
+`futin/backlog-manager`; until it lands, an orchestrator run that writes `main` directly is refused.

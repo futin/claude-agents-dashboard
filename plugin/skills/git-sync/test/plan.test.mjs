@@ -141,6 +141,7 @@ function mergedInWorktree(w, name) {
 
 test('T8.4 merged: all deletes the clean worktree, then the remote copy, then the local branch', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = mergedInWorktree(w, 'm1')
   const s = surveyOf(w)
   assert.deepEqual(s.mergedSet, ['m1'])
@@ -207,6 +208,7 @@ test('T8.6 no answers is an empty plan', (t) => {
 
 test('T8.7 removing a dirty worktree on a merged branch forces it and then deletes the branch', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = mergedInWorktree(w, 'm2')
   fs.writeFileSync(path.join(w.root, 'wt m2', 'm2.txt'), 'changed\n')
   const s = surveyOf(w)
@@ -335,6 +337,7 @@ test('T8.11 balanced chunks: every split keeps 2–4 options per question in can
 
 test('T8.12 unattended answers remove merged work only: the merged set, and every worktree on a merged branch, dirty or clean', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const m1 = mergedInWorktree(w, 'm1')
   const m2 = mergedInWorktree(w, 'm2')
   fs.writeFileSync(path.join(w.root, 'wt m2', 'm2.txt'), 'changed\n')
@@ -369,4 +372,47 @@ test('T8.13 unattended answers are empty when nothing is merged', (t) => {
   assert.ok(s.rounds.length > 0)
   assert.deepEqual(s.unattended, {})
   assert.deepEqual(buildPlan(s, s.unattended), [])
+})
+
+// B2: the carry answer.
+function carryWorld(t) {
+  const w = world(t)
+  w.rules([{ type: 'pull_request' }])
+  branch(w, 'm1')
+  w.git(w.a, 'merge', '--ff-only', 'm1')
+  w.git(w.a, 'push', 'origin', 'main')
+  w.commit(w.a, { file: 'ahead.txt', content: 'x\n', msg: 'feat(x): carried' })
+  return w
+}
+
+test('B2.6 carry "pr" plans one carry-trunk action from the survey, "keep" and absent plan none', (t) => {
+  const w = carryWorld(t)
+  const s = surveyOf(w)
+  assert.ok(s.carry)
+  assert.deepEqual(buildPlan(s, { carry: 'pr' }), [
+    { kind: 'carry-trunk', target: s.carry.branch, expectTip: s.carry.tip, title: 'feat(x): carried', commits: s.carry.commits },
+  ])
+  assert.deepEqual(buildPlan(s, { carry: 'keep' }), [])
+  assert.deepEqual(buildPlan(s, {}), [])
+  assert.equal(planCli(w, { carry: 'pr' }).json.actions[0].kind, 'carry-trunk')
+})
+
+test('B2.7 carry "pr" when nothing was offered, or any other value, is bad-answers', (t) => {
+  const level = world(t)
+  level.rules([{ type: 'pull_request' }])
+  const none = surveyOf(level)
+  assert.equal(none.carry, null)
+  assert.throws(() => buildPlan(none, { carry: 'pr' }), badAnswers)
+  assert.equal(planCli(level, { carry: 'pr' }).json.stop, 'bad-answers')
+
+  const s = surveyOf(carryWorld(t))
+  assert.throws(() => buildPlan(s, { carry: 'yes' }), badAnswers)
+  assert.throws(() => buildPlan(s, { carry: true }), badAnswers)
+  assert.throws(() => buildPlan(none, { carry: 'keep-it' }), badAnswers)
+})
+
+test('B2.8 the trunk carry sorts after every deletion', (t) => {
+  const s = surveyOf(carryWorld(t))
+  const kinds = buildPlan(s, { carry: 'pr', merged: 'all' }).map((a) => a.kind)
+  assert.deepEqual(kinds, ['delete-local', 'carry-trunk'])
 })

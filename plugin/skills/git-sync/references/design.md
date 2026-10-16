@@ -52,7 +52,7 @@ Run state lives in `<git-common-dir>/git-sync/` of the target repo — never com
 | 3 | Survey | script | Read-only classification (§5) plus detected checks (§9) and the push rules (§6). |
 | 4 | Decision round | model + script | Every question at once (§7), as `survey` pre-chunked them; `plan` turns the answers into `plan.json`. Skipped when nothing needs deciding. |
 | 5 | Verify | script | Install when needed, run the checks, write `verify.json` keyed to the trunk HEAD SHA. |
-| 6 | Push trunk | script | Only when verify is not red for this exact SHA, the trunk is ahead of origin, and push is allowed. |
+| 6 | Push trunk | script | Only when verify is not red for this exact SHA, the trunk is ahead of origin, push is allowed and the trunk is not PR-only (§6). |
 | 7 | Apply | script | Execute `plan.json`, re-checking each action first (§10). |
 | 8 | Report | script + model | `report` renders §12; the model relays it as-is. |
 
@@ -102,6 +102,13 @@ worktree, and kept otherwise.
 - A repo with `pushAllowed` false is **downgraded**: it still gets commit, sync, verify and local triage, but the trunk is not pushed and **remote branches
   are entirely off-limits** — no remote deletion, no branch pushing, remote-only branches not even listed as candidates. Company remotes hold colleagues'
   branches; this skill must never act on them.
+- **PR-only trunk.** `survey` reads the trunk's active rules once, with `gh api repos/<owner>/<repo>/rules/branches/<trunk>` (the endpoint merges every
+  ruleset that applies); a `pull_request` rule in the array makes `trunkPrOnly` true, reason `ruleset`. No such rule is `no-rule`, and a non-GitHub
+  remote or a downgraded repo answers `not-github` or `downgraded` without calling `gh`, so it is never PR-only. When the answer cannot be had — `gh`
+  absent (`gh-absent`), a failed or timed-out call, output that is not a JSON array (`gh-failed`) — the trunk is treated as PR-only: the safe side is a
+  push that does not happen. A PR-only trunk is never pushed (`push-trunk` stops with `pr-only`, also when no `ok: true` survey exists this run), and
+  the proof ref for every merged-ness check is `origin/<trunk>` rather than the local trunk, since the local commits ahead of origin can never land
+  directly: a branch merged only into those is not merged. Local trunk commits ahead of origin are instead offered to the user as a carry (§7).
 - Per-repo overrides are local git config, deliberately not a committed file, so a shared repo stays untouched: `git-sync.push`, `git-sync.checks`
   (a shell command replacing discovery), `git-sync.staleDays`. They are per machine and must be set on each box.
 
@@ -114,6 +121,7 @@ questions spread over consecutive calls, still asked back to back before anythin
 | --- | --- |
 | Delete the merged set | one question: delete all (N branches, M remote copies, K worktrees) / let me pick / keep all |
 | Abandoned and gone-unproven | multiSelect of branch name, age, commits ahead, local/remote presence; ticked = delete |
+| Carry local trunk commits | one question, asked first, only when the trunk is PR-only and ahead of origin: open a PR (push `sync/<trunk>-<YYYYMMDD-HHMM>`, reset the local trunk to `origin/<trunk>`, open the PR) / leave on the trunk. Never answered by `unattended`. |
 | Unpushed survivors | multiSelect of local-only or ahead branches; ticked = push with upstream. Not asked in downgraded repos. |
 | Each stash | branch it and push / branch it, keep local / drop / keep as stash (push option omitted when downgraded) |
 | Each dirty or unmerged worktree | keep / remove, the option naming how many changed files would be lost |
@@ -124,7 +132,7 @@ merged set goes (`"merged": "all"`), and so does every offered worktree on a mer
 gone-unproven and unpushed branches, stashes and unmerged or detached worktrees are kept and asked in prose after the report.
 
 The `plan` subcommand turns the answers into `plan.json` (the model never writes it): a list of actions — `stash-branch`, `stash-drop`,
-`remove-worktree`, `push-branch`, `delete-remote`, `delete-local` — each carrying the tip or stash SHA the survey saw (`expectTip`).
+`remove-worktree`, `push-branch`, `delete-remote`, `delete-local`, `carry-trunk` — each carrying the tip or stash SHA the survey saw (`expectTip`).
 
 ## 8. Stage and scan
 
@@ -171,8 +179,9 @@ model reads a log tail only when a check fails. A `.nvmrc` that does not match t
 7. Every deleted branch's name and tip SHA is appended to `deleted.log`, and the report prints one `git branch <name> <sha>` recovery line per deleted
    local branch and one `git push origin <sha>:refs/heads/<name>` per deleted remote branch.
 8. The script waits only on processes it started for checks; it starts no servers and never kills by pattern.
-9. Apply order: stash actions, worktree removals, branch pushes, remote deletions, local deletions. One failed action does not stop the rest.
+9. Apply order: stash actions, worktree removals, branch pushes, remote deletions, local deletions, `carry-trunk`. One failed action does not stop the rest.
 10. Re-running the whole skill is always safe; a second run on a tidy repo changes nothing.
+11. `carry-trunk` moves the trunk only after its carry branch is on `origin`, only by `reset --keep`, and only when HEAD is the trunk at the surveyed tip.
 
 ## 11. Errors
 
@@ -187,7 +196,9 @@ Exit code 1 is not a stop: with `Usage:` on stderr it is a malformed call, and a
 
 Printed in chat and written to `last-report.md`: committed (SHA, message, branch) · trunk (commits pulled, each check's status, pushed or why not) ·
 deleted (branch, bucket, local/remote, recovery line) · kept (branch, bucket, reason) · pushed branches · stashes · worktrees · warnings (node version,
-unverified, downgraded repo).
+unverified, downgraded repo, a PR-only trunk read by the safe default, local trunk commits left unpushed). A PR-only trunk shows in the trunk line as
+not pushed; a carry adds the branch and PR URL (or the exact `gh pr create` line to open it by hand) and the `git reset --keep <tip>` that undoes the
+trunk move.
 
 ## 13. Testing
 
@@ -301,3 +312,6 @@ Rulings made while the tasks were implemented that change behaviour this spec de
 - R37 — with no AskUserQuestion the survey's `unattended` answers are applied, not skipped (2026-10-02, the user's call: cleaning up merged work is the
   point of the skill and needs no answer). They are built from `offered`, so `buildPlan` accepts them by construction, and they hold merged work only;
   a dirty worktree on a merged branch is removed and its changed or ignored files are lost.
+- Phase B (2026-10-15): PR-only trunks — `main` of the dashboard repo accepts changes only through a pull request, so git-sync reads the trunk's rules
+  (§6), never pushes a PR-only trunk, and offers to carry its local commits to a PR branch (`carry-trunk`, invariant 11). The design and the rest of the
+  release pipeline are in `docs/superpowers/specs/2026-10-15-release-pipeline-design.md`.
