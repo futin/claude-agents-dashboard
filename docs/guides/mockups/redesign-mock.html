@@ -127,6 +127,18 @@
    panel is pinned, its phase, whether the answer token is needed, whether an
    older page is loading.
 
+   Trace is the modal's second mode (Chat | Trace in the head), a proposal not
+   yet built: every tool call as a row on a spine, with the causes we can infer
+   for it, because the thinking text that would say why is almost never in the
+   transcript. The sidecar becomes the picked step's inspector (intent, why-
+   chain, thinking when readable, result, what it led to); the wait panel and
+   the foot keep their places, the foot carrying the step filter instead. Each
+   chat tool line has a "why?" into it. Its fixture is the chat's own session,
+   shaped as the `GET /api/sessions/:id/trace` contract it would need, and the
+   bar's "replay live tail" plays it in the way a 3s poll would deliver it.
+   (A full-page tab with Canvas and Lanes views was sketched first; at the
+   modal's width only the spine fits, and live mattered more than layout.)
+
    New session is the launch form (SpawnPanel) given the same treatment, and it
    has landed on the sheet: one narrow column — project, prompt, name, then
    model / effort / permission as a triplet, then the remote-control switch.
@@ -1923,6 +1935,91 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .ch-facts .f b{color:var(--text-primary);font-weight:600}
 .ch-col{display:flex;flex-direction:column;min-width:0;min-height:0}
 .ch-col .ch-body{background:var(--bg-surface)}
+
+/* ── Trace — the modal's second mode ─────────────────────────────────────
+   Chat | Trace in the head. Trace swaps the transcript for the spine (one row
+   per tool call, the turn's prompt as a square) and the facts sidecar for the
+   step inspector; the wait panel and the foot stay where they are. Causes are
+   drawn only for the picked step, as arcs in the spine's left gutter: solid
+   for a direct cause, dashed for one further back. Kind colours are the
+   board's own tokens — magenta is the subagent, as Task is in the chat. */
+.ch-head .seg{flex:none}
+.tr-k-prompt{--c:var(--text-primary)}
+.tr-k-decide{--c:var(--amber-solid)}
+.tr-k-read{--c:var(--text-tertiary)}
+.tr-k-edit{--c:var(--green-600)}
+.tr-k-bash{--c:var(--mustard)}
+.tr-k-agent{--c:var(--magenta)}
+.ch-body.tr-body{padding:6px 18px 40px 0;gap:0;display:block;position:relative}
+.tr-spine{position:relative}
+.tr-arcs{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+.tr-turn{display:flex;gap:10px;align-items:baseline;padding:16px 0 6px 60px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary)}
+.tr-turn span{text-transform:none;letter-spacing:0;font-weight:500;color:var(--text-secondary)}
+.tr-row{display:grid;grid-template-columns:60px minmax(0,1fr);align-items:start;cursor:pointer;transition:opacity .15s}
+.tr-row.child{grid-template-columns:84px minmax(0,1fr)}
+.tr-dotcell{position:relative;min-height:36px;height:100%}
+.tr-dot{position:absolute;left:30px;top:12px;width:12px;height:12px;border-radius:var(--r-full);background:var(--bg-surface);border:2.5px solid var(--c)}
+.tr-row.child .tr-dot{left:54px;top:13px;width:10px;height:10px}
+.tr-row.tr-k-prompt .tr-dot{background:var(--c);border-radius:3px}
+.tr-row.err .tr-dot{background:var(--red-500);border-color:var(--red-500)}
+.tr-row.run .tr-dot{border-style:dashed;animation:tr-spin 2.4s linear infinite}
+.tr-row.fresh .tr-card{animation:tr-land .9s ease-out}
+.tr-card{padding:6px 10px 6px 6px;border-radius:var(--r-sm);min-width:0}
+.tr-row:hover .tr-card{background:var(--bg-subtle)}
+.tr-row.sel .tr-card{background:var(--bg-subtle);box-shadow:inset 0 0 0 1.5px var(--c)}
+.tr-row.anc .tr-card{background:color-mix(in srgb,var(--c) 8%,transparent)}
+.tr-spine.dim .tr-row:not(.sel):not(.anc):not(.desc){opacity:.6}
+.tr-spine.focus .tr-row:not(.sel):not(.anc):not(.desc){opacity:.25}
+.tr-line{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;min-width:0}
+.tr-tool{font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--c)}
+.tr-detail{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--text-primary);overflow-wrap:anywhere;min-width:0}
+.tr-k-prompt .tr-detail{font-family:inherit;font-size:13.5px;font-weight:500}
+.tr-intent{font-size:12.5px;color:var(--text-secondary);margin-top:2px}
+.tr-res{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--text-tertiary);margin-top:2px;overflow-wrap:anywhere}
+.tr-row.err .tr-res{color:var(--red-500)}
+.tr-row.run .tr-res{font-family:inherit;font-style:italic}
+.tr-flag{font-size:10.5px;font-weight:600;border-radius:var(--r-full);padding:1px 7px;white-space:nowrap;background:var(--bg-subtle);color:var(--text-tertiary)}
+.tr-flag.run{background:var(--green-200);color:var(--green-ink)}
+.tr-flag.err{background:color-mix(in srgb,var(--red-500) 12%,transparent);color:var(--red-500)}
+.tr-flag.you{background:var(--amber-tint);color:var(--amber-ink)}
+.tr-flag.think{background:color-mix(in srgb,var(--magenta) 13%,transparent);color:var(--magenta)}
+.tr-flag.sha{background:var(--mustard-tint);color:var(--mustard-ink)}
+.tr-jump{position:sticky;bottom:12px;display:none;margin:12px auto 0;width:max-content;border:0;border-radius:var(--r-full);background:var(--ink-inverse);color:var(--text-on-dark);padding:6px 14px;font-size:12px;font-weight:500;box-shadow:var(--lift-float);z-index:1}
+.tr-jump.show{display:block}
+/* the inspector, in the sidecar */
+.ch-side.tr-side{gap:14px;padding:18px}
+.tr-ctx{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-tertiary);font-variant-numeric:tabular-nums}
+.tr-ctx .tr-track{flex:1;height:4px;border-radius:var(--r-full);background:var(--bg-track);overflow:hidden}
+.tr-ctx .tr-track i{display:block;height:100%;background:var(--amber-solid)}
+.tr-ih{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.tr-kind{font-size:11px;font-weight:600;border-radius:var(--r-full);padding:2px 9px;color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)}
+.tr-when{margin-left:auto;font-size:11.5px;color:var(--text-tertiary);font-variant-numeric:tabular-nums}
+.tr-title{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;font-weight:500;overflow-wrap:anywhere}
+.tr-title.prose{font-family:inherit;font-size:14.5px;line-height:1.4}
+.tr-sec h4{margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.tr-sec h4 span{text-transform:none;letter-spacing:0;font-weight:400;font-style:italic}
+.tr-sec p{margin:0;font-size:13px;line-height:1.5}
+.tr-pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:var(--bg-surface);border-radius:var(--r-sm);padding:8px 10px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text-secondary)}
+.tr-think{background:color-mix(in srgb,var(--magenta) 8%,var(--bg-surface));border-radius:var(--r-sm);padding:9px 11px;font-size:12.5px;line-height:1.5}
+.tr-think.sig{background:var(--bg-surface);color:var(--text-tertiary);font-size:12px}
+.tr-chain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.tr-chain button{display:grid;grid-template-columns:74px minmax(0,1fr);gap:8px;align-items:baseline;width:100%;text-align:left;border:0;background:none;border-radius:var(--r-sm);padding:5px 6px}
+.tr-chain button:hover{background:var(--bg-surface)}
+.tr-chain .lv2 button{padding-left:16px}
+.tr-chain .lv3 button,.tr-chain .lv4 button,.tr-chain .lv5 button{padding-left:26px}
+.tr-rel{font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text-tertiary)}
+.tr-chain .lv1 .tr-rel{color:var(--text-primary)}
+.tr-cl{font-size:12px;min-width:0;overflow-wrap:anywhere}
+.tr-cl .tr-tool{margin-right:5px}
+.tr-none{font-size:13px;color:var(--text-tertiary);text-align:center;padding:40px 12px;line-height:1.6}
+/* the chat's tool line links into the trace */
+.cm-why{border:0;background:none;padding:0 0 0 6px;font-size:11.5px;font-weight:500;color:var(--magenta)}
+.cm-why:hover{text-decoration:underline}
+.ch-foot .tr-tog{border:1px solid var(--border-strong);background:var(--bg-surface);border-radius:var(--r-full);padding:3px 10px;font-size:11.5px;color:var(--text-secondary)}
+.ch-foot .tr-tog.on{background:var(--ink-inverse);border-color:var(--ink-inverse);color:var(--text-on-dark)}
+@keyframes tr-spin{to{transform:rotate(360deg)}}
+@keyframes tr-land{from{background:var(--green-200)}}
+@media (prefers-reduced-motion:reduce){.tr-row.run .tr-dot,.tr-row.fresh .tr-card{animation:none}.tr-row{transition:none}}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW SESSION — the launch form (SpawnPanel) as a modal.
@@ -4808,21 +4905,93 @@ unpersisted, since session ids churn.`;
   const MSGS = [
     { role: 'user', ts: '11:02', text: 'Redesign the sessions page. Keep 100% of the functionality — five variants, and I want to compare them as artboards.' },
     { role: 'assistant', ts: '11:02', text: 'Reading the live view and its subsystem doc first, so the variants can be checked against what the page actually does.', tools: [
-      { name: 'Read', detail: 'docs/subsystems/sessions.md' },
-      { name: 'Read', detail: 'client/src/components/SessionsView.tsx' },
-      { name: 'Grep', detail: '"usePersistedState" · 14 matches' } ] },
+      { name: 'Read', detail: 'docs/subsystems/sessions.md', step: 'toolu_01' },
+      { name: 'Read', detail: 'client/src/components/SessionsView.tsx', step: 'toolu_02' },
+      { name: 'Grep', detail: '"usePersistedState" · 14 matches', step: 'toolu_03' } ] },
     { role: 'assistant', ts: '11:04', tools: [
-      { name: 'Task', detail: 'cavecrew-investigator · locate every control the toolbar owns' } ] },
+      { name: 'Task', detail: 'cavecrew-investigator · locate every control the toolbar owns', step: 'toolu_04' } ] },
     { role: 'assistant', ts: '11:07', tools: [
-      { name: 'ExitPlanMode', body: PLAN_MD } ] },
+      { name: 'ExitPlanMode', body: PLAN_MD, step: 'toolu_05' } ] },
     { role: 'user', ts: '11:09', text: 'Good — but the toolbar should carry the filter and the sort in one track, not two.' },
     { role: 'assistant', ts: '11:09', text: 'One shared track it is: the filter button, the sort label, then the sort button, each opening a popover. The filter button goes raised only while a filter is set, so the raised state reads as "something is hidden" rather than "this is a button".', tools: [
-      { name: 'Edit', detail: 'client/src/components/Toolbar.tsx' },
-      { name: 'Edit', detail: 'client/src/styles.css' } ] },
+      { name: 'Edit', detail: 'client/src/components/Toolbar.tsx', step: 'toolu_07' },
+      { name: 'Edit', detail: 'client/src/styles.css', step: 'toolu_09' } ] },
     { role: 'assistant', ts: '11:14', text: 'Five artboards are up. Board reads best at this width; triage wins the moment two sessions are blocked at once. The full comparison, view by view, with the trade-off each one makes and what it costs on a phone-width window, is in the plan doc — ', textTruncated: true, tools: [
-      { name: 'Write', detail: 'docs/superpowers/plans/2026-09-11-sessions-redesign.md' } ] },
+      { name: 'Write', detail: 'docs/superpowers/plans/2026-09-11-sessions-redesign.md', step: 'toolu_13' } ] },
     { role: 'user', ts: '11:31', text: 'Ship the board as the default. Which one do you want for the phone?' }
   ];
+
+  /* ── TRACE fixture — the same session, as steps with their causes ───────
+     Shaped as the response a future `GET /api/sessions/:id/trace` would send
+     (and `?after=<cursor>` for the live tail, the same byte-offset currency
+     the chat pages use). Proposed contract, for shared/types.ts:
+
+       TraceResponse = { steps: TraceStep[]; cursor: number;
+                         thinking: { recorded: number; readable: number } }
+       TraceStep = {
+         id: string            tool_use id; a prompt uses its record uuid
+         turn: number          1-based, one per user prompt
+         kind: 'prompt' | 'decide' | 'read' | 'edit' | 'bash' | 'agent'
+         tool: string          'Read', 'Bash', 'Task', 'AskUserQuestion', …
+         detail: string        describeTool()'s line — the chat's tool line
+         intent: string | null intentFrom: 'description' | 'text' | null
+         at: string            ISO timestamp of the tool_use record
+         status: 'running' | 'ok' | 'error' | null    null for a prompt
+         result: string | null first line of the tool_result, capped
+         answer?: string       the AskUserQuestion pick / plan verdict
+         sha?: string          short sha read off a `git commit` result
+         agent?: string        the Task step whose subagent file ran it
+         why: { id: string; rel: Rel }[]              INFERRED, see below
+         thinking: 'text' | 'signature' | null; thinkingText?: string
+       }
+
+     `why` is inferred — the transcript's own parentUuid chain is a straight
+     line. Every rule looks backward, so a step is linked the moment its
+     tool_use lands, before its result exists:
+       asked     the turn's prompt, when nothing nearer explains it
+       answer    the nearest preceding AskUserQuestion / plan verdict
+       plan      an approved ExitPlanMode the step's file appears in
+       informed  an earlier Read / Grep / agent result naming the same file
+       verifies  a test / typecheck after an edit, back to that edit
+       retry     a step right after a failed one, back to the failure
+       delegated a subagent's step, back to its Task
+       commits   a `git commit`, back to the edits since the last commit
+     Thinking is mostly a signature with no text: on this machine 86 of 1,306
+     thinking blocks carried any (60 newest transcripts, 2026-10-16), so the
+     inspector says when a step's thinking was recorded but unreadable. */
+  const TRACE = {
+    cursor: 418_220,
+    thinking: { recorded: 8, readable: 2 },
+    steps: [
+      { id: 'u-7f3a', turn: 1, kind: 'prompt', tool: 'Prompt', detail: 'Redesign the sessions page. Keep 100% of the functionality — five variants, and I want to compare them as artboards.', at: '11:02:01', status: null, why: [] },
+      { id: 'toolu_01', turn: 1, kind: 'read', tool: 'Read', detail: 'docs/subsystems/sessions.md', intent: 'Read the live view and its subsystem doc first', intentFrom: 'text', at: '11:02:09', status: 'ok', result: '214 lines', why: [{ id: 'u-7f3a', rel: 'asked' }], thinking: 'signature' },
+      { id: 'toolu_02', turn: 1, kind: 'read', tool: 'Read', detail: 'client/src/components/SessionsView.tsx', intent: 'The doc names this as the view to match', intentFrom: 'text', at: '11:02:15', status: 'ok', result: '388 lines', why: [{ id: 'u-7f3a', rel: 'asked' }, { id: 'toolu_01', rel: 'informed' }] },
+      { id: 'toolu_03', turn: 1, kind: 'read', tool: 'Grep', detail: '"usePersistedState"  client/src', intent: 'Find every setting the view persists', intentFrom: 'description', at: '11:02:31', status: 'ok', result: '14 matches in 6 files', why: [{ id: 'toolu_02', rel: 'informed' }] },
+      { id: 'toolu_04', turn: 1, kind: 'agent', tool: 'Task · cavecrew-investigator', detail: 'locate every control the toolbar owns', intent: 'Map the toolbar without reading every component here', intentFrom: 'description', at: '11:04:02', status: 'ok', result: '11 controls in 3 files · file:line table', why: [{ id: 'u-7f3a', rel: 'asked' }, { id: 'toolu_02', rel: 'informed' }], thinking: 'signature' },
+      { id: 'toolu_04a', turn: 1, kind: 'read', tool: 'Grep', detail: '"Toolbar"  client/src/components', agent: 'toolu_04', at: '11:04:10', status: 'ok', result: '7 matches', why: [{ id: 'toolu_04', rel: 'delegated' }] },
+      { id: 'toolu_04b', turn: 1, kind: 'read', tool: 'Read', detail: 'client/src/components/Toolbar.tsx', agent: 'toolu_04', at: '11:04:19', status: 'ok', result: '162 lines', why: [{ id: 'toolu_04a', rel: 'informed' }] },
+      { id: 'toolu_04c', turn: 1, kind: 'read', tool: 'Read', detail: 'client/src/components/sessions/BoardView.tsx', agent: 'toolu_04', at: '11:04:27', status: 'ok', result: '240 lines', why: [{ id: 'toolu_04a', rel: 'informed' }] },
+      { id: 'toolu_05', turn: 1, kind: 'decide', tool: 'ExitPlanMode', detail: 'Sessions redesign — the board, five ways', intent: 'Five views over one session model, one toolbar to pick', intentFrom: 'text', at: '11:07:40', status: 'ok', result: 'approved', answer: 'approved', why: [{ id: 'toolu_04', rel: 'informed' }, { id: 'toolu_03', rel: 'informed' }], thinking: 'text', thinkingText: 'The five views share one session model, so the plan is really about the toolbar: one switcher, one filter, one sort. Persist the view; row expansion should not survive a reload because ids churn.' },
+      { id: 'u-81c0', turn: 2, kind: 'prompt', tool: 'Prompt', detail: 'Good — but the toolbar should carry the filter and the sort in one track, not two.', at: '11:09:03', status: null, why: [] },
+      { id: 'toolu_06', turn: 2, kind: 'read', tool: 'Read', detail: 'client/src/components/Toolbar.tsx', intent: 'Edit needs its own read; the agent’s does not count', intentFrom: 'text', at: '11:09:12', status: 'ok', result: '162 lines', why: [{ id: 'u-81c0', rel: 'asked' }, { id: 'toolu_04', rel: 'informed' }] },
+      { id: 'toolu_07', turn: 2, kind: 'edit', tool: 'Edit', detail: 'client/src/components/Toolbar.tsx', intent: 'One shared track: filter button, sort label, sort button', intentFrom: 'text', at: '11:09:48', status: 'ok', result: '1 replacement', why: [{ id: 'u-81c0', rel: 'asked' }, { id: 'toolu_06', rel: 'informed' }, { id: 'toolu_05', rel: 'plan' }], thinking: 'signature' },
+      { id: 'toolu_08', turn: 2, kind: 'read', tool: 'Read', detail: 'client/src/styles.css:950-990', intent: 'The toolbar rules, before restyling the raised state', intentFrom: 'text', at: '11:10:05', status: 'ok', result: '40 lines', why: [{ id: 'toolu_07', rel: 'informed' }] },
+      { id: 'toolu_09', turn: 2, kind: 'edit', tool: 'Edit', detail: 'client/src/styles.css:968', intent: 'Raised only while a filter is set, so it reads as "something is hidden"', intentFrom: 'text', at: '11:10:31', status: 'ok', result: '1 replacement', why: [{ id: 'toolu_08', rel: 'informed' }, { id: 'u-81c0', rel: 'asked' }] },
+      { id: 'toolu_10', turn: 2, kind: 'bash', tool: 'Bash', detail: 'pnpm typecheck', intent: 'Typecheck the toolbar change', intentFrom: 'description', at: '11:11:02', status: 'error', result: "Toolbar.tsx(41,7): Property 'sortLabel' is missing in type 'ToolbarProps'", why: [{ id: 'toolu_07', rel: 'verifies' }], thinking: 'signature' },
+      { id: 'toolu_11', turn: 2, kind: 'edit', tool: 'Edit', detail: 'client/src/components/Toolbar.tsx:12', intent: 'Add sortLabel to the props the track now reads', intentFrom: 'text', at: '11:11:40', status: 'ok', result: '1 replacement', why: [{ id: 'toolu_10', rel: 'retry' }, { id: 'toolu_06', rel: 'informed' }] },
+      { id: 'toolu_12', turn: 2, kind: 'bash', tool: 'Bash', detail: 'pnpm typecheck', intent: 'Typecheck again', intentFrom: 'description', at: '11:12:05', status: 'ok', result: 'no errors', why: [{ id: 'toolu_11', rel: 'verifies' }] },
+      { id: 'toolu_13', turn: 2, kind: 'edit', tool: 'Write', detail: 'docs/superpowers/plans/2026-09-11-sessions-redesign.md', intent: 'Record the five-way comparison in the plan doc', intentFrom: 'text', at: '11:14:22', status: 'ok', result: '1 file written · 96 lines', why: [{ id: 'toolu_05', rel: 'plan' }], thinking: 'signature' },
+      { id: 'toolu_14', turn: 2, kind: 'bash', tool: 'Bash', detail: 'git commit -m "feat(sessions): one toolbar track for filter and sort"', intent: 'Commit the toolbar change', intentFrom: 'description', at: '11:14:51', status: 'ok', result: '[redesign 5d21e08] 3 files changed', sha: '5d21e08', why: [{ id: 'toolu_07', rel: 'commits' }, { id: 'toolu_09', rel: 'commits' }, { id: 'toolu_11', rel: 'commits' }, { id: 'toolu_12', rel: 'verifies' }] },
+      { id: 'u-93d4', turn: 3, kind: 'prompt', tool: 'Prompt', detail: 'Ship the board as the default. Which one do you want for the phone?', at: '11:31:10', status: null, why: [] },
+      { id: 'toolu_15', turn: 3, kind: 'edit', tool: 'Edit', detail: 'client/src/components/SessionsView.tsx:34', intent: 'Board becomes the default view', intentFrom: 'description', at: '11:31:38', status: 'ok', result: '1 replacement', why: [{ id: 'u-93d4', rel: 'asked' }, { id: 'toolu_02', rel: 'informed' }], thinking: 'signature' },
+      { id: 'toolu_16', turn: 3, kind: 'decide', tool: 'AskUserQuestion', detail: 'Which view should the phone open on? · What should survive a reload?', intent: 'The phone default is a product call, so ask instead of picking', intentFrom: 'text', at: '11:32:04', status: 'running', result: null, why: [{ id: 'u-93d4', rel: 'asked' }, { id: 'toolu_05', rel: 'plan' }], thinking: 'text', thinkingText: 'Triage reads best on a narrow screen, but the user just made Board the default and may want one view everywhere. Persistence also has a real trade-off (stale filters hide rows), so ask both in one card.' }
+    ]
+  };
+  const TURNS = { 1: 'Plan the five views', 2: 'One toolbar track', 3: 'Board by default' };
+  const REL = { asked: 'asked by', answer: 'your answer', plan: 'follows plan', informed: 'informed by', verifies: 'checks', retry: 'retrying', delegated: 'delegated by', commits: 'commits' };
+  const TR_FILTERS = [['all', 'All'], ['edits', 'Edits'], ['fails', 'Fails'], ['you', 'You']];
+  const stepById = Object.fromEntries(TRACE.steps.map(s => [s.id, s]));
+  const stepIdx = Object.fromEntries(TRACE.steps.map((s, i) => [s.id, i]));
 
   const planTitle = (PLAN_MD.match(/^#{1,3} (.+)$/m) || [, 'Proposed plan'])[1];
   /* the head carries that heading, so the body starts under it — one title */
@@ -4840,7 +5009,12 @@ unpersisted, since session ids churn.`;
   const S = {
     filter: 'all', panel: 'question', phase: 'live',
     minimised: false, needsToken: false, planOpen: false, rec: false,
-    picked: { 0: [], 1: [] }, other: { 0: '', 1: '' }, text: '', loadingOlder: false
+    picked: { 0: [], 1: [] }, other: { 0: '', 1: '' }, text: '', loadingOlder: false,
+    /* Trace: `shown` is how many steps the tail has delivered, `running` the
+       ones whose tool_result has not landed, `follow` keeps the newest step
+       picked and the spine at its tail until the reader picks one */
+    mode: 'chat', sel: 'toolu_16', trFilter: 'all', trFocus: false, follow: true,
+    shown: TRACE.steps.length, running: new Set(['toolu_16']), fresh: null, replaying: false
   };
 
   const QUESTIONS = [
@@ -4902,7 +5076,7 @@ unpersisted, since session ids churn.`;
     const tools = (m.tools || []).map(t => t.body
       ? `<details ${'open'} class="cm-plan"><summary><span class="tool">${t.name}</span> ${t.name === 'ExitPlanMode' ? 'proposed a plan' : 'asked a question'}</summary>
            <div class="cm-text">${mdBlocks(t.body)}</div></details>`
-      : `<div class="cm-tool"><span class="tool${t.name === 'Task' ? ' task' : ''}">${t.name}</span> ${esc(t.detail)}</div>`).join('');
+      : `<div class="cm-tool"><span class="tool${t.name === 'Task' ? ' task' : ''}">${t.name}</span> ${esc(t.detail)}${t.step ? `<button class="cm-why" data-trwhy="${t.step}" title="Open this step in Trace">why?</button>` : ''}</div>`).join('');
     return `<div class="cm ${m.role}">
       <div class="cm-head"><span class="cm-role">${m.role === 'user' ? 'you' : 'claude'}</span><span class="cm-ts">${m.ts}</span></div>
       ${m.text ? `<div class="cm-text">${mdBlocks(m.text)}${m.textTruncated ? '<span class="cm-cut">… truncated</span>' : ''}</div>` : ''}
@@ -4919,12 +5093,157 @@ unpersisted, since session ids churn.`;
     </div>`;
   }
 
-  const foot = () => `<div class="ch-foot">
+  const foot = () => S.mode === 'trace' ? traceFoot() : `<div class="ch-foot">
       <span class="live"><i></i> live · refreshing every 3s</span>
       <span class="sp"></span>
       <span class="ch-count">${countText()}</span>
       ${segFilter()}
     </div>`;
+
+  /* ── Trace mode ──────────────────────────────────────────────────────── */
+  const modeSeg = () => `<div class="seg ground sm" role="tablist" aria-label="View">
+      ${[['chat', 'Chat'], ['trace', 'Trace']].map(([k, l]) =>
+        `<button role="tab" class="${S.mode === k ? 'on' : ''}" data-chmode="${k}" aria-selected="${S.mode === k}">${l}</button>`).join('')}
+    </div>`;
+
+  const delivered = () => TRACE.steps.slice(0, S.shown);
+  const stepTool = (s) => s.agent ? 'child' : '';
+  function causes(id) {   // breadth-first over `why`, nearest first, only steps already delivered
+    const out = new Map(), q = [[id, 0]];
+    while (q.length) {
+      const [cur, d] = q.shift();
+      for (const w of stepById[cur].why) if (stepIdx[w.id] < S.shown && !out.has(w.id)) { out.set(w.id, { d: d + 1, rel: w.rel, from: cur }); q.push([w.id, d + 1]); }
+    }
+    return out;
+  }
+  const ledTo = (id) => delivered().filter(s => s.why.some(w => w.id === id));
+  const questionAnswered = () => S.panel === 'question' && S.phase === 'sent';
+  const status = (s) => S.running.has(s.id) ? 'running' : s.id === 'toolu_16' ? 'ok' : s.status;
+  const answerOf = (s) => s.answer || (s.id === 'toolu_16' && questionAnswered() ? 'Triage · The picked view · Filters and sort' : null);
+  const resultOf = (s) => s.result || answerOf(s) || '';
+  const trPasses = (s) => S.trFilter === 'all' || s.kind === 'prompt'
+    || (S.trFilter === 'edits' && s.kind === 'edit')
+    || (S.trFilter === 'fails' && status(s) === 'error')
+    || (S.trFilter === 'you' && s.kind === 'decide');
+
+  function traceBody() {
+    const anc = S.sel ? causes(S.sel) : new Map();
+    const desc = new Set(S.sel ? ledTo(S.sel).map(s => s.id) : []);
+    let h = '', turn = 0;
+    for (const s of delivered()) {
+      if (!trPasses(s) && s.id !== S.sel) continue;
+      if (s.turn !== turn) { turn = s.turn; h += `<div class="tr-turn">Turn ${turn}<span>${TURNS[turn]}</span></div>`; }
+      const st = status(s);
+      const cls = ['tr-row', 'tr-k-' + s.kind, stepTool(s), st === 'running' ? 'run' : st === 'error' ? 'err' : '',
+        s.id === S.sel ? 'sel' : '', anc.has(s.id) ? 'anc' : '', desc.has(s.id) ? 'desc' : '', s.id === S.fresh ? 'fresh' : ''].join(' ');
+      const flags = (st === 'running' ? `<span class="tr-flag run">${s.kind === 'decide' ? 'waiting on you' : 'running'}</span>` : st === 'error' ? '<span class="tr-flag err">failed</span>' : '')
+        + (answerOf(s) && st !== 'running' ? `<span class="tr-flag you">${esc(answerOf(s))}</span>` : '')
+        + (s.sha && st !== 'running' ? `<span class="tr-flag sha">${s.sha}</span>` : '')
+        + (s.thinking === 'text' ? '<span class="tr-flag think">thinking</span>' : '');
+      h += `<div class="${cls}" data-trn="${s.id}" tabindex="0" role="button" aria-pressed="${s.id === S.sel}">
+          <div class="tr-dotcell"><span class="tr-dot"></span></div>
+          <div class="tr-card"><div class="tr-line"><span class="tr-tool">${esc(s.tool)}</span><span class="tr-detail">${esc(s.detail)}</span>${flags}</div>
+          ${s.intent ? `<div class="tr-intent">${esc(s.intent)}</div>` : ''}
+          ${s.kind !== 'prompt' ? `<div class="tr-res">${st === 'running' ? 'waiting for its result…' : '→ ' + esc(resultOf(s))}</div>` : ''}</div></div>`;
+    }
+    return `<div class="ch-body tr-body" data-trbody>
+        <div class="tr-spine ${S.trFocus ? 'focus' : S.sel ? 'dim' : ''}"><svg class="tr-arcs" aria-hidden="true"></svg>${h}</div>
+        <button class="tr-jump${S.follow ? '' : ' show'}" data-trfollow>↓ Follow live</button>
+      </div>`;
+  }
+
+  function inspector() {
+    const ctxRow = `<div class="tr-ctx">Context ${SESSION.pct}%<span class="tr-track"><i style="width:${SESSION.pct}%"></i></span>${SESSION.tokens} / ${SESSION.window}</div>`;
+    if (!S.sel || stepIdx[S.sel] >= S.shown) return ctxRow + '<div class="tr-none">Pick a step to see why it happened.</div>';
+    const s = stepById[S.sel], st = status(s);
+    const chain = [...causes(s.id).entries()].sort((a, b) => a[1].d - b[1].d || stepIdx[a[0]] - stepIdx[b[0]]);
+    const led = ledTo(s.id);
+    const pill = st === 'running' ? `<span class="tagpill running">${s.kind === 'decide' ? 'waiting on you' : 'running'}</span>`
+      : st === 'error' ? '<span class="tr-flag err">failed</span>' : st === 'ok' ? '<span class="tagpill done">ok</span>' : '';
+    const item = (a, rel, lv) => `<li class="lv${lv}"><button class="tr-k-${a.kind}" data-trn="${a.id}"><span class="tr-rel">${REL[rel]}</span><span class="tr-cl"><span class="tr-tool">${esc(a.tool)}</span>${esc(a.detail.length > 60 ? a.detail.slice(0, 59) + '…' : a.detail)}</span></button></li>`;
+    const think = s.thinking === 'text' ? `<div class="tr-think">${esc(s.thinkingText)}</div>`
+      : s.thinking === 'signature' ? '<div class="tr-think sig">Recorded, but only as an encrypted signature. The text is not in the transcript.</div>' : '';
+    const from = { description: "the call's description", text: "Claude's text before it" }[s.intentFrom];
+    return ctxRow + `
+      <div class="tr-ih tr-k-${s.kind}"><span class="tr-kind">${esc(s.tool)}</span>${pill}${s.sha ? `<span class="tr-flag sha">${s.sha}</span>` : ''}<span class="tr-when">T${s.turn} · ${s.at}</span></div>
+      <div class="tr-title${s.kind === 'prompt' || s.kind === 'decide' ? ' prose' : ''}">${esc(s.detail)}</div>
+      ${answerOf(s) && st !== 'running' ? `<div class="tr-sec"><h4>Your answer</h4><p><b>${esc(answerOf(s))}</b></p></div>` : ''}
+      ${s.intent ? `<div class="tr-sec"><h4>Intent <span>from ${from}</span></h4><p>${esc(s.intent)}</p></div>` : ''}
+      ${chain.length ? `<div class="tr-sec"><h4>Why <span>${chain.length} inferred ${chain.length === 1 ? 'cause' : 'causes'}</span></h4><ol class="tr-chain">${chain.map(([id, m]) => item(stepById[id], m.rel, m.d)).join('')}</ol></div>` : ''}
+      ${think ? `<div class="tr-sec"><h4>Thinking</h4>${think}</div>` : ''}
+      ${s.kind !== 'prompt' ? `<div class="tr-sec"><h4>Result</h4><div class="tr-pre">${st === 'running' ? (s.kind === 'decide' ? 'waiting for your answer — it is in the panel below' : 'waiting for its tool_result…') : esc(resultOf(s))}</div></div>` : ''}
+      ${led.length ? `<div class="tr-sec"><h4>Led to</h4><ol class="tr-chain">${led.map(a => item(a, a.why.find(w => w.id === s.id).rel, 1)).join('')}</ol></div>` : ''}`;
+  }
+
+  function traceFoot() {
+    const steps = delivered().filter(s => s.kind !== 'prompt').length;
+    return `<div class="ch-foot">
+      <span class="live"><i></i> live · refreshing every 3s</span>
+      <span class="sp"></span>
+      <span class="ch-count">${steps} steps · ${S.running.size} running · thinking readable in ${TRACE.thinking.readable} of ${TRACE.thinking.recorded}</span>
+      <button class="tr-tog${S.trFocus ? ' on' : ''}" data-trfocus aria-pressed="${S.trFocus}">Only this step's why</button>
+      <div class="seg ground sm" role="group" aria-label="Step filter">
+        ${TR_FILTERS.map(([k, l]) => `<button class="${S.trFilter === k ? 'on' : ''}" data-trfilter="${k}" aria-pressed="${S.trFilter === k}">${l}</button>`).join('')}
+      </div></div>`;
+  }
+
+  /* the causes of the picked step, as arcs in the spine's gutter */
+  function drawArcs() {
+    const sp = root.querySelector('.tr-spine'), svg = root.querySelector('.tr-arcs');
+    if (!sp || !svg) return;
+    const box = sp.getBoundingClientRect(), pos = {};
+    sp.querySelectorAll('.tr-row').forEach(r => { const d = r.querySelector('.tr-dot').getBoundingClientRect(); pos[r.dataset.trn] = [d.left - box.left + d.width / 2, d.top - box.top + d.height / 2]; });
+    svg.setAttribute('width', box.width); svg.setAttribute('height', box.height);
+    let p = '';
+    const main = delivered().filter(s => pos[s.id] && !s.agent);
+    for (let i = 1; i < main.length; i++) if (main[i].turn === main[i - 1].turn) {
+      const a = pos[main[i - 1].id], b = pos[main[i].id];
+      p += `<path d="M${a[0]} ${a[1]}L${b[0]} ${b[1]}" stroke="var(--border-strong)" stroke-width="2"/>`;
+    }
+    delivered().filter(s => s.agent && pos[s.id] && pos[s.agent]).forEach(s => {
+      const a = pos[s.agent], b = pos[s.id];
+      p += `<path d="M${a[0]} ${a[1]}C${a[0]} ${b[1] - 6} ${a[0] + 4} ${b[1]} ${b[0]} ${b[1]}" fill="none" stroke="var(--magenta)" stroke-width="1.5" opacity=".55"/>`;
+    });
+    if (S.sel && pos[S.sel]) for (const [id, m] of causes(S.sel)) {
+      if (!pos[id] || !pos[m.from]) continue;
+      const a = pos[m.from], b = pos[id], x = Math.min(a[0], b[0]) - Math.min(26, 8 + Math.abs(a[1] - b[1]) / 14);
+      const row = sp.querySelector(`[data-trn="${id}"]`), c = getComputedStyle(row).getPropertyValue('--c').trim();
+      p += `<path d="M${a[0] - 6} ${a[1]}C${x} ${a[1]} ${x} ${b[1]} ${b[0] - 6} ${b[1]}" fill="none" stroke="${c}" ${m.d === 1 ? 'stroke-width="2"' : 'stroke-width="1.3" stroke-dasharray="4 4" opacity=".7"'}/>`;
+    }
+    svg.innerHTML = p;
+  }
+
+  /* The live tail, replayed: each tick is one record landing — the oldest
+     running step's tool_result, else the next step's tool_use. A Task stays
+     running until the last step of its own subagent file resolves. The
+     fixture's last step, the AskUserQuestion, never resolves: it is the
+     question the pinned panel is holding. */
+  let replay = null;
+  function tick() {
+    const plain = [...S.running].filter(id => stepById[id].kind !== 'agent' && id !== 'toolu_16');
+    if (plain.length) S.running.delete(plain[0]);
+    else {
+      const next = TRACE.steps[S.shown];
+      const agent = [...S.running].find(id => stepById[id].kind === 'agent');
+      if (agent && (!next || next.agent !== agent)) S.running.delete(agent);
+      else if (next) {
+        S.shown++; S.fresh = next.id;
+        if (next.kind !== 'prompt') S.running.add(next.id);
+        if (S.follow) S.sel = next.id;
+      } else { clearInterval(replay); S.replaying = false; }
+    }
+    syncInputs();
+    render();
+  }
+  function startReplay() {
+    clearInterval(replay);
+    S.shown = 4; S.running = new Set(['toolu_03']); S.sel = 'toolu_03'; S.follow = true; S.replaying = true; S.mode = 'trace';
+    replay = setInterval(tick, 1400);
+  }
+  function stopReplay() {
+    clearInterval(replay); S.replaying = false;
+    S.shown = TRACE.steps.length; S.running = new Set(['toolu_16']);
+  }
 
   /* ── the pinned wait panels ──────────────────────────────────────────── */
   const tokenRow = () => S.needsToken ? `<div class="qp-token">
@@ -5076,11 +5395,11 @@ unpersisted, since session ids churn.`;
      filter, so the transcript keeps a clean top edge; the wait panel floats
      over the transcript's bottom edge rather than pushing it up. */
   const modal = () => `<div class="ch-modal" role="dialog" aria-label="Session chat history">
-      <div class="ch-head"><span class="ch-title">${SESSION.name}</span><span class="tagpill">${SESSION.project}</span><span class="sp"></span>${closeBits()}</div>
+      <div class="ch-head"><span class="ch-title">${SESSION.name}</span><span class="tagpill">${SESSION.project}</span><span class="sp"></span>${modeSeg()}${closeBits()}</div>
       <div class="ch-split">
-        <div class="ch-side">${facts()}</div>
+        <div class="ch-side${S.mode === 'trace' ? ' tr-side' : ''}">${S.mode === 'trace' ? inspector() : facts()}</div>
         <div class="ch-col">
-          <div class="ch-stack">${body()}${panel()}</div>
+          <div class="ch-stack">${S.mode === 'trace' ? traceBody() : body()}${panel()}</div>
           ${foot()}
         </div>
       </div></div>`;
@@ -5096,6 +5415,10 @@ unpersisted, since session ids churn.`;
       <span class="vsp"></span>
       <button data-ctoken aria-pressed="${S.needsToken}">token prompt</button>
       <button data-colder aria-pressed="${S.loadingOlder}">loading older</button>
+      <span class="vsp"></span>
+      <span class="tag">mode</span>
+      ${[['chat', 'chat'], ['trace', 'trace']].map(([k, l]) => `<button data-chmode="${k}" aria-pressed="${S.mode === k}">${l}</button>`).join('')}
+      <button data-trreplay aria-pressed="${S.replaying}">${S.replaying ? 'stop replay' : 'replay live tail'}</button>
     </div>`;
 
   const stage = () => `<div class="ch-stage">
@@ -5108,13 +5431,42 @@ unpersisted, since session ids churn.`;
     </div>`;
 
   function render() {
+    /* the open question is the trace's last step: answering it in the panel
+       resolves the step, so the two never disagree */
+    if (S.shown === TRACE.steps.length) S.running[questionAnswered() ? 'delete' : 'add']('toolu_16');
+    const old = root.querySelector('[data-trbody]'), keep = old && !S.follow ? old.scrollTop : null;
     root.innerHTML = varbar() + stage();
+    S.fresh = null;
+    const tb = root.querySelector('[data-trbody]');
+    if (!tb) return;
+    if (S.follow) tb.scrollTop = tb.scrollHeight; else if (keep != null) tb.scrollTop = keep;
+    requestAnimationFrame(drawArcs);
   }
+
+  const pick = (id) => { S.sel = id; S.follow = false; };
+  root.addEventListener('keydown', (ev) => {
+    const row = ev.target.closest && ev.target.closest('[data-trn]');
+    if (row && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); syncInputs(); pick(row.dataset.trn); render(); }
+  });
+  /* scrolling away from the tail stops following, the way the chat tail does */
+  root.addEventListener('scroll', (ev) => {
+    const b = ev.target;
+    if (!S.follow || !b.matches || !b.matches('[data-trbody]')) return;
+    if (b.scrollHeight - b.scrollTop - b.clientHeight > 80) { S.follow = false; root.querySelector('.tr-jump').classList.add('show'); }
+  }, true);
+  window.addEventListener('resize', () => requestAnimationFrame(drawArcs));
 
   root.addEventListener('click', (ev) => {
     const hit = (s) => ev.target.closest(s);
     let el;
-    if ((el = hit('[data-cpanel]'))) { S.panel = el.dataset.cpanel; S.minimised = false; S.phase = 'live'; }
+    if ((el = hit('[data-chmode]'))) S.mode = el.dataset.chmode;
+    else if ((el = hit('[data-trwhy]'))) { S.mode = 'trace'; pick(el.dataset.trwhy); }
+    else if ((el = hit('[data-trn]'))) pick(el.dataset.trn);
+    else if ((el = hit('[data-trfilter]'))) S.trFilter = el.dataset.trfilter;
+    else if (hit('[data-trfocus]')) S.trFocus = !S.trFocus;
+    else if (hit('[data-trfollow]')) { S.follow = true; S.sel = TRACE.steps[S.shown - 1].id; }
+    else if (hit('[data-trreplay]')) S.replaying ? stopReplay() : startReplay();
+    else if ((el = hit('[data-cpanel]'))) { S.panel = el.dataset.cpanel; S.minimised = false; S.phase = 'live'; }
     else if ((el = hit('[data-cphase]'))) S.phase = el.dataset.cphase;
     else if (hit('[data-ctoken]')) S.needsToken = !S.needsToken;
     else if (hit('[data-colder]')) S.loadingOlder = !S.loadingOlder;
