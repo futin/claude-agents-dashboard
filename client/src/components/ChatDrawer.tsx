@@ -239,6 +239,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
         <div className="chat-head">
           <span className="chat-title">{session.sessionName || session.project}</span>
           {session.sessionName && <span className="proj-pill">{session.project}</span>}
+          <span className="spacer" />
           <div className="seg" role="tablist" aria-label="View">
             {(['chat', 'trace'] as const).map(v => (
               <button key={v} role="tab" className={view === v ? 'on' : ''} aria-selected={view === v} onClick={() => setView(v)}>
@@ -246,7 +247,6 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
               </button>
             ))}
           </div>
-          <span className="spacer" />
           <button className="chat-x" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
@@ -308,6 +308,8 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                   <div className="chat-body"><div className="chat-empty">Loading trace…</div></div>
                 ) : trace.error ? (
                   <div className="chat-body"><div className="chat-empty">Couldn’t read this session’s trace.</div></div>
+                ) : trace.steps.length === 0 ? (
+                  <div className="chat-body"><div className="chat-empty">No tool calls in this transcript yet.</div></div>
                 ) : (
                   <TraceSpine
                     steps={trace.steps}

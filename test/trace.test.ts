@@ -291,6 +291,26 @@ export function run(): number {
     assert.deepStrictEqual(b.steps().map((s) => [s.id, s.turn]), [['p1', 1], ['r1', 1]]);
   })) p++; else f++;
 
+  if (test('17b. a background task\'s <task-notification> makes no step and does not move the turn', () => {
+    const b = build(
+      prompt('p1', 'go', T(1)),
+      prompt('tn', '<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>', T(2)),
+      use('r1', 'Read', { file_path: '/r/a.ts' }, T(3), 'm1')
+    );
+    assert.deepStrictEqual(b.steps().map((s) => [s.id, s.turn]), [['p1', 1], ['r1', 1]]);
+  })) p++; else f++;
+
+  if (test('17c. a result summary is the first line with a letter or digit: an MCP JSON result does not read "["', () => {
+    const b = build(
+      use('m1', 'mcp__x__search', { q: 'a' }, T(1), 'm1'),
+      result('m1', '[\n  {\n    "type": "text", "text": "Found 3"'),
+      use('b1', 'Bash', { command: 'false' }, T(2), 'm2'),
+      result('b1', '<tool_use_error>\n---\nExit code 1</tool_use_error>', true)
+    );
+    assert.strictEqual(step(b, 'm1').result, '"type": "text", "text": "Found 3"');
+    assert.strictEqual(step(b, 'b1').result, 'Exit code 1');
+  })) p++; else f++;
+
   /* ------------------------------------------------------------- readTrace: files, offsets and the cache */
 
   /** A fresh transcript path in its own tmpdir; `recs` written one JSON line each. */

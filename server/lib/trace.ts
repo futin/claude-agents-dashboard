@@ -49,6 +49,9 @@ const TOOL_ERROR_TAG_RE = /<\/?tool_use_error>/g;
 const COMMAND_NAME_RE = /<command-name>([\s\S]*?)<\/command-name>/;
 const COMMAND_ARGS_RE = /<command-args>([\s\S]*?)<\/command-args>/;
 const INTERRUPT_PREFIX = '[Request interrupted by user';
+const TASK_NOTIFICATION_PREFIX = '<task-notification>';
+/** A line worth showing as a result: one with a letter or digit, so an MCP JSON result does not read `[`. */
+const WORDY_RE = /[\p{L}\p{N}]/u;
 
 /**
  * A step as the builder keeps it: the public `TraceStep` plus what the `why` rules read. None of the extra fields reach a response (`toPublic`).
@@ -115,7 +118,8 @@ function summarize(thinks: Think[]): ScopeState['thinking'] {
  * A user record's text as a prompt step's detail, or null when it is CLI plumbing rather than the user's turn. A slash command or skill invocation is a
  * turn: its echo reads `/<name> <args>`. The CLI writes it as `<command-message>` then `<command-name>` then `<command-args>` (20 of 23 such records in
  * the 60 newest transcripts, 2026-10-16), so the name is looked for anywhere in the plumbing, not only as the prefix. Any other plumbing (a lone
- * `<command-message>` / `<command-args>`, `<local-command-*>`, `<bash-*>`) and the interrupt marker are not turns.
+ * `<command-message>` / `<command-args>`, `<local-command-*>`, `<bash-*>`), the interrupt marker and a background task's `<task-notification>` (the
+ * CLI injects one when the task completes) are not turns.
  */
 export function promptDetail(text: string): string | null {
   if (LOCAL_PLUMBING.test(text)) {
@@ -124,6 +128,7 @@ export function promptDetail(text: string): string | null {
     const args = COMMAND_ARGS_RE.exec(text)?.[1].trim();
     return args ? `/${name} ${args}` : `/${name}`;
   }
+  if (text.trimStart().startsWith(TASK_NOTIFICATION_PREFIX)) return null;
   return text.startsWith(INTERRUPT_PREFIX) ? null : text;
 }
 
@@ -331,7 +336,7 @@ export class TraceBuilder {
     if (s.tool === 'Read' && s.status === 'ok') {
       s.result = `${text.split('\n').filter((l) => l.trim() !== '').length} lines`;
     } else {
-      const line = text.replace(TOOL_ERROR_TAG_RE, '').split('\n').map((l) => l.trim()).find((l) => l !== '');
+      const line = text.replace(TOOL_ERROR_TAG_RE, '').split('\n').map((l) => l.trim()).find((l) => WORDY_RE.test(l));
       s.result = (line ?? '').slice(0, RESULT_CAP);
     }
     if (s.kind === 'read' || s.kind === 'agent') s.resultText = text.slice(0, RESULT_TEXT_CAP);

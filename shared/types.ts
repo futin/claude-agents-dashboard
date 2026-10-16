@@ -924,7 +924,7 @@ export interface TraceStep {
   at: string;
   /** `running` until the tool_result lands; null on a prompt. */
   status: 'running' | 'ok' | 'error' | null;
-  /** One-line result (a Read: "<n> lines"; otherwise the first non-empty line, capped at 160); null while running. */
+  /** One-line result (a Read: "<n> lines"; otherwise the first line with a letter or digit, capped at 160); null while running. */
   result: string | null;
   /** AskUserQuestion: the chosen answers joined with ` · `. ExitPlanMode: `approved` or `rejected`. */
   answer?: string;
