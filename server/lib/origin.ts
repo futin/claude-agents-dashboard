@@ -2,18 +2,16 @@
  * origin.ts — classify how a client reached the dashboard: loopback, the local
  * network, a Tailscale tailnet, or somewhere off-network.
  *
- * Display-only. The result rides along on `GET /api/health` and renders as a
- * badge in the toolbar; **nothing in the app makes an access decision from it**.
- * That is what makes the `X-Forwarded-For` branch below acceptable — see
- * `classifyOrigin`.
+ * Two consumers read the same answer: the toolbar badge (`GET /api/health`
+ * `origin`) and the write gate in `server/api.ts`, which trusts `local` and,
+ * behind the `trustTailnet` setting, `tailnet` (docs/subsystems/remote-access.md).
+ * Because the gate depends on it, {@link resolvePeer} reads only what a remote
+ * client cannot author: the socket address, and the `X-Forwarded-For` entries
+ * that loopback proxies on this machine appended, walked from the right.
  *
- * ⚠️ If you ever gate access on this module, gate on `classifyAddress`, never on
- * `classifyOrigin`. The latter consults the left-most forwarded entry, which a
- * peer behind a loopback-terminating proxy writes itself — so as a guard it
- * returns whichever verdict the caller asks for, refusing an honest proxied
- * client and admitting one that prepends `127.0.0.1`. `classifyAddress` reads the
- * socket and nothing else. (`GET /api/focus` used this; it was removed with the
- * deep link.)
+ * ⚠️ Never take the left-most forwarded entry. The client writes that one itself,
+ * and a proxy only appends — so a left-to-right reader returns whatever verdict the
+ * caller asks for.
  *
  * Pure and zero-dep, like the rest of `server/lib`: no `tailscale` binary, no
  * network, no config. With Tailscale absent the tailnet branches simply never
@@ -123,21 +121,22 @@ export function classifyAddress(addr: string | undefined): ConnectionOrigin {
 }
 
 /**
- * Classify a request by its socket address, falling back to `X-Forwarded-For`
- * **only when the socket is loopback**.
+ * The peer a request came from, as far as this machine can vouch for it.
  *
- * That fallback is what makes `pnpm tailnet` (`tailscale serve`, see
- * `scripts/tailnet.ts`) report `tailnet` instead of `local`: the serve proxy runs
- * on the host, so the socket is 127.0.0.1 and the peer's real tailnet address
- * survives only in the header.
- * The Vite dev proxy (`xfwd: true`) is the same shape.
+ * A non-loopback socket is the answer outright; nothing it sends is consulted.
+ * A loopback socket is some process on this machine, often a proxy: Vite's dev
+ * proxy (`xfwd: true`, which appends with a bare `,`) or `tailscale serve`
+ * (`pnpm tailnet`). Each appends the address of the socket *it* accepted, so the
+ * `X-Forwarded-For` list is walked from the right, skipping loopback entries
+ * (one local proxy fronting another — serve → Vite), and the first other entry
+ * is the peer. A LAN client that forges `100.64.0.1` through Vite arrives as
+ * `100.64.0.1,192.168.1.5` and resolves to `lan`.
  *
- * Spoofing is a non-issue here by construction: a forwarded header is honoured
- * only from loopback — i.e. only from something already on the machine — and the
- * result drives a badge with no policy attached, so the worst a caller can do is
- * mislabel their own badge.
+ * An entry that is not an address, empty ones included, is `unknown` rather than
+ * skipped: the gate fails closed. No header at all, or only loopback entries,
+ * is `local`.
  */
-export function classifyOrigin(
+export function resolvePeer(
   remoteAddress: string | undefined,
   headers?: IncomingHttpHeaders
 ): ConnectionOrigin {
@@ -145,9 +144,21 @@ export function classifyOrigin(
   if (socket !== 'local') return socket;
 
   const raw = headers?.['x-forwarded-for'];
-  const header = Array.isArray(raw) ? raw[0] : raw;
-  if (typeof header !== 'string') return 'local';
-  const hop = header.split(',')[0]?.trim();
-  if (!isIpish(hop)) return 'local';
-  return classifyAddress(hop);
+  if (raw === undefined) return 'local';
+  const hops = (Array.isArray(raw) ? raw.join(',') : raw).split(',');
+  for (let i = hops.length - 1; i >= 0; i--) {
+    const hop = hops[i].trim();
+    if (!isIpish(hop)) return 'unknown';
+    const kind = classifyAddress(hop);
+    if (kind !== 'local') return kind;
+  }
+  return 'local';
+}
+
+/** The badge's name for {@link resolvePeer}, kept so the badge and the gate can never disagree. */
+export function classifyOrigin(
+  remoteAddress: string | undefined,
+  headers?: IncomingHttpHeaders
+): ConnectionOrigin {
+  return resolvePeer(remoteAddress, headers);
 }
