@@ -12,18 +12,36 @@ already folded, which means every link is a hint, not a record. Chat's [drawer](
 `Chat | Trace` is a switch in the drawer head, right of the spacer, next to ✕. The modal always opens in Chat (the view is not persisted). The spine is the
 transcript column; the sidecar swaps the Tasks card for the **inspector** (the picked step in full); the foot swaps the message filter for the step filter.
 
-- **Spine** (`TraceSpine`): turns as headers (`Turn n` plus a label, once per turn: a background subagent's rows keep their Task's turn and interleave by
-  `at` with later turns without repeating its header), a dot and card per step, subagent steps indented under their Task. A step's card is
-  tool, detail and flags (`failed`, `waiting on you`, the user's answer, a commit sha, `thinking`), then the model's stated intent, then `→ result`. The
-  gutter's SVG draws the turn line, a magenta curve from each subagent step to its Task dot, and the picked step's cause arcs (solid one hop back, dashed
-  further). The other rows dim around a pick only when the picked step is on the spine. A pick of the user's own, or scrolling away from the tail, stops
-  **following**; `↓ Follow live` returns to the newest step.
+- **Spine** (`TraceSpine`): turns as headers (`Turn n` plus a label, once per turn), a dot and card per step, and a subagent's steps under their Task.
+  A step's card is tool, detail and flags (`failed`, `waiting on you`, the user's answer, a commit sha, `thinking`), then the model's stated intent,
+  then `→ result`. What renders where is one pure function, `traceLayout` (`client/src/lib/trace.ts`): steps, filter, pick and fold state in, an
+  ordered list of turn headers, step rows with their depth, fold summaries, `N earlier steps` lines and the not-loaded notice out. The spine only draws it.
+  - **Folds.** Under `All`, a Task's children render as one summary row on its lane: `<subagent type> · N steps · K ok · F failed · R running ·
+    duration` (failed and running only when non-zero; the duration runs from the Task's `at` to its last child's, `Xm YYs` or `Ns`, plus ` so far` while
+    the Task runs), and a strip of ticks, one per child, coloured by kind, red on a failure, blinking while running, outlined when picked. A tick picks
+    its step and opens the fold. 4 or more consecutive main-thread calls of one tool in one turn (prompts and agents excepted) fold the same way, keyed
+    `run:<first id>`: `<tool> ×N · <first detail> → … → <last detail>` (each clipped to 36), no duration. The toggle is a round 18px button in the run's
+    colour holding the `Chevron`, right when closed, down when open (`aria-expanded`, `Unfold/Fold these N steps`). A closed fold shows no rows,
+    except while its Task runs: then its last 3 steps show under an `N earlier steps` line that opens it. A fold **opens by itself** when it holds the
+    picked step (at any depth), unless that step is already in the visible tail or the reader closed the fold by hand. The open and closed sets live in
+    `ChatDrawer`, so a round trip through Chat keeps them, and reset with the session.
+  - **Depth.** Depth walks `agent` up the chain; a step whose Task was not delivered sits on the main thread. Main dots sit at x 36, each level is
+    `--tr-depth` (28px) further right, and a card starts 24px right of the line it hangs from (`grid-template-columns: calc(60px + depth*28px)`).
+  - **Under a filter** nothing folds: each passing step renders under its own Task at its own depth, a Task with a passing descendant stays so the step
+    has a parent, a prompt row always passes, and **the picked row stays visible even when the filter excludes it**.
+  - **Gutter** (`drawArcs`): the turn line between main-thread dots; one magenta **lane** per agent, down from the Task dot to the bottom of its card,
+    an elbow right to the lane x, then straight down to its last rendered child row or summary dot (skipped when that is within 12px of the card); and
+    the picked step's cause arcs (solid one hop back, dashed further) in the cause's `--c`. A step hidden in a closed fold answers at that fold's toggle
+    (the innermost rendered one), and an arc whose two ends land on one toggle is skipped.
+  - The other rows, summaries and `more` lines dim around a pick only when the picked step is on the spine; a summary holding the pick or one of its
+    causes keeps the `tr-anc` tint. A pick of the user's own, or scrolling away from the tail, stops **following**; `↓ Follow live` returns to the
+    newest step. When the response was capped, one quiet line heads the spine: `n older steps not loaded`.
 - **Inspector** (`TraceInspector`): the picked step's title, intent, outcome, readable thinking, then `Why` (its causes nearest first, each labelled with the
   relation) and `Led to` (the steps whose own causes name it), then the step's facts: Status, Turn, At, Plan task, Intent from, Thinking. An empty `Why`
   reads `A prompt is where a turn starts; nothing comes before it.` on a prompt and `Its causes are older than the steps loaded.` on any other step. On a
   phone the card is capped at 30vh and At / Intent from / Thinking are hidden (`.f.wide`, as Chat's facts).
-- **Foot:** `n steps · n running · thinking readable in n of n`, plus `· n older not loaded` when the response was capped; the `Only this step's why` toggle;
-  and the filter `All | Edits | Fails | You`. A prompt row always passes a filter, and **the picked row stays visible even when the filter excludes it**.
+- **Foot:** the live text, the `Only this step's why` toggle (neither wraps) and the filter `All | Edits | Fails | You`. No step count: the folds carry
+  it, and the not-loaded notice moved to the head of the spine. The response's `thinking` counts are no longer shown anywhere.
 - **`why?` on Chat's tool lines:** every chat tool line that carries a tool_use id (`ChatToolCall.id`) has a `why?` button that switches to Trace with that
   step picked, not following. A body-bearing tool (`ExitPlanMode`, `AskUserQuestion`) renders as a plan block, and its `why?` sits in the block's summary
   line; the click opens Trace without toggling the block.
@@ -130,9 +148,10 @@ Known limits, accepted for v1: the `informed` scan is O(n²) over the steps (the
 ## Tests
 
 `test/trace.test.ts` (the builder, the file side, the endpoint's cursor and reset, the window's prompts, parents and ancestor cap), `test/trace-why.test.ts` (the eight rules), `test/client-trace.test.ts`
-(merge, `causesOf`, filter). The picked-step views are pinned by the Playwright shots `sessions-daylight-1280-trace.png` and
-`sessions-daylight-375-trace.png` ([visual-tests](visual-tests.md)); the fixture is `test/visual/fixtures/session-trace.ts`, whose tool-line ids the chat
-fixture reuses so `why?` has a step to land on.
+(merge, `causesOf`, filter, and `traceLayout`: closed, running-tail, auto-open and explicit-close folds, the 4× repeat, filter depth, nested depth, the
+duration format). The picked-step views are pinned by the Playwright shots `sessions-daylight-1280-trace.png`,
+`sessions-daylight-375-trace.png` and `sessions-daylight-1280-trace-fold.png` ([visual-tests](visual-tests.md)); the fixture is `test/visual/fixtures/session-trace.ts`, whose tool-line ids the chat
+fixture reuses so `why?` has a step to land on; its subagent has six finished steps, one failed, which the `-fold` shot shows closed.
 
 <!-- docs-sync:
   sources:
