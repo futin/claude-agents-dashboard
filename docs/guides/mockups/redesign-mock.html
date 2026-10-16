@@ -130,8 +130,10 @@
    Trace is the modal's second mode (Chat | Trace in the head), a proposal not
    yet built: every tool call as a row on a spine, with the causes we can infer
    for it, because the thinking text that would say why is almost never in the
-   transcript. The sidecar becomes the picked step's inspector (intent, why-
-   chain, thinking when readable, result, what it led to); the wait panel and
+   transcript. The sidecar keeps live's card stack — Context on top, as in
+   Chat — and swaps the Tasks card for two of the same shape: the picked
+   Step (intent, outcome, the plan task it served, thinking when readable)
+   and Why (its causes, nearest first, then what it led to); the wait panel and
    the foot keep their places, the foot carrying the step filter instead. Each
    chat tool line has a "why?" into it. Its fixture is the chat's own session,
    shaped as the `GET /api/sessions/:id/trace` contract it would need, and the
@@ -1986,32 +1988,61 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .tr-flag.sha{background:var(--mustard-tint);color:var(--mustard-ink)}
 .tr-jump{position:sticky;bottom:12px;display:none;margin:12px auto 0;width:max-content;border:0;border-radius:var(--r-full);background:var(--ink-inverse);color:var(--text-on-dark);padding:6px 14px;font-size:12px;font-weight:500;box-shadow:var(--lift-float);z-index:1}
 .tr-jump.show{display:block}
-/* the inspector, in the sidecar */
-.ch-side.tr-side{gap:14px;padding:18px}
-.tr-ctx{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-tertiary);font-variant-numeric:tabular-nums}
-.tr-ctx .tr-track{flex:1;height:4px;border-radius:var(--r-full);background:var(--bg-track);overflow:hidden}
-.tr-ctx .tr-track i{display:block;height:100%;background:var(--amber-solid)}
-.tr-ih{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
-.tr-kind{font-size:11px;font-weight:600;border-radius:var(--r-full);padding:2px 9px;color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)}
-.tr-when{margin-left:auto;font-size:11.5px;color:var(--text-tertiary);font-variant-numeric:tabular-nums}
-.tr-title{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;font-weight:500;overflow-wrap:anywhere}
-.tr-title.prose{font-family:inherit;font-size:14.5px;line-height:1.4}
-.tr-sec h4{margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
-.tr-sec h4 span{text-transform:none;letter-spacing:0;font-weight:400;font-style:italic}
-.tr-sec p{margin:0;font-size:13px;line-height:1.5}
-.tr-pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:var(--bg-surface);border-radius:var(--r-sm);padding:8px 10px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text-secondary)}
-.tr-think{background:color-mix(in srgb,var(--magenta) 8%,var(--bg-surface));border-radius:var(--r-sm);padding:9px 11px;font-size:12.5px;line-height:1.5}
-.tr-think.sig{background:var(--bg-surface);color:var(--text-tertiary);font-size:12px}
-.tr-chain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
-.tr-chain button{display:grid;grid-template-columns:74px minmax(0,1fr);gap:8px;align-items:baseline;width:100%;text-align:left;border:0;background:none;border-radius:var(--r-sm);padding:5px 6px}
-.tr-chain button:hover{background:var(--bg-surface)}
-.tr-chain .lv2 button{padding-left:16px}
-.tr-chain .lv3 button,.tr-chain .lv4 button,.tr-chain .lv5 button{padding-left:26px}
-.tr-rel{font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text-tertiary)}
-.tr-chain .lv1 .tr-rel{color:var(--text-primary)}
-.tr-cl{font-size:12px;min-width:0;overflow-wrap:anywhere}
-.tr-cl .tr-tool{margin-right:5px}
-.tr-none{font-size:13px;color:var(--text-tertiary);text-align:center;padding:40px 12px;line-height:1.6}
+/* ── the sidecar's Tasks card — live's TasksCard (styles.css .tasks-kv) ──
+   The card takes the column's spare height and its checklist scrolls inside
+   it, so the facts below keep their natural height. The head carries
+   `Plan · <name>` and done / total; a long name ellipsises, the count never
+   shrinks. The running task is the green row with the pulsing dot. */
+.ch-side .tasks-kv{display:flex;flex-direction:column;flex:1;min-height:200px}
+.tasks-kv .k{display:flex;justify-content:space-between;gap:8px;flex:none}
+.tasks-kv .k > :first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tasks-kv .k > :last-child{flex:none;font-variant-numeric:tabular-nums}
+.tasks-kv .track{flex:none;height:6px;margin-top:8px}
+.task-status{flex:none;margin-top:8px;font-size:12px;color:var(--text-secondary)}
+.task-list{display:flex;flex-direction:column;gap:1px;flex:1;min-height:0;margin:12px -6px 0;padding:0;overflow:auto;list-style:none;font-size:12.5px}
+.task-list li{display:flex;align-items:flex-start;gap:8px;padding:5px 6px;border-radius:var(--r-sm);line-height:1.35}
+.task-list .g{flex:none;width:14px;font-size:11px;line-height:17px;text-align:center}
+.task-list .tsub{min-width:0;overflow-wrap:anywhere}
+.task-list .done{color:var(--text-tertiary)}
+.task-list .done .g{color:var(--green-ink)}
+.task-list .todo{color:var(--text-secondary)}
+.task-list .todo .g{color:var(--text-tertiary)}
+.task-list .live{background:color-mix(in srgb,var(--green-500) 14%,transparent);color:var(--text-primary);font-weight:600}
+.task-list .live .g{display:grid;height:17px;place-items:center}
+.task-dot{width:8px;height:8px;border-radius:50%;background:var(--green-500);animation:task-pulse 1.6s ease-in-out infinite}
+@keyframes task-pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.task-dot{animation:none}}
+
+/* ── Trace's sidecar: the same cards, about the picked step ─────────────
+   Context stays on top so the switch never moves it. The Step card is the
+   picked row read in full; the Why card is the Tasks card's shape — head with
+   a count, a list that takes the spare height and scrolls inside — with the
+   kind dot as the glyph, nearest cause first, then what the step led to. */
+.tr-step .k{display:flex;justify-content:space-between;gap:8px}
+.tr-step .k .tr-tool{font-size:12px}
+.tr-step .k span:last-child{color:var(--text-tertiary);font-variant-numeric:tabular-nums;flex:none}
+.tr-title{margin-top:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;font-weight:500;line-height:1.45;overflow-wrap:anywhere}
+.tr-title.prose{font-family:inherit;font-size:14px}
+.tr-say{margin-top:6px;font-size:12.5px;line-height:1.45;color:var(--text-secondary)}
+.tr-say i{font-style:normal;color:var(--text-tertiary)}
+.tr-stat{margin-top:8px;font-size:12px;color:var(--text-secondary);overflow-wrap:anywhere}
+.tr-stat.ok{color:var(--green-ink)}
+.tr-stat.err{color:var(--red-500)}
+.tr-stat.you b{color:var(--amber-ink)}
+.tr-think{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12.5px;line-height:1.5}
+.tr-think .lbl{display:block;font-size:11px;color:var(--magenta);font-weight:600;margin-bottom:3px}
+.tr-think.sig{color:var(--text-tertiary);font-size:12px}
+.tr-think.sig .lbl{color:var(--text-tertiary)}
+.tr-why .task-list li{padding:0}
+.tr-why .task-list button{display:flex;align-items:flex-start;gap:8px;width:100%;padding:5px 6px;border:0;background:none;border-radius:var(--r-sm);text-align:left;line-height:1.35;color:var(--text-secondary)}
+.tr-why .task-list button:hover{background:var(--bg-subtle);color:var(--text-primary)}
+.tr-why .task-list .near button{color:var(--text-primary)}
+.tr-why .g i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c);vertical-align:1px}
+.tr-why .tr-k-prompt .g i{border-radius:2px}
+.tr-rel{display:block;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-tertiary)}
+.tr-why .tsub .tr-tool{margin-right:5px}
+.tr-why .tr-led{margin:10px 0 2px 6px;font-size:11px;color:var(--text-tertiary)}
+.tr-none{font-size:13px;color:var(--text-tertiary);text-align:center;padding:24px 8px;line-height:1.6}
 /* the chat's tool line links into the trace */
 .cm-why{border:0;background:none;padding:0 0 0 6px;font-size:11.5px;font-weight:500;color:var(--magenta)}
 .cm-why:hover{text-decoration:underline}
@@ -4941,6 +4972,7 @@ unpersisted, since session ids churn.`;
          answer?: string       the AskUserQuestion pick / plan verdict
          sha?: string          short sha read off a `git commit` result
          agent?: string        the Task step whose subagent file ran it
+         task?: string         the plan task in_progress when it ran
          why: { id: string; rel: Rel }[]              INFERRED, see below
          thinking: 'text' | 'signature' | null; thinkingText?: string
        }
@@ -4989,9 +5021,30 @@ unpersisted, since session ids churn.`;
   };
   const TURNS = { 1: 'Plan the five views', 2: 'One toolbar track', 3: 'Board by default' };
   const REL = { asked: 'asked by', answer: 'your answer', plan: 'follows plan', informed: 'informed by', verifies: 'checks', retry: 'retrying', delegated: 'delegated by', commits: 'commits' };
+  /* the same edges read forward, for the Why card's "Led to" rows */
+  const REL_FWD = { asked: 'next step', answer: 'uses the answer', plan: 'carries out', informed: 'used by', verifies: 'checked by', retry: 'fixed by', delegated: 'subagent ran', commits: 'committed in' };
   const TR_FILTERS = [['all', 'All'], ['edits', 'Edits'], ['fails', 'Fails'], ['you', 'You']];
   const stepById = Object.fromEntries(TRACE.steps.map(s => [s.id, s]));
   const stepIdx = Object.fromEntries(TRACE.steps.map((s, i) => [s.id, i]));
+
+  /* the plan's tasks, as `session.tasks` / `session.taskPlan` carry them off
+     the 3s poll (shared/types.ts SessionTask) — the sidecar's Tasks card */
+  const TASK_PLAN = '2026-09-11-sessions-redesign';
+  const TASKS = [
+    { id: '1', subject: 'Read the live view and its subsystem doc', status: 'completed' },
+    { id: '2', subject: 'Draw the five views as artboards', status: 'completed' },
+    { id: '3', subject: 'One toolbar track for filter and sort', status: 'completed' },
+    { id: '4', subject: 'Board as the default view', status: 'completed' },
+    { id: '5', subject: 'Pick the phone view', activeForm: 'Asking which view the phone opens on', status: 'in_progress' },
+    { id: '6', subject: 'Persist the picked view as dashboard.sessionsView', status: 'pending' },
+    { id: '7', subject: 'Visual tests for all five views', status: 'pending' }
+  ];
+  /* `task` on each step: which task was in_progress when its tool_use landed.
+     Filled here in one pass to keep the step rows short. */
+  const TASK_OF = { toolu_01: '1', toolu_02: '1', toolu_03: '1', toolu_04: '2', toolu_04a: '2', toolu_04b: '2', toolu_04c: '2', toolu_05: '2',
+    toolu_06: '3', toolu_07: '3', toolu_08: '3', toolu_09: '3', toolu_10: '3', toolu_11: '3', toolu_12: '3', toolu_13: '3', toolu_14: '3',
+    toolu_15: '4', toolu_16: '5' };
+  TRACE.steps.forEach(s => { s.task = TASK_OF[s.id] || null; });
 
   const planTitle = (PLAN_MD.match(/^#{1,3} (.+)$/m) || [, 'Proposed plan'])[1];
   /* the head carries that heading, so the body starts under it — one title */
@@ -5152,27 +5205,41 @@ unpersisted, since session ids churn.`;
       </div>`;
   }
 
+  /* the sidecar in Trace: Context, then the picked step as a card, then its
+     causes in the Tasks card's shape */
   function inspector() {
-    const ctxRow = `<div class="tr-ctx">Context ${SESSION.pct}%<span class="tr-track"><i style="width:${SESSION.pct}%"></i></span>${SESSION.tokens} / ${SESSION.window}</div>`;
-    if (!S.sel || stepIdx[S.sel] >= S.shown) return ctxRow + '<div class="tr-none">Pick a step to see why it happened.</div>';
+    if (!S.sel || stepIdx[S.sel] >= S.shown) return contextCard() + '<div class="kv"><div class="tr-none">Pick a step to see why it happened.</div></div>';
     const s = stepById[S.sel], st = status(s);
     const chain = [...causes(s.id).entries()].sort((a, b) => a[1].d - b[1].d || stepIdx[a[0]] - stepIdx[b[0]]);
     const led = ledTo(s.id);
-    const pill = st === 'running' ? `<span class="tagpill running">${s.kind === 'decide' ? 'waiting on you' : 'running'}</span>`
-      : st === 'error' ? '<span class="tr-flag err">failed</span>' : st === 'ok' ? '<span class="tagpill done">ok</span>' : '';
-    const item = (a, rel, lv) => `<li class="lv${lv}"><button class="tr-k-${a.kind}" data-trn="${a.id}"><span class="tr-rel">${REL[rel]}</span><span class="tr-cl"><span class="tr-tool">${esc(a.tool)}</span>${esc(a.detail.length > 60 ? a.detail.slice(0, 59) + '…' : a.detail)}</span></button></li>`;
-    const think = s.thinking === 'text' ? `<div class="tr-think">${esc(s.thinkingText)}</div>`
-      : s.thinking === 'signature' ? '<div class="tr-think sig">Recorded, but only as an encrypted signature. The text is not in the transcript.</div>' : '';
+    const task = s.task && TASKS.find(t => t.id === s.task);
     const from = { description: "the call's description", text: "Claude's text before it" }[s.intentFrom];
-    return ctxRow + `
-      <div class="tr-ih tr-k-${s.kind}"><span class="tr-kind">${esc(s.tool)}</span>${pill}${s.sha ? `<span class="tr-flag sha">${s.sha}</span>` : ''}<span class="tr-when">T${s.turn} · ${s.at}</span></div>
-      <div class="tr-title${s.kind === 'prompt' || s.kind === 'decide' ? ' prose' : ''}">${esc(s.detail)}</div>
-      ${answerOf(s) && st !== 'running' ? `<div class="tr-sec"><h4>Your answer</h4><p><b>${esc(answerOf(s))}</b></p></div>` : ''}
-      ${s.intent ? `<div class="tr-sec"><h4>Intent <span>from ${from}</span></h4><p>${esc(s.intent)}</p></div>` : ''}
-      ${chain.length ? `<div class="tr-sec"><h4>Why <span>${chain.length} inferred ${chain.length === 1 ? 'cause' : 'causes'}</span></h4><ol class="tr-chain">${chain.map(([id, m]) => item(stepById[id], m.rel, m.d)).join('')}</ol></div>` : ''}
-      ${think ? `<div class="tr-sec"><h4>Thinking</h4>${think}</div>` : ''}
-      ${s.kind !== 'prompt' ? `<div class="tr-sec"><h4>Result</h4><div class="tr-pre">${st === 'running' ? (s.kind === 'decide' ? (S.panel === 'question' ? 'waiting for your answer — it is in the panel below' : 'waiting for your answer') : 'waiting for its tool_result…') : esc(resultOf(s))}</div></div>` : ''}
-      ${led.length ? `<div class="tr-sec"><h4>Led to</h4><ol class="tr-chain">${led.map(a => item(a, a.why.find(w => w.id === s.id).rel, 1)).join('')}</ol></div>` : ''}`;
+    const stat = s.kind === 'prompt' ? ''
+      : st === 'running' ? `<div class="tr-stat">${s.kind === 'decide' ? (S.panel === 'question' ? 'Waiting for your answer — it is in the panel below' : 'Waiting for your answer') : 'Running · waiting for its tool_result'}</div>`
+      : st === 'error' ? `<div class="tr-stat err">✕ ${esc(resultOf(s))}</div>`
+      : answerOf(s) ? `<div class="tr-stat you">You answered <b>${esc(answerOf(s))}</b></div>`
+      : `<div class="tr-stat ok">✓ ${esc(resultOf(s))}${s.sha ? ' · ' + s.sha : ''}</div>`;
+    const think = s.thinking === 'text' ? `<div class="tr-think"><span class="lbl">Thinking</span>${esc(s.thinkingText)}</div>`
+      : s.thinking === 'signature' ? '<div class="tr-think sig"><span class="lbl">Thinking</span>Recorded, but only as an encrypted signature. The text is not in the transcript.</div>' : '';
+    const row = (a, label, near) => `<li class="tr-k-${a.kind}${near ? ' near' : ''}"><button data-trn="${a.id}">
+        <span class="g" aria-hidden="true"><i></i></span>
+        <span class="tsub"><span class="tr-rel">${label}</span><span class="tr-tool">${esc(a.tool)}</span>${esc(a.detail.length > 64 ? a.detail.slice(0, 63) + '…' : a.detail)}</span></button></li>`;
+    return contextCard() + `
+      <div class="kv tr-step tr-k-${s.kind}">
+        <div class="k"><span class="tr-tool">${esc(s.tool)}</span><span>T${s.turn} · ${s.at}</span></div>
+        <div class="tr-title${s.kind === 'prompt' || s.kind === 'decide' ? ' prose' : ''}">${esc(s.detail)}</div>
+        ${s.intent ? `<div class="tr-say">${esc(s.intent)} <i>· from ${from}</i></div>` : ''}
+        ${stat}
+        ${task ? `<div class="tr-say"><i>Plan task ·</i> ${esc(task.subject)}</div>` : ''}
+        ${think}
+      </div>
+      <div class="kv tasks-kv tr-why">
+        <div class="k"><span>Why</span><span>${chain.length ? `${chain.length} inferred` : 'none'}</span></div>
+        <ol class="task-list">
+          ${chain.length ? chain.map(([id, m]) => row(stepById[id], REL[m.rel], m.d === 1)).join('') : '<li><span class="tsub">A prompt is where a turn starts; nothing comes before it.</span></li>'}
+          ${led.length ? `<li class="tr-led">Led to</li>${led.map(a => row(a, REL_FWD[a.why.find(w => w.id === s.id).rel], true)).join('')}` : ''}
+        </ol>
+      </div>`;
   }
 
   function traceFoot() {
@@ -5377,11 +5444,28 @@ unpersisted, since session ids churn.`;
 
   /* facts block — B's sidecar and D's right column show it instead of leaving
      the space empty; the same figures the row and the head carry. */
-  const facts = () => `<div class="kv">
+  const contextCard = () => `<div class="kv">
       <div class="k">Context</div>
       <div class="v${SESSION.pct >= 70 ? ' warn' : ''}">${SESSION.pct}%<span class="u">${SESSION.tokens} / ${SESSION.window}</span></div>
       <div class="track"><i class="warn" style="width:${SESSION.pct}%"></i></div>
-    </div>
+    </div>`;
+
+  /* live's TasksCard at desktop width: head, track, status line, checklist */
+  function tasksCard() {
+    const done = TASKS.filter(t => t.status === 'completed').length, total = TASKS.length;
+    const glyph = (t) => t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '<span class="task-dot"></span>' : '○';
+    const kind = (t) => t.status === 'completed' ? 'done' : t.status === 'in_progress' ? 'live' : 'todo';
+    const status = done === total ? '✓ All tasks done' : done === 0 && !TASKS.some(t => t.status === 'in_progress') ? 'Not started' : null;
+    return `<div class="kv tasks-kv">
+      <div class="k"><span title="${TASK_PLAN}">Plan · ${TASK_PLAN.replace(/^\d{4}-\d{2}-\d{2}-/, '')}</span><span>${done} / ${total}</span></div>
+      <div class="track"><i style="width:${Math.round(done / total * 100)}%"></i></div>
+      ${status ? `<div class="task-status">${status}</div>` : ''}
+      <ol class="task-list">${TASKS.map(t => `<li class="${kind(t)}"${kind(t) === 'live' ? ' aria-current="step"' : ''}>
+        <span class="g" aria-hidden="true">${glyph(t)}</span><span class="tsub">${esc(t.subject)}</span></li>`).join('')}</ol>
+    </div>`;
+  }
+
+  const facts = () => `${contextCard()}${tasksCard()}
     <div class="ch-facts">
       <div class="f"><span>Project</span><b>${SESSION.project}</b></div>
       <div class="f"><span>Branch</span><b>${SESSION.branch}</b></div>
@@ -5397,7 +5481,7 @@ unpersisted, since session ids churn.`;
   const modal = () => `<div class="ch-modal" role="dialog" aria-label="Session chat history">
       <div class="ch-head"><span class="ch-title">${SESSION.name}</span><span class="tagpill">${SESSION.project}</span><span class="sp"></span>${modeSeg()}${closeBits()}</div>
       <div class="ch-split">
-        <div class="ch-side${S.mode === 'trace' ? ' tr-side' : ''}">${S.mode === 'trace' ? inspector() : facts()}</div>
+        <div class="ch-side">${S.mode === 'trace' ? inspector() : facts()}</div>
         <div class="ch-col">
           <div class="ch-stack">${S.mode === 'trace' ? traceBody() : body()}${panel()}</div>
           ${foot()}
