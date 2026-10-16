@@ -1,7 +1,8 @@
 import assert from 'node:assert';
 
 import {
-  REL_FWD_LABEL, REL_LABEL, TRACE_FILTERS, causesOf, ledTo, mergeTrace, passesFilter, turnLabel
+  REL_FWD_LABEL, REL_LABEL, TRACE_FILTERS, causesOf, clipText, ledTo, mergeTrace, passesFilter, subagentType, traceDuration,
+  traceLayout, turnLabel, type TraceFolds, type TraceItem
 } from '../client/src/lib/trace.js';
 import type { TraceKind, TraceRel, TraceStep } from '../shared/types.js';
 
@@ -121,6 +122,117 @@ export function run(): number {
     assert.strictEqual(REL_FWD_LABEL.commits, 'committed in');
     assert.deepStrictEqual(TRACE_FILTERS.map(x => x.label), ['All', 'Edits', 'Fails', 'You']);
     assert.deepStrictEqual(TRACE_FILTERS.map(x => x.key), ['all', 'edits', 'fails', 'you']);
+  })) p++; else f++;
+
+  // ── traceLayout: the folded spine ──
+  const NO_FOLDS: TraceFolds = { open: new Set(), closed: new Set() };
+  const t0 = Date.parse('2026-10-16T10:00:00.000Z');
+  const iso = (s: number): string => new Date(t0 + s * 1000).toISOString();
+  /** A Task `A` with `n` children `c0..`, the Task at second 0 and each child a second apart. */
+  function agentRun(n: number, over: Partial<TraceStep> = {}, kid: (i: number) => Partial<TraceStep> = () => ({})): TraceStep[] {
+    const out = [step('p', { kind: 'prompt', tool: 'Prompt', detail: 'go', at: iso(0), status: null }),
+      step('A', { kind: 'agent', tool: 'Agent · general-purpose', at: iso(1), ...over })];
+    for (let i = 0; i < n; i++) out.push(step('c' + i, { agent: 'A', at: iso(2 + i), ...kid(i) }));
+    return out;
+  }
+  const shape = (items: TraceItem[]): string[] => items.map(i =>
+    i.t === 'step' ? `${i.step.id}@${i.depth}` : i.t === 'fold' ? `fold:${i.fold.key}${i.fold.open ? '+' : '-'}` : i.t === 'more' ? `more:${i.n}` : i.t);
+  const layout = (steps: TraceStep[], o: Partial<Parameters<typeof traceLayout>[1]> = {}) =>
+    traceLayout(steps, { filter: 'all', sel: null, folds: NO_FOLDS, ...o });
+
+  if (test('traceLayout: a finished, closed fold shows its summary and 0 rows', () => {
+    const items = layout(agentRun(5, {}, i => (i === 2 ? { status: 'error' } : {})));
+    assert.deepStrictEqual(shape(items), ['turn', 'p@0', 'A@0', 'fold:A-']);
+    const f = items.find(i => i.t === 'fold');
+    assert.ok(f && f.t === 'fold');
+    assert.strictEqual(f.fold.depth, 1);
+    assert.deepStrictEqual([f.fold.ok, f.fold.failed, f.fold.running, f.fold.live], [4, 1, 0, false]);
+    assert.strictEqual(f.fold.members.length, 5);
+  })) p++; else f++;
+
+  if (test('traceLayout: closed and running shows the last 3 under "N earlier"', () => {
+    const items = layout(agentRun(6, { status: 'running' }, i => (i === 5 ? { status: 'running' } : {})));
+    assert.deepStrictEqual(shape(items), ['turn', 'p@0', 'A@0', 'fold:A-', 'more:3', 'c3@1', 'c4@1', 'c5@1']);
+    const short = layout(agentRun(2, { status: 'running' }));
+    assert.deepStrictEqual(shape(short), ['turn', 'p@0', 'A@0', 'fold:A-', 'c0@1', 'c1@1'], 'no "0 earlier" line');
+  })) p++; else f++;
+
+  if (test('traceLayout: a fold opens by itself when it holds sel, not when sel is in the tail', () => {
+    assert.deepStrictEqual(shape(layout(agentRun(5), { sel: 'c1' })).slice(3),
+      ['fold:A+', 'c0@1', 'c1@1', 'c2@1', 'c3@1', 'c4@1']);
+    const running = agentRun(6, { status: 'running' });
+    assert.deepStrictEqual(shape(layout(running, { sel: 'c5' })).slice(3), ['fold:A-', 'more:3', 'c3@1', 'c4@1', 'c5@1']);
+    assert.ok(shape(layout(running, { sel: 'c0' })).includes('fold:A+'));
+  })) p++; else f++;
+
+  if (test('traceLayout: an explicit close beats the auto-open; an explicit open needs no pick', () => {
+    const closed = layout(agentRun(5), { sel: 'c1', folds: { open: new Set(), closed: new Set(['A']) } });
+    assert.deepStrictEqual(shape(closed).slice(3), ['fold:A-']);
+    const opened = layout(agentRun(5), { folds: { open: new Set(['A']), closed: new Set() } });
+    assert.deepStrictEqual(shape(opened).slice(3), ['fold:A+', 'c0@1', 'c1@1', 'c2@1', 'c3@1', 'c4@1']);
+  })) p++; else f++;
+
+  if (test('traceLayout: 4 consecutive main calls of one tool in one turn fold; 3 do not', () => {
+    const reads = (n: number, tool = 'Read') => [step('p', { kind: 'prompt', tool: 'Prompt', at: iso(0), status: null }),
+      ...Array.from({ length: n }, (_, i) => step('r' + i, { tool, detail: 'src/f' + i + '.ts', at: iso(1 + i) })),
+      step('e', { kind: 'edit', tool: 'Edit', at: iso(20) })];
+    assert.deepStrictEqual(shape(layout(reads(4))), ['turn', 'p@0', 'fold:run:r0-', 'e@0']);
+    assert.deepStrictEqual(shape(layout(reads(3))), ['turn', 'p@0', 'r0@0', 'r1@0', 'r2@0', 'e@0']);
+    const run = layout(reads(4)).find(i => i.t === 'fold');
+    assert.ok(run && run.t === 'fold');
+    assert.strictEqual(run.fold.task, null);
+    assert.strictEqual(run.fold.depth, 0);
+    // a turn boundary splits the run, a subagent step between them does not
+    const split = [...reads(2), ...[2, 3].map(i => step('r' + i, { turn: 2, detail: 'x', at: iso(30 + i) }))];
+    assert.ok(!shape(layout(split)).some(x => x.startsWith('fold:run')));
+    // prompts and agents never fold as a run
+    const agents = Array.from({ length: 4 }, (_, i) => step('a' + i, { kind: 'agent', tool: 'Agent', at: iso(i) }));
+    assert.ok(!shape(layout(agents)).some(x => x.startsWith('fold:')));
+  })) p++; else f++;
+
+  if (test('traceLayout: under a filter nothing folds, children sit at one depth, a Task with a passing child stays', () => {
+    const steps = agentRun(5, {}, i => (i === 3 ? { kind: 'edit', tool: 'Edit' } : {}));
+    assert.deepStrictEqual(shape(layout(steps, { filter: 'edits' })), ['turn', 'p@0', 'A@0', 'c3@1']);
+    // the picked row always renders, under its own Task
+    assert.deepStrictEqual(shape(layout(steps, { filter: 'edits', sel: 'c1' })), ['turn', 'p@0', 'A@0', 'c1@1', 'c3@1']);
+    assert.deepStrictEqual(shape(layout(steps, { filter: 'fails' })), ['turn', 'p@0']);
+  })) p++; else f++;
+
+  if (test('traceLayout: nested agents walk `agent` up the chain for depth', () => {
+    const steps = [
+      step('A', { kind: 'agent', tool: 'Agent · outer', at: iso(0) }),
+      step('B', { kind: 'agent', tool: 'Agent · inner', agent: 'A', at: iso(1) }),
+      step('x', { agent: 'B', at: iso(2) }),
+      step('y', { agent: 'B', kind: 'edit', tool: 'Edit', at: iso(3) }),
+      step('orphan', { agent: 'gone', at: iso(4) })
+    ];
+    // sel `x` opens both folds: the outer one holds it two levels down
+    const items = layout(steps, { sel: 'x' });
+    assert.deepStrictEqual(shape(items), ['turn', 'A@0', 'fold:A+', 'B@1', 'fold:B+', 'x@2', 'y@2', 'orphan@0']);
+    const inner = items.find(i => i.t === 'fold' && i.fold.key === 'B');
+    assert.ok(inner && inner.t === 'fold');
+    assert.strictEqual(inner.fold.depth, 2);
+    const outer = items.find(i => i.t === 'fold' && i.fold.key === 'A');
+    assert.ok(outer && outer.t === 'fold');
+    assert.deepStrictEqual(outer.fold.ids.sort(), ['B', 'x', 'y']);
+    assert.deepStrictEqual(shape(layout(steps, { filter: 'edits' })), ['turn', 'A@0', 'B@1', 'y@2']);
+  })) p++; else f++;
+
+  if (test('traceLayout: the not-loaded notice leads the spine', () => {
+    assert.deepStrictEqual(shape(layout(agentRun(1), { dropped: 7 })).slice(0, 2), ['dropped', 'turn']);
+    assert.ok(!shape(layout(agentRun(1), { dropped: 0 })).includes('dropped'));
+  })) p++; else f++;
+
+  if (test('traceDuration / subagentType / clipText', () => {
+    assert.strictEqual(traceDuration(iso(0), iso(42)), '42s');
+    assert.strictEqual(traceDuration(iso(0), iso(60)), '1m 00s');
+    assert.strictEqual(traceDuration(iso(0), iso(125)), '2m 05s');
+    assert.strictEqual(traceDuration(iso(10), iso(0)), '0s');
+    assert.strictEqual(traceDuration('', iso(0)), '0s');
+    assert.strictEqual(subagentType('Agent · general-purpose'), 'general-purpose');
+    assert.strictEqual(subagentType('Task'), 'Task');
+    assert.strictEqual(clipText('abcdef', 4), 'abc…');
+    assert.strictEqual(clipText('abcd', 4), 'abcd');
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

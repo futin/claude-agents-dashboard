@@ -1833,15 +1833,18 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 /* two classes, so it outranks `.chat-body` at every tier; the phone's right
    edge is the transcript's 14px, `md` below restores the mock's 18px */
 .chat-body.tr-body{display:block;position:relative;gap:0;padding:6px 14px calc(40px + var(--pinned-h,0px)) 0}
-.tr-spine{position:relative;display:flex;flex-direction:column;gap:6px}
+.tr-spine{position:relative;display:flex;flex-direction:column;gap:6px;--tr-depth:28px}
 .tr-arcs{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
 .tr-turn{display:flex;gap:10px;align-items:baseline;padding:16px 0 6px 60px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
 .tr-turn span{min-width:0;overflow-wrap:anywhere;text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink2)}
 .tr-row{display:grid;grid-template-columns:60px minmax(0,1fr);align-items:start;cursor:pointer;transition:opacity .15s}
-.tr-row.tr-child{grid-template-columns:84px minmax(0,1fr)}
+/* depth: the main dots sit at x 36, each nesting level is one --tr-depth
+   further right, and a card starts 24px right of the line it hangs from, so
+   the agent's lane runs in that gutter */
+.tr-row.tr-child{--x:calc(36px + var(--depth,1) * var(--tr-depth));grid-template-columns:calc(60px + var(--depth,1) * var(--tr-depth)) minmax(0,1fr)}
 .tr-dotcell{position:relative;min-height:36px;height:100%}
 .tr-dot{position:absolute;left:30px;top:12px;width:12px;height:12px;border-radius:999px;background:var(--strip);border:2.5px solid var(--c)}
-.tr-row.tr-child .tr-dot{left:54px;top:13px;width:10px;height:10px}
+.tr-row.tr-child .tr-dot{left:calc(var(--x) - 5px);top:13px;width:10px;height:10px}
 .tr-row.tr-k-prompt .tr-dot{background:var(--c);border-radius:3px}
 .tr-row.tr-err .tr-dot{background:var(--red);border-color:var(--red)}
 .tr-row.tr-run .tr-dot{border-style:dashed;animation:tr-spin 2.4s linear infinite}
@@ -1878,6 +1881,37 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 @keyframes tr-spin{to{transform:rotate(360deg)}}
 @keyframes tr-land{from{background:var(--green-tint)}}
 @media (prefers-reduced-motion:reduce){.tr-row.tr-run .tr-dot,.tr-row.tr-fresh .tr-card{animation:none}.tr-row{transition:none}}
+/* ── folds (mock `foldRun()`): a run is one summary row with a tick per step,
+   and its toggle — a solid dot in the run's colour, on the lane at the
+   children's x — opens it. Ticks take --c from their kind; a failure is red. */
+.tr-sum{display:grid;grid-template-columns:60px minmax(0,1fr);align-items:start;cursor:pointer;transition:opacity .15s}
+.tr-sum.tr-sub{grid-template-columns:calc(60px + var(--depth,1) * var(--tr-depth)) minmax(0,1fr)}
+.tr-sum .tr-dot.tr-fold{left:27px;top:7px;width:18px;height:18px;border:0;padding:0;display:grid;place-items:center;background:var(--c);color:var(--strip);cursor:pointer}
+.tr-sum.tr-sub .tr-dot.tr-fold{left:calc(27px + var(--depth,1) * var(--tr-depth))}
+.tr-fold .chev{width:10px;height:10px;stroke-width:1.6}
+.tr-sumcard{padding:6px 10px 6px 6px;border-radius:8px;min-width:0}
+.tr-sum:hover .tr-sumcard{background:var(--strip-hi)}
+.tr-sum.tr-anc .tr-sumcard{background:color-mix(in srgb,var(--c) 8%,transparent)}
+.tr-sumline{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:baseline;font-size:12px;color:var(--ink2);min-width:0}
+.tr-sumline b{font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--c)}
+.tr-sumline i{font-style:normal;color:var(--ink3)}
+.tr-sumline .err{color:var(--red)}
+.tr-sumline .tr-path{color:var(--ink);overflow-wrap:anywhere;min-width:0}
+.tr-strip{display:flex;flex-wrap:wrap;gap:2px;margin-top:6px}
+.tr-tick{width:7px;height:14px;padding:0;border:0;border-radius:2px;background:var(--c);opacity:.55;cursor:pointer}
+.tr-tick:hover,.tr-tick:focus-visible,.tr-tick.tr-on{opacity:1;outline:1.5px solid var(--ink);outline-offset:1px}
+.tr-tick.tr-terr{background:var(--red);opacity:1}
+.tr-tick.tr-trun{opacity:1;animation:tr-blink 1.2s ease-in-out infinite}
+.tr-more{display:block;margin:0 0 2px 60px;padding:2px 6px;border:0;background:none;font-family:var(--font);font-size:11.5px;text-align:left;color:var(--ink3);cursor:pointer}
+.tr-more.tr-sub{margin-left:calc(60px + var(--depth,1) * var(--tr-depth))}
+.tr-more:hover{color:var(--ink);text-decoration:underline}
+/* the not-loaded notice heads the spine in `.tr-more`'s voice, but is no control */
+.tr-more.tr-dropped{cursor:default}
+.tr-more.tr-dropped:hover{color:var(--ink3);text-decoration:none}
+.tr-spine.tr-dim .tr-sum:not(.tr-anc),.tr-spine.tr-dim .tr-more{opacity:.6}
+.tr-spine.tr-focus .tr-sum:not(.tr-anc),.tr-spine.tr-focus .tr-more{opacity:.25}
+@keyframes tr-blink{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.tr-tick.tr-trun{animation:none}.tr-sum,.tr-fold .chev{transition:none}}
 /* ── Trace's sidecar: Chat's structure, about the picked step ───────────
    Context, then one card in the Tasks card's place — the step read in full,
    its causes nearest first, then what it led to — scrolling as a whole, so

@@ -23,7 +23,7 @@ import { fmtTok } from '../lib/format';
 import { resumeEligible } from '../lib/resume';
 import { formatInterval } from '../lib/settings';
 import { surfacePill } from '../lib/surface';
-import { TRACE_FILTERS, type TraceFilter } from '../lib/trace';
+import { TRACE_FILTERS, type TraceFilter, type TraceFolds } from '../lib/trace';
 import type { ChatMessage, Session } from '../../../shared/types';
 
 /** Distance from the bottom (px) still counted as "following the tail". */
@@ -185,6 +185,16 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const picked = follow ? newest : sel;
   const traceRunning = trace.steps.filter(s => s.status === 'running').length;
   const traceCount = trace.steps.filter(s => s.kind !== 'prompt').length;
+  // Folds the reader opened or closed by hand. Held here, not in the spine,
+  // so a round trip through Chat keeps them; the drawer is keyed by session.
+  const [folds, setFolds] = useState<TraceFolds>(() => ({ open: new Set(), closed: new Set() }));
+  function setFold(key: string, open: boolean) {
+    setFolds(f => {
+      const o = new Set(f.open), c = new Set(f.closed);
+      if (open) { o.add(key); c.delete(key); } else { o.delete(key); c.add(key); }
+      return { open: o, closed: c };
+    });
+  }
 
   function pickStep(id: string) {
     setSel(id);
@@ -365,8 +375,11 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                     filter={traceFilter}
                     focus={focus}
                     follow={follow}
+                    folds={folds}
+                    dropped={trace.dropped}
                     onPick={pickStep}
                     onFollow={() => setFollow(true)}
+                    onFold={setFold}
                   />
                 )
               ) : (
@@ -438,7 +451,6 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                 <>
                   <span className="chat-count">
                     {`${traceCount} steps · ${traceRunning} running · thinking readable in ${trace.thinking.readable} of ${trace.thinking.recorded}`}
-                    {trace.dropped > 0 ? ` · ${trace.dropped} older not loaded` : ''}
                   </span>
                   <button className={`tr-tog${focus ? ' on' : ''}`} aria-pressed={focus} onClick={() => setFocus(f => !f)}>
                     Only this step's why
