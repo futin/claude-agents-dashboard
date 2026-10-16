@@ -104,7 +104,7 @@ with exactly the granularity the user picks events at:
 | `question` | `POST /api/questions/wait` | `serveQuestionWait`, after the wait registers |
 | `plan` | `POST /api/plans/wait` | `servePlanWait`, after the wait registers |
 | `permission` | `POST /api/permissions/notify` | `servePermissionNotify` |
-| `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on (headless sessions take the hold route at the desk too, unless an orchestrator run owns them) |
+| `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on (headless sessions take the hold route at the desk too, unless an orchestrator run owns them or it is a one-shot launch) |
 
 All four are token-gated (`tokenOk`), so a hook that cannot read the token file reaches
 none of them — see the last row of [Fail directions](#fail-directions).
@@ -174,7 +174,9 @@ not a blanket headless exemption: a headless session a person started by hand is
 on purpose and still holds. A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT`, set by the dashboard's Close when done and on every Git Sync run)
 takes the same `notify_fallback` route, so it still pushes "finished". The dashboard's own token-renewal turn
 (`CLAUDE_DASHBOARD_REFRESH`, [usage-limits](usage-limits.md)) is the one session that pushes nothing: the hook exits on the marker before the health probe,
-and the server drops `stop` events and message waits from the refresh cwd's transcripts as a backstop (#178). Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
+and the server drops `stop` events and message waits from the refresh cwd's transcripts as a backstop (#178). A stop that an `autopilot` run's guard blocks
+(`~/.claude/autopilot/<session_id>.json` counts as running, `stop_hook_active` exactly false) exits silently too — no hold, no push; the stop that then
+ends the turn is handled as a first stop, so it still reaches the phone ([remote-message](remote-message.md)). Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
 (and so which phrase and suppression rule apply), not whether `stop` pushes at all — see
 [remote-message](remote-message.md).
 

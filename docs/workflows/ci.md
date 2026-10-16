@@ -70,7 +70,7 @@ The dashboard reads these tags back at `GET /api/releases` for its version chip 
 | `fix`, `perf` | patch | patch |
 | `!` after the type or scope, or a `BREAKING CHANGE: ` line in the PR body | minor | major |
 
-`docs`, `chore`, `test`, `refactor`, `ci` and `build` cut nothing (this PR's own merge included), and a `BREAKING CHANGE:` line on one of them is
+`docs`, `chore`, `test`, `refactor`, `ci` and `build` cut nothing, and a `BREAKING CHANGE:` line on one of them is
 ignored. A commit on `main` with no PR is skipped with the warning `no PR for <sha>`; the commits after it are still released.
 
 **Where the notes come from.** The `## What's new` section of the PR body (`.github/pull_request_template.md` carries it above `## Why this shape`), up to
@@ -86,3 +86,11 @@ It is idempotent: a commit with its tag and its Release is left alone, and a tag
 baseline gets its GitHub Release. A dispatch whose target has a later version tag fails with `a newer release exists: <tag>`, since versions are never
 assigned out of order; a push run in the same state ends green with `a newer release exists: <tag> — nothing to do`, because it can only be a superseded run.
 A dispatch `sha` must be a commit on `main`; any other commit fails with `target <sha> is not on origin/main` and nothing is tagged.
+
+<!-- docs-sync:
+  sources:
+    - .github/workflows/ci.yml
+    - .github/workflows/release.yml
+    - .github/pull_request_template.md
+  kind: workflow
+-->

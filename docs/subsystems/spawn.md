@@ -655,7 +655,7 @@ edge case of it.
 Four things bound it, and none of them is new machinery — they're the same posture the
 rest of the app already takes, aimed at a bigger target:
 
-- **The remote-answer toggle covers it, like every other write path.**
+- **The remote-answer toggle covers it, like every other write path that acts on a session.**
   `serveSpawn`, `serveSpawnStop` and `serveSessionStop` all answer
   `404 {error: 'remote answers disabled'}` when
   `getState(config).remoteAnswer` is false — flipping the status-plate switch off, or setting

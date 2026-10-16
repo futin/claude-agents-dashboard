@@ -71,7 +71,10 @@ override it (see `dashboard.section` below).
   `matrix` — see [git-stats](git-stats.md));
   `management.projectsLayout` (which of Management › Projects' three shapes, Tiles | Columns | Lists, the switcher was left on, a bare `ProjectsLayout` string
   guarded by `isProjectsLayout` on read, default `tiles`; per device, an `OWNED_KEYS` entry so Reset sweeps it, no Settings picker; unlike Git's, it is never
-  coerced on a narrow window — see [settings](settings.md)).
+  coerced on a narrow window — see [settings](settings.md));
+  `management.syncRuns` (the Git Sync runs this device launched, keyed by repo — see [git-stats](git-stats.md); live state, so Reset leaves it);
+  `dashboard.releases.lastSeen` (the newest release this browser has seen, a raw version string, not JSON, that `App.tsx` reads and writes through
+  `localSeenStore` in `lib/releases.ts` rather than `usePersistedState` — see [releases](releases.md); not in `OWNED_KEYS`, so Reset leaves it too).
 - **Client-only, zero deps** — no backend, and nothing here is shareable/bookmarkable by
   design. The URL params in the app are the opposite of persistence: `?session=<id>`, the
   deep link a tapped push notification opens (`lib/deepLink.ts`, put in ntfy's `Click` header
@@ -135,10 +138,12 @@ override it (see `dashboard.section` below).
   `selectedId` / `expanded`) stay ephemeral — session IDs churn, so restored expansions and
   drawers would mostly be stale.
 - **Clearing them all** — Settings → Local › Reset this browser removes every key listed above
-  (`OWNED_KEYS` in `hooks/useSettings.tsx`) **except `dashboard.answerToken`** and restores the defaults. The token is kept on purpose: it is a credential
+  (`OWNED_KEYS` in `hooks/useSettings.tsx`) **except `dashboard.answerToken`**, `management.syncRuns` and `dashboard.releases.lastSeen`, and restores the
+  defaults. The token is kept on purpose: it is a credential
   rather than view state, and Reset is not a sign-out, so clearing it would silently disarm every write path (see [remote-answer](remote-answer.md)). It
   touches nothing on the server and nothing in `~/.claude`. Add a view-state key here and it belongs in that list too; the test in
-  `test/client-settings.test.ts` fails if it is missing.
+  `test/client-settings.test.ts` fails if it is missing — but it finds keys by scanning for `usePersistedState('<key>'` calls, so a key written
+  through `localStorage` directly (as `dashboard.releases.lastSeen` is) escapes it.
 
 <!-- docs-sync:
   sources:

@@ -109,8 +109,7 @@ remote as a held question.
   `PreToolUse` hook already denied, but it is kept in step with `ask-remote-hook.sh` and `stop-notify-hook.sh` so that all three parallel hooks agree about a
   run that must not ask. In plan mode (stdin `permission_mode` is `plan`) it does not opt out: the autopilot gate lets `ExitPlanMode` through, so the approval
   card still reaches the phone. A `session_id` outside `[A-Za-z0-9-]` skips the check. Deployment order: on each machine the dashboard checkout must be pulled
-  together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question. Merge this branch before claude-global's
-  `autopilot` branch: alone it is inert, because no state file exists until the CLI writes one.
+  together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question.
 
 ## The away-mode alternative: skip plan mode entirely
 

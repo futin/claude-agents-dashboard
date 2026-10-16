@@ -560,7 +560,8 @@ one bar per weekly window, newest first, whose right edge is the weekly limit, s
 local day, as long as the share of the week that day spent, days under 0.3 points left undrawn. A week the range opens on (or recording picked up late) starts
 with a grey pre segment for what it had already spent, never credited to its first visible day. A day whose reading rose across a gap of at least an hour
 wears a hatch, and its tooltip says how many hours its jump covers; a gap the reading did not rise across is just the server being off and is not marked. A row starts at the previous weekly window's observed reset, never at
-`resetsAt` minus 7 days; the oldest window and an unscoped one (no `resetsAt`, labelled `Unscoped`) have no known start. Every segment has a real tooltip through
+`resetsAt` minus 7 days; the oldest window and an unscoped one (no `resetsAt`, labelled `Unscoped`) have no known start, so the oldest is labelled
+`from <date>` — where its record starts — rather than a date that would read as its start. Every segment has a real tooltip through
 `useFloatingTip`, never a `title` attribute.
 
 ## Token value per model (the exchange rate, and its drift)
@@ -1064,7 +1065,7 @@ per transcript from a byte cursor, and measured on the real transcripts 263 of
 the reconstruction under-counts requests by roughly 4.5%, unevenly across ticks.
 Re-run `pnpm probe:usage-split` after a day of real recording and re-confirm the
 refutation against recorded counts before acting on it. The full caveat list is
-in `backlog/tasks/done/task-10-*.md` under *Not verified*.
+in task-10 (now issue #114) under *Not verified*.
 
 ⚠️ **And every figure in these two blocks was measured before `bug-22`.** The
 probe's `--reconstruct` replay and `pnpm check:weights` both read the transcripts
@@ -1678,8 +1679,8 @@ Accepted limitations:
   Only a real `claude` CLI process writes `Claude Code-credentials`; Claude Code Desktop
   keeps its own store. Nothing renewed it, so "token expired" was permanent rather than
   self-healing, and the only cure was to run the CLI by hand. The earlier removal
-  (`backlog/tasks/done/task-1-remove-in-app-oauth-token-refresh.md`) also rejected
-  *auto*-refresh as "burning turns silently"; at one haiku turn per 8h, with a free
+  (task-1, now issue #82) also rejected
+  *auto*-refresh, since it would burn turns silently; at one haiku turn per 8h, with a free
   `auth status` tried first, that cost is worth a header that heals itself.
 
 <!-- docs-sync:

@@ -7,13 +7,13 @@ usage and current tool activity per session. Polls every 3s.
 ## Orientation
 
 Monolith, three domains plus the plugin. The **only** things crossing the FE/BE boundary live in `shared/`:
-the typed JSON in `shared/types.ts`, plus the zero-dep parser in `shared/frontmatter.ts`.
+the typed JSON in `shared/types.ts`, plus two zero-dep modules both sides run: `shared/frontmatter.ts` and `shared/gitUpstream.ts`.
 
-- `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only) but one: `lookout-widgets`.
+- `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only) but two: `lookout-widgets`, `release-kit`.
 - `client/` — Vite + React + TypeScript; side rail Sessions | Usage | Management |
   Claude Configs | Analytics | Settings, all lazy but Sessions.
 - `shared/` — `types.ts` is the API contract and the single source of truth for it;
-  `frontmatter.ts` is the one module both sides run.
+  `frontmatter.ts` and `gitUpstream.ts` are the only modules both sides run.
 - `test/` — node-assert tests over backend + client domain logic, tmpdir JSONL fixtures.
 - `plugin/` — the installable Claude Code plugin (the repo root's `.claude-plugin/marketplace.json` points at it): the skills the dashboard depends on, plain
   JS, never imported by server or client at runtime. `test/plugin-manifest.test.ts` pins what may live in it.
@@ -27,7 +27,7 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
 - `pnpm dev` — API + Vite together → http://localhost:5174 (HMR, proxies `/api`).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — `test/run-all.ts` via tsx; prints the case count.
+- `pnpm test` — `test/run-all.ts` via tsx (prints the case count), then kaizen's `node --test` suite.
 - `pnpm test:skills` — git-sync's own `node --test` suite (~4 min, 2026-10-01), kept out of `pnpm test` for its length. **Required green for any change
   under `plugin/skills/git-sync/`.**
 - `pnpm test:visual` — Playwright screenshot, overflow and contrast suite over the built client with a mocked API (`docs/subsystems/visual-tests.md`).
@@ -52,14 +52,15 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
   literal belongs in `scripts/tailnet.ts`** — `test/tailnet.test.ts` asserts that against
   the source text.
 
-Both servers bind all interfaces, so localhost / LAN / Tailscale / any tunnel work with zero
-config — see `docs/subsystems/remote-access.md` before touching any of it.
+Both servers bind all interfaces, so localhost / LAN / Tailscale work with zero
+config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guard, `server/lib/request-guard.ts`) — see
+`docs/subsystems/remote-access.md` before touching any of it.
 
 ## Code rules
 
 - **ESM everywhere** (`"type": "module"`). Server imports use the `.js` suffix (resolves to
   `.ts` under Bundler resolution + tsx). Cross-boundary imports use `import type` — no
-  runtime coupling, `shared/frontmatter.ts` excepted.
+  runtime coupling, `shared/frontmatter.ts` and `shared/gitUpstream.ts` excepted.
 - **Server is never compiled.** `tsx` in dev *and* prod. No `dist/` for the server.
 - **Dev vs prod page:** in dev Vite serves the HTML and Node answers API only; in prod Node
   static-serves `client/dist` and auto-opens the browser.
@@ -142,6 +143,7 @@ filling them with nothing.
     - server/
     - client/src/
     - shared/types.ts
+    - shared/gitUpstream.ts
     - package.json
   kind: index
   verified: f06c54a88e5655ce39e1f5b23b97d42151e257b2

@@ -130,7 +130,7 @@ one is a reason to ever wire the mic straight to send.
 |---|---|
 | 200 | `{text: string}` — possibly `''` when nothing was heard; the client shows "nothing heard" inline, not an error |
 | 400 | empty body; upload aborted mid-read; or a `Content-Type` outside the mime allowlist (echoed back in the error message) |
-| 403 | bad or missing token — `tokenOk`, the same check as every other write path. The refusal is no longer silent: `tokenOk` prints one `rejected write: POST /api/transcribe` line on stderr, throttled to once per method+path per minute, carrying the method and path only — never the token, a prefix of it, or the query string |
+| 403 | bad or missing token — `tokenOk`, the same check as every other write path. The refusal is no longer silent: `tokenOk` prints one `rejected write: POST /api/transcribe` line on stderr, throttled to once per method+path per minute, carrying the method and path only — never the token, a prefix of it, or the query string. The listener's Host and cross-site guards (`lib/request-guard.ts`, [remote-access](remote-access.md#browser-side-guards)) also answer 403, before any route runs |
 | 404 | feature off: `remoteAnswer` is false, or `probeTranscribe` is false (no model configured, or no working binary) |
 | 405 | non-`POST` |
 | 413 | body over `AUDIO_CAP` (8MB) — caught from an honest `Content-Length` before a byte is read, or from the running byte count otherwise |
