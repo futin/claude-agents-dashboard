@@ -8,6 +8,7 @@ import PlanPanel from './PlanPanel';
 import MessagePanel from './MessagePanel';
 import ResumePanel from './ResumePanel';
 import { TasksCard } from './TasksCard';
+import { TraceInspector } from './TraceInspector';
 import { TraceSpine } from './TraceSpine';
 import { useBackClose } from '../hooks/useBackClose';
 import { useSessionChat } from '../hooks/useSessionChat';
@@ -40,7 +41,36 @@ function timeOf(ts: string | null): string {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function Message({ m }: { m: ChatMessage }) {
+/**
+ * The sidecar's live context gauge, straight off the same 3s poll that feeds
+ * the row — no extra read. A drawer opened from a tapped push never showed the
+ * list, so this is the only place that reader sees how full the session is.
+ * Same 70% amber threshold the row uses. Chat and Trace both lead with it.
+ */
+function ContextCard({ session }: { session: Session }) {
+  // same 70% threshold the row uses — one context reading, two places.
+  const ctxPct = session.contextPct || 0;
+  const ctxWarn = ctxPct >= 70;
+  return (
+    <div className="kv">
+      <div className="k">Context</div>
+      <div className="v">
+        <span className={`metric${ctxWarn ? ' warn' : ''}`}>{ctxPct}%</span>
+        <span className="u">
+          <span className="tok" title={`${session.tokens.toLocaleString()} of ${session.contextWindow.toLocaleString()} context tokens`}>
+            {fmtTok(session.tokens)} / {session.contextWindowLabel}
+          </span>
+        </span>
+      </div>
+      <div className="track">
+        <div className={`fill${ctxWarn ? ' warn' : ''}`} style={{ width: `${Math.min(ctxPct, 100)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/** `onWhy` opens a tool line's step in Trace; lines without a tool_use id get no link. */
+function Message({ m, onWhy }: { m: ChatMessage; onWhy(id: string): void }) {
   return (
     <div className={`cmsg ${m.role}`}>
       <div className="cmsg-head">
@@ -70,6 +100,9 @@ function Message({ m }: { m: ChatMessage }) {
           <div className="cmsg-tool" key={i}>
             <span className={`tool${t.name === 'Task' ? ' task' : ''}`}>{t.name}</span>
             {t.detail ? ' ' + t.detail : ''}
+            {t.id && (
+              <button type="button" className="cmsg-why" title="Open this step in Trace" onClick={() => onWhy(t.id!)}>why?</button>
+            )}
           </div>
         )
       )}
@@ -121,9 +154,6 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
   const shown = useMemo(() => filterMessages(messages, mode), [messages, mode]);
   const surfaceInfo = surfacePill(session.surface);
-  // same 70% threshold the row uses — one context reading, two places.
-  const ctxPct = session.contextPct || 0;
-  const ctxWarn = ctxPct >= 70;
 
   // Chat | Trace. Not persisted: the modal always opens in Chat. The trace
   // polls only while it is the view showing.
@@ -143,6 +173,16 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
     setSel(id);
     setFollow(false);
   }
+
+  /** A chat tool line's `why?`: open its step in Trace, picked, not following. */
+  function openStep(id: string) {
+    setView('trace');
+    pickStep(id);
+  }
+
+  // What QuestionPanel keys its options on: a pending question it has not
+  // already confirmed as sent or seen go. A running decide step then points at it.
+  const questionPending = !!question.pending && question.phase !== 'submitted' && question.phase !== 'gone';
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
@@ -252,53 +292,44 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
 
         <div className="chat-split">
           <div className="chat-side">
-            {/* live context, straight off the same 3s poll that feeds the row —
-                no extra read. A drawer opened from a tapped push never showed
-                the list, so this is the only place that reader sees how full
-                the session is. Same 70% amber threshold the row uses. */}
-            <div className="kv">
-              <div className="k">Context</div>
-              <div className="v">
-                <span className={`metric${ctxWarn ? ' warn' : ''}`}>{ctxPct}%</span>
-                <span className="u">
-                  <span className="tok" title={`${session.tokens.toLocaleString()} of ${session.contextWindow.toLocaleString()} context tokens`}>
-                    {fmtTok(session.tokens)} / {session.contextWindowLabel}
-                  </span>
-                </span>
-              </div>
-              <div className="track">
-                <div className={`fill${ctxWarn ? ' warn' : ''}`} style={{ width: `${Math.min(ctxPct, 100)}%` }} />
-              </div>
-            </div>
+            <ContextCard session={session} />
 
-            <TasksCard tasks={session.tasks} plan={session.taskPlan} />
+            {/* Trace keeps Chat's structure about the picked step: its card in
+                the Tasks card's place, its fields as the facts under it. */}
+            {view === 'trace' ? (
+              <TraceInspector steps={trace.steps} sel={picked} questionPending={questionPending} onPick={pickStep} />
+            ) : (
+              <>
+                <TasksCard tasks={session.tasks} plan={session.taskPlan} />
 
-            {/* Three of these are phone-hidden (`.f.wide`): Project repeats the
-                head's pill, Messages and Now are already on screen — the count
-                in the foot, the live tool in the transcript's last turn. They
-                stay in the DOM for the desktop column, which has the room. */}
-            <div className="chat-facts">
-              <div className="f wide"><span>Project</span><b title={session.projectPath || session.project}>{session.project}</b></div>
-              {/* the value ellipsises in a 290px column, so keep the full ref reachable */}
-              {session.gitBranch && (
-                <div className="f"><span>Branch</span><b title={session.gitBranch}>{session.gitBranch}</b></div>
-              )}
-              <div className="f"><span>Model</span><b>{session.model}</b></div>
-              {/* repeated from the row on purpose: a drawer opened straight from
-                  a tapped push (`?session=<id>`) never showed the list, so this
-                  is the first place the reader learns the session lives only
-                  here. */}
-              {surfaceInfo && (
-                <div className="f"><span>Surface</span><b title={surfaceInfo.title}>{surfaceInfo.label}</b></div>
-              )}
-              <div className="f wide"><span>Messages</span><b>{messages.length} loaded</b></div>
-              <div className="f wide">
-                <span>Now</span>
-                <b title={session.activity ? `${session.activity.tool}${session.activity.detail ? ' ' + session.activity.detail : ''}` : undefined}>
-                  {session.activity ? session.activity.tool : '—'}
-                </b>
-              </div>
-            </div>
+                {/* Three of these are phone-hidden (`.f.wide`): Project repeats the
+                    head's pill, Messages and Now are already on screen — the count
+                    in the foot, the live tool in the transcript's last turn. They
+                    stay in the DOM for the desktop column, which has the room. */}
+                <div className="chat-facts">
+                  <div className="f wide"><span>Project</span><b title={session.projectPath || session.project}>{session.project}</b></div>
+                  {/* the value ellipsises in a 290px column, so keep the full ref reachable */}
+                  {session.gitBranch && (
+                    <div className="f"><span>Branch</span><b title={session.gitBranch}>{session.gitBranch}</b></div>
+                  )}
+                  <div className="f"><span>Model</span><b>{session.model}</b></div>
+                  {/* repeated from the row on purpose: a drawer opened straight from
+                      a tapped push (`?session=<id>`) never showed the list, so this
+                      is the first place the reader learns the session lives only
+                      here. */}
+                  {surfaceInfo && (
+                    <div className="f"><span>Surface</span><b title={surfaceInfo.title}>{surfaceInfo.label}</b></div>
+                  )}
+                  <div className="f wide"><span>Messages</span><b>{messages.length} loaded</b></div>
+                  <div className="f wide">
+                    <span>Now</span>
+                    <b title={session.activity ? `${session.activity.tool}${session.activity.detail ? ' ' + session.activity.detail : ''}` : undefined}>
+                      {session.activity ? session.activity.tool : '—'}
+                    </b>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="chat-col">
@@ -340,7 +371,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                       {hasMore ? ' — load older, or switch back to “all”.' : '.'}
                     </div>
                   ) : (
-                    shown.map(m => <Message key={m.uuid} m={m} />)
+                    shown.map(m => <Message key={m.uuid} m={m} onWhy={openStep} />)
                   )}
                 </div>
               )}
