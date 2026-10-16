@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import Chevron from './Chevron';
 import { Markdown } from './Markdown';
@@ -8,8 +8,10 @@ import PlanPanel from './PlanPanel';
 import MessagePanel from './MessagePanel';
 import ResumePanel from './ResumePanel';
 import { TasksCard } from './TasksCard';
+import { TraceSpine } from './TraceSpine';
 import { useBackClose } from '../hooks/useBackClose';
 import { useSessionChat } from '../hooks/useSessionChat';
+import { useSessionTrace } from '../hooks/useSessionTrace';
 import { usePendingQuestion } from '../hooks/usePendingQuestion';
 import { usePendingPlan } from '../hooks/usePendingPlan';
 import { usePendingMessage } from '../hooks/usePendingMessage';
@@ -20,6 +22,7 @@ import { fmtTok } from '../lib/format';
 import { resumeEligible } from '../lib/resume';
 import { formatInterval } from '../lib/settings';
 import { surfacePill } from '../lib/surface';
+import { TRACE_FILTERS, type TraceFilter } from '../lib/trace';
 import type { ChatMessage, Session } from '../../../shared/types';
 
 /** Distance from the bottom (px) still counted as "following the tail". */
@@ -122,7 +125,27 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const ctxPct = session.contextPct || 0;
   const ctxWarn = ctxPct >= 70;
 
+  // Chat | Trace. Not persisted: the modal always opens in Chat. The trace
+  // polls only while it is the view showing.
+  const [view, setView] = useState<'chat' | 'trace'>('chat');
+  const [sel, setSel] = useState<string | null>(null);
+  const [traceFilter, setTraceFilter] = useState<TraceFilter>('all');
+  const [focus, setFocus] = useState(false);
+  const [follow, setFollow] = useState(true);
+  const trace = useSessionTrace(session.id, view === 'trace', refreshMs);
+  // While following, the pick is the newest step; a pick of its own stops following.
+  const newest = trace.steps.length ? trace.steps[trace.steps.length - 1].id : null;
+  const picked = follow ? newest : sel;
+  const traceRunning = trace.steps.filter(s => s.status === 'running').length;
+  const traceCount = trace.steps.filter(s => s.kind !== 'prompt').length;
+
+  function pickStep(id: string) {
+    setSel(id);
+    setFollow(false);
+  }
+
   const bodyRef = useRef<HTMLDivElement>(null);
+  const stackRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   /** scrollHeight captured just before an older page is requested. */
@@ -131,6 +154,8 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const firstId = useRef<string | null>(null);
   /** Filter at last render — a change re-anchors instead of looking like a prepend. */
   const prevMode = useRef(mode);
+  /** View at last chat render — coming back from Trace re-anchors like a filter switch. */
+  const prevView = useRef(view);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -146,12 +171,18 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   useBackClose(onClose);
 
   useLayoutEffect(() => {
+    if (view !== 'chat') {
+      prevView.current = view;
+      return;
+    }
     const el = bodyRef.current;
     if (!el) return;
     const first = shown.length ? shown[0].uuid : null;
-    if (prevMode.current !== mode) {
-      // Switching filters changes the whole list — jump back to the live tail.
+    if (prevMode.current !== mode || prevView.current !== view) {
+      // Switching filters changes the whole list, and the transcript remounts
+      // on the way back from Trace — either way, jump back to the live tail.
       prevMode.current = mode;
+      prevView.current = view;
       firstId.current = first;
       atBottom.current = true;
       el.scrollTop = el.scrollHeight;
@@ -161,21 +192,24 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
     firstId.current = first;
     if (prepended) el.scrollTop += el.scrollHeight - preHeight.current;
     else if (atBottom.current) el.scrollTop = el.scrollHeight;
-  }, [shown, mode]);
+  }, [shown, mode, view]);
 
   // The pinned layer covers the transcript's bottom edge, so the transcript
   // pads by exactly its height — a panel appearing, a textarea growing a line
   // or the panel going away all land here. offsetHeight, not
   // getBoundingClientRect: `.shell{zoom}` multiplies the rect but not the
   // layout box, and what we write back is a style px (bug-30 territory).
+  // Written on the stack, not the body: the transcript and the Trace spine
+  // take turns as its body, and both inherit the one measurement.
   useLayoutEffect(() => {
     const pinned = pinnedRef.current;
-    const body = bodyRef.current;
-    if (!pinned || !body) return;
+    const stack = stackRef.current;
+    if (!pinned || !stack) return;
     const measure = () => {
-      body.style.setProperty('--pinned-h', pinned.offsetHeight + 'px');
+      stack.style.setProperty('--pinned-h', pinned.offsetHeight + 'px');
       // The pad grew under the reader; keep the tail where they were reading it.
-      if (atBottom.current) body.scrollTop = body.scrollHeight;
+      const body = bodyRef.current;
+      if (body && atBottom.current) body.scrollTop = body.scrollHeight;
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -205,6 +239,13 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
         <div className="chat-head">
           <span className="chat-title">{session.sessionName || session.project}</span>
           {session.sessionName && <span className="proj-pill">{session.project}</span>}
+          <div className="seg" role="tablist" aria-label="View">
+            {(['chat', 'trace'] as const).map(v => (
+              <button key={v} role="tab" className={view === v ? 'on' : ''} aria-selected={view === v} onClick={() => setView(v)}>
+                {v === 'chat' ? 'Chat' : 'Trace'}
+              </button>
+            ))}
+          </div>
           <span className="spacer" />
           <button className="chat-x" onClick={onClose} aria-label="Close">✕</button>
         </div>
@@ -261,28 +302,46 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
           </div>
 
           <div className="chat-col">
-            <div className="chat-stack">
-              <div className="chat-body" ref={bodyRef} onScroll={onScroll}>
-                {hasMore && (
-                  <button className="chat-older" onClick={onOlder} disabled={loadingOlder}>
-                    {loadingOlder ? 'loading…' : 'load older'}
-                  </button>
-                )}
-                {loading ? (
-                  <div className="chat-empty">Loading chat…</div>
-                ) : error ? (
-                  <div className="chat-empty">Couldn’t read this session’s transcript.</div>
-                ) : messages.length === 0 ? (
-                  <div className="chat-empty">No messages in this transcript yet.</div>
-                ) : shown.length === 0 ? (
-                  <div className="chat-empty">
-                    Nothing matches this filter in the {messages.length} messages loaded
-                    {hasMore ? ' — load older, or switch back to “all”.' : '.'}
-                  </div>
+            <div className="chat-stack" ref={stackRef}>
+              {view === 'trace' ? (
+                trace.loading ? (
+                  <div className="chat-body"><div className="chat-empty">Loading trace…</div></div>
+                ) : trace.error ? (
+                  <div className="chat-body"><div className="chat-empty">Couldn’t read this session’s trace.</div></div>
                 ) : (
-                  shown.map(m => <Message key={m.uuid} m={m} />)
-                )}
-              </div>
+                  <TraceSpine
+                    steps={trace.steps}
+                    sel={picked}
+                    filter={traceFilter}
+                    focus={focus}
+                    follow={follow}
+                    onPick={pickStep}
+                    onFollow={() => setFollow(true)}
+                  />
+                )
+              ) : (
+                <div className="chat-body" ref={bodyRef} onScroll={onScroll}>
+                  {hasMore && (
+                    <button className="chat-older" onClick={onOlder} disabled={loadingOlder}>
+                      {loadingOlder ? 'loading…' : 'load older'}
+                    </button>
+                  )}
+                  {loading ? (
+                    <div className="chat-empty">Loading chat…</div>
+                  ) : error ? (
+                    <div className="chat-empty">Couldn’t read this session’s transcript.</div>
+                  ) : messages.length === 0 ? (
+                    <div className="chat-empty">No messages in this transcript yet.</div>
+                  ) : shown.length === 0 ? (
+                    <div className="chat-empty">
+                      Nothing matches this filter in the {messages.length} messages loaded
+                      {hasMore ? ' — load older, or switch back to “all”.' : '.'}
+                    </div>
+                  ) : (
+                    shown.map(m => <Message key={m.uuid} m={m} />)
+                  )}
+                </div>
+              )}
 
               {/* One absolutely-positioned layer for every pinned thing, rather
                   than five: the panels keep stacking in normal flow inside it
@@ -325,22 +384,48 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                 sized down to foot scale. */}
             <div className="chat-foot">
               <span className="chat-live"><i /> live · refreshing every {formatInterval(refreshMs)}</span>
-              <span className="chat-count">
-                {mode === 'all' ? `${messages.length} shown` : `${shown.length} of ${messages.length} shown`}
-              </span>
-              <div className="seg" role="group" aria-label="Message filter">
-                {CHAT_FILTERS.map(f => (
-                  <button
-                    key={f.key}
-                    className={mode === f.key ? 'on' : ''}
-                    title={f.title}
-                    aria-pressed={mode === f.key}
-                    onClick={() => setFilter(f.key)}
-                  >
-                    {f.label}
+              {view === 'trace' ? (
+                <>
+                  <span className="chat-count">
+                    {`${traceCount} steps · ${traceRunning} running · thinking readable in ${trace.thinking.readable} of ${trace.thinking.recorded}`}
+                    {trace.dropped > 0 ? ` · ${trace.dropped} older not loaded` : ''}
+                  </span>
+                  <button className={`tr-tog${focus ? ' on' : ''}`} aria-pressed={focus} onClick={() => setFocus(f => !f)}>
+                    Only this step's why
                   </button>
-                ))}
-              </div>
+                  <div className="seg" role="group" aria-label="Step filter">
+                    {TRACE_FILTERS.map(f => (
+                      <button
+                        key={f.key}
+                        className={traceFilter === f.key ? 'on' : ''}
+                        aria-pressed={traceFilter === f.key}
+                        onClick={() => setTraceFilter(f.key)}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span className="chat-count">
+                    {mode === 'all' ? `${messages.length} shown` : `${shown.length} of ${messages.length} shown`}
+                  </span>
+                  <div className="seg" role="group" aria-label="Message filter">
+                    {CHAT_FILTERS.map(f => (
+                      <button
+                        key={f.key}
+                        className={mode === f.key ? 'on' : ''}
+                        title={f.title}
+                        aria-pressed={mode === f.key}
+                        onClick={() => setFilter(f.key)}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -1815,6 +1815,66 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .chat-foot .seg{flex:none}
 .chat-foot .seg>button{padding:4px 10px;font-size:11px}
 
+/* ── Trace — the modal's second view (TraceSpine.tsx, mock `traceBody()`) ─────
+   Chat | Trace in the head. Trace swaps the transcript for the spine: one row
+   per tool call, the turn's prompt as a square. The wait panels and the foot
+   stay where they are, and the spine pads under the pinned layer exactly as
+   the transcript does (`--pinned-h`, written on `.chat-stack`). Kind colours
+   are the board's own tokens; magenta is the subagent, as Task is in the chat.
+   The mock's mono face is dropped: this board has no second face. */
+.chat-head .seg{flex:none}
+.chat-head .seg>button{padding:4px 10px;font-size:11px}
+.tr-k-prompt{--c:var(--ink)}
+.tr-k-decide{--c:var(--amber-solid)}
+.tr-k-read{--c:var(--ink3)}
+.tr-k-edit{--c:var(--green)}
+.tr-k-bash{--c:var(--mustard)}
+.tr-k-agent{--c:var(--magenta)}
+/* two classes, so it outranks `.chat-body` at every tier; the phone's right
+   edge is the transcript's 14px, `md` below restores the mock's 18px */
+.chat-body.tr-body{display:block;position:relative;gap:0;padding:6px 14px calc(40px + var(--pinned-h,0px)) 0}
+.tr-spine{position:relative;display:flex;flex-direction:column;gap:6px}
+.tr-arcs{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+.tr-turn{display:flex;gap:10px;align-items:baseline;padding:16px 0 6px 60px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.tr-turn span{min-width:0;overflow-wrap:anywhere;text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink2)}
+.tr-row{display:grid;grid-template-columns:60px minmax(0,1fr);align-items:start;cursor:pointer;transition:opacity .15s}
+.tr-row.tr-child{grid-template-columns:84px minmax(0,1fr)}
+.tr-dotcell{position:relative;min-height:36px;height:100%}
+.tr-dot{position:absolute;left:30px;top:12px;width:12px;height:12px;border-radius:999px;background:var(--strip);border:2.5px solid var(--c)}
+.tr-row.tr-child .tr-dot{left:54px;top:13px;width:10px;height:10px}
+.tr-row.tr-k-prompt .tr-dot{background:var(--c);border-radius:3px}
+.tr-row.tr-err .tr-dot{background:var(--red);border-color:var(--red)}
+.tr-row.tr-run .tr-dot{border-style:dashed;animation:tr-spin 2.4s linear infinite}
+.tr-row.tr-fresh .tr-card{animation:tr-land .9s ease-out}
+.tr-card{padding:6px 10px 6px 6px;border-radius:8px;min-width:0}
+.tr-row:hover .tr-card{background:var(--strip-hi)}
+.tr-row.tr-on .tr-card{background:var(--strip-hi);box-shadow:inset 0 0 0 1.5px var(--c)}
+.tr-row.tr-anc .tr-card{background:color-mix(in srgb,var(--c) 8%,transparent)}
+.tr-spine.tr-dim .tr-row:not(.tr-on):not(.tr-anc):not(.tr-desc){opacity:.6}
+.tr-spine.tr-focus .tr-row:not(.tr-on):not(.tr-anc):not(.tr-desc){opacity:.25}
+.tr-line{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;min-width:0}
+.tr-tool{font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--c)}
+.tr-detail{font-size:12px;color:var(--ink);overflow-wrap:anywhere;min-width:0}
+.tr-k-prompt .tr-detail{font-size:13.5px;font-weight:500}
+.tr-intent{font-size:12.5px;color:var(--ink2);margin-top:2px}
+.tr-res{font-size:11.5px;color:var(--ink3);margin-top:2px;overflow-wrap:anywhere}
+.tr-row.tr-err .tr-res{color:var(--red)}
+.tr-row.tr-run .tr-res{font-style:italic}
+/* a flag never wraps, so a long answer ellipsises rather than widening the row */
+.tr-flag{max-width:100%;overflow:hidden;text-overflow:ellipsis;font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 7px;white-space:nowrap;background:var(--strip-hi);color:var(--ink3)}
+.tr-flag.run{background:var(--green-tint);color:var(--green)}
+.tr-flag.err{background:color-mix(in srgb,var(--red) 12%,transparent);color:var(--red)}
+.tr-flag.you{background:var(--amber-tint);color:var(--amber-ink)}
+.tr-flag.think{background:color-mix(in srgb,var(--magenta) 13%,transparent);color:var(--magenta)}
+.tr-flag.sha{background:var(--mustard-tint);color:var(--mustard-ink)}
+.tr-jump{position:sticky;bottom:12px;display:none;margin:12px auto 0;width:max-content;border:0;border-radius:999px;background:var(--ink);color:var(--strip);padding:6px 14px;font-family:var(--font);font-size:12px;font-weight:500;box-shadow:0 8px 24px var(--shadow2);cursor:pointer;z-index:1}
+.tr-jump.show{display:block}
+.chat-foot .tr-tog{flex:none;border:1px solid var(--hairline2);background:var(--strip);border-radius:999px;padding:3px 10px;font-family:var(--font);font-size:11.5px;color:var(--ink2);cursor:pointer}
+.chat-foot .tr-tog.on{background:var(--ink);border-color:var(--ink);color:var(--strip)}
+@keyframes tr-spin{to{transform:rotate(360deg)}}
+@keyframes tr-land{from{background:var(--green-tint)}}
+@media (prefers-reduced-motion:reduce){.tr-row.tr-run .tr-dot,.tr-row.tr-fresh .tr-card{animation:none}.tr-row{transition:none}}
+
 /* Spawn modal (SpawnPanel.tsx) — the launch form floated like the chat modal
    (.claude/DESIGN.md §8.7, mock `#spawn`) rather than pinned into the Sessions
    column: a launch is a compose surface opened on purpose, not a hold the board
@@ -2139,6 +2199,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
   .chat-facts .f{justify-content:space-between;gap:12px;max-width:none}
   .chat-facts .f.wide{display:flex}
   .chat-body{padding:20px 24px calc(40px + var(--pinned-h,0px));gap:20px}
+  .chat-body.tr-body{padding:6px 18px calc(40px + var(--pinned-h,0px)) 0}
   .qpanel{padding:18px 24px}
   .qpanel.min{padding:12px 24px}
   .pbanner{padding:13px 24px}
