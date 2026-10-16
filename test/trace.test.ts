@@ -260,6 +260,34 @@ export function run(): number {
     assert.strictEqual(a.slice(0, 159), long.slice(0, 159));
   })) p++; else f++;
 
+  if (test('16. a slash command is a prompt with a "/<name> <args>" detail, in either tag order', () => {
+    const b = build(
+      prompt('c1', '<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args>opus</command-args>', T(1)),
+      prompt('c2', '<command-message>caveman</command-message>\n<command-name>/caveman</command-name>\n<command-args></command-args>', T(2)),
+      prompt('c3', `<command-message>s</command-message>\n<command-name>/s</command-name>\n<command-args>${'a'.repeat(400)}</command-args>`, T(3))
+    );
+    assert.deepStrictEqual(b.steps().map((s) => [s.id, s.kind, s.turn]), [['c1', 'prompt', 1], ['c2', 'prompt', 2], ['c3', 'prompt', 3]]);
+    assert.strictEqual(step(b, 'c1').detail, '/model opus');
+    assert.strictEqual(step(b, 'c2').detail, '/caveman');
+    assert.strictEqual(step(b, 'c3').detail.length, 300);
+    assert.ok(step(b, 'c3').detail.startsWith('/s aaa'));
+  })) p++; else f++;
+
+  if (test('17. CLI plumbing, the interrupt marker and a compact summary make no step and do not move the turn', () => {
+    const summary = prompt('cs', 'This session is being continued from a previous conversation.', T(5));
+    summary.rec.isCompactSummary = true;
+    const interrupt: Item = { rec: { type: 'user', uuid: 'in', timestamp: T(6), cwd: CWD, message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } }, scope: 'main' };
+    const b = build(
+      prompt('p1', 'go', T(1)),
+      prompt('so', '<local-command-stdout>Set model to opus</local-command-stdout>', T(2)),
+      prompt('cm', '<command-message>lonely</command-message>', T(3)),
+      prompt('bi', '<bash-input>ls</bash-input>', T(4)),
+      summary, interrupt,
+      use('r1', 'Read', { file_path: '/r/a.ts' }, T(7), 'm1')
+    );
+    assert.deepStrictEqual(b.steps().map((s) => [s.id, s.turn]), [['p1', 1], ['r1', 1]]);
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }

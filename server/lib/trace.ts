@@ -15,7 +15,7 @@ import path from 'node:path';
 import type { TraceKind, TraceStep, TraceWhy } from '../../shared/types.js';
 import { DEFAULT_CAPS, parseChatRecord } from './chat.js';
 import { foldTaskRecord, liveTaskSubject, newTaskFold, type TaskFold } from './tasks.js';
-import { describeTool } from './transcript.js';
+import { describeTool, LOCAL_PLUMBING } from './transcript.js';
 
 /** Most steps a full trace response carries (the newest ones). */
 export const TRACE_STEP_CAP = 500;
@@ -41,6 +41,9 @@ const SHA_RE = /\[[^\]\s]+(?: \([^)]*\))? ([0-9a-f]{7,40})\]/;
 const ANSWER_RE = /"([^"]*)"="([^"]*)"/g;
 const SYSTEM_REMINDER_RE = /<system-reminder>[\s\S]*?<\/system-reminder>/g;
 const TOOL_ERROR_TAG_RE = /<\/?tool_use_error>/g;
+const COMMAND_NAME_RE = /<command-name>([\s\S]*?)<\/command-name>/;
+const COMMAND_ARGS_RE = /<command-args>([\s\S]*?)<\/command-args>/;
+const INTERRUPT_PREFIX = '[Request interrupted by user';
 
 /**
  * A step as the builder keeps it: the public `TraceStep` plus what the `why` rules read. None of the extra fields reach a response (`toPublic`).
@@ -101,6 +104,22 @@ function summarize(thinks: Think[]): ScopeState['thinking'] {
   const texts = thinks.map((t) => t.text).filter((t) => t.trim() !== '');
   if (texts.length > 0) return { kind: 'text', text: texts.join('\n\n').slice(0, THINKING_CAP) };
   return { kind: thinks.some((t) => t.signed) ? 'signature' : null, text: null };
+}
+
+/**
+ * A user record's text as a prompt step's detail, or null when it is CLI plumbing rather than the user's turn. A slash command or skill invocation is a
+ * turn: its echo reads `/<name> <args>`. The CLI writes it as `<command-message>` then `<command-name>` then `<command-args>` (20 of 23 such records in
+ * the 60 newest transcripts, 2026-10-16), so the name is looked for anywhere in the plumbing, not only as the prefix. Any other plumbing (a lone
+ * `<command-message>` / `<command-args>`, `<local-command-*>`, `<bash-*>`) and the interrupt marker are not turns.
+ */
+export function promptDetail(text: string): string | null {
+  if (LOCAL_PLUMBING.test(text)) {
+    const name = COMMAND_NAME_RE.exec(text)?.[1].trim().replace(/^\//, '');
+    if (!name) return null;
+    const args = COMMAND_ARGS_RE.exec(text)?.[1].trim();
+    return args ? `/${name} ${args}` : `/${name}`;
+  }
+  return text.startsWith(INTERRUPT_PREFIX) ? null : text;
 }
 
 function toPublic(s: StepRecord): TraceStep {
@@ -203,10 +222,11 @@ export class TraceBuilder {
       if (Array.isArray(m.content)) {
         for (const b of m.content) if (isObject(b) && b.type === 'tool_result' && typeof b.tool_use_id === 'string') this.resolve(b);
       }
-      // Subagent user text is the dispatch prompt, not a turn.
-      if (main) {
+      // Subagent user text is the dispatch prompt, not a turn; a compaction summary is the CLI's, not the user's.
+      if (main && rec.isCompactSummary !== true) {
         const msg = parseChatRecord(rec, DEFAULT_CAPS);
-        if (msg && msg.role === 'user' && msg.text) this.prompt(rec, msg.text, at);
+        const detail = msg && msg.role === 'user' && msg.text ? promptDetail(msg.text) : null;
+        if (detail) this.prompt(rec, detail, at);
       }
       return;
     }

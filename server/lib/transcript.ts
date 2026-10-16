@@ -55,7 +55,7 @@ export const WAIT_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
  * Deliberately does NOT list bare `<command>`: that tag appears inside tool
  * inputs and prompts, not as a record's content prefix.
  */
-const LOCAL_PLUMBING = /^<(command-(name|message|args)|local-command-[a-z]+|bash-(input|stdout|stderr))>/;
+export const LOCAL_PLUMBING = /^<(command-(name|message|args)|local-command-[a-z]+|bash-(input|stdout|stderr))>/;
 
 /** Text of a message record's content, whether stored as a string or as blocks. */
 function contentText(content: unknown): string {
