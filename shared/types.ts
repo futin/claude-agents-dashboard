@@ -771,6 +771,40 @@ export interface AccountProfile {
 }
 
 /**
+ * What a release is: `feat`, `fix` and `perf` cut one; `baseline` is the hand-cut tag versioning starts from. Four members where release-kit's own
+ * `ReleaseType` has three — release-kit types `Release.type` as `ReleaseType | 'baseline'`, so the two are assignable but are not the same name.
+ */
+export type ReleaseType = 'feat' | 'fix' | 'perf' | 'baseline';
+
+/** One annotated `vX.Y.Z` tag, as release-kit's `readReleases` parses it (`docs/subsystems/releases.md`). */
+export interface Release {
+  /** No leading `v`: `0.2.0`. */
+  version: string;
+  /** Tag creation time, ISO. */
+  date: string;
+  /** The tag subject without its trailing `(#N)` — still carrying the Conventional Commits prefix, which the client strips for display. */
+  title: string;
+  type: ReleaseType;
+  scope?: string;
+  pr?: number;
+  breaking: boolean;
+  /** The PR's `## What's new` section, markdown; empty when it had none. */
+  notes: string;
+  /** The PR page, present only when `pr` is and `origin` is a GitHub remote. */
+  url?: string;
+}
+
+/**
+ * `GET /api/releases` — the dashboard's own release history, read from the local checkout's tags. `current` is `git describe` against those tags: on a
+ * tag `ahead` is 0, three commits past one it is 3. Not a checkout, no git, or no tags → `{ current: null, releases: [] }`, never an error status.
+ */
+export interface ReleasesResponse {
+  current: { version: string; ahead: number } | null;
+  /** Newest first. */
+  releases: Release[];
+}
+
+/**
  * `GET /api/account` — everything the header account chip draws, on one small
  * body it can poll on its own clock.
  *

@@ -60,6 +60,7 @@ import { fetchAll, markGitWatched } from './lib/git-fetch.js';
 import { openFolder, openFolderPlatform } from './lib/open-folder.js';
 import { readGitStats } from './lib/git-stats.js';
 import { classifyOrigin, resolvePeer } from './lib/origin.js';
+import { releasesPayload } from './lib/releases.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
   MAX_LAUNCHING, adoptLaunched, clampPermission, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
@@ -69,7 +70,7 @@ import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
-  ModelRateRow, RateLimit, SpawnResponse, UsageCoverage, UsageProfileCell,
+  ModelRateRow, RateLimit, ServerSettings, SpawnResponse, UsageCoverage, UsageProfileCell,
   UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult, ConnectionOrigin, WriteAccess
 } from '../shared/types.js';
 
@@ -594,20 +595,28 @@ setTimeout(function () {
 }
 
 /**
- * `GET /api/settings` — the settings that aren't per-device (see lib/settings.ts).
+ * The one `/api/settings` body, for GET and POST alike: the client replaces its
+ * whole state with either reply, so a field only one of them filled would vanish
+ * on the first save.
  *
- * `notifyAvailable` is filled here rather than in the store: it is the one field
- * derived from `Config`, and `lib/settings.ts` deliberately never reads config.
- * The topic itself is never returned — it is both the address and the credential.
+ * `notifyAvailable` and `staleEnvKeys` are filled here rather than in the store:
+ * both derive from `Config` or the `.env` baseline, and `lib/settings.ts`
+ * deliberately never reads config. The topic itself is never returned — it is
+ * both the address and the credential.
  */
-export function serveSettingsRead(config: Config, res: ServerResponse): void {
-  sendJson(res, 200, {
-    ...getSettings(),
+function settingsBody(config: Config, settings: ServerSettings): ServerSettings {
+  return {
+    ...settings,
     notifyAvailable: config.ntfyTopic !== '',
     // Read per request, not cached: the whole point is to notice a file that
     // changed after this process read it. One `readFileSync` of a small file.
     staleEnvKeys: staleEnvKeys()
-  });
+  } satisfies ServerSettings;
+}
+
+/** `GET /api/settings` — the settings that aren't per-device (see lib/settings.ts). */
+export function serveSettingsRead(config: Config, res: ServerResponse): void {
+  sendJson(res, 200, settingsBody(config, getSettings()));
 }
 
 /** An empty grid, for the fail-open path and for a never-recorded profile. */
@@ -963,6 +972,11 @@ export function serveAccount(config: Config, res: ServerResponse, homeDir?: stri
   }
 }
 
+/** `GET /api/releases` — the dashboard's own release history; always 200, the empty shape when there is nothing to read (lib/releases.ts). */
+export async function serveReleases(res: ServerResponse): Promise<void> {
+  sendJson(res, 200, await releasesPayload());
+}
+
 /**
  * `GET /api/usage/rates` — what a percent of the 5-hour window costs, per model.
  *
@@ -1035,7 +1049,7 @@ export async function serveSettingsWrite(
   if (!next) {
     return sendBadBody(res, { error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, gitFetchSecs?: 0|30|60|120|300|600}' });
   }
-  sendJson(res, 200, { ...next, notifyAvailable: config.ntfyTopic !== '' });
+  sendJson(res, 200, settingsBody(config, next));
 }
 
 /**
@@ -1482,7 +1496,9 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
       if (live?.has(rid)) {
         return sendJson(res, 409, { error: 'session is still running' });
       }
-      if (listLaunching().some(e => e.sessionId === rid)) {
+      // `'launching'` only, as at the cap above: a `failed` row for this id lingers
+      // FAIL_TTL_MS for display, holds no process, and must not refuse a retry.
+      if (listLaunching().some(e => e.sessionId === rid && e.state === 'launching')) {
         return sendJson(res, 409, { error: 'already resuming' });
       }
       const ref = { dirName: t.dirName, name: nodePath.basename(tr.cwd), path: tr.cwd, lastActiveMs: t.mtimeMs };

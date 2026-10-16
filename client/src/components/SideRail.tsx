@@ -26,6 +26,11 @@ interface Props {
    * `working` drives the wordmark's cursor (see `Brand`).
    */
   live?: { connected: boolean; working: boolean; refreshMs: number } | null;
+  /**
+   * The version chip under the live line, on every section: the checkout's version, a dot for a release not opened yet, and the What's new drawer behind
+   * it. Null when the checkout has no version, and then there is no chip. `App` owns the data and the drawer (docs/subsystems/releases.md).
+   */
+  version?: { label: string; dot: boolean; onOpen: () => void } | null;
 }
 
 /**
@@ -208,7 +213,7 @@ function MenuLayer({ onClose }: { onClose: () => void }) {
   return <div className="mnav-scrim" onClick={onClose} />;
 }
 
-export function SideRail({ section, onChange, accountSlot, live }: Props) {
+export function SideRail({ section, onChange, accountSlot, live, version }: Props) {
   // A section's sub-views are navigation, so they live in the nav: this is the
   // only control for them at every width, and the section renders whichever is
   // chosen. Per-device, like every other setting.
@@ -318,6 +323,18 @@ export function SideRail({ section, onChange, accountSlot, live }: Props) {
               ? `live · refreshing every ${formatInterval(live.refreshMs)}`
               : 'disconnected — server stopped?'}
           </div>
+        )}
+        {version && (
+          <button
+            type="button"
+            className="rel-chip"
+            aria-haspopup="dialog"
+            aria-label={`Running ${version.label}${version.dot ? ', new releases' : ''} — open What's new`}
+            onClick={pick(version.onOpen)}
+          >
+            {version.dot && <span className="rel-dot" aria-hidden="true" />}
+            {version.label}
+          </button>
         )}
       </nav>
     </div>

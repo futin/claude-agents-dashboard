@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { micErrorMessage, pickMimeType } from '../lib/dictation';
 import { READ_ONLY_TEXT, refusalKind } from '../lib/writeRefusal';
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
 import type { TranscribeResponse } from '../../../shared/types';
 
 /** Hard ceiling on one take, so a forgotten recording cannot run to tab death. */
@@ -29,7 +30,7 @@ export function useDictation(onText: (text: string) => void): DictationState {
   const [phase, setPhase] = useState<DictationPhase>('idle');
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
-  const [token] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token] = useAnswerToken();
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   // Same liveness idiom as useRemoteAnswer.ts's `let live`, adapted to a ref:
@@ -75,8 +76,7 @@ export function useDictation(onText: (text: string) => void): DictationState {
     // single-flight slot on a transcript nobody is left to receive.
     if (!liveRef.current) return;
     setPhase('transcribing');
-    const headers: Record<string, string> = { 'Content-Type': blob.type || 'audio/mp4' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token, { 'Content-Type': blob.type || 'audio/mp4' });
     try {
       const res = await fetch('/api/transcribe', { method: 'POST', headers, body: blob });
       if (!res.ok) {

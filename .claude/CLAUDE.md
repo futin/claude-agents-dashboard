@@ -7,13 +7,13 @@ usage and current tool activity per session. Polls every 3s.
 ## Orientation
 
 Monolith, three domains plus the plugin. The **only** things crossing the FE/BE boundary live in `shared/`:
-the typed JSON in `shared/types.ts`, plus the zero-dep parser in `shared/frontmatter.ts`.
+the typed JSON in `shared/types.ts`, plus two zero-dep modules both sides run: `shared/frontmatter.ts` and `shared/gitUpstream.ts`.
 
-- `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only) but one: `lookout-widgets`.
+- `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only) but two: `lookout-widgets`, `release-kit`.
 - `client/` — Vite + React + TypeScript; side rail Sessions | Usage | Management |
   Claude Configs | Analytics | Settings, all lazy but Sessions.
 - `shared/` — `types.ts` is the API contract and the single source of truth for it;
-  `frontmatter.ts` is the one module both sides run.
+  `frontmatter.ts` and `gitUpstream.ts` are the only modules both sides run.
 - `test/` — node-assert tests over backend + client domain logic, tmpdir JSONL fixtures.
 - `plugin/` — the installable Claude Code plugin (the repo root's `.claude-plugin/marketplace.json` points at it): the skills the dashboard depends on, plain
   JS, never imported by server or client at runtime. `test/plugin-manifest.test.ts` pins what may live in it.
@@ -27,7 +27,7 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
 - `pnpm dev` — API + Vite together → http://localhost:5174 (HMR, proxies `/api`).
 - `pnpm build` — bundles client → `client/dist`.
 - `pnpm start` — prod: built client + API on http://localhost:4173 (`NODE_ENV=production`).
-- `pnpm test` — `test/run-all.ts` via tsx; prints the case count.
+- `pnpm test` — `test/run-all.ts` via tsx (prints the case count), then kaizen's `node --test` suite.
 - `pnpm test:skills` — git-sync's own `node --test` suite (~4 min, 2026-10-01), kept out of `pnpm test` for its length. **Required green for any change
   under `plugin/skills/git-sync/`.**
 - `pnpm test:visual` — Playwright screenshot, overflow and contrast suite over the built client with a mocked API (`docs/subsystems/visual-tests.md`).
@@ -52,14 +52,15 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
   literal belongs in `scripts/tailnet.ts`** — `test/tailnet.test.ts` asserts that against
   the source text.
 
-Both servers bind all interfaces, so localhost / LAN / Tailscale / any tunnel work with zero
-config — see `docs/subsystems/remote-access.md` before touching any of it.
+Both servers bind all interfaces, so localhost / LAN / Tailscale work with zero
+config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guard, `server/lib/request-guard.ts`) — see
+`docs/subsystems/remote-access.md` before touching any of it.
 
 ## Code rules
 
 - **ESM everywhere** (`"type": "module"`). Server imports use the `.js` suffix (resolves to
   `.ts` under Bundler resolution + tsx). Cross-boundary imports use `import type` — no
-  runtime coupling, `shared/frontmatter.ts` excepted.
+  runtime coupling, `shared/frontmatter.ts` and `shared/gitUpstream.ts` excepted.
 - **Server is never compiled.** `tsx` in dev *and* prod. No `dist/` for the server.
 - **Dev vs prod page:** in dev Vite serves the HTML and Node answers API only; in prod Node
   static-serves `client/dist` and auto-opens the browser.
@@ -74,8 +75,10 @@ config — see `docs/subsystems/remote-access.md` before touching any of it.
   a reason. `lib/token-refresh.ts` and `lib/spawn.ts` launch the `claude` CLI, which makes its
   own network calls — the server does not, so they are not a third kind. `lib/git-fetch.ts` launches `git fetch`, which makes its own network call —
   not a third kind either. `test/outbound.test.ts` pins the list.
-  One npm package is allowed, by name: `lookout-widgets`, the Lookout contract producer behind `/api/hub/widgets`, which has zero runtime deps of its own
-  and is pinned to a git tag. `test/server-deps.test.ts` pins both the name and the tag; any other bare import under `server/` fails it.
+  Two npm packages are allowed, by name, each with zero runtime deps of its own and pinned to a git tag: `lookout-widgets`, the Lookout contract producer
+  behind `/api/hub/widgets`, and `release-kit`, whose `readReleases` is the one reader of the tag-message contract its release workflow writes (spec
+  `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` D7) and backs `/api/releases`; it uses Node built-ins only and launches `git`, so it is no
+  new outbound kind. `test/server-deps.test.ts` pins both names and tags; any other bare import under `server/` fails it.
 - `client/dist/` and `.env` are gitignored.
 - `plugin/skills/kaizen/` is the only copy of `/kaizen`; its log path and line grammar are a
   contract with Analytics (`docs/subsystems/analytics.md`) — never change one side only.
@@ -112,7 +115,7 @@ Three rules are load-bearing:
   human" line or an explicit *Unproven* row.
 - **Never claim green without the command output.**
 - **The PR title must pass `ci / pr-title`** (it becomes the squash commit once squash-only merges are applied): `feat|fix|perf` (`!` allowed) or
-  `docs|chore|test|refactor|ci|build`, optional lowercase `(scope)`, `: `, a description. `feat`/`fix`/`perf` cut a release once Phase C lands.
+  `docs|chore|test|refactor|ci|build`, optional lowercase `(scope)`, `: `, a description. `feat`/`fix`/`perf` cut a release (`docs/workflows/ci.md` §Releases).
 - **`main` is PR-only** (ruleset `main-pr-only`, `docs/workflows/ci.md`): every change reaches it through a PR, docs included. Specs, plans and notes go
   through a `docs:` PR, which passes CI and cuts no release. Never bypass the ruleset.
 
@@ -140,7 +143,8 @@ filling them with nothing.
     - server/
     - client/src/
     - shared/types.ts
+    - shared/gitUpstream.ts
     - package.json
   kind: index
-  verified: f06c54a88e5655ce39e1f5b23b97d42151e257b2
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

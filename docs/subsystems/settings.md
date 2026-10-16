@@ -1,6 +1,6 @@
 # Settings
 
-The fourth section tab. Everything the dashboard used to need a `.env` edit, a rebuild, or a
+The last section tab on the rail (`SECTIONS` in `client/src/lib/sections.ts`). Everything the dashboard used to need a `.env` edit, a rebuild, or a
 shell export for is editable here and takes effect on the next tick.
 
 ## Where each setting lives, and why
@@ -16,7 +16,7 @@ phone-only pill switch of its own; it is gone, so `settingsTab` has exactly one 
 at any width, as Usage's Forecast / Token value / History does. Each page is a band
 (title, a scope pill, one line) over sub-category cards: Local has Display, Live data,
 New sessions, Git Sync, Notify this browser, Connection and Reset; Shared has Push notifications,
-Remote answers and Usage forecast.
+Remote answers, Usage forecast and Git fetch.
 
 The Management › Projects page (`management/ProjectsView.tsx`) is no Settings card at all: it draws on the app ground under its own band, "Management ·
 Projects", which carries the "every device" scope pill (the pins are server-stored) and says a pin keeps a project in the launch sheet however long ago its
@@ -93,8 +93,7 @@ both read it — not a view preference. The clamp keeps only `[A-Za-z0-9-]+` str
 first-seen order, at most 50; a non-array reads as `[]` without touching the other keys. It is
 **not** in the `ServerSettings` payload: the pins have their own routes, `GET/POST /api/pins` and `POST /api/pins/order`, whose
 answer also carries the recent and older projects on offer — so the Settings page's merge/validate logic for
-`POST /api/settings` never sees them. Still one file: the app writes to disk only this store and
-the remote-answer toggle's.
+`POST /api/settings` never sees them. Still one file: the pins add no file of their own beside this store.
 
 The three scan knobs are the interesting case: they change what the **server** computes, but
 they are still per-device, so they travel as query params on the poll the client already makes —
@@ -327,9 +326,10 @@ Worth knowing from this page's side:
 | Route | Purpose |
 |---|---|
 | `GET /api/settings` | the non-per-device settings + any detected override, plus `notifyAvailable` and `staleEnvKeys` (names only — never the topic or token itself) |
-| `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?}` — any subset); token-guarded like the other writes |
+| `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?, recordUsageHistory?, gitFetchSecs?}` — any subset); token-guarded like the other writes; replies with the same body as GET (`settingsBody`), `staleEnvKeys` included, since the client replaces its whole state with it |
 | `GET /api/pins` | `{pinned: PinRow[], recent: ProjectRef[], older: ProjectRef[], home}` — the stored pins (a dead one `listed: false`) and the projects on offer to pin: `recent` is the listed ones not yet pinned, `older` the 30-day tail past the lookback, both minus Claude's own dirs (scratchpads, scratch workspaces, `~/.claude`) |
 | `POST /api/pins` | `{dirName, pinned}` — token-guarded; a pin must name a recent or older project (404 otherwise), 409 past 50; an unpin takes any stored dir; answers with the fresh `GET` payload |
+| `POST /api/pins/order` | `{order: string[]}` — token-guarded; the whole pin list in its new order, 409 unless it is an exact permutation of the stored pins (no membership check: a permutation cannot add a dir); answers with the fresh `GET /api/pins` payload |
 | `POST /api/notify/test` | fire one push regardless of policy and report the outcome |
 | `GET /api/health` | now also carries `idleSecs` and `answerSecs`, for the hooks |
 | `GET /api/sessions?limit=&lookback=&active=` | per-request scan overrides |
@@ -360,5 +360,5 @@ a value the rows never reflect.
     - server/lib/settings.ts
     - client/index.html
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

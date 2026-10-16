@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
 import { useSettings } from './useSettings';
 import { refusalKind } from '../lib/writeRefusal';
 import type { AnswerRequest, PendingQuestion, QuestionAnswer, SessionQuestion } from '../../../shared/types';
@@ -44,7 +45,7 @@ export function usePendingQuestion(id: string): PendingQuestionState {
   const [needsToken, setNeedsToken] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   // Only used when the write gate wants a token from this browser (a LAN client, a container, tailnet trust off).
-  const [token, setToken] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token, setToken] = useAnswerToken();
   const { settings: { refreshMs } } = useSettings();
 
   /** questionId the current phase refers to — a new question resets the panel. */
@@ -100,8 +101,7 @@ export function usePendingQuestion(id: string): PendingQuestionState {
   }, [id, refreshMs]);
 
   const post = useCallback(async (body: AnswerRequest): Promise<'ok' | 'gone' | 'token' | 'read-only' | 'error'> => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (tokenRef.current) headers.Authorization = `Bearer ${tokenRef.current}`;
+    const headers = authHeaders(tokenRef.current, { 'Content-Type': 'application/json' });
     let status = 0;
     let refusal: unknown;
     try {

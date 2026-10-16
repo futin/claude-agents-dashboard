@@ -120,6 +120,28 @@ export function run(): number {
     });
   })) p++; else f++;
 
+  if (test('every tick stats each transcript once — the listing\'s stat, not a second one', () => {
+    withFixture(fx => {
+      const realStat = fs.statSync;
+      let stats = 0;
+      (fs as any).statSync = (...args: Parameters<typeof fs.statSync>) => {
+        if (args[0] === fx.transcript) stats++;
+        return (realStat as any)(...args);
+      };
+      try {
+        recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+        assert.strictEqual(stats, 1, 'seeding tick');
+        stats = 0;
+        fs.appendFileSync(fx.transcript, assistantLine(T0 + 20_000, 'opus-5', 'm1', { in: 4, out: 0, cc: 0, cr: 0 }) + '\n');
+        recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
+        assert.strictEqual(stats, 1, 'reading tick');
+      } finally {
+        (fs as any).statSync = realStat;
+      }
+      assert.deepStrictEqual(JSON.parse(fx.ledgerLines()[0]).tok, { 'opus-5': { in: 4, out: 0, cc: 0, cr: 0 } });
+    });
+  })) p++; else f++;
+
   if (test('a transcript caught mid-line at seeding drops only that fragment', () => {
     withFixture(fx => {
       const partial = assistantLine(T0 - 5_000, 'opus-5', 'm0', { in: 900, out: 0, cc: 0, cr: 0 });

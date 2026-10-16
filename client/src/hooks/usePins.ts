@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
 import { READ_ONLY_TEXT, refusalKind } from '../lib/writeRefusal';
 import { applyPinOrder } from '../lib/pins';
 import type { PinsResponse } from '../../../shared/types';
@@ -42,7 +43,7 @@ async function refusalText(res: Response): Promise<string> {
 export function usePins(): PinsControl {
   const [pins, setPins] = useState<PinsResponse | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [token] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token] = useAnswerToken();
 
   useEffect(() => {
     let live = true;
@@ -55,8 +56,7 @@ export function usePins(): PinsControl {
 
   const setPin = useCallback(async (dirName: string, pinned: boolean): Promise<string | null> => {
     setBusy(dirName);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
       const res = await fetch('/api/pins', { method: 'POST', headers, body: JSON.stringify({ dirName, pinned }) });
       if (res.ok) {
@@ -81,8 +81,7 @@ export function usePins(): PinsControl {
     const before = pinsRef.current;
     setBusy('order');
     if (before) setPins({ ...before, pinned: applyPinOrder(before.pinned, order) });
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
       const res = await fetch('/api/pins/order', { method: 'POST', headers, body: JSON.stringify({ order }) });
       if (res.ok) {

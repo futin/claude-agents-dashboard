@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { readJsonBody, serveSettingsWrite } from '../server/api.js';
-import { loadConfig } from '../server/lib/config.js';
+import { loadConfig, resetEnvBaseline } from '../server/lib/config.js';
 import { getSettings, resetSettings } from '../server/lib/settings.js';
 
 async function testAsync(name: string, fn: () => Promise<void>): Promise<boolean> {
@@ -60,11 +60,11 @@ function post(
 }
 
 /** Config lives in a throwaway .env, so a developer's real one can't leak in. */
-function withEnvFile(body: string, fn: (cfg: ReturnType<typeof loadConfig>) => Promise<void>): Promise<void> {
+function withEnvFile(body: string, fn: (cfg: ReturnType<typeof loadConfig>, envPath: string) => Promise<void>): Promise<void> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-body-'));
   const envPath = path.join(dir, '.env');
   fs.writeFileSync(envPath, body);
-  return fn(loadConfig({ envPath })).finally(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return fn(loadConfig({ envPath }), envPath).finally(() => fs.rmSync(dir, { recursive: true, force: true }));
 }
 
 /** The settings file is resolved from cwd, so the endpoint test runs in a tmpdir. */
@@ -168,6 +168,27 @@ export async function run(): Promise<number> {
         );
         assert.equal(good.status, 200);
         assert.equal(good.json?.gitFetchSecs, 300);
+      });
+    });
+  }));
+
+  // The Settings page replaces its whole state with this reply, so a field only GET fills
+  // would vanish on the first save — the restart warning did, while pushes still went to
+  // the old topic.
+  check(await testAsync('POST /api/settings reply still names the .env keys edited since startup', async () => {
+    await inTmpCwd(async () => {
+      await withEnvFile('NTFY_TOPIC=phone-one\n', async (cfg, envPath) => {
+        try {
+          fs.writeFileSync(envPath, 'NTFY_TOPIC=phone-two\n');
+          const reply = await post(
+            (req, res) => void serveSettingsWrite(cfg, req, res), Buffer.from(JSON.stringify({ idleSecs: 90 }))
+          );
+          assert.equal(reply.status, 200);
+          assert.deepEqual(reply.json?.staleEnvKeys, ['NTFY_TOPIC']);
+          assert.equal(reply.json?.notifyAvailable, true);
+        } finally {
+          resetEnvBaseline();
+        }
       });
     });
   }));

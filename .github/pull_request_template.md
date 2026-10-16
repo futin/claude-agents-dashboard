@@ -15,6 +15,10 @@ House rules for the body:
 <!-- Optional, when the work has committed design artefacts: -->
 Spec: `docs/superpowers/specs/YYYY-MM-DD-<name>-design.md` · Plan: `docs/superpowers/plans/YYYY-MM-DD-<name>.md` · Subsystem doc: `docs/subsystems/<name>.md`
 
+## What's new
+
+<!-- 1–3 lines in user terms: what someone using the app can now do. Delete this section for PRs with nothing user-visible. -->
+
 ## Why this shape
 
 <!-- The constraint that forced this design, and the alternative you rejected.

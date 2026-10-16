@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
 import { refusalKind } from '../lib/writeRefusal';
 import type { NotifyPatch, ServerSettings } from '../../../shared/types';
 
@@ -49,7 +50,7 @@ export function useServerSettings(): ServerSettingsControl {
   const [savingKeys, setSavingKeys] = useState<readonly string[]>([]);
   const [needsToken, setNeedsToken] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
-  const [token] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token] = useAnswerToken();
 
   useEffect(() => {
     let live = true;
@@ -69,8 +70,7 @@ export function useServerSettings(): ServerSettingsControl {
     // The patch names what is being saved, so the rows don't have to be told.
     const keys = Object.keys(patch);
     setSavingKeys(prev => [...prev, ...keys]);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
       const res = await fetch('/api/settings', { method: 'POST', headers, body: JSON.stringify(patch) });
       if (res.status === 403) {

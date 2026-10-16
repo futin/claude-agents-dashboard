@@ -76,6 +76,7 @@ orchestrator run spawned (`BM_ORCH_RUN` set in its environment) never holds eith
 the *task finished* push and exits, because nobody is going to answer a session that was
 dispatched to work one item unattended. A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT`: every Git Sync run, and the spawn form's
 *Close when done*) takes the same exit. The dashboard's own token-renewal turn (`CLAUDE_DASHBOARD_REFRESH`) gets neither the hold nor the push.
+Nor does a stop an `autopilot` run's guard blocks; the stop that then ends that turn pushes as usual ([remote-message](../subsystems/remote-message.md)).
 
 **6. Verify.** Settings → **Test push**. It fires one push *ignoring every switch above*
 and reports what actually happened, because an off switch, a missing topic and a dropped
@@ -294,5 +295,5 @@ Assume a leaked topic reveals both.
     - .env.example
     - docker-compose.yml
   kind: workflow
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

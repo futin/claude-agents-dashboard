@@ -550,7 +550,7 @@ It had a second half — the rate-window percentages, opening onto the gauges �
 account moved to the shell. Those are in the phone nav bar's chip now, readable from every
 section rather than only from this list; see [account-header](account-header.md).
 
-Three things are deliberate:
+Two things are deliberate:
 
 - **The panel is the card's own body**, not a second drawing of it. `AsideBoard.tsx`
   exports `BoardBody` (plus `hasBoard`, so neither shape frames an empty box on a cold
@@ -558,8 +558,6 @@ Three things are deliberate:
   to the card is on the phone for free.
 - **`BoardBody` takes `launch={false}` here.** The strip's square **+** never scrolls away,
   so repeating **New session** inside the panel would be one action with two controls.
-- **One panel at a time.** They are two halves of one bar; both down is taller than the
-  screen with the list nowhere in sight.
 
 ### Pinned: full-bleed, and travelling with the nav
 
@@ -568,7 +566,7 @@ Pinned, the bar goes edge to edge — `--body-pad` cancelled by a negative margi
 floating over the list. At rest it is an ordinary card on the board.
 
 Where it pins never moves: `top: var(--mnav-h)`, the bar's resting height. When the bar
-auto-hides, `.nav.hid ~ .main .s-strip.stuck` lifts the strip by exactly that much, so the
+auto-hides, `.nav.hid ~ .maincol .s-strip.stuck` lifts the strip by exactly that much, so the
 two are always edge to edge. `--mnav-h` is why the phone bar has an explicit height rather
 than a padding sum — the pin, the lift and `useStuckStrip`'s threshold all resolve through
 that one token.
@@ -612,6 +610,11 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - server/lib/title-cache.ts
     - server/lib/record-cache.ts
     - server/lib/model-identity.ts
+    - server/lib/compact-history.ts
+    - server/lib/compact-window.ts
+    - server/lib/tasks.ts
+    - server/lib/plan-progress.ts
+    - client/src/lib/tasks.ts
     - client/src/components/SessionsView.tsx
     - client/src/components/Toolbar.tsx
     - client/src/components/AsideBoard.tsx
@@ -629,5 +632,5 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

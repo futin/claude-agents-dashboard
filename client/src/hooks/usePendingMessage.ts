@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
 import { useSettings } from './useSettings';
 import { refusalKind } from '../lib/writeRefusal';
 import type { MessageAnswerRequest, PendingMessage, SessionMessage } from '../../../shared/types';
@@ -40,7 +41,7 @@ export function usePendingMessage(id: string): PendingMessageState {
   const [needsToken, setNeedsToken] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   // Shared with the question and plan panels — one dashboard, one token.
-  const [token, setToken] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token, setToken] = useAnswerToken();
   const { settings: { refreshMs } } = useSettings();
 
   /** messageId the current phase refers to — a new window resets the panel. */
@@ -92,8 +93,7 @@ export function usePendingMessage(id: string): PendingMessageState {
   }, [id, refreshMs]);
 
   const post = useCallback(async (body: MessageAnswerRequest): Promise<'ok' | 'gone' | 'token' | 'read-only' | 'error'> => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (tokenRef.current) headers.Authorization = `Bearer ${tokenRef.current}`;
+    const headers = authHeaders(tokenRef.current, { 'Content-Type': 'application/json' });
     let status = 0;
     let refusal: unknown;
     try {

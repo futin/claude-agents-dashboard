@@ -2,8 +2,8 @@
 
 A **monolith split into three domains**: a Node backend (`server/`), a Vite + React +
 TypeScript frontend (`client/`), and the shared API contract (`shared/`). One repo, one
-deploy. The **only** thing crossing the frontend/backend boundary is the typed JSON
-payloads defined in `shared/types.ts` — when adding an API field, edit that file first,
+deploy. The **only** data crossing the frontend/backend boundary is the typed JSON
+payloads defined in `shared/types.ts` (the only code both sides run is `shared/frontmatter.ts` and `shared/gitUpstream.ts`) — when adding an API field, edit that file first,
 then the server producer, then the client consumer.
 
 Everything the dashboard shows is read straight off disk from
@@ -33,9 +33,9 @@ via `tsx`, dev and prod alike).
 ## Principles
 
 - **Read-only charter.** The app never writes to `~/.claude` or the transcripts. It reads
-  one file outside them — `~/.claude.json` → `oauthAccount`, for the account chip's name
-  and plan (see [account-header](subsystems/account-header.md)) — and nothing else in
-  that file. The
+  one file outside them — `~/.claude.json`, for `oauthAccount` (the account chip's name
+  and plan, see [account-header](subsystems/account-header.md)) and the `mcpServers` the config browser lists (`lib/management.ts`, top-level and
+  per-project) — and nothing else in that file. The
   deliberate exceptions are the answer POST endpoints (RAM-only stores); a handful of
   gitignored, repo-local files — `.remote-answer.json` (see
   [remote answers](subsystems/remote-answer.md)), `.dashboard-settings.json` (see
@@ -53,8 +53,9 @@ via `tsx`, dev and prod alike).
   The second thing that reaches outside the dashboard's own state is [the Git fetch timer](subsystems/git-stats.md#the-fetch): off by default, it runs
   `git fetch origin` over the pinned repos while Management › Git is open, which writes their remote-tracking refs and `FETCH_HEAD`, never a branch or a
   working tree.
-- **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only, with one pinned exception: `lookout-widgets`, which has none of its
-  own ([hub-widgets](subsystems/hub-widgets.md#the-dependency-exception)). Keep new npm deps out of it.
+- **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only, with two pinned exceptions, neither with deps of its own:
+  `lookout-widgets` ([hub-widgets](subsystems/hub-widgets.md#the-dependency-exception)) and `release-kit`, whose `readReleases` backs
+  [`GET /api/releases`](subsystems/releases.md); `test/server-deps.test.ts` pins both. Keep new npm deps out of it.
 - **Fail-open everywhere.** A missing token, an unreadable file, a failed probe — every
   auxiliary feature degrades to "not shown" rather than crashing the monitor.
 - **Path safety.** Endpoints never join request input into filesystem paths. IDs are
@@ -99,6 +100,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/hub/widgets`, `/:id` | the Lookout hub catalog and widget data — usage gauge, sessions list and Git pending list; `POST` action paths are 404 (see [hub-widgets](subsystems/hub-widgets.md)) |
 | `GET /api/account` | who the CLI is signed in as (`~/.claude.json` → `oauthAccount`, as display strings) + the two rate windows — the header chip's own 30s poll, so it does not ride the 3s session scan |
+| `GET /api/releases` | the dashboard's own releases from the checkout's local annotated `vX.Y.Z` tags (release-kit's `readReleases`), memoised on HEAD + the tag refs; the empty shape when there are none ([releases](subsystems/releases.md)) |
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
 | `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, one cell per UTC day of the horizon, plus the coverage disclosure and the off-peak boost verdict (`lib/usage-boost.ts`) |
 | `GET /api/usage/history?days=N` | recorded 5h and weekly utilization over the last N days (default 7, clamped 1–365): windows by observed `resetsAt`, gap-split step segments downsampled to ~1440 points, and the recording gaps; served with recording off too (`lib/usage-history-series.ts`) |
@@ -113,6 +115,10 @@ separator load-bearing rather than belt-and-braces: decoding is what turns `%2e%
 real `..`. This path is unauthenticated and answers on every interface, in dev as well as
 prod — the "production only" in the table above is about what is *useful* there, not about
 what the route will answer.
+
+⚠️ Before any route — the hub included — the listener runs the two checks in `lib/request-guard.ts`: a `Host` that public DNS could have handed out
+(DNS rebinding) and a cross-site state-changing request (CSRF) are both a 403. Loopback, IP literals and single-label names always pass; a public
+tunnel's name needs `ALLOWED_HOSTS` ([configuration](workflows/configuration.md)), which Vite's `allowedHosts` reads too.
 
 ⚠️ Route order in `index.ts` is load-bearing: the `:id` detail regex would swallow
 `/api/sessions/:id/chat|question|answer|plan|plan-answer|stop|message|message-answer`, so
@@ -145,10 +151,13 @@ shared/types.ts   the API contract (SessionsResponse, Session, ManagementIndex,
                   SessionAnalysis, AnalyticsReport, …)
 shared/frontmatter.ts  zero-dep YAML-frontmatter subset parser — shared because
                   both sides parse it (lib/management.ts and configs/FileBlock.tsx)
+shared/gitUpstream.ts  zero-dep upstream rule (`gitUpstreamShown`) — shared so the Git view's chip and level
+                  rule and the hub's Git pending tile cannot disagree about the same repo
 server/
   index.ts        HTTP entry + routing; static-serves client/dist in prod
   api.ts          all /api handlers (+ error fallbacks)
   lib/config.ts   .env loader — process.env > .env > defaults
+  lib/request-guard.ts  pure pre-route checks: `hostAllowed` (DNS rebinding) and `crossSiteWrite` (CSRF)
   lib/transcript.ts  tail-reads a transcript → tokens/model/window/activity
   lib/title-cache.ts  remembers a custom title once it sinks below the tail window
   lib/model-identity.ts  the session's model attachment id — its family/version (or `[1m]`) sizes the window, same tail-then-hunt
@@ -198,6 +207,8 @@ server/
   lib/git-fetch.ts    the Git fetch: detached `git fetch origin` per common dir, error classifier, watched-only timer + clock
   lib/open-folder.ts  `open <path>` through `execFile`, behind POST /api/open-folder (the pin-membership gate is in api.ts)
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
+  lib/account.ts      `~/.claude.json` → `oauthAccount` as display strings, behind GET /api/account; fail-open to null
+  lib/releases.ts     GET /api/releases: release-kit's tag reader behind a memo keyed on HEAD + the common dir's tag refs
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
   lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
@@ -236,7 +247,8 @@ client/src/
                   poll, so leaving the section stops it; two columns: the list in one of
                   five views + a 320px aside), HeaderAccount (the shell's account
                   chip — identity + both rate windows, in the header band or the
-                  phone nav bar; see subsystems/account-header.md),
+                  phone nav bar; see subsystems/account-header.md), ReleasesDrawer (the What's new
+                  drawer behind the rail's version chip), Chevron (the one disclosure mark),
                   AsideBoard (clock, origin, counts, remote-answer switch, New session),
                   Toolbar (view switcher + filter/sort popovers; Popover is the shared
                   dismiss primitive), sessions/ (atoms, Expanded, EmptyState, AsideStrip
@@ -262,9 +274,11 @@ client/src/
                   useUsageProfile, useUsageRates, useUsageHistory, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins, usePinReorder (Projects' pin grip), useOpenFolder (Git's Open folder
                   key),
+                  useAccount (the header chip's 30s poll, owned by App), useReleases (fetched on load
+                  and on each drawer open, no poll), useGitFetch (Git's Fetch all key),
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
                   Sync button: runs per device, a sessions poll only while one is live),
-                  usePersistedState, useSettings, useServerSettings, useDictation, useFloatingTip
+                  usePersistedState, useAnswerToken (the page's one Answer token copy), useSettings, useServerSettings, useDictation, useFloatingTip
                   (the one hover/pin explanation panel, shared by both Usage tabs),
                   useTranscribeAvailable, useWebNotify (browser banners for headless
                   sessions), useBackClose, useHideOnScroll (the phone top bar's
@@ -275,19 +289,25 @@ client/src/
                   sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
-                  webNotify, backClose, stopControl, triage (the board/triage piles),
+                  webNotify, backClose, stopControl, triage (the board/triage piles), answerToken (the token store + authHeaders),
                   stickyStrip, agentLabel (a subagent's type only when informative),
                   tasks (taskProgress — the one count the row pill and the Tasks card share),
                   gitLayouts / gitLevels / gitLinks / gitStatsText (the Git sub-view's switcher rules,
                   the problems → levels rule and session join, the compare link, the copy table), gitBar (the divergence bar's scale),
-                  gitPoll (its poll schedule, apart from the DOM), gitSync / gitSyncRuns
+                  gitPoll (its poll schedule, apart from the DOM), gitClock (the fetch clock's meters,
+                  re-poll timing and Fetch all key state), gitSync / gitSyncRuns
                   (the Sync button's rules, copy and run reconciler), projectsView (the
-                  Projects sub-view's layouts, pinned / offered split, dir line and copy)
+                  Projects sub-view's layouts, pinned / offered split, dir line and copy), releases (the
+                  version chip's label and unseen dot, the drawer's badges and dates)
 vite.config.ts    dev proxy /api → backend; reuses the server config loader;
                   allowedHosts = `.ts.net` + this node's bare MagicDNS short
                   name (probed via `tailscale status --json`), without which
-                  the short-name tailnet URL 403s (subsystems/remote-access.md)
+                  the short-name tailnet URL 403s (subsystems/remote-access.md), plus
+                  `ALLOWED_HOSTS` (`*` turns the check off), matching lib/request-guard.ts
 test/             node-assert tests over backend + client domain logic
+  visual/         the Playwright suite behind `pnpm test:visual` (config in playwright.config.ts at the
+                  root): mocked API, screenshots, overflow and contrast (subsystems/visual-tests.md)
+.github/workflows/  ci.yml (the PR gate) and release.yml (tags and publishes each release) — workflows/ci.md
 scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   plan-remote-hook.sh, permission-notify-hook.sh,
                   remote-decision-hook.sh, stop-notify-hook.sh,
@@ -350,6 +370,7 @@ that area:
 - [account-header](subsystems/account-header.md) — the shell's account chip: its two homes, the `oauthAccount` profile reader, and `GET /api/account`
 - [usage-limits](subsystems/usage-limits.md) — the rate-limit gauges the account chip draws, and the Usage tab behind them: pace, the duty-cycle forecast, and token value per model
 - [hub-widgets](subsystems/hub-widgets.md) — `/api/hub/widgets`: the three Lookout tiles, served through the `lookout-widgets` package, and its pinned dependency exception
+- [releases](subsystems/releases.md) — the rail's version chip and the What's new drawer, read from the local release tags at `GET /api/releases`
 - [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold, answer window, push policy
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `Allow?` tab for terminal permission dialogs
@@ -367,6 +388,7 @@ that area:
 <!-- docs-sync:
   sources:
     - shared/types.ts
+    - shared/gitUpstream.ts
     - server/index.ts
     - server/api.ts
     - server/lib/
@@ -374,5 +396,5 @@ that area:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: f06c54a88e5655ce39e1f5b23b97d42151e257b2
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->
