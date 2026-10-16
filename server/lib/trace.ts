@@ -25,6 +25,8 @@ import { describeTool, LOCAL_PLUMBING } from './transcript.js';
 
 /** Most steps a full trace response carries (the newest ones). */
 export const TRACE_STEP_CAP = 500;
+/** Most cause ancestors a capped full response adds beyond its window (subagent parents and turn prompts are not counted). */
+export const TRACE_CONTEXT_CAP = 100;
 
 const PROMPT_CAP = 300;
 const INTENT_CAP = 160;
@@ -475,8 +477,8 @@ function advance(file: string, projectPath: string | null, fresh: boolean): Trac
 }
 
 /**
- * The session's trace, advanced over whatever was appended since the last call. No `after`: the newest `TRACE_STEP_CAP` steps, the prompt of each
- * turn among them that fell outside, and `dropped` (the older steps left out). A matching `after`: the steps changed since `after.rev`. Another epoch,
+ * The session's trace, advanced over whatever was appended since the last call. No `after`: the newest `TRACE_STEP_CAP` steps with the context they
+ * need (`traceWindow`), and `dropped` (the older steps left out). A matching `after`: the steps changed since `after.rev`. Another epoch,
  * or `after.rev` past the builder's revision: the full answer with `reset` (Decision 1). Null when the main file is unreadable.
  */
 export function readTrace(file: string, projectPath: string | null, after?: { rev: number; epoch: string }): Omit<SessionTrace, 'id'> | null {
@@ -485,10 +487,47 @@ export function readTrace(file: string, projectPath: string | null, after?: { re
   const b = entry.builder;
   const head = { cursor: b.rev, epoch: b.epoch, thinking: b.thinking() };
   if (after && after.epoch === b.epoch && after.rev <= b.rev) return { ...head, steps: b.changedSince(after.rev), dropped: 0 };
-  const all = b.steps();
-  // Past the cap, a delivered turn whose prompt fell outside still gets that prompt, so its steps keep their `asked` cause and the turn its label.
+  return { ...head, ...traceWindow(b.steps()), ...(after ? { reset: true } : {}) };
+}
+
+/**
+ * What a full response carries out of `all` (every step, in `at` order), and `dropped`, the count left out. Past `TRACE_STEP_CAP` that is the newest
+ * `TRACE_STEP_CAP` steps (the window), plus:
+ * - the prompt of every turn with a step in the window, so its steps keep their `asked` cause and the turn its label;
+ * - the dispatching Agent/Task step of every delivered subagent step, up the chain, so no subagent step arrives without its parent;
+ * - up to `TRACE_CONTEXT_CAP` cause ancestors, walked breadth-first over `why` from everything above (each hop newest first, its parents riding along
+ *   uncounted), so the causes a window step converges on (answers, plans, prompts, Agent steps) are there for the inspector and the arcs.
+ */
+export function traceWindow(all: TraceStep[]): { steps: TraceStep[]; dropped: number } {
   const cut = Math.max(0, all.length - TRACE_STEP_CAP);
+  if (cut === 0) return { steps: all, dropped: 0 };
+
+  const index = new Map(all.map((s, i) => [s.id, i]));
+  const parentOf = (i: number): number | undefined => (all[i].agent === undefined ? undefined : index.get(all[i].agent));
+  const kept = new Set<number>();
+  let frontier: number[] = [];
+  // Keeps step `i` and its not-yet-kept parents; a kept step's parents are always kept, so the climb stops at the first kept one.
+  const keep = (i: number): void => {
+    for (let j: number | undefined = i; j !== undefined && !kept.has(j); j = parentOf(j)) { kept.add(j); frontier.push(j); }
+  };
+
   const turns = new Set(all.slice(cut).map((s) => s.turn));
-  const steps = cut === 0 ? all : all.filter((s, i) => i >= cut || (s.kind === 'prompt' && turns.has(s.turn)));
-  return { ...head, steps, dropped: all.length - steps.length, ...(after ? { reset: true } : {}) };
+  for (let i = 0; i < all.length; i++) if (i >= cut || (all[i].kind === 'prompt' && turns.has(all[i].turn))) keep(i);
+
+  let added = 0;
+  while (frontier.length > 0 && added < TRACE_CONTEXT_CAP) {
+    const hop = new Set<number>();
+    for (const i of frontier) for (const w of all[i].why) { const c = index.get(w.id); if (c !== undefined && !kept.has(c)) hop.add(c); }
+    frontier = [];
+    for (const c of [...hop].sort((a, b) => b - a)) {
+      if (added === TRACE_CONTEXT_CAP) break;
+      // Already kept as the parent of a nearer cause in this hop: not counted again.
+      if (kept.has(c)) continue;
+      keep(c);
+      added++;
+    }
+  }
+
+  const steps = all.filter((_, i) => kept.has(i));
+  return { steps, dropped: all.length - steps.length };
 }

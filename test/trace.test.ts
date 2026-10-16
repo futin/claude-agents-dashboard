@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { TraceStep } from '../shared/types.js';
-import { readTrace, resetTraceCache, TraceBuilder } from '../server/lib/trace.js';
+import { readTrace, resetTraceCache, TRACE_CONTEXT_CAP, TRACE_STEP_CAP, TraceBuilder, traceWindow } from '../server/lib/trace.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -491,6 +491,112 @@ export function run(): number {
     assert.strictEqual(t.reset, true);
     assert.deepStrictEqual(t.steps.map((s) => s.id), ['p1', 'r1']);
     assert.strictEqual(t.steps[1].status, 'ok');
+  })) p++; else f++;
+
+  // Synthetic steps for `traceWindow`: `i` sets `at` (one second apart), so array order is `at` order.
+  const at = (i: number): string => new Date(Date.UTC(2026, 9, 16, 10, 0, 0, 0) + i * 1000).toISOString();
+  const syn = (id: string, i: number, extra: Partial<TraceStep> = {}): TraceStep => ({
+    id, turn: 1, kind: 'read', tool: 'Read', detail: id, intent: null, intentFrom: null, at: at(i), status: 'ok', result: null, why: [], thinking: null, ...extra
+  });
+  /** `n` window-filling steps from index `from`, ids `w<k>`. */
+  const fill = (from: number, n: number, extra: (k: number) => Partial<TraceStep> = () => ({})): TraceStep[] =>
+    Array.from({ length: n }, (_, k) => syn('w' + k, from + k, extra(k)));
+  const ids = (steps: TraceStep[]): string[] => steps.map((s) => s.id);
+  const inAtOrder = (steps: TraceStep[]): boolean => steps.every((s, k) => k === 0 || steps[k - 1].at <= s.at);
+
+  if (test('28. a capped read carries the Agent step of a window subagent step, parents of parents too; dropped counts one less each', () => {
+    assert.strictEqual(TRACE_STEP_CAP, 500);
+    assert.strictEqual(TRACE_CONTEXT_CAP, 100);
+    // old0..old9, then ag-outer (main) dispatching ag-inner (nested), then 500 window steps; w0 is ag-inner's subagent step with no cause.
+    const old = Array.from({ length: 10 }, (_, k) => syn('old' + k, k));
+    const outer = syn('ag-outer', 10, { kind: 'agent', tool: 'Agent' });
+    const inner = syn('ag-inner', 11, { kind: 'agent', tool: 'Agent', agent: 'ag-outer' });
+    const win = fill(12, 500, (k) => (k === 0 ? { agent: 'ag-inner' } : {}));
+    const t = traceWindow([...old, outer, inner, ...win]);
+    assert.strictEqual(t.steps.length, 502);
+    assert.deepStrictEqual(ids(t.steps).slice(0, 3), ['ag-outer', 'ag-inner', 'w0']);
+    assert.strictEqual(t.dropped, 10);
+  })) p++; else f++;
+
+  if (test('29. readTrace: an Agent step older than the window whose subagent step is in it is delivered', () => {
+    resetTraceCache();
+    const file = fixture(
+      use('ag1', 'Agent', { description: 'scan' }, at(0), 'm-ag'),
+      ...Array.from({ length: 519 }, (_, k) => use('r' + k, 'Read', { file_path: '/r/f' + k }, at(k + 1), 'm' + k))
+    );
+    const dir = path.join(file.replace(/\.jsonl$/, ''), 'subagents');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'agent-a1.meta.json'), JSON.stringify({ toolUseId: 'ag1' }));
+    fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), JSON.stringify(use('sr1', 'Read', { file_path: '/r/sub' }, at(600), 'sm1', 'ag1').rec) + '\n');
+    const t = readTrace(file, null);
+    assert.ok(t);
+    // 521 steps: the newest 500 end with sr1; ag1 rides along, so 20 dropped rather than 21.
+    assert.strictEqual(t.steps.length, 501);
+    assert.strictEqual(t.dropped, 20);
+    assert.deepStrictEqual([t.steps[0].id, t.steps[500].id], ['ag1', 'sr1']);
+    assert.strictEqual(t.steps[500].agent, 'ag1');
+  })) p++; else f++;
+
+  if (test('30. a window step\'s cause chain two hops back is delivered, in at order', () => {
+    // x0..x9 old filler; a (5) ← b (7) ← w0 in the window.
+    const old = Array.from({ length: 10 }, (_, k) => syn('x' + k, k));
+    old[5] = syn('a', 5);
+    old[7] = syn('b', 7, { why: [{ id: 'a', rel: 'informed' }] });
+    const t = traceWindow([...old, ...fill(10, 500, (k) => (k === 0 ? { why: [{ id: 'b', rel: 'retry' }] } : {}))]);
+    assert.deepStrictEqual(ids(t.steps).slice(0, 3), ['a', 'b', 'w0']);
+    assert.strictEqual(t.dropped, 8);
+    assert.ok(inAtOrder(t.steps));
+  })) p++; else f++;
+
+  if (test('31. past TRACE_CONTEXT_CAP causes, exactly 100 ancestors are added, nearest first; a parent rides along uncounted', () => {
+    // far (0), agX (1), c0..c149 (2..151), then the window: w<k> for k < 150 is caused by c<k>. c149 is caused by `far` (a hop-2 cause), and c140 is
+    // a subagent step of agX, which no step names as a cause.
+    const far = syn('far', 0);
+    const agX = syn('agX', 1, { kind: 'agent', tool: 'Agent' });
+    const causes = Array.from({ length: 150 }, (_, k) => syn('c' + k, k + 2, k === 149 ? { why: [{ id: 'far', rel: 'informed' }] } : k === 140 ? { agent: 'agX' } : {}));
+    const win = fill(152, 500, (k) => (k < 150 ? { why: [{ id: 'c' + k, rel: 'informed' }] } : {}));
+    const t = traceWindow([far, agX, ...causes, ...win]);
+    const added = ids(t.steps).filter((id) => id.startsWith('c'));
+    assert.strictEqual(added.length, TRACE_CONTEXT_CAP);
+    // Nearest first: the newest 100 of the 150 hop-1 causes; `far` is hop 2, past the cap.
+    assert.deepStrictEqual(added, Array.from({ length: 100 }, (_, k) => 'c' + (k + 50)));
+    assert.ok(t.steps.some((s) => s.id === 'agX'));
+    assert.ok(!t.steps.some((s) => s.id === 'far'));
+    assert.strictEqual(t.steps.length, 500 + 100 + 1);
+    assert.strictEqual(t.dropped, 652 - 601);
+    assert.ok(inAtOrder(t.steps));
+  })) p++; else f++;
+
+  if (test('32. no duplicates: a cause that is in the window, the turn\'s prompt, or a parent is delivered once', () => {
+    // pr (turn 1's prompt, old), ag (old Agent), then the window: w0 is ag's subagent step caused by ag and pr; w1 is caused by w0 and pr.
+    const pr = syn('pr', 0, { kind: 'prompt', tool: 'Prompt', status: null });
+    const ag = syn('ag', 1, { kind: 'agent', tool: 'Agent', why: [{ id: 'pr', rel: 'asked' }] });
+    const old = Array.from({ length: 5 }, (_, k) => syn('o' + k, k + 2));
+    const win = fill(7, 500, (k) =>
+      k === 0 ? { agent: 'ag', why: [{ id: 'ag', rel: 'delegated' }, { id: 'pr', rel: 'asked' }] }
+      : k === 1 ? { why: [{ id: 'w0', rel: 'retry' }, { id: 'pr', rel: 'asked' }] } : {});
+    const t = traceWindow([pr, ag, ...old, ...win]);
+    const got = ids(t.steps);
+    assert.strictEqual(new Set(got).size, got.length);
+    assert.deepStrictEqual(got.slice(0, 3), ['pr', 'ag', 'w0']);
+    assert.strictEqual(t.steps.length, 502);
+    assert.strictEqual(t.dropped, 5);
+  })) p++; else f++;
+
+  if (test('33. a delta on a capped session is unaffected: only the changed step, no ancestors, dropped 0', () => {
+    resetTraceCache();
+    const recs = Array.from({ length: 520 }, (_, k) => use('d' + k, 'Read', { file_path: '/r/d' + k }, at(k), 'md' + k));
+    const file = fixture(...recs);
+    const first = readTrace(file, null);
+    assert.ok(first);
+    // d520 re-reads d0's file, so it is `informed` by d0, which sits outside the window: a delta still carries only what changed.
+    append(file, result('d519', 'x'), use('d520', 'Read', { file_path: '/r/d0' }, at(520), 'md520'));
+    const t = readTrace(file, null, { rev: first.cursor, epoch: first.epoch });
+    assert.ok(t);
+    assert.deepStrictEqual(ids(t.steps), ['d519', 'd520']);
+    assert.deepStrictEqual(t.steps[1].why, [{ id: 'd0', rel: 'informed' }]);
+    assert.strictEqual(t.dropped, 0);
+    assert.strictEqual(t.reset, undefined);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

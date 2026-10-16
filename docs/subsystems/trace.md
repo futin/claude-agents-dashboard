@@ -34,9 +34,18 @@ Empty and error copy: `Loading trace…`, `Couldn’t read this session’s trac
 
 `GET /api/sessions/:id/trace` → `SessionTrace` (`shared/types.ts`), handled by `serveSessionTrace` in `api.ts`, builder in `server/lib/trace.ts`.
 
-- No query → the **full** trace: the newest `TRACE_STEP_CAP` (500) steps, plus the prompt of every turn among them whose prompt fell outside (so that
-  turn keeps its label and its `asked` causes), still in `at` order, and `dropped`, how many older steps were left out. There is no "load older" in v1,
-  and any other cause that points at a step the client does not hold is simply not drawn.
+- No query → the **full** trace (`traceWindow`): the newest `TRACE_STEP_CAP` (500) steps, the window, plus the context those steps need, every step
+  once and still in `at` order, and `dropped`, all steps minus delivered ones. The window carries:
+  - the **prompt** of every turn with a step in it, so that turn keeps its label and its `asked` causes;
+  - the **parent**: every delivered subagent step's dispatching Agent/Task step (its `agent`), up the chain, so no subagent step renders indented
+    with no parent and "0 causes";
+  - up to `TRACE_CONTEXT_CAP` (100) **cause ancestors**: breadth-first over `why` from everything above, one hop at a time, each hop newest first.
+    An added ancestor brings its parents too; parents and prompts do not count against the cap, and the walk stops when the cap is reached.
+
+  Why: on a real session (measured 2026-10-16) the bare window held 501 steps, 373 of them subagent steps; 4 of those had their Agent step outside
+  it; 109 of 498 tool steps had no cause inside it, and only 31 had a chain two hops deep, so the dashed arcs (causes ≥2 hops back) almost never drew.
+  The causes converge on a few older decision steps (AskUserQuestion answers, ExitPlanMode, prompts, Agent steps), so a small ancestor budget brings
+  most of them back. There is no "load older" in v1; a cause past the budget is still simply not drawn.
 - `?after=<cursor>&epoch=<epoch>` → the **live tail**: only the steps that changed since that revision (a step changes when it lands and again when its
   result does). Unlike chat, **the cursor is a revision, not a byte offset**: subagent files have their own offsets, so one offset cannot say where the
   trace stands. `epoch` is the builder's identity; a different epoch, or an `after` past the builder's revision, answers with the full trace and
@@ -120,7 +129,7 @@ Known limits, accepted for v1: the `informed` scan is O(n²) over the steps (the
 
 ## Tests
 
-`test/trace.test.ts` (the builder, the file side, the endpoint's cursor and reset), `test/trace-why.test.ts` (the eight rules), `test/client-trace.test.ts`
+`test/trace.test.ts` (the builder, the file side, the endpoint's cursor and reset, the window's prompts, parents and ancestor cap), `test/trace-why.test.ts` (the eight rules), `test/client-trace.test.ts`
 (merge, `causesOf`, filter). The picked-step views are pinned by the Playwright shots `sessions-daylight-1280-trace.png` and
 `sessions-daylight-375-trace.png` ([visual-tests](visual-tests.md)); the fixture is `test/visual/fixtures/session-trace.ts`, whose tool-line ids the chat
 fixture reuses so `why?` has a step to land on.
