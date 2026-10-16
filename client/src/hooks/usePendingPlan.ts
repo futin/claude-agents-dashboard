@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
 import { useSettings } from './useSettings';
 import type { PendingPlan, PlanAnswerRequest, SessionPlan } from '../../../shared/types';
 
@@ -38,7 +39,7 @@ export function usePendingPlan(id: string): PendingPlanState {
   const [phase, setPhase] = useState<PlanPhase>('idle');
   const [needsToken, setNeedsToken] = useState(false);
   // Shared with the question panel — one dashboard, one token.
-  const [token, setToken] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token, setToken] = useAnswerToken();
   const { settings: { refreshMs } } = useSettings();
 
   /** planId the current phase refers to — a new plan resets the panel. */
@@ -90,8 +91,7 @@ export function usePendingPlan(id: string): PendingPlanState {
   }, [id, refreshMs]);
 
   const post = useCallback(async (body: PlanAnswerRequest): Promise<'ok' | 'gone' | 'token' | 'error'> => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (tokenRef.current) headers.Authorization = `Bearer ${tokenRef.current}`;
+    const headers = authHeaders(tokenRef.current, { 'Content-Type': 'application/json' });
     let status = 0;
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/plan-answer`, {
