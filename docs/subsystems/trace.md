@@ -12,17 +12,21 @@ already folded, which means every link is a hint, not a record. Chat's [drawer](
 `Chat | Trace` is a switch in the drawer head, right of the spacer, next to ✕. The modal always opens in Chat (the view is not persisted). The spine is the
 transcript column; the sidecar swaps the Tasks card for the **inspector** (the picked step in full); the foot swaps the message filter for the step filter.
 
-- **Spine** (`TraceSpine`): turns as headers (`Turn n` plus a label), a dot and card per step, subagent steps indented under their Task. A step's card is
+- **Spine** (`TraceSpine`): turns as headers (`Turn n` plus a label, once per turn: a background subagent's rows keep their Task's turn and interleave by
+  `at` with later turns without repeating its header), a dot and card per step, subagent steps indented under their Task. A step's card is
   tool, detail and flags (`failed`, `waiting on you`, the user's answer, a commit sha, `thinking`), then the model's stated intent, then `→ result`. The
   gutter's SVG draws the turn line, a magenta curve from each subagent step to its Task dot, and the picked step's cause arcs (solid one hop back, dashed
-  further). A pick of the user's own, or scrolling away from the tail, stops **following**; `↓ Follow live` returns to the newest step.
+  further). The other rows dim around a pick only when the picked step is on the spine. A pick of the user's own, or scrolling away from the tail, stops
+  **following**; `↓ Follow live` returns to the newest step.
 - **Inspector** (`TraceInspector`): the picked step's title, intent, outcome, readable thinking, then `Why` (its causes nearest first, each labelled with the
-  relation) and `Led to` (the steps whose own causes name it), then the step's facts: Status, Turn, At, Plan task, Intent from, Thinking. On a phone the
-  card is capped at 30vh and At / Intent from / Thinking are hidden (`.f.wide`, as Chat's facts).
+  relation) and `Led to` (the steps whose own causes name it), then the step's facts: Status, Turn, At, Plan task, Intent from, Thinking. An empty `Why`
+  reads `A prompt is where a turn starts; nothing comes before it.` on a prompt and `Its causes are older than the steps loaded.` on any other step. On a
+  phone the card is capped at 30vh and At / Intent from / Thinking are hidden (`.f.wide`, as Chat's facts).
 - **Foot:** `n steps · n running · thinking readable in n of n`, plus `· n older not loaded` when the response was capped; the `Only this step's why` toggle;
   and the filter `All | Edits | Fails | You`. A prompt row always passes a filter, and **the picked row stays visible even when the filter excludes it**.
 - **`why?` on Chat's tool lines:** every chat tool line that carries a tool_use id (`ChatToolCall.id`) has a `why?` button that switches to Trace with that
-  step picked, not following. A body-bearing tool (`ExitPlanMode`, `AskUserQuestion`) renders as a plan block and has none.
+  step picked, not following. A body-bearing tool (`ExitPlanMode`, `AskUserQuestion`) renders as a plan block, and its `why?` sits in the block's summary
+  line; the click opens Trace without toggling the block.
 
 Empty and error copy: `Loading trace…`, `Couldn’t read this session’s trace.`, `No tool calls in this transcript yet.`
 
@@ -30,8 +34,9 @@ Empty and error copy: `Loading trace…`, `Couldn’t read this session’s trac
 
 `GET /api/sessions/:id/trace` → `SessionTrace` (`shared/types.ts`), handled by `serveSessionTrace` in `api.ts`, builder in `server/lib/trace.ts`.
 
-- No query → the **full** trace: the newest `TRACE_STEP_CAP` (500) steps and `dropped`, how many older ones were left out. There is no "load older" in v1,
-  and a cause that points at a step the client does not hold is simply not drawn.
+- No query → the **full** trace: the newest `TRACE_STEP_CAP` (500) steps, plus the prompt of every turn among them whose prompt fell outside (so that
+  turn keeps its label and its `asked` causes), still in `at` order, and `dropped`, how many older steps were left out. There is no "load older" in v1,
+  and any other cause that points at a step the client does not hold is simply not drawn.
 - `?after=<cursor>&epoch=<epoch>` → the **live tail**: only the steps that changed since that revision (a step changes when it lands and again when its
   result does). Unlike chat, **the cursor is a revision, not a byte offset**: subagent files have their own offsets, so one offset cannot say where the
   trace stands. `epoch` is the builder's identity; a different epoch, or an `after` past the builder's revision, answers with the full trace and
@@ -49,8 +54,9 @@ rate. `mergeTrace` (`client/src/lib/trace.ts`) replaces by id, appends unseen id
 file side:
 
 - **Cache:** `Map<transcriptPath, entry>`, an LRU of 8 (`TRACE_CACHE_SIZE`). An entry is a builder plus the byte offset read to in the main file and in each
-  linked subagent file. The first open of a transcript parses the whole file once, synchronously (a 9,162-step transcript took 1.5 s, 2026-10-16); after that
-  a poll costs the appended bytes.
+  linked subagent file. The first open of a transcript parses the whole file once, synchronously: 2.69 s and about 480 MB peak RSS on a 9,714-step, 236 MB
+  transcript with 26 subagent files (2026-10-16), because a pass holds every parsed record before it folds them. After that a poll costs the appended bytes.
+  A pass whose fold throws drops its entry, so the next poll rebuilds from the start under a new epoch.
 - **Complete lines only.** A pass reads the complete new lines and stops at the last newline, leaving a partial trailing line for the next pass, the rule
   `chat.ts` and `tasks.ts` follow.
 - **Time-ordered ingest.** One pass reads the main file *and every linked subagent file*, stable-sorts the parsed records by `timestamp`, then folds them
@@ -71,8 +77,8 @@ file side:
   `in_progress` when the step landed, read through the same fold as the Tasks card, so the fact needs no client lookup. Subagent TaskUpdates do not move it.
 - **Turn** counts user prompts (0 before the first). A subagent step takes its Task's turn. The turn *label* is derived on the client from the prompt's
   `detail` (first line, 48 chars); it is not a contract field.
-- **`tool` / `detail`.** An agent step reads `Task · <subagent_type>` and its detail is `input.description`; otherwise `detail` is `describeTool`, the label
-  Chat uses. A prompt is `tool: 'Prompt'`, `id` the record uuid, `detail` the text capped at 300.
+- **`tool` / `detail`.** An agent step reads `<name> · <subagent_type>` (`Agent · …` on the current CLI) and its detail is `input.description`;
+  otherwise `detail` is `describeTool`, the label Chat uses. A prompt is `tool: 'Prompt'`, `id` the record uuid, `detail` the text capped at 300.
 - **Intent.** `input.description` when set (`intentFrom: 'description'`), else the assistant text since the previous tool_use in the same scope, applied to
   every tool_use sharing that text's `message.id` (`'text'`), trimmed to the first sentence and 160 chars, else null.
 - **Thinking.** The thinking blocks since the previous tool_use in the scope attach to the calls that follow in the same message: `'text'` when any block
@@ -109,7 +115,7 @@ against the command with quoted strings removed and tokens containing `/` or `.`
 "tests" in a commit message do not count. A `git commit` is never a check. The cost: an invocation written only as a path (`./run-tests.sh`) does not
 count either. `EnterPlanMode` resolves without a user verdict, so it is not an `answer`.
 
-Known limits, accepted for v1: the `informed` scan is O(n²) over the steps (the 1.5 s first open above); path matches have no boundary (`a.ts` is inside
+Known limits, accepted for v1: the `informed` scan is O(n²) over the steps (the 2.69 s first open above, 2026-10-16); path matches have no boundary (`a.ts` is inside
 `a.tsx`); a same-size rewrite of the main file is not detected.
 
 ## Tests
@@ -131,5 +137,5 @@ fixture reuses so `why?` has a step to land on.
     - client/src/components/ChatDrawer.tsx
     - test/visual/fixtures/session-trace.ts
   kind: subsystem
-  verified: 00ab0477ab7000418e7548e7de27bf84297cec7b
+  verified: 763bada01358907dd2f28aec434a5d14b4e3a7f3
 -->

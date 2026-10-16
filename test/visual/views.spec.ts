@@ -61,7 +61,7 @@ const CASES: ShotCase[] = [
   { ...PROJ, width: 375, storage: { 'management.projectsLayout': 'lists' }, kind: 'projects-lists' }
 ];
 
-/** 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts + 2 Trace shots (below). A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered. */
+/** 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts = 84 counted shots; the 2 Trace shots (below) sit outside the count. A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered. */
 const EXPECTED_SHOTS = 84;
 
 /** The drawer's Trace mode with a step picked — not in `CASES`, because each needs a click first. 1280 picks a row (a retry, so the arcs run back to its failure); 375 follows a chat tool line's `why?`. */
