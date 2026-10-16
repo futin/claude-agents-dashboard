@@ -14,6 +14,7 @@ import path from 'node:path';
 
 import type { TraceKind, TraceStep, TraceWhy } from '../../shared/types.js';
 import { DEFAULT_CAPS, parseChatRecord } from './chat.js';
+import { inferWhy } from './trace-why.js';
 import { foldTaskRecord, liveTaskSubject, newTaskFold, type TaskFold } from './tasks.js';
 import { describeTool, LOCAL_PLUMBING } from './transcript.js';
 
@@ -177,9 +178,9 @@ export class TraceBuilder {
     return { recorded: this.recorded, readable: this.readable };
   }
 
-  /** The single call site for a step's causes. Task 4 fills this in; until then a step has none. */
-  protected why(_draft: StepRecord): TraceWhy[] {
-    return [];
+  /** The single call site for a step's causes: every step folded so far, as the rules read them. */
+  protected why(draft: StepRecord): TraceWhy[] {
+    return inferWhy(draft, this.order, this.prompts.get(draft.turn) ?? null);
   }
 
   private sorted(): StepRecord[] {

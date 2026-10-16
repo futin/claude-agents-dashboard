@@ -83,7 +83,7 @@ export function run(): number {
     assert.strictEqual(rd.result, null);
     assert.strictEqual(rd.turn, 1);
     assert.strictEqual(rd.at, T(2));
-    assert.deepStrictEqual(rd.why, []);
+    assert.deepStrictEqual(rd.why, [{ id: 'p1', rel: 'asked' }]);
     for (const k of ['scope', 'file', 'cwd', 'command', 'planText', 'resultText', 'rev']) assert.ok(!(k in rd), `leaked ${k}`);
     assert.strictEqual(b.rev, 1);
     assert.ok(b.epoch.length > 0);
