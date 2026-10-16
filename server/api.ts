@@ -14,6 +14,7 @@ import {
 } from './lib/scan.js';
 import { archivedSessionIds } from './lib/archived.js';
 import { readTranscript } from './lib/transcript.js';
+import { readTrace } from './lib/trace.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
 import { isRefreshSession } from './lib/token-refresh.js';
@@ -68,7 +69,7 @@ import {
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
-  SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
+  SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SessionTrace, SpawnRequest,
   ModelRateRow, RateLimit, SpawnResponse, UsageCoverage, UsageProfileCell,
   UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult
 } from '../shared/types.js';
@@ -274,6 +275,45 @@ export function serveSessionChat(id: string, params: URLSearchParams, res: Serve
     body = { id, ...chat };
   } catch (e) {
     console.error('[dashboard] session chat failed:', (e as Error).message);
+    return fail(500);
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(body));
+}
+
+/**
+ * `GET /api/sessions/:id/trace` — the session's tool calls as Trace steps, each with its inferred causes (lib/trace.ts). No query → the newest
+ * `TRACE_STEP_CAP` steps; `?after=<cursor>&epoch=<epoch>` → only the steps that changed since (the live tail). The cursor is the builder's revision, not
+ * a byte offset, and is meaningful only with the epoch that issued it: a mismatch is answered in full with `reset`. The id is resolved against the
+ * enumerated transcript list, never joined into a path.
+ */
+export function serveSessionTrace(id: string, params: URLSearchParams, res: ServerResponse): void {
+  const fail = (code: number): void => {
+    const body: SessionTrace = { id, steps: [], cursor: 0, epoch: '', thinking: { recorded: 0, readable: 0 }, dropped: 0, error: true };
+    res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(body));
+  };
+
+  if (!ID_RE.test(id)) return fail(400);
+
+  let after: { rev: number; epoch: string } | undefined;
+  const rawAfter = params.get('after');
+  if (rawAfter !== null) {
+    const rev = Number(rawAfter);
+    const epoch = params.get('epoch');
+    if (!Number.isInteger(rev) || rev < 0 || !epoch) return fail(400);
+    after = { rev, epoch };
+  }
+
+  let body: SessionTrace;
+  try {
+    const ref = findTranscript(projectsRoot(), id);
+    if (!ref) return fail(404);
+    const trace = readTrace(ref.file, null, after);
+    if (!trace) return fail(404);
+    body = { id, ...trace };
+  } catch (e) {
+    console.error('[dashboard] session trace failed:', (e as Error).message);
     return fail(500);
   }
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });

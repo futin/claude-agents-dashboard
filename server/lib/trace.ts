@@ -7,15 +7,20 @@
  * a tool's result arrives later as a `user` record holding a `tool_result` block; a record holding several blocks folds the same way.
  *
  * Field rules are the chat-trace context's Decisions 5, 6, 7 and 11-15 (`.superpowers/sdd/2026-10-16-chat-trace/context.md`).
+ *
+ * `readTrace` (end of file) is the file side: a small LRU of builders keyed by transcript path, each advanced over the complete new lines of the main
+ * file and of every linked subagent file (Decisions 1-4 and 9).
  */
 
 import { randomBytes } from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 
-import type { TraceKind, TraceStep, TraceWhy } from '../../shared/types.js';
+import type { SessionTrace, TraceKind, TraceStep, TraceWhy } from '../../shared/types.js';
 import { DEFAULT_CAPS, parseChatRecord } from './chat.js';
 import { COMMIT_RE, inferWhy } from './trace-why.js';
-import { foldTaskRecord, liveTaskSubject, newTaskFold, type TaskFold } from './tasks.js';
+import { SUBAGENT_DIR } from './subagent-usage.js';
+import { CHUNK_BYTES, foldTaskRecord, liveTaskSubject, newTaskFold, type TaskFold } from './tasks.js';
 import { describeTool, LOCAL_PLUMBING } from './transcript.js';
 
 /** Most steps a full trace response carries (the newest ones). */
@@ -343,4 +348,138 @@ export class TraceBuilder {
     }
     this.touch(s);
   }
+}
+
+/* ------------------------------------------------------------------------------------------------------------------------- files and the cache */
+
+/** Builders kept warm, by transcript path (Decision 2). */
+const TRACE_CACHE_SIZE = 8;
+
+interface TraceEntry {
+  builder: TraceBuilder;
+  /** Byte offset into the main file, always just past a newline. */
+  offset: number;
+  /** Linked subagent files by path: the scope their records fold under and the byte offset read to. */
+  subs: Map<string, { scope: string; offset: number }>;
+}
+
+const cache = new Map<string, TraceEntry>();
+
+/** For tests: forget every builder. */
+export function resetTraceCache(): void {
+  cache.clear();
+}
+
+/** A parsed record, the scope it folds under, and the timestamp it sorts by. */
+interface Parsed { rec: any; scope: string; key: string }
+
+/**
+ * Parse the complete lines of the open file `fd` from `offset` to `size` into `out`, and return the offset just past the last newline: a trailing partial
+ * line is left for the next pass, the same rule `chat.ts` and `tasks.ts` follow. An unparsable line is skipped. A record without a timestamp sorts with
+ * the record before it in the same file (`''` at the head), so it keeps file order.
+ */
+function readLines(fd: number, offset: number, size: number, scope: string, out: Parsed[]): number {
+  let pos = offset;
+  let done = offset;
+  let carry: Buffer | null = null;
+  let key = '';
+  while (pos < size) {
+    const chunk = Buffer.allocUnsafe(Math.min(CHUNK_BYTES, size - pos));
+    const n = fs.readSync(fd, chunk, 0, chunk.length, pos);
+    if (n <= 0) break;
+    pos += n;
+    const buf: Buffer = carry ? Buffer.concat([carry, chunk.subarray(0, n)]) : chunk.subarray(0, n);
+    let start = 0;
+    for (let nl = buf.indexOf(0x0a); nl !== -1; nl = buf.indexOf(0x0a, start)) {
+      const line = buf.toString('utf8', start, nl);
+      start = nl + 1;
+      if (line.trim() === '') continue;
+      let rec: unknown;
+      try { rec = JSON.parse(line); } catch { continue; }
+      if (isObject(rec) && typeof rec.timestamp === 'string' && rec.timestamp !== '') key = rec.timestamp;
+      out.push({ rec, scope, key });
+    }
+    done += start;
+    carry = start < buf.length ? buf.subarray(start) : null;
+  }
+  return done;
+}
+
+/** Read one file's complete new lines; the new offset, or `'shrank'` when the file is now shorter than what was read. Throws when unreadable. */
+function readFrom(file: string, offset: number, scope: string, out: Parsed[]): number | 'shrank' {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const { size } = fs.fstatSync(fd);
+    if (size < offset) return 'shrank';
+    return readLines(fd, offset, size, scope, out);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/** Link every subagent file whose meta sidecar names its dispatching tool_use (Decision 4). A file without one stays unlinked and is looked at again next pass. */
+function linkSubagents(file: string, entry: TraceEntry): void {
+  const dir = path.join(file.replace(/\.jsonl$/, ''), SUBAGENT_DIR);
+  let names: string[];
+  try { names = fs.readdirSync(dir); } catch { return; }
+  for (const name of names) {
+    const m = /^agent-(.+)\.jsonl$/.exec(name);
+    if (!m) continue;
+    const sub = path.join(dir, name);
+    if (entry.subs.has(sub)) continue;
+    try {
+      const meta = JSON.parse(fs.readFileSync(path.join(dir, `agent-${m[1]}.meta.json`), 'utf8'));
+      if (isObject(meta) && nonEmpty(meta.toolUseId)) entry.subs.set(sub, { scope: meta.toolUseId, offset: 0 });
+    } catch { /* no sidecar yet */ }
+  }
+}
+
+/**
+ * One pass: the complete new lines of the main file and of every linked subagent file, stable-sorted by timestamp, folded in one `ingest` (Decision 3).
+ * Null when the main file is unreadable. A main or subagent file that shrank was rewritten: the entry is replaced and read from the start (new epoch).
+ */
+function advance(file: string, projectPath: string | null, fresh: boolean): TraceEntry | null {
+  let entry = fresh ? undefined : cache.get(file);
+  if (!entry) entry = { builder: new TraceBuilder(projectPath), offset: 0, subs: new Map() };
+
+  const parsed: Parsed[] = [];
+  let mainOffset: number | 'shrank';
+  try { mainOffset = readFrom(file, entry.offset, 'main', parsed); } catch { cache.delete(file); return null; }
+  if (mainOffset === 'shrank') return fresh ? null : advance(file, projectPath, true);
+
+  linkSubagents(file, entry);
+  const subOffsets = new Map<string, number>();
+  for (const [sub, link] of entry.subs) {
+    let n: number | 'shrank';
+    try { n = readFrom(sub, link.offset, link.scope, parsed); } catch { continue; }
+    if (n === 'shrank') return fresh ? null : advance(file, projectPath, true);
+    subOffsets.set(sub, n);
+  }
+
+  // Array.prototype.sort is stable: equal keys keep read order (main first, then each subagent file in turn).
+  parsed.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  entry.builder.ingest(parsed.map(({ rec, scope }) => ({ rec, scope })));
+  entry.offset = mainOffset;
+  for (const [sub, n] of subOffsets) entry.subs.get(sub)!.offset = n;
+
+  cache.delete(file);
+  cache.set(file, entry);
+  while (cache.size > TRACE_CACHE_SIZE) cache.delete(cache.keys().next().value!);
+  return entry;
+}
+
+/**
+ * The session's trace, advanced over whatever was appended since the last call. No `after`: the newest `TRACE_STEP_CAP` steps plus `dropped`. A matching
+ * `after`: the steps changed since `after.rev`. Another epoch, or `after.rev` past the builder's revision: the full answer with `reset` (Decision 1).
+ * Null when the main file is unreadable.
+ */
+export function readTrace(file: string, projectPath: string | null, after?: { rev: number; epoch: string }): Omit<SessionTrace, 'id'> | null {
+  const entry = advance(file, projectPath, false);
+  if (!entry) return null;
+  const b = entry.builder;
+  const head = { cursor: b.rev, epoch: b.epoch, thinking: b.thinking() };
+  if (after && after.epoch === b.epoch && after.rev <= b.rev) return { ...head, steps: b.changedSince(after.rev), dropped: 0 };
+  const all = b.steps();
+  const steps = all.length > TRACE_STEP_CAP ? all.slice(all.length - TRACE_STEP_CAP) : all;
+  return { ...head, steps, dropped: all.length - steps.length, ...(after ? { reset: true } : {}) };
 }

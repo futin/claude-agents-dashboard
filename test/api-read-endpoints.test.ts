@@ -1,13 +1,14 @@
 /**
- * The three read endpoints, driven through the real route table:
- * `GET /api/sessions`, `GET /api/sessions/:id`, `GET /api/sessions/:id/chat`.
+ * The four read endpoints, driven through the real route table:
+ * `GET /api/sessions`, `GET /api/sessions/:id`, `GET /api/sessions/:id/chat`,
+ * `GET /api/sessions/:id/trace`.
  *
  * Their readers (`scan.ts`, `agents-cache.ts`, `chat.ts`) are well covered on
  * their own. What is covered *here* is the handler layer above them and the
  * routing below them: the scan-knob query params and their caps, the `ID_RE`
  * shape check, the not-found path staying a 404 rather than a 500, the
  * cursor validation, and — the reason these go over a socket at all — the
- * route-order rule that `:id/chat` must be matched before `:id`, which no unit
+ * route-order rule that `:id/chat` and `:id/trace` must be matched before `:id`, which no unit
  * test of either handler can see.
  */
 
@@ -17,6 +18,7 @@ import path from 'node:path';
 
 import { testAsync, userRecord, withServer } from './api-harness.js';
 import { appSessionsRoot, resetArchivedCache } from '../server/lib/archived.js';
+import { resetTraceCache } from '../server/lib/trace.js';
 
 /** A session id that satisfies `ID_RE` and looks like a real transcript name. */
 const ID = '11111111-1111-4111-8111-111111111111';
@@ -256,6 +258,65 @@ export async function run(): Promise<number> {
       assert.equal(after.status, 200);
       const msgs = after.json?.messages as Array<{ uuid: string }>;
       assert.deepEqual(msgs.map(m => m.uuid), ['u-001'], 'the live tail is incremental');
+    });
+  }));
+
+  /* ----------------------------------------------- /api/sessions/:id/trace */
+
+  check(await testAsync('the trace route wins over the detail route for /api/sessions/:id/trace', async () => {
+    await withServer(ENV, async h => {
+      resetTraceCache();
+      h.plant(ID);
+      const reply = await h.req(`/api/sessions/${ID}/trace`);
+      assert.equal(reply.status, 200);
+      assert.equal(reply.headers['cache-control'], 'no-store');
+      assert.equal(reply.json?.id, ID);
+      const steps = reply.json?.steps as Array<{ kind: string }>;
+      assert.deepEqual(steps.map(s => s.kind), ['prompt'], 'the planted prompt is a step');
+      assert.equal(reply.json?.cursor, 1);
+      assert.ok(typeof reply.json?.epoch === 'string' && reply.json.epoch !== '');
+      assert.equal(reply.json?.agents, undefined, "the detail regex must not have swallowed '/trace'");
+    });
+  }));
+
+  check(await testAsync('GET /api/sessions/:id/trace?after=<cursor>&epoch= is the delta at the same cursor', async () => {
+    await withServer(ENV, async h => {
+      resetTraceCache();
+      h.plant(ID);
+      const full = await h.req(`/api/sessions/${ID}/trace`);
+      const reply = await h.req(`/api/sessions/${ID}/trace?after=${full.json?.cursor}&epoch=${full.json?.epoch}`);
+      assert.equal(reply.status, 200);
+      assert.deepEqual(reply.json?.steps, []);
+      assert.equal(reply.json?.reset, undefined);
+    });
+  }));
+
+  check(await testAsync('GET /api/sessions/:id/trace with a malformed ?after= or no epoch is 400', async () => {
+    await withServer(ENV, async h => {
+      h.plant(ID);
+      for (const q of ['after=x&epoch=e', 'after=-1&epoch=e', 'after=1.5&epoch=e', 'after=1']) {
+        const reply = await h.req(`/api/sessions/${ID}/trace?${q}`);
+        assert.equal(reply.status, 400, `${q} must be refused`);
+        assert.equal(reply.json?.error, true);
+        assert.deepEqual(reply.json?.steps, []);
+        assert.equal(reply.json?.epoch, '');
+      }
+    });
+  }));
+
+  check(await testAsync('GET /api/sessions/:id/trace for an unknown or malformed id is 404 / 400 with error: true', async () => {
+    await withServer(ENV, async h => {
+      h.plant(ID);
+      const unknown = await h.req('/api/sessions/99999999-9999-4999-8999-999999999999/trace');
+      assert.equal(unknown.status, 404);
+      assert.deepEqual(unknown.json, {
+        id: '99999999-9999-4999-8999-999999999999', steps: [], cursor: 0, epoch: '',
+        thinking: { recorded: 0, readable: 0 }, dropped: 0, error: true
+      });
+      assert.equal(unknown.headers['cache-control'], 'no-store');
+      const bad = await h.req('/api/sessions/bad%20id/trace');
+      assert.equal(bad.status, 400);
+      assert.equal(bad.json?.error, true);
     });
   }));
 

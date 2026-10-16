@@ -1,7 +1,10 @@
 import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import type { TraceStep } from '../shared/types.js';
-import { TraceBuilder } from '../server/lib/trace.js';
+import { readTrace, resetTraceCache, TraceBuilder } from '../server/lib/trace.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -286,6 +289,148 @@ export function run(): number {
       use('r1', 'Read', { file_path: '/r/a.ts' }, T(7), 'm1')
     );
     assert.deepStrictEqual(b.steps().map((s) => [s.id, s.turn]), [['p1', 1], ['r1', 1]]);
+  })) p++; else f++;
+
+  /* ------------------------------------------------------------- readTrace: files, offsets and the cache */
+
+  /** A fresh transcript path in its own tmpdir; `recs` written one JSON line each. */
+  const fixture = (...recs: Item[]): string => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cad-trace-')), 's.jsonl');
+    fs.writeFileSync(file, recs.map((r) => JSON.stringify(r.rec) + '\n').join(''));
+    return file;
+  };
+  const append = (file: string, ...recs: Item[]): void => fs.appendFileSync(file, recs.map((r) => JSON.stringify(r.rec) + '\n').join(''));
+
+  if (test('18. readTrace full read: steps, cursor 1, a non-empty epoch, nothing dropped', () => {
+    resetTraceCache();
+    const file = fixture(prompt('p1', 'go', T(1)), use('r1', 'Read', { file_path: '/r/a.ts' }, T(2), 'm1'));
+    const t = readTrace(file, null);
+    assert.ok(t);
+    assert.deepStrictEqual(t.steps.map((s) => s.id), ['p1', 'r1']);
+    assert.strictEqual(t.cursor, 1);
+    assert.ok(t.epoch.length > 0);
+    assert.strictEqual(t.dropped, 0);
+    assert.strictEqual(t.reset, undefined);
+  })) p++; else f++;
+
+  if (test('19. readTrace with a matching cursor returns only the step the appended result changed', () => {
+    resetTraceCache();
+    const file = fixture(prompt('p1', 'go', T(1)), use('r1', 'Read', { file_path: '/r/a.ts' }, T(2), 'm1'));
+    const first = readTrace(file, null);
+    assert.ok(first);
+    append(file, result('r1', 'a\nb'));
+    const t = readTrace(file, null, { rev: 1, epoch: first.epoch });
+    assert.ok(t);
+    assert.deepStrictEqual(t.steps.map((s) => [s.id, s.status]), [['r1', 'ok']]);
+    assert.strictEqual(t.cursor, 2);
+    assert.strictEqual(t.epoch, first.epoch);
+    assert.strictEqual(t.dropped, 0);
+    assert.strictEqual(t.reset, undefined);
+    // Nothing new: an empty delta at the same cursor.
+    const idle = readTrace(file, null, { rev: 2, epoch: first.epoch });
+    assert.ok(idle);
+    assert.deepStrictEqual(idle.steps, []);
+    assert.strictEqual(idle.cursor, 2);
+  })) p++; else f++;
+
+  if (test('20. a file ending mid-line folds only complete lines, and the completed line is picked up exactly once', () => {
+    resetTraceCache();
+    const file = fixture(prompt('p1', 'go', T(1)));
+    const line = JSON.stringify(use('r1', 'Read', { file_path: '/r/a.ts' }, T(2), 'm1').rec) + '\n';
+    const cut = Math.floor(line.length / 2);
+    fs.appendFileSync(file, line.slice(0, cut));
+    const first = readTrace(file, null);
+    assert.ok(first);
+    assert.deepStrictEqual(first.steps.map((s) => s.id), ['p1']);
+    assert.strictEqual(first.cursor, 1);
+    fs.appendFileSync(file, line.slice(cut));
+    const t = readTrace(file, null, { rev: first.cursor, epoch: first.epoch });
+    assert.ok(t);
+    assert.deepStrictEqual(t.steps.map((s) => s.id), ['r1']);
+    assert.strictEqual(t.cursor, 2);
+    const again = readTrace(file, null);
+    assert.ok(again);
+    assert.deepStrictEqual(again.steps.map((s) => s.id), ['p1', 'r1']);
+  })) p++; else f++;
+
+  if (test('21. a truncated file gets a new epoch, and a cursor from the old one gets the full trace with reset', () => {
+    resetTraceCache();
+    const file = fixture(prompt('p1', 'go', T(1)), use('r1', 'Read', { file_path: '/r/a.ts' }, T(2), 'm1'), result('r1', 'x'));
+    const first = readTrace(file, null);
+    assert.ok(first);
+    fs.writeFileSync(file, JSON.stringify(prompt('p2', 'again', T(5)).rec) + '\n');
+    const t = readTrace(file, null, { rev: first.cursor, epoch: first.epoch });
+    assert.ok(t);
+    assert.notStrictEqual(t.epoch, first.epoch);
+    assert.strictEqual(t.reset, true);
+    assert.deepStrictEqual(t.steps.map((s) => s.id), ['p2']);
+    assert.strictEqual(t.cursor, 1);
+    // A cursor past the builder's revision is also answered in full.
+    const ahead = readTrace(file, null, { rev: 9, epoch: t.epoch });
+    assert.ok(ahead);
+    assert.strictEqual(ahead.reset, true);
+    assert.deepStrictEqual(ahead.steps.map((s) => s.id), ['p2']);
+  })) p++; else f++;
+
+  if (test('22. a subagent file is skipped until its meta sidecar appears, then folds once under its Agent step', () => {
+    resetTraceCache();
+    const file = fixture(prompt('p1', 'go', T(1)), use('ag1', 'Agent', { description: 'scan', prompt: 'look' }, T(2), 'm1'));
+    const dir = path.join(file.replace(/\.jsonl$/, ''), 'subagents');
+    fs.mkdirSync(dir, { recursive: true });
+    const sub = (...recs: Item[]): string => recs.map((r) => JSON.stringify(r.rec) + '\n').join('');
+    fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), sub(use('sr1', 'Read', { file_path: '/r/b.ts' }, T(3), 'sm1', 'ag1')));
+    const first = readTrace(file, null);
+    assert.ok(first);
+    assert.deepStrictEqual(first.steps.map((s) => s.id), ['p1', 'ag1']);
+    fs.writeFileSync(path.join(dir, 'agent-a1.meta.json'), JSON.stringify({ toolUseId: 'ag1' }));
+    const t = readTrace(file, null, { rev: first.cursor, epoch: first.epoch });
+    assert.ok(t);
+    assert.deepStrictEqual(t.steps.map((s) => [s.id, s.agent]), [['sr1', 'ag1']]);
+    const all = readTrace(file, null);
+    assert.ok(all);
+    assert.deepStrictEqual(all.steps.map((s) => s.id), ['p1', 'ag1', 'sr1']);
+    // More subagent lines later fold from where the last pass stopped.
+    fs.appendFileSync(path.join(dir, 'agent-a1.jsonl'), sub(result('sr1', 'b', false, undefined, 'ag1')));
+    const later = readTrace(file, null, { rev: all.cursor, epoch: all.epoch });
+    assert.ok(later);
+    assert.deepStrictEqual(later.steps.map((s) => [s.id, s.status]), [['sr1', 'ok']]);
+  })) p++; else f++;
+
+  if (test('23. one pass folds main and subagent records in timestamp order, so "earlier" means earlier in time', () => {
+    resetTraceCache();
+    // The subagent's Edit (T3) lands before the main file's commit (T5) in time, though the main file is read first: the commit must see it.
+    const file = fixture(
+      prompt('p1', 'go', T(1)), use('ag1', 'Agent', { description: 'fix' }, T(2), 'm1'),
+      use('c1', 'Bash', { command: 'git commit -m x' }, T(5), 'm2')
+    );
+    const dir = path.join(file.replace(/\.jsonl$/, ''), 'subagents');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'agent-a1.meta.json'), JSON.stringify({ toolUseId: 'ag1' }));
+    fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), JSON.stringify(use('se1', 'Edit', { file_path: '/r/b.ts' }, T(3), 'sm1', 'ag1').rec) + '\n');
+    const t = readTrace(file, null);
+    assert.ok(t);
+    assert.deepStrictEqual(t.steps.map((s) => s.id), ['p1', 'ag1', 'se1', 'c1']);
+    assert.deepStrictEqual(t.steps.find((s) => s.id === 'c1')?.why, [{ id: 'se1', rel: 'commits' }]);
+  })) p++; else f++;
+
+  if (test('24. a prompt-only transcript gives one prompt step; an unreadable one gives null', () => {
+    resetTraceCache();
+    const t = readTrace(fixture(prompt('p1', 'just asking', T(1))), null);
+    assert.ok(t);
+    assert.deepStrictEqual(t.steps.map((s) => [s.id, s.kind]), [['p1', 'prompt']]);
+    assert.strictEqual(readTrace(path.join(os.tmpdir(), 'cad-trace-missing', 'nope.jsonl'), null), null);
+  })) p++; else f++;
+
+  if (test('25. a full read is capped at the newest TRACE_STEP_CAP steps, with dropped counting the rest', () => {
+    resetTraceCache();
+    const at = (i: number): string => new Date(Date.UTC(2026, 9, 16, 10, 0, 0, 0) + i * 1000).toISOString();
+    const recs = Array.from({ length: 520 }, (_, i) => use('s' + i, 'Read', { file_path: '/r/f' + i }, at(i), 'm' + i));
+    const t = readTrace(fixture(...recs), null);
+    assert.ok(t);
+    assert.strictEqual(t.steps.length, 500);
+    assert.strictEqual(t.dropped, 20);
+    assert.strictEqual(t.steps[0].id, 's20');
+    assert.strictEqual(t.steps[499].id, 's519');
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
