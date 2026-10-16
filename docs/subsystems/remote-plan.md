@@ -136,8 +136,10 @@ and stop POSTs the banner is a promise about — comes back 403 and is swallowed
 `curl -sf`. A session was told remote answering was armed for twelve hours in which no
 question ever reached a phone (backlog bug-6). With the token file missing the hook now
 prints a one-line notice naming the file and pointing at `pnpm hooks:install`, instead of
-the banner. An older server sends no `tokenRequired`, which reads as `false` and keeps the
-old behaviour rather than warning wrongly.
+the banner. `tokenRequired` means *this caller* would need the token (`writeAccess ===
+'token'`), so a hook on loopback, which is always trusted, never trips it. An older server
+sends no `tokenRequired`, which reads as `false` and keeps the old behaviour rather than
+warning wrongly.
 
 When all hold it injects an instruction for that turn: put every decision through
 `AskUserQuestion` (including skill-driven asks like the brainstorming skill's mode pick),
@@ -158,8 +160,8 @@ silent deciding.
 
 Approving work this way in auto mode grants nothing new — the session already edits and
 runs without asking; the POST only picks *which* pre-authorized path it takes. The
-perimeter question is the same one `remote-answer.md` documents (tailnet fine, public
-tunnel needs `ANSWER_TOKEN`). It is an **instruction, not a gate**: the model follows it
+perimeter question is the same one `remote-answer.md` documents (a trusted tailnet fine,
+LAN and public tunnel need `ANSWER_TOKEN`). It is an **instruction, not a gate**: the model follows it
 like any context, and the hard gates (the plan card, permission dialogs) sit exactly where
 they did.
 

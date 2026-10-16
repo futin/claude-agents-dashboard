@@ -43,7 +43,7 @@ export function usePendingQuestion(id: string): PendingQuestionState {
   const [sentLabels, setSentLabels] = useState<string[]>([]);
   const [needsToken, setNeedsToken] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
-  // Only used when the server runs with ANSWER_TOKEN set.
+  // Only used when the write gate wants a token from this browser (a LAN client, a container, tailnet trust off).
   const [token, setToken] = usePersistedState<string>('dashboard.answerToken', '');
   const { settings: { refreshMs } } = useSettings();
 

@@ -79,6 +79,12 @@ it takes effect without a restart.
 while nobody has Management › Git open — the timer fires only while the view was polled recently. A hand-edited value outside the six reads back as `0`, and a
 `POST /api/settings` patch carrying one is refused whole, like a bad `idleSecs`. It is the **Git fetch** card on the Shared page, after Usage forecast.
 
+`trustTailnet` (default **true**) decides whether a tailnet peer writes without `ANSWER_TOKEN` ([remote-access](remote-access.md#who-may-write)). It has to be
+Shared: the write gate on the server reads it on every request, through the same in-process cache `setSettings` updates, so flipping it takes effect without a
+restart and a per-device value could never reach the gate. It is the **Write access** card on the Shared page, after Remote answers. Turning it off is itself a
+write: a tailnet device that does so loses its own write access from its next request, and this machine, always `local`, can turn it back on. A hand-edited
+non-boolean reads back as the default, and a `POST /api/settings` patch carrying one is refused whole.
+
 `pinnedProjects` (#161, default `[]`) rides in the same file: encoded project dir names that
 stay listed past `LOOKBACK_HOURS` (see [configs](configs.md) §Pinned projects). Its order is meaningful — Management › Projects, Management › Git and the
 Lookout git-pending tile all draw in it. `setPinned` appends a new pin; `setPinOrder` rewrites the whole order, and only as an exact permutation of the stored list. It is

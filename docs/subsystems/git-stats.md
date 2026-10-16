@@ -50,7 +50,7 @@ imports nothing from the reader and has its own runner. It is a module of its ow
   client; `lock` (a clash with another git process) shows nothing and the next scheduled fetch retries.
 - **No memo work** (D12): a fetch that moves `origin/<trunk>` changes the base sha, so the reader's next read recounts on its own.
 
-`POST /api/git-fetch` runs one now: token-guarded by `tokenOk` like `POST /api/settings` (`403 { error: 'bad token' }`), marks the view watched, awaits
+`POST /api/git-fetch` runs one now: behind the write gate `refuseWrite` like `POST /api/settings` (403 `bad token` or `read-only from this network`), marks the view watched, awaits
 `fetchAll` and answers `200 { fetch }`; `500` only if `fetchAll` throws despite the above, `405` for any other method. A manual fetch resets the schedule.
 
 ## What each number means

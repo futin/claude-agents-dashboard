@@ -61,8 +61,9 @@
  * config bodies — and with `CLAUDE_BIN` set,
  * `/api/spawn` starts a real Claude Code session on this machine. A tailnet is
  * private WireGuard between your own devices and device identity is the auth,
- * which is why `ANSWER_TOKEN` may stay empty there and must not on anything
- * public. See `../docs/subsystems/remote-access.md`.
+ * which is why tailnet peers write without `ANSWER_TOKEN` while Settings › Shared ›
+ * Trust tailnet devices is on, and why a public front must not lean on that. See
+ * `../docs/subsystems/remote-access.md`.
  *
  * The plain-HTTP mode is not a hole in that: the hop from the phone to this
  * machine is WireGuard-encrypted end to end, and the HTTP exists only inside

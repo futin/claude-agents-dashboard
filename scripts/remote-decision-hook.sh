@@ -75,9 +75,10 @@ esac
 HEALTH=$(curl -sf -m 1 "$DASH/api/health" 2>/dev/null) || exit 0
 [ "$(printf '%s' "$HEALTH" | jq -r '.remoteAnswer // false')" = "true" ] || exit 0
 
-# Condition 3: if the server enforces ANSWER_TOKEN, the sibling hooks can only
-# reach its write endpoints when the token file exists — and the banner below is
-# a promise about exactly those write endpoints.
+# Condition 3: if the server wants ANSWER_TOKEN from this caller (tokenRequired
+# means "this caller would need it": never on loopback, the usual hook path), the
+# sibling hooks can only reach its write endpoints when the token file exists —
+# and the banner below is a promise about exactly those write endpoints.
 #
 # This condition exists because the banner was once the *only* visible signal
 # and it was wrong: /api/health is untokened, so it answered cheerfully while

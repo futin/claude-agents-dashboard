@@ -15,6 +15,12 @@ pnpm dev:docker
 `pnpm dev:docker` expands to `docker compose -f docker-compose.dev.yml up --build` with
 `HOST_LAN_IP` and `CLAUDE_CREDENTIALS_JSON` pre-filled from the two helper scripts.
 
+## Writes need `ANSWER_TOKEN`
+
+Inside a container every client — the desk browser, the host's `tailscale serve` and the hooks alike — arrives from the bridge gateway, which the write gate
+classifies as LAN, so a container run is read-only without a token ([remote-access](../subsystems/remote-access.md#who-may-write)). Set `ANSWER_TOKEN` in the
+host `.env` (both compose files forward it), enter it in the browser under Settings › Local › Connection, and put it in `~/.claude/hooks/dashboard-token`.
+
 ## What the helper scripts bridge
 
 Two things a container can't reach on its own:

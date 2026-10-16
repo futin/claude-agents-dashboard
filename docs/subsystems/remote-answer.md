@@ -104,7 +104,7 @@ Handlers `serveHealth` / `serveQuestionWait` / `serveSessionQuestion` /
 
 | Method | Path | Codes |
 |---|---|---|
-| `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?, idleSecs?, answerSecs?, tokenRequired?, transcribe?}` (`transcribe` is [dictation](dictation.md)'s engine-availability flag, unrelated to the gates) — the hook's probe (all three gates *and* the wait window off one round trip), the pill's read, and the origin badge's source |
+| `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?, writeAccess?, idleSecs?, answerSecs?, tokenRequired?, transcribe?}` (`transcribe` is [dictation](dictation.md)'s engine-availability flag, unrelated to the gates) — the hook's probe (all three gates *and* the wait window off one round trip), the pill's read, and the origin badge's source |
 | `POST` | `/api/remote-answer` | `{enabled}` → 200 `{...state, released}`; 400 non-boolean; 403 bad token; 409 `REMOTE_ANSWER=false`; 405 non-POST |
 | `POST` | `/api/questions/wait` | held → 200 `WaitResult`; 400 malformed / no usable questions; 403 bad token; 404 unknown session or feature off; 405 non-POST |
 | `GET` | `/api/sessions/:id/question` | 200 `SessionQuestion` (`pending: null` when idle); 400 bad id |
@@ -224,20 +224,22 @@ already decide this?" versus "is the user back?".
 
 ## Security posture
 
-These POSTs let any device on the LAN steer a live agent, and "Other…" free text reaches
-the model verbatim. `ANSWER_TOKEN` (empty = open, matching the app's existing posture)
-gates **both** POSTs with `Authorization: Bearer`; the `GET question` route stays open
+These POSTs let a caller steer a live agent, and "Other…" free text reaches the model
+verbatim. The write gate covers **both** POSTs: this machine always passes, a tailnet peer
+passes while tailnet trust is on, and anyone else needs `Authorization: Bearer <ANSWER_TOKEN>`
+(read-only when no token is set — see [remote-access](remote-access.md)); the `GET question` route stays open
 since it reveals no more than the transcript already does. The hook reads the token from
 `~/.claude/hooks/dashboard-token` (user-created — a server-generated file would fight the
 read-only Docker mount; `chmod 600`); the browser persists it as `dashboard.answerToken`
-and asks for it once. A refused write logs one stderr line — `rejected write: <METHOD>
-<path> (bad or missing token)`, method and path only, never the token, the header or the
+and asks for it when a 403 says a token would help. A refused write logs one stderr line —
+`rejected write: <METHOD> <path> from <peer> (bad or missing token)`, method, path and peer class only, never the token, the header or the
 query string, and throttled to once per path per minute — because the hooks swallow a 403
 (`curl -sf` then `exit 0`), so nothing otherwise distinguished a missing token file from a
 feature nobody had switched on. HTTP + a static token is a tripwire, not real auth.
 `REMOTE_ANSWER=false` turns the feature off server-side. Over a tailnet the network
 itself is the perimeter, so `ANSWER_TOKEN` can stay empty unless you share the tailnet —
-behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md)).
+then turn tailnet trust off and use the token; behind a *public* tunnel it is the minimum
+(see [remote-access](remote-access.md)).
 
 ## Client surfaces
 
