@@ -141,6 +141,19 @@
    (A full-page tab with Canvas and Lanes views was sketched first; at the
    modal's width only the spine fits, and live mattered more than layout.)
 
+   A long subagent run breaks the spine as built. Each child step gets its own
+   magenta curve from the Task dot, so twenty children paint the gutter solid,
+   and each child Bash row prints its description twice (detail and intent),
+   so a screen holds about nine near-identical cards. The bar's "data" switch
+   loads such a session ("many subagents", the default) and "spine" offers
+   three answers to it. Lanes keeps every row and fixes only the gutter: one
+   straight line per agent, with concurrent agents a lane apart. Folded hides
+   detail until asked: a run becomes one summary row with a tick per step, and
+   its chevron, a tick, or picking a step inside it opens the run. Ledger is
+   about three times denser, one 25px line per step with children nested
+   under their Task, but it moves the intent and the full result to the
+   sidecar card. All three drop an intent that only repeats the detail.
+
    New session is the launch form (SpawnPanel) given the same treatment, and it
    has landed on the sheet: one narrow column — project, prompt, name, then
    model / effort / permission as a triplet, then the remote-control switch.
@@ -2050,6 +2063,76 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 @keyframes tr-spin{to{transform:rotate(360deg)}}
 @keyframes tr-land{from{background:var(--green-200)}}
 @media (prefers-reduced-motion:reduce){.tr-row.tr-run .tr-dot,.tr-row.tr-fresh .tr-card{animation:none}.tr-row{transition:none}}
+
+/* ── Trace spine variants: the bar's "spine" switch, for long subagent runs ──
+   "as built" is the rules above. Each variant below is scoped by a
+   .tr-v-<name> class on the body, so "as built" never sees it. */
+/* lanes: one straight magenta lane per agent, concurrent agents 12px apart */
+.tr-v-lanes .tr-row.tr-child,.tr-v-folded .tr-row.tr-child{grid-template-columns:calc(84px + var(--lanes,0) * 12px) minmax(0,1fr)}
+.tr-v-lanes .tr-row.tr-child .tr-dot,.tr-v-folded .tr-row.tr-child .tr-dot{left:calc(54px + var(--lane,0) * 12px)}
+/* folded: a run is one summary row with a tick per step, and its chevron opens it */
+.tr-sum{display:grid;grid-template-columns:60px minmax(0,1fr);align-items:start;cursor:pointer;transition:opacity .15s}
+.tr-sum.tr-sub{grid-template-columns:84px minmax(0,1fr)}
+.tr-sum .tr-dot.tr-fold{left:28px;top:8px;width:16px;height:16px;border-width:1.5px;padding:0;display:grid;place-items:center;font-size:8px;line-height:1;color:var(--c);cursor:pointer;transition:transform .15s}
+.tr-sum.tr-sub .tr-dot.tr-fold{left:51px}
+.tr-fold[aria-expanded="true"]{transform:rotate(90deg)}
+.tr-sumcard{padding:6px 10px 6px 6px;border-radius:var(--r-sm);min-width:0}
+.tr-sum:hover .tr-sumcard{background:var(--bg-subtle)}
+.tr-sum.tr-anc .tr-sumcard{background:color-mix(in srgb,var(--c) 8%,transparent)}
+.tr-sumline{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:baseline;font-size:12px;color:var(--text-secondary);min-width:0}
+.tr-sumline b{font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--c)}
+.tr-sumline i{font-style:normal;color:var(--text-tertiary)}
+.tr-sumline .err{color:var(--red-500)}
+.tr-sumline .tr-path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text-primary);overflow-wrap:anywhere;min-width:0}
+.tr-strip{display:flex;flex-wrap:wrap;gap:2px;margin-top:6px}
+.tr-tick{width:7px;height:14px;padding:0;border:0;border-radius:2px;background:var(--c);opacity:.55;cursor:pointer}
+.tr-tick:hover,.tr-tick.tr-on{opacity:1;outline:1.5px solid var(--text-primary);outline-offset:1px}
+.tr-tick.tr-terr{background:var(--red-500);opacity:1}
+.tr-tick.tr-trun{opacity:1;animation:tr-blink 1.2s ease-in-out infinite}
+.tr-more{display:block;margin:0 0 2px 60px;padding:2px 6px;border:0;background:none;font-size:11.5px;color:var(--text-tertiary);cursor:pointer}
+.tr-more.tr-sub{margin-left:84px}
+.tr-more:hover{color:var(--text-primary);text-decoration:underline}
+.tr-spine.tr-dim .tr-sum:not(.tr-anc),.tr-spine.tr-dim .tr-more{opacity:.6}
+.tr-spine.tr-focus .tr-sum:not(.tr-anc),.tr-spine.tr-focus .tr-more{opacity:.25}
+@keyframes tr-blink{50%{opacity:.35}}
+/* ledger: one ~25px line per step, children nested under their Task, no curves */
+.tr-v-ledger .tr-spine{gap:1px}
+.tr-v-ledger .tr-turn{padding:12px 0 4px 44px}
+.tr-v-ledger .tr-row{grid-template-columns:44px minmax(0,1fr)}
+.tr-v-ledger .tr-dotcell{min-height:25px}
+.tr-v-ledger .tr-dot{left:25px;top:8px;width:9px;height:9px;border-width:2px}
+.tr-v-ledger .tr-card{padding:3px 10px 3px 6px}
+.tr-lline{display:flex;gap:8px;align-items:baseline;min-width:0;white-space:nowrap;line-height:19px}
+.tr-lline > *{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tr-lline .tr-tool,.tr-lat{flex:none}
+.tr-lline .tr-detail{flex:1 1 auto;overflow-wrap:normal}
+.tr-k-prompt .tr-lline .tr-detail{font-size:13px}
+.tr-lres{flex:0 1 auto;max-width:40%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--text-tertiary)}
+.tr-row.tr-err .tr-lres{color:var(--red-500)}
+.tr-lat{font-size:11px;color:var(--text-tertiary);font-variant-numeric:tabular-nums}
+.tr-v-ledger .tr-row.tr-on .tr-lline{white-space:normal}
+.tr-v-ledger .tr-row.tr-on .tr-lline .tr-detail{overflow-wrap:anywhere}
+.tr-v-ledger .tr-row.tr-on .tr-lres{display:none}
+.tr-v-ledger .tr-row.tr-on .tr-line{margin-top:4px}
+.tr-nest{display:flex;flex-direction:column;gap:1px;margin-left:44px;border-left:1.5px solid color-mix(in srgb,var(--magenta) 40%,transparent)}
+.tr-nest .tr-row{grid-template-columns:22px minmax(0,1fr)}
+.tr-nest .tr-dot{left:7px;width:8px;height:8px}
+@container (max-width:479px){.tr-lres{max-width:34%}.tr-lat{display:none}}
+@media (prefers-reduced-motion:reduce){.tr-tick.tr-trun{animation:none}.tr-sum,.tr-fold{transition:none}}
+/* phone: Trace stacks the sidecar under the spine, so nothing scrolls
+   sideways. A container query, not a media query: the mock's own shell (body
+   padding, 240px rail) is desktop-only, so the chat page is what goes narrow. */
+#p-chat{container-type:inline-size}
+@container (max-width:639px){
+  .ch-stage.tr-mode{padding:8px;min-height:0;grid-template-columns:minmax(0,1fr)}
+  .tr-mode .ch-modal{max-height:none}
+  .tr-mode .ch-head{padding:14px 16px}
+  .tr-mode .ch-split{grid-template-columns:minmax(0,1fr)}
+  .tr-mode .ch-side{order:2;border-right:0;border-top:1px solid var(--border);padding:14px}
+  .tr-mode .ch-col{height:560px}
+  .tr-mode .ch-foot{flex-wrap:wrap;padding:10px 16px}
+  .tr-mode .ch-count{white-space:normal}
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW SESSION — the launch form (SpawnPanel) as a modal.
@@ -5018,13 +5101,11 @@ unpersisted, since session ids churn.`;
       { id: 'toolu_16', turn: 3, kind: 'decide', tool: 'AskUserQuestion', detail: 'Which view should the phone open on? · What should survive a reload?', intent: 'The phone default is a product call, so ask instead of picking', intentFrom: 'text', at: '11:32:04', status: 'running', result: null, why: [{ id: 'u-93d4', rel: 'asked' }, { id: 'toolu_05', rel: 'plan' }], thinking: 'text', thinkingText: 'Triage reads best on a narrow screen, but the user just made Board the default and may want one view everywhere. Persistence also has a real trade-off (stale filters hide rows), so ask both in one card.' }
     ]
   };
-  const TURNS = { 1: 'Plan the five views', 2: 'One toolbar track', 3: 'Board by default' };
+  const TURNS_SAMPLE = { 1: 'Plan the five views', 2: 'One toolbar track', 3: 'Board by default' };
   const REL = { asked: 'asked by', answer: 'your answer', plan: 'follows plan', informed: 'informed by', verifies: 'checks', retry: 'retrying', delegated: 'delegated by', commits: 'commits' };
   /* the same edges read forward, for the Why card's "Led to" rows */
   const REL_FWD = { asked: 'next step', answer: 'uses the answer', plan: 'carries out', informed: 'used by', verifies: 'checked by', retry: 'fixed by', delegated: 'subagent ran', commits: 'committed in' };
   const TR_FILTERS = [['all', 'All'], ['edits', 'Edits'], ['fails', 'Fails'], ['you', 'You']];
-  const stepById = Object.fromEntries(TRACE.steps.map(s => [s.id, s]));
-  const stepIdx = Object.fromEntries(TRACE.steps.map((s, i) => [s.id, i]));
 
   /* the plan's tasks, as `session.tasks` / `session.taskPlan` carry them off
      the 3s poll (shared/types.ts SessionTask) — the sidecar's Tasks card */
@@ -5043,7 +5124,93 @@ unpersisted, since session ids churn.`;
   const TASK_OF = { toolu_01: '1', toolu_02: '1', toolu_03: '1', toolu_04: '2', toolu_04a: '2', toolu_04b: '2', toolu_04c: '2', toolu_05: '2',
     toolu_06: '3', toolu_07: '3', toolu_08: '3', toolu_09: '3', toolu_10: '3', toolu_11: '3', toolu_12: '3', toolu_13: '3', toolu_14: '3',
     toolu_15: '4', toolu_16: '5' };
-  TRACE.steps.forEach(s => { s.task = TASK_OF[s.id] || null; });
+
+  /* ── TRACE_LONG: a session whose subagent runs long ─────────────────────
+     The same contract as TRACE, built to show the band. Turn 2 has six
+     consecutive main-thread Bash calls, then one message launches two agents:
+     `Agent · general-purpose` runs 20 steps (mostly Bash, two failures) and is
+     still running, and `Agent · Explore` runs 6 steps interleaved with it.
+     A subagent's Bash row carries its description as both detail and intent,
+     as live's describeTool does. That is the doubled line the variants drop. */
+  const kid = (agent) => (id, at, tool, kind, detail, result, why, more = {}) => ({ id, turn: 2, kind, tool, detail,
+    intent: tool === 'Bash' ? detail : null, intentFrom: tool === 'Bash' ? 'description' : null, at, status: 'ok', result, why, agent, ...more });
+  const ga = kid('tl_11'), eb = kid('tl_12');
+  const asked = (id) => [{ id, rel: 'asked' }], dlg = (id) => [{ id, rel: 'delegated' }], inf = (id) => [{ id, rel: 'informed' }];
+  const sh = (id, turn, at, detail, intent, status, result, why, more = {}) =>
+    ({ id, turn, kind: 'bash', tool: 'Bash', detail, intent, intentFrom: 'description', at, status, result, why, ...more });
+  const TRACE_LONG = {
+    cursor: 1_204_880,
+    thinking: { recorded: 11, readable: 1 },
+    steps: [
+      { id: 'u-l1', turn: 1, kind: 'prompt', tool: 'Prompt', detail: 'Rebase chat-trace on main and push it.', at: '13:48:02', status: null, why: [] },
+      sh('tl_01', 1, '13:48:09', 'git fetch origin', 'Fetch main', 'ok', 'exit=0', asked('u-l1')),
+      sh('tl_02', 1, '13:48:16', 'git rebase origin/main', 'Rebase onto main', 'ok', 'Successfully rebased and updated refs/heads/chat-trace.', asked('u-l1')),
+      sh('tl_03', 1, '13:48:31', 'git push --force-with-lease', 'Push the rebased branch', 'ok', 'exit=0', asked('u-l1')),
+      { id: 'u-l2', turn: 2, kind: 'prompt', tool: 'Prompt', detail: 'pnpm test is red after the rebase — find which suite fails and fix it, then make sure the visual suite still passes.', at: '14:01:40', status: null, why: [] },
+      { id: 'tl_04', turn: 2, kind: 'read', tool: 'Read', detail: 'docs/subsystems/trace.md', intent: 'Read the trace doc before touching its tests', intentFrom: 'text', at: '14:01:52', status: 'ok', result: '186 lines', why: asked('u-l2'), thinking: 'signature' },
+      sh('tl_05', 2, '14:02:05', 'pnpm test 2>&1 | tail -40', 'Run the suite to see the failure', 'error', '1 failed of 3122 · test/trace-fold.test.ts', asked('u-l2')),
+      sh('tl_06', 2, '14:02:19', 'git log --oneline -5', 'See what the rebase brought in', 'ok', '5 commits · 36f1724 newest', [{ id: 'tl_05', rel: 'retry' }]),
+      sh('tl_07', 2, '14:02:28', 'git diff ORIG_HEAD --stat', 'Size the rebase', 'ok', '4 files changed, 61 insertions(+)', asked('u-l2')),
+      sh('tl_08', 2, '14:02:41', 'pnpm test -- trace', 'Run only the trace suites', 'error', '1 failed of 14 · trace-fold.test.ts:88', asked('u-l2'), { thinking: 'signature' }),
+      sh('tl_09', 2, '14:02:50', 'node --version', 'Rule out the runtime', 'ok', 'v22.11.0', [{ id: 'tl_08', rel: 'retry' }]),
+      sh('tl_10', 2, '14:02:56', 'ls test/*.test.ts | wc -l', 'Count the suites', 'ok', '41', asked('u-l2')),
+      { id: 'tl_11', turn: 2, kind: 'agent', tool: 'Agent · general-purpose', detail: 'Find why trace-fold.test.ts fails and fix it', intent: 'Hand the hunt to a subagent and keep this context for the review', intentFrom: 'text', at: '14:03:10', status: 'running', result: null, why: [{ id: 'u-l2', rel: 'asked' }, { id: 'tl_04', rel: 'informed' }], thinking: 'text', thinkingText: 'Two runs agree on one case, trace-fold.test.ts:88. Finding it means a dozen test runs, and their output would fill this context, so a subagent should grind through them and hand back the fix. The visual suite has to run afterwards, so map its fixtures in parallel.' },
+      { id: 'tl_12', turn: 2, kind: 'agent', tool: 'Agent · Explore', detail: 'List every fixture the visual suite mocks', intent: 'The visual suite runs after the fix; know what it mocks first', intentFrom: 'text', at: '14:03:11', status: 'ok', result: '9 fixtures in test/visual/fixtures · file:line table', why: asked('u-l2'), thinking: 'signature' },
+      ga('ga_01', '14:03:18', 'Bash', 'bash', 'Locate failure details', '3121 passed · 1 failed · trace-fold.test.ts:88', dlg('tl_11')),
+      eb('eb_01', '14:03:20', 'Grep', 'read', '"mockApi"  test/visual', '12 matches in 4 files', dlg('tl_12')),
+      ga('ga_02', '14:03:27', 'Read', 'read', 'test/trace-fold.test.ts', '212 lines', inf('ga_01')),
+      eb('eb_02', '14:03:33', 'Read', 'read', 'test/visual/mock-api.ts', '204 lines', inf('eb_01')),
+      ga('ga_03', '14:03:41', 'Bash', 'bash', 'Find which suite failed', 'trace-fold: 1 of 14 cases failed', inf('ga_02')),
+      eb('eb_03', '14:03:47', 'Glob', 'read', 'test/visual/fixtures/*.json', '9 files', dlg('tl_12')),
+      ga('ga_04', '14:03:55', 'Bash', 'bash', 'Inspect run-all tail', '3121 pass · 1 fail', dlg('tl_11')),
+      eb('eb_04', '14:04:02', 'Read', 'read', 'test/visual/fixtures/trace.json', '318 lines', inf('eb_03')),
+      ga('ga_05', '14:04:09', 'Bash', 'bash', 'See run-all end', 'exit=1', dlg('tl_11')),
+      eb('eb_05', '14:04:15', 'Grep', 'read', '"steps"  test/visual/fixtures', '3 matches in 2 files', inf('eb_04')),
+      ga('ga_06', '14:04:20', 'Grep', 'read', '"promptRow"  client/src/lib', '4 matches in 2 files', inf('ga_02')),
+      eb('eb_06', '14:04:28', 'Read', 'read', 'docs/subsystems/visual-tests.md', '142 lines', dlg('tl_12')),
+      ga('ga_07', '14:04:34', 'Read', 'read', 'client/src/lib/traceFold.ts', '131 lines', inf('ga_06')),
+      ga('ga_08', '14:04:45', 'Bash', 'bash', 'Get overall pass/fail', '3121: 1 FAIL', dlg('tl_11')),
+      ga('ga_09', '14:04:58', 'Edit', 'edit', 'client/src/lib/traceFold.ts:57', '1 replacement', inf('ga_07'), { intent: 'Keep the prompt row out of a fold', intentFrom: 'text', thinking: 'signature' }),
+      ga('ga_10', '14:05:14', 'Bash', 'bash', 'Rerun pnpm test', "TypeError: Cannot read properties of undefined (reading 'turn')", [{ id: 'ga_09', rel: 'verifies' }], { status: 'error' }),
+      ga('ga_11', '14:05:25', 'Read', 'read', 'client/src/lib/traceFold.ts:40-70', '31 lines', [{ id: 'ga_10', rel: 'retry' }, { id: 'ga_07', rel: 'informed' }]),
+      ga('ga_12', '14:05:39', 'Edit', 'edit', 'client/src/lib/traceFold.ts:61', '1 replacement', [{ id: 'ga_10', rel: 'retry' }, { id: 'ga_11', rel: 'informed' }], { intent: 'Guard the empty run before reading its turn', intentFrom: 'text' }),
+      ga('ga_13', '14:05:58', 'Bash', 'bash', 'Rerun pnpm test', '3122: ALL PASS', [{ id: 'ga_12', rel: 'verifies' }]),
+      ga('ga_14', '14:06:06', 'Bash', 'bash', 'Show test summary', '3122 cases · 0 failed · 41.2s', dlg('tl_11')),
+      ga('ga_15', '14:06:15', 'Bash', 'bash', 'Check fixtures for prompt rows', '9 fixtures · all carry a prompt', dlg('tl_11')),
+      ga('ga_16', '14:06:28', 'Bash', 'bash', 'Run visual test suite', '2 snapshots differ: trace-dark, trace-phone', [{ id: 'ga_12', rel: 'verifies' }], { status: 'error' }),
+      ga('ga_17', '14:06:37', 'Read', 'read', 'test/visual/trace.spec.ts', '96 lines', [{ id: 'ga_16', rel: 'retry' }]),
+      ga('ga_18', '14:06:49', 'Bash', 'bash', 'Re-baseline the two trace shots', '2 snapshots updated', [{ id: 'ga_16', rel: 'retry' }, { id: 'ga_17', rel: 'informed' }]),
+      ga('ga_19', '14:07:08', 'Bash', 'bash', 'Run visual test suite', '48 passed · exit=0', [{ id: 'ga_18', rel: 'verifies' }]),
+      ga('ga_20', '14:07:22', 'Bash', 'bash', 'Get overall pass/fail', null, [{ id: 'ga_13', rel: 'verifies' }, { id: 'ga_19', rel: 'verifies' }], { status: 'running' })
+    ]
+  };
+  const TASKS_LONG = [
+    { id: '1', subject: 'Rebase chat-trace on main', status: 'completed' },
+    { id: '2', subject: 'Find the failing suite', status: 'completed' },
+    { id: '3', subject: 'Keep the prompt row out of a fold', status: 'completed' },
+    { id: '4', subject: 'Visual suite green on the fix', activeForm: 'Re-running the visual suite', status: 'in_progress' }
+  ];
+
+  /* Each fixture carries its own lookups, and useData() swaps them in, so
+     every Trace function reads whichever session the bar has loaded. A
+     fixture without fixed turn names takes them from its prompts' first clause. */
+  const clip = (t, n) => t.length > n ? t.slice(0, n - 1) + '…' : t;
+  function fixture(trace, o) {
+    trace.steps.forEach((s, i) => { s.task = s.kind === 'prompt' ? null : o.taskOf(s, i) || null; });
+    const turns = o.turns || Object.fromEntries(trace.steps.filter(s => s.kind === 'prompt')
+      .map(s => [s.turn, clip(s.detail.split(/[.?!—]\s/)[0].replace(/[.?!]$/, ''), 44)]));
+    return { trace, turns, tasks: o.tasks, ask: o.ask || null, running: o.running, sel: o.sel,
+      byId: Object.fromEntries(trace.steps.map(s => [s.id, s])), idx: Object.fromEntries(trace.steps.map((s, i) => [s.id, i])) };
+  }
+  const FIX = {
+    sample: fixture(TRACE, { turns: TURNS_SAMPLE, tasks: TASKS, taskOf: s => TASK_OF[s.id], ask: 'toolu_16', running: ['toolu_16'], sel: 'toolu_16' }),
+    long: fixture(TRACE_LONG, { tasks: TASKS_LONG, running: ['tl_11', 'ga_20'], sel: 'ga_20',
+      taskOf: (s, i) => s.turn === 1 ? '1' : i < TRACE_LONG.steps.findIndex(x => x.id === 'ga_09') ? '2'
+        : i < TRACE_LONG.steps.findIndex(x => x.id === 'ga_16') ? '3' : '4' })
+  };
+  let F, TR, stepById, stepIdx, TURNS;
+  function useData(k) { F = FIX[k]; TR = F.trace; stepById = F.byId; stepIdx = F.idx; TURNS = F.turns; }
+  useData('long');
 
   const planTitle = (PLAN_MD.match(/^#{1,3} (.+)$/m) || [, 'Proposed plan'])[1];
   /* the head carries that heading, so the body starts under it — one title */
@@ -5065,9 +5232,16 @@ unpersisted, since session ids churn.`;
     /* Trace: `shown` is how many steps the tail has delivered, `running` the
        ones whose tool_result has not landed, `follow` keeps the newest step
        picked and the spine at its tail until the reader picks one */
-    mode: 'chat', sel: 'toolu_16', trFilter: 'all', trFocus: false, follow: true,
-    shown: TRACE.steps.length, running: new Set(['toolu_16']), fresh: null, replaying: false
+    mode: 'chat', sel: F.sel, trFilter: 'all', trFocus: false, follow: true,
+    shown: TR.steps.length, running: new Set(F.running), fresh: null, replaying: false,
+    /* the bar's data and spine switches; `open` / `closed` are the folds the
+       reader opened or shut by hand, keyed by Task id or `run:<first id>` */
+    data: 'long', spine: 'built', open: new Set(), closed: new Set()
   };
+  function resetTrace() {
+    S.shown = TR.steps.length; S.running = new Set(F.running); S.sel = F.sel; S.follow = true;
+    S.fresh = null; S.open.clear(); S.closed.clear();
+  }
 
   const QUESTIONS = [
     { header: 'phone view', question: 'Which view should the phone open on?', multiSelect: false, options: [
@@ -5158,7 +5332,7 @@ unpersisted, since session ids churn.`;
         `<button role="tab" class="${S.mode === k ? 'on' : ''}" data-chmode="${k}" aria-selected="${S.mode === k}">${l}</button>`).join('')}
     </div>`;
 
-  const delivered = () => TRACE.steps.slice(0, S.shown);
+  const delivered = () => TR.steps.slice(0, S.shown);
   const stepTool = (s) => s.agent ? 'tr-child' : '';
   function causes(id) {   // breadth-first over `why`, nearest first, only steps already delivered
     const out = new Map(), q = [[id, 0]];
@@ -5170,36 +5344,148 @@ unpersisted, since session ids churn.`;
   }
   const ledTo = (id) => delivered().filter(s => s.why.some(w => w.id === id));
   const questionAnswered = () => S.panel === 'question' && S.phase === 'sent';
-  const status = (s) => S.running.has(s.id) ? 'running' : s.id === 'toolu_16' ? 'ok' : s.status;
-  const answerOf = (s) => s.answer || (s.id === 'toolu_16' && questionAnswered() ? 'Triage · The picked view · Filters and sort' : null);
+  const status = (s) => S.running.has(s.id) ? 'running' : s.id === F.ask ? 'ok' : s.status;
+  const answerOf = (s) => s.answer || (s.id === F.ask && questionAnswered() ? 'Triage · The picked view · Filters and sort' : null);
   const resultOf = (s) => s.result || answerOf(s) || '';
   const trPasses = (s) => S.trFilter === 'all' || s.kind === 'prompt'
     || (S.trFilter === 'edits' && s.kind === 'edit')
     || (S.trFilter === 'fails' && status(s) === 'error')
     || (S.trFilter === 'you' && s.kind === 'decide');
 
-  function traceBody() {
-    const anc = S.sel ? causes(S.sel) : new Map();
-    const desc = new Set(S.sel ? ledTo(S.sel).map(s => s.id) : []);
-    let h = '', turn = 0;
-    for (const s of delivered()) {
-      if (!trPasses(s) && s.id !== S.sel) continue;
-      if (s.turn !== turn) { turn = s.turn; h += `<div class="tr-turn">Turn ${turn}<span>${TURNS[turn]}</span></div>`; }
-      const st = status(s);
-      const cls = ['tr-row', 'tr-k-' + s.kind, stepTool(s), st === 'running' ? 'tr-run' : st === 'error' ? 'tr-err' : '',
-        s.id === S.sel ? 'tr-on' : '', anc.has(s.id) ? 'tr-anc' : '', desc.has(s.id) ? 'tr-desc' : '', s.id === S.fresh ? 'tr-fresh' : ''].join(' ');
-      const flags = (st === 'running' ? `<span class="tr-flag run">${s.kind === 'decide' ? 'waiting on you' : 'running'}</span>` : st === 'error' ? '<span class="tr-flag err">failed</span>' : '')
-        + (answerOf(s) && st !== 'running' ? `<span class="tr-flag you">${esc(answerOf(s))}</span>` : '')
-        + (s.sha && st !== 'running' ? `<span class="tr-flag sha">${s.sha}</span>` : '')
-        + (s.thinking === 'text' ? '<span class="tr-flag think">thinking</span>' : '');
-      h += `<div class="${cls}" data-trn="${s.id}" tabindex="0" role="button" aria-pressed="${s.id === S.sel}">
+  const SPINES = [['built', 'as built'], ['lanes', 'lanes'], ['folded', 'folded'], ['ledger', 'ledger']];
+  const escA = (s) => esc(s).replace(/"/g, '&quot;');
+  const rowCls = (s, st, hl, extra) => ['tr-row', 'tr-k-' + s.kind, extra, st === 'running' ? 'tr-run' : st === 'error' ? 'tr-err' : '',
+    s.id === S.sel ? 'tr-on' : '', hl.anc.has(s.id) ? 'tr-anc' : '', hl.desc.has(s.id) ? 'tr-desc' : '', s.id === S.fresh ? 'tr-fresh' : ''].join(' ');
+  const flagsOf = (s, st) => (st === 'running' ? `<span class="tr-flag run">${s.kind === 'decide' ? 'waiting on you' : 'running'}</span>` : st === 'error' ? '<span class="tr-flag err">failed</span>' : '')
+    + (answerOf(s) && st !== 'running' ? `<span class="tr-flag you">${esc(answerOf(s))}</span>` : '')
+    + (s.sha && st !== 'running' ? `<span class="tr-flag sha">${s.sha}</span>` : '')
+    + (s.thinking === 'text' ? '<span class="tr-flag think">thinking</span>' : '');
+  const resLine = (s, st) => st === 'running' ? 'waiting for its result…' : '→ ' + esc(resultOf(s));
+
+  /* One spine row. With no options it is the row as built; `dedupe` drops an
+     intent that only repeats the detail, and `lane` puts a child's dot on its
+     agent's lane. */
+  function stepRow(s, hl, o = {}) {
+    const st = status(s);
+    const intent = s.intent && !(o.dedupe && s.intent === s.detail) ? `<div class="tr-intent">${esc(s.intent)}</div>` : '';
+    const lane = o.lane != null ? ` style="--lane:${o.lane}" data-agent="${s.agent}"` : '';
+    return `<div class="${rowCls(s, st, hl, stepTool(s))}"${lane} data-trn="${s.id}" tabindex="0" role="button" aria-pressed="${s.id === S.sel}">
           <div class="tr-dotcell"><span class="tr-dot"></span></div>
-          <div class="tr-card"><div class="tr-line"><span class="tr-tool">${esc(s.tool)}</span><span class="tr-detail">${esc(s.detail)}</span>${flags}</div>
-          ${s.intent ? `<div class="tr-intent">${esc(s.intent)}</div>` : ''}
-          ${s.kind !== 'prompt' ? `<div class="tr-res">${st === 'running' ? 'waiting for its result…' : '→ ' + esc(resultOf(s))}</div>` : ''}</div></div>`;
+          <div class="tr-card"><div class="tr-line"><span class="tr-tool">${esc(s.tool)}</span><span class="tr-detail">${esc(s.detail)}</span>${flagsOf(s, st)}</div>
+          ${intent}
+          ${s.kind !== 'prompt' ? `<div class="tr-res">${resLine(s, st)}</div>` : ''}</div></div>`;
+  }
+
+  /* ledger: one line, tool · detail · result · time; the picked row opens
+     in place to its intent and full result */
+  function ledgerRow(s, hl) {
+    const st = status(s), on = s.id === S.sel;
+    const res = s.kind === 'prompt' ? '' : st === 'running' ? (s.kind === 'decide' ? 'waiting on you' : 'running…') : '→ ' + resultOf(s);
+    const flags = flagsOf(s, st);
+    return `<div class="${rowCls(s, st, hl, '')}" data-trn="${s.id}" tabindex="0" role="button" aria-pressed="${on}">
+          <div class="tr-dotcell"><span class="tr-dot"></span></div>
+          <div class="tr-card"><div class="tr-lline"><span class="tr-tool">${esc(s.tool)}</span><span class="tr-detail">${esc(s.detail)}</span>${res ? `<span class="tr-lres">${esc(res)}</span>` : ''}<span class="tr-lat">${s.at}</span></div>
+          ${on && s.intent && s.intent !== s.detail ? `<div class="tr-intent">${esc(s.intent)}</div>` : ''}
+          ${on && s.kind !== 'prompt' ? `<div class="tr-res">${resLine(s, st)}</div>` : ''}
+          ${on && flags ? `<div class="tr-line">${flags}</div>` : ''}</div></div>`;
+  }
+
+  /* lanes: each agent's span runs from its Task to its last delivered child;
+     agents whose spans overlap in time take adjacent lanes */
+  function laneMap(steps) {
+    const span = {};
+    steps.forEach((s, i) => { if (s.kind === 'agent') span[s.id] = [i, i]; else if (s.agent && span[s.agent]) span[s.agent][1] = i; });
+    const ends = [], lane = {};
+    for (const [id, [a, b]] of Object.entries(span).sort((x, y) => x[1][0] - y[1][0])) {
+      if (a === b) continue;
+      let n = ends.findIndex(e => e < a);
+      if (n < 0) n = ends.length;
+      ends[n] = b; lane[id] = n;
     }
-    return `<div class="ch-body tr-body" data-trbody>
-        <div class="tr-spine ${S.trFocus ? 'tr-focus' : S.sel ? 'tr-dim' : ''}"><svg class="tr-arcs" aria-hidden="true"></svg>${h}</div>
+    return { lane, count: ends.length };
+  }
+
+  const secs = (t) => t.split(':').reduce((a, n) => a * 60 + Number(n), 0);
+  const dur = (a, b) => { const d = Math.max(0, secs(b) - secs(a)); return d >= 60 ? `${Math.floor(d / 60)}m ${String(d % 60).padStart(2, '0')}s` : `${d}s`; };
+
+  /* folded: a run as one summary row and a strip of ticks, one per step,
+     coloured by kind (failures red). It opens by hand, or by itself when it
+     holds the picked step. While it is running it shows its last 3 steps under
+     an "N earlier steps" line. */
+  function foldRun(key, members, task, hl) {
+    const sts = members.map(status), n = members.length;
+    const ok = sts.filter(x => x === 'ok').length, bad = sts.filter(x => x === 'error').length, run = sts.filter(x => x === 'running').length;
+    const live = task ? status(task) === 'running' : run > 0;
+    const tail = live ? members.slice(-3) : [];
+    const holds = members.some(m => m.id === S.sel) && !tail.some(m => m.id === S.sel);
+    const open = S.open.has(key) || (holds && !S.closed.has(key));
+    const sub = !!task, last = members[n - 1];
+    const parts = task
+      ? [`<b>${esc(task.tool.replace(/^\w+ · /, ''))}</b>`, `${n} steps`, `${ok} ok`, bad ? `<span class="err">${bad} failed</span>` : '', run ? `${run} running` : '',
+         dur(task.at, last.at) + (live ? ' so far' : '')]
+      : [`<b>${esc(members[0].tool)} ×${n}</b>`, `<span class="tr-path">${esc(clip(members[0].detail, 36))} → … → ${esc(clip(last.detail, 36))}</span>`,
+         bad ? `<span class="err">${bad} failed</span>` : '', run ? `${run} running` : ''];
+    const ticks = members.map((m, i) => `<button class="tr-tick tr-k-${m.kind}${sts[i] === 'error' ? ' tr-terr' : ''}${sts[i] === 'running' ? ' tr-trun' : ''}${m.id === S.sel ? ' tr-on' : ''}"
+        data-trtick="${m.id}" data-trkey="${key}" title="${escA(m.tool + ' · ' + m.detail)}" aria-label="${escA(m.tool + ' ' + m.detail)}"></button>`).join('');
+    const anc = members.some(m => hl.anc.has(m.id) || m.id === S.sel);
+    let h = `<div class="tr-sum tr-k-${task ? 'agent' : members[0].kind}${sub ? ' tr-sub' : ''}${anc ? ' tr-anc' : ''}" data-trfold="${key}" data-members="${members.map(m => m.id).join(' ')}">
+        <div class="tr-dotcell"><button class="tr-dot tr-fold" data-trfold="${key}" aria-expanded="${open}" aria-label="${open ? 'Fold' : 'Unfold'} these ${n} steps">▶</button></div>
+        <div class="tr-sumcard"><div class="tr-sumline">${parts.filter(Boolean).join('<i>·</i>')}</div>
+        <div class="tr-strip" role="group" aria-label="One tick per step">${ticks}</div></div></div>`;
+    const rows = open ? members : tail;
+    if (!open && rows.length && n > rows.length) h += `<button class="tr-more${sub ? ' tr-sub' : ''}" data-trfold="${key}">${n - rows.length} earlier ${n - rows.length === 1 ? 'step' : 'steps'}</button>`;
+    return h + rows.map(m => stepRow(m, hl, { dedupe: true, lane: sub ? 0 : null })).join('');
+  }
+
+  function foldedRows(all, hl, head) {
+    const mains = all.filter(s => !s.agent), runAt = {};
+    /* main-thread runs: 4 or more consecutive calls of one tool, in one turn */
+    for (let i = 0; i < mains.length;) {
+      const s = mains[i];
+      let j = i + 1;
+      if (s.kind !== 'prompt' && s.kind !== 'agent') while (j < mains.length && mains[j].tool === s.tool && mains[j].turn === s.turn) j++;
+      if (j - i >= 4) runAt[s.id] = mains.slice(i, j);
+      i = j;
+    }
+    let h = '';
+    for (let i = 0; i < mains.length; i++) {
+      const s = mains[i], run = runAt[s.id];
+      h += head(s);
+      if (run) { h += foldRun('run:' + s.id, run, null, hl); i += run.length - 1; continue; }
+      h += stepRow(s, hl, { dedupe: true });
+      if (s.kind === 'agent') { const kids = all.filter(k => k.agent === s.id); if (kids.length) h += foldRun(s.id, kids, s, hl); }
+    }
+    return h;
+  }
+
+  function traceBody() {
+    const hl = { anc: S.sel ? causes(S.sel) : new Map(), desc: new Set(S.sel ? ledTo(S.sel).map(s => s.id) : []) };
+    const all = delivered(), shows = (s) => trPasses(s) || s.id === S.sel;
+    /* a step filter already thins the spine, so folded gives way to lanes
+       under one; lanes and ledger keep a Task whose child passes the filter,
+       so the child still has a parent to hang from */
+    const v = S.spine === 'folded' && S.trFilter !== 'all' ? 'lanes' : S.spine;
+    const vis = all.filter(s => shows(s) || (v !== 'built' && s.kind === 'agent' && all.some(k => k.agent === s.id && shows(k))));
+    let h = '', turn = 0, style = '';
+    const head = (s) => {
+      if (s.turn === turn) return '';
+      turn = s.turn;
+      return `<div class="tr-turn">Turn ${turn}<span>${esc(TURNS[turn])}</span></div>`;
+    };
+    if (v === 'built') for (const s of vis) h += head(s) + stepRow(s, hl);
+    else if (v === 'lanes') {
+      const L = laneMap(all);
+      style = ` style="--lanes:${Math.max(0, L.count - 1)}"`;
+      for (const s of vis) h += head(s) + stepRow(s, hl, { dedupe: true, lane: s.agent ? L.lane[s.agent] || 0 : null });
+    } else if (v === 'ledger') for (const s of vis) {
+      if (s.agent) continue;
+      h += head(s) + ledgerRow(s, hl);
+      const kids = s.kind === 'agent' ? vis.filter(k => k.agent === s.id) : [];
+      if (kids.length) h += `<div class="tr-nest" role="group" aria-label="${escA(s.tool)} steps">${kids.map(k => ledgerRow(k, hl)).join('')}</div>`;
+    }
+    else h = foldedRows(all, hl, head);
+    return `<div class="ch-body tr-body tr-v-${v}" data-trbody data-spine="${v}">
+        <div class="tr-spine ${S.trFocus ? 'tr-focus' : S.sel ? 'tr-dim' : ''}"${style}><svg class="tr-arcs" aria-hidden="true"></svg>${h}</div>
         <button class="tr-jump${S.follow ? '' : ' show'}" data-trfollow>↓ Follow live</button>
       </div>`;
   }
@@ -5212,7 +5498,7 @@ unpersisted, since session ids churn.`;
     const s = stepById[S.sel], st = status(s);
     const chain = [...causes(s.id).entries()].sort((a, b) => a[1].d - b[1].d || stepIdx[a[0]] - stepIdx[b[0]]);
     const led = ledTo(s.id);
-    const task = s.task && TASKS.find(t => t.id === s.task);
+    const task = s.task && F.tasks.find(t => t.id === s.task);
     const outcome = s.kind === 'prompt' ? ''
       : st === 'running' ? `<div class="tr-stat">${s.kind === 'decide' ? (S.panel === 'question' ? 'Waiting for your answer — it is in the panel below' : 'Waiting for your answer') : 'Waiting for its tool_result…'}</div>`
       : st === 'error' ? `<div class="tr-stat err">✕ ${esc(resultOf(s))}</div>`
@@ -5252,7 +5538,7 @@ unpersisted, since session ids churn.`;
     return `<div class="ch-foot">
       <span class="live"><i></i> live · refreshing every 3s</span>
       <span class="sp"></span>
-      <span class="ch-count">${steps} steps · ${S.running.size} running · thinking readable in ${TRACE.thinking.readable} of ${TRACE.thinking.recorded}</span>
+      <span class="ch-count">${steps} steps · ${S.running.size} running · thinking readable in ${TR.thinking.readable} of ${TR.thinking.recorded}</span>
       <button class="tr-tog${S.trFocus ? ' on' : ''}" data-trfocus aria-pressed="${S.trFocus}">Only this step's why</button>
       <div class="seg ground sm" role="group" aria-label="Step filter">
         ${TR_FILTERS.map(([k, l]) => `<button class="${S.trFilter === k ? 'on' : ''}" data-trfilter="${k}" aria-pressed="${S.trFilter === k}">${l}</button>`).join('')}
@@ -5264,22 +5550,41 @@ unpersisted, since session ids churn.`;
     const sp = root.querySelector('.tr-spine'), svg = root.querySelector('.tr-arcs');
     if (!sp || !svg) return;
     const box = sp.getBoundingClientRect(), pos = {};
-    sp.querySelectorAll('.tr-row').forEach(r => { const d = r.querySelector('.tr-dot').getBoundingClientRect(); pos[r.dataset.trn] = [d.left - box.left + d.width / 2, d.top - box.top + d.height / 2]; });
+    const mid = (el) => { const d = el.getBoundingClientRect(); return [d.left - box.left + d.width / 2, d.top - box.top + d.height / 2]; };
+    sp.querySelectorAll('.tr-row').forEach(r => { pos[r.dataset.trn] = mid(r.querySelector('.tr-dot')); });
+    /* folded: a step hidden in a fold answers at its summary's chevron */
+    sp.querySelectorAll('.tr-sum').forEach(r => { const c = mid(r.querySelector('.tr-dot')); r.dataset.members.split(' ').forEach(id => { if (!pos[id]) pos[id] = c; }); });
     svg.setAttribute('width', box.width); svg.setAttribute('height', box.height);
     let p = '';
+    const spine = sp.parentElement.dataset.spine;
     const main = delivered().filter(s => pos[s.id] && !s.agent);
     for (let i = 1; i < main.length; i++) if (main[i].turn === main[i - 1].turn) {
       const a = pos[main[i - 1].id], b = pos[main[i].id];
       p += `<path d="M${a[0]} ${a[1]}L${b[0]} ${b[1]}" stroke="var(--border-strong)" stroke-width="2"/>`;
     }
-    delivered().filter(s => s.agent && pos[s.id] && pos[s.agent]).forEach(s => {
+    if (spine === 'built') delivered().filter(s => s.agent && pos[s.id] && pos[s.agent]).forEach(s => {
       const a = pos[s.agent], b = pos[s.id];
       p += `<path d="M${a[0]} ${a[1]}C${a[0]} ${b[1] - 6} ${a[0] + 4} ${b[1]} ${b[0]} ${b[1]}" fill="none" stroke="var(--magenta)" stroke-width="1.5" opacity=".55"/>`;
     });
+    /* lanes and folded: one elbow off the Task dot, then one straight lane
+       down to the agent's last rendered child (or its summary row) */
+    else if (spine === 'lanes' || spine === 'folded') {
+      const ends = {};
+      sp.querySelectorAll('.tr-row[data-agent], .tr-sum.tr-sub').forEach(r => {
+        const id = r.dataset.agent || r.dataset.trfold, [x, y] = mid(r.querySelector('.tr-dot'));
+        ends[id] = ends[id] ? { x: ends[id].x, y: Math.max(ends[id].y, y) } : { x, y };
+      });
+      for (const [id, e] of Object.entries(ends)) {
+        const a = sp.querySelector(`.tr-row[data-trn="${id}"]`) && pos[id];
+        if (!a || e.y <= a[1] + 6) continue;
+        p += `<path d="M${a[0] + 6} ${a[1]}H${e.x - 6}Q${e.x} ${a[1]} ${e.x} ${a[1] + 6}V${e.y}" fill="none" stroke="var(--magenta)" stroke-width="1.5" stroke-linecap="round"/>`;
+      }
+    }
     if (S.sel && pos[S.sel]) for (const [id, m] of causes(S.sel)) {
       if (!pos[id] || !pos[m.from]) continue;
       const a = pos[m.from], b = pos[id], x = Math.min(a[0], b[0]) - Math.min(26, 8 + Math.abs(a[1] - b[1]) / 14);
-      const row = sp.querySelector(`[data-trn="${id}"]`), c = getComputedStyle(row).getPropertyValue('--c').trim();
+      if (a[0] === b[0] && a[1] === b[1]) continue;   // both ends inside one fold
+      const row = sp.querySelector(`.tr-row[data-trn="${id}"]`) || sp.querySelector(`[data-trtick="${id}"]`), c = getComputedStyle(row).getPropertyValue('--c').trim();
       p += `<path d="M${a[0] - 6} ${a[1]}C${x} ${a[1]} ${x} ${b[1]} ${b[0] - 6} ${b[1]}" fill="none" stroke="${c}" ${m.d === 1 ? 'stroke-width="2"' : 'stroke-width="1.3" stroke-dasharray="4 4" opacity=".7"'}/>`;
     }
     svg.innerHTML = p;
@@ -5292,10 +5597,10 @@ unpersisted, since session ids churn.`;
      question the pinned panel is holding. */
   let replay = null;
   function tick() {
-    const plain = [...S.running].filter(id => stepById[id].kind !== 'agent' && id !== 'toolu_16');
+    const plain = [...S.running].filter(id => stepById[id].kind !== 'agent' && id !== F.ask);
     if (plain.length) S.running.delete(plain[0]);
     else {
-      const next = TRACE.steps[S.shown];
+      const next = TR.steps[S.shown];
       const agent = [...S.running].find(id => stepById[id].kind === 'agent');
       if (agent && (!next || next.agent !== agent)) S.running.delete(agent);
       else if (next) {
@@ -5308,13 +5613,14 @@ unpersisted, since session ids churn.`;
     render();
   }
   function startReplay() {
+    if (S.data !== 'sample') return;   // the replay is scripted against the sample fixture
     clearInterval(replay);
     S.shown = 4; S.running = new Set(['toolu_03']); S.sel = 'toolu_03'; S.follow = true; S.replaying = true; S.mode = 'trace';
     replay = setInterval(tick, 1400);
   }
   function stopReplay() {
     clearInterval(replay); S.replaying = false;
-    S.shown = TRACE.steps.length; S.running = new Set(['toolu_16']);
+    S.shown = TR.steps.length; S.running = new Set(F.running);
   }
 
   /* ── the pinned wait panels ──────────────────────────────────────────── */
@@ -5507,10 +5813,16 @@ unpersisted, since session ids churn.`;
       <span class="vsp"></span>
       <span class="tag">mode</span>
       ${[['chat', 'chat'], ['trace', 'trace']].map(([k, l]) => `<button data-chmode="${k}" aria-pressed="${S.mode === k}">${l}</button>`).join('')}
-      <button data-trreplay aria-pressed="${S.replaying}">${S.replaying ? 'stop replay' : 'replay live tail'}</button>
+      ${S.data === 'sample' ? `<button data-trreplay aria-pressed="${S.replaying}">${S.replaying ? 'stop replay' : 'replay live tail'}</button>` : ''}
+      <span class="vsp"></span>
+      <span class="tag">data</span>
+      ${[['sample', 'sample'], ['long', 'many subagents']].map(([k, l]) => `<button data-trdata="${k}" aria-pressed="${S.data === k}">${l}</button>`).join('')}
+      <span class="vsp"></span>
+      <span class="tag">spine</span>
+      ${SPINES.map(([k, l]) => `<button data-trspine="${k}" aria-pressed="${S.spine === k}">${l}</button>`).join('')}
     </div>`;
 
-  const stage = () => `<div class="ch-stage">
+  const stage = () => `<div class="ch-stage${S.mode === 'trace' ? ' tr-mode' : ''}">
       <div class="ch-ghost">
         <div class="ch-gcard t"></div><div class="ch-gcard"></div><div class="ch-gcard"></div>
         <div class="ch-gcard"></div><div class="ch-gcard"></div><div class="ch-gcard"></div>
@@ -5522,7 +5834,7 @@ unpersisted, since session ids churn.`;
   function render() {
     /* the open question is the trace's last step: answering it in the panel
        resolves the step, so the two never disagree */
-    if (S.shown === TRACE.steps.length) S.running[questionAnswered() ? 'delete' : 'add']('toolu_16');
+    if (F.ask && S.shown === TR.steps.length) S.running[questionAnswered() ? 'delete' : 'add'](F.ask);
     const old = root.querySelector('[data-trbody]'), keep = old && !S.follow ? old.scrollTop : null;
     root.innerHTML = varbar() + stage();
     S.fresh = null;
@@ -5534,6 +5846,7 @@ unpersisted, since session ids churn.`;
 
   const pick = (id) => { S.sel = id; S.follow = false; };
   root.addEventListener('keydown', (ev) => {
+    if (ev.target.tagName === 'BUTTON') return;   // a real button's own click does it
     const row = ev.target.closest && ev.target.closest('[data-trn]');
     if (row && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); syncInputs(); pick(row.dataset.trn); render(); }
   });
@@ -5549,11 +5862,26 @@ unpersisted, since session ids churn.`;
     const hit = (s) => ev.target.closest(s);
     let el;
     if ((el = hit('[data-chmode]'))) S.mode = el.dataset.chmode;
-    else if ((el = hit('[data-trwhy]'))) { S.mode = 'trace'; pick(el.dataset.trwhy); }
+    else if ((el = hit('[data-trwhy]'))) {
+      /* the chat's tool lines are the sample session's, so "why?" loads it */
+      if (S.data !== 'sample') { S.data = 'sample'; useData('sample'); resetTrace(); }
+      S.mode = 'trace'; pick(el.dataset.trwhy);
+    }
+    else if ((el = hit('[data-trdata]'))) {
+      if (S.replaying) stopReplay();
+      S.data = el.dataset.trdata; useData(S.data); resetTrace(); S.mode = 'trace';
+    }
+    else if ((el = hit('[data-trspine]'))) { S.spine = el.dataset.trspine; S.mode = 'trace'; }
+    else if ((el = hit('[data-trtick]'))) { pick(el.dataset.trtick); S.open.add(el.dataset.trkey); S.closed.delete(el.dataset.trkey); }
+    else if ((el = hit('[data-trfold]'))) {
+      const k = el.dataset.trfold, btn = root.querySelector(`.tr-fold[data-trfold="${k}"]`);
+      if (btn && btn.getAttribute('aria-expanded') === 'true') { S.open.delete(k); S.closed.add(k); }
+      else { S.open.add(k); S.closed.delete(k); }
+    }
     else if ((el = hit('[data-trn]'))) pick(el.dataset.trn);
     else if ((el = hit('[data-trfilter]'))) S.trFilter = el.dataset.trfilter;
     else if (hit('[data-trfocus]')) S.trFocus = !S.trFocus;
-    else if (hit('[data-trfollow]')) { S.follow = true; S.sel = TRACE.steps[S.shown - 1].id; }
+    else if (hit('[data-trfollow]')) { S.follow = true; S.sel = TR.steps[S.shown - 1].id; }
     else if (hit('[data-trreplay]')) S.replaying ? stopReplay() : startReplay();
     else if ((el = hit('[data-cpanel]'))) { S.panel = el.dataset.cpanel; S.minimised = false; S.phase = 'live'; }
     else if ((el = hit('[data-cphase]'))) S.phase = el.dataset.cphase;
