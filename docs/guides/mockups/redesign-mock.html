@@ -141,18 +141,16 @@
    (A full-page tab with Canvas and Lanes views was sketched first; at the
    modal's width only the spine fits, and live mattered more than layout.)
 
-   A long subagent run breaks the spine as built. Each child step gets its own
-   magenta curve from the Task dot, so twenty children paint the gutter solid,
-   and each child Bash row prints its description twice (detail and intent),
-   so a screen holds about nine near-identical cards. The bar's "data" switch
-   loads such a session ("many subagents", the default) and "spine" offers
-   three answers to it. Lanes keeps every row and fixes only the gutter: one
-   straight line per agent, with concurrent agents a lane apart. Folded hides
-   detail until asked: a run becomes one summary row with a tick per step, and
-   its chevron, a tick, or picking a step inside it opens the run. Ledger is
-   about three times denser, one 25px line per step with children nested
-   under their Task, but it moves the intent and the full result to the
-   sidecar card. All three drop an intent that only repeats the detail.
+   The spine is folded, so a long subagent run stays readable. A run becomes
+   one summary row with a tick per step, and its toggle, a tick, or picking a
+   step inside it opens the run. An opened run hangs one depth step right of
+   its Task on a single magenta lane, and four or more consecutive calls of
+   one main-thread tool fold the same way. A row drops an intent that only
+   repeats its detail. The bar's "data" switch loads such a session ("many
+   subagents", the default). (The spine as first drawn, with one magenta curve
+   per child step, painted the gutter solid under a twenty-step agent. Lanes
+   keeping every row, and a dense one-line-per-step ledger, were drawn and
+   dropped.)
 
    New session is the launch form (SpawnPanel) given the same treatment, and it
    has landed on the sheet: one narrow column — project, prompt, name, then
@@ -1966,15 +1964,18 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .tr-k-bash{--c:var(--mustard)}
 .tr-k-agent{--c:var(--magenta)}
 .ch-body.tr-body{padding:6px 18px 40px 0;gap:0;display:block;position:relative}
-.tr-spine{position:relative;display:flex;flex-direction:column;gap:6px}
+.tr-spine{position:relative;display:flex;flex-direction:column;gap:6px;--tr-depth:28px}
 .tr-arcs{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
 .tr-turn{display:flex;gap:10px;align-items:baseline;padding:16px 0 6px 60px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary)}
 .tr-turn span{text-transform:none;letter-spacing:0;font-weight:500;color:var(--text-secondary)}
 .tr-row{display:grid;grid-template-columns:60px minmax(0,1fr);align-items:start;cursor:pointer;transition:opacity .15s}
-.tr-row.tr-child{grid-template-columns:84px minmax(0,1fr)}
+/* depth: the main dots sit at x 36, each nesting level is one --tr-depth
+   further right, and a card starts 24px right of the line it hangs from, so
+   the agent's lane runs in that gutter */
+.tr-row.tr-child{--x:calc(36px + var(--depth,1) * var(--tr-depth));grid-template-columns:calc(60px + var(--depth,1) * var(--tr-depth)) minmax(0,1fr)}
 .tr-dotcell{position:relative;min-height:36px;height:100%}
 .tr-dot{position:absolute;left:30px;top:12px;width:12px;height:12px;border-radius:var(--r-full);background:var(--bg-surface);border:2.5px solid var(--c)}
-.tr-row.tr-child .tr-dot{left:54px;top:13px;width:10px;height:10px}
+.tr-row.tr-child .tr-dot{left:calc(var(--x) - 5px);top:13px;width:10px;height:10px}
 .tr-row.tr-k-prompt .tr-dot{background:var(--c);border-radius:3px}
 .tr-row.tr-err .tr-dot{background:var(--red-500);border-color:var(--red-500)}
 .tr-row.tr-run .tr-dot{border-style:dashed;animation:tr-spin 2.4s linear infinite}
@@ -2064,19 +2065,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 @keyframes tr-land{from{background:var(--green-200)}}
 @media (prefers-reduced-motion:reduce){.tr-row.tr-run .tr-dot,.tr-row.tr-fresh .tr-card{animation:none}.tr-row{transition:none}}
 
-/* ── Trace spine variants: the bar's "spine" switch, for long subagent runs ──
-   "as built" is the rules above. Each variant below is scoped by a
-   .tr-v-<name> class on the body, so "as built" never sees it. */
-/* lanes: one straight magenta lane per agent, concurrent agents 12px apart.
-   Depth geometry, shared with folded: the main dots sit at x 36, each nesting
-   level is one --tr-depth further right, and a card starts 24px right of the
-   line it hangs from. The lane's vertical runs in that 24px gutter. */
-.tr-v-lanes,.tr-v-folded{--tr-depth:28px}
-.tr-v-lanes .tr-row.tr-child,.tr-v-folded .tr-row.tr-child{
-  --x:calc(36px + var(--depth,1) * var(--tr-depth) + var(--lane,0) * 12px);
-  grid-template-columns:calc(60px + var(--depth,1) * var(--tr-depth) + var(--lanes,0) * 12px) minmax(0,1fr)}
-.tr-v-lanes .tr-row.tr-child .tr-dot,.tr-v-folded .tr-row.tr-child .tr-dot{left:calc(var(--x) - 5px)}
-/* folded: a run is one summary row with a tick per step, and its toggle (a
+/* ── folds: a run is one summary row with a tick per step, and its toggle (a
    solid dot in the lane's colour, sitting on the lane) opens it */
 .tr-sum{display:grid;grid-template-columns:60px minmax(0,1fr);align-items:start;cursor:pointer;transition:opacity .15s}
 .tr-sum.tr-sub{grid-template-columns:calc(60px + var(--depth,1) * var(--tr-depth)) minmax(0,1fr)}
@@ -2103,29 +2092,6 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .tr-spine.tr-dim .tr-sum:not(.tr-anc),.tr-spine.tr-dim .tr-more{opacity:.6}
 .tr-spine.tr-focus .tr-sum:not(.tr-anc),.tr-spine.tr-focus .tr-more{opacity:.25}
 @keyframes tr-blink{50%{opacity:.35}}
-/* ledger: one ~25px line per step, children nested under their Task, no curves */
-.tr-v-ledger .tr-spine{gap:1px}
-.tr-v-ledger .tr-turn{padding:12px 0 4px 44px}
-.tr-v-ledger .tr-row{grid-template-columns:44px minmax(0,1fr)}
-.tr-v-ledger .tr-dotcell{min-height:25px}
-.tr-v-ledger .tr-dot{left:25px;top:8px;width:9px;height:9px;border-width:2px}
-.tr-v-ledger .tr-card{padding:3px 10px 3px 6px}
-.tr-lline{display:flex;gap:8px;align-items:baseline;min-width:0;white-space:nowrap;line-height:19px}
-.tr-lline > *{min-width:0;overflow:hidden;text-overflow:ellipsis}
-.tr-lline .tr-tool,.tr-lat{flex:none}
-.tr-lline .tr-detail{flex:1 1 auto;overflow-wrap:normal}
-.tr-k-prompt .tr-lline .tr-detail{font-size:13px}
-.tr-lres{flex:0 1 auto;max-width:40%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--text-tertiary)}
-.tr-row.tr-err .tr-lres{color:var(--red-500)}
-.tr-lat{font-size:11px;color:var(--text-tertiary);font-variant-numeric:tabular-nums}
-.tr-v-ledger .tr-row.tr-on .tr-lline{white-space:normal}
-.tr-v-ledger .tr-row.tr-on .tr-lline .tr-detail{overflow-wrap:anywhere}
-.tr-v-ledger .tr-row.tr-on .tr-lres{display:none}
-.tr-v-ledger .tr-row.tr-on .tr-line{margin-top:4px}
-.tr-nest{display:flex;flex-direction:column;gap:1px;margin-left:44px;border-left:1.5px solid color-mix(in srgb,var(--magenta) 40%,transparent)}
-.tr-nest .tr-row{grid-template-columns:22px minmax(0,1fr)}
-.tr-nest .tr-dot{left:7px;width:8px;height:8px}
-@container (max-width:479px){.tr-lres{max-width:34%}.tr-lat{display:none}}
 @media (prefers-reduced-motion:reduce){.tr-tick.tr-trun{animation:none}.tr-sum,.tr-fold .chev{transition:none}}
 /* the foot: live text, the why toggle and the filter, each on one line */
 .tr-foot .live,.tr-foot .tr-tog{white-space:nowrap}
@@ -5136,12 +5102,12 @@ unpersisted, since session ids churn.`;
     toolu_15: '4', toolu_16: '5' };
 
   /* ── TRACE_LONG: a session whose subagent runs long ─────────────────────
-     The same contract as TRACE, built to show the band. Turn 2 has six
+     The same contract as TRACE, built to stress the spine. Turn 2 has six
      consecutive main-thread Bash calls, then one message launches two agents:
      `Agent · general-purpose` runs 20 steps (mostly Bash, two failures) and is
      still running, and `Agent · Explore` runs 6 steps interleaved with it.
      A subagent's Bash row carries its description as both detail and intent,
-     as live's describeTool does. That is the doubled line the variants drop. */
+     as live's describeTool does. That is the doubled line the spine drops. */
   const kid = (agent) => (id, at, tool, kind, detail, result, why, more = {}) => ({ id, turn: 2, kind, tool, detail,
     intent: tool === 'Bash' ? detail : null, intentFrom: tool === 'Bash' ? 'description' : null, at, status: 'ok', result, why, agent, ...more });
   const ga = kid('tl_11'), eb = kid('tl_12');
@@ -5244,9 +5210,9 @@ unpersisted, since session ids churn.`;
        picked and the spine at its tail until the reader picks one */
     mode: 'chat', sel: F.sel, trFilter: 'all', trFocus: false, follow: true,
     shown: TR.steps.length, running: new Set(F.running), fresh: null, replaying: false,
-    /* the bar's data and spine switches; `open` / `closed` are the folds the
-       reader opened or shut by hand, keyed by Task id or `run:<first id>` */
-    data: 'long', spine: 'built', open: new Set(), closed: new Set()
+    /* the bar's data switch; `open` / `closed` are the folds the reader
+       opened or shut by hand, keyed by Task id or `run:<first id>` */
+    data: 'long', open: new Set(), closed: new Set()
   };
   function resetTrace() {
     S.shown = TR.steps.length; S.running = new Set(F.running); S.sel = F.sel; S.follow = true;
@@ -5362,7 +5328,6 @@ unpersisted, since session ids churn.`;
     || (S.trFilter === 'fails' && status(s) === 'error')
     || (S.trFilter === 'you' && s.kind === 'decide');
 
-  const SPINES = [['built', 'as built'], ['lanes', 'lanes'], ['folded', 'folded'], ['ledger', 'ledger']];
   const escA = (s) => esc(s).replace(/"/g, '&quot;');
   const rowCls = (s, st, hl, extra) => ['tr-row', 'tr-k-' + s.kind, extra, st === 'running' ? 'tr-run' : st === 'error' ? 'tr-err' : '',
     s.id === S.sel ? 'tr-on' : '', hl.anc.has(s.id) ? 'tr-anc' : '', hl.desc.has(s.id) ? 'tr-desc' : '', s.id === S.fresh ? 'tr-fresh' : ''].join(' ');
@@ -5377,13 +5342,13 @@ unpersisted, since session ids churn.`;
   /* the header account chip's chevron (.acct .cv), pointing down */
   const CHEV = '<svg class="chev" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4l3 3 3-3"/></svg>';
 
-  /* One spine row. With no options it is the row as built; `dedupe` drops an
-     intent that only repeats the detail, and `lane` puts a child's dot on its
-     agent's lane, one depth step right of the line it hangs from. */
-  function stepRow(s, hl, o = {}) {
+  /* One spine row. It drops an intent that only repeats the detail, and a
+     subagent's row sits on its agent's lane, one depth step right of the
+     line it hangs from. */
+  function stepRow(s, hl) {
     const st = status(s);
-    const intent = s.intent && !(o.dedupe && s.intent === s.detail) ? `<div class="tr-intent">${esc(s.intent)}</div>` : '';
-    const lane = o.lane != null ? ` style="--lane:${o.lane};--depth:${depthOf(s)}" data-agent="${s.agent}"` : '';
+    const intent = s.intent && s.intent !== s.detail ? `<div class="tr-intent">${esc(s.intent)}</div>` : '';
+    const lane = s.agent ? ` style="--depth:${depthOf(s)}" data-agent="${s.agent}"` : '';
     return `<div class="${rowCls(s, st, hl, stepTool(s))}"${lane} data-trn="${s.id}" tabindex="0" role="button" aria-pressed="${s.id === S.sel}">
           <div class="tr-dotcell"><span class="tr-dot"></span></div>
           <div class="tr-card"><div class="tr-line"><span class="tr-tool">${esc(s.tool)}</span><span class="tr-detail">${esc(s.detail)}</span>${flagsOf(s, st)}</div>
@@ -5391,39 +5356,10 @@ unpersisted, since session ids churn.`;
           ${s.kind !== 'prompt' ? `<div class="tr-res">${resLine(s, st)}</div>` : ''}</div></div>`;
   }
 
-  /* ledger: one line, tool · detail · result · time; the picked row opens
-     in place to its intent and full result */
-  function ledgerRow(s, hl) {
-    const st = status(s), on = s.id === S.sel;
-    const res = s.kind === 'prompt' ? '' : st === 'running' ? (s.kind === 'decide' ? 'waiting on you' : 'running…') : '→ ' + resultOf(s);
-    const flags = flagsOf(s, st);
-    return `<div class="${rowCls(s, st, hl, '')}" data-trn="${s.id}" tabindex="0" role="button" aria-pressed="${on}">
-          <div class="tr-dotcell"><span class="tr-dot"></span></div>
-          <div class="tr-card"><div class="tr-lline"><span class="tr-tool">${esc(s.tool)}</span><span class="tr-detail">${esc(s.detail)}</span>${res ? `<span class="tr-lres">${esc(res)}</span>` : ''}<span class="tr-lat">${s.at}</span></div>
-          ${on && s.intent && s.intent !== s.detail ? `<div class="tr-intent">${esc(s.intent)}</div>` : ''}
-          ${on && s.kind !== 'prompt' ? `<div class="tr-res">${resLine(s, st)}</div>` : ''}
-          ${on && flags ? `<div class="tr-line">${flags}</div>` : ''}</div></div>`;
-  }
-
-  /* lanes: each agent's span runs from its Task to its last delivered child;
-     agents whose spans overlap in time take adjacent lanes */
-  function laneMap(steps) {
-    const span = {};
-    steps.forEach((s, i) => { if (s.kind === 'agent') span[s.id] = [i, i]; else if (s.agent && span[s.agent]) span[s.agent][1] = i; });
-    const ends = [], lane = {};
-    for (const [id, [a, b]] of Object.entries(span).sort((x, y) => x[1][0] - y[1][0])) {
-      if (a === b) continue;
-      let n = ends.findIndex(e => e < a);
-      if (n < 0) n = ends.length;
-      ends[n] = b; lane[id] = n;
-    }
-    return { lane, count: ends.length };
-  }
-
   const secs = (t) => t.split(':').reduce((a, n) => a * 60 + Number(n), 0);
   const dur = (a, b) => { const d = Math.max(0, secs(b) - secs(a)); return d >= 60 ? `${Math.floor(d / 60)}m ${String(d % 60).padStart(2, '0')}s` : `${d}s`; };
 
-  /* folded: a run as one summary row and a strip of ticks, one per step,
+  /* a fold: a run as one summary row and a strip of ticks, one per step,
      coloured by kind (failures red). It opens by hand, or by itself when it
      holds the picked step. While it is running it shows its last 3 steps under
      an "N earlier steps" line. */
@@ -5450,7 +5386,7 @@ unpersisted, since session ids churn.`;
         <div class="tr-strip" role="group" aria-label="One tick per step">${ticks}</div></div></div>`;
     const rows = open ? members : tail;
     if (!open && rows.length && n > rows.length) h += `<button class="tr-more${sub ? ' tr-sub' : ''}"${depth} data-trfold="${key}">${n - rows.length} earlier ${n - rows.length === 1 ? 'step' : 'steps'}</button>`;
-    return h + rows.map(m => stepRow(m, hl, { dedupe: true, lane: sub ? 0 : null })).join('');
+    return h + rows.map(m => stepRow(m, hl)).join('');
   }
 
   function foldedRows(all, hl, head) {
@@ -5468,7 +5404,7 @@ unpersisted, since session ids churn.`;
       const s = mains[i], run = runAt[s.id];
       h += head(s);
       if (run) { h += foldRun('run:' + s.id, run, null, hl); i += run.length - 1; continue; }
-      h += stepRow(s, hl, { dedupe: true });
+      h += stepRow(s, hl);
       if (s.kind === 'agent') { const kids = all.filter(k => k.agent === s.id); if (kids.length) h += foldRun(s.id, kids, s, hl); }
     }
     return h;
@@ -5477,37 +5413,25 @@ unpersisted, since session ids churn.`;
   function traceBody() {
     const hl = { anc: S.sel ? causes(S.sel) : new Map(), desc: new Set(S.sel ? ledTo(S.sel).map(s => s.id) : []) };
     const all = delivered(), shows = (s) => trPasses(s) || s.id === S.sel;
-    /* A step filter already thins the spine, so folded opens every run under
-       one: each passing child sits under its own Task at the same single depth
-       indent as an opened fold. Lanes, folded and ledger keep a Task whose
-       child passes the filter, so the child still has a parent to hang from. */
-    const v = S.spine;
-    const vis = all.filter(s => shows(s) || (v !== 'built' && s.kind === 'agent' && all.some(k => k.agent === s.id && shows(k))));
-    let h = '', turn = 0, style = '';
+    /* A step filter already thins the spine, so it opens every run: each
+       passing child sits under its own Task at the same single depth indent
+       as an opened fold. A Task whose child passes the filter stays, so the
+       child still has a parent to hang from. */
+    const vis = all.filter(s => shows(s) || (s.kind === 'agent' && all.some(k => k.agent === s.id && shows(k))));
+    let h = '', turn = 0;
     const head = (s) => {
       if (s.turn === turn) return '';
       turn = s.turn;
       return `<div class="tr-turn">Turn ${turn}<span>${esc(TURNS[turn])}</span></div>`;
     };
-    if (v === 'built') for (const s of vis) h += head(s) + stepRow(s, hl);
-    else if (v === 'lanes') {
-      const L = laneMap(all);
-      style = ` style="--lanes:${Math.max(0, L.count - 1)}"`;
-      for (const s of vis) h += head(s) + stepRow(s, hl, { dedupe: true, lane: s.agent ? L.lane[s.agent] || 0 : null });
-    } else if (v === 'ledger') for (const s of vis) {
-      if (s.agent) continue;
-      h += head(s) + ledgerRow(s, hl);
-      const kids = s.kind === 'agent' ? vis.filter(k => k.agent === s.id) : [];
-      if (kids.length) h += `<div class="tr-nest" role="group" aria-label="${escA(s.tool)} steps">${kids.map(k => ledgerRow(k, hl)).join('')}</div>`;
-    }
-    else if (S.trFilter !== 'all') {
-      const emit = (s) => stepRow(s, hl, { dedupe: true, lane: s.agent ? 0 : null })
+    if (S.trFilter !== 'all') {
+      const emit = (s) => stepRow(s, hl)
         + (s.kind === 'agent' ? vis.filter(k => k.agent === s.id).map(emit).join('') : '');
       for (const s of vis) if (!s.agent) h += head(s) + emit(s);
     }
     else h = foldedRows(all, hl, head);
-    return `<div class="ch-body tr-body tr-v-${v}" data-trbody data-spine="${v}">
-        <div class="tr-spine ${S.trFocus ? 'tr-focus' : S.sel ? 'tr-dim' : ''}"${style}><svg class="tr-arcs" aria-hidden="true"></svg>${h}</div>
+    return `<div class="ch-body tr-body" data-trbody>
+        <div class="tr-spine ${S.trFocus ? 'tr-focus' : S.sel ? 'tr-dim' : ''}"><svg class="tr-arcs" aria-hidden="true"></svg>${h}</div>
         <button class="tr-jump${S.follow ? '' : ' show'}" data-trfollow>↓ Follow live</button>
       </div>`;
   }
@@ -5574,23 +5498,18 @@ unpersisted, since session ids churn.`;
     const box = sp.getBoundingClientRect(), pos = {};
     const mid = (el) => { const d = el.getBoundingClientRect(); return [d.left - box.left + d.width / 2, d.top - box.top + d.height / 2]; };
     sp.querySelectorAll('.tr-row').forEach(r => { pos[r.dataset.trn] = mid(r.querySelector('.tr-dot')); });
-    /* folded: a step hidden in a fold answers at its summary's chevron */
+    /* a step hidden in a fold answers at its summary's toggle */
     sp.querySelectorAll('.tr-sum').forEach(r => { const c = mid(r.querySelector('.tr-dot')); r.dataset.members.split(' ').forEach(id => { if (!pos[id]) pos[id] = c; }); });
     svg.setAttribute('width', box.width); svg.setAttribute('height', box.height);
     let p = '';
-    const spine = sp.parentElement.dataset.spine;
     const main = delivered().filter(s => pos[s.id] && !s.agent);
     for (let i = 1; i < main.length; i++) if (main[i].turn === main[i - 1].turn) {
       const a = pos[main[i - 1].id], b = pos[main[i].id];
       p += `<path d="M${a[0]} ${a[1]}L${b[0]} ${b[1]}"${a[0] === b[0] ? ` data-vx="${a[0]}" data-vy="${a[1]} ${b[1]}"` : ''} stroke="var(--border-strong)" stroke-width="2"/>`;
     }
-    if (spine === 'built') delivered().filter(s => s.agent && pos[s.id] && pos[s.agent]).forEach(s => {
-      const a = pos[s.agent], b = pos[s.id];
-      p += `<path d="M${a[0]} ${a[1]}C${a[0]} ${b[1] - 6} ${a[0] + 4} ${b[1]} ${b[0]} ${b[1]}" fill="none" stroke="var(--magenta)" stroke-width="1.5" opacity=".55"/>`;
-    });
-    /* lanes and folded: one elbow off the Task dot, then one straight lane
-       down to the agent's last rendered child (or its summary row) */
-    else if (spine === 'lanes' || spine === 'folded') {
+    /* one elbow off each Task dot, then one straight lane down to the
+       agent's last rendered child (or its summary row) */
+    {
       const ends = {};
       sp.querySelectorAll('.tr-row[data-agent], .tr-sum.tr-sub').forEach(r => {
         const id = r.dataset.agent || r.dataset.trfold, [x, y] = mid(r.querySelector('.tr-dot'));
@@ -5843,9 +5762,6 @@ unpersisted, since session ids churn.`;
       <span class="vsp"></span>
       <span class="tag">data</span>
       ${[['sample', 'sample'], ['long', 'many subagents']].map(([k, l]) => `<button data-trdata="${k}" aria-pressed="${S.data === k}">${l}</button>`).join('')}
-      <span class="vsp"></span>
-      <span class="tag">spine</span>
-      ${SPINES.map(([k, l]) => `<button data-trspine="${k}" aria-pressed="${S.spine === k}">${l}</button>`).join('')}
     </div>`;
 
   const stage = () => `<div class="ch-stage${S.mode === 'trace' ? ' tr-mode' : ''}">
@@ -5897,7 +5813,6 @@ unpersisted, since session ids churn.`;
       if (S.replaying) stopReplay();
       S.data = el.dataset.trdata; useData(S.data); resetTrace(); S.mode = 'trace';
     }
-    else if ((el = hit('[data-trspine]'))) { S.spine = el.dataset.trspine; S.mode = 'trace'; }
     else if ((el = hit('[data-trtick]'))) { pick(el.dataset.trtick); S.open.add(el.dataset.trkey); S.closed.delete(el.dataset.trkey); }
     else if ((el = hit('[data-trfold]'))) {
       const k = el.dataset.trfold, btn = root.querySelector(`.tr-fold[data-trfold="${k}"]`);
