@@ -70,6 +70,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/sessions` | the poll snapshot: sessions + totals + usage bars (`?limit=&lookback=&active=` override the scan) |
 | `GET /api/sessions/:id` | one session's subagent timeline |
 | `GET /api/sessions/:id/chat` | paged chat history (byte-offset cursors) |
+| `GET /api/sessions/:id/trace` | the causal trace: steps with why-links (`?after=<rev>&epoch=` live tail) |
 | `GET /api/sessions/:id/question` | pending remote question, if any |
 | `POST /api/sessions/:id/answer` | deliver a remote answer (write path) |
 | `POST /api/questions/wait` | the hook's held-open wait (write path) |
@@ -115,7 +116,7 @@ prod — the "production only" in the table above is about what is *useful* ther
 what the route will answer.
 
 ⚠️ Route order in `index.ts` is load-bearing: the `:id` detail regex would swallow
-`/api/sessions/:id/chat|question|answer|plan|plan-answer|stop|message|message-answer`, so
+`/api/sessions/:id/chat|trace|question|answer|plan|plan-answer|stop|message|message-answer`, so
 all of those matches sit above it.
 
 ⚠️ Every `:id` route decodes its segment through `decodePath` in `index.ts`, never
@@ -170,6 +171,8 @@ server/
   lib/tasks.ts    whole-file fold of the plan signals and TaskCreate/TaskUpdate → Session.tasks / taskPlan (plan wins), incremental by byte offset (the creates sit below the 256 KB tail)
   lib/plan-progress.ts  pure half of plan progress: signals from one tool_use input, the plan file's `Task N:` headings, the composed rows
   lib/chat.ts     byte-offset paged chat history
+  lib/trace.ts    TraceBuilder (transcript records → Trace steps) + `readTrace`: an LRU of 8 builders, time-ordered ingest of the main file and linked subagent files
+  lib/trace-why.ts  the eight rules that infer which earlier steps led to a step (`inferWhy`)
   lib/usage.ts    account 5h/weekly limits from Anthropic (OAuth) — the other
                   outbound call
   lib/usage-pace.ts  utilization sample ring → burn rate + projected 100% per window
@@ -241,7 +244,8 @@ client/src/
                   dismiss primitive), sessions/ (atoms, Expanded, EmptyState, AsideStrip
                   — the phone's one-bar aside — and the five views: Board, List, Split,
                   Tiles, Triage), SessionDetail (the subagent timeline),
-                  ChatDrawer, TasksCard (the sidecar's checklist card and its phone fold), QuestionPanel, PlanPanel,
+                  ChatDrawer (Chat | Trace), TraceSpine (the Trace step spine and its cause arcs), TraceInspector (the picked step's sidecar card),
+                  TasksCard (the sidecar's checklist card and its phone fold), QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   MicButton, SpawnPanel, PinPicker (the launch sheet's older projects to
                   pin), ResumePanel, PermissionBanner,
@@ -256,6 +260,7 @@ client/src/
                   chrome the tabs draw, and
                   ReadingAids — the ⓘ button they both render), settings/
   hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
+                  useSessionTrace (the Trace poll: full once, then `?after=<rev>`),
                   useConfigs, useConfigsScope (the scope + the one index
                   fetch, shared by the rail's tree and the page), useAnalytics,
                   useUsageProfile, useUsageRates, useUsageHistory, usePendingQuestion, usePendingPlan,
@@ -269,7 +274,7 @@ client/src/
                   sessions), useBackClose, useHideOnScroll (the phone top bar's
                   auto-hide), useNarrow (the one JS read of the `md` breakpoint),
                   useStuckStrip (when the phone's aside strip pins)
-  lib/            filterSort, analyticsFilterSort, chatFilter, markdown, configsEntries,
+  lib/            filterSort, analyticsFilterSort, chatFilter, trace (the step merge, cause walk and filter), markdown, configsEntries,
                   format, settings,
                   sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
@@ -335,6 +340,7 @@ that area:
 
 - [sessions](subsystems/sessions.md) — session rows, the status machine, subagent detail
 - [chat](subsystems/chat.md) — the chat drawer + byte-offset transcript tail
+- [trace](subsystems/trace.md) — the drawer's Trace mode: a session's tool calls as steps, with the earlier steps that led to each
 - [remote-answer](subsystems/remote-answer.md) — answering `AskUserQuestion` remotely (the first write path)
 - [remote-plan](subsystems/remote-plan.md) — sending an `ExitPlanMode` plan back for revision (reject-only, by upstream design)
 - [remote-message](subsystems/remote-message.md) — replying into a finished, away-from-keyboard turn (the third write path)

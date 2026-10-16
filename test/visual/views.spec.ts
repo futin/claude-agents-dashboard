@@ -6,10 +6,11 @@ import { SECTIONS, type Section } from '../../client/src/lib/sections.js';
 import type { ThemeId } from '../../client/src/lib/settings.js';
 
 import { FIXTURE_SESSION_ID } from './fixtures/index.js';
+import { TRACE_IDS } from './fixtures/session-trace.js';
 import { gitSessions } from './fixtures/git-sessions.js';
 import { pinsWithGone } from './fixtures/pins.js';
 import { expect, test } from './harness.js';
-import { stage, type StageOpts } from './stage.js';
+import { isReady, stage, type StageOpts } from './stage.js';
 import { DAYLIGHT_TIERS } from './tiers.js';
 
 interface ShotCase extends StageOpts {
@@ -60,8 +61,14 @@ const CASES: ShotCase[] = [
   { ...PROJ, width: 375, storage: { 'management.projectsLayout': 'lists' }, kind: 'projects-lists' }
 ];
 
-/** 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts. A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered. */
+/** 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts + 2 Trace shots (below). A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered. */
 const EXPECTED_SHOTS = 84;
+
+/** The drawer's Trace mode with a step picked — not in `CASES`, because each needs a click first. 1280 picks a row (a retry, so the arcs run back to its failure); 375 follows a chat tool line's `why?`. */
+const TRACE_SHOTS = [
+  { width: 1280, pick: 'row' as const, step: 'toolu_11' },
+  { width: 375, pick: 'why' as const, step: TRACE_IDS.editLimiter }
+];
 
 const title = (c: ShotCase): string => `${c.section} · ${c.theme} · ${c.width} · ${c.kind}`;
 
@@ -73,5 +80,26 @@ for (const c of CASES) {
   test(title(c), async ({ page }) => {
     await stage(page, c);
     await expect(page).toHaveScreenshot(title(c).replaceAll(' · ', '-') + '.png', { fullPage: true });
+  });
+}
+
+for (const t of TRACE_SHOTS) {
+  const name = `sessions-daylight-${t.width}-trace`;
+  test(`sessions · daylight · ${t.width} · trace (${t.pick})`, async ({ page }) => {
+    await stage(page, { section: 'sessions', theme: 'daylight', width: t.width, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID });
+    const drawer = page.locator('aside.chat');
+    if (t.pick === 'why') {
+      // The last tool line in the transcript is the Edit of the limiter; its `why?` opens that step in Trace.
+      await drawer.locator('.cmsg-tool.has-why').last().getByRole('button', { name: 'why?' }).click();
+    } else {
+      await drawer.getByRole('tab', { name: 'Trace' }).click();
+      await drawer.locator(`[data-trn="${t.step}"]`).click();
+    }
+    const picked = drawer.locator(`.tr-row.tr-on[data-trn="${t.step}"]`);
+    await expect(picked).toBeVisible();
+    // The arcs are drawn into the SVG after layout; a picked step with causes has at least one.
+    await expect(drawer.locator('.tr-arcs path').first()).toBeAttached();
+    await expect.poll(() => isReady(page)).toBe(true);
+    await expect(page).toHaveScreenshot(name + '.png', { fullPage: true });
   });
 }

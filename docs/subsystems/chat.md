@@ -8,7 +8,7 @@ at the shell radius — so the scrim is a real exit at every width above `md` (7
 that it is full-screen, because a 1080px modal with margins does not fit a phone.
 
 **Two columns inside it** ([DESIGN.md](../../.claude/DESIGN.md) §8.6, mock `#chat`). The head
-carries the session name, the project pill and ✕. A 290px **sidecar** on the subtle ground
+carries the session name, the project pill, the **Chat | Trace** switch and ✕ (the switch sits after the spacer, beside ✕). A 290px **sidecar** on the subtle ground
 carries everything the head used to: the live context reading as a metric block (percent,
 `tokens / window`, a track, amber at the same 70% threshold the list row uses), then a facts
 list — project, branch, model, surface, messages loaded, current tool. Below `md` the sidecar
@@ -77,10 +77,25 @@ them load-bearing:
 - One layer rather than five, so the panels keep stacking in normal flow inside it and the
   layer — not each panel — is what caps and scrolls.
 
+## Trace mode
+
+The switch in the head turns the transcript column into the **Trace** spine, the sidecar's Tasks card into the step inspector, and the foot's `All / Text / You`
+filter into the step filter (`All / Edits / Fails / You`, plus `Only this step's why`). The view is component state (`'chat' | 'trace'`) and is not persisted:
+the modal always opens in Chat. The Context card, the pinned panels and `--pinned-h` serve both views, and the spine pads under the pinned layer the way the
+transcript does. Coming back to Chat remounts the transcript, which re-anchors to the live tail like a filter switch.
+
+`useSessionTrace` polls only while `view === 'trace'`, at the same `refreshMs` as the chat, so a drawer left in Chat never reads the trace. Everything about
+the steps, the endpoint and the `why` rules is in [trace](trace.md); this doc owns only the seam.
+
+**A chat tool line can jump there.** `ChatToolCall.id` is the `tool_use` id, which is also the key of that call's Trace step (`TraceStep.id`). A tool line with
+an id gets a `why?` button (`.cmsg-why`) that sets the view to Trace with that step picked and following off. The line's name and detail shrink and ellipsise
+together and the button never shrinks, so a long path cannot push it out of the row. A line with no id, or a body-bearing tool (`ExitPlanMode`,
+`AskUserQuestion`, which render as `.cmsg-plan` blocks), has no button.
+
 ## What's shown
 
 `parseChatRecord` (pure + unit-tested) keeps user text and assistant text, plus one
-compact line per `tool_use` (`{ name, detail }`, detail from the **reused** `describeTool`
+compact line per `tool_use` (`{ id, name, detail }`, `id` the `tool_use` id when the block carries one, detail from the **reused** `describeTool`
 in `transcript.ts`). Exception: for `ExitPlanMode` and `AskUserQuestion` the input *is*
 conversational content, so the full body (the plan markdown / questions+options composed
 as markdown) rides along as `ChatToolCall.body` — capped at `TOOL_BODY_CAP` (20 KB by
@@ -279,7 +294,10 @@ control since nothing outside that terminal can answer it.
     - client/src/components/ResumePanel.tsx
     - client/src/components/PermissionBanner.tsx
     - client/src/components/Markdown.tsx
+    - client/src/components/TraceSpine.tsx
+    - client/src/components/TraceInspector.tsx
     - client/src/hooks/useSessionChat.ts
+    - client/src/hooks/useSessionTrace.ts
     - client/src/hooks/useBackClose.ts
     - client/src/lib/backClose.ts
     - client/src/lib/chatFilter.ts

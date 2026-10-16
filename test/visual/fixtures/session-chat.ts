@@ -2,6 +2,7 @@
 import type { ChatMessage, SessionChat } from '../../../shared/types.js';
 
 import { MIN, SEC, agoIso } from './epoch.js';
+import { TRACE_IDS } from './session-trace.js';
 import { SESSION_IDS } from './sessions.js';
 
 /** The first message's text — what a test looks for to prove the drawer opened on this fixture. */
@@ -14,15 +15,15 @@ const messages: ChatMessage[] = [
     at: 5 * MIN + 40 * SEC,
     text: "I'll look at how the orders router is mounted and whether there's existing middleware to hang a limiter on.",
     tools: [
-      { name: 'Grep', detail: 'router.use' },
-      { name: 'Read', detail: 'src/routes/orders.ts' }
+      { id: TRACE_IDS.grepRouter, name: 'Grep', detail: 'router.use' },
+      { id: TRACE_IDS.readOrders, name: 'Read', detail: 'src/routes/orders.ts' }
     ]
   },
   {
     role: 'assistant',
     at: 3 * MIN,
     text: 'There is no limiter yet. I will add a token-bucket middleware keyed on the API client id, with a `Retry-After` header on 429.',
-    tools: [{ name: 'Write', detail: 'src/middleware/rateLimit.ts' }]
+    tools: [{ id: TRACE_IDS.writeLimiter, name: 'Write', detail: 'src/middleware/rateLimit.ts' }]
   },
   { role: 'user', at: 2 * MIN, text: 'Make the limit configurable per environment.', tools: [] },
   {
@@ -30,8 +31,8 @@ const messages: ChatMessage[] = [
     at: 4 * SEC,
     text: 'Reading `RATE_LIMIT_PER_MIN` from config with 60 as the default, and wiring it into the middleware now.',
     tools: [
-      { name: 'Edit', detail: 'src/config.ts' },
-      { name: 'Edit', detail: 'src/middleware/rateLimit.ts' }
+      { id: TRACE_IDS.editConfig, name: 'Edit', detail: 'src/config.ts' },
+      { id: TRACE_IDS.editLimiter, name: 'Edit', detail: 'src/middleware/rateLimit.ts' }
     ]
   }
 ].map((m, i) => ({

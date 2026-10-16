@@ -10,7 +10,7 @@ of `pnpm test`. Design and plan: [2026-10-01-visual-regression-design.md](../sup
 
 | Spec | Cases | What |
 |---|---|---|
-| `views.spec.ts` | 84 shots + 1 count check | each of the 6 `SECTIONS` views at 12 states, plus Sessions with the chat drawer open (`?session=`) at 375 and 1280 and in the Triage layout at 375 and 1280, Git's Matrix (1280), Inspector and Branches (375 and 1280), and Projects' Tiles, Columns (1280) and Lists (375) with a gone pin |
+| `views.spec.ts` | 86 shots + 1 count check | each of the 6 `SECTIONS` views at 12 states, plus Sessions with the chat drawer open (`?session=`) at 375 and 1280 and in the Triage layout at 375 and 1280, Git's Matrix (1280), Inspector and Branches (375 and 1280), and Projects' Tiles, Columns (1280) and Lists (375) with a gone pin, and the drawer's Trace mode with a step picked (375 and 1280) |
 | `layout.spec.ts` | 48 overflow + 6 contrast | overflow: 6 views × 8 daylight tiers; contrast: 6 views, daylight, 1280, axe `color-contrast` |
 | `stage.spec.ts` | 16 | the staging itself: seeded theme beats the default, clock, UTC, DPR 1, font loaded, deep link, every section reachable |
 | `scroll-hit.spec.ts` | 9 + 1 mirror | Management › Projects with 60 offered projects, Tiles / Columns / Lists at 1280, 1536 and 1921 (`full`): scrolled to the bottom, every on-screen Pin must take the hit and `.wrap` must hold the whole view (#194); the mirror checks Analytics stays pinned to the viewport |
@@ -18,7 +18,7 @@ of `pnpm test`. Design and plan: [2026-10-01-visual-regression-design.md](../sup
 
 The 12 states per view are daylight at the six `fixed` tiers (375, 640, 768, 1024, 1280, 1536 — each tier's `min-width` from [breakpoints](breakpoints.md),
 375 for the phone base) and the two `full` tiers (1537, 1921), plus midnight, amber, graphite and nightshift at 1280. 12 × 6 + 2 + 2 + 5 + 3 = 84;
-`views.spec.ts` asserts that number, so a new `SECTIONS` entry fails until the matrix and its baselines are reconsidered. Comparison is zero-tolerance:
+`views.spec.ts` asserts that number, so a new `SECTIONS` entry fails until the matrix and its baselines are reconsidered. The two Trace shots sit outside that count: each needs a click first. Comparison is zero-tolerance:
 `maxDiffPixels: 0`, `threshold: 0`, animations disabled, caret hidden, full page.
 
 The Sessions fixture's working session runs a 13-task plan (7 done, Task 8 running) under a basename long enough to ellipsise, and the idle one holds a
@@ -38,8 +38,13 @@ machine's transcripts. The mock matches on pathname only — the query string is
 answers 404, any non-GET 405, and any off-origin request is aborted; all three are recorded, and `harness.ts`'s auto fixture fails the case afterwards, so a
 case cannot pass on an error or empty state. Google Fonts are served from `test/visual/fonts/` (Hanken Grotesk, OFL — see its README).
 
-A fixture body may be a function of the request URL. One uses it: the chat transcript returns no messages when `?after=` is present, because the drawer's
-tail poll would otherwise append the whole transcript again on every tick.
+A fixture body may be a function of the request URL. Two use it: the chat transcript returns no messages when `?after=` is present, because the drawer's
+tail poll would otherwise append the whole transcript again on every tick, and the trace answers its `?after=` poll with no steps for the same reason.
+
+The Trace fixture (`fixtures/session-trace.ts`) is two turns on the working session's rate-limiting task: a retry after a failed typecheck, a subagent, an
+approved plan with readable thinking, a commit, and an `AskUserQuestion` still waiting. Its `at`s are `agoIso` offsets from `EPOCH`, absolute ISO strings, so
+the inspector's local-time fact never moves. The chat fixture's tool lines carry the matching step ids (`TRACE_IDS`), which is also why every chat drawer
+shot now shows a `why?` on its tool lines and the switch in its head. The 1280 Trace shot picks a row; the 375 one follows a tool line's `why?`.
 
 `stage.ts` puts a page into a known state: fixed clock at `EPOCH` (2026-09-30T14:00:00Z, `fixtures/epoch.ts`), UTC, `en-US`, DPR 1, sRGB, the viewport at
 the case's width × 900, and the full `Settings` object seeded into `localStorage` (theme, landing section, content width; everything else at its default).
@@ -111,6 +116,7 @@ Dark-theme contrast is off: those themes are due for a redesign, and recording t
     - test/visual/contrast-known.ts
     - test/visual/tiers.ts
     - test/visual/fixtures/index.ts
+    - test/visual/fixtures/session-trace.ts
   kind: subsystem
   verified: 7a0857fcaa4cec51b5cf97f52daaa2be71c97fec
 -->

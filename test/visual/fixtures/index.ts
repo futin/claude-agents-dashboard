@@ -14,6 +14,7 @@ import { sessionDetail } from './session-detail.js';
 import { sessionMessage } from './session-message.js';
 import { sessionPlan } from './session-plan.js';
 import { sessionQuestion } from './session-question.js';
+import { sessionTrace } from './session-trace.js';
 import { SESSION_IDS, sessions } from './sessions.js';
 import { settings } from './settings.js';
 import { usageHistory } from './usage-history.js';
@@ -30,6 +31,8 @@ export const fixtures: FixtureMap = {
   '/api/sessions/:id': sessionDetail,
   // The tail poll (`?after=<cursor>`) appends what it gets; answering it with the first page again would grow the drawer every 3s.
   '/api/sessions/:id/chat': (url: URL) => url.searchParams.has('after') ? { ...sessionChat, messages: [] } : sessionChat,
+  // The tail poll answers "nothing new": the full trace again would be merged by id, but a stable body keeps the shot from depending on the merge.
+  '/api/sessions/:id/trace': (url: URL) => url.searchParams.has('after') ? { ...sessionTrace, steps: [] } : sessionTrace,
   '/api/sessions/:id/plan': sessionPlan,
   '/api/sessions/:id/message': sessionMessage,
   '/api/sessions/:id/question': sessionQuestion,
