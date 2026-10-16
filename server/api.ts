@@ -1461,7 +1461,9 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
       if (live?.has(rid)) {
         return sendJson(res, 409, { error: 'session is still running' });
       }
-      if (listLaunching().some(e => e.sessionId === rid)) {
+      // `'launching'` only, as at the cap above: a `failed` row for this id lingers
+      // FAIL_TTL_MS for display, holds no process, and must not refuse a retry.
+      if (listLaunching().some(e => e.sessionId === rid && e.state === 'launching')) {
         return sendJson(res, 409, { error: 'already resuming' });
       }
       const ref = { dirName: t.dirName, name: nodePath.basename(tr.cwd), path: tr.cwd, lastActiveMs: t.mtimeMs };
