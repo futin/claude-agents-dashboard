@@ -377,7 +377,7 @@ now differs. Three deliberate limits:
 - **Keys pinned in `process.env` are skipped.** They beat the file whatever it says, so a
   restart would not move them and naming them would be false advice.
 
-It surfaces in two places: `GET /api/settings` carries `staleEnvKeys` for the Settings page,
+It surfaces in two places: every `/api/settings` reply — GET and the POST a save answers with, both built by `settingsBody` — carries `staleEnvKeys` for the Settings page,
 and `sendTest` appends the push-relevant subset to its own answer — because the string
 someone reads while asking "why did nothing arrive?" is that one.
 

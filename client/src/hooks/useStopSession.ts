@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
 
 export interface StopControl {
   /**
@@ -17,9 +18,8 @@ export interface StopControl {
 
 /**
  * Stops a session this dashboard spawned, with the same Bearer-token pattern as
- * {@link useSpawn}: one shared `usePersistedState('dashboard.answerToken')` call
- * — not a second, independent one, which would not see a token saved elsewhere
- * until this hook's component remounted — and a `403 → needsToken` branch.
+ * {@link useSpawn}: the page's one shared `useAnswerToken` copy, so a token saved
+ * in any other panel is sent here without a remount, and a `403 → needsToken` branch.
  *
  * Every other non-2xx feeds `error` from the server's JSON body, because a
  * refused stop has a reason worth showing: a 404 here means the server no longer
@@ -30,14 +30,13 @@ export function useStopSession(): StopControl {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsToken, setNeedsToken] = useState(false);
-  const [token] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token] = useAnswerToken();
 
   const stop = useCallback(async (sessionId: string, force = false): Promise<boolean> => {
     if (pending) return false;
     setPending(true);
     setError(null);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/stop`, {
         method: 'POST', headers, body: JSON.stringify({ force })

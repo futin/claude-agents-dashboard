@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { fetchFailureOf } from '../lib/gitClock';
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
 
 export interface GitFetchControl {
   /** Fetch all now: `POST /api/git-fetch`. A no-op while this tab's own POST is out, and while a token the server wants is not stored. */
@@ -19,7 +20,7 @@ export interface GitFetchControl {
  * clock either way. The POST answers once the fetch has *finished* (the server awaits `fetchAll`), so the poll after it already sees the new refs.
  */
 export function useGitFetch(tokenRequired: boolean | undefined, onDone: () => void): GitFetchControl {
-  const [token] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token] = useAnswerToken();
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<'refused' | 'failed' | null>(null);
   const pendingRef = useRef(false);
@@ -34,8 +35,7 @@ export function useGitFetch(tokenRequired: boolean | undefined, onDone: () => vo
     if (pendingRef.current || (tokenRequired === true && !tokenStored)) return;
     pendingRef.current = true;
     setPending(true);
-    const headers: Record<string, string> = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token);
     fetch('/api/git-fetch', { method: 'POST', headers })
       .then(res => setFailure(res.ok ? null : fetchFailureOf(res.status)), () => setFailure(fetchFailureOf('network')))
       .finally(() => {

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 
 import { NumberField, Segmented, Select, SettingsBand, SettingsGroup, SettingsRow } from './SettingsRow';
 import { useNarrow } from '../../hooks/useNarrow';
-import { usePersistedState } from '../../hooks/usePersistedState';
+import { useAnswerToken } from '../../hooks/useAnswerToken';
+import { authHeaders } from '../../lib/answerToken';
 import { useRemoteAnswer } from '../../hooks/useRemoteAnswer';
 import { useServerSettings } from '../../hooks/useServerSettings';
 import { useSettings } from '../../hooks/useSettings';
@@ -68,7 +69,7 @@ export default function SettingsView() {
   const { settings, update, reset } = useSettings();
   const server = useServerSettings();
   const remote = useRemoteAnswer();
-  const [token, setToken] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token, setToken] = useAnswerToken();
   const [confirmReset, setConfirmReset] = useState(false);
   const [pushTestResult, setPushTestResult] = useState<string | null>(null);
   const [webTestResult, setWebTestResult] = useState<string | null>(null);
@@ -152,8 +153,7 @@ export default function SettingsView() {
    */
   async function sendTestPush(): Promise<void> {
     setPushTestResult('sending…');
-    const headers: Record<string, string> = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token);
     try {
       const res = await fetch('/api/notify/test', { method: 'POST', headers });
       const body = (await res.json()) as { outcome?: string; error?: string };
