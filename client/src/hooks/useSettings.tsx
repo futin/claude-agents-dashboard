@@ -16,7 +16,7 @@ const SettingsContext = createContext<SettingsControl | null>(null);
 /**
  * View-state keys the Reset button clears alongside the settings themselves.
  *
- * Every `usePersistedState` key in the app except `dashboard.answerToken`,
+ * Every persisted localStorage key in the app except `dashboard.answerToken`,
  * which is a credential rather than a view state: Reset is a "put the board
  * back the way it shipped" button, not a sign-out, and clearing the token would
  * silently disarm every write path (see remote-answer.md).

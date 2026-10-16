@@ -230,7 +230,9 @@ gates **both** POSTs with `Authorization: Bearer`; the `GET question` route stay
 since it reveals no more than the transcript already does. The hook reads the token from
 `~/.claude/hooks/dashboard-token` (user-created — a server-generated file would fight the
 read-only Docker mount; `chmod 600`); the browser persists it as `dashboard.answerToken`
-and asks for it once. A refused write logs one stderr line — `rejected write: <METHOD>
+and asks for it once. Every client caller reads it through `useAnswerToken`, one module-level store in `client/src/lib/answerToken.ts` with a `storage`
+listener, and builds the header with that file's `authHeaders` — so a token entered in one panel reaches every hook mounted beside it, where twelve
+private `usePersistedState` copies once each needed a remount to see it (#200). A refused write logs one stderr line — `rejected write: <METHOD>
 <path> (bad or missing token)`, method and path only, never the token, the header or the
 query string, and throttled to once per path per minute — because the hooks swallow a 403
 (`curl -sf` then `exit 0`), so nothing otherwise distinguished a missing token file from a
