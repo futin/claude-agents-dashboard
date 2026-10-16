@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
 import type { SpawnRequest, SpawnResponse } from '../../../shared/types';
 
 export interface SpawnControl {
@@ -12,20 +13,16 @@ export interface SpawnControl {
   /** Set when the server refused the token — same meaning as useRemoteAnswer's flag. */
   needsToken: boolean;
   /**
-   * Saves a freshly-entered token. `launch` reads the very same persisted
-   * state this setter writes (one `usePersistedState` call, shared), so a
-   * retry right after saving actually sends it — the same "one dashboard, one
-   * token" reasoning `usePendingMessage` documents. A second, independent
-   * `usePersistedState('dashboard.answerToken', …)` call in the panel would
-   * not see this write until the panel remounted.
+   * Saves a freshly-entered token into the page's one shared copy (`useAnswerToken`), so a retry right after saving actually sends it, and so does every
+   * other hook mounted beside this one.
    */
   setToken: (t: string) => void;
 }
 
 /**
  * Starts a new headless `claude -p` session: `POST /api/spawn`, with the same
- * Bearer-token pattern as `useRemoteAnswer`'s `toggle` — the `dashboard.answerToken`
- * persisted key, and a `403 → needsToken` branch. Unlike `toggle`, a failed
+ * Bearer-token pattern as `useRemoteAnswer`'s `toggle` — the shared `useAnswerToken`
+ * copy, and a `403 → needsToken` branch. Unlike `toggle`, a failed
  * launch has a reason worth showing (unknown project, empty prompt, spawn
  * unavailable, …), so every other non-2xx status feeds `error` from the
  * server's JSON body instead of being silently ignored.
@@ -34,14 +31,13 @@ export function useSpawn(): SpawnControl {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsToken, setNeedsToken] = useState(false);
-  const [token, setToken] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token, setToken] = useAnswerToken();
 
   const launch = useCallback(async (req: SpawnRequest): Promise<string | null> => {
     if (pending) return null;
     setPending(true);
     setError(null);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
       const res = await fetch('/api/spawn', {
         method: 'POST', headers, body: JSON.stringify(req)

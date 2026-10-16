@@ -60,7 +60,8 @@ override it (see `dashboard.section` below).
   `dashboard.analyticsLayout` (which of that tab's two shapes the switcher was left on,
   a bare `AnLayout` string guarded by `isAnLayout` on read — both see
   [analytics](analytics.md));
-  `dashboard.answerToken` (see [remote-answer](remote-answer.md)); `configs.scope`,
+  `dashboard.answerToken` (same JSON shape, but read through `useAnswerToken`'s shared store rather than `usePersistedState`, so every reader sees one
+  write — see [remote-answer](remote-answer.md)); `configs.scope`,
   `configs.type` (which of the type column's rows the item column is showing) and
   `configs.collapsed` (see [configs](configs.md) — all three resolve during render,
   so a scope that aged out, a type the filter emptied and a sub-group that no longer exists

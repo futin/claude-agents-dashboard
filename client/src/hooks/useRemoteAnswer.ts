@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
 import type { HealthResponse, RemoteAnswerState } from '../../../shared/types';
 
 /** Slow poll: the switch only changes when someone flips it. */
@@ -25,7 +26,7 @@ export function useRemoteAnswer(): RemoteAnswerControl {
   const [state, setState] = useState<HealthResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [needsToken, setNeedsToken] = useState(false);
-  const [token] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token] = useAnswerToken();
 
   useEffect(() => {
     let live = true;
@@ -46,8 +47,7 @@ export function useRemoteAnswer(): RemoteAnswerControl {
   const toggle = useCallback(async () => {
     if (!state?.available || busy) return;
     setBusy(true);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
       const res = await fetch('/api/remote-answer', {
         method: 'POST', headers, body: JSON.stringify({ enabled: !state.enabled })
