@@ -6,7 +6,7 @@
  * poll can ask only for what moved. Claude Code writes each assistant content block (text, thinking, tool_use) as its own record sharing `message.id`, and
  * a tool's result arrives later as a `user` record holding a `tool_result` block; a record holding several blocks folds the same way.
  *
- * Field rules are the chat-trace context's Decisions 5, 6, 7 and 11-15 (`.superpowers/sdd/2026-10-16-chat-trace/context.md`).
+ * Field rules and the contract are documented in `docs/subsystems/trace.md`.
  *
  * `readTrace` (end of file) is the file side: a small LRU of builders keyed by transcript path, each advanced over the complete new lines of the main
  * file and of every linked subagent file (Decisions 1-4 and 9).
@@ -463,7 +463,8 @@ function advance(file: string, projectPath: string | null, fresh: boolean): Trac
 
   // Array.prototype.sort is stable: equal keys keep read order (main first, then each subagent file in turn).
   parsed.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  entry.builder.ingest(parsed.map(({ rec, scope }) => ({ rec, scope })));
+  // A throw mid-fold leaves the builder partly advanced: drop it so the next poll rebuilds from the start (new epoch).
+  try { entry.builder.ingest(parsed.map(({ rec, scope }) => ({ rec, scope }))); } catch (e) { cache.delete(file); throw e; }
   entry.offset = mainOffset;
   for (const [sub, n] of subOffsets) entry.subs.get(sub)!.offset = n;
 
@@ -474,9 +475,9 @@ function advance(file: string, projectPath: string | null, fresh: boolean): Trac
 }
 
 /**
- * The session's trace, advanced over whatever was appended since the last call. No `after`: the newest `TRACE_STEP_CAP` steps plus `dropped`. A matching
- * `after`: the steps changed since `after.rev`. Another epoch, or `after.rev` past the builder's revision: the full answer with `reset` (Decision 1).
- * Null when the main file is unreadable.
+ * The session's trace, advanced over whatever was appended since the last call. No `after`: the newest `TRACE_STEP_CAP` steps, the prompt of each
+ * turn among them that fell outside, and `dropped` (the older steps left out). A matching `after`: the steps changed since `after.rev`. Another epoch,
+ * or `after.rev` past the builder's revision: the full answer with `reset` (Decision 1). Null when the main file is unreadable.
  */
 export function readTrace(file: string, projectPath: string | null, after?: { rev: number; epoch: string }): Omit<SessionTrace, 'id'> | null {
   const entry = advance(file, projectPath, false);
@@ -485,6 +486,9 @@ export function readTrace(file: string, projectPath: string | null, after?: { re
   const head = { cursor: b.rev, epoch: b.epoch, thinking: b.thinking() };
   if (after && after.epoch === b.epoch && after.rev <= b.rev) return { ...head, steps: b.changedSince(after.rev), dropped: 0 };
   const all = b.steps();
-  const steps = all.length > TRACE_STEP_CAP ? all.slice(all.length - TRACE_STEP_CAP) : all;
+  // Past the cap, a delivered turn whose prompt fell outside still gets that prompt, so its steps keep their `asked` cause and the turn its label.
+  const cut = Math.max(0, all.length - TRACE_STEP_CAP);
+  const turns = new Set(all.slice(cut).map((s) => s.turn));
+  const steps = cut === 0 ? all : all.filter((s, i) => i >= cut || (s.kind === 'prompt' && turns.has(s.turn)));
   return { ...head, steps, dropped: all.length - steps.length, ...(after ? { reset: true } : {}) };
 }

@@ -453,6 +453,46 @@ export function run(): number {
     assert.strictEqual(t.steps[499].id, 's519');
   })) p++; else f++;
 
+  if (test('26. a capped full read also carries the prompt of every turn it delivers; a wholly dropped turn stays dropped', () => {
+    resetTraceCache();
+    let i = 0;
+    const at = (): string => new Date(Date.UTC(2026, 9, 16, 10, 0, 0, 0) + i++ * 1000).toISOString();
+    const reads = (pre: string, n: number): Item[] => Array.from({ length: n }, (_, k) => use(pre + k, 'Read', { file_path: '/r/' + pre + k }, at(), 'm' + pre + k));
+    // Turn 1 (6 steps) is wholly outside the newest 500; turn 2's prompt and first 21 reads are too; turn 3 is inside.
+    const recs = [
+      prompt('pa', 'first', at()), ...reads('a', 5),
+      prompt('pb', 'second', at()), ...reads('b', 30),
+      prompt('pc', 'third', at()), ...reads('c', 490)
+    ];
+    const t = readTrace(fixture(...recs), null);
+    assert.ok(t);
+    assert.strictEqual(t.steps.length, 501);
+    assert.deepStrictEqual(t.steps.slice(0, 3).map((s) => [s.id, s.turn]), [['pb', 2], ['b21', 2], ['b22', 2]]);
+    assert.ok(!t.steps.some((s) => s.id === 'pa' || s.id === 'b20'));
+    assert.strictEqual(t.steps[500].id, 'c489');
+    assert.strictEqual(t.dropped, 27);
+    // `at` order holds across the added prompt.
+    assert.ok(t.steps.every((s, k) => k === 0 || t.steps[k - 1].at <= s.at));
+  })) p++; else f++;
+
+  if (test('27. an ingest that throws drops its cache entry, so the next read rebuilds with a new epoch', () => {
+    resetTraceCache();
+    const file = fixture(prompt('p1', 'go', T(1)), use('r1', 'Read', { file_path: '/r/a.ts' }, T(2), 'm1'));
+    const first = readTrace(file, null);
+    assert.ok(first);
+    append(file, result('r1', 'a'));
+    const orig = TraceBuilder.prototype.ingest;
+    TraceBuilder.prototype.ingest = function () { throw new Error('boom'); };
+    try { assert.throws(() => readTrace(file, null, { rev: first.cursor, epoch: first.epoch }), /boom/); }
+    finally { TraceBuilder.prototype.ingest = orig; }
+    const t = readTrace(file, null, { rev: first.cursor, epoch: first.epoch });
+    assert.ok(t);
+    assert.notStrictEqual(t.epoch, first.epoch);
+    assert.strictEqual(t.reset, true);
+    assert.deepStrictEqual(t.steps.map((s) => s.id), ['p1', 'r1']);
+    assert.strictEqual(t.steps[1].status, 'ok');
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }
