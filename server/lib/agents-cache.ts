@@ -47,8 +47,9 @@ interface CacheEntry {
 const MAX_ENTRIES = 32;
 const cache = new Map<string, CacheEntry>();
 
+// Stamped now, not 0: `evictIfNeeded` runs right after insertion, and a 0 would make the new entry the LRU pick, evicting itself.
 function freshEntry(): CacheEntry {
-  return { offset: 0, partial: Buffer.alloc(0), state: createScanState(), jobs: [], lastUsed: 0 };
+  return { offset: 0, partial: Buffer.alloc(0), state: createScanState(), jobs: [], lastUsed: Date.now() };
 }
 
 function consumeLine(state: ScanState, lineBuf: Buffer): void {
