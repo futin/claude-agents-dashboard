@@ -1867,8 +1867,11 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .tr-flag.you{background:var(--amber-tint);color:var(--amber-ink)}
 .tr-flag.think{background:color-mix(in srgb,var(--magenta) 13%,transparent);color:var(--magenta)}
 .tr-flag.sha{background:var(--mustard-tint);color:var(--mustard-ink)}
-/* the pinned layer floats over the body's bottom edge (z-index 2), so the jump rides above it */
-.tr-jump{position:sticky;bottom:calc(12px + var(--pinned-h,0px));display:none;margin:12px auto 0;width:max-content;border:0;border-radius:999px;background:var(--ink);color:var(--strip);padding:6px 14px;font-family:var(--font);font-size:12px;font-weight:500;box-shadow:0 8px 24px var(--shadow2);cursor:pointer;z-index:1}
+/* Sticky offsets count from inside the body's bottom padding (40px + --pinned-h), so
+   `bottom:-28px` lands the button 12px above the body's edge, or above the pinned layer when
+   one is up, with no second --pinned-h term. The matching -28px margin lets it rest at the same
+   spot at the tail instead of 40px up under the last row. */
+.tr-jump{position:sticky;bottom:-28px;display:none;margin:12px auto -28px;width:max-content;border:0;border-radius:999px;background:var(--ink);color:var(--strip);padding:6px 14px;font-family:var(--font);font-size:12px;font-weight:500;box-shadow:0 8px 24px var(--shadow2);cursor:pointer;z-index:1}
 .tr-jump.show{display:block}
 .chat-foot .tr-tog{flex:none;border:1px solid var(--hairline2);background:var(--strip);border-radius:999px;padding:3px 10px;font-family:var(--font);font-size:11.5px;color:var(--ink2);cursor:pointer}
 .chat-foot .tr-tog.on{background:var(--ink);border-color:var(--ink);color:var(--strip)}
