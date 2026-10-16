@@ -71,9 +71,16 @@ export function run(): number {
     ]))!;
     assert.strictEqual(m.text, 'Reading the file.'); // thinking is not text
     assert.deepStrictEqual(m.tools, [
-      { name: 'Read', detail: '/tmp/a.ts' },
-      { name: 'Task', detail: 'Explore: find X' }
+      { id: 't1', name: 'Read', detail: '/tmp/a.ts' },
+      { id: 't2', name: 'Task', detail: 'Explore: find X' }
     ]);
+  })) p++; else f++;
+
+  if (test('tool_use id carried onto the tool line', () => {
+    const m = parseChatRecord(asstRec('a1', [
+      { type: 'tool_use', id: 'toolu_x', name: 'Read', input: { file_path: '/r/a.ts' } }
+    ]))!;
+    assert.strictEqual(m.tools[0].id, 'toolu_x');
   })) p++; else f++;
 
   if (test('thinking-only assistant record dropped', () => {
@@ -153,13 +160,13 @@ export function run(): number {
   if (test('tool-only assistant record kept (no text)', () => {
     const m = parseChatRecord(asstRec('a1', [{ type: 'tool_use', id: 't1', name: 'Bash', input: { description: 'run tests' } }]))!;
     assert.strictEqual(m.text, '');
-    assert.deepStrictEqual(m.tools, [{ name: 'Bash', detail: 'run tests' }]);
+    assert.deepStrictEqual(m.tools, [{ id: 't1', name: 'Bash', detail: 'run tests' }]);
   })) p++; else f++;
 
   if (test('ExitPlanMode carries the full plan as body', () => {
     const plan = '# Plan\n\n- step one\n- step two';
     const m = parseChatRecord(asstRec('a1', [{ type: 'tool_use', id: 't1', name: 'ExitPlanMode', input: { plan } }]))!;
-    assert.deepStrictEqual(m.tools, [{ name: 'ExitPlanMode', detail: plan.slice(0, 80), body: plan }]);
+    assert.deepStrictEqual(m.tools, [{ id: 't1', name: 'ExitPlanMode', detail: plan.slice(0, 80), body: plan }]);
   })) p++; else f++;
 
   if (test('over-cap plan body truncated with flag', () => {

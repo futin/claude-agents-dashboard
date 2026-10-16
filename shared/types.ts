@@ -847,6 +847,8 @@ export interface SessionDetail {
 
 /** One tool call rendered as a compact line under an assistant message. */
 export interface ChatToolCall {
+  /** The `tool_use` id — the key of this call's Trace step (`TraceStep.id`). Absent on a block that carries none. */
+  id?: string;
   name: string;
   /** Short human label (`describeTool` in transcript.ts) — file path, pattern, command… */
   detail: string;
@@ -885,6 +887,78 @@ export interface SessionChat {
   /** `headOffset > 0` — there is history above the first message. */
   hasMore: boolean;
   /** The file shrank/rotated: the client's cursor is meaningless, refetch the tail. */
+  reset?: boolean;
+  /** Set only when the read failed or the id is unknown. */
+  error?: boolean;
+}
+
+/** What a Trace step is. Derived from the tool name; a user prompt is `prompt`. */
+export type TraceKind = 'prompt' | 'decide' | 'read' | 'edit' | 'bash' | 'agent';
+
+/** Why one step points at an earlier one: the relation drawn on the causal edge. */
+export type TraceRel = 'asked' | 'answer' | 'plan' | 'informed' | 'verifies' | 'retry' | 'delegated' | 'commits';
+
+/** A cause of a step: the earlier step's id and how it led here. */
+export interface TraceWhy {
+  /** `TraceStep.id` of the earlier step. */
+  id: string;
+  rel: TraceRel;
+}
+
+/** One node of the session's causal trace: a user prompt or a tool call, with what led to it. */
+export interface TraceStep {
+  /** The `tool_use` id (a prompt step: the record uuid). Matches `ChatToolCall.id`. */
+  id: string;
+  /** Which user prompt this step belongs to: 0 before the first prompt, then one per prompt. */
+  turn: number;
+  kind: TraceKind;
+  /** Tool name (`Prompt` for a prompt). An agent step reads `<name> · <subagent_type>` when the type is set. */
+  tool: string;
+  /** `describeTool` label; an agent step's `input.description`; a prompt step's text, capped at 300. */
+  detail: string;
+  /** The model's stated reason, first sentence, capped at 160 chars; null when it gave none. */
+  intent: string | null;
+  /** Where `intent` came from: the tool's `description` input, or the assistant text before the call. */
+  intentFrom: 'description' | 'text' | null;
+  /** Record timestamp (ISO); the previous step's when the record has none, `''` for the first. */
+  at: string;
+  /** `running` until the tool_result lands; null on a prompt. */
+  status: 'running' | 'ok' | 'error' | null;
+  /** One-line result (a Read: "<n> lines"; otherwise the first non-empty line, capped at 160); null while running. */
+  result: string | null;
+  /** AskUserQuestion: the chosen answers joined with ` · `. ExitPlanMode: `approved` or `rejected`. */
+  answer?: string;
+  /** A `git commit` Bash step: the first 7 hex chars of the new commit. */
+  sha?: string;
+  /** A subagent step: its agent id (`agent-<id>.jsonl`). */
+  agent?: string;
+  /** Subject of the task `in_progress` when the step landed. */
+  task?: string;
+  /** The earlier steps that led here, in rule order, deduplicated by id. */
+  why: TraceWhy[];
+  /** Thinking before the call: `text` when readable, `signature` when only the signature was recorded, else null. */
+  thinking: 'text' | 'signature' | null;
+  /** The readable thinking, joined, capped at 1200 chars; present only when `thinking === 'text'`. */
+  thinkingText?: string;
+}
+
+/**
+ * Payload of `GET /api/sessions/:id/trace` — the session's causal trace.
+ * `cursor` is the builder's revision, not a byte offset (subagent files have their own).
+ */
+export interface SessionTrace {
+  id: string;
+  /** Oldest-first. A full response carries the newest steps only (`dropped` counts the rest). */
+  steps: TraceStep[];
+  /** Builder revision; pass back as `?after=` for the live tail. */
+  cursor: number;
+  /** Builder identity. A client holding another epoch's cursor is answered with the full trace and `reset`. */
+  epoch: string;
+  /** Thinking blocks ingested: how many were recorded, and how many carried readable text. */
+  thinking: { recorded: number; readable: number };
+  /** Older steps left out of a full response by the cap. */
+  dropped: number;
+  /** The epoch changed or `after` ran past `cursor`: replace the steps, do not merge. */
   reset?: boolean;
   /** Set only when the read failed or the id is unknown. */
   error?: boolean;

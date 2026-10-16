@@ -134,6 +134,8 @@ export function parseChatRecord(rec: any, caps: ChatCaps = DEFAULT_CAPS): ChatMe
         text += (text ? '\n' : '') + b.text;
       } else if (b.type === 'tool_use' && typeof b.name === 'string') {
         const tool: ChatToolCall = { name: b.name, detail: describeTool(b) };
+        // The tool_use id lets a chat line point at its Trace step (`why?`).
+        if (typeof b.id === 'string') tool.id = b.id;
         // body/bodyTruncated attach conditionally — most tools never carry them.
         const body = toolBody(b);
         if (body) {
