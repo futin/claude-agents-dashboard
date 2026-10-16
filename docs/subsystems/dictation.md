@@ -273,5 +273,5 @@ mitigations above are what stand in the token's place if you choose not to set o
     - client/src/lib/dictation.ts
     - client/src/components/MessagePanel.tsx
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

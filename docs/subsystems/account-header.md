@@ -143,4 +143,5 @@ both deliberate:
     - client/src/hooks/useNarrow.ts
     - client/src/styles.css
   kind: subsystem
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

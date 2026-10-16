@@ -93,4 +93,5 @@ A dispatch `sha` must be a commit on `main`; any other commit fails with `target
     - .github/workflows/release.yml
     - .github/pull_request_template.md
   kind: workflow
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->
