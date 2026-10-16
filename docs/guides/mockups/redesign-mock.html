@@ -1951,33 +1951,33 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .tr-k-bash{--c:var(--mustard)}
 .tr-k-agent{--c:var(--magenta)}
 .ch-body.tr-body{padding:6px 18px 40px 0;gap:0;display:block;position:relative}
-.tr-spine{position:relative}
+.tr-spine{position:relative;display:flex;flex-direction:column;gap:6px}
 .tr-arcs{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
 .tr-turn{display:flex;gap:10px;align-items:baseline;padding:16px 0 6px 60px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary)}
 .tr-turn span{text-transform:none;letter-spacing:0;font-weight:500;color:var(--text-secondary)}
 .tr-row{display:grid;grid-template-columns:60px minmax(0,1fr);align-items:start;cursor:pointer;transition:opacity .15s}
-.tr-row.child{grid-template-columns:84px minmax(0,1fr)}
+.tr-row.tr-child{grid-template-columns:84px minmax(0,1fr)}
 .tr-dotcell{position:relative;min-height:36px;height:100%}
 .tr-dot{position:absolute;left:30px;top:12px;width:12px;height:12px;border-radius:var(--r-full);background:var(--bg-surface);border:2.5px solid var(--c)}
-.tr-row.child .tr-dot{left:54px;top:13px;width:10px;height:10px}
+.tr-row.tr-child .tr-dot{left:54px;top:13px;width:10px;height:10px}
 .tr-row.tr-k-prompt .tr-dot{background:var(--c);border-radius:3px}
-.tr-row.err .tr-dot{background:var(--red-500);border-color:var(--red-500)}
-.tr-row.run .tr-dot{border-style:dashed;animation:tr-spin 2.4s linear infinite}
-.tr-row.fresh .tr-card{animation:tr-land .9s ease-out}
+.tr-row.tr-err .tr-dot{background:var(--red-500);border-color:var(--red-500)}
+.tr-row.tr-run .tr-dot{border-style:dashed;animation:tr-spin 2.4s linear infinite}
+.tr-row.tr-fresh .tr-card{animation:tr-land .9s ease-out}
 .tr-card{padding:6px 10px 6px 6px;border-radius:var(--r-sm);min-width:0}
 .tr-row:hover .tr-card{background:var(--bg-subtle)}
-.tr-row.sel .tr-card{background:var(--bg-subtle);box-shadow:inset 0 0 0 1.5px var(--c)}
-.tr-row.anc .tr-card{background:color-mix(in srgb,var(--c) 8%,transparent)}
-.tr-spine.dim .tr-row:not(.sel):not(.anc):not(.desc){opacity:.6}
-.tr-spine.focus .tr-row:not(.sel):not(.anc):not(.desc){opacity:.25}
+.tr-row.tr-on .tr-card{background:var(--bg-subtle);box-shadow:inset 0 0 0 1.5px var(--c)}
+.tr-row.tr-anc .tr-card{background:color-mix(in srgb,var(--c) 8%,transparent)}
+.tr-spine.tr-dim .tr-row:not(.tr-on):not(.tr-anc):not(.tr-desc){opacity:.6}
+.tr-spine.tr-focus .tr-row:not(.tr-on):not(.tr-anc):not(.tr-desc){opacity:.25}
 .tr-line{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;min-width:0}
 .tr-tool{font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--c)}
 .tr-detail{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--text-primary);overflow-wrap:anywhere;min-width:0}
 .tr-k-prompt .tr-detail{font-family:inherit;font-size:13.5px;font-weight:500}
 .tr-intent{font-size:12.5px;color:var(--text-secondary);margin-top:2px}
 .tr-res{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--text-tertiary);margin-top:2px;overflow-wrap:anywhere}
-.tr-row.err .tr-res{color:var(--red-500)}
-.tr-row.run .tr-res{font-family:inherit;font-style:italic}
+.tr-row.tr-err .tr-res{color:var(--red-500)}
+.tr-row.tr-run .tr-res{font-family:inherit;font-style:italic}
 .tr-flag{font-size:10.5px;font-weight:600;border-radius:var(--r-full);padding:1px 7px;white-space:nowrap;background:var(--bg-subtle);color:var(--text-tertiary)}
 .tr-flag.run{background:var(--green-200);color:var(--green-ink)}
 .tr-flag.err{background:color-mix(in srgb,var(--red-500) 12%,transparent);color:var(--red-500)}
@@ -2019,7 +2019,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .ch-foot .tr-tog.on{background:var(--ink-inverse);border-color:var(--ink-inverse);color:var(--text-on-dark)}
 @keyframes tr-spin{to{transform:rotate(360deg)}}
 @keyframes tr-land{from{background:var(--green-200)}}
-@media (prefers-reduced-motion:reduce){.tr-row.run .tr-dot,.tr-row.fresh .tr-card{animation:none}.tr-row{transition:none}}
+@media (prefers-reduced-motion:reduce){.tr-row.tr-run .tr-dot,.tr-row.tr-fresh .tr-card{animation:none}.tr-row{transition:none}}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NEW SESSION — the launch form (SpawnPanel) as a modal.
@@ -5107,7 +5107,7 @@ unpersisted, since session ids churn.`;
     </div>`;
 
   const delivered = () => TRACE.steps.slice(0, S.shown);
-  const stepTool = (s) => s.agent ? 'child' : '';
+  const stepTool = (s) => s.agent ? 'tr-child' : '';
   function causes(id) {   // breadth-first over `why`, nearest first, only steps already delivered
     const out = new Map(), q = [[id, 0]];
     while (q.length) {
@@ -5134,8 +5134,8 @@ unpersisted, since session ids churn.`;
       if (!trPasses(s) && s.id !== S.sel) continue;
       if (s.turn !== turn) { turn = s.turn; h += `<div class="tr-turn">Turn ${turn}<span>${TURNS[turn]}</span></div>`; }
       const st = status(s);
-      const cls = ['tr-row', 'tr-k-' + s.kind, stepTool(s), st === 'running' ? 'run' : st === 'error' ? 'err' : '',
-        s.id === S.sel ? 'sel' : '', anc.has(s.id) ? 'anc' : '', desc.has(s.id) ? 'desc' : '', s.id === S.fresh ? 'fresh' : ''].join(' ');
+      const cls = ['tr-row', 'tr-k-' + s.kind, stepTool(s), st === 'running' ? 'tr-run' : st === 'error' ? 'tr-err' : '',
+        s.id === S.sel ? 'tr-on' : '', anc.has(s.id) ? 'tr-anc' : '', desc.has(s.id) ? 'tr-desc' : '', s.id === S.fresh ? 'tr-fresh' : ''].join(' ');
       const flags = (st === 'running' ? `<span class="tr-flag run">${s.kind === 'decide' ? 'waiting on you' : 'running'}</span>` : st === 'error' ? '<span class="tr-flag err">failed</span>' : '')
         + (answerOf(s) && st !== 'running' ? `<span class="tr-flag you">${esc(answerOf(s))}</span>` : '')
         + (s.sha && st !== 'running' ? `<span class="tr-flag sha">${s.sha}</span>` : '')
@@ -5147,7 +5147,7 @@ unpersisted, since session ids churn.`;
           ${s.kind !== 'prompt' ? `<div class="tr-res">${st === 'running' ? 'waiting for its result…' : '→ ' + esc(resultOf(s))}</div>` : ''}</div></div>`;
     }
     return `<div class="ch-body tr-body" data-trbody>
-        <div class="tr-spine ${S.trFocus ? 'focus' : S.sel ? 'dim' : ''}"><svg class="tr-arcs" aria-hidden="true"></svg>${h}</div>
+        <div class="tr-spine ${S.trFocus ? 'tr-focus' : S.sel ? 'tr-dim' : ''}"><svg class="tr-arcs" aria-hidden="true"></svg>${h}</div>
         <button class="tr-jump${S.follow ? '' : ' show'}" data-trfollow>↓ Follow live</button>
       </div>`;
   }
