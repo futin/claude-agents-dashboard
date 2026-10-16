@@ -60,6 +60,7 @@ import { fetchAll, markGitWatched } from './lib/git-fetch.js';
 import { openFolder, openFolderPlatform } from './lib/open-folder.js';
 import { readGitStats } from './lib/git-stats.js';
 import { classifyOrigin } from './lib/origin.js';
+import { releasesPayload } from './lib/releases.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
   MAX_LAUNCHING, adoptLaunched, clampPermission, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
@@ -948,6 +949,11 @@ export function serveAccount(config: Config, res: ServerResponse, homeDir?: stri
   } catch {
     sendJson(res, 200, { profile: null });
   }
+}
+
+/** `GET /api/releases` — the dashboard's own release history; always 200, the empty shape when there is nothing to read (lib/releases.ts). */
+export async function serveReleases(res: ServerResponse): Promise<void> {
+  sendJson(res, 200, await releasesPayload());
 }
 
 /**

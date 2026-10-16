@@ -99,6 +99,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/hub/widgets`, `/:id` | the Lookout hub catalog and widget data — usage gauge, sessions list and Git pending list; `POST` action paths are 404 (see [hub-widgets](subsystems/hub-widgets.md)) |
 | `GET /api/account` | who the CLI is signed in as (`~/.claude.json` → `oauthAccount`, as display strings) + the two rate windows — the header chip's own 30s poll, so it does not ride the 3s session scan |
+| `GET /api/releases` | the dashboard's own releases from the checkout's local annotated `vX.Y.Z` tags (release-kit's `readReleases`), memoised on HEAD + the tag refs; the empty shape when there are none ([releases](subsystems/releases.md)) |
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
 | `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, one cell per UTC day of the horizon, plus the coverage disclosure and the off-peak boost verdict (`lib/usage-boost.ts`) |
 | `GET /api/usage/history?days=N` | recorded 5h and weekly utilization over the last N days (default 7, clamped 1–365): windows by observed `resetsAt`, gap-split step segments downsampled to ~1440 points, and the recording gaps; served with recording off too (`lib/usage-history-series.ts`) |
@@ -198,6 +199,7 @@ server/
   lib/git-fetch.ts    the Git fetch: detached `git fetch origin` per common dir, error classifier, watched-only timer + clock
   lib/open-folder.ts  `open <path>` through `execFile`, behind POST /api/open-folder (the pin-membership gate is in api.ts)
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
+  lib/releases.ts     GET /api/releases: release-kit's tag reader behind a memo keyed on HEAD + the common dir's tag refs
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
   lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
@@ -349,6 +351,7 @@ that area:
 - [account-header](subsystems/account-header.md) — the shell's account chip: its two homes, the `oauthAccount` profile reader, and `GET /api/account`
 - [usage-limits](subsystems/usage-limits.md) — the rate-limit gauges the account chip draws, and the Usage tab behind them: pace, the duty-cycle forecast, and token value per model
 - [hub-widgets](subsystems/hub-widgets.md) — `/api/hub/widgets`: the three Lookout tiles, served through the `lookout-widgets` package, and its pinned dependency exception
+- [releases](subsystems/releases.md) — the rail's version chip and the What's new drawer, read from the local release tags at `GET /api/releases`
 - [settings](subsystems/settings.md) — the Settings tab: themes, refresh rate, scan knobs, idle threshold, answer window, push policy
 - [view-persistence](subsystems/view-persistence.md) — toolbar state in localStorage
 - [permission-notify](subsystems/permission-notify.md) — the `Allow?` tab for terminal permission dialogs

@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { armBackClose, type BackCloseHost } from '../client/src/lib/backClose.js';
+import { armBackClose, browserHost, type BackCloseHost } from '../client/src/lib/backClose.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -134,6 +134,9 @@ export function run(): number {
     h.runDeferred();
     off();
     assert.strictEqual(h.count('back'), 1);
+    // Only the in-flight counter listens until back()'s popstate lands; then nothing does.
+    assert.strictEqual(h.listenerCount(), 1);
+    h.firePopstate();
     assert.strictEqual(h.listenerCount(), 0);
   })) p++; else f++;
 
@@ -176,6 +179,55 @@ export function run(): number {
     assert.strictEqual(h.count('back'), 0);
     assert.strictEqual(h.listenerCount(), 0);
     assert.strictEqual(closed, 0);
+  })) p++; else f++;
+
+  // One overlay closing as another opens (the phone menu's version chip opens What's new): the menu's teardown calls back(), whose popstate lands in a
+  // later task — measured in Chromium to land after the new drawer's deferred push about half the time, popping the drawer's own entry.
+  if (test('an arm whose push comes due while an earlier back() is in flight waits for that popstate', () => {
+    const h = fakeHost();
+    const offMenu = armBackClose(h.host, () => {});
+    h.runDeferred();
+    let closed = 0;
+    offMenu();
+    armBackClose(h.host, () => { closed++; });
+    h.runDeferred();
+    assert.strictEqual(h.count('pushState'), 1, 'no push while the menu entry is still being popped');
+    h.firePopstate();
+    assert.strictEqual(closed, 0, "the menu's popstate must not close the new drawer");
+    h.runDeferred();
+    assert.strictEqual(h.count('pushState'), 2, 'the drawer pushes once that popstate has landed');
+    h.firePopstate();
+    assert.strictEqual(closed, 1, 'and its own entry still closes it');
+  })) p++; else f++;
+
+  if (test('an arm torn down while it waits for an in-flight back() never pushes', () => {
+    const h = fakeHost();
+    const offMenu = armBackClose(h.host, () => {});
+    h.runDeferred();
+    offMenu();
+    const offDrawer = armBackClose(h.host, () => {});
+    h.runDeferred();
+    offDrawer();
+    h.firePopstate();
+    h.runDeferred();
+    assert.strictEqual(h.count('pushState'), 1);
+    assert.strictEqual(h.count('back'), 1);
+    assert.strictEqual(h.listenerCount(), 0);
+  })) p++; else f++;
+
+  if (test('a back() in flight on one host does not hold up an arm on another', () => {
+    const a = fakeHost();
+    const b = fakeHost();
+    const off = armBackClose(a.host, () => {});
+    a.runDeferred();
+    off();
+    armBackClose(b.host, () => {});
+    b.runDeferred();
+    assert.strictEqual(b.count('pushState'), 1);
+  })) p++; else f++;
+
+  if (test('browserHost is one host, so every overlay sees the same in-flight back()', () => {
+    assert.strictEqual(browserHost(), browserHost());
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

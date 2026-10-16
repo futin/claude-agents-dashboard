@@ -12,6 +12,7 @@
  *   POST /api/open-folder       → open a pinned project's folder in Finder (macOS; see api.ts)
  *   GET  /api/git-stats         → local git state of each pinned project (see lib/git-stats.ts)
  *   POST /api/git-fetch         → fetch every pinned repo's origin now (see lib/git-fetch.ts)
+ *   GET  /api/releases          → the dashboard's own releases from its local tags (see lib/releases.ts)
  *   GET  /api/dismiss           → a tapped desk push lands here; the page closes itself
  *   GET  /api/hub/widgets       → Lookout hub catalog (see lib/hub-widgets.ts)
  *   GET  /api/hub/widgets/:id   → one widget's data
@@ -39,7 +40,7 @@ import {
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
   serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, servePinsOrder, serveGitStats, serveGitFetch, serveNotifyEvent, serveNotifyTest,
   serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates, serveUsageHistory,
-  serveAccount, serveHub, serveOpenFolder
+  serveAccount, serveReleases, serveHub, serveOpenFolder
 } from './api.js';
 import { createDashboardHub } from './lib/hub-widgets.js';
 import { startGitFetchTimer } from './lib/git-fetch.js';
@@ -270,6 +271,10 @@ export function createRequestListener(config: Config): http.RequestListener {
     // header account chip polls on its own 30s clock from every section.
     if (u.pathname === '/api/account') {
       return void serveAccount(config, res);
+    }
+    // The version chip and What's new drawer: fetched on load and on each open, memoised on HEAD + the tag refs.
+    if (u.pathname === '/api/releases') {
+      return void serveReleases(res);
     }
     // The duty-cycle profile behind the weekly forecast — read-only, and never
     // carrying raw samples (see docs/subsystems/usage-limits.md).
