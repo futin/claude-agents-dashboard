@@ -993,6 +993,11 @@ export interface ServerSettings {
    * one timer serves every browser, and it idles while nobody is watching the git view. See docs/subsystems/git-stats.md.
    */
   gitFetchSecs: number;
+  /**
+   * Writes from a tailnet peer pass without `ANSWER_TOKEN`. On by default. Shared because the write gate on the server reads it; turning it off from a
+   * tailnet device locks that device out of its own next write. See docs/subsystems/remote-access.md.
+   */
+  trustTailnet: boolean;
   /** False when the value couldn't be written to disk (won't survive a restart). */
   persisted: boolean;
   /**

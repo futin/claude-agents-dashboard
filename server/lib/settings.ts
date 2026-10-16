@@ -71,6 +71,8 @@ export const DEFAULT_RECORD_USAGE_HISTORY = false;
 export const GIT_FETCH_SECS: readonly number[] = [0, 30, 60, 120, 300, 600];
 /** Off by default — fetching makes the server talk to every pinned repo's remote unattended. */
 export const DEFAULT_GIT_FETCH_SECS = 0;
+/** On by default — the point of the switch is a phone on the tailnet that writes with nothing stored on it. */
+export const DEFAULT_TRUST_TAILNET = true;
 
 /** Cap on stored pins. The list is offered as rows in two UIs, not searched. */
 export const MAX_PINNED_PROJECTS = 50;
@@ -84,6 +86,7 @@ interface Stored {
   notify: NotifyPolicy;
   recordUsageHistory: boolean;
   gitFetchSecs: number;
+  trustTailnet: boolean;
   /**
    * Encoded project dir names that stay listed past `LOOKBACK_HOURS` (#161).
    * Still only this store and `remoteState` write to disk — this key rides in
@@ -172,6 +175,7 @@ function readStored(): Stored {
     notify: DEFAULT_NOTIFY,
     recordUsageHistory: DEFAULT_RECORD_USAGE_HISTORY,
     gitFetchSecs: DEFAULT_GIT_FETCH_SECS,
+    trustTailnet: DEFAULT_TRUST_TAILNET,
     pinnedProjects: []
   };
   try {
@@ -186,6 +190,7 @@ function readStored(): Stored {
           ? raw.recordUsageHistory
           : fallback.recordUsageHistory,
       gitFetchSecs: parseGitFetchSecs(raw.gitFetchSecs) ?? DEFAULT_GIT_FETCH_SECS,
+      trustTailnet: typeof raw.trustTailnet === 'boolean' ? raw.trustTailnet : fallback.trustTailnet,
       pinnedProjects: clampPinned(raw.pinnedProjects)
     };
   } catch {
@@ -264,6 +269,7 @@ export function setSettings(patch: unknown): ServerSettings | null {
     notify?: unknown;
     recordUsageHistory?: unknown;
     gitFetchSecs?: unknown;
+    trustTailnet?: unknown;
   } | null;
   if (!body || typeof body !== 'object') return null;
 
@@ -292,6 +298,10 @@ export function setSettings(patch: unknown): ServerSettings | null {
     const gitFetchSecs = parseGitFetchSecs(body.gitFetchSecs);
     if (gitFetchSecs === null) return null;
     next.gitFetchSecs = gitFetchSecs;
+  }
+  if (body.trustTailnet !== undefined) {
+    if (typeof body.trustTailnet !== 'boolean') return null;
+    next.trustTailnet = body.trustTailnet;
   }
   if (Object.keys(next).length === 0) return null;
 
