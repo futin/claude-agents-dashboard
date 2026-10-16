@@ -69,7 +69,7 @@ import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
-  ModelRateRow, RateLimit, SpawnResponse, UsageCoverage, UsageProfileCell,
+  ModelRateRow, RateLimit, ServerSettings, SpawnResponse, UsageCoverage, UsageProfileCell,
   UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult
 } from '../shared/types.js';
 
@@ -573,20 +573,28 @@ setTimeout(function () {
 }
 
 /**
- * `GET /api/settings` — the settings that aren't per-device (see lib/settings.ts).
+ * The one `/api/settings` body, for GET and POST alike: the client replaces its
+ * whole state with either reply, so a field only one of them filled would vanish
+ * on the first save.
  *
- * `notifyAvailable` is filled here rather than in the store: it is the one field
- * derived from `Config`, and `lib/settings.ts` deliberately never reads config.
- * The topic itself is never returned — it is both the address and the credential.
+ * `notifyAvailable` and `staleEnvKeys` are filled here rather than in the store:
+ * both derive from `Config` or the `.env` baseline, and `lib/settings.ts`
+ * deliberately never reads config. The topic itself is never returned — it is
+ * both the address and the credential.
  */
-export function serveSettingsRead(config: Config, res: ServerResponse): void {
-  sendJson(res, 200, {
-    ...getSettings(),
+function settingsBody(config: Config, settings: ServerSettings): ServerSettings {
+  return {
+    ...settings,
     notifyAvailable: config.ntfyTopic !== '',
     // Read per request, not cached: the whole point is to notice a file that
     // changed after this process read it. One `readFileSync` of a small file.
     staleEnvKeys: staleEnvKeys()
-  });
+  } satisfies ServerSettings;
+}
+
+/** `GET /api/settings` — the settings that aren't per-device (see lib/settings.ts). */
+export function serveSettingsRead(config: Config, res: ServerResponse): void {
+  sendJson(res, 200, settingsBody(config, getSettings()));
 }
 
 /** An empty grid, for the fail-open path and for a never-recorded profile. */
@@ -1014,7 +1022,7 @@ export async function serveSettingsWrite(
   if (!next) {
     return sendBadBody(res, { error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, gitFetchSecs?: 0|30|60|120|300|600}' });
   }
-  sendJson(res, 200, { ...next, notifyAvailable: config.ntfyTopic !== '' });
+  sendJson(res, 200, settingsBody(config, next));
 }
 
 /**
