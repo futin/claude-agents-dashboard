@@ -248,6 +248,18 @@ export function run(): number {
     assert.deepStrictEqual(b.thinking(), { recorded: 1, readable: 1 });
   })) p++; else f++;
 
+  if (test('15. a long AskUserQuestion answer is capped at 160 chars ending with …', () => {
+    const long = 'x'.repeat(400);
+    const b = build(
+      use('q1', 'AskUserQuestion', { questions: [{ question: 'Why?' }] }, T(1), 'm1'),
+      result('q1', `User has answered your questions: "Why?"="${long}". You can now continue`)
+    );
+    const a = step(b, 'q1').answer!;
+    assert.strictEqual(a.length, 160);
+    assert.ok(a.endsWith('…'));
+    assert.strictEqual(a.slice(0, 159), long.slice(0, 159));
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }

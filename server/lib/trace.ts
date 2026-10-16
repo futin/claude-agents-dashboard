@@ -23,6 +23,8 @@ export const TRACE_STEP_CAP = 500;
 const PROMPT_CAP = 300;
 const INTENT_CAP = 160;
 const RESULT_CAP = 160;
+/** An AskUserQuestion answer line; a cut one ends with `…` inside the cap. */
+const ANSWER_CAP = 160;
 const THINKING_CAP = 1200;
 /** Result text kept server-side for the `informed` rule (read- and agent-kind steps only). */
 const RESULT_TEXT_CAP = 16 * 1024;
@@ -311,7 +313,8 @@ export class TraceBuilder {
 
     if (s.tool === 'AskUserQuestion') {
       const answers = [...text.matchAll(ANSWER_RE)].map((a) => a[2]);
-      if (answers.length > 0) s.answer = answers.join(' · ');
+      const joined = answers.join(' · ');
+      if (answers.length > 0) s.answer = joined.length > ANSWER_CAP ? joined.slice(0, ANSWER_CAP - 1) + '…' : joined;
     } else if (s.tool === 'ExitPlanMode') {
       s.answer = s.status === 'ok' ? 'approved' : 'rejected';
     } else if (s.command !== null && COMMIT_RE.test(s.command)) {

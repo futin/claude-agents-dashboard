@@ -930,7 +930,7 @@ export interface TraceStep {
   answer?: string;
   /** A `git commit` Bash step: the first 7 hex chars of the new commit. */
   sha?: string;
-  /** A subagent step: its agent id (`agent-<id>.jsonl`). */
+  /** A subagent step: the tool_use id of the Task/Agent step that dispatched it (the parent dot the client draws its curve from). */
   agent?: string;
   /** Subject of the task `in_progress` when the step landed. */
   task?: string;
