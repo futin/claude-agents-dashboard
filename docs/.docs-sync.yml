@@ -81,6 +81,14 @@ docs:
     kind: subsystem
   - path: docs/subsystems/visual-tests.md
     kind: subsystem
+  - path: docs/subsystems/account-header.md
+    kind: subsystem
+  - path: docs/subsystems/releases.md
+    kind: subsystem
+  - path: docs/subsystems/hub-widgets.md
+    kind: subsystem
+  - path: docs/workflows/ci.md
+    kind: workflow
 overlap-ok:
   - pair: docs/subsystems/push-notify.md ~ docs/workflows/push-notify-setup.md
     reason: same code, different register — why the policy is shaped this way vs the steps you run; a changed sendTest string or config default genuinely stales the setup doc too
@@ -99,5 +107,9 @@ out-of-scope:
     reason: PR body template — a form, not reference prose; no code to drift against
   - path: audits/
     reason: whole-repo audit reports — records of a moment, like docs/superpowers/
+  - path: plugin/skills/
+    reason: the plugin's skill instructions — versioned and shipped with the plugin, pinned by test/plugin-manifest.test.ts, not reference prose
+  - path: test/visual/fonts/README.md
+    reason: provenance note for vendored test fonts — no code to drift against
   - path: .claude/DESIGN.md
     reason: the design reference — changes often and on its own schedule, independent of the code docs-sync tracks
