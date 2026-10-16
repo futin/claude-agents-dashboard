@@ -410,12 +410,7 @@ function eventFromRecord(raw: unknown, cursor: FileCursor): UsageEvent | null {
 function collectEvents(root: string): UsageEvent[] {
   const events: UsageEvent[] = [];
   for (const ref of listUsageTranscripts(root)) {
-    let size: number;
-    try {
-      size = fs.statSync(ref.file).size;
-    } catch {
-      continue;
-    }
+    const size = ref.size; // the listing's own stat — a second one per file doubled every tick's syscalls
     let cursor = cursors.get(ref.file);
     if (!cursor) {
       cursor = { offset: 0, seen: [], seenSet: new Set() };
@@ -463,11 +458,7 @@ function collectEvents(root: string): UsageEvent[] {
  */
 function seedCursors(root: string): void {
   for (const ref of listUsageTranscripts(root)) {
-    try {
-      cursors.set(ref.file, { offset: fs.statSync(ref.file).size, seen: [], seenSet: new Set() });
-    } catch {
-      /* gone between listing and stat — a later tick starts it from 0 */
-    }
+    cursors.set(ref.file, { offset: ref.size, seen: [], seenSet: new Set() });
   }
 }
 
