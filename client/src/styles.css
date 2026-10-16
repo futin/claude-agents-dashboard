@@ -1882,8 +1882,9 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    under it as facts, where Chat lists the session's. Port of the mock's
    `.tr-one` block; the mono title face is dropped with the spine's. On a
    phone the card stacks (not the band's wrapping `.kv` row), keeps its head
-   and caps at the Tasks list's 40vh; `md` hands it the desktop column card. */
-.chat-side .kv.tr-one{display:block;max-height:40vh;overflow:auto}
+   and caps at 30vh, so card and facts leave the spine most of the screen;
+   `md` hands it the desktop column card. */
+.chat-side .kv.tr-one{display:block;max-height:30vh;overflow:auto}
 .chat-side .kv.tr-one .k{display:flex;justify-content:space-between;gap:8px}
 .chat-side .kv.tr-one .k > :first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-side .kv.tr-one .k > :last-child{flex:none;font-variant-numeric:tabular-nums}
@@ -1913,8 +1914,13 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .tr-rel{display:block;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}
 .tr-one .tsub .tr-tool{margin-right:5px}
 .tr-none{font-size:13px;color:var(--ink3);text-align:center;padding:24px 8px;line-height:1.6}
-/* the chat's tool line links into the trace (`.cm-why` in the mock) */
-.cmsg-why{border:0;background:none;padding:0 0 0 6px;font-family:var(--font);font-size:11.5px;font-weight:500;color:var(--magenta);cursor:pointer}
+/* the chat's tool line links into the trace (`.cm-why` in the mock). A line
+   with the link is a row: name and detail shrink and ellipsise in
+   `.cmsg-what`, the link never shrinks, so a long detail cannot clip it. A
+   line without one keeps the plain block above. */
+.cmsg-tool.has-why{display:flex;align-items:baseline;min-width:0}
+.cmsg-what{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmsg-why{flex:none;border:0;background:none;padding:0 0 0 6px;font-family:var(--font);font-size:11.5px;font-weight:500;color:var(--magenta);cursor:pointer}
 .cmsg-why:hover{text-decoration:underline}
 
 /* Spawn modal (SpawnPanel.tsx) — the launch form floated like the chat modal

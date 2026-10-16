@@ -97,13 +97,21 @@ function Message({ m, onWhy }: { m: ChatMessage; onWhy(id: string): void }) {
             </div>
           </details>
         ) : (
-          <div className="cmsg-tool" key={i}>
-            <span className={`tool${t.name === 'Task' ? ' task' : ''}`}>{t.name}</span>
-            {t.detail ? ' ' + t.detail : ''}
-            {t.id && (
+          t.id ? (
+            // the name and detail shrink and ellipsise together; `why?` never does
+            <div className="cmsg-tool has-why" key={i}>
+              <span className="cmsg-what">
+                <span className={`tool${t.name === 'Task' ? ' task' : ''}`}>{t.name}</span>
+                {t.detail ? ' ' + t.detail : ''}
+              </span>
               <button type="button" className="cmsg-why" title="Open this step in Trace" onClick={() => onWhy(t.id!)}>why?</button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="cmsg-tool" key={i}>
+              <span className={`tool${t.name === 'Task' ? ' task' : ''}`}>{t.name}</span>
+              {t.detail ? ' ' + t.detail : ''}
+            </div>
+          )
         )
       )}
     </div>
