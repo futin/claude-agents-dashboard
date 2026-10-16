@@ -1912,6 +1912,10 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .tr-spine.tr-focus .tr-sum:not(.tr-anc),.tr-spine.tr-focus .tr-more{opacity:.25}
 @keyframes tr-blink{50%{opacity:.35}}
 @media (prefers-reduced-motion:reduce){.tr-tick.tr-trun{animation:none}.tr-sum,.tr-fold .chev{transition:none}}
+/* Trace's foot: the live text and the why toggle never wrap; with no count
+   between them the toggle takes the spare width's left edge */
+.tr-foot .chat-live,.tr-foot .tr-tog{white-space:nowrap}
+.tr-foot .tr-tog{margin-left:auto}
 /* ── Trace's sidecar: Chat's structure, about the picked step ───────────
    Context, then one card in the Tasks card's place — the step read in full,
    its causes nearest first, then what it led to — scrolling as a whole, so

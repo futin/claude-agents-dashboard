@@ -183,8 +183,6 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   // While following, the pick is the newest step; a pick of its own stops following.
   const newest = trace.steps.length ? trace.steps[trace.steps.length - 1].id : null;
   const picked = follow ? newest : sel;
-  const traceRunning = trace.steps.filter(s => s.status === 'running').length;
-  const traceCount = trace.steps.filter(s => s.kind !== 'prompt').length;
   // Folds the reader opened or closed by hand. Held here, not in the spine,
   // so a round trip through Chat keeps them; the drawer is keyed by session.
   const [folds, setFolds] = useState<TraceFolds>(() => ({ open: new Set(), closed: new Set() }));
@@ -445,13 +443,11 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                 one line, and no chrome row spent on it. Still the board's
                 segmented switch (the same `.seg` the sessions toolbar uses),
                 sized down to foot scale. */}
-            <div className="chat-foot">
+            <div className={`chat-foot${view === 'trace' ? ' tr-foot' : ''}`}>
               <span className="chat-live"><i /> live · refreshing every {formatInterval(refreshMs)}</span>
               {view === 'trace' ? (
                 <>
-                  <span className="chat-count">
-                    {`${traceCount} steps · ${traceRunning} running · thinking readable in ${trace.thinking.readable} of ${trace.thinking.recorded}`}
-                  </span>
+                  {/* no step count: the spine's folds carry it; the not-loaded notice heads the spine */}
                   <button className={`tr-tog${focus ? ' on' : ''}`} aria-pressed={focus} onClick={() => setFocus(f => !f)}>
                     Only this step's why
                   </button>
