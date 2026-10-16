@@ -6,6 +6,7 @@ export const settings: ServerSettings = {
   answerSecs: 600,
   recordUsageHistory: true,
   gitFetchSecs: 300,
+  trustTailnet: true,
   persisted: true,
   idleOverride: null,
   answerOverride: null,

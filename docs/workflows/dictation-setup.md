@@ -46,8 +46,8 @@ tab names the changed keys in a warning banner (`staleEnvKeys` on `GET /api/sett
 names only — never values); it can only tell you a restart is pending, not apply them.
 
 ⚠️ Before turning this on somewhere other devices can reach: this endpoint has no auth
-beyond the same `ANSWER_TOKEN` every other write path uses, and it defaults to empty
-(open). Read [dictation's security posture](../subsystems/dictation.md#security-posture)
+beyond the write gate every other write path uses — every tailnet device may call it while
+tailnet trust is on (the default), and a LAN client needs `ANSWER_TOKEN`. Read [dictation's security posture](../subsystems/dictation.md#security-posture)
 before configuring a model on a machine other people's devices can reach.
 
 **4. Confirm it's live.** Open a reply window (or wait for one to appear) — the mic button

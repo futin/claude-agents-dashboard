@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  DEFAULT_ANSWER_SECS, DEFAULT_GIT_FETCH_SECS, DEFAULT_IDLE_SECS, DEFAULT_NOTIFY, GIT_FETCH_SECS, MAX_ANSWER_SECS, MAX_IDLE_SECS,
+  DEFAULT_ANSWER_SECS, DEFAULT_GIT_FETCH_SECS, DEFAULT_IDLE_SECS, DEFAULT_NOTIFY, DEFAULT_TRUST_TAILNET, GIT_FETCH_SECS, MAX_ANSWER_SECS, MAX_IDLE_SECS,
   MAX_PINNED_PROJECTS, MIN_ANSWER_SECS, SETTINGS_FILE,
   clampAnswerSecs, clampIdleSecs, clampPinned, detectAnswerOverride, detectIdleOverride,
   getGitFetchSecs, getPinnedProjects, getSettings, parseGitFetchSecs, resetSettings, setPinned, setPinOrder, setSettings
@@ -321,6 +321,45 @@ export function run(): number {
       setSettings({ recordUsageHistory: true });
       setSettings({ recordUsageHistory: 3 });
       assert.strictEqual(getSettings().recordUsageHistory, true);
+    });
+  })) p++; else f++;
+
+  if (test('trustTailnet: on in a fresh home', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(DEFAULT_TRUST_TAILNET, true);
+      assert.strictEqual(getSettings().trustTailnet, true);
+    });
+  })) p++; else f++;
+
+  if (test('trustTailnet: a settings file from before the switch existed reads as on', () => {
+    inTmpCwd(dir => {
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ idleSecs: 30, answerSecs: 600, recordUsageHistory: true, gitFetchSecs: 60 }), 'utf8');
+      resetSettings();
+      assert.strictEqual(getSettings().trustTailnet, true);
+    });
+  })) p++; else f++;
+
+  if (test('trustTailnet: a false patch is returned and survives a re-read from disk', () => {
+    inTmpCwd(dir => {
+      assert.strictEqual(setSettings({ trustTailnet: false })?.trustTailnet, false);
+      assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, SETTINGS_FILE), 'utf8')).trustTailnet, false);
+      resetSettings();
+      assert.strictEqual(getSettings().trustTailnet, false);
+    });
+  })) p++; else f++;
+
+  if (test('trustTailnet: a non-boolean rejects the patch and leaves it on', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ trustTailnet: 'no' }), null);
+      assert.strictEqual(getSettings().trustTailnet, true);
+    });
+  })) p++; else f++;
+
+  if (test('trustTailnet: a stored non-boolean reads as on', () => {
+    inTmpCwd(dir => {
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ trustTailnet: 1 }), 'utf8');
+      resetSettings();
+      assert.strictEqual(getSettings().trustTailnet, true);
     });
   })) p++; else f++;
 

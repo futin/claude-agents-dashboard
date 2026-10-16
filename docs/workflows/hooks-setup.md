@@ -101,8 +101,9 @@ Stop event*; that belongs behind a command someone chose to run, not behind `git
   `model`. The previous file is copied to `settings.json.bak.<stamp>` before any write, and
   the new one is validated as JSON before it replaces anything.
 - **Your token.** `~/.claude/hooks/dashboard-token` is written only if it does not exist
-  *and* this checkout's `.env` has an `ANSWER_TOKEN` to copy. Otherwise you get the command
-  to run yourself. It is never read from or written to the repo.
+  *and* this checkout's `.env` has an `ANSWER_TOKEN` to copy. With no token anywhere it says
+  `no token file needed`: the hooks reach the dashboard on loopback, which the write gate
+  always trusts. It is never read from or written to the repo.
 
   A token file that already exists is now *compared* to `.env` rather than assumed correct:
   identical is `ok`, different is a `warn` that leaves the file alone and points at
@@ -142,8 +143,9 @@ running, because the CLI's Stop guard blocks in that state too.
 
 Three things the installer cannot do for you:
 
-1. **Set `ANSWER_TOKEN`** in `.env` (and in the token file) — it gates every write endpoint.
-   See [remote-answer-setup](remote-answer-setup.md).
+1. **Set `ANSWER_TOKEN`** in `.env` (and in the token file) — only if a hook runs in a
+   container or points at a non-loopback `CLAUDE_DASHBOARD_URL`, or a LAN client must write.
+   See [remote-access](../subsystems/remote-access.md).
 2. **Turn remote answering on** in the dashboard. It is off by default, and every hook
    checks it before doing anything ([remote-answer](../subsystems/remote-answer.md)).
 3. **Point the hooks at the right port** if you are not serving on `127.0.0.1:4173` —

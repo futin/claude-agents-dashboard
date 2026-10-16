@@ -23,6 +23,7 @@ import {
   syncReading,
 } from '../client/src/lib/gitClock.js';
 import { SYNC_NEEDS_TOKEN } from '../client/src/lib/gitSync.js';
+import { READ_ONLY_TEXT } from '../client/src/lib/writeRefusal.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -335,7 +336,7 @@ export function run(): number {
 
   if (test('fetchKeyState: the five states, against the literal copy', () => {
     const k = (over: Partial<Parameters<typeof fetchKeyState>[0]>) =>
-      fetchKeyState({ tokenRequired: false, tokenStored: false, failure: null, pending: false, running: false, intervalSecs: 300, ...over });
+      fetchKeyState({ tokenRequired: false, writeAccess: undefined, tokenStored: false, failure: null, pending: false, running: false, intervalSecs: 300, ...over });
     assert.deepStrictEqual(k({ tokenRequired: true }), { disabled: true, label: 'now', sub: 'Fetch all needs the Answer token — set it under Settings › Local › Connection.', subTone: 'amber' });
     assert.deepStrictEqual(k({ tokenRequired: true, tokenStored: true }), { disabled: false, label: 'now', sub: 'git fetch origin · every 5 min', subTone: null });
     assert.deepStrictEqual(k({ failure: 'refused' }), { disabled: true, label: 'now', sub: 'fetch refused: bad token — check it under Settings › Local › Connection.', subTone: 'amber' });
@@ -347,6 +348,8 @@ export function run(): number {
     assert.deepStrictEqual(k({ intervalSecs: undefined }), { disabled: false, label: 'now', sub: 'git fetch origin', subTone: null });
     assert.deepStrictEqual(k({ tokenRequired: undefined, tokenStored: false }), { disabled: false, label: 'now', sub: 'git fetch origin · every 5 min', subTone: null });
     assert.strictEqual(k({ tokenRequired: true, failure: 'refused' }).sub, 'Fetch all needs the Answer token — set it under Settings › Local › Connection.', 'no token outranks a refusal');
+    assert.deepStrictEqual(k({ writeAccess: 'none' }), { disabled: true, label: 'now', sub: READ_ONLY_TEXT, subTone: 'amber' });
+    assert.strictEqual(k({ writeAccess: 'none', failure: 'refused' }).sub, READ_ONLY_TEXT, 'read-only outranks a refusal');
     assert.deepStrictEqual([fetchFailureOf(403), fetchFailureOf(500), fetchFailureOf('network')], ['refused', 'failed', 'failed']);
   })) p++; else f++;
 

@@ -82,7 +82,7 @@ unauthenticated peer on the network can cause.
 
 - **Off by default.** <env var> empty disables the feature outright — the house
   "unset means off" rule.
-- **`ANSWER_TOKEN` gates the POST**, as it gates the other write paths.
+- **The write gate (`refuseWrite`) covers the POST**, as it covers the other write paths: this machine, a trusted tailnet peer, or `ANSWER_TOKEN`.
 - Bounded by:
 -->
 

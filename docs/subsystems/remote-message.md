@@ -228,10 +228,10 @@ since, is wider still — it starts a session rather than steering one). A quest
 steerable from the phone when the session *asked* for one; a reply window opens at the end
 of **every** AFK turn, so from the moment you step away, the model's next instruction on any
 session can come from whoever can reach these POSTs — not just whoever answers something a
-session raised. The posture itself is unchanged, not new: `ANSWER_TOKEN` gates
-`/api/messages/wait` and `/api/sessions/:id/message-answer` exactly as it gates the question
+session raised. The posture itself is unchanged, not new: the write gate covers
+`/api/messages/wait` and `/api/sessions/:id/message-answer` exactly as it covers the question
 and plan POSTs (see [remote-answer](remote-answer.md#security-posture)), and the tailnet is
-still the intended perimeter — set the token if you share the tailnet, and treat it as the
+still the intended perimeter — if you share the tailnet, turn tailnet trust off and use the token, and treat it as the
 minimum behind a public tunnel. What changes is how much a leaked token, or an unwanted LAN
 guest, can do with it: previously "answer a question that already exists," now "hand a
 parked session brand-new instructions."

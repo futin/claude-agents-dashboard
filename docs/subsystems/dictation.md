@@ -130,7 +130,7 @@ one is a reason to ever wire the mic straight to send.
 |---|---|
 | 200 | `{text: string}` — possibly `''` when nothing was heard; the client shows "nothing heard" inline, not an error |
 | 400 | empty body; upload aborted mid-read; or a `Content-Type` outside the mime allowlist (echoed back in the error message) |
-| 403 | bad or missing token — `tokenOk`, the same check as every other write path. The refusal is no longer silent: `tokenOk` prints one `rejected write: POST /api/transcribe` line on stderr, throttled to once per method+path per minute, carrying the method and path only — never the token, a prefix of it, or the query string. The listener's Host and cross-site guards (`lib/request-guard.ts`, [remote-access](remote-access.md#browser-side-guards)) also answer 403, before any route runs |
+| 403 | `bad token` or `read-only from this network` — `refuseWrite`, the same gate as every other write path. The refusal is no longer silent: it prints one `rejected write: POST /api/transcribe from <peer> (…)` line on stderr, throttled to once per method+path per minute, carrying the method and path only — never the token, a prefix of it, or the query string. The listener's Host and cross-site guards (`lib/request-guard.ts`, [remote-access](remote-access.md#browser-side-guards)) also answer 403, before any route runs |
 | 404 | feature off: `remoteAnswer` is false, or `probeTranscribe` is false (no model configured, or no working binary) |
 | 405 | non-`POST` |
 | 413 | body over `AUDIO_CAP` (8MB) — caught from an honest `Content-Length` before a byte is read, or from the running byte count otherwise |
@@ -165,17 +165,17 @@ create a second, worse copy of state `useRemoteAnswer` already owns.
 no `Authorization` header — it never did, since `origin`, `idleSecs`, and `answerSecs`
 already ride on the same unauthenticated payload for the hooks and the toolbar badge to
 read. Gating `transcribe` behind the token would not make the capability more private; it
-would just break the mic for exactly the people who bothered to set `ANSWER_TOKEN`, because
+would just break the mic for every caller the write gate wants a token from, because
 `useRemoteAnswer` and `useTranscribeAvailable` both fetch `/api/health` with no
 `Authorization` header — a token-configured browser would probe, get refused, and never
 render the button at all. The bit sits beside other booleans that already leak nothing more
 sensitive than "a feature is turned on"; it doesn't leak anything new in kind. `spawnAvailable`
-is one; so is `tokenRequired`, added so a hook with no token file can tell "a token is
-needed" from "the feature is off" — it announces only *that* a token is required, never
-which, which is the same thing a 403 already announces.
+is one; so are `tokenRequired` and `writeAccess`, which tell a caller with no token whether it
+needs one — they announce only *that* a token is required, never which, which is the same
+thing a 403 already announces.
 
 What the token *does* gate is a spawn per request. `serveTranscribe` checks `remoteAnswer` →
-`tokenOk` → `probeTranscribe` → `isTranscribing()` → mime → body, in that order, so an
+`refuseWrite` → `probeTranscribe` → `isTranscribing()` → mime → body, in that order, so an
 unauthenticated caller is refused at 403 before any audio is read or any per-request
 process spawns. That is not the
 same as "no spawn is reachable without a token": the capability probe itself (previous
@@ -186,7 +186,7 @@ keeping the auth boundary where the other write paths keep it — not about hidi
 capability exists.
 
 ⚠️ One write path runs those two checks the *other* way round: `serveSpawn` calls
-`probeSpawn` before `tokenOk`. That divergence is harmless rather than principled, for the
+`probeSpawn` before `refuseWrite`. That divergence is harmless rather than principled, for the
 same reason the probe is harmless here — `GET /api/health` already publishes
 `spawnAvailable` unauthenticated and already calls the same memoised probe, so probe-first
 reveals nothing new and spawns no extra process. `api.ts` cross-references the two handlers
@@ -218,11 +218,12 @@ limits](#accepted-limits) for where it can wedge.
 
 ## Security posture
 
-⚠️ **Read this as an operator warning, not a reassurance.** `ANSWER_TOKEN` gates
-`/api/transcribe` exactly as it gates every other write path — and it defaults to
-**empty, which means open**. With `WHISPER_MODEL` configured and no token set, **any peer
-that can reach the dashboard on any interface it's bound to can cause `ffmpeg` and
-`whisper-cli` to run on this machine.** That is real, and it is bounded by exactly four
+⚠️ **Read this as an operator warning, not a reassurance.** The write gate covers
+`/api/transcribe` exactly as it covers every other write path: this machine always passes,
+**every tailnet device passes while tailnet trust is on (the default)**, and anyone else needs
+`ANSWER_TOKEN` — with no token set, a LAN peer is read-only. With `WHISPER_MODEL` configured,
+**any trusted peer can cause `ffmpeg` and `whisper-cli` to run on this machine.** That is real,
+and it is bounded by exactly four
 things: the single-flight guard above (one clip at a time, 429 otherwise), a 30-second
 timeout on each spawn, the 8MB body cap, and the mime allowlist. The feature is off
 entirely when `WHISPER_MODEL` is unset — the route still matches, but `probeTranscribe`
@@ -231,11 +232,10 @@ fails and the handler answers 404 before anything spawns.
 This was a deliberate choice, not an oversight: singling this one route out for mandatory
 auth would break the common case of a desk-only setup with no token configured, and it
 would make `/api/transcribe` behave differently from every other write path in an app that
-otherwise applies one consistent rule (`ANSWER_TOKEN` empty = open, matching the LAN-trust
-posture documented in [remote-access](remote-access.md)). Set a token if you share the
-network this dashboard is reachable on — over a tailnet, device identity is already a
-stronger perimeter than the token; behind a public tunnel, treat it as the minimum. The
-mitigations above are what stand in the token's place if you choose not to set one.
+otherwise applies one consistent rule (the trust rule in [remote-access](remote-access.md)).
+Turn tailnet trust off, or set a token and use it, if you share the tailnet — tagged devices
+and users this machine is shared with count as tailnet; behind a public tunnel, treat the
+token as the minimum. The mitigations above are what stand behind the gate.
 
 ## Accepted limits
 

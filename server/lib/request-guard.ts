@@ -5,8 +5,8 @@
  * - {@link hostAllowed} — DNS rebinding. A page on `evil.example` can re-point its own name at 127.0.0.1 and then read every open GET route as
  *   same-origin. The browser still sends `Host: evil.example`, so refusing names that public DNS could have handed out closes it. This is the prod
  *   twin of Vite's `allowedHosts` guard; `ALLOWED_HOSTS` feeds both.
- * - {@link crossSiteWrite} — CSRF. With `ANSWER_TOKEN` empty (the default) the write routes are open, and `readJsonBody` parses any Content-Type, so a
- *   `no-cors` `text/plain` POST from any site the user visits would reach them without a preflight. The hooks and curl send neither header checked here,
+ * - {@link crossSiteWrite} — CSRF. The write gate trusts loopback and the tailnet with no token, and `readJsonBody` parses any Content-Type, so a
+ *   `no-cors` `text/plain` POST from any site the user's own browser visits would reach them without a preflight. The hooks and curl send neither header checked here,
  *   so they are unaffected.
  *
  * Pure: headers in, verdict out. The listener owns the 403s.

@@ -27,6 +27,8 @@ import { testAsync, withServer } from './api-harness.js';
 
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
 const TOKEN = 'super-secret-token';
+/** A LAN peer as a loopback proxy delivers one; from loopback itself the gate passes with no token. */
+const LAN = { 'X-Forwarded-For': '192.168.1.5' };
 
 /** Collect everything `console.error` is handed while `fn` runs. */
 async function captureErrors(fn: () => Promise<void>): Promise<string[]> {
@@ -43,7 +45,7 @@ function rejectLines(lines: string[]): string[] {
 }
 
 export async function run(): Promise<number> {
-  console.log('\n=== rejected writes are audible (api.ts tokenOk) ===\n');
+  console.log('\n=== rejected writes are audible (api.ts refuseWrite) ===\n');
   let ok = 0, total = 0;
   const check = (r: boolean): void => { total++; if (r) ok++; };
 
@@ -52,14 +54,14 @@ export async function run(): Promise<number> {
     const lines = await captureErrors(async () => {
       await withServer(`${ENV}ANSWER_TOKEN=${TOKEN}\n`, async h => {
         const reply = await h.req('/api/remote-answer', {
-          method: 'POST', body: JSON.stringify({ enabled: false })
+          method: 'POST', body: JSON.stringify({ enabled: false }), headers: LAN
         });
         assert.equal(reply.status, 403, 'precondition: the write is refused');
       });
     });
     const ours = rejectLines(lines);
     assert.equal(ours.length, 1, `exactly one line, got ${JSON.stringify(ours)}`);
-    assert.match(ours[0], /^\[dashboard] rejected write: POST \/api\/remote-answer \(bad or missing token\)$/);
+    assert.match(ours[0], /^\[dashboard] rejected write: POST \/api\/remote-answer from lan \(bad or missing token\)$/);
   }));
 
   check(await testAsync('the line carries no part of the token, sent or expected', async () => {
@@ -68,7 +70,7 @@ export async function run(): Promise<number> {
       await withServer(`${ENV}ANSWER_TOKEN=${TOKEN}\n`, async h => {
         const reply = await h.req('/api/remote-answer', {
           method: 'POST', body: JSON.stringify({ enabled: false }),
-          headers: { Authorization: 'Bearer wrong-token-9f2b' }
+          headers: { ...LAN, Authorization: 'Bearer wrong-token-9f2b' }
         });
         assert.equal(reply.status, 403);
       });
@@ -87,7 +89,7 @@ export async function run(): Promise<number> {
       await withServer(`${ENV}ANSWER_TOKEN=${TOKEN}\n`, async h => {
         for (let i = 0; i < 5; i++) {
           const reply = await h.req('/api/remote-answer', {
-            method: 'POST', body: JSON.stringify({ enabled: false })
+            method: 'POST', body: JSON.stringify({ enabled: false }), headers: LAN
           });
           assert.equal(reply.status, 403);
         }
@@ -101,10 +103,10 @@ export async function run(): Promise<number> {
     const lines = await captureErrors(async () => {
       await withServer(`${ENV}ANSWER_TOKEN=${TOKEN}\n`, async h => {
         const a = await h.req('/api/remote-answer', {
-          method: 'POST', body: JSON.stringify({ enabled: false })
+          method: 'POST', body: JSON.stringify({ enabled: false }), headers: LAN
         });
         assert.equal(a.status, 403);
-        const b = await h.req('/api/notify/test', { method: 'POST', body: '{}' });
+        const b = await h.req('/api/notify/test', { method: 'POST', body: '{}', headers: LAN });
         assert.equal(b.status, 403);
       });
     });
@@ -119,7 +121,7 @@ export async function run(): Promise<number> {
     const lines = await captureErrors(async () => {
       await withServer(`${ENV}ANSWER_TOKEN=${TOKEN}\n`, async h => {
         const reply = await h.req('/api/remote-answer?token=leaked-in-a-url', {
-          method: 'POST', body: JSON.stringify({ enabled: false })
+          method: 'POST', body: JSON.stringify({ enabled: false }), headers: LAN
         });
         assert.equal(reply.status, 403);
       });
@@ -143,14 +145,29 @@ export async function run(): Promise<number> {
     assert.deepEqual(rejectLines(lines), [], 'the log is for refusals only');
   }));
 
-  check(await testAsync('with no ANSWER_TOKEN configured nothing is refused or logged', async () => {
+  check(await testAsync('a read-only refusal says so, and names the peer', async () => {
+    resetRejectedWriteLog();
+    const lines = await captureErrors(async () => {
+      await withServer(ENV, async h => {
+        const reply = await h.req('/api/remote-answer', {
+          method: 'POST', body: JSON.stringify({ enabled: false }), headers: LAN
+        });
+        assert.equal(reply.status, 403);
+      });
+    });
+    const ours = rejectLines(lines);
+    assert.equal(ours.length, 1);
+    assert.match(ours[0], /^\[dashboard] rejected write: POST \/api\/remote-answer from lan \(read-only, no token set\)$/);
+  }));
+
+  check(await testAsync('from this machine with no ANSWER_TOKEN configured nothing is refused or logged', async () => {
     resetRejectedWriteLog();
     const lines = await captureErrors(async () => {
       await withServer(ENV, async h => {
         const reply = await h.req('/api/remote-answer', {
           method: 'POST', body: JSON.stringify({ enabled: false })
         });
-        assert.equal(reply.status, 200, 'an unset token leaves the writes open, as before');
+        assert.equal(reply.status, 200, 'loopback writes need no token');
       });
     });
     assert.deepEqual(rejectLines(lines), []);

@@ -523,7 +523,7 @@ export async function run(): Promise<number> {
       const id = adoptedSession(cfg, calls);
       try {
         const reply = await post(
-          (req, res) => void serveSessionStop(cfg, id, req, res), '', { Authorization: 'Bearer wrong-token' }
+          (req, res) => void serveSessionStop(cfg, id, req, res), '', { Authorization: 'Bearer wrong-token', 'X-Forwarded-For': '192.168.1.5' }
         );
         assert.equal(reply.status, 403);
         assert.equal(reply.json?.error, 'bad token');

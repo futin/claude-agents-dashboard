@@ -31,8 +31,8 @@ export interface Config {
   /** Feature toggle for remote answers (the only write path). Off → the wait endpoint 404s. */
   remoteAnswer: boolean;
   /**
-   * Shared secret for the two remote-answer POSTs. Empty (default) leaves them
-   * open, like the rest of the dashboard; set it on a LAN you share.
+   * Optional pass for every write route, from any address. Empty (default): only this machine and, while `trustTailnet` is on, the tailnet can
+   * write; a LAN client is read-only. See docs/subsystems/remote-access.md.
    */
   answerToken: string;
   /**

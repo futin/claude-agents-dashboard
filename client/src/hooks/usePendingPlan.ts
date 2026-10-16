@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAnswerToken } from './useAnswerToken';
 import { authHeaders } from '../lib/answerToken';
 import { useSettings } from './useSettings';
+import { refusalKind } from '../lib/writeRefusal';
 import type { PendingPlan, PlanAnswerRequest, SessionPlan } from '../../../shared/types';
 
 /**
@@ -19,6 +20,8 @@ export interface PendingPlanState {
   phase: PlanPhase;
   /** Set when the server refused the token — the panel prompts for one. */
   needsToken: boolean;
+  /** Set when the server says this network is read-only: no token can help, so the panel says so instead of prompting. */
+  readOnly: boolean;
   /** Send the plan back for revision. Feedback is required — see plans.ts. */
   reject: (feedback: string) => Promise<void>;
   /** Hand the plan back to its card in the terminal. */
@@ -38,6 +41,7 @@ export function usePendingPlan(id: string): PendingPlanState {
   const [pending, setPending] = useState<PendingPlan | null>(null);
   const [phase, setPhase] = useState<PlanPhase>('idle');
   const [needsToken, setNeedsToken] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
   // Shared with the question panel — one dashboard, one token.
   const [token, setToken] = useAnswerToken();
   const { settings: { refreshMs } } = useSettings();
@@ -90,19 +94,21 @@ export function usePendingPlan(id: string): PendingPlanState {
     };
   }, [id, refreshMs]);
 
-  const post = useCallback(async (body: PlanAnswerRequest): Promise<'ok' | 'gone' | 'token' | 'error'> => {
+  const post = useCallback(async (body: PlanAnswerRequest): Promise<'ok' | 'gone' | 'token' | 'read-only' | 'error'> => {
     const headers = authHeaders(tokenRef.current, { 'Content-Type': 'application/json' });
     let status = 0;
+    let refusal: unknown;
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/plan-answer`, {
         method: 'POST', headers, body: JSON.stringify(body)
       });
       status = res.status;
+      if (status === 403) refusal = await res.json().catch(() => undefined);
     } catch {
       return 'error';
     }
     if (status === 200) return 'ok';
-    if (status === 403) return 'token';
+    if (status === 403) return refusalKind(status, refusal) === 'read-only' ? 'read-only' : 'token';
     // 404 (nothing waiting) and 409 (a newer plan now) both mean the plan we
     // were looking at is no longer answerable.
     if (status === 404 || status === 409) return 'gone';
@@ -116,9 +122,15 @@ export function usePendingPlan(id: string): PendingPlanState {
     const outcome = await post({ planId: current.planId, verdict: 'reject', feedback });
     if (outcome === 'ok') {
       setNeedsToken(false);
+      setReadOnly(false);
       setPhase('sent');
     } else if (outcome === 'token') {
       setNeedsToken(true);
+      setReadOnly(false);
+      setPhase('idle');
+    } else if (outcome === 'read-only') {
+      setReadOnly(true);
+      setNeedsToken(false);
       setPhase('idle');
     } else if (outcome === 'gone') {
       setPhase('gone');
@@ -133,9 +145,10 @@ export function usePendingPlan(id: string): PendingPlanState {
     setPhase('submitting');
     const outcome = await post({ planId: current.planId, verdict: 'dismiss' });
     if (outcome === 'token') setNeedsToken(true);
+    if (outcome === 'read-only') setReadOnly(true);
     setPhase(outcome === 'gone' ? 'gone' : 'idle');
     if (outcome === 'ok') setPending(null);
   }, [pending, phase, post]);
 
-  return { pending, phase, needsToken, reject, dismiss, setToken };
+  return { pending, phase, needsToken, readOnly, reject, dismiss, setToken };
 }

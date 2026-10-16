@@ -8,7 +8,7 @@ app depends on any of them being present.
 | Route | URL | Notes |
 |---|---|---|
 | **localhost** | `http://localhost:5174` (dev) / `:4173` (prod) | the default; nothing to set up |
-| **LAN** | `http://<lan-ip>:5174` / `:4173` | the `Network:` URL Vite prints. Free, but the IP moves when the network does |
+| **LAN** | `http://<lan-ip>:5174` / `:4173` | the `Network:` URL Vite prints. Free, but the IP moves when the network does, and writes need `ANSWER_TOKEN` (read-only without one) |
 | **Tailscale** | `http://<host>.<tailnet>.ts.net:4173` (prod) / `:5174` (dev) | recommended for away-from-home — stable hostname, private, no auth gate needed. Dev needs `allowedHosts` (below) |
 | **any other tunnel** | ngrok / Cloudflare / `ssh -L` … | works too, but read the warning below first |
 
@@ -17,15 +17,67 @@ app depends on any of them being present.
 A tailnet is a private WireGuard network between your own devices, so the dashboard never
 touches the public internet. **Device identity is the auth** — only devices signed into
 your Tailscale account can connect, there is no URL to guess, and traffic is end-to-end
-encrypted. That is *stronger* than the app's LAN-trust posture, so the existing security
-model carries over unchanged: reads stay open, and `ANSWER_TOKEN` (gating **every** write
-endpoint — `grep -c 'tokenOk(config, req)' server/api.ts` for the current count — including
-[spawn](spawn.md), which starts a brand-new `claude` process on this machine rather than
-answering a session that already asked something, plus [dictation](dictation.md) and the
-[push](push-notify.md) endpoints the hooks POST to) may stay empty. Set `ANSWER_TOKEN` only if you **share the
-tailnet** with other people — inside a tailnet it means exactly what it meant on a shared
-LAN. `POST /api/open-folder`, like every write route, is open to any client on the LAN or tailnet when no `ANSWER_TOKEN` is set; it can only open a folder
-that is already a listed pin, on the host's screen.
+encrypted. That is *stronger* than a shared LAN, which is why the write gate trusts it.
+
+## Who may write
+
+Reads stay open. Every write route — `grep -c 'refuseWrite(config, req, res)' server/api.ts` for the current count, including [spawn](spawn.md), which starts a
+brand-new `claude` process on this machine, [dictation](dictation.md), the [push](push-notify.md) endpoints the hooks POST to, and `POST /api/open-folder`,
+which can only open a folder that is already a listed pin — runs one gate, `refuseWrite` in `server/api.ts`. A write is allowed when **either**:
+
+1. **Trusted network:** the peer (`resolvePeer`, below) is `local`, or it is `tailnet` and **Settings › Shared › Trust tailnet devices** (`trustTailnet`,
+   default on, live without a restart) is on; **or**
+2. **Token:** `ANSWER_TOKEN` is set and the request carries `Authorization: Bearer <ANSWER_TOKEN>` — from any address.
+
+| Peer | `trustTailnet` | token set? | valid bearer? | result |
+|---|---|---|---|---|
+| local | any | any | any | allow |
+| tailnet | on | any | any | allow |
+| tailnet | off | yes | yes | allow |
+| tailnet | off | yes / no | no | 403 |
+| lan / unknown | any | yes | yes | allow |
+| lan / unknown | any | yes / no | no | 403 |
+
+The 403 body says which kind of refusal it is: `bad token` when a token is set (sending the right one would help), `read-only from this network` when none is
+(nothing the caller sends can). So with no token set, a device reaching the dashboard by its LAN IP (`http://192.168.x.x:5174`) without Tailscale is
+**read-only**; the same phone on the same Wi-Fi using the `ts.net` URL is a tailnet peer and writes. `GET /api/health` reports the calling peer's
+`writeAccess` (`open` / `token` / `none`), and `tokenRequired` is `writeAccess === 'token'`; Settings › Local › Connection renders it as one line about this
+browser.
+
+The switch is itself a write (`POST /api/settings`): a tailnet device that turns it off loses its own write access from the next request, and this machine,
+always `local`, can turn it back on. Turn it off and use the token if you **share the tailnet**: tagged devices and users of other tailnets this machine is
+shared with have tailnet addresses, and are trusted while it is on.
+
+**Resolving the peer.** `resolvePeer(remoteAddress, headers)` (`server/lib/origin.ts`) classifies the socket address. A non-loopback socket is the answer
+outright: nothing such a client sends is consulted. A loopback socket means a process on this machine, possibly a proxy, so `X-Forwarded-For` is walked **from
+the right**: loopback entries (another local hop) are skipped, the first other entry is the peer, and an entry that is not an address is `unknown` (fail
+closed). No header, or only loopback entries, is `local`. The right-most entry is the trustworthy one because each proxy *appends* the address of the socket
+it accepted (Vite's `xfwd`), so whatever a client forged sits to its left.
+
+| Path | socket | XFF at the API | peer |
+|---|---|---|---|
+| hook / curl on this machine → API | 127.0.0.1 | — | local |
+| desk browser → Vite → API | 127.0.0.1 | `127.0.0.1` | local |
+| phone → serve → Vite → API (dev) | 127.0.0.1 | `100.x.y.z,127.0.0.1` | tailnet |
+| phone → serve → API (prod on 4173) | 127.0.0.1 | `100.x.y.z` | tailnet |
+| tailnet device → `100.x:5174` directly | 127.0.0.1 | `100.x.y.z` | tailnet |
+| LAN device → `192.168.x:5174` (any forged XFF) | 127.0.0.1 | `…,192.168.1.5` | lan |
+| LAN device → `192.168.x:4173` | 192.168.1.5 | ignored | lan |
+
+**Residual risks, accepted:**
+
+- **A loopback proxy that does not set `X-Forwarded-For`** makes all its clients look `local`. Vite, `tailscale serve`, ngrok and cloudflared all set it; any
+  new front proxy must too.
+- **Any local process** can write, and can claim any peer by sending its own `X-Forwarded-For`. It can already read `~/.claude` and `.env`, so this adds
+  nothing. An `ssh -L` forward sets no header, so its clients are `local` too: whoever can ssh in already has the machine.
+- **CSRF is the only barrier for trusted peers.** A page in the desk or phone browser that tries a write meets `crossSiteWrite` alone, even with a token set.
+  That guard stays, unchanged (below).
+- **Tailnet trust is coarse** — tagged devices and shared-in users count, as above.
+- **Containerised runs** see every client — the desk browser, the host's `tailscale serve` and the hooks alike — arrive from the bridge gateway, which
+  classifies `lan`. Docker Desktop's published ports deliver LAN traffic from that same gateway, so trusting it would trust the LAN; a container run needs
+  `ANSWER_TOKEN` to write, and both compose files forward it.
+- **Lookout** reaches the dashboard by this machine's tailnet host on a plain port, so it is a tailnet peer: it writes while the switch is on, or with the
+  switch off when its configured bearer matches `ANSWER_TOKEN`.
 
 The trade-off: every connecting device needs the Tailscale app, so you can't hand the URL
 to someone who isn't on your tailnet.
@@ -34,9 +86,10 @@ to someone who isn't on your tailnet.
 > exposes: *every* read endpoint is open — full transcripts, chat history,
 > `/api/git-stats` (pinned repos' paths and branch names), and `/api/configs/file`
 > (config file bodies) — to anyone with the link. And if you have
-> set `CLAUDE_BIN`, so is [spawn](spawn.md): with `ANSWER_TOKEN` empty, anyone with the
-> link can start a real Claude Code session on this machine. Set
-> `ANSWER_TOKEN` at minimum, and put auth at the edge (ngrok Basic Auth / Cloudflare
+> set `CLAUDE_BIN`, so is [spawn](spawn.md) for anyone holding the token. A tunnel client
+> terminates on loopback, so the write gate trusts it only through `X-Forwarded-For`: the
+> tunnel must set that header (ngrok and cloudflared do), or every client of it reads
+> `local` and writes. Set `ANSWER_TOKEN` at minimum, and put auth at the edge (ngrok Basic Auth / Cloudflare
 > Access), or add an app-level gate. The origin badge reads **`public`** on such a
 > connection, which is the reminder. ngrok's free tier also interposes an interstitial
 > page, and a stable Cloudflare hostname needs an owned domain.
@@ -53,8 +106,8 @@ the LAN/tailnet trust model above is unchanged — they stop a web page in *your
   same-origin; the browser still sends `Host: evil.example`. Allowed without config: a missing `Host`, IP literals, single-label names (`localhost`, a
   tailnet short name, a LAN hostname), and `*.localhost`, `*.local`, `*.ts.net`. Anything else is a 403 naming `ALLOWED_HOSTS` — comma-separated exact
   names, `.suffix` rules (which also match the apex) or `*` to switch the check off. This is the prod twin of the Vite guard described below.
-- **Cross-site writes (CSRF).** With `ANSWER_TOKEN` empty the write routes are open and `readJsonBody` ignores Content-Type, so a `no-cors`
-  `text/plain` POST from any site would reach them without a preflight. Any non-GET/HEAD/OPTIONS request is refused when `Sec-Fetch-Site` is present and
+- **Cross-site writes (CSRF).** A trusted peer writes with no token and `readJsonBody` ignores Content-Type, so a `no-cors` `text/plain` POST from any
+  site open in that browser would reach the write routes without a preflight. Any non-GET/HEAD/OPTIONS request is refused when `Sec-Fetch-Site` is present and
   is not `same-origin` or `none`, or — when it is absent — when `Origin` is present and its host differs from `Host` (`Origin: null` included). A request
   carrying neither header is not a browser and passes, which is how the hooks and `curl` keep working. Another port on localhost counts as cross-site.
 
@@ -66,11 +119,10 @@ The Board card in the Sessions aside shows a small pill — `local`, `LAN`, `tai
 *your browser* reached the dashboard. `public` is tinted orange, since it's the one worth
 noticing.
 
-- **Display-only.** `server/lib/origin.ts` (pure, zero-dep, unit-tested in
-  `test/origin.test.ts`) classifies `req.socket.remoteAddress`; the value rides on
+- **The same verdict the write gate uses.** `server/lib/origin.ts` (pure, zero-dep, unit-tested in
+  `test/origin.test.ts`) resolves the peer with `resolvePeer` (above); the value rides on
   `GET /api/health` as `HealthResponse.origin` and renders via
-  `components/OriginBadge.tsx`. **Nothing gates on it** — there is no policy to lock
-  yourself out of.
+  `components/OriginBadge.tsx`. Badge and gate share one function, so they can never disagree.
 - No Tailscale installed ⇒ the tailnet branches never match and the badge reads `local`
   or `LAN`. Unreadable address ⇒ `unknown`; absent field (older server) ⇒ no badge at
   all.
@@ -214,17 +266,13 @@ what is registered.
   `fd7a:115c:a1e0::/48` sits *inside* the generic ULA space `fc00::/7`, so the tailnet
   check must run before the LAN check or every tailnet client reads `lan`. IPv4 tailnet
   is the CGNAT range `100.64.0.0/10`.
-- **⚠️ `X-Forwarded-For` is honoured only from a loopback socket.** `pnpm tailnet`
+- **⚠️ `X-Forwarded-For` is honoured only from a loopback socket, and read from the right.** `pnpm tailnet`
   (`tailscale serve`) proxies on the host, so the socket is `127.0.0.1` and the peer's
-  real tailnet address survives only in that header — without the fallback every tunnel
-  user would read `local`. Spoofing is a non-issue by construction: only something
-  already on the machine can send it, and it drives a badge with no policy attached.
-  **⚠️ That holds only while nothing gates on it.** A peer behind a
-  loopback-terminating proxy writes the left-most forwarded entry itself, so as a
-  guard `classifyOrigin` returns whichever verdict the caller asks for — refusing an
-  honest proxied client and admitting one that prepends `127.0.0.1`. Any future gate
-  must read `classifyAddress` (socket only), never `classifyOrigin`
-  (`server/lib/origin.ts`).
+  real tailnet address survives only in that header — without it every tunnel user would
+  read `local`. The write gate decides on it, so the walk order is load-bearing: the
+  left-most entry is whatever the client sent, the right-most non-loopback entry is the one
+  the nearest proxy appended. Reading the left one would let a LAN client behind Vite claim
+  `100.x` and write; never switch back to first-hop parsing.
 - **⚠️ The dev proxy needs `xfwd: true`** (`vite.config.ts`). Vite reaches the API over
   loopback, so without it every `pnpm dev` client — including a phone on the LAN —
   classifies as `local`.
@@ -239,9 +287,10 @@ what is registered.
   startup.
 - **The host must be awake.** Tailscale doesn't wake a sleeping machine; disable sleep
   (or use `caffeinate`) if you rely on away-from-home access.
-- **Docker runs are unaffected** — Tailscale runs on the host and forwards to the
-  published localhost ports, same as a LAN client. The badge sees the container's view of
-  the peer address, so containerized dev may read `lan` where a host run reads `local`.
+- **Docker runs need `ANSWER_TOKEN` to write** — Tailscale runs on the host and forwards to the
+  published ports, and inside the container every client, the desk browser and the hooks
+  included, arrives from the bridge gateway and classifies `lan`. Set the token in the host
+  `.env` (both compose files forward it), in the browser, and in `~/.claude/hooks/dashboard-token`.
 
 <!-- docs-sync:
   sources:

@@ -153,14 +153,14 @@ That's the whole basic setup. Everything below is optional.
   whisper-cpp` (plus `ffmpeg`), a model file, one `.env` line, and `pnpm tunnel` for phone
   use: [setup](docs/workflows/dictation-setup.md). Read the [security
   posture](docs/subsystems/dictation.md#security-posture) first if other devices can reach
-  the dashboard — the endpoint spawns processes and is gated only by `ANSWER_TOKEN`, which
-  defaults to empty.
+  the dashboard — the endpoint spawns processes, and every tailnet device may call it while
+  tailnet trust is on (the default); a LAN client needs `ANSWER_TOKEN`.
 - **New sessions (spawn)** — 1 step, ~1 minute: point `CLAUDE_BIN` at your `claude` binary
   (`which claude`), and set `SPAWN_MAX_PERMISSION` below its `auto` default if that's more
   than you want an unattended launch to have. Read the [security
   posture](docs/subsystems/spawn.md#security-posture) first — this is the widest write
-  surface in the app; it's gated by the same `ANSWER_TOKEN` that defaults to empty, and by
-  the remote-answer toggle, so flipping that pill off stops launching too.
+  surface in the app; it sits behind the same write gate (this machine, a trusted tailnet, or
+  `ANSWER_TOKEN`), and the remote-answer toggle, so flipping that pill off stops launching too.
 - **Docker** — production and dev images, read-only `~/.claude` mount:
   [docker](docs/workflows/docker.md).
 - **Configuration** — everything is optional, defaults work out of the box; the full

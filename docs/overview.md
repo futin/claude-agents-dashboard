@@ -89,8 +89,8 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said |
 | `POST /api/remote-answer` | flip the remote-answer toggle (write path) |
 | `GET /api/dismiss` | where a tapped desk push lands — a page that closes the tab it opened in; carries no deep link |
-| `GET /api/health` | liveness + remote-answer state + connection origin + the two hook numbers (idle threshold, answer window) |
-| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, plus `notifyAvailable` (never the ntfy topic itself); write path |
+| `GET /api/health` | liveness + remote-answer state + connection origin and this caller's `writeAccess` + the two hook numbers (idle threshold, answer window) |
+| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, tailnet write trust, plus `notifyAvailable` (never the ntfy topic itself); write path |
 | `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; write path (see [configs](subsystems/configs.md)) |
 | `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); token-guarded, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
 | `POST /api/open-folder` | open a pinned project's folder with macOS `open`. Token-guarded, path must be a listed pin's, 501 off macOS (see [git-stats](subsystems/git-stats.md)) |
@@ -126,7 +126,7 @@ all of those matches sit above it.
 
 ⚠️ Every `:id` route decodes its segment through `decodePath` in `index.ts`, never
 `decodeURIComponent` directly. A malformed escape (a lone `%ZZ`) throws a `URIError`
-*synchronously* inside the request listener — before any handler, before even `tokenOk` — so
+*synchronously* inside the request listener — before any handler, before even `refuseWrite` — so
 one unauthenticated request could otherwise end the process for every session it was
 watching. A failed decode answers `400 {"error": "bad path encoding"}` instead. The async half
 of the same problem has its own floor: handlers are dispatched as `void serveX(...)` and
@@ -228,7 +228,8 @@ server/
   lib/notify.ts   server-sent ntfy pushes — the layered policy, the `atDesk`
                   predicate, phone-vs-desk topic routing, and one of the backend's
                   two outbound calls (the other is `lib/usage.ts`)
-  lib/origin.ts   connection classifier → local | lan | tailnet | unknown
+  lib/origin.ts   connection classifier → local | lan | tailnet | unknown; `resolvePeer` is
+                  both the badge and the write gate's verdict (`refuseWrite` in api.ts)
   lib/permissions.ts  in-memory "a permission dialog is open in that terminal" flags,
                   fed by the PermissionRequest hook; display-only
   lib/transcribe.ts  ffmpeg → whisper-cli pipeline behind POST /api/transcribe: mime

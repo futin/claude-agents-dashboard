@@ -18,6 +18,8 @@ import {
   type SpawnDefaultEffort, type SpawnDefaultModel, type ThemeId
 } from '../../lib/settings';
 import { GIT_FETCH_OPTIONS } from '../../lib/gitClock';
+import { READ_ONLY_TEXT } from '../../lib/writeRefusal';
+import { writeStatusLine } from '../../lib/writeStatus';
 import { EFFORTS, MODELS, PERMISSION_MODE_LABEL } from '../../lib/spawnOptions';
 
 /**
@@ -69,6 +71,7 @@ export default function SettingsView() {
   const { settings, update, reset } = useSettings();
   const server = useServerSettings();
   const remote = useRemoteAnswer();
+  const writeAccessLine = writeStatusLine(remote.state?.origin, remote.state?.writeAccess, server.state?.trustTailnet);
   const [token, setToken] = useAnswerToken();
   const [confirmReset, setConfirmReset] = useState(false);
   const [pushTestResult, setPushTestResult] = useState<string | null>(null);
@@ -394,6 +397,12 @@ export default function SettingsView() {
                   )}
                   {/* The token itself is per browser, so it lives on the other
                       page — say where, since "below" is no longer true. */}
+                  {server.readOnly && (
+                    <div className="set-warn">
+                      <span>⚠</span>
+                      <span>{READ_ONLY_TEXT}</span>
+                    </div>
+                  )}
                   {server.needsToken && (
                     <div className="set-warn">
                       <span>⚠</span>
@@ -405,6 +414,21 @@ export default function SettingsView() {
                   )}
                 </>
               )}
+            </SettingsGroup>
+
+            <SettingsGroup title="Write access" sub="Who may change things without the answer token">
+              <SettingsRow
+                name="Trust tailnet devices"
+                hint="Writes from any device on your tailnet need no token, tagged devices and users this machine is shared with included. Lookout reaches the dashboard over the tailnet, so with this off it needs its token."
+              >
+                {server.state && (
+                  <Segmented
+                    value={server.state.trustTailnet ? 'on' : 'off'}
+                    options={ON_OFF}
+                    onChange={v => void server.save({ trustTailnet: v === 'on' })}
+                  />
+                )}
+              </SettingsRow>
             </SettingsGroup>
 
             <SettingsGroup title="Usage forecast" sub="Feeds the weekly projection on the Usage page">
@@ -697,9 +721,10 @@ export default function SettingsView() {
           )}
 
           <SettingsGroup title="Connection" sub="How this browser talks to the server">
+            {writeAccessLine && <SettingsRow name="This device" hint={writeAccessLine} />}
             <SettingsRow
               name="Answer token"
-              hint={<>Only needed when the server runs with <code>ANSWER_TOKEN</code> set. Stored in this browser and sent with every write.</>}
+              hint={<>Only needed when the status line above says so, or when the server runs with <code>ANSWER_TOKEN</code> set and shows none. Stored in this browser and sent with every write.</>}
             >
               <input
                 type="text"

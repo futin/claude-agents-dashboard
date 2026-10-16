@@ -28,15 +28,18 @@ async function withSettings(env: string, fn: (h: Harness) => Promise<void>): Pro
   });
 }
 
+/** A LAN peer as a loopback proxy delivers one: the harness listens on loopback, and a loopback peer writes with no token at all. */
+const LAN = { 'X-Forwarded-For': '192.168.1.5' };
+
 export async function run(): Promise<number> {
   console.log('\n=== settings endpoints (api.ts via the router) ===\n');
   let ok = 0, total = 0;
   const check = (r: boolean): void => { total++; if (r) ok++; };
 
   for (const [label, headers] of [
-    ['no Authorization header', {}],
-    ['a wrong bearer', { Authorization: 'Bearer nope' }],
-    ['the token without the Bearer scheme', { Authorization: TOKEN }]
+    ['no Authorization header', LAN],
+    ['a wrong bearer', { ...LAN, Authorization: 'Bearer nope' }],
+    ['the token without the Bearer scheme', { ...LAN, Authorization: TOKEN }]
   ] as const) {
     check(await testAsync(`POST /api/settings with ANSWER_TOKEN set and ${label} is 403 and writes nothing`, async () => {
       await withSettings(GATED, async h => {
@@ -53,7 +56,7 @@ export async function run(): Promise<number> {
   check(await testAsync('POST /api/settings with ANSWER_TOKEN set and the right bearer is 200 and applies the patch', async () => {
     await withSettings(GATED, async h => {
       const next = getSettings().idleSecs + 60;
-      const reply = await post(h, { idleSecs: next }, { Authorization: `Bearer ${TOKEN}` });
+      const reply = await post(h, { idleSecs: next }, { ...LAN, Authorization: `Bearer ${TOKEN}` });
       assert.equal(reply.status, 200);
       assert.equal(reply.json?.idleSecs, next);
       assert.equal(getSettings().idleSecs, next);

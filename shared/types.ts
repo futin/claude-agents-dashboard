@@ -951,6 +951,12 @@ export interface RemoteAnswerState {
  */
 export type ConnectionOrigin = 'local' | 'lan' | 'tailnet' | 'unknown';
 
+/**
+ * What the calling peer may do without a token: `open` (this machine, or a tailnet device while `trustTailnet` is on), `token` (it needs
+ * `Bearer <ANSWER_TOKEN>`), `none` (read-only: no token is set, so nothing it sends can unlock a write).
+ */
+export type WriteAccess = 'open' | 'token' | 'none';
+
 /** The four session events a push notification can announce. */
 export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan';
 
@@ -1027,6 +1033,11 @@ export interface ServerSettings {
    * one timer serves every browser, and it idles while nobody is watching the git view. See docs/subsystems/git-stats.md.
    */
   gitFetchSecs: number;
+  /**
+   * Writes from a tailnet peer pass without `ANSWER_TOKEN`. On by default. Shared because the write gate on the server reads it; turning it off from a
+   * tailnet device locks that device out of its own next write. See docs/subsystems/remote-access.md.
+   */
+  trustTailnet: boolean;
   /** False when the value couldn't be written to disk (won't survive a restart). */
   persisted: boolean;
   /**
@@ -1082,16 +1093,14 @@ export interface HealthResponse extends RemoteAnswerState {
   idleSecs?: number;
   /** Mirrors `ServerSettings.answerSecs`, read off the same probe. */
   answerSecs?: number;
+  /** Write access for the calling peer, computed per request. Absent on an older server. */
+  writeAccess?: WriteAccess;
   /**
-   * True when `ANSWER_TOKEN` is set, so every write endpoint needs a
-   * `Bearer` header. Health is the one endpoint the hooks can reach without a
-   * token, which makes it the only place that can tell them one is needed:
-   * before this field, a hook with no `~/.claude/hooks/dashboard-token` got a
-   * healthy probe and then a silent 403 on every write, indistinguishable from
-   * the feature being switched off (backlog bug-6). It announces only *that* a
-   * token is required — the same thing a 403 already announces — never which.
-   * Absent on an older server, which is why `remote-decision-hook.sh` treats a
-   * missing field as `false` and stays quiet rather than warning wrongly.
+   * True when this caller would need the token to write: `writeAccess === 'token'`. Health is the one endpoint the hooks can reach without a
+   * token, which makes it the only place that can tell them one is needed: before this field, a hook with no `~/.claude/hooks/dashboard-token`
+   * got a healthy probe and then a silent 403 on every write, indistinguishable from the feature being switched off (backlog bug-6). It announces
+   * only *that* a token is required — the same thing a 403 already announces — never which. Absent on an older server, which is why
+   * `remote-decision-hook.sh` treats a missing field as `false` and stays quiet rather than warning wrongly.
    */
   tokenRequired?: boolean;
   /**

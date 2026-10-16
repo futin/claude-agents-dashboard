@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
 import { authHeaders } from '../lib/answerToken';
+import { READ_ONLY_TEXT, refusalKind } from '../lib/writeRefusal';
 import type { SpawnRequest, SpawnResponse } from '../../../shared/types';
 
 export interface SpawnControl {
@@ -12,6 +13,8 @@ export interface SpawnControl {
   error: string | null;
   /** Set when the server refused the token — same meaning as useRemoteAnswer's flag. */
   needsToken: boolean;
+  /** Set when the server says this network is read-only; `error` then carries `READ_ONLY_TEXT`. */
+  readOnly: boolean;
   /**
    * Saves a freshly-entered token into the page's one shared copy (`useAnswerToken`), so a retry right after saving actually sends it, and so does every
    * other hook mounted beside this one.
@@ -31,6 +34,7 @@ export function useSpawn(): SpawnControl {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsToken, setNeedsToken] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
   const [token, setToken] = useAnswerToken();
 
   const launch = useCallback(async (req: SpawnRequest): Promise<string | null> => {
@@ -43,10 +47,14 @@ export function useSpawn(): SpawnControl {
         method: 'POST', headers, body: JSON.stringify(req)
       });
       if (res.status === 403) {
-        setNeedsToken(true);
+        const readOnlyNow = refusalKind(res.status, await res.json().catch(() => undefined)) === 'read-only';
+        setReadOnly(readOnlyNow);
+        setNeedsToken(!readOnlyNow);
+        if (readOnlyNow) setError(READ_ONLY_TEXT);
         return null;
       }
       setNeedsToken(false);
+      setReadOnly(false);
       if (res.ok) {
         const body = (await res.json()) as SpawnResponse;
         return body.sessionId;
@@ -62,5 +70,5 @@ export function useSpawn(): SpawnControl {
     }
   }, [pending, token]);
 
-  return { launch, pending, error, needsToken, setToken };
+  return { launch, pending, error, needsToken, readOnly, setToken };
 }

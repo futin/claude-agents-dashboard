@@ -17,13 +17,13 @@ const LABEL: Record<ConnectionOrigin, { text: string; title: string }> = {
   unknown: {
     text: 'public',
     title: 'This request came from off-network (a public tunnel, or an address we can’t place). '
-      + 'Every read endpoint is open — set ANSWER_TOKEN and consider auth at the edge.'
+      + 'Every read endpoint is open — writes need ANSWER_TOKEN here; consider auth at the edge too.'
   }
 };
 
 /**
- * How the current browser reached the dashboard. Informational only — nothing
- * in the app gates on it (see server/lib/origin.ts).
+ * How the current browser reached the dashboard. The same verdict the write gate decides on: both read `resolvePeer` (server/lib/origin.ts), so the badge
+ * and the gate cannot disagree.
  *
  * `public` is the one worth noticing, so it gets the warning tint. Absent origin
  * (health not loaded yet, or a server that predates the field) renders nothing.
