@@ -38,7 +38,7 @@ export default function GitView() {
   const stats = useGitStats();
   const { data, error } = stats;
   const sync = useGitSync(stats.refresh);
-  const fetchCtl = useGitFetch(sync.tokenRequired, stats.refresh);
+  const fetchCtl = useGitFetch(sync.tokenRequired, sync.writeAccess, stats.refresh);
   const narrow = useNarrow();
   const [stored, setStored] = usePersistedState<string>('management.gitLayout', DEFAULT_GIT_LAYOUT);
   const layout = drawableGitLayout(parseGitLayout(stored), narrow);
@@ -74,7 +74,7 @@ export default function GitView() {
           ))}
         </div>
         {/* Once the first poll has answered, payload or error: a first-load failure still gets the chip, whose Local sync key is the retry. */}
-        {(data !== null || error) && <GitClockChip stats={stats} fetchCtl={fetchCtl} tokenRequired={sync.tokenRequired} clock={data?.fetch} />}
+        {(data !== null || error) && <GitClockChip stats={stats} fetchCtl={fetchCtl} tokenRequired={sync.tokenRequired} writeAccess={sync.writeAccess} clock={data?.fetch} />}
       </div>
       {sync.note && <div className="git-sync-note">{sync.note}</div>}
       {unpinNote && <div className="git-sync-note">{unpinNote}</div>}

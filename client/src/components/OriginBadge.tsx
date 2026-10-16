@@ -17,7 +17,7 @@ const LABEL: Record<ConnectionOrigin, { text: string; title: string }> = {
   unknown: {
     text: 'public',
     title: 'This request came from off-network (a public tunnel, or an address we can’t place). '
-      + 'Every read endpoint is open — set ANSWER_TOKEN and consider auth at the edge.'
+      + 'Every read endpoint is open — writes need ANSWER_TOKEN here; consider auth at the edge too.'
   }
 };
 

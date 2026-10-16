@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { RepoGitStats, Session } from '../../../shared/types';
+import type { RepoGitStats, Session, WriteAccess } from '../../../shared/types';
 import {
   SYNC_NEEDS_TOKEN, SYNC_SCAN_LIMIT, canSync, parseSyncRuns, runFor, syncFailedText, syncLaunchErrorText, syncPhase, syncRequest,
   type OkRepo, type SyncPhase,
@@ -18,6 +18,8 @@ export interface GitSyncControl {
   available: boolean;
   /** The server wants an Answer token on writes (`HealthResponse.tokenRequired`); undefined until health answers or on an older server. The chip's Fetch all key reads it. */
   tokenRequired: boolean | undefined;
+  /** This browser's write access (`HealthResponse.writeAccess`); `'none'` disables the Fetch all key. Undefined as `tokenRequired` is. */
+  writeAccess: WriteAccess | undefined;
   /** The repo's remembered run as it stands now; null when it has none. */
   phaseFor(repo: RepoGitStats): SyncPhase | null;
   start(repo: OkRepo): void;
@@ -111,6 +113,7 @@ export function useGitSync(onEnded: () => void): GitSyncControl {
   return {
     available,
     tokenRequired: remote.state?.tokenRequired,
+    writeAccess: remote.state?.writeAccess,
     phaseFor,
     start,
     pending,

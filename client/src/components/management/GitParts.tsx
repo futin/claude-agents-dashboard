@@ -149,7 +149,7 @@ export function GitKeys({ a, ctx, bare = false, compact = false }: { a: GitAsses
         <button
           type="button"
           className={`git-key${retryPrimary ? ' primary' : ''}`}
-          disabled={ctx.fetchCtl.pending || ctx.clock?.runningSinceMs != null || (ctx.sync.tokenRequired === true && !ctx.fetchCtl.tokenStored)}
+          disabled={ctx.fetchCtl.pending || ctx.clock?.runningSinceMs != null || ctx.sync.writeAccess === 'none' || (ctx.sync.tokenRequired === true && !ctx.fetchCtl.tokenStored)}
           onClick={e => {
             e.stopPropagation();
             ctx.fetchCtl.start();
