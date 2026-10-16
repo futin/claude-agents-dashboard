@@ -19,7 +19,8 @@ of `pnpm test`. Design and plan: [2026-10-01-visual-regression-design.md](../sup
 The 12 states per view are daylight at the six `fixed` tiers (375, 640, 768, 1024, 1280, 1536 — each tier's `min-width` from [breakpoints](breakpoints.md),
 375 for the phone base) and the two `full` tiers (1537, 1921), plus midnight, amber, graphite and nightshift at 1280. 12 × 6 + 2 + 2 + 5 + 3 + 2 = 86;
 `views.spec.ts` asserts that number, so a new `SECTIONS` entry fails until the matrix and its baselines are reconsidered. Comparison is zero-tolerance:
-`maxDiffPixels: 0`, `threshold: 0`, animations disabled, caret hidden, full page — except the two What's new shots, which are the viewport, since the drawer is `position: fixed`.
+`maxDiffPixels: 0`, `threshold: 0`, animations disabled, caret hidden, full page — except the two What's new shots,
+which are the viewport, since the drawer is `position: fixed`.
 
 The Sessions fixture's working session runs a 13-task plan (7 done, Task 8 running) under a basename long enough to ellipsise, and the idle one holds a
 finished `TaskCreate` list, so the shots carry both task-pill states, the drawer card's `Plan · …` head and its phone fold. `StageOpts.layout` seeds the

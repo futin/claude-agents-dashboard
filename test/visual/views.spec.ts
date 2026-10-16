@@ -65,7 +65,10 @@ const CASES: ShotCase[] = [
   { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', kind: 'releases' }
 ];
 
-/** 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts + 2 What's new drawers. A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered. */
+/**
+ * 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts + 2 What's new drawers. A changed `SECTIONS` fails here until the
+ * matrix (and its baselines) are reconsidered.
+ */
 const EXPECTED_SHOTS = 86;
 
 /** Click the version chip — through the phone menu below `md`, where the rail is folded away — and wait until the drawer is drawn and settled. */
