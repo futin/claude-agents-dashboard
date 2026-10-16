@@ -17,6 +17,7 @@ import {
   type SpawnDefaultEffort, type SpawnDefaultModel, type ThemeId
 } from '../../lib/settings';
 import { GIT_FETCH_OPTIONS } from '../../lib/gitClock';
+import { READ_ONLY_TEXT } from '../../lib/writeRefusal';
 import { EFFORTS, MODELS, PERMISSION_MODE_LABEL } from '../../lib/spawnOptions';
 
 /**
@@ -394,6 +395,12 @@ export default function SettingsView() {
                   )}
                   {/* The token itself is per browser, so it lives on the other
                       page — say where, since "below" is no longer true. */}
+                  {server.readOnly && (
+                    <div className="set-warn">
+                      <span>⚠</span>
+                      <span>{READ_ONLY_TEXT}</span>
+                    </div>
+                  )}
                   {server.needsToken && (
                     <div className="set-warn">
                       <span>⚠</span>

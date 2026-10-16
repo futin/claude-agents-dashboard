@@ -4,6 +4,7 @@ import { Markdown } from './Markdown';
 import { parseInline, type Inline } from '../lib/markdown';
 import { MinimisedPanel, PanelHead } from './PanelChrome';
 import { collapsedSummary } from '../lib/panelCollapse';
+import { READ_ONLY_TEXT } from '../lib/writeRefusal';
 import type { PendingPlanState } from '../hooks/usePendingPlan';
 import Chevron from './Chevron';
 
@@ -86,7 +87,7 @@ export function splitPlan(md: string): { title: string; body: string } {
  * before the `tool_use` record reaches the transcript the drawer renders.
  */
 export default function PlanPanel({ state }: { state: PendingPlanState }) {
-  const { pending, phase, needsToken, reject, dismiss, setToken } = state;
+  const { pending, phase, needsToken, readOnly, reject, dismiss, setToken } = state;
   const [feedback, setFeedback] = useState('');
   const [tokenDraft, setTokenDraft] = useState('');
   const [open, setOpen] = useState(false);
@@ -193,6 +194,7 @@ export default function PlanPanel({ state }: { state: PendingPlanState }) {
         </div>
       </div>
 
+      {readOnly && <div className="qp-token"><span className="qp-note">{READ_ONLY_TEXT}</span></div>}
       {needsToken && (
         <div className="qp-token">
           <span className="qp-note">This dashboard needs its answer token.</span>

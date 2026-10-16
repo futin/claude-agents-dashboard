@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { micErrorMessage, pickMimeType } from '../lib/dictation';
+import { READ_ONLY_TEXT, refusalKind } from '../lib/writeRefusal';
 import { usePersistedState } from './usePersistedState';
 import type { TranscribeResponse } from '../../../shared/types';
 
@@ -79,8 +80,10 @@ export function useDictation(onText: (text: string) => void): DictationState {
     try {
       const res = await fetch('/api/transcribe', { method: 'POST', headers, body: blob });
       if (!res.ok) {
+        const readOnly = refusalKind(res.status, res.status === 403 ? await res.json().catch(() => undefined) : undefined) === 'read-only';
         setError(
           res.status === 429 ? 'another clip is transcribing'
+          : readOnly ? READ_ONLY_TEXT
           : res.status === 403 ? 'token needed — tap send to enter it'
           : 'transcription failed'
         );

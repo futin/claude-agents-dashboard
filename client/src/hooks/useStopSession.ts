@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 
 import { usePersistedState } from './usePersistedState';
+import { READ_ONLY_TEXT, refusalKind } from '../lib/writeRefusal';
 
 export interface StopControl {
   /**
@@ -43,7 +44,9 @@ export function useStopSession(): StopControl {
         method: 'POST', headers, body: JSON.stringify({ force })
       });
       if (res.status === 403) {
-        setNeedsToken(true);
+        const readOnlyNow = refusalKind(res.status, await res.json().catch(() => undefined)) === 'read-only';
+        setNeedsToken(!readOnlyNow);
+        if (readOnlyNow) setError(READ_ONLY_TEXT);
         return false;
       }
       setNeedsToken(false);

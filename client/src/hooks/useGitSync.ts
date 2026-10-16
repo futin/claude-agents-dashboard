@@ -6,6 +6,7 @@ import {
   type OkRepo, type SyncPhase,
 } from '../lib/gitSync';
 import { reconcileRuns } from '../lib/gitSyncRuns';
+import { READ_ONLY_TEXT } from '../lib/writeRefusal';
 import { usePersistedState } from './usePersistedState';
 import { useRemoteAnswer } from './useRemoteAnswer';
 import { useSessions } from './useSessions';
@@ -40,7 +41,7 @@ export interface GitSyncControl {
 export function useGitSync(onEnded: () => void): GitSyncControl {
   const { settings } = useSettings();
   const remote = useRemoteAnswer();
-  const { launch, pending, error, needsToken } = useSpawn();
+  const { launch, pending, error, needsToken, readOnly } = useSpawn();
   // The literal key, not SYNC_RUNS_KEY: the Reset sweep in test/client-settings.test.ts reads keys off the source.
   const [stored, setStored] = usePersistedState<unknown>('management.syncRuns', {});
   const runs = parseSyncRuns(stored);
@@ -79,7 +80,8 @@ export function useGitSync(onEnded: () => void): GitSyncControl {
     const name = startedName.current;
     startedName.current = null;
     setStarting(null);
-    if (needsToken) setNote(SYNC_NEEDS_TOKEN);
+    if (readOnly) setNote(READ_ONLY_TEXT);
+    else if (needsToken) setNote(SYNC_NEEDS_TOKEN);
     else if (error) setNote(syncLaunchErrorText(name, error));
   }, [pending]);
 

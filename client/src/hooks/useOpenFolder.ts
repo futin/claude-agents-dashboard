@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 
 import type { OpenFolderRequest } from '../../../shared/types';
 import { usePersistedState } from './usePersistedState';
+import { READ_ONLY_TEXT, refusalKind } from '../lib/writeRefusal';
 
 export interface OpenFolderControl {
   /** `POST /api/open-folder` `{path}`. A no-op while this hook's own POST is out. Never throws. */
@@ -35,6 +36,7 @@ export function useOpenFolder(): OpenFolderControl {
         if (res.status === 200) return null;
         if (res.status === 403) {
           const reply = await res.json().catch(() => null) as { error?: unknown } | null;
+          if (refusalKind(res.status, reply) === 'read-only') return READ_ONLY_TEXT;
           return reply?.error === 'bad token'
             ? 'Open folder needs the Answer token — set it under Settings › Local › Connection.'
             : 'That folder is no longer pinned.';

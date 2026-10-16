@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { usePersistedState } from './usePersistedState';
+import { refusalKind } from '../lib/writeRefusal';
 import type { NotifyPatch, ServerSettings } from '../../../shared/types';
 
 /** What a caller can ask about: the two number fields, or the notify policy. */
@@ -19,6 +20,8 @@ export interface ServerSettingsControl {
   isSaving: (key: SavingKey) => boolean;
   /** Set when the server refused the token. */
   needsToken: boolean;
+  /** Set when the server says this network is read-only: no token can help, so the surface says so instead of prompting. */
+  readOnly: boolean;
   save: (patch: Partial<ServerSettings>) => Promise<void>;
   /** Patch one or more notify keys. Merged server-side, so send only what changed. */
   saveNotify: (patch: NotifyPatch) => Promise<void>;
@@ -45,6 +48,7 @@ export function useServerSettings(): ServerSettingsControl {
    */
   const [savingKeys, setSavingKeys] = useState<readonly string[]>([]);
   const [needsToken, setNeedsToken] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
   const [token] = usePersistedState<string>('dashboard.answerToken', '');
 
   useEffect(() => {
@@ -70,9 +74,12 @@ export function useServerSettings(): ServerSettingsControl {
     try {
       const res = await fetch('/api/settings', { method: 'POST', headers, body: JSON.stringify(patch) });
       if (res.status === 403) {
-        setNeedsToken(true);
+        const readOnlyNow = refusalKind(res.status, await res.json().catch(() => undefined)) === 'read-only';
+        setReadOnly(readOnlyNow);
+        setNeedsToken(!readOnlyNow);
       } else if (res.ok) {
         setNeedsToken(false);
+        setReadOnly(false);
         // Trust the response, not the request: the server clamps, so what it
         // echoes back is what the hooks will actually read.
         setState((await res.json()) as ServerSettings);
@@ -100,5 +107,5 @@ export function useServerSettings(): ServerSettingsControl {
     [save]
   );
 
-  return { state, isSaving, needsToken, save, saveNotify };
+  return { state, isSaving, needsToken, readOnly, save, saveNotify };
 }
