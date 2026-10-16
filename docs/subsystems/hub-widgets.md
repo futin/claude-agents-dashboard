@@ -94,4 +94,5 @@ data the dashboard already exposes, and a write path through Lookout would need 
     - test/hub-widgets.test.ts
     - test/server-deps.test.ts
   kind: subsystem
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

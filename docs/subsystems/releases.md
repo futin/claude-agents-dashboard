@@ -70,5 +70,5 @@ the release workflow and are not read back.
     - client/src/components/SideRail.tsx
     - client/src/App.tsx
   kind: subsystem
-  verified: b6e2aa227d5ffb029991b594a2b2fe3e9143a3ab
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

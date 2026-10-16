@@ -281,4 +281,5 @@ in flight, and only the clicked one reads "Starting…". The runs key is not a s
     - client/src/hooks/useOpenFolder.ts
     - server/lib/open-folder.ts
   kind: subsystem
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

@@ -256,5 +256,5 @@ The live session meter (status line, `/compact` nudge, tool and subagent pane) u
     - client/src/hooks/useSettings.tsx
     - plugin/skills/kaizen/
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

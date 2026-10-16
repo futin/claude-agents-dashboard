@@ -114,5 +114,5 @@ Dark-theme contrast is off: those themes are due for a redesign, and recording t
     - test/visual/tiers.ts
     - test/visual/fixtures/index.ts
   kind: subsystem
-  verified: 7a0857fcaa4cec51b5cf97f52daaa2be71c97fec
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->
