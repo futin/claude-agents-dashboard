@@ -53,7 +53,11 @@ interface PlanState {
   live: string | null;
 }
 
-interface Entry {
+/**
+ * The fold state for one transcript: the task list, the plan being executed and the calls still waiting on a result. `readSessionTasks` keeps one per file;
+ * the chat Trace keeps one per builder and feeds it a record at a time (`foldTaskRecord`) so it can read the live task as each tool call lands.
+ */
+export interface TaskFold {
   /** Everything before this byte has been folded; it always sits just past a newline. */
   offset: number;
   /** File size at the last call — a smaller size later means the file was replaced. */
@@ -70,31 +74,32 @@ interface Entry {
   heldLive: string | null;
 }
 
-const cache = new Map<string, Entry>();
+const cache = new Map<string, TaskFold>();
 let bytesRead = 0;
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const nonEmpty = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 
-function apply(entry: Entry, call: PendingCall, result: unknown): void {
+/** True when the result changed the task list. */
+function apply(entry: TaskFold, call: PendingCall, result: unknown): boolean {
   const res = isObject(result) ? result : null;
   const { input } = call;
 
   if (call.name === CREATE) {
     const id = nonEmpty(res?.task?.id);
-    if (id === null) return;
+    if (id === null) return false;
     entry.tasks.set(id, { id, subject: typeof input.subject === 'string' ? input.subject : '', status: 'pending', activeForm: nonEmpty(input.activeForm) });
     entry.created = true;
-    return;
+    return true;
   }
 
-  if (res?.success !== true) return;
+  if (res?.success !== true) return false;
   const id = nonEmpty(input.taskId);
   const task = id === null ? undefined : entry.tasks.get(id);
-  if (!task) return;
+  if (!task) return false;
 
   const next: unknown = res?.statusChange?.to ?? input.status;
-  if (next === 'deleted') { entry.tasks.delete(task.id); return; }
+  if (next === 'deleted') { entry.tasks.delete(task.id); return true; }
   // Replaced, not mutated: a list already handed out stays a snapshot.
   entry.tasks.set(task.id, {
     ...task,
@@ -102,15 +107,18 @@ function apply(entry: Entry, call: PendingCall, result: unknown): void {
     subject: nonEmpty(input.subject) ?? task.subject,
     activeForm: nonEmpty(input.activeForm) ?? task.activeForm
   });
+  return true;
 }
 
-function applySignal(entry: Entry, sig: PlanSignal): void {
+/** True when the signal changed the plan state (a path or base that moved, a new plan, a task newly done or newly running). */
+function applySignal(entry: TaskFold, sig: PlanSignal): boolean {
   if (sig.kind === 'plan') {
     const key = path.basename(sig.path);
     if (entry.plan?.key === key) {
+      const moved = entry.plan.path !== sig.path || entry.plan.base !== sig.base;
       entry.plan.path = sig.path;
       entry.plan.base = sig.base;
-      return;
+      return moved;
     }
     // The held signals were consumed by the first plan, so a later plan starts empty.
     const first = entry.plan === null;
@@ -120,9 +128,11 @@ function applySignal(entry: Entry, sig: PlanSignal): void {
     };
     entry.heldDone = new Set();
     entry.heldLive = null;
-    return;
+    return true;
   }
   const state = entry.plan ?? { done: entry.heldDone, live: entry.heldLive };
+  const before = state.done.size;
+  const liveBefore = state.live;
   if (sig.kind === 'done') {
     state.done.add(sig.id);
     if (state.live === sig.id) state.live = null;
@@ -130,38 +140,59 @@ function applySignal(entry: Entry, sig: PlanSignal): void {
     state.live = sig.id;
   }
   if (!entry.plan) entry.heldLive = state.live;
+  return state.done.size !== before || state.live !== liveBefore;
 }
 
-function foldLine(entry: Entry, line: Buffer): void {
+function foldLine(entry: TaskFold, line: Buffer): void {
   // Most lines are neither a Task call nor an answer to one; skip them without decoding.
   let hit = CALL_MARKERS.some((m) => line.includes(m));
   if (!hit && entry.pending.size > 0) for (const id of entry.pending.keys()) if (line.includes(id)) { hit = true; break; }
   if (!hit) return;
 
-  let rec: any;
+  let rec: unknown;
   try { rec = JSON.parse(line.toString('utf8')); } catch { return; }
-  const content = rec?.message?.content;
-  if (!Array.isArray(content)) return;
+  foldTaskRecord(entry, rec);
+}
+
+/** A fresh fold: no tasks, no plan, nothing pending. */
+export function newTaskFold(): TaskFold {
+  return { offset: 0, size: 0, pending: new Map(), tasks: new Map(), created: false, plan: null, heldDone: new Set(), heldLive: null };
+}
+
+/**
+ * Fold one parsed transcript record (the object half of `foldLine`, after `JSON.parse`). True when it changed the task list or the plan state: a call only
+ * parks a pending entry, so it is the result that answers true. There is no byte prefilter here; the caller already holds the parsed record.
+ */
+export function foldTaskRecord(fold: TaskFold, rec: unknown): boolean {
+  const content = isObject(rec) ? rec.message?.content : undefined;
+  if (!isObject(rec) || !Array.isArray(content)) return false;
 
   // The substring hit is not trusted: the words also turn up in message text and a pending id in progress records, so only the exact block shape counts.
+  let changed = false;
   const cwd = nonEmpty(rec.cwd);
   for (const block of content) {
     if (!isObject(block)) continue;
     if (block.type === 'tool_use' && (block.name === CREATE || block.name === UPDATE)) {
-      if (typeof block.id === 'string') entry.pending.set(block.id, { name: block.name, input: isObject(block.input) ? block.input : {} });
+      if (typeof block.id === 'string') fold.pending.set(block.id, { name: block.name, input: isObject(block.input) ? block.input : {} });
     } else if (block.type === 'tool_use' && typeof block.name === 'string' && isObject(block.input)) {
-      for (const sig of planSignals(block.name, block.input, cwd)) applySignal(entry, sig);
+      for (const sig of planSignals(block.name, block.input, cwd)) if (applySignal(fold, sig)) changed = true;
     } else if (block.type === 'tool_result' && typeof block.tool_use_id === 'string') {
-      const call = entry.pending.get(block.tool_use_id);
+      const call = fold.pending.get(block.tool_use_id);
       if (!call) continue;
-      entry.pending.delete(block.tool_use_id);
-      apply(entry, call, rec.toolUseResult);
+      fold.pending.delete(block.tool_use_id);
+      if (apply(fold, call, rec.toolUseResult)) changed = true;
     }
   }
+  return changed;
+}
+
+/** The subject of the task running now (the `in_progress` row of the session's list, plan rows included); null when none is. */
+export function liveTaskSubject(fold: TaskFold, projectPath: string | null): string | null {
+  return snapshot(fold, projectPath).tasks?.find((t) => t.status === 'in_progress')?.subject ?? null;
 }
 
 /** Fold `[entry.offset, size)`; `entry.offset` advances chunk by chunk, so a read error leaves it at the last fully folded line. */
-function foldFrom(fd: number, entry: Entry, size: number): void {
+function foldFrom(fd: number, entry: TaskFold, size: number): void {
   let pos = entry.offset;
   let carry: Buffer | null = null;
   while (pos < size) {
@@ -183,7 +214,7 @@ function foldFrom(fd: number, entry: Entry, size: number): void {
 }
 
 /** The plan file is read here, not in the fold, so an amended plan shows on the next poll even when the transcript did not grow. */
-function snapshot(entry: Entry, projectPath: string | null): TaskState {
+function snapshot(entry: TaskFold, projectPath: string | null): TaskState {
   const { plan } = entry;
   if (plan) {
     const file = resolvePlanFile(plan.path, plan.base, projectPath);
@@ -230,7 +261,7 @@ export function readSessionTasks(filePath: string, projectPath: string | null): 
   }
 
   if (!entry) {
-    entry = { offset: 0, size: 0, pending: new Map(), tasks: new Map(), created: false, plan: null, heldDone: new Set(), heldLive: null };
+    entry = newTaskFold();
     cache.set(filePath, entry);
     if (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value!);
   }

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { SessionTask } from '../shared/types.js';
-import { CHUNK_BYTES, readSessionTasks, resetTaskCache, taskCacheStats } from '../server/lib/tasks.js';
+import { CHUNK_BYTES, foldTaskRecord, liveTaskSubject, newTaskFold, readSessionTasks, resetTaskCache, taskCacheStats } from '../server/lib/tasks.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -470,6 +470,19 @@ export function run(): number {
     const root = planRoot({ p: ['A', 'B', 'C', 'D', 'E'] });
     const file = transcript(header(root, 'docs/p.md') + ledger(root, 'Task 4: complete (x)') + agent(root, 'Implement Task 5: x') + agent(root, 'Review Task 4'));
     assert.deepStrictEqual(statuses(readSessionTasks(file, null).tasks), ['pending', 'pending', 'pending', 'completed', 'in_progress']);
+  })) p++; else f++;
+
+  if (test('F1. foldTaskRecord folds one parsed record at a time and liveTaskSubject names the in_progress task', () => {
+    const fold = newTaskFold();
+    const recs = (text: string): unknown[] => text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const folded = recs(create('1', 'Wire the trace') + update({ taskId: '1', status: 'in_progress' })).map((r) => foldTaskRecord(fold, r));
+    // A call only parks a pending entry; each result is what moves tasks.
+    assert.deepStrictEqual(folded, [false, true, false, true]);
+    assert.strictEqual(liveTaskSubject(fold, null), 'Wire the trace');
+    assert.strictEqual(foldTaskRecord(fold, JSON.parse(reply('thinking out loud'))), false);
+    assert.strictEqual(foldTaskRecord(fold, JSON.parse(plain('hello'))), false);
+    assert.strictEqual(liveTaskSubject(fold, null), 'Wire the trace');
+    assert.strictEqual(liveTaskSubject(newTaskFold(), null), null);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
