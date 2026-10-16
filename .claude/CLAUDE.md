@@ -112,7 +112,7 @@ Three rules are load-bearing:
   human" line or an explicit *Unproven* row.
 - **Never claim green without the command output.**
 - **The PR title must pass `ci / pr-title`** (it becomes the squash commit once squash-only merges are applied): `feat|fix|perf` (`!` allowed) or
-  `docs|chore|test|refactor|ci|build`, optional lowercase `(scope)`, `: `, a description. `feat`/`fix`/`perf` cut a release once Phase C lands.
+  `docs|chore|test|refactor|ci|build`, optional lowercase `(scope)`, `: `, a description. `feat`/`fix`/`perf` cut a release (`docs/workflows/ci.md` §Releases).
 - **`main` is PR-only** (ruleset `main-pr-only`, `docs/workflows/ci.md`): every change reaches it through a PR, docs included. Specs, plans and notes go
   through a `docs:` PR, which passes CI and cuts no release. Never bypass the ruleset.
 

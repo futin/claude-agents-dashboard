@@ -47,5 +47,40 @@ The `main-pr-only` ruleset (PR required, the three contexts above, linear histor
 settings are applied by release-kit's `scripts/apply-repo-settings.sh futin/claude-agents-dashboard`. **Applied on 2026-10-15** (ruleset id 25157835),
 after PR #204 reported all three contexts green. Re-running the script updates the ruleset in place. Direct pushes to `main` are refused, so every change reaches it
 through a PR. git-sync reads the rule (one `gh api` call per survey), never pushes the trunk, and offers to carry local trunk commits to a PR branch
-([design §6](../../plugin/skills/git-sync/references/design.md)). backlog-orchestrate's `--pr` mode, which gives it the same path, is pending in
-`futin/backlog-manager`; until it lands, an orchestrator run that writes `main` directly is refused.
+([design §6](../../plugin/skills/git-sync/references/design.md)). backlog-orchestrate's `--pr` mode gives it the same path (merged as
+futin/backlog-manager#279).
+
+## Releases
+
+`.github/workflows/release.yml` is a thin caller of release-kit's reusable `release.yml` (`@v1`, with `kit-ref: v1` kept equal to that ref), run on every
+push to `main` and on `workflow_dispatch`. Design: `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` §Phase C. It needs both
+`contents: write` (the tag push and the Release) and `pull-requests: read` — setting `contents` alone drops `pull-requests` to none and the PR lookup then
+fails on a private repo. The group is `release` with `cancel-in-progress: false`; GitHub still drops an older *pending* run when a newer one queues, so a
+run releases every unreleased commit since the last tag, not only its own.
+
+**The tag is the record.** The version exists only as an annotated `vX.Y.Z` tag whose message carries the PR title, the notes and `Release-*` trailers.
+`package.json` `version` is not read and is not bumped; the same tags feed the GitHub Release.
+
+**What cuts one.** The PR title decides, and the version is bumped from the newest `vX.Y.Z` tag reachable from the commit:
+
+| Title | While major = 0 | From 1.0.0 |
+|---|---|---|
+| `feat` | minor | minor |
+| `fix`, `perf` | patch | patch |
+| `!` after the type or scope, or a `BREAKING CHANGE: ` line in the PR body | minor | major |
+
+`docs`, `chore`, `test`, `refactor`, `ci` and `build` cut nothing (this PR's own merge included), and a `BREAKING CHANGE:` line on one of them is
+ignored. A commit on `main` with no PR is skipped with the warning `no PR for <sha>`; the commits after it are still released.
+
+**Where the notes come from.** The `## What's new` section of the PR body (`.github/pull_request_template.md` carries it above `## Why this shape`), up to
+the next `## ` heading, with HTML comments stripped first. A missing or empty section, which is what the untouched template yields, means the title alone is
+the entry. Delete the section from PRs with nothing user-visible.
+
+**Baseline.** Until a `vX.Y.Z` tag exists the workflow releases nothing and ends green with the warning `no baseline tag`. `v0.1.0` is tagged once, by hand,
+on the `main` commit that contains the workflow (`git tag -a v0.1.0 <sha> -m "Baseline — versioning starts here" --cleanup=verbatim`, then
+`git push origin v0.1.0`); every later version is cut from it.
+
+**Re-running.** `gh workflow run release.yml -f sha=<sha>` releases that commit and every unreleased commit before it; with no `sha` it uses the branch head.
+It is idempotent: a commit with its tag and its Release is left alone, and a tag whose Release is missing only gets the Release. That is also how the
+baseline gets its GitHub Release. A dispatch whose target has a later version tag fails with `a newer release exists: <tag>`, since versions are never
+assigned out of order; a push run in the same state ends green with `a newer release exists: <tag> — nothing to do`, because it can only be a superseded run.
