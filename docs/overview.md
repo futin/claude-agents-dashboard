@@ -247,8 +247,8 @@ client/src/
                   poll, so leaving the section stops it; two columns: the list in one of
                   five views + a 320px aside), HeaderAccount (the shell's account
                   chip — identity + both rate windows, in the header band or the
-                  phone nav bar; see subsystems/account-header.md), ReleasesDrawer (the What's new
-                  drawer behind the rail's version chip), Chevron (the one disclosure mark),
+                  phone nav bar; see subsystems/account-header.md), ReleasesDrawer (ui-kit's What's new
+                  drawer behind the rail's version chip, plus the back gesture), Chevron (the one disclosure mark),
                   AsideBoard (clock, origin, counts, remote-answer switch, New session),
                   Toolbar (view switcher + filter/sort popovers; Popover is the shared
                   dismiss primitive), sessions/ (atoms, Expanded, EmptyState, AsideStrip
@@ -274,8 +274,7 @@ client/src/
                   useUsageProfile, useUsageRates, useUsageHistory, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins, usePinReorder (Projects' pin grip), useOpenFolder (Git's Open folder
                   key),
-                  useAccount (the header chip's 30s poll, owned by App), useReleases (fetched on load
-                  and on each drawer open, no poll), useGitFetch (Git's Fetch all key),
+                  useAccount (the header chip's 30s poll, owned by App), useGitFetch (Git's Fetch all key),
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
                   Sync button: runs per device, a sessions poll only while one is live),
                   usePersistedState, useAnswerToken (the page's one Answer token copy), useSettings, useServerSettings, useDictation, useFloatingTip
@@ -298,7 +297,7 @@ client/src/
                   re-poll timing and Fetch all key state), gitSync / gitSyncRuns
                   (the Sync button's rules, copy and run reconciler), projectsView (the
                   Projects sub-view's layouts, pinned / offered split, dir line and copy), releases (the
-                  version chip's label and unseen dot, the drawer's badges and dates)
+                  unseen dot's localStorage key; the chip and drawer logic are ui-kit's)
 vite.config.ts    dev proxy /api → backend; reuses the server config loader;
                   allowedHosts = `.ts.net` + this node's bare MagicDNS short
                   name (probed via `tailscale status --json`), without which

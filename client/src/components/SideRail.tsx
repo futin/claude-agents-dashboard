@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { VersionChip } from 'ui-kit';
 
 import { SECTIONS, type Section } from '../lib/sections';
 import { useBackClose } from '../hooks/useBackClose';
@@ -324,18 +325,7 @@ export function SideRail({ section, onChange, accountSlot, live, version }: Prop
               : 'disconnected — server stopped?'}
           </div>
         )}
-        {version && (
-          <button
-            type="button"
-            className="rel-chip"
-            aria-haspopup="dialog"
-            aria-label={`Running ${version.label}${version.dot ? ', new releases' : ''} — open What's new`}
-            onClick={pick(version.onOpen)}
-          >
-            {version.dot && <span className="rel-dot" aria-hidden="true" />}
-            {version.label}
-          </button>
-        )}
+        {version && <VersionChip label={version.label} dot={version.dot} onClick={pick(version.onOpen)} className="rel-chip" />}
       </nav>
     </div>
   );

@@ -187,6 +187,9 @@ importers:
       release-kit:
         specifier: github:futin/release-kit#v1.2.0
         version: https://codeload.github.com/futin/release-kit/tar.gz/574d3f148a3783d0549e8a7c85395b79b94ec631
+      ui-kit:
+        specifier: github:futin/ui-kit#v0.2.0
+        version: https://codeload.github.com/futin/ui-kit/tar.gz/39511c4541a69536c2b30dda0aa9d5d193d7ccf1(react@18.3.1)
     devDependencies:
       '@axe-core/playwright':
         specifier: 4.13.0
@@ -1069,6 +1072,13 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  ui-kit@https://codeload.github.com/futin/ui-kit/tar.gz/39511c4541a69536c2b30dda0aa9d5d193d7ccf1:
+    resolution: {gitHosted: true, integrity: sha512-nLMX9nFO/ZkOq/hvc4Huc4TjhzjM5BkcuLcv2U4k+UZOZxlJdrbzDOwXziD89bD7hyPzlsoQEeEyx5nSA+2nMQ==, tarball: https://codeload.github.com/futin/ui-kit/tar.gz/39511c4541a69536c2b30dda0aa9d5d193d7ccf1}
+    version: 0.0.0
+    engines: {node: '>=22'}
+    peerDependencies:
+      react: ^18.3 || ^19
+
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
@@ -1829,6 +1839,10 @@ snapshots:
       fsevents: 2.3.3
 
   typescript@5.9.3: {}
+
+  ui-kit@https://codeload.github.com/futin/ui-kit/tar.gz/39511c4541a69536c2b30dda0aa9d5d193d7ccf1(react@18.3.1):
+    dependencies:
+      react: 18.3.1
 
   undici-types@6.21.0: {}
 

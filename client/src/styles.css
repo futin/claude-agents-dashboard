@@ -322,7 +322,6 @@ code,kbd,samp,pre{font-family:inherit}
 .rel-chip{position:relative;display:inline-flex;align-items:center;gap:6px;align-self:flex-start;margin:auto 0 0 8px;min-height:28px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:999px;padding:4px 10px;cursor:pointer;transition:color .15s,border-color .15s}
 .foot+.rel-chip{margin-top:12px}
 .rel-chip:hover{color:var(--ink);border-color:var(--hairline2)}
-.rel-dot{flex:none;width:7px;height:7px;border-radius:999px;background:var(--cyan)}
 /* A phone widens its layout viewport to fit anything that overflows sideways,
    and `position:fixed` panels are sized against that widened box: the chat
    drawer's close button and its footer land off the visible screen, with no
@@ -3132,36 +3131,15 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 @media (min-width:640px){.git-bb-cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (min-width:1280px){.git-bb-cols{grid-template-columns:repeat(4,minmax(0,1fr))}}
 
-/* What's new — the releases drawer behind the version chip. Phone first: full screen with no scrim, ✕ at a thumb's 40px, back gesture to leave, the
-   chat drawer's shape. From `md` (768px) a 400px panel on the right over the scrim, which closes it on a tap. */
-.rel-back{position:fixed;inset:0;z-index:50;display:flex;justify-content:flex-end;background:var(--scrim)}
-.rel-drawer{width:100%;height:100%;min-width:0;display:flex;flex-direction:column;background:var(--strip);animation:chat-in .16s ease-out}
-.rel-head{display:flex;align-items:center;gap:10px;padding:13px 14px;border-bottom:1px solid var(--hairline);flex:none;min-width:0}
-.rel-head-t{font-size:16px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
-.rel-head-s{min-width:0;font-size:12px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rel-list{flex:1;min-height:0;overflow-y:auto;padding:4px 16px 20px;display:flex;flex-direction:column}
-.rel-entry{display:flex;flex-direction:column;gap:8px;padding:16px 0;border-top:1px solid var(--hairline);min-width:0}
-.rel-entry:first-child{border-top:0}
-.rel-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.rel-ver{font-size:14px;font-weight:600;color:var(--ink);letter-spacing:-.01em}
-.rel-date{font-size:12px;color:var(--ink3)}
-.rel-title{font-size:14px;color:var(--ink);line-height:1.4;overflow-wrap:anywhere}
-.rel-entry .md{font-size:13px;color:var(--ink2);line-height:1.5}
-/* Badges: the type in its status colour on its own tint, Breaking always a badge of its own beside it. Tints are mixed from the tokens here, so each
-   theme's override of the hue carries through. */
-.rel-badge{display:inline-flex;align-items:center;font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;white-space:nowrap}
-.rel-badge.feat{color:var(--green);background:var(--green-tint)}
-.rel-badge.fix{color:var(--amber-ink);background:var(--amber-tint)}
-.rel-badge.perf{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 14%,transparent)}
-.rel-badge.breaking{color:var(--red);background:color-mix(in srgb,var(--red) 14%,transparent)}
-.rel-pr{align-self:flex-start;font-size:12px;color:var(--cyan);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--cyan) 40%,transparent)}
-.rel-pr:hover{border-bottom-color:var(--cyan)}
-/* the baseline: where numbering starts, drawn as a rule with its words in the gap */
-.rel-base{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ink3)}
-.rel-base::before,.rel-base::after{content:"";flex:1;height:1px;background:var(--hairline)}
-@media (min-width:768px){
-  .rel-drawer{width:400px;border-left:1px solid var(--hairline);box-shadow:-12px 0 32px var(--shadow2)}
-  .rel-head{padding:16px 18px}
-  .rel-head .chat-x{width:32px;height:32px}
-  .rel-list{padding:4px 18px 20px}
+/* What's new — ui-kit's chip and drawer (docs/subsystems/releases.md), themed by mapping its `--uk-*` properties onto this sheet's tokens. Set on the
+   two roots rather than `:root`, so each property resolves against whichever `[data-theme]` the element sits under. Badges are each status token on its
+   own tint; the 14% mixes carry each theme's hue through. Full screen below `md` is ui-kit's `narrow`, passed in from `useNarrow`. */
+.uk-chip,.uk-drawer-scrim{
+  --uk-panel-bg:var(--strip);--uk-ink:var(--ink);--uk-ink-muted:var(--ink3);--uk-hairline:var(--hairline);--uk-scrim:var(--scrim);--uk-shadow:var(--shadow2);
+  --uk-accent:var(--cyan);--uk-hover-bg:var(--steel);--uk-code-bg:var(--steel);--uk-font:var(--font);--uk-font-mono:var(--font);
+  --uk-feat-ink:var(--green);--uk-feat-tint:var(--green-tint);--uk-fix-ink:var(--amber-ink);--uk-fix-tint:var(--amber-tint);
+  --uk-perf-ink:var(--cyan);--uk-perf-tint:color-mix(in srgb,var(--cyan) 14%,transparent);
+  --uk-breaking-ink:var(--red);--uk-breaking-tint:color-mix(in srgb,var(--red) 14%,transparent);
+  --uk-font-size-lg:16px;--uk-z:50;
 }
+.uk-releases-notes .md{font-size:13px}

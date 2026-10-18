@@ -73,8 +73,8 @@ override it (see `dashboard.section` below).
   guarded by `isProjectsLayout` on read, default `tiles`; per device, an `OWNED_KEYS` entry so Reset sweeps it, no Settings picker; unlike Git's, it is never
   coerced on a narrow window — see [settings](settings.md));
   `management.syncRuns` (the Git Sync runs this device launched, keyed by repo — see [git-stats](git-stats.md); live state, so Reset leaves it);
-  `dashboard.releases.lastSeen` (the newest release this browser has seen, a raw version string, not JSON, that `App.tsx` reads and writes through
-  `localSeenStore` in `lib/releases.ts` rather than `usePersistedState` — see [releases](releases.md); not in `OWNED_KEYS`, so Reset leaves it too).
+  `dashboard.releases.lastSeen` (the newest release this browser has seen, a raw version string, not JSON, that ui-kit's `useWhatsNew` reads and writes
+  under `LAST_SEEN_KEY` from `lib/releases.ts` rather than through `usePersistedState` — see [releases](releases.md); not in `OWNED_KEYS`, so Reset leaves it too).
 - **Client-only, zero deps** — no backend, and nothing here is shareable/bookmarkable by
   design. The URL params in the app are the opposite of persistence: `?session=<id>`, the
   deep link a tapped push notification opens (`lib/deepLink.ts`, put in ntfy's `Click` header
