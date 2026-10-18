@@ -4,21 +4,21 @@ The dashboard shows its own release history: a version chip at the foot of the s
 newest first. The record is the checkout's annotated `vX.Y.Z` tags, which the release workflow cuts on every releasing merge into `main`
 ([ci](../workflows/ci.md) §Releases). Design: [the release pipeline spec](../superpowers/specs/2026-10-15-release-pipeline-design.md) §App.
 
-Code: `server/lib/releases.ts` (the memo), `serveReleases` in `server/api.ts`, `client/src/lib/releases.ts` (every decision the chip and drawer make, no
+Code: `server/lib/releases.ts` (points release-kit's memoised reader at the checkout), `serveReleases` in `server/api.ts`, `client/src/lib/releases.ts` (every decision the chip and drawer make, no
 React), `client/src/hooks/useReleases.ts`, `client/src/components/ReleasesDrawer.tsx`, the chip in `SideRail.tsx`, the wiring in `AppShell` (`App.tsx`).
 
 ## `GET /api/releases`
 
 Answers `ReleasesResponse` (`shared/types.ts`): `current` is the newest release tag reachable from HEAD and how many commits HEAD is past it, `releases`
 every release tag, newest first. Parsing the tag messages (subject, notes, `Release-Type` / `Release-Scope` / `Release-PR` / `Release-Breaking`
-trailers) is [release-kit](https://github.com/futin/release-kit)'s `readReleases`, pinned to an exact `vX.Y.Z` tag (`v1.1.0` as of 2026-10-18) — the second of the two packages `server/` may import
+trailers) is [release-kit](https://github.com/futin/release-kit)'s `createReleasesReader`, pinned to an exact `vX.Y.Z` tag (`v1.2.0` as of 2026-10-18) — the second of the two packages `server/` may import
 (`test/server-deps.test.ts`). It runs `git` and reads nothing else, so it adds no outbound call. A tag with no `Release-Type` trailer is the **baseline**:
 where numbering starts, not a release of anything. Lightweight tags and names that are not exactly `vX.Y.Z` are ignored.
 
 **The empty shape.** A folder that is not a checkout, a checkout with no tags, or any git failure answers `{ current: null, releases: [] }`, with 200.
-`readReleases` never rejects, so the route has no error branch.
+The reader never rejects, so the route has no error branch.
 
-**The memo.** One read per change, not per request. The key is HEAD plus the mtimes of `packed-refs` and `refs/tags` under the **common** git dir
+**The memo** is release-kit's, not this repo's. One read per change, not per request. The key is the root, HEAD, plus the mtimes of `packed-refs` and `refs/tags` under the **common** git dir
 (`git rev-parse HEAD --git-common-dir`):
 
 - HEAD alone is not enough: a tag fetched or cut by hand moves no HEAD, and the release workflow tags `main` after the merge you already pulled.
@@ -26,7 +26,9 @@ where numbering starts, not a release of anything. Lightweight tags and names th
   would never move the key.
 - `refs/tags` changes when a loose tag is added or removed, `packed-refs` when `git pack-refs` or `git gc` moves tags into it.
 
-A key git cannot produce is never memoised, so a transient failure is not pinned. Concurrent requests under one key share one read.
+A key git cannot produce is never memoised, and neither is an incomplete read, so a transient failure is not pinned. Concurrent requests under one key
+share one read. `overrideReleasesRoot` (a fresh reader, count reset) and `releasesReadCount` (the tag-listing `for-each-ref` launches, counted through
+the git port) are the test seams over it.
 `test/api-releases.test.ts` covers each of these through the real route table.
 
 ## The chip

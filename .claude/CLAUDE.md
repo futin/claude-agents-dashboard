@@ -76,8 +76,8 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
   own network calls — the server does not, so they are not a third kind. `lib/git-fetch.ts` launches `git fetch`, which makes its own network call —
   not a third kind either. `test/outbound.test.ts` pins the list.
   Two npm packages are allowed, by name, each with zero runtime deps of its own and pinned to a git tag: `lookout-widgets`, the Lookout contract producer
-  behind `/api/hub/widgets`, and `release-kit`, whose `readReleases` is the one reader of the tag-message contract its release workflow writes (spec
-  `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` D7) and backs `/api/releases`; it uses Node built-ins only and launches `git`, so it is no
+  behind `/api/hub/widgets`, and `release-kit`, whose reader is the one reader of the tag-message contract its release workflow writes (spec
+  `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` D7) and, as `createReleasesReader`, backs `/api/releases`; it uses Node built-ins only and launches `git`, so it is no
   new outbound kind. `test/server-deps.test.ts` pins both names, `lookout-widgets` to its literal tag and `release-kit` to any exact `vX.Y.Z` tag; any other bare import under `server/` fails it.
 - `client/dist/` and `.env` are gitignored.
 - `plugin/skills/kaizen/` is the only copy of `/kaizen`; its log path and line grammar are a

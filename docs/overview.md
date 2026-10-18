@@ -54,7 +54,7 @@ via `tsx`, dev and prod alike).
   `git fetch origin` over the pinned repos while Management › Git is open, which writes their remote-tracking refs and `FETCH_HEAD`, never a branch or a
   working tree.
 - **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only, with two pinned exceptions, neither with deps of its own:
-  `lookout-widgets` ([hub-widgets](subsystems/hub-widgets.md#the-dependency-exception)) and `release-kit`, whose `readReleases` backs
+  `lookout-widgets` ([hub-widgets](subsystems/hub-widgets.md#the-dependency-exception)) and `release-kit`, whose memoised `createReleasesReader` backs
   [`GET /api/releases`](subsystems/releases.md); `test/server-deps.test.ts` pins both. Keep new npm deps out of it.
 - **Fail-open everywhere.** A missing token, an unreadable file, a failed probe — every
   auxiliary feature degrades to "not shown" rather than crashing the monitor.
@@ -100,7 +100,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/hub/widgets`, `/:id` | the Lookout hub catalog and widget data — usage gauge, sessions list and Git pending list; `POST` action paths are 404 (see [hub-widgets](subsystems/hub-widgets.md)) |
 | `GET /api/account` | who the CLI is signed in as (`~/.claude.json` → `oauthAccount`, as display strings) + the two rate windows — the header chip's own 30s poll, so it does not ride the 3s session scan |
-| `GET /api/releases` | the dashboard's own releases from the checkout's local annotated `vX.Y.Z` tags (release-kit's `readReleases`), memoised on HEAD + the tag refs; the empty shape when there are none ([releases](subsystems/releases.md)) |
+| `GET /api/releases` | the dashboard's own releases from the checkout's local annotated `vX.Y.Z` tags (release-kit's `createReleasesReader`), memoised on HEAD + the tag refs; the empty shape when there are none ([releases](subsystems/releases.md)) |
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
 | `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, one cell per UTC day of the horizon, plus the coverage disclosure and the off-peak boost verdict (`lib/usage-boost.ts`) |
 | `GET /api/usage/history?days=N` | recorded 5h and weekly utilization over the last N days (default 7, clamped 1–365): windows by observed `resetsAt`, gap-split step segments downsampled to ~1440 points, and the recording gaps; served with recording off too (`lib/usage-history-series.ts`) |
@@ -208,7 +208,7 @@ server/
   lib/open-folder.ts  `open <path>` through `execFile`, behind POST /api/open-folder (the pin-membership gate is in api.ts)
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
   lib/account.ts      `~/.claude.json` → `oauthAccount` as display strings, behind GET /api/account; fail-open to null
-  lib/releases.ts     GET /api/releases: release-kit's tag reader behind a memo keyed on HEAD + the common dir's tag refs
+  lib/releases.ts     GET /api/releases: release-kit's memoised tag reader, pointed at the checkout, plus two test seams
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
   lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
