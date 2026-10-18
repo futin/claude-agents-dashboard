@@ -11,7 +11,7 @@ React), `client/src/hooks/useReleases.ts`, `client/src/components/ReleasesDrawer
 
 Answers `ReleasesResponse` (`shared/types.ts`): `current` is the newest release tag reachable from HEAD and how many commits HEAD is past it, `releases`
 every release tag, newest first. Parsing the tag messages (subject, notes, `Release-Type` / `Release-Scope` / `Release-PR` / `Release-Breaking`
-trailers) is [release-kit](https://github.com/futin/release-kit)'s `readReleases`, pinned to `v1.1.0` — the second of the two packages `server/` may import
+trailers) is [release-kit](https://github.com/futin/release-kit)'s `readReleases`, pinned to an exact `vX.Y.Z` tag (`v1.1.0` as of 2026-10-18) — the second of the two packages `server/` may import
 (`test/server-deps.test.ts`). It runs `git` and reads nothing else, so it adds no outbound call. A tag with no `Release-Type` trailer is the **baseline**:
 where numbering starts, not a release of anything. Lightweight tags and names that are not exactly `vX.Y.Z` are ignored.
 
