@@ -1,4 +1,4 @@
-# Remote answers (the first write path)
+# Remote answers (the first session write path)
 
 When a session calls `AskUserQuestion`, the [chat drawer](chat.md) can render its options
 as buttons and deliver the pick **into the live session** — tap one on your phone and the

@@ -130,7 +130,7 @@ one is a reason to ever wire the mic straight to send.
 |---|---|
 | 200 | `{text: string}` — possibly `''` when nothing was heard; the client shows "nothing heard" inline, not an error |
 | 400 | empty body; upload aborted mid-read; or a `Content-Type` outside the mime allowlist (echoed back in the error message) |
-| 403 | `bad token` or `read-only from this network` — `refuseWrite`, the same gate as every other write path. The refusal is no longer silent: it prints one `rejected write: POST /api/transcribe from <peer> (…)` line on stderr, throttled to once per method+path per minute, carrying the method and path only — never the token, a prefix of it, or the query string. The listener's Host and cross-site guards (`lib/request-guard.ts`, [remote-access](remote-access.md#browser-side-guards)) also answer 403, before any route runs |
+| 403 | `bad token` or `read-only from this network` — `refuseWrite`, the same gate as every other route behind the write gate. The refusal is no longer silent: it prints one `rejected write: POST /api/transcribe from <peer> (…)` line on stderr, throttled to once per method+path per minute, carrying the method and path only — never the token, a prefix of it, or the query string. The listener's Host and cross-site guards (`lib/request-guard.ts`, [remote-access](remote-access.md#browser-side-guards)) also answer 403, before any route runs |
 | 404 | feature off: `remoteAnswer` is false, or `probeTranscribe` is false (no model configured, or no working binary) |
 | 405 | non-`POST` |
 | 413 | body over `AUDIO_CAP` (8MB) — caught from an honest `Content-Length` before a byte is read, or from the running byte count otherwise |
@@ -182,10 +182,10 @@ same as "no spawn is reachable without a token": the capability probe itself (pr
 section) is cached for the process's lifetime and also runs behind the unauthenticated
 `GET /api/health`, so it alone can be triggered with no token at all — a one-time
 `whisper-cli -h`, never `ffmpeg` or a per-clip `whisper-cli` run. That ordering is about
-keeping the auth boundary where the other write paths keep it — not about hiding whether the
+keeping the auth boundary where every other route behind the write gate keeps it — not about hiding whether the
 capability exists.
 
-⚠️ One write path runs those two checks the *other* way round: `serveSpawn` calls
+⚠️ One session write path runs those two checks the *other* way round: `serveSpawn` calls
 `probeSpawn` before `refuseWrite`. That divergence is harmless rather than principled, for the
 same reason the probe is harmless here — `GET /api/health` already publishes
 `spawnAvailable` unauthenticated and already calls the same memoised probe, so probe-first
@@ -219,7 +219,7 @@ limits](#accepted-limits) for where it can wedge.
 ## Security posture
 
 ⚠️ **Read this as an operator warning, not a reassurance.** The write gate covers
-`/api/transcribe` exactly as it covers every other write path: this machine always passes,
+`/api/transcribe` exactly as it covers every other route behind the write gate: this machine always passes,
 **every tailnet device passes while tailnet trust is on (the default)**, and anyone else needs
 `ANSWER_TOKEN` — with no token set, a LAN peer is read-only. With `WHISPER_MODEL` configured,
 **any trusted peer can cause `ffmpeg` and `whisper-cli` to run on this machine.** That is real,
@@ -231,7 +231,7 @@ fails and the handler answers 404 before anything spawns.
 
 This was a deliberate choice, not an oversight: singling this one route out for mandatory
 auth would break the common case of a desk-only setup with no token configured, and it
-would make `/api/transcribe` behave differently from every other write path in an app that
+would make `/api/transcribe` behave differently from every other route behind the write gate in an app that
 otherwise applies one consistent rule (the trust rule in [remote-access](remote-access.md)).
 Turn tailnet trust off, or set a token and use it, if you share the tailnet — tagged devices
 and users this machine is shared with count as tailnet; behind a public tunnel, treat the

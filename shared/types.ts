@@ -925,7 +925,7 @@ export interface SessionChat {
 }
 
 /**
- * Remote answers — the one write path in the dashboard (see
+ * Remote answers — the first of the four session write paths (see
  * `docs/subsystems/remote-answer.md`). A session's `AskUserQuestion` PreToolUse
  * hook offers the question here and blocks; the browser answers it; the hook
  * feeds the choice back to the model. Everything below lives in memory only.

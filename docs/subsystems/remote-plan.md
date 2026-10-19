@@ -51,7 +51,7 @@ Getting this wrong fails silently: the hook's output is ignored and the card jus
 | `scripts/plan-remote-hook.sh` | `PermissionRequest[ExitPlanMode]` hook. Same three gates as `ask-remote-hook.sh`, plus its own `tool_name` re-check (a matcher is config; never trust it alone). Its POST body also carries `permissionMode`, unused here and read only by the [push notifier](push-notify.md)'s auto-mode layer |
 | `POST /api/plans/wait` | `servePlanWait` — held open until a verdict, deadline, or supersede |
 | `GET /api/sessions/:id/plan` | `serveSessionPlan` — what the browser polls, at the configured refresh rate (`usePendingPlan` reads `refreshMs` from `useSettings`, exactly as `usePendingQuestion` does) |
-| `POST /api/sessions/:id/plan-answer` | `serveSessionPlanAnswer` — `{verdict: 'reject', feedback}` or `'dismiss'`. Token-gated |
+| `POST /api/sessions/:id/plan-answer` | `serveSessionPlanAnswer` — `{verdict: 'reject', feedback}` or `'dismiss'`. Behind the remote-answer switch and the write gate (a session write path) |
 | `server/lib/plans.ts` | RAM-only store; same state machine as `pending.ts` with an injected `resolve` |
 | `scan.ts` `ScanOptions.planIds` | sets `Session.remotePlan` and forces `status: 'question'` |
 | chat button + `PlanPanel` | the row's chat button labelled `Plan?` and the pinned drawer panel |

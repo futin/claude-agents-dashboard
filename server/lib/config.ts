@@ -28,7 +28,7 @@ export interface Config {
   analyticsKeep: number;
   /** Feature toggle for the Analytics section. */
   showAnalytics: boolean;
-  /** Feature toggle for remote answers (the only write path). Off → the wait endpoint 404s. */
+  /** Feature toggle for remote answers (kill switch for the session write paths). Off → the wait endpoint 404s. */
   remoteAnswer: boolean;
   /**
    * Optional pass for every write route, from any address. Empty (default): only this machine and, while `trustTailnet` is on, the tailnet can
