@@ -3135,10 +3135,12 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 
 /* What's new — ui-kit's chip and drawer (docs/subsystems/releases.md), themed by mapping its `--uk-*` properties onto this sheet's tokens. Set on the
    two roots rather than `:root`, so each property resolves against whichever `[data-theme]` the element sits under. Badges are each status token on its
-   own tint; the 14% mixes carry each theme's hue through. Full screen below `md` is ui-kit's `narrow`, passed in from `useNarrow`. Mapping only:
+   own tint; the 14% mixes carry each theme's hue through. Full screen below `md` is ui-kit's `narrow`, passed in from `useNarrow`. `--uk-ink-muted` is
+   `--ink2`, as in the other two apps: the chip draws its 12px label in it on `--steel`, where `--ink3` measured 3.5-3.9:1 on the four dark themes and
+   `--ink2` 6.7-8.0:1 on all five. Mapping only:
    `test/ui-kit-guard.test.ts` fails on any other rule on a `.uk-*` class. */
 .uk-chip,.uk-drawer-scrim{
-  --uk-panel-bg:var(--strip);--uk-ink:var(--ink);--uk-ink-muted:var(--ink3);--uk-hairline:var(--hairline);--uk-scrim:var(--scrim);--uk-shadow:var(--shadow2);
+  --uk-panel-bg:var(--strip);--uk-ink:var(--ink);--uk-ink-muted:var(--ink2);--uk-hairline:var(--hairline);--uk-scrim:var(--scrim);--uk-shadow:var(--shadow2);
   --uk-accent:var(--cyan);--uk-hover-bg:var(--steel);--uk-code-bg:var(--steel);--uk-font:var(--font);--uk-font-mono:var(--font);
   --uk-feat-ink:var(--green);--uk-feat-tint:var(--green-tint);--uk-fix-ink:var(--amber-ink);--uk-fix-tint:var(--amber-tint);
   --uk-perf-ink:var(--cyan);--uk-perf-tint:color-mix(in srgb,var(--cyan) 14%,transparent);
