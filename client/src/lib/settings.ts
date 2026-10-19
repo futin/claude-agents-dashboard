@@ -45,7 +45,7 @@ export type SettingsScope = 'local' | 'shared';
 /** Which page the Settings section shows: one per storage backend, nothing else. */
 export type SettingsTab = SettingsScope;
 /** Which sub-view the Management section opens on. */
-export type ManagementTab = 'git' | 'projects';
+export type ManagementTab = 'git' | 'projects' | 'codegraph';
 /** Which section opens on load. `last` restores whatever you were on. */
 export type Landing = Section | 'last';
 /**
@@ -234,7 +234,7 @@ const SPAWN_MODELS: SpawnDefaultModel[] = ['', ...MODELS];
 const SPAWN_EFFORTS: SpawnDefaultEffort[] = ['', ...EFFORTS];
 const USAGE_TABS: UsageTab[] = ['forecast', 'rates', 'history'];
 const SETTINGS_TABS: SettingsTab[] = ['local', 'shared'];
-const MANAGEMENT_TABS: ManagementTab[] = ['git', 'projects'];
+const MANAGEMENT_TABS: ManagementTab[] = ['git', 'projects', 'codegraph'];
 /** Derived from the picker, so the offered set and the accepted set cannot drift. */
 const LAYOUT_IDS: DefaultLayout[] = LAYOUT_OPTIONS.map(o => o.value);
 const CONTENT_WIDTHS: ContentWidth[] = ['fixed', 'full'];

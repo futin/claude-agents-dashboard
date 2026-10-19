@@ -26,15 +26,20 @@ export function fmtDuration(ms: number): string {
   return h + 'h' + (m % 60 ? (m % 60) + 'm' : '');
 }
 
-/** Relative age of an epoch-ms timestamp: 5s, 3m, 2h, 1d. */
-export function formatAgo(ms: number): string {
-  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+/** Relative age of an epoch-ms timestamp against a caller-supplied now: 5s, 3m, 2h, 1d. A timestamp in the future reads 0s. */
+export function ageAt(ms: number, nowMs: number): string {
+  const s = Math.max(0, Math.round((nowMs - ms) / 1000));
   if (s < 60) return s + 's';
   const m = Math.round(s / 60);
   if (m < 60) return m + 'm';
   const h = Math.round(m / 60);
   if (h < 24) return h + 'h';
   return Math.round(h / 24) + 'd';
+}
+
+/** Relative age of an epoch-ms timestamp against the clock: 5s, 3m, 2h, 1d. */
+export function formatAgo(ms: number): string {
+  return ageAt(ms, Date.now());
 }
 
 /** Reset clock time for a usage window: 2:14pm (today), or Thu 2:14pm (later). */
