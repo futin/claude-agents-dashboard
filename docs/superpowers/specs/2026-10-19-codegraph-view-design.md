@@ -45,8 +45,11 @@ knows Git's tab should know this one without reading anything.
 
 Per pinned project (`listPinRows`, same as `/api/git-stats` — paths never come from the request):
 
-- No `.codegraph/` directory → `state: 'none'`.
-- Otherwise run `codegraph status --json` with `cwd` = the pin's path, through `execFile` (argv, no shell) with its own timer, as `git-stats.ts` does (see its
+- A dead pin (`path: null` or `listed: false`, `server/lib/management.ts`) → `state: 'missing'`, no CLI launch. It ranks with *Not indexed* (the `none`
+  level) and reads "Folder gone" there, the same chip Projects draws.
+- Otherwise run `codegraph status --json` with `cwd` = the pin's path. The pin's path may be a subdirectory of the repo; the CLI walks up to the nearest
+  `codegraph.db` itself, so no repo-root resolution is needed. `initialized: false` in the answer (exit 0, e.g. a bare `.codegraph/` with no DB) →
+  `state: 'none'`. The run goes through `execFile` (argv, no shell) with its own timer, as `git-stats.ts` does (see its
   #168 note on `execFile`'s `timeout`). Non-zero exit, timeout or unparsable JSON → `state: 'error'` with a one-line reason.
 - CLI missing from the server's `PATH` → the whole payload says so once (`cli: 'missing'`), not one error per repo. Note that this machine's `codegraph` is under
   nvm's bin dir; the builder confirms the server process inherits that `PATH` under both `pnpm dev` and `pnpm start`.
@@ -54,10 +57,20 @@ Per pinned project (`listPinRows`, same as `/api/git-stats` — paths never come
 The fields the status JSON carries today (codegraph 1.6.2) and this view uses: `lastIndexed`, `fileCount`, `nodeCount`, `edgeCount`, `dbSizeBytes`,
 `nodesByKind`, `languages` (names only), `pendingChanges.{added,modified,removed}`, `worktreeMismatch`, `version`, and `index.{state, reindexRecommended,
 builtWithExtractionVersion, currentExtractionVersion}`. Pass them through typed in `shared/types.ts`; the client never sees raw CLI output.
+`index.state` is `'indexing' | 'complete' | 'partial' | 'failed' | null` (`dist/index.d.ts`, `getIndexState`); `null` means the index predates the marker and
+is read as `complete`. `builtWithVersion` / `builtWithExtractionVersion` are null for an index built before stamping: the Extractor cell shows `—` and the
+Inspector fact reads "extractor unknown (older index)".
 
 **Watcher running.** Whether a codegraph daemon is watching the repo (it picks up edits within ~1 s, so pending changes then resolve themselves). Two candidate
-sources on disk: `<repo>/.codegraph/daemon.pid`, and `~/.codegraph/daemons/*.json` (`{root, pid, version, socketPath, startedAt}`). Either way the pid must be
-checked alive (`process.kill(pid, 0)`), since a crashed daemon leaves its file. Which source wins is the builder's call.
+sources on disk: `<repo>/.codegraph/daemon.pid`, and `~/.codegraph/daemons/*.json` (`{root, pid, version, socketPath, startedAt}`). `daemon.pid`,
+`writer.pid` and `rebuild.pid` are **JSON objects** (`{pid, …, startedAt}`), not bare pids; only `codegraph.lock` is a bare pid. Either way the pid must be
+checked alive (`process.kill(pid, 0)`), since a crashed daemon leaves its file. `startedAt` feeds the Inspector's "Running since". Which source wins is the
+builder's call.
+
+**A live rebuild** is a `.codegraph/rebuild.pid` whose pid is alive. The server reads it on every refresh and, when it is live and no run of its own is
+recorded, synthesises `run: { kind: 'reindex', startedAtMs: <its startedAt> }`, so the client's 3 s poll and disabled keys work for a rebuild started from a
+terminal or before a server restart. While a rebuild is live, a status read that fails or times out does **not** turn the repo to `error`: the last good stats
+are kept and the run is shown.
 
 ### Cost
 
@@ -68,7 +81,7 @@ asked recently, so a closed tab costs nothing. Exact TTL, cap and whether to sha
 ### API
 
 - `GET /api/codegraph` — `{ generatedAt, cli: 'ok' | 'missing', repos: CodegraphRepo[] }`, repos in pin order. Each repo: `dirName`, `name`, `path`, `state`
-  (`ok | none | error`), the status fields above when `ok`, `watching: boolean`, `run: null | { kind: 'sync' | 'reindex', startedAtMs }`, and
+  (`ok | none | missing | error`), the status fields above when `ok`, `watching: boolean`, `run: null | { kind: 'sync' | 'reindex', startedAtMs }`, and
   `lastRun: null | { kind, ok, endedAtMs, message }` so a failed sync is visible after it ends.
 - `POST /api/codegraph/run` — `{ dirName, kind: 'sync' | 'reindex' }`. Write-guarded exactly like `POST /api/git-fetch`: `refuseWrite` (`server/api.ts`), so
   local and trusted-tailnet peers need no token and others need the Answer token; the client gates its keys on `tokenRequired` / `writeAccess` as `GitView`
@@ -82,20 +95,21 @@ Read each repo into problems with a severity, exactly as `gitLevels.ts` does, an
 
 | Level | Tile label | When |
 | ----- | ---------- | ---- |
-| `needs` (sev 3) | Needs you | `reindexRecommended`, `index.state: 'partial'` (an interrupted build), or `state: 'error'`; also a `lastRun` that failed |
+| `needs` (sev 3) | Needs you | `reindexRecommended`; `index.state: 'partial'` (the build dropped files); `'failed'`; `'indexing'` with **no** live `rebuild.pid` (a build that never finished: the index is truncated, as `codegraph status` itself warns); `state: 'error'`; a `lastRun` that failed |
 | `look` (sev 2) | Worth a look | pending changes > 0 **and** no watcher running; `worktreeMismatch` non-null (author's call — the mock's legend did not place it) |
 | `quiet` | All good | an `ok` repo with neither of the above. Pending changes with a watcher running are quiet: the watcher will catch up |
-| `none` | Not indexed | no `.codegraph/`. Takes the slot Git gives *Can't read* |
+| `none` | Not indexed | `state: 'none'` (no graph) or `'missing'` (dead pin). Takes the slot Git gives *Can't read* |
 
 `state: 'error'` is *Needs you*, not its own level, because the fix (Reindex) is the same.
 
-**A build in progress** — `index.state: 'indexing'`, or a live `.codegraph/rebuild.pid` — is drawn as a run (cyan "Indexing…" chip, keys disabled) whatever
-started it: a terminal, another session, or this server before a `tsx watch` restart dropped its in-memory `run`. It adds no problem and does not change the
-level. (Author's call; the CLI's three index states are `complete`, `indexing`, `partial`.)
+**A build in progress** is a live `.codegraph/rebuild.pid` only — never `index.state: 'indexing'` on its own, which at rest means a killed build. It is drawn
+as a run (cyan "Indexing…" chip, keys disabled) whatever started it: a terminal, another session, or this server before a `tsx watch` restart dropped its
+in-memory `run`. It adds no problem and does not change the level.
 
 **When a failed run stops counting** (author's call): `lastRun` is held in memory, so a server restart clears it; otherwise it clears on the next successful run
 of either kind. A `sync` that loses `codegraph.lock` to a live watcher is **not** a failure — the watcher is already doing the work — and is recorded as
-`ok` with the message "watcher is syncing it".
+`ok` with the message "watcher is syncing it". The rule: exit code ≠ 0, **and** the output contains `could not acquire the file lock` (the CLI's
+`LockUnavailableError` text, 1.6.2), **and** the repo had `watching: true` when the run launched. Without a watcher the same exit is a failure.
 
 ## Client
 
@@ -106,7 +120,8 @@ Mirror `GitView` and its parts; reuse shared pieces where they are already gener
   `CodegraphView` only while that tab is picked, so the poll stops when the user leaves.
 - **Band.** "Management · CodeGraph", sub: "Code graph index of your pinned repos. Sync re-parses changed files; Reindex rebuilds from scratch."
 - **Switcher.** Inbox | Matrix | Inspector, stored per device as `management.codegraphLayout` (default Inbox); phone draws Inbox while a stored Matrix waits,
-  exactly as `drawableGitLayout` does.
+  exactly as `drawableGitLayout` does. The key joins `OWNED_KEYS` (`client/src/hooks/useSettings.tsx`) so Settings › Reset clears it, pinned by a test as
+  `management.gitLayout` is.
 - **Poll.** 30 s while visible, immediate on becoming visible, none while hidden — `useGitStats`'s schedule. While any repo has a `run`, poll every 3 s until
   it clears.
 - **Clock chip** (right end of the toolbar). Two meters: **READ** (countdown to the next poll) and **WATCHERS** (`n / m` indexed repos with a watcher; amber when
@@ -114,7 +129,8 @@ Mirror `GitView` and its parts; reuse shared pieces where they are already gener
   pending changes, one POST each, sequentially; disabled with a reason when there are none, or when the Answer token is missing).
 - **Inbox.** Four tiles (counts per level, click filters, click again clears). Loud repos as `.git-panel` items: dot, name, chips (`reindex` amber /
   `N pending` mustard / `no watcher` dashed / `watching`), a verdict sentence, steps, keys on the right. *All good* as one dashed box of lines: `files · symbols ·
-  watching · indexed <age>` and a quiet Sync key. *Not indexed* as a second dashed box: name and "No .codegraph/ in <~path>", no key.
+  watching · indexed <age>` and a quiet Sync key. *Not indexed* as a second dashed box: name and "No .codegraph/ in <~path>", no key; a `missing` pin reads
+  "Folder gone" instead (it has no path).
 - **Matrix.** Wide-only. Columns: dot, Repo, Index (`complete` / pill), Changes (`none` / `N pending` pill), Extractor (`v27` / `v26 → v27` pill), Watcher
   (`on` / `off`; pill only when it matters, i.e. on a `look` repo), Files, Symbols, Edges, DB, Indexed (age), key. A `none` row spans one *Not indexed* cell.
   Row expansion (symbols by kind) is optional — builder's call.
