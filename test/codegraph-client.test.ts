@@ -16,6 +16,9 @@ import {
   CODEGRAPH_KEY_REINDEX, CODEGRAPH_KEY_REINDEXING, CODEGRAPH_KEY_SYNC, CODEGRAPH_KEY_SYNCING,
   codegraphChip, codegraphFirstLoadText, codegraphPill, codegraphQuietLine, codegraphRunConflictText, codegraphRunFailedText, codegraphRunMissingText,
   codegraphSteps, codegraphVerdict, compactCount, extractorCell, formatDbSize, reindexConfirmText,
+  CODEGRAPH_BAND_SUB, CODEGRAPH_BAND_TITLE, CODEGRAPH_EXTRACTOR_UNKNOWN, FACT_CHANGES_NONE, FACT_WATCHER_OFF, FACT_WATCHER_ON,
+  ROW_REREAD, ROW_REREAD_SUB, ROW_SYNC_ALL, ROW_SYNC_ALL_NEEDS_TOKEN_SUB, ROW_SYNC_ALL_NONE_SUB, changesFact, codegraphKeyAria, fullCount, indexedAge,
+  languagesFact, lastIndexedFact, rowSyncAllSub, watcherFact, watchersValue,
 } from '../client/src/lib/codegraphText.js';
 import { CODEGRAPH_FAST_POLL_MS, hasLiveRun, runNote } from '../client/src/lib/codegraphPoll.js';
 import { READ_ONLY_TEXT } from '../client/src/lib/writeRefusal.js';
@@ -348,6 +351,85 @@ export function run(): number {
   if (test("runNote: a 403 'not a pinned project' is not a token problem, so no token prompt; a 400 is the generic line", () => {
     assert.strictEqual(runNote(403, { error: 'not a pinned project' }, 'x', 'reindex'), "Couldn't start reindex on x.");
     assert.strictEqual(runNote(400, { error: 'bad body' }, 'x', 'sync'), "Couldn't start sync on x.");
+  })) p++; else f++;
+
+  // ── label text: the spec's literal strings and the small formatters ────────
+  if (test('the band and the clock popover carry the spec strings verbatim', () => {
+    assert.strictEqual(CODEGRAPH_BAND_TITLE, 'Management · CodeGraph');
+    assert.strictEqual(CODEGRAPH_BAND_SUB, 'Code graph index of your pinned repos. Sync re-parses changed files; Reindex rebuilds from scratch.');
+    assert.strictEqual(ROW_REREAD, 'Re-read status');
+    assert.strictEqual(ROW_REREAD_SUB, 'Ask codegraph again now');
+    assert.strictEqual(ROW_SYNC_ALL, 'Sync all behind');
+    assert.strictEqual(ROW_SYNC_ALL_NONE_SUB, 'Nothing behind');
+    assert.strictEqual(ROW_SYNC_ALL_NEEDS_TOKEN_SUB, 'Needs the Answer token');
+    assert.strictEqual(CODEGRAPH_EXTRACTOR_UNKNOWN, 'extractor unknown (older index)');
+  })) p++; else f++;
+
+  if (test('rowSyncAllSub counts repos and pluralises: 1 repo, 2 repos', () => {
+    assert.strictEqual(rowSyncAllSub(1), '1 repo with pending changes and no watcher');
+    assert.strictEqual(rowSyncAllSub(2), '2 repos with pending changes and no watcher');
+    assert.strictEqual(rowSyncAllSub(0), '0 repos with pending changes and no watcher');
+  })) p++; else f++;
+
+  if (test('watchersValue reads watching over indexed; codegraphKeyAria names the key and the repo', () => {
+    assert.strictEqual(watchersValue(3, 5), '3 / 5');
+    assert.strictEqual(watchersValue(0, 0), '0 / 0');
+    assert.strictEqual(codegraphKeyAria(CODEGRAPH_KEY_SYNC, 'brickwright'), 'Sync brickwright');
+    assert.strictEqual(codegraphKeyAria(CODEGRAPH_KEY_SYNCING, 'brickwright'), 'Syncing brickwright');
+  })) p++; else f++;
+
+  if (test('fullCount groups thousands with a comma; indexedAge is `<age> ago`, or a dash with no timestamp', () => {
+    assert.strictEqual(fullCount(2672), '2,672');
+    assert.strictEqual(fullCount(416), '416');
+    assert.strictEqual(fullCount(1234567), '1,234,567');
+    assert.strictEqual(indexedAge(stats({ lastIndexedMs: NOW - 2 * 3600_000 }), NOW), '2h ago');
+    assert.strictEqual(indexedAge(stats({ lastIndexedMs: null }), NOW), '—');
+  })) p++; else f++;
+
+  if (test('languagesFact joins the names with a middle dot; an empty list is a dash', () => {
+    assert.strictEqual(languagesFact(stats({ languages: ['typescript', 'tsx', 'javascript'] })), 'typescript · tsx · javascript');
+    assert.strictEqual(languagesFact(stats({ languages: ['rust'] })), 'rust');
+    assert.strictEqual(languagesFact(stats({ languages: [] })), '—');
+  })) p++; else f++;
+
+  if (test('lastIndexedFact: age, codegraph version and extractor; an unstamped index says so instead', () => {
+    const at = NOW - 2 * 3600_000;
+    assert.strictEqual(
+      lastIndexedFact(stats({ lastIndexedMs: at, builtWithVersion: '1.6.2', builtWithExtractionVersion: 27 }), NOW),
+      '2h ago · codegraph 1.6.2, extractor v27',
+    );
+    // An extractor stamp without a codegraph version drops the "codegraph x, " lead rather than printing "null".
+    assert.strictEqual(lastIndexedFact(stats({ lastIndexedMs: at, builtWithVersion: null, builtWithExtractionVersion: 26 }), NOW), '2h ago · extractor v26');
+    assert.strictEqual(
+      lastIndexedFact(stats({ lastIndexedMs: at, builtWithVersion: null, builtWithExtractionVersion: null }), NOW),
+      '2h ago · extractor unknown (older index)',
+    );
+    assert.strictEqual(
+      lastIndexedFact(stats({ lastIndexedMs: null, builtWithVersion: '1.6.2', builtWithExtractionVersion: 27 }), NOW),
+      '— · codegraph 1.6.2, extractor v27',
+    );
+  })) p++; else f++;
+
+  if (test('changesFact: None pending, else the total then the non-zero parts in modified, added, removed order', () => {
+    assert.strictEqual(FACT_CHANGES_NONE, 'None pending');
+    assert.strictEqual(changesFact(stats()), 'None pending');
+    assert.strictEqual(changesFact(stats({ pending: { added: 2, modified: 5, removed: 0 } })), '7 pending · 5 modified · 2 added');
+    assert.strictEqual(changesFact(stats({ pending: { added: 0, modified: 0, removed: 1 } })), '1 pending · 1 removed');
+    assert.strictEqual(changesFact(stats({ pending: { added: 1, modified: 1, removed: 1 } })), '3 pending · 1 modified · 1 added · 1 removed');
+  })) p++; else f++;
+
+  if (test('watcherFact: Not running, Running with no start time, then today as a time and an earlier day with its date', () => {
+    // Built from local-time components, so the expectation holds in any timezone the suite runs in.
+    const nowLocal = new Date(2026, 9, 19, 12, 0).getTime();
+    const off = okRepo('a');
+    assert.strictEqual(FACT_WATCHER_OFF, 'Not running');
+    assert.strictEqual(FACT_WATCHER_ON, 'Running');
+    assert.strictEqual(watcherFact(off, nowLocal), 'Not running');
+    assert.strictEqual(watcherFact({ ...off, watching: true, watcherSinceMs: null }, nowLocal), 'Running');
+    assert.strictEqual(watcherFact({ ...off, watching: true, watcherSinceMs: new Date(2026, 9, 19, 10, 31).getTime() }, nowLocal), 'Running since 10:31');
+    assert.strictEqual(watcherFact({ ...off, watching: true, watcherSinceMs: new Date(2026, 9, 17, 10, 31).getTime() }, nowLocal), 'Running since 17 Oct, 10:31');
+    // A stale pid file's start time does not matter once the daemon is not alive.
+    assert.strictEqual(watcherFact({ ...off, watching: false, watcherSinceMs: new Date(2026, 9, 19, 10, 31).getTime() }, nowLocal), 'Not running');
   })) p++; else f++;
 
   // ── settings ──────────────────────────────────────────────────────────────
