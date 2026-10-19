@@ -263,12 +263,12 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (u.pathname === '/api/git-stats') {
       return void serveGitStats(config, res);
     }
-    // The one route that makes git reach the network, so POST-only and token-guarded inside the handler.
+    // The one route that makes git reach the network, so POST-only and behind the write gate inside the handler.
     if (u.pathname === '/api/git-fetch') {
       if (req.method !== 'POST') return methodNotAllowed(res);
       return void serveGitFetch(config, req, res);
     }
-    // Read-only codegraph state of the pinned repos, and the one write beside it: a Sync or Reindex, POST-only and token-guarded inside the handler.
+    // Read-only codegraph state of the pinned repos, and the one write beside it: a Sync or Reindex, POST-only and behind the write gate inside the handler.
     if (u.pathname === '/api/codegraph') {
       return void serveCodegraph(config, res, u.searchParams.get('fresh') === '1');
     }

@@ -67,7 +67,8 @@ via `tsx`, dev and prod alike).
 
 ## HTTP surface
 
-All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
+All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers). Every POST runs the write gate; a **session write path** also needs the
+remote-answer switch on, a **gate-only write** needs the gate alone ([who may write](subsystems/remote-access.md#who-may-write) defines both):
 
 | Route | Purpose |
 |---|---|
@@ -75,32 +76,32 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/sessions/:id` | one session's subagent timeline |
 | `GET /api/sessions/:id/chat` | paged chat history (byte-offset cursors) |
 | `GET /api/sessions/:id/question` | pending remote question, if any |
-| `POST /api/sessions/:id/answer` | deliver a remote answer (write path) |
-| `POST /api/questions/wait` | the hook's held-open wait (write path) |
+| `POST /api/sessions/:id/answer` | deliver a remote answer (session write path — answer) |
+| `POST /api/questions/wait` | the hook's held-open wait (session write path — answer) |
 | `GET /api/sessions/:id/plan` | pending proposed plan, if any |
-| `POST /api/sessions/:id/plan-answer` | send a plan back for revision (write path) |
-| `POST /api/plans/wait` | the plan hook's held-open wait (write path) |
+| `POST /api/sessions/:id/plan-answer` | send a plan back for revision (session write path — plan) |
+| `POST /api/plans/wait` | the plan hook's held-open wait (session write path — plan) |
 | `GET /api/sessions/:id/message` | pending reply window, if any |
-| `POST /api/sessions/:id/message-answer` | send free text into a finished turn, or let it stop (write path) |
-| `POST /api/messages/wait` | the Stop hook's held-open wait, away only — except headless sessions, which hold at the desk too (write path) |
-| `POST /api/transcribe` | a recorded clip in, transcribed text out — feeds the reply composer's mic (write path) |
-| `POST /api/spawn` | start a new headless `claude -p` session in a recent or pinned project, or `resume` an ended `dashboard` one by id (write path, the one the dashboard initiates rather than answers) |
-| `POST /api/spawn/:id/stop` | SIGTERM a still-launching session's child (write path) |
-| `POST /api/sessions/:id/stop` | stop a dashboard-spawned session at any point in its life — graceful by default, `{"force":true}` to skip the grace window; the row's button only ever calls this one (write path) |
-| `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) |
-| `POST /api/notify/event` | the Stop hook's push trigger — the other three events notify from the endpoint they already POST to |
-| `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said |
-| `POST /api/remote-answer` | flip the remote-answer toggle (write path) |
+| `POST /api/sessions/:id/message-answer` | send free text into a finished turn, or let it stop (session write path — message) |
+| `POST /api/messages/wait` | the Stop hook's held-open wait, away only — except headless sessions, which hold at the desk too (session write path — message) |
+| `POST /api/transcribe` | a recorded clip in, transcribed text out — feeds the reply composer's mic (session write path — dictation, rides the switch, not counted) |
+| `POST /api/spawn` | start a new headless `claude -p` session in a recent or pinned project, or `resume` an ended `dashboard` one by id (session write path — spawn, the one the dashboard initiates rather than answers) |
+| `POST /api/spawn/:id/stop` | SIGTERM a still-launching session's child (session write path — spawn) |
+| `POST /api/sessions/:id/stop` | stop a dashboard-spawned session at any point in its life — graceful by default, `{"force":true}` to skip the grace window; the row's button only ever calls this one (session write path — spawn) |
+| `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) (gate-only write) |
+| `POST /api/notify/event` | the Stop hook's push trigger — the other three events notify from the endpoint they already POST to (gate-only write) |
+| `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said (gate-only write) |
+| `POST /api/remote-answer` | flip the remote-answer toggle (gate-only write) |
 | `GET /api/dismiss` | where a tapped desk push lands — a page that closes the tab it opened in; carries no deep link |
 | `GET /api/health` | liveness + remote-answer state + connection origin and this caller's `writeAccess` + the two hook numbers (idle threshold, answer window) |
-| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, tailnet write trust, plus `notifyAvailable` (never the ntfy topic itself); write path |
-| `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; write path (see [configs](subsystems/configs.md)) |
-| `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); token-guarded, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
-| `POST /api/open-folder` | open a pinned project's folder with macOS `open`. Token-guarded, path must be a listed pin's, 501 off macOS (see [git-stats](subsystems/git-stats.md)) |
+| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, tailnet write trust, plus `notifyAvailable` (never the ntfy topic itself); the POST is a gate-only write |
+| `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; the POST is a gate-only write (see [configs](subsystems/configs.md)) |
+| `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); gate-only write, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
+| `POST /api/open-folder` | open a pinned project's folder with macOS `open` (gate-only write); path must be a listed pin's, 501 off macOS (see [git-stats](subsystems/git-stats.md)) |
 | `GET /api/git-stats` | local git state of every pinned project, in pin order, plus the fetch clock and each repo's last-fetch verdict; a repo that fails is its own `error` row (see [git-stats](subsystems/git-stats.md)) |
 | `GET /api/codegraph` | the `codegraph` CLI's state of every pinned project, in pin order: index health, watcher, run in flight, last run; `cli: 'missing'` once for the payload; `?fresh=1` (Re-read status) skips the status cache (see [codegraph](subsystems/codegraph.md)) |
-| `POST /api/codegraph/run` | `{dirName, kind: 'sync' \| 'reindex'}`: start `codegraph sync` / `index` on a pinned, indexed repo and answer at once. Token-guarded like `git-fetch`; 404 not indexed, 409 already running (see [codegraph](subsystems/codegraph.md#runs)) |
-| `POST /api/git-fetch` | `git fetch origin` over every pinned repo now, answering with the fetch clock; token-guarded write path (see [git-stats](subsystems/git-stats.md#the-fetch)) |
+| `POST /api/codegraph/run` | `{dirName, kind: 'sync' \| 'reindex'}`: start `codegraph sync` / `index` on a pinned, indexed repo and answer at once (gate-only write, like `git-fetch`); 404 not indexed, 409 already running (see [codegraph](subsystems/codegraph.md#runs)) |
+| `POST /api/git-fetch` | `git fetch origin` over every pinned repo now, answering with the fetch clock; gate-only write (see [git-stats](subsystems/git-stats.md#the-fetch)) |
 | `GET /api/configs`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/hub/widgets`, `/:id` | the Lookout hub catalog and widget data — usage gauge, sessions list and Git pending list; `POST` action paths are 404 (see [hub-widgets](subsystems/hub-widgets.md)) |
@@ -220,7 +221,7 @@ server/
   lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
   lib/analytics.ts  reader for the Analytics tab
-  lib/pending.ts  in-memory pending-question store (the first of the four write paths)
+  lib/pending.ts  in-memory pending-question store (the first of the four session write paths)
   lib/plans.ts    in-memory pending-plan store (same machine, reject-only verdicts)
   lib/messages.ts in-memory turn-end reply-window store (same machine, plus a 5s
                   idle sweep that auto-releases every terminal-backed hold — headless
@@ -242,7 +243,7 @@ server/
   lib/transcribe.ts  ffmpeg → whisper-cli pipeline behind POST /api/transcribe: mime
                   allowlist, cached engine probe, single-flight guard, typed failures
   lib/spawn.ts    launches a detached, headless `claude -p` session, or resumes an ended
-                  one — the fourth write path, and the first the dashboard initiates;
+                  one — the fourth session write path, and the first the dashboard initiates;
                   also owns stopping one (graceful SIGTERM, grace window, escalation)
                   (see docs/subsystems/spawn.md)
 client/src/
@@ -368,11 +369,11 @@ that area:
 
 - [sessions](subsystems/sessions.md) — session rows, the status machine, subagent detail
 - [chat](subsystems/chat.md) — the chat drawer + byte-offset transcript tail
-- [remote-answer](subsystems/remote-answer.md) — answering `AskUserQuestion` remotely (the first write path)
+- [remote-answer](subsystems/remote-answer.md) — answering `AskUserQuestion` remotely (the first session write path)
 - [remote-plan](subsystems/remote-plan.md) — sending an `ExitPlanMode` plan back for revision (reject-only, by upstream design)
-- [remote-message](subsystems/remote-message.md) — replying into a finished, away-from-keyboard turn (the third write path)
+- [remote-message](subsystems/remote-message.md) — replying into a finished, away-from-keyboard turn (the third session write path)
 - [dictation](subsystems/dictation.md) — the reply composer's mic: local whisper transcription, never auto-sent
-- [spawn](subsystems/spawn.md) — starting a new headless session from the dashboard (the fourth write path, and the first one it initiates), and stopping one from its row
+- [spawn](subsystems/spawn.md) — starting a new headless session from the dashboard (the fourth session write path, and the first one it initiates), and stopping one from its row
 - [session-surfaces](subsystems/session-surfaces.md) — where a session lives, and where you can continue it (also where `Session.surface` is specified)
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [configs](subsystems/configs.md) — read-only config browser

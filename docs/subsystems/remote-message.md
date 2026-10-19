@@ -67,7 +67,7 @@ same session with your follow-up.
 | `scripts/stop-notify-hook.sh` | Extended in place, not duplicated — a second hook would race the notify POST and double-push. Away + remote answers on → holds; otherwise the pre-feature `notify_fallback` path (`POST /api/notify/event`), byte-for-byte unchanged. Failed wait POST (non-2xx) also falls back to plain notify POST. Headless sessions (no controlling TTY — `ps -o tty=` prints `??`; the dashboard's own `-p` launches — **and** not a front-end named in the interactive-entrypoint allowlist) skip the at-desk gate and hold regardless of idle, sending `headless: true` in the wait body. Sessions an orchestrator run owns (`BM_ORCH_RUN` set in the environment) never hold at all: the check sits just after the `remoteAnswer` gate and takes `notify_fallback`, so the finished-turn push still goes out — the run spawned the process to work one item unattended and is blocking on its exit, so nobody is going to reply. Keyed on that env var rather than widened into a blanket headless exemption: a headless session a person started by hand is reachable on purpose. A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT` set — the Git Sync button, or the spawn form's *Close when done*) takes the same `notify_fallback` exit just after it, a separate marker because its owner is the person at the launch form rather than a run. The dashboard's token-renewal turn (`CLAUDE_DASHBOARD_REFRESH` set) is a bare `exit 0` before the health probe — no hold and no push, since nobody started it; `serveMessageWait` answers a refresh-cwd transcript `dismissed` as the server-side backstop (#178) |
 | `POST /api/messages/wait` | `serveMessageWait` — held open until an answer, a dismiss, the deadline, an idle release, or a supersede |
 | `GET /api/sessions/:id/message` | `serveSessionMessage` — what the browser polls, at the configured refresh rate (`usePendingMessage` reads `refreshMs` from `useSettings`, exactly as `usePendingPlan`/`usePendingQuestion` do) |
-| `POST /api/sessions/:id/message-answer` | `serveSessionMessageAnswer` — `{messageId, text}` or `{messageId, dismiss: true}`. Token-gated |
+| `POST /api/sessions/:id/message-answer` | `serveSessionMessageAnswer` — `{messageId, text}` or `{messageId, dismiss: true}`. Behind the remote-answer switch and the write gate (a session write path) |
 | `server/lib/messages.ts` | RAM-only store; same state machine as `pending.ts`/`plans.ts` with an injected `resolve`, plus the idle-release reaper below |
 | `scan.ts` `ScanOptions.messageIds` | sets `Session.remoteReply` and forces `status: 'question'` (blue) |
 | chat button + `MessagePanel` | the `Reply?` label on the row's chat button (same amber `answer` tone as `Answer`/`Plan?`, just different text) and the pinned drawer composer |
@@ -223,7 +223,7 @@ into a path; the store is keyed in memory, same as the other two.
 
 ## Security posture
 
-This is a wider surface than the question and plan write paths ([spawn](spawn.md), added
+This is a wider surface than the question and plan session write paths ([spawn](spawn.md), added
 since, is wider still — it starts a session rather than steering one). A question or a plan is only
 steerable from the phone when the session *asked* for one; a reply window opens at the end
 of **every** AFK turn, so from the moment you step away, the model's next instruction on any

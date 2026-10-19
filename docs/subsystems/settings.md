@@ -326,10 +326,10 @@ Worth knowing from this page's side:
 | Route | Purpose |
 |---|---|
 | `GET /api/settings` | the non-per-device settings + any detected override, plus `notifyAvailable` and `staleEnvKeys` (names only — never the topic or token itself) |
-| `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?, recordUsageHistory?, gitFetchSecs?}` — any subset); token-guarded like the other writes; replies with the same body as GET (`settingsBody`), `staleEnvKeys` included, since the client replaces its whole state with it |
+| `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?, recordUsageHistory?, gitFetchSecs?}` — any subset); a gate-only write, like the other settings writes; replies with the same body as GET (`settingsBody`), `staleEnvKeys` included, since the client replaces its whole state with it |
 | `GET /api/pins` | `{pinned: PinRow[], recent: ProjectRef[], older: ProjectRef[], home}` — the stored pins (a dead one `listed: false`) and the projects on offer to pin: `recent` is the listed ones not yet pinned, `older` the 30-day tail past the lookback, both minus Claude's own dirs (scratchpads, scratch workspaces, `~/.claude`) |
-| `POST /api/pins` | `{dirName, pinned}` — token-guarded; a pin must name a recent or older project (404 otherwise), 409 past 50; an unpin takes any stored dir; answers with the fresh `GET` payload |
-| `POST /api/pins/order` | `{order: string[]}` — token-guarded; the whole pin list in its new order, 409 unless it is an exact permutation of the stored pins (no membership check: a permutation cannot add a dir); answers with the fresh `GET /api/pins` payload |
+| `POST /api/pins` | `{dirName, pinned}` — gate-only write; a pin must name a recent or older project (404 otherwise), 409 past 50; an unpin takes any stored dir; answers with the fresh `GET` payload |
+| `POST /api/pins/order` | `{order: string[]}` — gate-only write; the whole pin list in its new order, 409 unless it is an exact permutation of the stored pins (no membership check: a permutation cannot add a dir); answers with the fresh `GET /api/pins` payload |
 | `POST /api/notify/test` | fire one push regardless of policy and report the outcome |
 | `GET /api/health` | now also carries `idleSecs` and `answerSecs`, for the hooks |
 | `GET /api/sessions?limit=&lookback=&active=` | per-request scan overrides |

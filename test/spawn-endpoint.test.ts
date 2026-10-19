@@ -4,7 +4,7 @@
  * see them:
  *
  *   1. the remote-answer toggle gate (the app's only runtime kill switch —
- *      spawn used to be the one write path it did not cover), and
+ *      spawn used to be the one session write path it did not cover), and
  *   2. `MAX_LAUNCHING`, the concurrency cap that answers 429.
  *
  * Both are exercised against the real handler over a real socket. No test here

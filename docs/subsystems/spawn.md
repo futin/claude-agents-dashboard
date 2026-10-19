@@ -1,4 +1,4 @@
-# Spawning a new session (the fourth write path)
+# Spawning a new session (the fourth session write path)
 
 The Board card's **+ New session** button starts a brand-new Claude Code session from the
 dashboard: pick a recent (or pinned) project, write or dictate a prompt, tap `Launch`. The server
@@ -20,7 +20,7 @@ trip**; the ask (`PreToolUse`/`AskUserQuestion`) and plan hooks having `630` doe
 `Stop` does. This is the design spec's Risk 4. Editing that file is a host-side step, on
 purpose outside this repo.
 
-The three earlier write paths — [remote-answer](remote-answer.md),
+The three earlier session write paths — [remote-answer](remote-answer.md),
 [remote-plan](remote-plan.md), [remote-message](remote-message.md) — are all
 **hook-held**: a session is already running, a hook blocks on something, the browser
 resolves it. The dashboard has never *initiated* anything; it has only ever answered
@@ -556,8 +556,8 @@ a `title` attribute.
 | `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}` for a still-`launching` entry, or `{stopping: true}` if that id has since become a running session (it delegates to `stopSession`); 400 bad id shape; 403 bad token; 404 remote answers off *or* no live launch for that id |
 | `POST` | `/api/sessions/:id/stop` | 200 `{stopping: true}` (graceful) or `{stopped: true}` (`{"force": true}`); 400 bad id shape, bad path encoding, *or* a present-but-unparseable body — an absent/empty body is normal; 403 bad token; 404 remote answers off *or* no live session for that id; 405 + `Allow: POST` for any other method |
 
-All three sit behind the same write gate, `refuseWrite` (`api.ts`), the other write paths
-use — this machine and a trusted tailnet pass with no token, anyone else needs
+All three sit behind the same write gate, `refuseWrite` (`api.ts`), that every route behind the write gate
+uses — this machine and a trusted tailnet pass with no token, anyone else needs
 `ANSWER_TOKEN` (read-only when none is set) — and behind the same remote-answer toggle (below).
 
 **The concurrency cap.** `MAX_LAUNCHING` (4, in `server/lib/spawn.ts` beside the other
@@ -648,14 +648,14 @@ This is the widest write surface in the app, in the same plain terms
 on, anyone the write gate trusts — every device on your tailnet while tailnet trust is on
 (the default), or anyone holding a leaked `ANSWER_TOKEN` — can start a real Claude Code session — running real tools, in a real
 project directory — on this machine. That is a materially different thing from the
-other three write paths, which can only ever act on a session that is already running
+other three session write paths, which can only ever act on a session that is already running
 and already asked for something. It is the honest reading of what "spawn" means, not an
 edge case of it.
 
 Four things bound it, and none of them is new machinery — they're the same posture the
 rest of the app already takes, aimed at a bigger target:
 
-- **The remote-answer toggle covers it, like every other write path that acts on a session.**
+- **The remote-answer toggle covers it, like the other three session write paths.**
   `serveSpawn`, `serveSpawnStop` and `serveSessionStop` all answer
   `404 {error: 'remote answers disabled'}` when
   `getState(config).remoteAnswer` is false — flipping the status-plate switch off, or setting
