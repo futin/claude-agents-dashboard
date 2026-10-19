@@ -3143,3 +3143,38 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   --uk-font-size-lg:16px;--uk-z:50;
 }
 .uk-releases-notes .md{font-size:13px}
+
+/* ── Management › CodeGraph ───────────────────────────────────────────────
+   Git's shapes and classes throughout (docs/superpowers/specs/2026-10-19-codegraph-view-design.md §Client); these rules are only what Git has no shape for:
+   the cyan run chip, a running key that stays cyan while disabled, the in-page Reindex confirm, the Matrix's number columns, and the Inspector's size tiles,
+   symbols-by-kind strip and facts. Every colour is a theme token or a `color-mix` over one. */
+.git-chip.cg-chip-run{color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+/* A running key is disabled (both keys are, while a run is on) but must still read as running: `.git-sync:disabled` would grey it. */
+.git-sync.cg-live:disabled{color:var(--cyan)}
+.cg-confirm{display:flex;flex-direction:column;gap:10px;width:100%;max-width:440px;margin-left:auto;padding:12px 14px;border-radius:12px;background:var(--strip-hi);font-size:13px;line-height:1.45;color:var(--ink);text-align:left;white-space:normal}
+.cg-confirm.start{margin-left:0}
+.cg-confirm-keys{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.cg-confirm.start .cg-confirm-keys{justify-content:flex-start}
+.git-mx tr.cg-mx-confirm td{border-top:0;padding-top:0}
+.git-mx .cg-num{text-align:right;white-space:nowrap;color:var(--ink2);font-variant-numeric:tabular-nums}
+.cg-pane-why{display:flex;flex-direction:column;gap:4px}
+.cg-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cg-tile{background:var(--strip-hi);border-radius:12px;padding:10px 12px;min-width:0}
+.cg-tile b{display:block;font-size:20px;font-weight:600;letter-spacing:-.02em;color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.cg-tile span{font-size:12px;color:var(--ink2)}
+.cg-kinds-wrap{display:flex;flex-direction:column;gap:10px}
+.cg-kinds{display:flex;gap:2px;height:8px;border-radius:999px;overflow:hidden}
+.cg-kinds span{display:block;height:100%;flex-basis:0;min-width:2px}
+.cg-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
+.cg-legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+.cg-k-functions{background:var(--cyan)}
+.cg-k-imports{background:var(--ink3)}
+.cg-k-properties{background:var(--magenta)}
+.cg-k-constants{background:var(--mustard)}
+.cg-k-types{background:var(--green-solid)}
+.cg-k-other{background:var(--hairline2)}
+.cg-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 16px;margin:0;font-size:13px}
+.cg-facts dt{color:var(--ink3)}
+.cg-facts dd{margin:0;color:var(--ink);overflow-wrap:anywhere}
+.cg-foot{display:flex;gap:6px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--hairline)}
+@media (min-width:640px){.cg-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}

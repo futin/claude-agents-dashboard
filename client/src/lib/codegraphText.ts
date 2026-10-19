@@ -1,7 +1,7 @@
 import type { CodegraphRepo, CodegraphRunKind, CodegraphStats } from '../../../shared/types';
 import { ageAt } from './format';
-import type { CodegraphProblem } from './codegraphLevels';
-import { GIT_NO_PINS } from './gitStatsText';
+import type { CodegraphKindKey, CodegraphProblem } from './codegraphLevels';
+import { GIT_NO_PINS, KEY_NOW } from './gitStatsText';
 
 /**
  * Every string of the CodeGraph view (design spec §Client and the §Levels copy table), as named constants and small functions, so no component spells one
@@ -215,4 +215,89 @@ export function codegraphPill(problem: CodegraphProblem, repo: CodegraphRepo): C
     case 'lastRun': return null;
     case 'worktree': return { column: 'index', text: 'other worktree' };
   }
+}
+
+// ── the view's labels (spec §Client and the approved mock v2) ─────────────────
+export const CODEGRAPH_BAND_TITLE = 'Management · CodeGraph';
+/** The word of `CODEGRAPH_NO_PINS` that becomes the link to Management › Projects. */
+export const CODEGRAPH_NO_PINS_LINK = 'Projects';
+export const CODEGRAPH_FILTER_EMPTY = 'No repo at this level.';
+export const CODEGRAPH_LIST_TITLE = 'Repos';
+export const CODEGRAPH_KEY_OPEN_FOLDER = 'Open folder';
+export const CODEGRAPH_KEY_NOW = KEY_NOW;
+/** The cyan chip of a live rebuild, whoever started it (spec §Levels, "A build in progress"). */
+export const CODEGRAPH_CHIP_INDEXING = 'Indexing…';
+/** The READ meter while a poll is out; Git's says "syncing…", which here would read as the Sync key. */
+export const METER_READ_READING = 'reading…';
+export const CODEGRAPH_CONFIRM_LABEL = 'Confirm reindex';
+
+/** A key's accessible name: its visible label (`Sync`, `Syncing`, …) and the repo, since a column of keys all reading "Sync" says nothing on its own. */
+export function codegraphKeyAria(label: string, name: string): string {
+  return `${label} ${name}`;
+}
+
+/** The WATCHERS meter's value: indexed repos with a watcher over all indexed repos. */
+export function watchersValue(watching: number, indexed: number): string {
+  return `${watching} / ${indexed}`;
+}
+
+export const MATRIX_COLUMNS = {
+  repo: 'Repo', index: 'Index', changes: 'Changes', extractor: 'Extractor', watcher: 'Watcher',
+  files: 'Files', symbols: 'Symbols', edges: 'Edges', db: 'DB', indexed: 'Indexed',
+} as const;
+
+/** The symbols-by-kind legend, keyed by `kindGroups`' keys. */
+export const CODEGRAPH_KIND_LABELS: Record<CodegraphKindKey, string> = {
+  functions: 'functions', imports: 'imports', properties: 'properties', constants: 'constants', types: 'types', other: 'other',
+};
+
+export const INSPECTOR_TILES = { files: 'files', symbols: 'symbols', edges: 'edges', db: 'database' } as const;
+export const FACT_LANGUAGES = 'Languages';
+export const FACT_LAST_INDEXED = 'Last indexed';
+export const FACT_CHANGES = 'Changes';
+export const FACT_WATCHER = 'Watcher';
+export const FACT_CHANGES_NONE = 'None pending';
+export const FACT_WATCHER_OFF = 'Not running';
+export const FACT_WATCHER_ON = 'Running';
+export const FACT_RUNNING_SINCE = 'Running since';
+
+/** 2,672 — the Inspector's tiles and the Matrix's Files column, where a count is small enough to read whole. */
+export function fullCount(n: number): string {
+  return n.toLocaleString('en-US');
+}
+
+/** `<age> ago` for the Matrix's Indexed cell and the Inspector list, `—` for an index with no timestamp. */
+export function indexedAge(stats: CodegraphStats, nowMs: number): string {
+  return stats.lastIndexedMs === null ? '—' : `${ageAt(stats.lastIndexedMs, nowMs)} ago`;
+}
+
+export function languagesFact(stats: CodegraphStats): string {
+  return stats.languages.length === 0 ? '—' : stats.languages.join(' · ');
+}
+
+/** `2h ago · codegraph 1.6.2, extractor v27`; an index built before stamping says so instead of a version. */
+export function lastIndexedFact(stats: CodegraphStats, nowMs: number): string {
+  const built = stats.builtWithExtractionVersion === null
+    ? CODEGRAPH_EXTRACTOR_UNKNOWN
+    : `${stats.builtWithVersion === null ? '' : `codegraph ${stats.builtWithVersion}, `}extractor v${stats.builtWithExtractionVersion}`;
+  return `${indexedAge(stats, nowMs)} · ${built}`;
+}
+
+/** `None pending`, or `7 pending · 5 modified · 2 added`. */
+export function changesFact(stats: CodegraphStats): string {
+  const n = pendingTotal(stats);
+  if (n === 0) return FACT_CHANGES_NONE;
+  const { modified, added, removed } = stats.pending;
+  const parts = ([[modified, 'modified'], [added, 'added'], [removed, 'removed']] as const).filter(([k]) => k > 0).map(([k, w]) => `${k} ${w}`);
+  return [`${n} pending`, ...parts].join(' · ');
+}
+
+/** `Running since 10:31` (today) or `Running since 17 Oct, 10:31`; `Running` when the daemon left no start time, `Not running` without one. */
+export function watcherFact(repo: CodegraphRepo, nowMs: number): string {
+  if (!repo.watching) return FACT_WATCHER_OFF;
+  if (repo.watcherSinceMs === null) return FACT_WATCHER_ON;
+  const at = new Date(repo.watcherSinceMs);
+  const time = at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const sameDay = at.toDateString() === new Date(nowMs).toDateString();
+  return `${FACT_RUNNING_SINCE} ${sameDay ? time : `${at.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${time}`}`;
 }
