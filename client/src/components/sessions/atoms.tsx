@@ -1,6 +1,7 @@
 import type { LaunchingSession, Session } from '../../../../shared/types';
 import { fmtTok, formatAgo } from '../../lib/format';
 import { STATUS_LABEL } from '../../lib/filterSort';
+import { modelLabel } from '../../lib/modelLabel';
 import { chatTab } from '../../lib/holds';
 import { stopControl } from '../../lib/stopControl';
 import { surfacePill } from '../../lib/surface';
@@ -55,7 +56,7 @@ export function Tags({ s, withTitle = true }: { s: Session; withTitle?: boolean 
       {withTitle && <Title s={s} />}
       {s.sessionName && <span className="proj-pill">{s.project}</span>}
       {s.gitBranch && <span className="branch" title={s.gitBranch}>{s.gitBranch}</span>}
-      <span className="model">{s.model}</span>
+      <span className="model">{modelLabel(s.model)}</span>
       {surface && <span className={`ag-pill surface ${s.surface}`} title={surface.title}>{surface.label}</span>}
       {s.kaizenLesson && <span className="ag-pill kaizen" title={s.kaizenLesson}>kaizen</span>}
       <TaskPill s={s} />

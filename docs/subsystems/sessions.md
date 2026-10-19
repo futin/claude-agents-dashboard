@@ -66,7 +66,8 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   checkout's name (`server/lib/worktree-repo.ts`: the worktree's `.git` file, else the `.claude/worktrees/<n>` / `.worktrees/<n>` path shape once the
   worktree is deleted). `project` stays the worktree folder — the filter, pins and chat drawer key on it — and only the List view's Project column reads
   `repo` today.
-- **Model + CLI version** — what the session is running.
+- **Model + CLI version** — what the session is running. Every view shows the model through `lib/modelLabel.ts` (`Opus 5.5`); only the chat drawer's
+  facts panel keeps the full id, the one place with room for it.
 - **Surface pill** — where the session lives, when that isn't the obvious answer. A headless
   spawn appears in no other list, which is worth saying on the row rather than leaving to be
   rediscovered. `scan.ts`'s `sessionSurface` reads the transcript's own `entrypoint`: only
