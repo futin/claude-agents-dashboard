@@ -38,7 +38,8 @@ import {
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
-  serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, servePinsOrder, serveGitStats, serveGitFetch, serveNotifyEvent, serveNotifyTest,
+  serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, servePinsOrder, serveGitStats, serveGitFetch, serveCodegraph, serveCodegraphRun,
+  serveNotifyEvent, serveNotifyTest,
   serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates, serveUsageHistory,
   serveAccount, serveReleases, serveHub, serveOpenFolder
 } from './api.js';
@@ -266,6 +267,14 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (u.pathname === '/api/git-fetch') {
       if (req.method !== 'POST') return methodNotAllowed(res);
       return void serveGitFetch(config, req, res);
+    }
+    // Read-only codegraph state of the pinned repos, and the one write beside it: a Sync or Reindex, POST-only and token-guarded inside the handler.
+    if (u.pathname === '/api/codegraph') {
+      return void serveCodegraph(config, res);
+    }
+    if (u.pathname === '/api/codegraph/run') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveCodegraphRun(config, req, res);
     }
     // Who the CLI is signed in as + the two rate windows, on one small body the
     // header account chip polls on its own 30s clock from every section.
