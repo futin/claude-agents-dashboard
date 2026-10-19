@@ -87,7 +87,8 @@ const CORRECTION_RE = /\b(no|nope|wrong|incorrect|not (?:what|right|correct)|act
 /**
  * Peak context that proves auto-compaction never fired. A 200k window compacts near 160k, so a turn above 250k can only come from a larger window
  * (a 1M one puts compaction out of reach) — and since every turn replays the whole context, a session that never compacts pays total input
- * ≈ (C_end² − C_start²) / 2d to the end. The transcript records neither the window nor a compaction marker, so this is an inference.
+ * ≈ (C_end² − C_start²) / 2d to the end. The transcript records no window, and compactions are marked by `compact_boundary` records, which
+ * `analyzeSession` does not read yet — so this is an inference.
  */
 const NEVER_COMPACTED_PEAK = 250_000;
 /** A turn below this fraction of the running peak is a compaction: context only ever grows between them, and compaction cuts it several-fold. */
@@ -252,7 +253,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
     'byTool.approxOutputTokens splits each turn\'s output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.',
     'byTool.resultTokens is what each tool injected into context: its tool_result text sized at chars ÷ 4, summed per call (not split), error text included, images not counted. The firmer per-tool figure and byTool\'s sort key — but it is context growth, not assistant output; cite both and never add them.',
     'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.',
-    'perTurn.neverCompacted is inferred from peak context, not read from a window field — the transcript records neither the window nor a compaction: true when the peak turn tops 250k combined (a 200k window compacts near 160k) and no turn ever fell below half the running peak.'
+    'perTurn.neverCompacted is inferred from peak context — the transcript records no window, and compactions are marked by compact_boundary records, which this flag does not read: true when the peak turn tops 250k combined (a 200k window compacts near 160k) and no turn ever fell below half the running peak.'
   ];
   if (subagentTotals.count > 0) {
     notes.push('Subagent tokens are summed from each subagent\'s own transcript and are separate from main-agent totals; whole-session total = totals.combined + subagentTotals.tokens. subagentTotals.usage splits them by class — lead with its billableApprox for cost.');
