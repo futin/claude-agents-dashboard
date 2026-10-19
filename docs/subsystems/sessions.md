@@ -34,7 +34,12 @@ board, and reading them should not mean being on Sessions. See
     · *Quiet*, from `lib/triage.ts`'s `triageGroups`: a hold (or a terminal question)
     outranks the status, so a working session with a permission dialog open sits under
     *Needs you*. A card per session; the open one shows the expanded body inline.
-  - **List** — one table; the open row expands underneath itself across every column.
+  - **List** — one table; the open row expands underneath itself across every column. Columns: Session (title and pills) · **Project** (`repo ??
+    project`, branch under it) · **Model** (`modelLabel`: `claude-opus-5-5` → `Opus 5.5`, date stamp and `[1m]` dropped, an unparsed id shown as is) ·
+    Context · State · Activity · Last · Chat. Widths key on the table, not the viewport (container queries on `.s-card.ledger` — the aside and the Width
+    setting decide the table's width). Under 950px the Project column stays hidden and the Session cell's `.repo-sub` line carries repo and branch, since
+    the fixed columns alone sum to ~750px. From 1200px the text columns take percentage widths and
+    Session, the one unsized column, takes what is left; before that it took every spare pixel and a wide table drew the rest as a clump on the right.
   - **Split** — a compact list and one inspector (title, meta, Context and Now tiles, then
     the expanded body). The first row is inspected until one is clicked.
   - **Tiles** — every session a metric card with its context percentage as the figure; the
@@ -57,7 +62,10 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
 - **Name + git branch** — a named session leads with its custom title and demotes the
   project to a pill; an unnamed one leads with the project itself (basename of the
   transcript's *first* `cwd` — where the session was launched, not where its shell has
-  since wandered). Either way the row also carries its `gitBranch`.
+  since wandered). Either way the row also carries its `gitBranch`. A session launched in a linked git worktree also carries `repo`, the main
+  checkout's name (`server/lib/worktree-repo.ts`: the worktree's `.git` file, else the `.claude/worktrees/<n>` / `.worktrees/<n>` path shape once the
+  worktree is deleted). `project` stays the worktree folder — the filter, pins and chat drawer key on it — and only the List view's Project column reads
+  `repo` today.
 - **Model + CLI version** — what the session is running.
 - **Surface pill** — where the session lives, when that isn't the obvious answer. A headless
   spawn appears in no other list, which is worth saying on the row rather than leaving to be

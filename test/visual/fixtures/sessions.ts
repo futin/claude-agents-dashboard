@@ -23,6 +23,7 @@ function session(over: Partial<Session> & Pick<Session, 'id' | 'status' | 'model
   return {
     project,
     projectPath: project === PROJECTS.aurora.name ? PROJECTS.aurora.path : PROJECTS.harbor.path,
+    repo: null,
     sessionName: null,
     gitBranch: 'main',
     contextWindowLabel: over.contextWindow >= 1_000_000 ? `${over.contextWindow / 1_000_000}M` : `${Math.round(over.contextWindow / 1000)}k`,

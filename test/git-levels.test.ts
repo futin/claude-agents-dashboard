@@ -38,7 +38,7 @@ function branch(name: string, over: Partial<GitBranch> = {}): GitBranch {
 
 function sess(over: Partial<Session> = {}): Session {
   return {
-    id: 's1', project: 'a', projectPath: '/p/a', sessionName: null, gitBranch: 'feat', model: 'claude-opus-5', tokens: 0, contextWindow: 200_000,
+    id: 's1', project: 'a', projectPath: '/p/a', repo: null, sessionName: null, gitBranch: 'feat', model: 'claude-opus-5', tokens: 0, contextWindow: 200_000,
     contextWindowLabel: '200k', contextPct: 0, status: 'working', surface: 'local', remoteQuestion: false, remotePlan: false, remoteReply: false,
     permissionWait: false, activity: null, lastTimestamp: null, updatedMs: Date.now(), version: null, kaizenLesson: null, tasks: null, taskPlan: null,
     ...over,
