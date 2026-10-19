@@ -12,7 +12,7 @@ export const settings: ServerSettings = {
   answerOverride: null,
   notify: {
     enabled: true,
-    events: { question: true, stop: false, permission: true, plan: true },
+    events: { question: true, stop: false, permission: true, plan: true, 'schedule-failed': true },
     requireRemoteAnswer: true,
     requireAfk: true,
     requireAutoMode: false

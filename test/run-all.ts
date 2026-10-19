@@ -150,6 +150,7 @@ import { run as runRunSchedule } from './run-schedule.test.js';
 import { run as runScheduleLog } from './schedule-log.test.js';
 import { run as runScheduleConfig } from './schedule-config.test.js';
 import { run as runScheduleStore } from './schedule-store.test.js';
+import { run as runScheduleNotify } from './schedule-notify.test.js';
 import { run as runScheduleReconcile } from './schedule-reconcile.test.js';
 import { run as runSyncPlugin } from './sync-plugin.test.js';
 
@@ -304,6 +305,7 @@ failed += await runRunSchedule();
 failed += runScheduleLog();
 failed += runScheduleConfig();
 failed += runScheduleStore();
+failed += runScheduleNotify();
 failed += await runScheduleReconcile();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');

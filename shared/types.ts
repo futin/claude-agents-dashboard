@@ -963,7 +963,7 @@ export type ConnectionOrigin = 'local' | 'lan' | 'tailnet' | 'unknown';
 export type WriteAccess = 'open' | 'token' | 'none';
 
 /** The four session events a push notification can announce. */
-export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan';
+export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan' | 'schedule-failed';
 
 /**
  * When to send a push. Every clause is AND-ed, and every layer is independently
