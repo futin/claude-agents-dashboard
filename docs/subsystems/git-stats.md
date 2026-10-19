@@ -57,15 +57,15 @@ imports nothing from the reader and has its own runner. It is a module of its ow
 ## Quick pull and push — the writer
 
 `server/lib/git-quick.ts` is the one place the server moves a local branch (design record: `docs/superpowers/specs/2026-10-19-quick-pull-push-design.md`).
-It backs the Pull and Push items of the Sync key's menu, so a pull or push that needs no judgement does not cost a Claude session. Like the fetch, it imports
-nothing from the reader; unlike the fetch, it writes local refs and the working tree — but only by fast-forward.
+It backs the Pull and Push items of the Sync key's menu, so a pull or push that needs no judgement does not cost a Claude session. It takes only `trunkOf` from
+the reader; unlike the fetch, it writes local refs and the working tree — but only by fast-forward.
 
 - **Route.** `POST /api/git-quick {dirName, op: 'pull' | 'push'}`, behind `refuseWrite` like `POST /api/git-fetch`. A body that is not that shape is 400,
   a `dirName` that is not a listed pin with a path is 404, `busy` and `fetch-running` refusals are 409, everything else answers 200 with a
   `GitQuickResponse` (`refusal` plus `parts`); a throw is 500 `git quick failed`, any other method 405.
 - **One op per repo, never beside fetch-all.** `server/lib/git-locks.ts` holds one lock per git **common dir** (two pins in one repo, a linked worktree
   included, share it). A quick op refuses `fetch-running` while fetch-all is in flight and `busy` while its repo's lock is held; both checks and the lock
-  happen before the first await after the common dir is known, so two requests cannot both pass. Fetch-all waits for every held lock inside its in-flight
+  run with no await between them, so two requests cannot both pass and fetch-all cannot start in the gap. Fetch-all waits for every held lock inside its in-flight
   promise, so no new lock is taken while it waits, and the timer skips a tick while any lock is held.
 - **Preconditions**, each a refusal with its own copy: a readable repo with an `origin` (`not-ok`, `no-origin`); no merge, rebase, cherry-pick, revert
   or bisect in progress (`in-progress`); a checked-out branch (`detached`); something to do (`nothing`). The server re-reads all of it; the client's menu
