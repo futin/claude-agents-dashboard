@@ -59,6 +59,7 @@ import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } f
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
 import { openFolder, openFolderPlatform } from './lib/open-folder.js';
 import { readGitStats } from './lib/git-stats.js';
+import { readCodegraph, startCodegraphRun } from './lib/codegraph-store.js';
 import { classifyOrigin, resolvePeer } from './lib/origin.js';
 import { releasesPayload } from './lib/releases.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
@@ -1744,6 +1745,49 @@ export async function serveGitFetch(config: Config, req: IncomingMessage, res: S
   } catch (e) {
     console.error('[dashboard] git fetch failed:', (e as Error).message);
     sendJson(res, 500, { error: 'git fetch failed' });
+  }
+}
+
+/**
+ * `GET /api/codegraph` — the codegraph state of every pinned project, in pin order (codegraph-view spec §API). No method check, like `serveGitStats`: the
+ * repo paths come from the stored pins, never from the request. The one parameter, `fresh=1` (Re-read status), skips the status cache; any other value is a
+ * plain read. A repo that fails reads as its own `error` row; only an unreadable pin list is a 500.
+ */
+export async function serveCodegraph(config: Config, res: ServerResponse, fresh = false): Promise<void> {
+  try {
+    sendJson(res, 200, await readCodegraph(config, { fresh }));
+  } catch (e) {
+    console.error('[dashboard] codegraph read failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'codegraph read failed' });
+  }
+}
+
+/** What the store's refusal means to the caller; the order they are checked in lives in `startCodegraphRun`. */
+const CODEGRAPH_RUN_REFUSALS = {
+  'not-pinned': [403, 'not a pinned project'],
+  'not-indexed': [404, 'not indexed'],
+  busy: [409, 'already running'],
+} as const;
+
+/**
+ * `POST /api/codegraph/run` `{dirName, kind}` — start a Sync or Reindex on one pinned repo and answer at once (codegraph-view spec §API). The method check
+ * is the router's. Refusals in order: the write gate, the body shape (checked here so a bad `kind` can never reach the CLI), then the store's own: not
+ * pinned, not indexed, already running.
+ */
+export async function serveCodegraphRun(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  const body = await readJsonBody(req) as { dirName?: unknown; kind?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.dirName !== 'string' || body.dirName === '' || (body.kind !== 'sync' && body.kind !== 'reindex')) {
+    return sendBadBody(res, { error: "expected {dirName: string, kind: 'sync' | 'reindex'}" });
+  }
+  try {
+    const result = await startCodegraphRun(config, body.dirName, body.kind);
+    if (result === 'started') return sendJson(res, 200, { ok: true });
+    const [status, error] = CODEGRAPH_RUN_REFUSALS[result];
+    sendJson(res, status, { error });
+  } catch (e) {
+    console.error('[dashboard] codegraph run failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'codegraph run failed' });
   }
 }
 

@@ -1746,6 +1746,77 @@ export interface GitStatsResponse {
   generatedAt: number;
 }
 
+/** What a codegraph run does: `sync` applies pending changes, `reindex` rebuilds the whole graph. */
+export type CodegraphRunKind = 'sync' | 'reindex';
+
+/** A run in flight on one repo: ours, or a rebuild started from a terminal. */
+export interface CodegraphRun {
+  kind: CodegraphRunKind;
+  startedAtMs: number;
+}
+
+/** How the last run on a repo ended, so a failed sync stays visible after it is over. */
+export interface CodegraphLastRun {
+  kind: CodegraphRunKind;
+  ok: boolean;
+  endedAtMs: number;
+  message: string;
+}
+
+/** The CLI's `index.state`; a CLI `null` (index older than the marker) is read as `complete`. */
+export type CodegraphIndexState = 'indexing' | 'complete' | 'partial' | 'failed';
+
+/** The fields of `codegraph status --json` the view uses; the client never sees raw CLI output. */
+export interface CodegraphStats {
+  lastIndexedMs: number | null;
+  fileCount: number;
+  nodeCount: number;
+  edgeCount: number;
+  dbSizeBytes: number;
+  nodesByKind: Record<string, number>;
+  languages: string[];
+  pending: { added: number; modified: number; removed: number };
+  worktreeMismatch: { worktreeRoot: string; indexRoot: string } | null;
+  version: string;
+  indexState: CodegraphIndexState;
+  reindexRecommended: boolean;
+  /** Null for an index built before the CLI stamped its version. */
+  builtWithVersion: string | null;
+  builtWithExtractionVersion: number | null;
+  currentExtractionVersion: number | null;
+}
+
+/** One pinned project's codegraph state: `ok` carries stats, `building` is a rebuild with no good stats yet. */
+export type CodegraphRepo = {
+  dirName: string;
+  name: string;
+  path: string | null;
+  watching: boolean;
+  watcherSinceMs: number | null;
+  rebuildLive: boolean;
+  run: CodegraphRun | null;
+  lastRun: CodegraphLastRun | null;
+} & (
+  | { state: 'ok'; root: string; stats: CodegraphStats }
+  | { state: 'building'; root: string }
+  | { state: 'none' }
+  | { state: 'missing' }
+  | { state: 'error'; root: string; message: string }
+);
+
+/** Payload of `GET /api/codegraph`: one entry per pin, in pin order; `cli: 'missing'` is said once for the page. */
+export interface CodegraphResponse {
+  generatedAt: number;
+  cli: 'ok' | 'missing';
+  repos: CodegraphRepo[];
+}
+
+/** Body of `POST /api/codegraph/run`. */
+export interface CodegraphRunRequest {
+  dirName: string;
+  kind: CodegraphRunKind;
+}
+
 /** Payload of `GET /api/configs`. */
 export interface ManagementIndex {
   generatedAt: string;

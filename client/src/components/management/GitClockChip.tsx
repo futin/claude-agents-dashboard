@@ -11,7 +11,7 @@ import { useDismiss } from '../Popover';
 import Chevron from '../Chevron';
 
 /** The chip's and the popover rows' bar: label over value, a flat track, the fill's width inline. The tone is the root's `data-tone`. */
-function GitMeter({ label, reading }: { label: string; reading: MeterReading }) {
+export function GitMeter({ label, reading }: { label: string; reading: MeterReading }) {
   return (
     <span className="git-meter" data-tone={reading.tone}>
       <span className="git-meter-head">

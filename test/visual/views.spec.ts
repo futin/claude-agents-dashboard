@@ -16,7 +16,7 @@ import { isReady, stage, type StageOpts } from './stage.js';
 import { DAYLIGHT_TIERS } from './tiers.js';
 
 interface ShotCase extends StageOpts {
-  kind: 'shot' | 'detail' | 'triage' | 'git-matrix' | 'git-inspector' | 'git-branches' | 'projects-tiles' | 'projects-columns' | 'projects-lists' | 'releases';
+  kind: 'shot' | 'detail' | 'triage' | 'git-matrix' | 'git-inspector' | 'git-branches' | 'codegraph-inbox' | 'codegraph-matrix' | 'codegraph-inspector' | 'projects-tiles' | 'projects-columns' | 'projects-lists' | 'releases';
   /** Per-pixel colour tolerance overriding the config's `0`; `maxDiffPixels` stays `0`, so a pixel that really changes colour still fails the shot. */
   threshold?: number;
 }
@@ -43,6 +43,12 @@ const GIT = {
   contentWidth: 'fixed' as const,
   fixtures: { '/api/sessions': gitSessions }
 };
+const CG = {
+  section: 'management' as Section,
+  theme: 'daylight' as ThemeId,
+  contentWidth: 'fixed' as const,
+  managementTab: 'codegraph' as const
+};
 const PROJ = {
   section: 'management' as Section,
   theme: 'daylight' as ThemeId,
@@ -66,6 +72,12 @@ const CASES: ShotCase[] = [
   { ...GIT, width: 1280, storage: { 'management.gitLayout': 'inspector' }, kind: 'git-inspector' },
   { ...GIT, width: 375, storage: { 'management.gitLayout': 'branches' }, kind: 'git-branches' },
   { ...GIT, width: 1280, storage: { 'management.gitLayout': 'branches' }, kind: 'git-branches' },
+  // CodeGraph's Inbox is the default layout and drawn at 1280; the phone shot stores Matrix, which a narrow window does not offer, so it also pins that the
+  // stored choice is drawn as Inbox rather than a table the phone cannot hold.
+  { ...CG, width: 1280, kind: 'codegraph-inbox' },
+  { ...CG, width: 1280, storage: { 'management.codegraphLayout': 'matrix' }, kind: 'codegraph-matrix' },
+  { ...CG, width: 1280, storage: { 'management.codegraphLayout': 'inspector' }, kind: 'codegraph-inspector' },
+  { ...CG, width: 375, storage: { 'management.codegraphLayout': 'matrix' }, kind: 'codegraph-inbox' },
   // Projects with a pinned folder that is gone, so every layout shows the `Folder gone` chip.
   { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'tiles' }, kind: 'projects-tiles', threshold: AA_NOISE },
   { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'columns' }, kind: 'projects-columns', threshold: AA_NOISE },
@@ -76,10 +88,10 @@ const CASES: ShotCase[] = [
 ];
 
 /**
- * 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts + 2 What's new drawers. A changed `SECTIONS` fails here until the
+ * 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 4 codegraph layouts + 3 projects layouts + 2 What's new drawers. A changed `SECTIONS` fails here until the
  * matrix (and its baselines) are reconsidered.
  */
-const EXPECTED_SHOTS = 86;
+const EXPECTED_SHOTS = 90;
 
 /** Click the version chip — through the phone menu below `md`, where the rail is folded away — and wait until the drawer is drawn and settled. */
 async function openReleases(page: Page): Promise<void> {

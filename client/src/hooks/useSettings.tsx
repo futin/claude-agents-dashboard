@@ -29,6 +29,8 @@ export const OWNED_KEYS = [
   'management.gitLayout',
   // Management › Projects' layout: live, like the Git one above.
   'management.projectsLayout',
+  // Management › CodeGraph's layout: live, like the two above.
+  'management.codegraphLayout',
   // The pre-rename keys: nothing writes them now (D13, no migration), but Reset still sweeps what an older build left behind.
   'management.scope', 'management.type', 'management.collapsed'
 ];

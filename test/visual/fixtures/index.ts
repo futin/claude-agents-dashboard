@@ -3,6 +3,7 @@ import type { FixtureMap } from '../mock-api.js';
 
 import { account } from './account.js';
 import { analytics } from './analytics.js';
+import { codegraph } from './codegraph.js';
 import { configs } from './configs.js';
 import { configsFile } from './configs-file.js';
 import { configsProject } from './configs-project.js';
@@ -46,5 +47,6 @@ export const fixtures: FixtureMap = {
   '/api/configs': configs,
   '/api/configs/project': configsProject,
   '/api/configs/file': configsFile,
-  '/api/git-stats': gitStats
+  '/api/git-stats': gitStats,
+  '/api/codegraph': codegraph
 };

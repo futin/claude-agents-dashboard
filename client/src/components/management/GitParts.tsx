@@ -24,7 +24,7 @@ export function GitWorktreeBadge({ b }: { b: GitBranch }) {
 }
 
 /** Two arrows chasing, not the band's ↻: that one re-reads the stats, this one spends a session. Turns while a sync runs (`.git-sync.on`). */
-function GitSyncGlyph() {
+export function GitSyncGlyph() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M13.5 8a5.5 5.5 0 0 1-9.4 3.9M2.5 8a5.5 5.5 0 0 1 9.4-3.9" />
