@@ -50,7 +50,8 @@ Per pinned project (`listPinRows`, same as `/api/git-stats` — paths never come
 - Otherwise resolve the pin's **graph root** once, server-side: the pin's path or its nearest ancestor holding `.codegraph/codegraph.db` (a bare
   `.codegraph/` without the DB does not count), the same walk as the CLI's `resolveProjectPath` (`dist/bin/codegraph.js`, 1.6.2). The pin's path may be a
   subdirectory of the repo, so every later use — the `none` short-circuit, the run's `404`, every pid file, every launch's `cwd` — goes through the root.
-  No root → `state: 'none'`, no CLI launch. Otherwise run `codegraph status --json` with `cwd` = the root; `initialized: false` in the answer (exit 0)
+  No root → `state: 'none'`, no CLI launch. Otherwise run `codegraph status --json` with `cwd` = the **pin's path** (the one exception: the CLI's
+  `worktreeMismatch` compares the start path with the root it walks up to, so a root `cwd` would always report null); `initialized: false` in the answer (exit 0)
   → `state: 'none'` as well. The run goes through `execFile` (argv, no shell) with its own timer, as `git-stats.ts` does (see its
   #168 note on `execFile`'s `timeout`). Non-zero exit, timeout or unparsable JSON → `state: 'error'` with a one-line reason.
 - CLI missing from the server's `PATH` → the whole payload says so once (`cli: 'missing'`), not one error per repo. Detection mirrors `readRepo` in
