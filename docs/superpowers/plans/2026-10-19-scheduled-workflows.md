@@ -13,7 +13,9 @@
 **Plan conventions (override the template):** steps specify *behaviour and exact test cases* — signatures, expected values, edge cases — never literal implementation or test code. Handed code gets transcribed with its bugs; a named assertion gets thought about. Where a step shows a value in backticks it is an exact value, not an example. Line budgets are soft. Authored text wraps at 160 columns. Every test file follows the repo pattern: `function test(name, fn): boolean` counting passes, `export function run(): number` returning failures,
 registered in `test/run-all.ts`, and ending with the main guard `if (import.meta.url === \`file://${process.argv[1]}\`) process.exit(run() > 0 ? 1 : 0);`
 (as `test/scan.test.ts` does) so one file runs alone: **a task's run steps are `pnpm tsx test/<that file>.test.ts` plus `pnpm typecheck`, never the
-whole `test/run-all.ts`** — CI is the full-suite gate (`.claude/CLAUDE.md` §Commands). Commits are one per task, `git add <the files>` then `git commit`, never `-A`; the branch is `feat/schedules` off `main`.
+whole `test/run-all.ts`** — CI is the full-suite gate (`.claude/CLAUDE.md` §Commands). An existing test file a task extends gets the same guard in that
+task's test step if it lacks one (`frontmatter`, `plugin-manifest`, `sync-plugin`, `notify`, `settings`, `client-settings`, `deep-link` all do, 2026-10-19);
+without it `pnpm tsx test/<file>.test.ts` runs nothing and reads green. Commits are one per task, `git add <the files>` then `git commit`, never `-A`; the branch is `feat/schedules` off `main`.
 
 ## Global Constraints
 
@@ -103,9 +105,11 @@ one` (Review Focus 1); the same cron with `machines: [wsl]` parses. `checkPins`:
 ### Task 3: generated plugin modules and manifest rules
 
 **Files:** Create `scripts/gen-plugin-lib.ts`, `plugin/lib/{cron,schedule-file,frontmatter}.mjs` (generated); Modify `package.json` (`"plugin:gen"`),
-`scripts/sync-plugin.ts` (`PUBLISHED_PATHS` becomes `['.claude-plugin', 'hooks', 'lib', 'skills']`; after a successful install it POSTs
-`http://127.0.0.1:<PORT from .env>/api/schedules/reconcile` with `{ apply: true }`, best effort, connection errors ignored), `test/sync-plugin.test.ts`
-(the `PUBLISHED_PATHS` deep-equal at its line 108; a recording listener sees exactly one POST after install; a closed port does not fail the sync),
+`scripts/sync-plugin.ts` (`PUBLISHED_PATHS` becomes `['.claude-plugin', 'hooks', 'lib', 'skills']`; new export `postReconcile(port: number, timeoutMs =
+2000): Promise<boolean>` POSTs `http://127.0.0.1:<port>/api/schedules/reconcile` with `{ apply: true }` and resolves false on any error; `main()` calls
+it after a successful reinstall with `loadConfig().port` — `PORT` from `server/lib/config.ts`, the API's port, the way `scripts/tailnet.ts` reads
+`webPort` — and ignores the result), `test/sync-plugin.test.ts` (the `PUBLISHED_PATHS` deep-equal at its line 108; `postReconcile` against a recording
+listener records exactly one POST with that body and resolves true; against a closed port resolves false within the timeout),
 `test/plugin-manifest.test.ts`, `.claude/CLAUDE.md`, `docs/overview.md`.
 
 - [ ] **Step 1: failing tests** in `plugin-manifest.test.ts`: `plugin/` entries equal `['.claude-plugin','lib','skills']`; for each of the three modules, `transpileModule(shared source, { module: ESNext, target: ES2022 })` text with import specifiers rewritten `./x.js` → `./x.mjs` equals the file on disk; `plugin/lib/` holds exactly the three `.mjs` plus `run-schedule.mjs` (Task 4 adds it; until then assert the three).
@@ -125,7 +129,7 @@ other machine → the same three; manual + disabled → runs; claude job → fak
 `--disallowed-tools AskUserQuestion`, `--max-turns 60`, env `CLAUDE_DASHBOARD_SCHEDULE=<job>`, stdin = body; `step-end` carries `cost`, `tokensIn`,
 `tokensOut`, `turns`, `model` from the fake's result; no `permission-mode` + env `SYNC_PERMISSION_MODE=acceptEdits` → argv has `--permission-mode
 acceptEdits`; `permission-mode: auto` + env `SPAWN_MAX_PERMISSION=plan` → argv has `--permission-mode plan` (clamped); fake result `is_error: true` → `outcome failed`; a file with `permission-mode: bypassPermissions` is invalid → `refused why "invalid: <line>"`, no `start`, nothing launched; `CLAUDE_BIN` unset + claude job → `end.error "claude cli not configured"`; `timeout: 1s` on `sleep 5` → `outcome timeout`, child gone; SIGTERM to the wrapper mid-step → `end.stopped true`, exit 143, child gone; `--trigger schedule` 20 min after the slot → `start.late true`, `start.slot` the slot's ISO; manual → no `slot`.
-- [ ] **Step 2: run** → FAIL. **Step 3: implement**; boot id from `sysctl -n kern.boottime` (mac) or `/proc/sys/kernel/random/boot_id`; liveness via `process.kill(pid, 0)` plus `ps -o command= -p <pid>` containing `run-schedule <job>`; shell body to a tmp file run with `bash -e`; `tail` = last 20 lines of combined output. **Step 4: run** → PASS; `plugin-manifest.test.ts` updated for the fourth file.
+- [ ] **Step 2: run** → FAIL. **Step 3: implement**; boot id from `sysctl -n kern.boottime` (mac) or `/proc/sys/kernel/random/boot_id`; liveness via `process.kill(pid, 0)` plus `ps -o command= -p <pid>` split on whitespace: some element's basename is `run-schedule.mjs` and the next element equals the job name (a token match — `git-sync` never matches `git-sync-all`); shell body to a tmp file run with `bash -e`; `tail` = last 20 lines of combined output. **Step 4: run** → PASS; `plugin-manifest.test.ts` updated for the fourth file.
 - [ ] **Step 5: commit** `feat(schedules): run-schedule wrapper`.
 
 ### Task 5: run-log reader and stats
@@ -150,6 +154,9 @@ untouched, and `read()` after the rename still folds every run; an `end` arrivin
 
 **Interfaces — Produces:** `machineName(config): { name: 'mac'|'wsl'; error: string|null }`; `scheduleDirs(config): { schedules; state; runs; locks; launchd }`; `scheduleEnv(config): Record<string,string>` with exactly `PATH, HOME, CLAUDE_BIN, SPAWN_MAX_PERMISSION, SYNC_PERMISSION_MODE, SCHEDULE_MACHINE, SCHEDULES_DIR`;
 `scheduleStateRoot(config)` — `SCHEDULES_STATE_ROOT` from `.env` when set (a test and verification seam, not documented for users), else `~/.claude/schedules`.
+The seam moves the whole state folder, `owner.json` included, and the wrapper's seven-key env does not carry it, so a server under the seam must never
+be the owner: `claimOwner` returns `{ ownedBy: 'seam' }` without writing when the seam is set (its test case lives in Task 7), and the wrapper is
+exercised only through Task 4's child-process tests.
 
 - [ ] **Step 1: failing tests** — `SCHEDULE_MACHINE=wsl` wins over Darwin; `SCHEDULE_MACHINE=linux` → `error "bad SCHEDULE_MACHINE"`; unset on Darwin → `mac`; unset with `/proc/version` containing `microsoft` (injected reader) → `wsl`; `scheduleEnv` has exactly those seven keys and nothing from `process.env` beyond `PATH`/`HOME`; `SCHEDULES_DIR` default expands `~`.
 - [ ] **Step 2–4:** FAIL → implement → PASS. **Step 5: commit** `feat(schedules): config keys and baked environment`.
@@ -160,12 +167,14 @@ untouched, and `read()` after the rename still folds every run; an `end` arrivin
 in Task 11 — `settings.ts` already imports `management.ts`, so a call from there would cycle — and start-up wiring is Task 11's too.)
 
 **Interfaces — Consumes:** Tasks 2, 6. **Produces:** `readJobs(dir): Array<{ name; text; job: ScheduleJob|null; errors: JobError[]; mtimeMs }>`; `writeJob(dir, name, text)` (tmp + rename; `409`-style `exists` error for create); `deleteJob(dir, name)`; `writePinsSnapshot(config)`; `claimOwner(config): 'owner' | { ownedBy: string }`; `releaseOwner()`; `isOwner(): boolean`; `wrapperAlive(pid: number, job: string): boolean | null`
-(`process.kill(pid, 0)` then `ps -o command= -p` contains `run-schedule <job>`; null when `ps` is unavailable); `sweepLocks(config): string[]` (names of
-locks removed).
+(`process.kill(pid, 0)` then `ps -o command= -p`, tokenised as in Task 4: an element with basename `run-schedule.mjs` followed by an element equal to
+`job`; null when `ps` is unavailable); `createProbe(): Probe` where `Probe = { alive(pid: number): boolean; command(pid: number): string | null }` is the
+process seam, and `wrapperAlive(pid, job, probe = createProbe())`, `sweepLocks(config, probe = createProbe()): string[]` (names of locks removed) take it.
 
 - [ ] **Step 1: failing tests** — a folder with two valid files, one invalid and one `.txt` → two jobs, one error entry, the `.txt` ignored; `writeJob` leaves no `.tmp` behind and a concurrent reader never sees a partial file (write 1 MB, read in a loop); `writePinsSnapshot` writes `[{dirName,name,path,listed}]` in pin order; `claimOwner` with no file → `owner` and the file has this pid + boot id; with a live foreign pid → `{ ownedBy: '<cwd>:<port>' }`; with a dead pid → `owner`; a pid from another boot id → `owner`; a server without `SCHEDULES_OWNER` never claims (`isOwner()` false, file untouched). `sweepLocks` with a fake `ps`: a lock whose pid is dead → removed;
-live pid whose command is `node …/run-schedule.mjs git-sync-all --trigger schedule` for job `git-sync-all` → kept (Review Focus 5); live pid running
-something else → removed; matching command but another boot id → removed.
+live pid whose command is `node …/run-schedule.mjs git-sync-all --trigger schedule` for job `git-sync-all` → kept (Review Focus 5); the same command
+for job `git-sync` → removed; live pid running something else → removed; matching command but another boot id → removed. The fake is a `Probe` passed
+in, not a fake `ps` binary.
 - [ ] **Step 2–4:** FAIL → implement → PASS. **Step 5: commit** `feat(schedules): job store, pins snapshot, owner lock`.
 
 ### Task 8: reconcile
@@ -204,15 +213,17 @@ something else → removed; matching command but another boot id → removed.
 **Interfaces — Produces** in `shared/types.ts`: `ScheduleJobRow = { name; text; job: ScheduleJob | null; errors: JobError[]; mtimeMs; onThisMachine:
 boolean; installed: boolean; nextAt: string | null; last: ScheduleRun | null; running: ScheduleRun | null }`; `SchedulesResponse = { machine; dir;
 owner: 'owner' | { ownedBy: string }; reconcile: ReconcileReport; jobs: ScheduleJobRow[] }`; `ScheduleRunsResponse = { runs: ScheduleRun[]; stats:
-ScheduleStats }`. `startSchedules(config)`: when owner — `claimOwner`, `sweepLocks`, `writePinsSnapshot`, `rotateIfLarge`, `applyReconcile`,
+ScheduleStats }`. `startSchedules(config, deps = defaultDeps)` where `deps` holds every call it makes (`claimOwner`, `sweepLocks`, `writePinsSnapshot`,
+`rotateIfLarge`, `applyReconcile`, `startReconcileWatchers`, `createLogReader`, `sendScheduleEvent`, `releaseOwner`) so the test injects fakes: when owner — `claimOwner`, `sweepLocks`, `writePinsSnapshot`, `rotateIfLarge`, `applyReconcile`,
 `startReconcileWatchers`, and a runs watcher that folds and calls `sendScheduleEvent` for each pushable run; when not owner — nothing but the read
 path. `stopSchedules()`: watchers off, `releaseOwner`.
 
 - [ ] **Step 1: failing tests** — every route in the spec's table with its status codes: `GET /api/schedules` shape; `GET /api/schedules/runs?days=7&job=x&outcome=failed&runner=claude` filters; `PUT` with an invalid file → `422 { errors: [{ line, message }] }` and the file untouched; `PUT`, `POST` and `/validate` run `checkPins` against the
-current pins → a `foreach` naming an ambiguous pin is a `422` too; a name `../x`, `Runs` or `runs` on any route → `400 { error: 'bad name' }` with the
-store never called (fake store records calls); `POST` existing name → `409`; `PATCH { enabled:false }` → file diff is exactly the `enabled:` line; `DELETE` removes the file, log rows remain; `POST /validate` is reachable without write trust; every other write → `403` without trust (reuse the existing trust test helper) and `409 not-owner` on a non-owner; `POST /reveal` → `501` off darwin; `GET /api/sessions/:id/row` for a transcript older than `SCAN_CAPS.lookback` returns a `Session` with status derived from the transcript (liveness `null`), `404` for an unknown id, and does not 404 a `commandOnly` transcript. `scan.test.ts`: `sessionFromRef(ref, opts)` returns the same row `scanSessions` does for a fixture (deep-equal against the scan's output).
-`schedule-boot.test.ts` with fakes for every call: owner → the seven calls happen in that order, pins written before reconcile; non-owner → none of
-them; `stopSchedules` releases the owner file; a `pins` write through `servePinsWrite` on an owner rewrites `pins.json`, on a non-owner does not.
+current pins → a `foreach` naming an ambiguous pin is a `422` too; a name `../x` or `Runs` on `PUT`, `PATCH`, `DELETE`, `/run`, `/stop` or `/reveal` → `400 { error: 'bad name' }` with the store never called (fake store
+records calls); `POST` with `{ name: 'runs' }` → `422` with the error `name is reserved` (validation, spec §The job file); `GET /api/schedules/runs`
+is the runs list, never a job lookup; `POST` existing name → `409`; `PATCH { enabled:false }` → file diff is exactly the `enabled:` line; `DELETE` removes the file, log rows remain; `POST /validate` is reachable without write trust; every other write → `403` without trust (reuse the existing trust test helper) and `409 not-owner` on a non-owner; `POST /reveal` → `501` off darwin; `GET /api/sessions/:id/row` for a transcript older than `SCAN_CAPS.lookback` returns a `Session` with status derived from the transcript (liveness `null`), `404` for an unknown id, and does not 404 a `commandOnly` transcript. `scan.test.ts`: `sessionFromRef(ref, opts)` returns the same row `scanSessions` does for a fixture (deep-equal against the scan's output).
+`schedule-boot.test.ts` with a fake `deps`: owner → the seven calls happen in that order, pins written before reconcile; `SCHEDULES_OWNER` unset → zero
+calls; `SCHEDULES_OWNER=true` and `claimOwner` answering `{ ownedBy }` → `claimOwner` is the only call; `stopSchedules` releases the owner file; a `pins` write through `servePinsWrite` on an owner rewrites `pins.json`, on a non-owner does not.
 - [ ] **Step 2–4:** FAIL → implement → PASS; `docs/subsystems/remote-access.md` write-route list updated. **Step 5: commit** `feat(api): schedules routes and session row by id`.
 
 ### Task 12: hook markers
@@ -250,10 +261,10 @@ Behaviour per the spec's UI section and the mockup screens 1–6; the ChatDrawer
   hidden with the chip `owned by <cwd>:<port>`; the drawer shows the amber note from the mock under a file with `permission-mode: acceptEdits`; on load
   with `deepLinkRun()` set, the Runs page opens with that run's fold expanded.
 - [ ] **Step 4:** `JobMenu` (Edit file, Run now on one repo…, Pause/Resume, Reveal — hidden on wsl, Copy launchd label, Delete…) and `RunNowPopover` (per-pin last outcome, Run, `Run the N failed`; sheet with checkboxes under 640 px).
-- [ ] **Step 5: verify** with `preview_start` on a dev server whose `.env` sets `SCHEDULES_DIR` to a tmp folder, `SCHEDULES_STATE_ROOT` (Task 6's
-  test seam, default `~/.claude/schedules`) to another, `SCHEDULES_OWNER=true`, notifications off, and the five mock jobs all `machines: [wsl]` so a
-  reconcile on this mac installs nothing real; seed that state root's log. Screenshot the Jobs page at desktop and 375 px, read console for errors,
-  toggle a job and confirm the file diff, open a 10-day-old run's session. Record the pid you started and stop that pid. Record what was not verified
+- [ ] **Step 5: verify** with `preview_start` on a dev server whose `.env` sets `SCHEDULES_DIR` to a tmp folder with the five mock jobs and
+  `SCHEDULES_STATE_ROOT` (Task 6's seam) to another with a seeded log; the server is therefore a non-owner and reconciles, installs and removes
+  nothing real. Screenshot the Jobs page at desktop and 375 px with the `owned by` chip, read console for errors, open a 10-day-old run's session.
+  The toggle's file diff is proven by Task 11's `PATCH` test, not here. Record the pid you started and stop that pid. Record what was not verified
   (launchd on a real machine, WSL, a real push).
 - [ ] **Step 6: commit** `feat(schedules): Management › Schedules tab`.
 
@@ -273,6 +284,8 @@ Behaviour per the spec's UI section and the mockup screens 1–6; the ChatDrawer
 - Spec coverage: job file → T2; pins on disk → T7; machine → T6; owner → T7; reconcile (triggers, chip states, deferral, serialisation, env, quoting, cron-down) → T8; wrapper (lock, refusals, late, outcome mapping, hooks marker) → T4, T12; log + lost + stats + rotation → T5; `/run`, `/stop` → T10; HTTP table + row endpoint → T11; shared modules + generated copies + CLAUDE.md lists → T2, T3; UI screens → T13, T14; notifications → T9; security (trust gate, name validation, no shell interpolation) → T4, T11; docs → T15.
 - Types: `ScheduleJob` (T2) is what `readJobs` (T7), `renderPlist` (T8) and the client (T13) consume; `ScheduleRun`/`ScheduleStep` (T5) feed T9, T11, T13; `scheduleEnv` (T6) feeds T8 and T10; `setScheduleRunner` (T8) and `setSpawner` (existing) are the two seams every server test uses.
 - Review Focus tests live in T1 + T2 (1), T5 (2), T2 + T4 (3), T8 (4), T7 + T8 (5).
+- Plan review 2 (re-check): guards on extended test files, token-match liveness with a `Probe` seam, `startSchedules` deps, reserved-name codes, seam
+  servers never own, `postReconcile` export.
 - Plan review 1 (`docs/superpowers/reviews/…-plan-review-1.md`): per-file test runs, full wrapper refusal matrix, `rotateIfLarge`, `sweepLocks`, boot
   wiring in T11, deep-link `run`, verification isolation.
 - Proportion: 15 tasks over a 340-line spec; no task carries a code body.
