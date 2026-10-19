@@ -70,6 +70,8 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
   inline `renderPage()`. React auto-escapes — no `esc()`.
 - **Never hardcode a color or shadow in `styles.css`** below the theme-token block. The 5
   themes are pure `[data-theme]` token overrides; one literal breaks the light one.
+- **`styles.css` only maps ui-kit's `--uk-*` tokens; it never restyles a `.uk-*` class.** The chip and drawer look the same in every app that ships them,
+  and `test/ui-kit-guard.test.ts` (ui-kit's `checkHostCss`) fails on any other rule. The chip's place is the `.rel-chip` wrapper, nothing more.
 - **Keep new deps out of `server/`.** It reads disk and makes exactly two kinds of outbound
   call — the ntfy push in `lib/notify.ts` and the usage read in `lib/usage.ts`. A third needs
   a reason. `lib/token-refresh.ts` and `lib/spawn.ts` launch the `claude` CLI, which makes its

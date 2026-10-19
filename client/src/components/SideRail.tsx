@@ -4,6 +4,7 @@ import { VersionChip } from 'ui-kit';
 import { SECTIONS, type Section } from '../lib/sections';
 import { useBackClose } from '../hooks/useBackClose';
 import { useHideOnScroll } from '../hooks/useHideOnScroll';
+import { useNarrow } from '../hooks/useNarrow';
 import { useConfigsScope } from '../hooks/useConfigsScope';
 import { useSettings } from '../hooks/useSettings';
 import { formatInterval, type Settings } from '../lib/settings';
@@ -228,6 +229,8 @@ export function SideRail({ section, onChange, accountSlot, live, version }: Prop
   // The bar gets out of the way going down the page and comes back on the way
   // up. Pinned open while the menu is down: the panel hangs off the bar.
   const barOff = useHideOnScroll(open);
+  // ui-kit's chip takes the phone shape (a 44px tap target around the 28px pill) at the same measure as its drawer's full-screen shape, so the two agree.
+  const narrow = useNarrow();
 
   // Picking anything is a destination, so the menu closes behind it. The rail
   // above `sm` (640px) is never open, so this is a no-op there.
@@ -325,7 +328,11 @@ export function SideRail({ section, onChange, accountSlot, live, version }: Prop
               : 'disconnected — server stopped?'}
           </div>
         )}
-        {version && <VersionChip label={version.label} dot={version.dot} onClick={pick(version.onOpen)} className="rel-chip" />}
+        {version && (
+          <div className="rel-chip">
+            <VersionChip label={version.label} dot={version.dot} onClick={pick(version.onOpen)} narrow={narrow} />
+          </div>
+        )}
       </nav>
     </div>
   );

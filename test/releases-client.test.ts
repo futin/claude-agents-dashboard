@@ -88,15 +88,18 @@ export function run(): number {
     });
   });
 
-  t('the rail renders ui-kit VersionChip with the rel-chip class', () => {
-    assert.match(src('components/SideRail.tsx'), /<VersionChip [^>]*className="rel-chip"/);
+  t('the rail places ui-kit VersionChip in a rel-chip wrapper and hands it the phone shape', () => {
+    const rail = src('components/SideRail.tsx');
+    assert.match(rail, /<div className="rel-chip">\s*<VersionChip [^>]*narrow=\{narrow\}/);
+    assert.doesNotMatch(rail, /<VersionChip [^>]*className=/, 'the chip takes no className');
+    assert.match(rail, /const narrow = useNarrow\(\)/);
   });
 
-  t('the drawer wrapper keeps the back-gesture close and the app Markdown notes', () => {
+  t('the drawer wrapper keeps the back-gesture close, passes narrow, and leaves the notes to ui-kit', () => {
     const d = src('components/ReleasesDrawer.tsx');
     assert.match(d, /useBackClose\(onClose\)/);
     assert.match(d, /narrow=\{useNarrow\(\)\}/);
-    assert.match(d, /renderNotes=\{t => <Markdown text=\{t\} \/>\}/);
+    assert.doesNotMatch(d, /renderNotes/);
   });
 
   t('the client entry imports ui-kit styles before its own sheet', () => {

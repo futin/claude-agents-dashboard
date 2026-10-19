@@ -8,7 +8,7 @@ import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/600.css';
-// Before the app's sheet, so its `.rel-chip` and `--uk-*` mapping win over ui-kit's neutral defaults.
+// Before the app's sheet, so its `--uk-*` mapping wins over ui-kit's neutral defaults.
 import 'ui-kit/styles.css';
 import './styles.css';
 

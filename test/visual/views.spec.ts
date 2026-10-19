@@ -97,7 +97,7 @@ const EXPECTED_SHOTS = 90;
 async function openReleases(page: Page): Promise<void> {
   const menu = page.getByRole('button', { name: 'Open menu' });
   if (await menu.isVisible()) await menu.click();
-  await page.locator('.rel-chip').click();
+  await page.locator('.rel-chip .uk-chip').click();
   await expect(page.locator('.uk-drawer')).toBeVisible();
   await expect.poll(() => isReady(page), { timeout: 5000, message: 'the releases drawer never settled' }).toBe(true);
 }
