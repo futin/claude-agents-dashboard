@@ -5,6 +5,8 @@
  * produces it; `useSessions` (client) consumes it. One definition, both sides.
  */
 
+import type { JobError } from './schedule-file.js';
+
 /** The session's most-recent tool call. */
 export interface Activity {
   tool: string;
@@ -2095,4 +2097,55 @@ export interface ScheduleStats {
   /** Exactly `days` local days, oldest first, `YYYY-MM-DD`; a lost run counts as failed here. */
   byDay: Array<{ day: string; ok: number; failed: number }>;
   prev: { costUsd: number; runs: number };
+}
+
+/** Reconcile's verdict, as the toolbar chip reads it; `not-owner` is what every server but the owner reports (spec §Owning server). */
+export type ReconcileState = 'in-sync' | 'drift' | 'failed' | 'pending' | 'not-owner' | 'no-plugin' | 'cron-down' | 'bad-machine' | 'no-claude';
+/** One job's difference between its file and the OS scheduler. `pending` is a change deferred (a running job) or blocked (`why` says which). */
+export interface ReconcileChange { name: string; action: 'install' | 'update' | 'remove' | 'pending'; why: string }
+export interface ReconcileReport { state: ReconcileState; changes: ReconcileChange[]; unchanged: number; error: string | null; at: string }
+
+/** One job file as `GET /api/schedules/:name` serves it to the editor: the raw text, and the parse of it. `job` is null when `errors` is not empty. */
+export interface ScheduleFile {
+  name: string;
+  text: string;
+  job: ScheduleJob | null;
+  errors: JobError[];
+  mtimeMs: number;
+}
+
+/** One ledger row of `GET /api/schedules`: the file plus what this machine knows about it. */
+export interface ScheduleJobRow extends ScheduleFile {
+  /** The job names this machine in `machines:`. */
+  onThisMachine: boolean;
+  /** The OS scheduler holds a job for it now (an older version counts). Only an owner can tell: false whenever the report could not be planned. */
+  installed: boolean;
+  /** The next fire, ISO; null for an invalid, paused or other-machine job. */
+  nextAt: string | null;
+  /** The newest run that is not running (a refusal included). */
+  last: ScheduleRun | null;
+  running: ScheduleRun | null;
+}
+
+export interface SchedulesResponse {
+  machine: 'mac' | 'wsl';
+  /** The schedules folder, `~` expanded. */
+  dir: string;
+  /** `ownedBy` is `<cwd>:<port>` of the live owner, or `''` when this server never opted in (`SCHEDULES_OWNER`), or `seam` under the test seam. */
+  owner: 'owner' | { ownedBy: string };
+  reconcile: ReconcileReport;
+  /** Sorted by name. */
+  jobs: ScheduleJobRow[];
+}
+
+/** `GET /api/schedules/runs`: the filtered runs of the window, newest first, and the stats for the window (job and runner filters applied, outcome not). */
+export interface ScheduleRunsResponse {
+  runs: ScheduleRun[];
+  stats: ScheduleStats;
+}
+
+/** `POST /api/schedules/validate`: what the drawer shows under the textarea. `summary` is the one-line reading of a valid file, null otherwise. */
+export interface ScheduleValidateResponse {
+  errors: JobError[];
+  summary: string | null;
 }

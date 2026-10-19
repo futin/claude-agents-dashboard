@@ -32,7 +32,9 @@ const SESSION_WRITE_PATHS = [
 
 const GATE_ONLY_WRITES = [
   'serveCodegraphRun', 'serveGitFetch', 'serveGitQuick', 'serveNotifyEvent', 'serveNotifyTest', 'serveOpenFolder',
-  'servePermissionNotify', 'servePinsOrder', 'servePinsWrite', 'serveRemoteAnswerToggle', 'serveSettingsWrite',
+  'servePermissionNotify', 'servePinsOrder', 'servePinsWrite', 'serveRemoteAnswerToggle', 'serveScheduleCreate', 'serveScheduleDelete',
+  'serveSchedulePatch', 'serveScheduleReconcile', 'serveScheduleReveal', 'serveScheduleRun', 'serveScheduleStop', 'serveScheduleWrite',
+  'serveSettingsWrite',
 ];
 
 /** Each exported `serve*` function's text, from its `export` line up to the next top-level `export`. */

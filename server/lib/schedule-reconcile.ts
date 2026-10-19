@@ -12,7 +12,7 @@ import path from 'node:path';
 
 import { parseCron, toCalendarIntervals } from '../../shared/cron.js';
 import type { CalendarInterval } from '../../shared/cron.js';
-import type { ScheduleJob } from '../../shared/types.js';
+import type { ReconcileChange, ReconcileReport, ReconcileState, ScheduleJob } from '../../shared/types.js';
 import type { Config } from './config.js';
 import { machineName, scheduleDirs, scheduleEnv } from './schedule-config.js';
 import { createProbe, isOwner, readJobs, wrapperAlive } from './schedule-store.js';
@@ -24,9 +24,7 @@ export const CRON_END = '# <<< claude-dashboard schedules <<<';
 /** `scripts/sync-plugin.ts` `PLUGIN_ID`; `test/schedule-reconcile.test.ts` pins the two together, since the server does not import a script. */
 export const PLUGIN_ID = 'claude-agents-dashboard@claude-agents-dashboard-marketplace';
 
-export type ReconcileState = 'in-sync' | 'drift' | 'failed' | 'pending' | 'not-owner' | 'no-plugin' | 'cron-down' | 'bad-machine' | 'no-claude';
-export interface ReconcileChange { name: string; action: 'install' | 'update' | 'remove' | 'pending'; why: string }
-export interface ReconcileReport { state: ReconcileState; changes: ReconcileChange[]; unchanged: number; error: string | null; at: string }
+export type { ReconcileChange, ReconcileReport, ReconcileState };
 
 /** The absolute paths baked into an installed job; `cronEnv` is the env file every crontab line sources (wsl only). */
 export interface ReconcilePaths { node: string; wrapper: string; schedules: string; launchd: string; cronEnv: string }

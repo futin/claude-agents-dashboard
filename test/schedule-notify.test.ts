@@ -13,7 +13,7 @@ import { resetEnvBaseline } from '../server/lib/config.js';
 import { resetNotify, setLabelResolver, setSender } from '../server/lib/notify.js';
 import type { NotifyPayload } from '../server/lib/notify.js';
 import { resetState } from '../server/lib/remoteState.js';
-import { notifyScheduleRuns, resetScheduleNotify } from '../server/lib/schedule-notify.js';
+import { SEED_AGE_MS, notifyScheduleRuns, resetScheduleNotify, seedScheduleNotify } from '../server/lib/schedule-notify.js';
 import { claimOwner, releaseOwner } from '../server/lib/schedule-store.js';
 import { resetSettings, setSettings } from '../server/lib/settings.js';
 
@@ -149,6 +149,44 @@ export function run(): number {
     fs.writeFileSync(path.join(state, 'notified.json'), '{nope');
     assert.strictEqual(notifyScheduleRuns(conf(), [runOf()]), 1);
     assert.strictEqual(sent.length, 1);
+  }));
+
+  const NOW = Date.parse('2026-10-20T12:00:00.000Z');
+  const isoAgo = (ms: number): string => new Date(NOW - ms).toISOString();
+
+  t('first-ever start: runs older than 24 h are seeded without a push, the newer one is pushed by the fold', () => world(({ sent, state }) => {
+    const old = runOf({ id: 'old', startedAt: isoAgo(SEED_AGE_MS + 60_000) });
+    const fresh = runOf({ id: 'fresh', startedAt: isoAgo(SEED_AGE_MS - 60_000) });
+    assert.strictEqual(seedScheduleNotify(conf(), [old, fresh], NOW), 1);
+    assert.strictEqual(sent.length, 0, 'seeding never pushes');
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(state, 'notified.json'), 'utf8')).ids, ['old']);
+    assert.strictEqual(notifyScheduleRuns(conf(), [old, fresh]), 1);
+    assert.deepStrictEqual(sent.map(s => s.title), ['nightly · 2 of 3 failed']);
+  }));
+
+  t('a start with notified.json already present seeds nothing, so an old unseen failure still pushes', () => world(({ sent, state }) => {
+    fs.mkdirSync(state, { recursive: true });
+    fs.writeFileSync(path.join(state, 'notified.json'), JSON.stringify({ ids: [] }));
+    assert.strictEqual(seedScheduleNotify(conf(), [runOf({ id: 'old', startedAt: isoAgo(3 * SEED_AGE_MS) })], NOW), 0);
+    assert.strictEqual(notifyScheduleRuns(conf(), [runOf({ id: 'old', startedAt: isoAgo(3 * SEED_AGE_MS) })]), 1);
+    assert.strictEqual(sent.length, 1);
+  }));
+
+  t('seeding with nothing to seed still writes notified.json, so the next start is not a first one', () => world(({ state }) => {
+    assert.strictEqual(seedScheduleNotify(conf(), [], NOW), 0);
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(state, 'notified.json'), 'utf8')).ids, []);
+  }));
+
+  t('a non-owner seeds nothing and writes no notified.json', () => world(({ state }) => {
+    assert.strictEqual(seedScheduleNotify(conf(), [runOf({ id: 'old', startedAt: isoAgo(3 * SEED_AGE_MS) })], NOW), 0);
+    assert.strictEqual(fs.existsSync(path.join(state, 'notified.json')), false);
+  }, false));
+
+  t('the send seam replaces the transport call and is what the count follows', () => world(({ sent }) => {
+    const seen: string[] = [];
+    assert.strictEqual(notifyScheduleRuns(conf(), [runOf()], (e) => { seen.push(e.run.id); return true; }), 1);
+    assert.deepStrictEqual(seen, ['run-1']);
+    assert.strictEqual(sent.length, 0);
   }));
 
   for (const d of made) fs.rmSync(d, { recursive: true, force: true });

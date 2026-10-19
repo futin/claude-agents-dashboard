@@ -191,6 +191,21 @@ export function run(): number {
     assert.strictEqual(out.maxSessions, 2);
   })) p++; else f++;
 
+  if (test('sessionFromRef builds the same row scanSessions lists for the same transcript', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-row', id: 'row', mtimeMs: now - 60 * 1000, records: [metaRec('/a/row', 'main'), toolRec('Bash', { description: 'go' }), usageRec(3000)] },
+      { dirName: '-a-done', id: 'done', mtimeMs: now - 120 * 1000, records: [metaRec('/a/done', 'dev'), assistantDone()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true, lessons: null });
+    assert.strictEqual(out.sessions.length, 2);
+    for (const listed of out.sessions) {
+      const ref = scan.findTranscript(root, listed.id);
+      assert.ok(ref, listed.id);
+      assert.deepStrictEqual(scan.sessionFromRef(ref, { now, activeWindowMin: 5, liveCwds: null, lessons: null, scanSkips: true }), listed);
+    }
+  })) p++; else f++;
+
   if (test('scanSessions: Session.tasks folds a transcript\'s task calls; no task records → null', () => {
     const now = 1_700_000_000_000;
     const taskCall = (id: string, name: string, input: unknown) =>

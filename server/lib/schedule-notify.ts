@@ -57,7 +57,7 @@ function persist(l: { file: string; ids: Set<string> }): void {
  * Push each qualifying run not seen before and remember it. A run is marked seen when first sighted even if the policy then declines it (master off, no
  * topic, a user-stopped run), so enabling the switch later does not flood old failures. Returns how many pushes were handed to the transport.
  */
-export function notifyScheduleRuns(config: Config, runs: ScheduleRun[]): number {
+export function notifyScheduleRuns(config: Config, runs: ScheduleRun[], send: typeof sendScheduleEvent = sendScheduleEvent): number {
   if (!isOwner()) return 0;
   const l = ledger(config);
   let sent = 0;
@@ -68,8 +68,32 @@ export function notifyScheduleRuns(config: Config, runs: ScheduleRun[]): number 
     changed = true;
     // A Stop press or a SIGTERM is the user's own doing; the run still counts as seen.
     if (e.run.stopped) continue;
-    if (sendScheduleEvent(e, config)) sent++;
+    if (send(e, config)) sent++;
   }
   if (changed) persist(l);
   return sent;
+}
+
+/** How old a run must be for the first-ever start to file it as seen instead of pushing it. */
+export const SEED_AGE_MS = 24 * 3600_000;
+
+/**
+ * First-ever start only (no `notified.json` yet): mark every qualifying run older than {@link SEED_AGE_MS} seen without pushing it, so a machine that
+ * has been logging runs before its server took ownership does not push its whole history at once. The newer ones are left for the fold to push. Writes
+ * `notified.json` even when nothing qualified, which is what makes the next start not a first one. Returns how many runs were seeded.
+ */
+export function seedScheduleNotify(config: Config, runs: ScheduleRun[], now: number = Date.now()): number {
+  if (!isOwner()) return 0;
+  const file = path.join(scheduleStateRoot(config), 'notified.json');
+  if (fs.existsSync(file)) return 0;
+  const l = ledger(config);
+  let seeded = 0;
+  for (const e of pushableEvents(runs)) {
+    const at = Date.parse(e.run.startedAt);
+    if (!Number.isFinite(at) || now - at <= SEED_AGE_MS || l.ids.has(e.run.id)) continue;
+    l.ids.add(e.run.id);
+    seeded++;
+  }
+  persist(l);
+  return seeded;
 }
