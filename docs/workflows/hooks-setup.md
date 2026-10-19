@@ -139,6 +139,15 @@ Two per-hook exceptions to "does nothing when `running`": `plan-remote.sh` does 
 gate lets `ExitPlanMode` through and the approval card should still reach the phone; and `stop-notify.sh` also counts `blocked` with `blockPasses == 0` as
 running, because the CLI's Stop guard blocks in that state too.
 
+## Scheduled runs
+
+Five of the six hooks, `ask-remote.sh`, `plan-remote.sh`, `permission-notify.sh`, `stop-notify.sh` and `remote-decision.sh`, exit at once, before any health probe
+or POST, when `CLAUDE_DASHBOARD_SCHEDULE` is set in the environment. `plugin/lib/run-schedule.mjs` stamps `CLAUDE_DASHBOARD_SCHEDULE=<job>` on every step it
+launches, and the claude steps also run with `AskUserQuestion` disallowed. An unattended step must never be held for `answerSecs`, never push "finished" (the
+schedule's own failure push is the only one), and never be told by `remote-decision.sh` to "ask in prose" and end its turn doing nothing. The guard sits right after
+the `CLAUDECODE` check (in `stop-notify.sh`, beside the `CLAUDE_DASHBOARD_REFRESH` exit), and an empty value does not trip it. Nothing to configure. `test/hooks-schedule-marker.test.ts` pins it; the design is in
+[scheduled-workflows](../superpowers/specs/2026-10-19-scheduled-workflows-design.md).
+
 ## After installing
 
 Three things the installer cannot do for you:
