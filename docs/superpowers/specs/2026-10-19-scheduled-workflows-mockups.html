@@ -1,0 +1,713 @@
+<title>Schedules Mockups</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&display=swap">
+<style>
+/* Layout: stacked boards, one per screen of the Ledger design; each shows desktop and a 375px phone pane.
+   Tokens are the dashboard's own: daylight for light, midnight for dark, copied from client/src/styles.css. */
+:root{
+  --board:#f4f4f3;--steel:#ededec;--strip:#ffffff;--strip-hi:#f2f2f1;
+  --edge:rgba(0,0,0,.03);--hairline:#eaeae8;--hairline2:#dcdcda;
+  --ink:#131313;--ink2:#525252;--ink3:#6b6b6b;
+  --green:#38631a;--mustard:#5f530b;--cyan:#306c0f;--red:#aa3927;--magenta:#6950a5;
+  --green-tint:#cde8a8;--amber-solid:#c4761f;--amber-ink:#945917;
+  --amber-tint:color-mix(in srgb,#c4761f 11%,transparent);
+  --mustard-tint:color-mix(in srgb,#9a8712 13%,transparent);--mustard-ink:#74660e;
+  --red-tint:color-mix(in srgb,var(--red) 12%,transparent);
+  --cyan-tint:color-mix(in srgb,var(--cyan) 12%,transparent);
+  --shadow:rgba(0,0,0,.06);--shadow2:rgba(0,0,0,.1);--scrim:rgba(19,19,19,.28);
+  --page:#e9e9e7;--note:#3b3b3b;
+  --font:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --edge:rgba(255,255,255,.05);--hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--mustard:#d1ba52;--cyan:#55d0dd;--red:#e0533f;--magenta:#cf6f9e;
+  --green-tint:color-mix(in srgb,var(--green) 18%,transparent);--amber-solid:#ffb03a;--amber-ink:#ffb03a;
+  --amber-tint:color-mix(in srgb,#ffb03a 11%,transparent);
+  --mustard-tint:color-mix(in srgb,var(--mustard) 13%,transparent);--mustard-ink:var(--mustard);
+  --shadow:rgba(0,0,0,.4);--shadow2:rgba(0,0,0,.5);--scrim:rgba(4,8,16,.66);
+  --page:#060a12;--note:#c8d1e0;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;
+  --edge:rgba(255,255,255,.05);--hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;
+  --green:#46d48c;--mustard:#d1ba52;--cyan:#55d0dd;--red:#e0533f;--magenta:#cf6f9e;
+  --green-tint:color-mix(in srgb,var(--green) 18%,transparent);--amber-solid:#ffb03a;--amber-ink:#ffb03a;
+  --amber-tint:color-mix(in srgb,#ffb03a 11%,transparent);
+  --mustard-tint:color-mix(in srgb,var(--mustard) 13%,transparent);--mustard-ink:var(--mustard);
+  --shadow:rgba(0,0,0,.4);--shadow2:rgba(0,0,0,.5);--scrim:rgba(4,8,16,.66);
+  --page:#060a12;--note:#c8d1e0;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45;
+  padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:22px;font-weight:500;letter-spacing:-.01em;margin:0 0 4px;text-wrap:balance}
+.lede{color:var(--ink2);max-width:72ch;margin:0 0 24px}
+.lede code,.note code{font-family:var(--mono);font-size:12px;background:var(--steel);padding:1px 5px;border-radius:4px}
+.variant{margin:0 0 40px}
+.vhead{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;margin:0 0 8px}
+.vhead h2{font-size:17px;font-weight:500;margin:0}
+.vhead .tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.note{color:var(--note);max-width:84ch;margin:0 0 14px;font-size:13px}
+.note b{font-weight:600}
+.frames{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+.frame{background:var(--board);border:1px solid var(--hairline2);border-radius:14px;padding:18px;min-width:0;flex:1 1 560px;max-width:980px;overflow:hidden;position:relative}
+.frame.phone{flex:0 0 375px;width:375px;max-width:100%;padding:14px 12px}
+.frame .cap{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin:0 0 12px}
+
+/* ── dashboard chrome, real class names ── */
+.mgmt-bar{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
+.mgmt-title{font-size:19px;font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.3;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mgmt-sub{font-size:13px;color:var(--ink2);line-height:1.45;max-width:92ch}
+.git-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.seg{display:inline-flex;align-items:center;background:var(--hairline2);border-radius:12px;padding:3px}
+.seg>button{font-family:var(--font);font-size:13px;font-weight:500;white-space:nowrap;color:var(--ink2);background:none;border:0;border-radius:9px;padding:7px 12px;cursor:pointer}
+.seg>button.on{color:var(--ink);background:var(--strip);box-shadow:0 1px 2px var(--shadow)}
+.seg.sm>button{font-size:12px;padding:5px 10px}
+.git-chip{display:inline-block;font-size:12px;font-weight:500;line-height:1.4;padding:2px 9px;border-radius:999px;border:1px solid var(--hairline2);color:var(--ink2);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.git-chip.amber{color:var(--amber-ink);border-color:transparent;background:var(--amber-tint)}
+.git-chip.green{color:var(--green);border-color:transparent;background:var(--green-tint)}
+.git-chip.mustard{color:var(--mustard-ink);border-color:transparent;background:var(--mustard-tint)}
+.git-chip.red{color:var(--red);border-color:transparent;background:var(--red-tint)}
+.git-chip.run{color:var(--cyan);border-color:transparent;background:var(--cyan-tint)}
+.git-chip.dim{color:var(--ink3);border-style:dashed}
+.git-chip.mach{font-size:11px;padding:0 7px}
+.git-chip.mach.here{color:var(--ink);border-color:var(--ink3)}
+.btn{font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;padding:6px 14px;cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--amber-solid);border-color:transparent;color:#fff}
+.btn.sm{font-size:12px;padding:4px 11px}
+.btn.icon{padding:6px 9px}
+.btn.danger{color:var(--red)}
+.tog{display:inline-block;width:34px;height:20px;border-radius:999px;background:var(--hairline2);position:relative;vertical-align:middle;flex:none}
+.tog::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--strip);box-shadow:0 1px 2px var(--shadow2)}
+.tog.on{background:var(--green)}
+.tog.on::after{left:16px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ink3);flex:none}
+.dot.ok{background:var(--green)}.dot.warn{background:var(--amber-solid)}.dot.bad{background:var(--red)}.dot.off{background:var(--hairline2);outline:1px solid var(--ink3)}
+.dot.live{background:var(--green);box-shadow:0 0 0 3px var(--green-tint)}
+.card{background:var(--strip);border-radius:16px;min-width:0;overflow:hidden}
+.mono{font-family:var(--mono);font-size:12px}
+.muted{color:var(--ink3)}
+.legend{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;font-size:12px;color:var(--ink2);padding:12px 6px 0}
+.kick{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin:0 0 8px}
+
+/* ── stats band ── */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--hairline);border:1px solid var(--hairline);border-radius:16px;overflow:hidden;margin-bottom:14px}
+.stat{background:var(--strip);padding:12px 16px;min-width:0}
+.stat .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.stat .v{font-size:20px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.2;margin-top:3px}
+.stat .v small{font-size:12px;font-weight:400;color:var(--ink2);margin-left:4px}
+.stat .d{font-size:12px;color:var(--ink2);margin-top:2px}
+.stat .d.up{color:var(--red)}.stat .d.dn{color:var(--green)}
+.bars{display:flex;align-items:flex-end;gap:2px;height:22px;margin-top:6px}
+.bars i{flex:1;background:var(--green);border-radius:2px 2px 0 0;min-height:2px;opacity:.75}
+.bars i.bad{background:var(--red)}
+.bars i.none{background:var(--hairline2)}
+
+/* ── ledger ── */
+.sch-ledger{display:grid;grid-template-columns:20px minmax(150px,1.4fr) 72px 150px 110px 44px auto;gap:10px 14px;align-items:center;padding:14px 20px;border-top:1px solid var(--hairline);font-size:13px;color:var(--ink2)}
+/* A cell is a stack of lines; a pill always has a line to itself, prose never pushes it sideways. */
+.cell{display:flex;flex-direction:column;gap:3px;min-width:0}
+.cell>*{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cell .git-chip{align-self:flex-start}
+.sch-ledger.head{border-top:0;color:var(--ink3);font-size:12px;padding:12px 20px}
+.sch-ledger .name{color:var(--ink);font-weight:500;font-size:14px}
+.sch-ledger .sub{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:3px;align-items:center}
+.sch-ledger .act{display:inline-flex;gap:4px;justify-self:end;position:relative}
+.sch-runs{background:var(--strip-hi);padding:12px 20px 14px 54px;border-top:1px solid var(--hairline)}
+.sch-run{display:grid;grid-template-columns:minmax(120px,1fr) 60px 96px 56px 48px auto;gap:8px 14px;align-items:center;padding:6px 0;font-size:12px;color:var(--ink2);border-top:1px solid var(--hairline)}
+.sch-run.first{border-top:0}
+.sch-run .name{color:var(--ink)}
+.sch-run a{color:var(--cyan);text-decoration:none}
+.fold-stats{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:var(--ink2);margin:0 0 10px}
+.fold-stats b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+.menu{position:absolute;right:0;top:34px;z-index:2;background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;box-shadow:0 8px 24px var(--shadow2);padding:6px;min-width:170px;text-align:left}
+.menu div{padding:7px 10px;font-size:13px;color:var(--ink);border-radius:8px;white-space:nowrap}
+.menu div.sep{height:1px;padding:0;margin:4px 6px;background:var(--hairline)}
+.menu div.danger{color:var(--red)}
+.menu div.on{background:var(--strip-hi)}
+
+/* ── runs tab ── */
+.runs-row{display:grid;grid-template-columns:20px 56px minmax(150px,1.2fr) 130px 64px 56px 64px auto;gap:8px 14px;align-items:center;padding:11px 20px;border-top:1px solid var(--hairline);font-size:13px;color:var(--ink2)}
+.runs-row.head{border-top:0;color:var(--ink3);font-size:12px}
+.runs-row.first{border-top:0}
+.runs-row .name{color:var(--ink);font-weight:500}
+.runs-row a{color:var(--cyan);text-decoration:none;justify-self:end}
+.runs-row .step{padding-left:14px;color:var(--ink2)}
+.runs-row .step::before{content:"└ ";color:var(--ink3)}
+.runs-row .err{display:block;font-family:var(--mono);font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.pop{position:absolute;right:0;top:34px;z-index:2;background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;box-shadow:0 8px 24px var(--shadow2);padding:8px;min-width:300px;max-width:min(360px,calc(100vw - 48px));text-align:left}
+.pop .kick{padding:4px 8px 6px;margin:0}
+.pop .prow{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:6px 8px;border-radius:8px;font-size:13px;color:var(--ink)}
+.pop .prow:hover,.pop .prow.on{background:var(--strip-hi)}
+.pop .prow .muted{font-size:12px}
+.pop .pfoot{display:flex;gap:6px;align-items:center;padding:8px 8px 2px;border-top:1px solid var(--hairline);margin-top:4px}
+.toast{display:inline-flex;align-items:center;gap:8px;background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;padding:8px 12px;font-size:13px;color:var(--ink);box-shadow:0 8px 24px var(--shadow2)}
+.picks{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.pick{font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--hairline2);color:var(--ink2);white-space:nowrap}
+.pick.on{color:var(--ink);border-color:var(--ink3);background:var(--strip-hi)}
+.pick.on::before{content:"✓ ";color:var(--green)}
+.runs-day{padding:10px 20px 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);background:var(--strip-hi)}
+
+/* ── drawer ── */
+.drawer{background:var(--strip);border:1px solid var(--hairline2);border-radius:16px;box-shadow:0 16px 40px var(--shadow2);padding:20px;max-width:620px;min-width:0}
+.drawer h3{margin:0;font-size:17px;font-weight:500;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.drawer .sub{font-size:12px;color:var(--ink2);margin:4px 0 14px}
+.field{margin:0 0 12px}
+.field label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:5px}
+.in{height:36px;border:1px solid var(--hairline2);border-radius:12px;padding:0 12px;display:flex;align-items:center;background:var(--strip);color:var(--ink);min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:13px}
+.in .ph{color:var(--ink3)}
+.in .tail{margin-left:auto;color:var(--ink3);font-family:var(--mono);font-size:12px}
+.kinds{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kind{border:1px solid var(--hairline2);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink2);min-width:0}
+.kind b{display:block;color:var(--ink);font-weight:500;margin-bottom:2px}
+.kind.on{border-color:var(--ink3);box-shadow:0 0 0 1px var(--ink3);color:var(--ink2)}
+.kind small{display:block;font-size:11px;color:var(--ink3);margin-top:3px}
+.ta{font-family:var(--mono);font-size:12px;line-height:1.55;background:var(--steel);border:1px solid var(--hairline2);border-radius:12px;padding:12px 14px;margin:0;overflow-x:auto;color:var(--ink2);white-space:pre;min-height:160px}
+.ta b{color:var(--ink);font-weight:500}
+.ta i{color:var(--ink3);font-style:normal}
+.ta .err{background:var(--red-tint);color:var(--red);border-radius:3px;padding:0 2px}
+.vmsg{font-size:12px;border-radius:8px;padding:7px 10px;margin-top:8px}
+.vmsg.err{color:var(--red);background:var(--red-tint)}
+.vmsg.ok{color:var(--green);background:var(--green-tint)}
+.vmsg.warn{color:var(--amber-ink);background:var(--amber-tint)}
+.dfoot{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.dfoot .spacer{flex:1}
+.rside{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+.rside>*{flex:1 1 300px;min-width:0}
+
+/* ── session panel ── */
+.sp{background:var(--strip);border:1px solid var(--hairline2);border-radius:16px;box-shadow:0 16px 40px var(--shadow2);padding:18px 20px;max-width:560px;min-width:0}
+.sp .head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sp .title{font-size:15px;font-weight:500;color:var(--ink)}
+.sp .meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--ink2);margin:8px 0 12px}
+.sp .meta b{color:var(--ink);font-weight:500}
+.msg{font-size:13px;line-height:1.5;color:var(--ink2);border-radius:12px;padding:10px 12px;margin-top:8px;background:var(--steel)}
+.msg.user{background:var(--strip-hi);color:var(--ink)}
+.msg .who{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);display:block;margin-bottom:3px}
+.msg .tool{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+
+/* ── flow diagram ── */
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;font-size:12px}
+.flow .box{background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;padding:10px 12px;min-width:0}
+.flow .box b{display:block;color:var(--ink);font-weight:500;margin-bottom:3px}
+.flow .box .mono{display:block;color:var(--ink3);margin-top:4px;white-space:normal;word-break:break-word}
+.flow .box.dim{border-style:dashed;color:var(--ink3)}
+
+/* ── phone-wide shapes ── */
+.ph .sch-ledger{grid-template-columns:20px 1fr auto;gap:6px 10px;padding:12px 14px}
+.ph .sch-ledger.head{display:none}
+.ph .sch-ledger .hide{display:none}
+.ph .sch-ledger .act{grid-column:3}
+.ph .sch-runs{padding-left:14px}
+.ph .sch-run{grid-template-columns:1fr 60px auto;gap:4px 10px}
+.ph .sch-run .hide{display:none}
+.ph .stats{grid-template-columns:1fr 1fr}
+.ph .runs-row{grid-template-columns:20px 1fr auto;gap:4px 10px;padding:10px 14px}
+.ph .runs-row .hide,.ph .runs-row.head{display:none}
+.ph .kinds{grid-template-columns:1fr}
+.ph .mgmt-sub{font-size:12px}
+.frame>.card{max-width:100%}
+@media (max-width:640px){.frame{padding:12px}.sch-ledger{grid-template-columns:20px 1fr auto;gap:6px 10px}.sch-ledger.head,.sch-ledger .hide{display:none}.runs-row{grid-template-columns:20px 1fr auto}.runs-row .hide,.runs-row.head{display:none}.kinds{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<h1>Management · Schedules</h1>
+<p class="lede">The Ledger design, screen by screen: the Jobs page with its stats band, a row's run fold, the Runs page, the New job drawer, the Edit menu and drawer, Run now, and what opens when a run older than the sessions window is clicked. Same five example jobs throughout. Class names are the dashboard's (<code>.mgmt-bar</code>, <code>.seg</code>, <code>.git-chip</code>); new ones are prefixed <code>.sch-</code>.</p>
+
+<!-- ───────────────────────── 1. Jobs ───────────────────────── -->
+<section class="variant" id="jobs">
+  <div class="vhead"><span class="tag">Screen 1</span><h2>Jobs, with the stats band for the last N days</h2></div>
+  <p class="note">Every cell is a stack of short lines and a pill always has a line of its own, so a long duration or a wide pill never pushes its neighbours; pill columns have a fixed width, prose columns ellipsize. The band sums the run log for the chosen window across every job on this machine; the bars are one per day. The ledger row answers the three everyday questions in order: did it work last time, when is the next one, is it on. A row's caret opens the menu (screen 5); clicking the row body unfolds its runs (screen 2).</p>
+  <div class="frames">
+    <div class="frame">
+      <p class="cap">Desktop · Jobs</p>
+      <div class="mgmt-bar">
+        <div class="mgmt-title">Management · Schedules <span class="git-chip mach here">mac</span></div>
+        <div class="mgmt-sub">Jobs defined in <span class="mono">~/claude-global/schedules/</span>, run by launchd on this machine. Files sync through git; each machine installs only the jobs that name it.</div>
+      </div>
+      <div class="git-toolbar">
+        <div class="seg"><button class="on">Jobs</button><button>Runs</button></div>
+        <div class="seg sm"><button>7d</button><button class="on">30d</button><button>90d</button></div>
+        <span class="git-chip green">5 installed · in sync</span>
+        <span style="margin-left:auto;display:inline-flex;gap:6px"><button class="btn">Reconcile</button><button class="btn primary">New job</button></span>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Runs · 30d</div><div class="v">61<small>52 ok · 9 failed</small></div><div class="bars"><i style="height:60%"></i><i style="height:60%"></i><i style="height:80%"></i><i style="height:60%"></i><i style="height:60%"></i><i class="none"></i><i class="none"></i><i style="height:60%"></i><i style="height:60%"></i><i class="bad" style="height:80%"></i><i style="height:60%"></i><i style="height:60%"></i><i class="none"></i><i class="none"></i><i style="height:60%"></i><i style="height:100%"></i><i style="height:60%"></i><i style="height:60%"></i><i style="height:60%"></i><i class="none"></i><i class="none"></i><i style="height:60%"></i><i style="height:60%"></i><i style="height:60%"></i><i class="bad" style="height:60%"></i><i style="height:60%"></i><i class="none"></i><i class="none"></i><i style="height:60%"></i><i class="bad" style="height:80%"></i></div></div>
+        <div class="stat"><div class="k">Success</div><div class="v">85%</div><div class="d">7 of 9 failures: lookout needs auth</div></div>
+        <div class="stat"><div class="k">Claude cost · 30d</div><div class="v">$24.10</div><div class="d up">↑ $3.40 vs previous 30d</div></div>
+        <div class="stat"><div class="k">Tokens</div><div class="v">4.1M<small>in · 310k out</small></div><div class="d">git-sync-all is 71% of it</div></div>
+        <div class="stat"><div class="k">Wall time</div><div class="v">5h 12m</div><div class="d">shell jobs: 19m of it</div></div>
+      </div>
+      <div class="card">
+        <div class="sch-ledger head"><span></span><span>Job</span><span>Runner</span><span>Last run</span><span>Next</span><span>On</span><span></span></div>
+        <div class="sch-ledger"><span class="dot ok"></span>
+          <div><div class="name">pull-pins</div><div class="sub"><span class="mono muted">07:00 Mon–Fri</span><span class="git-chip dim mach">× 14 pinned</span><span class="git-chip mach here">mac</span><span class="git-chip mach">wsl</span></div></div>
+          <span class="git-chip dim">shell</span>
+          <div class="cell"><span class="git-chip green">14 ok</span><span class="muted">6:00 today · 38s</span></div>
+          <div class="cell"><span>tomorrow</span><span class="muted">07:00</span></div>
+          <span class="tog on"></span>
+          <span class="act"><button class="btn sm">Run now</button><button class="btn sm icon">⌄</button></span>
+        </div>
+        <div class="sch-ledger"><span class="dot live"></span>
+          <div><div class="name">git-sync-all</div><div class="sub"><span class="mono muted">22:00 daily</span><span class="git-chip dim mach">× 12 pinned</span><span class="git-chip mach here">mac</span></div></div>
+          <span class="git-chip run">claude</span>
+          <div class="cell"><span class="git-chip run">running · 4 of 12</span><span class="muted">22:00 · 3m so far</span></div>
+          <div class="cell"><span>tomorrow</span><span class="muted">22:00</span></div>
+          <span class="tog on"></span>
+          <span class="act"><button class="btn sm">Stop</button><button class="btn sm icon">⌄</button></span>
+        </div>
+        <div class="sch-ledger"><span class="dot off"></span>
+          <div><div class="name muted">docs-sync-dashboard</div><div class="sub"><span class="mono muted">Sun 09:00</span><span class="git-chip dim mach">~/…/claude-agents-dashboard</span><span class="git-chip mach here">mac</span></div></div>
+          <span class="git-chip run">claude</span>
+          <div class="cell"><span class="git-chip green">ok</span><span class="muted">12d ago · 6m · $0.52</span></div>
+          <div class="cell"><span class="muted">paused</span></div>
+          <span class="tog"></span>
+          <span class="act"><button class="btn sm">Run now</button><button class="btn sm icon">⌄</button></span>
+        </div>
+        <div class="sch-ledger"><span class="dot"></span>
+          <div><div class="name">kaizen-review</div><div class="sub"><span class="mono muted">1st of month 09:00</span><span class="git-chip mach">wsl</span></div></div>
+          <span class="git-chip run">claude</span>
+          <div class="cell"><span class="git-chip dim">wsl only</span></div>
+          <div class="cell"><span class="muted">—</span></div>
+          <span class="tog on"></span>
+          <span class="act"><button class="btn sm icon">⌄</button></span>
+        </div>
+        <div class="sch-ledger"><span class="dot ok"></span>
+          <div><div class="name">backlog-retro</div><div class="sub"><span class="mono muted">1st of month 09:30</span><span class="git-chip mach here">mac</span><span class="git-chip mach">wsl</span></div></div>
+          <span class="git-chip run">claude</span>
+          <div class="cell"><span class="git-chip green">ok</span><span class="muted">Oct 1 · 4m · $0.31</span></div>
+          <div class="cell"><span>Nov 1</span><span class="muted">09:30</span></div>
+          <span class="tog on"></span>
+          <span class="act"><button class="btn sm">Run now</button><button class="btn sm icon">⌄</button></span>
+        </div>
+      </div>
+      <div class="legend"><span class="dot ok"></span>last run ok <span class="dot warn"></span>some failed <span class="dot bad"></span>failed <span class="dot live"></span>running <span class="dot off"></span>paused <span class="git-chip dim">shell</span>no tokens <span class="git-chip run">claude</span>claude -p</div>
+    </div>
+    <div class="frame phone ph">
+      <p class="cap">375px · Jobs</p>
+      <div class="mgmt-bar"><div class="mgmt-title">Schedules <span class="git-chip mach here">mac</span></div></div>
+      <div class="git-toolbar"><div class="seg"><button class="on">Jobs</button><button>Runs</button></div><div class="seg sm"><button class="on">30d</button></div><button class="btn sm primary" style="margin-left:auto">New</button></div>
+      <div class="stats">
+        <div class="stat"><div class="k">Runs · 30d</div><div class="v">61<small>9 failed</small></div></div>
+        <div class="stat"><div class="k">Cost</div><div class="v">$24.10</div><div class="d up">↑ $3.40</div></div>
+      </div>
+      <div class="card">
+        <div class="sch-ledger"><span class="dot ok"></span>
+          <div><div class="name">pull-pins <span class="git-chip dim" style="margin-left:4px">shell</span></div><div class="sub"><span class="mono muted">07:00 Mon–Fri</span><span class="git-chip dim mach">× 14</span></div><div class="muted" style="margin-top:4px">6:00 today · <span class="git-chip green">14 ok</span></div></div>
+          <span class="act"><span class="tog on"></span></span>
+        </div>
+        <div class="sch-ledger"><span class="dot live"></span>
+          <div><div class="name">git-sync-all <span class="git-chip run" style="margin-left:4px">claude</span></div><div class="sub"><span class="mono muted">22:00 daily</span><span class="git-chip dim mach">× 12</span></div><div class="muted" style="margin-top:4px"><span class="git-chip green">running</span> 4 of 12 · 3m</div></div>
+          <span class="act"><span class="tog on"></span></span>
+        </div>
+        <div class="sch-ledger"><span class="dot off"></span>
+          <div><div class="name muted">docs-sync-dashboard</div><div class="sub"><span class="mono muted">Sun 09:00</span></div></div>
+          <span class="act"><span class="tog"></span></span>
+        </div>
+        <div class="sch-ledger"><span class="dot"></span>
+          <div><div class="name">kaizen-review</div><div class="sub"><span class="git-chip mach">wsl only</span></div></div>
+          <span class="act"><span class="tog on"></span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 2. Fold ───────────────────────── -->
+<section class="variant" id="fold">
+  <div class="vhead"><span class="tag">Screen 2</span><h2>A row unfolded: that job's own stats and its last runs</h2></div>
+  <p class="note">Same window as the band, scoped to one job. A fan-out run shows one line per repo; a plain job shows one line per run. A claude line links to its session; a shell line shows the last stderr line instead. The <b>all runs</b> link switches to the Runs page filtered to this job.</p>
+  <div class="frames">
+    <div class="frame">
+      <p class="cap">Desktop · git-sync-all unfolded (yesterday's run, now finished)</p>
+      <div class="card">
+        <div class="sch-ledger" style="background:var(--strip-hi)"><span class="dot warn"></span>
+          <div><div class="name">git-sync-all</div><div class="sub"><span class="mono muted">22:00 daily</span><span class="git-chip dim mach">× 12 pinned</span><span class="git-chip mach here">mac</span></div></div>
+          <span class="git-chip run">claude</span>
+          <div class="cell"><span class="git-chip amber">2 of 12 failed</span><span class="muted">yesterday 22:00 · 11m · $0.84</span></div>
+          <div class="cell"><span>today</span><span class="muted">22:00</span></div>
+          <span class="tog on"></span>
+          <span class="act"><button class="btn sm">Run now</button><button class="btn sm icon">⌃</button></span>
+        </div>
+        <div class="sch-runs">
+          <div class="fold-stats"><span><b>29</b> runs · 30d</span><span><b>93%</b> ok</span><span><b>$17.20</b> · 71% of all</span><span><b>2.9M</b> in · 220k out</span><span><b>5m 40s</b> median</span><span class="muted">file: <span class="mono">schedules/git-sync-all.md</span></span></div>
+          <div class="kick">Yesterday 22:00 · by schedule · 12 repos · 11m 04s · $0.84</div>
+          <div class="sch-run first"><span class="name">lookout</span><span>0m 12s</span><span class="git-chip red">exit 1</span><span class="hide">$0.01</span><span class="hide">opus</span><a href="#">session →</a></div>
+          <div class="sch-run"><span class="name">ixray</span><span>0m 09s</span><span class="git-chip red">needs auth</span><span class="hide">$0.00</span><span class="hide">opus</span><a href="#">session →</a></div>
+          <div class="sch-run"><span class="name">claude-agents-dashboard</span><span>2m 10s</span><span class="git-chip green">ok</span><span class="hide">$0.11</span><span class="hide">opus</span><a href="#">session →</a></div>
+          <div class="sch-run"><span class="name">backlog-manager</span><span>1m 48s</span><span class="git-chip green">ok</span><span class="hide">$0.09</span><span class="hide">opus</span><a href="#">session →</a></div>
+          <div class="sch-run"><span class="muted">8 more ok</span><span></span><span></span><span class="hide"></span><span class="hide"></span><span></span></div>
+          <div class="kick" style="margin-top:12px">Oct 17 22:00 · by schedule · 12 repos · 9m 51s · $0.71</div>
+          <div class="sch-run first"><span class="muted">12 ok</span><span></span><span></span><span class="hide"></span><span class="hide"></span><a href="#">all runs →</a></div>
+        </div>
+        <div class="sch-ledger"><span class="dot ok"></span>
+          <div><div class="name">pull-pins</div><div class="sub"><span class="mono muted">07:00 Mon–Fri</span><span class="git-chip dim mach">× 14 pinned</span></div></div>
+          <span class="git-chip dim">shell</span>
+          <div class="cell"><span class="git-chip green">14 ok</span><span class="muted">6:00 today · 38s</span></div>
+          <div class="cell"><span>tomorrow</span><span class="muted">07:00</span></div>
+          <span class="tog on"></span>
+          <span class="act"><button class="btn sm">Run now</button><button class="btn sm icon">⌄</button></span>
+        </div>
+      </div>
+    </div>
+    <div class="frame phone ph">
+      <p class="cap">375px · unfolded</p>
+      <div class="card">
+        <div class="sch-ledger" style="background:var(--strip-hi)"><span class="dot warn"></span>
+          <div><div class="name">git-sync-all</div><div class="muted" style="margin-top:4px">yesterday · <span class="git-chip amber">2 failed</span> · $0.84</div></div>
+          <span class="act"><span class="tog on"></span></span>
+        </div>
+        <div class="sch-runs">
+          <div class="fold-stats"><span><b>29</b> runs</span><span><b>93%</b> ok</span><span><b>$17.20</b></span></div>
+          <div class="kick">Yesterday 22:00 · 12 repos</div>
+          <div class="sch-run first"><span class="name">lookout</span><span class="git-chip red">exit 1</span><a href="#">session →</a></div>
+          <div class="sch-run"><span class="name">ixray</span><span class="git-chip red">auth</span><a href="#">session →</a></div>
+          <div class="sch-run"><span class="muted">10 ok</span><span></span><a href="#">all →</a></div>
+          <div style="margin-top:10px;display:flex;gap:6px"><button class="btn sm">Run now</button><button class="btn sm">Edit</button><button class="btn sm icon">⌄</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 3. Runs ───────────────────────── -->
+<section class="variant" id="runs">
+  <div class="vhead"><span class="tag">Screen 3</span><h2>Runs: every run on this machine, newest first</h2></div>
+  <p class="note">One run = one wrapper invocation. A fan-out run is one row with its per-repo steps folded; failed steps show open by default, ok steps count. Filters: outcome, runner, job. The window is the same 7/30/90 seg. A run that started but never finished (machine slept, process killed) reads <b>lost</b> after its grace, in mustard, so a silent crash is visible rather than missing.</p>
+  <div class="frames">
+    <div class="frame">
+      <p class="cap">Desktop · Runs, filtered to Failed</p>
+      <div class="git-toolbar">
+        <div class="seg"><button>Jobs</button><button class="on">Runs</button></div>
+        <div class="seg sm"><button>7d</button><button class="on">30d</button><button>90d</button></div>
+        <div class="seg sm"><button>All</button><button class="on">Failed</button><button>Lost</button></div>
+        <div class="seg sm"><button class="on">Any</button><button>claude</button><button>shell</button></div>
+        <span class="git-chip" style="margin-left:auto">job: any ⌄</span>
+      </div>
+      <div class="card">
+        <div class="runs-row head"><span></span><span>When</span><span>Job</span><span>Outcome</span><span>Took</span><span>Cost</span><span>Trigger</span><span></span></div>
+        <div class="runs-day">Yesterday · Sat 18</div>
+        <div class="runs-row first"><span class="dot warn"></span><span>22:00</span><span class="name">git-sync-all</span><span><span class="git-chip amber">2 of 12 failed</span></span><span>11m 04s</span><span>$0.84</span><span class="hide muted">schedule</span><a href="#">fold ⌃</a></div>
+        <div class="runs-row"><span></span><span></span><span class="step">lookout<span class="err">fatal: could not read Username for 'https://github.com'</span></span><span><span class="git-chip red">exit 1</span></span><span>0m 12s</span><span>$0.01</span><span class="hide"></span><a href="#">session →</a></div>
+        <div class="runs-row"><span></span><span></span><span class="step">ixray</span><span><span class="git-chip red">needs auth</span></span><span>0m 09s</span><span>$0.00</span><span class="hide"></span><a href="#">session →</a></div>
+        <div class="runs-row"><span></span><span></span><span class="step muted">10 more ok</span><span></span><span></span><span></span><span class="hide"></span><span></span></div>
+        <div class="runs-day">Wed 15</div>
+        <div class="runs-row first"><span class="dot bad"></span><span>07:00</span><span class="name">pull-pins</span><span><span class="git-chip red">1 of 14 failed</span></span><span>41s</span><span class="muted">—</span><span class="hide muted">schedule</span><a href="#">fold ⌄</a></div>
+        <div class="runs-row"><span class="dot" style="background:var(--mustard)"></span><span>03:12</span><span class="name">docs-sync-dashboard<span class="err">no end record · machine slept?</span></span><span><span class="git-chip mustard">lost</span></span><span>—</span><span>$0.08</span><span class="hide muted">manual</span><a href="#">session →</a></div>
+        <div class="runs-day">Sat 11</div>
+        <div class="runs-row first"><span class="dot warn"></span><span>22:00</span><span class="name">git-sync-all</span><span><span class="git-chip amber">1 of 12 failed</span></span><span>9m 20s</span><span>$0.66</span><span class="hide muted">schedule</span><a href="#">fold ⌄</a></div>
+      </div>
+      <div class="legend"><span class="muted">9 failed runs in 30d · 61 total</span></div>
+    </div>
+    <div class="frame phone ph">
+      <p class="cap">375px · Runs</p>
+      <div class="git-toolbar"><div class="seg"><button>Jobs</button><button class="on">Runs</button></div><div class="seg sm"><button>All</button><button class="on">Failed</button></div></div>
+      <div class="card">
+        <div class="runs-day">Yesterday</div>
+        <div class="runs-row first"><span class="dot warn"></span><div><div class="name">git-sync-all <span class="muted" style="font-weight:400">22:00</span></div><div class="muted"><span class="git-chip amber">2 of 12 failed</span> · 11m · $0.84</div></div><a href="#">⌃</a></div>
+        <div class="runs-row"><span></span><div class="step">lookout <span class="git-chip red">exit 1</span></div><a href="#">session →</a></div>
+        <div class="runs-row"><span></span><div class="step">ixray <span class="git-chip red">auth</span></div><a href="#">session →</a></div>
+        <div class="runs-day">Wed 15</div>
+        <div class="runs-row first"><span class="dot bad"></span><div><div class="name">pull-pins <span class="muted" style="font-weight:400">07:00</span></div><div class="muted"><span class="git-chip red">1 of 14 failed</span> · 41s</div></div><a href="#">⌄</a></div>
+        <div class="runs-row"><span class="dot" style="background:var(--mustard)"></span><div><div class="name">docs-sync-dashboard</div><div class="muted"><span class="git-chip mustard">lost</span> · manual</div></div><a href="#">session →</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 4. New job ───────────────────────── -->
+<section class="variant" id="new">
+  <div class="vhead"><span class="tag">Screen 4</span><h2>New job: pick a kind, get a filled-in file, save</h2></div>
+  <p class="note">One drawer, no wizard. The kind only chooses the template; after that the file is the form. <b>Repos</b> is the one helper above the file: all pinned, a picked subset, or a single cwd; it only rewrites the <span class="mono">foreach:</span> line. Name becomes the filename and is checked live. Save validates the frontmatter (cron parses, machines known, runner known, body present), writes <span class="mono">schedules/&lt;name&gt;.md</span>, and reconciles; the second button saves it paused, for trying by hand before it is installed. The file is in the git-synced folder, so it reaches the other machine on the next <span class="mono">sync.sh push</span> / <span class="mono">pull</span>.</p>
+  <div class="frames">
+    <div class="frame">
+      <p class="cap">Desktop · drawer over the Jobs page</p>
+      <div class="rside">
+        <div class="drawer">
+          <h3>New job</h3>
+          <div class="sub">Saved to <span class="mono">~/claude-global/schedules/</span></div>
+          <div class="field"><label>Kind</label>
+            <div class="kinds">
+              <div class="kind on"><b>Shell script</b>Runs a bash block. No tokens, no transcript.<small>exit code + last lines logged</small></div>
+              <div class="kind"><b>Claude prompt</b>Runs <span class="mono">claude -p</span> with the body as the prompt.<small>session + cost logged</small></div>
+              <div class="kind"><b>Claude skill</b>Same, body is one <span class="mono">/skill</span> line.<small>git-sync, docs-sync, kaizen…</small></div>
+            </div>
+          </div>
+          <div class="field"><label>Name</label><div class="in">pull-pins<span class="tail">pull-pins.md</span></div></div>
+          <div class="field"><label>Repos</label>
+            <div class="seg sm"><button>All pinned (14)</button><button class="on">Pick</button><button>Single cwd</button></div>
+            <div class="picks"><span class="pick on">lookout</span><span class="pick on">ixray</span><span class="pick on">claude-agents-dashboard</span><span class="pick">backlog-manager</span><span class="pick">guide-manager</span><span class="pick">ui-kit</span><span class="pick">release-kit</span><span class="pick muted">+7</span></div>
+            <div class="sub" style="margin:6px 0 0">Writes the <span class="mono">foreach:</span> line below; a name not pinned on a machine is skipped there and noted in the run.</div>
+          </div>
+          <div class="field"><label>File</label>
+<pre class="ta"><b>---</b>
+<i># Every weekday at 07:00; five cron fields.</i>
+cron: "0 7 * * 1-5"
+<i># Which machines install it: mac, wsl, or both.</i>
+machines: [mac, wsl]
+run: shell
+<i># pinned = every pinned repo; a list = only these, by folder name.</i>
+foreach: [lookout, ixray, claude-agents-dashboard]
+enabled: true
+<b>---</b>
+```bash
+git pull --ff-only --quiet
+```</pre>
+            <div class="vmsg ok">Valid · weekdays at 07:00 · both machines · 3 repos, all pinned here</div>
+          </div>
+          <div class="dfoot"><button class="btn primary">Save and install</button><button class="btn">Save, keep paused</button><span class="spacer"></span><button class="btn">Cancel</button></div>
+          <div class="sub" style="margin:8px 0 0"><b>Save and install</b> writes the file with <span class="mono">enabled: true</span> and reconciles, so launchd fires it at the next cron tick. <b>Save, keep paused</b> writes it with <span class="mono">enabled: false</span>: the row appears, nothing is installed, and Run now still works, so a new job is tried by hand first and the toggle turns it on once it behaves.</div>
+        </div>
+        <div class="drawer" style="max-width:420px">
+          <h3>Claude prompt, multi-step <span class="git-chip run">claude</span></h3>
+          <div class="sub">The body is the whole prompt, as long as it needs to be. One leading <span class="mono">/skill</span> line is the "skill" template; anything else is plain <span class="mono">claude -p</span> with skills reachable by name.</div>
+<pre class="ta"><b>---</b>
+cron: "0 22 * * 0"
+machines: [mac]
+run: claude
+foreach: [claude-agents-dashboard, backlog-manager]
+model: opus          <i># or sonnet, haiku; blank = CLI default</i>
+effort: medium
+permission-mode: acceptEdits
+allowed-tools: [Bash, Read, Edit, Write, Skill]
+max-turns: 60
+enabled: true
+<b>---</b>
+Weekly housekeeping for this repo, in order:
+1. Run the git-sync skill. Stop here if it reports a diverged trunk.
+2. Run docs-sync. Re-baseline only the docs it rewrote.
+3. If anything changed, open one `docs:` PR titled
+   "docs: weekly sync" and put the docs-sync report in the body.
+Reply with one line per step: done, skipped (why) or failed (why).</pre>
+          <div class="vmsg warn">permission-mode acceptEdits: the run can edit files in each repo without asking. bypassPermissions is refused here.</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame phone ph">
+      <p class="cap">375px · drawer is full-screen</p>
+      <div class="drawer" style="padding:14px">
+        <h3>New job</h3>
+        <div class="field" style="margin-top:10px"><label>Kind</label><div class="kinds"><div class="kind on"><b>Shell script</b>No tokens, no transcript.</div><div class="kind"><b>Claude prompt</b></div><div class="kind"><b>Claude skill</b></div></div></div>
+        <div class="field"><label>Name</label><div class="in">pull-pins<span class="tail">.md</span></div></div>
+        <div class="field"><label>Repos</label><div class="seg sm"><button>All</button><button class="on">Pick</button><button>cwd</button></div><div class="picks"><span class="pick on">lookout</span><span class="pick on">ixray</span><span class="pick">+12</span></div></div>
+        <div class="field"><label>File</label><pre class="ta" style="min-height:120px"><b>---</b>
+cron: "0 7 * * 1-5"
+machines: [mac, wsl]
+run: shell
+foreach: [lookout, ixray]
+enabled: true
+<b>---</b>
+```bash
+git pull --ff-only --quiet
+```</pre><div class="vmsg ok">Valid · weekdays 07:00</div></div>
+        <div class="dfoot"><button class="btn primary">Save and install</button><button class="btn">Keep paused</button><button class="btn">Cancel</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 5. Edit ───────────────────────── -->
+<section class="variant" id="edit">
+  <div class="vhead"><span class="tag">Screen 5</span><h2>Editing a job: the caret menu, the same drawer, and what the toggle does</h2></div>
+  <p class="note">The caret menu holds everything that is not Run now. <b>Edit</b> opens the New-job drawer with the current file, Repos helper included, both ways bound: editing the <span class="mono">foreach:</span> line moves the picker, the picker rewrites the line; Save validates, writes, reconciles. The row's <b>toggle</b> rewrites only the <span class="mono">enabled:</span> line, keeping the rest of the file byte for byte, then reconciles, so a pause is a one-line diff in git. <b>Delete</b> confirms inside the drawer (the viewer has no confirm dialog) and removes the file plus the installed plist. <b>Reveal</b> opens the folder in Finder / Explorer for people who prefer their own editor; the dashboard picks the file change up by watching the folder.</p>
+  <div class="frames">
+    <div class="frame">
+      <p class="cap">Desktop · menu open, then the drawer with a validation error</p>
+      <div class="card" style="overflow:visible;margin-bottom:16px">
+        <div class="sch-ledger" style="background:var(--strip-hi)"><span class="dot warn"></span>
+          <div><div class="name">git-sync-all</div><div class="sub"><span class="mono muted">22:00 daily</span><span class="git-chip dim mach">× 12 pinned</span><span class="git-chip mach here">mac</span></div></div>
+          <span class="git-chip run">claude</span>
+          <div class="cell"><span class="git-chip amber">2 of 12 failed</span><span class="muted">yesterday 22:00 · 11m · $0.84</span></div>
+          <div class="cell"><span>today</span><span class="muted">22:00</span></div>
+          <span class="tog on"></span>
+          <span class="act"><button class="btn sm">Run now</button><button class="btn sm icon" style="background:var(--strip-hi)">⌃</button>
+            <div class="menu"><div class="on">Edit file</div><div>Run now on one repo…</div><div>Pause</div><div>Reveal in Finder</div><div>Copy launchd label</div><div class="sep"></div><div class="danger">Delete…</div></div>
+          </span>
+        </div>
+        <div style="height:150px"></div>
+      </div>
+      <div class="rside">
+        <div class="drawer">
+          <h3>Edit job <span class="mono muted">git-sync-all.md</span> <span class="git-chip amber">unsaved</span></h3>
+          <div class="sub">Installed on this machine as <span class="mono">com.claude-dashboard.schedule.git-sync-all</span> · last reconciled 2m ago</div>
+          <div class="field"><label>Repos</label>
+            <div class="seg sm"><button class="on">All pinned (12)</button><button>Pick</button><button>Single cwd</button></div>
+            <div class="sub" style="margin:6px 0 0">Read from the <span class="mono">foreach:</span> line each time the file changes; switching to Pick preselects today's 12 and writes the list.</div>
+          </div>
+          <div class="field"><label>File</label>
+<pre class="ta"><b>---</b>
+cron: "<span class="err">0 22 * *</span>"
+machines: [mac]
+run: claude
+foreach: pinned
+model: opus
+effort: medium
+permission-mode: acceptEdits
+enabled: true
+<b>---</b>
+/git-sync</pre>
+            <div class="vmsg err">cron needs five fields (minute hour day month weekday); got four.</div>
+          </div>
+          <div class="dfoot"><button class="btn primary" style="opacity:.5">Save and reconcile</button><span class="spacer"></span><button class="btn danger">Delete…</button><button class="btn">Cancel</button></div>
+        </div>
+        <div class="drawer" style="max-width:380px">
+          <h3>Delete git-sync-all?</h3>
+          <div class="sub">Removes the file from <span class="mono">schedules/</span> and the launchd job from this machine. Runs stay in the log. The other machine drops it on its next pull.</div>
+          <div class="dfoot"><button class="btn danger">Delete file and job</button><span class="spacer"></span><button class="btn">Keep</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame phone ph">
+      <p class="cap">375px · menu</p>
+      <div class="card" style="overflow:visible">
+        <div class="sch-ledger" style="background:var(--strip-hi)"><span class="dot warn"></span>
+          <div><div class="name">git-sync-all</div><div class="muted" style="margin-top:4px">yesterday · <span class="git-chip amber">2 failed</span></div></div>
+          <span class="act"><span class="tog on"></span><button class="btn sm icon">⌃</button>
+            <div class="menu"><div>Run now</div><div class="on">Edit file</div><div>Pause</div><div class="sep"></div><div class="danger">Delete…</div></div>
+          </span>
+        </div>
+        <div style="height:170px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 5b. Run now ───────────────────────── -->
+<section class="variant" id="runnow">
+  <div class="vhead"><span class="tag">Screen 5b</span><h2>Run now, and Run now on one repo</h2></div>
+  <p class="note"><b>Run now</b> asks the dashboard server to launch the same wrapper launchd would, with <span class="mono">trigger: manual</span>; nothing else differs, so a manual run lands in the same log, the same stats and the same Runs page. The row flips at once: pill reads <span class="git-chip run">running</span>, the button becomes <b>Stop</b> (SIGTERM to the wrapper, which forwards it to its child). On a fan-out job the caret adds <b>Run now on one repo…</b>: a popover listing the job's repos with each one's last outcome, so the two that failed last night can be rerun without touching the other ten. A step's <b>run again</b> link in the fold is the same thing with the repo preselected. Pause does not block Run now: a paused job can still be run by hand, which is how you test one before enabling it.</p>
+  <div class="frames">
+    <div class="frame">
+      <p class="cap">Desktop · popover from the caret, then the row 20s after Run</p>
+      <div class="card" style="overflow:visible;margin-bottom:16px">
+        <div class="sch-ledger" style="background:var(--strip-hi)"><span class="dot warn"></span>
+          <div><div class="name">git-sync-all</div><div class="sub"><span class="mono muted">22:00 daily</span><span class="git-chip dim mach">× 12 pinned</span><span class="git-chip mach here">mac</span></div></div>
+          <span class="git-chip run">claude</span>
+          <div class="cell"><span class="git-chip amber">2 of 12 failed</span><span class="muted">yesterday 22:00 · 11m · $0.84</span></div>
+          <div class="cell"><span>today</span><span class="muted">22:00</span></div>
+          <span class="tog on"></span>
+          <span class="act"><button class="btn sm">Run now</button><button class="btn sm icon" style="background:var(--strip-hi)">⌃</button>
+            <div class="pop">
+              <div class="kick">Run now on one repo · last run shown</div>
+              <div class="prow on"><span>lookout</span><span class="git-chip red">exit 1</span><button class="btn sm primary">Run</button></div>
+              <div class="prow"><span>ixray</span><span class="git-chip red">needs auth</span><button class="btn sm">Run</button></div>
+              <div class="prow"><span>claude-agents-dashboard</span><span class="git-chip green">ok</span><button class="btn sm">Run</button></div>
+              <div class="prow"><span>backlog-manager</span><span class="git-chip green">ok</span><button class="btn sm">Run</button></div>
+              <div class="prow"><span class="muted">8 more, all ok</span><span></span><span></span></div>
+              <div class="pfoot"><span class="muted" style="font-size:12px">Runs the file as saved, cwd set to that repo.</span><span class="spacer" style="flex:1"></span><button class="btn sm">Run the 2 failed</button></div>
+            </div>
+          </span>
+        </div>
+        <div style="height:250px"></div>
+      </div>
+      <div class="card">
+        <div class="sch-ledger"><span class="dot live"></span>
+          <div><div class="name">git-sync-all</div><div class="sub"><span class="mono muted">22:00 daily</span><span class="git-chip dim mach">× 12 pinned</span><span class="git-chip mach here">mac</span></div></div>
+          <span class="git-chip run">claude</span>
+          <div class="cell"><span class="git-chip run">running · lookout</span><span class="muted">by hand · 20s</span></div>
+          <div class="cell"><span>today</span><span class="muted">22:00</span></div>
+          <span class="tog on"></span>
+          <span class="act"><button class="btn sm">Stop</button><button class="btn sm icon">⌄</button></span>
+        </div>
+        <div class="sch-runs">
+          <div class="kick">Now · by hand · 1 repo · 20s so far</div>
+          <div class="sch-run first"><span class="name">lookout</span><span>0m 20s</span><span class="git-chip run">running</span><span class="hide">$0.00</span><span class="hide">opus</span><a href="#">session →</a></div>
+          <div class="kick" style="margin-top:12px">Yesterday 22:00 · by schedule · 12 repos · 11m 04s · $0.84</div>
+          <div class="sch-run first"><span class="name">lookout</span><span>0m 12s</span><span class="git-chip red">exit 1</span><span class="hide">$0.01</span><span class="hide">opus</span><a href="#">run again</a></div>
+          <div class="sch-run"><span class="name">ixray</span><span>0m 09s</span><span class="git-chip red">needs auth</span><span class="hide">$0.00</span><span class="hide">opus</span><a href="#">run again</a></div>
+        </div>
+        <div class="sch-ledger"><span class="dot live"></span>
+          <div><div class="name">pull-pins</div><div class="sub"><span class="mono muted">07:00 Mon–Fri</span><span class="git-chip dim mach">× 14 pinned</span></div></div>
+          <span class="git-chip dim">shell</span>
+          <div class="cell"><span class="git-chip run">running · 9 of 14</span><span class="muted">by hand · 21s</span></div>
+          <div class="cell"><span>tomorrow</span><span class="muted">07:00</span></div>
+          <span class="tog on"></span>
+          <span class="act"><button class="btn sm">Stop</button><button class="btn sm icon">⌄</button></span>
+        </div>
+      </div>
+      <div style="margin-top:12px"><span class="toast"><span class="dot live"></span>git-sync-all started on lookout · <a href="#" style="color:var(--cyan);text-decoration:none">open session</a></span></div>
+    </div>
+    <div class="frame phone ph">
+      <p class="cap">375px · one-repo popover is a sheet</p>
+      <div class="card" style="overflow:visible">
+        <div class="sch-ledger" style="background:var(--strip-hi)"><span class="dot warn"></span>
+          <div><div class="name">git-sync-all</div><div class="muted" style="margin-top:4px">yesterday · <span class="git-chip amber">2 failed</span></div></div>
+          <span class="act"><span class="tog on"></span></span>
+        </div>
+      </div>
+      <div class="drawer" style="padding:12px;margin-top:10px">
+        <h3 style="font-size:15px">Run git-sync-all now</h3>
+        <div class="sub">Pick repos; the file runs as saved.</div>
+        <div class="prow on" style="display:grid;grid-template-columns:1fr auto;gap:10px;padding:6px 4px"><span>lookout</span><span class="git-chip red">exit 1</span></div>
+        <div class="prow on" style="display:grid;grid-template-columns:1fr auto;gap:10px;padding:6px 4px"><span>ixray</span><span class="git-chip red">auth</span></div>
+        <div class="prow" style="display:grid;grid-template-columns:1fr auto;gap:10px;padding:6px 4px"><span>claude-agents-dashboard</span><span class="git-chip green">ok</span></div>
+        <div class="prow" style="display:grid;grid-template-columns:1fr auto;gap:10px;padding:6px 4px"><span class="muted">9 more ok</span><span></span></div>
+        <div class="dfoot"><button class="btn primary">Run 2 selected</button><button class="btn">All 12</button><span class="spacer"></span><button class="btn">Cancel</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 6. Old session ───────────────────────── -->
+<section class="variant" id="session">
+  <div class="vhead"><span class="tag">Screen 6</span><h2>Opening a run's session, including one older than the Sessions window</h2></div>
+  <p class="note">Same path as the Git Sync pill: the run line opens the existing <span class="mono">ChatDrawer</span> with the session row, nothing new to draw. One difference underneath: Git Sync gets its row from the Sessions poll, which is capped at 7 days and 50 rows, so a 3-week-old run would come back empty. Here the wrapper chooses the id up front (<span class="mono">claude --session-id</span>) and writes it into the run log, and a small by-id endpoint builds the row straight from the transcript file with no window, the way <span class="mono">/api/sessions/:id/chat</span> already does. Same drawer, any age.</p>
+  <div class="frames">
+    <div class="frame">
+      <p class="cap">Desktop · ChatDrawer for lookout, Sep 27 (22 days old), as Git Sync opens it</p>
+      <div class="sp">
+        <div class="head"><span class="dot"></span><span class="title">git-sync lookout</span><span class="git-chip dim">finished</span><span class="git-chip run">schedule · git-sync-all</span><span class="muted" style="margin-left:auto;font-size:12px">Sep 27, 22:00 · 22d ago</span></div>
+        <div class="meta"><span>model <b>opus</b></span><span>context <b>31%</b></span><span>cost <b>$0.01</b></span><span>took <b>12s</b></span><span>exit <b style="color:var(--red)">1</b></span><span>cwd <span class="mono">~/Documents/custom-projects/lookout</span></span></div>
+        <div class="msg user"><span class="who">you · by schedule</span>/claude-agents-dashboard:git-sync</div>
+        <div class="msg"><span class="who">claude</span>Checking the tree and the remote first.<div class="tool" style="margin-top:4px">Bash · git fetch --prune</div></div>
+        <div class="msg"><span class="who">claude</span>Fetch refused: <span class="mono">fatal: could not read Username for 'https://github.com'</span>. This remote is HTTPS with no stored credential, and a headless run cannot answer the prompt. Stopping here; nothing was changed. Switch the remote to SSH or store a credential, then run again.</div>
+        <div class="dfoot"><button class="btn sm">Open in Sessions</button><button class="btn sm">Resume…</button><span class="spacer"></span><button class="btn sm">Run lookout again</button></div>
+      </div>
+    </div>
+    <div class="frame phone ph">
+      <p class="cap">375px</p>
+      <div class="sp" style="padding:14px">
+        <div class="head"><span class="title">git-sync lookout</span><span class="git-chip dim">finished</span></div>
+        <div class="meta"><span>opus</span><span>$0.01</span><span>12s</span><span>exit <b style="color:var(--red)">1</b></span><span>22d ago</span></div>
+        <div class="msg user"><span class="who">you · by schedule</span>/claude-agents-dashboard:git-sync</div>
+        <div class="msg"><span class="who">claude</span>Fetch refused: could not read Username for github.com. Headless run cannot answer a credential prompt. Nothing changed.</div>
+        <div class="dfoot"><button class="btn sm">Open in Sessions</button><button class="btn sm">Run again</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 7. Reconcile ───────────────────────── -->
+<section class="variant" id="reconcile">
+  <div class="vhead"><span class="tag">Mechanics</span><h2>Reconcile: files in, OS jobs out</h2></div>
+  <p class="note">Reconcile makes the OS scheduler match the files. It runs on server start, when the folder changes (a pull landed, you edited in your own editor), after every save or toggle from the UI, and from the button. The button shows the diff first and applies on a second click. The chip in the toolbar is its state: <span class="git-chip green">in sync</span>, <span class="git-chip amber">drift 2</span> (files and installed jobs disagree, e.g. launchd refused a plist), or <span class="git-chip red">reconcile failed</span> with the error in the fold. Nothing in the dashboard fires a job; launchd and cron do, through one wrapper script, and they keep doing so with the dashboard closed.</p>
+  <div class="flow">
+    <div class="box"><b>schedules/*.md</b>one file per job, git-synced<span class="mono">~/claude-global/schedules/</span></div>
+    <div class="box"><b>desired set</b>enabled ∧ machines ∋ this one<span class="mono">machine = bootstrap profile (mac | wsl), .env override</span></div>
+    <div class="box"><b>installed set</b>mac: plists with our label prefix · wsl: crontab block between markers<span class="mono">com.claude-dashboard.schedule.*</span></div>
+    <div class="box"><b>diff → apply</b>install · update · remove, idempotent<span class="mono">launchctl bootstrap/bootout · crontab -</span></div>
+    <div class="box"><b>run-schedule &lt;job&gt;</b>the one wrapper launchd/cron calls; absolute node + claude paths baked in at reconcile<span class="mono">plugin/bin/run-schedule.mjs</span></div>
+    <div class="box"><b>runs.jsonl</b>start line, then end line per step; machine-local, never in git<span class="mono">~/.claude/schedule-runs/mac.jsonl</span></div>
+  </div>
+  <div class="frames" style="margin-top:14px">
+    <div class="frame" style="max-width:640px">
+      <p class="cap">Reconcile button, first click</p>
+      <div class="drawer" style="box-shadow:none">
+        <h3>Reconcile this machine</h3>
+        <div class="sub">Files vs launchd, mac · 2 changes</div>
+        <div class="sch-run first"><span class="name">pull-pins</span><span class="git-chip green">install</span><span class="muted" style="grid-column:span 4">new file from this morning's pull</span></div>
+        <div class="sch-run"><span class="name">backlog-retro</span><span class="git-chip amber">update</span><span class="muted" style="grid-column:span 4">cron changed 09:00 → 09:30</span></div>
+        <div class="sch-run"><span class="name">old-nightly</span><span class="git-chip red">remove</span><span class="muted" style="grid-column:span 4">installed here, no file names it any more</span></div>
+        <div class="sch-run"><span class="muted">3 unchanged</span><span></span><span></span></div>
+        <div class="dfoot"><button class="btn primary">Apply</button><span class="spacer"></span><button class="btn">Close</button></div>
+      </div>
+    </div>
+  </div>
+</section>
