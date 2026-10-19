@@ -293,7 +293,7 @@ client/src/
                   sessions), useBackClose, useHideOnScroll (the phone top bar's
                   auto-hide), useNarrow (the one JS read of the `md` breakpoint),
                   useStuckStrip (when the phone's aside strip pins)
-  lib/            filterSort, analyticsFilterSort, chatFilter, markdown, configsEntries,
+  lib/            filterSort, analyticsFilterSort, chatFilter, heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings,
                   sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
