@@ -59,7 +59,7 @@ import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
-import { openFolder, openFolderPlatform } from './lib/open-folder.js';
+import { openFolder, openFolderPlatform, revealFile } from './lib/open-folder.js';
 import { runQuickOp } from './lib/git-quick.js';
 import { readGitStats } from './lib/git-stats.js';
 import { readCodegraph, startCodegraphRun } from './lib/codegraph-store.js';
@@ -2010,6 +2010,7 @@ export function serveScheduleRuns(config: Config, params: URLSearchParams, res: 
     const days = SCHEDULE_WINDOWS.find(d => d === rawDays) ?? 30;
     const job = params.get('job') || null;
     const outcome = params.get('outcome') || null;
+    if (outcome !== null && !RUN_OUTCOMES.has(outcome)) return sendJson(res, 400, { error: 'bad outcome' });
     const runner = params.get('runner') || null;
     const all = runsReader(config).read();
     foldForPush(config, all);
@@ -2019,7 +2020,7 @@ export function serveScheduleRuns(config: Config, params: URLSearchParams, res: 
     const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)).getTime();
     const runs = scoped.filter(r => {
       const t = Date.parse(r.startedAt);
-      return Number.isFinite(t) && t >= from && (outcome === null || !RUN_OUTCOMES.has(outcome) || r.state === outcome);
+      return Number.isFinite(t) && t >= from && (outcome === null || r.state === outcome);
     });
     sendJson(res, 200, { runs, stats: computeStats(scoped, days, now) } satisfies ScheduleRunsResponse);
   } catch (e) {
@@ -2034,11 +2035,6 @@ export function serveScheduleRead(config: Config, name: string, res: ServerRespo
   const stored = readJobs(scheduleDirs(config).schedules).find(s => s.name === name);
   if (!stored) return sendJson(res, 404, { error: 'no such job' });
   sendJson(res, 200, stored satisfies ScheduleFile);
-}
-
-/** Reconcile after a file change; the write already stands, so a failed apply is reported in the body, never as the request's failure. */
-async function reconcileAfterWrite(config: Config): Promise<ReconcileReport> {
-  return applyReconcile(config);
 }
 
 /** `PUT /api/schedules/:name` `{text}` — replace an existing job's file. Validated first; `422 {errors}` writes nothing. */
@@ -2057,7 +2053,7 @@ export async function serveScheduleWrite(config: Config, name: string, req: Inco
     console.error('[dashboard] schedule write failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'write failed' });
   }
-  sendJson(res, 200, { job, reconcile: await reconcileAfterWrite(config) });
+  sendJson(res, 200, { job, reconcile: await applyReconcile(config) });
 }
 
 /** `POST /api/schedules` `{name, text}` — a new job: `409` when the file exists, else validated and written like PUT. */
@@ -2080,7 +2076,7 @@ export async function serveScheduleCreate(config: Config, req: IncomingMessage, 
     console.error('[dashboard] schedule create failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'write failed' });
   }
-  sendJson(res, 200, { job, reconcile: await reconcileAfterWrite(config) });
+  sendJson(res, 200, { job, reconcile: await applyReconcile(config) });
 }
 
 /** `DELETE /api/schedules/:name` — remove the file and reconcile; the run log keeps the job's rows. */
@@ -2095,7 +2091,7 @@ export async function serveScheduleDelete(config: Config, name: string, req: Inc
     return sendJson(res, 500, { error: 'delete failed' });
   }
   if (!removed) return sendJson(res, 404, { error: 'no such job' });
-  sendJson(res, 200, { reconcile: await reconcileAfterWrite(config) });
+  sendJson(res, 200, { reconcile: await applyReconcile(config) });
 }
 
 /** `PATCH /api/schedules/:name` `{enabled}` — rewrite the `enabled:` line only (every other byte kept), then reconcile. */
@@ -2107,6 +2103,8 @@ export async function serveSchedulePatch(config: Config, name: string, req: Inco
   const dir = scheduleDirs(config).schedules;
   const stored = readJobs(dir).find(s => s.name === name);
   if (!stored) return sendJson(res, 404, { error: 'no such job' });
+  // An unparseable file has no trustworthy `enabled:` line to rewrite; the drawer fixes it through PUT.
+  if (!stored.job) return sendJson(res, 422, { errors: stored.errors });
   const text = serializeEnabled(stored.text, body.enabled);
   try {
     writeJob(dir, name, text, 'replace');
@@ -2114,7 +2112,7 @@ export async function serveSchedulePatch(config: Config, name: string, req: Inco
     console.error('[dashboard] schedule toggle failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'write failed' });
   }
-  sendJson(res, 200, { job: parseJob(name, text).job, reconcile: await reconcileAfterWrite(config) });
+  sendJson(res, 200, { job: parseJob(name, text).job, reconcile: await applyReconcile(config) });
 }
 
 /** `POST /api/schedules/reconcile` `{apply?}` — the diff, applied when `apply` is true. The plugin sync script posts `{apply: true}`. */
@@ -2134,10 +2132,19 @@ export async function serveScheduleReconcile(config: Config, req: IncomingMessag
 export async function serveScheduleRun(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
   if (refuseScheduleWrite(res, name)) return;
-  const body = await readJsonBody(req) as Record<string, unknown> | null;
-  // No `only` key is a whole run; anything under the key, null included, is `runJob`'s to judge.
-  const only = body && typeof body === 'object' && 'only' in body ? body.only : undefined;
-  if (Array.isArray(only) && only.length > ONLY_MAX) return sendJson(res, 400, { error: 'bad-only' });
+  // Fail closed: a body that did not arrive whole, or did not parse, is refused rather than read as "no `only`", which would run every pin.
+  const raw = await readBody(req, BODY_CAP);
+  if (!raw.ok) return sendBadBody(res, { error: 'bad body' });
+  let only: unknown;
+  if (raw.bytes.length > 0) {
+    let body: unknown;
+    try { body = JSON.parse(raw.bytes.toString('utf8')); } catch { return sendBadBody(res, { error: 'bad body' }); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return sendBadBody(res, { error: 'bad body' });
+    // No `only` key is a whole run; anything under the key, null included, is `runJob`'s to judge.
+    only = 'only' in body ? (body as { only?: unknown }).only : undefined;
+  }
+  // `runJob` reads `[]` as every pin; over HTTP an empty selection is a caller bug, not a request for a whole run.
+  if (Array.isArray(only) && (only.length === 0 || only.length > ONLY_MAX)) return sendJson(res, 400, { error: 'bad-only' });
   try {
     const result = await runJob(config, name, only);
     if (result.status === 202) return sendJson(res, 202, { run: result.run });
@@ -2162,19 +2169,22 @@ export async function serveScheduleStop(config: Config, name: string, req: Incom
 }
 
 /**
- * `POST /api/schedules/reveal` `{name?}` — open the schedules folder in Finder (macOS only, `501` elsewhere). The folder comes from config, never the
- * request; a `name`, when sent, must be a job name, so the caret menu can pass the row it was opened from without that reaching a path either.
+ * `POST /api/schedules/reveal` `{name?}` — open the schedules folder in Finder (macOS only, `501` elsewhere), with `<name>.md` selected when a name is sent.
+ * The folder comes from config, never the request; a name must match the job-name rule before it is joined onto it, so it cannot climb out.
  */
 export async function serveScheduleReveal(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
   const body = await readJsonBody(req) as { name?: unknown } | null;
-  const name = body && typeof body === 'object' && body.name !== undefined ? String(body.name) : undefined;
+  const name = body && typeof body === 'object' ? body.name : undefined;
+  if (name !== undefined && typeof name !== 'string') return sendBadBody(res, { error: 'expected {name?: string}' });
   if (refuseScheduleWrite(res, name)) return;
   if (openFolderPlatform() !== 'darwin') return sendJson(res, 501, { error: 'reveal needs macOS' });
   const dir = scheduleDirs(config).schedules;
   if (!fs.existsSync(dir)) return sendJson(res, 404, { error: 'no schedules folder' });
+  const file = name === undefined ? null : nodePath.join(dir, `${name}.md`);
+  if (file !== null && !fs.existsSync(file)) return sendJson(res, 404, { error: 'no such job' });
   try {
-    await openFolder(dir);
+    await (file === null ? openFolder(dir) : revealFile(file));
   } catch (e) {
     console.error(`[dashboard] schedules reveal failed: ${(e as Error).message}`);
     return sendJson(res, 500, { error: 'open failed' });

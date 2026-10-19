@@ -277,6 +277,7 @@ export function createRequestListener(config: Config): http.RequestListener {
       return void serveSchedules(config, res);
     }
     if (u.pathname === '/api/schedules/runs') {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return methodNotAllowed(res, 'GET');
       return serveScheduleRuns(config, u.searchParams, res);
     }
     if (u.pathname === '/api/schedules/validate') {

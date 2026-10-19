@@ -101,7 +101,14 @@ export function foldForPush(config: Config, runs: ScheduleRun[], deps: ScheduleD
  */
 export function startSchedules(config: Config, deps: ScheduleDeps = defaultDeps): void {
   if (!config.schedulesOwner) return;
-  claim = deps.claimOwner(config);
+  // An unwritable state root throws here; the server still serves everything but schedules, so this must not take `listen` down with it.
+  try {
+    claim = deps.claimOwner(config);
+  } catch (e) {
+    console.error('[dashboard] schedules owner claim failed:', (e as Error).message);
+    claim = { ownedBy: '' };
+    return;
+  }
   if (claim !== 'owner') return;
   started = { deps, unwatch: null };
   const step = (what: string, fn: () => void): void => {

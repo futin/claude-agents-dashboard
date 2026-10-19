@@ -156,6 +156,22 @@ export async function run(): Promise<number> {
     });
   }));
 
+  tally(await testAsync('a claimOwner that throws (an unwritable state root) is logged, startSchedules returns, and nothing else is called', async () => {
+    await withHome(true, config => {
+      const fake = fakeDeps();
+      fake.deps.claimOwner = () => { fake.calls.push('claimOwner'); throw new Error('EACCES'); };
+      const err = console.error;
+      const logged: string[] = [];
+      console.error = (...a: unknown[]) => { logged.push(a.join(' ')); };
+      try { startSchedules(config, fake.deps); } finally { console.error = err; }
+      assert.deepStrictEqual(fake.calls, ['claimOwner']);
+      assert.ok(logged.some(l => l.includes('owner claim failed')), logged.join('\n'));
+      assert.deepStrictEqual(ownerStatus(), { ownedBy: '' });
+      stopSchedules();
+      assert.deepStrictEqual(fake.calls, ['claimOwner']);
+    });
+  }));
+
   tally(await testAsync('stopSchedules: the runs watcher and reconcile watchers off, the owner file released; a second stop is a no-op', async () => {
     await withHome(true, config => {
       const fake = fakeDeps();

@@ -13,11 +13,14 @@ import type { Harness, Reply } from './api-harness.js';
 import { installedFrom } from '../server/api.js';
 import { encodeProjectDir, overrideClaudeRoots } from '../server/lib/management.js';
 import { overrideOpenFolder } from '../server/lib/open-folder.js';
+import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { resetScheduleBoot, setScheduleProbe } from '../server/lib/schedule-boot.js';
-import { setReconcileHost, setScheduleRunner } from '../server/lib/schedule-reconcile.js';
+import { PLUGIN_ID, setReconcileHost, setScheduleRunner } from '../server/lib/schedule-reconcile.js';
 import { claimOwner, releaseOwner } from '../server/lib/schedule-store.js';
 import type { Probe } from '../server/lib/schedule-store.js';
 import { resetSettings, setPinned } from '../server/lib/settings.js';
+import { setSpawner } from '../server/lib/spawn.js';
 import type { ReconcileChange, ReconcileReport, ScheduleFile, ScheduleRunsResponse, SchedulesResponse, Session } from '../shared/types.js';
 
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\nSCHEDULES_DIR=~/schedules\nSCHEDULE_MACHINE=mac\nNTFY_TOPIC=\n';
@@ -123,6 +126,23 @@ function plantAmbiguousPins(h: Harness): void {
 
 const listing = (dir: string): string[] => fs.readdirSync(dir).sort();
 
+/** An installed plugin under the harness HOME and a recording spawner that plays the wrapper's `start` line, so Run now answers without its 2 s wait. */
+function installAndSpawn(c: Ctx): string[][] {
+  const install = path.join(c.h.home, 'plugin-install');
+  fs.mkdirSync(path.join(install, 'lib'), { recursive: true });
+  fs.writeFileSync(path.join(install, 'lib', 'run-schedule.mjs'), '// fixture, never run\n');
+  fs.mkdirSync(path.join(c.h.home, '.claude', 'plugins'), { recursive: true });
+  fs.writeFileSync(path.join(c.h.home, '.claude', 'plugins', 'installed_plugins.json'),
+    JSON.stringify({ version: 2, plugins: { [PLUGIN_ID]: [{ scope: 'user', installPath: install, version: '1.0.0' }] } }));
+  const calls: string[][] = [];
+  setSpawner((_command, args) => {
+    calls.push(args);
+    logStart(c, `r-${calls.length}`, 'x', 0, 99);
+    return Object.assign(new EventEmitter(), { pid: 99, unref: () => {} }) as unknown as ChildProcess;
+  });
+  return calls;
+}
+
 export async function run(): Promise<number> {
   console.log('\n=== schedules endpoints (api.ts via the router) ===\n');
   let p = 0;
@@ -213,6 +233,10 @@ export async function run(): Promise<number> {
       assert.deepStrictEqual(month.runs.map(x => x.id), ['y-fail', 'x-fail', 'x-ok', 'x-ancient'], 'newest first, the 30-day window');
       const odd = (await send(c.h, 'GET', '/api/schedules/runs?days=12')).json as unknown as ScheduleRunsResponse;
       assert.strictEqual(odd.stats.byDay.length, 30, 'a window outside 7 | 30 | 90 reads as 30');
+      const bad = await send(c.h, 'GET', '/api/schedules/runs?outcome=bogus');
+      assert.deepStrictEqual([bad.status, bad.json], [400, { error: 'bad outcome' }], 'an unknown outcome is refused, never read as no filter');
+      const del = await send(c.h, 'DELETE', '/api/schedules/runs');
+      assert.deepStrictEqual([del.status, del.headers.allow], [405, 'GET']);
     });
   }));
 
@@ -352,6 +376,12 @@ export async function run(): Promise<number> {
       assert.deepStrictEqual(changed, [['enabled: true', 'enabled: false']]);
       assert.strictEqual((await send(c.h, 'PATCH', '/api/schedules/x', { enabled: 'no' })).status, 400);
       assert.strictEqual((await send(c.h, 'PATCH', '/api/schedules/ghost', { enabled: true })).status, 404);
+      const broken = '---\ncron: nonsense\nenabled: true\n---\nx\n';
+      const brokenFile = writeJob(c, 'broken', broken);
+      const unparsed = await send(c.h, 'PATCH', '/api/schedules/broken', { enabled: false });
+      assert.strictEqual(unparsed.status, 422, unparsed.raw);
+      assert.ok((unparsed.json?.errors as unknown[]).length > 0);
+      assert.strictEqual(fs.readFileSync(brokenFile, 'utf8'), broken, 'a file that does not parse is left as it was');
     });
   }));
 
@@ -432,20 +462,63 @@ export async function run(): Promise<number> {
     });
   }));
 
-  tally(await testAsync('POST /reveal → 501 off darwin; on darwin it opens the schedules folder, 404 when that folder is missing', async () => {
+  tally(await testAsync('POST /reveal → 501 off darwin; on darwin the folder, or `open -R` on a named job file; 404 for no file or no folder', async () => {
     await withSchedules('', true, async c => {
       const opened: string[][] = [];
       overrideOpenFolder({ platform: 'linux', run: async (cmd, args) => { opened.push([cmd, ...args]); } });
       const off = await send(c.h, 'POST', '/api/schedules/reveal', {});
       assert.strictEqual(off.status, 501, off.raw);
       overrideOpenFolder({ platform: 'darwin' });
-      const ok = await send(c.h, 'POST', '/api/schedules/reveal', { name: 'x' });
-      assert.strictEqual(ok.status, 200, ok.raw);
-      assert.strictEqual(opened.length, 1);
-      assert.strictEqual(opened[0][opened[0].length - 1], c.schedules);
+      const folder = await send(c.h, 'POST', '/api/schedules/reveal', {});
+      assert.strictEqual(folder.status, 200, folder.raw);
+      const file = writeJob(c, 'x', job());
+      const named = await send(c.h, 'POST', '/api/schedules/reveal', { name: 'x' });
+      assert.strictEqual(named.status, 200, named.raw);
+      assert.deepStrictEqual(opened, [['open', c.schedules], ['open', '-R', file]]);
+      assert.deepStrictEqual([(await send(c.h, 'POST', '/api/schedules/reveal', { name: 'ghost' })).status, opened.length], [404, 2]);
+      assert.deepStrictEqual([(await send(c.h, 'POST', '/api/schedules/reveal', { name: 7 })).status, opened.length], [400, 2]);
       fs.rmSync(c.schedules, { recursive: true });
       assert.strictEqual((await send(c.h, 'POST', '/api/schedules/reveal', {})).status, 404);
-      assert.strictEqual(opened.length, 1);
+      assert.strictEqual(opened.length, 2);
+    });
+  }));
+
+  tally(await testAsync('POST /:name/run fails closed: malformed JSON, an over-cap body, a non-object body and `only: []` → 400 and nothing is spawned', async () => {
+    await withSchedules('', true, async c => {
+      writeJob(c, 'x', job());
+      const calls = installAndSpawn(c);
+      try {
+        const malformed = await send(c.h, 'POST', '/api/schedules/x/run', '{"only":');
+        assert.strictEqual(malformed.status, 400, malformed.raw);
+        const big = await send(c.h, 'POST', '/api/schedules/x/run', JSON.stringify({ only: ['a'], pad: 'x'.repeat(70 * 1024) }));
+        assert.strictEqual(big.status, 400, big.raw);
+        assert.strictEqual((await send(c.h, 'POST', '/api/schedules/x/run', [1])).status, 400);
+        assert.strictEqual((await send(c.h, 'POST', '/api/schedules/x/run', 'null')).status, 400);
+        const empty = await send(c.h, 'POST', '/api/schedules/x/run', { only: [] });
+        assert.deepStrictEqual([empty.status, empty.json], [400, { error: 'bad-only' }]);
+        assert.deepStrictEqual(calls, [], 'a refused body never reaches the spawner');
+      } finally {
+        setSpawner(null);
+      }
+    });
+  }));
+
+  tally(await testAsync('POST /:name/run: an empty body or one without `only` is a whole run; `only` passes through as --only', async () => {
+    await withSchedules('', true, async c => {
+      writeJob(c, 'x', job());
+      const calls = installAndSpawn(c);
+      try {
+        const bare = await send(c.h, 'POST', '/api/schedules/x/run');
+        assert.deepStrictEqual([bare.status, bare.json], [202, { run: 'r-1' }], bare.raw);
+        assert.strictEqual((await send(c.h, 'POST', '/api/schedules/x/run', {})).status, 202);
+        const some = await send(c.h, 'POST', '/api/schedules/x/run', { only: ['repo-a'] });
+        assert.strictEqual(some.status, 202, some.raw);
+        assert.strictEqual(calls.length, 3);
+        assert.ok(!calls[0].includes('--only') && !calls[1].includes('--only'), calls[0].join(' '));
+        assert.deepStrictEqual(calls[2].slice(-2), ['--only', 'repo-a']);
+      } finally {
+        setSpawner(null);
+      }
     });
   }));
 
