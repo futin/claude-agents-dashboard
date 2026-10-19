@@ -39,8 +39,9 @@ gains one field, `trunkCheckedOutElsewhere`. The client computes menu state and 
 ## Review Focus
 
 1. **Dirty tree + fast-forward that touches a modified file** — git refuses; the user must see git's first stderr line, and nothing moved. (Task 3 test.)
-2. **Linked-worktree pin whose main checkout is on the trunk** — the common case for `.claude/worktrees/*`: Pull's trunk part disabled up front, and if the
-   client is stale, the server's `fetch origin main:main` refusal is reported, not worked around. (Task 1 + Task 3 tests.)
+2. **Linked-worktree pin whose main checkout is on the trunk** — the common case for `.claude/worktrees/*`: Pull's trunk part disabled up front; a stale
+   client's click finds the trunk checked out on re-read and no move is attempted; a git refusal of the move is reported, not worked around. (Task 1 +
+   Task 3 tests.)
 3. **Two clicks on two worktrees of one repo** — the second is refused `busy` (409), never two gits racing on one common dir. (Task 2 + Task 4 tests.)
 4. **Fetch all pressed while a quick op holds a lock** — fetch-all waits, then runs; no `lock` FetchError recorded; a quick op pressed while fetch-all waits
    gets 409. (Task 2 test.)
@@ -356,3 +357,7 @@ Result line: in `GitView`, `{quick.note && <div className={...}>}` beside the ot
 - **Task 8:** the browser check's scratch repo is pinned by planting one transcript under a **temporary `HOME`** for the worktree server (the server reads
   `~/.claude/projects` from `HOME`), the way `plantProject` does in `test/api-git-fetch.test.ts` — never in the user's real `~/.claude/projects`; delete the
   temp dir afterwards.
+- **Re-check of review 1:** Task 3 adds `move refused by git → failed move part`: a spy runner fails `fetch origin main:main` (code 1, stderr
+  `fatal: refusing to fetch into branch 'refs/heads/main'`) → one `move` part `ok:false` with that detail minus `fatal: `. Task 5: an empty `detail` drops
+  the ` — D` clause — `claude-global: git refused. Use Sync.`, `claude-global: fetch failed. Use Sync.`, and `fix/x refused. Use Sync.` inside the mixed
+  line — one case each.
