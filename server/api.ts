@@ -1749,13 +1749,13 @@ export async function serveGitFetch(config: Config, req: IncomingMessage, res: S
 }
 
 /**
- * `GET /api/codegraph` — the codegraph state of every pinned project, in pin order (codegraph-view spec §API). No parameters and no method check, like
- * `serveGitStats`: the repo paths come from the stored pins, never from the request. A repo that fails reads as its own `error` row; only an unreadable pin
- * list is a 500.
+ * `GET /api/codegraph` — the codegraph state of every pinned project, in pin order (codegraph-view spec §API). No method check, like `serveGitStats`: the
+ * repo paths come from the stored pins, never from the request. The one parameter, `fresh=1` (Re-read status), skips the status cache; any other value is a
+ * plain read. A repo that fails reads as its own `error` row; only an unreadable pin list is a 500.
  */
-export async function serveCodegraph(config: Config, res: ServerResponse): Promise<void> {
+export async function serveCodegraph(config: Config, res: ServerResponse, fresh = false): Promise<void> {
   try {
-    sendJson(res, 200, await readCodegraph(config));
+    sendJson(res, 200, await readCodegraph(config, { fresh }));
   } catch (e) {
     console.error('[dashboard] codegraph read failed:', (e as Error).message);
     sendJson(res, 500, { error: 'codegraph read failed' });

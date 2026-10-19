@@ -103,6 +103,20 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await testAsync('GET /api/codegraph?fresh=1 reads the status again with a warm cache; a plain GET and fresh=0 do not', async () => {
+    await withCodegraphApi(async (h, fake) => {
+      pinFolder(h, 'repo-a', true);
+      const statuses = () => fake.calls.filter(c => c.args[0] === 'status').length;
+      assert.equal((await h.req('/api/codegraph')).status, 200);
+      assert.equal(statuses(), 1);
+      assert.equal((await h.req('/api/codegraph')).status, 200);
+      assert.equal((await h.req('/api/codegraph?fresh=0')).status, 200);
+      assert.equal(statuses(), 1, 'a warm cache answers both');
+      assert.equal((await h.req('/api/codegraph?fresh=1')).status, 200);
+      assert.equal(statuses(), 2, 'fresh=1 ran the CLI again');
+    });
+  }));
+
   check(await testAsync('POST /api/codegraph/run refuses in order: 405, 403 bad token, 400, 403 not pinned, 404, 400, then 200, 409', async () => {
     await withCodegraphApi(async (h, fake) => {
       const indexed = pinFolder(h, 'repo-a', true);

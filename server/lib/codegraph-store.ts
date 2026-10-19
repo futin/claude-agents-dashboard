@@ -164,8 +164,11 @@ const NO_LIVE: RootLive = { watching: false, watcherSinceMs: null, rebuildLive: 
 /**
  * Every pinned project's codegraph state, in pin order. When `cli` is `'missing'` the rows are placeholders (`state: 'error'`): callers check `cli` first. A repo with no cache entry is read now; a stale entry answers as it is while one background refresh
  * runs; a fresh one answers from the cache. The pid files are read on every call.
+ *
+ * `fresh` (Re-read status) skips the cache and awaits a status read for every indexed pin. It joins a read already in flight rather than starting a second, so
+ * the one-read-per-pin rule holds through a burst of re-reads.
  */
-export async function readCodegraph(config: Partial<Config>): Promise<CodegraphResponse> {
+export async function readCodegraph(config: Partial<Config>, opts: { fresh?: boolean } = {}): Promise<CodegraphResponse> {
   const pins = pinRows(config);
   const roots = await Promise.all(pins.map(rootOf));
 
@@ -178,12 +181,12 @@ export async function readCodegraph(config: Partial<Config>): Promise<CodegraphR
     else if (seenRebuild.delete(root)) dropEntry(root);
   }
 
-  const repos = await Promise.all(pins.map((pin, i) => repoRow(pin, roots[i], roots[i] ? live.get(roots[i]!) ?? NO_LIVE : NO_LIVE)));
+  const repos = await Promise.all(pins.map((pin, i) => repoRow(pin, roots[i], roots[i] ? live.get(roots[i]!) ?? NO_LIVE : NO_LIVE, opts.fresh === true)));
   const cliMissing = repos.some(r => r.cliMissing);
   return { generatedAt: clock(), cli: cliMissing ? 'missing' : 'ok', repos: repos.map(r => r.repo) };
 }
 
-async function repoRow(pin: PinRow, root: string | null, l: RootLive): Promise<{ repo: CodegraphRepo; cliMissing: boolean }> {
+async function repoRow(pin: PinRow, root: string | null, l: RootLive, fresh: boolean): Promise<{ repo: CodegraphRepo; cliMissing: boolean }> {
   const head = { dirName: pin.dirName, name: pin.name, path: pin.path };
   const noRoot = { ...head, watching: false, watcherSinceMs: null, rebuildLive: false, run: null, lastRun: null };
 
@@ -195,7 +198,7 @@ async function repoRow(pin: PinRow, root: string | null, l: RootLive): Promise<{
 
   let read: StatusRead;
   const entry = cache.get(statusKey(root, pin));
-  if (!entry) {
+  if (!entry || fresh) {
     read = await startRead(root, pin);
   } else {
     read = entry.read;

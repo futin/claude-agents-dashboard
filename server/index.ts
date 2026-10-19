@@ -270,7 +270,7 @@ export function createRequestListener(config: Config): http.RequestListener {
     }
     // Read-only codegraph state of the pinned repos, and the one write beside it: a Sync or Reindex, POST-only and token-guarded inside the handler.
     if (u.pathname === '/api/codegraph') {
-      return void serveCodegraph(config, res);
+      return void serveCodegraph(config, res, u.searchParams.get('fresh') === '1');
     }
     if (u.pathname === '/api/codegraph/run') {
       if (req.method !== 'POST') return methodNotAllowed(res);

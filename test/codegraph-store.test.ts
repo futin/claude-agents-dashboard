@@ -185,6 +185,56 @@ export async function run(): Promise<number> {
     assert.strictEqual(f.status(), 2, 'and that entry is fresh again');
   });
 
+  await it('cache: a fresh GET inside the TTL runs the CLI again and answers with that read; a plain GET in between does not', async () => {
+    const a = repo();
+    let answerFiles = 416;
+    const f = fake(async (_c, args) => ({ code: 0, stdout: args[0] === 'status' ? statusWith(answerFiles) : '', stderr: '' }));
+    overrideCodegraphRunner(f.run);
+    await get();
+    assert.strictEqual(f.status(), 1);
+    answerFiles = 500;
+    now += 1_000;
+    const plain = await row(a);
+    assert.strictEqual(f.status(), 1, 'a plain GET with a warm entry makes no read');
+    assert.ok(plain.state === 'ok' && plain.stats.fileCount === 416, 'and answers from the cache');
+    const fresh = (await readCodegraph({}, { fresh: true })).repos.find(r => r.dirName === a.dirName)!;
+    assert.strictEqual(f.status(), 2, 'a fresh GET with a warm entry reads again');
+    assert.ok(fresh.state === 'ok' && fresh.stats.fileCount === 500, 'and its answer is that read, not the cache');
+    const after = await row(a);
+    assert.strictEqual(f.status(), 2, 'the fresh read refilled the cache');
+    assert.ok(after.state === 'ok' && after.stats.fileCount === 500);
+  });
+
+  await it('cache: a fresh GET while a read is in flight joins it instead of starting a second', async () => {
+    const a = repo();
+    let release: () => void = () => {};
+    const gate = new Promise<void>(r => { release = r; });
+    const f = fake(async (_c, args) => {
+      if (args[0] === 'status') await gate;
+      return { code: 0, stdout: args[0] === 'status' ? FIXTURE : '', stderr: '' };
+    });
+    overrideCodegraphRunner(f.run);
+    const cold = get();
+    let launched: number;
+    let answers: CodegraphResponse[];
+    try {
+      await sleep(10);
+      assert.strictEqual(f.status(), 1, 'the cold read is in flight');
+      const fresh = readCodegraph({}, { fresh: true });
+      const fresh2 = readCodegraph({}, { fresh: true });
+      await sleep(10);
+      launched = f.status();
+      release();
+      answers = await Promise.all([cold, fresh, fresh2]);
+    } finally {
+      release(); // a failed assert above must not leave the parked read holding teardown open
+    }
+    assert.strictEqual(launched, 1, 'fresh GETs during it launch nothing');
+    assert.ok(answers.every(res => res.repos.find(r => r.dirName === a.dirName)!.state === 'ok'), 'all three get the one read');
+    await codegraphRunsSettled();
+    assert.strictEqual(f.status(), 1);
+  });
+
   await it('cache: pins on one root each read from their own path and keep their own worktreeMismatch', async () => {
     const top = repo('mono');
     const sub = pinned(path.join(top.dir, '.claude', 'worktrees', 'wt'), false);

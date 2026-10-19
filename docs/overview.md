@@ -98,7 +98,7 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); token-guarded, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
 | `POST /api/open-folder` | open a pinned project's folder with macOS `open`. Token-guarded, path must be a listed pin's, 501 off macOS (see [git-stats](subsystems/git-stats.md)) |
 | `GET /api/git-stats` | local git state of every pinned project, in pin order, plus the fetch clock and each repo's last-fetch verdict; a repo that fails is its own `error` row (see [git-stats](subsystems/git-stats.md)) |
-| `GET /api/codegraph` | the `codegraph` CLI's state of every pinned project, in pin order: index health, watcher, run in flight, last run; `cli: 'missing'` once for the payload (see [codegraph](subsystems/codegraph.md)) |
+| `GET /api/codegraph` | the `codegraph` CLI's state of every pinned project, in pin order: index health, watcher, run in flight, last run; `cli: 'missing'` once for the payload; `?fresh=1` (Re-read status) skips the status cache (see [codegraph](subsystems/codegraph.md)) |
 | `POST /api/codegraph/run` | `{dirName, kind: 'sync' \| 'reindex'}`: start `codegraph sync` / `index` on a pinned, indexed repo and answer at once. Token-guarded like `git-fetch`; 404 not indexed, 409 already running (see [codegraph](subsystems/codegraph.md#runs)) |
 | `POST /api/git-fetch` | `git fetch origin` over every pinned repo now, answering with the fetch clock; token-guarded write path (see [git-stats](subsystems/git-stats.md#the-fetch)) |
 | `GET /api/configs`, `/project`, `/file` | config browser index / scope / file body |

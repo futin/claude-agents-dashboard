@@ -43,6 +43,10 @@ The store keeps one status result per **(graph root, pin path)**, since `worktre
 across repos. There is **no timer and no Git-style watched flag**: a read only ever starts inside a GET, so a closed tab costs nothing, and the client's 30 s poll keeps each entry
 fresh enough. Seven indexed pins read back to back are ~8 s of CPU, which is why the poll must not run the CLI per request (timings below).
 
+`GET /api/codegraph?fresh=1` is the one exception, and only the popover's **Re-read status** key sends it (`useCodegraph`'s `refresh()`; a Sync / Reindex answer re-polls with
+`poll()`, which does not). It skips the cache and awaits a status read for every indexed pin, joining a read already in flight rather than starting a second, so a burst of re-reads
+still costs at most one CLI run per pin.
+
 A run's end drops that root's entries, and so does a `rebuild.pid` seen live on one GET and dead on the next (a terminal's rebuild, or one that outlived a server restart), so the next
 GET re-reads instead of showing pre-run numbers for the rest of the TTL. A run in flight with no record of its own but a live `rebuild.pid` is synthesised as
 `run: { kind: 'reindex', startedAtMs: <its startedAt> }`, so the client's fast poll and disabled keys work for it. `seenRebuild` is cleared when our own reindex ends, so dropping

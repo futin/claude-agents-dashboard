@@ -32,7 +32,7 @@ import type { CodegraphLayoutProps } from './CodegraphParts';
 export default function CodegraphView() {
   const cg = useCodegraph();
   const { data, error } = cg;
-  const runCtl = useCodegraphRun(cg.refresh);
+  const runCtl = useCodegraphRun(cg.poll);
   const [token] = useAnswerToken();
   const tokenMissing = runCtl.tokenRequired === true && token === '';
   const readOnly = runCtl.writeAccess === 'none';
