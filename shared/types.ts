@@ -63,6 +63,11 @@ export interface Session {
    * when no record in the transcript's head window carried one.
    */
   projectPath: string | null;
+  /**
+   * Name of the main checkout when `projectPath` is a linked git worktree (`zen-joliot-19719c` → `backlog-manager`), else null. Display only: `project`
+   * stays the worktree folder, because the project filter, pinned projects and the chat drawer key on it. See `server/lib/worktree-repo.ts`.
+   */
+  repo: string | null;
   /** User-set custom title from Claude Code (custom-title record); null when unnamed. */
   sessionName: string | null;
   gitBranch: string | null;

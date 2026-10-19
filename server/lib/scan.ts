@@ -13,6 +13,7 @@ import { readAgentsCached } from './agents-cache.js';
 import { SUBAGENT_DIR } from './subagent-usage.js';
 import { refreshCwd } from './token-refresh.js';
 import { readSessionTasks } from './tasks.js';
+import { repoNameFor } from './worktree-repo.js';
 import { readSessionAnalyticsLog, lessonForSession } from './sessionAnalyticsLog.js';
 import type { SessionAnalyticsLesson } from './sessionAnalyticsLog.js';
 import type { Config } from './config.js';
@@ -639,6 +640,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       id: c.id,
       project,
       projectPath,
+      repo: repoNameFor(projectPath),
       sessionName: parsed.sessionName || null,
       gitBranch: parsed.gitBranch || null,
       model: parsed.model || '',
