@@ -147,6 +147,7 @@ import { run as runAnswerToken } from './answer-token.test.js';
 import { run as runCron } from './cron.test.js';
 import { run as runScheduleFile } from './schedule-file.test.js';
 import { run as runRunSchedule } from './run-schedule.test.js';
+import { run as runScheduleLog } from './schedule-log.test.js';
 import { run as runSyncPlugin } from './sync-plugin.test.js';
 
 let failed = 0;
@@ -297,6 +298,7 @@ failed += runAnswerToken();
 failed += runCron();
 failed += runScheduleFile();
 failed += await runRunSchedule();
+failed += runScheduleLog();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

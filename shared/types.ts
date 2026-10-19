@@ -2029,3 +2029,70 @@ export interface ScheduleJob {
   /** `shell` only: the inner text of the body's first ```bash fence. */
   script: string | null;
 }
+
+/** One step of a scheduled run, folded from its `step-start` / `step-end` log records. `outcome` is null while the step is in flight (or its run was lost). */
+export interface ScheduleStep {
+  index: number;
+  /** The pin name for a `foreach:` job, null for a single-cwd job. */
+  repo: string | null;
+  cwd: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  outcome: 'ok' | 'failed' | 'skipped' | 'timeout' | 'stopped' | null;
+  ms: number | null;
+  exit: number | null;
+  why: string | null;
+  /** Shell steps only: the last lines of combined output. */
+  tail: string | null;
+  /** Claude steps only; null for shell steps and steps still running. */
+  costUsd: number | null;
+  /** input + cache creation + cache read, summed by the wrapper — never re-derived. */
+  tokensIn: number | null;
+  tokensOut: number | null;
+  turns: number | null;
+  model: string | null;
+  /** Claude steps only: the id `--session-id` gave the child, what `GET /api/sessions/:id/row` opens. */
+  sessionId: string | null;
+}
+
+/** One run of a scheduled job, or a refusal, as the server folds them from `~/.claude/schedules/runs/*.jsonl`. */
+export interface ScheduleRun {
+  /** The wrapper's uuid; a refusal has none in the log, so its id is `refused-<machine>-<job>-<epoch ms>`. */
+  id: string;
+  job: string;
+  machine: string;
+  trigger: 'schedule' | 'manual';
+  startedAt: string;
+  endedAt: string | null;
+  ms: number | null;
+  late: boolean;
+  /** `lost` is derived at read time, never logged: a start with no end whose wrapper is gone or past the age rule. */
+  state: 'running' | 'ok' | 'failed' | 'lost' | 'refused';
+  /** Step counts: the `end` record's, or counted from the step records so far when the run has none. */
+  ok: number;
+  failed: number;
+  skipped: number;
+  /** How many steps the wrapper planned (`start.steps`); `steps` may hold fewer while it runs or after a stop. */
+  total: number;
+  stopped: boolean;
+  /** Set only when the run failed before its first step. */
+  error: string | null;
+  /** A refusal's reason, or why a run reads lost. */
+  why: string | null;
+  steps: ScheduleStep[];
+}
+
+/** The Jobs band over a window of whole local days ending today, plus the cost and run count of the window before it. */
+export interface ScheduleStats {
+  runs: number;
+  ok: number;
+  failed: number;
+  lost: number;
+  costUsd: number;
+  tokensIn: number;
+  tokensOut: number;
+  wallMs: number;
+  /** Exactly `days` local days, oldest first, `YYYY-MM-DD`; a lost run counts as failed here. */
+  byDay: Array<{ day: string; ok: number; failed: number }>;
+  prev: { costUsd: number; runs: number };
+}
