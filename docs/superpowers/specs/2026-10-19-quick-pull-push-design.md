@@ -83,7 +83,8 @@ Pull fast-forwards **every ref it safely can**, from origin, in one click:
 | On a branch other than the trunk, `trunkVsOrigin.behind > 0`, `ahead == 0`, trunk not checked out in any worktree | move the local trunk ref forward without a checkout |
 
 Upstream cases row 2 leaves out: an upstream on another remote, or `origin/<trunk>` itself (a branch tracking the trunk), gets no current-branch pull —
-the trunk row still applies on its own. `currentVsUpstream.counts: null` (upstream gone) disables it with `Upstream gone — use Sync`.
+the trunk row still applies on its own. `currentVsUpstream.counts: null` (upstream gone) blocks only the current-branch part; it is the Pull sub-line
+`Upstream gone — use Sync` only when no other part applies.
 
 Row 3 needs to know where the trunk is checked out, which the client cannot see today (`branches` excludes the trunk). The reader gains one read-only
 field, `trunkCheckedOutElsewhere: boolean` on the `ok` variant: true when the local trunk ref's `%(worktreepath)` (already read for every ref,
@@ -121,7 +122,10 @@ The server never trusts the client's view: it re-reads the repo's state right be
 - the server's fetch-all is in flight (answer 409, copy `A fetch is running — try again in a moment`), or another quick op is running on the same **git
   common dir** (linked worktrees share refs, so the lock is keyed the way fetch-all already groups repos); a different repo may run in parallel. The other
   direction: the fetch timer's tick does not start fetch-all while any quick-op lock is held, and `fetchAll` (timer or Fetch all key) awaits every held
-  quick-op lock before `runFetch` starts, so the button just takes a second or two longer and no `lock` fetch error is recorded;
+  quick-op lock before `runFetch` starts, so the button just takes a second or two longer and no `lock` fetch error is recorded. Ordering, against
+  `git-fetch.ts:221-226`: the join check stays first (a second press joins, D6); the wait for held locks lives **inside** the promise stored in `inFlight`,
+  before `runFetch`; and "fetch-all is in flight" for the 409 means `inFlight !== null` (not `runningSinceMs`), so it covers the waiting phase too and the
+  set of held locks only shrinks while fetch-all waits;
 - the repo has no origin, or is not `ok`.
 
 A running git-sync session is **client-side only**: runs live in each browser's `localStorage`, the server has no record of them, so the menu disables Pull
@@ -154,6 +158,7 @@ module is a writer and gets its own section in that doc (or a sibling doc with a
 | Where | Text |
 |---|---|
 | Pull sub-line, trunk on it | `Fast-forward main by N commit(s)` |
+| Pull sub-line, current branch only | `Fast-forward fix/x by N commit(s)` |
 | Pull sub-line, trunk elsewhere | `Move main forward N commit(s)` |
 | Pull sub-line, both | `fix/x by N · main by M` |
 | Push sub-line | `N commit(s) to origin/feat/x` |
@@ -171,12 +176,21 @@ module is a writer and gets its own section in that doc (or a sibling doc with a
 | Result, pulled | `claude-global: pulled 1 commit into main.` |
 | Result, trunk moved | `guide-manager: moved main forward 5 commits.` |
 | Result, both | `guide-manager: pulled 3 commits into fix/x, moved main forward 5.` |
+| Result, one part moved, one refused | one line: `guide-manager: moved main forward 5 commits; fix/x refused — <git's first stderr line>. Use Sync.` |
 | Result, pushed | `claude-agents-dashboard: pushed 2 commits to origin/feat/x.` |
 | Result, refusal | `claude-global: git refused — <git's first stderr line>. Use Sync.` |
 | Result, fetch running | `claude-global: a fetch is running — try again in a moment.` |
 | Result, timeout | `claude-global: git took over 60s and was stopped. Use Sync.` |
 
-The mockups' copy (`Fast-forward main by 1 commit`, `Pulled 1 commit into main.` without a prefix, `Read-only…` truncated) is superseded by this table.
+Every sub-line, pill label and result string in the mockups is superseded by this table — among them `main has diverged from origin`, `main is PR-only` and
+`fix/deck-paths has diverged` without `— use Sync`, the unprefixed `Pulled 1 commit into main.`, and the two-sentence move-plus-refusal result. The pills
+themselves are unchanged from today; the mockups' pill text is sample data.
+
+**Precedence.** A disabled item shows one reason, the first that applies, in this order: write access → sync running → detached → (Pull) every part blocked:
+show the current-branch part's reason if the repo is on a branch with an upstream, else the trunk part's; (Push) on the trunk → `main is PR-only — use Sync`
+when `trunkVsOrigin.ahead > 0`, else `Nothing to push`; no upstream → upstream gone → diverged → nothing to push. On the trunk `currentVsUpstream` is
+null by contract, so `No upstream` never shows there. For Push, an upstream on another remote or `origin/<trunk>` reads as `No upstream — use Sync`. Trunk `ahead > 0` with `behind == 0` blocks only the trunk part of Pull (`Nothing to pull` when
+nothing else applies).
 
 Wording is the builder's to polish; the rule is that every disabled item says why, and every result names repo, branch and direction.
 
