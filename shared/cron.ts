@@ -91,6 +91,9 @@ export function parseCron(expr: string): CronParse {
   };
 }
 
+// Epoch arithmetic, not setSeconds: inside the repeated fall-back hour a local-field write resolves to the first pass and moves the time back an hour.
+const floorToMinute = (d: Date): number => Math.floor(d.getTime() / MINUTE_MS) * MINUTE_MS;
+
 function dayMatches(c: Cron, t: Date): boolean {
   const dom = c.dom.has(t.getDate());
   const dow = c.dow.has(t.getDay());
@@ -101,9 +104,7 @@ function dayMatches(c: Cron, t: Date): boolean {
 export function nextAfter(cron: Cron, from: Date): Date | null {
   const limit = new Date(from);
   limit.setFullYear(limit.getFullYear() + SEARCH_YEARS);
-  let t = new Date(from);
-  t.setSeconds(0, 0);
-  t = new Date(t.getTime() + MINUTE_MS);
+  let t = new Date(floorToMinute(from) + MINUTE_MS);
   while (t.getTime() <= limit.getTime()) {
     const y = t.getFullYear(), mo = t.getMonth(), d = t.getDate(), h = t.getHours();
     let next: Date;
@@ -122,9 +123,8 @@ export function nextAfter(cron: Cron, from: Date): Date | null {
 export function lastBefore(cron: Cron, from: Date): Date | null {
   const limit = new Date(from);
   limit.setFullYear(limit.getFullYear() - SEARCH_YEARS);
-  let t = new Date(from);
-  t.setSeconds(0, 0);
-  if (t.getTime() === from.getTime()) t = new Date(t.getTime() - MINUTE_MS);
+  const floor = floorToMinute(from);
+  let t = new Date(floor === from.getTime() ? floor - MINUTE_MS : floor);
   while (t.getTime() >= limit.getTime()) {
     const y = t.getFullYear(), mo = t.getMonth(), d = t.getDate(), h = t.getHours();
     let prev: Date;

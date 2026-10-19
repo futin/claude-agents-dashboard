@@ -21,6 +21,16 @@ function sorted(s: Set<number>): number[] {
 // Local-time constructor on purpose: cron fires in the machine's local time, and an ISO string with Z would shift under a non-UTC TZ.
 const at = (y: number, mo: number, d: number, h = 0, mi = 0): Date => new Date(y, mo - 1, d, h, mi);
 
+// Node re-reads process.env.TZ on assignment, so a test can sit in a zone with a real DST transition whatever the machine's own zone is.
+function inZone(tz: string, fn: () => void): void {
+  const prev = process.env.TZ;
+  process.env.TZ = tz;
+  try { fn(); } finally { if (prev === undefined) delete process.env.TZ; else process.env.TZ = prev; }
+}
+
+const utc = (y: number, mo: number, d: number, h: number, mi = 0): Date => new Date(Date.UTC(y, mo - 1, d, h, mi));
+const iso = (d: Date | null): string | null => (d === null ? null : d.toISOString());
+
 export function run(): number {
   console.log('\n=== cron.ts ===\n');
   let p = 0, f = 0;
@@ -215,6 +225,50 @@ export function run(): number {
     assert.strictEqual(describeCron(must('0  9   * *  1,3')), '0 9 * * 1,3');
     assert.strictEqual(describeCron(must('0 9 1 6 *')), '0 9 1 6 *');
   })) p++; else f++;
+
+  // New York falls back 2026-11-01: 01:00 EDT = 05:00Z, then 01:00 EST = 06:00Z, so 01:45 happens at 05:45Z and again at 06:45Z.
+  if (test('DST fall-back: nextAfter is strictly after `from` and never earlier, including inside the repeated hour', () => inZone('America/New_York', () => {
+    const c = must('45 1 * * *');
+    assert.strictEqual(iso(nextAfter(c, utc(2026, 11, 1, 5, 30))), '2026-11-01T05:45:00.000Z');
+    assert.strictEqual(iso(nextAfter(c, utc(2026, 11, 1, 6, 30))), '2026-11-01T06:45:00.000Z');
+    assert.strictEqual(iso(nextAfter(c, utc(2026, 11, 1, 6, 45))), '2026-11-02T06:45:00.000Z');
+    // The slot fires in both passes of the repeated hour, so from the first one the second is next.
+    assert.strictEqual(iso(nextAfter(c, utc(2026, 11, 1, 5, 45))), '2026-11-01T06:45:00.000Z');
+  }))) p++; else f++;
+
+  if (test('DST fall-back: lastBefore is strictly before `from` and finds the same-day slot from inside the repeated hour', () => inZone('America/New_York', () => {
+    const c = must('45 1 * * *');
+    assert.strictEqual(iso(lastBefore(c, utc(2026, 11, 1, 6, 30))), '2026-11-01T05:45:00.000Z');
+    assert.strictEqual(iso(lastBefore(c, utc(2026, 11, 1, 6, 45))), '2026-11-01T05:45:00.000Z');
+    assert.strictEqual(iso(lastBefore(c, utc(2026, 11, 1, 6, 46))), '2026-11-01T06:45:00.000Z');
+  }))) p++; else f++;
+
+  if (test('DST fall-back: chained nextAfter / lastBefore over "*/30" step by exactly 30 absolute minutes through the repeated hour', () => inZone('America/New_York', () => {
+    const c = must('*/30 * * * *');
+    // The step cap keeps a non-monotone regression a failure instead of an endless loop.
+    const fwd: number[] = [];
+    for (let t: Date | null = utc(2026, 11, 1, 4, 0); t !== null && t.getTime() < utc(2026, 11, 1, 8, 0).getTime() && fwd.length < 20; t = nextAfter(c, t)) fwd.push(t.getTime());
+    assert.strictEqual(fwd.length, 8);
+    for (let i = 1; i < fwd.length; i++) assert.strictEqual(fwd[i] - fwd[i - 1], 30 * 60_000, `forward step ${i}`);
+    const back: number[] = [];
+    for (let t: Date | null = utc(2026, 11, 1, 8, 0); t !== null && t.getTime() > utc(2026, 11, 1, 4, 0).getTime() && back.length < 20; t = lastBefore(c, t)) back.push(t.getTime());
+    assert.strictEqual(back.length, 8);
+    for (let i = 1; i < back.length; i++) assert.strictEqual(back[i - 1] - back[i], 30 * 60_000, `backward step ${i}`);
+  }))) p++; else f++;
+
+  // New York springs forward 2026-03-08: 02:00 EST = 07:00Z becomes 03:00 EDT, so wall times 02:00-02:59 do not exist that day.
+  if (test('DST spring-forward: a slot inside the skipped hour is skipped that day; a 03:00 slot lands on 07:00Z', () => inZone('America/New_York', () => {
+    assert.strictEqual(iso(nextAfter(must('30 2 * * *'), utc(2026, 3, 8, 6, 0))), '2026-03-09T06:30:00.000Z');
+    assert.strictEqual(iso(lastBefore(must('30 2 * * *'), utc(2026, 3, 8, 12, 0))), '2026-03-07T07:30:00.000Z');
+    assert.strictEqual(iso(nextAfter(must('0 3 * * *'), utc(2026, 3, 8, 5, 0))), '2026-03-08T07:00:00.000Z');
+    assert.strictEqual(iso(lastBefore(must('0 3 * * *'), utc(2026, 3, 8, 12, 0))), '2026-03-08T07:00:00.000Z');
+  }))) p++; else f++;
+
+  if (test('DST spring-forward: "*/30" goes 06:30Z -> 07:00Z across the gap in both directions', () => inZone('America/New_York', () => {
+    const c = must('*/30 * * * *');
+    assert.strictEqual(iso(nextAfter(c, utc(2026, 3, 8, 6, 30))), '2026-03-08T07:00:00.000Z');
+    assert.strictEqual(iso(lastBefore(c, utc(2026, 3, 8, 7, 0))), '2026-03-08T06:30:00.000Z');
+  }))) p++; else f++;
 
   console.log(`\ncron: ${p} passed, ${f} failed`);
   return f;
