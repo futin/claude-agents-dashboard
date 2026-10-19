@@ -215,8 +215,9 @@ export function getPending(sessionId: string): PendingQuestion | null {
 
 /**
  * Every session with a wait held right now. Read by the session scan so a held
- * question shows on the row itself — the transcript can't tell us (the hook
- * registers during PreToolUse, before the tool_use record is written).
+ * question shows on the row itself — the transcript can't tell us at registration (the hook
+ * registers during PreToolUse, before the tool_use record is written; the record lands ~1s
+ * into the hold, which is why the chat drawer folds its timeline copy — `client/src/lib/heldBody.ts`).
  * A fresh Set: callers never get a handle on the store's keys.
  */
 export function pendingSessionIds(): Set<string> {

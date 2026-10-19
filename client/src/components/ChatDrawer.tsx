@@ -18,6 +18,7 @@ import { useSettings } from '../hooks/useSettings';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
 import { fmtTok } from '../lib/format';
 import { resumeEligible } from '../lib/resume';
+import { heldBodyUuid } from '../lib/heldBody';
 import { formatInterval } from '../lib/settings';
 import { surfacePill } from '../lib/surface';
 import type { ChatMessage, Session } from '../../../shared/types';
@@ -37,7 +38,11 @@ function timeOf(ts: string | null): string {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function Message({ m }: { m: ChatMessage }) {
+/**
+ * `folded` names the tool whose body a pinned panel is showing right now (`lib/heldBody.ts`): that body renders closed, summary still clickable, and
+ * reopens as history once the hold ends.
+ */
+function Message({ m, folded }: { m: ChatMessage; folded?: string }) {
   return (
     <div className={`cmsg ${m.role}`}>
       <div className="cmsg-head">
@@ -52,7 +57,7 @@ function Message({ m }: { m: ChatMessage }) {
       )}
       {m.tools.map((t, i) =>
         t.body ? (
-          <details open className="cmsg-plan" key={i}>
+          <details open={t.name !== folded} className="cmsg-plan" key={i}>
             <summary>
               <Chevron className="cmsg-chev" />
               <span className="tool">{t.name}</span>
@@ -117,6 +122,8 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const { settings: { refreshMs } } = useSettings();
   const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
   const shown = useMemo(() => filterMessages(messages, mode), [messages, mode]);
+  const heldAsk = useMemo(() => heldBodyUuid(messages, 'AskUserQuestion', !!question.pending), [messages, question.pending]);
+  const heldPlan = useMemo(() => heldBodyUuid(messages, 'ExitPlanMode', !!plan.pending), [messages, plan.pending]);
   const surfaceInfo = surfacePill(session.surface);
   // same 70% threshold the row uses — one context reading, two places.
   const ctxPct = session.contextPct || 0;
@@ -280,7 +287,13 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                     {hasMore ? ' — load older, or switch back to “all”.' : '.'}
                   </div>
                 ) : (
-                  shown.map(m => <Message key={m.uuid} m={m} />)
+                  shown.map(m => (
+                    <Message
+                      key={m.uuid}
+                      m={m}
+                      folded={m.uuid === heldAsk ? 'AskUserQuestion' : m.uuid === heldPlan ? 'ExitPlanMode' : undefined}
+                    />
+                  ))
                 )}
               </div>
 
@@ -295,8 +308,9 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                     be live, since a permission prompt blocks the session. */}
                 {session.permissionWait && <PermissionBanner session={session} />}
 
-                {/* An action bar, not a message: the question itself already renders in
-                    the transcript above. Pinned so it stays reachable while scrolling. */}
+                {/* The one full rendering of a held question: its tool_use lands in the
+                    transcript ~1s into the hold, and that copy renders folded until the
+                    hold ends (heldAsk). Pinned so it stays reachable while scrolling. */}
                 <QuestionPanel state={question} />
 
                 {/* Same deal for a proposed plan. The two stores are one-entry-per-

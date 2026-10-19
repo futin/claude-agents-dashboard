@@ -282,9 +282,11 @@ then turn tailnet trust off and use the token; behind a *public* tunnel it is th
   other hold (see [sessions](sessions.md#the-chat-button-is-also-where-a-session-says-it-needs-a-human)). The store is still RAM-only and still read-only
   here — the scan only reads the key set, and gets a copied `Set`, never the store's own.
   `scan.ts` does not import `pending.ts` (injection keeps it pure and testable).
-- **`QuestionPanel` is an action bar, not a message** — pinned between `.chat-body` and
-  `.chat-foot`, since the question text already renders in the transcript as the existing
-  `<details open>` `AskUserQuestion` body. It is fed **only** by the pending store's
+- **`QuestionPanel` is the one full rendering of a held question** — pinned between `.chat-body` and
+  `.chat-foot`. The `AskUserQuestion` tool_use is absent from the transcript only at registration: it lands about 1s into the hold (probe, Claude Code
+  2.1.302, 2026-10-19), and the 3s tail then draws it as a `.cmsg-plan` body too. While the hold lasts, `client/src/lib/heldBody.ts` names the newest such
+  message and the drawer renders its `<details>` closed — summary still clickable — so the question shows once; it reopens as history when the hold ends.
+  A held `ExitPlanMode` folds the same way, since `PlanPanel` renders the plan. It is fed **only** by the pending store's
   structured options, never by re-parsing that markdown. Submit is gated until every
   question has a pick (no tap-to-send: no fat-finger sends from a phone). The deny reason
   will **not** appear as a chat message — `parseChatRecord` drops `tool_result` blocks by
