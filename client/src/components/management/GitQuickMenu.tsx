@@ -43,11 +43,13 @@ export function GitQuickMenu({ anchor, items, label, onClose }: {
     setPos({ left, top });
   }, [anchor]);
 
+  // Once measured: until then the menu is `visibility: hidden`, and a hidden button refuses focus. `items` is fresh every render; focus is placed once.
+  const placed = pos !== null;
   useEffect(() => {
+    if (!placed) return;
     const first = items.findIndex(i => i.enabled);
     itemRefs.current[first === -1 ? 0 : first]?.focus();
-    // `items` is fresh every render; focus is placed once, when the menu opens.
-  }, []);
+  }, [placed]);
 
   useEffect(() => {
     const outside = (e: Event) => {
