@@ -216,6 +216,17 @@ export async function run(): Promise<number> {
     });
   }));
 
+  tally(await testAsync('a run of a deleted job whose wrapper cannot be judged ages out against the default timeout, never running for ever', async () => {
+    await withSchedules('', true, async c => {
+      // Alive but unreadable: the liveness check answers null, so only the age rule can end the run.
+      setScheduleProbe({ alive: () => true, command: () => null });
+      logStart(c, 'gone-old', 'gone', 3 * 3600_000, 5555);
+      logStart(c, 'gone-new', 'gone', 60_000, 5556);
+      const body = (await send(c.h, 'GET', '/api/schedules/runs?job=gone')).json as unknown as ScheduleRunsResponse;
+      assert.deepStrictEqual(body.runs.map(r => [r.id, r.state]), [['gone-new', 'running'], ['gone-old', 'lost']]);
+    });
+  }));
+
   tally(await testAsync('GET /api/schedules/runs is the runs list even with a runs.md on disk, never a job lookup', async () => {
     await withSchedules('', true, async c => {
       writeJob(c, 'runs', job());
