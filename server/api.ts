@@ -1762,7 +1762,8 @@ export async function serveGitQuick(config: Config, req: IncomingMessage, res: S
   }
   const { dirName, op } = body as GitQuickRequest;
   const rows = listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), ...pinOptions() });
-  const pin = rows.find(r => r.dirName === dirName && r.listed && r.path !== null);
+  // Not `listed`: git-stats draws every pin with a path, a linked worktree's included, so the menu it feeds must reach git for the same set.
+  const pin = rows.find(r => r.dirName === dirName && r.path !== null);
   if (!pin || pin.path === null) return sendJson(res, 404, { error: 'not a pinned project' });
   try {
     const answer = await runQuickOp({ name: pin.name, toplevel: pin.path }, op);

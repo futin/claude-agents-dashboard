@@ -174,6 +174,21 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await testAsync('a linked-worktree pin, drawn by /api/git-stats though unlisted, reaches git: 200, not 404', async () => {
+    await withQuickApi(async (h, fx) => {
+      const { work } = behindByOne(fx);
+      const wt = path.join(path.dirname(work), 'work-wt');
+      fx.git(work, ['worktree', 'add', '-q', '-b', 'wt', wt]);
+      const dirName = plantProject(h, 'work-wt', wt);
+      setPinned(dirName, true);
+      const s = spy();
+      overrideQuickRunner(s.run);
+      const reply = await post(h, { dirName, op: 'pull' });
+      assert.equal(reply.status, 200, reply.raw);
+      assert.ok(s.calls() > 0, 'git should have run');
+    });
+  }));
+
   console.log(`\napi git-quick: ${ok}/${total} passed`);
   return total - ok;
 }
