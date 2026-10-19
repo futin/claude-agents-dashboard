@@ -274,7 +274,8 @@ const CORRECTION_RE = /\b(no|nope|wrong|incorrect|not (?:what|right|correct)|act
 
 // Peak context that proves auto-compaction never fired: a 200k window compacts near 160k, so only a larger one (1M puts compaction out of reach)
 // gets a turn past 250k — and every turn replays the whole context, so total input grows with the square of it. Inferred: the transcript records
-// neither the window nor a compaction marker. A turn below half the running peak is a compaction — context only grows between them.
+// no window. Compactions are marked by compact_boundary records, which the COMPACTIONS block in analyzeSession reads, but neverCompacted does not
+// use them. Here a turn below half the running peak is a compaction — context only grows between them.
 const NEVER_COMPACTED_PEAK = 250_000;
 const COMPACTION_DROP_RATIO = 0.5;
 
@@ -467,7 +468,7 @@ export function analyzeSession(filePath, id) {
     "byTool.approxOutputTokens splits each turn's output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.",
     "byTool.resultTokens is what each tool injected into context: its tool_result text sized at chars ÷ 4, summed per call (not split), error text included, images not counted. The firmer per-tool figure and byTool's sort key — but it is context growth, not assistant output; cite both and never add them.",
     'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.',
-    'perTurn.neverCompacted is inferred from peak context, not read from a window field — the transcript records neither the window nor a compaction: true when the peak turn tops 250k combined (a 200k window compacts near 160k) and no turn ever fell below half the running peak.'
+    'perTurn.neverCompacted is inferred from peak context — the transcript records no window, and compactions are marked by compact_boundary records, which this flag does not read: true when the peak turn tops 250k combined (a 200k window compacts near 160k) and no turn ever fell below half the running peak.'
   ];
   if (subagentTotals.count > 0) notes.push("Subagent tokens are summed from each subagent's own transcript and are separate from main-agent totals; whole-session total = totals.combined + subagentTotals.tokens. subagentTotals.usage splits them by class — lead with its billableApprox for cost.");
   if (subagentTotals.fallbackCount > 0) notes.push(`${subagentTotals.fallbackCount} subagent(s) have no complete transcript and are counted at the harness figure (their final context size) — a lower bound.`);

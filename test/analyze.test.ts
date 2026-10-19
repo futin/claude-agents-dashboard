@@ -566,6 +566,12 @@ export function run(): number {
     assert.strictEqual(analyzeSession(ctx([150_000, 30_000, 600_000]))!.perTurn.neverCompacted, false);
   })) p++; else f++;
 
+  if (test('neverCompacted: its notes[] entry names compact_boundary and no longer claims the transcript has no compaction marker', () => {
+    const notes = analyzeSession(ctx([20_000, 90_000]))!.notes;
+    assert.ok(notes.some(n => /perTurn\.neverCompacted/.test(n) && /compact_boundary/.test(n)), notes.join('\n'));
+    assert.ok(!notes.some(n => /neither the window nor a compaction/.test(n)), notes.join('\n'));
+  })) p++; else f++;
+
   if (test('neverCompacted: one turn, and no usage at all, read false rather than undefined', () => {
     assert.strictEqual(analyzeSession(ctx([12_000]))!.perTurn.neverCompacted, false);
     const empty = analyzeSession(fixture([{ timestamp: '2026-07-01T10:00:00Z', message: { role: 'user', content: 'hi' } }]))!;
