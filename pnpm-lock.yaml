@@ -185,8 +185,8 @@ importers:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
       release-kit:
-        specifier: github:futin/release-kit#v1.2.0
-        version: https://codeload.github.com/futin/release-kit/tar.gz/574d3f148a3783d0549e8a7c85395b79b94ec631
+        specifier: github:futin/release-kit#v1.3.0
+        version: https://codeload.github.com/futin/release-kit/tar.gz/d6894b993bce3105dbe7de5230f49688fbecac44
       ui-kit:
         specifier: github:futin/ui-kit#v0.2.0
         version: https://codeload.github.com/futin/ui-kit/tar.gz/39511c4541a69536c2b30dda0aa9d5d193d7ccf1(react@18.3.1)
@@ -999,8 +999,8 @@ packages:
     resolution: {integrity: sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==}
     engines: {node: '>=0.10.0'}
 
-  release-kit@https://codeload.github.com/futin/release-kit/tar.gz/574d3f148a3783d0549e8a7c85395b79b94ec631:
-    resolution: {gitHosted: true, integrity: sha512-alKK4lenhDJAE4fjLtEhKbig4rGWvQus+zrS6ktvyMQkZN+3WZkjA+sAQsBJOzKTHJuY3mg3//1WCSMrCNatnQ==, tarball: https://codeload.github.com/futin/release-kit/tar.gz/574d3f148a3783d0549e8a7c85395b79b94ec631}
+  release-kit@https://codeload.github.com/futin/release-kit/tar.gz/d6894b993bce3105dbe7de5230f49688fbecac44:
+    resolution: {gitHosted: true, integrity: sha512-dn1K6l8ubfVs3UIofGNZ8t4kVOdpDTCMlqumkghwAyiGWBlxe2kgaFvNsMfyW+0bCvym6B/S6Lf+YFipRj2kUg==, tarball: https://codeload.github.com/futin/release-kit/tar.gz/d6894b993bce3105dbe7de5230f49688fbecac44}
     version: 0.0.0
     engines: {node: '>=22'}
 
@@ -1755,7 +1755,7 @@ snapshots:
     dependencies:
       loose-envify: 1.4.0
 
-  release-kit@https://codeload.github.com/futin/release-kit/tar.gz/574d3f148a3783d0549e8a7c85395b79b94ec631: {}
+  release-kit@https://codeload.github.com/futin/release-kit/tar.gz/d6894b993bce3105dbe7de5230f49688fbecac44: {}
 
   require-directory@2.1.1: {}
 
