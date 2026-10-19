@@ -47,16 +47,21 @@ Per pinned project (`listPinRows`, same as `/api/git-stats` — paths never come
 
 - A dead pin (`path: null` or `listed: false`, `server/lib/management.ts`) → `state: 'missing'`, no CLI launch. It ranks with *Not indexed* (the `none`
   level) and reads "Folder gone" there, the same chip Projects draws.
-- Otherwise run `codegraph status --json` with `cwd` = the pin's path. The pin's path may be a subdirectory of the repo; the CLI walks up to the nearest
-  `codegraph.db` itself, so no repo-root resolution is needed. `initialized: false` in the answer (exit 0, e.g. a bare `.codegraph/` with no DB) →
-  `state: 'none'`. The run goes through `execFile` (argv, no shell) with its own timer, as `git-stats.ts` does (see its
+- Otherwise resolve the pin's **graph root** once, server-side: the pin's path or its nearest ancestor holding `.codegraph/codegraph.db` (a bare
+  `.codegraph/` without the DB does not count), the same walk as the CLI's `resolveProjectPath` (`dist/bin/codegraph.js`, 1.6.2). The pin's path may be a
+  subdirectory of the repo, so every later use — the `none` short-circuit, the run's `404`, every pid file, every launch's `cwd` — goes through the root.
+  No root → `state: 'none'`, no CLI launch. Otherwise run `codegraph status --json` with `cwd` = the root; `initialized: false` in the answer (exit 0)
+  → `state: 'none'` as well. The run goes through `execFile` (argv, no shell) with its own timer, as `git-stats.ts` does (see its
   #168 note on `execFile`'s `timeout`). Non-zero exit, timeout or unparsable JSON → `state: 'error'` with a one-line reason.
-- CLI missing from the server's `PATH` → the whole payload says so once (`cli: 'missing'`), not one error per repo. Note that this machine's `codegraph` is under
+- CLI missing from the server's `PATH` → the whole payload says so once (`cli: 'missing'`), not one error per repo. Detection mirrors `readRepo` in
+  `server/lib/git-stats.ts`: a spawn `ENOENT` while the `cwd` is still a directory means the CLI is missing; `ENOENT` with the `cwd` gone means that one
+  repo is `missing` (its folder vanished since the stat), never the whole page. Note that this machine's `codegraph` is under
   nvm's bin dir; the builder confirms the server process inherits that `PATH` under both `pnpm dev` and `pnpm start`.
 
 The fields the status JSON carries today (codegraph 1.6.2) and this view uses: `lastIndexed`, `fileCount`, `nodeCount`, `edgeCount`, `dbSizeBytes`,
 `nodesByKind`, `languages` (names only), `pendingChanges.{added,modified,removed}`, `worktreeMismatch`, `version`, and `index.{state, reindexRecommended,
 builtWithExtractionVersion, currentExtractionVersion}`. Pass them through typed in `shared/types.ts`; the client never sees raw CLI output.
+**Symbols** everywhere in the view is `nodeCount` as the CLI reports it, file nodes included; the kinds strip's "other" therefore includes `file`.
 `index.state` is `'indexing' | 'complete' | 'partial' | 'failed' | null` (`dist/index.d.ts`, `getIndexState`); `null` means the index predates the marker and
 is read as `complete`. `builtWithVersion` / `builtWithExtractionVersion` are null for an index built before stamping: the Extractor cell shows `—` and the
 Inspector fact reads "extractor unknown (older index)".
@@ -67,26 +72,33 @@ sources on disk: `<repo>/.codegraph/daemon.pid`, and `~/.codegraph/daemons/*.jso
 checked alive (`process.kill(pid, 0)`), since a crashed daemon leaves its file. `startedAt` feeds the Inspector's "Running since". Which source wins is the
 builder's call.
 
-**A live rebuild** is a `.codegraph/rebuild.pid` whose pid is alive. The server reads it on every refresh and, when it is live and no run of its own is
-recorded, synthesises `run: { kind: 'reindex', startedAtMs: <its startedAt> }`, so the client's 3 s poll and disabled keys work for a rebuild started from a
+**A live rebuild** is a `.codegraph/rebuild.pid` whose pid is alive. **A live sync lock** is a `.codegraph/codegraph.lock` (bare pid) whose pid is alive —
+a `codegraph sync` from a terminal, or the watcher's own write. Pid liveness is cheap (a file read and `process.kill(pid, 0)`), so the server checks the pid
+files on **every `GET`**, not on the cached status refresh. When a rebuild is live and no run of its own is recorded, the server synthesises `run: { kind: 'reindex', startedAtMs: <its startedAt> }`, so the client's 3 s poll and disabled keys work for a rebuild started from a
 terminal or before a server restart. While a rebuild is live, a status read that fails or times out does **not** turn the repo to `error`: the last good stats
-are kept and the run is shown.
+are kept and the run is shown. When there are no good stats yet (the server started mid-rebuild), the repo is `state: 'building'`: no stats fields, the
+run shown, ranked `quiet` with the line "Indexing… — numbers when it finishes".
 
 ### Cost
 
 The server keeps a per-repo cache of the last status result and refreshes it in the background, at most one CLI run per repo at a time and a small concurrency
 cap across repos. A `GET` answers from the cache immediately. Use Git's watched-only idea (`markGitWatched` in `git-fetch.ts`): refresh only while a client has
 asked recently, so a closed tab costs nothing. Exact TTL, cap and whether to share Git's watch flag are the builder's call; the constraint is the anti-goal above.
+**A run's end invalidates that repo's cache entry** — ours finishing, or a synthesised rebuild whose pid has died — so the next `GET` triggers a fresh
+read instead of showing pre-run stats ("N pending" after a sync) for the rest of the TTL.
 
 ### API
 
 - `GET /api/codegraph` — `{ generatedAt, cli: 'ok' | 'missing', repos: CodegraphRepo[] }`, repos in pin order. Each repo: `dirName`, `name`, `path`, `state`
-  (`ok | none | missing | error`), the status fields above when `ok`, `watching: boolean`, `run: null | { kind: 'sync' | 'reindex', startedAtMs }`, and
+  (`ok | building | none | missing | error`), the status fields above when `ok`, `watching: boolean`, `run: null | { kind: 'sync' | 'reindex', startedAtMs }`, and
   `lastRun: null | { kind, ok, endedAtMs, message }` so a failed sync is visible after it ends.
 - `POST /api/codegraph/run` — `{ dirName, kind: 'sync' | 'reindex' }`. Write-guarded exactly like `POST /api/git-fetch`: `refuseWrite` (`server/api.ts`), so
   local and trusted-tailnet peers need no token and others need the Answer token; the client gates its keys on `tokenRequired` / `writeAccess` as `GitView`
-  does. `dirName` must be a listed pin with `.codegraph/`; `409` if a run is already going on that repo (ours, or a `.codegraph/rebuild.pid` that is alive).
-  Starts the CLI detached from the request and answers at once; the next poll shows `run`. Refusals in order: `405` non-POST, `403` (`refuseWrite`), `400` bad
+  does. `dirName` must be a listed pin with a graph root; `409` if a run is already going on that repo (ours, a live `rebuild.pid`, or a live
+  `codegraph.lock` while no watcher is running — with a watcher the lock is the watcher's and a sync is allowed, see the lock-loss rule).
+  Starts the CLI detached from the request and answers at once; the next poll shows `run`. Argv is exactly `codegraph sync` / `codegraph index` — no path
+  argument (`index <path>` does not walk up), no `-q` (quiet suppresses the lock-loss line the rule below keys on) — with `cwd` = the graph root and
+  `stdio: ['ignore', 'pipe', 'pipe']` (stdin not a TTY, so `index` never prompts). `lastRun.message` is the last non-empty stderr line, else stdout's. Refusals in order: `405` non-POST, `403` (`refuseWrite`), `400` bad
   body, `403 not a pinned project` (as `open-folder` answers), `404 not indexed`, `409 already running`, then `200`.
 
 ## Levels
@@ -97,10 +109,27 @@ Read each repo into problems with a severity, exactly as `gitLevels.ts` does, an
 | ----- | ---------- | ---- |
 | `needs` (sev 3) | Needs you | `reindexRecommended`; `index.state: 'partial'` (the build dropped files); `'failed'`; `'indexing'` with **no** live `rebuild.pid` (a build that never finished: the index is truncated, as `codegraph status` itself warns); `state: 'error'`; a `lastRun` that failed |
 | `look` (sev 2) | Worth a look | pending changes > 0 **and** no watcher running; `worktreeMismatch` non-null (author's call — the mock's legend did not place it) |
-| `quiet` | All good | an `ok` repo with neither of the above. Pending changes with a watcher running are quiet: the watcher will catch up |
+| `quiet` | All good | an `ok` repo with neither of the above, or a `building` repo. Pending changes with a watcher running are quiet: the watcher will catch up |
 | `none` | Not indexed | `state: 'none'` (no graph) or `'missing'` (dead pin). Takes the slot Git gives *Can't read* |
 
 `state: 'error'` is *Needs you*, not its own level, because the fix (Reindex) is the same.
+
+**Copy per problem** (the first two rows are the approved mock's, verbatim; the rest are the author's call, same voice). `<old>`/`<new>` are extraction
+versions, `<n>` counts. A repo with several problems leads with the highest-severity verdict and lists every problem's steps.
+
+| Problem | Chip | Verdict | Steps | Matrix pill |
+| ------- | ---- | ------- | ----- | ----------- |
+| `reindexRecommended` | `reindex` amber | Built by an older codegraph extractor (v`<old>`, now v`<new>`). Queries can miss symbols until it is rebuilt. | `<files> files · <symbols> symbols · <db>: a full rebuild takes a few minutes` | Extractor `v<old> → v<new>` |
+| pending, no watcher | `<n> pending` mustard + `no watcher` dashed | `<n>` files changed since the last index. | `<m> modified · <a> added · <r> removed` (zero parts dropped), `Indexed <age> ago` | Changes `<n> pending` |
+| `partial` | `partial` amber | The last index skipped some files, so the graph is incomplete. | Reindex to rebuild it in full. | Index `partial` |
+| `failed` | `failed` amber | The last index failed. | Reindex to rebuild it. | Index `failed` |
+| `indexing` at rest | `unfinished` amber | An index run stopped before it finished, so the graph is truncated. | Reindex to rebuild it. | Index `unfinished` |
+| `state: 'error'` | `can't read` amber | Couldn't read codegraph status: `<reason>`. | Reindex if this persists. | Index `can't read` |
+| failed `lastRun` | `sync failed` / `reindex failed` amber | The last `<sync\|reindex>` failed: `<message>`. | Try again, or Reindex. | — |
+| `worktreeMismatch` | `other worktree` mustard | This index was built from another worktree of the repo. | Reindex here to rebuild it from this checkout. | Index `other worktree` |
+
+Inspector chip on a quiet repo: `up to date`. Popover subs: **Re-read status** "Ask codegraph again now"; **Sync all behind** "`<n>` repos with pending
+changes and no watcher" / disabled "Nothing behind" / disabled "Needs the Answer token".
 
 **A build in progress** is a live `.codegraph/rebuild.pid` only — never `index.state: 'indexing'` on its own, which at rest means a killed build. It is drawn
 as a run (cyan "Indexing…" chip, keys disabled) whatever started it: a terminal, another session, or this server before a `tsx watch` restart dropped its
@@ -109,7 +138,8 @@ in-memory `run`. It adds no problem and does not change the level.
 **When a failed run stops counting** (author's call): `lastRun` is held in memory, so a server restart clears it; otherwise it clears on the next successful run
 of either kind. A `sync` that loses `codegraph.lock` to a live watcher is **not** a failure — the watcher is already doing the work — and is recorded as
 `ok` with the message "watcher is syncing it". The rule: exit code ≠ 0, **and** the output contains `could not acquire the file lock` (the CLI's
-`LockUnavailableError` text, 1.6.2), **and** the repo had `watching: true` when the run launched. Without a watcher the same exit is a failure.
+`LockUnavailableError` text, 1.6.2), **and** the repo had `watching: true` when the run launched. Without a watcher the same exit is a failure — but
+without a watcher a live `codegraph.lock` already answered `409` before launch, so that case means a lock taken in the launch window.
 
 ## Client
 
@@ -163,9 +193,11 @@ All spec'd strings live in one `codegraphText.ts`, as Git's do.
 
 - Levels and ranking: one case per row of the Levels table, plus the mirror cases (pending **with** a watcher is quiet; reindexRecommended **with** a watcher
   is still needs).
-- Status parsing: real 1.6.2 JSON fixture → typed repo; garbage, empty stdout, non-zero exit, timeout → `error` with reason; no `.codegraph/` → `none` without
-  launching the CLI.
+- Status parsing: real 1.6.2 JSON fixture → typed repo; garbage, empty stdout, non-zero exit, timeout → `error` with reason; no graph root → `none` without
+  launching the CLI; a pin in a subdirectory of an indexed repo resolves to that repo's root; spawn `ENOENT` with the cwd present → `cli: 'missing'`, with
+  the cwd gone → that repo `missing`.
 - Watcher detection: live pid → true; dead pid file → false; no file → false.
+- Cache invalidation: a run ending drops that repo's entry (the next `GET` re-reads); mirror — a `GET` with no run ending answers from cache.
 - `POST /api/codegraph/run`: each refusal code in order, `409` on a second run, `dirName` not a pin, pin not indexed. The run itself through an injected
   runner, never the real CLI.
 - Cache: a burst of `GET`s runs the CLI at most once per repo per refresh window; no client watching → no runs.
