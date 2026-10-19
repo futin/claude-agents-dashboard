@@ -3160,7 +3160,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .cg-pane-why{display:flex;flex-direction:column;gap:4px}
 .cg-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .cg-tile{background:var(--strip-hi);border-radius:12px;padding:10px 12px;min-width:0}
-.cg-tile b{display:block;font-size:20px;font-weight:600;letter-spacing:-.02em;color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.cg-tile b{display:block;font-size:20px;font-weight:600;letter-spacing:-.02em;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
 .cg-tile span{font-size:12px;color:var(--ink2)}
 .cg-kinds-wrap{display:flex;flex-direction:column;gap:10px}
 .cg-kinds{display:flex;gap:2px;height:8px;border-radius:999px;overflow:hidden}
@@ -3177,4 +3177,3 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .cg-facts dt{color:var(--ink3)}
 .cg-facts dd{margin:0;color:var(--ink);overflow-wrap:anywhere}
 .cg-foot{display:flex;gap:6px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--hairline)}
-@media (min-width:640px){.cg-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
