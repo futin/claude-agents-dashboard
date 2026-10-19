@@ -144,6 +144,7 @@ import { run as runApiReleases } from './api-releases.test.js';
 import { run as runPluginManifest } from './plugin-manifest.test.js';
 import { run as runTmpRoot } from './tmp-root.test.js';
 import { run as runAnswerToken } from './answer-token.test.js';
+import { run as runCron } from './cron.test.js';
 import { run as runSyncPlugin } from './sync-plugin.test.js';
 
 let failed = 0;
@@ -291,6 +292,7 @@ failed += runPluginManifest();
 failed += runSyncPlugin();
 failed += runTmpRoot();
 failed += runAnswerToken();
+failed += runCron();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);
