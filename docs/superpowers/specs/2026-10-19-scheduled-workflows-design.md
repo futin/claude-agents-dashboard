@@ -3,8 +3,8 @@
 Date: 2026-10-19. Issue: [futin/claude-agents-dashboard#247](https://github.com/futin/claude-agents-dashboard/issues/247). Mockups:
 `docs/superpowers/specs/2026-10-19-scheduled-workflows-mockups.html` (the Ledger layout was picked; a tiles-and-inspector layout and a week strip were
 drawn and dropped). Brainstormed 2026-10-19; every "theirs" decision below was answered by the user in that session. Where the mockup and this document differ, this
-document wins: screen 6's `schedule · git-sync-all` chip, `Open in Sessions` and `Resume…` stay (the drawer's own controls), its `Run lookout again`
-button is the fold's `run again` link, and the mechanics board's `~/.claude/schedule-runs/mac.jsonl` is `~/.claude/schedules/runs/mac.jsonl` below.
+document wins: screen 6 is the existing `ChatDrawer` unchanged — its `schedule · git-sync-all` chip, `Open in Sessions` and `Run lookout again` are
+not built (the drawer has no such controls and does not know the job; `run again` lives in the fold), and the mechanics board's `~/.claude/schedule-runs/mac.jsonl` is `~/.claude/schedules/runs/mac.jsonl` below.
 
 ## Intent
 
@@ -39,7 +39,10 @@ uses, and all of it keeps firing with the dashboard closed. A job that needs non
 
 - A scheduler inside the dashboard server. No timers, no queue. The OS fires jobs; the server only installs, launches on demand, and reads.
 - Running a job on a machine the file does not name, or on the machine the dashboard happens to be open on. `machines:` decides.
-- An idle guard ("skip if the user is typing"). Considered and not chosen: jobs run at the hour they are given.
+- An idle guard ("skip if the user is typing"). Considered and not chosen: jobs run at the hour they are given, or, on a Mac that was asleep at that
+  hour, when it wakes — launchd fires a missed `StartCalendarInterval` on wake, cron on WSL skips it. The wrapper computes the slot a scheduled fire
+  belongs to (`cron.ts` `lastBefore(expr, now)`) and sets `late: true` on the `start` record when it is more than 10 minutes past it; the row and the
+  Runs page show `late` beside the time. Nothing is skipped.
 - Secrets, tokens or credentials in job files. The folder is a git repo; the wrapper inherits the user's login environment and nothing more.
 - A form-field editor over the frontmatter. The raw file in a drawer was chosen; the one helper above it (Repos) rewrites a single line.
 - Windows outside WSL, Linux outside WSL, systemd timers. The two profiles `bootstrap.sh` knows are the two this ships for, and WSL means cron.
@@ -79,7 +82,7 @@ cwd: ~/Documents/x            # only without foreach; default = the schedules fo
 enabled: true                 # absent = true
 model: opus                   # claude only; absent = CLI default
 effort: medium                # claude only
-permission-mode: acceptEdits  # claude only; default = the Sync button's (`SYNC_PERMISSION_MODE`, `auto`); bypassPermissions refused
+permission-mode: acceptEdits  # claude only; plan | acceptEdits | auto; default = the Sync button's (`SYNC_PERMISSION_MODE`, `auto`)
 allowed-tools: [Bash, Read]   # claude only; absent = CLI default
 max-turns: 60                 # claude only
 timeout: 30m                  # both; wrapper kills the step after this; default 60m
@@ -96,7 +99,10 @@ timeout: 30m                  # both; wrapper kills the step after this; default
   shown on Management › Projects (the repo folder basename). A name not pinned on the running machine is skipped there and logged as `skipped: not pinned`.
   Two pins sharing a basename on a machine (a worktree, a fork) make that name ambiguous there: validation refuses the file naming both `dirName`s, and the
   file uses the `dirName` instead. The step's cwd is the pin's own path (`PinRow.path`), not the git toplevel.
-- Frontmatter keys the parser does not know are rejected at validation with the key named. `machines:` and `foreach:` lists are the inline `[a, b]` form
+- `permission-mode` accepts `plan`, `acceptEdits` and `auto` only — `bypassPermissions`, `dontAsk` and anything else is an error (never clamped to
+  `auto` the way `spawn.ts` `modeIndex` does). `model` and `effort` are single tokens without whitespace, passed through as `--model` / `--effort`;
+  a value the CLI rejects fails the step with the CLI's stderr as `why`. Frontmatter keys the parser does not know are rejected at validation with the
+  key named. `machines:` and `foreach:` lists are the inline `[a, b]` form
   only; the parser's block-scalar support stays as is.
 
 **Pins on disk.** The wrapper never calls the dashboard. The server writes `~/.claude/schedules/pins.json` — `[{ dirName, name, path }]` in pin order,
@@ -115,17 +121,20 @@ file and its installed job agree on which machine they are on.
 
 Pins, settings and the write routes are per checkout (`server/lib/settings.ts` keeps `.dashboard-settings.json` under `process.cwd()`), and this user
 routinely runs a second server from a worktree on 4273 to verify a branch. Only one server per machine may install OS jobs, write `pins.json` or sweep
-locks: the one whose `.env` sets `SCHEDULES_OWNER=true`. Every other server serves the Schedules tab read-only — jobs, runs and stats, with the toolbar
-chip reading `read-only · owned by another server` and every write control hidden — and never touches `~/.claude/schedules/` or the OS. A worktree has no
-`.env`, so it is never the owner by accident. Two owners on one machine is a misconfiguration the reconcile chip reports when it finds a lock or plist it
-did not write in this process's lifetime; it is not otherwise detected.
+locks: a server opts in with `SCHEDULES_OWNER=true` in its `.env`, and on start takes `~/.claude/schedules/owner.json` (`{ pid, bootId, cwd, port, at }`)
+if the file is absent or its pid is dead or from another boot. A second opted-in server that finds a live owner does not take it: it runs read-only
+with the chip reading `owned by <cwd>:<port>`. A server without the flag never tries. A worktree copies `main`'s `.env` for its own ports, so the flag
+alone would make two owners; the lock is what prevents it. A non-owner serves jobs, runs and stats, hides every write control, answers every write
+route `409 not-owner`, never folds for pushes and never writes under `~/.claude/schedules/`. Only the owner sends `schedule-failed` and keeps
+`notified.json`. The owner releases the file on clean exit; a crash leaves a dead pid the next start takes over.
 
 ## Reconcile: files in, OS jobs out
 
 `reconcile()` is a pure diff applied idempotently:
 
 - **desired** = every valid file where `enabled: true` and `machines` contains this machine.
-- **installed** — mac: every plist under `~/Library/LaunchAgents/` whose label starts with `com.claude-dashboard.schedule.`; wsl: every line of the user's
+- **installed** — mac: every plist under `~/Library/LaunchAgents/` whose label starts with `com.claude-dashboard.schedule.` *and* is loaded
+  (`launchctl print gui/<uid>/<label>` exits 0); a plist on disk that launchd refused is the `drift` case; wsl: every line of the user's
   crontab between `# >>> claude-dashboard schedules >>>` and `# <<< claude-dashboard schedules <<<`. WSL is cron only; when no cron daemon is running
   (`pgrep -x cron|crond` empty) the chip reads `cron not running` in red, since installed lines fire nothing.
 - **diff** → install (new file), update (the fully rendered plist or crontab line differs from the installed one: cron, wrapper path, node path or any
@@ -141,7 +150,9 @@ did not write in this process's lifetime; it is not otherwise detected.
   installed job and the `/run` spawn: `PATH` and `HOME` as the server process sees them, `CLAUDE_BIN`, `SPAWN_MAX_PERMISSION`, `SYNC_PERMISSION_MODE`,
   `SCHEDULE_MACHINE` and `SCHEDULES_DIR` (`.env` values live in `Config`, never in `process.env`, so nothing reaches a child unless baked). launchd and
   cron give a job no shell rc, so without this `git`, `gh`, `pnpm` and `claude`'s own plugin launches exit 127 at 22:00. In the crontab the assignments
-  are inline on the command (`PATH=… HOME=… node … job`), never as lines of their own, which would leak into the user's entries below the block. The
+  are inline on the command (`PATH='…' HOME='…' node … job`), never as lines of their own, which would leak into the user's entries below the block;
+  every value is single-quoted with `'` written as `'\''` (WSL's `PATH` carries `Program Files (x86)`), and `%` is written `\%` because cron turns a
+  bare one into a newline — a test renders a PATH with both and runs the line through `sh -n`. The
   shell block runs under that env through `bash -e <file>`, not a login shell: no rc side effects, no `$SHELL` dependence.
 - Runs on: server start; `fs.watch` on the schedules folder (debounced 500 ms — a `sync.sh pull` lands several files); after every save, toggle or delete
   from the UI; the **Reconcile** button; and a change to `~/.claude/plugins/installed_plugins.json`, because `pnpm plugin:sync` reinstalls the plugin
@@ -163,6 +174,10 @@ What launchd and cron call; the only process that runs jobs. Plain Node, built-i
 `run-schedule <job> [--trigger schedule|manual] [--only <pin>...]`
 
 1. Resolve machine, read `<dir>/<job>.md`, parse and validate exactly as the server does (the validator is one module both import — see Shared modules).
+   The dashboard may have been down when the file was deleted, broken, disabled or stopped naming this machine, leaving the OS job installed: on a
+   `--trigger schedule` fire with a missing, invalid, disabled or other-machine file the wrapper appends `refused` with `why` (`file gone`, `invalid:
+   <line>`, `disabled`, `not this machine`) and exits 0 without running. A manual run of a disabled file is allowed (that is Run now on a paused job);
+   the other three refuse it too.
 2. Take the job lock `~/.claude/schedules/locks/<job>.lock` (`O_EXCL`, pid and boot id inside — `kern.boottime` on mac, `/proc/sys/kernel/random/boot_id`
    on wsl). If held by a live pid from this boot whose command line is `run-schedule <job>`: write a `refused` log line and exit 75. Any other lock is
    stale and taken over; the reader then shows its run as lost. The server does the same sweep on start, so a reboot never leaves a job reading
@@ -173,7 +188,7 @@ What launchd and cron call; the only process that runs jobs. Plain Node, built-i
 
 Outcome mapping, the same in the wrapper and the reader: a step is `ok` when the shell exits 0 or the claude result has `is_error: false`; `skipped`
 when its pin is missing or unlisted; otherwise `failed`, which includes `timeout`, `stopped` and a claude `is_error`. `end.failed` counts every
-non-ok, non-skipped step, and that count is what the push and the row's pill read.
+non-ok, non-skipped step. A run is failed when `failed > 0` or `error` is set; that is what the push and the row's pill read.
 
 The claude launch is `claude -p --output-format json --session-id <uuid> [--model] [--effort] [--permission-mode] [--allowed-tools …] [--max-turns]` with
 the prompt on stdin. `bypassPermissions` is refused here too, whatever the file says, and the mode is clamped to `SPAWN_MAX_PERMISSION` from the baked
@@ -183,7 +198,8 @@ claude job there, and the wrapper, if reached anyway, ends the step `failed` wit
 
 The child gets `CLAUDE_DASHBOARD_SCHEDULE=<job>` in its env and `--disallowed-tools AskUserQuestion`. The marker exists for the user-global hooks: the Stop
 hook (`scripts/stop-notify-hook.sh`) exits at once on it, like `CLAUDE_DASHBOARD_REFRESH`, so a step is never held for `answerSecs` and never pushes
-"finished" — the schedule's own failure push is the only one; the ask hook (`scripts/ask-remote-hook.sh`) exits on it too. With the tool disallowed a
+"finished" — the schedule's own failure push is the only one; `ask-remote-hook.sh`, `remote-decision-hook.sh` (which would otherwise tell the step
+to "ask in prose" and end the turn doing nothing), `plan-remote-hook.sh` and `permission-notify-hook.sh` exit on it too. With the tool disallowed a
 step cannot stop to ask; a prompt that needs an answer must say what to do instead. The transcript itself records nothing: the run log is the join, and
 the Sessions page does not badge schedule runs in this version.
 
@@ -193,14 +209,15 @@ the Sessions page does not badge schedule runs in this version.
 
 | kind | fields |
 |---|---|
-| `start` | `run` (uuid), `job`, `machine`, `trigger` (`schedule`/`manual`), `at` (ISO), `steps` (count), `pid` |
+| `start` | `run` (uuid), `job`, `machine`, `trigger` (`schedule`/`manual`), `at` (ISO), `slot` (ISO, schedule only), `late` (boolean), `steps` (count), `pid` |
 | `step-start` | `run`, `step` (index), `repo` (pin name or `null`), `cwd`, `at`, `session` (uuid, claude only) |
 | `step-end` | `run`, `step`, `at`, `ms`, `exit`, `outcome` (`ok`/`failed`/`skipped`/`timeout`/`stopped`), `why` (short text), `tail` (shell: last lines), `cost`, `tokensIn`, `tokensOut`, `turns`, `model` (claude) |
-| `end` | `run`, `at`, `ms`, `ok`, `failed`, `skipped` (counts), `stopped` (boolean: SIGTERM ended it) |
-| `refused` | `job`, `at`, `trigger`, `heldBy` (pid) |
+| `end` | `run`, `at`, `ms`, `ok`, `failed`, `skipped` (counts), `stopped` (boolean: SIGTERM ended it), `error` (string, only when the run failed before its first step: `no pins snapshot`, `claude cli not configured`) |
+| `refused` | `job`, `at`, `trigger`, `why` (`running`, `file gone`, `invalid: <line>`, `disabled`, `not this machine`), `heldBy` (pid, `running` only) |
 
 The server folds the file into runs: a `start` with no `end` whose pid is dead (or alive but not running `run-schedule <job>`, checked by command
-line), or older than its job's `timeout` × steps + 5 min, is **lost**. Lost is derived at read time, never written; a slept laptop that wakes and
+line) is **lost**; the age rule — older than its job's `timeout` × steps + 5 min — applies only when the pid cannot be checked (another machine's
+file, no `ps`), never to a run whose lock is held by a live wrapper, so a laptop that slept mid-run shows `running` until the wrapper ends it. Lost is derived at read time, never written; a slept laptop that wakes and
 appends `end` later supersedes it, and a lost push already sent is not followed by a second push for that run. The `end`
 record is what the Runs page and the stats read; a run in flight is read from `start` + the `step-*` lines so far. The reader is incremental: it keeps,
 per file, the byte offset and inode it last read to and appends only the new lines to its in-memory fold; a smaller size or a changed inode means
@@ -210,7 +227,8 @@ the server renames it `<machine>.<yyyymmdd>.jsonl` and the stats read every file
 ## Launching on demand
 
 `POST /api/schedules/:name/run` with optional `{ only: [pins] }` spawns the wrapper detached, `--trigger manual`, through the same `setSpawner` seam
-`spawn.ts` uses so tests inject a fake. It answers `202 { run }` with the run id read back from the log within 2 s, `409 already-running` when the lock
+`spawn.ts` uses so tests inject a fake; the child's env is exactly `scheduleEnv(config)`, not the server's (which carries `CLAUDE_CODE_ENTRYPOINT`
+and the markers `spawn.ts` strips). It answers `202 { run }` with the run id read back from the log within 2 s, `409 already-running` when the lock
 is held, `404` for an unknown job. `POST /api/schedules/:name/stop` sends SIGTERM to the pid in the lock file; `204`, or `409 not-running`. A paused job
 can be run on demand — that is how a new job is tried before the toggle installs it.
 
@@ -239,10 +257,12 @@ wrapper's are never taken from a request.
 - `shared/schedule-file.ts` — `parseJob(text) → { job, errors }`, `checkPins(job, pins) → errors` (the ambiguous-name check, run by the server at validation
   and by the wrapper at step time against `pins.json`) and `serializeEnabled(text, enabled) → text` (rewrites the `enabled:` line, inserting it after
   `run:` when absent, everything else byte for byte). `parseJob` reads the raw frontmatter lines itself rather than trusting `parseFrontmatter`'s data:
-  a nested block, an empty value, a duplicate key or an unknown key is an error naming the line, inline lists are `[a, b]` only, and a ` #` outside quotes
-  starts a comment that is stripped — so the example file above parses as written. Zero deps, runs on server and client (the drawer's live summary). The wrapper runs `plugin/lib/schedule-file.js`, `cron.js` and `frontmatter.js`: generated
+  a nested block, an empty value, a duplicate key or an unknown key is an error naming the line, inline lists are `[a, b]` only, a line whose first non-blank character is `#` is a comment, and a ` #` outside quotes starts one — so the example
+  file above and the drawer templates parse as written. Zero deps, runs on server and client (the drawer's live summary). The wrapper runs `plugin/lib/schedule-file.mjs`, `cron.mjs` and `frontmatter.mjs`: generated
   from the TS by `pnpm plugin:gen` (`typescript`'s `transpileModule`, already a dev dep), and `test/plugin-manifest.test.ts` regenerates and compares, so a
-  TS edit without the regen fails CI, and `shared/frontmatter.js` is generated the same way since `parseJob` imports it. The plugin is still never
+  TS edit without the regen fails CI, and `plugin/lib/frontmatter.mjs` is generated the same way since `parseJob` imports it. The generated files are
+  `.mjs` (`schedule-file.mjs`, `cron.mjs`, `frontmatter.mjs`): the plugin has no `package.json`, so a `.js` would load as CommonJS on the Node 18–20
+  this repo still allows and the wrapper would die before its first log line. The plugin is still never
   imported by server or client. `.claude/CLAUDE.md` names `frontmatter.ts` and `gitUpstream.ts` as the only modules both sides run (§Orientation and
   §Code rules) and `docs/overview.md` repeats it: the same PR adds `schedule-file.ts` and `cron.ts` to both lists.
 - `shared/cron.ts` — parse five-field cron, `nextAfter(expr, date)`, `toCalendarIntervals(expr)` for launchd, `describe(expr)` for the row ("07:00
@@ -289,11 +309,14 @@ full screen. No horizontal scroll.
 
 ## Notifications
 
-A run whose `end` has `failed > 0` or is marked lost sends one ntfy push through `notify.ts` as a fifth event kind, `schedule-failed`: title `<job> · <n> of
+A run that is failed (`failed > 0` or `error`), a `refused` record whose `why` is not `running`, or a run marked lost sends one ntfy push through `notify.ts` as a fifth event kind, `schedule-failed`: title `<job> · <n> of
 <N> failed`, body the first failed step's `why`, click → `/?view=schedules&run=<id>`. It sits under the master switch and the desk/phone routing
 like the other four, with its own checkbox in Settings and `NOTIFY_EVENTS`, but is exempt from `requireAfk`, `requireRemoteAnswer` and `requireAutoMode`:
 those gate interactive sessions, and a 22:00 job has none. It needs no session id, so it goes through a sibling of `maybeSend` that takes the run instead.
-The server folds the log and sends on an `fs.watch` of `runs/` and on start, not only when a tab polls, so a push goes out with no browser open; the
+The server folds the log and sends on an `fs.watch` of `runs/`, on every poll and on start, so a push goes out with no browser open. A run that
+becomes lost without a log write (SIGKILL, the age rule) is noticed at the next log write, poll or start; that delay is accepted — no timer. A lost
+run's push is titled `<job> · lost`, body `started <time>, no end record · machine slept?`; a pre-step failure's is `<job> · failed before start`, body
+`end.error`; a refusal's is `<job> · not run`, body the `why`. the
 click URL is `config.publicUrl` + `/?view=schedules&run=<id>`, and `deepLink.ts` `readViewParam` learns `schedules` beside `git`, with `run` opening
 that run's fold. Sent by the server when it folds the log and sees the record for
 the first time (an id set in memory plus a `~/.claude/schedules/notified.json` so a restart does not resend). Shell-only failures push too; success never.
@@ -324,14 +347,13 @@ the first time (an id set in memory plus a `~/.claude/schedules/notified.json` s
 - `cwd:` default (no foreach) is the schedules folder's parent, i.e. `~/claude-global`.
 - A cron launchd cannot express is an error on mac rather than a nearest-approximation.
 - Window seg default 30d, kept in `settings.scheduleWindow`.
-- Rotation at 20 MB; 2 MB full-read threshold.
+- Rotation at 20 MB.
 - `--trigger` and `--only` are the wrapper's only flags.
 - Log retention: never pruned by this feature.
 
 ## Left to the builder
 
 - Exact plist template and the `launchctl` invocation sequence on macOS 15+ (`bootstrap`/`bootout` vs `load`/`unload`).
-- The `readTail` reuse or a new offset-cached reader for the log.
 - Component split under `client/src/components/management/schedules/`; hook shape (`useSchedules`, `useScheduleRuns`).
 - Test fixtures: a tmpdir schedules folder, a fake spawner, a fake `launchctl`/`crontab` via the same override seam `git-fetch.ts` uses for its runner.
 - The docs: `docs/subsystems/schedules.md` and a line in `docs/overview.md` §Map; `docs/subsystems/spawn.md` gains the wrapper launch; `test/outbound.test.ts`
