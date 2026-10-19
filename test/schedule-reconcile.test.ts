@@ -11,7 +11,8 @@ import path from 'node:path';
 
 import type { Config } from '../server/lib/config.js';
 import {
-  applyReconcile, CRON_END, CRON_START, LABEL_PREFIX, PLUGIN_ID, planReconcile, renderCronLine, renderPlist, setReconcileHost, setScheduleRunner,
+  applyReconcile, CRON_END, CRON_LINE_MAX, CRON_START, LABEL_PREFIX, PLUGIN_ID, lastReconcile, planReconcile, renderCronEnv, renderCronLine, renderPlist,
+  setReconcileHost, setScheduleRunner,
 } from '../server/lib/schedule-reconcile.js';
 import type { ReconcilePaths, ReconcileReport } from '../server/lib/schedule-reconcile.js';
 import { claimOwner, releaseOwner } from '../server/lib/schedule-store.js';
@@ -48,6 +49,10 @@ class FakeOs {
   crontab: string | null = null;
   cronPids = '123\n';
   bootstrapFails = false;
+  /** Exit code `bootout` gives for a loaded label (null = success); an unloaded one always answers 3, as real launchctl does. */
+  bootoutLoadedCode: number | null = null;
+  /** `crontab -l` failing with this stderr instead of answering (null = answer from `crontab`). */
+  listError: string | null = null;
   /** Per-call delay, so two overlapping applies would interleave if nothing serialized them. */
   delayMs = 0;
   inFlight = 0;
@@ -69,13 +74,19 @@ class FakeOs {
       const [verb, target, file] = args;
       const label = (target ?? '').split('/').pop() ?? '';
       if (verb === 'print') return this.loaded.has(label) ? ok('state = waiting') : { code: 113, stdout: '', stderr: 'Could not find service' };
-      if (verb === 'bootout') return this.loaded.delete(label) ? ok() : { code: 3, stdout: '', stderr: 'No such process' };
+      if (verb === 'bootout') {
+        if (!this.loaded.has(label)) return { code: 3, stdout: '', stderr: 'No such process' };
+        if (this.bootoutLoadedCode !== null) return { code: this.bootoutLoadedCode, stdout: '', stderr: 'Boot-out failed: 150: Operation not permitted' };
+        this.loaded.delete(label);
+        return ok();
+      }
       if (verb === 'bootstrap') {
         if (this.bootstrapFails) return { code: 5, stdout: '', stderr: 'Bootstrap failed: 5: Input/output error' };
         this.loaded.add(path.basename(file, '.plist'));
         return ok();
       }
     }
+    if (cmd === 'crontab' && args[0] === '-l' && this.listError !== null) return { code: 1, stdout: '', stderr: this.listError };
     if (cmd === 'crontab' && args[0] === '-l') return this.crontab === null ? { code: 1, stdout: '', stderr: 'no crontab for u' } : ok(this.crontab);
     if (cmd === 'crontab' && args[0] === '-') { this.crontab = input ?? ''; return ok(); }
     if (cmd === 'pgrep') return this.cronPids ? ok(this.cronPids) : { code: 1, stdout: '', stderr: '' };
@@ -152,7 +163,9 @@ export async function run(): Promise<number> {
   let total = 0;
   let ok_ = 0;
   const check = (r: boolean): void => { total++; if (r) ok_++; };
-  const paths: ReconcilePaths = { node: NODE, wrapper: '/p/lib/run-schedule.mjs', schedules: '/s/schedules', launchd: '/h/.claude/schedules/launchd' };
+  const paths: ReconcilePaths = {
+    node: NODE, wrapper: '/p/lib/run-schedule.mjs', schedules: '/s/schedules', launchd: '/h/.claude/schedules/launchd', cronEnv: '/h/.claude/schedules/cron.env'
+  };
   const env = Object.fromEntries(SEVEN.map((k) => [k, `v-${k}`]));
 
   check(await test('PLUGIN_ID matches scripts/sync-plugin.ts', () => {
@@ -179,16 +192,10 @@ export async function run(): Promise<number> {
     assert.ok(text.includes('<string>/a&amp;b/&lt;c&gt;</string>'));
   }));
 
-  check(await test('renderCronLine: one line, cron first, every env value single-quoted, quote and % escaped, passes sh -n', () => {
-    const e = { ...env, PATH: "/c/Program Files (x86)/x:/it's", HOME: '/home/a%b' };
-    const line = renderCronLine(job('pull-pins', SHELL()), e, paths);
-    assert.ok(!line.includes('\n'));
-    assert.ok(line.startsWith('0 7 * * 1-5 '), line);
-    assert.ok(line.includes(`PATH='/c/Program Files (x86)/x:/it'\\''s'`), line);
-    assert.ok(line.includes(`HOME='/home/a\\%b'`), line);
-    assert.ok(!/[^\\]%/.test(line), 'no bare %');
-    for (const k of SEVEN) assert.ok(new RegExp(` ${k}='`).test(line), `${k} single-quoted`);
-    assert.ok(line.endsWith(` '${NODE}' '${paths.wrapper}' 'pull-pins'`), line);
+  check(await test('renderCronLine: one short line that sources the env file and execs the wrapper, paths quoted, % escaped, passes sh -n', () => {
+    const odd = { ...paths, wrapper: "/p/it's/lib%x/run-schedule.mjs" };
+    const line = renderCronLine(job('pull-pins', SHELL()), odd);
+    assert.strictEqual(line, `0 7 * * 1-5 . '/h/.claude/schedules/cron.env' && exec '${NODE}' '/p/it'\\''s/lib\\%x/run-schedule.mjs' 'pull-pins'`);
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'schedule-cronline-'));
     try {
       // The line as written, and the command as cron hands it to sh (`\%` back to `%`, the five fields gone).
@@ -199,6 +206,21 @@ export async function run(): Promise<number> {
         const r = spawnSync('sh', ['-n', f], { encoding: 'utf8' });
         assert.strictEqual(r.status, 0, `sh -n failed on ${text}: ${r.stderr}`);
       }
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  }));
+
+  check(await test('renderCronEnv: one export per key, single-quoted, and sh sources it back to the same values', () => {
+    const e = { ...env, PATH: "/c/Program Files (x86)/x:/it's", HOME: '/home/a%b $x `y`' };
+    const text = renderCronEnv(e);
+    assert.deepStrictEqual(text.split('\n').filter(Boolean).map((l) => l.split('=')[0]), SEVEN.map((k) => `export ${k}`));
+    assert.ok(text.includes(`export PATH='/c/Program Files (x86)/x:/it'\\''s'\n`), text);
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'schedule-cronenv-'));
+    try {
+      const f = path.join(tmp, 'cron.env');
+      fs.writeFileSync(f, text);
+      const r = spawnSync('/bin/sh', ['-c', `. '${f}' && printf '%s\\n%s' "$PATH" "$HOME"`], { encoding: 'utf8' });
+      assert.strictEqual(r.status, 0, r.stderr);
+      assert.strictEqual(r.stdout, `${e.PATH}\n${e.HOME}`);
     } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
   }));
 
@@ -367,11 +389,12 @@ export async function run(): Promise<number> {
     });
   }));
 
-  check(await test('a plist of another label prefix is never read, printed or removed', async () => {
+  check(await test('a plist of another label prefix, or with a name outside [a-z0-9-], is never read, printed or removed', async () => {
     await withWorld({}, async (w) => {
       fs.mkdirSync(w.agents, { recursive: true });
       const other = path.join(w.agents, 'com.example.other.plist');
       fs.writeFileSync(other, 'x');
+      fs.writeFileSync(path.join(w.agents, `${LABEL_PREFIX}Bad_Name.plist`), 'x');
       const r = await applyReconcile(w.cfg);
       assert.strictEqual(r.state, 'in-sync');
       assert.deepStrictEqual(w.fake.calls, []);
@@ -425,11 +448,7 @@ export async function run(): Promise<number> {
   check(await test('wsl: crontab -l failing for another reason → failed, and nothing is written', async () => {
     await withWorld({ scheduleMachine: 'wsl' }, async (w) => {
       w.write('pull-pins', SHELL());
-      setScheduleRunner(async (cmd, args, input) => {
-        w.fake.calls.push({ cmd, args, input });
-        if (cmd === 'crontab' && args[0] === '-l') return { code: 1, stdout: '', stderr: 'crontab: cannot open /var/spool/cron: Permission denied' };
-        return { code: 0, stdout: '1\n', stderr: '' };
-      });
+      w.fake.listError = 'crontab: cannot open /var/spool/cron: Permission denied';
       const r = await applyReconcile(w.cfg);
       assert.strictEqual(r.state, 'failed');
       assert.match(r.error ?? '', /Permission denied/);
@@ -445,6 +464,133 @@ export async function run(): Promise<number> {
       assert.strictEqual(r.state, 'cron-down');
       assert.ok(w.fake.calls.some((c) => c.cmd === 'pgrep' && c.args.join(' ') === '-x cron|crond'));
       assert.ok(w.fake.crontab?.includes(`'pull-pins'`));
+    });
+  }));
+
+  check(await test('wsl: a 1500-character PATH stays in the 0600 env file and the crontab line stays short', async () => {
+    const saved = process.env.PATH;
+    try {
+      await withWorld({ scheduleMachine: 'wsl' }, async (w) => {
+        const long = Array.from({ length: 60 }, (_, i) => `/mnt/c/Program Files (x86)/Vendor${String(i).padStart(2, '0')}/bin`).join(':').slice(0, 1500);
+        assert.strictEqual(long.length, 1500);
+        process.env.PATH = long;
+        w.write('pull-pins', SHELL());
+        const r = await applyReconcile(w.cfg);
+        assert.strictEqual(r.state, 'in-sync', JSON.stringify(r));
+        const line = (w.fake.crontab ?? '').split('\n').find((l) => l.startsWith('0 7 * * 1-5 ')) ?? '';
+        assert.ok(line.length > 0 && Buffer.byteLength(line) < CRON_LINE_MAX, `line is ${line.length} bytes`);
+        assert.ok(!line.includes('Vendor'), 'the PATH is not inline');
+        const envFile = path.join(w.home, '.claude', 'schedules', 'cron.env');
+        assert.ok(line.includes(`. '${envFile}' && exec `), line);
+        assert.ok(fs.readFileSync(envFile, 'utf8').includes(`export PATH='${long}'\n`));
+        assert.strictEqual(fs.statSync(envFile).mode & 0o777, 0o600);
+      });
+    } finally { process.env.PATH = saved; }
+  }));
+
+  check(await test('wsl: an env change alone rewrites the env file and never calls crontab -', async () => {
+    await withWorld({ scheduleMachine: 'wsl' }, async (w) => {
+      w.write('pull-pins', SHELL());
+      await applyReconcile(w.cfg);
+      const envFile = path.join(w.home, '.claude', 'schedules', 'cron.env');
+      assert.ok(fs.readFileSync(envFile, 'utf8').includes(`export CLAUDE_BIN='/usr/local/bin/claude'`));
+      w.fake.calls = [];
+      w.cfg = { ...w.cfg, claudeBin: '/opt/claude/bin/claude' };
+      assert.deepStrictEqual(actions(await planReconcile(w.cfg)), ['pull-pins:update:env changed']);
+      const r = await applyReconcile(w.cfg);
+      assert.strictEqual(r.state, 'in-sync', JSON.stringify(r));
+      assert.ok(fs.readFileSync(envFile, 'utf8').includes(`export CLAUDE_BIN='/opt/claude/bin/claude'`));
+      assert.ok(!w.fake.calls.some((c) => c.cmd === 'crontab' && c.args[0] === '-'), w.fake.verbs().join(','));
+    });
+  }));
+
+  check(await test('wsl: a rendered line still over the cap is refused: failed, pending · crontab line too long, not installed', async () => {
+    await withWorld({ scheduleMachine: 'wsl' }, async (w) => {
+      w.write('pull-pins', SHELL());
+      const r = await applyReconcile(w.cfg);
+      assert.strictEqual(r.state, 'failed');
+      assert.strictEqual(r.error, 'crontab line too long: pull-pins');
+      assert.deepStrictEqual(actions(r), ['pull-pins:pending:crontab line too long']);
+      assert.ok(!w.fake.calls.some((c) => c.cmd === 'crontab' && c.args[0] === '-'));
+    }, { node: '/opt/' + 'n'.repeat(1000) + '/node' });
+  }));
+
+  for (const machine of ['wsl', 'mac'] as const) {
+    check(await test(`${machine}: a newline in PATH → failed, bad value in PATH, no runner call at all`, async () => {
+      const saved = process.env.PATH;
+      await withWorld({ scheduleMachine: machine }, async (w) => {
+        w.write('pull-pins', SHELL());
+        process.env.PATH = '/usr/bin\n* * * * * rm -rf ~';
+        try {
+          const r = await applyReconcile(w.cfg);
+          assert.strictEqual(r.state, 'failed');
+          assert.strictEqual(r.error, 'bad value in PATH');
+          assert.deepStrictEqual(w.fake.calls, []);
+          assert.ok(!fs.existsSync(w.agents));
+        } finally { process.env.PATH = saved; }
+      });
+    }));
+  }
+
+  check(await test('a control character or a cron-bound \\% in a baked path is refused by name', async () => {
+    await withWorld({ scheduleMachine: 'mac' }, async (w) => {
+      w.write('pull-pins', SHELL());
+      assert.strictEqual((await applyReconcile(w.cfg)).error, 'bad value in node path');
+      assert.deepStrictEqual(w.fake.calls, []);
+    }, { node: '/opt/no\rde' });
+    await withWorld({ scheduleMachine: 'wsl' }, async (w) => {
+      w.write('pull-pins', SHELL());
+      assert.strictEqual((await applyReconcile(w.cfg)).error, 'bad value in node path');
+      assert.deepStrictEqual(w.fake.calls, []);
+    }, { node: '/opt/a\\%b/node' });
+  }));
+
+  check(await test('mac: a bootout that fails on a loaded job keeps its plist and reports failed', async () => {
+    await withWorld({}, async (w) => {
+      await installed(w);
+      fs.rmSync(path.join(w.dir, 'pull-pins.md'));
+      w.fake.bootoutLoadedCode = 150;
+      const r = await applyReconcile(w.cfg);
+      assert.strictEqual(r.state, 'failed');
+      assert.match(r.error ?? '', /pull-pins: launchctl bootout: Boot-out failed: 150/);
+      assert.ok(fs.existsSync(w.plist('pull-pins')));
+      assert.deepStrictEqual(actions(r), ['pull-pins:remove:file gone']);
+    });
+  }));
+
+  check(await test('mac: a not-loaded job whose lock a live wrapper holds is pending, not booted out', async () => {
+    const live = fakeProbe({ 4242: `${NODE} /x/lib/run-schedule.mjs pull-pins` });
+    await withWorld({}, async (w) => {
+      await installed(w);
+      w.fake.loaded.clear();
+      const locks = path.join(w.home, '.claude', 'schedules', 'locks');
+      fs.mkdirSync(locks, { recursive: true });
+      fs.writeFileSync(path.join(locks, 'pull-pins.lock'), JSON.stringify({ pid: 4242, bootId: null, job: 'pull-pins' }));
+      const r = await applyReconcile(w.cfg);
+      assert.deepStrictEqual(actions(r), ['pull-pins:pending:running']);
+      assert.ok(!w.fake.verbs().includes('launchctl bootout'));
+    }, { probe: live });
+  }));
+
+  check(await test('wsl: a start marker with no end marker → failed, and the crontab is not written', async () => {
+    await withWorld({ scheduleMachine: 'wsl' }, async (w) => {
+      w.fake.crontab = `${CRON_START}\n0 1 * * * x 'a'\n# user line\n`;
+      w.write('pull-pins', SHELL());
+      const r = await applyReconcile(w.cfg);
+      assert.strictEqual(r.state, 'failed');
+      assert.match(r.error ?? '', /no "# <<< claude-dashboard schedules <<<"/);
+      assert.ok(!w.fake.calls.some((c) => c.cmd === 'crontab' && c.args[0] === '-'));
+    });
+  }));
+
+  check(await test('planReconcile leaves the last apply report, failed error included, in place', async () => {
+    await withWorld({}, async (w) => {
+      w.write('pull-pins', SHELL());
+      w.fake.bootstrapFails = true;
+      await applyReconcile(w.cfg);
+      assert.strictEqual((await planReconcile(w.cfg)).state, 'drift');
+      assert.strictEqual(lastReconcile()?.state, 'failed');
+      assert.match(lastReconcile()?.error ?? '', /bootstrap/);
     });
   }));
 

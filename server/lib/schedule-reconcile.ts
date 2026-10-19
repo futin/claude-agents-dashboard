@@ -28,8 +28,11 @@ export type ReconcileState = 'in-sync' | 'drift' | 'failed' | 'pending' | 'not-o
 export interface ReconcileChange { name: string; action: 'install' | 'update' | 'remove' | 'pending'; why: string }
 export interface ReconcileReport { state: ReconcileState; changes: ReconcileChange[]; unchanged: number; error: string | null; at: string }
 
-/** The absolute paths baked into an installed job. */
-export interface ReconcilePaths { node: string; wrapper: string; schedules: string; launchd: string }
+/** The absolute paths baked into an installed job; `cronEnv` is the env file every crontab line sources (wsl only). */
+export interface ReconcilePaths { node: string; wrapper: string; schedules: string; launchd: string; cronEnv: string }
+
+/** Under Vixie cron's ~998-character command cap, which truncates silently and leaves the full line in the file reading as installed. */
+export const CRON_LINE_MAX = 990;
 
 export type ScheduleRunner = (cmd: string, args: string[], input?: string) => Promise<{ code: number; stdout: string; stderr: string }>;
 
@@ -132,24 +135,36 @@ export function renderPlist(job: ScheduleJob, env: Record<string, string>, paths
 const sq = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 
 /**
- * One crontab line: the cron, then the env inline on the command (lines of their own would leak into the user's entries below the block), every value
- * single-quoted, and `%` escaped because cron turns a bare one into a newline. Ends in the quoted job name, which is how an installed line is read back.
+ * The env file every crontab line sources: one `export KEY='value'` per baked key. It is a file, not inline assignments, because a WSL `PATH` alone runs past
+ * cron's command cap; the seven keys are server-wide, so all jobs share it.
  */
-export function renderCronLine(job: ScheduleJob, env: Record<string, string>, paths: ReconcilePaths): string {
-  const assigns = Object.entries(env).map(([k, v]) => `${k}=${sq(v)}`);
-  const command = [...assigns, sq(paths.node), sq(paths.wrapper), sq(job.name)].join(' ');
+export function renderCronEnv(env: Record<string, string>): string {
+  return Object.entries(env).map(([k, v]) => `export ${k}=${sq(v)}\n`).join('');
+}
+
+/**
+ * One crontab line: the cron, then source the env file and exec the wrapper, every path single-quoted and `%` escaped because cron turns a bare one into a
+ * newline. Ends in the quoted job name, which is how an installed line is read back.
+ */
+export function renderCronLine(job: ScheduleJob, paths: ReconcilePaths): string {
+  const command = `. ${sq(paths.cronEnv)} && exec ${sq(paths.node)} ${sq(paths.wrapper)} ${sq(job.name)}`;
   return `${job.cron.trim()} ${command.replace(/%/g, '\\%')}`;
 }
 
 const CRON_NAME = / '([a-z0-9-]+)'$/;
 
-/** Splits a crontab into the text around the marker block and the block's lines; no complete block means `before` is the whole text and `lines` is null. */
-function splitCrontab(text: string): { before: string; lines: string[] | null; after: string } {
+/**
+ * Splits a crontab into the text around the marker block and the block's lines; no block means `before` is the whole text and `lines` is null. A start
+ * marker with no end is `broken`: guessing where the block ends would drop the user's lines after it.
+ */
+function splitCrontab(text: string): { before: string; lines: string[] | null; after: string; broken: boolean } {
   const all = text.split('\n');
   const s = all.indexOf(CRON_START);
   const e = s === -1 ? -1 : all.indexOf(CRON_END, s + 1);
-  if (s === -1 || e === -1) return { before: text, lines: null, after: '' };
-  return { before: all.slice(0, s).map((l) => l + '\n').join(''), lines: all.slice(s + 1, e).filter((l) => l !== ''), after: all.slice(e + 1).join('\n') };
+  if (s === -1 || e === -1) return { before: text, lines: null, after: '', broken: s !== -1 };
+  return {
+    before: all.slice(0, s).map((l) => l + '\n').join(''), lines: all.slice(s + 1, e).filter((l) => l !== ''), after: all.slice(e + 1).join('\n'), broken: false
+  };
 }
 
 function joinCrontab(parts: { before: string; after: string }, lines: string[]): string {
@@ -163,8 +178,13 @@ type Desired = { name: string; text: string };
 interface PlanContext {
   report: ReconcileReport;
   machine: 'mac' | 'wsl';
+  paths: ReconcilePaths;
   desired: Map<string, Desired>;
   crontab: string | null;
+  /** wsl: the env file's wanted text, when it differs from the one on disk and some job needs it. */
+  writeEnv: string | null;
+  /** wsl: whether the marker block's lines change (an env-only change rewrites the env file and leaves the crontab alone). */
+  writeCrontab: boolean;
 }
 
 const now = (): string => new Date().toISOString();
@@ -180,6 +200,23 @@ function notDesired(stored: StoredJob, machine: 'mac' | 'wsl', claudeBin: string
   if (job.run === 'claude' && claudeBin === '') return 'claude cli not configured';
   return null;
 }
+
+/** Desired jobs that cannot be installed here; listed as `pending` so the user sees why, removed if an older version is installed. */
+const BLOCKED = new Set(['claude cli not configured', 'crontab line too long']);
+
+/** C0 controls but tab: a newline in a baked value would add a crontab line, and the rest make the plist invalid XML. */
+const CONTROL = /[\x00-\x08\x0a-\x1f]/;
+
+/** The first baked value that cannot go into a plist or crontab line, by name, or null. `\%` survives only where cron reads the text (`cronOnly`). */
+function badValue(values: Record<string, string>, cronOnly: Record<string, string>): string | null {
+  for (const [k, v] of Object.entries(values)) if (CONTROL.test(v)) return k;
+  for (const [k, v] of Object.entries(cronOnly)) if (CONTROL.test(v) || v.includes('\\%')) return k;
+  return null;
+}
+
+const SAFE_NAME = /^[a-z0-9-]+$/;
+/** Exit codes `launchctl bootout` gives for a label that is not loaded, which is success for a remove. */
+const NOT_LOADED = new Set([0, 3, 113]);
 
 /** Whether `name`'s lock is held by a live wrapper; an unreadable holder counts as live, because acting on it would bootout a running job. */
 function lockHeld(locks: string, name: string): boolean {
@@ -198,15 +235,23 @@ async function plan(config: Config): Promise<PlanContext | ReconcileReport> {
 
   const dirs = scheduleDirs(config);
   const env = scheduleEnv(config);
-  const paths: ReconcilePaths = { node: host.nodePath, wrapper, schedules: dirs.schedules, launchd: dirs.launchd };
-  const render = machine.name === 'mac' ? renderPlist : renderCronLine;
+  const paths: ReconcilePaths = { node: host.nodePath, wrapper, schedules: dirs.schedules, launchd: dirs.launchd, cronEnv: path.join(dirs.state, 'cron.env') };
+  const pathValues = { 'node path': paths.node, 'wrapper path': paths.wrapper, 'state dir': dirs.state };
+  const bad = machine.name === 'mac' ? badValue({ ...env, ...pathValues, 'launchd log dir': paths.launchd }, {}) : badValue(env, pathValues);
+  if (bad) return bare('failed', `bad value in ${bad}`);
+  const render = (job: ScheduleJob): string => (machine.name === 'mac' ? renderPlist(job, env, paths) : renderCronLine(job, paths));
 
   const desired = new Map<string, Desired>();
   const skipped = new Map<string, string>();
   for (const stored of readJobs(dirs.schedules)) {
-    const why = notDesired(stored, machine.name, config.claudeBin);
+    let why = notDesired(stored, machine.name, config.claudeBin);
+    let text = '';
+    if (!why) {
+      try { text = render(stored.job as ScheduleJob); } catch { why = 'invalid'; }
+    }
+    if (!why && machine.name === 'wsl' && Buffer.byteLength(text) > CRON_LINE_MAX) why = 'crontab line too long';
     if (why) skipped.set(stored.name, why);
-    else desired.set(stored.name, { name: stored.name, text: render(stored.job as ScheduleJob, env, paths) });
+    else desired.set(stored.name, { name: stored.name, text });
   }
 
   // name -> installed text, plus whether launchd has it loaded (always true for a crontab line: cron reads the file).
@@ -220,6 +265,7 @@ async function plan(config: Config): Promise<PlanContext | ReconcileReport> {
     for (const file of files.sort()) {
       if (!file.startsWith(LABEL_PREFIX) || !file.endsWith('.plist')) continue;
       const name = file.slice(LABEL_PREFIX.length, -'.plist'.length);
+      if (!SAFE_NAME.test(name)) continue;
       let text: string;
       try { text = fs.readFileSync(path.join(launchAgentsDir(), file), 'utf8'); } catch { continue; }
       const print = await runner('launchctl', ['print', `gui/${host.uid}/${LABEL_PREFIX}${name}`]);
@@ -232,58 +278,78 @@ async function plan(config: Config): Promise<PlanContext | ReconcileReport> {
     else if (/no crontab/i.test(list.stderr)) crontab = '';
     // Anything else and the user's crontab is unknown: writing a block into it would clobber their entries.
     else return bare('failed', `crontab -l: ${lastLine(list.stderr) || `exit ${list.code}`}`);
-    for (const line of splitCrontab(crontab).lines ?? []) {
+    const split = splitCrontab(crontab);
+    if (split.broken) return bare('failed', `crontab has "${CRON_START}" with no "${CRON_END}" after it`);
+    for (const line of split.lines ?? []) {
       const m = CRON_NAME.exec(line);
       if (m) installed.set(m[1], { text: line, loaded: true });
       else unknown.push(line);
     }
   }
 
+  let envText: string | null = null;
+  if (machine.name === 'wsl' && desired.size > 0) {
+    const want = renderCronEnv(env);
+    let have: string | null = null;
+    try { have = fs.readFileSync(paths.cronEnv, 'utf8'); } catch { /* first install */ }
+    if (have !== want) envText = want;
+  }
+
   const changes: ReconcileChange[] = [];
   let unchanged = 0;
+  let lineChanges = unknown.length > 0;
   const running = (name: string): boolean => machine.name === 'mac' && lockHeld(dirs.locks, name);
+  const deferred = (name: string, change: ReconcileChange): ReconcileChange => (running(name) ? { name, action: 'pending', why: 'running' } : change);
   for (const d of desired.values()) {
     const have = installed.get(d.name);
-    if (!have) changes.push({ name: d.name, action: 'install', why: 'new' });
-    else if (!have.loaded) changes.push({ name: d.name, action: 'install', why: 'not loaded' });
-    else if (have.text !== d.text) changes.push(running(d.name) ? { name: d.name, action: 'pending', why: 'running' } : { name: d.name, action: 'update', why: 'changed' });
+    if (!have) { changes.push({ name: d.name, action: 'install', why: 'new' }); lineChanges = true; }
+    // A print that failed on a loaded job (a timeout) would otherwise bootout a running one.
+    else if (!have.loaded) changes.push(deferred(d.name, { name: d.name, action: 'install', why: 'not loaded' }));
+    else if (have.text !== d.text) { changes.push(deferred(d.name, { name: d.name, action: 'update', why: 'changed' })); lineChanges = true; }
+    else if (envText !== null) changes.push({ name: d.name, action: 'update', why: 'env changed' });
     else unchanged++;
   }
   for (const name of installed.keys()) {
     if (desired.has(name)) continue;
-    const why = skipped.get(name) ?? 'file gone';
-    changes.push(running(name) ? { name, action: 'pending', why: 'running' } : { name, action: 'remove', why });
+    changes.push(deferred(name, { name, action: 'remove', why: skipped.get(name) ?? 'file gone' }));
+    lineChanges = true;
   }
   for (const [name, why] of skipped) {
-    if (why === 'claude cli not configured' && !installed.has(name)) changes.push({ name, action: 'pending', why });
+    if (BLOCKED.has(why) && !installed.has(name)) changes.push({ name, action: 'pending', why });
   }
   if (unknown.length > 0) changes.push({ name: '', action: 'remove', why: `${unknown.length} unrecognised line(s) in the marker block` });
 
+  const tooLong = [...skipped].filter(([, why]) => why === 'crontab line too long').map(([name]) => name);
   const acts = changes.some((c) => c.action !== 'pending');
-  const state: ReconcileState = cronDown ? 'cron-down'
-    : acts ? 'drift'
-      : changes.some((c) => c.why === 'running') ? 'pending'
-        : changes.length > 0 ? 'no-claude'
-          : 'in-sync';
-  return { report: { state, changes, unchanged, error: null, at: now() }, machine: machine.name, desired, crontab };
+  const state: ReconcileState = tooLong.length > 0 ? 'failed'
+    : cronDown ? 'cron-down'
+      : acts ? 'drift'
+        : changes.some((c) => c.why === 'running') ? 'pending'
+          : changes.length > 0 ? 'no-claude'
+            : 'in-sync';
+  const error = tooLong.length > 0 ? `crontab line too long: ${tooLong.join(', ')}` : null;
+  return { report: { state, changes, unchanged, error, at: now() }, machine: machine.name, paths, desired, crontab, writeEnv: envText, writeCrontab: lineChanges };
 }
 
 const isReport = (p: PlanContext | ReconcileReport): p is ReconcileReport => 'state' in p;
 
 let lastReport: ReconcileReport | null = null;
 
-/** The diff between the job files and what the OS has installed, read fresh from the OS; writes nothing. */
+/**
+ * The diff between the job files and what the OS has installed, read fresh from the OS; writes nothing. It leaves `lastReconcile()` alone, so a poll
+ * right after a failed apply does not wipe that apply's error.
+ */
 export async function planReconcile(config: Config): Promise<ReconcileReport> {
   const p = await plan(config);
-  lastReport = isReport(p) ? p : p.report;
-  return lastReport;
+  return isReport(p) ? p : p.report;
 }
 
-/** Atomic write: launchd may read the plist the moment `bootstrap` names it. */
-function writeFileAtomic(file: string, text: string): void {
+/** Atomic write: launchd may read the plist the moment `bootstrap` names it, and cron may source the env file at any minute. */
+function writeFileAtomic(file: string, text: string, mode = 0o644): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, text);
+  fs.writeFileSync(tmp, text, { mode });
+  fs.chmodSync(tmp, mode);
   fs.renameSync(tmp, file);
 }
 
@@ -295,8 +361,10 @@ async function applyMac(ctx: PlanContext, errors: string[]): Promise<void> {
     const file = plistPath(c.name);
     try {
       if (c.action === 'remove') {
-        await runner('launchctl', ['bootout', `${domain}/${label}`]);
-        fs.rmSync(file, { force: true });
+        // Deleting the plist of a job launchd still has loaded would hide it from every later plan.
+        const out = await runner('launchctl', ['bootout', `${domain}/${label}`]);
+        if (NOT_LOADED.has(out.code)) fs.rmSync(file, { force: true });
+        else errors.push(`${c.name}: launchctl bootout: ${lastLine(out.stderr) || `exit ${out.code}`}`);
         continue;
       }
       const want = ctx.desired.get(c.name);
@@ -313,7 +381,11 @@ async function applyMac(ctx: PlanContext, errors: string[]): Promise<void> {
 }
 
 async function applyWsl(ctx: PlanContext, errors: string[]): Promise<void> {
-  if (!ctx.report.changes.some((c) => c.action !== 'pending') || ctx.crontab === null) return;
+  if (ctx.writeEnv !== null) {
+    // 0600: the file carries the user's PATH and paths, and nothing but their own cron needs to read it.
+    try { writeFileAtomic(ctx.paths.cronEnv, ctx.writeEnv, 0o600); } catch (e) { errors.push(`cron.env: ${(e as Error).message}`); return; }
+  }
+  if (!ctx.writeCrontab || ctx.crontab === null) return;
   const parts = splitCrontab(ctx.crontab);
   const lines = [...ctx.desired.values()].sort((a, b) => a.name.localeCompare(b.name)).map((d) => d.text);
   const res = await runner('crontab', ['-'], joinCrontab(parts, lines));
