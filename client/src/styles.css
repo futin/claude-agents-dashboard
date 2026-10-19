@@ -316,12 +316,14 @@ code,kbd,samp,pre{font-family:inherit}
 .foot i{flex:none;width:7px;height:7px;border-radius:999px;background:var(--green-solid)}
 .foot.off{color:var(--red)}
 .foot.off i{background:var(--red)}
-/* The version chip (docs/subsystems/releases.md): the last thing in the rail, under the live line when there is one. Sinks to the rail's foot by itself
-   on sections with no live line; in the phone menu it is the menu's last row. A pill on the recessed well, the board's own ink — status lives in the
-   dot alone, cyan for a release not opened yet. */
-.rel-chip{position:relative;display:inline-flex;align-items:center;gap:6px;align-self:flex-start;margin:auto 0 0 8px;min-height:28px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:999px;padding:4px 10px;cursor:pointer;transition:color .15s,border-color .15s}
+/* The version chip's place (docs/subsystems/releases.md): the last thing in the rail, under the live line when there is one. Sinks to the rail's foot by
+   itself on sections with no live line; in the phone menu it is the menu's last row. Placement only — the pill is ui-kit's (`.uk-chip`), the same in every
+   app, and it takes no class, hence this wrapper. Below `md` ui-kit's phone shape draws a 44px tap target around the 28px pill with a `::before` that
+   overhangs it by 8px above and below; the wrapper is that tall so the overhang sits inside it, because the phone menu (`.rail`) scrolls and would clip
+   whatever stuck out past its padding. */
+.rel-chip{display:flex;align-items:center;align-self:flex-start;min-height:44px;margin:auto 0 0 8px}
 .foot+.rel-chip{margin-top:12px}
-.rel-chip:hover{color:var(--ink);border-color:var(--hairline2)}
+@media (min-width:768px){.rel-chip{min-height:0}}
 /* A phone widens its layout viewport to fit anything that overflows sideways,
    and `position:fixed` panels are sized against that widened box: the chat
    drawer's close button and its footer land off the visible screen, with no
@@ -3133,13 +3135,16 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 
 /* What's new — ui-kit's chip and drawer (docs/subsystems/releases.md), themed by mapping its `--uk-*` properties onto this sheet's tokens. Set on the
    two roots rather than `:root`, so each property resolves against whichever `[data-theme]` the element sits under. Badges are each status token on its
-   own tint; the 14% mixes carry each theme's hue through. Full screen below `md` is ui-kit's `narrow`, passed in from `useNarrow`. */
+   own tint; the 14% mixes carry each theme's hue through. Full screen below `md` is ui-kit's `narrow`, passed in from `useNarrow`. Mapping only:
+   `test/ui-kit-guard.test.ts` fails on any other rule on a `.uk-*` class. */
 .uk-chip,.uk-drawer-scrim{
   --uk-panel-bg:var(--strip);--uk-ink:var(--ink);--uk-ink-muted:var(--ink3);--uk-hairline:var(--hairline);--uk-scrim:var(--scrim);--uk-shadow:var(--shadow2);
   --uk-accent:var(--cyan);--uk-hover-bg:var(--steel);--uk-code-bg:var(--steel);--uk-font:var(--font);--uk-font-mono:var(--font);
   --uk-feat-ink:var(--green);--uk-feat-tint:var(--green-tint);--uk-fix-ink:var(--amber-ink);--uk-fix-tint:var(--amber-tint);
   --uk-perf-ink:var(--cyan);--uk-perf-tint:color-mix(in srgb,var(--cyan) 14%,transparent);
   --uk-breaking-ink:var(--red);--uk-breaking-tint:color-mix(in srgb,var(--red) 14%,transparent);
-  --uk-font-size-lg:16px;--uk-z:50;
+  --uk-chip-bg:var(--steel);--uk-z:50;
+  /* The drawer's viewport units are divided by this, because `.shell{zoom}` scales a panel sized in vh/vw too and it would overhang the window. The drawer
+     renders inside `.uk-drawer-scrim`, so it inherits it from there. */
+  --uk-zoom:var(--font-scale,1);
 }
-.uk-releases-notes .md{font-size:13px}

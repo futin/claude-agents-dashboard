@@ -5,10 +5,10 @@ newest first. The record is the checkout's annotated `vX.Y.Z` tags, which the re
 ([ci](../workflows/ci.md) §Releases). Design: [the release pipeline spec](../superpowers/specs/2026-10-15-release-pipeline-design.md) §App.
 
 Code: `server/lib/releases.ts` (points release-kit's memoised reader at the checkout), `serveReleases` in `server/api.ts`, and on the client [ui-kit](https://github.com/futin/ui-kit)
-(pinned to `v0.2.0` as of 2026-10-18): its `useWhatsNew` hook, `VersionChip` and `ReleasesDrawer` own the read, the dot, the chip and the drawer. What is
-this app's own: `client/src/lib/releases.ts` (the storage key), `client/src/components/ReleasesDrawer.tsx` (the wrapper adding the back gesture, `narrow`
-and the app's `Markdown` for notes), the chip's placement in `SideRail.tsx`, the wiring in `AppShell` (`App.tsx`), the `--uk-*` token mapping in
-`styles.css` and its import of `ui-kit/styles.css` in `main.tsx`.
+(pinned to `v0.3.0` as of 2026-10-19): its `useWhatsNew` hook, `VersionChip` and `ReleasesDrawer` own the read, the dot, the chip and the drawer. What is
+this app's own: `client/src/lib/releases.ts` (the storage key), `client/src/components/ReleasesDrawer.tsx` (the wrapper adding the back gesture and `narrow`;
+the notes are ui-kit's own renderer), the chip's placement (the `.rel-chip` wrapper, and its `narrow`, in `SideRail.tsx`), the wiring in `AppShell`
+(`App.tsx`), the `--uk-*` token mapping in `styles.css` and its import of `ui-kit/styles.css` in `main.tsx`.
 
 ## `GET /api/releases`
 
@@ -36,7 +36,7 @@ the git port) are the test seams over it.
 
 ## The chip
 
-ui-kit's `VersionChip`, with `className="rel-chip"` for the rail's pill: `v0.3.0`, or `v0.3.0+2` when HEAD is two commits past the tag (`chipLabel`). No chip at all when `current` is null. It is the rail's last element: under the
+ui-kit's `VersionChip`, placed by a `.rel-chip` wrapper div (the chip takes no class; its look is ui-kit's, and the rail passes `narrow` from `useNarrow`): `v0.3.0`, or `v0.3.0+2` when HEAD is two commits past the tag (`chipLabel`). No chip at all when `current` is null. It is the rail's last element: under the
 live line on Sessions, sunk to the rail's foot on every other section, and the last row of the phone menu, where tapping it closes the menu as every rail
 entry does.
 
