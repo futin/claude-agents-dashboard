@@ -3157,6 +3157,9 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .cg-confirm.start .cg-confirm-keys{justify-content:flex-start}
 .git-mx tr.cg-mx-confirm td{border-top:0;padding-top:0}
 .git-mx .cg-num{text-align:right;white-space:nowrap;color:var(--ink2);font-variant-numeric:tabular-nums}
+/* Twelve columns against Git's five: tighter gutters and a narrower name floor keep the keys inside the panel at the 1280 tier. */
+.cg-mx th,.cg-mx td{padding-left:8px;padding-right:8px}
+.cg-mx .git-mx-rn{min-width:100px}
 .cg-pane-why{display:flex;flex-direction:column;gap:4px}
 .cg-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .cg-tile{background:var(--strip-hi);border-radius:12px;padding:10px 12px;min-width:0}
