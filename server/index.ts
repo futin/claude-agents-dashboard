@@ -12,6 +12,7 @@
  *   POST /api/open-folder       → open a pinned project's folder in Finder (macOS; see api.ts)
  *   GET  /api/git-stats         → local git state of each pinned project (see lib/git-stats.ts)
  *   POST /api/git-fetch         → fetch every pinned repo's origin now (see lib/git-fetch.ts)
+ *   POST /api/git-quick         → fast-forward pull or push of one pinned repo, no session (see lib/git-quick.ts)
  *   GET  /api/releases          → the dashboard's own releases from its local tags (see lib/releases.ts)
  *   GET  /api/dismiss           → a tapped desk push lands here; the page closes itself
  *   GET  /api/hub/widgets       → Lookout hub catalog (see lib/hub-widgets.ts)
@@ -38,7 +39,7 @@ import {
   serveRemoteAnswerToggle, servePermissionNotify,
   servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
-  serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, servePinsOrder, serveGitStats, serveGitFetch, serveCodegraph, serveCodegraphRun,
+  serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, servePinsOrder, serveGitStats, serveGitFetch, serveGitQuick, serveCodegraph, serveCodegraphRun,
   serveNotifyEvent, serveNotifyTest,
   serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates, serveUsageHistory,
   serveAccount, serveReleases, serveHub, serveOpenFolder
@@ -267,6 +268,11 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (u.pathname === '/api/git-fetch') {
       if (req.method !== 'POST') return methodNotAllowed(res);
       return void serveGitFetch(config, req, res);
+    }
+    // Pull or Push one pinned repo without a session: POST-only and behind the write gate inside the handler, like git-fetch.
+    if (u.pathname === '/api/git-quick') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveGitQuick(config, req, res);
     }
     // Read-only codegraph state of the pinned repos, and the one write beside it: a Sync or Reindex, POST-only and behind the write gate inside the handler.
     if (u.pathname === '/api/codegraph') {

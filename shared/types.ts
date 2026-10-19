@@ -1709,6 +1709,11 @@ export type RepoGitStats =
       /** Which refs of the trunk exist; null exactly when `trunk` is null. Lets the client tell "<trunk> not on origin" from "<trunk> only on origin", which `trunkVsOrigin: null` alone cannot. */
       trunkRefs: { local: boolean; origin: boolean } | null;
       /**
+       * The local trunk is checked out in a worktree other than this pin's `toplevel`, so a quick Pull cannot move it without a checkout. False when there
+       * is no local trunk or it is checked out nowhere else.
+       */
+      trunkCheckedOutElsewhere: boolean;
+      /**
        * The current branch against its configured upstream (`%(upstream)`), counted over local refs only. `upstream` is the short name (`origin/feat/x`);
        * `counts` is null when the upstream is configured but its ref does not resolve (gone, e.g. after `fetch --prune`). The whole field is null when
        * detached, on the trunk, on an unborn branch, or with no upstream configured. `ahead` = commits only on the branch, `behind` = commits only on the
@@ -1750,6 +1755,41 @@ export interface GitStatsResponse {
   repos: RepoGitStats[];
   fetch: FetchClock;
   generatedAt: number;
+}
+
+/** A quick git op from the Sync key's menu: a fast-forward pull or push, run on the server with no Claude session. */
+export type GitQuickOp = 'pull' | 'push';
+
+/** Body of `POST /api/git-quick`. `dirName` names a pin; the server never takes a path from the client. */
+export interface GitQuickRequest {
+  dirName: string;
+  op: GitQuickOp;
+}
+
+/** `ff`: the checked-out branch (trunk or not) fast-forwarded; `move`: the local trunk moved without a checkout; `push`: the current branch pushed. */
+export type GitQuickPartKind = 'ff' | 'move' | 'push';
+
+/**
+ * One ref a quick op moved, or tried to. `target` is the ref on the other side (`origin/main`, `origin/feature/x`). A failed part carries git's first
+ * non-empty stderr line with any `error: ` / `fatal: ` prefix stripped (`''` when git said nothing), or `timedOut` when the call was killed.
+ */
+export type GitQuickPart = { kind: GitQuickPartKind; branch: string; target: string } & (
+  | { ok: true; commits: number }
+  | { ok: false; timedOut: boolean; detail: string }
+);
+
+/** Why a quick op did nothing at all. `fetch-running` and `busy` answer 409; the rest 200. */
+export type GitQuickRefusal = 'not-ok' | 'no-origin' | 'detached' | 'in-progress' | 'fetch-running' | 'busy' | 'nothing' | 'fetch-failed';
+
+/** Answer of `POST /api/git-quick`: either parts (some may have failed) or one refusal. `detail` and `timedOut` describe a `fetch-failed`. */
+export interface GitQuickResponse {
+  op: GitQuickOp;
+  /** The pin's display name, which every result line starts with. */
+  repo: string;
+  parts: GitQuickPart[];
+  refusal: GitQuickRefusal | null;
+  detail: string | null;
+  timedOut: boolean;
 }
 
 /** What a codegraph run does: `sync` applies pending changes, `reindex` rebuilds the whole graph. */

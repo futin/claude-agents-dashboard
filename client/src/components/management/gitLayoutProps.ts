@@ -1,5 +1,6 @@
 import type { FetchClock, RepoGitStats, Session } from '../../../../shared/types';
 import type { GitFetchControl } from '../../hooks/useGitFetch';
+import type { GitQuickControl } from '../../hooks/useGitQuick';
 import type { GitSyncControl } from '../../hooks/useGitSync';
 import type { GitLayout } from '../../lib/gitLayouts';
 
@@ -11,6 +12,7 @@ export interface GitLayoutProps {
   clock: FetchClock | undefined;
   sync: GitSyncControl;
   fetchCtl: GitFetchControl;
+  quick: GitQuickControl;
   unpin: { busy: string | null; run: (dirName: string) => void };
   openFolder: (path: string) => void;
   narrow: boolean;

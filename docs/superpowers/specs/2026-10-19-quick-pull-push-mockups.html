@@ -1,0 +1,320 @@
+<title>Quick Pull and Push</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&display=swap">
+<style>
+/* Layout: the app's own Matrix table, drawn once per variant on a board, with the same four rows each time so the variants compare row for row.
+   Tokens: daylight theme (light) and midnight (dark), copied from client/src/styles.css. */
+:root{
+  --board:#f4f4f3;--steel:#ededec;--strip:#ffffff;--strip-hi:#f2f2f1;
+  --hairline:#eaeae8;--hairline2:#dcdcda;
+  --ink:#131313;--ink2:#525252;--ink3:#6b6b6b;
+  --green:#38631a;--mustard:#5f530b;--cyan:#306c0f;
+  --green-solid:#7dc242;--green-tint:#cde8a8;
+  --amber-solid:#c4761f;--amber-tint:color-mix(in srgb,#c4761f 11%,transparent);--amber-ink:#945917;
+  --mustard-tint:color-mix(in srgb,#9a8712 13%,transparent);--mustard-ink:#74660e;
+  --shadow2:rgba(0,0,0,.1);
+  --font:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;--hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;--green:#46d48c;--mustard:#d1ba52;--cyan:#55d0dd;
+  --green-solid:#46d48c;--green-tint:color-mix(in srgb,#46d48c 18%,transparent);
+  --amber-solid:#ffb03a;--amber-tint:color-mix(in srgb,#ffb03a 14%,transparent);--amber-ink:#ffc46b;
+  --mustard-tint:color-mix(in srgb,#d1ba52 14%,transparent);--mustard-ink:#e0cc70;--shadow2:rgba(0,0,0,.5);
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;--hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;--green:#46d48c;--mustard:#d1ba52;--cyan:#55d0dd;
+  --green-solid:#46d48c;--green-tint:color-mix(in srgb,#46d48c 18%,transparent);
+  --amber-solid:#ffb03a;--amber-tint:color-mix(in srgb,#ffb03a 14%,transparent);--amber-ink:#ffc46b;
+  --mustard-tint:color-mix(in srgb,#d1ba52 14%,transparent);--mustard-ink:#e0cc70;--shadow2:rgba(0,0,0,.5);
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--board);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.page{max-width:1180px;margin:0 auto;padding-block:32px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:40px}
+h1{font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0;text-wrap:balance}
+h2{font-size:18px;font-weight:600;letter-spacing:-.01em;margin:0;text-wrap:balance}
+h3{font-size:13px;font-weight:600;margin:0;color:var(--ink2);text-transform:uppercase;letter-spacing:.06em}
+p{margin:0;max-width:68ch;color:var(--ink2)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:var(--steel);padding:1px 5px;border-radius:5px;color:var(--ink)}
+.lead{display:grid;gap:10px}
+.sec{display:grid;gap:14px}
+.sec-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px}
+.tag{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.tag.rec{color:var(--green)}
+.pros{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px 28px}
+.pros div{display:grid;gap:4px;min-width:0}
+.pros ul{margin:0;padding-left:18px;color:var(--ink2);display:grid;gap:3px}
+
+/* ── real app classes (styles.css) ── */
+.git-panel{background:var(--strip);border-radius:16px;min-width:0}
+.git-mx-wrap{padding:0 0 6px;overflow-x:auto}
+.git-mx{width:100%;min-width:900px;border-collapse:collapse;font-size:13px;color:var(--ink)}
+.git-mx th{font-size:12px;font-weight:400;color:var(--ink2);text-align:left;padding:14px 12px;border-bottom:1px solid var(--hairline);white-space:nowrap}
+.git-mx td{padding:14px 12px;border-top:1px solid var(--hairline);vertical-align:middle}
+.git-mx tbody tr:first-child td{border-top:0}
+.git-mx th:first-child,.git-mx td:first-child{padding-left:20px}
+.git-mx th:last-child,.git-mx td:last-child{padding-right:20px}
+.git-mx-dot{width:9px}
+.git-dot{width:9px;height:9px;border-radius:50%;display:block;background:var(--ink3)}
+.git-dot.needs{background:var(--amber-solid)}.git-dot.flight{background:var(--mustard)}.git-dot.quiet{background:var(--green-solid)}
+.git-mx-cnt{color:var(--ink3)}
+.git-mx-rn{width:100%;min-width:150px}
+.git-name{font-size:14px;font-weight:500;letter-spacing:-.01em}
+.git-mx-sub{margin-top:3px;font-size:12px;color:var(--ink2)}
+.git-mx-act{text-align:right;white-space:nowrap}
+.git-mx-act>*+*{margin-left:6px}
+.git-cell{font-size:12px;white-space:nowrap}
+.git-cell.ok,.git-cell.na{color:var(--ink3)}
+.git-cell.live{color:var(--cyan)}
+.git-cell.bad,.git-cell.meh{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px}
+.git-cell.bad{color:var(--amber-ink);background:var(--amber-tint)}
+.git-cell.meh{color:var(--mustard-ink);background:var(--mustard-tint)}
+.git-sync,.git-key{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px 0 9px;font-family:var(--font);font-size:12px;font-weight:500;line-height:1;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:8px;cursor:pointer;white-space:nowrap;vertical-align:middle}
+.git-sync:hover,.git-key:hover{color:var(--ink);background:var(--hairline2)}
+.git-sync svg,.git-key svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.git-key.primary,.git-sync.primary{color:var(--strip);background:var(--ink)}
+.git-key:focus-visible,.git-sync:focus-visible,.git-cell.act:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.git-key.on{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+.git-key.on svg{animation:spin 1.2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── proposed (A): a pill that is also a button ── */
+.git-cell.act{border:0;font-family:var(--font);cursor:pointer;box-shadow:inset 0 0 0 1px transparent;transition:box-shadow .15s,background .15s}
+.git-cell.act svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;margin-right:-2px}
+.git-cell.act:hover{box-shadow:inset 0 0 0 1px currentColor}
+.git-cell.act.live{display:inline-flex;font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;background:color-mix(in srgb,var(--cyan) 12%,transparent);cursor:default}
+.git-cell.act.done{display:inline-flex;font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;color:var(--green);background:var(--green-tint);cursor:default}
+.hovertip{position:relative}
+.hovertip .tip{position:absolute;left:0;top:calc(100% + 8px);z-index:3;width:max-content;max-width:260px;padding:8px 10px;border-radius:10px;background:var(--ink);color:var(--strip);font-size:12px;line-height:1.4;box-shadow:0 6px 20px var(--shadow2);white-space:normal}
+.hovertip .tip code{background:color-mix(in srgb,var(--strip) 18%,transparent);color:var(--strip)}
+
+/* ── proposed (C): split Sync with a menu ── */
+.split{position:relative;display:inline-flex;vertical-align:middle}
+.split .git-sync{border-radius:8px 0 0 8px;padding-right:9px}
+.split .caret{border-radius:0 8px 8px 0;padding:0 7px;margin-left:1px}
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:4;width:300px;padding:6px;border-radius:12px;background:var(--strip);box-shadow:0 0 0 1px var(--hairline2),0 10px 28px var(--shadow2);text-align:left;white-space:normal;display:grid;gap:2px}
+.menu button{display:grid;grid-template-columns:18px 1fr;gap:2px 8px;align-items:start;width:100%;text-align:left;padding:8px 10px;border:0;border-radius:8px;background:none;font-family:var(--font);color:var(--ink);cursor:pointer}
+.menu button:hover:not(:disabled){background:var(--strip-hi)}
+.menu button:disabled{cursor:default;color:var(--ink3)}
+.menu svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;margin-top:2px}
+.menu .t{font-size:13px;font-weight:500}
+.menu .s{grid-column:2;font-size:12px;color:var(--ink3)}
+.menu hr{border:0;border-top:1px solid var(--hairline);margin:4px 6px}
+
+/* row note that reports a finished quick action, in every variant */
+.git-mx tr.note td{border-top:0;padding:0 20px 12px 45px}
+.qnote{font-size:12px;color:var(--ink2)}
+.qnote.err{color:var(--amber-ink)}
+
+/* rules table + YAGNI */
+.rules{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+.rules th{text-align:left;font-size:12px;font-weight:400;color:var(--ink2);padding:10px 14px;border-bottom:1px solid var(--hairline)}
+.rules td{padding:10px 14px;border-top:1px solid var(--hairline);vertical-align:top}
+.rules tr:first-child td{border-top:0}
+.rules td:first-child{padding-left:20px}.rules th:first-child{padding-left:20px}
+.no{color:var(--ink3)}
+.console{display:grid;gap:12px;padding:18px 20px}
+.console .keys{display:flex;flex-wrap:wrap;gap:6px}
+.console pre{margin:0;padding:12px 14px;border-radius:10px;background:var(--steel);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--ink2);overflow-x:auto}
+.ask{border-left:3px solid var(--ink);padding:4px 0 4px 16px;display:grid;gap:6px}
+@media (prefers-reduced-motion: reduce){.git-key.on svg{animation:none}}
+</style>
+
+<div class="page">
+  <header class="lead">
+    <span class="tag">Management › Git · Matrix</span>
+    <h1>Quick pull and push without a Claude session</h1>
+    <p>Sync starts a full <code>/git-sync</code> session every time: a secret scan, checks, branch pruning, a question round. Many rows only need one git
+      command. Each variant below adds a fast path that runs plain git on the server and leaves Sync for everything else. Click the buttons and pills to
+      see the running and finished states.</p>
+  </header>
+
+  <!-- NOW -->
+  <section class="sec">
+    <div class="sec-head"><h2>Now</h2><span class="tag">today's Matrix, four sample rows</span></div>
+    <div class="git-panel git-mx-wrap" id="now"></div>
+  </section>
+
+  <!-- RULES -->
+  <section class="sec">
+    <div class="sec-head"><h2>Which pill gets a fast path</h2><span class="tag">same rules in every variant</span></div>
+    <p>A fast path only exists when git can do it with no judgement call: a fast-forward or a plain push. Anything that needs a commit, a merge or a PR
+      stays with Sync.</p>
+    <div class="git-panel git-mx-wrap">
+      <table class="rules">
+        <thead><tr><th>Cell</th><th>State</th><th>Fast path</th><th>Command</th></tr></thead>
+        <tbody>
+          <tr><td>Up to date</td><td><span class="git-cell bad">3 to pull</span>, nothing unpushed</td><td>Pull</td><td><code>git merge --ff-only @{u}</code> (data is already fetched)</td></tr>
+          <tr><td>Pushed</td><td><span class="git-cell meh">2 unpushed</span>, nothing to pull</td><td>Push</td><td><code>git push</code> on the current branch</td></tr>
+          <tr><td>Trunk</td><td><span class="git-cell meh">main ↓1</span>, main checked out</td><td>Pull</td><td><code>git merge --ff-only origin/main</code></td></tr>
+          <tr><td>Trunk</td><td><span class="git-cell meh">main ↓5</span>, other branch checked out</td><td>Pull</td><td><code>git fetch . origin/main:main</code> (moves main without a checkout)</td></tr>
+          <tr><td>Trunk</td><td><span class="git-cell meh">main ↑1</span> or <span class="git-cell meh">main ↓2 ↑1</span></td><td class="no">none</td><td class="no">PR-only trunk or diverged: Sync carries it to a PR</td></tr>
+          <tr><td>Working tree</td><td><span class="git-cell bad">1 uncommitted</span></td><td class="no">none</td><td class="no">committing needs the secret scan: Sync. A pull still runs if git accepts it.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- A -->
+  <section class="sec">
+    <div class="sec-head"><h2>A · The pill is the button</h2><span class="tag">your idea</span></div>
+    <p>A pill with a fast path gains a small arrow and a hover ring. Clicking it runs the command; the pill turns cyan while git runs, then settles to its
+      healthy text. Pills without a fast path look exactly as today. Sync stays at the end of the row.</p>
+    <div class="git-panel git-mx-wrap" id="va"></div>
+    <div class="pros">
+      <div><h3>Good</h3><ul><li>No new chrome: the action sits on the fact it fixes.</li><li>Two problems on one row (row 4) are two separate clicks, each obvious.</li></ul></div>
+      <div><h3>Costs</h3><ul><li>Matrix only. Inbox, Inspector and Branches draw facts differently and need their own version.</li><li>A pill that looks like a status but acts like a button can surprise; the arrow is the only cue.</li><li>Phone: Matrix scrolls sideways, so the pill can be off-screen.</li></ul></div>
+    </div>
+  </section>
+
+  <!-- B -->
+  <section class="sec">
+    <div class="sec-head"><h2>B · A quick key beside Sync</h2><span class="tag rec">recommended</span></div>
+    <p>The action column gets one more key, built from the same rules: <b>Pull</b>, <b>Push</b> or <b>Pull + push</b>, with the count. When the quick key
+      fixes everything on the row it takes the dark primary style and Sync goes quiet. A diverged or PR-only row gets no quick key.</p>
+    <div class="git-panel git-mx-wrap" id="vb"></div>
+    <div class="pros">
+      <div><h3>Good</h3><ul><li>Lives in <code>GitKeys</code>, which every layout already draws, so Inbox, Inspector and Branches get it for free.</li><li>Reads as a button: same shape as Sync and Retry fetch.</li><li>One click for the common case.</li></ul></div>
+      <div><h3>Costs</h3><ul><li>The action column grows by about 80px.</li><li>The key does not point at which pill it fixes; the label carries that.</li></ul></div>
+    </div>
+  </section>
+
+  <!-- C -->
+  <section class="sec">
+    <div class="sec-head"><h2>C · Sync becomes a split button</h2></div>
+    <p>Sync keeps its place and gains a caret. The menu lists Pull and Push with what each would do, greyed out with a reason when git cannot do it, and the
+      full Claude sync at the bottom. Row 1's menu is open.</p>
+    <div class="git-panel git-mx-wrap" id="vc" style="padding-bottom:230px"></div>
+    <div class="pros">
+      <div><h3>Good</h3><ul><li>Row width unchanged.</li><li>Room to explain each command and why one is unavailable.</li></ul></div>
+      <div><h3>Costs</h3><ul><li>Two clicks for the most common case.</li><li>The fast path is hidden until you open the menu.</li></ul></div>
+    </div>
+  </section>
+
+  <!-- YAGNI -->
+  <section class="sec">
+    <div class="sec-head"><h2>Left out · A git console per repo</h2><span class="tag">YAGNI</span></div>
+    <p>A drawer per repo with Fetch, Pull, Push, Stash and Commit keys and the raw git output. It covers more cases, but it rebuilds a terminal inside the
+      dashboard, and commit without the secret scan is exactly what Sync exists to prevent.</p>
+    <div class="git-panel console">
+      <div class="keys">
+        <button class="git-key" type="button">Fetch</button><button class="git-key" type="button">Pull</button><button class="git-key" type="button">Push</button>
+        <button class="git-key" type="button">Stash</button><button class="git-key" type="button">Commit…</button><button class="git-key" type="button">Rebase on main</button>
+      </div>
+<pre>$ git merge --ff-only origin/main
+Updating 4bec6bb..d18e082
+Fast-forward
+ client/src/components/management/GitMatrix.tsx | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)</pre>
+    </div>
+  </section>
+
+  <section class="ask">
+    <h2>Under every variant</h2>
+    <p>One new server route, <code>POST /api/git/quick</code> with <code>{ dirName, op: "pull" | "push" }</code>. It re-reads the repo, re-checks the
+      rule above, and runs git the way <code>lib/git-fetch.ts</code> already does, behind the same write-access and Answer-token guard. The result shows as
+      one line under the row: <span class="qnote">Pulled 1 commit into main.</span> or, when git refuses,
+      <span class="qnote err">git refused: your uncommitted change to settings.json would be overwritten. Use Sync.</span></p>
+  </section>
+</div>
+
+<script>
+const SYNC = '<svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 0 1-9.4 3.9M2.5 8a5.5 5.5 0 0 1 9.4-3.9"/><path d="M12 1.5v3h-3M4 14.5v-3h3"/></svg>';
+const DOWN = '<svg viewBox="0 0 16 16"><path d="M8 2.5v10M3.5 8.5 8 13l4.5-4.5"/></svg>';
+const UP = '<svg viewBox="0 0 16 16"><path d="M8 13.5v-10M3.5 7.5 8 3l4.5 4.5"/></svg>';
+const BOTH = '<svg viewBox="0 0 16 16"><path d="M5 2.5v10M2 9.5l3 3 3-3M11 13.5v-10M8 6.5l3-3 3 3"/></svg>';
+const CARET = '<svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>';
+const SPIN = '<svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/></svg>';
+
+// The same four rows in every board. `fast` is what the rules above allow; `fixesAll` says the quick path clears the row.
+const ROWS = [
+  { name:'claude-global', br:'main', lvl:'needs',
+    cells:[['bad','1 uncommitted'],['na','—'],['na','—'],['meh','main ↓1',{op:'pull',done:'main = origin',note:'Pulled 1 commit into main.'}],['ok','9m'],['na','0']],
+    quick:{op:'pull',label:'Pull 1',icon:DOWN,note:'Pulled 1 commit into main.'}, fixesAll:false },
+  { name:'claude-agents-dashboard', br:'feat/quick-pull', lvl:'flight',
+    cells:[['ok','clean'],['meh','2 unpushed',{op:'push',done:'yes',note:'Pushed 2 commits to origin/feat/quick-pull.'}],['ok','yes'],['ok','main = origin'],['ok','3m'],['ok','4']],
+    quick:{op:'push',label:'Push 2',icon:UP,note:'Pushed 2 commits to origin/feat/quick-pull.'}, fixesAll:true },
+  { name:'backlog-manager', br:'main', lvl:'flight',
+    cells:[['ok','clean'],['na','—'],['na','—'],['meh','main ↓2 ↑1'],['ok','12m'],['ok','1']],
+    quick:null, fixesAll:false },
+  { name:'guide-manager', br:'fix/deck-paths', lvl:'needs',
+    cells:[['ok','clean'],['meh','1 unpushed',{op:'push',done:'yes',note:'Pushed 1 commit to origin/fix/deck-paths.'}],['bad','3 to pull',{op:'pull',done:'yes',note:'Pulled 3 commits into fix/deck-paths.'}],['meh','main ↓5',{op:'pull',done:'main = origin',note:'Moved main forward 5 commits.'}],['ok','5m'],['ok','2']],
+    quick:null, fixesAll:false },
+];
+// Row 4 is behind AND ahead on its own branch: diverged, so neither pull nor push alone is a fast-forward. Only main ↓5 is.
+ROWS[3].cells[1] = ['meh','1 unpushed']; ROWS[3].cells[2] = ['bad','3 to pull'];
+ROWS[3].quick = {op:'pull',label:'Pull main 5',icon:DOWN,note:'Moved main forward 5 commits. fix/deck-paths has diverged: use Sync.'};
+
+const HEAD = ['Working tree','Pushed','Up to date','Trunk','Origin data','Branches'];
+function counts(){ return HEAD.map((_,i)=>ROWS.filter(r=>r.cells[i][0]==='bad'||r.cells[i][0]==='meh').length); }
+function thead(){ const c=counts(); return '<thead><tr><th class="git-mx-dot"></th><th>Repo</th>'+HEAD.map((h,i)=>`<th>${h}${c[i]?` <span class="git-mx-cnt">${c[i]}</span>`:''}</th>`).join('')+'<th></th></tr></thead>'; }
+function rn(r){ return `<td class="git-mx-dot"><span class="git-dot ${r.lvl}"></span></td><td class="git-mx-rn"><div class="git-name">${r.name}</div><div class="git-mx-sub">${r.br}</div></td>`; }
+function syncBtn(primary){ return `<button type="button" class="git-sync${primary?' primary':''}">${SYNC}Sync</button>`; }
+function cell(c){ return `<span class="git-cell ${c[0]}">${c[1]}</span>`; }
+
+function boardNow(){
+  return '<table class="git-mx">'+thead()+'<tbody>'+ROWS.map(r=>`<tr>${rn(r)}${r.cells.map(c=>`<td>${cell(c)}</td>`).join('')}<td class="git-mx-act">${syncBtn(r.lvl==='needs')}</td></tr>`).join('')+'</tbody></table>';
+}
+
+function boardA(){
+  return '<table class="git-mx">'+thead()+'<tbody>'+ROWS.map((r,ri)=>{
+    const tds = r.cells.map((c,ci)=>{
+      if(!c[2]) return `<td>${cell(c)}</td>`;
+      const icon = c[2].op==='pull'?DOWN:UP;
+      const tip = ri===0&&ci===3 ? `<span class="tip">Pull: fast-forward main by 1 commit<br><code>git merge --ff-only origin/main</code></span>` : '';
+      return `<td><span class="hovertip"><button type="button" class="git-cell ${c[0]} act" data-a="${ri}:${ci}" aria-label="${c[2].op} — ${c[1]}">${c[1]}${icon}</button>${tip}</span></td>`;
+    }).join('');
+    return `<tr>${rn(r)}${tds}<td class="git-mx-act">${syncBtn(r.lvl==='needs')}</td></tr><tr class="note" data-note="a${ri}" hidden><td colspan="9"></td></tr>`;
+  }).join('')+'</tbody></table>';
+}
+
+function boardB(){
+  return '<table class="git-mx">'+thead()+'<tbody>'+ROWS.map((r,ri)=>{
+    const q = r.quick ? `<button type="button" class="git-key${r.fixesAll?' primary':''}" data-b="${ri}">${r.quick.icon}${r.quick.label}</button>` : '';
+    return `<tr>${rn(r)}${r.cells.map(c=>`<td>${cell(c)}</td>`).join('')}<td class="git-mx-act">${q}${syncBtn(!r.fixesAll && r.lvl==='needs')}</td></tr><tr class="note" data-note="b${ri}" hidden><td colspan="9"></td></tr>`;
+  }).join('')+'</tbody></table>';
+}
+
+function menuFor(r){
+  const pull = r.quick&&r.quick.op==='pull', push = r.quick&&r.quick.op==='push';
+  const pullSub = r.name==='claude-global'?'Fast-forward main by 1 commit':r.name==='guide-manager'?'Move main forward 5 commits':r.name==='backlog-manager'?'main has diverged from origin':'Nothing to pull';
+  const pushSub = push?'2 commits to origin/feat/quick-pull':r.name==='backlog-manager'?'main is PR-only':r.name==='guide-manager'?'fix/deck-paths has diverged':'Nothing to push';
+  return `<div class="menu" role="menu">
+    <button type="button" role="menuitem"${pull?'':' disabled'}>${DOWN}<span class="t">Pull</span><span class="s">${pullSub}</span></button>
+    <button type="button" role="menuitem"${push?'':' disabled'}>${UP}<span class="t">Push</span><span class="s">${pushSub}</span></button>
+    <hr>
+    <button type="button" role="menuitem">${SYNC}<span class="t">Sync with Claude</span><span class="s">Commit, check, push, prune branches</span></button>
+  </div>`;
+}
+function boardC(){
+  return '<table class="git-mx">'+thead()+'<tbody>'+ROWS.map((r,ri)=>`<tr>${rn(r)}${r.cells.map(c=>`<td>${cell(c)}</td>`).join('')}<td class="git-mx-act"><span class="split"><button type="button" class="git-sync${r.lvl==='needs'?' primary':''}">${SYNC}Sync</button><button type="button" class="git-sync caret${r.lvl==='needs'?' primary':''}" data-c="${ri}" aria-label="More sync options" aria-expanded="${ri===0}">${CARET}</button>${ri===0?menuFor(r):''}</span></td></tr>`).join('')+'</tbody></table>';
+}
+
+document.getElementById('now').innerHTML = boardNow();
+document.getElementById('va').innerHTML = boardA();
+document.getElementById('vb').innerHTML = boardB();
+document.getElementById('vc').innerHTML = boardC();
+
+function showNote(key, text){ const tr=document.querySelector(`[data-note="${key}"]`); tr.hidden=false; tr.firstElementChild.innerHTML=`<span class="qnote${/diverged/.test(text)?' err':''}">${text}</span>`; }
+
+document.getElementById('va').addEventListener('click', e=>{
+  const b=e.target.closest('button.act'); if(!b||b.classList.contains('live')||b.classList.contains('done')) return;
+  const [ri,ci]=b.dataset.a.split(':').map(Number); const c=ROWS[ri].cells[ci];
+  const tip=b.parentElement.querySelector('.tip'); if(tip) tip.remove();
+  b.className='git-cell act live'; b.textContent=c[2].op==='pull'?'pulling…':'pushing…';
+  setTimeout(()=>{ b.className='git-cell act done'; b.textContent=c[2].done; showNote('a'+ri,c[2].note); },1100);
+});
+document.getElementById('vb').addEventListener('click', e=>{
+  const b=e.target.closest('button[data-b]'); if(!b||b.classList.contains('on')) return;
+  const r=ROWS[+b.dataset.b]; b.className='git-key on'; b.innerHTML=SPIN+(r.quick.op==='pull'?'Pulling…':'Pushing…');
+  setTimeout(()=>{ b.remove(); showNote('b'+b.dataset.b,r.quick.note); },1100);
+});
+document.getElementById('vc').addEventListener('click', e=>{
+  const b=e.target.closest('button[data-c]'); if(!b) return;
+  document.querySelectorAll('#vc .menu').forEach(m=>m.remove());
+  document.querySelectorAll('#vc [data-c]').forEach(x=>x.setAttribute('aria-expanded','false'));
+  b.setAttribute('aria-expanded','true'); b.parentElement.insertAdjacentHTML('beforeend', menuFor(ROWS[+b.dataset.c]));
+});
+</script>

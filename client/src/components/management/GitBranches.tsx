@@ -19,7 +19,7 @@ const COLS: { key: Col; label: string; hint: string }[] = [
  * Branches (management-redesign spec §4.6): every open branch across the pins, a column per need. Repos keep pin order since nothing here is ranked; a repo
  * that cannot be read has no branches to place, so it gets a note that points at Inbox instead of a column.
  */
-export default function GitBranches({ repos, sessions, nowMs, sync, setLayout }: GitLayoutProps) {
+export default function GitBranches({ repos, sessions, nowMs, sync, quick, setLayout }: GitLayoutProps) {
   const assessed = repos.map(r => assessGitRepo(r, sessions, nowMs));
   const items: { col: Col; repo: OkRepo; b: OkRepo['branches'][number]; a: (typeof assessed)[number] }[] = [];
   for (const a of assessed) {
@@ -66,7 +66,7 @@ export default function GitBranches({ repos, sessions, nowMs, sync, setLayout }:
                     {agent && <span className="git-bb-ln start"><GitAgentChip agent={agent} /></span>}
                     {(here || url !== null) && (
                       <span className="git-bb-ln end">
-                        {here && <GitSyncButton repo={repo} sync={sync} />}
+                        {here && <GitSyncButton repo={repo} sync={sync} quick={quick} />}
                         {url !== null && <a className="git-key" href={url} target="_blank" rel="noopener noreferrer">Open PR</a>}
                       </span>
                     )}

@@ -56,13 +56,13 @@ pins the split against `server/api.ts`):
   `POST /api/transcribe` ([dictation](dictation.md)) rides the switch too but acts on no session, so it is not a fifth path: its only consumers are the reply and
   spawn composers.
 - **Gate-only write** — the write gate and nothing else: `POST /api/settings`, `POST /api/remote-answer`, the three [push](push-notify.md) routes
-  (`permissions/notify`, `notify/event`, `notify/test`), `POST /api/pins`, `POST /api/pins/order`, `POST /api/open-folder`, `POST /api/git-fetch` and
-  `POST /api/codegraph/run`.
+  (`permissions/notify`, `notify/event`, `notify/test`), `POST /api/pins`, `POST /api/pins/order`, `POST /api/open-folder`, `POST /api/git-fetch`,
+  `POST /api/git-quick` and `POST /api/codegraph/run`.
 
 Gate-only is the intended posture for that second set, not an oversight. The switch is a runtime kill switch for *acting on sessions remotely*, not an auth
 boundary — the gate above is the boundary. `POST /api/settings` and `POST /api/remote-answer` cannot sit behind it, or turning the switch off would lock out
 turning it back on. The push routes must keep working with remote answering off, because push notification is independent of it. Pins, pin order, open folder,
-git fetch and codegraph runs touch no session.
+git fetch, quick pull and push, and codegraph runs touch no session.
 
 **Resolving the peer.** `resolvePeer(remoteAddress, headers)` (`server/lib/origin.ts`) classifies the socket address. A non-loopback socket is the answer
 outright: nothing such a client sends is consulted. A loopback socket means a process on this machine, possibly a proxy, so `X-Forwarded-For` is walked **from

@@ -76,7 +76,8 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
   call — the ntfy push in `lib/notify.ts` and the usage read in `lib/usage.ts`. A third needs
   a reason. `lib/token-refresh.ts` and `lib/spawn.ts` launch the `claude` CLI, which makes its
   own network calls — the server does not, so they are not a third kind. `lib/git-fetch.ts` launches `git fetch`, which makes its own network call —
-  not a third kind either. `lib/codegraph.ts` launches the `codegraph` CLI with `CODEGRAPH_NO_UPDATE_CHECK=1` and `CODEGRAPH_NO_DOWNLOAD=1` set, which switches off its
+  not a third kind either. `lib/git-quick.ts` launches `git fetch`, `git merge --ff-only` and `git push`
+  for the Sync menu's Pull and Push, which make their own network calls — a git launch, not a third kind. `lib/codegraph.ts` launches the `codegraph` CLI with `CODEGRAPH_NO_UPDATE_CHECK=1` and `CODEGRAPH_NO_DOWNLOAD=1` set, which switches off its
   update check and its bundle download — a local launch like `git`, not a third kind. `test/outbound.test.ts` pins the list.
   Two npm packages are allowed, by name, each with zero runtime deps of its own and pinned to a git tag: `lookout-widgets`, the Lookout contract producer
   behind `/api/hub/widgets`, and `release-kit`, whose reader is the one reader of the tag-message contract its release workflow writes (spec

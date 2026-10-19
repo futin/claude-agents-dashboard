@@ -102,6 +102,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `GET /api/codegraph` | the `codegraph` CLI's state of every pinned project, in pin order: index health, watcher, run in flight, last run; `cli: 'missing'` once for the payload; `?fresh=1` (Re-read status) skips the status cache (see [codegraph](subsystems/codegraph.md)) |
 | `POST /api/codegraph/run` | `{dirName, kind: 'sync' \| 'reindex'}`: start `codegraph sync` / `index` on a pinned, indexed repo and answer at once (gate-only write, like `git-fetch`); 404 not indexed, 409 already running (see [codegraph](subsystems/codegraph.md#runs)) |
 | `POST /api/git-fetch` | `git fetch origin` over every pinned repo now, answering with the fetch clock; gate-only write (see [git-stats](subsystems/git-stats.md#the-fetch)) |
+| `POST /api/git-quick` | `{dirName, op: 'pull' \| 'push'}`: fast-forward pull or push of one pinned repo for the Sync menu; gate-only write, 409 when busy or a fetch is running (see [git-stats](subsystems/git-stats.md#quick-pull-and-push--the-writer)) |
 | `GET /api/configs`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/hub/widgets`, `/:id` | the Lookout hub catalog and widget data — usage gauge, sessions list and Git pending list; `POST` action paths are 404 (see [hub-widgets](subsystems/hub-widgets.md)) |
@@ -213,6 +214,8 @@ server/
   lib/codegraph.ts    the `codegraph` CLI reader: runner (update check off), status parser, graph-root walk, pid files
   lib/codegraph-store.ts  CodeGraph's per-(root, pin) status cache, runs, lock-loss rule and the payload
   lib/git-fetch.ts    the Git fetch: detached `git fetch origin` per common dir, error classifier, watched-only timer + clock
+  lib/git-quick.ts    the Sync menu's Pull and Push: fast-forward-only pull and push of one pinned repo, never forced, hooks run
+  lib/git-locks.ts    one lock per git common dir, shared by git-quick and the fetch-all wait
   lib/open-folder.ts  `open <path>` through `execFile`, behind POST /api/open-folder (the pin-membership gate is in api.ts)
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
   lib/account.ts      `~/.claude.json` → `oauthAccount` as display strings, behind GET /api/account; fail-open to null
@@ -271,7 +274,8 @@ client/src/
                   projects on offer as Tiles, Columns or Lists; and the Git sub-view: GitView
                   (band, switcher, poll owner), GitClockChip (the sync/fetch clock chip and
                   its popover), GitInbox / GitMatrix / GitInspector /
-                  GitBranches (the four shapes, fed one `GitLayoutProps`) and GitParts (chips, divergence bar, branch list they share); and the CodeGraph
+                  GitBranches (the four shapes, fed one `GitLayoutProps`), GitParts (chips, divergence bar, branch list they share, the split Sync key)
+                  and GitQuickMenu (that key's Pull · Push · Sync with Claude menu); and the CodeGraph
                   sub-view: CodegraphView (band, switcher, poll owner), CodegraphClockChip, CodegraphInbox / CodegraphMatrix / CodegraphInspector (fed one
                   `CodegraphLayoutProps`) and CodegraphParts (chips, keys, Reindex confirm, kinds strip)), analytics/,
                   usage/ (UsageView + the three tabs, Sheet — the band / figure
@@ -284,7 +288,7 @@ client/src/
                   useUsageProfile, useUsageRates, useUsageHistory, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins, usePinReorder (Projects' pin grip), useOpenFolder (Git's Open folder
                   key),
-                  useAccount (the header chip's 30s poll, owned by App), useGitFetch (Git's Fetch all key),
+                  useAccount (the header chip's 30s poll, owned by App), useGitFetch (Git's Fetch all key), useGitQuick (the Sync menu's Pull and Push),
                   useCodegraph (the CodeGraph sub-view's 30s visible-only poll, 3s while a run is live), useCodegraphRun (its Sync / Reindex keys),
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
                   Sync button: runs per device, a sessions poll only while one is live),
@@ -307,7 +311,7 @@ client/src/
                   codegraphLayouts / codegraphLevels / codegraphText / codegraphPoll (the CodeGraph sub-view's switcher rules, the problems → levels rule,
                   the copy table, its poll schedule and run notes),
                   gitPoll (its poll schedule, apart from the DOM), gitClock (the fetch clock's meters,
-                  re-poll timing and Fetch all key state), gitSync / gitSyncRuns
+                  re-poll timing and Fetch all key state), gitQuick (the Sync menu's rules and result copy), gitSync / gitSyncRuns
                   (the Sync button's rules, copy and run reconciler), projectsView (the
                   Projects sub-view's layouts, pinned / offered split, dir line and copy), releases (the
                   unseen dot's localStorage key; the chip and drawer logic are ui-kit's)
