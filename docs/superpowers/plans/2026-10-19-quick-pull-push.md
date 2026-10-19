@@ -332,3 +332,27 @@ Result line: in `GitView`, `{quick.note && <div className={...}>}` beside the ot
   the result line and refreshed pills. Phone width (375): menu stays on screen.
 - [ ] `pnpm test:visual` if git views are in its screens; a changed baseline caused only by the new caret is re-baselined with `pnpm test:visual
   --update-snapshots` and the diff named in the PR.
+
+## Clarifications from plan review 1 (binding; each names the task it amends)
+
+- **Task 1:** compare the trunk's `%(worktreepath)` with the pin's `toplevel`, after `realpathOr` on both — not with `mainWorktree`, which `branches[]` uses.
+- **Task 2:** in the "awaits a held lock" case, the spy ordering is the proof; drop the `'lock'` clause (an in-memory lock never makes git see a lock file).
+- **Task 3:** `trunkOf` is already exported (`server/lib/git-stats.ts:102`) and takes a `GitRunner` `(cwd, args)`; reuse it through a small adapter over the
+  quick runner. `promptlessEnv` returning null → refusal `fetch-failed`, `detail` `''` (Pull) or a failed `push` part with `detail` `''` (Push). The
+  `pin.toplevel` parameter is the pin row's path; `runQuickOp` re-derives the real toplevel itself (step 1). Task 3's two-part case uses `feat/x` throughout.
+  The overlay `promptlessEnv` returns also carries `GIT_OPTIONAL_LOCKS=0` (via `READ_ENV`) — that is fine; Global Constraints lists the prompt-related part.
+- **Task 4:** a bad body answers through the house helper `sendBadBody` (`server/api.ts`, as `/api/codegraph/run` does) with the expected shape
+  `{dirName: string, op: 'pull' | 'push'}`.
+- **Task 5:** `quickFailureLine(repoName, kind)` takes `kind: 'read-only' | 'bad-token' | 'failed'` — map a 403 through `refusalKind`
+  (`client/src/lib/writeRefusal.ts`) — with copy `<repo>: <READ_ONLY_TEXT>`, `<repo>: the server refused the Answer token.`, `<repo>: the request failed.`;
+  one test case each. The note expires on the client's own clock: `quickNoteExpired(note.atMs, receivedAtMs)` where both are client `Date.now()` (the
+  note's stamp, and the moment a stats poll answered) — never the server's `generatedAt`. Pull-reason precedence: "on a branch with an upstream" means an
+  *eligible* one (`origin/*`, not `origin/<trunk>`); a branch whose upstream is on another remote or is `origin/<trunk>` shows the trunk part's reason —
+  add one case: `fix/x` upstream `upstream/fix/x` behind 2, trunk {0,0} → `Nothing to pull`. The Sync item is also disabled while `sync.pending` (today's key
+  disables on it, `GitParts.tsx:57`); `QuickCtx` grows `syncPending: boolean`.
+- **Task 6:** after an item runs, focus returns to the caret too (not only on Escape). The caret's spin honours `prefers-reduced-motion` the way the Sync
+  glyph's does (`client/src/styles.css`, beside `.git-sync.on`).
+- **Task 7:** `docs/overview.md` also gains a `POST /api/git-quick` row in its API table, beside `POST /api/git-fetch`.
+- **Task 8:** the browser check's scratch repo is pinned by planting one transcript under a **temporary `HOME`** for the worktree server (the server reads
+  `~/.claude/projects` from `HOME`), the way `plantProject` does in `test/api-git-fetch.test.ts` — never in the user's real `~/.claude/projects`; delete the
+  temp dir afterwards.
