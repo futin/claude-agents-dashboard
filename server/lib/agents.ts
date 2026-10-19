@@ -29,7 +29,10 @@
  * Both are derived from the PARENT transcript alone. The interpretation is split
  * into a pure per-record event parser (`parseRecordEvents`) and a reducer over
  * `ScanState` (`applyEvent`), so the whole-file `readAgents` (the oracle) and
- * the incremental cache (agents-cache.ts) share the exact same logic. Unlike
+ * the incremental cache (agents-cache.ts) share the exact same logic. A
+ * compaction can replay earlier records verbatim, ids included, so the reducer
+ * drops a launch or SendMessage whose tool_use id it has already seen (#174) —
+ * without that a replayed launch reads as a second row. Unlike
  * transcript.ts (256KB tail, newest tool only) `readAgents` walks the WHOLE
  * file, so it never runs in the 3s poll loop itself: the list poll reaches it
  * only through the incremental cache, and only for a session with a fresh,
@@ -228,21 +231,31 @@ interface Launch {
  * task-notification; `sends` holds SendMessage calls awaiting the result that
  * says whether they resumed an agent. Keeping these maps alive across incremental reads is what
  * lets an out-of-order completion (a notification landing long after younger
- * launches settled) still resolve — no re-scan needed.
+ * launches settled) still resolve — no re-scan needed. `seen` is every launch
+ * and SendMessage id folded so far: the maps above forget an id once it settles,
+ * so only this set recognizes a copy a compaction replays.
  */
 export interface ScanState {
   launches: Launch[];                  // file order (oldest first)
   byToolUseId: Map<string, Launch>;
   byAgentId: Map<string, Launch>;
   sends: Map<string, { summary: string; ts: string | null }>;
+  seen: Set<string>;
 }
 
 export function createScanState(): ScanState {
-  return { launches: [], byToolUseId: new Map(), byAgentId: new Map(), sends: new Map() };
+  return { launches: [], byToolUseId: new Map(), byAgentId: new Map(), sends: new Map(), seen: new Set() };
 }
 
-/** Fold one event into the state. First result / first notification wins. */
+/**
+ * Fold one event into the state. First result / first notification wins. A replayed launch or send is dropped; its replayed
+ * result and notification then find nothing armed to settle, so they need no guard of their own.
+ */
 export function applyEvent(state: ScanState, ev: AgentEvent): void {
+  if (ev.kind === 'launch' || ev.kind === 'send') {
+    if (state.seen.has(ev.id)) return;
+    state.seen.add(ev.id);
+  }
   if (ev.kind === 'launch') {
     const l: Launch = {
       id: ev.id, type: ev.type, description: ev.description,

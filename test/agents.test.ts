@@ -90,6 +90,19 @@ function resumeRec(toolUseId: string, agentId: string, iso: string, opts: { stru
   };
 }
 
+/** The marker a compaction writes on the main chain — no `message`, so it carries no agent event of its own. */
+function boundaryRec(iso: string) {
+  return { type: 'system', subtype: 'compact_boundary', timestamp: iso, content: 'Conversation compacted', compactMetadata: { trigger: 'auto', preTokens: 999 } };
+}
+/** The summary that follows a boundary. After it the CLI may replay earlier records verbatim, ids included (#174). */
+function summaryRec(iso: string) {
+  return { type: 'user', isCompactSummary: true, timestamp: iso, message: { role: 'user', content: 'Summary of the conversation so far.' } };
+}
+/** `prefix`, then a boundary and its summary, then `prefix` replayed verbatim. */
+function replayed(prefix: unknown[]): unknown[] {
+  return [...prefix, boundaryRec('2026-07-01T11:00:00Z'), summaryRec('2026-07-01T11:00:01Z'), ...prefix];
+}
+
 export function run(): number {
   console.log('\n=== agents.ts ===\n');
   let p = 0, f = 0;
@@ -443,6 +456,52 @@ export function run(): number {
     assert.strictEqual(byId.get('toolu_sm')!.type, 'Plan');
     assert.strictEqual(byId.get('toolu_sm2')!.type, '');
     assert.strictEqual(byId.get('toolu_sm2')!.status, 'running');
+  })) p++; else f++;
+
+  // --- compaction replays (#174, #226) --------------------------------------
+  if (test('sync Task launch + result replayed after a compaction → one done row, first result\'s figures', () => {
+    const jobs = readAgents(fixture(replayed([
+      taskRec('toolu_r1', 'Explore', 'look', '2026-07-01T10:00:00Z'),
+      resultRec('toolu_r1', '2026-07-01T10:00:30Z', { status: 'completed', agentId: 'ar1', totalTokens: 1200, totalToolUseCount: 3, totalDurationMs: 30000 })
+    ])))!;
+    assert.strictEqual(jobs.length, 1);
+    assert.strictEqual(jobs[0].status, 'done');
+    assert.strictEqual(jobs[0].tokens, 1200);
+    assert.strictEqual(jobs[0].endedAt, '2026-07-01T10:00:30Z');
+  })) p++; else f++;
+
+  if (test('background Agent launch + ack + notification replayed after a compaction → one done row', () => {
+    const jobs = readAgents(fixture(replayed([
+      taskRec('toolu_r2', 'general-purpose', 'work', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_r2', 'bgr2', '2026-07-01T10:00:01Z', { structured: true }),
+      notifyRec('bgr2', 'completed', '2026-07-01T10:05:00Z', { tokens: 4242, toolUses: 9, durationMs: 299000 })
+    ])))!;
+    assert.strictEqual(jobs.length, 1);
+    assert.strictEqual(jobs[0].status, 'done');
+    assert.strictEqual(jobs[0].tokens, 4242);
+  })) p++; else f++;
+
+  if (test('SendMessage resume replayed after a compaction → exactly one resumed row', () => {
+    const jobs = readAgents(fixture(replayed([
+      taskRec('toolu_r3', 'Plan', 'plan it', '2026-07-01T10:00:00Z'),
+      resultRec('toolu_r3', '2026-07-01T10:01:00Z', { status: 'completed', agentId: 'syncR3', totalTokens: 10 }),
+      sendRec('toolu_sm3', 'syncR3', '2026-07-01T10:02:00Z', 'again'),
+      resumeRec('toolu_sm3', 'syncR3', '2026-07-01T10:02:01Z'),
+      notifyRec('syncR3', 'completed', '2026-07-01T10:04:00Z', { tokens: 77, toolUses: 2, durationMs: 119000 })
+    ])))!;
+    assert.strictEqual(jobs.filter(j => j.resumed).length, 1);
+    assert.strictEqual(jobs.length, 2);
+    assert.deepStrictEqual(jobs.map(j => [j.id, j.status]), [['toolu_sm3', 'done'], ['toolu_r3', 'done']]);
+  })) p++; else f++;
+
+  if (test('two different launch ids with identical type and description, no replay → still two rows', () => {
+    const jobs = readAgents(fixture([
+      taskRec('toolu_d1', 'Explore', 'same', '2026-07-01T10:00:00Z'),
+      resultRec('toolu_d1', '2026-07-01T10:00:10Z', { status: 'completed', totalTokens: 1 }),
+      taskRec('toolu_d2', 'Explore', 'same', '2026-07-01T10:01:00Z'),
+      resultRec('toolu_d2', '2026-07-01T10:01:10Z', { status: 'completed', totalTokens: 2 })
+    ]))!;
+    assert.deepStrictEqual(jobs.map(j => [j.id, j.tokens]), [['toolu_d2', 2], ['toolu_d1', 1]]);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
