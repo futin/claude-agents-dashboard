@@ -62,8 +62,8 @@ export function run(): number {
     assert.deepStrictEqual(entries, ['.claude-plugin', 'lib', 'skills']);
   })) p++; else f++;
 
-  if (test('plugin/lib/ holds exactly the three generated .mjs modules', () => {
-    assert.deepStrictEqual(fs.readdirSync(path.join(root, 'plugin', 'lib')).sort(), LIB_MODULES.map((m) => `${m}.mjs`));
+  if (test('plugin/lib/ holds exactly the three generated .mjs modules plus the hand-written run-schedule.mjs wrapper', () => {
+    assert.deepStrictEqual(fs.readdirSync(path.join(root, 'plugin', 'lib')).sort(), [...LIB_MODULES, 'run-schedule'].map((m) => `${m}.mjs`).sort());
   })) p++; else f++;
 
   for (const name of LIB_MODULES) {
