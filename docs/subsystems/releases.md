@@ -52,7 +52,7 @@ blocked site data) means no dot, never a crash. It is a per-browser convenience,
 Opened from the chip, which refetches first; the list is also fetched once on load. There is no poll — a new release reaches the server only when someone
 pulls or fetches tags, and the chip is rarely looked at. Each entry: version, type badge (Feature / Fix / Performance), a separate Breaking badge, date,
 the title without its `type(scope)!: ` prefix (the badge already says it), the notes as markdown when there are any, and `PR #N` when the origin is on
-GitHub. The baseline renders as a divider: `Versioning starts here · v0.1.0`.
+GitHub. The baseline renders as a divider with its date: `Versioning starts here · v0.1.0`.
 
 Full screen below `md` (768px), like the chat drawer, with the back gesture closing it; a 400px right-hand panel over the scrim from `md` up. Escape, the ✕
 and a scrim click close it. It is rendered in `AppShell`, outside `.nav`: the phone menu hides itself with a `transform`, which makes it the containing
