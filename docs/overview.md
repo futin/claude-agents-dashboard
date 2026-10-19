@@ -53,6 +53,9 @@ via `tsx`, dev and prod alike).
   The second thing that reaches outside the dashboard's own state is [the Git fetch timer](subsystems/git-stats.md#the-fetch): off by default, it runs
   `git fetch origin` over the pinned repos while Management › Git is open, which writes their remote-tracking refs and `FETCH_HEAD`, never a branch or a
   working tree.
+  The third thing the server launches is the `codegraph` CLI ([codegraph](subsystems/codegraph.md)): `codegraph status --json` per pinned project, cached 25 s and run only
+  from inside a GET, and `codegraph sync` / `codegraph index` when the user presses Sync or Reindex. Every launch sets `CODEGRAPH_NO_UPDATE_CHECK=1` and
+  `CODEGRAPH_NO_DOWNLOAD=1`, so the shim neither checks for nor downloads a newer bundle.
 - **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only, with two pinned exceptions, neither with deps of its own:
   `lookout-widgets` ([hub-widgets](subsystems/hub-widgets.md#the-dependency-exception)) and `release-kit`, whose memoised `createReleasesReader` backs
   [`GET /api/releases`](subsystems/releases.md); `test/server-deps.test.ts` pins both. Keep new npm deps out of it.
@@ -95,6 +98,8 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); token-guarded, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
 | `POST /api/open-folder` | open a pinned project's folder with macOS `open`. Token-guarded, path must be a listed pin's, 501 off macOS (see [git-stats](subsystems/git-stats.md)) |
 | `GET /api/git-stats` | local git state of every pinned project, in pin order, plus the fetch clock and each repo's last-fetch verdict; a repo that fails is its own `error` row (see [git-stats](subsystems/git-stats.md)) |
+| `GET /api/codegraph` | the `codegraph` CLI's state of every pinned project, in pin order: index health, watcher, run in flight, last run; `cli: 'missing'` once for the payload (see [codegraph](subsystems/codegraph.md)) |
+| `POST /api/codegraph/run` | `{dirName, kind: 'sync' \| 'reindex'}`: start `codegraph sync` / `index` on a pinned, indexed repo and answer at once. Token-guarded like `git-fetch`; 404 not indexed, 409 already running (see [codegraph](subsystems/codegraph.md#runs)) |
 | `POST /api/git-fetch` | `git fetch origin` over every pinned repo now, answering with the fetch clock; token-guarded write path (see [git-stats](subsystems/git-stats.md#the-fetch)) |
 | `GET /api/configs`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
@@ -204,6 +209,8 @@ server/
                   then one haiku turn) so the bars self-heal
   lib/management.ts   config scanner + servable-path security set
   lib/git-stats.ts    read-only git reader for the pinned repos: runner, trunk, memoised branch counts + merged proof
+  lib/codegraph.ts    the `codegraph` CLI reader: runner (update check off), status parser, graph-root walk, pid files
+  lib/codegraph-store.ts  CodeGraph's per-(root, pin) status cache, runs, lock-loss rule and the payload
   lib/git-fetch.ts    the Git fetch: detached `git fetch origin` per common dir, error classifier, watched-only timer + clock
   lib/open-folder.ts  `open <path>` through `execFile`, behind POST /api/open-folder (the pin-membership gate is in api.ts)
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
@@ -263,7 +270,9 @@ client/src/
                   projects on offer as Tiles, Columns or Lists; and the Git sub-view: GitView
                   (band, switcher, poll owner), GitClockChip (the sync/fetch clock chip and
                   its popover), GitInbox / GitMatrix / GitInspector /
-                  GitBranches (the four shapes, fed one `GitLayoutProps`) and GitParts (chips, divergence bar, branch list they share)), analytics/,
+                  GitBranches (the four shapes, fed one `GitLayoutProps`) and GitParts (chips, divergence bar, branch list they share); and the CodeGraph
+                  sub-view: CodegraphView (band, switcher, poll owner), CodegraphClockChip, CodegraphInbox / CodegraphMatrix / CodegraphInspector (fed one
+                  `CodegraphLayoutProps`) and CodegraphParts (chips, keys, Reindex confirm, kinds strip)), analytics/,
                   usage/ (UsageView + the three tabs, Sheet — the band / figure
                   strip / sheet / definitions
                   chrome the tabs draw, and
@@ -275,6 +284,7 @@ client/src/
                   usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins, usePinReorder (Projects' pin grip), useOpenFolder (Git's Open folder
                   key),
                   useAccount (the header chip's 30s poll, owned by App), useGitFetch (Git's Fetch all key),
+                  useCodegraph (the CodeGraph sub-view's 30s visible-only poll, 3s while a run is live), useCodegraphRun (its Sync / Reindex keys),
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
                   Sync button: runs per device, a sessions poll only while one is live),
                   usePersistedState, useAnswerToken (the page's one Answer token copy), useSettings, useServerSettings, useDictation, useFloatingTip
@@ -293,6 +303,8 @@ client/src/
                   tasks (taskProgress — the one count the row pill and the Tasks card share),
                   gitLayouts / gitLevels / gitLinks / gitStatsText (the Git sub-view's switcher rules,
                   the problems → levels rule and session join, the compare link, the copy table), gitBar (the divergence bar's scale),
+                  codegraphLayouts / codegraphLevels / codegraphText / codegraphPoll (the CodeGraph sub-view's switcher rules, the problems → levels rule,
+                  the copy table, its poll schedule and run notes),
                   gitPoll (its poll schedule, apart from the DOM), gitClock (the fetch clock's meters,
                   re-poll timing and Fetch all key state), gitSync / gitSyncRuns
                   (the Sync button's rules, copy and run reconciler), projectsView (the
@@ -375,6 +387,7 @@ that area:
 - [permission-notify](subsystems/permission-notify.md) — the `Allow?` tab for terminal permission dialogs
 - [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and the one narrow browser layer that came back for headless sessions
 - [breakpoints](subsystems/breakpoints.md) — the seven-tier mobile-first ladder in `styles.css`, the rail+measure lock, and the capped/full content-width matrix
+- [codegraph](subsystems/codegraph.md) — `GET /api/codegraph`, `POST /api/codegraph/run`: the `codegraph` CLI's index state per pinned project — a status cache, Sync and Reindex runs, the lock-loss rule, and the levels the Management › CodeGraph layouts draw
 - [visual-tests](subsystems/visual-tests.md) — `pnpm test:visual`: Playwright screenshots of every view against fixture data, overflow and daylight contrast, macOS only
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [ci](workflows/ci.md) — the PR gate: `ci / checks`, `ci / pr-title`, `ci / skills` from release-kit's reusable workflow, and the `main-pr-only` ruleset
