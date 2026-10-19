@@ -149,6 +149,7 @@ import { run as runScheduleFile } from './schedule-file.test.js';
 import { run as runRunSchedule } from './run-schedule.test.js';
 import { run as runScheduleLog } from './schedule-log.test.js';
 import { run as runScheduleConfig } from './schedule-config.test.js';
+import { run as runScheduleStore } from './schedule-store.test.js';
 import { run as runSyncPlugin } from './sync-plugin.test.js';
 
 let failed = 0;
@@ -301,6 +302,7 @@ failed += runScheduleFile();
 failed += await runRunSchedule();
 failed += runScheduleLog();
 failed += runScheduleConfig();
+failed += runScheduleStore();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);
