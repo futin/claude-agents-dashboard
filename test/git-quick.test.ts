@@ -189,6 +189,23 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await test('a pin on a subfolder of a repo mid-merge → in-progress for pull and push, no fetch', async () => {
+    await withRepo(async ({ fx, work, other, calls }) => {
+      fx.commit(other, 'theirs', { 'c.txt': 'theirs' });
+      fx.git(other, ['push', '-q', 'origin', 'main']);
+      fx.commit(work, 'mine', { 'c.txt': 'mine' });
+      fx.git(work, ['fetch', '-q', 'origin']);
+      fx.git(work, ['merge', 'origin/main'], { allowFail: true });
+      assert.ok(fs.existsSync(path.join(work, '.git', 'MERGE_HEAD')), 'the fixture should be mid-merge');
+      const sub = path.join(work, 'sub');
+      fs.mkdirSync(sub);
+      calls.length = 0;
+      assert.strictEqual((await runQuickOp(pin(sub), 'pull')).refusal, 'in-progress');
+      assert.strictEqual((await runQuickOp(pin(sub), 'push')).refusal, 'in-progress');
+      assert.strictEqual(calls.filter(c => c.args[0] === 'fetch' || c.args[0] === 'push').length, 0);
+    });
+  }));
+
   check(await test('pull on a detached HEAD → detached', async () => {
     await withRepo(async ({ fx, work }) => {
       fx.git(work, ['checkout', '-q', '--detach']);

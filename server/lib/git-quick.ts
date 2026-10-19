@@ -4,7 +4,6 @@
  * as the user configured them: a pre-push hook that refuses is a failed part, never bypassed.
  */
 import fs from 'node:fs';
-import path from 'node:path';
 
 import type { GitQuickOp, GitQuickPart, GitQuickPartKind, GitQuickRefusal, GitQuickResponse } from '../../shared/types.js';
 import { fetchInFlight, makeFetchRunner, promptlessEnv } from './git-fetch.js';
@@ -65,8 +64,9 @@ export async function runQuickOp(pin: { name: string; toplevel: string }, op: Gi
     const gitRun = (cwd: string, args: string[]) => run(cwd, args, LOCAL_ENV);
 
     for (const name of IN_PROGRESS) {
-      const p = await local(['rev-parse', '--git-path', name]);
-      if (p.code === 0 && fs.existsSync(path.resolve(toplevel, p.stdout.trim()))) return answer('in-progress');
+      // Absolute: a relative `--git-path` is relative to the pin's cwd, which may be a subfolder of the toplevel.
+      const p = await local(['rev-parse', '--path-format=absolute', '--git-path', name]);
+      if (p.code === 0 && fs.existsSync(p.stdout.trim())) return answer('in-progress');
     }
 
     const head = await local(['symbolic-ref', '-q', '--short', 'HEAD']);
