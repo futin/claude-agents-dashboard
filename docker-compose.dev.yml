@@ -17,6 +17,9 @@ services:
       - NTFY_TOPIC
       - NTFY_SERVER
       - DASHBOARD_PUBLIC_URL
+      # Every client reaches the container from the bridge gateway, which counts as LAN, so writes need the token
+      # (docs/subsystems/remote-access.md). Bare, like the ntfy lines.
+      - ANSWER_TOKEN
     volumes:
       - .:/app
       - /app/node_modules # keep container's linux node_modules, don't let the bind mount shadow it

@@ -28,7 +28,8 @@ are credentials.
 | `SHOW_ANALYTICS` | `true` | Show the [Analytics tab](../subsystems/analytics.md) |
 | `ANALYTICS_KEEP` | `5` | How many `/kaizen`-logged sessions the Analytics tab shows |
 | `REMOTE_ANSWER` | `true` | Whether [remote answers](../subsystems/remote-answer.md) are available at all — the hard kill switch in front of **every** write path, not just questions: [plans](../subsystems/remote-plan.md), [replies](../subsystems/remote-message.md), [spawn](../subsystems/spawn.md) and [dictation](../subsystems/dictation.md) each check it too. It is the app's only *runtime* switch (the `CLAUDE_BIN`/`WHISPER_MODEL` kill switches are restart-scoped), which is why it covers the widest path rather than excluding it |
-| `ANSWER_TOKEN` | _(empty)_ | Shared secret required by **every** write endpoint, not only the remote-answer ones: the [push](../subsystems/push-notify.md) routes the hooks POST to, [spawn](../subsystems/spawn.md), [dictation](../subsystems/dictation.md) and the settings write are all gated by it (`grep -c 'tokenOk(config, req)' server/api.ts`). Empty = open, matching the app's LAN-trust posture. Set it and the hooks need the same value in `~/.claude/hooks/dashboard-token`, or they are refused — silently from the hook's side (`curl -sf`), but the server prints `[dashboard] rejected write: …` once per path per minute, and `/api/health` reports `tokenRequired` so `remote-decision-hook.sh` stops claiming remote answering is armed. `pnpm hooks:install` copies the value across and warns if the file already there disagrees |
+| `ANSWER_TOKEN` | _(empty)_ | Optional pass for **every** write endpoint, from any address: the [push](../subsystems/push-notify.md) routes the hooks POST to, [spawn](../subsystems/spawn.md), [dictation](../subsystems/dictation.md) and the settings write all sit behind the same gate (`grep -c 'refuseWrite(config, req, res)' server/api.ts`). This machine always writes without it, and a tailnet device does while Settings › Shared › Trust tailnet devices is on; anyone else needs it, and with it empty a LAN client is read-only ([remote-access](../subsystems/remote-access.md)). A hook on loopback needs no token file; one in a container or pointed at a non-loopback `CLAUDE_DASHBOARD_URL` needs the same value in `~/.claude/hooks/dashboard-token`, or it is refused — silently from the hook's side (`curl -sf`), but the server prints `[dashboard] rejected write: …` once per path per minute, and `/api/health` reports `tokenRequired` so `remote-decision-hook.sh` stops claiming remote answering is armed. `pnpm hooks:install` copies the value across and warns if the file already there disagrees |
+| `ALLOWED_HOSTS` | _(empty)_ | Extra `Host` names the server and Vite dev answer, comma-separated: an exact name, a `.suffix` (also matches its apex) or `*` to disable the check. Loopback, IP literals, single-label names and `*.localhost` / `*.local` / `*.ts.net` never need listing — anything else is a 403, the [DNS-rebinding guard](../subsystems/remote-access.md#browser-side-guards). Needed only for a public tunnel (`.ngrok.app`, a Cloudflare hostname) |
 | `USAGE_AUTO_REFRESH` | `true` | Renew an expired OAuth token by asking the CLI to, rather than showing the "token expired" hint. A kill switch, not a feature flag: renewal spawns `claude` and may spend one turn, so a host that wants neither sets `false` |
 | `SKIP_PROC_SCAN` | _(auto)_ | Skip the `lsof` process-liveness gate. Defaults to `true` inside a Docker container, `false` otherwise |
 | `NTFY_TOPIC` | _(empty)_ | ntfy topic for [push notifications](../subsystems/push-notify.md). Empty disables pushes outright. **Treat it as a secret** — the string is both the address and the credential, so anyone who learns it can publish to your phone as well as read it. Never returned by any endpoint. Step-by-step: [push-notify-setup](push-notify-setup.md) |
@@ -41,6 +42,7 @@ are credentials.
 | `FFMPEG_BIN` | `ffmpeg` | Transcodes the browser's recording (AAC or Opus) to the 16kHz mono WAV whisper.cpp requires. Resolved from `PATH`; override with an absolute path for a non-`PATH` install |
 | `CLAUDE_BIN` | _(empty)_ | Path or `PATH` name of the `claude` CLI to spawn for a new headless session (see [spawn](../subsystems/spawn.md)). **Empty disables the whole feature outright** — the same "unset means off" rule `NTFY_TOPIC`/`WHISPER_MODEL` already use, rather than a separate on/off flag. Setting it arms `POST /api/spawn`, an endpoint that spawns a whole new `claude` process on this machine, gated only by the same `ANSWER_TOKEN` above (empty there means this is open too) |
 | `SPAWN_MAX_PERMISSION` | `auto` | The permission-mode ceiling every launch request is clamped to, no matter what the launch form asks for — ladder `plan < acceptEdits < auto < bypassPermissions`. **Security note:** raising this to `bypassPermissions` lets anything that can reach `/api/spawn` run a fully unsandboxed `claude` process on this machine with no permission prompts at all — only raise it on a machine and network you fully trust (see [spawn's security posture](../subsystems/spawn.md#security-posture)). A present-but-unrecognized value (e.g. a typo'd case) does **not** fail silently like the rest of this table: it falls back to `auto` but also logs a warning, because this is the one knob that bounds the feature's blast radius |
+| `SYNC_PERMISSION_MODE` | `auto` | The permission mode Management › Git's Sync button launches git-sync with (see [git-stats](../subsystems/git-stats.md)). The button has no launch sheet, so this is the whole choice; `/api/health` publishes it clamped to `SPAWN_MAX_PERMISSION`, never above. An unrecognized value falls back to `auto` with the same warning |
 
 ## Process-environment only (not read from `.env`)
 
@@ -72,7 +74,7 @@ dashboard. (`detectEnvOverride` in `server/lib/settings.ts` also checks the serv
 environment, and reports which of the two places it found.)
 
 The hook also reads `~/.claude/hooks/dashboard-token` for the `ANSWER_TOKEN` value, if
-you set one. Full setup in [remote-answers.md](../subsystems/remote-answer.md).
+you set one — only a hook that reaches the dashboard off loopback needs it. Full setup in [remote-answers.md](../subsystems/remote-answer.md).
 
 <!-- docs-sync:
   sources:
@@ -82,5 +84,5 @@ you set one. Full setup in [remote-answers.md](../subsystems/remote-answer.md).
     - scripts/ask-remote-hook.sh
     - .env.example
   kind: workflow
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

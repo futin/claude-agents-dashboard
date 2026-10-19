@@ -23,6 +23,8 @@ export interface TranscriptRef {
   dirName: string;
   id: string;
   mtimeMs: number;
+  /** Bytes at listing time — lets the usage ledger skip a second `stat` per file. */
+  size: number;
 }
 
 interface ScanOptions {
@@ -131,7 +133,8 @@ function statRef(full: string, dirName: string): TranscriptRef | null {
     file: full,
     dirName,
     id: path.basename(full).replace(/\.jsonl$/, ''),
-    mtimeMs: stat.mtimeMs
+    mtimeMs: stat.mtimeMs,
+    size: stat.size
   };
 }
 

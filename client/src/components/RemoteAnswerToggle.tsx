@@ -1,4 +1,5 @@
 import type { RemoteAnswerControl } from '../hooks/useRemoteAnswer';
+import { READ_ONLY_TEXT } from '../lib/writeRefusal';
 
 /**
  * The remote-answer switch in the status plate.
@@ -16,7 +17,7 @@ import type { RemoteAnswerControl } from '../hooks/useRemoteAnswer';
  * can read the same `/api/health` snapshot instead of starting a second poll.
  */
 export function RemoteAnswerToggle({ control }: { control: RemoteAnswerControl }) {
-  const { state, busy, needsToken, toggle } = control;
+  const { state, busy, needsToken, readOnly, toggle } = control;
   if (!state) return null;
 
   if (!state.available) {
@@ -27,11 +28,13 @@ export function RemoteAnswerToggle({ control }: { control: RemoteAnswerControl }
     );
   }
 
-  const title = needsToken
-    ? 'The server wants its ANSWER_TOKEN — open a question panel to enter it'
-    : state.enabled
-      ? 'On: a question asked while you are away from the keyboard waits here. At your desk it still goes straight to the terminal.'
-      : 'Off: every question goes to the terminal dialog.';
+  const title = readOnly
+    ? READ_ONLY_TEXT
+    : needsToken
+      ? 'The server wants its ANSWER_TOKEN — open a question panel to enter it'
+      : state.enabled
+        ? 'On: a question asked while you are away from the keyboard waits here. At your desk it still goes straight to the terminal.'
+        : 'Off: every question goes to the terminal dialog.';
 
   return (
     <button
@@ -46,6 +49,7 @@ export function RemoteAnswerToggle({ control }: { control: RemoteAnswerControl }
       <span className="ra-track" aria-hidden="true"><i /></span>
       {state.enabled && !state.persisted && <span className="ra-warn" title="Couldn’t be saved — resets when the server restarts">*</span>}
       {needsToken && <span className="ra-warn">token?</span>}
+      {readOnly && <span className="ra-warn">read-only</span>}
     </button>
   );
 }

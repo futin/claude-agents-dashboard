@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import type { IncomingHttpHeaders } from 'node:http';
 
-import { classifyAddress, classifyOrigin, normalizeAddress } from '../server/lib/origin.js';
+import { classifyAddress, classifyOrigin, normalizeAddress, resolvePeer } from '../server/lib/origin.js';
 import type { ConnectionOrigin } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -120,18 +120,55 @@ export function run(): number {
     assert.strictEqual(classifyOrigin('127.0.0.1', xff('8.8.8.8')), 'unknown');
   })) p++; else f++;
 
-  if (test('the first forwarded hop wins, in string or array form', () => {
+  if (test('the right-most non-loopback hop wins, in string or array form', () => {
+    // Each loopback proxy appends the address it accepted, so only the right end is written by something on this machine.
     assert.strictEqual(classifyOrigin('127.0.0.1', xff('100.90.1.2, 127.0.0.1')), 'tailnet');
     assert.strictEqual(classifyOrigin('127.0.0.1', xff(['192.168.1.9'])), 'lan');
-    assert.strictEqual(classifyOrigin('127.0.0.1', xff(['100.90.1.2, 10.0.0.1'])), 'tailnet');
+    assert.strictEqual(classifyOrigin('127.0.0.1', xff(['100.90.1.2, 10.0.0.1'])), 'lan');
   })) p++; else f++;
 
-  if (test('an unusable or absent forwarded header leaves it local', () => {
-    assert.strictEqual(classifyOrigin('127.0.0.1', xff('not-an-ip')), 'local');
-    assert.strictEqual(classifyOrigin('127.0.0.1', xff('')), 'local');
+  if (test('an absent forwarded header is local; an unusable one is unknown', () => {
+    assert.strictEqual(classifyOrigin('127.0.0.1', xff('not-an-ip')), 'unknown');
+    assert.strictEqual(classifyOrigin('127.0.0.1', xff('')), 'unknown');
     assert.strictEqual(classifyOrigin('127.0.0.1', {}), 'local');
     assert.strictEqual(classifyOrigin('127.0.0.1', undefined), 'local');
     assert.strictEqual(classifyOrigin('127.0.0.1'), 'local');
+  })) p++; else f++;
+
+  if (test('resolvePeer: every proxy chain the write gate meets', () => {
+    const table: [string | undefined, string | string[] | null, ConnectionOrigin][] = [
+      ['127.0.0.1', null, 'local'],
+      ['::1', null, 'local'],
+      ['::ffff:127.0.0.1', '127.0.0.1', 'local'],
+      ['127.0.0.1', '100.101.102.103,127.0.0.1', 'tailnet'],
+      ['127.0.0.1', '100.101.102.103, 127.0.0.1', 'tailnet'],
+      ['127.0.0.1', '100.101.102.103', 'tailnet'],
+      ['127.0.0.1', 'fd7a:115c:a1e0::5', 'tailnet'],
+      // A LAN client forging a tailnet or loopback entry through Vite: Vite appends the real address on the right.
+      ['127.0.0.1', '100.64.0.1,192.168.1.5', 'lan'],
+      ['127.0.0.1', '127.0.0.1,192.168.1.5', 'lan'],
+      ['127.0.0.1', '::ffff:192.168.1.5', 'lan'],
+      ['127.0.0.1', '100.90.1.2, 10.0.0.1', 'lan'],
+      ['127.0.0.1', 'not-an-ip', 'unknown'],
+      ['127.0.0.1', '', 'unknown'],
+      ['127.0.0.1', '100.101.102.103, ,127.0.0.1', 'unknown'],
+      ['127.0.0.1', '  ', 'unknown'],
+      ['127.0.0.1', ['100.101.102.103', '127.0.0.1'], 'tailnet'],
+      ['127.0.0.1', '8.8.8.8', 'unknown'],
+      ['192.168.1.5', '100.101.102.103', 'lan'],
+      ['100.101.102.103', '127.0.0.1', 'tailnet'],
+      [undefined, '100.101.102.103', 'unknown']
+    ];
+    for (const [socket, header, want] of table) {
+      const headers = header === null ? {} : xff(header);
+      assert.strictEqual(resolvePeer(socket, headers), want, `${String(socket)} + ${JSON.stringify(header)} → ${want}`);
+    }
+  })) p++; else f++;
+
+  if (test('classifyOrigin and resolvePeer agree, so the badge never disagrees with the gate', () => {
+    for (const [socket, header] of [['127.0.0.1', '100.64.0.1,192.168.1.5'], ['127.0.0.1', 'garbage'], ['192.168.1.5', '100.101.102.103']]) {
+      assert.strictEqual(classifyOrigin(socket, xff(header)), resolvePeer(socket, xff(header)));
+    }
   })) p++; else f++;
 
   if (test('X-Forwarded-For is ignored when the socket is NOT loopback', () => {

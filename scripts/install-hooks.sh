@@ -351,8 +351,9 @@ if [ "$UNINSTALL" != "true" ]; then
       printf '%s' "$envtok" > "$TOKEN_FILE" && chmod 600 "$TOKEN_FILE"
     fi
   elif [ ! -f "$TOKEN_FILE" ]; then
-    step "TODO     no ANSWER_TOKEN in .env — set one, then:"
-    step "         printf '%s' \"\$ANSWER_TOKEN\" > $TOKEN_FILE && chmod 600 $TOKEN_FILE"
+    # No token anywhere is fine: the hooks reach the dashboard on loopback, which the write gate always trusts. A container or a non-loopback
+    # CLAUDE_DASHBOARD_URL is the case that still needs one (docs/subsystems/remote-access.md).
+    step "ok       no token file needed — hooks reach the dashboard on loopback (set ANSWER_TOKEN only for a container or a non-loopback CLAUDE_DASHBOARD_URL)"
   elif [ "$envstate" != "ok" ]; then
     step "ok       $TOKEN_FILE already exists (left alone)"
   else

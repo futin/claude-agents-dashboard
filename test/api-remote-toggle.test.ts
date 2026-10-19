@@ -41,10 +41,12 @@ export async function run(): Promise<number> {
 
   check(await testAsync('POST /api/remote-answer without a valid token is 403', async () => {
     await withServer(`${ENV}ANSWER_TOKEN=s3cret\n`, async h => {
-      // No header at all, the wrong secret, and the right secret without the
-      // `Bearer ` prefix — `tokenOk` compares the whole header string.
+      // From a LAN peer (loopback needs no token): no header at all, the wrong
+      // secret, and the right secret without the `Bearer ` prefix — the gate
+      // compares the whole header string.
+      const lan = { 'X-Forwarded-For': '192.168.1.5' };
       const attempts: Array<Record<string, string>> = [
-        {}, { Authorization: 'Bearer wrong' }, { Authorization: 's3cret' }
+        lan, { ...lan, Authorization: 'Bearer wrong' }, { ...lan, Authorization: 's3cret' }
       ];
       for (const headers of attempts) {
         const reply = await h.req('/api/remote-answer', {
@@ -60,13 +62,14 @@ export async function run(): Promise<number> {
     });
   }));
 
-  // `/api/health` is the only endpoint the hooks can reach without a token, so
-  // it is also the only place that can warn them one is needed. Before this
-  // field a missing token file was indistinguishable from "feature switched
-  // off" from every surface a person checks — see backlog bug-6.
-  check(await testAsync('GET /api/health reports tokenRequired: true when ANSWER_TOKEN is set', async () => {
+  // `/api/health` answers every caller without a token, which makes it the
+  // place that can warn one that it needs a token to write. Before this field
+  // a missing token file was indistinguishable from "feature switched off"
+  // from every surface a person checks — see backlog bug-6. A loopback caller
+  // needs none, so the case asks as a LAN peer.
+  check(await testAsync('GET /api/health reports tokenRequired: true to a LAN caller when ANSWER_TOKEN is set', async () => {
     await withServer(`${ENV}ANSWER_TOKEN=s3cret\n`, async h => {
-      const health = await h.req('/api/health');
+      const health = await h.req('/api/health', { headers: { 'X-Forwarded-For': '192.168.1.5' } });
       assert.equal(health.status, 200);
       assert.equal(health.json?.tokenRequired, true);
       // The flag says a token is needed; it must never say which.

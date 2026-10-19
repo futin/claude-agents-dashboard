@@ -85,7 +85,7 @@ export async function run(): Promise<number> {
       ];
       for (const [route, body] of cases) {
         const reply = await h.req(route, {
-          method: 'POST', body: JSON.stringify(body), headers: { Authorization: 'Bearer wrong' }
+          method: 'POST', body: JSON.stringify(body), headers: { Authorization: 'Bearer wrong', 'X-Forwarded-For': '192.168.1.5' }
         });
         assert.equal(reply.status, 403, `${route} must refuse`);
         assert.equal(reply.json?.error, 'bad token');

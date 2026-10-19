@@ -9,6 +9,7 @@ import { configsProject } from './configs-project.js';
 import { gitStats } from './git-stats.js';
 import { health } from './health.js';
 import { pins } from './pins.js';
+import { releases } from './releases.js';
 import { sessionChat } from './session-chat.js';
 import { sessionDetail } from './session-detail.js';
 import { sessionMessage } from './session-message.js';
@@ -37,6 +38,7 @@ export const fixtures: FixtureMap = {
   '/api/sessions/:id/message': sessionMessage,
   '/api/sessions/:id/question': sessionQuestion,
   '/api/account': account,
+  '/api/releases': releases,
   '/api/usage/profile': usageProfile,
   '/api/usage/rates': usageRates,
   '/api/usage/history': usageHistory,

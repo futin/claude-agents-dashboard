@@ -6,8 +6,8 @@ with `min-width`. Three TypeScript breakpoints sit on the same ladder rather tha
 their own numbers: `hooks/useNarrow.ts` exports `NARROW_PX` (767.98, the `md` density
 tier — which shapes the switcher offers, which options a `<select>` lists) and
 `SHELL_NARROW_PX` (639.98, the `sm` shell tier — which of its two homes the account chip
-is drawn in, see [account-header](account-header.md)), and the column-count comment in
-`components/configs/ConfigsView.tsx` is the third. Each is fractional so it is a
+is drawn in, see [account-header](account-header.md)), and the stacked-layout scroll guard in
+`components/configs/ConfigsView.tsx` (`max-width:767.98px`, the `md` tier) is the third. Each is fractional so it is a
 true complement of the CSS's `min-width`, with no gap at fractional viewport widths. Design and migration history:
 [2026-09-15-breakpoint-ladder-design.md](../superpowers/specs/2026-09-15-breakpoint-ladder-design.md).
 
@@ -19,7 +19,7 @@ true complement of the CSS's `min-width`, with no gap at fractional viewport wid
 | `sm` | 640 | Desktop shell returns (rail, board radius, `.main` padding) |
 | `md` | 768 | Density: column counts, table columns, control fitting |
 | `lg` | 1024 | Analytics metrics reach 5-across; Management › Projects' Columns and Lists go two-up |
-| `xl` | 1280 | Board/Tiles 3-col, Management 3-col, Analytics pinned to the viewport (its tab the scroller) |
+| `xl` | 1280 | Board/Tiles 3-col, Claude Configs 3-col, Analytics pinned to the viewport (its tab the scroller) |
 | `2xl` | 1536 | **The lock.** Measure reaches 1248; Sessions aside moves beside |
 | `3xl` | 1537 | Full content-width mode only: structural gains |
 | `4xl` | 1921 | Full content-width mode only: structural gains |
@@ -134,5 +134,5 @@ migration:
     - client/src/components/configs/ConfigsView.tsx
     - test/breakpoints.test.ts
   kind: subsystem
-  verified: f06c54a88e5655ce39e1f5b23b97d42151e257b2
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

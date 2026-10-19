@@ -219,7 +219,7 @@ into a path; the store is keyed in memory, same as the other two.
   one event run in parallel and the CLI applies a block only after every one has returned, so a 600 s hold here would stall every guard block. Every other
   status, a missing file and a malformed one keep today's behaviour; the hook never writes the file, and a `session_id` outside `[A-Za-z0-9-]` skips the check.
   Deployment order: on each machine the dashboard checkout must be pulled together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on
-  every denied question. Merge this branch before claude-global's `autopilot` branch: alone it is inert, because no state file exists until the CLI writes one.
+  every denied question.
 
 ## Security posture
 
@@ -228,10 +228,10 @@ since, is wider still — it starts a session rather than steering one). A quest
 steerable from the phone when the session *asked* for one; a reply window opens at the end
 of **every** AFK turn, so from the moment you step away, the model's next instruction on any
 session can come from whoever can reach these POSTs — not just whoever answers something a
-session raised. The posture itself is unchanged, not new: `ANSWER_TOKEN` gates
-`/api/messages/wait` and `/api/sessions/:id/message-answer` exactly as it gates the question
+session raised. The posture itself is unchanged, not new: the write gate covers
+`/api/messages/wait` and `/api/sessions/:id/message-answer` exactly as it covers the question
 and plan POSTs (see [remote-answer](remote-answer.md#security-posture)), and the tailnet is
-still the intended perimeter — set the token if you share the tailnet, and treat it as the
+still the intended perimeter — if you share the tailnet, turn tailnet trust off and use the token, and treat it as the
 minimum behind a public tunnel. What changes is how much a leaked token, or an unwanted LAN
 guest, can do with it: previously "answer a question that already exists," now "hand a
 parked session brand-new instructions."
@@ -269,6 +269,7 @@ state, reset on a new `messageId`, never persisted.
 <!-- docs-sync:
   sources:
     - server/lib/messages.ts
+    - server/lib/remote-message-prose.ts
     - server/api.ts
     - server/index.ts
     - server/lib/scan.ts
@@ -278,5 +279,5 @@ state, reset on a new `messageId`, never persisted.
     - client/src/hooks/usePendingMessage.ts
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

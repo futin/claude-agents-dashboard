@@ -10,16 +10,17 @@ of `pnpm test`. Design and plan: [2026-10-01-visual-regression-design.md](../sup
 
 | Spec | Cases | What |
 |---|---|---|
-| `views.spec.ts` | 84 counted shots + 3 Trace shots + 1 count check + 1 phone no-Trace check | each of the 6 `SECTIONS` views at 12 states, plus Sessions with the chat drawer open (`?session=`) at 375 and 1280 and in the Triage layout at 375 and 1280, Git's Matrix (1280), Inspector and Branches (375 and 1280), and Projects' Tiles, Columns (1280) and Lists (375) with a gone pin, and the drawer's Trace mode with a step picked (1280: a picked row, a `why?` followed from Chat, a closed subagent fold), plus a 375 check that the drawer offers no Trace |
+| `views.spec.ts` | 86 counted shots + 3 Trace shots + 1 count check + 1 phone no-Trace check | each of the 6 `SECTIONS` views at 12 states, plus Sessions with the chat drawer open (`?session=`) at 375 and 1280 and in the Triage layout at 375 and 1280, Git's Matrix (1280), Inspector and Branches (375 and 1280), and Projects' Tiles, Columns (1280) and Lists (375) with a gone pin, the What's new drawer opened from the version chip at 375 and 1280, and the drawer's Trace mode with a step picked (1280: a picked row, a `why?` followed from Chat, a closed subagent fold), plus a 375 check that the drawer offers no Trace |
 | `layout.spec.ts` | 48 overflow + 6 contrast | overflow: 6 views × 8 daylight tiers; contrast: 6 views, daylight, 1280, axe `color-contrast` |
 | `stage.spec.ts` | 16 | the staging itself: seeded theme beats the default, clock, UTC, DPR 1, font loaded, deep link, every section reachable |
 | `scroll-hit.spec.ts` | 9 + 1 mirror | Management › Projects with 60 offered projects, Tiles / Columns / Lists at 1280, 1536 and 1921 (`full`): scrolled to the bottom, every on-screen Pin must take the hit and `.wrap` must hold the whole view (#194); the mirror checks Analytics stays pinned to the viewport |
 | `mock-api.spec.ts` | 5 | the mock: 404 for no fixture, 405 for writes, query ignored, exact path beats `:param`, off-origin refused |
 
 The 12 states per view are daylight at the six `fixed` tiers (375, 640, 768, 1024, 1280, 1536 — each tier's `min-width` from [breakpoints](breakpoints.md),
-375 for the phone base) and the two `full` tiers (1537, 1921), plus midnight, amber, graphite and nightshift at 1280. 12 × 6 + 2 + 2 + 5 + 3 = 84;
-`views.spec.ts` asserts that number, so a new `SECTIONS` entry fails until the matrix and its baselines are reconsidered. The three Trace shots (84 + 3 = 87 in all) sit outside that count: each needs a click first. Comparison is zero-tolerance:
-`maxDiffPixels: 0`, `threshold: 0`, animations disabled, caret hidden, full page.
+375 for the phone base) and the two `full` tiers (1537, 1921), plus midnight, amber, graphite and nightshift at 1280. 12 × 6 + 2 + 2 + 5 + 3 + 2 = 86;
+`views.spec.ts` asserts that number, so a new `SECTIONS` entry fails until the matrix and its baselines are reconsidered. The three Trace shots (86 + 3 = 89 in all) sit outside that count: each needs a click first. Comparison is zero-tolerance:
+`maxDiffPixels: 0`, `threshold: 0`, animations disabled, caret hidden, full page — except the two What's new shots,
+which are the viewport, since the drawer is `position: fixed`.
 
 The Sessions fixture's working session runs a 13-task plan (7 done, Task 8 running) under a basename long enough to ellipsise, and the idle one holds a
 finished `TaskCreate` list, so the shots carry both task-pill states, the drawer card's `Plan · …` head and its phone fold. `StageOpts.layout` seeds the
@@ -49,7 +50,8 @@ the inspector's local-time fact never moves. The chat fixture's tool lines carry
 subagent's Task row, which scrolls turn 1 into view with its run folded shut beneath it.
 
 `stage.ts` puts a page into a known state: fixed clock at `EPOCH` (2026-09-30T14:00:00Z, `fixtures/epoch.ts`), UTC, `en-US`, DPR 1, sRGB, the viewport at
-the case's width × 900, and the full `Settings` object seeded into `localStorage` (theme, landing section, content width; everything else at its default).
+the case's width × 900, and the full `Settings` object seeded into `localStorage` (theme, landing section, content width, Sessions layout and Management
+sub-view; everything else at its default).
 It then waits until the page is ready: `document.fonts.ready`, a Hanken Grotesk face with `status === 'loaded'`, no `/api` request in flight, and no text node
 starting with "loading". Specs poll that predicate rather than reading it once, because a poll can be in flight right after staging.
 
@@ -120,5 +122,5 @@ Dark-theme contrast is off: those themes are due for a redesign, and recording t
     - test/visual/fixtures/index.ts
     - test/visual/fixtures/session-trace.ts
   kind: subsystem
-  verified: 7a0857fcaa4cec51b5cf97f52daaa2be71c97fec
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

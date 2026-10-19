@@ -90,6 +90,55 @@ export function run(): number {
     assert.strictEqual(cw.compactWindowStats().reads, 2);
   })) p++; else f++;
 
+  if (test('modelSettings[<model>].autoCompactWindow beats the top-level one for that model only', () => {
+    const s = sandbox();
+    write(path.join(s.home, '.claude', 'settings.json'), {
+      autoCompactWindow: 200000, modelSettings: { 'claude-opus-5-5': { autoCompactWindow: 300000 } },
+    });
+    assert.strictEqual(cw.sessionCompactWindow(s.project, s.home, 'claude-opus-5-5'), 300000);
+    assert.strictEqual(cw.sessionCompactWindow(s.project, s.home, 'claude-opus-5-5[1m]'), 300000);
+    assert.strictEqual(cw.sessionCompactWindow(s.project, s.home, 'claude-sonnet-5'), 200000);
+    assert.strictEqual(cw.sessionCompactWindow(s.project, s.home, null), 200000);
+    assert.strictEqual(cw.sessionCompactWindow(s.project, s.home), 200000);
+  })) p++; else f++;
+
+  if (test('modelSettings merge model by model across files; env and autoCompactEnabled still win', () => {
+    const s = sandbox();
+    write(path.join(s.home, '.claude', 'settings.json'), {
+      modelSettings: { 'claude-opus-5-5': { autoCompactWindow: 300000 }, 'claude-fable-5-1': { autoCompactWindow: 400000 } },
+    });
+    write(path.join(s.project, '.claude', 'settings.json'), { modelSettings: { 'claude-fable-5-1': { autoCompactWindow: 250000 } } });
+    assert.strictEqual(cw.sessionCompactWindow(s.project, s.home, 'claude-opus-5-5'), 300000);
+    assert.strictEqual(cw.sessionCompactWindow(s.project, s.home, 'claude-fable-5-1'), 250000);
+    write(path.join(s.project, '.claude', 'settings.local.json'), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '150000' } });
+    assert.strictEqual(cw.sessionCompactWindow(s.project, s.home, 'claude-opus-5-5'), 150000);
+    write(path.join(s.project, '.claude', 'settings.local.json'), { autoCompactEnabled: false });
+    assert.strictEqual(cw.sessionCompactWindow(s.project, s.home, 'claude-opus-5-5'), null);
+  })) p++; else f++;
+
+  if (test('a malformed modelSettings entry falls back to the top-level window', () => {
+    const s = sandbox();
+    write(path.join(s.home, '.claude', 'settings.json'), {
+      autoCompactWindow: 200000, modelSettings: { 'claude-opus-5-5': { autoCompactWindow: 'big' }, 'claude-fable-5-1': 7 },
+    });
+    assert.strictEqual(cw.sessionCompactWindow(s.project, s.home, 'claude-opus-5-5'), 200000);
+    assert.strictEqual(cw.sessionCompactWindow(s.project, s.home, 'claude-fable-5-1'), 200000);
+  })) p++; else f++;
+
+  if (test('frozenCompactWindow pins the settings, not the model: a /model switch picks the new model\'s window', () => {
+    const s = sandbox();
+    cw.setCompactWindowHome(s.home);
+    const user = path.join(s.home, '.claude', 'settings.json');
+    write(user, { autoCompactWindow: 200000, modelSettings: { 'claude-opus-5-5': { autoCompactWindow: 300000 } } });
+    assert.strictEqual(cw.frozenCompactWindow('/t.jsonl', 10, s.project, 'claude-opus-5-5'), 300000);
+    assert.strictEqual(cw.frozenCompactWindow('/t.jsonl', 20, s.project, 'claude-sonnet-5'), 200000);
+    write(user, { autoCompactWindow: 500000 });
+    const later = new Date(Date.now() + 5000);
+    fs.utimesSync(user, later, later);
+    assert.strictEqual(cw.frozenCompactWindow('/t.jsonl', 30, s.project, 'claude-opus-5-5'), 300000);
+    cw.setCompactWindowHome(null);
+  })) p++; else f++;
+
   cw.setManagedSettingsPath(null);
   cw.resetCompactWindowCache();
   console.log('\n  ' + p + ' passed, ' + f + ' failed');

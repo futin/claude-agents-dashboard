@@ -4,6 +4,7 @@ import MicButton from './MicButton';
 import { MinimisedPanel, PanelHead } from './PanelChrome';
 import { appendTranscript } from '../lib/dictation';
 import { collapsedSummary, fmtLeft } from '../lib/panelCollapse';
+import { READ_ONLY_TEXT } from '../lib/writeRefusal';
 import type { PendingMessageState } from '../hooks/usePendingMessage';
 
 /** Seconds left in the window, clamped at 0. */
@@ -22,7 +23,7 @@ function secsLeft(expiresAt: string): number {
  * last message in the transcript above.
  */
 export default function MessagePanel({ state }: { state: PendingMessageState }) {
-  const { pending, phase, needsToken, send, dismiss, setToken } = state;
+  const { pending, phase, needsToken, readOnly, send, dismiss, setToken } = state;
   const [text, setText] = useState('');
   const [tokenDraft, setTokenDraft] = useState('');
   const [left, setLeft] = useState(0);
@@ -87,6 +88,7 @@ export default function MessagePanel({ state }: { state: PendingMessageState }) 
         onMinimise={() => setMinimised(true)}
       />
 
+      {readOnly && <div className="qp-token"><span className="qp-note">{READ_ONLY_TEXT}</span></div>}
       {needsToken && (
         <div className="qp-token">
           <span className="qp-note">This dashboard needs its answer token.</span>

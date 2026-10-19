@@ -104,9 +104,9 @@ with exactly the granularity the user picks events at:
 | `question` | `POST /api/questions/wait` | `serveQuestionWait`, after the wait registers |
 | `plan` | `POST /api/plans/wait` | `servePlanWait`, after the wait registers |
 | `permission` | `POST /api/permissions/notify` | `servePermissionNotify` |
-| `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on (headless sessions take the hold route at the desk too, unless an orchestrator run owns them) |
+| `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on (headless sessions take the hold route at the desk too, unless an orchestrator run owns them or it is a one-shot launch) |
 
-All four are token-gated (`tokenOk`), so a hook that cannot read the token file reaches
+All four sit behind the write gate (`refuseWrite`), so a hook off loopback that cannot read the token file reaches
 none of them — see the last row of [Fail directions](#fail-directions).
 
 Only `stop` needed a new route, because a finished turn registers nothing. So the whole
@@ -174,7 +174,9 @@ not a blanket headless exemption: a headless session a person started by hand is
 on purpose and still holds. A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT`, set by the dashboard's Close when done and on every Git Sync run)
 takes the same `notify_fallback` route, so it still pushes "finished". The dashboard's own token-renewal turn
 (`CLAUDE_DASHBOARD_REFRESH`, [usage-limits](usage-limits.md)) is the one session that pushes nothing: the hook exits on the marker before the health probe,
-and the server drops `stop` events and message waits from the refresh cwd's transcripts as a backstop (#178). Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
+and the server drops `stop` events and message waits from the refresh cwd's transcripts as a backstop (#178). A stop that an `autopilot` run's guard blocks
+(`~/.claude/autopilot/<session_id>.json` counts as running, `stop_hook_active` exactly false) exits silently too — no hold, no push; the stop that then
+ends the turn is handled as a first stop, so it still reaches the phone ([remote-message](remote-message.md)). Push eligibility is unchanged; only which route reached the notifier. The hook's check gates which route fires
 (and so which phrase and suppression rule apply), not whether `stop` pushes at all — see
 [remote-message](remote-message.md).
 
@@ -206,7 +208,7 @@ Silence is the bug this feature exists to fix, so every failure gets an explicit
 | ntfy request fails or times out | **swallow — except in the test** | 2s cap, never awaited, never fails the caller — `maybeSend` `void`s the promise and catches it, since an un-awaited rejection would escape the surrounding `try` and take the process down. `sendTest` is the one send that *does* await the answer, distinguishing a refusal (`<server> refused it (HTTP 404): …  — check NTFY_TOPIC`, the first line of ntfy's own body) from an unreachable server (`couldn't reach <server>: …`), because a button whose job is proving delivery must be able to fail |
 | session scan fails | **push with a short id** | A poor label beats no push |
 | settings file unreadable | **all switches off** | Same fail-open read as the rest of `settings.ts` |
-| hook POST rejected `403 bad token` | **swallowed by the hook — but the server says so** | The four entry routes are `tokenOk`-gated like every other write path, and the hooks read the token from `~/.claude/hooks/dashboard-token`. Missing or wrong there while `ANSWER_TOKEN` is set server-side, and every POST is refused before `maybeSend` runs; the hooks use `curl -sf`, so the 403 is still swallowed and the CLI itself never mentions it. What changed after this cost twelve silent hours: `tokenOk` now prints `[dashboard] rejected write: POST <path> (bad or missing token)` once per path per minute, and `/api/health` carries `tokenRequired`, which `remote-decision-hook.sh` uses to refuse to claim remote answering is armed when the token file is absent. Neither carries the token. The Settings switches still read On and `notifyAvailable` still reports `true` — both describe the topic, not the token — so if nothing arrives and the test button works, read the server's output, then check the token file ([remote-answer-setup](../workflows/remote-answer-setup.md#failure-modes)) |
+| hook POST rejected `403 bad token` | **swallowed by the hook — but the server says so** | The four entry routes sit behind `refuseWrite` like every other write path. A hook on loopback always passes; one pointed at a non-loopback `CLAUDE_DASHBOARD_URL` (or running in a container) reads the token from `~/.claude/hooks/dashboard-token`. Missing or wrong there while the gate wants one, and every POST is refused before `maybeSend` runs; the hooks use `curl -sf`, so the 403 is still swallowed and the CLI itself never mentions it. What changed after this cost twelve silent hours: the gate now prints `[dashboard] rejected write: POST <path> from <peer> (bad or missing token)` (or `(read-only, no token set)`) once per path per minute, and `/api/health` carries `tokenRequired`, which `remote-decision-hook.sh` uses to refuse to claim remote answering is armed when the token file is absent. Neither carries the token. The Settings switches still read On and `notifyAvailable` still reports `true` — both describe the topic, not the token — so if nothing arrives and the test button works, read the server's output, then check the token file ([remote-answer-setup](../workflows/remote-answer-setup.md#failure-modes)) |
 
 ## The topic is a secret
 
@@ -377,7 +379,7 @@ now differs. Three deliberate limits:
 - **Keys pinned in `process.env` are skipped.** They beat the file whatever it says, so a
   restart would not move them and naming them would be false advice.
 
-It surfaces in two places: `GET /api/settings` carries `staleEnvKeys` for the Settings page,
+It surfaces in two places: every `/api/settings` reply — GET and the POST a save answers with, both built by `settingsBody` — carries `staleEnvKeys` for the Settings page,
 and `sendTest` appends the push-relevant subset to its own answer — because the string
 someone reads while asking "why did nothing arrive?" is that one.
 
@@ -405,5 +407,5 @@ server write path. ntfy makes it unnecessary for now.
     - client/src/lib/deepLink.ts
     - client/src/components/settings/SettingsView.tsx
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

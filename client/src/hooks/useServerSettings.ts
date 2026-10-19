@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
+import { refusalKind } from '../lib/writeRefusal';
 import type { NotifyPatch, ServerSettings } from '../../../shared/types';
 
 /** What a caller can ask about: the two number fields, or the notify policy. */
-export type SavingKey = 'idleSecs' | 'answerSecs' | 'notify' | 'recordUsageHistory' | 'gitFetchSecs';
+export type SavingKey = 'idleSecs' | 'answerSecs' | 'notify' | 'recordUsageHistory' | 'gitFetchSecs' | 'trustTailnet';
 
 export interface ServerSettingsControl {
   state: ServerSettings | null;
@@ -19,6 +21,8 @@ export interface ServerSettingsControl {
   isSaving: (key: SavingKey) => boolean;
   /** Set when the server refused the token. */
   needsToken: boolean;
+  /** Set when the server says this network is read-only: no token can help, so the surface says so instead of prompting. */
+  readOnly: boolean;
   save: (patch: Partial<ServerSettings>) => Promise<void>;
   /** Patch one or more notify keys. Merged server-side, so send only what changed. */
   saveNotify: (patch: NotifyPatch) => Promise<void>;
@@ -27,7 +31,7 @@ export interface ServerSettingsControl {
 /**
  * The handful of settings that can't be per-device, over `GET/POST
  * /api/settings`. Today that is the idle threshold, the answer window, the
- * push-notification policy and the usage-recording switch — see
+ * push-notification policy, the usage-recording switch and the tailnet-trust switch — see
  * `server/lib/settings.ts` for why they can't live in localStorage with the
  * rest. (Recording is the clearest case: a per-device toggle cannot start a
  * server-side timer.)
@@ -45,7 +49,8 @@ export function useServerSettings(): ServerSettingsControl {
    */
   const [savingKeys, setSavingKeys] = useState<readonly string[]>([]);
   const [needsToken, setNeedsToken] = useState(false);
-  const [token] = usePersistedState<string>('dashboard.answerToken', '');
+  const [readOnly, setReadOnly] = useState(false);
+  const [token] = useAnswerToken();
 
   useEffect(() => {
     let live = true;
@@ -65,14 +70,16 @@ export function useServerSettings(): ServerSettingsControl {
     // The patch names what is being saved, so the rows don't have to be told.
     const keys = Object.keys(patch);
     setSavingKeys(prev => [...prev, ...keys]);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
       const res = await fetch('/api/settings', { method: 'POST', headers, body: JSON.stringify(patch) });
       if (res.status === 403) {
-        setNeedsToken(true);
+        const readOnlyNow = refusalKind(res.status, await res.json().catch(() => undefined)) === 'read-only';
+        setReadOnly(readOnlyNow);
+        setNeedsToken(!readOnlyNow);
       } else if (res.ok) {
         setNeedsToken(false);
+        setReadOnly(false);
         // Trust the response, not the request: the server clamps, so what it
         // echoes back is what the hooks will actually read.
         setState((await res.json()) as ServerSettings);
@@ -100,5 +107,5 @@ export function useServerSettings(): ServerSettingsControl {
     [save]
   );
 
-  return { state, isSaving, needsToken, save, saveNotify };
+  return { state, isSaving, needsToken, readOnly, save, saveNotify };
 }

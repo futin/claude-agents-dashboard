@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
-import type { FetchClock } from '../../../../shared/types';
+import type { FetchClock, WriteAccess } from '../../../../shared/types';
 import type { GitFetchControl } from '../../hooks/useGitFetch';
 import type { GitStatsState } from '../../hooks/useGitStats';
 import { createFollowTracker, fetchKeyState, fetchReading, followUp, syncReading, type MeterReading } from '../../lib/gitClock';
@@ -32,10 +32,11 @@ function GitMeter({ label, reading }: { label: string; reading: MeterReading }) 
  * **Name versus description.** The button's name is fixed and the readings ride as its description: a name that changed every second would be re-announced
  * every second for as long as the chip held focus.
  */
-export default function GitClockChip({ stats, fetchCtl, tokenRequired, clock }: {
+export default function GitClockChip({ stats, fetchCtl, tokenRequired, writeAccess, clock }: {
   stats: GitStatsState;
   fetchCtl: GitFetchControl;
   tokenRequired: boolean | undefined;
+  writeAccess: WriteAccess | undefined;
   /** The payload's fetch clock; undefined before one arrives or from an older server, which the meters read as pending. */
   clock: FetchClock | undefined;
 }) {
@@ -74,7 +75,7 @@ export default function GitClockChip({ stats, fetchCtl, tokenRequired, clock }: 
   const sync = syncReading({ polling: stats.polling, error: stats.error, nextPollAtMs: stats.nextPollAtMs, now });
   const fetched = fetchReading({ clock, ownPost: fetchCtl.pending, skewMs: stats.skewMs, now });
   const key = fetchKeyState({
-    tokenRequired, tokenStored: fetchCtl.tokenStored, failure: fetchCtl.failure, pending: fetchCtl.pending,
+    tokenRequired, writeAccess, tokenStored: fetchCtl.tokenStored, failure: fetchCtl.failure, pending: fetchCtl.pending,
     running: clock?.runningSinceMs != null, intervalSecs: clock?.intervalSecs,
   });
   const trouble = gitTroubleLines(stats.data?.repos ?? [], clock);

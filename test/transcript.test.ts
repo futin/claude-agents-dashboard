@@ -432,6 +432,21 @@ export function run(): number {
     assert.strictEqual(capped.contextWindowLabel, '200k');
   })) p++; else f++;
 
+  // The Opus 5.5 session at 201.2k read 1M: the top-level 200k cap was the only one read, and 201k past it "proved" no cap.
+  if (test('readTranscript: modelSettings[<model>].autoCompactWindow caps the session past the top-level window', () => {
+    mi.resetModelIdentityCache();
+    cw.resetCompactWindowCache();
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-tr-proj-'));
+    const settings = path.join(project, '.claude', 'settings.json');
+    fs.mkdirSync(path.dirname(settings), { recursive: true });
+    fs.writeFileSync(settings, JSON.stringify({ autoCompactWindow: 200000, modelSettings: { 'claude-opus-5-5': { autoCompactWindow: 300000 } } }));
+    const at = (n: number) => ({ ...USAGE(0), cwd: project, message: { ...USAGE(0).message, model: 'claude-opus-5-5', usage: { input_tokens: n } } });
+    const s = tr.readTranscript(fixture([IDENT('claude-opus-5-5'), at(1000), at(201200)]))!;
+    assert.strictEqual(s.contextWindow, 300000);
+    assert.strictEqual(s.contextWindowLabel, '300k');
+    assert.strictEqual(tr.readTranscript(fixture([IDENT('claude-sonnet-5'), at(1000)]))!.contextWindow, 200000);
+  })) p++; else f++;
+
   // #159: a session loads its settings once, at start — editing them later
   // moves nothing for a session already running, so neither may the gauge.
   if (test('readTranscript: the compact window is frozen per transcript at first sight', () => {

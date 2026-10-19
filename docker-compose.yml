@@ -25,6 +25,9 @@ services:
       - NTFY_TOPIC
       - NTFY_SERVER
       - DASHBOARD_PUBLIC_URL
+      # Writes. Inside a container every client arrives from the bridge gateway, which the write gate classifies as LAN — never loopback or tailnet —
+      # so without a token this image is read-only (docs/subsystems/remote-access.md). Bare, for the same reason as the ntfy lines above.
+      - ANSWER_TOKEN
     volumes:
       # read-only mount of the host's ~/.claude — this is what the dashboard scans
       - ${HOME}/.claude:/root/.claude:ro

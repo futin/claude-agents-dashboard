@@ -158,6 +158,12 @@ export function world(t, { host = 'github.com' } = {}) {
     fs.chmodSync(file, 0o755) // belt and braces: writeFileSync's mode is still subject to umask
   }
 
+  // The rules endpoint answers `list` and every `gh pr list` answers `[]` — empty stdout there would read as "PR status unknown" for every branch. Matched on
+  // `rules/branches`, not a bare `api`, which a branch named `feat/api` would also hit.
+  function rules(list) {
+    stub('gh', { byArgs: { 'rules/branches': { stdout: JSON.stringify(list) }, 'pr list': { stdout: '[]' } } })
+  }
+
   function calls() {
     if (!fs.existsSync(callsPath)) return []
     return fs
@@ -192,5 +198,5 @@ export function world(t, { host = 'github.com' } = {}) {
     return context(dir, { env })
   }
 
-  return { root, origin: originPath, a: aPath, b: bPath, env, git, commit, stub, calls, cli, ctx }
+  return { root, origin: originPath, a: aPath, b: bPath, env, git, commit, stub, calls, cli, ctx, rules }
 }

@@ -88,6 +88,8 @@ one of them at random — the same two-state rule the Sessions board follows.
   for a finished subagent whose transcript is missing or sums below it, counted in `subagentTotals.fallbackCount`. The
   metric's tooltip carries `subagentTotals.usage`'s billable / cache-read split. `/kaizen`'s `kaizen.mjs` does the
   same, and `test/analyze.test.ts` runs it against `analyzeSession` to keep the two in step.
+  A `resumed` row (a SendMessage resume, which `lib/agents.ts` lists as its own row) is left out of the sum: its runs write into the transcript the
+  original launch already claims. `kaizen.mjs` lists only `Task`/`Agent` launches, so it has no such row to skip.
   One known gap in that parity: a compaction replays earlier records verbatim, and `kaizen.mjs` counts each `tool_use` id, `tool_result` and Agent launch
   once and adds each subagent transcript once (#174), while `analyzeSession` and `lib/agents.ts` still count the replayed copies — so on a compacted
   session the tab's `byTool`, error/retry counts and subagent figures read high. The parity tests use transcripts with no replay, so they stay green.
@@ -200,11 +202,14 @@ returned — no backend change, so the read-only invariant above still holds.
   *latest* usage rather than summing, and the copies are identical — its numbers were
   always right.
 - **`perTurn.neverCompacted` is inferred, never read.** The transcript carries no context-window field (`message.model` reads `claude-opus-5`, no
-  `[1m]` suffix) and no compaction marker, so `analyzeSession` derives it from turn sizes alone: `maxCombined` above `NEVER_COMPACTED_PEAK` (250k — a
+  `[1m]` suffix), and `analyzeSession` reads no compaction marker, so it infers it from turn sizes alone: `maxCombined` above `NEVER_COMPACTED_PEAK` (250k — a
   200k window compacts near 160k, so only a larger window reaches it) **and** no turn anywhere below `COMPACTION_DROP_RATIO` (half) of the running peak.
   A turn's `combined` is its whole context, which only grows between compactions, so that fall is the one compaction leaves — which is why a big early
   peak followed by a drop reads `false` where a bare `max > 250k` would say `true`. No turns reads `false`. A `notes[]` entry states the inference, and
   `/kaizen` §2 treats `true` as a primary explanation for cost. Only `kaizen.mjs` surfaces it today — the Analytics tab does not render it.
+  The marker does exist: main-chain `compact_boundary` records (`compactMetadata`). `kaizen.mjs` alone reads them, into a `compactions` block — one row
+  per boundary, a replayed boundary with the same timestamp counted once in `duplicatesSkipped`, and its `isCompactSummary` record kept out of the
+  correction heuristic. It has no TS twin yet (`plugin/skills/kaizen/test/compactions.test.mjs`); `analyzeSession` and the tab still infer.
 - **The lesson line's figures are data, not only prose.** `kaizen.mjs --trend [log]` reads the `<billable> billable (<ctx> ctx` prefix back out of
   every lesson line (`k` / `M` / `B` suffixes, decimals, thousands commas; trailing `, 231 turns` and the like ignored) and prints per-project and
   overall ctx series, which `/kaizen review` step 2 reports. Drift is the median ctx of a group's newest 3 sessions at ≥ 1.5× the median of all its
@@ -251,5 +256,5 @@ The live session meter (status line, `/compact` nudge, tool and subagent pane) u
     - client/src/hooks/useSettings.tsx
     - plugin/skills/kaizen/
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

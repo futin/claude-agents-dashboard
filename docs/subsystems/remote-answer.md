@@ -104,7 +104,7 @@ Handlers `serveHealth` / `serveQuestionWait` / `serveSessionQuestion` /
 
 | Method | Path | Codes |
 |---|---|---|
-| `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?, idleSecs?, answerSecs?, tokenRequired?, transcribe?}` (`transcribe` is [dictation](dictation.md)'s engine-availability flag, unrelated to the gates) — the hook's probe (all three gates *and* the wait window off one round trip), the pill's read, and the origin badge's source |
+| `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?, writeAccess?, idleSecs?, answerSecs?, tokenRequired?, transcribe?, spawnAvailable?, spawnMaxPermission?, syncPermissionMode?}` (`transcribe` is [dictation](dictation.md)'s engine-availability flag and the `spawn*`/`sync*` fields are [spawn](spawn.md)'s, all unrelated to the gates) — the hook's probe (all three gates *and* the wait window off one round trip), the pill's read, and the origin badge's source |
 | `POST` | `/api/remote-answer` | `{enabled}` → 200 `{...state, released}`; 400 non-boolean; 403 bad token; 409 `REMOTE_ANSWER=false`; 405 non-POST |
 | `POST` | `/api/questions/wait` | held → 200 `WaitResult`; 400 malformed / no usable questions; 403 bad token; 404 unknown session or feature off; 405 non-POST |
 | `GET` | `/api/sessions/:id/question` | 200 `SessionQuestion` (`pending: null` when idle); 400 bad id |
@@ -219,25 +219,30 @@ already decide this?" versus "is the user back?".
   would idle for up to `answerSecs` and push a question to the phone for a run that must not ask. Only `running` counts: `blocked`, `wrap-up`, `done`, `off`, a
   missing file and a malformed one all keep today's behaviour, so the blocker question and the final batched question stay answerable from the phone. The hook
   never writes the file, and a `session_id` outside `[A-Za-z0-9-]` skips the check. Deployment order: on each machine the dashboard checkout must be pulled
-  together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question. Merge this branch before claude-global's
-  `autopilot` branch: alone it is inert, because no state file exists until the CLI writes one.
+  together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question.
 
 ## Security posture
 
-These POSTs let any device on the LAN steer a live agent, and "Other…" free text reaches
-the model verbatim. `ANSWER_TOKEN` (empty = open, matching the app's existing posture)
-gates **both** POSTs with `Authorization: Bearer`; the `GET question` route stays open
+These POSTs let a caller steer a live agent, and "Other…" free text reaches the model
+verbatim. The write gate covers **both** POSTs: this machine always passes, a tailnet peer
+passes while tailnet trust is on, and anyone else needs `Authorization: Bearer <ANSWER_TOKEN>`
+(read-only when no token is set — see [remote-access](remote-access.md)); the `GET question` route stays open
 since it reveals no more than the transcript already does. The hook reads the token from
 `~/.claude/hooks/dashboard-token` (user-created — a server-generated file would fight the
 read-only Docker mount; `chmod 600`); the browser persists it as `dashboard.answerToken`
-and asks for it once. A refused write logs one stderr line — `rejected write: <METHOD>
-<path> (bad or missing token)`, method and path only, never the token, the header or the
+and asks for it when a 403 says a token would help. Every client caller reads it through `useAnswerToken`, one module-level store in `client/src/lib/answerToken.ts` with a `storage`
+listener, and builds the header with that file's `authHeaders` — so a token entered in one panel reaches every hook mounted beside it, where twelve
+private `usePersistedState` copies once each needed a remount to see it (#200). A refused write logs one stderr line — `rejected write: <METHOD>
+<path> from <peer> (bad or missing token)`, method, path and peer class only, never the token, the header or the
 query string, and throttled to once per path per minute — because the hooks swallow a 403
 (`curl -sf` then `exit 0`), so nothing otherwise distinguished a missing token file from a
 feature nobody had switched on. HTTP + a static token is a tripwire, not real auth.
+Ahead of any route, `server/lib/request-guard.ts` 403s an unrecognised `Host` (DNS rebinding) and a cross-site browser write, so with the token empty a page
+on another origin still cannot reach these POSTs; the hooks' `curl` sends neither `Sec-Fetch-Site` nor `Origin` and passes (see [remote-access](remote-access.md)).
 `REMOTE_ANSWER=false` turns the feature off server-side. Over a tailnet the network
 itself is the perimeter, so `ANSWER_TOKEN` can stay empty unless you share the tailnet —
-behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md)).
+then turn tailnet trust off and use the token; behind a *public* tunnel it is the minimum
+(see [remote-access](remote-access.md)).
 
 ## Client surfaces
 
@@ -312,8 +317,10 @@ behind a *public* tunnel it is the minimum (see [remote-access](remote-access.md
     - client/src/components/RemoteAnswerToggle.tsx
     - client/src/hooks/usePendingQuestion.ts
     - client/src/hooks/useRemoteAnswer.ts
+    - client/src/hooks/useAnswerToken.ts
+    - client/src/lib/answerToken.ts
     - client/src/components/sessions/atoms.tsx
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
 import { useSettings } from './useSettings';
+import { refusalKind } from '../lib/writeRefusal';
 import type { AnswerRequest, PendingQuestion, QuestionAnswer, SessionQuestion } from '../../../shared/types';
 
 /**
@@ -20,6 +22,8 @@ export interface PendingQuestionState {
   sentLabels: string[];
   /** Set when the server refused the token — the panel prompts for one. */
   needsToken: boolean;
+  /** Set when the server says this network is read-only: no token can help, so the panel says so instead of prompting. */
+  readOnly: boolean;
   submit: (answers: QuestionAnswer[]) => Promise<void>;
   /** Hand the question back to the terminal dialog. */
   dismiss: () => Promise<void>;
@@ -39,8 +43,9 @@ export function usePendingQuestion(id: string): PendingQuestionState {
   const [phase, setPhase] = useState<QuestionPhase>('idle');
   const [sentLabels, setSentLabels] = useState<string[]>([]);
   const [needsToken, setNeedsToken] = useState(false);
-  // Only used when the server runs with ANSWER_TOKEN set.
-  const [token, setToken] = usePersistedState<string>('dashboard.answerToken', '');
+  const [readOnly, setReadOnly] = useState(false);
+  // Only used when the write gate wants a token from this browser (a LAN client, a container, tailnet trust off).
+  const [token, setToken] = useAnswerToken();
   const { settings: { refreshMs } } = useSettings();
 
   /** questionId the current phase refers to — a new question resets the panel. */
@@ -95,20 +100,21 @@ export function usePendingQuestion(id: string): PendingQuestionState {
     };
   }, [id, refreshMs]);
 
-  const post = useCallback(async (body: AnswerRequest): Promise<'ok' | 'gone' | 'token' | 'error'> => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (tokenRef.current) headers.Authorization = `Bearer ${tokenRef.current}`;
+  const post = useCallback(async (body: AnswerRequest): Promise<'ok' | 'gone' | 'token' | 'read-only' | 'error'> => {
+    const headers = authHeaders(tokenRef.current, { 'Content-Type': 'application/json' });
     let status = 0;
+    let refusal: unknown;
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/answer`, {
         method: 'POST', headers, body: JSON.stringify(body)
       });
       status = res.status;
+      if (status === 403) refusal = await res.json().catch(() => undefined);
     } catch {
       return 'error';
     }
     if (status === 200) return 'ok';
-    if (status === 403) return 'token';
+    if (status === 403) return refusalKind(status, refusal) === 'read-only' ? 'read-only' : 'token';
     // 404 (nothing waiting) and 409 (a different question now) both mean the
     // question we were looking at is no longer answerable.
     if (status === 404 || status === 409) return 'gone';
@@ -122,10 +128,16 @@ export function usePendingQuestion(id: string): PendingQuestionState {
     const outcome = await post({ questionId: current.questionId, answers });
     if (outcome === 'ok') {
       setNeedsToken(false);
+      setReadOnly(false);
       setSentLabels(answers.map(a => a.selected.join(', ')));
       setPhase('submitted');
     } else if (outcome === 'token') {
       setNeedsToken(true);
+      setReadOnly(false);
+      setPhase('idle');
+    } else if (outcome === 'read-only') {
+      setReadOnly(true);
+      setNeedsToken(false);
       setPhase('idle');
     } else if (outcome === 'gone') {
       setPhase('gone');
@@ -140,10 +152,11 @@ export function usePendingQuestion(id: string): PendingQuestionState {
     setPhase('submitting');
     const outcome = await post({ questionId: current.questionId, dismiss: true });
     if (outcome === 'token') setNeedsToken(true);
+    if (outcome === 'read-only') setReadOnly(true);
     // Either way the panel goes away: dismissed here, or already over.
     setPhase(outcome === 'ok' ? 'idle' : outcome === 'gone' ? 'gone' : 'idle');
     if (outcome === 'ok') setPending(null);
   }, [pending, phase, post]);
 
-  return { pending, phase, sentLabels, needsToken, submit, dismiss, setToken };
+  return { pending, phase, sentLabels, needsToken, readOnly, submit, dismiss, setToken };
 }

@@ -74,10 +74,12 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   finds the same way the title is found below — or when the model id carries `[1m]`. Otherwise it is the model's native window: 1M for Opus, Sonnet,
   Fable and Mythos from 4.6 on, 200k for Haiku, anything older and any id that doesn't parse. The id is the session's own model attachment
   (`{"type":"attachment","attachment":{"type":"model","identity":{"modelId":"claude-opus-5-5"}}}`, newest wins, found by `model-identity.ts`), else
-  `message.model`. That maximum is then capped at the session's own `autoCompactWindow` (or an `env` `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), read by
-  `compact-window.ts` from its user, project, local and managed settings files, as Claude Code caps it — unless context has already passed the cap, which
-  proves it is not in force. The cap is pinned per transcript the first time it is resolved, because a session loads its settings once, at start: a later
-  edit moves only sessions first seen after it. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the dashboard's own env overrides all of it. Turns orange/red as it
+  `message.model`. That maximum is then capped at the session's own `autoCompactWindow` — an `env` `CLAUDE_CODE_AUTO_COMPACT_WINDOW` first, then
+  `modelSettings[<model id>].autoCompactWindow` (tried as given, then without `[1m]`), then the top-level setting — read by `compact-window.ts` from its
+  user, project, local and managed settings files, as Claude Code caps it — unless context has already passed the cap, which proves it is not in force.
+  Missing the per-model entry is what put an Opus 5.5 session at 201k on a 1M gauge: the top-level 200k was the only cap read, and 201k "proved" it gone.
+  The settings are pinned per transcript the first time they are resolved, because a session loads its settings once, at start: a later edit moves only
+  sessions first seen after it. The model is not pinned, so a `/model` switch moves the cap with it. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the dashboard's own env overrides all of it. Turns orange/red as it
   fills.
 - **Activity line** — the most recent tool call (e.g. `Edit server.ts`,
   `Task Explore: map the codebase`).
@@ -548,7 +550,7 @@ It had a second half — the rate-window percentages, opening onto the gauges �
 account moved to the shell. Those are in the phone nav bar's chip now, readable from every
 section rather than only from this list; see [account-header](account-header.md).
 
-Three things are deliberate:
+Two things are deliberate:
 
 - **The panel is the card's own body**, not a second drawing of it. `AsideBoard.tsx`
   exports `BoardBody` (plus `hasBoard`, so neither shape frames an empty box on a cold
@@ -556,8 +558,6 @@ Three things are deliberate:
   to the card is on the phone for free.
 - **`BoardBody` takes `launch={false}` here.** The strip's square **+** never scrolls away,
   so repeating **New session** inside the panel would be one action with two controls.
-- **One panel at a time.** They are two halves of one bar; both down is taller than the
-  screen with the list nowhere in sight.
 
 ### Pinned: full-bleed, and travelling with the nav
 
@@ -566,7 +566,7 @@ Pinned, the bar goes edge to edge — `--body-pad` cancelled by a negative margi
 floating over the list. At rest it is an ordinary card on the board.
 
 Where it pins never moves: `top: var(--mnav-h)`, the bar's resting height. When the bar
-auto-hides, `.nav.hid ~ .main .s-strip.stuck` lifts the strip by exactly that much, so the
+auto-hides, `.nav.hid ~ .maincol .s-strip.stuck` lifts the strip by exactly that much, so the
 two are always edge to edge. `--mnav-h` is why the phone bar has an explicit height rather
 than a padding sum — the pin, the lift and `useStuckStrip`'s threshold all resolve through
 that one token.
@@ -610,6 +610,11 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - server/lib/title-cache.ts
     - server/lib/record-cache.ts
     - server/lib/model-identity.ts
+    - server/lib/compact-history.ts
+    - server/lib/compact-window.ts
+    - server/lib/tasks.ts
+    - server/lib/plan-progress.ts
+    - client/src/lib/tasks.ts
     - client/src/components/SessionsView.tsx
     - client/src/components/Toolbar.tsx
     - client/src/components/AsideBoard.tsx
@@ -627,5 +632,5 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

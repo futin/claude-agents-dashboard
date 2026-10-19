@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
+import { refusalKind } from '../lib/writeRefusal';
 import type { HealthResponse, RemoteAnswerState } from '../../../shared/types';
 
 /** Slow poll: the switch only changes when someone flips it. */
@@ -11,6 +13,8 @@ export interface RemoteAnswerControl {
   busy: boolean;
   /** Set when the server refused the token. */
   needsToken: boolean;
+  /** Set when the server says this network is read-only: no token can help, so the surface says so instead of prompting. */
+  readOnly: boolean;
   toggle: () => Promise<void>;
 }
 
@@ -25,7 +29,8 @@ export function useRemoteAnswer(): RemoteAnswerControl {
   const [state, setState] = useState<HealthResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [needsToken, setNeedsToken] = useState(false);
-  const [token] = usePersistedState<string>('dashboard.answerToken', '');
+  const [readOnly, setReadOnly] = useState(false);
+  const [token] = useAnswerToken();
 
   useEffect(() => {
     let live = true;
@@ -46,16 +51,18 @@ export function useRemoteAnswer(): RemoteAnswerControl {
   const toggle = useCallback(async () => {
     if (!state?.available || busy) return;
     setBusy(true);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
       const res = await fetch('/api/remote-answer', {
         method: 'POST', headers, body: JSON.stringify({ enabled: !state.enabled })
       });
       if (res.status === 403) {
-        setNeedsToken(true);
+        const readOnlyNow = refusalKind(res.status, await res.json().catch(() => undefined)) === 'read-only';
+        setReadOnly(readOnlyNow);
+        setNeedsToken(!readOnlyNow);
       } else if (res.ok) {
         setNeedsToken(false);
+        setReadOnly(false);
         // This endpoint answers with the switch state alone — merge, or the
         // health-only fields (origin) would blank out until the next poll.
         const body = (await res.json()) as RemoteAnswerState;
@@ -68,5 +75,5 @@ export function useRemoteAnswer(): RemoteAnswerControl {
     }
   }, [state, busy, token]);
 
-  return { state, busy, needsToken, toggle };
+  return { state, busy, needsToken, readOnly, toggle };
 }

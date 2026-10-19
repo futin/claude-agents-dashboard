@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { fetchFailureOf } from '../lib/gitClock';
-import { usePersistedState } from './usePersistedState';
+import type { WriteAccess } from '../../../shared/types';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
 
 export interface GitFetchControl {
-  /** Fetch all now: `POST /api/git-fetch`. A no-op while this tab's own POST is out, and while a token the server wants is not stored. */
+  /** Fetch all now: `POST /api/git-fetch`. A no-op while this tab's own POST is out, while a token the server wants is not stored, and on a read-only network. */
   start(): void;
   /** This tab's own POST is out; a fetch another tab or the timer started is the payload's `runningSinceMs`, not this. */
   pending: boolean;
@@ -18,8 +20,8 @@ export interface GitFetchControl {
  * Management › Git's Fetch all key (git-fetch spec §4). `onDone` is the stats poll, run after every answer — a refusal included, so the chip re-reads the
  * clock either way. The POST answers once the fetch has *finished* (the server awaits `fetchAll`), so the poll after it already sees the new refs.
  */
-export function useGitFetch(tokenRequired: boolean | undefined, onDone: () => void): GitFetchControl {
-  const [token] = usePersistedState<string>('dashboard.answerToken', '');
+export function useGitFetch(tokenRequired: boolean | undefined, writeAccess: WriteAccess | undefined, onDone: () => void): GitFetchControl {
+  const [token] = useAnswerToken();
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<'refused' | 'failed' | null>(null);
   const pendingRef = useRef(false);
@@ -31,11 +33,10 @@ export function useGitFetch(tokenRequired: boolean | undefined, onDone: () => vo
   useEffect(() => setFailure(f => (f === 'refused' ? null : f)), [token]);
 
   const start = useCallback((): void => {
-    if (pendingRef.current || (tokenRequired === true && !tokenStored)) return;
+    if (pendingRef.current || writeAccess === 'none' || (tokenRequired === true && !tokenStored)) return;
     pendingRef.current = true;
     setPending(true);
-    const headers: Record<string, string> = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token);
     fetch('/api/git-fetch', { method: 'POST', headers })
       .then(res => setFailure(res.ok ? null : fetchFailureOf(res.status)), () => setFailure(fetchFailureOf('network')))
       .finally(() => {
@@ -43,7 +44,7 @@ export function useGitFetch(tokenRequired: boolean | undefined, onDone: () => vo
         setPending(false);
         onDoneRef.current();
       });
-  }, [tokenRequired, tokenStored, token]);
+  }, [tokenRequired, writeAccess, tokenStored, token]);
 
   return { start, pending, failure, tokenStored };
 }

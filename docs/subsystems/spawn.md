@@ -556,9 +556,9 @@ a `title` attribute.
 | `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}` for a still-`launching` entry, or `{stopping: true}` if that id has since become a running session (it delegates to `stopSession`); 400 bad id shape; 403 bad token; 404 remote answers off *or* no live launch for that id |
 | `POST` | `/api/sessions/:id/stop` | 200 `{stopping: true}` (graceful) or `{stopped: true}` (`{"force": true}`); 400 bad id shape, bad path encoding, *or* a present-but-unparseable body — an absent/empty body is normal; 403 bad token; 404 remote answers off *or* no live session for that id; 405 + `Allow: POST` for any other method |
 
-All three gated by the same `tokenOk` (`api.ts`) the other three write paths use — an
-unset `ANSWER_TOKEN` leaves them open, matching the rest of the app's LAN-trust posture —
-and by the same remote-answer toggle (below).
+All three sit behind the same write gate, `refuseWrite` (`api.ts`), the other write paths
+use — this machine and a trusted tailnet pass with no token, anyone else needs
+`ANSWER_TOKEN` (read-only when none is set) — and behind the same remote-answer toggle (below).
 
 **The concurrency cap.** `MAX_LAUNCHING` (4, in `server/lib/spawn.ts` beside the other
 caps) is checked before the request body is even read, the same pre-buffer refusal
@@ -582,7 +582,7 @@ What it counts is narrow on both axes, and both are deliberate:
   would need the session registry this store deliberately is not.
 
 `serveSpawn`'s check order: is the switch on (`getState`) → is the feature configured
-(`probeSpawn`) → who's asking (`tokenOk`) → is anything already in flight
+(`probeSpawn`) → who's asking (`refuseWrite`) → is anything already in flight
 (`MAX_LAUNCHING`) → is the request usable (`parseSpawnRequest`, pure — it also decides
 fresh-vs-resume) → then the filesystem step for the chosen shape: `resolveProject` for a
 fresh launch, the transcript hunt plus liveness checks for a resume. Parse moving ahead
@@ -613,7 +613,7 @@ though a plain `===` can't itself be prefix-swallowed the way a looser regex cou
 `decodeURIComponent` throws a synchronous `URIError` on malformed percent-encoding (a
 lone `%ZZ`) — and this process has no `uncaughtException` handler anywhere. Before this
 branch, `POST /api/spawn/%ZZ/stop` (or the identical shape against any other `:id`
-route) crashed the entire dashboard process, unauthenticated, before `tokenOk` or any
+route) crashed the entire dashboard process, unauthenticated, before `refuseWrite` or any
 handler ever ran.
 
 The fix is a single `decodePath(raw): string | null` helper (`index.ts`, try/catch
@@ -645,8 +645,8 @@ stop endpoint above ends it. Degrades, does not wedge.
 
 This is the widest write surface in the app, in the same plain terms
 [remote-message](remote-message.md#security-posture) uses for its own: with the feature
-on and a leaked `ANSWER_TOKEN` (or none set at all, its default), anyone who can reach
-this dashboard can start a real Claude Code session — running real tools, in a real
+on, anyone the write gate trusts — every device on your tailnet while tailnet trust is on
+(the default), or anyone holding a leaked `ANSWER_TOKEN` — can start a real Claude Code session — running real tools, in a real
 project directory — on this machine. That is a materially different thing from the
 other three write paths, which can only ever act on a session that is already running
 and already asked for something. It is the honest reading of what "spawn" means, not an
@@ -655,7 +655,7 @@ edge case of it.
 Four things bound it, and none of them is new machinery — they're the same posture the
 rest of the app already takes, aimed at a bigger target:
 
-- **The remote-answer toggle covers it, like every other write path.**
+- **The remote-answer toggle covers it, like every other write path that acts on a session.**
   `serveSpawn`, `serveSpawnStop` and `serveSessionStop` all answer
   `404 {error: 'remote answers disabled'}` when
   `getState(config).remoteAnswer` is false — flipping the status-plate switch off, or setting
@@ -678,10 +678,10 @@ rest of the app already takes, aimed at a bigger target:
   `SPAWN_MAX_PERMISSION` defaults to `auto` — real tool use, but not
   `bypassPermissions`. Reaching fully unsandboxed execution needs the host owner to
   raise the ceiling on purpose; the browser can never ask its way there.
-- **`ANSWER_TOKEN`, same as the other three.** Empty leaves it open, matching this
-  app's LAN-trust posture everywhere else; the tailnet remains the intended perimeter —
-  set a token if you share it, and treat the token as the minimum behind a public
-  tunnel. See [remote-access](remote-access.md).
+- **The write gate, same as the other three.** This machine and a trusted tailnet pass;
+  a LAN client needs `ANSWER_TOKEN`, and is read-only with none set. The tailnet remains the
+  intended perimeter — if you share it, turn tailnet trust off and use the token, and treat
+  the token as the minimum behind a public tunnel. See [remote-access](remote-access.md).
 
 ## Accepted limits (deferred on purpose)
 
@@ -725,5 +725,5 @@ new reason:
     - client/src/lib/spawnOptions.ts
     - client/src/lib/surface.ts
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

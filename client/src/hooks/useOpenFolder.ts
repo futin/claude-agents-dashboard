@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
 
 import type { OpenFolderRequest } from '../../../shared/types';
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
+import { READ_ONLY_TEXT, refusalKind } from '../lib/writeRefusal';
 
 export interface OpenFolderControl {
   /** `POST /api/open-folder` `{path}`. A no-op while this hook's own POST is out. Never throws. */
@@ -17,7 +19,7 @@ export interface OpenFolderControl {
  * body's `error` picks the note.
  */
 export function useOpenFolder(): OpenFolderControl {
-  const [token] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token] = useAnswerToken();
   const [pending, setPending] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   // A ref, not the state, so two clicks inside one render both see the first one's POST.
@@ -27,14 +29,14 @@ export function useOpenFolder(): OpenFolderControl {
     if (pendingRef.current) return;
     pendingRef.current = true;
     setPending(true);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     const body: OpenFolderRequest = { path };
     fetch('/api/open-folder', { method: 'POST', headers, body: JSON.stringify(body) })
       .then(async res => {
         if (res.status === 200) return null;
         if (res.status === 403) {
           const reply = await res.json().catch(() => null) as { error?: unknown } | null;
+          if (refusalKind(res.status, reply) === 'read-only') return READ_ONLY_TEXT;
           return reply?.error === 'bad token'
             ? 'Open folder needs the Answer token — set it under Settings › Local › Connection.'
             : 'That folder is no longer pinned.';

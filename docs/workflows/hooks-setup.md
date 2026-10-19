@@ -101,8 +101,9 @@ Stop event*; that belongs behind a command someone chose to run, not behind `git
   `model`. The previous file is copied to `settings.json.bak.<stamp>` before any write, and
   the new one is validated as JSON before it replaces anything.
 - **Your token.** `~/.claude/hooks/dashboard-token` is written only if it does not exist
-  *and* this checkout's `.env` has an `ANSWER_TOKEN` to copy. Otherwise you get the command
-  to run yourself. It is never read from or written to the repo.
+  *and* this checkout's `.env` has an `ANSWER_TOKEN` to copy. With no token anywhere it says
+  `no token file needed`: the hooks reach the dashboard on loopback, which the write gate
+  always trusts. It is never read from or written to the repo.
 
   A token file that already exists is now *compared* to `.env` rather than assumed correct:
   identical is `ok`, different is a `warn` that leaves the file alone and points at
@@ -131,16 +132,20 @@ Three of the six hooks, `ask-remote.sh`, `plan-remote.sh` and `stop-notify.sh`, 
 still reports the turn that actually ends the run). Hooks on one event run in parallel and the CLI applies a deny or block only after every one has returned, so
 without this each autopilot gate deny and guard block would idle for the answer window and push to the phone for a run that must not ask. Every other status, a
 missing file and a malformed one leave the hooks as they were, and none of them writes the file. Nothing to configure, but deployment order: on each machine the
-dashboard checkout must be pulled together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question. Merge this branch
-before claude-global's `autopilot` branch: alone it is inert, because no state file exists until the CLI writes one. Per-hook detail:
+dashboard checkout must be pulled together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question. Per-hook detail:
 [remote-answer](../subsystems/remote-answer.md), [remote-plan](../subsystems/remote-plan.md), [remote-message](../subsystems/remote-message.md).
+
+Two per-hook exceptions to "does nothing when `running`": `plan-remote.sh` does not step aside in plan mode (`permission_mode` `plan`), where the autopilot
+gate lets `ExitPlanMode` through and the approval card should still reach the phone; and `stop-notify.sh` also counts `blocked` with `blockPasses == 0` as
+running, because the CLI's Stop guard blocks in that state too.
 
 ## After installing
 
 Three things the installer cannot do for you:
 
-1. **Set `ANSWER_TOKEN`** in `.env` (and in the token file) — it gates every write endpoint.
-   See [remote-answer-setup](remote-answer-setup.md).
+1. **Set `ANSWER_TOKEN`** in `.env` (and in the token file) — only if a hook runs in a
+   container or points at a non-loopback `CLAUDE_DASHBOARD_URL`, or a LAN client must write.
+   See [remote-access](../subsystems/remote-access.md).
 2. **Turn remote answering on** in the dashboard. It is off by default, and every hook
    checks it before doing anything ([remote-answer](../subsystems/remote-answer.md)).
 3. **Point the hooks at the right port** if you are not serving on `127.0.0.1:4173` —
@@ -167,5 +172,5 @@ warning on any non-Darwin host rather than letting you discover it as silence.
     - scripts/kill-guard-hook.sh
     - package.json
   kind: workflow
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

@@ -57,7 +57,7 @@ back with feedback" is a real instruction, not merely a refusal.
 | Piece | What it does |
 |---|---|
 | `scripts/permission-notify-hook.sh` | Serves **both** events, keyed on `hook_event_name`. POSTs `{sessionId, message, permissionMode}` — the mode is read by the [push notifier](push-notify.md)'s auto-mode layer and is present on `PermissionRequest` but not always on the legacy `Notification` payload. Prints nothing, exits 0 always — for `PermissionRequest`, empty stdout means "no decision", so the prompt renders untouched |
-| `POST /api/permissions/notify` | `servePermissionNotify` in `api.ts` — `tokenOk` 403, `ID_RE` 400, unknown session 404, else `notifyPermission()` followed by `maybeSend(config, 'permission', …)`. The route notifies inline rather than through `/api/notify/event`, because the hook is already POSTing here (see [push-notify](push-notify.md)) |
+| `POST /api/permissions/notify` | `servePermissionNotify` in `api.ts` — `refuseWrite` 403, `ID_RE` 400, unknown session 404, else `notifyPermission()` followed by `maybeSend(config, 'permission', …)`. The route notifies inline rather than through `/api/notify/event`, because the hook is already POSTing here (see [push-notify](push-notify.md)) |
 | `server/lib/permissions.ts` | RAM-only `Map<sessionId, {notifiedAt, message, timer}>`. No held socket, no resolve — a notify is a fact, not a wait |
 | `scan.ts` `ScanOptions.permissionWaits` | injected `sessionId → notifiedAt`; sets `Session.permissionWait` and forces `status: 'question'` |
 | chat button + `PermissionBanner` | the row's chat button in mustard `Allow?` — `chatTab()` now looks the label up by `holdKind(s)` (`client/src/lib/holds.ts`), which returns `permission` last, so `remoteQuestion`, `remotePlan` and `remoteReply` all label it first (see [sessions](sessions.md#the-chat-button-is-also-where-a-session-says-it-needs-a-human)). That precedence lives in `holds.ts` rather than in the row because the Board card's "Need you" count and the browser-notification gate read the same answer — and the pinned drawer strip |
@@ -170,9 +170,9 @@ silencing an unrelated prompt.
   are looking at. Every failure degrades to exactly the pre-hook behaviour.
 - **RAM only.** A server restart drops every flag (fails open, rows read as before). No disk
   write — unlike `remote-answer.md`'s toggle, there's no state worth surviving a restart.
-- **Token-gated** like the other POSTs (`ANSWER_TOKEN`, empty = open, hook reads
-  `~/.claude/hooks/dashboard-token`). It steers no agent, but without the gate anyone on the
-  LAN could light up rows.
+- **Behind the write gate** like the other POSTs (this machine, a trusted tailnet peer, or
+  `ANSWER_TOKEN`; a hook on loopback needs no token). It steers no agent, but without the gate
+  anyone on the LAN could light up rows.
 - **Per-session, not per-call:** one entry per session id, a second notify supersedes the first
   and re-arms the TTL — matching the CLI, which shows one dialog at a time.
 
@@ -186,5 +186,5 @@ silencing an unrelated prompt.
     - client/src/components/sessions/atoms.tsx
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

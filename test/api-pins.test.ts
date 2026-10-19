@@ -64,7 +64,7 @@ export async function run(): Promise<number> {
   check(await testAsync('POST /api/pins with ANSWER_TOKEN set and no bearer is 403 and writes nothing', async () => {
     await withPins(ENV + 'ANSWER_TOKEN=s3cret\n', async h => {
       const { dirName } = plantProject(h, 'old', 5);
-      const reply = await post(h, { dirName, pinned: true });
+      const reply = await post(h, { dirName, pinned: true }, { 'X-Forwarded-For': '192.168.1.5' });
       assert.equal(reply.status, 403);
       assert.equal(reply.json?.error, 'bad token');
       assert.deepStrictEqual(getPinnedProjects(), []);
@@ -181,7 +181,7 @@ export async function run(): Promise<number> {
   check(await testAsync('POST /api/pins/order with ANSWER_TOKEN set and no bearer is 403 and reorders nothing', async () => {
     await withPins(ENV + 'ANSWER_TOKEN=s3cret\n', async h => {
       const dirs = await pinAll(h, ['p', 'q'], { Authorization: 'Bearer s3cret' });
-      const reply = await postOrder(h, { order: [...dirs].reverse() });
+      const reply = await postOrder(h, { order: [...dirs].reverse() }, { 'X-Forwarded-For': '192.168.1.5' });
       assert.equal(reply.status, 403);
       assert.equal(reply.json?.error, 'bad token');
       assert.deepStrictEqual(getPinnedProjects(), dirs);

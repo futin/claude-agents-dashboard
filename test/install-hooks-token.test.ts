@@ -215,9 +215,12 @@ export function run(): number {
       assert.strictEqual(r.after, 'whatever');
     })) p++; else f++;
 
-    if (test('genuinely no token anywhere is the TODO branch', () => {
+    if (test('genuinely no token anywhere needs no token file: the hooks reach the dashboard on loopback', () => {
       const r = runInstaller(s);
-      assert.match(r.token, /TODO {5}no ANSWER_TOKEN in \.env/, `got:\n${r.token}`);
+      assert.ok(r.token.includes(
+        'ok       no token file needed — hooks reach the dashboard on loopback (set ANSWER_TOKEN only for a container or a non-loopback CLAUDE_DASHBOARD_URL)'
+      ), `got:\n${r.token}`);
+      assert.ok(!/TODO {5}no ANSWER_TOKEN/.test(r.token), `the old TODO is gone, got:\n${r.token}`);
     })) p++; else f++;
 
     // ------------------------------------------- the reader that fails to run

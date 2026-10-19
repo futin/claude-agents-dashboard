@@ -1,9 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
+import { useWhatsNew } from 'ui-kit';
 
 import { HeaderAccount } from './components/HeaderAccount';
+import { ReleasesDrawer } from './components/ReleasesDrawer';
 import { SideRail } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
 import { deepLinkSession, deepLinkView, takeDeepLinkManagementTab } from './lib/deepLink';
+import { LAST_SEEN_KEY } from './lib/releases';
 import { isSection, wrapClass, type Section } from './lib/sections';
 import { useAccount } from './hooks/useAccount';
 import { useShellNarrow } from './hooks/useNarrow';
@@ -90,6 +93,10 @@ function AppShell() {
   // rides along for the wordmark's cursor, which blinks while a session is.
   const [link, setLink] = useState({ connected: true, working: false });
 
+  // The version chip and its drawer, shell furniture like the account chip: ui-kit's hook owns the read, the unseen dot and the open state, under the
+  // storage key this app has always used.
+  const releases = useWhatsNew({ storageKey: LAST_SEEN_KEY });
+
   return (
     <ConfigsScopeProvider active>
       <div className="shell">
@@ -98,6 +105,7 @@ function AppShell() {
           onChange={change}
           accountSlot={narrow ? chip : null}
           live={section === 'sessions' ? { ...link, refreshMs: settings.refreshMs } : null}
+          version={releases.chip ? { ...releases.chip, onOpen: releases.show } : null}
         />
         {/* `display:contents` below `sm`, so the board is the flex child of
             `.shell` it has always been there; from `sm` this is the column
@@ -133,6 +141,7 @@ function AppShell() {
             </div>
           </main>
         </div>
+        {releases.open && releases.data && <ReleasesDrawer data={releases.data} onClose={releases.close} />}
       </div>
     </ConfigsScopeProvider>
   );

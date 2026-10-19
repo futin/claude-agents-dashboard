@@ -109,8 +109,7 @@ remote as a held question.
   `PreToolUse` hook already denied, but it is kept in step with `ask-remote-hook.sh` and `stop-notify-hook.sh` so that all three parallel hooks agree about a
   run that must not ask. In plan mode (stdin `permission_mode` is `plan`) it does not opt out: the autopilot gate lets `ExitPlanMode` through, so the approval
   card still reaches the phone. A `session_id` outside `[A-Za-z0-9-]` skips the check. Deployment order: on each machine the dashboard checkout must be pulled
-  together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question. Merge this branch before claude-global's
-  `autopilot` branch: alone it is inert, because no state file exists until the CLI writes one.
+  together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question.
 
 ## The away-mode alternative: skip plan mode entirely
 
@@ -136,8 +135,10 @@ and stop POSTs the banner is a promise about — comes back 403 and is swallowed
 `curl -sf`. A session was told remote answering was armed for twelve hours in which no
 question ever reached a phone (backlog bug-6). With the token file missing the hook now
 prints a one-line notice naming the file and pointing at `pnpm hooks:install`, instead of
-the banner. An older server sends no `tokenRequired`, which reads as `false` and keeps the
-old behaviour rather than warning wrongly.
+the banner. `tokenRequired` means *this caller* would need the token (`writeAccess ===
+'token'`), so a hook on loopback, which is always trusted, never trips it. An older server
+sends no `tokenRequired`, which reads as `false` and keeps the old behaviour rather than
+warning wrongly.
 
 When all hold it injects an instruction for that turn: put every decision through
 `AskUserQuestion` (including skill-driven asks like the brainstorming skill's mode pick),
@@ -158,8 +159,8 @@ silent deciding.
 
 Approving work this way in auto mode grants nothing new — the session already edits and
 runs without asking; the POST only picks *which* pre-authorized path it takes. The
-perimeter question is the same one `remote-answer.md` documents (tailnet fine, public
-tunnel needs `ANSWER_TOKEN`). It is an **instruction, not a gate**: the model follows it
+perimeter question is the same one `remote-answer.md` documents (a trusted tailnet fine,
+LAN and public tunnel need `ANSWER_TOKEN`). It is an **instruction, not a gate**: the model follows it
 like any context, and the hard gates (the plan card, permission dialogs) sit exactly where
 they did.
 
@@ -200,5 +201,5 @@ same failure mode, and the same one setting as
     - client/src/hooks/usePendingPlan.ts
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

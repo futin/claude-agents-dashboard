@@ -60,7 +60,8 @@ import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } f
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
 import { openFolder, openFolderPlatform } from './lib/open-folder.js';
 import { readGitStats } from './lib/git-stats.js';
-import { classifyOrigin } from './lib/origin.js';
+import { classifyOrigin, resolvePeer } from './lib/origin.js';
+import { releasesPayload } from './lib/releases.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
   MAX_LAUNCHING, adoptLaunched, clampPermission, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
@@ -70,8 +71,8 @@ import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import type {
   AnalyticsResponse, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SessionTrace, SpawnRequest,
-  ModelRateRow, RateLimit, SpawnResponse, UsageCoverage, UsageProfileCell,
-  UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult
+  ModelRateRow, RateLimit, ServerSettings, SpawnResponse, UsageCoverage, UsageProfileCell,
+  UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult, ConnectionOrigin, WriteAccess
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -425,7 +426,7 @@ function send413(res: ServerResponse, body: unknown): void {
  *
  * Gated like the other write paths even though it writes no session state: it
  * spawns processes and writes files on this machine, which is firmly the write
- * side of the line this codebase draws. Token comes before the engine probe so
+ * side of the line this codebase draws. The write gate comes before the engine probe so
  * an unauthenticated caller gets no further than 403 on a path that spawns
  * processes — not to hide the capability itself: `GET /api/health` already
  * publishes `transcribe` with no auth at all, by design. `serveSpawn` below
@@ -437,7 +438,7 @@ export async function serveTranscribe(
   config: Config, req: IncomingMessage, res: ServerResponse
 ): Promise<void> {
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   if (!probeTranscribe(config)) return sendJson(res, 404, { error: 'no transcription engine' });
   // Cheap pre-buffer peek: refuse a second caller before its audio is ever
   // read into memory, rather than after (see docs/subsystems/dictation.md).
@@ -507,14 +508,14 @@ export function resetRejectedWriteLog(): void {
 }
 
 /**
- * Say once, on stderr, that a write was refused for its token.
+ * Say once, on stderr, that a write was refused, from which kind of peer, and whether a token would have helped.
  *
  * Silence here is what made backlog bug-6 cost twelve hours: the installer had
  * written no token file, every hook POST came back 403, and the hooks swallow
  * that (`curl -sf`, then `exit 0`). Nothing on any surface distinguished a
  * misconfigured token from a feature nobody had switched on.
  *
- * Method and path only. Never the expected token, the received header, or a
+ * Method, path and peer class only. Never the expected token, the received header, or a
  * prefix of either — a log that carries the credential is a worse bug than the
  * one it diagnoses — and never the query string, which is the one part of a URL
  * a caller might have put a secret in.
@@ -522,7 +523,7 @@ export function resetRejectedWriteLog(): void {
  * Throttled per path because a held `stop` hook retries: an unthrottled line
  * would bury the output it is supposed to draw attention to.
  */
-function logRejectedWrite(req: IncomingMessage): void {
+function logRejectedWrite(req: IncomingMessage, peer: ConnectionOrigin, kind: 'token' | 'read-only'): void {
   const key = `${req.method || 'GET'} ${(req.url || '').split('?')[0]}`;
   const now = Date.now();
   const last = rejectLogged.get(key);
@@ -530,19 +531,38 @@ function logRejectedWrite(req: IncomingMessage): void {
   // Paths carry session ids, so the key space is unbounded over a long run.
   if (rejectLogged.size >= 256) rejectLogged.clear();
   rejectLogged.set(key, now);
-  console.error(`[dashboard] rejected write: ${key} (bad or missing token)`);
+  const why = kind === 'token' ? 'bad or missing token' : 'read-only, no token set';
+  console.error(`[dashboard] rejected write: ${key} from ${peer} (${why})`);
 }
 
 /**
- * Bearer check for the two write endpoints. An unset ANSWER_TOKEN leaves them
- * open — the same posture as every read endpoint here.
+ * What a peer may do without presenting a token: `open` for this machine, and for the tailnet while `trustTailnet` is on; otherwise `token` when one
+ * is configured, else `none`. The rule table lives in docs/subsystems/remote-access.md.
  */
-function tokenOk(config: Config, req: IncomingMessage): boolean {
-  if (!config.answerToken) return true;
-  const header = req.headers.authorization;
-  if (typeof header === 'string' && header === `Bearer ${config.answerToken}`) return true;
-  logRejectedWrite(req);
-  return false;
+export function writeAccessFor(peer: ConnectionOrigin, trustTailnet: boolean, tokenSet: boolean): WriteAccess {
+  if (peer === 'local' || (peer === 'tailnet' && trustTailnet)) return 'open';
+  return tokenSet ? 'token' : 'none';
+}
+
+/** `writeAccessFor` for this request. Reads the switch per call, which is what makes it live without a restart. */
+function requestWriteAccess(config: Config, req: IncomingMessage): { peer: ConnectionOrigin; access: WriteAccess } {
+  const peer = resolvePeer(req.socket?.remoteAddress, req.headers);
+  return { peer, access: writeAccessFor(peer, getSettings().trustTailnet, config.answerToken !== '') };
+}
+
+/**
+ * The gate every write route runs: true when it has already sent the 403 and the caller must return. A trusted peer passes; so does an exact
+ * `Bearer <ANSWER_TOKEN>` from anywhere. The two refusal bodies tell a client whether a token could help (`bad token`) or not (`read-only from this
+ * network`).
+ */
+export function refuseWrite(config: Config, req: IncomingMessage, res: ServerResponse): boolean {
+  const { peer, access } = requestWriteAccess(config, req);
+  if (access === 'open') return false;
+  if (access === 'token' && req.headers.authorization === `Bearer ${config.answerToken}`) return false;
+  const kind = access === 'token' ? 'token' : 'read-only';
+  logRejectedWrite(req, peer, kind);
+  sendJson(res, 403, { error: kind === 'token' ? 'bad token' : 'read-only from this network' });
+  return true;
 }
 
 /** True when the id names a transcript we can see. Never joined into a path. */
@@ -560,15 +580,17 @@ function sessionExists(id: string): boolean {
  * after this probe (`ask-remote-hook.sh`), and a second round trip to fetch two
  * integers would add latency to every question they intercept.
  */
-export function serveHealth(config: Config, res: ServerResponse, req?: IncomingMessage): void {
+export function serveHealth(config: Config, res: ServerResponse, req: IncomingMessage): void {
   const settings = getSettings();
+  const { access } = requestWriteAccess(config, req);
   sendJson(res, 200, {
     ok: true,
     ...getState(config),
     idleSecs: settings.idleSecs,
     answerSecs: settings.answerSecs,
-    origin: classifyOrigin(req?.socket?.remoteAddress, req?.headers),
-    tokenRequired: config.answerToken !== '',
+    origin: classifyOrigin(req.socket?.remoteAddress, req.headers),
+    writeAccess: access,
+    tokenRequired: access === 'token',
     transcribe: probeTranscribe(config),
     spawnAvailable: probeSpawn(config),
     spawnMaxPermission: config.spawnMaxPermission,
@@ -613,20 +635,28 @@ setTimeout(function () {
 }
 
 /**
- * `GET /api/settings` — the settings that aren't per-device (see lib/settings.ts).
+ * The one `/api/settings` body, for GET and POST alike: the client replaces its
+ * whole state with either reply, so a field only one of them filled would vanish
+ * on the first save.
  *
- * `notifyAvailable` is filled here rather than in the store: it is the one field
- * derived from `Config`, and `lib/settings.ts` deliberately never reads config.
- * The topic itself is never returned — it is both the address and the credential.
+ * `notifyAvailable` and `staleEnvKeys` are filled here rather than in the store:
+ * both derive from `Config` or the `.env` baseline, and `lib/settings.ts`
+ * deliberately never reads config. The topic itself is never returned — it is
+ * both the address and the credential.
  */
-export function serveSettingsRead(config: Config, res: ServerResponse): void {
-  sendJson(res, 200, {
-    ...getSettings(),
+function settingsBody(config: Config, settings: ServerSettings): ServerSettings {
+  return {
+    ...settings,
     notifyAvailable: config.ntfyTopic !== '',
     // Read per request, not cached: the whole point is to notice a file that
     // changed after this process read it. One `readFileSync` of a small file.
     staleEnvKeys: staleEnvKeys()
-  });
+  } satisfies ServerSettings;
+}
+
+/** `GET /api/settings` — the settings that aren't per-device (see lib/settings.ts). */
+export function serveSettingsRead(config: Config, res: ServerResponse): void {
+  sendJson(res, 200, settingsBody(config, getSettings()));
 }
 
 /** An empty grid, for the fail-open path and for a never-recorded profile. */
@@ -982,6 +1012,11 @@ export function serveAccount(config: Config, res: ServerResponse, homeDir?: stri
   }
 }
 
+/** `GET /api/releases` — the dashboard's own release history; always 200, the empty shape when there is nothing to read (lib/releases.ts). */
+export async function serveReleases(res: ServerResponse): Promise<void> {
+  sendJson(res, 200, await releasesPayload());
+}
+
 /**
  * `GET /api/usage/rates` — what a percent of the 5-hour window costs, per model.
  *
@@ -1048,13 +1083,13 @@ export function serveUsageHistory(res: ServerResponse, query: URLSearchParams, d
 export async function serveSettingsWrite(
   config: Config, req: IncomingMessage, res: ServerResponse
 ): Promise<void> {
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   const body = await readJsonBody(req);
   const next = setSettings(body);
   if (!next) {
     return sendBadBody(res, { error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, gitFetchSecs?: 0|30|60|120|300|600}' });
   }
-  sendJson(res, 200, { ...next, notifyAvailable: config.ntfyTopic !== '' });
+  sendJson(res, 200, settingsBody(config, next));
 }
 
 /**
@@ -1065,7 +1100,7 @@ export async function serveSettingsWrite(
 export async function serveRemoteAnswerToggle(
   config: Config, req: IncomingMessage, res: ServerResponse
 ): Promise<void> {
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   const body = await readJsonBody(req) as { enabled?: unknown } | null;
   if (!body || typeof body.enabled !== 'boolean') return sendBadBody(res, { error: 'expected {enabled: boolean}' });
   const state = setEnabled(config, body.enabled);
@@ -1090,7 +1125,7 @@ export async function serveRemoteAnswerToggle(
  */
 export async function serveQuestionWait(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
 
   const body = await readJsonBody(req) as
     { sessionId?: unknown; toolInput?: unknown; timeoutMs?: unknown; permissionMode?: unknown } | null;
@@ -1141,7 +1176,7 @@ export async function serveSessionAnswer(
   config: Config, id: string, req: IncomingMessage, res: ServerResponse
 ): Promise<void> {
   if (!config.remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
 
   const body = await readJsonBody(req);
@@ -1163,7 +1198,7 @@ export async function serveSessionAnswer(
  */
 export async function servePlanWait(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
 
   const body = await readJsonBody(req) as
     { sessionId?: unknown; toolInput?: unknown; timeoutMs?: unknown; permissionMode?: unknown } | null;
@@ -1211,7 +1246,7 @@ export async function serveSessionPlanAnswer(
   config: Config, id: string, req: IncomingMessage, res: ServerResponse
 ): Promise<void> {
   if (!config.remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
 
   const body = await readJsonBody(req);
@@ -1238,7 +1273,7 @@ export async function serveSessionPlanAnswer(
  */
 export async function serveMessageWait(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
 
   const body = await readJsonBody(req) as
     { sessionId?: unknown; timeoutMs?: unknown; permissionMode?: unknown; stopHookActive?: unknown; headless?: unknown } | null;
@@ -1291,7 +1326,7 @@ export async function serveSessionMessageAnswer(
   config: Config, id: string, req: IncomingMessage, res: ServerResponse
 ): Promise<void> {
   if (!config.remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
 
   const body = await readJsonBody(req);
@@ -1319,7 +1354,7 @@ export async function serveSessionMessageAnswer(
 export async function servePermissionNotify(
   config: Config, req: IncomingMessage, res: ServerResponse
 ): Promise<void> {
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
 
   const body = await readJsonBody(req) as
     { sessionId?: unknown; message?: unknown; permissionMode?: unknown } | null;
@@ -1360,7 +1395,7 @@ export async function servePermissionNotify(
 export async function serveNotifyEvent(
   config: Config, req: IncomingMessage, res: ServerResponse
 ): Promise<void> {
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
 
   const body = await readJsonBody(req) as
     { sessionId?: unknown; event?: unknown; permissionMode?: unknown } | null;
@@ -1387,7 +1422,7 @@ export async function serveNotifyEvent(
 export async function serveNotifyTest(
   config: Config, req: IncomingMessage, res: ServerResponse
 ): Promise<void> {
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   sendJson(res, 200, { outcome: await sendTest(config) });
 }
 
@@ -1407,7 +1442,7 @@ export async function serveNotifyTest(
  * probe regardless, the same split `transcribe` uses on that payload.
  *
  * Check order, and the one part of it that is *not* about leaking less: the
- * probe runs before `tokenOk`, unlike `serveTranscribe` above, which documents
+ * probe runs before `refuseWrite`, unlike `serveTranscribe` above, which documents
  * the opposite order for itself. That divergence is harmless here rather than
  * principled — `GET /api/health` already publishes `spawnAvailable`
  * unauthenticated and already calls the same memoised `probeSpawn`, so
@@ -1436,7 +1471,7 @@ export async function serveNotifyTest(
 export async function serveSpawn(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
   if (!probeSpawn(config)) return sendJson(res, 404, { error: 'spawn unavailable' });
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   // The accident rail (see MAX_LAUNCHING in server/lib/spawn.ts): N POSTs would
   // otherwise be N live `claude` processes on the account's real quota. Counted
   // before the body is read, like transcribe's `isTranscribing()` peek — and
@@ -1501,7 +1536,9 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
       if (live?.has(rid)) {
         return sendJson(res, 409, { error: 'session is still running' });
       }
-      if (listLaunching().some(e => e.sessionId === rid)) {
+      // `'launching'` only, as at the cap above: a `failed` row for this id lingers
+      // FAIL_TTL_MS for display, holds no process, and must not refuse a retry.
+      if (listLaunching().some(e => e.sessionId === rid && e.state === 'launching')) {
         return sendJson(res, 409, { error: 'already resuming' });
       }
       const ref = { dirName: t.dirName, name: nodePath.basename(tr.cwd), path: tr.cwd, lastActiveMs: t.mtimeMs };
@@ -1549,7 +1586,7 @@ export function serveSpawnStop(
   config: Config, id: string, req: IncomingMessage, res: ServerResponse
 ): void {
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
   switch (stopSession(id)) {
     case 'not-found': return sendJson(res, 404, { error: 'no live launch' });
@@ -1582,7 +1619,7 @@ export async function serveSessionStop(
   config: Config, id: string, req: IncomingMessage, res: ServerResponse
 ): Promise<void> {
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
 
   // `readJsonBody` collapses "empty" and "malformed" into the same null, and
@@ -1737,10 +1774,10 @@ export async function serveGitStats(config: Config, res: ServerResponse): Promis
 
 /**
  * `POST /api/git-fetch` — fetch every pinned repo's `origin` now and answer with the clock as the run leaves it (git-fetch spec §2). The method check is the
- * router's; the token guard is here, because this is the one route that makes git talk to the network. A run already in flight is joined, not doubled (D6).
+ * router's; the write gate is here, because this is the one route that makes git talk to the network. A run already in flight is joined, not doubled (D6).
  */
 export async function serveGitFetch(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   try {
     markGitWatched();
     sendJson(res, 200, { fetch: await fetchAll(config) });
@@ -1759,7 +1796,7 @@ export async function serveGitFetch(config: Config, req: IncomingMessage, res: S
  * Success answers with the fresh `GET /api/pins` payload.
  */
 export async function servePinsWrite(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   const body = await readJsonBody(req) as { dirName?: unknown; pinned?: unknown } | null;
   if (!body || typeof body.dirName !== 'string' || typeof body.pinned !== 'boolean') {
     return sendBadBody(res, { error: 'expected {dirName: string, pinned: boolean}' });
@@ -1781,7 +1818,7 @@ export async function servePinsWrite(config: Config, req: IncomingMessage, res: 
  * is a 409, so a stale tab can neither drop nor resurrect a pin. Success answers with the fresh `GET /api/pins` payload.
  */
 export async function servePinsOrder(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   const body = await readJsonBody(req) as { order?: unknown } | null;
   if (!body || !Array.isArray(body.order) || !body.order.every(d => typeof d === 'string')) {
     return sendBadBody(res, { error: 'expected {order: string[]}' });
@@ -1792,12 +1829,12 @@ export async function servePinsOrder(config: Config, req: IncomingMessage, res: 
 
 /**
  * `POST /api/open-folder` `{path}` — open a pinned project's folder in Finder on the server host (management redesign spec §6.3). The method check is the
- * router's. This launches a process on the host from a request that may come over LAN or the tailnet, so beyond the token the path must string-equal the
+ * router's. This launches a process on the host from a request that may come over LAN or the tailnet, so beyond the write gate the path must string-equal the
  * path of a pin listed now: nothing is joined or normalised, so the request can name only a folder the pin list already shows. The platform gate sits before
  * the pin read so a non-macOS host answers 501 without listing anything.
  */
 export async function serveOpenFolder(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (!tokenOk(config, req)) return sendJson(res, 403, { error: 'bad token' });
+  if (refuseWrite(config, req, res)) return;
   const body = await readJsonBody(req) as { path?: unknown } | null;
   if (!body || typeof body !== 'object' || typeof body.path !== 'string' || body.path === '') {
     return sendBadBody(res, { error: 'expected {path: string}' });

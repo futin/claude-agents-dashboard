@@ -39,6 +39,7 @@ import { resetStore as resetMessages } from '../server/lib/messages.js';
 import { resetStore as resetPending } from '../server/lib/pending.js';
 import { resetStore as resetPlans } from '../server/lib/plans.js';
 import { resetState } from '../server/lib/remoteState.js';
+import { resetSettings } from '../server/lib/settings.js';
 import type { Config } from '../server/lib/config.js';
 
 /** One `it`-style case. Async throughout: every request below is a promise. */
@@ -102,11 +103,18 @@ export function userRecord(uuid: string, text: string, cwd: string): unknown {
   };
 }
 
+/**
+ * Module stores a server reads, dropped on the way in and out. Settings are
+ * among them: `getSettings()` caches the file under the cwd it first read, and
+ * every `withServer` runs in a fresh home, so a cache carried over would answer
+ * with the previous suite's values (it turned `recording` on for the rates suite).
+ */
 function resetStores(): void {
   resetState();
   resetPending();
   resetPlans();
   resetMessages();
+  resetSettings();
 }
 
 /**

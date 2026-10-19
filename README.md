@@ -11,8 +11,8 @@ opt-in features that need one ([remote answers](docs/subsystems/remote-answer.md
 [remote plan verdicts](docs/subsystems/remote-plan.md), the
 [`Allow?` tab](docs/subsystems/permission-notify.md), and the `Stop` hook behind both the
 finished-turn [push](docs/subsystems/push-notify.md) and
-[remote messages](docs/subsystems/remote-message.md)). One runtime dependency on the backend, [`lookout-widgets`](docs/subsystems/hub-widgets.md#the-dependency-exception)
-(the rest is Node built-ins), and exactly two kinds of outbound call — the ntfy push and the usage-bar read
+[remote messages](docs/subsystems/remote-message.md)). Two runtime dependencies on the backend, [`lookout-widgets`](docs/subsystems/hub-widgets.md#the-dependency-exception)
+and `release-kit` (the rest is Node built-ins), and exactly two kinds of outbound call — the ntfy push and the usage-bar read
 from Anthropic's API — plus `git fetch` on the pinned repos when you turn the Git fetch timer on.
 
 ## Quick start
@@ -85,14 +85,20 @@ That's the whole basic setup. Everything below is optional.
   (`Stop session` → `Really stop?`, with `Force stop` if the graceful signal doesn't
   land). Off by default (empty `CLAUDE_BIN`); how much a launch can do unattended is
   bounded by the `SPAWN_MAX_PERMISSION` ceiling on the host, never by the browser.
+- **Management tab** — **Projects**: the pinned projects and the ones on offer to pin, as tiles, columns or lists, with the pins reordered by drag or
+  keyboard. **Git** ([git-stats](docs/subsystems/git-stats.md)): read-only local git state of each pinned repo — uncommitted work, unmerged branches and how
+  far they are from the trunk — plus an opt-in background `git fetch` and a Sync button that launches a headless `/git-sync` session in that repo.
+- **[What's new](docs/subsystems/releases.md)** — the version chip at the foot of the side rail opens every release of the dashboard, newest first, read
+  from the checkout's own release tags.
 - **[Claude Configs tab](docs/subsystems/configs.md)** — read-only browser for all Claude
   config on the machine: skills, agents, commands, rules, hooks, settings, plugins, MCP
   servers (secrets redacted), per scope. A skill that ships more than `SKILL.md` opens its whole directory in a file rail
   beside the viewer.
 - **[Analytics tab](docs/subsystems/analytics.md)** — per-session post-mortem cards
   (tokens, priciest tools/subagents) paired with the lesson the `/kaizen` skill logged.
-- **[Usage bars and forecast](docs/subsystems/usage-limits.md)** — the Sessions aside's 5h / Week
-  account rate-limit bars, same numbers as `/usage` in the CLI, each with a time strip
+- **[Usage bars and forecast](docs/subsystems/usage-limits.md)** — the 5h / Week account rate-limit bars, in the
+  [account chip](docs/subsystems/account-header.md) above every section (who the CLI is signed in as, with the full bars in its popover),
+  same numbers as `/usage` in the CLI, each with a time strip
   underneath: how much of the window has elapsed, your burn rate, and where the current
   pace projects 100% — as a band rather than a single tick while the estimate is still
   young. Opt in to recording and the weekly projection learns which hours you actually
@@ -105,7 +111,7 @@ That's the whole basic setup. Everything below is optional.
   answers what a percent *is*: tokens per 1% of the 5-hour window per model (with the
   weekly limit's equivalent alongside), measured on this machine because the budget is
   never published, with a verdict on whether that price has drifted. Ratios between token
-  types only — no currency anywhere.
+  types only — no currency anywhere. A third, **History**, charts the recorded 5h and weekly utilization over the last N days.
 - **[Push notifications](docs/subsystems/push-notify.md)** — the server publishes to an
   [ntfy](https://ntfy.sh) topic when a session needs you (question, plan, permission
   dialog, finished turn); tapping the push opens that session's chat. Off by default, and
@@ -136,7 +142,7 @@ That's the whole basic setup. Everything below is optional.
   One of the six is not a dashboard feature at all: `kill-guard.sh` refuses a broad
   `pkill`/`killall` from a Bash tool call, which is what once took this repo's own dev
   server down from a session running somewhere else.
-- **Phone / away-from-home access** — nothing to configure in the app; see
+- **Phone / away-from-home access** — nothing to configure in the app for LAN or Tailscale; a public tunnel's hostname goes in `ALLOWED_HOSTS`. See
   [remote access](docs/subsystems/remote-access.md) for LAN, Tailscale, and tunnel options.
 - **Remote answers hook** — 4 steps, ~2 minutes:
   [setup](docs/workflows/remote-answer-setup.md).
@@ -147,14 +153,14 @@ That's the whole basic setup. Everything below is optional.
   whisper-cpp` (plus `ffmpeg`), a model file, one `.env` line, and `pnpm tunnel` for phone
   use: [setup](docs/workflows/dictation-setup.md). Read the [security
   posture](docs/subsystems/dictation.md#security-posture) first if other devices can reach
-  the dashboard — the endpoint spawns processes and is gated only by `ANSWER_TOKEN`, which
-  defaults to empty.
+  the dashboard — the endpoint spawns processes, and every tailnet device may call it while
+  tailnet trust is on (the default); a LAN client needs `ANSWER_TOKEN`.
 - **New sessions (spawn)** — 1 step, ~1 minute: point `CLAUDE_BIN` at your `claude` binary
   (`which claude`), and set `SPAWN_MAX_PERMISSION` below its `auto` default if that's more
   than you want an unattended launch to have. Read the [security
   posture](docs/subsystems/spawn.md#security-posture) first — this is the widest write
-  surface in the app; it's gated by the same `ANSWER_TOKEN` that defaults to empty, and by
-  the remote-answer toggle, so flipping that pill off stops launching too.
+  surface in the app; it sits behind the same write gate (this machine, a trusted tailnet, or
+  `ANSWER_TOKEN`), and the remote-answer toggle, so flipping that pill off stops launching too.
 - **Docker** — production and dev images, read-only `~/.claude` mount:
   [docker](docs/workflows/docker.md).
 - **Configuration** — everything is optional, defaults work out of the box; the full
@@ -186,7 +192,7 @@ committed and pushed and `pnpm plugin:sync` has run. The script compares `plugin
 surface, repo layout, and the map of every doc. Per-subsystem deep dives (mechanism +
 invariants) live in [`docs/subsystems/`](docs/subsystems/); runnable procedures
 (configuration, Docker, the hook installer, the remote-answers hook, push-notification and
-dictation setup) in
+dictation setup, CI and releases) in
 [`docs/workflows/`](docs/workflows/).
 
 ## Not included (yet)
@@ -201,5 +207,5 @@ dictation setup) in
     - scripts/
     - package.json
   kind: readme
-  verified: f06c54a88e5655ce39e1f5b23b97d42151e257b2
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

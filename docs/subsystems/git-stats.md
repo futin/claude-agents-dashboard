@@ -50,7 +50,7 @@ imports nothing from the reader and has its own runner. It is a module of its ow
   client; `lock` (a clash with another git process) shows nothing and the next scheduled fetch retries.
 - **No memo work** (D12): a fetch that moves `origin/<trunk>` changes the base sha, so the reader's next read recounts on its own.
 
-`POST /api/git-fetch` runs one now: token-guarded by `tokenOk` like `POST /api/settings` (`403 { error: 'bad token' }`), marks the view watched, awaits
+`POST /api/git-fetch` runs one now: behind the write gate `refuseWrite` like `POST /api/settings` (403 `bad token` or `read-only from this network`), marks the view watched, awaits
 `fetchAll` and answers `200 { fetch }`; `500` only if `fetchAll` throws despite the above, `405` for any other method. A manual fetch resets the schedule.
 
 ## What each number means
@@ -227,8 +227,8 @@ origin; the verdict and the age in amber (`offline · fetched 2m ago`, `needs au
 joins its facts into one plain string, such as an All good line, carries the words without the colour. A failed fetch other than `lock` is a sev 3 problem, so
 it does raise the repo's level.
 
-**The copy.** Every string is in `client/src/lib/gitStatsText.ts`, verbatim from the copy tables of the git-stats spec §6 and the git-fetch spec §4; the
-components never build their own. The empty state's "Projects" is a link that sets `managementTab: 'projects'`.
+**The copy.** The spec'd strings are in `client/src/lib/gitStatsText.ts`, verbatim from the copy tables of the git-stats spec §6 and the git-fetch spec §4;
+the exceptions are short labels and hints kept beside their one use, such as `GitInspector.tsx`'s per-verdict fetch-failure hints and its `Open folder` key. The empty state's "Projects" is a link that sets `managementTab: 'projects'`.
 
 **Sync** (spec §9). Every `ok` repo with an origin gets a Sync button while `/api/health` reports `spawnAvailable` (`canSync` in `client/src/lib/gitSync.ts`):
 drawn by `GitKeys` in every layout, beside the repo's verdict in Inbox, in the action column in Matrix, in the Inspector pane's head and footer, and on the
@@ -281,4 +281,5 @@ in flight, and only the clicked one reads "Starting…". The runs key is not a s
     - client/src/hooks/useOpenFolder.ts
     - server/lib/open-folder.ts
   kind: subsystem
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

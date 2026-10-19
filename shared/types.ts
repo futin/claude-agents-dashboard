@@ -771,6 +771,40 @@ export interface AccountProfile {
 }
 
 /**
+ * What a release is: `feat`, `fix` and `perf` cut one; `baseline` is the hand-cut tag versioning starts from. Four members where release-kit's own
+ * `ReleaseType` has three — release-kit types `Release.type` as `ReleaseType | 'baseline'`, so the two are assignable but are not the same name.
+ */
+export type ReleaseType = 'feat' | 'fix' | 'perf' | 'baseline';
+
+/** One annotated `vX.Y.Z` tag, as release-kit's `readReleases` parses it (`docs/subsystems/releases.md`). */
+export interface Release {
+  /** No leading `v`: `0.2.0`. */
+  version: string;
+  /** Tag creation time, ISO. */
+  date: string;
+  /** The tag subject without its trailing `(#N)` — still carrying the Conventional Commits prefix, which the client strips for display. */
+  title: string;
+  type: ReleaseType;
+  scope?: string;
+  pr?: number;
+  breaking: boolean;
+  /** The PR's `## What's new` section, markdown; empty when it had none. */
+  notes: string;
+  /** The PR page, present only when `pr` is and `origin` is a GitHub remote. */
+  url?: string;
+}
+
+/**
+ * `GET /api/releases` — the dashboard's own release history, read from the local checkout's tags. `current` is `git describe` against those tags: on a
+ * tag `ahead` is 0, three commits past one it is 3. Not a checkout, no git, or no tags → `{ current: null, releases: [] }`, never an error status.
+ */
+export interface ReleasesResponse {
+  current: { version: string; ahead: number } | null;
+  /** Newest first. */
+  releases: Release[];
+}
+
+/**
  * `GET /api/account` — everything the header account chip draws, on one small
  * body it can poll on its own clock.
  *
@@ -991,6 +1025,12 @@ export interface RemoteAnswerState {
  */
 export type ConnectionOrigin = 'local' | 'lan' | 'tailnet' | 'unknown';
 
+/**
+ * What the calling peer may do without a token: `open` (this machine, or a tailnet device while `trustTailnet` is on), `token` (it needs
+ * `Bearer <ANSWER_TOKEN>`), `none` (read-only: no token is set, so nothing it sends can unlock a write).
+ */
+export type WriteAccess = 'open' | 'token' | 'none';
+
 /** The four session events a push notification can announce. */
 export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan';
 
@@ -1067,6 +1107,11 @@ export interface ServerSettings {
    * one timer serves every browser, and it idles while nobody is watching the git view. See docs/subsystems/git-stats.md.
    */
   gitFetchSecs: number;
+  /**
+   * Writes from a tailnet peer pass without `ANSWER_TOKEN`. On by default. Shared because the write gate on the server reads it; turning it off from a
+   * tailnet device locks that device out of its own next write. See docs/subsystems/remote-access.md.
+   */
+  trustTailnet: boolean;
   /** False when the value couldn't be written to disk (won't survive a restart). */
   persisted: boolean;
   /**
@@ -1122,16 +1167,14 @@ export interface HealthResponse extends RemoteAnswerState {
   idleSecs?: number;
   /** Mirrors `ServerSettings.answerSecs`, read off the same probe. */
   answerSecs?: number;
+  /** Write access for the calling peer, computed per request. Absent on an older server. */
+  writeAccess?: WriteAccess;
   /**
-   * True when `ANSWER_TOKEN` is set, so every write endpoint needs a
-   * `Bearer` header. Health is the one endpoint the hooks can reach without a
-   * token, which makes it the only place that can tell them one is needed:
-   * before this field, a hook with no `~/.claude/hooks/dashboard-token` got a
-   * healthy probe and then a silent 403 on every write, indistinguishable from
-   * the feature being switched off (backlog bug-6). It announces only *that* a
-   * token is required — the same thing a 403 already announces — never which.
-   * Absent on an older server, which is why `remote-decision-hook.sh` treats a
-   * missing field as `false` and stays quiet rather than warning wrongly.
+   * True when this caller would need the token to write: `writeAccess === 'token'`. Health is the one endpoint the hooks can reach without a
+   * token, which makes it the only place that can tell them one is needed: before this field, a hook with no `~/.claude/hooks/dashboard-token`
+   * got a healthy probe and then a silent 403 on every write, indistinguishable from the feature being switched off (backlog bug-6). It announces
+   * only *that* a token is required — the same thing a 403 already announces — never which. Absent on an older server, which is why
+   * `remote-decision-hook.sh` treats a missing field as `false` and stays quiet rather than warning wrongly.
    */
   tokenRequired?: boolean;
   /**

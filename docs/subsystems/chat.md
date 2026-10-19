@@ -166,17 +166,16 @@ request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviour
   per-message caps. Any other value, or its absence, is the capped default.
 - **Paging currency is byte offsets** (transcripts are append-only): `cursor` walks
   forward, `headOffset` (the byte offset of `messages[0]`'s line) walks backward,
-  `hasMore` is just `headOffset > 0`. Backward pages return `cursor: 0` — they must never
+  `hasMore` is just `headOffset > 0`. A page that kept no message still hands back the first whole line of its window as `headOffset`, so the next older
+  page never ends mid-line. Backward pages return `cursor: 0` — they must never
   move the live cursor. `?after=` past EOF (truncation/rotation) returns `reset: true`
   and the client refetches the tail. Bad/negative/non-integer offsets → 400.
 - **No cache.** Unlike `agents-cache.ts` there's no accumulated reducer state to keep, so
   every call is already `O(window)` or `O(appended bytes)`. Measured on an 805 KB
   transcript: tail page ≈ 10 KB, idle poll ≈ 110 bytes.
 - **Filter (`lib/chatFilter.ts`, pure + unit-tested):** the board's segmented switch — the
-  same `.seg` the sessions toolbar picks a view with — sitting full-width at the foot of the
-  sidecar: `all` / `text` / `you`. It wears `.seg`'s own track (`--hairline2`) rather than a
-  subtle fill, because on the sidecar's `--strip-hi` ground a subtle track vanishes (the §8.2
-  scope-pill lesson). A transcript is mostly tool traffic (dozens of
+  same `.seg` the sessions toolbar picks a view with, sized down — sitting in `.chat-foot` beside the `N shown` count it changes (full-width on a phone):
+  `all` / `text` / `you`. A transcript is mostly tool traffic (dozens of
   near-identical `Edit <path>` lines), so `text` drops messages with no text at all
   (tool-only turns) and `you` keeps only user prompts. **Client-side on purpose:**
   switching is instant and keeps every page already loaded — a server-side `?text=` param
@@ -222,7 +221,9 @@ request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviour
   mounts and closes on the popstate that pops it. The entry carries **no URL change**, so
   the drawer stays unbookmarkable (see [view-persistence](view-persistence.md)); the push
   is deferred to a macrotask so StrictMode's arm→teardown→arm cannot let an in-flight
-  `back()` pop the second entry; and every close by another route spends the entry with
+  `back()` pop the second entry; an arm that comes due while another overlay's `back()` is still in flight — the phone menu's version chip opening
+  What's new — waits for that popstate and pushes on a fresh macrotask, which is why `browserHost()` returns one object per page (the in-flight count is kept
+  per host); and every close by another route spends the entry with
   `back()` first, because an entry left on the stack is a back press that visibly does
   nothing. If `pushState` throws (Safari's throttle, `file://`) the arm goes inert and the
   drawer behaves exactly as it did before — teardown must never `back()` in that state.
@@ -259,7 +260,7 @@ control since nothing outside that terminal can answer it.
   the reader could reach. It is a titled block: an 11px `plan` kicker, the plan's **own first
   markdown heading** as the title (derived by `splitPlan()`, which also strips that heading
   from the body so it is not printed twice — never a second label typed here, which would
-  drift from it), and a `read all ▾` fold on the right, over a `--strip-hi` box clipped at
+  drift from it), and a `read all` fold on the right (a `Chevron` that flips up when open), over a `--strip-hi` box clipped at
   104px under a gradient fade. The whole clipped box is the control (a `div role="button"`,
   not a `<button>`: a plan's markdown carries links, and an `<a>` inside a `<button>` is both
   invalid and unreachable — a click on an anchor is let through). Expanded, the box takes
@@ -278,7 +279,7 @@ control since nothing outside that terminal can answer it.
 - **⚠️ Path safety:** the id is validated with `ID_RE` and resolved through
   `findTranscript(projectsRoot(), id)` — a `listTranscripts` scan filtered by id, so the
   file path only ever comes from the scan and is **never joined into a path** (same philosophy as
-  `serveSessionDetail` / the management file endpoint).
+  `serveSessionDetail` / the configs file endpoint, `serveConfigsFile`).
 - **⚠️ Route order:** the detail regex `/^\/api\/sessions\/([^/?]+)/` in `index.ts` also
   matches `/api/sessions/:id/chat` and would answer it with agents — the chat match
   **must** stay above it.
@@ -286,8 +287,10 @@ control since nothing outside that terminal can answer it.
 <!-- docs-sync:
   sources:
     - server/lib/chat.ts
+    - server/lib/remote-message-prose.ts
     - server/api.ts
     - client/src/components/ChatDrawer.tsx
+    - client/src/components/TasksCard.tsx
     - client/src/components/PanelChrome.tsx
     - client/src/components/QuestionPanel.tsx
     - client/src/components/PlanPanel.tsx
@@ -304,5 +307,5 @@ control since nothing outside that terminal can answer it.
     - client/src/lib/chatFilter.ts
     - client/src/lib/markdown.ts
   kind: subsystem
-  verified: 6c94cf297f325506268b1686ed8526816e9f8487
+  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
 -->

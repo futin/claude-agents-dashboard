@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { VersionChip } from 'ui-kit';
 
 import { SECTIONS, type Section } from '../lib/sections';
 import { useBackClose } from '../hooks/useBackClose';
@@ -26,6 +27,11 @@ interface Props {
    * `working` drives the wordmark's cursor (see `Brand`).
    */
   live?: { connected: boolean; working: boolean; refreshMs: number } | null;
+  /**
+   * The version chip under the live line, on every section: the checkout's version, a dot for a release not opened yet, and the What's new drawer behind
+   * it. Null when the checkout has no version, and then there is no chip. `App` owns the data and the drawer (docs/subsystems/releases.md).
+   */
+  version?: { label: string; dot: boolean; onOpen: () => void } | null;
 }
 
 /**
@@ -208,7 +214,7 @@ function MenuLayer({ onClose }: { onClose: () => void }) {
   return <div className="mnav-scrim" onClick={onClose} />;
 }
 
-export function SideRail({ section, onChange, accountSlot, live }: Props) {
+export function SideRail({ section, onChange, accountSlot, live, version }: Props) {
   // A section's sub-views are navigation, so they live in the nav: this is the
   // only control for them at every width, and the section renders whichever is
   // chosen. Per-device, like every other setting.
@@ -319,6 +325,7 @@ export function SideRail({ section, onChange, accountSlot, live }: Props) {
               : 'disconnected — server stopped?'}
           </div>
         )}
+        {version && <VersionChip label={version.label} dot={version.dot} onClick={pick(version.onOpen)} className="rel-chip" />}
       </nav>
     </div>
   );

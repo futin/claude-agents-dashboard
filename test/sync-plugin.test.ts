@@ -3,16 +3,20 @@
  *
  * A plugin install is a copy keyed by the version in plugin.json, so an edit under plugin/ changes nothing for a running session, and `claude plugin update`
  * stops at "already at the latest version" while the version stays put. The script's whole value is in noticing drift and refusing to install a tree GitHub
- * does not have, so those halves are what is tested here: the digests, the refusal ladder, and reading the install record. The `claude plugin` calls are not
- * run — a test that reinstalled this machine's plugin to prove a string would be worse than none.
+ * does not have, so those halves are what is tested here: the digests, the refusal ladder, bringing a checkout level with origin/main (against throwaway git
+ * repos in tmpdir), and reading the install record. The `claude plugin` calls are not run — a test that reinstalled this machine's plugin to prove a string
+ * would be worse than none.
  */
 import assert from 'node:assert';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { driftedPaths, hashTree, PLUGIN_ID, PUBLISHED_PATHS, publishBlocker, publishedDigests, readInstall } from '../scripts/sync-plugin.js';
+import {
+  bringCheckoutCurrent, checkoutGate, driftedPaths, hashTree, PLUGIN_ID, PUBLISHED_PATHS, publishedDigests, readInstall,
+} from '../scripts/sync-plugin.js';
 import { findRepoRoot } from './docs-links.test.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -27,6 +31,43 @@ function tree(files: Record<string, string>): string {
     fs.writeFileSync(path.join(root, rel), body);
   }
   return root;
+}
+
+const GIT_ENV = {
+  ...process.env,
+  GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t',
+  GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+};
+const git = (cwd: string, ...args: string[]): string =>
+  execFileSync('git', args, { cwd, encoding: 'utf8', env: GIT_ENV, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+
+function commitFile(cwd: string, rel: string, body: string): string {
+  fs.mkdirSync(path.dirname(path.join(cwd, rel)), { recursive: true });
+  fs.writeFileSync(path.join(cwd, rel), body);
+  git(cwd, 'add', '--', rel);
+  git(cwd, 'commit', '-q', '-m', `edit ${rel}`);
+  return git(cwd, 'rev-parse', 'HEAD');
+}
+
+/**
+ * A bare origin, a `stale` clone of it, and a `peer` clone that has since pushed `merged` more commits — the shape of a checkout that never pulled a PR
+ * merged on GitHub. The stale clone's origin/main still points at the old tip until something fetches.
+ */
+function staleCheckout(merged = 1): { stale: string; tip: string } {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-plugin-git-'));
+  const origin = path.join(base, 'origin.git');
+  git(base, 'init', '-q', '--bare', '-b', 'main', origin);
+  const peer = path.join(base, 'peer');
+  git(base, 'clone', '-q', origin, peer);
+  commitFile(peer, 'plugin/skills/git-sync/SKILL.md', 'v1');
+  commitFile(peer, 'README.md', 'readme');
+  git(peer, 'push', '-q', 'origin', 'HEAD:main');
+  const stale = path.join(base, 'stale');
+  git(base, 'clone', '-q', origin, stale);
+  let tip = '';
+  for (let i = 0; i < merged; i++) tip = commitFile(peer, 'plugin/skills/git-sync/SKILL.md', `v${i + 2} carry-trunk`);
+  git(peer, 'push', '-q', 'origin', 'HEAD:main');
+  return { stale, tip };
 }
 
 const PLUGIN = {
@@ -91,39 +132,93 @@ export function run(): number {
     assert.deepStrictEqual(driftedPaths(repo, { skills: '', hooks: '', '.claude-plugin': '' }), ['.claude-plugin', 'hooks', 'skills']);
   })) p++; else f++;
 
-  if (test('publishBlocker: a clean, pushed, up-to-date tree passes', () => {
-    assert.strictEqual(publishBlocker({ branch: 'main', dirty: [], ahead: 0, behind: 0 }), undefined);
+  const message = (gate: ReturnType<typeof checkoutGate>): string => {
+    assert.strictEqual(gate.kind, 'refuse', `expected a refusal, got ${gate.kind}`);
+    return (gate as { message: string }).message;
+  };
+
+  if (test('checkoutGate: a clean, pushed, up-to-date tree passes', () => {
+    assert.deepStrictEqual(checkoutGate({ branch: 'main', dirty: [], ahead: 0, behind: 0 }), { kind: 'ok' });
   })) p++; else f++;
 
-  if (test('publishBlocker: a branch other than main refuses first — the marketplace installs main', () => {
-    const msg = publishBlocker({ branch: 'feat/x', dirty: [' M plugin/skills/a/SKILL.md'], ahead: 1, behind: 0 });
-    assert.ok(msg, 'refuses');
-    assert.match(msg!, /feat\/x/);
-    assert.match(msg!, /main/);
-    assert.doesNotMatch(msg!, /SKILL\.md/);
+  if (test('checkoutGate: a branch other than main refuses first — the marketplace installs main', () => {
+    const msg = message(checkoutGate({ branch: 'feat/x', dirty: [' M plugin/skills/a/SKILL.md'], ahead: 1, behind: 0 }));
+    assert.match(msg, /feat\/x/);
+    assert.match(msg, /main/);
+    assert.doesNotMatch(msg, /SKILL\.md/);
   })) p++; else f++;
 
-  if (test('publishBlocker: uncommitted files under plugin/ are named, and outrank ahead/behind', () => {
-    const msg = publishBlocker({ branch: 'main', dirty: [' M plugin/skills/kaizen/SKILL.md', '?? plugin/skills/new/'], ahead: 2, behind: 1 });
-    assert.ok(msg, 'refuses');
-    assert.match(msg!, /plugin\/skills\/kaizen\/SKILL\.md/);
-    assert.match(msg!, /plugin\/skills\/new\//);
-    assert.match(msg!, /commit/i);
-    assert.doesNotMatch(msg!, /git push/);
+  if (test('checkoutGate: uncommitted files under plugin/ are named, and outrank ahead/behind', () => {
+    const msg = message(checkoutGate({ branch: 'main', dirty: [' M plugin/skills/kaizen/SKILL.md', '?? plugin/skills/new/'], ahead: 2, behind: 1 }));
+    assert.match(msg, /plugin\/skills\/kaizen\/SKILL\.md/);
+    assert.match(msg, /plugin\/skills\/new\//);
+    assert.match(msg, /commit/i);
+    assert.doesNotMatch(msg, /git push/);
   })) p++; else f++;
 
-  if (test('publishBlocker: unpushed commits refuse with the push command, and outrank behind', () => {
-    const msg = publishBlocker({ branch: 'main', dirty: [], ahead: 3, behind: 1 });
-    assert.ok(msg, 'refuses');
-    assert.match(msg!, /3 commit/);
-    assert.match(msg!, /git push/);
+  if (test('checkoutGate: unpushed commits refuse with the push command, and outrank behind', () => {
+    const msg = message(checkoutGate({ branch: 'main', dirty: [], ahead: 3, behind: 1 }));
+    assert.match(msg, /3 commit/);
+    assert.match(msg, /git push/);
   })) p++; else f++;
 
-  if (test('publishBlocker: a HEAD behind origin/main refuses with the pull command', () => {
-    const msg = publishBlocker({ branch: 'main', dirty: [], ahead: 0, behind: 2 });
-    assert.ok(msg, 'refuses');
-    assert.match(msg!, /2 commit/);
-    assert.match(msg!, /git pull --ff-only/);
+  if (test('checkoutGate: a clean main that is only behind origin/main fast-forwards rather than refusing', () => {
+    assert.deepStrictEqual(checkoutGate({ branch: 'main', dirty: [], ahead: 0, behind: 2 }), { kind: 'fast-forward' });
+  })) p++; else f++;
+
+  if (test('bringCheckoutCurrent: a checkout that never pulled a merged PR is fetched and fast-forwarded to it', () => {
+    const { stale, tip } = staleCheckout(2);
+    // The 2026-10-15 shape: without a fetch, this clone believes it is level with origin/main.
+    assert.strictEqual(git(stale, 'rev-list', '--count', 'HEAD..origin/main'), '0');
+    const result = bringCheckoutCurrent(stale);
+    assert.deepStrictEqual(result, { fastForwarded: 2, head: tip });
+    assert.strictEqual(fs.readFileSync(path.join(stale, 'plugin/skills/git-sync/SKILL.md'), 'utf8'), 'v3 carry-trunk');
+  })) p++; else f++;
+
+  if (test('bringCheckoutCurrent: an uncommitted edit outside plugin/ survives the fast-forward', () => {
+    const { stale, tip } = staleCheckout();
+    fs.writeFileSync(path.join(stale, 'README.md'), 'local edit');
+    assert.deepStrictEqual(bringCheckoutCurrent(stale), { fastForwarded: 1, head: tip });
+    assert.strictEqual(fs.readFileSync(path.join(stale, 'README.md'), 'utf8'), 'local edit');
+  })) p++; else f++;
+
+  if (test('bringCheckoutCurrent: an uncommitted edit the fast-forward would overwrite refuses, and nothing moves', () => {
+    const { stale } = staleCheckout();
+    const before = git(stale, 'rev-parse', 'HEAD');
+    // Outside plugin/, so checkoutGate passes it and only git's own overwrite check stands between it and the merge.
+    commitFile(path.join(stale, '..', 'peer'), 'README.md', 'upstream');
+    git(path.join(stale, '..', 'peer'), 'push', '-q', 'origin', 'HEAD:main');
+    fs.writeFileSync(path.join(stale, 'README.md'), 'local edit');
+    const result = bringCheckoutCurrent(stale);
+    assert.ok(result.refused, 'refuses');
+    assert.match(result.refused!, /2 commit\(s\) behind/);
+    assert.match(result.refused!, /git pull --ff-only/);
+    assert.strictEqual(git(stale, 'rev-parse', 'HEAD'), before);
+    assert.strictEqual(fs.readFileSync(path.join(stale, 'README.md'), 'utf8'), 'local edit');
+  })) p++; else f++;
+
+  if (test('bringCheckoutCurrent: an already-level checkout reports 0 and its HEAD', () => {
+    const { stale, tip } = staleCheckout();
+    git(stale, 'pull', '-q', '--ff-only');
+    assert.deepStrictEqual(bringCheckoutCurrent(stale), { fastForwarded: 0, head: tip });
+  })) p++; else f++;
+
+  if (test('bringCheckoutCurrent: an unreachable origin refuses rather than trusting a stale origin/main', () => {
+    const { stale } = staleCheckout();
+    git(stale, 'remote', 'set-url', 'origin', path.join(os.tmpdir(), 'sync-plugin-no-such-origin.git'));
+    const result = bringCheckoutCurrent(stale);
+    assert.ok(result.refused, 'refuses');
+    assert.match(result.refused!, /could not fetch origin\/main/);
+  })) p++; else f++;
+
+  if (test('main brings the checkout current before it compares digests — the order the 2026-10-15 "in sync" bug got wrong', () => {
+    const root = findRepoRoot(path.dirname(fileURLToPath(import.meta.url)));
+    const source = fs.readFileSync(path.join(root, 'scripts', 'sync-plugin.ts'), 'utf8');
+    const body = source.slice(source.indexOf('function main('));
+    const current = body.indexOf('bringCheckoutCurrent(REPO_ROOT)');
+    const digests = body.indexOf('publishedDigests(PLUGIN_ROOT)');
+    assert.ok(current > 0 && digests > 0, 'both calls are in main');
+    assert.ok(current < digests, 'bringCheckoutCurrent runs first');
   })) p++; else f++;
 
   if (test('readInstall: no file, or no entry for this plugin, reads as not installed', () => {

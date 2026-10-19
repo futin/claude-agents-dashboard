@@ -5,7 +5,8 @@
  * The six interval values are a literal here and another in `server/lib/settings.ts`: no runtime constant crosses `shared/`, so each side pins its own list
  * with a test. The segment labels sit beside their values because the Settings card is their only reader.
  */
-import type { FetchClock } from '../../../shared/types';
+import type { FetchClock, WriteAccess } from '../../../shared/types';
+import { READ_ONLY_TEXT } from './writeRefusal';
 import { GIT_POLL_MS } from './gitPoll';
 import {
   FETCH_NEEDS_TOKEN, FETCH_REFUSED, FETCH_START_FAILED, KEY_NOW, READ_FAILED, READ_FETCHING, READ_OFF, READ_OVERDUE, READ_PENDING, READ_SYNCING, fetchRowSub,
@@ -126,14 +127,15 @@ export function fetchFailureOf(status: number | 'network'): 'refused' | 'failed'
 }
 
 /**
- * The Fetch all key. No stored token on a server that wants one outranks everything (nothing was sent, so nothing can have been refused); an undefined
- * `tokenRequired` means health has not answered, and the key stays usable. `intervalSecs` is undefined before any payload or on an older server, which has no
+ * The Fetch all key. A read-only network (`writeAccess: 'none'`) outranks everything: no token could make the press work. Next, no stored token on a server
+ * that wants one (nothing was sent, so nothing can have been refused); an undefined `tokenRequired` means health has not answered, and the key stays usable. `intervalSecs` is undefined before any payload or on an older server, which has no
  * auto-fetch to be off — so the sub is the bare command and never amber.
  */
 export function fetchKeyState(s: {
-  tokenRequired: boolean | undefined; tokenStored: boolean; failure: 'refused' | 'failed' | null; pending: boolean; running: boolean; intervalSecs: number | undefined;
+  tokenRequired: boolean | undefined; writeAccess: WriteAccess | undefined; tokenStored: boolean; failure: 'refused' | 'failed' | null; pending: boolean; running: boolean; intervalSecs: number | undefined;
 }): { disabled: boolean; label: string; sub: string; subTone: 'amber' | null } {
   const offTone = s.intervalSecs === 0 ? 'amber' : null;
+  if (s.writeAccess === 'none') return { disabled: true, label: KEY_NOW, sub: READ_ONLY_TEXT, subTone: 'amber' };
   if (s.tokenRequired === true && !s.tokenStored) return { disabled: true, label: KEY_NOW, sub: FETCH_NEEDS_TOKEN, subTone: 'amber' };
   if (s.failure === 'refused') return { disabled: true, label: KEY_NOW, sub: FETCH_REFUSED, subTone: 'amber' };
   if (s.running || s.pending) return { disabled: true, label: READ_FETCHING, sub: fetchRowSub(s.intervalSecs), subTone: offTone };

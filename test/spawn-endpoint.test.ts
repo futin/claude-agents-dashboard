@@ -362,6 +362,25 @@ export async function run(): Promise<number> {
     });
   }));
 
+  // The mirror of the case above: a `failed` row lingers for FAIL_TTL_MS so the
+  // UI can explain itself, but it holds no process, so it must not block a retry.
+  check(await testAsync('a resume retried after the previous resume failed is NOT 409 — a failed row holds no process', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      const children: FakeChild[] = [];
+      setSpawner(fakeSpawner(children));
+      const body = JSON.stringify({ prompt: 'continue', resume: RES_ID });
+      const first = await post((req, res) => void serveSpawn(cfg, req, res), body);
+      assert.equal(first.status, 200);
+      children[0].emit('exit', 1, null);
+      assert.equal(listLaunching().find(e => e.sessionId === RES_ID)?.state, 'failed');
+
+      const retry = await post((req, res) => void serveSpawn(cfg, req, res), body);
+      assert.equal(retry.status, 200, 'the failed row must not read as a resume in flight');
+      assert.equal(children.length, 2);
+      assert.equal(listLaunching().find(e => e.sessionId === RES_ID)?.state, 'launching');
+    });
+  }));
+
   check(await testAsync('resume of an adopted, still-live session is 409 — a held socket is not the only way to be alive', async () => {
     await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
       const children: FakeChild[] = [];
@@ -504,7 +523,7 @@ export async function run(): Promise<number> {
       const id = adoptedSession(cfg, calls);
       try {
         const reply = await post(
-          (req, res) => void serveSessionStop(cfg, id, req, res), '', { Authorization: 'Bearer wrong-token' }
+          (req, res) => void serveSessionStop(cfg, id, req, res), '', { Authorization: 'Bearer wrong-token', 'X-Forwarded-For': '192.168.1.5' }
         );
         assert.equal(reply.status, 403);
         assert.equal(reply.json?.error, 'bad token');

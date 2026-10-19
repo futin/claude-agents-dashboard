@@ -194,7 +194,7 @@ export async function run(): Promise<number> {
       await withServer(`${ENV}ANSWER_TOKEN=s3cret\n`, async h => {
         h.plant(ID);
         const reply = await h.req(ep.route, {
-          method: 'POST', body: '{not json', headers: { Authorization: 'Bearer wrong' }
+          method: 'POST', body: '{not json', headers: { Authorization: 'Bearer wrong', 'X-Forwarded-For': '192.168.1.5' }
         });
         assert.equal(reply.status, 403);
         assert.equal(reply.json?.error, 'bad token');

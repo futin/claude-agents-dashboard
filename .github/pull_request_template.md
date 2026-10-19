@@ -15,6 +15,10 @@ House rules for the body:
 <!-- Optional, when the work has committed design artefacts: -->
 Spec: `docs/superpowers/specs/YYYY-MM-DD-<name>-design.md` · Plan: `docs/superpowers/plans/YYYY-MM-DD-<name>.md` · Subsystem doc: `docs/subsystems/<name>.md`
 
+## What's new
+
+<!-- 1–3 lines in user terms: what someone using the app can now do. Delete this section for PRs with nothing user-visible. -->
+
 ## Why this shape
 
 <!-- The constraint that forced this design, and the alternative you rejected.
@@ -78,7 +82,7 @@ unauthenticated peer on the network can cause.
 
 - **Off by default.** <env var> empty disables the feature outright — the house
   "unset means off" rule.
-- **`ANSWER_TOKEN` gates the POST**, as it gates the other write paths.
+- **The write gate (`refuseWrite`) covers the POST**, as it covers the other write paths: this machine, a trusted tailnet peer, or `ANSWER_TOKEN`.
 - Bounded by:
 -->
 

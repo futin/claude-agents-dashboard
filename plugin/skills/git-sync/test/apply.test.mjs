@@ -88,6 +88,7 @@ const logLines = (w) => (fs.existsSync(logFile(w)) ? fs.readFileSync(logFile(w),
 
 test('T11.1 T8.4 plan: the worktree, the remote copy and the local branch all go, and deleted.log records both deletions', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = mergedInWorktree(w, 'm1')
   surveyOf(w)
   planCli(w, { merged: 'all' })
@@ -129,6 +130,7 @@ test('T11.1 T8.4 plan: the worktree, the remote copy and the local branch all go
 // `name` pushed and fast-forwarded into a's local main, with no worktree — the survey offers it merged, the plan deletes both copies.
 function mergedBranch(t, name) {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = branch(w, name, { push: true })
   w.git(w.a, 'merge', '--ff-only', name)
   surveyOf(w)
@@ -315,6 +317,7 @@ test('T11.8 one failed action does not stop the rest', (t) => {
 
 test('T11.9 actions run in §10.9 order whatever order the plan lists them in', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   mergedInWorktree(w, 'm1')
   surveyOf(w)
   const actions = planCli(w, { merged: 'all' })
@@ -360,6 +363,7 @@ test('T11.11 a downgraded repo never pushes or deletes a remote branch', (t) => 
 // offers it; whether apply may delete it depends on whether phase 6 actually did.
 function mergedLocallyOnly(t, checks) {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = branch(w, 'm1', { push: true })
   w.git(w.a, 'merge', '--no-ff', '-m', 'merge m1', 'm1')
   fs.writeFileSync(path.join(w.a, 'package.json'), JSON.stringify({ scripts: { test: 'x' } }))
@@ -622,6 +626,7 @@ test('T11.21 an engine failure outside any action still leaves a partial apply.j
 // same way (R16): its HEAD must be merged on `origin/<trunk>`, not just on the local trunk the survey saw.
 test('T11.22 a merged-basis worktree removal is re-proved on origin: kept while the trunk is unpublished, removed once it is', (t) => {
   const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
   const tip = mergedInWorktree(w, 'm1')
   surveyOf(w)
   const actions = planCli(w, { merged: 'all' })
@@ -643,4 +648,196 @@ test('T11.22 a merged-basis worktree removal is re-proved on origin: kept while 
     ['delete-local', 'done', null],
   ])
   assert.equal(fs.existsSync(realWt(w, 'm1')), false)
+})
+
+test('B2.9 a hand-written carry-trunk is validated by readPlan: a branch name, a full-sha expectTip and a title', (t) => {
+  const w = world(t)
+  w.rules([])
+  const tip = w.git(w.a, 'rev-parse', 'main')
+  const good = { kind: 'carry-trunk', target: 'sync/main-20261015-1200', expectTip: tip, title: 'feat: x', commits: [] }
+  for (const [patch, why] of [
+    [{ target: 'a b' }, 'not a branch name'],
+    [{ expectTip: 'main' }, 'expectTip must be a full sha'],
+    [{ title: '' }, 'carry-trunk needs a title'],
+    [{ title: undefined }, 'carry-trunk needs a title'],
+  ]) {
+    const refused = applyCli(w, [{ ...good, ...patch }])
+    assert.equal(refused.status, 2, why)
+    assert.equal(refused.json.stop, 'bad-plan')
+    assert.equal(refused.json.detail.why, why)
+  }
+})
+
+// Task 4's world: two commits on a's local `main` that origin's ruleset would refuse, and the hand-written action `buildPlan` would emit for them.
+// `gh` answers `pr create` with a PR URL unless the test passes its own stub config (one stub per test: a second call overwrites the first).
+const CARRY = 'sync/main-20261015-1200'
+const PR_URL = 'https://github.com/o/r/pull/7'
+function carryWorld(t, { gh = { byArgs: { 'pr create': { stdout: `${PR_URL}\n` } } }, title = 'chore(git-sync): carry 2 local main commits', subjects } = {}) {
+  const w = world(t)
+  if (gh !== null) w.stub('gh', gh)
+  const base = w.git(w.a, 'rev-parse', 'main')
+  const msgs = subjects ?? ['feat: first local', 'fix: second local']
+  const commits = msgs.map((msg, i) => ({ sha: w.commit(w.a, { file: `local-${i}.txt`, content: `${i}\n`, msg }), subject: msg }))
+  const tip = commits.at(-1).sha
+  const action = { kind: 'carry-trunk', target: CARRY, expectTip: tip, title, commits }
+  return { w, base, tip, action, commits }
+}
+const ghCalls = (w) => w.calls().filter((c) => c.name === 'gh')
+
+test('B4.1 carry-trunk pushes the carry branch, moves the trunk back to origin/main and opens the PR', (t) => {
+  const { w, base, tip, action, commits } = carryWorld(t)
+  const json = applied(w, [action])
+  assert.deepEqual(outcomes(json), [['carry-trunk', 'done', 'carried']])
+  const res = byTarget(json, 'carry-trunk', CARRY)
+  assert.equal(res.pr, PR_URL)
+  assert.equal(res.tip, tip)
+  assert.equal(res.detail, undefined)
+  assert.equal(originTip(w, CARRY), tip)
+  assert.equal(localTip(w, CARRY), tip)
+  assert.equal(localTip(w, 'main'), base)
+  assert.equal(localTip(w, 'main'), tipOf(w, w.a, 'refs/remotes/origin/main'))
+  assert.equal(originTip(w, 'main'), base)
+  assert.equal(w.git(w.a, 'symbolic-ref', 'HEAD'), 'refs/heads/main')
+  // The carry branch tracks origin, like any pushed branch (`-u`).
+  assert.equal(w.git(w.a, 'config', `branch.${CARRY}.merge`), `refs/heads/${CARRY}`)
+  const gh = ghCalls(w)
+  assert.equal(gh.length, 1)
+  const { argv } = gh[0]
+  assert.deepEqual(argv.slice(0, 2), ['pr', 'create'])
+  for (const [flag, value] of [['--base', 'main'], ['--head', CARRY], ['--title', action.title]]) assert.equal(argv[argv.indexOf(flag) + 1], value)
+  const body = argv[argv.indexOf('--body') + 1]
+  assert.equal(
+    body,
+    'Opened by /git-sync: main only accepts pull requests here, so these local commits moved to this branch. Retitle before merging if they ' +
+      'deserve a release.\n\n' +
+      commits.map((c) => `- ${c.sha.slice(0, 7)} ${c.subject}`).join('\n'),
+  )
+  // A carry is not a deletion: nothing is written to deleted.log.
+  assert.deepEqual(logLines(w), [])
+})
+
+test('B4.2 a commit on the trunk after the plan skips the carry with nothing pushed or moved', (t) => {
+  const { w, action } = carryWorld(t)
+  const later = w.commit(w.a, { file: 'later.txt', content: 'later\n', msg: 'later' })
+  assert.deepEqual(outcomes(applied(w, [action])), [['carry-trunk', 'skipped', 'tip-moved']])
+  assert.equal(originTip(w, CARRY), '')
+  assert.equal(localTip(w, CARRY), '')
+  assert.equal(localTip(w, 'main'), later)
+  assert.deepEqual(ghCalls(w), [])
+})
+
+test('B4.3 HEAD on another branch skips the carry, and that branch is never rewound (Review Focus 3)', (t) => {
+  const { w, tip, action } = carryWorld(t)
+  w.git(w.a, 'checkout', '-b', 'feature')
+  const feature = w.commit(w.a, { file: 'feature.txt', content: 'f\n', msg: 'feature work' })
+  assert.deepEqual(outcomes(applied(w, [action])), [['carry-trunk', 'skipped', 'not-on-trunk']])
+  assert.equal(localTip(w, 'feature'), feature)
+  assert.equal(localTip(w, 'main'), tip)
+  assert.equal(originTip(w, CARRY), '')
+  assert.equal(localTip(w, CARRY), '')
+
+  // A detached HEAD at the trunk's very tip is not "on the trunk" either: `reset --keep` there would move HEAD, not `main`.
+  w.git(w.a, 'checkout', '--detach', tip)
+  assert.deepEqual(outcomes(applied(w, [action])), [['carry-trunk', 'skipped', 'not-on-trunk']])
+  assert.equal(localTip(w, 'main'), tip)
+  assert.deepEqual(ghCalls(w), [])
+})
+
+test('B4.4 a carry branch name already taken, locally or only on origin, skips the carry', (t) => {
+  const { w, tip, action } = carryWorld(t)
+  w.git(w.a, 'branch', CARRY, 'origin/main')
+  assert.deepEqual(outcomes(applied(w, [action])), [['carry-trunk', 'skipped', 'branch-exists']])
+  w.git(w.a, 'branch', '-D', CARRY)
+
+  theirBranch(w, CARRY)
+  const theirs = originTip(w, CARRY)
+  w.git(w.a, 'fetch', 'origin')
+  assert.deepEqual(outcomes(applied(w, [action])), [['carry-trunk', 'skipped', 'branch-exists']])
+  assert.equal(originTip(w, CARRY), theirs)
+  assert.equal(localTip(w, CARRY), '')
+  assert.equal(localTip(w, 'main'), tip)
+  assert.deepEqual(ghCalls(w), [])
+})
+
+test('B4.5 a trunk that no longer descends from origin/main skips the carry', (t) => {
+  const { w, tip, action } = carryWorld(t)
+  w.commit(w.b, { file: 'b.txt', content: 'b\n', msg: 'their trunk work' })
+  w.git(w.b, 'push', 'origin', 'main')
+  w.git(w.a, 'fetch', 'origin')
+  assert.deepEqual(outcomes(applied(w, [action])), [['carry-trunk', 'skipped', 'trunk-diverged']])
+  assert.equal(localTip(w, 'main'), tip)
+  assert.equal(originTip(w, CARRY), '')
+  assert.equal(localTip(w, CARRY), '')
+  assert.deepEqual(ghCalls(w), [])
+})
+
+test('B4.6 a refused push leaves no carry branch and the trunk untouched (Review Focus 4)', (t) => {
+  const { w, tip, action } = carryWorld(t)
+  const hook = path.join(w.origin, 'hooks', 'pre-receive')
+  fs.writeFileSync(hook, '#!/bin/sh\necho "refused by test hook" >&2\nexit 1\n', { mode: 0o755 })
+  fs.chmodSync(hook, 0o755)
+  const json = applied(w, [action])
+  assert.deepEqual(outcomes(json), [['carry-trunk', 'failed', 'push-failed']])
+  assert.match(byTarget(json, 'carry-trunk', CARRY).detail, /refused by test hook/)
+  assert.equal(localTip(w, CARRY), '')
+  assert.equal(originTip(w, CARRY), '')
+  assert.equal(localTip(w, 'main'), tip)
+  assert.deepEqual(ghCalls(w), [])
+})
+
+test('B4.7 a reset --keep that would lose an uncommitted edit fails after the push, leaving the commits on both', (t) => {
+  const { w, tip, action } = carryWorld(t)
+  fs.writeFileSync(path.join(w.a, 'local-0.txt'), 'edited, not committed\n')
+  const json = applied(w, [action])
+  assert.deepEqual(outcomes(json), [['carry-trunk', 'failed', 'reset-failed']])
+  assert.ok(byTarget(json, 'carry-trunk', CARRY).detail)
+  assert.equal(originTip(w, CARRY), tip)
+  assert.equal(localTip(w, 'main'), tip)
+  assert.equal(fs.readFileSync(path.join(w.a, 'local-0.txt'), 'utf8'), 'edited, not committed\n')
+  assert.deepEqual(ghCalls(w), [])
+})
+
+test('B4.8 gh pr create failing, or gh missing, still carries: the branch is on origin and the trunk reset (Review Focus 5)', (t) => {
+  const failing = carryWorld(t, { gh: { byArgs: { 'pr create': { exit: 1, stderr: 'GraphQL error: no\nsecond line\n' } } } })
+  const json = applied(failing.w, [failing.action])
+  assert.deepEqual(outcomes(json), [['carry-trunk', 'done', 'carried']])
+  const res = byTarget(json, 'carry-trunk', CARRY)
+  assert.equal(res.pr, null)
+  assert.equal(res.tip, failing.tip)
+  assert.equal(res.detail, 'gh pr create failed: GraphQL error: no')
+  assert.ok(res.detail.startsWith('gh pr create failed: GraphQL error'))
+  assert.equal(originTip(failing.w, CARRY), failing.tip)
+  assert.equal(localTip(failing.w, 'main'), failing.base)
+
+  const absent = carryWorld(t, { gh: null })
+  const json2 = applied(absent.w, [absent.action])
+  assert.deepEqual(outcomes(json2), [['carry-trunk', 'done', 'carried']])
+  const res2 = byTarget(json2, 'carry-trunk', CARRY)
+  assert.equal(res2.pr, null)
+  assert.equal(res2.tip, absent.tip)
+  assert.equal(res2.detail, 'gh absent')
+  assert.equal(originTip(absent.w, CARRY), absent.tip)
+  assert.equal(localTip(absent.w, 'main'), absent.base)
+})
+
+test('B4.9 a title and subjects full of shell syntax reach gh verbatim as argv, and nothing runs', (t) => {
+  const title = 'feat: $(touch pwned) `touch pwned2`; touch pwned3'
+  const subject = 'fix: quote `touch pwned4` and $(touch pwned5)'
+  const { w, action } = carryWorld(t, { title, subjects: [subject] })
+  assert.deepEqual(outcomes(applied(w, [action])), [['carry-trunk', 'done', 'carried']])
+  const [call] = ghCalls(w)
+  assert.equal(call.argv[call.argv.indexOf('--title') + 1], title)
+  assert.ok(call.argv[call.argv.indexOf('--body') + 1].endsWith(`\n\n- ${action.commits[0].sha.slice(0, 7)} ${subject}`))
+  for (const dir of [w.root, w.a, process.cwd()]) {
+    for (const n of ['pwned', 'pwned2', 'pwned3', 'pwned4', 'pwned5']) assert.equal(fs.existsSync(path.join(dir, n)), false, `${n} in ${dir}`)
+  }
+})
+
+test('B4.10 a downgraded repo never pushes a carry branch', (t) => {
+  const { w, tip, action } = carryWorld(t)
+  w.git(w.a, 'config', 'git-sync.push', 'false')
+  assert.deepEqual(outcomes(applied(w, [action])), [['carry-trunk', 'skipped', 'downgraded']])
+  assert.equal(originTip(w, CARRY), '')
+  assert.equal(localTip(w, CARRY), '')
+  assert.equal(localTip(w, 'main'), tip)
 })

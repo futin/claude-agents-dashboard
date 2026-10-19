@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { usePersistedState } from './usePersistedState';
+import { useAnswerToken } from './useAnswerToken';
+import { authHeaders } from '../lib/answerToken';
+import { READ_ONLY_TEXT, refusalKind } from '../lib/writeRefusal';
 import { applyPinOrder } from '../lib/pins';
 import type { PinsResponse } from '../../../shared/types';
 
@@ -25,6 +27,11 @@ export interface PinsControl {
 const TOKEN_TEXT = 'The server refused the request — set the Answer token under Settings › Local › Connection.';
 const NETWORK_TEXT = 'Could not reach the server.';
 
+/** A 403's note: the token prompt, or `READ_ONLY_TEXT` when no token could help. */
+async function refusalText(res: Response): Promise<string> {
+  return refusalKind(res.status, await res.json().catch(() => undefined)) === 'read-only' ? READ_ONLY_TEXT : TOKEN_TEXT;
+}
+
 /**
  * Pinned projects (#161) over `GET/POST /api/pins` and `POST /api/pins/order`, for the launch sheet and
  * Management › Projects. Fetched once on mount, not polled — the pin list changes
@@ -36,7 +43,7 @@ const NETWORK_TEXT = 'Could not reach the server.';
 export function usePins(): PinsControl {
   const [pins, setPins] = useState<PinsResponse | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [token] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token] = useAnswerToken();
 
   useEffect(() => {
     let live = true;
@@ -49,15 +56,14 @@ export function usePins(): PinsControl {
 
   const setPin = useCallback(async (dirName: string, pinned: boolean): Promise<string | null> => {
     setBusy(dirName);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
       const res = await fetch('/api/pins', { method: 'POST', headers, body: JSON.stringify({ dirName, pinned }) });
       if (res.ok) {
         setPins((await res.json()) as PinsResponse);
         return null;
       }
-      if (res.status === 403) return TOKEN_TEXT;
+      if (res.status === 403) return refusalText(res);
       const body = await res.json().catch(() => null) as { error?: string } | null;
       return body?.error ?? `Failed (${res.status}).`;
     } catch {
@@ -75,8 +81,7 @@ export function usePins(): PinsControl {
     const before = pinsRef.current;
     setBusy('order');
     if (before) setPins({ ...before, pinned: applyPinOrder(before.pinned, order) });
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
       const res = await fetch('/api/pins/order', { method: 'POST', headers, body: JSON.stringify({ order }) });
       if (res.ok) {
@@ -97,7 +102,7 @@ export function usePins(): PinsControl {
         return NETWORK_TEXT;
       }
       setPins(before);
-      if (res.status === 403) return TOKEN_TEXT;
+      if (res.status === 403) return refusalText(res);
       const body = await res.json().catch(() => null) as { error?: string } | null;
       return body?.error ?? `Failed (${res.status}).`;
     } catch {

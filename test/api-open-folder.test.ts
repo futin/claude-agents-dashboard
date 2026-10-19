@@ -83,7 +83,7 @@ export async function run(): Promise<number> {
   check(await testAsync('ANSWER_TOKEN set and no bearer is 403 bad token, and open never runs', async () => {
     await withOpen(ENV + 'ANSWER_TOKEN=s3cret\n', async (h, calls) => {
       const cwd = pinOne(h);
-      const reply = await post(h, { path: cwd });
+      const reply = await post(h, { path: cwd }, { 'X-Forwarded-For': '192.168.1.5' });
       assert.equal(reply.status, 403);
       assert.equal(reply.json?.error, 'bad token');
       assert.deepStrictEqual(calls, []);
