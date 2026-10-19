@@ -13,8 +13,9 @@
  * PROVENANCE: ported from claude-agents-dashboard server/lib/{analyze,agents,subagent-usage,scan}.ts.
  * That repo holds the unit-tested source of truth; keep this in sync if it changes.
  * Exception: `--trend` is kaizen-only, has no TS twin, and is tested by spawning this file (test/kaizen-trend.test.ts).
- * Kaizen-only too, not yet in that source: the `compactions` block and skipping compact summaries in the
- * correction heuristic (tested in test/compactions.test.mjs: `node --test test/*.test.mjs`).
+ * Counting compaction replays once (#174), skipping compact summaries and reading compact_boundary for neverCompacted are in that
+ * source too (#226), pinned by its parity tests. Kaizen-only by decision: the `compactions` block — a lesson input with no dashboard
+ * consumer — tested in test/compactions.test.mjs (`node --test test/*.test.mjs`).
  */
 
 import fs from 'node:fs';
@@ -274,7 +275,8 @@ const CORRECTION_RE = /\b(no|nope|wrong|incorrect|not (?:what|right|correct)|act
 
 // Peak context that proves auto-compaction never fired: a 200k window compacts near 160k, so only a larger one (1M puts compaction out of reach)
 // gets a turn past 250k — and every turn replays the whole context, so total input grows with the square of it. Inferred: the transcript records
-// neither the window nor a compaction marker. A turn below half the running peak is a compaction — context only grows between them.
+// no window. Compaction itself is read from main-chain compact_boundary records (the COMPACTIONS block below); for transcripts that predate the
+// marker, a turn below half the running peak counts as one — context only grows between them.
 const NEVER_COMPACTED_PEAK = 250_000;
 const COMPACTION_DROP_RATIO = 0.5;
 
@@ -467,7 +469,7 @@ export function analyzeSession(filePath, id) {
     "byTool.approxOutputTokens splits each turn's output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.",
     "byTool.resultTokens is what each tool injected into context: its tool_result text sized at chars ÷ 4, summed per call (not split), error text included, images not counted. The firmer per-tool figure and byTool's sort key — but it is context growth, not assistant output; cite both and never add them.",
     'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.',
-    'perTurn.neverCompacted is inferred from peak context, not read from a window field — the transcript records neither the window nor a compaction: true when the peak turn tops 250k combined (a 200k window compacts near 160k) and no turn ever fell below half the running peak.'
+    'perTurn.neverCompacted: true when the peak turn tops 250k combined (a 200k window compacts near 160k — the transcript records no window, so that part is inferred) and the session never compacted. Compaction is read from main-chain compact_boundary records; for transcripts without them, a turn below half the running peak counts as one.'
   ];
   if (subagentTotals.count > 0) notes.push("Subagent tokens are summed from each subagent's own transcript and are separate from main-agent totals; whole-session total = totals.combined + subagentTotals.tokens. subagentTotals.usage splits them by class — lead with its billableApprox for cost.");
   if (subagentTotals.fallbackCount > 0) notes.push(`${subagentTotals.fallbackCount} subagent(s) have no complete transcript and are counted at the harness figure (their final context size) — a lower bound.`);
@@ -481,7 +483,7 @@ export function analyzeSession(filePath, id) {
     file: filePath, cwd, models: [...models],
     startedAt: minTs, endedAt: maxTs, durationMs: Number.isFinite(durationMs) ? durationMs : null,
     totals: { input, output, cacheCreation, cacheRead, combined, billableApprox: input + output + cacheCreation },
-    perTurn: { count: turnCount, avgCombined: turnCount > 0 ? Math.round(sumCombined / turnCount) : 0, maxCombined, maxTurnIndex, neverCompacted: maxCombined > NEVER_COMPACTED_PEAK && !compacted },
+    perTurn: { count: turnCount, avgCombined: turnCount > 0 ? Math.round(sumCombined / turnCount) : 0, maxCombined, maxTurnIndex, neverCompacted: maxCombined > NEVER_COMPACTED_PEAK && !compacted && boundaries.length === 0 },
     byTool, bySubagent: agents, subagentTotals,
     serverTools: { webSearch: serverWebSearch, webFetch: serverWebFetch },
     errorSignals: { toolErrors, retries, userCorrections },

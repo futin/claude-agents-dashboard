@@ -55,8 +55,8 @@ both embed it as `…/<uuid>/…` — or list candidates with
 - **`perTurn.neverCompacted: true` is a primary explanation for cost — lead the cost story with it.** It means the peak turn topped 250k combined
   (a 200k window auto-compacts near 160k, so it cannot get there) and no turn ever fell below half the running peak, the drop a compaction leaves. The
   usual cause is a 1M-window model (`"model": "opus[1m]"` or similar) putting auto-compaction out of reach, so the session paid the quadratic curve to
-  the end. Say it is **inferred** from peak context — the transcript carries no window field (`notes[]` also says there is no compaction marker; that
-  predates `compactions` below, which reads the `compact_boundary` records, so when `compactions.count > 0` the session did compact) — and
+  the end. Say the window is **inferred** from peak context — the transcript carries no window field. Compaction itself is read from the
+  `compact_boundary` records `compactions` below counts, so `true` already implies `compactions.count === 0` — and
   suggest the fix: a 200k-window default, `/compact` or `/clear` between tasks. `false` does not mean cheap: a session that compacted can still be
   bloated, so keep reading the bloated-turn bullet below.
 - **Whole-session total = `totals.combined` + `subagentTotals.tokens`.** Subagent tokens are summed from each subagent's

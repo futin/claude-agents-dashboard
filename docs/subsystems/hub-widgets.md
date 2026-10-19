@@ -83,7 +83,7 @@ under `server/` must be one of the named packages, and `package.json` must carry
    A widget with a required param needs a case there.
 
 The package also supports actions (a POST route per declared action, with confirm and text input). None are declared here on purpose: the tiles only read
-data the dashboard already exposes, and a write path through Lookout would need the token gate the dashboard's own writes carry.
+data the dashboard already exposes, and a write path through Lookout would need the write gate the dashboard's own writes carry.
 
 <!-- docs-sync:
   sources:

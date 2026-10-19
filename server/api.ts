@@ -386,7 +386,8 @@ function send413(res: ServerResponse, body: unknown): void {
 /**
  * `POST /api/transcribe` — a recorded clip in, one line of text out.
  *
- * Gated like the other write paths even though it writes no session state: it
+ * Gated like the session write paths (remote-answer switch, then the write gate)
+ * even though it writes no session state, so it is not counted as one: it
  * spawns processes and writes files on this machine, which is firmly the write
  * side of the line this codebase draws. The write gate comes before the engine probe so
  * an unauthenticated caller gets no further than 403 on a path that spawns
@@ -1038,8 +1039,8 @@ export function serveUsageHistory(res: ServerResponse, query: URLSearchParams, d
 }
 
 /**
- * `POST /api/settings` — change them from the Settings page. Token-guarded like
- * the other write endpoints; 400 rather than a silent no-op when the body
+ * `POST /api/settings` — change them from the Settings page. A gate-only write,
+ * like the other config writes; 400 rather than a silent no-op when the body
  * carries nothing usable, so the UI never shows a value the server refused.
  */
 export async function serveSettingsWrite(
@@ -1309,7 +1310,7 @@ export async function serveSessionMessageAnswer(
  * `{sessionId, message?}`; the store keeps only the id and the arrival time.
  *
  * Write-shaped but not a control path: the flag decorates a row, and nothing
- * can answer the dialog remotely. Still token-gated like the other POSTs, since
+ * can answer the dialog remotely. Still behind the write gate like the other POSTs, since
  * it can otherwise be used to light up rows from anywhere on the LAN. The hook
  * ignores the response entirely — every failure here is invisible to the CLI.
  */
@@ -1397,7 +1398,7 @@ export async function serveNotifyTest(
  * Gated on the remote-answer toggle exactly like `serveTranscribe` above, and
  * for the stronger version of its reason: spawn writes a whole new session on
  * this machine. The pill is the app's only *runtime* kill switch (`CLAUDE_BIN`
- * is restart-scoped), so a switch that silently excluded the widest write path
+ * is restart-scoped), so a switch that silently excluded the widest session write path
  * would be worse than none — the user infers coverage. It is not an auth
  * boundary: `REMOTE_ANSWER` defaults to true and whoever can flip the pill off
  * can flip it back on. `HealthResponse.spawnAvailable` stays a pure capability
@@ -1819,7 +1820,7 @@ export async function serveCodegraphRun(config: Config, req: IncomingMessage, re
 
 /**
  * `POST /api/pins` `{dirName, pinned}` — pin or unpin one project (#161).
- * Token-guarded like `POST /api/settings`. A pin must name a dir the server
+ * A gate-only write, like `POST /api/settings`. A pin must name a dir the server
  * itself enumerated (older ∪ recent), compared as a string and never joined into
  * a path — a pinned dir becomes spawnable and its config servable, so this is
  * the gate. An unpin accepts any stored dir, so a dead pin can be removed.
