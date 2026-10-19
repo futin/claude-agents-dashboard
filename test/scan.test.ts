@@ -476,6 +476,22 @@ export function run(): number {
     assert.strictEqual(parentOnly.sessions[0].status, 'idle');
   })) p++; else f++;
 
+  if (test('repo: a worktree row names its main checkout and keeps the worktree as project', () => {
+    const now = 1_700_000_000_000;
+    const ts = new Date(now - 10 * 1000).toISOString();
+    const specs = [
+      { dirName: '-a-repo--worktrees-bug-4', id: 'wt', mtimeMs: now - 10 * 1000, records: [metaRec('/a/repo/.worktrees/bug-4', 'backlog/bug-4'), at(assistantPending(), ts)] },
+      { dirName: '-a-repo', id: 'main', mtimeMs: now - 20 * 1000, records: [metaRec('/a/repo', 'main'), at(assistantPending(), ts)] }
+    ];
+    const res = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root: makeRoot(specs), now });
+    const wt = res.sessions.find(s => s.id === 'wt')!;
+    const main = res.sessions.find(s => s.id === 'main')!;
+    assert.strictEqual(wt.project, 'bug-4');
+    assert.strictEqual(wt.repo, 'repo');
+    assert.strictEqual(main.project, 'repo');
+    assert.strictEqual(main.repo, null);
+  })) p++; else f++;
+
   if (test('pendingIds: a held remote wait flags the row and turns it blue', () => {
     // The hook registers the wait during PreToolUse, so the transcript still ends
     // on a finished turn — only the store knows a question is open.

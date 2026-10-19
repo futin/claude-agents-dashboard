@@ -954,19 +954,19 @@ code,kbd,samp,pre{font-family:inherit}
    add one. Qualified with `.s-card` on purpose — the `md` tier re-declares
    `.s-card{padding:24px}` further down, and a bare `.ledger` (same specificity,
    earlier in the file) loses to it above 768. Same shape as `.s-card.quiet`. */
-.s-card.ledger{padding:0 0 16px;overflow:hidden}
+.s-card.ledger{padding:0 0 16px;overflow:hidden;container-type:inline-size}
 .ledger table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
 .ledger th{font-size:12px;font-weight:400;color:var(--ink2);text-align:left;padding:14px 12px;border-bottom:1px solid var(--hairline);white-space:nowrap}
 .ledger td{padding:14px 12px;border-top:1px solid var(--hairline);vertical-align:middle;overflow:hidden}
 .ledger tbody tr:first-child td{border-top:0}
 .ledger th:first-child,.ledger td:first-child{padding-left:20px}
 .ledger th:last-child,.ledger td:last-child{padding-right:20px}
-.ledger .c-dot{width:41px}.ledger .c-model{width:90px}.ledger .c-ctx{width:120px}.ledger .c-state{width:84px}.ledger .c-act{width:150px}.ledger .c-last{width:80px}.ledger .c-do{width:104px}
-/* Model column is a tablet-portrait-and-up luxury: at md the ctx bar gets its
-   full 200px back alongside it. Table is `table-layout:fixed`, so a `col`
-   width and a hidden `th`/`td` must always agree or the columns misalign
-   rather than error. */
-.ledger .c-model,.ledger td.model,.ledger th:nth-child(3){display:none}
+/* No below-md tier: List is a wide-only layout (`WIDE_ONLY_LAYOUTS`), so a window under md never draws this table. Its width still swings with the
+   aside and the Width setting, though, so the Project column waits for a 950px table (container query below); until then the fixed columns alone sum to
+   ~750px and would leave Session nothing, and the Session cell's `.repo-sub` line carries repo and branch instead. The table is `table-layout:fixed`, so
+   a `col` and its `th`/`td` are hidden together — by class, never `nth-child`, which silently picks the wrong column once one is added. */
+.ledger .c-proj,.ledger th.proj,.ledger td.proj{display:none}
+.ledger .c-dot{width:41px}.ledger .c-proj{width:120px}.ledger .c-model{width:88px}.ledger .c-ctx{width:120px}.ledger .c-state{width:84px}.ledger .c-act{width:110px}.ledger .c-last{width:80px}.ledger .c-do{width:104px}
 .ledger tbody tr:not(.launching):not(.expand){cursor:pointer}
 .ledger tbody tr:not(.launching):not(.expand):not(.selected):hover td{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
 /* Open row + its body read as one block: same fill through the hover, one
@@ -979,7 +979,8 @@ code,kbd,samp,pre{font-family:inherit}
 .ledger .name{font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ledger .name .ag-pill{margin-left:6px;vertical-align:1px}
 .ledger .sub{font-size:12px;color:var(--ink2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ledger td.model{font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ledger td.proj .pn{font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ledger td.model{font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ledger .ctx{display:flex;align-items:center;gap:10px}
 .ledger .ctx .bar{flex:1}
 .ledger .ctx .pct{min-width:38px;text-align:right}
@@ -1101,9 +1102,6 @@ code,kbd,samp,pre{font-family:inherit}
   .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
   .tile.selected{grid-column:span 2}
   .split{grid-template-columns:280px minmax(0,1fr)}
-  .ledger .c-model{display:table-column}
-  .ledger td.model,.ledger th:nth-child(3){display:table-cell}
-  .ledger .c-ctx{width:200px}
   .toolbar{flex-wrap:wrap}
   .toolbar .seg.view>button{padding:7px 12px}
   .toolbar .sortlab{display:inline}
@@ -1134,6 +1132,17 @@ code,kbd,samp,pre{font-family:inherit}
    and narrows the measure again. */
 @media (min-width:1280px){
   .tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+/* The ledger's text columns grow with the table once it is wide, so spare width spreads across them instead of all landing in Session, which stays
+   the one unsized column and takes what is left (about a third of a 1900px table). A container query, not a viewport tier: the aside and the Width
+   setting decide the table's width, and a 1920px window can still hold a 900px table, where these percentages would leave Session ~165px. */
+@container (min-width:950px){
+  .ledger .c-proj{display:table-column}
+  .ledger th.proj,.ledger td.proj{display:table-cell}
+  .ledger .repo-sub{display:none}
+}
+@container (min-width:1200px){
+  .ledger .c-proj{width:13%}.ledger .c-model{width:8%}.ledger .c-ctx{width:15%}.ledger .c-act{width:12%}
 }
 
 /* The lock. 1536px — tier 2xl — is the exact width at which the board stops
@@ -3023,7 +3032,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 
 /* Matrix — a row per repo, a column per check, colour only on failure (management-redesign spec §4.4). Wide-only: the table's floor is 760px, and the wrapper
    scrolls it sideways while its own overflow clips the card's corners, as `.s-card.ledger` does. The table is drawn in Sessions › List's language — the
-   `.ledger` values, ported here rather than shared, because `.ledger th:nth-child(3)` hides a column below md: hairline rules, a 41px dot column, name over
+   `.ledger` values, ported here rather than shared, because `.ledger` sizes its columns for a wide-only layout: hairline rules, a 41px dot column, name over
    branch, the open row and its body one --strip-hi block with an --ink bar down the left, pills only where a check fails, `.cbtn`-shaped keys. */
 .git-mx-wrap{padding:0 0 16px;overflow-x:auto}
 .git-mx{width:100%;min-width:760px;border-collapse:collapse;font-size:13px;color:var(--ink)}
