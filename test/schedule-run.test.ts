@@ -214,6 +214,17 @@ export async function run(): Promise<number> {
     } finally { fx.done(); }
   }));
 
+  check(await test('a bad `only` is 400 bad-only and nothing spawns: flag-shaped, empty, non-string, control character, not an array', async () => {
+    const fx = fixture();
+    try {
+      fs.writeFileSync(path.join(fx.schedules, 'git-sync.md'), JOB(['foreach: pinned']));
+      const calls = fakeSpawner();
+      const bad: unknown[] = [['--trigger', 'schedule'], ['--x'], ['a', '--only'], ['-x'], [''], [42], ['a', null], ['a\nb'], ['a\u0000'], 'a', { 0: 'a' }, null];
+      for (const only of bad) assert.deepStrictEqual(await runJob(fx.config, 'git-sync', only, NO_PROBE), { status: 400, error: 'bad-only' }, JSON.stringify(only));
+      assert.strictEqual(calls.length, 0);
+    } finally { fx.done(); }
+  }));
+
   check(await test('unknown name and path-shaped names are 404 and nothing spawns', async () => {
     const fx = fixture();
     try {

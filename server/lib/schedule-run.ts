@@ -16,6 +16,7 @@ import { spawnProcess } from './spawn.js';
 
 export type RunResult =
   | { status: 202; run: string | null }
+  | { status: 400; error: 'bad-only' }
   | { status: 404 }
   | { status: 409; error: 'already-running' | 'no-plugin' | 'invalid' | 'not-this-machine' }
   | { status: 500; error: 'spawn-failed' };
@@ -72,10 +73,20 @@ function createStartWatcher(file: string, job: string, since: number): () => str
 }
 
 /**
+ * The wrapper's `--only` parser ends its list at the first element starting with `--` and reads it as a flag, so `['--trigger', 'schedule']` would flip the
+ * run's trigger. A pin name never starts with `-`, so any such element, an empty one, a non-string or a control character refuses the whole call.
+ */
+function validOnly(only: unknown): only is string[] {
+  return Array.isArray(only) && only.every(p => typeof p === 'string' && p !== '' && !p.startsWith('-') && !/[\u0000-\u001f\u007f]/.test(p));
+}
+
+/**
  * Launch `name` now, as `--trigger manual`. A paused job runs too: that is how a new job is tried before its toggle installs it. The child's environment is
  * exactly `scheduleEnv(config)`, not the server's. `run` is null when the wrapper wrote no `start` within 2 s (it refused, or is slow); the spawn still happened.
  */
-export async function runJob(config: Config, name: string, only?: string[], probe: Probe = createProbe()): Promise<RunResult> {
+export async function runJob(config: Config, name: string, only?: unknown, probe: Probe = createProbe()): Promise<RunResult> {
+  const pins = only === undefined ? [] : validOnly(only) ? only : null;
+  if (pins === null) return { status: 400, error: 'bad-only' };
   const stored = SAFE_NAME.test(name) ? readJobs(scheduleDirs(config).schedules).find(j => j.name === name) : undefined;
   if (!stored) return { status: 404 };
   // The wrapper would refuse both of these and a 2 s wait for a log line that never comes would then read as a slow success.
@@ -87,7 +98,7 @@ export async function runJob(config: Config, name: string, only?: string[], prob
   if (!wrapper) return { status: 409, error: 'no-plugin' };
 
   const args = [wrapper, name, '--trigger', 'manual'];
-  if (only && only.length > 0) args.push('--only', ...only);
+  if (pins.length > 0) args.push('--only', ...pins);
   const since = Date.now();
   const watch = createStartWatcher(path.join(scheduleDirs(config).runs, `${machine}.jsonl`), name, since);
   try {
