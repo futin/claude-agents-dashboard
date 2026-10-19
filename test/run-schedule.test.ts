@@ -586,6 +586,98 @@ export async function run(): Promise<number> {
     assert.ok(!fs.existsSync(path.join(fx.state, 'locks', 'long.lock')), 'lock released');
   }));
 
+  // `trap "" TERM` is inherited across exec, so this sleep ignores the group's SIGTERM and only the SIGKILL after the grace ends it.
+  const TRAPPED = '(trap "" TERM; exec sleep 40) &\necho $! > "$FAKE_REC/trap.pid"\nwait';
+
+  tally(await test('timeout: a group member that traps TERM is SIGKILLed after the grace, before the wrapper exits', async () => {
+    const fx = setup();
+    shellJob(fx, 'stubborn', TRAPPED, ['timeout: 1s']);
+    const t0 = Date.now();
+    assert.strictEqual(wrap(fx, ['stubborn', '--trigger', 'manual'], { RUN_SCHEDULE_GRACE_MS: '1500' }).code, 1);
+    const took = Date.now() - t0;
+    const pid = readPid(path.join(fx.rec, 'trap.pid'));
+    const dead = await gone(pid, 1000);
+    try { process.kill(pid, 'SIGKILL'); } catch { /* the expected case */ }
+    assert.ok(dead, 'trapped sleep survived the wrapper');
+    assert.ok(took >= 2400, `wrapper did not wait for the group (${took} ms)`);
+    assert.strictEqual(ofKind(log(fx), 'step-end')[0].outcome, 'timeout');
+  }));
+
+  tally(await test('SIGTERM-stop: a group member that traps TERM is gone by the time the wrapper exits 143', async () => {
+    const fx = setup();
+    shellJob(fx, 'stubborn', TRAPPED);
+    const kid = spawn(process.execPath, [WRAPPER, 'stubborn', '--trigger', 'manual'], { env: envFor(fx, { RUN_SCHEDULE_GRACE_MS: '1000' }), stdio: 'ignore' });
+    kids.push(kid);
+    const exited = new Promise<number | null>((r) => kid.on('exit', (code) => r(code)));
+    const pidFile = path.join(fx.rec, 'trap.pid');
+    await waitFor(() => fs.existsSync(pidFile) && fs.readFileSync(pidFile, 'utf8').trim() !== '');
+    kid.kill('SIGTERM');
+    assert.strictEqual(await exited, 143);
+    const pid = readPid(pidFile);
+    const dead = await gone(pid, 1000);
+    try { process.kill(pid, 'SIGKILL'); } catch { /* the expected case */ }
+    assert.ok(dead, 'trapped sleep survived the wrapper');
+    assert.strictEqual(ofKind(log(fx), 'step-end')[0].outcome, 'stopped');
+  }));
+
+  tally(await test('SIGTERM after the step\'s leader exited 0 (still draining pipes) keeps outcome ok; end.stopped true, exit 143', async () => {
+    const fx = setup();
+    // The backgrounded sleep inherits stdout, so 'close' waits on it and the wrapper sits in its post-exit window.
+    shellJob(fx, 'drain', 'sleep 3 &\necho $! > "$FAKE_REC/bg.pid"\ntouch "$FAKE_REC/done"');
+    const kid = spawn(process.execPath, [WRAPPER, 'drain', '--trigger', 'manual'], { env: envFor(fx), stdio: 'ignore' });
+    kids.push(kid);
+    const exited = new Promise<number | null>((r) => kid.on('exit', (code) => r(code)));
+    await waitFor(() => fs.existsSync(path.join(fx.rec, 'done')));
+    await sleepMs(150);
+    kid.kill('SIGTERM');
+    assert.strictEqual(await exited, 143);
+    const bg = readPid(path.join(fx.rec, 'bg.pid'));
+    try { process.kill(bg, 'SIGKILL'); } catch { /* already gone */ }
+    const recs = log(fx);
+    assert.strictEqual(ofKind(recs, 'step-end')[0].outcome, 'ok');
+    assert.strictEqual(ofKind(recs, 'end')[0].stopped, true);
+  }));
+
+  tally(await test('SIGINT is handled like SIGTERM: end.stopped true, exit 130', async () => {
+    const fx = setup();
+    shellJob(fx, 'long', 'sleep 10 &\necho $! > "$FAKE_REC/sleep.pid"\nwait');
+    const kid = spawn(process.execPath, [WRAPPER, 'long', '--trigger', 'manual'], { env: envFor(fx), stdio: 'ignore' });
+    kids.push(kid);
+    const exited = new Promise<number | null>((r) => kid.on('exit', (code) => r(code)));
+    const pidFile = path.join(fx.rec, 'sleep.pid');
+    await waitFor(() => fs.existsSync(pidFile) && fs.readFileSync(pidFile, 'utf8').trim() !== '');
+    kid.kill('SIGINT');
+    assert.strictEqual(await exited, 130);
+    assert.strictEqual(ofKind(log(fx), 'end')[0].stopped, true);
+    assert.ok(await gone(readPid(pidFile)));
+  }));
+
+  tally(await test('timeout: 600h (past setTimeout\'s 2^31-1 ms) does not fire at once', () => {
+    const fx = setup();
+    shellJob(fx, 'patient', 'sleep 0.3\necho hi', ['timeout: 600h']);
+    assert.strictEqual(wrap(fx, ['patient', '--trigger', 'manual']).code, 0);
+    assert.strictEqual(ofKind(log(fx), 'step-end')[0].outcome, 'ok');
+  }));
+
+  tally(await test('two listed pins named lookout, one with a null path → still ambiguous, as checkPins reads it', () => {
+    const fx = setup();
+    writePins(fx, [
+      { dirName: '-Users-me-a-lookout', name: 'lookout', path: repo(fx, 'a/lookout'), listed: true },
+      { dirName: '-Users-me-b-lookout', name: 'lookout', path: null, listed: true },
+    ]);
+    shellJob(fx, 'fan', 'true', ['foreach: [lookout]']);
+    assert.strictEqual(wrap(fx, ['fan', '--trigger', 'manual']).code, 1);
+    assert.strictEqual(ofKind(log(fx), 'end')[0].error, 'ambiguous pin lookout');
+  }));
+
+  tally(await test('no lock temp or aside file is left in locks/ after a run or a stale takeover', () => {
+    const fx = setup();
+    shellJob(fx, 'tidy', 'true');
+    writeLock(fx, 'tidy', { pid: 1, bootId: 'another-boot', job: 'tidy' });
+    assert.strictEqual(wrap(fx, ['tidy', '--trigger', 'manual']).code, 0);
+    assert.deepStrictEqual(fs.readdirSync(path.join(fx.state, 'locks')), []);
+  }));
+
   tally(await test('--trigger schedule 20 min after the slot → start.late true, start.slot the slot\'s ISO', () => {
     const fx = setup();
     const slot = new Date(Date.now() - 20 * 60_000);
@@ -632,6 +724,8 @@ export async function run(): Promise<number> {
     }
     assert.strictEqual(wrap(fx, []).code, 64);
     assert.strictEqual(wrap(fx, ['ok', '--trigger', 'sometimes']).code, 64);
+    assert.strictEqual(wrap(fx, ['ok', '--only']).code, 64);
+    assert.strictEqual(wrap(fx, ['ok', '--only', '--trigger', 'manual']).code, 64);
     assert.ok(!fs.existsSync(path.join(fx.state, 'runs')));
   }));
 

@@ -7,8 +7,11 @@
  *   run-schedule <job> [--trigger schedule|manual] [--only <pin>...]
  *
  * Exit 0 every step ok (or a refusal), 1 a step failed or the run failed before its first step, 75 the job's lock is held by a live wrapper,
- * 143 SIGTERM, 64 a usage error. The environment is exactly what reconcile bakes: PATH, HOME, CLAUDE_BIN, SPAWN_MAX_PERMISSION,
- * SYNC_PERMISSION_MODE, SCHEDULE_MACHINE, SCHEDULES_DIR.
+ * 143 SIGTERM (130 SIGINT, 129 SIGHUP, handled the same way), 64 a usage error. The environment is exactly what reconcile bakes: PATH, HOME,
+ * CLAUDE_BIN, SPAWN_MAX_PERMISSION, SYNC_PERMISSION_MODE, SCHEDULE_MACHINE, SCHEDULES_DIR. `RUN_SCHEDULE_GRACE_MS` (not baked) is a test seam for the
+ * 10 s TERM→KILL grace.
+ *
+ * An error thrown mid-run (a full disk under `append`) exits 1 without an `end` record; the server's fold reads that run as lost, which is the truth.
  *
  * Boot id (lock files, and the server's owner.json — keep both readers on this one form): mac = the `sec` of `sysctl -n kern.boottime`,
  * wsl = `/proc/sys/kernel/random/boot_id` trimmed.
@@ -25,11 +28,14 @@ import { parseJob } from './schedule-file.mjs';
 const NAME_RE = /^[a-z0-9-]+$/;
 const EXIT_USAGE = 64;
 const EXIT_RUNNING = 75;
-const EXIT_SIGTERM = 143;
+const SIGNAL_EXITS = { SIGTERM: 143, SIGINT: 130, SIGHUP: 129 };
 const TAIL_LINES = 20;
 const TAIL_MAX_CHARS = 8192;
 const WHY_MAX_CHARS = 300;
-const KILL_GRACE_MS = 10_000;
+const KILL_GRACE_MS = Number(process.env.RUN_SCHEDULE_GRACE_MS) > 0 ? Number(process.env.RUN_SCHEDULE_GRACE_MS) : 10_000;
+// setTimeout clamps anything above 2^31-1 ms to 1 ms; a timeout that long is "never" in practice.
+const MAX_TIMER_MS = 2 ** 31 - 1;
+const GROUP_POLL_MS = 50;
 const LATE_MS = 10 * 60_000;
 // spawn.ts PERMISSION_MODES minus bypassPermissions, which a schedule never runs under whatever the file or the baked env says.
 const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto'];
@@ -51,7 +57,9 @@ function parseArgs(argv) {
       if (trigger !== 'schedule' && trigger !== 'manual') usage('--trigger takes schedule or manual');
     } else if (rest[i] === '--only') {
       only ??= [];
+      const before = only.length;
       while (i + 1 < rest.length && !rest[i + 1].startsWith('--')) only.push(rest[++i]);
+      if (only.length === before) usage('--only takes at least one pin name');
     } else usage(`unknown argument ${rest[i]}`);
   }
   return { job, trigger, only };
@@ -86,6 +94,7 @@ function isWrapperFor(pid, job) {
   try { process.kill(pid, 0); } catch (e) { if (e.code !== 'EPERM') return false; }
   let cmd;
   try { cmd = execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' }); } catch { return false; }
+  // Whitespace split: an install path with a space in it would read as stale. ~/.claude/plugins/… has none.
   const tokens = cmd.trim().split(/\s+/);
   return tokens.some((t, i) => path.basename(t) === 'run-schedule.mjs' && tokens[i + 1] === job);
 }
@@ -142,28 +151,43 @@ class Wrapper {
     return { job };
   }
 
-  /** Take the lock, or return the live holder's pid. Anything but a live wrapper for this job from this boot is stale. */
+  /** The pid in lock text `text` when it is a live wrapper for this job from this boot, else null (stale). */
+  liveHolder(text) {
+    let held = null;
+    try { held = JSON.parse(text); } catch { /* torn or unreadable: stale */ }
+    const pid = Number(held?.pid);
+    const sameBoot = held?.bootId == null || this.bootId == null || held.bootId === this.bootId;
+    return Number.isInteger(pid) && pid > 0 && sameBoot && isWrapperFor(pid, this.job) ? pid : null;
+  }
+
+  /**
+   * Take the lock, or return the live holder's pid. Anything but a live wrapper for this job from this boot is stale. The lock appears by `link` of a
+   * complete temp file, so no reader ever sees it empty; a stale one is renamed aside and checked, since another wrapper may have replaced it between
+   * the read and the rename.
+   */
   lock() {
     fs.mkdirSync(path.dirname(this.lockPath), { recursive: true });
-    const body = JSON.stringify({ pid: process.pid, bootId: this.bootId, job: this.job });
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const fd = fs.openSync(this.lockPath, 'wx');
-        fs.writeSync(fd, body);
-        fs.closeSync(fd);
-        return null;
-      } catch (e) {
-        if (e.code !== 'EEXIST') throw e;
+    const tmp = `${this.lockPath}.${process.pid}.tmp`;
+    const aside = `${this.lockPath}.${process.pid}.stale`;
+    fs.writeFileSync(tmp, JSON.stringify({ pid: process.pid, bootId: this.bootId, job: this.job }));
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { fs.linkSync(tmp, this.lockPath); return null; } catch (e) { if (e.code !== 'EEXIST') throw e; }
+        let text;
+        try { text = fs.readFileSync(this.lockPath, 'utf8'); } catch (e) { if (e.code === 'ENOENT') continue; throw e; }
+        const holder = this.liveHolder(text);
+        if (holder !== null) return holder;
+        try { fs.renameSync(this.lockPath, aside); } catch (e) { if (e.code === 'ENOENT') continue; throw e; }
+        if (fs.readFileSync(aside, 'utf8') !== text) {
+          try { fs.linkSync(aside, this.lockPath); } catch { /* a third wrapper holds it now; the next attempt reads theirs */ }
+        }
+        fs.unlinkSync(aside);
       }
-      let held = null;
-      try { held = JSON.parse(fs.readFileSync(this.lockPath, 'utf8')); } catch { /* torn or unreadable: stale */ }
-      const pid = Number(held?.pid);
-      const sameBoot = held?.bootId == null || this.bootId == null || held.bootId === this.bootId;
-      if (Number.isInteger(pid) && pid > 0 && sameBoot && isWrapperFor(pid, this.job)) return pid;
-      try { fs.unlinkSync(this.lockPath); } catch { /* another wrapper took it over first; the retry sees theirs */ }
+      // Lost the takeover race every time: whoever holds it now is live.
+      try { return Number(JSON.parse(fs.readFileSync(this.lockPath, 'utf8')).pid) || 0; } catch { return 0; }
+    } finally {
+      try { fs.unlinkSync(tmp); } catch { /* already gone */ }
     }
-    // Lost the takeover race twice: whoever holds it now is live.
-    try { return Number(JSON.parse(fs.readFileSync(this.lockPath, 'utf8')).pid) || 0; } catch { return 0; }
   }
 
   unlock() {
@@ -196,13 +220,16 @@ class Wrapper {
     return { steps: wanted.map((c) => ({ repo: c.pin?.name ?? c.entry, cwd: c.pin?.path ?? null, skip: c.skip })) };
   }
 
-  /** One `foreach:` entry against the pins: listed by name, then by dirName; an unlisted match is skipped, no match is not pinned. */
+  /**
+   * One `foreach:` entry against the pins: listed by name, then by dirName; an unlisted match is skipped, no match is not pinned. Ambiguity counts
+   * listed pins whatever their path, as `checkPins` does, so the wrapper never runs a file the server's validation calls ambiguous.
+   */
   resolve(entry, pins, usable) {
-    const listed = pins.filter(usable);
+    const listed = pins.filter((p) => p.listed);
     const byName = listed.filter((p) => p.name === entry);
     const byDir = listed.filter((p) => p.dirName === entry);
-    if (byName.length === 1) return { entry, pin: byName[0], skip: null };
-    if (byDir.length >= 1) return { entry, pin: byDir[0], skip: null };
+    const pick = byName.length === 1 ? byName[0] : byDir[0];
+    if (pick) return { entry, pin: pick, skip: usable(pick) ? null : 'pin unlisted' };
     if (byName.length > 1) return { entry, ambiguous: true };
     const hidden = pins.find((p) => p.name === entry || p.dirName === entry);
     if (hidden) return { entry, pin: hidden, skip: 'pin unlisted' };
@@ -256,7 +283,7 @@ class Wrapper {
       else counts.failed++;
     }
     finish({});
-    if (this.stopping) return EXIT_SIGTERM;
+    if (this.stopping) return this.stopExit;
     return counts.failed > 0 ? 1 : 0;
   }
 
@@ -308,13 +335,17 @@ class Wrapper {
 
   /**
    * Run one step's child in its own process group, so a timeout or a SIGTERM reaches whatever the script backgrounded too. `outcome` is set only
-   * when the wrapper ended it: `timeout` or `stopped`.
+   * when the wrapper ended it: `timeout` or `stopped`. Once it has, the step does not settle until the whole group is gone — a member that traps
+   * TERM outlives its leader — or the grace runs out and the group is SIGKILLed; only then may the lock go.
    */
   spawnStep(cmd, args, opts, input, timeoutMs, combine) {
     return new Promise((resolve) => {
       let stdout = '', stderr = '', combined = '';
       let outcome = null;
+      let leader = null;
       let settled = false;
+      let deadline = 0;
+      let killTimer = null;
       const child = spawn(cmd, args, { ...opts, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
       this.child = child;
       const keep = (s, chunk) => { const t = s + chunk; return combine && t.length > 1_000_000 ? t.slice(-500_000) : t; };
@@ -322,27 +353,46 @@ class Wrapper {
       child.stderr.on('data', (c) => { const s = c.toString(); stderr = keep(stderr, s); combined = keep(combined, s); });
       child.stdin.on('error', () => { /* the child exited without reading its prompt */ });
       child.stdin.end(input ?? '');
-      let killTimer = null;
+      const groupAlive = () => {
+        if (!child.pid) return false;
+        try { process.kill(-child.pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+      };
       const end = (why) => {
-        if (outcome || settled) return;
+        // A step whose leader already exited on its own keeps its result; only the wait for its pipes was left.
+        if (outcome || settled || leader || child.exitCode !== null) return;
         outcome = why;
+        deadline = Date.now() + KILL_GRACE_MS;
         this.killGroup(child, 'SIGTERM');
         killTimer = setTimeout(() => this.killGroup(child, 'SIGKILL'), KILL_GRACE_MS);
       };
       child.endStep = end;
-      const timer = setTimeout(() => end('timeout'), timeoutMs);
-      const done = (code, signal) => {
+      const timer = setTimeout(() => end('timeout'), Math.min(timeoutMs, MAX_TIMER_MS));
+      const finish = () => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
         if (killTimer) clearTimeout(killTimer);
         this.child = null;
-        resolve({ code, signal, stdout, stderr, combined, outcome });
+        resolve({ ...leader, stdout, stderr, combined, outcome });
       };
-      child.on('error', (e) => { stderr += `${e.message}\n`; combined += `${e.message}\n`; done(null, null); });
+      const settle = (code, signal) => {
+        if (leader) return;
+        leader = { code, signal };
+        if (!outcome) return finish();
+        const poll = () => {
+          if (!groupAlive()) return finish();
+          if (Date.now() >= deadline) { this.killGroup(child, 'SIGKILL'); return finish(); }
+          setTimeout(poll, GROUP_POLL_MS);
+        };
+        poll();
+      };
+      child.on('error', (e) => { stderr += `${e.message}\n`; combined += `${e.message}\n`; settle(null, null); });
       // 'close' waits for every holder of the pipes; a backgrounded grandchild may hold them long after the child exits.
-      child.on('exit', (code, signal) => { setTimeout(() => done(code, signal), 1000).unref(); });
-      child.on('close', (code, signal) => done(code, signal));
+      child.on('exit', (code, signal) => {
+        if (outcome) settle(code, signal);
+        else setTimeout(() => settle(code, signal), 1000).unref();
+      });
+      child.on('close', (code, signal) => settle(code, signal));
     });
   }
 
@@ -350,14 +400,15 @@ class Wrapper {
     try { process.kill(-child.pid, sig); } catch { try { child.kill(sig); } catch { /* gone */ } }
   }
 
-  stop() {
+  stop(signal) {
+    if (!this.stopping) this.stopExit = SIGNAL_EXITS[signal];
     this.stopping = true;
     if (this.child) this.child.endStep('stopped');
   }
 }
 
 const wrapper = new Wrapper(parseArgs(process.argv.slice(2)));
-process.on('SIGTERM', () => wrapper.stop());
+for (const sig of Object.keys(SIGNAL_EXITS)) process.on(sig, () => wrapper.stop(sig));
 wrapper.run().then(
   (code) => process.exit(code),
   (e) => { process.stderr.write(`run-schedule: ${e?.stack ?? e}\n`); wrapper.unlock(); process.exit(1); },
