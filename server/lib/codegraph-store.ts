@@ -2,7 +2,8 @@
  * codegraph-store.ts — the status cache and the Sync / Reindex runs behind `GET /api/codegraph` and `POST /api/codegraph/run`.
  *
  * Design: `docs/superpowers/specs/2026-10-19-codegraph-view-design.md` §Source, §Cost, §API, §Levels. State is per graph root, not per pin: a repo pin and its
- * subdirectory pin share one cache entry, one `run` and one `lastRun`. Pid files are read on every GET (cheap); only `codegraph status --json` is cached. There
+ * subdirectory pin share one `run`, one `lastRun` and their pid files, but each keeps its own status entry (the CLI runs from the pin's own path, so
+ * `worktreeMismatch` is per pin). Pid files are read on every GET (cheap); only `codegraph status --json` is cached. There
  * is no timer: a stale entry is refreshed by the GET that finds it stale, so a closed tab costs nothing.
  */
 import path from 'node:path';
@@ -50,10 +51,11 @@ export function setCodegraphClock(now: (() => number) | null): void {
 interface Entry { read: StatusRead; atMs: number }
 interface OwnRun extends CodegraphRun { watchingAtLaunch: boolean }
 
+/** Keyed by {@link statusKey}: the status read runs from the pin's own path, so two pins on one root each keep their own answer (`worktreeMismatch` differs). */
 const cache = new Map<string, Entry>();
 /** The last `ok` stats per root, kept apart from the cache because a failed read replaces the cache entry but a live rebuild still wants the old numbers. */
 const lastOk = new Map<string, CodegraphStats>();
-/** Reads in flight per root; also how a read knows it was superseded (see {@link dropEntry}). */
+/** Reads in flight per {@link statusKey}; also how a read knows it was superseded (see {@link dropEntry}). */
 const reading = new Map<string, Promise<StatusRead>>();
 const runs = new Map<string, OwnRun>();
 const lastRuns = new Map<string, CodegraphLastRun>();
@@ -63,7 +65,7 @@ const seenRebuild = new Set<string>();
 const launching = new Set<string>();
 const pending = new Set<Promise<unknown>>();
 
-/** Forgets everything in memory (test seam). Runs already launched still finish, into an empty store. */
+/** Forgets everything in memory (test seam). Runs already launched still finish, into an empty store; the read limiter is left alone, so settle first. */
 export function resetCodegraph(): void {
   cache.clear();
   lastOk.clear();
@@ -102,24 +104,27 @@ async function limited<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** A root's status is stale once its cache entry goes, and a read that started before that must not put its answer back. */
+const statusKey = (root: string, pin: PinRow): string => `${root}\0${pin.path}`;
+
+/** A root's status is stale once its cache entries go (every pin's on it), and a read that started before that must not put its answer back. */
 function dropEntry(root: string): void {
-  cache.delete(root);
-  reading.delete(root);
+  for (const map of [cache, reading]) for (const key of [...map.keys()]) if (key.startsWith(`${root}\0`)) map.delete(key);
 }
 
 function startRead(root: string, pin: PinRow): Promise<StatusRead> {
-  const inFlight = reading.get(root);
+  const key = statusKey(root, pin);
+  const inFlight = reading.get(key);
   if (inFlight) return inFlight;
-  const mine: Promise<StatusRead> = limited(() => readCodegraphStatus(pin, currentCodegraphRunner())).then(read => {
-    if (reading.get(root) === mine) {
-      reading.delete(root);
-      cache.set(root, { read, atMs: clock() });
-      if (read.kind === 'ok') lastOk.set(root, read.stats);
-    }
-    return read;
-  });
-  reading.set(root, mine);
+  const mine: Promise<StatusRead> = limited(() => readCodegraphStatus(pin, currentCodegraphRunner()))
+    .then(read => {
+      if (reading.get(key) === mine) {
+        cache.set(key, { read, atMs: clock() });
+        if (read.kind === 'ok') lastOk.set(root, read.stats);
+      }
+      return read;
+    })
+    .finally(() => { if (reading.get(key) === mine) reading.delete(key); });
+  reading.set(key, mine);
   track(mine);
   return mine;
 }
@@ -157,7 +162,7 @@ async function rootOf(pin: PinRow): Promise<string | null> {
 const NO_LIVE: RootLive = { watching: false, watcherSinceMs: null, rebuildLive: false, rebuildSinceMs: null };
 
 /**
- * Every pinned project's codegraph state, in pin order. A repo with no cache entry is read now; a stale entry answers as it is while one background refresh
+ * Every pinned project's codegraph state, in pin order. When `cli` is `'missing'` the rows are placeholders (`state: 'error'`): callers check `cli` first. A repo with no cache entry is read now; a stale entry answers as it is while one background refresh
  * runs; a fresh one answers from the cache. The pid files are read on every call.
  */
 export async function readCodegraph(config: Partial<Config>): Promise<CodegraphResponse> {
@@ -189,7 +194,7 @@ async function repoRow(pin: PinRow, root: string | null, l: RootLive): Promise<{
   }
 
   let read: StatusRead;
-  const entry = cache.get(root);
+  const entry = cache.get(statusKey(root, pin));
   if (!entry) {
     read = await startRead(root, pin);
   } else {
@@ -286,6 +291,8 @@ async function launch(root: string, record: OwnRun): Promise<void> {
   // A run that ended after `resetCodegraph` would otherwise write into a store that has moved on.
   if (runs.get(root) !== record) return;
   runs.delete(root);
+  // Our own reindex was seen as a live rebuild; dropping again when its pid is found dead would discard the read that follows this drop.
+  seenRebuild.delete(root);
   lastRuns.set(root, { kind, ...ended, endedAtMs: clock() });
   dropEntry(root);
 }

@@ -185,15 +185,36 @@ export async function run(): Promise<number> {
     assert.strictEqual(f.status(), 2, 'and that entry is fresh again');
   });
 
-  await it('cache: a repo pin and its subdirectory pin share one entry and one read', async () => {
+  await it('cache: pins on one root each read from their own path and keep their own worktreeMismatch', async () => {
     const top = repo('mono');
-    const sub = pinned(path.join(top.dir, 'packages', 'x'), false);
-    const f = fake(); overrideCodegraphRunner(f.run);
+    const sub = pinned(path.join(top.dir, '.claude', 'worktrees', 'wt'), false);
+    const mismatch = { worktreeRoot: sub.dir, indexRoot: top.dir };
+    const f = fake(async cwd => ({ code: 0, stdout: JSON.stringify({ ...JSON.parse(FIXTURE), worktreeMismatch: cwd === sub.dir ? mismatch : null }), stderr: '' }));
+    overrideCodegraphRunner(f.run);
     const res = await get();
-    assert.strictEqual(f.status(), 1, 'two pins on one root read once');
-    const [r1, r2] = res.repos;
-    assert.ok(r1.state === 'ok' && r2.state === 'ok' && r1.root === top.dir && r2.root === top.dir);
-    assert.ok(res.repos.some(r => r.dirName === sub.dirName));
+    assert.deepStrictEqual(f.calls.map(c => c.cwd).sort(), [top.dir, sub.dir].sort(), 'one read per pin path, each from its own path');
+    const by = (p: Pinned) => res.repos.find(r => r.dirName === p.dirName)!;
+    const [t, s] = [by(top), by(sub)];
+    assert.ok(t.state === 'ok' && s.state === 'ok' && t.root === top.dir && s.root === top.dir, 'one root');
+    assert.ok(t.state === 'ok' && t.stats.worktreeMismatch === null, 'the repo row is not told it is another worktree');
+    assert.ok(s.state === 'ok' && s.stats.worktreeMismatch !== null && s.stats.worktreeMismatch.worktreeRoot === sub.dir);
+    await get();
+    assert.strictEqual(f.status(), 2, 'both entries are fresh inside the TTL');
+  });
+
+  await it('cache: pins on one root still share the run, the lastRun and the drop at run end', async () => {
+    const top = repo('mono');
+    const sub = pinned(path.join(top.dir, 'sub'), false);
+    const f = parked(); overrideCodegraphRunner(f.run);
+    await get();
+    assert.strictEqual(f.status(), 2);
+    assert.strictEqual(await startCodegraphRun({}, sub.dirName, 'sync'), 'started');
+    const mid = (await get()).repos;
+    assert.ok(mid.every(r => r.run !== null && r.run.kind === 'sync' && r.run.startedAtMs === mid[0].run!.startedAtMs), 'both rows show the one run');
+    f.release(); await codegraphRunsSettled();
+    const after = (await get()).repos;
+    assert.strictEqual(f.status(), 4, 'the run ending dropped the entry of every pin on the root');
+    assert.ok(after.every(r => r.run === null && r.lastRun !== null && r.lastRun.ok), 'and both rows carry the one lastRun');
   });
 
   await it('limiter: seven cold repos never run more than two reads at once', async () => {
