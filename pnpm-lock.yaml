@@ -188,8 +188,8 @@ importers:
         specifier: github:futin/release-kit#v1.3.0
         version: https://codeload.github.com/futin/release-kit/tar.gz/d6894b993bce3105dbe7de5230f49688fbecac44
       ui-kit:
-        specifier: github:futin/ui-kit#v0.3.0
-        version: https://codeload.github.com/futin/ui-kit/tar.gz/8bd29d2729a25f66a3cff1513c191ab3c84c4a6f(react@18.3.1)
+        specifier: github:futin/ui-kit#v0.3.1
+        version: https://codeload.github.com/futin/ui-kit/tar.gz/472f31c2cbd2a4319d7885d4acaa9ea5a846f2d4(react@18.3.1)
     devDependencies:
       '@axe-core/playwright':
         specifier: 4.13.0
@@ -1072,8 +1072,8 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
-  ui-kit@https://codeload.github.com/futin/ui-kit/tar.gz/8bd29d2729a25f66a3cff1513c191ab3c84c4a6f:
-    resolution: {gitHosted: true, integrity: sha512-Zo5paCqXgeV+SEn+XSmHG7VY1bITo5Lu4ywzLa6ZARF+ajE5KlewEcVdHR0Y5wDi/2StC6xl7r5AbdbmHvl2Fw==, tarball: https://codeload.github.com/futin/ui-kit/tar.gz/8bd29d2729a25f66a3cff1513c191ab3c84c4a6f}
+  ui-kit@https://codeload.github.com/futin/ui-kit/tar.gz/472f31c2cbd2a4319d7885d4acaa9ea5a846f2d4:
+    resolution: {gitHosted: true, integrity: sha512-4ULhsolkpvDTYR+JkD+9CHJW6EKIVsHhc0i5uCaQKr85Vdeo4A9lXydgeGEP6QTa6T/GiIe7IiLakwk/uyDfMg==, tarball: https://codeload.github.com/futin/ui-kit/tar.gz/472f31c2cbd2a4319d7885d4acaa9ea5a846f2d4}
     version: 0.0.0
     engines: {node: '>=22'}
     peerDependencies:
@@ -1840,7 +1840,7 @@ snapshots:
 
   typescript@5.9.3: {}
 
-  ui-kit@https://codeload.github.com/futin/ui-kit/tar.gz/8bd29d2729a25f66a3cff1513c191ab3c84c4a6f(react@18.3.1):
+  ui-kit@https://codeload.github.com/futin/ui-kit/tar.gz/472f31c2cbd2a4319d7885d4acaa9ea5a846f2d4(react@18.3.1):
     dependencies:
       react: 18.3.1
 
