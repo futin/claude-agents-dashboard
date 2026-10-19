@@ -1,6 +1,7 @@
 /**
  * The screenshot matrix (spec §4): every `SECTIONS` view at the six daylight breakpoint tiers (`fixed`), the two full-width tiers (`full`) and the four other
- * themes at 1280, plus one Sessions shot with the chat drawer open. Zero tolerance — the config's `maxDiffPixels: 0` and `threshold: 0`.
+ * themes at 1280, plus one Sessions shot with the chat drawer open. Zero tolerance — the config's `maxDiffPixels: 0` and `threshold: 0` — but for the cases
+ * that carry their own `threshold`.
  */
 import type { Page } from '@playwright/test';
 
@@ -17,7 +18,16 @@ import { DAYLIGHT_TIERS } from './tiers.js';
 
 interface ShotCase extends StageOpts {
   kind: 'shot' | 'detail' | 'triage' | 'git-matrix' | 'git-inspector' | 'git-branches' | 'projects-tiles' | 'projects-columns' | 'projects-lists' | 'releases';
+  /** Per-pixel colour tolerance overriding the config's `0`; `maxDiffPixels` stays `0`, so a pixel that really changes colour still fails the shot. */
+  threshold?: number;
 }
+
+/**
+ * Chromium rasterises the top-left rounded corner of the projects filter (`.pj-toolbar .pin-filter`, at a fractional y) two ways at random: the same 7
+ * pixels, every channel off by at most 1, in about 60% of runs (#235). Layout is identical in both, and neither an extra settled frame nor a whole-pixel left
+ * edge removes it, so the 1280 projects shots accept one-step colour noise — about 0.004 in pixelmatch's YIQ scale, 0.01 leaves a little headroom.
+ */
+const AA_NOISE = 0.01;
 
 const OTHER_THEMES: ThemeId[] = ['midnight', 'amber', 'graphite', 'nightshift'];
 
@@ -58,8 +68,8 @@ const CASES: ShotCase[] = [
   { ...GIT, width: 375, storage: { 'management.gitLayout': 'branches' }, kind: 'git-branches' },
   { ...GIT, width: 1280, storage: { 'management.gitLayout': 'branches' }, kind: 'git-branches' },
   // Projects with a pinned folder that is gone, so every layout shows the `Folder gone` chip.
-  { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'tiles' }, kind: 'projects-tiles' },
-  { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'columns' }, kind: 'projects-columns' },
+  { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'tiles' }, kind: 'projects-tiles', threshold: AA_NOISE },
+  { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'columns' }, kind: 'projects-columns', threshold: AA_NOISE },
   { ...PROJ, width: 375, storage: { 'management.projectsLayout': 'lists' }, kind: 'projects-lists' },
   // What's new, opened from the version chip: full screen on the phone (reached through the menu, whose last row the chip is), the 400px panel from `md`.
   { section: 'sessions', theme: 'daylight', width: 375, contentWidth: 'fixed', kind: 'releases' },
@@ -104,7 +114,10 @@ for (const c of CASES) {
     await stage(page, c);
     if (c.kind === 'releases') await openReleases(page);
     // The drawer is `position: fixed`, so its shots are the viewport: a full-page shot would append the board scrolled out beneath it.
-    await expect(page).toHaveScreenshot(title(c).replaceAll(' · ', '-') + '.png', { fullPage: c.kind !== 'releases' });
+    await expect(page).toHaveScreenshot(title(c).replaceAll(' · ', '-') + '.png', {
+      fullPage: c.kind !== 'releases',
+      ...(c.threshold !== undefined && { threshold: c.threshold })
+    });
   });
 }
 
