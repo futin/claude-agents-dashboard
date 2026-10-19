@@ -10,6 +10,7 @@ import type { ChildProcess } from 'node:child_process';
 import type { FetchClock, FetchError, RepoLastFetch } from '../../shared/types.js';
 import { archivedSessionIds } from './archived.js';
 import type { Config } from './config.js';
+import { anyRepoLockHeld, heldRepoLocks, resetRepoLocks } from './git-locks.js';
 import { listPinRows } from './management.js';
 import { getGitFetchSecs, getPinnedProjects } from './settings.js';
 
@@ -146,6 +147,8 @@ export function getFetchClock(): FetchClock {
 
 /** Test seam: wait out a fetch in flight (it would otherwise write its clock into the next case), then forget everything. */
 export async function resetGitFetch(): Promise<void> {
+  // Before the await: a fetch-all still waiting on a lock a case left held would otherwise never settle.
+  resetRepoLocks();
   if (inFlight) await inFlight.catch(() => undefined);
   inFlight = null;
   lastFetch.clear();
@@ -196,7 +199,8 @@ export async function tickGitFetch(config: Partial<Config>): Promise<void> {
   }
   // Off -> on with nobody watching never reaches here; the next `markGitWatched` enters the schedule instead of a stale tick doing it.
   if (changed || nextAtMs === null) nextAtMs = scheduleFrom(now(), secs);
-  if (inFlight === null && now() >= nextAtMs) void fetchAll(config);
+  // A quick pull or push holds its repo's lock for a second or two; the tick after it ends starts the fetch instead of queueing one behind it.
+  if (inFlight === null && !anyRepoLockHeld() && now() >= nextAtMs) void fetchAll(config);
 }
 
 let timer: NodeJS.Timeout | null = null;
@@ -220,9 +224,18 @@ export function stopGitFetchTimer(): void {
  */
 export function fetchAll(config: Partial<Config>): Promise<FetchClock> {
   if (inFlight) return inFlight;
-  const p = runFetch(config).finally(() => { if (inFlight === p) inFlight = null; });
+  // The wait for held quick-op locks lives inside the stored promise, so `fetchInFlight()` covers it and no new lock is taken while it waits (quick
+  // pull/push spec §Shared preconditions): the set only shrinks, and the fetch never meets git's own ref lock.
+  const p = Promise.all(heldRepoLocks())
+    .then(() => runFetch(config))
+    .finally(() => { if (inFlight === p) inFlight = null; });
   inFlight = p;
   return p;
+}
+
+/** Fetch-all has been asked for and has not ended, including while it waits for a quick op's lock. A quick op refuses then. */
+export function fetchInFlight(): boolean {
+  return inFlight !== null;
 }
 
 async function runFetch(config: Partial<Config>): Promise<FetchClock> {
@@ -281,6 +294,18 @@ async function fetchGroups(config: Partial<Config>, run: FetchRunner): Promise<v
 }
 
 /** One group, never rejecting: whatever goes wrong is this group's entry, not the others'. */
+/**
+ * The env overlay for a git call that talks to origin: never prompt, and BatchMode ssh unless the user chose their own ssh (D5). Null when `git config`
+ * itself fails — 0 is set, 1 is unset, anything else is git failing, which callers treat as a skip rather than a guess about the user's ssh.
+ */
+export async function promptlessEnv(cwd: string, run: FetchRunner): Promise<Record<string, string> | null> {
+  const sshCommand = await run(cwd, ['config', '--get', 'core.sshCommand'], READ_ENV);
+  if (sshCommand.code !== 0 && sshCommand.code !== 1) return null;
+  // The user's own ssh, however they chose it, is left exactly as set.
+  const userSsh = sshCommand.code === 0 || process.env.GIT_SSH_COMMAND !== undefined || process.env.GIT_SSH !== undefined;
+  return userSsh ? FETCH_ENV : { ...FETCH_ENV, GIT_SSH_COMMAND: SSH_BATCH };
+}
+
 async function fetchGroup(toplevels: string[], run: FetchRunner): Promise<void> {
   const cwd = toplevels[0];
   const skip = (): void => { for (const t of toplevels) lastFetch.delete(t); };
@@ -289,13 +314,8 @@ async function fetchGroup(toplevels: string[], run: FetchRunner): Promise<void> 
     const remotes = await run(cwd, ['remote'], READ_ENV);
     if (remotes.code !== 0 || !remotes.stdout.split('\n').some(l => l.trim() === 'origin')) return skip();
 
-    // 0 is set, 1 is unset; anything else is git failing, which is a skip rather than a guess about the user's ssh.
-    const sshCommand = await run(cwd, ['config', '--get', 'core.sshCommand'], READ_ENV);
-    if (sshCommand.code !== 0 && sshCommand.code !== 1) return skip();
-
-    // The user's own ssh, however they chose it, is left exactly as set; otherwise BatchMode for the cleaner error (D5).
-    const userSsh = sshCommand.code === 0 || process.env.GIT_SSH_COMMAND !== undefined || process.env.GIT_SSH !== undefined;
-    const env = userSsh ? FETCH_ENV : { ...FETCH_ENV, GIT_SSH_COMMAND: SSH_BATCH };
+    const env = await promptlessEnv(cwd, run);
+    if (env === null) return skip();
 
     try {
       const r = await run(cwd, [...FETCH_ARGS], env);

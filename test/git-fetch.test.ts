@@ -18,9 +18,10 @@ import path from 'node:path';
 import { loadConfig } from '../server/lib/config.js';
 import type { Config } from '../server/lib/config.js';
 import {
-  FETCH_ARGS, classifyFetchError, fetchAll, getFetchClock, isGitWatched, lastFetchFor, makeFetchRunner, markGitWatched, overrideFetchClock, overrideFetchRunner,
-  resetGitFetch, tickGitFetch,
+  FETCH_ARGS, classifyFetchError, fetchAll, fetchInFlight, getFetchClock, isGitWatched, lastFetchFor, makeFetchRunner, markGitWatched, overrideFetchClock,
+  overrideFetchRunner, resetGitFetch, tickGitFetch,
 } from '../server/lib/git-fetch.js';
+import { anyRepoLockHeld, heldRepoLocks, tryLockRepo } from '../server/lib/git-locks.js';
 import type { FetchRunner } from '../server/lib/git-fetch.js';
 import { gitStatsMemoKeys, readGitStats } from '../server/lib/git-stats.js';
 import { encodeProjectDir, overrideClaudeRoots } from '../server/lib/management.js';
@@ -675,6 +676,103 @@ export async function run(): Promise<number> {
       await fetchAll(cfg);
       assert.strictEqual(lastFetchFor(b), null);
       assert.ok(lastFetchFor(a));
+    });
+  }));
+
+  // Quick pull/push (spec docs/superpowers/specs/2026-10-19-quick-pull-push-design.md §Shared preconditions): a held repo lock makes fetch-all wait.
+  const settle = (): Promise<void> => new Promise(r => setTimeout(r, 30));
+
+  check(await test('L1. fetchAll awaits a held repo lock before it runs, then fetches', async () => {
+    await withGitFetch(async ({ fx, cfg, pin }) => {
+      pin(cloneOf(fx, 'a'));
+      const s = spy();
+      overrideFetchRunner(s.run);
+      const release = tryLockRepo('/x');
+      assert.ok(release);
+      const p = fetchAll(cfg);
+      await settle();
+      assert.strictEqual(s.calls.length, 0, 'no git call while the lock is held');
+      assert.strictEqual(getFetchClock().runningSinceMs, null);
+      assert.strictEqual(fetchInFlight(), true);
+      release();
+      await p;
+      assert.strictEqual(s.fetches().length, 1);
+      assert.strictEqual(fetchInFlight(), false);
+    });
+  }));
+
+  check(await test('L2. a second fetchAll while the first waits on a lock joins it', async () => {
+    await withGitFetch(async ({ fx, cfg, pin }) => {
+      pin(cloneOf(fx, 'a'));
+      const s = spy();
+      overrideFetchRunner(s.run);
+      const release = tryLockRepo('/x')!;
+      const p1 = fetchAll(cfg);
+      const p2 = fetchAll(cfg);
+      assert.strictEqual(p1, p2);
+      release();
+      await p1;
+      assert.strictEqual(s.fetches().length, 1);
+    });
+  }));
+
+  check(await test('L3. tickGitFetch starts nothing while a repo lock is held, and fetches on the tick after release', async () => {
+    await withGitFetch(async ({ fx, cfg, pin }) => {
+      pin(cloneOf(fx, 'a'));
+      const s = spy();
+      overrideFetchRunner(s.run);
+      let t = 1_000_000;
+      overrideFetchClock(() => t);
+      setSecs(60);
+      markGitWatched();
+      const release = tryLockRepo('/x')!;
+      t += 1000;
+      await tickGitFetch(cfg);
+      assert.strictEqual(fetchInFlight(), false);
+      release();
+      t += 1000;
+      await tickGitFetch(cfg);
+      assert.strictEqual(fetchInFlight(), true);
+      await until(() => !fetchInFlight(), 'the ticked fetch to end');
+      assert.strictEqual(s.fetches().length, 1);
+    });
+  }));
+
+  check(await test('L4. resetGitFetch with a lock held and fetchAll waiting on it returns', async () => {
+    await withGitFetch(async ({ fx, cfg, pin }) => {
+      pin(cloneOf(fx, 'a'));
+      overrideFetchRunner(spy(c => (isFetch(c) ? answer(0) : undefined)).run);
+      tryLockRepo('/x');
+      const p = fetchAll(cfg);
+      const reset = resetGitFetch().then(() => 'reset');
+      const winner = await Promise.race([reset, new Promise(r => setTimeout(() => r('hung'), 2000))]);
+      assert.strictEqual(winner, 'reset');
+      assert.strictEqual(anyRepoLockHeld(), false);
+      await p;
+    });
+  }));
+
+  check(await test('L5. tryLockRepo: same common dir refused, another free, release frees it, double release harmless', async () => {
+    await withGitFetch(async () => {
+      const a = tryLockRepo('/repo/a.git');
+      assert.ok(a);
+      assert.strictEqual(tryLockRepo('/repo/a.git'), null);
+      const b = tryLockRepo('/repo/b.git');
+      assert.ok(b);
+      assert.strictEqual(heldRepoLocks().length, 2);
+      let bothReleased = false;
+      void Promise.all(heldRepoLocks()).then(() => { bothReleased = true; });
+      a();
+      a();
+      const again = tryLockRepo('/repo/a.git');
+      assert.ok(again, 'a released lock can be taken again');
+      await settle();
+      assert.strictEqual(bothReleased, false, 'b is still held');
+      b();
+      await settle();
+      assert.strictEqual(bothReleased, true);
+      again();
+      assert.strictEqual(anyRepoLockHeld(), false);
     });
   }));
 
