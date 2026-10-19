@@ -593,6 +593,108 @@ export function run(): number {
     assert.strictEqual(JSON.parse(spawnSync(process.execPath, [kaizen, ctx([20_000, 600_000])], { encoding: 'utf8' }).stdout).perTurn.neverCompacted, true);
   })) p++; else f++;
 
+  // --- compaction replays and compact_boundary (#174, #226) ----------------
+  // Each case mirrors one in plugin/skills/kaizen/test/compactions.test.mjs, so the two implementations are pinned to the same answers.
+  const boundaryRec = (iso: string, opts: { sidechain?: boolean } = {}) => ({
+    type: 'system', subtype: 'compact_boundary', ...(opts.sidechain ? { isSidechain: true } : {}), timestamp: iso,
+    content: 'Conversation compacted', compactMetadata: { trigger: 'auto', preTokens: 999, durationMs: 1000 }
+  });
+  const summaryRec = (iso: string, text = 's') => ({ type: 'user', isCompactSummary: true, timestamp: iso, message: { role: 'user', content: text } });
+  const subUsage = { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 400, cache_read_input_tokens: 1000 };
+  const withSubagent = (records: unknown[]) => {
+    const file = fixture(records);
+    subagentFile(file, 'abc123', [1, 2].map(i => usageRec(subUsage, `2026-07-01T10:00:0${i}Z`, { id: `sub_${i}` })));
+    return file;
+  };
+  const callUsage = { input_tokens: 0, output_tokens: 4, cache_creation_input_tokens: 10, cache_read_input_tokens: 0 };
+  /** Agent launch + ack + notification, a Bash call + result, then a boundary, its summary, that whole prefix replayed, and one more turn. */
+  const replayWorld = (bashResult: (iso: string) => unknown) => {
+    const pre = [
+      toolUseRec([tu('toolu_A', 'Agent', { subagent_type: 'Explore', description: 'look' })], '2026-07-01T10:00:00Z', callUsage, 'msg_A'),
+      resultRec('toolu_A', '2026-07-01T10:00:01Z', { content: 'Async agent launched successfully. agentId: abc123', toolUseResult: { isAsync: true, agentId: 'abc123' } }),
+      humanRec('<task-notification><task-id>abc123</task-id><status>completed</status><subagent_tokens>500</subagent_tokens></task-notification>', '2026-07-01T10:00:02Z'),
+      toolUseRec([tu('toolu_B', 'Bash', { command: 'ls' })], '2026-07-01T10:00:03Z', callUsage, 'msg_B'),
+      bashResult('2026-07-01T10:00:04Z')
+    ];
+    return withSubagent([...pre, boundaryRec('2026-07-01T10:00:05Z'), summaryRec('2026-07-01T10:00:06Z'), ...pre,
+      usageRec({ cache_read_input_tokens: 50 }, '2026-07-01T10:00:07Z', { id: 'msg_end' })]);
+  };
+  const okBash = (iso: string) => resultRec('toolu_B', iso, { content: 'x'.repeat(40) });
+  const errBash = (iso: string) => resultRec('toolu_B', iso, { isError: true, content: '<tool_use_error>boom</tool_use_error>' });
+  const toolOf = (a: { byTool: { tool: string }[] }, name: string) => a.byTool.find(t => t.tool === name) as any;
+
+  if (test('tool calls, results and Agent launches replayed after a compaction are counted once', () => {
+    const a = analyzeSession(replayWorld(okBash))!;
+    assert.strictEqual(toolOf(a, 'Bash').count, 1);
+    assert.strictEqual(toolOf(a, 'Agent').count, 1);
+    assert.strictEqual(toolOf(a, 'Bash').resultTokens, 10);
+    assert.strictEqual(a.bySubagent.length, 1);
+    assert.strictEqual(a.subagentTotals.count, 1);
+    assert.deepStrictEqual(a.subagentTotals.usage, { input: 200, output: 100, cacheCreation: 800, cacheRead: 2000, combined: 3100, billableApprox: 1100 });
+  })) p++; else f++;
+
+  if (test('a replayed error result is one tool error, and its replayed call is not a retry', () => {
+    const a = analyzeSession(replayWorld(errBash))!;
+    assert.strictEqual(a.errorSignals.toolErrors, 1);
+    assert.strictEqual(a.errorSignals.retries, 0);
+    assert.strictEqual(toolOf(a, 'Bash').errors, 1);
+  })) p++; else f++;
+
+  if (test('two launch rows resolving to one subagent file add its transcript to usage once', () => {
+    const tur = { toolUseResult: { agentId: 'abc123', totalTokens: 500 }, content: 'done' };
+    const a = analyzeSession(withSubagent([
+      toolUseRec([tu('toolu_A', 'Agent', { subagent_type: 'Explore', description: 'look' })], '2026-07-01T10:00:00Z', callUsage, 'msg_A'),
+      resultRec('toolu_A', '2026-07-01T10:00:01Z', tur),
+      toolUseRec([tu('toolu_C', 'Agent', { subagent_type: 'Explore', description: 'again' })], '2026-07-01T10:00:02Z', callUsage, 'msg_C'),
+      resultRec('toolu_C', '2026-07-01T10:00:03Z', tur)
+    ]))!;
+    assert.strictEqual(a.bySubagent.length, 2);
+    assert.strictEqual(a.subagentTotals.count, 2);
+    assert.strictEqual(a.subagentTotals.usage.combined, 3100);
+  })) p++; else f++;
+
+  if (test('a compact summary quoting correction words is not counted as a user correction', () => {
+    const a = analyzeSession(fixture([
+      usageRec({ cache_read_input_tokens: 100 }, '2026-07-01T10:00:00Z', { id: 'msg_1' }),
+      summaryRec('2026-07-01T10:00:01Z', "The user said: no, that's wrong, don't do it, revert"),
+      humanRec('no, wrong file', '2026-07-01T10:00:02Z')
+    ]))!;
+    assert.strictEqual(a.errorSignals.userCorrections, 1);
+  })) p++; else f++;
+
+  /** Turns growing to 600k with no drop below half the peak, and a compact_boundary record after the first turn. */
+  const ctxWithBoundary = (opts: { sidechain?: boolean } = {}) => fixture([
+    usageRec({ cache_read_input_tokens: 20_000 }, '2026-07-01T10:00:00Z'),
+    boundaryRec('2026-07-01T10:00:30Z', opts), summaryRec('2026-07-01T10:00:31Z'),
+    usageRec({ cache_read_input_tokens: 400_000 }, '2026-07-01T10:01:00Z'),
+    usageRec({ cache_read_input_tokens: 600_000 }, '2026-07-01T10:02:00Z')
+  ]);
+
+  if (test('neverCompacted: a main-chain compact_boundary reads false even with no drop below half the peak', () => {
+    const a = analyzeSession(ctxWithBoundary())!;
+    assert.strictEqual(a.perTurn.maxCombined, 600_000);
+    assert.strictEqual(a.perTurn.neverCompacted, false);
+  })) p++; else f++;
+
+  if (test('neverCompacted: a compact_boundary on a sidechain record only does not count — still true', () => {
+    assert.strictEqual(analyzeSession(ctxWithBoundary({ sidechain: true }))!.perTurn.neverCompacted, true);
+  })) p++; else f++;
+
+  if (test('plugin kaizen.mjs agrees with analyzeSession on a compacted, replayed session', () => {
+    const kaizen = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../plugin/skills/kaizen/kaizen.mjs');
+    for (const file of [replayWorld(okBash), replayWorld(errBash), ctxWithBoundary(), ctxWithBoundary({ sidechain: true })]) {
+      const r = spawnSync(process.execPath, [kaizen, file], { encoding: 'utf8' });
+      assert.strictEqual(r.status, 0, r.stderr);
+      const k = JSON.parse(r.stdout);
+      const a = analyzeSession(file)!;
+      assert.deepStrictEqual(k.byTool, a.byTool);
+      assert.deepStrictEqual(k.errorSignals, a.errorSignals);
+      assert.deepStrictEqual(k.perTurn, a.perTurn);
+      assert.deepStrictEqual(k.subagentTotals, a.subagentTotals);
+      assert.strictEqual(k.bySubagent.length, a.bySubagent.length);
+    }
+  })) p++; else f++;
+
   if (test('missing file → null', () => {
     assert.strictEqual(analyzeSession('/no/such/transcript.jsonl'), null);
   })) p++; else f++;
