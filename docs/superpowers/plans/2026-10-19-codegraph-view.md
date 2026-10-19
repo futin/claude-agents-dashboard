@@ -52,7 +52,8 @@ any task; it wins over this plan on behaviour, this plan wins on names.
 **Files:**
 - Modify: `shared/types.ts` (after the Git block, ~line 1740)
 - Create: `server/lib/codegraph.ts`
-- Create: `test/fixtures/codegraph-status-1.6.2.json` — capture with `CODEGRAPH_NO_UPDATE_CHECK=1 codegraph status --json` in this repo; values below are
+- Create: `test/fixtures/codegraph-status-1.6.2.json` — capture with `CODEGRAPH_NO_UPDATE_CHECK=1 codegraph status --json` in this repo, then replace
+  `projectPath` / `indexPath` with `/repo` and `/repo/.codegraph` (no home path in the repo); keep the extra fields, the parser must ignore them. Values below are
   from the 2026-10-19 capture (fileCount 416, nodeCount 8254, edgeCount 33969, dbSizeBytes 36786176, extraction 27/27, state `complete`). If your capture
   differs, use the capture's numbers in the assertions.
 - Create: `test/codegraph.test.ts`; register in `test/run-all.ts`
@@ -76,9 +77,11 @@ any task; it wins over this plan on behaviour, this plan wins on names.
   - `type CodegraphRunner = (cwd: string, args: string[], timeoutMs: number | null) => Promise<{ code: number; stdout: string; stderr: string }>` —
     resolves on any exit code; rejects only when the spawn fails (error keeps its `code`, e.g. `'ENOENT'`) or the timeout fires (`code: 'ETIMEDOUT'`).
   - `defaultCodegraphRunner: CodegraphRunner`, `overrideCodegraphRunner(r: CodegraphRunner | null): void`, `currentCodegraphRunner(): CodegraphRunner`
-  - `findGraphRoot(dir: string): Promise<string | null>` — `dir` or nearest ancestor with `.codegraph/codegraph.db` (a file), else null
+  - `findGraphRoot(dir: string): Promise<string | null>` — `dir` or nearest ancestor whose `.codegraph/` holds `codegraph.db` (a file) **or** a live
+    `rebuild.pid` (1.6.2 `index` unlinks and recreates the DB — `CodeGraph.recreate`, bundle `bin/codegraph.js:849-861` — so mid-rebuild the file can be
+    briefly absent), else null
   - `parseCodegraphStatus(stdout: string): CodegraphStats | 'uninitialized'` — throws `Error` with a one-line reason on non-JSON / missing numeric fields
-  - `readPidFile(file: string): Promise<{ pid: number; startedAtMs: number | null } | null>` — JSON `{pid, startedAt}` or a bare integer; null when absent
+  - `readPidFile(file: string): Promise<{ pid: number; startedAtMs: number | null } | null>` — JSON `{pid, startedAt}` (`startedAt` is epoch ms, passed through as `startedAtMs`) or a bare integer; null when absent
     or unparsable
   - `isPidAlive(pid: number): boolean` — `process.kill(pid, 0)`; `EPERM` counts as alive
   - `livePid(file): Promise<{ pid; startedAtMs } | null>` — `readPidFile` + `isPidAlive`
@@ -96,9 +99,12 @@ any task; it wins over this plan on behaviour, this plan wins on names.
   - `findGraphRoot`: repo with DB → itself; `repo/a/b` (no own DB) → repo; folder with bare `.codegraph/` and no DB, under no indexed parent → null.
   - `readPidFile`: JSON object → `{pid, startedAtMs}`; bare `"12345\n"` → `{pid: 12345, startedAtMs: null}`; missing → null; garbage → null.
   - `livePid`: own `process.pid` → non-null; dead pid → null.
-  - `readCodegraphStatus` with a fake runner: dead pin (`path: null`) → `missing`, runner never called; no graph root → `none`, runner never called;
+  - `findGraphRoot`: folder with `.codegraph/` holding no DB but a `rebuild.pid` with own `process.pid` → itself.
+  - `readCodegraphStatus` with a fake runner: dead pin (`path: null`) → `missing`, runner never called; `listed: false` pin **with** a path (spec:48,
+    `listPinRows` returns these at `server/lib/management.ts:728`) → `missing`, runner never called; no graph root → `none`, runner never called;
     subdirectory pin → runner called with `cwd` = the **pin path** and args `['status','--json']`, result `ok` with `root` = repo root; runner exit ≠ 0 →
-    `error` whose message is the last non-empty stderr line; runner rejects `ETIMEDOUT` → `error` "codegraph status timed out"; runner rejects `ENOENT`
+    `error` whose message is the last non-empty stderr line, else stdout's, else `exit <code>`; stdout `not json` with exit 0 → `error` with the
+    parser's reason; runner rejects `ETIMEDOUT` → `error` "codegraph status timed out"; runner rejects `ENOENT`
     with the cwd present → `cli-missing`; `ENOENT` after the folder was removed → `missing`; `initialized:false` answer → `none`.
 - [ ] **Step 2: Run** `pnpm exec tsx test/run-all.ts` (or the module alone if the harness allows) — expect the new cases to fail on missing exports.
 - [ ] **Step 3: Implement** the types and `server/lib/codegraph.ts` to the Interfaces above. `defaultCodegraphRunner` uses `execFile('codegraph', args,
@@ -117,34 +123,42 @@ any task; it wins over this plan on behaviour, this plan wins on names.
 - Consumes: everything Task 1 produces.
 - Produces:
   - `readCodegraph(config: Partial<Config>): Promise<CodegraphResponse>`
-  - `startCodegraphRun(config: Partial<Config>, dirName: string, kind: CodegraphRunKind): 'started' | 'not-pinned' | 'not-indexed' | 'busy'`
-    (synchronous decision; the launch continues in the background)
+  - `startCodegraphRun(config: Partial<Config>, dirName: string, kind: CodegraphRunKind): Promise<'started' | 'not-pinned' | 'not-indexed' | 'busy'>`
+    — async (it awaits `findGraphRoot` / `livePid`), so it takes a per-`dirName` in-flight mark **synchronously, before its first `await`**; a second call
+    seeing the mark answers `busy`. The mark is released on a refusal or becomes the run's record on `started`; the launch continues in the background.
   - `resetCodegraph(): void` (test seam: clears cache, runs, lastRuns, seen-rebuild set), `codegraphRunsSettled(): Promise<void>` (test seam: resolves when
     every in-flight run has ended)
   - `CODEGRAPH_TTL_MS = 25_000`, `CODEGRAPH_CONCURRENCY = 2`, `WATCHER_SYNCING_TEXT = 'watcher is syncing it'`
 
 Behaviour (spec §Source, §Cost, §API, §Levels last paragraph):
-- Cache is a `Map<root-or-dirName, { read: StatusRead; atMs: number }>`. On a GET: a repo with **no entry** is read now (awaited, through a limiter of
+- Cache is a `Map<root-or-dirName, { read: StatusRead; atMs: number }>`. Keyed by root on purpose: a repo pin and its subdirectory pin share one entry,
+  one `run` and one `lastRun`, and both rows show the same run. On a GET: a repo with **no entry** is read now (awaited, through a limiter of
   `CODEGRAPH_CONCURRENCY`); an entry older than the TTL answers from the cache and starts **one** background refresh (never two for one repo); a fresh entry
   answers from the cache. No timer anywhere.
 - Every GET also reads, per repo with a root: `daemon.pid` (→ `watching`, `watcherSinceMs`), `rebuild.pid` (→ `rebuildLive`). Rebuild live and no own run →
   `run = { kind: 'reindex', startedAtMs: <its startedAt ?? now> }`. A root seen with a live rebuild on the last GET and dead now → drop its cache entry first.
-- Rebuild live and the read is `error` (or the refresh failed): keep the previous `ok` stats; with no previous stats → `state: 'building'`.
+- Rebuild live and the read is anything but `ok` (`error`, `none` from a DB recreated mid-read, a failed refresh): keep the previous `ok` stats; with no
+  previous stats → `state: 'building'`.
 - Any read of kind `cli-missing` → `cli: 'missing'` on the payload.
-- `startCodegraphRun`: pin not in the stored pin list → `not-pinned`; dead pin or no graph root → `not-indexed`; own run on that root, a live `rebuild.pid`,
+- `startCodegraphRun`: pin not in the stored pin list, or `listed: false` (as `serveOpenFolder` refuses, `server/api.ts:1807`) → `not-pinned`;
+  `path: null` or no graph root → `not-indexed`; own run on that root, a live `rebuild.pid`,
   or a live `codegraph.lock` while `daemon.pid` is not live → `busy`; else record `run`, note `watchingAtLaunch`, launch via the runner with `timeoutMs` null.
 - Run end: clear `run`; `lastRun = { kind, ok, endedAtMs, message }` where `ok` is exit 0, **or** (exit ≠ 0 **and** stdout+stderr contains
   `LOCK_LOSS_TEXT` **and** `watchingAtLaunch`) with message `WATCHER_SYNCING_TEXT`; otherwise message = last non-empty stderr line, else stdout's, else
   `exit <code>`. A spawn rejection is a failed lastRun with its message. A successful lastRun replaces any failed one (that is how a failure clears). Drop the
   repo's cache entry.
 
-- [ ] **Step 1: Write the failing tests** (fake runner counting calls per `(cwd, args[0])`, injectable clock or real time with small waits; pins via
+- [ ] **Step 1: Write the failing tests** (fake runner counting calls per `(cwd, args[0])`, an injectable clock (`setCodegraphClock(now: (() => number) | null)` test seam — real waits cannot reach a 25 s TTL); pins via
   `setPinned` + planted transcripts the way `test/api-git-fetch.test.ts` `plantProject` does):
   - Cold GET reads each indexed repo once; a second GET within the TTL makes **zero** status calls; a GET after the TTL answers the old stats and makes
     exactly one background call; two GETs after the TTL still make one.
   - Seven repos cold with a runner that records concurrency → peak concurrency ≤ 2.
   - No GET → runner never called (no timer exists).
-  - `daemon.pid` with `process.pid` → `watching true`, `watcherSinceMs` = its `startedAt`; dead pid → `false`.
+  - `daemon.pid` with `process.pid` → `watching true`, `watcherSinceMs` = its `startedAt`; dead pid → `false`; no `daemon.pid` → `watching false`,
+    `watcherSinceMs null`; no `rebuild.pid` → `rebuildLive false`, `run null`.
+  - Rebuild live, earlier stats cached, and the refresh reads `none` (DB absent) → still `state 'ok'` with the earlier stats.
+  - `listed: false` pin with a path → `startCodegraphRun` answers `not-pinned`, runner never called.
+  - Two `startCodegraphRun` calls via `Promise.all` on the same dirName → one `started`, one `busy`, exactly one launch.
   - Live `rebuild.pid` (own pid, `startedAt: 1000`) and no own run → `run {kind:'reindex', startedAtMs:1000}`, `rebuildLive true`; runner answering
     `error` while rebuild live and earlier stats cached → `state 'ok'` with the earlier stats; with no earlier stats → `state 'building'`.
   - Rebuild pid live on GET 1, dead on GET 2 (rewrite the file with a dead pid) → GET 2 makes a fresh status call although the TTL has not passed.
@@ -177,6 +191,7 @@ Behaviour (spec §Source, §Cost, §API, §Levels last paragraph):
   - Refusal order on `/api/codegraph/run`: `GET` → 405; LAN peer, no token → 403 `bad token`; LAN + token, body `{}` → 400; `{dirName:'nope',
     kind:'sync'}` → 403 `{error:'not a pinned project'}`; pinned folder without DB → 404 `{error:'not indexed'}`; `kind:'rebuild'` → 400;
     valid → 200 `{ok:true}`; the same POST again before the fake run resolves → 409 `{error:'already running'}`, and the runner saw exactly one `sync`.
+  - Two identical valid POSTs sent concurrently (`Promise.all`) → one 200, one 409, the runner saw exactly one `sync`.
   - A refused request (each of 403/400/404) launches nothing (runner spy saw no `sync`/`index`).
   - Subdirectory pin → 200 and the runner's cwd is the repo root.
 - [ ] **Step 2: Run** — expect FAIL.
@@ -207,6 +222,8 @@ Behaviour (spec §Source, §Cost, §API, §Levels last paragraph):
   PATH."`, `codegraphVerdict(problem, repo)`, `codegraphSteps(problem, repo)`, `codegraphChip(problem, repo)`, `codegraphPill(problem, repo)`,
   `codegraphQuietLine(repo, nowMs)`, `CODEGRAPH_UP_TO_DATE = 'up to date'`, `CODEGRAPH_NOT_INDEXED(dir)`, `CODEGRAPH_FOLDER_GONE = 'Folder gone'`,
   `CODEGRAPH_BUILDING_LINE = 'Indexing… — numbers when it finishes'`, `reindexConfirmText(name, watching)`, `compactCount(n)`, `formatDbSize(bytes)`,
+  `ageAt(ms, nowMs)` (the `formatAgo` buckets — `client/src/lib/format.ts:29` reads `Date.now()` itself — against a passed clock; make `formatAgo` delegate
+  to it rather than duplicating the buckets; the quiet line appends " ago" itself, matching the mock's "indexed 2h ago"),
   `extractorCell(stats)`, key labels `Sync` / `Syncing` / `Reindex` / `Reindexing`, popover rows and subs, `CODEGRAPH_NEEDS_TOKEN`.
 - Produces (`codegraphLayouts.ts`): `CodegraphLayout = 'inbox' | 'matrix' | 'inspector'`, `CODEGRAPH_LAYOUTS`, `DEFAULT_CODEGRAPH_LAYOUT = 'inbox'`,
   `parseCodegraphLayout(v)`, `codegraphLayoutsFor(narrow)`, `drawableCodegraphLayout(layout, narrow)` — same contract as `gitLayouts.ts`.
@@ -245,7 +262,7 @@ POST notes: 409 → "`<name>` is already running a sync or reindex."; 404 → "`
 - Modify: `test/codegraph-client.test.ts`
 
 **Interfaces:**
-- Consumes: `startGitPoll`, `createPollGate` (as `useGitStats` uses them), `authHeaders`, `useAnswerToken`, `refusalKind`, `READ_ONLY_TEXT`, the
+- Consumes: `startGitPoll` (`client/src/lib/gitPoll.ts`), `createPollGate` (`client/src/lib/gitClock.ts`) (as `useGitStats` uses them), `authHeaders`, `useAnswerToken`, `refusalKind`, `READ_ONLY_TEXT`, the
   remote-answer state the way `useGitSync` reads `tokenRequired` / `writeAccess`.
 - Produces:
   - `codegraphPoll.ts`: `CODEGRAPH_FAST_POLL_MS = 3000`; `hasLiveRun(data: CodegraphResponse | null): boolean`; `runNote(status: number, body: unknown,
@@ -282,7 +299,9 @@ repo's `run` is set, or when `writeAccess === 'none'`. `cli: 'missing'` draws th
   none is up, start your own on spare ports and kill it by its recorded pid). Check: each layout renders the real pins; tile click filters and clears;
   phone width (375) draws Inbox for a stored Matrix with no horizontal scroll; Sync on a repo with pending changes shows `Syncing`, polls at 3 s, then the
   repo reads quiet; Reindex opens the confirm and Cancel closes it (do **not** confirm a reindex on the user's repos); midnight and daylight themes show no
-  hardcoded color. Screenshot each layout.
+  hardcoded color. Screenshot each layout. Then the `PATH` duty (spec §Source): run the prod shape on a spare port (`WEB_PORT=<spare> pnpm start` in the
+  background, record its pid), `GET /api/codegraph` → `cli: 'ok'`, kill that pid. `codegraph` here is an nvm `#!/usr/bin/env node` shim, so `cli: 'missing'`
+  means the server's `PATH` lacks nvm's bin dir — report it, do not edit shell config.
 - [ ] **Step 3: Commit** `feat(management): CodeGraph sub-view`.
 
 ### Task 7: Docs, visual baselines
@@ -293,7 +312,8 @@ repo's `run` is set, or when `writeAccess === 'none'`. `cli: 'missing'` draws th
 - Modify: `docs/overview.md` (§Map line, API table rows for both routes, `lib/` map for both server modules), `.claude/CLAUDE.md` (§Code rules: one sentence
   that `lib/codegraph.ts` launches the `codegraph` CLI, whose update check is disabled by `CODEGRAPH_NO_UPDATE_CHECK=1` / `CODEGRAPH_NO_DOWNLOAD=1` — a local
   launch, not a third outbound kind), `test/visual/` (a `codegraph` fixture beside `fixtures/git-stats.ts` and shots for the three layouts plus phone Inbox,
-  per `docs/subsystems/visual-tests.md`)
+  per `docs/subsystems/visual-tests.md`): register `'/api/codegraph'` in `test/visual/fixtures/index.ts` (route map ~line 49), extend the closed `kind`
+  union in `test/visual/views.spec.ts:19` with the new kinds, add the four cases, and raise `EXPECTED_SHOTS` there from 86 to 90
 
 - [ ] **Step 1:** Write the docs; run `pnpm exec tsx test/outbound.test.ts` (or the full harness module) — PASS (the doc half must still pass).
 - [ ] **Step 2:** Add the visual fixture and specs; `pnpm build && pnpm test:visual --update-snapshots`, then `pnpm test:visual` — PASS.
