@@ -2005,3 +2005,27 @@ export interface SessionsResponse {
   /** Set only when the scan failed and an empty snapshot is returned. */
   error?: boolean;
 }
+
+/** One scheduled job as `shared/schedule-file.ts` parses it from `<name>.md` in the schedules folder. */
+export interface ScheduleJob {
+  /** The filename without `.md`; also the launchd label suffix and the log key. */
+  name: string;
+  /** Five-field cron, local time of the machine that runs it. */
+  cron: string;
+  machines: ('mac' | 'wsl')[];
+  run: 'shell' | 'claude';
+  /** `pinned` = every pinned repo, a list = only those pins (by name or dirName), null = one step in `cwd`. */
+  foreach: 'pinned' | string[] | null;
+  cwd: string | null;
+  enabled: boolean;
+  model: string | null;
+  effort: string | null;
+  permissionMode: 'plan' | 'acceptEdits' | 'auto' | null;
+  allowedTools: string[] | null;
+  maxTurns: number | null;
+  timeoutMs: number;
+  /** Everything after the frontmatter, trimmed: the prompt for `claude`, the whole body for `shell`. */
+  body: string;
+  /** `shell` only: the inner text of the body's first ```bash fence. */
+  script: string | null;
+}
