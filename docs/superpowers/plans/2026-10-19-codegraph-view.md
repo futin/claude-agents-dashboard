@@ -126,6 +126,8 @@ any task; it wins over this plan on behaviour, this plan wins on names.
   - `startCodegraphRun(config: Partial<Config>, dirName: string, kind: CodegraphRunKind): Promise<'started' | 'not-pinned' | 'not-indexed' | 'busy'>`
     — async (it awaits `findGraphRoot` / `livePid`), so it takes a per-`dirName` in-flight mark **synchronously, before its first `await`**; a second call
     seeing the mark answers `busy`. The mark is released on a refusal or becomes the run's record on `started`; the launch continues in the background.
+    Runs are recorded **per graph root**: after the last `await`, the own-run-on-this-root check and recording the run are one synchronous step, so a repo
+    pin and its subdirectory pin racing each other launch once.
   - `resetCodegraph(): void` (test seam: clears cache, runs, lastRuns, seen-rebuild set), `codegraphRunsSettled(): Promise<void>` (test seam: resolves when
     every in-flight run has ended)
   - `CODEGRAPH_TTL_MS = 25_000`, `CODEGRAPH_CONCURRENCY = 2`, `WATCHER_SYNCING_TEXT = 'watcher is syncing it'`
@@ -159,6 +161,8 @@ Behaviour (spec §Source, §Cost, §API, §Levels last paragraph):
   - Rebuild live, earlier stats cached, and the refresh reads `none` (DB absent) → still `state 'ok'` with the earlier stats.
   - `listed: false` pin with a path → `startCodegraphRun` answers `not-pinned`, runner never called.
   - Two `startCodegraphRun` calls via `Promise.all` on the same dirName → one `started`, one `busy`, exactly one launch.
+  - Mirror: repo pin and its subdirectory pin via `Promise.all` → one `started`, one `busy`, exactly one launch.
+  - (Task 2 also Produces the test seam `setCodegraphClock(now: (() => number) | null): void`.)
   - Live `rebuild.pid` (own pid, `startedAt: 1000`) and no own run → `run {kind:'reindex', startedAtMs:1000}`, `rebuildLive true`; runner answering
     `error` while rebuild live and earlier stats cached → `state 'ok'` with the earlier stats; with no earlier stats → `state 'building'`.
   - Rebuild pid live on GET 1, dead on GET 2 (rewrite the file with a dead pid) → GET 2 makes a fresh status call although the TTL has not passed.
@@ -203,7 +207,7 @@ Behaviour (spec §Source, §Cost, §API, §Levels last paragraph):
 
 **Files:**
 - Create: `client/src/lib/codegraphLevels.ts`, `client/src/lib/codegraphText.ts`, `client/src/lib/codegraphLayouts.ts`
-- Modify: `client/src/lib/settings.ts` (`ManagementTab`, `MANAGEMENT_TABS`), `client/src/hooks/useSettings.tsx` (`OWNED_KEYS`),
+- Modify: `client/src/lib/format.ts` (add `ageAt(ms, nowMs)` beside `formatAgo`, which delegates to it), `client/src/lib/settings.ts` (`ManagementTab`, `MANAGEMENT_TABS`), `client/src/hooks/useSettings.tsx` (`OWNED_KEYS`),
   `client/src/components/SideRail.tsx:88` (third item `{ value: 'codegraph', label: 'CodeGraph' }` after Git)
 - Create: `test/codegraph-client.test.ts`; register in `test/run-all.ts`
 
@@ -222,8 +226,7 @@ Behaviour (spec §Source, §Cost, §API, §Levels last paragraph):
   PATH."`, `codegraphVerdict(problem, repo)`, `codegraphSteps(problem, repo)`, `codegraphChip(problem, repo)`, `codegraphPill(problem, repo)`,
   `codegraphQuietLine(repo, nowMs)`, `CODEGRAPH_UP_TO_DATE = 'up to date'`, `CODEGRAPH_NOT_INDEXED(dir)`, `CODEGRAPH_FOLDER_GONE = 'Folder gone'`,
   `CODEGRAPH_BUILDING_LINE = 'Indexing… — numbers when it finishes'`, `reindexConfirmText(name, watching)`, `compactCount(n)`, `formatDbSize(bytes)`,
-  `ageAt(ms, nowMs)` (the `formatAgo` buckets — `client/src/lib/format.ts:29` reads `Date.now()` itself — against a passed clock; make `formatAgo` delegate
-  to it rather than duplicating the buckets; the quiet line appends " ago" itself, matching the mock's "indexed 2h ago"),
+  (`codegraphQuietLine` consumes `ageAt` from `client/src/lib/format.ts` and appends " ago" itself, matching the mock's "indexed 2h ago"),
   `extractorCell(stats)`, key labels `Sync` / `Syncing` / `Reindex` / `Reindexing`, popover rows and subs, `CODEGRAPH_NEEDS_TOKEN`.
 - Produces (`codegraphLayouts.ts`): `CodegraphLayout = 'inbox' | 'matrix' | 'inspector'`, `CODEGRAPH_LAYOUTS`, `DEFAULT_CODEGRAPH_LAYOUT = 'inbox'`,
   `parseCodegraphLayout(v)`, `codegraphLayoutsFor(narrow)`, `drawableCodegraphLayout(layout, narrow)` — same contract as `gitLayouts.ts`.
@@ -299,7 +302,7 @@ repo's `run` is set, or when `writeAccess === 'none'`. `cli: 'missing'` draws th
   none is up, start your own on spare ports and kill it by its recorded pid). Check: each layout renders the real pins; tile click filters and clears;
   phone width (375) draws Inbox for a stored Matrix with no horizontal scroll; Sync on a repo with pending changes shows `Syncing`, polls at 3 s, then the
   repo reads quiet; Reindex opens the confirm and Cancel closes it (do **not** confirm a reindex on the user's repos); midnight and daylight themes show no
-  hardcoded color. Screenshot each layout. Then the `PATH` duty (spec §Source): run the prod shape on a spare port (`WEB_PORT=<spare> pnpm start` in the
+  hardcoded color. Screenshot each layout. Then the `PATH` duty (spec §Source): run the prod shape on a spare port (`PORT=<spare> pnpm start` — `PORT` is the prod listener, `WEB_PORT` only Vite's in the
   background, record its pid), `GET /api/codegraph` → `cli: 'ok'`, kill that pid. `codegraph` here is an nvm `#!/usr/bin/env node` shim, so `cli: 'missing'`
   means the server's `PATH` lacks nvm's bin dir — report it, do not edit shell config.
 - [ ] **Step 3: Commit** `feat(management): CodeGraph sub-view`.
