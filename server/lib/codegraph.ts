@@ -193,7 +193,7 @@ async function isFile(p: string): Promise<boolean> {
   }
 }
 
-async function isDirectory(p: string): Promise<boolean> {
+export async function isDirectory(p: string): Promise<boolean> {
   try {
     return (await fs.promises.stat(p)).isDirectory();
   } catch {
@@ -216,7 +216,7 @@ export async function findGraphRoot(dir: string): Promise<string | null> {
   }
 }
 
-function lastLine(text: string): string | null {
+export function lastLine(text: string): string | null {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   return lines.length ? lines[lines.length - 1] : null;
 }
