@@ -107,10 +107,11 @@ export function nextAfter(cron: Cron, from: Date): Date | null {
   let t = new Date(floorToMinute(from) + MINUTE_MS);
   while (t.getTime() <= limit.getTime()) {
     const y = t.getFullYear(), mo = t.getMonth(), d = t.getDate(), h = t.getHours();
+    // The hour jump steps by epoch: a local constructor resolves the repeated fall-back hour to its first pass and would skip the second.
     let next: Date;
     if (!cron.month.has(mo + 1)) next = new Date(y, mo + 1, 1, 0, 0);
     else if (!dayMatches(cron, t)) next = new Date(y, mo, d + 1, 0, 0);
-    else if (!cron.hour.has(h)) next = new Date(y, mo, d, h + 1, 0);
+    else if (!cron.hour.has(h)) next = new Date(t.getTime() + (60 - t.getMinutes()) * MINUTE_MS);
     else if (!cron.minute.has(t.getMinutes())) next = new Date(t.getTime() + MINUTE_MS);
     else return t;
     // A DST gap can resolve a wall-clock jump to a time that is not later; one minute always makes progress.
@@ -130,7 +131,7 @@ export function lastBefore(cron: Cron, from: Date): Date | null {
     let prev: Date;
     if (!cron.month.has(mo + 1)) prev = new Date(y, mo, 0, 23, 59);
     else if (!dayMatches(cron, t)) prev = new Date(y, mo, d - 1, 23, 59);
-    else if (!cron.hour.has(h)) prev = new Date(y, mo, d, h - 1, 59);
+    else if (!cron.hour.has(h)) prev = new Date(t.getTime() - (t.getMinutes() + 1) * MINUTE_MS);
     else if (!cron.minute.has(t.getMinutes())) prev = new Date(t.getTime() - MINUTE_MS);
     else return t;
     t = prev.getTime() < t.getTime() ? prev : new Date(t.getTime() - MINUTE_MS);

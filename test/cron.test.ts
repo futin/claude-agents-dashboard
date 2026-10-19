@@ -241,6 +241,10 @@ export function run(): number {
     assert.strictEqual(iso(lastBefore(c, utc(2026, 11, 1, 6, 30))), '2026-11-01T05:45:00.000Z');
     assert.strictEqual(iso(lastBefore(c, utc(2026, 11, 1, 6, 45))), '2026-11-01T05:45:00.000Z');
     assert.strictEqual(iso(lastBefore(c, utc(2026, 11, 1, 6, 46))), '2026-11-01T06:45:00.000Z');
+    // After the repeated hour the second pass is still the latest slot; nextAfter fires both passes, so lastBefore must see both too.
+    assert.strictEqual(iso(lastBefore(c, utc(2026, 11, 1, 7, 0))), '2026-11-01T06:45:00.000Z');
+    assert.strictEqual(iso(lastBefore(c, utc(2026, 11, 1, 8, 0))), '2026-11-01T06:45:00.000Z');
+    assert.strictEqual(iso(lastBefore(c, utc(2026, 11, 1, 12, 0))), '2026-11-01T06:45:00.000Z');
   }))) p++; else f++;
 
   if (test('DST fall-back: chained nextAfter / lastBefore over "*/30" step by exactly 30 absolute minutes through the repeated hour', () => inZone('America/New_York', () => {
