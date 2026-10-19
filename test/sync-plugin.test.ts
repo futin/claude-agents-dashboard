@@ -10,12 +10,14 @@
 import assert from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  bringCheckoutCurrent, checkoutGate, driftedPaths, hashTree, PLUGIN_ID, PUBLISHED_PATHS, publishedDigests, readInstall,
+  bringCheckoutCurrent, checkoutGate, driftedPaths, hashTree, PLUGIN_ID, PUBLISHED_PATHS, postReconcile, publishedDigests, readInstall,
 } from '../scripts/sync-plugin.js';
 import { findRepoRoot } from './docs-links.test.js';
 
@@ -76,7 +78,12 @@ const PLUGIN = {
   'skills/b/tools/b.mjs': 'b',
 };
 
-export function run(): number {
+async function testAsync(name: string, fn: () => Promise<void>): Promise<boolean> {
+  try { await fn(); console.log('  ✓ ' + name); return true; }
+  catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
+}
+
+export async function run(): Promise<number> {
   console.log('\n=== sync-plugin ===\n');
   let p = 0, f = 0;
 
@@ -104,11 +111,11 @@ export function run(): number {
     assert.strictEqual(hashTree(path.join(os.tmpdir(), 'sync-plugin-does-not-exist')), '');
   })) p++; else f++;
 
-  if (test('publishedDigests covers .claude-plugin, hooks and skills, and ignores files beside them', () => {
-    assert.deepStrictEqual(PUBLISHED_PATHS, ['.claude-plugin', 'hooks', 'skills']);
+  if (test('publishedDigests covers .claude-plugin, hooks, lib and skills, and ignores files beside them', () => {
+    assert.deepStrictEqual(PUBLISHED_PATHS, ['.claude-plugin', 'hooks', 'lib', 'skills']);
     const clean = publishedDigests(tree(PLUGIN));
     const marked = publishedDigests(tree({ ...PLUGIN, '.in_use': '', '.orphaned_at': '1' }));
-    assert.deepStrictEqual(Object.keys(clean), ['.claude-plugin', 'hooks', 'skills']);
+    assert.deepStrictEqual(Object.keys(clean), ['.claude-plugin', 'hooks', 'lib', 'skills']);
     assert.deepStrictEqual(marked, clean);
   })) p++; else f++;
 
@@ -236,6 +243,59 @@ export function run(): number {
     assert.strictEqual(readInstall(file)?.installPath, '/u');
   })) p++; else f++;
 
+  if (await testAsync('postReconcile: one POST of { apply: true } to /api/schedules/reconcile on 127.0.0.1, resolves true', async () => {
+    const seen: Array<{ method?: string; url?: string; type?: string; body: string }> = [];
+    const server = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => { seen.push({ method: req.method, url: req.url, type: String(req.headers['content-type']), body }); res.end('{}'); });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      assert.strictEqual(await postReconcile((server.address() as net.AddressInfo).port), true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+    assert.strictEqual(seen.length, 1);
+    assert.strictEqual(seen[0].method, 'POST');
+    assert.strictEqual(seen[0].url, '/api/schedules/reconcile');
+    assert.match(seen[0].type!, /application\/json/);
+    assert.deepStrictEqual(JSON.parse(seen[0].body), { apply: true });
+  })) p++; else f++;
+
+  if (await testAsync('postReconcile: a closed port resolves false within the timeout, never throws', async () => {
+    const probe = net.createServer();
+    await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const port = (probe.address() as net.AddressInfo).port;
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+    const started = Date.now();
+    assert.strictEqual(await postReconcile(port, 500), false);
+    assert.ok(Date.now() - started < 1500, 'resolved inside the timeout window');
+  })) p++; else f++;
+
+  if (await testAsync('postReconcile: a listener that never answers resolves false at the timeout', async () => {
+    const server = http.createServer(() => { /* never respond */ });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const started = Date.now();
+      assert.strictEqual(await postReconcile((server.address() as net.AddressInfo).port, 300), false);
+      assert.ok(Date.now() - started < 1500, 'gave up near the timeout');
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  })) p++; else f++;
+
+  if (test('main POSTs the reconcile with the API port from loadConfig after a successful reinstall, and ignores the result', () => {
+    const root = findRepoRoot(path.dirname(fileURLToPath(import.meta.url)));
+    const source = fs.readFileSync(path.join(root, 'scripts', 'sync-plugin.ts'), 'utf8');
+    const body = source.slice(source.indexOf('function main('));
+    assert.match(body, /postReconcile\(loadConfig\(.*\)\.port\)/);
+    assert.ok(body.indexOf('postReconcile(') > body.indexOf("installed v${after.version}"), 'after the success line');
+  })) p++; else f++;
+
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }
+
+if (import.meta.url === `file://${process.argv[1]}`) process.exit((await run()) > 0 ? 1 : 0);

@@ -3,7 +3,7 @@
 A **monolith split into three domains**: a Node backend (`server/`), a Vite + React +
 TypeScript frontend (`client/`), and the shared API contract (`shared/`). One repo, one
 deploy. The **only** data crossing the frontend/backend boundary is the typed JSON
-payloads defined in `shared/types.ts` (the only code both sides run is `shared/frontmatter.ts` and `shared/gitUpstream.ts`) — when adding an API field, edit that file first,
+payloads defined in `shared/types.ts` (the only code both sides run is `shared/frontmatter.ts`, `shared/gitUpstream.ts`, `shared/cron.ts` and `shared/schedule-file.ts`) — when adding an API field, edit that file first,
 then the server producer, then the client consumer.
 
 Everything the dashboard shows is read straight off disk from
@@ -340,7 +340,11 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   sync-plugin.ts (`pnpm plugin:sync`) — fetches origin and fast-forwards
                   a clean main that is behind *before* comparing, then reinstalls the
                   plugin from GitHub's main when plugin/ differs from the installed copy;
-                  refuses a tree that is off main, dirty, unpushed or can't fast-forward,
+                  refuses a tree that is off main, dirty, unpushed or can't fast-forward;
+                  after a reinstall POSTs `/api/schedules/reconcile` to a running server,
+                  gen-plugin-lib.ts (`pnpm plugin:gen`) — transpiles shared/{cron,frontmatter,
+                  schedule-file}.ts into plugin/lib/*.mjs; test/plugin-manifest.test.ts
+                  regenerates and compares,
                   session-analytics.ts (`pnpm session-analytics`) — prints one
                   session's SessionAnalysis as JSON without the server running,
                   which is how `/kaizen` gets exact numbers,
@@ -359,6 +363,8 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
 plugin/           the installable Claude Code plugin (`/plugin install`, README §Install the skills);
                   plain JS skills, never imported by server/ or client/ at runtime
   .claude-plugin/plugin.json  name + version
+  lib/            generated `.mjs` copies of the shared schedule modules, for plain-`node` use
+                  (never `bin/`: Claude Code puts that on every session's PATH)
   skills/git-sync/  repo chores across machines; engine tools/git-sync.mjs, own `node --test`
                   suite run by `pnpm test:skills` (~4 min, 2026-10-01)
   skills/kaizen/  session post-mortem; analyzer kaizen.mjs, own `node --test` suite run
