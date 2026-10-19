@@ -70,7 +70,7 @@ uses, and all of it keeps firing with the dashboard closed. A job that needs non
 
 One file per job, `<name>.md`, in the schedules folder (default `~/claude-global/schedules/`, `.env` `SCHEDULES_DIR` overrides). The name is the filename
 without `.md`, `[a-z0-9-]+`, and is the launchd label suffix and the log key. `runs`, `validate`, `reconcile` and `reveal` are reserved (they are route
-segments) and refused by validation.
+segments) and refused by validation; a route given a name outside the pattern answers `400 { error: 'bad name' }` before touching the disk.
 
 ```markdown
 ---
@@ -78,14 +78,14 @@ cron: "0 22 * * *"            # five fields, local time of the machine that runs
 machines: [mac, wsl]          # which profiles install it; one or both
 run: claude                   # shell | claude
 foreach: pinned               # absent = run once in `cwd`; pinned = every pinned repo; [a, b] = only these pins, by name
-cwd: ~/Documents/x            # only without foreach; default = the schedules folder's parent
+# cwd: ~/Documents/x          # only without foreach; default = the schedules folder's parent
 enabled: true                 # absent = true
 model: opus                   # claude only; absent = CLI default
 effort: medium                # claude only
 permission-mode: acceptEdits  # claude only; plan | acceptEdits | auto; default = the Sync button's (`SYNC_PERMISSION_MODE`, `auto`)
 allowed-tools: [Bash, Read]   # claude only; absent = CLI default
 max-turns: 60                 # claude only
-timeout: 30m                  # both; wrapper kills the step after this; default 60m
+timeout: 30m                  # both; 30s | 30m | 2h; wrapper kills the step after this; default 60m
 ---
 /git-sync
 ```
@@ -145,7 +145,9 @@ route `409 not-owner`, never folds for pushes and never writes under `~/.claude/
   rewrite only the marker block, `crontab -` with the rest of the file byte-identical. `bootout` kills a running job, so an update or remove of a job
   whose lock is held is deferred: reconcile reports it as `pending · running`, and re-runs when the lock goes (the runs watcher sees the `end`).
   Reconciles never overlap: one runs at a time, a trigger during a run schedules one trailing re-run, so the crontab read-modify-write cannot race. A cron expression launchd cannot express (step values, ranges across
-  fields) is expanded to the equivalent list of `StartCalendarInterval` dicts; one that cannot be expanded is a validation error on mac.
+  fields) is expanded to the equivalent list of `StartCalendarInterval` dicts; one that cannot be expanded (day-of-month and weekday both restricted:
+cron ORs them, launchd ANDs them) is a validation error for any file whose `machines` includes `mac`: `cron: launchd cannot combine day-of-month and
+weekday; use one`.
 - The plist and each crontab line carry the environment the job needs, one list built from `Config` by `scheduleEnv(config)` and used for both the
   installed job and the `/run` spawn: `PATH` and `HOME` as the server process sees them, `CLAUDE_BIN`, `SPAWN_MAX_PERMISSION`, `SYNC_PERMISSION_MODE`,
   `SCHEDULE_MACHINE` and `SCHEDULES_DIR` (`.env` values live in `Config`, never in `process.env`, so nothing reaches a child unless baked). launchd and
@@ -212,7 +214,7 @@ the Sessions page does not badge schedule runs in this version.
 | `start` | `run` (uuid), `job`, `machine`, `trigger` (`schedule`/`manual`), `at` (ISO), `slot` (ISO, schedule only), `late` (boolean), `steps` (count), `pid` |
 | `step-start` | `run`, `step` (index), `repo` (pin name or `null`), `cwd`, `at`, `session` (uuid, claude only) |
 | `step-end` | `run`, `step`, `at`, `ms`, `exit`, `outcome` (`ok`/`failed`/`skipped`/`timeout`/`stopped`), `why` (short text), `tail` (shell: last lines), `cost`, `tokensIn`, `tokensOut`, `turns`, `model` (claude) |
-| `end` | `run`, `at`, `ms`, `ok`, `failed`, `skipped` (counts), `stopped` (boolean: SIGTERM ended it), `error` (string, only when the run failed before its first step: `no pins snapshot`, `claude cli not configured`) |
+| `end` | `run`, `at`, `ms`, `ok`, `failed`, `skipped` (counts), `stopped` (boolean: SIGTERM ended it), `error` (string, only when the run failed before its first step: `no pins snapshot`, `claude cli not configured`, `ambiguous pin <name>`) |
 | `refused` | `job`, `at`, `trigger`, `why` (`running`, `file gone`, `invalid: <line>`, `disabled`, `not this machine`), `heldBy` (pid, `running` only) |
 
 The server folds the file into runs: a `start` with no `end` whose pid is dead (or alive but not running `run-schedule <job>`, checked by command
