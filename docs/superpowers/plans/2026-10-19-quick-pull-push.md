@@ -102,7 +102,6 @@ gains one field, `trunkCheckedOutElsewhere`. The client computes menu state and 
   - `promptlessEnv(cwd: string, run: FetchRunner): Promise<Record<string, string> | null>` — the overlay `fetchGroup` uses today (FETCH_ENV, plus
     `SSH_BATCH` unless the user chose their ssh); null when `git config --get core.sshCommand` exits other than 0/1. `fetchGroup` calls it instead of its
     inline copy (behaviour unchanged).
-  - `currentFetchRunner(): FetchRunner` — the runner `overrideFetchRunner` set, so git-quick's tests can spy the same way.
 
 - [ ] **Step 1: Write failing tests** in `test/git-fetch.test.ts` (runner spy via `overrideFetchRunner`, clock via `overrideFetchClock`; `resetRepoLocks` in
   the module's reset):
@@ -111,11 +110,13 @@ gains one field, `trunkCheckedOutElsewhere`. The client computes menu state and 
     `lastFetchFor` error is `null`, never `'lock'`.
   - `a second fetchAll while waiting joins the first` (same promise object, D6 still holds).
   - `tickGitFetch skips while a repo lock is held`: due time passed, lock held → tick → `fetchInFlight() === false`; release → tick → fetch runs.
+  - `resetGitFetch with a lock held and fetchAll waiting resolves` (drops the lock, the waiting fetch-all settles, the reset returns).
   - `tryLockRepo: second lock on the same commonDir is null; another commonDir is free; release frees it; double release is harmless`.
 - [ ] **Step 2:** `ONE git-fetch` → new cases fail.
 - [ ] **Step 3: Implement** git-locks.ts and the git-fetch changes. Ordering in `fetchAll` (spec §Shared preconditions): the join check stays first;
   `inFlight` is assigned synchronously to a promise that first awaits `Promise.all(heldRepoLocks())`, then `runFetch`. `tickGitFetch` adds
-  `!anyRepoLockHeld()` to its start condition. `resetGitFetch` calls `resetRepoLocks`.
+  `!anyRepoLockHeld()` to its start condition. `resetGitFetch` calls `resetRepoLocks()` **before** it awaits `inFlight` — otherwise a test that ends with
+  a lock held and fetch-all waiting on it hangs the reset.
 - [ ] **Step 4:** `ONE git-fetch` and `ONE api-git-fetch` pass.
 - [ ] **Step 5: Commit** `feat(git): per-repo lock that fetch-all waits for`.
 
@@ -127,11 +128,13 @@ gains one field, `trunkCheckedOutElsewhere`. The client computes menu state and 
 - Maybe modify: `server/lib/git-stats.ts` to export `trunkOf` if you reuse it (read-only; your call per spec §Left to the builder)
 
 **Interfaces:**
-- Consumes: Task 1 types; Task 2 `tryLockRepo`, `fetchInFlight`, `promptlessEnv`, `currentFetchRunner`, `makeFetchRunner`.
+- Consumes: Task 1 types; Task 2 `tryLockRepo`, `fetchInFlight`, `promptlessEnv`, `makeFetchRunner`.
 - Produces:
   - `export const QUICK_TIMEOUT_MS = 60_000;`
-  - `runQuickOp(pin: { name: string; toplevel: string }, op: GitQuickOp, run?: FetchRunner): Promise<GitQuickResponse>` — `run` defaults to a runner with
-    `timeoutMs: QUICK_TIMEOUT_MS` (tests pass a spy wrapping `makeFetchRunner`). Never throws for a git failure; it answers with a refusal or a failed part.
+  - `overrideQuickRunner(run: FetchRunner | null): void` — git-quick's own test seam, mirroring `overrideFetchRunner`; null restores the default,
+    `makeFetchRunner({ timeoutMs: QUICK_TIMEOUT_MS })`. Never fetch-all's runner (its timeout is 30s). Task 3 and Task 4 tests both spy through it.
+  - `runQuickOp(pin: { name: string; toplevel: string }, op: GitQuickOp): Promise<GitQuickResponse>` — runs every git call through the module's runner. Never
+    throws for a git failure; it answers with a refusal or a failed part.
 
 Behaviour, in order (each step re-reads; nothing comes from the client but `op`):
 1. Read `rev-parse --show-toplevel --git-common-dir` (resolve the common dir to an absolute realpath); a failure → `not-ok`. No `origin` remote → `no-origin`.
@@ -146,12 +149,12 @@ Behaviour, in order (each step re-reads; nothing comes from the client but `op`)
      before (or `rev-list --count old..new` after — your call). A non-zero exit is a failed part.
    - *move part* — only when not on the trunk, a local trunk exists, `for-each-ref --format=%(worktreepath) refs/heads/<trunk>` is empty, and trunk vs
      `origin/<trunk>` is behind > 0, ahead == 0: `fetch origin <trunk>:<trunk>` (non-`+` refspec, so git itself refuses a non-ff or a checked-out branch),
-     with `promptlessEnv`. If the trunk *is* checked out elsewhere, still attempt the fetch so git's refusal becomes a failed part (spec: "reported, not
-     worked around").
+     with `promptlessEnv`. A trunk checked out elsewhere at re-read time gets no move part (the menu never offered it); a checkout that lands
+     between the re-read and the fetch is git's refusal, reported as a failed part, never worked around.
    - No part applies → `nothing`.
 6. **Push:** branch must not be the trunk and its upstream must start `origin/` and not be `origin/<trunk>`, else `nothing`. Counts ahead > 0, behind == 0,
    else `nothing`. `push origin refs/heads/<branch>:refs/heads/<upstream minus origin/>` with `promptlessEnv` — never `-u`, `--force`, `--no-verify`.
-   One `push` part, target `origin/<branch path>`, commits = ahead; a non-zero exit is a failed part.
+   One `push` part, target = the upstream short name (`origin/feature/x`), commits = ahead; a non-zero exit is a failed part.
 7. Hooks: do not pass `core.hooksPath`. Env = `promptlessEnv` for network calls, `{ LC_ALL: 'C' }` for local ones.
 
 - [ ] **Step 1: Write failing tests** in `test/git-quick.test.ts`, over `GitFixture` (bare origin + clone + a second clone that pushes the "remote" commits):
@@ -161,12 +164,13 @@ Behaviour, in order (each step re-reads; nothing comes from the client but `op`)
   - `pull with a dirty file the fast-forward would overwrite → ff part ok:false, detail non-empty, HEAD unchanged, the modification still on disk`.
   - `pull with a dirty unrelated file → ff ok:true` (decided with the user).
   - `pull, trunk diverged (ahead 1, behind 1), on trunk → refusal 'nothing'; local main unchanged`.
-  - `pull from a linked worktree on feat/y while the main checkout is on main → no move attempted when not behind; when main is behind, a failed move part
-    whose detail mentions the checkout` (git's own words — assert `ok:false` and non-empty `detail`, not the exact text).
+  - `pull from a linked worktree on feat/y (no upstream) while the main checkout is on main and main is behind 2 → refusal 'nothing'; local main unchanged;
+    the spy saw no `fetch origin main:main``.
   - `pull fetches first`: a commit pushed to origin after the clone's last fetch is pulled (the count is the real one).
   - `pull while MERGE_HEAD exists → 'in-progress'` (create a conflicting merge with `allowFail`).
   - `pull on detached HEAD → 'detached'`.
   - `push feat/x ahead 2 → push part commits:2, target 'origin/feat/x'; origin's feat/x equals local`.
+  - `push feat/x tracking origin/feature/x ahead 1 → target 'origin/feature/x'; origin's feature/x moved, no origin/feat/x created`.
   - `push rejected as non-fast-forward (origin moved, local fetch stale so the client thought ahead-only) → ok:false, detail non-empty, origin unchanged`.
     Arrange so the *re-read* counts still say ahead-only (do not fetch before push) and the remote rejects.
   - `push on a branch tracking upstream/feat/x (another remote) → 'nothing'; nothing sent` (spy saw no `push`).
@@ -203,7 +207,8 @@ the `GitQuickResponse`. A thrown error → 500 `{error:'git quick failed'}` and 
   - `GET → 405`.
   - `op 'merge' → 400; dirName not pinned → 404`.
   - `busy → 409 with refusal 'busy'` (hold `tryLockRepo` on the clone's common dir).
-  - `two pins on one repo (main checkout + linked worktree): two concurrent POSTs → one 200, one 409 busy`.
+  - `two pins on one repo (main checkout + linked worktree): the first POST's runner spy blocks on its `fetch` until the second POST has answered → the
+    second is 409 busy; release → the first is 200`.
 - [ ] **Step 2:** `ONE api-git-quick` fails.
 - [ ] **Step 3: Implement** the handler, route and comment row (`POST /api/git-quick → serveGitQuick`, in the existing rows' format).
 - [ ] **Step 4:** `ONE api-git-quick` passes.
@@ -254,7 +259,9 @@ sub `Commit, check, push, prune branches`; otherwise enabled with that sub (whil
     disabled.
   - result lines, repo `guide-manager` unless named: one ff into main 1 → `claude-global: pulled 1 commit into main.` (ok); one move 5 → `guide-manager:
     moved main forward 5 commits.`; ff fix/x 3 + move 5 → `guide-manager: pulled 3 commits into fix/x, moved main forward 5.`; move 5 ok + ff fix/x failed
-    `detail D` → `guide-manager: moved main forward 5 commits; fix/x refused — D. Use Sync.` (warn); push 2 → `claude-agents-dashboard: pushed 2 commits to
+    `detail D` → `guide-manager: moved main forward 5 commits; fix/x refused — D. Use Sync.` (warn); ff fix/x 3 ok + move failed `D` → `guide-manager: pulled
+    3 commits into fix/x; main refused — D. Use Sync.` (warn); both parts failed (`D1`, `D2`) → `guide-manager: git refused — D1. Use Sync.` (warn, first
+    failed part's detail; the line stays one sentence); push 2 → `claude-agents-dashboard: pushed 2 commits to
     origin/feat/x.`; single failed part `D` → `claude-global: git refused — D. Use Sync.` (warn); failed part timedOut → `claude-global: git took over 60s
     and was stopped. Use Sync.`; refusal fetch-running → `claude-global: a fetch is running — try again in a moment.`; refusal fetch-failed timedOut → the
     timeout line; refusal `busy` → `claude-global: another pull or push is running on this repo — try again in a moment.`; `in-progress` →
