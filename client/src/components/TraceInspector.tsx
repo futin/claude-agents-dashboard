@@ -127,15 +127,13 @@ export function TraceInspector({ steps, sel, questionPending, onPick }: {
           )}
         </ol>
       </div>
-      {/* At, Intent from and Thinking are phone-hidden (`.f.wide`, as Chat's
-          facts): the band keeps Status, Turn and Plan task, the spine the rest. */}
       <div className="chat-facts">
         <div className="f"><span>Status</span><b>{statusFact}</b></div>
         <div className="f"><span>Turn</span><b title={turn}>{turn}</b></div>
-        <div className="f wide"><span>At</span><b>{clock(s.at)}</b></div>
+        <div className="f"><span>At</span><b>{clock(s.at)}</b></div>
         <div className="f"><span>Plan task</span><b title={s.task}>{s.task || '—'}</b></div>
-        <div className="f wide"><span>Intent from</span><b>{from}</b></div>
-        <div className="f wide"><span>Thinking</span><b title={s.thinking === 'signature' ? SIGNATURE_TITLE : undefined}>{thinking}</b></div>
+        <div className="f"><span>Intent from</span><b>{from}</b></div>
+        <div className="f"><span>Thinking</span><b title={s.thinking === 'signature' ? SIGNATURE_TITLE : undefined}>{thinking}</b></div>
       </div>
     </>
   );

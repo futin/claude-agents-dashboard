@@ -10,7 +10,7 @@ of `pnpm test`. Design and plan: [2026-10-01-visual-regression-design.md](../sup
 
 | Spec | Cases | What |
 |---|---|---|
-| `views.spec.ts` | 84 counted shots + 3 Trace shots + 1 count check | each of the 6 `SECTIONS` views at 12 states, plus Sessions with the chat drawer open (`?session=`) at 375 and 1280 and in the Triage layout at 375 and 1280, Git's Matrix (1280), Inspector and Branches (375 and 1280), and Projects' Tiles, Columns (1280) and Lists (375) with a gone pin, and the drawer's Trace mode with a step picked (375 and 1280, plus a 1280 shot of a closed subagent fold) |
+| `views.spec.ts` | 84 counted shots + 3 Trace shots + 1 count check + 1 phone no-Trace check | each of the 6 `SECTIONS` views at 12 states, plus Sessions with the chat drawer open (`?session=`) at 375 and 1280 and in the Triage layout at 375 and 1280, Git's Matrix (1280), Inspector and Branches (375 and 1280), and Projects' Tiles, Columns (1280) and Lists (375) with a gone pin, and the drawer's Trace mode with a step picked (1280: a picked row, a `why?` followed from Chat, a closed subagent fold), plus a 375 check that the drawer offers no Trace |
 | `layout.spec.ts` | 48 overflow + 6 contrast | overflow: 6 views × 8 daylight tiers; contrast: 6 views, daylight, 1280, axe `color-contrast` |
 | `stage.spec.ts` | 16 | the staging itself: seeded theme beats the default, clock, UTC, DPR 1, font loaded, deep link, every section reachable |
 | `scroll-hit.spec.ts` | 9 + 1 mirror | Management › Projects with 60 offered projects, Tiles / Columns / Lists at 1280, 1536 and 1921 (`full`): scrolled to the bottom, every on-screen Pin must take the hit and `.wrap` must hold the whole view (#194); the mirror checks Analytics stays pinned to the viewport |
@@ -44,7 +44,8 @@ tail poll would otherwise append the whole transcript again on every tick, and t
 The Trace fixture (`fixtures/session-trace.ts`) is two turns on the working session's rate-limiting task: a retry after a failed typecheck, a subagent whose six
 finished steps (one failed) render as a closed fold, an approved plan with readable thinking, a commit, and an `AskUserQuestion` still waiting. Its `at`s are `agoIso` offsets from `EPOCH`, absolute ISO strings, so
 the inspector's local-time fact never moves. The chat fixture's tool lines carry the matching step ids (`TRACE_IDS`), which is also why every chat drawer
-shot now shows a `why?` on its tool lines and the switch in its head. The 1280 Trace shot picks a row; the 375 one follows a tool line's `why?`; `sessions-daylight-1280-trace-fold` picks the
+1280 drawer shot shows a `why?` on its tool lines and the switch in its head (the 375 one shows neither: Trace is wide-only). All three Trace shots are
+1280: `sessions-daylight-1280-trace` picks a row; `-trace-why` follows a tool line's `why?`; `-trace-fold` picks the
 subagent's Task row, which scrolls turn 1 into view with its run folded shut beneath it.
 
 `stage.ts` puts a page into a known state: fixed clock at `EPOCH` (2026-09-30T14:00:00Z, `fixtures/epoch.ts`), UTC, `en-US`, DPR 1, sRGB, the viewport at

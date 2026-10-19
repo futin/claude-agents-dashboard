@@ -83,6 +83,7 @@ The switch in the head turns the transcript column into the **Trace** spine, the
 filter into the step filter (`All / Edits / Fails / You`, plus `Only this step's why`). The view is component state (`'chat' | 'trace'`) and is not persisted:
 the modal always opens in Chat. The Context card, the pinned panels and `--pinned-h` serve both views, and the spine pads under the pinned layer the way the
 transcript does. Coming back to Chat remounts the transcript, which re-anchors to the live tail like a filter switch.
+Trace is wide-only: below `md` (`useNarrow`) the switch and every `why?` are not rendered and the view reads as Chat ([trace](trace.md)).
 
 `useSessionTrace` polls only while `view === 'trace'`, at the same `refreshMs` as the chat, so a drawer left in Chat never reads the trace. Everything about
 the steps, the endpoint and the `why` rules is in [trace](trace.md); this doc owns only the seam.

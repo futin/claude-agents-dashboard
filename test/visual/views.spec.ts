@@ -65,13 +65,14 @@ const CASES: ShotCase[] = [
 const EXPECTED_SHOTS = 84;
 
 /**
- * The drawer's Trace mode with a step picked — not in `CASES`, because each needs a click first. 1280 picks a row (a retry, so the arcs run back to its
- * failure); 375 follows a chat tool line's `why?`; the `fold` shot picks the subagent's Task row, which scrolls turn 1 into view with the Task's run
+ * The drawer's Trace mode with a step picked — not in `CASES`, because each needs a click first. All three are 1280: Trace has no phone layout (below
+ * `md` the drawer offers Chat only, pinned by the test after the loop). `row` picks a row (a retry, so the arcs run back to its failure); `why` follows
+ * a chat tool line's `why?`; the `fold` shot picks the subagent's Task row, which scrolls turn 1 into view with the Task's run
  * folded shut under it (a pick of the Task itself does not open it): the summary, its six ticks with the red failure, and the lane's elbow.
  */
 const TRACE_SHOTS = [
   { width: 1280, pick: 'row' as const, step: 'toolu_11', label: 'row', suffix: '' },
-  { width: 375, pick: 'why' as const, step: TRACE_IDS.editLimiter, label: 'why', suffix: '' },
+  { width: 1280, pick: 'why' as const, step: TRACE_IDS.editLimiter, label: 'why', suffix: '-why' },
   { width: 1280, pick: 'row' as const, step: 'toolu_04', label: 'fold', suffix: '-fold' }
 ];
 
@@ -109,3 +110,11 @@ for (const t of TRACE_SHOTS) {
     await expect(page).toHaveScreenshot(name + '.png', { fullPage: true });
   });
 }
+
+test('sessions · daylight · 375 · the drawer offers no Trace', async ({ page }) => {
+  await stage(page, { section: 'sessions', theme: 'daylight', width: 375, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID });
+  const drawer = page.locator('aside.chat');
+  await expect(drawer.locator('.cmsg').first()).toBeVisible();
+  await expect(drawer.getByRole('tab', { name: 'Trace' })).toHaveCount(0);
+  await expect(drawer.locator('.cmsg-why')).toHaveCount(0);
+});

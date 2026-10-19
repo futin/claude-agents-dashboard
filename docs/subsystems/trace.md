@@ -12,6 +12,11 @@ already folded, which means every link is a hint, not a record. Chat's [drawer](
 `Chat | Trace` is a switch in the drawer head, right of the spacer, next to ✕. The modal always opens in Chat (the view is not persisted). The spine is the
 transcript column; the sidecar swaps the Tasks card for the **inspector** (the picked step in full); the foot swaps the message filter for the step filter.
 
+**No Trace on a phone.** Below `md` (`useNarrow`, 767.98px) the drawer offers Chat only: no switch in the head, no `why?` on tool lines, and a Trace
+picked wide falls back to Chat (the pick, filter and folds are kept for the way back; the spine remounts, so its scroll is not). The spine and its
+sidecar were too small to use at that width. Playwright's full-page capture briefly reports a 1px viewport, so every Trace shot passes through that
+fallback once before it is taken.
+
 - **Spine** (`TraceSpine`): turns as headers (`Turn n` plus a label, once per turn), a dot and card per step, and a subagent's steps under their Task.
   A step's card is tool, detail and flags (`failed`, `waiting on you`, the user's answer, a commit sha, `thinking`), then the model's stated intent,
   then `→ result`. What renders where is one pure function, `traceLayout` (`client/src/lib/trace.ts`): steps, filter, pick and fold state in, an
@@ -38,8 +43,7 @@ transcript column; the sidecar swaps the Tasks card for the **inspector** (the p
     newest step. When the response was capped, one quiet line heads the spine: `n older steps not loaded`.
 - **Inspector** (`TraceInspector`): the picked step's title, intent, outcome, readable thinking, then `Why` (its causes nearest first, each labelled with the
   relation) and `Led to` (the steps whose own causes name it), then the step's facts: Status, Turn, At, Plan task, Intent from, Thinking. An empty `Why`
-  reads `A prompt is where a turn starts; nothing comes before it.` on a prompt and `Its causes are older than the steps loaded.` on any other step. On a
-  phone the card is capped at 30vh and At / Intent from / Thinking are hidden (`.f.wide`, as Chat's facts).
+  reads `A prompt is where a turn starts; nothing comes before it.` on a prompt and `Its causes are older than the steps loaded.` on any other step.
 - **Foot:** the live text, the `Only this step's why` toggle (neither wraps) and the filter `All | Edits | Fails | You`. No step count: the folds carry
   it, and the not-loaded notice moved to the head of the spine. The response's `thinking` counts are no longer shown anywhere.
 - **`why?` on Chat's tool lines:** every chat tool line that carries a tool_use id (`ChatToolCall.id`) has a `why?` button that switches to Trace with that
@@ -150,7 +154,7 @@ Known limits, accepted for v1: the `informed` scan is O(n²) over the steps (the
 `test/trace.test.ts` (the builder, the file side, the endpoint's cursor and reset, the window's prompts, parents and ancestor cap), `test/trace-why.test.ts` (the eight rules), `test/client-trace.test.ts`
 (merge, `causesOf`, filter, and `traceLayout`: closed, running-tail, auto-open and explicit-close folds, the 4× repeat, filter depth, nested depth, the
 duration format). The picked-step views are pinned by the Playwright shots `sessions-daylight-1280-trace.png`,
-`sessions-daylight-375-trace.png` and `sessions-daylight-1280-trace-fold.png` ([visual-tests](visual-tests.md)); the fixture is `test/visual/fixtures/session-trace.ts`, whose tool-line ids the chat
+`sessions-daylight-1280-trace-why.png` and `sessions-daylight-1280-trace-fold.png`, and the phone's lack of Trace by a 375 check with no shot ([visual-tests](visual-tests.md)); the fixture is `test/visual/fixtures/session-trace.ts`, whose tool-line ids the chat
 fixture reuses so `why?` has a step to land on; its subagent has six finished steps, one failed, which the `-fold` shot shows closed.
 
 <!-- docs-sync:

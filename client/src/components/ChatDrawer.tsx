@@ -11,6 +11,7 @@ import { TasksCard } from './TasksCard';
 import { TraceInspector } from './TraceInspector';
 import { TraceSpine } from './TraceSpine';
 import { useBackClose } from '../hooks/useBackClose';
+import { useNarrow } from '../hooks/useNarrow';
 import { useSessionChat } from '../hooks/useSessionChat';
 import { useSessionTrace } from '../hooks/useSessionTrace';
 import { usePendingQuestion } from '../hooks/usePendingQuestion';
@@ -69,8 +70,8 @@ function ContextCard({ session }: { session: Session }) {
   );
 }
 
-/** `onWhy` opens a tool line's step in Trace; lines without a tool_use id get no link. */
-function Message({ m, onWhy }: { m: ChatMessage; onWhy(id: string): void }) {
+/** `onWhy` opens a tool line's step in Trace; lines without a tool_use id, and every line on a phone (no `onWhy`), get no link. */
+function Message({ m, onWhy }: { m: ChatMessage; onWhy?(id: string): void }) {
   return (
     <div className={`cmsg ${m.role}`}>
       <div className="cmsg-head">
@@ -90,7 +91,7 @@ function Message({ m, onWhy }: { m: ChatMessage; onWhy(id: string): void }) {
               <Chevron className="cmsg-chev" />
               <span className="tool">{t.name}</span>
               {' ' + (TOOL_HINT[t.name] ?? '')}
-              {t.id && (
+              {t.id && onWhy && (
                 // a click inside <summary> would toggle the details: the link only opens Trace
                 <button
                   type="button"
@@ -106,7 +107,7 @@ function Message({ m, onWhy }: { m: ChatMessage; onWhy(id: string): void }) {
             </div>
           </details>
         ) : (
-          t.id ? (
+          t.id && onWhy ? (
             // the name and detail shrink and ellipsise together; `why?` never does
             <div className="cmsg-tool has-why" key={i}>
               <span className="cmsg-what">
@@ -173,8 +174,12 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const surfaceInfo = surfacePill(session.surface);
 
   // Chat | Trace. Not persisted: the modal always opens in Chat. The trace
-  // polls only while it is the view showing.
-  const [view, setView] = useState<'chat' | 'trace'>('chat');
+  // polls only while it is the view showing. Below `md` (768) there is no
+  // Trace: the spine and its sidecar are too small to use on a phone, so the
+  // switch and every `why?` go, and a pick made wide falls back to Chat.
+  const narrow = useNarrow();
+  const [viewPick, setView] = useState<'chat' | 'trace'>('chat');
+  const view = narrow ? 'chat' : viewPick;
   const [sel, setSel] = useState<string | null>(null);
   const [traceFilter, setTraceFilter] = useState<TraceFilter>('all');
   const [focus, setFocus] = useState(false);
@@ -305,13 +310,15 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
           <span className="chat-title">{session.sessionName || session.project}</span>
           {session.sessionName && <span className="proj-pill">{session.project}</span>}
           <span className="spacer" />
-          <div className="seg" role="tablist" aria-label="View">
-            {(['chat', 'trace'] as const).map(v => (
-              <button key={v} role="tab" className={view === v ? 'on' : ''} aria-selected={view === v} onClick={() => setView(v)}>
-                {v === 'chat' ? 'Chat' : 'Trace'}
-              </button>
-            ))}
-          </div>
+          {!narrow && (
+            <div className="seg" role="tablist" aria-label="View">
+              {(['chat', 'trace'] as const).map(v => (
+                <button key={v} role="tab" className={view === v ? 'on' : ''} aria-selected={view === v} onClick={() => setView(v)}>
+                  {v === 'chat' ? 'Chat' : 'Trace'}
+                </button>
+              ))}
+            </div>
+          )}
           <button className="chat-x" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
@@ -399,7 +406,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                       {hasMore ? ' — load older, or switch back to “all”.' : '.'}
                     </div>
                   ) : (
-                    shown.map(m => <Message key={m.uuid} m={m} onWhy={openStep} />)
+                    shown.map(m => <Message key={m.uuid} m={m} onWhy={narrow ? undefined : openStep} />)
                   )}
                 </div>
               )}

@@ -1921,17 +1921,12 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
    its causes nearest first, then what it led to — scrolling as a whole, so
    no box ever holds a short window onto a long list. The step's fields sit
    under it as facts, where Chat lists the session's. Port of the mock's
-   `.tr-one` block; the mono title face is dropped with the spine's. On a
-   phone the card stacks (not the band's wrapping `.kv` row), keeps its head
-   and caps at 30vh, so card and facts leave the spine most of the screen;
-   `md` hands it the desktop column card. */
-.chat-side .kv.tr-one{display:block;max-height:30vh;overflow:auto}
+   `.tr-one` block; the mono title face is dropped with the spine's. Trace
+   has no phone layout: below `md` the drawer offers Chat only. */
+.chat-side .kv.tr-one{display:flex;overflow:auto}
 .chat-side .kv.tr-one .k{display:flex;justify-content:space-between;gap:8px}
 .chat-side .kv.tr-one .k > :first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-side .kv.tr-one .k > :last-child{flex:none;font-variant-numeric:tabular-nums}
-@media (min-width:768px){
-  .chat-side .kv.tr-one{display:flex;max-height:none}
-}
 .tr-one .task-list{flex:none;max-height:none;overflow:visible;margin-top:10px}
 .tr-one .k .tr-tool{font-size:12px}
 .tr-one .task-list .tr-led{margin:8px 0 2px 6px;padding:0;font-size:11px;color:var(--ink3)}
