@@ -37,7 +37,8 @@ board, and reading them should not mean being on Sessions. See
   - **List** — one table; the open row expands underneath itself across every column. Columns: Session (title and pills) · **Project** (`repo ??
     project`, branch under it) · **Model** (`modelLabel`: `claude-opus-5-5` → `Opus 5.5`, date stamp and `[1m]` dropped, an unparsed id shown as is) ·
     Context · State · Activity · Last · Chat. Widths key on the table, not the viewport (container queries on `.s-card.ledger` — the aside and the Width
-    setting decide the table's width). Under 950px the Project column stays hidden and the Session cell's `.repo-sub` line carries repo and branch, since
+    setting decide the table's width). Under 950px the Project column collapses to 0px (not `display:none` — an open row's
+    `colSpan={9}` would revive it as an unsized phantom) and the Session cell's `.repo-sub` line carries repo and branch, since
     the fixed columns alone sum to ~750px. From 1200px the text columns take percentage widths and
     Session, the one unsized column, takes what is left; before that it took every spare pixel and a wide table drew the rest as a clump on the right.
   - **Split** — a compact list and one inspector (title, meta, Context and Now tiles, then

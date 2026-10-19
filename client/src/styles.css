@@ -963,10 +963,13 @@ code,kbd,samp,pre{font-family:inherit}
 .ledger th:last-child,.ledger td:last-child{padding-right:20px}
 /* No below-md tier: List is a wide-only layout (`WIDE_ONLY_LAYOUTS`), so a window under md never draws this table. Its width still swings with the
    aside and the Width setting, though, so the Project column waits for a 950px table (container query below); until then the fixed columns alone sum to
-   ~750px and would leave Session nothing, and the Session cell's `.repo-sub` line carries repo and branch instead. The table is `table-layout:fixed`, so
-   a `col` and its `th`/`td` are hidden together — by class, never `nth-child`, which silently picks the wrong column once one is added. */
-.ledger .c-proj,.ledger th.proj,.ledger td.proj{display:none}
-.ledger .c-dot{width:41px}.ledger .c-proj{width:120px}.ledger .c-model{width:88px}.ledger .c-ctx{width:120px}.ledger .c-state{width:84px}.ledger .c-act{width:110px}.ledger .c-last{width:80px}.ledger .c-do{width:104px}
+   ~750px and would leave Session nothing, and the Session cell's `.repo-sub` line carries repo and branch instead. Narrow, the column collapses to 0px
+   rather than `display:none`: an open row's `.expand` cell spans 9 columns whatever CSS says, so a hidden `col` comes back as an unsized phantom that
+   halves Session and leaves an empty strip down the right edge. Targeted by class, never `nth-child`, which silently picks the wrong column once one
+   is added. */
+.ledger .c-proj{width:0}
+.ledger th.proj,.ledger td.proj{padding:0;overflow:hidden;visibility:hidden}
+.ledger .c-dot{width:41px}.ledger .c-model{width:88px}.ledger .c-ctx{width:120px}.ledger .c-state{width:84px}.ledger .c-act{width:110px}.ledger .c-last{width:80px}.ledger .c-do{width:104px}
 .ledger tbody tr:not(.launching):not(.expand){cursor:pointer}
 .ledger tbody tr:not(.launching):not(.expand):not(.selected):hover td{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
 /* Open row + its body read as one block: same fill through the hover, one
@@ -1137,8 +1140,8 @@ code,kbd,samp,pre{font-family:inherit}
    the one unsized column and takes what is left (about a third of a 1900px table). A container query, not a viewport tier: the aside and the Width
    setting decide the table's width, and a 1920px window can still hold a 900px table, where these percentages would leave Session ~165px. */
 @container (min-width:950px){
-  .ledger .c-proj{display:table-column}
-  .ledger th.proj,.ledger td.proj{display:table-cell}
+  .ledger .c-proj{width:120px}
+  .ledger th.proj,.ledger td.proj{padding:14px 12px;visibility:visible}
   .ledger .repo-sub{display:none}
 }
 @container (min-width:1200px){
