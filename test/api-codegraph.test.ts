@@ -55,10 +55,10 @@ function pinFolder(h: Harness, rel: string, indexed: boolean): { dir: string; di
 }
 
 /** Each case starts with no pins and a cold codegraph store, and leaves the modules that way. */
-async function withCodegraphApi(fn: (h: Harness, fake: Fake & { run: CodegraphRunner }) => Promise<void>): Promise<void> {
+async function withCodegraphApi(fn: (h: Harness, fake: Fake & { run: CodegraphRunner }) => Promise<void>, env = ENV): Promise<void> {
   overrideClaudeRoots([]);
   try {
-    await withServer(ENV, async h => {
+    await withServer(env, async h => {
       resetSettings();
       resetCodegraph();
       const fake = parkedRunner();
@@ -129,6 +129,8 @@ export async function run(): Promise<number> {
 
       const badKind = await post(h, { dirName: indexed.dirName, kind: 'rebuild' }, { ...LAN, ...AUTH });
       assert.equal(badKind.status, 400, badKind.raw);
+      // Shape before the store: an unpinned dirName with a bad kind is still a 400, not the 403 the store would give.
+      assert.equal((await post(h, { dirName: 'nope', kind: 'rebuild' }, { ...LAN, ...AUTH })).status, 400);
       assert.equal(fake.runs().length, 0, 'no refused request may reach the CLI');
 
       const started = await post(h, { dirName: indexed.dirName, kind: 'sync' }, { ...LAN, ...AUTH });
@@ -140,6 +142,30 @@ export async function run(): Promise<number> {
       assert.deepStrictEqual(again.json, { error: 'already running' });
       assert.deepStrictEqual(fake.runs().map(c => c.args), [['sync']], 'exactly one sync reached the CLI');
     });
+  }));
+
+  check(await testAsync('the write gate runs before the body is read: a LAN peer with a malformed body is 403, not 400, and nothing launches', async () => {
+    await withCodegraphApi(async (h, fake) => {
+      pinFolder(h, 'repo-a', true);
+      const noToken = await post(h, 'not json', LAN);
+      assert.equal(noToken.status, 403, noToken.raw);
+      assert.deepStrictEqual(noToken.json, { error: 'bad token' });
+      const wrong = await post(h, '{}', { ...LAN, Authorization: 'Bearer nope' });
+      assert.equal(wrong.status, 403, wrong.raw);
+      assert.equal(fake.runs().length, 0);
+      // The same peer with the token gets as far as the body check.
+      assert.equal((await post(h, 'not json', { ...LAN, ...AUTH })).status, 400);
+    });
+  }));
+
+  check(await testAsync('with no ANSWER_TOKEN a LAN peer is read-only (403) even with a malformed body, and nothing launches', async () => {
+    await withCodegraphApi(async (h, fake) => {
+      pinFolder(h, 'repo-a', true);
+      const refused = await post(h, 'not json', LAN);
+      assert.equal(refused.status, 403, refused.raw);
+      assert.deepStrictEqual(refused.json, { error: 'read-only from this network' });
+      assert.equal(fake.runs().length, 0);
+    }, 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n');
   }));
 
   check(await testAsync('a malformed body and a non-string dirName are 400 and launch nothing', async () => {
