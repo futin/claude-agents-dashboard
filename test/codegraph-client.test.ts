@@ -17,6 +17,8 @@ import {
   codegraphChip, codegraphFirstLoadText, codegraphPill, codegraphQuietLine, codegraphRunConflictText, codegraphRunFailedText, codegraphRunMissingText,
   codegraphSteps, codegraphVerdict, compactCount, extractorCell, formatDbSize, reindexConfirmText,
 } from '../client/src/lib/codegraphText.js';
+import { CODEGRAPH_FAST_POLL_MS, hasLiveRun, runNote } from '../client/src/lib/codegraphPoll.js';
+import { READ_ONLY_TEXT } from '../client/src/lib/writeRefusal.js';
 import { GIT_NO_PINS } from '../client/src/lib/gitStatsText.js';
 import {
   CODEGRAPH_LAYOUTS, DEFAULT_CODEGRAPH_LAYOUT, codegraphLayoutsFor, drawableCodegraphLayout, parseCodegraphLayout,
@@ -321,6 +323,31 @@ export function run(): number {
     assert.strictEqual(drawableCodegraphLayout('inspector', true), 'inspector');
     assert.deepStrictEqual(codegraphLayoutsFor(true).map(l => l.key), ['inbox', 'inspector']);
     assert.deepStrictEqual(codegraphLayoutsFor(false).map(l => l.key), ['inbox', 'matrix', 'inspector']);
+  })) p++; else f++;
+
+  // ── poll and run notes ────────────────────────────────────────────────────
+  if (test('hasLiveRun: null and a quiet payload are false, one repo with a run is true; the fast poll is 3s', () => {
+    assert.strictEqual(CODEGRAPH_FAST_POLL_MS, 3000);
+    assert.strictEqual(hasLiveRun(null), false);
+    const quiet = { generatedAt: 1, cli: 'ok' as const, repos: [okRepo('a'), okRepo('b')] };
+    assert.strictEqual(hasLiveRun(quiet), false);
+    const live = { ...quiet, repos: [okRepo('a'), okRepo('b', {}, { run: { kind: 'sync', startedAtMs: 1 } })] };
+    assert.strictEqual(hasLiveRun(live), true);
+  })) p++; else f++;
+
+  if (test('runNote: 200 is no note; 409, 404, 403 bad token, 403 read-only and 500 each say their line', () => {
+    assert.strictEqual(runNote(200, { ok: true }, 'brickwright', 'sync'), null);
+    assert.strictEqual(runNote(409, { error: 'already running' }, 'brickwright', 'sync'), 'brickwright is already running a sync or reindex.');
+    assert.strictEqual(runNote(404, { error: 'not indexed' }, 'brickwright', 'sync'), 'brickwright has no code graph.');
+    assert.strictEqual(runNote(403, { error: 'bad token' }, 'brickwright', 'sync'), CODEGRAPH_NEEDS_TOKEN);
+    assert.strictEqual(runNote(403, { error: 'read-only from this network' }, 'brickwright', 'sync'), READ_ONLY_TEXT);
+    assert.strictEqual(runNote(500, undefined, 'brickwright', 'sync'), "Couldn't start sync on brickwright.");
+    assert.strictEqual(runNote(500, null, 'brickwright', 'reindex'), "Couldn't start reindex on brickwright.");
+  })) p++; else f++;
+
+  if (test("runNote: a 403 'not a pinned project' is not a token problem, so no token prompt; a 400 is the generic line", () => {
+    assert.strictEqual(runNote(403, { error: 'not a pinned project' }, 'x', 'reindex'), "Couldn't start reindex on x.");
+    assert.strictEqual(runNote(400, { error: 'bad body' }, 'x', 'sync'), "Couldn't start sync on x.");
   })) p++; else f++;
 
   // ── settings ──────────────────────────────────────────────────────────────
