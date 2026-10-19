@@ -58,6 +58,7 @@ import { getState, setEnabled } from './lib/remoteState.js';
 import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
 import { openFolder, openFolderPlatform } from './lib/open-folder.js';
+import { runQuickOp } from './lib/git-quick.js';
 import { readGitStats } from './lib/git-stats.js';
 import { readCodegraph, startCodegraphRun } from './lib/codegraph-store.js';
 import { classifyOrigin, resolvePeer } from './lib/origin.js';
@@ -69,7 +70,7 @@ import {
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import type {
-  AnalyticsResponse, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
+  AnalyticsResponse, GitQuickRequest, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
   ModelRateRow, RateLimit, ServerSettings, SpawnResponse, UsageCoverage, UsageProfileCell,
   UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult, ConnectionOrigin, WriteAccess
@@ -1745,6 +1746,30 @@ export async function serveGitFetch(config: Config, req: IncomingMessage, res: S
   } catch (e) {
     console.error('[dashboard] git fetch failed:', (e as Error).message);
     sendJson(res, 500, { error: 'git fetch failed' });
+  }
+}
+
+/**
+ * `POST /api/git-quick` — a fast-forward Pull or a Push of one pinned repo, no Claude session (quick pull/push spec §API). The body names a pin and an op,
+ * never a path: the repo is the pin's own folder, read from the stored pin list exactly as `/api/git-stats` reads it. `fetch-running` and `busy` are 409,
+ * since retrying in a moment is the answer to both; every other refusal is a 200 the client words.
+ */
+export async function serveGitQuick(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  const body = await readJsonBody(req) as { dirName?: unknown; op?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.dirName !== 'string' || (body.op !== 'pull' && body.op !== 'push')) {
+    return sendBadBody(res, { error: "expected {dirName: string, op: 'pull' | 'push'}" });
+  }
+  const { dirName, op } = body as GitQuickRequest;
+  const rows = listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), ...pinOptions() });
+  const pin = rows.find(r => r.dirName === dirName && r.listed && r.path !== null);
+  if (!pin || pin.path === null) return sendJson(res, 404, { error: 'not a pinned project' });
+  try {
+    const answer = await runQuickOp({ name: pin.name, toplevel: pin.path }, op);
+    sendJson(res, answer.refusal === 'fetch-running' || answer.refusal === 'busy' ? 409 : 200, answer);
+  } catch (e) {
+    console.error('[dashboard] git quick failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'git quick failed' });
   }
 }
 
