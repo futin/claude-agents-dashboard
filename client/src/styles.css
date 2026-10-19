@@ -2953,8 +2953,31 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-sync.on svg{animation:git-spin 1.6s linear infinite}
 .git-sync:disabled{cursor:default;color:var(--ink3)}
 @keyframes git-spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.git-sync.on svg{animation:none}.git-meter[data-tone="live"] .git-meter-fill{animation:none}}
+@media (prefers-reduced-motion:reduce){.git-sync.on svg,.git-split-caret[aria-disabled="true"] svg{animation:none}.git-meter[data-tone="live"] .git-meter-fill{animation:none}}
 .git-sync-note{font-size:12px;color:var(--amber-text);overflow-wrap:anywhere}
+.git-quick-note{font-size:12px;color:var(--ink2);overflow-wrap:anywhere}
+/* The split Sync key (quick pull/push spec §The UI): the plain key on the left, a caret on the right that opens Pull · Push · Sync with Claude. */
+.git-split{flex:none;display:inline-flex;align-items:stretch;gap:1px}
+.git-split>.git-sync{border-top-right-radius:0;border-bottom-right-radius:0}
+.git-split-caret{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:26px;padding:0;color:var(--ink2);background:var(--sync-paper,var(--strip-hi));border:0;border-radius:0 8px 8px 0;cursor:pointer;transition:color .15s,background .15s}
+.git-split-caret svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.git-split-caret:hover:not([aria-disabled="true"]),.git-split-caret[aria-expanded="true"]{color:var(--ink);background:var(--hairline2)}
+.git-split-caret.primary{color:var(--strip);background:var(--ink)}
+.git-split-caret.primary:hover:not([aria-disabled="true"]),.git-split-caret.primary[aria-expanded="true"]{color:var(--strip);background:color-mix(in srgb,var(--ink) 85%,var(--strip))}
+.git-split-caret.on{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+.git-split-caret.on svg{width:13px;height:13px}
+.git-split-caret[aria-disabled="true"]{cursor:default}
+.git-split-caret[aria-disabled="true"] svg{animation:git-spin 1.6s linear infinite}
+.git-split-caret:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.git-qm{position:fixed;z-index:50;display:flex;flex-direction:column;min-width:240px;max-width:min(320px,calc(100vw - 16px));padding:4px;font-family:var(--font);font-size:12px;background:var(--strip);border:1px solid var(--hairline2);border-radius:10px;box-shadow:0 8px 24px var(--shadow2)}
+.git-qm-item{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:7px 10px;font:inherit;text-align:left;color:var(--ink);background:transparent;border:0;border-radius:6px;cursor:pointer}
+.git-qm-item:hover:not([aria-disabled="true"]),.git-qm-item:focus{outline:none;background:var(--strip-hi)}
+.git-qm-item:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+.git-qm-item[aria-disabled="true"]{cursor:default;color:var(--ink3)}
+.git-qm-label{font-weight:500}
+.git-qm-sub{font-size:11px;color:var(--ink2);overflow-wrap:anywhere}
+.git-qm-item[aria-disabled="true"] .git-qm-sub{color:var(--ink3)}
+.git-qm-sep{height:1px;margin:4px 6px;background:var(--hairline)}
 /* Inbox | Matrix | Inspector | Branches — the parts they share (management-redesign spec §4.2) */
 .git-panel{background:var(--strip);border-radius:16px;min-width:0}
 .git-gh{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin:16px 4px 8px}
@@ -3075,6 +3098,11 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-mx-act .git-key.primary:hover:not(:disabled),.git-mx-act .git-sync.primary:hover:not(:disabled){color:var(--ink)}
 .git-mx-act .git-key.primary:disabled,.git-mx-act .git-sync.primary:disabled{color:var(--amber-ink);opacity:.55}
 .git-mx-act .git-sync.on,.git-mx-act .git-sync.on:hover:not(:disabled){color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+.git-mx-act .git-split>.git-sync{border-top-right-radius:0;border-bottom-right-radius:0}
+.git-mx-act .git-split-caret{width:26px;height:30px;border:1px solid var(--hairline2);border-left:0;border-radius:0 12px 12px 0;background:var(--strip);color:var(--ink2)}
+.git-mx-act .git-split-caret:hover:not([aria-disabled="true"]),.git-mx-act .git-split-caret[aria-expanded="true"]{color:var(--ink);border-color:var(--ink3);background:var(--strip)}
+.git-mx-act .git-split-caret.primary,.git-mx-act .git-split-caret.primary:hover:not([aria-disabled="true"]){background:var(--amber-tint);border-color:transparent;color:var(--amber-ink)}
+.git-mx-act .git-split-caret.on{color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
 /* Cells: a failing check is a pill in `.spill`'s shape (11px, 500, 2px 8px, 12px corners) with the mock's soft colours — the check's own ink on an 11%
    amber (`bad`) or 13% mustard (`meh`) tint — and everything else plain 12px text, `--ink3` (`live` --cyan), with no dot, so the eye goes only where a
    check failed. Scoped to the table and its legend. */

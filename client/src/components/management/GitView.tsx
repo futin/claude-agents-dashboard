@@ -1,6 +1,7 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 
 import { useGitFetch } from '../../hooks/useGitFetch';
+import { useGitQuick } from '../../hooks/useGitQuick';
 import { useGitStats } from '../../hooks/useGitStats';
 import { useGitSync } from '../../hooks/useGitSync';
 import type { GitStatsResponse } from '../../../../shared/types';
@@ -11,6 +12,7 @@ import { usePins } from '../../hooks/usePins';
 import { useSessions } from '../../hooks/useSessions';
 import { useSettings } from '../../hooks/useSettings';
 import { DEFAULT_GIT_LAYOUT, drawableGitLayout, gitLayoutsFor, parseGitLayout, type GitLayout } from '../../lib/gitLayouts';
+import { quickNoteExpired } from '../../lib/gitQuick';
 import { SYNC_SCAN_LIMIT } from '../../lib/gitSync';
 import { GIT_BAND_SUB, GIT_NO_PINS, gitFirstLoadText } from '../../lib/gitStatsText';
 import { Band } from '../usage/Sheet';
@@ -39,6 +41,15 @@ export default function GitView() {
   const { data, error } = stats;
   const sync = useGitSync(stats.refresh);
   const fetchCtl = useGitFetch(sync.tokenRequired, sync.writeAccess, stats.refresh);
+  const quick = useGitQuick(sync.tokenRequired, sync.writeAccess, stats.refresh);
+  const { note: quickNote, clearNote: clearQuickNote } = quick;
+  // A sync starting supersedes the last quick op's line; so does a poll landing after the line has stood its 30s, on this client's clock.
+  useEffect(() => {
+    if (sync.starting !== null) clearQuickNote();
+  }, [sync.starting, clearQuickNote]);
+  useEffect(() => {
+    if (quickNote !== null && stats.updatedAt !== null && quickNoteExpired(quickNote.atMs, stats.updatedAt)) clearQuickNote();
+  }, [stats.updatedAt, quickNote, clearQuickNote]);
   const narrow = useNarrow();
   const [stored, setStored] = usePersistedState<string>('management.gitLayout', DEFAULT_GIT_LAYOUT);
   const layout = drawableGitLayout(parseGitLayout(stored), narrow);
@@ -59,7 +70,7 @@ export default function GitView() {
     },
   };
   const props: GitLayoutProps = {
-    repos: data?.repos ?? [], sessions, nowMs: Date.now(), clock: data?.fetch, sync, fetchCtl, unpin, openFolder: folder.open, narrow, setLayout: setStored,
+    repos: data?.repos ?? [], sessions, nowMs: Date.now(), clock: data?.fetch, sync, fetchCtl, quick, unpin, openFolder: folder.open, narrow, setLayout: setStored,
   };
 
   return (
@@ -77,6 +88,7 @@ export default function GitView() {
         {(data !== null || error) && <GitClockChip stats={stats} fetchCtl={fetchCtl} tokenRequired={sync.tokenRequired} writeAccess={sync.writeAccess} clock={data?.fetch} />}
       </div>
       {sync.note && <div className="git-sync-note">{sync.note}</div>}
+      {quickNote && <div className={quickNote.tone === 'warn' ? 'git-sync-note' : 'git-quick-note'} role="status">{quickNote.text}</div>}
       {unpinNote && <div className="git-sync-note">{unpinNote}</div>}
       {folder.note && <div className="git-sync-note">{folder.note}</div>}
       <GitBody data={data} error={error} layout={layout} props={props} />
