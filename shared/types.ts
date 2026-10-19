@@ -930,7 +930,7 @@ export interface SessionChat {
 }
 
 /**
- * Remote answers — the one write path in the dashboard (see
+ * Remote answers — the first of the four session write paths (see
  * `docs/subsystems/remote-answer.md`). A session's `AskUserQuestion` PreToolUse
  * hook offers the question here and blocks; the browser answers it; the hook
  * feeds the choice back to the model. Everything below lives in memory only.
@@ -1336,8 +1336,9 @@ export interface PerTurn {
   /** 0-based index (in assistant-turn order) of the `maxCombined` turn, or -1. */
   maxTurnIndex: number;
   /**
-   * Inferred, not read: `maxCombined` topped 250k (out of a 200k window's reach — it compacts near 160k) and no turn ever fell below half the
-   * running peak, the drop compaction leaves. A session with no turns, or one that compacted after its peak, reads false.
+   * `maxCombined` topped 250k (out of a 200k window's reach — it compacts near 160k; the window itself is inferred, never recorded) and the session
+   * never compacted. False when any main-chain `compact_boundary` record is present; for transcripts without one, false when a turn fell below
+   * half the running peak, the drop compaction leaves. A session with no turns, or one that compacted after its peak, reads false.
    */
   neverCompacted: boolean;
 }

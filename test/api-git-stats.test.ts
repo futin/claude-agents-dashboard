@@ -2,7 +2,7 @@
  * `GET /api/git-stats` through the real route table (spec §3, §7): pin order, the memo dropping an unpinned repo's keys, failure staying per repo, a missing
  * git binary not taking the server down, and a concurrent request sharing one round of git calls.
  *
- * Pins come from `setPinned` (the token-guarded POST is `api-pins.test.ts`'s business) over transcripts whose `cwd` is a real fixture repo. The runner is
+ * Pins come from `setPinned` (the gated POST is `api-pins.test.ts`'s business) over transcripts whose `cwd` is a real fixture repo. The runner is
  * reached only through `overrideGitRunner`, the one seam the harness leaves, and every case restores it.
  */
 import assert from 'node:assert';

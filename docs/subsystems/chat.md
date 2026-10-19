@@ -85,7 +85,8 @@ in `transcript.ts`). Exception: for `ExitPlanMode` and `AskUserQuestion` the inp
 conversational content, so the full body (the plan markdown / questions+options composed
 as markdown) rides along as `ChatToolCall.body` — capped at `TOOL_BODY_CAP` (20 KB by
 default, `bodyTruncated` flag) — and renders as a collapsible `<details open>` block
-(`.cmsg-plan`) instead of the one-liner; the `text` filter keeps body-bearing messages.
+(`.cmsg-plan`) instead of the one-liner; the `text` filter keeps body-bearing messages. While a question or plan is held, the newest matching body
+renders closed, because the pinned panel already shows it (`lib/heldBody.ts`, [remote-answer](remote-answer.md)).
 
 Dropped: records with no user/assistant `message.role` (`last-prompt`, `custom-title`,
 `queue-operation`, `attachment`, `system`), `isSidechain` records (subagent traffic —
@@ -286,6 +287,7 @@ control since nothing outside that terminal can answer it.
     - client/src/hooks/useBackClose.ts
     - client/src/lib/backClose.ts
     - client/src/lib/chatFilter.ts
+    - client/src/lib/heldBody.ts
     - client/src/lib/markdown.ts
   kind: subsystem
   verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57

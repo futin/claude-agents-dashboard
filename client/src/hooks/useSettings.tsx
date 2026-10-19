@@ -19,7 +19,7 @@ const SettingsContext = createContext<SettingsControl | null>(null);
  * Every persisted localStorage key in the app except `dashboard.answerToken`,
  * which is a credential rather than a view state: Reset is a "put the board
  * back the way it shipped" button, not a sign-out, and clearing the token would
- * silently disarm every write path (see remote-answer.md).
+ * silently disarm every route behind the write gate for a browser that needs the token (see remote-access.md).
  */
 export const OWNED_KEYS = [
   'dashboard.view', 'dashboard.layout', 'dashboard.section', 'dashboard.chatFilter',

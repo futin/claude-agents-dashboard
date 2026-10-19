@@ -33,6 +33,11 @@
  * split across ALL of that turn's tool blocks, which means buffering them and
  * settling at end of file rather than attributing per record. Records with no
  * `message.id` (old or malformed transcripts) each count as their own turn.
+ *
+ * A COMPACTION REPLAYS RECORDS. After a main-chain `compact_boundary` the CLI
+ * can rewrite earlier records verbatim, ids included, so a tool call, its result
+ * and an Agent launch are each counted once per id (#174), and the compact
+ * summary — which quotes the user's earlier messages — is skipped outright.
  */
 
 import fs from 'node:fs';
@@ -87,7 +92,8 @@ const CORRECTION_RE = /\b(no|nope|wrong|incorrect|not (?:what|right|correct)|act
 /**
  * Peak context that proves auto-compaction never fired. A 200k window compacts near 160k, so a turn above 250k can only come from a larger window
  * (a 1M one puts compaction out of reach) — and since every turn replays the whole context, a session that never compacts pays total input
- * ≈ (C_end² − C_start²) / 2d to the end. The transcript records neither the window nor a compaction marker, so this is an inference.
+ * ≈ (C_end² − C_start²) / 2d to the end. The transcript records no window, so the threshold is an inference. Compaction itself is read from
+ * main-chain `compact_boundary` records; a fall below half the running peak stays as the fallback for transcripts that predate the marker.
  */
 const NEVER_COMPACTED_PEAK = 250_000;
 /** A turn below this fraction of the running peak is a compaction: context only ever grows between them, and compaction cuts it several-fold. */
@@ -109,11 +115,13 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
   const models = new Set<string>();
   const toolMap = new Map<string, ToolStat>();
   const pendingTool = new Map<string, { name: string; ts: string | null }>();
+  // pendingTool forgets a call once its result lands, so these two catch the copies a compaction replays (#174).
+  const seenToolUse = new Set<string>(), seenToolResult = new Set<string>();
   const errorOutstanding = new Set<string>();
   let serverWebSearch = 0, serverWebFetch = 0;
   let toolErrors = 0, retries = 0, userCorrections = 0;
   let turnCount = 0, sumCombined = 0, maxCombined = 0, maxTurnIndex = -1;
-  let compacted = false;
+  let compacted = false, sawBoundary = false;
   let cwd: string | null = null;
   let minTs: string | null = null, maxTs: string | null = null;
 
@@ -153,6 +161,11 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
     // double against bySubagent (readAgents). Skip for main-agent facts.
     if (rec.isSidechain === true) continue;
 
+    // Same predicate kaizen.mjs uses, so the two cannot disagree on what a boundary is.
+    if (rec.compactMetadata && typeof rec.compactMetadata === 'object') { sawBoundary = true; continue; }
+    // The summary quotes the user's earlier messages, so it must not reach the correction heuristic below.
+    if (rec.isCompactSummary === true) continue;
+
     const msg = rec.message;
     if (!msg) continue;
     const content = msg.content;
@@ -190,6 +203,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
       if (Array.isArray(content)) {
         const toolBlocks = content.filter((b: any) => b && b.type === 'tool_use' && typeof b.name === 'string');
         for (const b of toolBlocks) {
+          if (typeof b.id === 'string') { if (seenToolUse.has(b.id)) continue; seenToolUse.add(b.id); }
           const s = getTool(b.name);
           // count/duration/retries are per tool CALL, and parallel calls really
           // do land in separate records — only the token split is per turn.
@@ -204,6 +218,8 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
       if (Array.isArray(content)) {
         for (const b of content) {
           if (!b || b.type !== 'tool_result' || typeof b.tool_use_id !== 'string') continue;
+          if (seenToolResult.has(b.tool_use_id)) continue;
+          seenToolResult.add(b.tool_use_id);
           const p = pendingTool.get(b.tool_use_id);
           const err = isErrorResult(b);
           if (p) {
@@ -252,7 +268,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
     'byTool.approxOutputTokens splits each turn\'s output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.',
     'byTool.resultTokens is what each tool injected into context: its tool_result text sized at chars ÷ 4, summed per call (not split), error text included, images not counted. The firmer per-tool figure and byTool\'s sort key — but it is context growth, not assistant output; cite both and never add them.',
     'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.',
-    'perTurn.neverCompacted is inferred from peak context, not read from a window field — the transcript records neither the window nor a compaction: true when the peak turn tops 250k combined (a 200k window compacts near 160k) and no turn ever fell below half the running peak.'
+    'perTurn.neverCompacted: true when the peak turn tops 250k combined (a 200k window compacts near 160k — the transcript records no window, so that part is inferred) and the session never compacted. Compaction is read from main-chain compact_boundary records; for transcripts without them, a turn below half the running peak counts as one.'
   ];
   if (subagentTotals.count > 0) {
     notes.push('Subagent tokens are summed from each subagent\'s own transcript and are separate from main-agent totals; whole-session total = totals.combined + subagentTotals.tokens. subagentTotals.usage splits them by class — lead with its billableApprox for cost.');
@@ -280,7 +296,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
       avgCombined: turnCount > 0 ? Math.round(sumCombined / turnCount) : 0,
       maxCombined,
       maxTurnIndex,
-      neverCompacted: maxCombined > NEVER_COMPACTED_PEAK && !compacted
+      neverCompacted: maxCombined > NEVER_COMPACTED_PEAK && !compacted && !sawBoundary
     },
     byTool,
     bySubagent: agents,
@@ -299,13 +315,15 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
  * the better (lower-bound) answer. A running launch stays unknown, as does a finished one with
  * neither. A transcript no launch claims is not a subagent this session can account for, and
  * is left out rather than risk counting one twice. A `resumed` row is left out too: its runs
- * write into the transcript the original launch already claims.
+ * write into the transcript the original launch already claims. Two rows can still claim one
+ * transcript — a sync result naming an agentId already claimed — so a file joins `usage` once.
  */
 function subagentSpend(filePath: string): { agents: AgentJob[]; subagentTotals: SubagentTotals } {
   const files = readSubagentUsage(filePath);
   const byAgentId = new Map(files.map(f => [f.agentId, f]));
   const byToolUseId = new Map(files.filter(f => f.toolUseId).map(f => [f.toolUseId as string, f]));
   const usage = emptyTotals();
+  const added = new Set<string>();
   let tokens = 0, fallbackCount = 0, unknownTokenCount = 0;
   const agents = (readAgents(filePath) || []).filter(a => !a.resumed).map(a => {
     const file = (a.agentId && byAgentId.get(a.agentId)) || byToolUseId.get(a.id);
@@ -313,7 +331,7 @@ function subagentSpend(filePath: string): { agents: AgentJob[]; subagentTotals: 
     if (a.status === 'done') {
       if (file && file.usage.combined > 0 && file.usage.combined >= (a.tokens ?? 0)) {
         figure = file.usage.combined;
-        addTotals(usage, file.usage);
+        if (!added.has(file.agentId)) { added.add(file.agentId); addTotals(usage, file.usage); }
       } else if (a.tokens != null) {
         figure = a.tokens;
         fallbackCount++;
