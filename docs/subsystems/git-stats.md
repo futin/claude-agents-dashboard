@@ -12,7 +12,8 @@ beside it, does not check the method. Git must be **2.31 or newer** (`rev-parse 
 
 Every git call the reader makes runs against local refs and is an array-form `execFile` (never a shell) with a 5s timeout and `GIT_OPTIONAL_LOCKS=0` (so
 `git status` never takes `index.lock` while you run git yourself), `GIT_TERMINAL_PROMPT=0` and `LC_ALL=C`. The reader never fetches, pulls, pushes, calls `gh`
-or writes to a repo; `commit-tree` is out for the same reason. The numbers are as fresh as the last fetch anybody ran, the server's own included, which is why
+or writes to a repo; `commit-tree` is out for the same reason. Pull and Push live in the writer below, not here; the reader only adds
+`trunkCheckedOutElsewhere` (the trunk's `%(worktreepath)` against this checkout, both through realpath) so the Sync menu can say why the trunk will not move. The numbers are as fresh as the last fetch anybody ran, the server's own included, which is why
 the payload carries `fetchedAtMs` and the client shows its age. Branches are **local only**: one pushed from another machine appears once it is checked out
 here.
 
@@ -52,6 +53,32 @@ imports nothing from the reader and has its own runner. It is a module of its ow
 
 `POST /api/git-fetch` runs one now: behind the write gate `refuseWrite` like `POST /api/settings` (403 `bad token` or `read-only from this network`), marks the view watched, awaits
 `fetchAll` and answers `200 { fetch }`; `500` only if `fetchAll` throws despite the above, `405` for any other method. A manual fetch resets the schedule.
+
+## Quick pull and push — the writer
+
+`server/lib/git-quick.ts` is the one place the server moves a local branch (design record: `docs/superpowers/specs/2026-10-19-quick-pull-push-design.md`).
+It backs the Pull and Push items of the Sync key's menu, so a pull or push that needs no judgement does not cost a Claude session. Like the fetch, it imports
+nothing from the reader; unlike the fetch, it writes local refs and the working tree — but only by fast-forward.
+
+- **Route.** `POST /api/git-quick {dirName, op: 'pull' | 'push'}`, behind `refuseWrite` like `POST /api/git-fetch`. A body that is not that shape is 400,
+  a `dirName` that is not a listed pin with a path is 404, `busy` and `fetch-running` refusals are 409, everything else answers 200 with a
+  `GitQuickResponse` (`refusal` plus `parts`); a throw is 500 `git quick failed`, any other method 405.
+- **One op per repo, never beside fetch-all.** `server/lib/git-locks.ts` holds one lock per git **common dir** (two pins in one repo, a linked worktree
+  included, share it). A quick op refuses `fetch-running` while fetch-all is in flight and `busy` while its repo's lock is held; both checks and the lock
+  happen before the first await after the common dir is known, so two requests cannot both pass. Fetch-all waits for every held lock inside its in-flight
+  promise, so no new lock is taken while it waits, and the timer skips a tick while any lock is held.
+- **Preconditions**, each a refusal with its own copy: a readable repo with an `origin` (`not-ok`, `no-origin`); no merge, rebase, cherry-pick, revert
+  or bisect in progress (`in-progress`); a checked-out branch (`detached`); something to do (`nothing`). The server re-reads all of it; the client's menu
+  rules (`client/src/lib/gitQuick.ts`) only decide what is offered.
+- **Push** pushes the checked-out branch to its configured upstream, only when that upstream is on `origin` and is not `origin/<trunk>`, with an explicit
+  `refs/heads/B:refs/heads/<upstream>` refspec so `push.default` cannot widen it. The trunk is never pushed: `main` is PR-only.
+- **Pull** runs `git fetch origin`, then fast-forwards the checked-out branch with `merge --ff-only` (its upstream, or `origin/<trunk>` on the trunk), and
+  moves a trunk checked out nowhere with `fetch origin <trunk>:<trunk>` — which git refuses unless it is a fast-forward. A trunk checked out in another
+  worktree is left alone; the reader's `trunkCheckedOutElsewhere` says so to the menu.
+- **Never forces.** No `--force`, `reset`, merge commit or rebase. A part git refuses comes back `ok: false` with git's first line, and the copy says Use
+  Sync.
+- **Hooks run** (fetch-all turns them off): a `pre-push` or `post-merge` hook is the user's own gate. So each git call gets 60s (`QUICK_TIMEOUT_MS`), and
+  a timed-out part says so. Calls that talk to origin use the fetch's never-prompt env (`promptlessEnv`).
 
 ## What each number means
 
