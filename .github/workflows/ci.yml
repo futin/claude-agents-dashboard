@@ -20,7 +20,6 @@ jobs:
   ci:
     uses: futin/release-kit/.github/workflows/ci-node.yml@v1
     with:
-      # build before test: test/api-usage-rates.test.ts expects the built SPA shell for unmatched paths.
       check-commands: |
         pnpm typecheck
         pnpm build
