@@ -135,7 +135,9 @@ const PHRASE: Record<NotifyEvent, string> = {
   plan: 'plan waiting for review',
   permission: 'permission dialog open',
   stop: 'task finished',
-  'schedule-failed': 'scheduled job failed'
+  'schedule-failed': 'scheduled job failed',
+  'usage-limit': '5-hour limit reached',
+  'usage-reset': '5-hour limit reset'
 };
 
 const TAGS: Record<NotifyEvent, string> = {
@@ -143,7 +145,9 @@ const TAGS: Record<NotifyEvent, string> = {
   plan: 'clipboard',
   permission: 'lock',
   stop: 'white_check_mark',
-  'schedule-failed': 'warning'
+  'schedule-failed': 'warning',
+  'usage-limit': 'no_entry',
+  'usage-reset': 'arrows_counterclockwise'
 };
 
 let sender: Sender | null = null;

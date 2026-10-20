@@ -964,8 +964,11 @@ export type ConnectionOrigin = 'local' | 'lan' | 'tailnet' | 'unknown';
  */
 export type WriteAccess = 'open' | 'token' | 'none';
 
-/** The four session events a push notification can announce. */
-export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan' | 'schedule-failed';
+/**
+ * What a push notification can announce: four session events, a failed scheduled job, and the 5-hour usage window reaching its limit
+ * (`usage-limit`) or resetting after one (`usage-reset`). The last three ignore the session-only `require*` conditions.
+ */
+export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan' | 'schedule-failed' | 'usage-limit' | 'usage-reset';
 
 /**
  * When to send a push. Every clause is AND-ed, and every layer is independently
@@ -1064,6 +1067,10 @@ export interface ServerSettings {
    * both read and publish to the channel.
    */
   notifyAvailable: boolean;
+  /**
+   * Whether `SHOW_USAGE` is on. Off, the server never reads usage, so the usage-limit alerts cannot fire and their Settings rows say why.
+   */
+  usageAvailable: boolean;
   /**
    * Names of `.env` settings that have been edited since the server started, and
    * are therefore *not* what it is running on — config is read once, at startup.

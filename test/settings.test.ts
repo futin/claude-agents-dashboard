@@ -290,7 +290,7 @@ export function run(): number {
   })) p++; else f++;
 
   if (test('schedule-failed is the fifth notify event: listed, off by default, and settable on its own', () => {
-    assert.deepStrictEqual([...NOTIFY_EVENTS], ['question', 'stop', 'permission', 'plan', 'schedule-failed']);
+    assert.deepStrictEqual(NOTIFY_EVENTS.slice(0, 5), ['question', 'stop', 'permission', 'plan', 'schedule-failed']);
     assert.deepStrictEqual(Object.keys(DEFAULT_NOTIFY.events).sort(), [...NOTIFY_EVENTS].sort());
     inTmpCwd(() => {
       assert.strictEqual(getSettings().notify.events['schedule-failed'], false);
@@ -299,6 +299,35 @@ export function run(): number {
       const events = getSettings().notify.events;
       assert.strictEqual(events['schedule-failed'], true, 'survives a restart');
       assert.strictEqual(events.question, false, 'the other four stay off');
+    });
+  })) p++; else f++;
+
+  if (test('NOTIFY_EVENTS includes both usage events, off by default', () => {
+    assert.ok(NOTIFY_EVENTS.includes('usage-limit'));
+    assert.ok(NOTIFY_EVENTS.includes('usage-reset'));
+    assert.strictEqual(DEFAULT_NOTIFY.events['usage-limit'], false);
+    assert.strictEqual(DEFAULT_NOTIFY.events['usage-reset'], false);
+  })) p++; else f++;
+
+  if (test('a stored policy without the usage keys loads them as false', () => {
+    inTmpCwd(dir => {
+      const events = { question: true, stop: false, permission: false, plan: false, 'schedule-failed': true };
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ notify: { enabled: true, events } }), 'utf8');
+      resetSettings();
+      const loaded = getSettings().notify.events;
+      assert.strictEqual(loaded.question, true);
+      assert.strictEqual(loaded['usage-limit'], false);
+      assert.strictEqual(loaded['usage-reset'], false);
+    });
+  })) p++; else f++;
+
+  if (test('a notify patch accepts usage-limit and usage-reset', () => {
+    inTmpCwd(() => {
+      assert.notStrictEqual(setSettings({ notify: { events: { 'usage-limit': true, 'usage-reset': true } } }), null);
+      resetSettings();
+      const events = getSettings().notify.events;
+      assert.strictEqual(events['usage-limit'], true);
+      assert.strictEqual(events['usage-reset'], true);
     });
   })) p++; else f++;
 

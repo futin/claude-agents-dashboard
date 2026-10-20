@@ -455,7 +455,7 @@ export async function run(): Promise<number> {
     }))) p++; else f++;
 
   if (test('schedule-failed is the fifth event, and only it passes a policy that selects only it', () => {
-    assert.strictEqual(NOTIFY_EVENTS.length, 5);
+    assert.strictEqual(NOTIFY_EVENTS[4], 'schedule-failed');
     const pol = policy({ events: { ...DEFAULT_NOTIFY.events, 'schedule-failed': true } });
     assert.strictEqual(shouldNotify('schedule-failed', pol, ctx()), true);
     assert.strictEqual(shouldNotify('question', pol, ctx()), false);

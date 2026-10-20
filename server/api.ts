@@ -614,8 +614,8 @@ setTimeout(function () {
  * whole state with either reply, so a field only one of them filled would vanish
  * on the first save.
  *
- * `notifyAvailable` and `staleEnvKeys` are filled here rather than in the store:
- * both derive from `Config` or the `.env` baseline, and `lib/settings.ts`
+ * `notifyAvailable`, `usageAvailable` and `staleEnvKeys` are filled here rather than in the store:
+ * all three derive from `Config` or the `.env` baseline, and `lib/settings.ts`
  * deliberately never reads config. The topic itself is never returned — it is
  * both the address and the credential.
  */
@@ -623,6 +623,7 @@ function settingsBody(config: Config, settings: ServerSettings): ServerSettings 
   return {
     ...settings,
     notifyAvailable: config.ntfyTopic !== '',
+    usageAvailable: config.showUsage,
     // Read per request, not cached: the whole point is to notice a file that
     // changed after this process read it. One `readFileSync` of a small file.
     staleEnvKeys: staleEnvKeys()

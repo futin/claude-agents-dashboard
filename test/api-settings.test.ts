@@ -75,6 +75,15 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await testAsync('GET /api/settings reports usageAvailable from SHOW_USAGE', async () => {
+    await withSettings('SHOW_USAGE=true\nSKIP_PROC_SCAN=true\n', async h => {
+      assert.equal((await h.req('/api/settings')).json?.usageAvailable, true);
+    });
+    await withSettings(ENV, async h => {
+      assert.equal((await h.req('/api/settings')).json?.usageAvailable, false);
+    });
+  }));
+
   console.log(`\n  ${ok}/${total} passed`);
   return total - ok;
 }
