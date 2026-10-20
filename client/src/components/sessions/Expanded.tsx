@@ -1,10 +1,7 @@
-import { useState } from 'react';
-
 import type { Session } from '../../../../shared/types';
 import { SessionDetail } from '../SessionDetail';
 import { ActFull } from './atoms';
-import { stopControl } from '../../lib/stopControl';
-import { useStopSession } from '../../hooks/useStopSession';
+import { SessionStopControl } from './SessionStopControl';
 
 /**
  * The open body of a session — the full tool call, the kaizen lesson, the
@@ -22,10 +19,6 @@ import { useStopSession } from '../../hooks/useStopSession';
  * click, and a confirm step that collapses its own row is no confirm step.
  */
 export function Expanded({ s }: { s: Session }) {
-  const [confirming, setConfirming] = useState(false);
-  const { stop, pending, error, needsToken } = useStopSession();
-  const ctl = stopControl(s.stopState, confirming);
-
   return (
     <div className="expanded" onClick={e => e.stopPropagation()}>
       <ActFull s={s} />
@@ -35,27 +28,7 @@ export function Expanded({ s }: { s: Session }) {
           <span>{s.kaizenLesson}</span>
         </div>
       )}
-      {ctl.render && (
-        <div className="stop-ctl">
-          <button
-            type="button"
-            className="stop-go"
-            disabled={pending}
-            onClick={() => {
-              if (ctl.arms) return setConfirming(true);
-              setConfirming(false);
-              void stop(s.id, ctl.force);
-            }}
-          >
-            {ctl.label}
-          </button>
-          {ctl.cancel && (
-            <button type="button" className="stop-cancel" onClick={() => setConfirming(false)}>Cancel</button>
-          )}
-          {needsToken && <span className="stop-msg">Needs the dashboard token — set it in Settings › Local › Connection.</span>}
-          {!needsToken && error && <span className="stop-msg">{error}</span>}
-        </div>
-      )}
+      <SessionStopControl sessionId={s.id} stopState={s.stopState} />
       <SessionDetail id={s.id} />
     </div>
   );

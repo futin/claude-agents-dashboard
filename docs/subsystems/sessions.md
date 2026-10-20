@@ -104,7 +104,8 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   drawer never also toggles the row.
 - **Stop control** — a `stopping…` badge beside the activity line, plus a two-stage
   `Stop session` → `Really stop?` pair (and `Force stop` once stopping) in the expanded
-  body (`sessions/Expanded.tsx`, shared by every view that opens a session). It renders
+  body (`sessions/Expanded.tsx`, shared by every view that opens a session) and in the
+  [chat drawer](chat.md)'s sidecar — both render `sessions/SessionStopControl.tsx`. It renders
   only for a session carrying `Session.stopState`, i.e. one this server still holds a
   child handle for; `lib/stopControl.ts` decides every branch. Absent for every other
   row, deliberately — see

@@ -1,9 +1,9 @@
 /**
- * stopControl.ts — what the Stop control on an expanded row shows, and what it
- * sends.
+ * stopControl.ts — what the Stop control (expanded row and chat drawer sidecar) shows,
+ * and what it sends.
  *
  * Every branch of a two-stage destructive control lives here rather than in
- * `sessions/Expanded.tsx`, so the component stays declarative and this stays testable
+ * `sessions/SessionStopControl.tsx`, so the component stays declarative and this stays testable
  * without a DOM — the same split `panelCollapse.ts` and `holds.ts` already use
  * (this repo's client tests import `client/src/lib/*` and never render).
  */
@@ -27,7 +27,7 @@ export type StopControlView =
       force: boolean;
       /** Draw a `cancel` button beside the primary one. */
       cancel: boolean;
-      /** Visible text for the row's second line, or null. Text, never a `title` — a tooltip is dead on touch. */
+      /** Visible text for the row's second line (or inside the drawer's control), or null. Text, never a `title` — a tooltip is dead on touch. */
       badge: string | null;
     };
 

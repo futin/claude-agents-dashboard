@@ -3,7 +3,7 @@ import { SECTIONS } from '../../client/src/lib/sections.js';
 
 import { EPOCH } from './fixtures/epoch.js';
 import { FIXTURE_FIRST_MESSAGE, FIXTURE_SESSION_ID } from './fixtures/index.js';
-import { sessions } from './fixtures/sessions.js';
+import { SESSION_IDS, sessions } from './fixtures/sessions.js';
 import { expect, test } from './harness.js';
 import { mockApiFailures } from './mock-api.js';
 import { isReady, stage, type StageOpts } from './stage.js';
@@ -69,6 +69,33 @@ test('the ?session= deep link opens the chat drawer on the fixture chat', async 
   const drawer = page.locator('aside.chat');
   await expect(drawer).toBeVisible();
   await expect(drawer).toContainText(FIXTURE_FIRST_MESSAGE);
+});
+
+// The mock API serves no `/stop`, so a request would fail the case: the arm and cancel taps are proven request-free, and `Really stop?` is never clicked.
+for (const width of [1280, 375]) {
+  test(`the drawer's sidecar carries the two-stage stop control at ${width}`, async ({ page }) => {
+    await stage(page, { ...BASE, width, query: '?session=' + FIXTURE_SESSION_ID });
+    const side = page.locator('aside.chat .chat-side');
+    await expect(side.locator('.stop-go')).toHaveText('Stop session');
+    await expect(page.locator('aside.chat .chat-head .stop-go')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+
+    await side.locator('.stop-go').click();
+    await expect(side.locator('.stop-go')).toHaveText('Really stop?');
+    await expect(side.locator('.stop-cancel')).toHaveText('Cancel');
+
+    await side.locator('.stop-cancel').click();
+    await expect(side.locator('.stop-go')).toHaveText('Stop session');
+    await expect(side.locator('.stop-cancel')).toHaveCount(0);
+    expect(mockApiFailures(page)).toEqual([]);
+  });
+}
+
+test('the drawer has no stop control for a session this dashboard did not spawn', async ({ page }) => {
+  await stage(page, { ...BASE, query: '?session=' + SESSION_IDS.idle });
+  const drawer = page.locator('aside.chat');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.locator('.stop-ctl')).toHaveCount(0);
 });
 
 for (const { id, label } of SECTIONS) {

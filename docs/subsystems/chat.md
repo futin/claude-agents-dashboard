@@ -18,6 +18,13 @@ is off the same 3s poll rather than a second read, and it is there because a mod
 straight from a tapped push ([deep link](push-notify.md)) never showed the list, so this is
 the only place that reader sees how full the session is.
 
+**The Stop control sits in the sidecar, directly under the context reading** — the same
+`sessions/SessionStopControl.tsx` the expanded row renders, so arm, confirm, cancel, `stopping…` + `Force stop`, the token hint and the server's error line
+behave identically in both places. It renders only for a session carrying `Session.stopState` and leaves no gap otherwise. It is in the sidecar and not the
+head on purpose: on a phone the thumb goes to ✕, and a stop beside it gets hit by accident even behind the confirm step (#211). Below `md` it is one line in
+the band. A drawer opened from Schedules never shows it: that drawer's session comes from `GET /api/sessions/:id/row`, and `serveSessionRow` builds the row
+without `stopStates`, so it carries no `stopState`.
+
 **A Tasks card sits between the Context card and the facts**, for a session that is executing a plan or has built a task list (the plan's tasks first, else
 `TaskCreate` / `TaskUpdate`; the fold is in [sessions](sessions.md#the-task-list-and-why-it-folds-the-whole-file)). `TasksCard` takes `session.tasks` off the
 same 3s poll and renders nothing for `null` or `[]`. On desktop it is a head row (`Tasks`, `done / total`), a 6px track and the checklist, and it takes the
@@ -275,6 +282,7 @@ control since nothing outside that terminal can answer it.
     - server/lib/remote-message-prose.ts
     - server/api.ts
     - client/src/components/ChatDrawer.tsx
+    - client/src/components/sessions/SessionStopControl.tsx
     - client/src/components/TasksCard.tsx
     - client/src/components/PanelChrome.tsx
     - client/src/components/QuestionPanel.tsx
