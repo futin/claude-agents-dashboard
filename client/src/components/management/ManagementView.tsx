@@ -2,7 +2,7 @@ import { useSettings } from '../../hooks/useSettings';
 import CodegraphView from './CodegraphView';
 import GitView from './GitView';
 import ProjectsView from './ProjectsView';
-import SchedulesView from './SchedulesView';
+import SchedulesView from './schedules/SchedulesView';
 
 /**
  * The Management section: four sub-views, **Projects**, **Git**, **CodeGraph** and **Schedules**.

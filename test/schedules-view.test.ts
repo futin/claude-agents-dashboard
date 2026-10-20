@@ -4,8 +4,13 @@
  */
 import assert from 'node:assert';
 
-import { createPollSeq, foreachLine, formatStat, groupRunsByDay, readForeach, rowText, runsQueryString } from '../client/src/lib/schedules.js';
-import type { ScheduleJob, ScheduleJobRow, ScheduleRun, ScheduleStep } from '../shared/types.js';
+import {
+  costDelta, createPollSeq, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, launchdLabel, medianMs, nameProblem, readForeach,
+  reconcileChip, rowText, runClock, dotTone, topFailure, jobPins, pinOutcome, stepErrLine, runKicker, runPill, runsQueryString, setRepos, splitNext, splitSteps, stepPill, successRate, topTokenShare, withLate, writeFailureText
+} from '../client/src/lib/schedules.js';
+import { READ_ONLY_TEXT } from '../client/src/lib/writeRefusal.js';
+import { parseJob } from '../shared/schedule-file.js';
+import type { ScheduleJob, ScheduleJobRow, ScheduleRun, ScheduleStats, ScheduleStep } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -230,6 +235,193 @@ export function run(): number {
   t('runsQueryString: days always, filters only when set', () => {
     assert.strictEqual(runsQueryString({ days: 30, job: '', outcome: '', runner: '' }), '?days=30');
     assert.strictEqual(runsQueryString({ days: 7, job: 'git-sync-all', outcome: 'failed', runner: 'claude' }), '?days=7&job=git-sync-all&outcome=failed&runner=claude');
+  });
+
+  t('readForeach: a trailing comment on the line is not the value (the spec example file reads as All pinned)', () => {
+    assert.deepStrictEqual(readForeach('---\nforeach: pinned               # absent = run once\n---\n'), { mode: 'all', picks: [] });
+    assert.deepStrictEqual(readForeach('---\nforeach: [a, b]  # two\n---\n'), { mode: 'pick', picks: ['a', 'b'] });
+    assert.deepStrictEqual(readForeach(jobTemplate('skill')), { mode: 'all', picks: [] });
+  });
+
+  t('setRepos: pick rewrites foreach in place and keeps its comment; all writes pinned', () => {
+    const src = '---\ncron: "0 7 * * *"\nrun: shell\nforeach: pinned   # keep me\nenabled: true\n---\nbody\n';
+    assert.strictEqual(setRepos(src, 'pick', ['a', 'b']), '---\ncron: "0 7 * * *"\nrun: shell\nforeach: [a, b]   # keep me\nenabled: true\n---\nbody\n');
+    assert.strictEqual(setRepos(setRepos(src, 'pick', ['a']), 'all', []), src);
+  });
+
+  t('setRepos: from a cwd file, all inserts foreach after run: and drops the cwd: line; a # cwd comment stays', () => {
+    const src = '---\ncron: "0 7 * * *"\nrun: shell\n# cwd: ~/x\ncwd: ~/Documents/x\nenabled: true\n---\nbody\n';
+    assert.strictEqual(setRepos(src, 'all', []), '---\ncron: "0 7 * * *"\nrun: shell\nforeach: pinned\n# cwd: ~/x\nenabled: true\n---\nbody\n');
+  });
+
+  t('setRepos: cwd drops foreach and leaves cwd: alone; a body line naming the key is untouched; no frontmatter is unchanged', () => {
+    const src = '---\nrun: shell\nforeach: [a]\ncwd: ~/y\n---\nforeach: pinned\n';
+    assert.strictEqual(setRepos(src, 'cwd', []), '---\nrun: shell\ncwd: ~/y\n---\nforeach: pinned\n');
+    assert.strictEqual(setRepos('no frontmatter', 'all', []), 'no frontmatter');
+    assert.strictEqual(setRepos('---\nrun: shell\n', 'all', []), '---\nrun: shell\n');
+  });
+
+  t('setRepos: CRLF files keep CRLF on the rewritten and inserted lines', () => {
+    assert.strictEqual(setRepos('---\r\nrun: shell\r\n---\r\nx\r\n', 'pick', ['a']), '---\r\nrun: shell\r\nforeach: [a]\r\n---\r\nx\r\n');
+    assert.strictEqual(setRepos('---\r\nrun: shell\r\nforeach: pinned\r\n---\r\n', 'cwd', []), '---\r\nrun: shell\r\n---\r\n');
+  });
+
+  t('jobTemplate: every kind parses with no errors, and each is the runner its kind says', () => {
+    for (const kind of ['shell', 'prompt', 'skill'] as const) {
+      const parsed = parseJob('a-job', jobTemplate(kind));
+      assert.deepStrictEqual(parsed.errors, [], `${kind}: ${JSON.stringify(parsed.errors)}`);
+      assert.strictEqual(parsed.job?.run, kind === 'shell' ? 'shell' : 'claude');
+      assert.strictEqual(parsed.job?.foreach, 'pinned');
+    }
+    assert.strictEqual(parseJob('a-job', jobTemplate('skill')).job?.body, '/git-sync');
+    assert.strictEqual(parseJob('a-job', jobTemplate('shell')).job?.script, 'git pull --ff-only --quiet');
+  });
+
+  t('nameProblem: empty, bad pattern, reserved, taken, then fine', () => {
+    assert.strictEqual(nameProblem('', []), 'Name the job; it becomes the filename.');
+    assert.strictEqual(nameProblem('Pull_Pins', []), 'Lowercase letters, digits and - only.');
+    assert.strictEqual(nameProblem('runs', []), 'runs is reserved.');
+    assert.strictEqual(nameProblem('pull-pins', ['pull-pins']), 'A job named pull-pins already exists.');
+    assert.strictEqual(nameProblem('pull-pins', ['other']), null);
+  });
+
+  t('editsWithoutAsking: acceptEdits in the frontmatter (quoted or commented), not plan, not a body line', () => {
+    assert.strictEqual(editsWithoutAsking(jobTemplate('skill')), true);
+    assert.strictEqual(editsWithoutAsking('---\npermission-mode: "acceptEdits"\n---\n'), true);
+    assert.strictEqual(editsWithoutAsking('---\npermission-mode: plan\n---\npermission-mode: acceptEdits\n'), false);
+    assert.strictEqual(editsWithoutAsking(jobTemplate('shell')), false);
+  });
+
+  t('splitNext: day then clock on the last space; a one-word line stays one line', () => {
+    assert.deepStrictEqual(splitNext('tomorrow 07:00'), ['tomorrow', '07:00']);
+    assert.deepStrictEqual(splitNext('Nov 1 09:30'), ['Nov 1', '09:30']);
+    assert.deepStrictEqual(splitNext('paused'), ['paused', null]);
+  });
+
+  t('withLate: late lands after the time, alone on an empty line, and nowhere when the run was on time', () => {
+    assert.strictEqual(withLate('6:00 today · 38s', true), '6:00 today · late · 38s');
+    assert.strictEqual(withLate('22:00', true), '22:00 · late');
+    assert.strictEqual(withLate('', true), 'late');
+    assert.strictEqual(withLate('6:00 today · 38s', false), '6:00 today · 38s');
+    assert.strictEqual(runClock(mkRun({ startedAt: at(4, 19, 7, 5), late: true })), '07:05 · late');
+  });
+
+  t('writeFailureText: read-only and token 403s, not-owner, running, 404, 422, network, anything else', () => {
+    assert.strictEqual(writeFailureText('Run now', 403, { error: 'read-only from this network' }), READ_ONLY_TEXT);
+    assert.strictEqual(writeFailureText('Run now', 403, { error: 'bad token' }), 'Run now needs the Answer token — set it under Settings › Local › Connection.');
+    assert.strictEqual(writeFailureText('Save', 409, { error: 'not-owner' }), 'Another server owns the schedules on this machine; this one only reads.');
+    assert.strictEqual(writeFailureText('Run now', 409, { error: 'already-running' }), 'Run now: the job is already running.');
+    assert.strictEqual(writeFailureText('Stop', 409, { error: 'not-running' }), 'Stop: the job is not running.');
+    assert.strictEqual(writeFailureText('Delete', 404, null), 'Delete: no such job.');
+    assert.strictEqual(writeFailureText('Save', 422, { errors: [] }), 'Save: the file has errors.');
+    assert.strictEqual(writeFailureText('Reveal', 0, null), 'Reveal failed: the server did not answer.');
+    assert.strictEqual(writeFailureText('Reconcile', 500, { error: 'x' }), 'Reconcile failed (HTTP 500).');
+  });
+
+  const stats = (over: Partial<ScheduleStats> = {}): ScheduleStats => ({
+    runs: 0, ok: 0, failed: 0, lost: 0, costUsd: 0, tokensIn: 0, tokensOut: 0, wallMs: 0, byDay: [], prev: { costUsd: 0, runs: 0 }, ...over
+  });
+
+  t('costDelta: up is red, down is green, a flat or empty previous window says so', () => {
+    assert.deepStrictEqual(costDelta(stats({ costUsd: 24.1, prev: { costUsd: 20.7, runs: 50 } }), 30), { text: '↑ $3.40 vs previous 30d', dir: 'up' });
+    assert.deepStrictEqual(costDelta(stats({ costUsd: 1, prev: { costUsd: 2.5, runs: 3 } }), 7), { text: '↓ $1.50 vs previous 7d', dir: 'dn' });
+    assert.deepStrictEqual(costDelta(stats({ costUsd: 1, prev: { costUsd: 1.001, runs: 3 } }), 7), { text: 'same as previous 7d', dir: null });
+    assert.deepStrictEqual(costDelta(stats({ costUsd: 1 }), 90), { text: 'nothing in the previous 90d', dir: null });
+  });
+
+  t('successRate: ok over ok + failed + lost; NaN reads — when nothing finished', () => {
+    assert.strictEqual(formatStat(successRate(stats({ ok: 52, failed: 8, lost: 1 })), 'pct'), '85%');
+    assert.strictEqual(formatStat(successRate(stats()), 'pct'), '—');
+  });
+
+  t('topTokenShare: the biggest job and its share; one job alone, or no tokens, is null', () => {
+    const r = (job: string, n: number) => mkRun({ job, steps: [step({ tokensIn: n, tokensOut: 0 })] });
+    assert.deepStrictEqual(topTokenShare([r('a', 71), r('b', 20), r('a', 0), r('c', 9)]), { job: 'a', share: 0.71 });
+    assert.strictEqual(topTokenShare([r('a', 5), r('a', 5)]), null);
+    assert.strictEqual(topTokenShare([r('a', 0), r('b', 0)]), null);
+  });
+
+  t('medianMs: odd and even counts, running runs skipped, NaN when none finished', () => {
+    assert.strictEqual(medianMs([mkRun({ ms: 3 }), mkRun({ ms: 1 }), mkRun({ ms: 2 })]), 2);
+    assert.strictEqual(medianMs([mkRun({ ms: 1 }), mkRun({ ms: 4 }), mkRun({ ms: null })]), 2.5);
+    assert.ok(Number.isNaN(medianMs([mkRun({ ms: null })])));
+  });
+
+  t('runKicker: a finished fan-out, a late one, a by-hand run in flight, a plain run', () => {
+    const fan = mkRun({ startedAt: at(4, 18, 22), ms: 664_000, total: 12, steps: [step({ repo: 'a', costUsd: 0.5 }), step({ repo: 'b', costUsd: 0.34 })] });
+    assert.strictEqual(runKicker(fan, NOW), 'Yesterday 22:00 · by schedule · 12 repos · 11m 4s · $0.84');
+    assert.strictEqual(runKicker({ ...fan, startedAt: at(4, 17, 22), late: true }, NOW), 'Apr 17 22:00 · by schedule · late · 12 repos · 11m 4s · $0.84');
+    const live = mkRun({ state: 'running', trigger: 'manual', startedAt: at(4, 19, 11, 59), ms: null, total: 1, steps: [step({ repo: 'lookout', outcome: null })] });
+    assert.strictEqual(runKicker(live, NOW), 'Now · by hand · 1 repo · 1m so far');
+    assert.strictEqual(runKicker(mkRun({ startedAt: at(4, 19, 6) }), NOW), 'Today 06:00 · by schedule · 38s');
+    assert.strictEqual(isFanOut(mkRun()), false);
+  });
+
+  t('stepPill: ok, exit code, failed with no code, timeout, stopped, skipped, in flight, lost', () => {
+    assert.deepStrictEqual(stepPill(step(), 'ok'), { text: 'ok', tone: 'green' });
+    assert.deepStrictEqual(stepPill(step({ outcome: 'failed', exit: 1 }), 'failed'), { text: 'exit 1', tone: 'red' });
+    assert.deepStrictEqual(stepPill(step({ outcome: 'failed', exit: null }), 'failed'), { text: 'failed', tone: 'red' });
+    assert.deepStrictEqual(stepPill(step({ outcome: 'timeout' }), 'failed'), { text: 'timeout', tone: 'red' });
+    assert.deepStrictEqual(stepPill(step({ outcome: 'stopped' }), 'failed'), { text: 'stopped', tone: 'mustard' });
+    assert.deepStrictEqual(stepPill(step({ outcome: 'skipped' }), 'ok'), { text: 'skipped', tone: 'dim' });
+    assert.deepStrictEqual(stepPill(step({ outcome: null }), 'running'), { text: 'running', tone: 'run' });
+    assert.deepStrictEqual(stepPill(step({ outcome: null }), 'lost'), { text: 'lost', tone: 'mustard' });
+    assert.deepStrictEqual(runPill(mkRun({ state: 'lost' })), { text: 'lost', tone: 'mustard' });
+  });
+
+  t('splitSteps: failures always show in order, ok steps fill up to the limit, the rest are counted', () => {
+    const s = [step({ index: 0 }), step({ index: 1, outcome: 'failed' }), step({ index: 2 }), step({ index: 3 }), step({ index: 4, outcome: 'failed' })];
+    const four = splitSteps(s, 4);
+    assert.deepStrictEqual(four.shown.map(x => x.index), [0, 1, 2, 4]);
+    assert.strictEqual(four.hiddenOk, 1);
+    const none = splitSteps(s, 0);
+    assert.deepStrictEqual(none.shown.map(x => x.index), [1, 4]);
+    assert.strictEqual(none.hiddenOk, 3);
+    assert.strictEqual(launchdLabel('git-sync-all'), 'com.claude-dashboard.schedule.git-sync-all');
+  });
+
+  t('reconcileChip: owned by <x>, not owner for a server that never opted in, then the owner\'s verdicts', () => {
+    const rep = (state: 'in-sync' | 'drift' | 'failed', n = 0) => ({ state, changes: Array.from({ length: n }, () => ({ name: 'a', action: 'install' as const, why: '' })), unchanged: 0, error: null, at: '' });
+    assert.deepStrictEqual(reconcileChip({ owner: { ownedBy: '/x:4173' }, reconcile: rep('in-sync'), jobs: [] }), { text: 'owned by /x:4173', tone: 'dim' });
+    assert.deepStrictEqual(reconcileChip({ owner: { ownedBy: '' }, reconcile: rep('in-sync'), jobs: [] }), { text: 'not owner', tone: 'dim' });
+    assert.deepStrictEqual(reconcileChip({ owner: 'owner', reconcile: rep('in-sync'), jobs: [mkRow(), mkRow({ installed: false })] }), { text: '1 installed · in sync', tone: 'green' });
+    assert.deepStrictEqual(reconcileChip({ owner: 'owner', reconcile: rep('drift', 2), jobs: [] }), { text: 'drift · 2 to apply', tone: 'amber' });
+    assert.deepStrictEqual(reconcileChip({ owner: 'owner', reconcile: rep('failed'), jobs: [] }), { text: 'reconcile failed', tone: 'red' });
+  });
+
+  t('dotTone: running wins over paused, paused wins over the last outcome, mustard reads lost', () => {
+    assert.strictEqual(dotTone({ text: 'running', tone: 'run' }, false), 'live');
+    assert.strictEqual(dotTone({ text: 'failed', tone: 'red' }, false), 'off');
+    assert.strictEqual(dotTone({ text: 'ok', tone: 'green' }, true), 'ok');
+    assert.strictEqual(dotTone({ text: '2 of 12 failed', tone: 'amber' }, true), 'warn');
+    assert.strictEqual(dotTone({ text: 'failed', tone: 'red' }, true), 'bad');
+    assert.strictEqual(dotTone({ text: 'lost', tone: 'mustard' }, true), 'lost');
+    assert.strictEqual(dotTone({ text: 'never run', tone: 'dim' }, true), '');
+  });
+
+  t('topFailure: counts failed and lost runs per job; null when nothing failed', () => {
+    const r = (job: string, state: 'ok' | 'failed' | 'lost') => mkRun({ job, state });
+    assert.strictEqual(topFailure([r('a', 'ok')]), null);
+    assert.strictEqual(topFailure([r('a', 'failed'), r('b', 'lost'), r('a', 'failed'), r('c', 'ok')]), '2 of 3 failures: a');
+    assert.strictEqual(topFailure([r('a', 'failed'), r('a', 'lost')]), 'all 2 from a');
+  });
+
+  t('jobPins: pinned = listed pins only, a list is kept as written, cwd is none', () => {
+    const pins = [{ name: 'x', listed: true }, { name: 'dead', listed: false }, { name: 'y', listed: true }];
+    assert.deepStrictEqual(jobPins('pinned', pins), ['x', 'y']);
+    assert.deepStrictEqual(jobPins(['y', 'not-here'], pins), ['y', 'not-here']);
+    assert.deepStrictEqual(jobPins(null, pins), []);
+  });
+
+  t('pinOutcome and stepErrLine: the pin\'s step pill, and the last output line before why', () => {
+    const run = mkRun({ state: 'failed', steps: [step({ repo: 'a', outcome: 'failed', exit: 1 }), step({ repo: 'b', outcome: 'ok' })] });
+    assert.deepStrictEqual(pinOutcome(run, 'a'), { text: 'exit 1', tone: 'red' });
+    assert.deepStrictEqual(pinOutcome(run, 'b'), { text: 'ok', tone: 'green' });
+    assert.strictEqual(pinOutcome(run, 'c'), null);
+    assert.strictEqual(pinOutcome(null, 'a'), null);
+    assert.strictEqual(stepErrLine(step({ tail: 'one\nfatal: no auth\n\n', why: 'exit 1' })), 'fatal: no auth');
+    assert.strictEqual(stepErrLine(step({ tail: null, why: 'timeout' })), 'timeout');
+    assert.strictEqual(stepErrLine(step({ tail: null, why: null })), null);
   });
 
   console.log(`\n  ${p} passed, ${f} failed`);
