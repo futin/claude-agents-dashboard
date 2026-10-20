@@ -11,7 +11,7 @@ the typed JSON in `shared/types.ts`, plus four zero-dep modules both sides run: 
 `shared/schedule-file.ts`.
 
 - `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only) but two: `lookout-widgets`, `release-kit`.
-- `client/` — Vite + React + TypeScript; side rail Sessions | Usage | Management |
+- `client/` — Vite + React + TypeScript; side rail Sessions | Schedules | Usage | Management |
   Claude Configs | Analytics | Settings, all lazy but Sessions.
 - `shared/` — `types.ts` is the API contract and the single source of truth for it;
   `frontmatter.ts`, `gitUpstream.ts`, `cron.ts` and `schedule-file.ts` are the only modules both sides run.

@@ -273,7 +273,7 @@ ntfy's `Click` header carries `<DASHBOARD_PUBLIC_URL>/?session=<id>`.
 from buzz to answerable. That last one is why the reply-window `stop` push carries a link at
 all: the panel it lands you in is the composer the hold is waiting on.
 
-The `schedule-failed` push carries `/?view=schedules&run=<id>` instead and lands on Management › Schedules with that run unfolded (see
+The `schedule-failed` push carries `/?view=schedules&run=<id>` instead and lands on Schedules › Runs with that run unfolded (see
 [view-persistence](view-persistence.md)).
 
 The parameter is stripped because session ids churn: a bookmarked or refreshed deep link

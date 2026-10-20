@@ -1,24 +1,24 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { ScheduleJobRow, Session } from '../../../../../shared/types';
-import { useAnswerToken } from '../../../hooks/useAnswerToken';
-import { useNarrow, useShellNarrow } from '../../../hooks/useNarrow';
-import { usePins } from '../../../hooks/usePins';
-import { useRemoteAnswer } from '../../../hooks/useRemoteAnswer';
-import { useScheduleRuns } from '../../../hooks/useScheduleRuns';
-import { useScheduleWrite } from '../../../hooks/useScheduleWrite';
-import { useSchedules } from '../../../hooks/useSchedules';
-import { useSettings } from '../../../hooks/useSettings';
-import { deepLinkRun } from '../../../lib/deepLink';
-import { chipClass, launchdLabel, reconcileChip, reconcilePreview, type ReconcilePreview, type ScheduleRunsQuery } from '../../../lib/schedules';
-import { READ_ONLY_TEXT } from '../../../lib/writeRefusal';
+import type { ScheduleJobRow, Session } from '../../../../shared/types';
+import { useAnswerToken } from '../../hooks/useAnswerToken';
+import { useNarrow, useShellNarrow } from '../../hooks/useNarrow';
+import { usePins } from '../../hooks/usePins';
+import { useRemoteAnswer } from '../../hooks/useRemoteAnswer';
+import { useScheduleRuns } from '../../hooks/useScheduleRuns';
+import { useScheduleWrite } from '../../hooks/useScheduleWrite';
+import { useSchedules } from '../../hooks/useSchedules';
+import { useSettings } from '../../hooks/useSettings';
+import { deepLinkRun } from '../../lib/deepLink';
+import { chipClass, launchdLabel, reconcileChip, reconcilePreview, type ReconcilePreview, type ScheduleRunsQuery } from '../../lib/schedules';
+import { READ_ONLY_TEXT } from '../../lib/writeRefusal';
 import type { ScheduleCtl } from './ctl';
 import JobDrawer from './JobDrawer';
 import JobLedger from './JobLedger';
 import RunsList from './RunsList';
 import StatsBand from './StatsBand';
 
-const ChatDrawer = lazy(() => import('../../ChatDrawer'));
+const ChatDrawer = lazy(() => import('../ChatDrawer'));
 
 const WINDOWS = [7, 30, 90] as const;
 const NEEDS_TOKEN = 'Schedule changes need the Answer token — set it under Settings › Local › Connection.';
@@ -27,7 +27,7 @@ type Drawer = { mode: 'new' } | { mode: 'edit'; name: string; confirmDelete: boo
 type RunFilters = Pick<ScheduleRunsQuery, 'outcome' | 'runner' | 'job'>;
 
 /**
- * Management › Schedules: the job ledger and the run log of the schedules folder (spec §UI). Owns the `/api/schedules` poll, the write helper every
+ * The Schedules section: the job ledger (Jobs) and the run log (Runs) of the schedules folder (spec §UI). Owns the `/api/schedules` poll, the write helper every
  * control goes through, the drawer and the ChatDrawer a step's `session →` opens. A deep link with `&run=<id>` lands on Runs with that run unfolded.
  */
 export default function SchedulesView() {
@@ -35,7 +35,8 @@ export default function SchedulesView() {
   const { settings, update } = useSettings();
   const days = settings.scheduleWindow;
   const [focusRun] = useState(() => deepLinkRun());
-  const [page, setPage] = useState<'jobs' | 'runs'>(() => (focusRun ? 'runs' : 'jobs'));
+  // Jobs or Runs is picked in the rail's tree (`schedulesTab`); `AppShell` puts a `&run=` link on Runs.
+  const page = settings.schedulesTab;
   const [filters, setFilters] = useState<RunFilters>({ outcome: '', runner: '', job: '' });
   const [drawer, setDrawer] = useState<Drawer | null>(null);
   const [chat, setChat] = useState<Session | null>(null);
@@ -48,6 +49,7 @@ export default function SchedulesView() {
   const narrow = useNarrow();
   const band = useScheduleRuns({ days, job: '', outcome: '', runner: '' }, page === 'jobs' && data !== null);
 
+  const pageLabel = page === 'jobs' ? 'Jobs' : 'Runs';
   const owner = data?.owner === 'owner';
   const readOnly = remote.state?.writeAccess === 'none';
   const tokenMissing = remote.state?.tokenRequired === true && token === '';
@@ -90,7 +92,7 @@ export default function SchedulesView() {
         .then(() => setNote({ text: `Copied ${label}`, tone: 'ok' }))
         .catch(() => setNote({ text: `Could not copy; the label is ${label}`, tone: 'warn' }));
     },
-    allRuns: name => { setFilters({ outcome: '', runner: '', job: name }); setPage('runs'); }
+    allRuns: name => { setFilters({ outcome: '', runner: '', job: name }); update({ schedulesTab: 'runs' }); }
   };
 
   // Reconcile can boot jobs out, so the first click only plans (no `apply`) and shows the diff; Apply re-plans on the server and applies (spec §Reconcile).
@@ -116,7 +118,7 @@ export default function SchedulesView() {
     <div className="usage-section sch-view">
       <div className="mgmt-bar">
         <div className="mgmt-title sch-title">
-          <span>{narrow ? 'Schedules' : 'Management · Schedules'}</span>
+          <span>{narrow ? pageLabel : `Schedules · ${pageLabel}`}</span>
           {data && <span className="git-chip sch-mach sch-here">{data.machine}</span>}
         </div>
         {!phone && data && (
@@ -127,13 +129,6 @@ export default function SchedulesView() {
         )}
       </div>
       <div className="git-toolbar">
-        <div className="seg" role="tablist" aria-label="Page">
-          {(['jobs', 'runs'] as const).map(p => (
-            <button key={p} type="button" role="tab" aria-selected={page === p} className={page === p ? 'on' : ''} onClick={() => setPage(p)}>
-              {p === 'jobs' ? 'Jobs' : 'Runs'}
-            </button>
-          ))}
-        </div>
         <div className="seg sch-sm" role="group" aria-label="Window">
           {WINDOWS.map(w => (
             <button key={w} type="button" aria-pressed={days === w} className={days === w ? 'on' : ''} onClick={() => update({ scheduleWindow: w })}>

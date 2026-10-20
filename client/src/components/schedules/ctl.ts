@@ -1,4 +1,4 @@
-import type { PinRow } from '../../../../../shared/types';
+import type { PinRow } from '../../../../shared/types';
 
 /**
  * What every Schedules component reads and calls, built once by `SchedulesView`. `owner` false hides every write control (another server, or none, owns

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
-import type { ScheduleJobRow, ScheduleRun, ScheduleStep } from '../../../../../shared/types';
-import { useScheduleRuns } from '../../../hooks/useScheduleRuns';
+import type { ScheduleJobRow, ScheduleRun, ScheduleStep } from '../../../../shared/types';
+import { useScheduleRuns } from '../../hooks/useScheduleRuns';
 import {
   chipClass, dotTone, formatStat, groupRunsByDay, isFanOut, runClock, runPill, splitSteps, stepErrLine, stepPill, type ScheduleRunsQuery
-} from '../../../lib/schedules';
-import Chevron from '../../Chevron';
+} from '../../lib/schedules';
+import Chevron from '../Chevron';
 import type { ScheduleCtl } from './ctl';
 import SessionLink from './SessionLink';
 

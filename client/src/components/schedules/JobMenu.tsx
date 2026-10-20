@@ -1,5 +1,5 @@
-import type { ScheduleJobRow } from '../../../../../shared/types';
-import { isFanOut } from '../../../lib/schedules';
+import type { ScheduleJobRow } from '../../../../shared/types';
+import { isFanOut } from '../../lib/schedules';
 import type { ScheduleCtl } from './ctl';
 
 /**

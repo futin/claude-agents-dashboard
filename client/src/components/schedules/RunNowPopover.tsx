@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-import type { ScheduleJobRow } from '../../../../../shared/types';
-import { chipClass, pinOutcome } from '../../../lib/schedules';
+import type { ScheduleJobRow } from '../../../../shared/types';
+import { chipClass, pinOutcome } from '../../lib/schedules';
 import type { ScheduleCtl } from './ctl';
 
 /**

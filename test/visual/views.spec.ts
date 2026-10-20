@@ -16,9 +16,11 @@ import { isReady, stage, type StageOpts } from './stage.js';
 import { DAYLIGHT_TIERS } from './tiers.js';
 
 interface ShotCase extends StageOpts {
-  kind: 'shot' | 'detail' | 'triage' | 'git-matrix' | 'git-inspector' | 'git-branches' | 'codegraph-inbox' | 'codegraph-matrix' | 'codegraph-inspector' | 'projects-tiles' | 'projects-columns' | 'projects-lists' | 'releases';
+  kind: 'shot' | 'detail' | 'triage' | 'git-matrix' | 'git-inspector' | 'git-branches' | 'codegraph-inbox' | 'codegraph-matrix' | 'codegraph-inspector' | 'projects-tiles' | 'projects-columns' | 'projects-lists' | 'schedules-runs' | 'releases';
   /** Per-pixel colour tolerance overriding the config's `0`; `maxDiffPixels` stays `0`, so a pixel that really changes colour still fails the shot. */
   threshold?: number;
+  /** Selectors painted over before the comparison, for a native control whose glyphs Chromium places a pixel apart at random. */
+  mask?: string[];
 }
 
 /**
@@ -27,6 +29,13 @@ interface ShotCase extends StageOpts {
  * edge removes it, so the 1280 projects shots accept one-step colour noise — about 0.004 in pixelmatch's YIQ scale, 0.01 leaves a little headroom.
  */
 const AA_NOISE = 0.01;
+
+/**
+ * Schedules hits the same quirk: its stats band (`.sch-stats`, rounded and `overflow: hidden`, at a fractional y) shows one-step noise on its corners in
+ * some runs, so every Schedules shot takes `AA_NOISE`. The phone Runs shot also masks the native job `<select>`: at y 184.69 Chromium draws its label a whole
+ * pixel lower in about half the runs, a shift no colour tolerance absorbs. The 1280 Runs shot still pins the select.
+ */
+const SCHEDULES = (c: ShotCase): ShotCase => (c.section === 'schedules' ? { ...c, threshold: AA_NOISE } : c);
 
 const OTHER_THEMES: ThemeId[] = ['midnight', 'amber', 'graphite', 'nightshift'];
 
@@ -58,7 +67,7 @@ const PROJ = {
 };
 
 const CASES: ShotCase[] = [
-  ...SECTIONS.flatMap((s) => casesFor(s.id)),
+  ...SECTIONS.flatMap((s) => casesFor(s.id)).map(SCHEDULES),
   { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID, kind: 'detail' },
   // The phone drawer folds the fixture plan's card to one `Plan 7/13 · …` line; the 1280 detail above pins its ellipsised `Plan · …` head.
   { section: 'sessions', theme: 'daylight', width: 375, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID, kind: 'detail' },
@@ -82,16 +91,19 @@ const CASES: ShotCase[] = [
   { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'tiles' }, kind: 'projects-tiles', threshold: AA_NOISE },
   { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'columns' }, kind: 'projects-columns', threshold: AA_NOISE },
   { ...PROJ, width: 375, storage: { 'management.projectsLayout': 'lists' }, kind: 'projects-lists' },
+  // Schedules' default page (Jobs) is what the matrix above shows; Runs is the rail's other sub-item.
+  { section: 'schedules', theme: 'daylight', width: 375, contentWidth: 'fixed', schedulesTab: 'runs', kind: 'schedules-runs', threshold: AA_NOISE, mask: ['.sch-select'] },
+  { section: 'schedules', theme: 'daylight', width: 1280, contentWidth: 'fixed', schedulesTab: 'runs', kind: 'schedules-runs', threshold: AA_NOISE },
   // What's new, opened from the version chip: full screen on the phone (reached through the menu, whose last row the chip is), the 400px panel from `md`.
   { section: 'sessions', theme: 'daylight', width: 375, contentWidth: 'fixed', kind: 'releases' },
   { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', kind: 'releases' }
 ];
 
 /**
- * 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 4 codegraph layouts + 3 projects layouts + 2 What's new drawers. A changed `SECTIONS` fails here until the
+ * 12 per view × 7 views + 2 drawer details + 2 triage + 5 git layouts + 4 codegraph layouts + 3 projects layouts + 2 schedules runs + 2 What's new drawers. A changed `SECTIONS` fails here until the
  * matrix (and its baselines) are reconsidered.
  */
-const EXPECTED_SHOTS = 90;
+const EXPECTED_SHOTS = 104;
 
 /** Click the version chip — through the phone menu below `md`, where the rail is folded away — and wait until the drawer is drawn and settled. */
 async function openReleases(page: Page): Promise<void> {
@@ -115,7 +127,8 @@ for (const c of CASES) {
     // The drawer is `position: fixed`, so its shots are the viewport: a full-page shot would append the board scrolled out beneath it.
     await expect(page).toHaveScreenshot(title(c).replaceAll(' · ', '-') + '.png', {
       fullPage: c.kind !== 'releases',
-      ...(c.threshold !== undefined && { threshold: c.threshold })
+      ...(c.threshold !== undefined && { threshold: c.threshold }),
+      ...(c.mask && { mask: c.mask.map((s) => page.locator(s)) })
     });
   });
 }

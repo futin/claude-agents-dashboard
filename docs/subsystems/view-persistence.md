@@ -40,7 +40,7 @@ override it (see `dashboard.section` below).
   `dashboard.settings` (theme, density, text scale, refresh rate, scan knobs, landing tab
   — see [settings](settings.md); re-clamped on every read by `clampSettings`, and the
   one key an inline script in `index.html` also reads, pre-paint, to avoid a theme flash);
-  `dashboard.section` (Sessions | Usage | Management | Claude Configs | Analytics | Settings —
+  `dashboard.section` (Sessions | Schedules | Usage | Management | Claude Configs | Analytics | Settings —
   the `Section` union in `lib/sections.ts`, switched on in `App.tsx`) — always
   *written* on navigation, but only *read* on open when Settings → landing is `last`; any
   other value pins the opening section, resolved in the `useState` initializer so there's no
@@ -83,10 +83,10 @@ override it (see `dashboard.section` below).
   `SessionsView` opening the drawer), and strips it from the URL via `history.replaceState`,
   precisely so a refresh or a bookmark does *not* replay it. Its sibling `?view=git` is the same kind of one-shot: Lookout's Git pending tile opens it,
   `deepLinkView()` reads it from the same single memoised parse (so neither caller can strip the other's param first), and `App.tsx` forces the
-  `management` section and sets `managementTab` to `git` — once per load (`takeDeepLinkManagementTab`), and not at all when a `?session=` beside it wins.
-  `?view=schedules` is the third: any `view` the link names (`git` or `schedules`, `DeepLinkView`) lands on Management, and the value is the sub-view. A failed
+  `management` section and sets `managementTab` to `git` — once per load (`takeDeepLinkTab`), and not at all when a `?session=` beside it wins.
+  `?view=schedules` is the third: it lands on the Schedules section instead, on Jobs, or on Runs when the link carries a run (`schedulesTab`). A failed
   scheduled run's push adds `&run=<id>` (`server/lib/notify.ts` `scheduleClickUrl`): `readRunParam` takes it in the same single parse, behind a
-  `[A-Za-z0-9._-]{1,128}` shape check, `deepLinkRun()` keeps answering after the strip, and Management › Schedules opens on Runs with that run's fold open.
+  `[A-Za-z0-9._-]{1,128}` shape check, `deepLinkRun()` keeps answering after the strip, and Schedules › Runs opens with that run's fold open.
   See [schedules](schedules.md#notifications).
 - **Which of the five shapes draws the list is deliberately NOT in `dashboard.view`.** It
   used to be a `View` field, which made one click in the switcher the shape every future load

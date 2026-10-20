@@ -115,9 +115,18 @@ export function run(): number {
     assert.strictEqual(clampSettings({ managementTab: 'git' }).managementTab, 'git');
   })) p++; else f++;
 
-  if (test('schedules is a Management sub-view and round-trips through clampSettings', () => {
-    assert.strictEqual(clampSettings({ managementTab: 'schedules' }).managementTab, 'schedules');
-    assert.strictEqual(clampSettings(clampSettings({ managementTab: 'schedules' })).managementTab, 'schedules');
+  // Schedules was a Management sub-view before it became its own section: a device that stored it lands on Projects.
+  if (test('a stored managementTab schedules falls back to projects', () => {
+    assert.strictEqual(clampSettings({ managementTab: 'schedules' }).managementTab, 'projects');
+  })) p++; else f++;
+
+  if (test('the Schedules sub-tab defaults to jobs, accepts jobs and runs, and round-trips', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.schedulesTab, 'jobs');
+    assert.strictEqual(clampSettings({}).schedulesTab, 'jobs');
+    assert.strictEqual(clampSettings({ schedulesTab: 'nonsense' }).schedulesTab, 'jobs');
+    assert.strictEqual(clampSettings({ schedulesTab: 'jobs' }).schedulesTab, 'jobs');
+    assert.strictEqual(clampSettings({ schedulesTab: 'runs' }).schedulesTab, 'runs');
+    assert.strictEqual(clampSettings(clampSettings({ schedulesTab: 'runs' })).schedulesTab, 'runs');
   })) p++; else f++;
 
   if (test('the Schedules window defaults to 30 and accepts only 7, 30 and 90', () => {
@@ -275,12 +284,12 @@ export function run(): number {
   // Spelled out literally, not derived from SECTIONS: a test that reads the
   // same array as the code under test passes whatever either one says. This
   // fails if a section joins the rail without a decision about landing on it.
-  if (test('the picker offers exactly the seven intended choices', () => {
+  if (test('the picker offers exactly the eight intended choices', () => {
     assert.deepStrictEqual(
       LANDING_OPTIONS.map(o => o.value),
-      ['last', 'sessions', 'usage', 'management', 'configs', 'analytics', 'settings']
+      ['last', 'sessions', 'schedules', 'usage', 'management', 'configs', 'analytics', 'settings']
     );
-    assert.strictEqual(LANDING_OPTIONS.length, 7);
+    assert.strictEqual(LANDING_OPTIONS.length, 8);
   })) p++; else f++;
 
   if (test('each landing option carries the rail\'s own label', () => {

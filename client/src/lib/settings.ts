@@ -45,7 +45,9 @@ export type SettingsScope = 'local' | 'shared';
 /** Which page the Settings section shows: one per storage backend, nothing else. */
 export type SettingsTab = SettingsScope;
 /** Which sub-view the Management section opens on. */
-export type ManagementTab = 'git' | 'projects' | 'codegraph' | 'schedules';
+export type ManagementTab = 'git' | 'projects' | 'codegraph';
+/** Which sub-view the Schedules section opens on. */
+export type SchedulesTab = 'jobs' | 'runs';
 /** The day windows the Schedules stats band and Runs list read: the server's `SCHEDULE_WINDOWS`. */
 export type ScheduleWindow = 7 | 30 | 90;
 /** Which section opens on load. `last` restores whatever you were on. */
@@ -110,6 +112,8 @@ export interface Settings {
   settingsTab: SettingsTab;
   /** Which Management sub-view is showing. Mirrors `usageTab` in every respect. */
   managementTab: ManagementTab;
+  /** Which Schedules sub-view is showing. Mirrors `usageTab` in every respect. */
+  schedulesTab: SchedulesTab;
   /** The Schedules page's day window (stats band, Runs list). Per device, like the other view picks. */
   scheduleWindow: ScheduleWindow;
   /**
@@ -152,6 +156,7 @@ export const DEFAULT_SETTINGS: Settings = {
   usageTab: 'forecast',
   settingsTab: 'local',
   managementTab: 'projects',
+  schedulesTab: 'jobs',
   scheduleWindow: 30,
   defaultLayout: 'last',
   contentWidth: 'fixed'
@@ -239,7 +244,8 @@ const SPAWN_MODELS: SpawnDefaultModel[] = ['', ...MODELS];
 const SPAWN_EFFORTS: SpawnDefaultEffort[] = ['', ...EFFORTS];
 const USAGE_TABS: UsageTab[] = ['forecast', 'rates', 'history'];
 const SETTINGS_TABS: SettingsTab[] = ['local', 'shared'];
-const MANAGEMENT_TABS: ManagementTab[] = ['git', 'projects', 'codegraph', 'schedules'];
+const MANAGEMENT_TABS: ManagementTab[] = ['git', 'projects', 'codegraph'];
+const SCHEDULES_TABS: SchedulesTab[] = ['jobs', 'runs'];
 export const SCHEDULE_WINDOWS: readonly ScheduleWindow[] = [7, 30, 90];
 /** Derived from the picker, so the offered set and the accepted set cannot drift. */
 const LAYOUT_IDS: DefaultLayout[] = LAYOUT_OPTIONS.map(o => o.value);
@@ -269,8 +275,10 @@ export function clampSettings(raw: unknown): Settings {
     notifyBrowser: pickBool(s.notifyBrowser, DEFAULT_SETTINGS.notifyBrowser),
     usageTab: pickOne(s.usageTab, USAGE_TABS, DEFAULT_SETTINGS.usageTab),
     settingsTab: pickOne(s.settingsTab, SETTINGS_TABS, DEFAULT_SETTINGS.settingsTab),
-    // The sub-view was called `pinned` before it became Projects; a device that stored the old id keeps its place.
+    // The sub-view was called `pinned` before it became Projects; a device that stored the old id keeps its place. A stored `schedules` (the sub-view
+    // that became its own section) is not one of the tabs any more, so it falls back to Projects like any unknown id.
     managementTab: pickOne((s.managementTab as string) === 'pinned' ? 'projects' : s.managementTab, MANAGEMENT_TABS, DEFAULT_SETTINGS.managementTab),
+    schedulesTab: pickOne(s.schedulesTab, SCHEDULES_TABS, DEFAULT_SETTINGS.schedulesTab),
     // Strict like `pickBool`: a stored "7" from a hand-edit is not a window, so it reads as the default.
     scheduleWindow: SCHEDULE_WINDOWS.find(w => w === s.scheduleWindow) ?? DEFAULT_SETTINGS.scheduleWindow,
     defaultLayout: pickOne(s.defaultLayout, LAYOUT_IDS, DEFAULT_SETTINGS.defaultLayout),

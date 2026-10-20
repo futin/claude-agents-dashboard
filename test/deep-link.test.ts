@@ -75,16 +75,16 @@ export function run(): number {
     assert.deepStrictEqual(strips, []);
   })) p++; else f++;
 
-  if (test('view=git hands out the git Management tab once, then null', () => {
+  if (test('view=git hands out the git tab once, then null', () => {
     const { link } = fake('?view=git');
-    assert.strictEqual(link.takeManagementTab(), 'git');
-    assert.strictEqual(link.takeManagementTab(), null);
+    assert.strictEqual(link.takeTab(), 'git');
+    assert.strictEqual(link.takeTab(), null);
     assert.strictEqual(link.view(), 'git');
   })) p++; else f++;
 
-  if (test('a session param outranks view=git: no Management tab is handed out', () => {
+  if (test('a session param outranks view=git: no tab is handed out', () => {
     const { link } = fake(`?session=${UUID}&view=git`);
-    assert.strictEqual(link.takeManagementTab(), null);
+    assert.strictEqual(link.takeTab(), null);
   })) p++; else f++;
 
   if (test('reads view=schedules beside git; other casings and views stay null', () => {
@@ -126,12 +126,12 @@ export function run(): number {
     assert.strictEqual(fake('?other=1').link.run(), null);
   })) p++; else f++;
 
-  if (test('view=schedules hands out the schedules Management tab once; a session param outranks it', () => {
+  if (test('view=schedules hands out the schedules tab once; a session param outranks it', () => {
     const { link } = fake('?view=schedules&run=abc');
-    assert.strictEqual(link.takeManagementTab(), 'schedules');
-    assert.strictEqual(link.takeManagementTab(), null);
+    assert.strictEqual(link.takeTab(), 'schedules');
+    assert.strictEqual(link.takeTab(), null);
     assert.strictEqual(link.run(), 'abc', 'taking the tab does not spend the run');
-    assert.strictEqual(fake(`?session=${UUID}&view=schedules`).link.takeManagementTab(), null);
+    assert.strictEqual(fake(`?session=${UUID}&view=schedules`).link.takeTab(), null);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
