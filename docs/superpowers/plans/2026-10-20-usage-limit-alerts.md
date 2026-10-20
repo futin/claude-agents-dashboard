@@ -58,7 +58,7 @@ Write the bodies yourself, and disagree with the plan where the code proves it w
 - Modify: `server/lib/settings.ts:59,65` (`DEFAULT_NOTIFY.events`, `NOTIFY_EVENTS`)
 - Modify: `server/lib/notify.ts:133-147` (`PHRASE`, `TAGS`)
 - Modify: `server/api.ts:621-629` (`settingsBody`)
-- Modify: `test/visual/fixtures/settings.ts:4-20` (its settings literal gains `usageAvailable`)
+- Modify: `test/visual/fixtures/settings.ts:4-22` (its literal gains `usageAvailable`, its `events` map the two keys)
 - Test: `test/settings.test.ts`, `test/api-settings.test.ts`
 
 **Interfaces:**
@@ -166,7 +166,7 @@ Order: not-a-reading, then account switch, then the late-reading guard, then the
     `resetUsageAlertsMemory(): void` (test seam: drops the in-memory ledger, simulating a restart), `setUsageAlertsHome(dir: string | null): void` (test
     seam passed to `readAccountProfile(homeDir)`; tests call `clearAccountCache()` between cases),
     `onUsageReading(limits: UsageLimits | null, now?: number): void` — never throws. `ok` is `limits !== null` (no `status` is in scope at the call
-    site; `refreshNow` derives it later, `usage.ts:379`).
+    site; `refreshNow` derives it later, `usage.ts:380`).
 
 **`onUsageReading` behaviour:** returns at once unless armed and `config.showUsage` and `getSettings().recordUsageHistory`. Reads the profile (null or empty
 email → return). Re-reads the ledger file (missing or corrupt → empty ledger), calls `decideUsageAlert` with `canSend` from `usageCanSend`, writes the new
