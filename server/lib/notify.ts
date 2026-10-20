@@ -38,7 +38,7 @@ import { scanSessions } from './scan.js';
 import { getSettings } from './settings.js';
 import { staleEnvKeys } from './config.js';
 import type { Config } from './config.js';
-import type { NotifyEvent, NotifyPolicy } from '../../shared/types.js';
+import type { NotifyEvent, NotifyPolicy, ScheduleRun } from '../../shared/types.js';
 
 /**
  * Permission modes that count as "running unattended".
@@ -134,14 +134,16 @@ const PHRASE: Record<NotifyEvent, string> = {
   question: 'question waiting',
   plan: 'plan waiting for review',
   permission: 'permission dialog open',
-  stop: 'task finished'
+  stop: 'task finished',
+  'schedule-failed': 'scheduled job failed'
 };
 
 const TAGS: Record<NotifyEvent, string> = {
   question: 'question',
   plan: 'clipboard',
   permission: 'lock',
-  stop: 'white_check_mark'
+  stop: 'white_check_mark',
+  'schedule-failed': 'warning'
 };
 
 let sender: Sender | null = null;
@@ -251,6 +253,12 @@ export function clickUrl(config: Config, sessionId: string): string {
   return `${config.publicUrl}/?session=${encodeURIComponent(sessionId)}`;
 }
 
+/** Where a schedule push lands: the Schedules view with that run's fold open. Empty without a public URL, like {@link clickUrl}. */
+export function scheduleClickUrl(config: Config, runId: string): string {
+  if (!config.publicUrl) return '';
+  return `${config.publicUrl}/?view=schedules&run=${encodeURIComponent(runId)}`;
+}
+
 /**
  * The desk push's tap-through: a page that closes the tab it opened in.
  *
@@ -287,10 +295,20 @@ export function routePush(
   thresholdSecs: number,
   readIdle: () => number | null
 ): { topic: string; click: string; desk: boolean } {
+  return routeTo(config, clickUrl(config, sessionId), thresholdSecs, readIdle);
+}
+
+/** `routePush` with the phone's tap-through already chosen, so a push that has no session id (a schedule run) shares the desk decision. */
+function routeTo(
+  config: Config,
+  phoneClick: string,
+  thresholdSecs: number,
+  readIdle: () => number | null
+): { topic: string; click: string; desk: boolean } {
   if (config.ntfyTopicDesk && atDesk(readIdle(), thresholdSecs)) {
     return { topic: config.ntfyTopicDesk, click: deskClickUrl(config), desk: true };
   }
-  return { topic: config.ntfyTopic, click: clickUrl(config, sessionId), desk: false };
+  return { topic: config.ntfyTopic, click: phoneClick, desk: false };
 }
 
 /**
@@ -390,6 +408,28 @@ export function maybeSend(
     void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
   } catch {
     /* a notification must never break the request that triggered it */
+  }
+}
+
+/**
+ * The schedule sibling of {@link maybeSend}: a failed run instead of a session. Same master switch, per-event checkbox, desk/phone routing and transport,
+ * but exempt from `requireAfk`, `requireRemoteAnswer` and `requireAutoMode` — those gate interactive sessions and a 22:00 job has none. `title` and `body`
+ * come from `pushableEvents`; this only delivers. Returns whether a push was handed to the transport, and never throws.
+ */
+export function sendScheduleEvent(event: { run: ScheduleRun; title: string; body: string }, config: Config): boolean {
+  try {
+    if (!config.ntfyTopic) return false;
+    const settings = getSettings();
+    const open = { ...settings.notify, requireRemoteAnswer: false, requireAfk: false, requireAutoMode: false };
+    const idle = (): number | null => (idleSource ?? readIdleSecs)();
+    if (!shouldNotify('schedule-failed', open, { remoteAnswer: false, thresholdSecs: settings.idleSecs, readIdle: idle })) return false;
+
+    const route = routeTo(config, scheduleClickUrl(config, event.run.id), settings.idleSecs, idle);
+    const result = deliver({ title: event.title, body: event.body, tags: TAGS['schedule-failed'], click: route.click, topic: route.topic }, config);
+    void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
+    return true;
+  } catch {
+    return false;
   }
 }
 

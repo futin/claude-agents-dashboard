@@ -96,7 +96,7 @@ is the channel that has none of them:
 
 ## Why the server sends, not the hooks
 
-Three of the four events already arrive here as hook POSTs, at the moment they happen and
+Three of the four session events already arrive here as hook POSTs, at the moment they happen and
 with exactly the granularity the user picks events at:
 
 | Event | Enters at | Trigger |
@@ -106,7 +106,7 @@ with exactly the granularity the user picks events at:
 | `permission` | `POST /api/permissions/notify` | `servePermissionNotify` |
 | `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on (headless sessions take the hold route at the desk too, unless an orchestrator run owns them or it is a one-shot launch) |
 
-All four sit behind the write gate (`refuseWrite`), so a hook off loopback that cannot read the token file reaches
+All four session routes sit behind the write gate (`refuseWrite`), so a hook off loopback that cannot read the token file reaches
 none of them — see the last row of [Fail directions](#fail-directions).
 
 Only `stop` needed a new route, because a finished turn registers nothing. So the whole
@@ -172,7 +172,8 @@ why an env var has to carry it — the tty and entrypoint the hook inspects both
 front end, and by those tests every one of these sessions is simply headless. Deliberately
 not a blanket headless exemption: a headless session a person started by hand is reachable
 on purpose and still holds. A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT`, set by the dashboard's Close when done and on every Git Sync run)
-takes the same `notify_fallback` route, so it still pushes "finished". The dashboard's own token-renewal turn
+takes the same `notify_fallback` route, so it still pushes "finished". A scheduled step (`CLAUDE_DASHBOARD_SCHEDULE=<job>`, set by the [schedule wrapper](schedules.md#the-wrapper)) is the other: the Stop hook exits on that marker too,
+so a 22:00 step is never held for `answerSecs` and never pushes "finished" — its own failure push below is the only one it can raise. The dashboard's own token-renewal turn
 (`CLAUDE_DASHBOARD_REFRESH`, [usage-limits](usage-limits.md)) is the one session that pushes nothing: the hook exits on the marker before the health probe,
 and the server drops `stop` events and message waits from the refresh cwd's transcripts as a backstop (#178). A stop that an `autopilot` run's guard blocks
 (`~/.claude/autopilot/<session_id>.json` counts as running, `stop_hook_active` exactly false) exits silently too — no hold, no push; the stop that then
@@ -253,6 +254,16 @@ The label comes from `scanSessions` (`sessionName || project`), resolved *after*
 predicate passes so the scan is never paid for a push that will not be sent. An id the scan
 no longer covers falls back to its first 8 characters.
 
+## The fifth event: `schedule-failed`
+
+`NotifyEvent` has a fifth member, `schedule-failed`, for [scheduled workflows](schedules.md): a run that failed (`failed > 0` or an `error`), a `refused` record
+whose `why` is not `running`, or a run that is lost. It is not a session event, so it has no hook and no session id and does not go through `maybeSend`: the
+server folds the run log and `sendScheduleEvent` (`lib/notify.ts`) delivers. It shares everything that is not session-shaped — the master switch, its own
+per-event checkbox (Settings → **Shared › Push notifications › Scheduled job failed**, `NOTIFY_EVENTS` in `lib/settings.ts`), the desk/phone routing and the
+transport — and is **exempt from `requireAfk`, `requireRemoteAnswer` and `requireAutoMode`**: those gate interactive sessions, and a 22:00 job has none, so with
+the checkbox on it pushes at the desk too. Copy, the once-per-run ledger (`notified.json`) and the tap-through are in [schedules](schedules.md#notifications);
+the click is `<DASHBOARD_PUBLIC_URL>/?view=schedules&run=<id>`, and without a public URL the push carries no link.
+
 ## Tapping the notification
 
 ntfy's `Click` header carries `<DASHBOARD_PUBLIC_URL>/?session=<id>`.
@@ -261,6 +272,9 @@ ntfy's `Click` header carries `<DASHBOARD_PUBLIC_URL>/?session=<id>`.
 `QuestionPanel`, `PlanPanel`, `MessagePanel` and `PermissionBanner` already render — one tap
 from buzz to answerable. That last one is why the reply-window `stop` push carries a link at
 all: the panel it lands you in is the composer the hold is waiting on.
+
+The `schedule-failed` push carries `/?view=schedules&run=<id>` instead and lands on Management › Schedules with that run unfolded (see
+[view-persistence](view-persistence.md)).
 
 The parameter is stripped because session ids churn: a bookmarked or refreshed deep link
 would otherwise reopen a drawer for a session that no longer exists. Same reasoning that

@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { createDeepLink, readSessionParam, readViewParam } from '../client/src/lib/deepLink.js';
+import { createDeepLink, readRunParam, readSessionParam, readViewParam } from '../client/src/lib/deepLink.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -87,6 +87,55 @@ export function run(): number {
     assert.strictEqual(link.takeManagementTab(), null);
   })) p++; else f++;
 
+  if (test('reads view=schedules beside git; other casings and views stay null', () => {
+    assert.strictEqual(readViewParam('?view=schedules'), 'schedules');
+    assert.strictEqual(readViewParam('?view=schedules&run=abc'), 'schedules');
+    assert.strictEqual(readViewParam('?view=Schedules'), null);
+    assert.strictEqual(readViewParam('?view=schedule'), null);
+  })) p++; else f++;
+
+  if (test('reads a run id of either shape and refuses anything else', () => {
+    assert.strictEqual(readRunParam('?run=abc'), 'abc');
+    assert.strictEqual(readRunParam(`?view=schedules&run=${UUID}`), UUID);
+    assert.strictEqual(readRunParam('?run=refused-mac-pull-pins-1760000000000'), 'refused-mac-pull-pins-1760000000000');
+    assert.strictEqual(readRunParam(''), null);
+    assert.strictEqual(readRunParam('?run='), null);
+    assert.strictEqual(readRunParam('?run=../../etc/passwd'), null);
+    assert.strictEqual(readRunParam('?run=<script>'), null);
+    assert.strictEqual(readRunParam('?run=' + 'a'.repeat(200)), null);
+    assert.strictEqual(readRunParam('?%'), null);
+  })) p++; else f++;
+
+  if (test('view=schedules&run=<id> answers both, and both still answer after the URL was stripped', () => {
+    const { link, strips } = fake('?view=schedules&run=abc');
+    assert.strictEqual(link.view(), 'schedules');
+    assert.strictEqual(link.run(), 'abc');
+    assert.deepStrictEqual(strips, ['/app'], 'stripped once, in the same pass that read both');
+    assert.strictEqual(link.run(), 'abc', 'a later call is the memo, not the (now clean) URL');
+    assert.strictEqual(link.view(), 'schedules');
+  })) p++; else f++;
+
+  if (test('run() answers first too: asking for it before view() cannot lose the view', () => {
+    const { link } = fake('?view=schedules&run=abc');
+    assert.strictEqual(link.run(), 'abc');
+    assert.strictEqual(link.view(), 'schedules');
+  })) p++; else f++;
+
+  if (test('view=git has no run; a link with no run param answers null', () => {
+    assert.strictEqual(fake('?view=git').link.run(), null);
+    assert.strictEqual(fake('?other=1').link.run(), null);
+  })) p++; else f++;
+
+  if (test('view=schedules hands out the schedules Management tab once; a session param outranks it', () => {
+    const { link } = fake('?view=schedules&run=abc');
+    assert.strictEqual(link.takeManagementTab(), 'schedules');
+    assert.strictEqual(link.takeManagementTab(), null);
+    assert.strictEqual(link.run(), 'abc', 'taking the tab does not spend the run');
+    assert.strictEqual(fake(`?session=${UUID}&view=schedules`).link.takeManagementTab(), null);
+  })) p++; else f++;
+
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }
+
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(run() > 0 ? 1 : 0);

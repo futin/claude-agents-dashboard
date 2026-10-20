@@ -42,13 +42,13 @@ function AppShell() {
   // navigation is normal and the last section is still remembered for next time.
   // A `?session=` deep link — a tapped push notification — beats both: it exists
   // only to put you on that session's chat. `?view=git` — Lookout's Git pending
-  // tile — does the same for Management › Git.
+  // tile — does the same for Management › Git, and `?view=schedules` — a failed run's push — for Management › Schedules.
   // `isSection` filters a value left over from a release that had a section
   // this one doesn't (the removed Guides tab), which would otherwise render
   // the final `else` branch — Settings — instead of the sessions list.
   const [section, setSection] = useState<Section>(() => {
     if (deepLinkSession()) return 'sessions';
-    if (deepLinkView() === 'git') return 'management';
+    if (deepLinkView()) return 'management';
     const want = settings.landing === 'last' ? stored : settings.landing;
     return isSection(want) ? want : 'sessions';
   });

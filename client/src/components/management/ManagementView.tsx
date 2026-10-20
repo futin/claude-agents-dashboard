@@ -2,9 +2,10 @@ import { useSettings } from '../../hooks/useSettings';
 import CodegraphView from './CodegraphView';
 import GitView from './GitView';
 import ProjectsView from './ProjectsView';
+import SchedulesView from './schedules/SchedulesView';
 
 /**
- * The Management section: three sub-views, **Projects**, **Git** and **CodeGraph**.
+ * The Management section: four sub-views, **Projects**, **Git**, **CodeGraph** and **Schedules**.
  *
  * Which one is showing is the per-device `managementTab`, picked from the
  * rail's tree at every width — the same swap Usage and Settings make, so there
@@ -26,5 +27,6 @@ export default function ManagementView() {
 
   if (settings.managementTab === 'projects') return <ProjectsView />;
   if (settings.managementTab === 'codegraph') return <CodegraphView />;
+  if (settings.managementTab === 'schedules') return <SchedulesView />;
   return <GitView />;
 }

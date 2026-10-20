@@ -10,6 +10,11 @@
  *   GET/POST /api/pins          → pinned projects, listed past LOOKBACK_HOURS (see api.ts)
  *   POST /api/pins/order        → the whole pin list in a new order (see api.ts)
  *   POST /api/open-folder       → open a pinned project's folder in Finder (macOS; see api.ts)
+ *   GET/POST /api/schedules     → the scheduled-workflow ledger / a new job (see api.ts, lib/schedule-*.ts)
+ *   GET  /api/schedules/runs    → folded runs of a window plus stats
+ *   POST /api/schedules/{validate,reconcile,reveal} → check a file as typed / reconcile the OS / open the folder
+ *   GET/PUT/PATCH/DELETE /api/schedules/:name → one job's file; POST …/:name/run and …/:name/stop
+ *   GET  /api/sessions/:id/row  → one Session row for any transcript, no lookback
  *   GET  /api/git-stats         → local git state of each pinned project (see lib/git-stats.ts)
  *   POST /api/git-fetch         → fetch every pinned repo's origin now (see lib/git-fetch.ts)
  *   POST /api/git-quick         → fast-forward pull or push of one pinned repo, no session (see lib/git-quick.ts)
@@ -42,8 +47,12 @@ import {
   serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, servePinsOrder, serveGitStats, serveGitFetch, serveGitQuick, serveCodegraph, serveCodegraphRun,
   serveNotifyEvent, serveNotifyTest,
   serveTranscribe, serveSpawn, serveSpawnStop, serveSessionStop, serveUsageProfile, serveUsageRates, serveUsageHistory,
-  serveAccount, serveReleases, serveHub, serveOpenFolder
+  serveAccount, serveReleases, serveHub, serveOpenFolder,
+  serveSchedules, serveScheduleRuns, serveScheduleRead, serveScheduleWrite, serveScheduleCreate, serveScheduleDelete,
+  serveSchedulePatch,
+  serveScheduleReconcile, serveScheduleRun, serveScheduleStop, serveScheduleReveal, serveScheduleValidate, serveSessionRow
 } from './api.js';
+import { startSchedules, stopSchedules } from './lib/schedule-boot.js';
 import { createDashboardHub } from './lib/hub-widgets.js';
 import { startGitFetchTimer } from './lib/git-fetch.js';
 import { crossSiteWrite, hostAllowed } from './lib/request-guard.js';
@@ -139,9 +148,9 @@ function serveStatic(urlPath: string, res: http.ServerResponse): void {
   });
 }
 
-/** The write endpoints are POST-only; everything else here is method-agnostic. */
-function methodNotAllowed(res: http.ServerResponse): void {
-  res.writeHead(405, { 'Content-Type': 'application/json', 'Allow': 'POST', 'Cache-Control': 'no-store' });
+/** The write endpoints are POST-only; everything else here is method-agnostic, bar `/api/schedules/:name`, which names its own `allow`. */
+function methodNotAllowed(res: http.ServerResponse, allow = 'POST'): void {
+  res.writeHead(405, { 'Content-Type': 'application/json', 'Allow': allow, 'Cache-Control': 'no-store' });
   res.end(JSON.stringify({ error: 'method not allowed' }));
 }
 
@@ -260,6 +269,46 @@ export function createRequestListener(config: Config): http.RequestListener {
       if (req.method !== 'POST') return methodNotAllowed(res);
       return void serveOpenFolder(config, req, res);
     }
+    // Scheduled workflows. The fixed paths come before the `:name` regex, so `runs`, `validate`, `reconcile` and `reveal` are never read as a job name
+    // (the validator reserves them too). Every write is gated inside its handler; `/validate` is read-only and is not.
+    if (u.pathname === '/api/schedules') {
+      if (req.method === 'POST') return void serveScheduleCreate(config, req, res);
+      if (req.method !== 'GET' && req.method !== 'HEAD') return methodNotAllowed(res, 'GET, POST');
+      return void serveSchedules(config, res);
+    }
+    if (u.pathname === '/api/schedules/runs') {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return methodNotAllowed(res, 'GET');
+      return serveScheduleRuns(config, u.searchParams, res);
+    }
+    if (u.pathname === '/api/schedules/validate') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveScheduleValidate(config, req, res);
+    }
+    if (u.pathname === '/api/schedules/reconcile') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveScheduleReconcile(config, req, res);
+    }
+    if (u.pathname === '/api/schedules/reveal') {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      return void serveScheduleReveal(config, req, res);
+    }
+    const scheduleAction = u.pathname.match(/^\/api\/schedules\/([^/]+)\/(run|stop)$/);
+    if (scheduleAction) {
+      if (req.method !== 'POST') return methodNotAllowed(res);
+      const name = decodePath(scheduleAction[1]);
+      if (name === null) return badRequest(res);
+      return void (scheduleAction[2] === 'run' ? serveScheduleRun(config, name, req, res) : serveScheduleStop(config, name, req, res));
+    }
+    const scheduleJob = u.pathname.match(/^\/api\/schedules\/([^/]+)$/);
+    if (scheduleJob) {
+      const name = decodePath(scheduleJob[1]);
+      if (name === null) return badRequest(res);
+      if (req.method === 'GET' || req.method === 'HEAD') return serveScheduleRead(config, name, res);
+      if (req.method === 'PUT') return void serveScheduleWrite(config, name, req, res);
+      if (req.method === 'PATCH') return void serveSchedulePatch(config, name, req, res);
+      if (req.method === 'DELETE') return void serveScheduleDelete(config, name, req, res);
+      return methodNotAllowed(res, 'GET, PUT, PATCH, DELETE');
+    }
     // Read-only git state of the pinned repos; the pins are the only input.
     if (u.pathname === '/api/git-stats') {
       return void serveGitStats(config, res);
@@ -360,6 +409,13 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (u.pathname === '/api/spawn') {
       if (req.method !== 'POST') return methodNotAllowed(res);
       return void serveSpawn(config, req, res);
+    }
+    // A scheduled run's `session →`: any transcript, whatever its age. Before the detail regex, which would swallow it.
+    const row = u.pathname.match(/^\/api\/sessions\/([^/]+)\/row$/);
+    if (row) {
+      const id = decodePath(row[1]);
+      if (id === null) return badRequest(res);
+      return serveSessionRow(config, id, res);
     }
     // Like the chat route below, these must be matched before the detail regex,
     // whose `[^/?]+` would otherwise swallow `/api/sessions/:id/<anything>`.
@@ -471,7 +527,18 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
     // The git-fetch timer idles unless the Git view is open and an interval is set (both re-read each tick), so it starts unconditionally.
     startGitFetchTimer(config);
+
+    // Opt-in (`SCHEDULES_OWNER`); a server that loses the owner claim, or never makes it, only reads (scheduled-workflows spec §Owning server).
+    startSchedules(config);
   });
+
+  // `claimOwner` releases on `exit`, which a signal skips; and the reconcile watchers must stop before the process does.
+  const onSignal = (code: number) => (): void => {
+    stopSchedules();
+    process.exit(code);
+  };
+  process.once('SIGINT', onSignal(130));
+  process.once('SIGTERM', onSignal(143));
 }
 
 export { server, config };

@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import {
   DEFAULT_ANSWER_SECS, DEFAULT_GIT_FETCH_SECS, DEFAULT_IDLE_SECS, DEFAULT_NOTIFY, DEFAULT_TRUST_TAILNET, GIT_FETCH_SECS, MAX_ANSWER_SECS, MAX_IDLE_SECS,
-  MAX_PINNED_PROJECTS, MIN_ANSWER_SECS, SETTINGS_FILE,
+  MAX_PINNED_PROJECTS, MIN_ANSWER_SECS, NOTIFY_EVENTS, SETTINGS_FILE,
   clampAnswerSecs, clampIdleSecs, clampPinned, detectAnswerOverride, detectIdleOverride,
   getGitFetchSecs, getPinnedProjects, getSettings, parseGitFetchSecs, resetSettings, setPinned, setPinOrder, setSettings
 } from '../server/lib/settings.js';
@@ -289,6 +289,19 @@ export function run(): number {
     });
   })) p++; else f++;
 
+  if (test('schedule-failed is the fifth notify event: listed, off by default, and settable on its own', () => {
+    assert.deepStrictEqual([...NOTIFY_EVENTS], ['question', 'stop', 'permission', 'plan', 'schedule-failed']);
+    assert.deepStrictEqual(Object.keys(DEFAULT_NOTIFY.events).sort(), [...NOTIFY_EVENTS].sort());
+    inTmpCwd(() => {
+      assert.strictEqual(getSettings().notify.events['schedule-failed'], false);
+      assert.notStrictEqual(setSettings({ notify: { events: { 'schedule-failed': true } } }), null);
+      resetSettings();
+      const events = getSettings().notify.events;
+      assert.strictEqual(events['schedule-failed'], true, 'survives a restart');
+      assert.strictEqual(events.question, false, 'the other four stay off');
+    });
+  })) p++; else f++;
+
   if (test('an unreadable settings file yields notify defaults', () => {
     inTmpCwd(dir => {
       fs.writeFileSync(path.join(dir, SETTINGS_FILE), '{not json', 'utf8');
@@ -520,3 +533,5 @@ export function run(): number {
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }
+
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(run() > 0 ? 1 : 0);

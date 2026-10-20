@@ -5,6 +5,8 @@
  * produces it; `useSessions` (client) consumes it. One definition, both sides.
  */
 
+import type { JobError } from './schedule-file.js';
+
 /** The session's most-recent tool call. */
 export interface Activity {
   tool: string;
@@ -963,7 +965,7 @@ export type ConnectionOrigin = 'local' | 'lan' | 'tailnet' | 'unknown';
 export type WriteAccess = 'open' | 'token' | 'none';
 
 /** The four session events a push notification can announce. */
-export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan';
+export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan' | 'schedule-failed';
 
 /**
  * When to send a push. Every clause is AND-ed, and every layer is independently
@@ -2004,4 +2006,146 @@ export interface SessionsResponse {
   usageStatus?: UsageStatus;
   /** Set only when the scan failed and an empty snapshot is returned. */
   error?: boolean;
+}
+
+/** One scheduled job as `shared/schedule-file.ts` parses it from `<name>.md` in the schedules folder. */
+export interface ScheduleJob {
+  /** The filename without `.md`; also the launchd label suffix and the log key. */
+  name: string;
+  /** Five-field cron, local time of the machine that runs it. */
+  cron: string;
+  machines: ('mac' | 'wsl')[];
+  run: 'shell' | 'claude';
+  /** `pinned` = every pinned repo, a list = only those pins (by name or dirName), null = one step in `cwd`. */
+  foreach: 'pinned' | string[] | null;
+  cwd: string | null;
+  enabled: boolean;
+  model: string | null;
+  effort: string | null;
+  permissionMode: 'plan' | 'acceptEdits' | 'auto' | null;
+  allowedTools: string[] | null;
+  maxTurns: number | null;
+  timeoutMs: number;
+  /** Everything after the frontmatter, trimmed: the prompt for `claude`, the whole body for `shell`. */
+  body: string;
+  /** `shell` only: the inner text of the body's first ```bash fence. */
+  script: string | null;
+}
+
+/** One step of a scheduled run, folded from its `step-start` / `step-end` log records. `outcome` is null while the step is in flight (or its run was lost). */
+export interface ScheduleStep {
+  index: number;
+  /** The pin name for a `foreach:` job, null for a single-cwd job. */
+  repo: string | null;
+  cwd: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  outcome: 'ok' | 'failed' | 'skipped' | 'timeout' | 'stopped' | null;
+  ms: number | null;
+  exit: number | null;
+  why: string | null;
+  /** Shell steps only: the last lines of combined output. */
+  tail: string | null;
+  /** Claude steps only; null for shell steps and steps still running. */
+  costUsd: number | null;
+  /** input + cache creation + cache read, summed by the wrapper — never re-derived. */
+  tokensIn: number | null;
+  tokensOut: number | null;
+  turns: number | null;
+  model: string | null;
+  /** Claude steps only: the id `--session-id` gave the child, what `GET /api/sessions/:id/row` opens. */
+  sessionId: string | null;
+}
+
+/** One run of a scheduled job, or a refusal, as the server folds them from `~/.claude/schedules/runs/*.jsonl`. */
+export interface ScheduleRun {
+  /** The wrapper's uuid; a refusal has none in the log, so its id is `refused-<machine>-<job>-<epoch ms>`. */
+  id: string;
+  job: string;
+  machine: string;
+  trigger: 'schedule' | 'manual';
+  startedAt: string;
+  endedAt: string | null;
+  ms: number | null;
+  late: boolean;
+  /** `lost` is derived at read time, never logged: a start with no end whose wrapper is gone or past the age rule. */
+  state: 'running' | 'ok' | 'failed' | 'lost' | 'refused';
+  /** Step counts: the `end` record's, or counted from the step records so far when the run has none. */
+  ok: number;
+  failed: number;
+  skipped: number;
+  /** How many steps the wrapper planned (`start.steps`); `steps` may hold fewer while it runs or after a stop. */
+  total: number;
+  stopped: boolean;
+  /** Set only when the run failed before its first step. */
+  error: string | null;
+  /** A refusal's reason, or why a run reads lost. */
+  why: string | null;
+  steps: ScheduleStep[];
+}
+
+/** The Jobs band over a window of whole local days ending today, plus the cost and run count of the window before it. */
+export interface ScheduleStats {
+  runs: number;
+  ok: number;
+  failed: number;
+  lost: number;
+  costUsd: number;
+  tokensIn: number;
+  tokensOut: number;
+  wallMs: number;
+  /** Exactly `days` local days, oldest first, `YYYY-MM-DD`; a lost run counts as failed here. */
+  byDay: Array<{ day: string; ok: number; failed: number }>;
+  prev: { costUsd: number; runs: number };
+}
+
+/** Reconcile's verdict, as the toolbar chip reads it; `not-owner` is what every server but the owner reports (spec §Owning server). */
+export type ReconcileState = 'in-sync' | 'drift' | 'failed' | 'pending' | 'not-owner' | 'no-plugin' | 'cron-down' | 'bad-machine' | 'no-claude';
+/** One job's difference between its file and the OS scheduler. `pending` is a change deferred (a running job) or blocked (`why` says which). */
+export interface ReconcileChange { name: string; action: 'install' | 'update' | 'remove' | 'pending'; why: string }
+export interface ReconcileReport { state: ReconcileState; changes: ReconcileChange[]; unchanged: number; error: string | null; at: string }
+
+/** One job file as `GET /api/schedules/:name` serves it to the editor: the raw text, and the parse of it. `job` is null when `errors` is not empty. */
+export interface ScheduleFile {
+  name: string;
+  text: string;
+  job: ScheduleJob | null;
+  errors: JobError[];
+  mtimeMs: number;
+}
+
+/** One ledger row of `GET /api/schedules`: the file plus what this machine knows about it. */
+export interface ScheduleJobRow extends ScheduleFile {
+  /** The job names this machine in `machines:`. */
+  onThisMachine: boolean;
+  /** The OS scheduler holds a job for it now (an older version counts). Only an owner can tell: false whenever the report could not be planned. */
+  installed: boolean;
+  /** The next fire, ISO; null for an invalid, paused or other-machine job. */
+  nextAt: string | null;
+  /** The newest run that is not running (a refusal included). */
+  last: ScheduleRun | null;
+  running: ScheduleRun | null;
+}
+
+export interface SchedulesResponse {
+  machine: 'mac' | 'wsl';
+  /** The schedules folder, `~` expanded. */
+  dir: string;
+  /** `ownedBy` is `<cwd>:<port>` of the live owner, or `''` when this server never opted in (`SCHEDULES_OWNER`), or `seam` under the test seam. */
+  owner: 'owner' | { ownedBy: string };
+  reconcile: ReconcileReport;
+  /** Sorted by name. */
+  jobs: ScheduleJobRow[];
+}
+
+/** `GET /api/schedules/runs`: the filtered runs of the window, newest first, and the stats for the window (job and runner filters applied, outcome not). */
+export interface ScheduleRunsResponse {
+  runs: ScheduleRun[];
+  stats: ScheduleStats;
+}
+
+/** `POST /api/schedules/validate`: what the drawer shows under the textarea. `summary` is the one-line reading of a valid file, null otherwise. */
+export interface ScheduleValidateResponse {
+  errors: JobError[];
+  summary: string | null;
 }

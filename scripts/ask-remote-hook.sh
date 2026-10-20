@@ -29,6 +29,8 @@ INPUT=$(cat)
 
 # Only inside Claude Code (mirrors the other hooks in ~/.claude/settings.json).
 [ "$CLAUDECODE" = "1" ] || exit 0
+# A scheduled run (plugin/lib/run-schedule.mjs) stamps this on its child: unattended, so no hold, no push, no advice.
+[ -n "$CLAUDE_DASHBOARD_SCHEDULE" ] && exit 0
 
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
 TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"

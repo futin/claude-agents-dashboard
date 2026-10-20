@@ -55,6 +55,7 @@ function seededSettings(opts: StageOpts): Settings {
     usageTab: 'forecast',
     settingsTab: 'local',
     managementTab: opts.managementTab ?? 'git',
+    scheduleWindow: 30,
     // Not the default 'last', which defers to `dashboard.layout` (SessionsView.tsx).
     defaultLayout: opts.layout ?? 'board',
     contentWidth: opts.contentWidth

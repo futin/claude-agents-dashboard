@@ -36,12 +36,13 @@ const SWATCHES: Record<ThemeId, [string, string, string]> = {
   daylight: ['#f4f4f3', '#ffffff', '#131313']
 };
 
-/** The four push events, ordered by how much they matter when you are away. */
+/** The five push events, ordered by how much they matter when you are away. */
 const NOTIFY_EVENT_ROWS = [
   { key: 'question' as const, name: 'Question waiting', hint: 'A session is asking something you can answer from the dashboard.' },
   { key: 'permission' as const, name: 'Permission dialog open', hint: 'A terminal permission dialog is blocking a session until you return.' },
   { key: 'plan' as const, name: 'Plan waiting for review', hint: 'A proposed plan is held for a remote send-back.' },
-  { key: 'stop' as const, name: 'Task finished', hint: 'A session finished its turn. Suppressed while background agents are still running.' }
+  { key: 'stop' as const, name: 'Task finished', hint: 'A session finished its turn. Suppressed while background agents are still running.' },
+  { key: 'schedule-failed' as const, name: 'Scheduled job failed', hint: 'A scheduled job failed, was refused or never finished. Ignores the three conditions below.' }
 ];
 
 const ON_OFF = [{ value: 'off' as const, label: 'Off' }, { value: 'on' as const, label: 'On' }];

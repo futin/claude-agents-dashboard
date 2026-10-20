@@ -7,13 +7,14 @@ usage and current tool activity per session. Polls every 3s.
 ## Orientation
 
 Monolith, three domains plus the plugin. The **only** things crossing the FE/BE boundary live in `shared/`:
-the typed JSON in `shared/types.ts`, plus two zero-dep modules both sides run: `shared/frontmatter.ts` and `shared/gitUpstream.ts`.
+the typed JSON in `shared/types.ts`, plus four zero-dep modules both sides run: `shared/frontmatter.ts`, `shared/gitUpstream.ts`, `shared/cron.ts` and
+`shared/schedule-file.ts`.
 
 - `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only) but two: `lookout-widgets`, `release-kit`.
 - `client/` — Vite + React + TypeScript; side rail Sessions | Usage | Management |
   Claude Configs | Analytics | Settings, all lazy but Sessions.
 - `shared/` — `types.ts` is the API contract and the single source of truth for it;
-  `frontmatter.ts` and `gitUpstream.ts` are the only modules both sides run.
+  `frontmatter.ts`, `gitUpstream.ts`, `cron.ts` and `schedule-file.ts` are the only modules both sides run.
 - `test/` — node-assert tests over backend + client domain logic, tmpdir JSONL fixtures.
 - `plugin/` — the installable Claude Code plugin (the repo root's `.claude-plugin/marketplace.json` points at it): the skills the dashboard depends on, plain
   JS, never imported by server or client at runtime. `test/plugin-manifest.test.ts` pins what may live in it.
@@ -60,7 +61,7 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
 
 - **ESM everywhere** (`"type": "module"`). Server imports use the `.js` suffix (resolves to
   `.ts` under Bundler resolution + tsx). Cross-boundary imports use `import type` — no
-  runtime coupling, `shared/frontmatter.ts` and `shared/gitUpstream.ts` excepted.
+  runtime coupling, `shared/frontmatter.ts`, `shared/gitUpstream.ts`, `shared/cron.ts` and `shared/schedule-file.ts` excepted.
 - **Server is never compiled.** `tsx` in dev *and* prod. No `dist/` for the server.
 - **Dev vs prod page:** in dev Vite serves the HTML and Node answers API only; in prod Node
   static-serves `client/dist` and auto-opens the browser.
@@ -78,7 +79,10 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
   own network calls — the server does not, so they are not a third kind. `lib/git-fetch.ts` launches `git fetch`, which makes its own network call —
   not a third kind either. `lib/git-quick.ts` launches `git fetch`, `git merge --ff-only` and `git push`
   for the Sync menu's Pull and Push, which make their own network calls — a git launch, not a third kind. `lib/codegraph.ts` launches the `codegraph` CLI with `CODEGRAPH_NO_UPDATE_CHECK=1` and `CODEGRAPH_NO_DOWNLOAD=1` set, which switches off its
-  update check and its bundle download — a local launch like `git`, not a third kind. `test/outbound.test.ts` pins the list.
+  update check and its bundle download — a local launch like `git`, not a third kind. `lib/schedule-reconcile.ts` launches `launchctl`, `crontab` and `pgrep`
+  to install scheduled jobs, `lib/schedule-store.ts` launches `ps` and `sysctl` to judge lock and owner holders, `lib/open-folder.ts` launches `open` (and `open -R` for
+  the Schedules menu's Reveal), and `lib/schedule-run.ts` spawns the plugin's `run-schedule.mjs` wrapper through `spawn.ts`'s `spawnProcess` for Run now — local
+  launches, not a third kind. `test/outbound.test.ts` pins the list.
   Two npm packages are allowed, by name, each with zero runtime deps of its own and pinned to a git tag: `lookout-widgets`, the Lookout contract producer
   behind `/api/hub/widgets`, and `release-kit`, whose reader is the one reader of the tag-message contract its release workflow writes (spec
   `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` D7) and, as `createReleasesReader`, backs `/api/releases`; it uses Node built-ins only and launches `git`, so it is no

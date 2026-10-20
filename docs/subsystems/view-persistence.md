@@ -84,6 +84,10 @@ override it (see `dashboard.section` below).
   precisely so a refresh or a bookmark does *not* replay it. Its sibling `?view=git` is the same kind of one-shot: Lookout's Git pending tile opens it,
   `deepLinkView()` reads it from the same single memoised parse (so neither caller can strip the other's param first), and `App.tsx` forces the
   `management` section and sets `managementTab` to `git` — once per load (`takeDeepLinkManagementTab`), and not at all when a `?session=` beside it wins.
+  `?view=schedules` is the third: any `view` the link names (`git` or `schedules`, `DeepLinkView`) lands on Management, and the value is the sub-view. A failed
+  scheduled run's push adds `&run=<id>` (`server/lib/notify.ts` `scheduleClickUrl`): `readRunParam` takes it in the same single parse, behind a
+  `[A-Za-z0-9._-]{1,128}` shape check, `deepLinkRun()` keeps answering after the strip, and Management › Schedules opens on Runs with that run's fold open.
+  See [schedules](schedules.md#notifications).
 - **Which of the five shapes draws the list is deliberately NOT in `dashboard.view`.** It
   used to be a `View` field, which made one click in the switcher the shape every future load
   opened in. The shape is not a filter, and it does not belong in the object the filters are

@@ -28,6 +28,11 @@ export function openFolder(path: string): Promise<void> {
   return run('open', [path]);
 }
 
+/** `open -R <path>`: Finder opens the enclosing folder with the file selected, rather than opening the file in its default app. */
+export function revealFile(path: string): Promise<void> {
+  return run('open', ['-R', path]);
+}
+
 /**
  * Test seam. A field left `undefined` leaves that seam alone; `null` restores the default — the runner that really launches `open`, and `process.platform`.
  */

@@ -56,13 +56,13 @@ const ANSWER_ENV = 'CLAUDE_DASHBOARD_ANSWER_TIMEOUT';
 /** Every switch off. Pushes are opt-in — nothing leaves the machine unasked. */
 export const DEFAULT_NOTIFY: NotifyPolicy = {
   enabled: false,
-  events: { question: false, stop: false, permission: false, plan: false },
+  events: { question: false, stop: false, permission: false, plan: false, 'schedule-failed': false },
   requireRemoteAnswer: false,
   requireAfk: false,
   requireAutoMode: false
 };
 
-const NOTIFY_EVENTS: readonly NotifyEvent[] = ['question', 'stop', 'permission', 'plan'];
+export const NOTIFY_EVENTS: readonly NotifyEvent[] = ['question', 'stop', 'permission', 'plan', 'schedule-failed'];
 
 /** Off by default — recording makes the server poll Anthropic unattended. */
 export const DEFAULT_RECORD_USAGE_HISTORY = false;

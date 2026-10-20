@@ -41,6 +41,9 @@ command -v jq > /dev/null 2>&1 || exit 0
 # "finished" because a person is waiting on that work. Without it every renewal, about every 8h, pushed "finished — reply window open" (#178).
 [ -n "$CLAUDE_DASHBOARD_REFRESH" ] && exit 0
 
+# A scheduled step is never held for answerSecs and never pushes "finished"; the schedule's own failure push is the only one (plugin/lib/run-schedule.mjs).
+[ -n "$CLAUDE_DASHBOARD_SCHEDULE" ] && exit 0
+
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
 TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"
 

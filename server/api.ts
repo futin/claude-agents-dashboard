@@ -4,14 +4,16 @@
  * fall back to a safe empty payload if the scan throws.
  */
 
+import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import nodePath from 'node:path';
 
 import type { HubHandler } from 'lookout-widgets';
 
 import {
-  scanSessions, lastMessageMs, listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionSurface
+  scanSessions, lastMessageMs, listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface
 } from './lib/scan.js';
+import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
 import { archivedSessionIds } from './lib/archived.js';
 import { readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
@@ -57,7 +59,7 @@ import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
-import { openFolder, openFolderPlatform } from './lib/open-folder.js';
+import { openFolder, openFolderPlatform, revealFile } from './lib/open-folder.js';
 import { runQuickOp } from './lib/git-quick.js';
 import { readGitStats } from './lib/git-stats.js';
 import { readCodegraph, startCodegraphRun } from './lib/codegraph-store.js';
@@ -69,11 +71,21 @@ import {
   probeSpawn, stopSession, stopStates
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
+import { describeCron, nextAfter, parseCron } from '../shared/cron.js';
+import { checkPins, parseJob, serializeEnabled } from '../shared/schedule-file.js';
+import type { JobError, PinSnapshot } from '../shared/schedule-file.js';
+import { foldForPush, ownerStatus, runsReader } from './lib/schedule-boot.js';
+import { machineName, scheduleDirs } from './lib/schedule-config.js';
+import { computeStats } from './lib/schedule-log.js';
+import { applyReconcile, lastReconcile, planReconcile } from './lib/schedule-reconcile.js';
+import { runJob, stopJob } from './lib/schedule-run.js';
+import { ScheduleStoreError, deleteJob, isOwner, readJobs, writeJob, writePinsSnapshot } from './lib/schedule-store.js';
 import type {
   AnalyticsResponse, GitQuickRequest, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
   ModelRateRow, RateLimit, ServerSettings, SpawnResponse, UsageCoverage, UsageProfileCell,
-  UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult, ConnectionOrigin, WriteAccess
+  UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult, ConnectionOrigin, WriteAccess,
+  ReconcileReport, ScheduleFile, ScheduleJob, ScheduleJobRow, ScheduleRunsResponse, SchedulesResponse, ScheduleValidateResponse, Session
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -1819,6 +1831,15 @@ export async function serveCodegraphRun(config: Config, req: IncomingMessage, re
 }
 
 /**
+ * The owner keeps `pins.json` current for the schedule wrapper, which never calls the dashboard (spec §The job file, Pins on disk). Called here rather
+ * than from `settings.ts`, which `management.ts` imports. The pin change already stands, so a failed snapshot is logged, not answered.
+ */
+function snapshotPins(config: Config): void {
+  if (!isOwner()) return;
+  try { writePinsSnapshot(config); } catch (e) { console.error('[dashboard] pins snapshot failed:', (e as Error).message); }
+}
+
+/**
  * `POST /api/pins` `{dirName, pinned}` — pin or unpin one project (#161).
  * A gate-only write, like `POST /api/settings`. A pin must name a dir the server
  * itself enumerated (older ∪ recent), compared as a string and never joined into
@@ -1840,6 +1861,7 @@ export async function servePinsWrite(config: Config, req: IncomingMessage, res: 
     if (!known) return sendJson(res, 404, { error: 'no such project' });
   }
   if (setPinned(dirName, pinned) === null) return sendJson(res, 409, { error: 'pin limit reached' });
+  snapshotPins(config);
   sendJson(res, 200, pinsPayload(config));
 }
 
@@ -1855,6 +1877,7 @@ export async function servePinsOrder(config: Config, req: IncomingMessage, res: 
     return sendBadBody(res, { error: 'expected {order: string[]}' });
   }
   if (setPinOrder(body.order) === null) return sendJson(res, 409, { error: 'pins changed — reload' });
+  snapshotPins(config);
   sendJson(res, 200, pinsPayload(config));
 }
 
@@ -1883,6 +1906,324 @@ export async function serveOpenFolder(config: Config, req: IncomingMessage, res:
     return sendJson(res, 500, { error: 'open failed' });
   }
   sendJson(res, 200, { ok: true } satisfies OpenFolderResponse);
+}
+
+/* -------------------------------------------------- scheduled workflows (docs/superpowers/specs/2026-10-19-scheduled-workflows-design.md §HTTP) */
+
+/** A job name from a URL or a body, checked before it reaches any path; the reserved names pass here and are the validator's to refuse. */
+const JOB_NAME_RE = /^[a-z0-9-]+$/;
+/** The wrapper takes `--only` as argv; a list longer than any pin set is refused rather than handed to a spawn. */
+const ONLY_MAX = 200;
+const SCHEDULE_WINDOWS = [7, 30, 90] as const;
+const RUN_OUTCOMES: ReadonlySet<string> = new Set(['running', 'ok', 'failed', 'lost', 'refused']);
+
+/**
+ * The checks every job-scoped schedule write makes after the write gate: the name (400, nothing touched) and ownership (409 — only the owning server
+ * writes job files, installs or runs, spec §Owning server). True when it has answered and the caller must return.
+ */
+function refuseScheduleWrite(res: ServerResponse, name?: string): boolean {
+  if (name !== undefined && !JOB_NAME_RE.test(name)) { sendJson(res, 400, { error: 'bad name' }); return true; }
+  if (!isOwner()) { sendJson(res, 409, { error: 'not-owner' }); return true; }
+  return false;
+}
+
+/** The pins as the wrapper will see them in `pins.json`, for `checkPins`: the same rows `GET /api/pins` lists. */
+function pinSnapshot(config: Config): PinSnapshot[] {
+  return listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), ...pinOptions() })
+    .map(r => ({ dirName: r.dirName, name: r.name, path: r.path, listed: r.listed }));
+}
+
+/** `parseJob` plus the ambiguous-pin check against the pins of this machine now — what PUT, POST and `/validate` all run. */
+function validateScheduleText(config: Config, name: string, text: string): { job: ScheduleJob | null; errors: JobError[] } {
+  const parsed = parseJob(name, text);
+  if (!parsed.job) return parsed;
+  const pinErrors = checkPins(parsed.job, pinSnapshot(config));
+  return pinErrors.length > 0 ? { job: null, errors: pinErrors } : parsed;
+}
+
+/** The drawer's one-line reading of a valid job: when, how, where. */
+function scheduleSummary(job: ScheduleJob): string {
+  const cron = parseCron(job.cron);
+  const when = cron.ok ? describeCron(cron.cron) : job.cron;
+  const where = job.foreach === 'pinned' ? 'every pinned repo'
+    : Array.isArray(job.foreach) ? `${job.foreach.length} repo${job.foreach.length === 1 ? '' : 's'}`
+      : job.cwd ?? 'the schedules folder\'s parent';
+  return [when, job.run, where, job.machines.join(' + '), job.enabled ? null : 'paused'].filter(Boolean).join(' · ');
+}
+
+/** Whether the OS holds a job for `name`, read off a planned report. A bare report (not owner, no plugin, bad machine) knows nothing: false. */
+export function installedFrom(report: ReconcileReport, name: string, desired: boolean): boolean {
+  const planned = report.state !== 'not-owner' && report.state !== 'no-plugin' && report.state !== 'bad-machine'
+    && !(report.state === 'failed' && report.changes.length === 0 && report.unchanged === 0);
+  if (!planned) return false;
+  const change = report.changes.find(c => c.name === name);
+  if (!change) return desired;
+  if (change.action === 'install') return false;
+  if (change.action === 'pending') return change.why === 'running';
+  return true;
+}
+
+function nextFire(job: ScheduleJob, now: Date): string | null {
+  const cron = parseCron(job.cron);
+  return cron.ok ? nextAfter(cron.cron, now)?.toISOString() ?? null : null;
+}
+
+/** `GET /api/schedules` — the ledger. Read-only and open to every peer; plans reconcile against the OS (no writes), and folds the log for pushes. */
+export async function serveSchedules(config: Config, res: ServerResponse): Promise<void> {
+  try {
+    const machine = machineName(config).name;
+    const dir = scheduleDirs(config).schedules;
+    const stored = readJobs(dir);
+    const runs = runsReader(config).read();
+    foldForPush(config, runs);
+    const plan = await planReconcile(config);
+    // The plan re-reads the OS on every poll; a failed apply's message would otherwise vanish behind the drift it left.
+    const last = lastReconcile();
+    const reconcile = plan.state === 'drift' && plan.error === null && last?.state === 'failed' ? { ...plan, error: last.error } : plan;
+    const now = new Date();
+    const jobs: ScheduleJobRow[] = stored.map(s => {
+      const onThisMachine = s.job?.machines.includes(machine) ?? false;
+      const desired = s.job !== null && s.job.enabled && onThisMachine;
+      return {
+        ...s,
+        onThisMachine,
+        installed: installedFrom(reconcile, s.name, desired),
+        nextAt: desired && s.job ? nextFire(s.job, now) : null,
+        last: runs.find(r => r.job === s.name && r.state !== 'running') ?? null,
+        running: runs.find(r => r.job === s.name && r.state === 'running') ?? null
+      };
+    });
+    sendJson(res, 200, { machine, dir, owner: ownerStatus(), reconcile, jobs } satisfies SchedulesResponse);
+  } catch (e) {
+    console.error('[dashboard] schedules read failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'schedules read failed' });
+  }
+}
+
+/**
+ * `GET /api/schedules/runs?days=30&job=&outcome=&runner=` — the folded runs of the window, newest first, and the stats. `days` outside 7 | 30 | 90 reads
+ * as 30. `runner` is looked up in the job's file (a run carries none), so a run of a job whose file is gone is excluded once that filter is set.
+ */
+export function serveScheduleRuns(config: Config, params: URLSearchParams, res: ServerResponse): void {
+  try {
+    const rawDays = Number(params.get('days'));
+    const days = SCHEDULE_WINDOWS.find(d => d === rawDays) ?? 30;
+    const job = params.get('job') || null;
+    const outcome = params.get('outcome') || null;
+    if (outcome !== null && !RUN_OUTCOMES.has(outcome)) return sendJson(res, 400, { error: 'bad outcome' });
+    const runner = params.get('runner') || null;
+    const all = runsReader(config).read();
+    foldForPush(config, all);
+    const runnerOf = new Map(readJobs(scheduleDirs(config).schedules).map(s => [s.name, s.job?.run ?? null]));
+    const scoped = all.filter(r => (job === null || r.job === job) && (runner === null || runnerOf.get(r.job) === runner));
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)).getTime();
+    const runs = scoped.filter(r => {
+      const t = Date.parse(r.startedAt);
+      return Number.isFinite(t) && t >= from && (outcome === null || r.state === outcome);
+    });
+    sendJson(res, 200, { runs, stats: computeStats(scoped, days, now) } satisfies ScheduleRunsResponse);
+  } catch (e) {
+    console.error('[dashboard] schedule runs read failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'schedule runs read failed' });
+  }
+}
+
+/** `GET /api/schedules/:name` — the raw file and its parse, for the editor. */
+export function serveScheduleRead(config: Config, name: string, res: ServerResponse): void {
+  if (!JOB_NAME_RE.test(name)) return sendJson(res, 400, { error: 'bad name' });
+  const stored = readJobs(scheduleDirs(config).schedules).find(s => s.name === name);
+  if (!stored) return sendJson(res, 404, { error: 'no such job' });
+  sendJson(res, 200, stored satisfies ScheduleFile);
+}
+
+/** `PUT /api/schedules/:name` `{text}` — replace an existing job's file. Validated first; `422 {errors}` writes nothing. */
+export async function serveScheduleWrite(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  if (refuseScheduleWrite(res, name)) return;
+  const body = await readJsonBody(req) as { text?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.text !== 'string') return sendBadBody(res, { error: 'expected {text: string}' });
+  const dir = scheduleDirs(config).schedules;
+  if (!readJobs(dir).some(s => s.name === name)) return sendJson(res, 404, { error: 'no such job' });
+  const { job, errors } = validateScheduleText(config, name, body.text);
+  if (!job) return sendJson(res, 422, { errors });
+  try {
+    writeJob(dir, name, body.text, 'replace');
+  } catch (e) {
+    console.error('[dashboard] schedule write failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'write failed' });
+  }
+  sendJson(res, 200, { job, reconcile: await applyReconcile(config) });
+}
+
+/** `POST /api/schedules` `{name, text}` — a new job: `409` when the file exists, else validated and written like PUT. */
+export async function serveScheduleCreate(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  const body = await readJsonBody(req) as { name?: unknown; text?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.name !== 'string' || typeof body.text !== 'string') {
+    return sendBadBody(res, { error: 'expected {name: string, text: string}' });
+  }
+  const { name, text } = body;
+  if (refuseScheduleWrite(res, name)) return;
+  const dir = scheduleDirs(config).schedules;
+  if (readJobs(dir).some(s => s.name === name)) return sendJson(res, 409, { error: 'exists' });
+  const { job, errors } = validateScheduleText(config, name, text);
+  if (!job) return sendJson(res, 422, { errors });
+  try {
+    writeJob(dir, name, text, 'create');
+  } catch (e) {
+    if (e instanceof ScheduleStoreError && e.code === 'exists') return sendJson(res, 409, { error: 'exists' });
+    console.error('[dashboard] schedule create failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'write failed' });
+  }
+  sendJson(res, 200, { job, reconcile: await applyReconcile(config) });
+}
+
+/** `DELETE /api/schedules/:name` — remove the file and reconcile; the run log keeps the job's rows. */
+export async function serveScheduleDelete(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  if (refuseScheduleWrite(res, name)) return;
+  let removed: boolean;
+  try {
+    removed = deleteJob(scheduleDirs(config).schedules, name);
+  } catch (e) {
+    console.error('[dashboard] schedule delete failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'delete failed' });
+  }
+  if (!removed) return sendJson(res, 404, { error: 'no such job' });
+  sendJson(res, 200, { reconcile: await applyReconcile(config) });
+}
+
+/** `PATCH /api/schedules/:name` `{enabled}` — rewrite the `enabled:` line only (every other byte kept), then reconcile. */
+export async function serveSchedulePatch(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  if (refuseScheduleWrite(res, name)) return;
+  const body = await readJsonBody(req) as { enabled?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.enabled !== 'boolean') return sendBadBody(res, { error: 'expected {enabled: boolean}' });
+  const dir = scheduleDirs(config).schedules;
+  const stored = readJobs(dir).find(s => s.name === name);
+  if (!stored) return sendJson(res, 404, { error: 'no such job' });
+  // An unparseable file has no trustworthy `enabled:` line to rewrite; the drawer fixes it through PUT.
+  if (!stored.job) return sendJson(res, 422, { errors: stored.errors });
+  const text = serializeEnabled(stored.text, body.enabled);
+  try {
+    writeJob(dir, name, text, 'replace');
+  } catch (e) {
+    console.error('[dashboard] schedule toggle failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'write failed' });
+  }
+  sendJson(res, 200, { job: parseJob(name, text).job, reconcile: await applyReconcile(config) });
+}
+
+/** `POST /api/schedules/reconcile` `{apply?}` — the diff, applied when `apply` is true. The plugin sync script posts `{apply: true}`. */
+export async function serveScheduleReconcile(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  if (refuseScheduleWrite(res)) return;
+  const body = await readJsonBody(req) as { apply?: unknown } | null;
+  try {
+    sendJson(res, 200, body && typeof body === 'object' && body.apply === true ? await applyReconcile(config) : await planReconcile(config));
+  } catch (e) {
+    console.error('[dashboard] schedule reconcile failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'reconcile failed' });
+  }
+}
+
+/** `POST /api/schedules/:name/run` `{only?: string[]}` — Run now (`schedule-run.ts`); its answers map 1:1 onto HTTP. */
+export async function serveScheduleRun(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  if (refuseScheduleWrite(res, name)) return;
+  // Fail closed: a body that did not arrive whole, or did not parse, is refused rather than read as "no `only`", which would run every pin.
+  const raw = await readBody(req, BODY_CAP);
+  if (!raw.ok) return sendBadBody(res, { error: 'bad body' });
+  let only: unknown;
+  if (raw.bytes.length > 0) {
+    let body: unknown;
+    try { body = JSON.parse(raw.bytes.toString('utf8')); } catch { return sendBadBody(res, { error: 'bad body' }); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return sendBadBody(res, { error: 'bad body' });
+    // No `only` key is a whole run; anything under the key, null included, is `runJob`'s to judge.
+    only = 'only' in body ? (body as { only?: unknown }).only : undefined;
+  }
+  // `runJob` reads `[]` as every pin; over HTTP an empty selection is a caller bug, not a request for a whole run.
+  if (Array.isArray(only) && (only.length === 0 || only.length > ONLY_MAX)) return sendJson(res, 400, { error: 'bad-only' });
+  try {
+    const result = await runJob(config, name, only);
+    if (result.status === 202) return sendJson(res, 202, { run: result.run });
+    if (result.status === 404) return sendJson(res, 404, { error: 'no such job' });
+    sendJson(res, result.status, { error: result.error });
+  } catch (e) {
+    console.error('[dashboard] schedule run failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'spawn-failed' });
+  }
+}
+
+/** `POST /api/schedules/:name/stop` — SIGTERM the job's live wrapper: `204`, or `409 not-running`. */
+export async function serveScheduleStop(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  if (refuseScheduleWrite(res, name)) return;
+  const result = stopJob(config, name);
+  if (result.status === 204) {
+    res.writeHead(204, { 'Cache-Control': 'no-store' });
+    return void res.end();
+  }
+  sendJson(res, 409, { error: result.error });
+}
+
+/**
+ * `POST /api/schedules/reveal` `{name?}` — open the schedules folder in Finder (macOS only, `501` elsewhere), with `<name>.md` selected when a name is sent.
+ * The folder comes from config, never the request; a name must match the job-name rule before it is joined onto it, so it cannot climb out.
+ */
+export async function serveScheduleReveal(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  const body = await readJsonBody(req) as { name?: unknown } | null;
+  const name = body && typeof body === 'object' ? body.name : undefined;
+  if (name !== undefined && typeof name !== 'string') return sendBadBody(res, { error: 'expected {name?: string}' });
+  if (refuseScheduleWrite(res, name)) return;
+  if (openFolderPlatform() !== 'darwin') return sendJson(res, 501, { error: 'reveal needs macOS' });
+  const dir = scheduleDirs(config).schedules;
+  if (!fs.existsSync(dir)) return sendJson(res, 404, { error: 'no schedules folder' });
+  const file = name === undefined ? null : nodePath.join(dir, `${name}.md`);
+  if (file !== null && !fs.existsSync(file)) return sendJson(res, 404, { error: 'no such job' });
+  try {
+    await (file === null ? openFolder(dir) : revealFile(file));
+  } catch (e) {
+    console.error(`[dashboard] schedules reveal failed: ${(e as Error).message}`);
+    return sendJson(res, 500, { error: 'open failed' });
+  }
+  sendJson(res, 200, { ok: true });
+}
+
+/**
+ * `POST /api/schedules/validate` `{text, name?}` — what the drawer calls as the user types. Read-only, so outside the write gate: it parses and checks pins,
+ * and touches no file. Without a `name` the file is judged under a neutral one, so the name rules stay the Name field's.
+ */
+export async function serveScheduleValidate(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJsonBody(req) as { text?: unknown; name?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.text !== 'string') return sendBadBody(res, { error: 'expected {text: string}' });
+  const name = typeof body.name === 'string' ? body.name : 'untitled';
+  const { job, errors } = validateScheduleText(config, name, body.text);
+  sendJson(res, 200, { errors, summary: job ? scheduleSummary(job) : null } satisfies ScheduleValidateResponse);
+}
+
+/**
+ * `GET /api/sessions/:id/row` — one `Session` row for any transcript `findTranscript` resolves, whatever its age: a scheduled run's `session →` opens
+ * the chat drawer with it. No lookback, the liveness set null (fail open), no wait sets, and none of the list's skips, so a run the list would hide
+ * still opens. `404` only when no transcript exists.
+ */
+export function serveSessionRow(config: Config, id: string, res: ServerResponse): void {
+  if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
+  try {
+    const ref = findTranscript(projectsRoot(), id);
+    if (!ref) return sendJson(res, 404, { error: 'no such session' });
+    const row = sessionFromRef(ref, {
+      now: Date.now(), activeWindowMin: config.activeWindowMin, liveCwds: null,
+      lessons: config.showAnalytics === false ? null : readSessionAnalyticsLog()
+    });
+    if (!row) return sendJson(res, 500, { error: 'transcript unreadable' });
+    sendJson(res, 200, row satisfies Session);
+  } catch (e) {
+    console.error('[dashboard] session row failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'session row failed' });
+  }
 }
 
 /* -------------------------------------------------- analytics endpoint */

@@ -86,7 +86,7 @@ type SubKey = 'usageTab' | 'managementTab' | 'settingsTab';
 interface SubNav<K extends SubKey> { key: K; items: { value: Settings[K]; label: string }[] }
 const SUBNAV: Partial<Record<Section, SubNav<'usageTab'> | SubNav<'managementTab'> | SubNav<'settingsTab'>>> = {
   usage: { key: 'usageTab', items: [{ value: 'forecast', label: 'Forecast' }, { value: 'rates', label: 'Token value' }, { value: 'history', label: 'History' }] },
-  management: { key: 'managementTab', items: [{ value: 'projects', label: 'Projects' }, { value: 'git', label: 'Git' }, { value: 'codegraph', label: 'CodeGraph' }] },
+  management: { key: 'managementTab', items: [{ value: 'projects', label: 'Projects' }, { value: 'git', label: 'Git' }, { value: 'codegraph', label: 'CodeGraph' }, { value: 'schedules', label: 'Schedules' }] },
   settings: { key: 'settingsTab', items: [{ value: 'local', label: 'Local' }, { value: 'shared', label: 'Shared' }] }
 };
 
