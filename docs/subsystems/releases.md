@@ -45,7 +45,8 @@ entry does.
 checkout behind the one last opened never writes its lower version back (release-kit spec D17), so the releases between the two are not flagged again
 when the newer checkout returns. A first visit, or a stored value that is not a
 version, seeds the newest without showing the dot, so a fresh browser never flags the whole history as new. Storage that throws (a private window,
-blocked site data) means no dot, never a crash. It is a per-browser convenience, not a record.
+blocked site data) means no dot, never a crash. It is a per-browser convenience, not a record, and Settings Reset clears it like any other view
+state — the next load then reseeds it, still without a dot.
 
 ## The drawer
 
