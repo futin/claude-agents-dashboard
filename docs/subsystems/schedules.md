@@ -21,7 +21,7 @@ a change.
 | `~/.claude/schedules/` (the *state root*) | everything below, machine-local, never under git | |
 | `runs/<machine>.jsonl` | the append-only run log; rotated to `<machine>.<yyyymmdd>.jsonl` at 20 MB | the wrapper (appends), the owner (rotates) |
 | `locks/<job>.lock` | the job lock: pid and boot id | the wrapper; the owner sweeps dead ones on start |
-| `launchd/` | the plists' stdout and stderr files (mac) | launchd |
+| `launchd/` | the plists' stdout and stderr files (mac) | reconcile creates it, launchd writes the files in it |
 | `pins.json` | `[{dirName, name, path}]` in pin order, what `foreach:` resolves against | the owner, on start and when pins change |
 | `owner.json` | `{pid, bootId, cwd, port, at}`, the owner claim | the owner |
 | `notified.json` | run ids already pushed, capped at 2000 | the owner |
@@ -125,6 +125,7 @@ runs watcher sees the `end`. Two further reasons are deferred rather than applie
 
 **mac apply.** Write the plist (`StartCalendarInterval` from the cron, `ProgramArguments` = absolute `node`, the installed wrapper, the job name;
 `WorkingDirectory` = the schedules folder; stdout and stderr under `launchd/`), then `launchctl bootout` and `bootstrap gui/<uid> <plist>`.
+`launchd/` is created first, because launchd never creates a log path's parent: without it every fire fails before exec and nothing is logged.
 
 **wsl apply.** Rewrite only the marker block with `crontab -`, the rest of the crontab byte-identical. Unrecognised lines inside the block are removed. A
 START marker with no END marker, or a `crontab -l` error other than "no crontab for", is `failed` and nothing is written. Each job line is

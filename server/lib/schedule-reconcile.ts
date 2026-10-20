@@ -353,6 +353,8 @@ function writeFileAtomic(file: string, text: string, mode = 0o644): void {
 
 async function applyMac(ctx: PlanContext, errors: string[]): Promise<void> {
   const domain = `gui/${host.uid}`;
+  // launchd never creates a log path's parent: with launchd/ missing, every fire fails before exec and the wrapper logs nothing.
+  try { fs.mkdirSync(ctx.paths.launchd, { recursive: true }); } catch (e) { errors.push(`launchd log dir: ${(e as Error).message}`); return; }
   for (const c of ctx.report.changes) {
     if (c.action === 'pending') continue;
     const label = `${LABEL_PREFIX}${c.name}`;

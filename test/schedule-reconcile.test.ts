@@ -49,6 +49,8 @@ class FakeOs {
   crontab: string | null = null;
   cronPids = '123\n';
   bootstrapFails = false;
+  /** Called with the plist path as `bootstrap` runs, to look at the disk at that moment. */
+  onBootstrap: ((file: string) => void) | null = null;
   /** Exit code `bootout` gives for a loaded label (null = success); an unloaded one always answers 3, as real launchctl does. */
   bootoutLoadedCode: number | null = null;
   /** `crontab -l` failing with this stderr instead of answering (null = answer from `crontab`). */
@@ -81,6 +83,7 @@ class FakeOs {
         return ok();
       }
       if (verb === 'bootstrap') {
+        this.onBootstrap?.(file);
         if (this.bootstrapFails) return { code: 5, stdout: '', stderr: 'Bootstrap failed: 5: Input/output error' };
         this.loaded.add(path.basename(file, '.plist'));
         return ok();
@@ -243,6 +246,19 @@ export async function run(): Promise<number> {
       const text = fs.readFileSync(w.plist('pull-pins'), 'utf8');
       assert.ok(text.includes(`<string>${w.wrapper}</string>`), 'the installed plugin copy is the wrapper');
       assert.ok(text.includes(`<string>${path.join(w.home, '.claude', 'schedules', 'launchd', 'pull-pins.out.log')}</string>`));
+    });
+  }));
+
+  check(await test('mac: the launchd/ log dir exists by the time bootstrap names the plist (launchd never creates a log path\'s parent)', async () => {
+    await withWorld({}, async (w) => {
+      const logs = path.join(w.home, '.claude', 'schedules', 'launchd');
+      fs.rmSync(logs, { recursive: true, force: true });
+      const seen: boolean[] = [];
+      w.fake.onBootstrap = () => seen.push(fs.statSync(logs, { throwIfNoEntry: false })?.isDirectory() === true);
+      w.write('pull-pins', SHELL());
+      const r = await applyReconcile(w.cfg);
+      assert.strictEqual(r.state, 'in-sync', JSON.stringify(r));
+      assert.deepStrictEqual(seen, [true]);
     });
   }));
 
