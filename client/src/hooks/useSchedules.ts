@@ -14,7 +14,7 @@ export interface SchedulesState {
 }
 
 /**
- * `GET /api/schedules` for Management › Schedules, on the interval the Settings page sets (3s by default) like `useSessions`: a running job's `running ·
+ * `GET /api/schedules` for the Schedules section, on the interval the Settings page sets (3s by default) like `useSessions`: a running job's `running ·
  * n of N` pill moves with the poll, and the page is the only mounted consumer, so leaving it stops the timer. A tick that lands while the tab is hidden, or
  * while a fetch is still out, is skipped (`createPollSeq`), and returning to the tab polls at once; `refresh()` always fetches and supersedes one in flight.
  */

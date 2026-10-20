@@ -1,5 +1,5 @@
-import type { ScheduleJobRow, ScheduleRunsResponse } from '../../../../../shared/types';
-import { costDelta, formatStat, successRate, topFailure, topTokenShare } from '../../../lib/schedules';
+import type { ScheduleJobRow, ScheduleRunsResponse } from '../../../../shared/types';
+import { costDelta, formatStat, successRate, topFailure, topTokenShare } from '../../lib/schedules';
 
 /**
  * The Jobs page's band: the window summed over every job (spec §UI, screen 1). Five tiles, Runs and Cost only at phone width. Until the runs answer the

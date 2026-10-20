@@ -13,7 +13,7 @@
  * `?view=git` is Lookout's "Git pending" tile (`server/lib/hub-widgets.ts`): it lands on Management › Git. It is consumed and stripped the same way, in the
  * same read, so whichever of the two callers runs first cannot strip the other's param.
  *
- * `?view=schedules&run=<id>` is a failed scheduled run's push (`server/lib/notify.ts`): Management › Schedules with that run's fold open. `run` is read in the
+ * `?view=schedules&run=<id>` is a failed scheduled run's push (`server/lib/notify.ts`): Schedules › Runs with that run's fold open. `run` is read in the
  * same pass as the other two, so the strip that follows cannot lose it before the Schedules page asks.
  */
 
@@ -61,10 +61,10 @@ export interface DeepLink {
   /** The scheduled run this page was opened with (`&run=<id>`), or null. */
   run(): string | null;
   /**
-   * The Management tab the link asks for, at most once: null when a `?session=` outranks the view (that link lands on Sessions, so it must not rewrite
-   * the stored tab) and on every call after the first, so an effect that re-runs cannot re-apply it.
+   * The sub-view the link asks for, at most once: null when a `?session=` outranks the view (that link lands on Sessions, so it must not rewrite the
+   * stored tab) and on every call after the first, so an effect that re-runs cannot re-apply it.
    */
-  takeManagementTab(): DeepLinkView | null;
+  takeTab(): DeepLinkView | null;
 }
 
 /**
@@ -91,7 +91,7 @@ export function createDeepLink(where: Where): DeepLink {
     session: () => consume().session,
     view: () => consume().view,
     run: () => consume().run,
-    takeManagementTab: () => {
+    takeTab: () => {
       if (tabTaken) return null;
       tabTaken = true;
       const { session, view } = consume();
@@ -124,7 +124,7 @@ export function deepLinkRun(): string | null {
   return page().run();
 }
 
-/** {@link DeepLink.takeManagementTab} for this page: `AppShell` applies it to the `managementTab` setting once. */
-export function takeDeepLinkManagementTab(): DeepLinkView | null {
-  return page().takeManagementTab();
+/** {@link DeepLink.takeTab} for this page: `AppShell` applies it to the `managementTab` or `schedulesTab` setting once. */
+export function takeDeepLinkTab(): DeepLinkView | null {
+  return page().takeTab();
 }

@@ -49,10 +49,11 @@ model and effort (`syncModel` / `syncEffort`, default `''` each; the button neve
 (`scheduleWindow`: `7` | `30` | `90`, default `30` — the stats band and the Runs list read it; a hand-edited value outside the three reads back as `30`, and
 the server's `SCHEDULE_WINDOWS` is the same list; see [schedules](schedules.md#the-schedules-page)), which Usage sub-tab
 opens (`forecast` | `rates` | `history`), which Management sub-view is showing (`managementTab`: `git` |
-`projects` | `codegraph` | `schedules`, default `projects`, which is also where a main-row click on Management lands: `items[0]` of its tree), and which Settings page is showing (`settingsTab`: `local` |
+`projects` | `codegraph`, default `projects`, which is also where a main-row click on Management lands: `items[0]` of its tree), which Schedules sub-view
+is showing (`schedulesTab`: `jobs` | `runs`, default `jobs`, the same way), and which Settings page is showing (`settingsTab`: `local` |
 `shared`). A `settingsTab: 'pinned'` stored by an older release fails the validator and falls back to
 `local`. A `managementTab: 'pinned'` is the other case: that sub-view was renamed, not removed, so `clampSettings` reads it as `projects` and the device keeps its
-place. The answer token is per browser too (`dashboard.answerToken`, its own key), which
+place. A `managementTab: 'schedules'` from before Schedules became its own section is simply unknown now, and falls back to `projects`. The answer token is per browser too (`dashboard.answerToken`, its own key), which
 is why it sits under **Local › Connection** and not beside the remote-answer switch it
 unlocks — a Shared page carrying it would break the promise the two pages make. A phone propped on the desk
 wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and

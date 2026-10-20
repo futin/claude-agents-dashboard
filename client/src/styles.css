@@ -3228,7 +3228,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .cg-facts dd{margin:0;color:var(--ink);overflow-wrap:anywhere}
 .cg-foot{display:flex;gap:6px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--hairline)}
 
-/* ── Management › Schedules (spec §UI, the Ledger mock). Phone first: `.sch-hide` is what only the wide grid has room for and `.sch-phone` is the stacked
+/* ── Schedules (spec §UI, the Ledger mock). Phone first: `.sch-hide` is what only the wide grid has room for and `.sch-phone` is the stacked
    stand-in for it; the two swap at lg (1024), where the 7-column ledger first fits beside the 240 rail. At 1024 each kind of `.sch-hide` element gets its author
    display back by name: `revert` would drop `.sch-cell`'s flex to the UA block, and a `max-width` hide would break the min-width-only ladder
    (test/breakpoints.test.ts). A new `.sch-hide` on an element whose own rule sets a display needs its pair added to that list. Both are scoped under

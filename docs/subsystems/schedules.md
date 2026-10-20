@@ -1,4 +1,4 @@
-# Scheduled workflows (Management › Schedules)
+# Scheduled workflows (the Schedules section)
 
 Jobs are markdown files in a folder that syncs through git (default `~/claude-global/schedules/`). The dashboard turns them into launchd jobs (macOS) or
 crontab lines (WSL), shows the ledger and the run log, and pushes a phone notification when one fails. **No scheduler runs in the server.** The OS fires
@@ -258,7 +258,7 @@ The owner's pin routes rewrite `pins.json` after every pin change, so a fan-out 
 
 ## The Schedules page
 
-Management › Schedules, `client/src/components/management/schedules/`. `SchedulesView` owns the `/api/schedules` poll (`useSchedules`, on
+The Schedules section, second in the rail, `client/src/components/schedules/`; its two pages, Jobs and Runs, are the rail's sub-items (`schedulesTab`). `SchedulesView` owns the `/api/schedules` poll (`useSchedules`, on
 `settings.refreshMs`, through `createPollSeq` so a stale answer never lands over a newer one), the single write helper (`useScheduleWrite`: one status
 line under the toolbar, one `busy` key so only the clicked control greys out, and a re-poll after every success), the drawer and the ChatDrawer.
 
@@ -274,9 +274,9 @@ line under the toolbar, one `busy` key so only the clicked control greys out, an
 - **Run now:** `RunNowPopover` lists the job's pins with each one's last outcome (a sheet on a phone); a step's `run again` is `/run` with `only: [repo]`.
 
 Write controls render only for the owner. They stay drawn but disabled when the network is read-only or the Answer token is missing, with the reason in
-`.git-sync-note`. `scheduleWindow` (7, 30 or 90, default 30) is a device setting ([settings](settings.md)); `managementTab` gains `schedules`. A deep link
-`?view=schedules&run=<id>` lands on Runs with that run's fold open, and any `view` param forces the Management section
-([view-persistence](view-persistence.md)).
+`.git-sync-note`. `scheduleWindow` (7, 30 or 90, default 30) is a device setting ([settings](settings.md)), and so is `schedulesTab`. A deep link
+`?view=schedules&run=<id>` lands on Runs with that run's fold open, and `?view=schedules` alone on Jobs ([view-persistence](view-persistence.md)).
+A job menu's All runs switches the rail to Runs, filtered to that job.
 All class names are `.sch-` prefixed and colours are theme tokens.
 
 ## Security
@@ -318,7 +318,7 @@ All class names are `.sch-` prefixed and colours are theme tokens.
     - plugin/lib/run-schedule.mjs
     - scripts/sync-plugin.ts
     - scripts/gen-plugin-lib.ts
-    - client/src/components/management/schedules/SchedulesView.tsx
+    - client/src/components/schedules/SchedulesView.tsx
     - client/src/hooks/useSchedules.ts
     - client/src/hooks/useScheduleRuns.ts
     - client/src/hooks/useScheduleWrite.ts

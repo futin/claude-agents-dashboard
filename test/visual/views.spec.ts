@@ -88,10 +88,10 @@ const CASES: ShotCase[] = [
 ];
 
 /**
- * 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 4 codegraph layouts + 3 projects layouts + 2 What's new drawers. A changed `SECTIONS` fails here until the
+ * 12 per view × 7 views + 2 drawer details + 2 triage + 5 git layouts + 4 codegraph layouts + 3 projects layouts + 2 What's new drawers. A changed `SECTIONS` fails here until the
  * matrix (and its baselines) are reconsidered.
  */
-const EXPECTED_SHOTS = 90;
+const EXPECTED_SHOTS = 102;
 
 /** Click the version chip — through the phone menu below `md`, where the rail is folded away — and wait until the drawer is drawn and settled. */
 async function openReleases(page: Page): Promise<void> {

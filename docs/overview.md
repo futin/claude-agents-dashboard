@@ -271,7 +271,7 @@ server/
                   also owns stopping one (graceful SIGTERM, grace window, escalation)
                   (see docs/subsystems/spawn.md)
 client/src/
-  App.tsx         shell: side rail (Sessions | Usage | Management | Claude Configs |
+  App.tsx         shell: side rail (Sessions | Schedules | Usage | Management | Claude Configs |
                   Analytics | Settings) + lazy views
   components/     SideRail (section switcher — the rail on desktop, and below `sm`
                   (640px) the same markup as a menu dropped out of a top bar, every tree
@@ -303,7 +303,7 @@ client/src/
                   strip / sheet / definitions
                   chrome the tabs draw, and
                   ReadingAids — the ⓘ button they both render), settings/
-  components/management/schedules/  the Schedules sub-view, lazy with the rest of Management: SchedulesView (owns the poll, the write helper, the
+  components/schedules/  the Schedules section (Jobs | Runs, picked in the rail), its own lazy chunk: SchedulesView (owns the poll, the write helper, the
                   drawer and the ChatDrawer), StatsBand, JobLedger / JobFold / JobMenu, JobDrawer (the editor), RunNowPopover, RunsList, SessionLink,
                   and `ctl.ts`, the one object of state and callbacks every part reads (see subsystems/schedules.md)
   hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
@@ -424,7 +424,7 @@ that area:
 - [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and the one narrow browser layer that came back for headless sessions
 - [breakpoints](subsystems/breakpoints.md) — the seven-tier mobile-first ladder in `styles.css`, the rail+measure lock, and the capped/full content-width matrix
 - [codegraph](subsystems/codegraph.md) — `GET /api/codegraph`, `POST /api/codegraph/run`: the `codegraph` CLI's index state per pinned project — a status cache, Sync and Reindex runs, the lock-loss rule, and the levels the Management › CodeGraph layouts draw
-- [schedules](subsystems/schedules.md) — Management › Schedules: job files in a git-synced folder, installed as launchd / cron jobs by reconcile, run by `plugin/lib/run-schedule.mjs`, the run log, the owning server and `schedule-failed` pushes
+- [schedules](subsystems/schedules.md) — the Schedules section: job files in a git-synced folder, installed as launchd / cron jobs by reconcile, run by `plugin/lib/run-schedule.mjs`, the run log, the owning server and `schedule-failed` pushes
 - [visual-tests](subsystems/visual-tests.md) — `pnpm test:visual`: Playwright screenshots of every view against fixture data, overflow and daylight contrast, macOS only
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [ci](workflows/ci.md) — the PR gate: `ci / checks`, `ci / pr-title`, `ci / skills` from release-kit's reusable workflow, and the `main-pr-only` ruleset

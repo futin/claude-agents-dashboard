@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { ScheduleJobRow } from '../../../../../shared/types';
-import { describeCron, parseCron } from '../../../../../shared/cron';
-import { chipClass, dotTone, jobPins, rowText, splitNext, withLate } from '../../../lib/schedules';
-import Chevron from '../../Chevron';
+import type { ScheduleJobRow } from '../../../../shared/types';
+import { describeCron, parseCron } from '../../../../shared/cron';
+import { chipClass, dotTone, jobPins, rowText, splitNext, withLate } from '../../lib/schedules';
+import Chevron from '../Chevron';
 import type { ScheduleCtl } from './ctl';
 import JobFold from './JobFold';
 import JobMenu from './JobMenu';

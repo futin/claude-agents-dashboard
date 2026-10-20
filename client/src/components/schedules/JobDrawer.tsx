@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { serializeEnabled, type JobError } from '../../../../../shared/schedule-file';
-import type { ScheduleFile, ScheduleJobRow, ScheduleValidateResponse } from '../../../../../shared/types';
-import { useAnswerToken } from '../../../hooks/useAnswerToken';
-import { useBackClose } from '../../../hooks/useBackClose';
-import type { ScheduleWriteControl } from '../../../hooks/useScheduleWrite';
-import { authHeaders } from '../../../lib/answerToken';
+import { serializeEnabled, type JobError } from '../../../../shared/schedule-file';
+import type { ScheduleFile, ScheduleJobRow, ScheduleValidateResponse } from '../../../../shared/types';
+import { useAnswerToken } from '../../hooks/useAnswerToken';
+import { useBackClose } from '../../hooks/useBackClose';
+import type { ScheduleWriteControl } from '../../hooks/useScheduleWrite';
+import { authHeaders } from '../../lib/answerToken';
 import {
   editsWithoutAsking, jobPins, jobTemplate, launchdLabel, nameProblem, readForeach, setRepos, type ForeachMode, type JobKind
-} from '../../../lib/schedules';
+} from '../../lib/schedules';
 import type { ScheduleCtl } from './ctl';
 
 const VALIDATE_MS = 300;
