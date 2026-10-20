@@ -146,7 +146,7 @@ and cron, which hand a job no shell rc. `RUN_SCHEDULE_GRACE_MS` is a wrapper tes
 
 **Triggers.** Reconciles never overlap: one runs at a time and a trigger during one schedules a single trailing re-run. They run on server start, on a
 change in the schedules folder, on a change to `installed_plugins.json` (a `pnpm plugin:sync` moves the wrapper's versioned directory), on `runs/` writes
-while something is pending, after every save, toggle or delete, from the Reconcile button and from `pnpm plugin:sync`. `fs.watch` events are debounced
+while something is pending, after every save, toggle or delete, from the Reconcile button's Apply and from `pnpm plugin:sync`. `fs.watch` events are debounced
 500 ms, because a `sync.sh pull` lands several files at once.
 
 The wrapper path baked in is the **installed** plugin's `lib/run-schedule.mjs`, never the repo checkout's. It is `lib/`, not `bin/`, because Claude Code
@@ -264,6 +264,9 @@ line under the toolbar, one `busy` key so only the clicked control greys out, an
 
 - **Jobs:** the stats band (`StatsBand`) and the ledger (`JobLedger`, one row per file, with `JobFold` for the unfolded stats and last three runs and
   `JobMenu` for Edit, Run now on one repo, Pause or Resume, Reveal in Finder, Copy launchd label and Delete).
+- **Reconcile** (owner only, Jobs page) applies nothing on its first click: it POSTs `/api/schedules/reconcile` without `apply` and shows the dry plan
+  under the toolbar (`.sch-plan`, built by `reconcilePreview`: each change's action, name and why, or `Nothing to do`). **Apply** POSTs `{apply: true}`,
+  which re-plans on the server, and closes the plan; **Cancel** closes it. Apply is disabled when only `pending` changes are planned.
 - **Runs:** `RunsList`, grouped by day, filtered by outcome, runner and job; a fan-out run is one row with its steps folded, failed steps open. `SessionLink`
   fetches the row and opens the ChatDrawer, and its failure shows beside the link that was clicked.
 - **Drawer:** `JobDrawer` validates on each keystroke (debounced) through `/validate`; **Save and install** writes `enabled: true`, **Save, keep paused**

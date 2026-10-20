@@ -10,7 +10,7 @@ import { useScheduleWrite } from '../../../hooks/useScheduleWrite';
 import { useSchedules } from '../../../hooks/useSchedules';
 import { useSettings } from '../../../hooks/useSettings';
 import { deepLinkRun } from '../../../lib/deepLink';
-import { chipClass, launchdLabel, reconcileChip, type ScheduleRunsQuery } from '../../../lib/schedules';
+import { chipClass, launchdLabel, reconcileChip, reconcilePreview, type ReconcilePreview, type ScheduleRunsQuery } from '../../../lib/schedules';
 import { READ_ONLY_TEXT } from '../../../lib/writeRefusal';
 import type { ScheduleCtl } from './ctl';
 import JobDrawer from './JobDrawer';
@@ -39,6 +39,7 @@ export default function SchedulesView() {
   const [filters, setFilters] = useState<RunFilters>({ outcome: '', runner: '', job: '' });
   const [drawer, setDrawer] = useState<Drawer | null>(null);
   const [chat, setChat] = useState<Session | null>(null);
+  const [plan, setPlan] = useState<ReconcilePreview | null>(null);
   const write = useScheduleWrite(refresh);
   const remote = useRemoteAnswer();
   const [token] = useAnswerToken();
@@ -90,6 +91,16 @@ export default function SchedulesView() {
         .catch(() => setNote({ text: `Could not copy; the label is ${label}`, tone: 'warn' }));
     },
     allRuns: name => { setFilters({ outcome: '', runner: '', job: name }); setPage('runs'); }
+  };
+
+  // Reconcile can boot jobs out, so the first click only plans (no `apply`) and shows the diff; Apply re-plans on the server and applies (spec §Reconcile).
+  const previewReconcile = async (): Promise<void> => {
+    const r = await send('Reconcile', 'reconcile', 'POST', '/api/schedules/reconcile', {});
+    setPlan(r.ok ? reconcilePreview(r.body) : null);
+  };
+  const applyPlan = async (): Promise<void> => {
+    const r = await send('Reconcile', 'reconcile', 'POST', '/api/schedules/reconcile', { apply: true });
+    if (r.ok) setPlan(null);
   };
 
   const chip = data ? reconcileChip(data) : null;
@@ -156,7 +167,7 @@ export default function SchedulesView() {
         {page === 'jobs' && owner && (
           <span className="sch-tools">
             <button type="button" className="sch-btn" disabled={ctl.locked || write.busy === 'reconcile'}
-              onClick={() => { void send('Reconcile', 'reconcile', 'POST', '/api/schedules/reconcile', { apply: true }); }}>
+              onClick={() => { void previewReconcile(); }}>
               Reconcile
             </button>
             <button type="button" className="sch-btn sch-primary" disabled={ctl.locked} onClick={() => setDrawer({ mode: 'new' })}>
@@ -165,6 +176,30 @@ export default function SchedulesView() {
           </span>
         )}
       </div>
+      {page === 'jobs' && owner && plan && (
+        <div className="sch-plan" role="status">
+          <div className="sch-plan-sum">Reconcile plan: {plan.summary}</div>
+          {plan.rows.length > 0 && (
+            <ul className="sch-plan-list">
+              {plan.rows.map(r => (
+                <li key={r.key} className="sch-plan-row">
+                  <span className="sch-plan-act">{r.action}</span>
+                  <span className="sch-plan-name">{r.name}</span>
+                  {r.why && <span className="sch-plan-why">{r.why}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {plan.error && <div className="sch-plan-err">{plan.error}</div>}
+          <div className="sch-plan-btns">
+            <button type="button" className="sch-btn sch-sm sch-primary" disabled={ctl.locked || !plan.canApply || write.busy === 'reconcile'}
+              onClick={() => { void applyPlan(); }}>
+              Apply
+            </button>
+            <button type="button" className="sch-btn sch-sm" onClick={() => setPlan(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
       {lockNote && <div className="git-sync-note">{lockNote}</div>}
       {write.note && write.note.text !== lockNote && (
         <div className={write.note.tone === 'warn' ? 'git-sync-note' : 'git-quick-note'} role="status">{write.note.text}</div>

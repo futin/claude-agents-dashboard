@@ -6,7 +6,7 @@ import assert from 'node:assert';
 
 import {
   chipClass, costDelta, createPollSeq, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, launchdLabel, medianMs, nameProblem,
-  readForeach, reconcileChip, rowText, runClock, dotTone, topFailure, jobPins, pinOutcome, stepErrLine, runKicker, runPill, runsQueryString, setRepos,
+  readForeach, reconcileChip, reconcilePreview, rowText, runClock, dotTone, topFailure, jobPins, pinOutcome, stepErrLine, runKicker, runPill, runsQueryString, setRepos,
   splitNext, splitSteps, stepPill, successRate, topTokenShare, withLate, writeFailureText
 } from '../client/src/lib/schedules.js';
 import { READ_ONLY_TEXT } from '../client/src/lib/writeRefusal.js';
@@ -388,6 +388,40 @@ export function run(): number {
     assert.deepStrictEqual(reconcileChip({ owner: 'owner', reconcile: rep('in-sync'), jobs: [mkRow(), mkRow({ installed: false })] }), { text: '1 installed · in sync', tone: 'green' });
     assert.deepStrictEqual(reconcileChip({ owner: 'owner', reconcile: rep('drift', 2), jobs: [] }), { text: 'drift · 2 to apply', tone: 'amber' });
     assert.deepStrictEqual(reconcileChip({ owner: 'owner', reconcile: rep('failed'), jobs: [] }), { text: 'reconcile failed', tone: 'red' });
+  });
+
+  t('reconcilePreview: one row per change, pending listed but not counted, the nameless change named, Apply only with work to do', () => {
+    const p = reconcilePreview({
+      state: 'drift', unchanged: 2, error: null, at: '',
+      changes: [
+        { name: 'pull-pins', action: 'install', why: 'new' }, { name: 'old', action: 'remove', why: 'file gone' },
+        { name: 'busy', action: 'pending', why: 'running' }, { name: '', action: 'remove', why: '1 unrecognised line(s) in the marker block' }
+      ]
+    });
+    assert.deepStrictEqual(p, {
+      summary: '3 changes to apply · 1 pending · 2 unchanged',
+      rows: [
+        { key: '0:pull-pins', name: 'pull-pins', action: 'install', why: 'new' }, { key: '1:old', name: 'old', action: 'remove', why: 'file gone' },
+        { key: '2:busy', name: 'busy', action: 'pending', why: 'running' }, { key: '3:', name: 'crontab block', action: 'remove', why: '1 unrecognised line(s) in the marker block' }
+      ],
+      error: null,
+      canApply: true
+    });
+    assert.strictEqual(reconcilePreview({ state: 'drift', unchanged: 0, error: null, at: '', changes: [{ name: 'a', action: 'update', why: 'changed' }] })?.summary, '1 change to apply');
+  });
+
+  t('reconcilePreview: nothing to do, all-pending and a refused plan cannot apply; a non-report body is null', () => {
+    assert.deepStrictEqual(reconcilePreview({ state: 'in-sync', changes: [], unchanged: 3, error: null, at: '' }),
+      { summary: 'Nothing to do · 3 unchanged', rows: [], error: null, canApply: false });
+    assert.deepStrictEqual(reconcilePreview({ state: 'in-sync', changes: [], unchanged: 0, error: null, at: '' })?.summary, 'Nothing to do');
+    const pend = reconcilePreview({ state: 'pending', changes: [{ name: 'busy', action: 'pending', why: 'running' }], unchanged: 0, error: null, at: '' });
+    assert.strictEqual(pend?.summary, '1 pending');
+    assert.strictEqual(pend?.canApply, false);
+    const bad = reconcilePreview({ state: 'no-plugin', changes: [], unchanged: 0, error: 'plugin not installed', at: '' });
+    assert.strictEqual(bad?.error, 'plugin not installed');
+    assert.strictEqual(bad?.canApply, false);
+    assert.strictEqual(reconcilePreview(null), null);
+    assert.strictEqual(reconcilePreview({ error: 'reconcile failed' }), null);
   });
 
   t('chipClass: the running tone never takes `.sch-run`, the fold row grid it once collided with', () => {

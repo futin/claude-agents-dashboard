@@ -6,7 +6,7 @@
  * dashboard shows the clock of the machine the job runs on, which is the browser's in the single-machine case this page is built for).
  */
 import { scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
-import type { ScheduleJobRow, ScheduleRun, ScheduleStats, ScheduleStep, SchedulesResponse } from '../../../shared/types';
+import type { ReconcileChange, ScheduleJobRow, ScheduleRun, ScheduleStats, ScheduleStep, SchedulesResponse } from '../../../shared/types';
 import { READ_ONLY_TEXT, refusalKind } from './writeRefusal';
 
 /** The chip colours a pill may take; `run` is the cyan "in flight" one the mock draws, `dim` the dashed one. */
@@ -487,6 +487,36 @@ export function reconcileChip(data: Pick<SchedulesResponse, 'owner' | 'reconcile
     case 'no-claude': return { text: 'claude CLI not found', tone: 'red' };
     default: return { text: 'not owner', tone: 'dim' };
   }
+}
+
+/** What the first Reconcile click shows before anything is applied: one row per planned change, a summary line, and whether Apply has work to do. */
+export interface ReconcilePreview {
+  summary: string;
+  rows: Array<{ key: string; name: string; action: ReconcileChange['action']; why: string }>;
+  error: string | null;
+  canApply: boolean;
+}
+
+/**
+ * The dry plan `POST /api/schedules/reconcile` answers without `apply`, as the preview shows it; null when the body is not a report. A `pending` change is
+ * deferred, so it is listed but does not count toward Apply; the nameless change is the crontab block's unrecognised lines.
+ */
+export function reconcilePreview(body: unknown): ReconcilePreview | null {
+  if (!body || typeof body !== 'object' || !Array.isArray((body as { changes?: unknown }).changes)) return null;
+  const { changes, unchanged, error } = body as { changes: ReconcileChange[]; unchanged?: unknown; error?: unknown };
+  const acts = changes.filter(c => c.action !== 'pending').length;
+  const pending = changes.length - acts;
+  const parts: string[] = [];
+  if (acts > 0) parts.push(`${acts} change${acts === 1 ? '' : 's'} to apply`);
+  if (pending > 0) parts.push(`${pending} pending`);
+  if (parts.length === 0) parts.push('Nothing to do');
+  if (typeof unchanged === 'number' && unchanged > 0) parts.push(`${unchanged} unchanged`);
+  return {
+    summary: parts.join(' · '),
+    rows: changes.map((c, i) => ({ key: `${i}:${c.name}`, name: c.name || 'crontab block', action: c.action, why: c.why })),
+    error: typeof error === 'string' && error !== '' ? error : null,
+    canApply: acts > 0
+  };
 }
 
 /** The ledger's and the Runs page's status dot, read off the row's pill: a paused job is `off` whatever its last run said. */
