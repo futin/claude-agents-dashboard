@@ -318,6 +318,9 @@ Worth knowing from this page's side:
 - **The scheduled-job checkbox ignores the three AND-layers.** `schedule-failed` is exempt from only-while-accepting-remote-answers, only-when-away and
   only-in-auto-modes, since those gate interactive sessions and a scheduled job has none; the page's hint on that row says so. It rides the master switch and the
   routing only. See [push-notify](push-notify.md#the-fifth-event-schedule-failed).
+- **The two 5-hour limit rows ride the same exemption** and add two gates of their own: they are disabled, with a note saying which, while `SHOW_USAGE`
+  is off (`usageAvailable: false`) or **Record usage history** is off. The rows live in `client/src/lib/notifyRows.ts` (`notifyRowState`). See
+  [push-notify](push-notify.md#the-usage-events-usage-limit-and-usage-reset).
 - **`notify` patches merge.** The UI sends the one checkbox that changed, not the whole
   policy. A key that is present but unusable rejects the *entire* patch (400) rather than
   half-applying — the one outcome the page could not report honestly.

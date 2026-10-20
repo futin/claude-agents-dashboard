@@ -340,6 +340,9 @@ Consequence for the client: `ratePerHour × 24` overstates the daily figure by
   *watched* rather than when work happened. It re-reads the setting on every tick, is
   `unref()`'d, and forces the refresh rather than going through the 60s cache TTL (at the
   same 60s the two alternate, and the recorder measured out at ~120s).
+- Each recorder fetch, failed ones included, also goes to the 5-hour limit alert detector (`onUsageReading`, `lib/usage-alerts.ts`), whose one-window
+  claim lives in `~/.claude/dashboard/usage-alerts.json` — machine-wide, unlike the two files above. Recording off means no alerts. See
+  [push-notify](push-notify.md#the-usage-events-usage-limit-and-usage-reset).
 
 ### The inspector
 

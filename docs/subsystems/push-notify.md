@@ -248,7 +248,7 @@ visible payload stays clean.
 
 `ctx.phrase` is the one per-send override this table's default `PHRASE[event]` lookup
 allows — `maybeSend` uses it when given, so the same `stop` event reads differently
-depending on which route produced it, without becoming a fifth event type.
+depending on which route produced it, without becoming another event type.
 
 The label comes from `scanSessions` (`sessionName || project`), resolved *after* the
 predicate passes so the scan is never paid for a push that will not be sent. An id the scan
@@ -264,6 +264,31 @@ transport — and is **exempt from `requireAfk`, `requireRemoteAnswer` and `requ
 the checkbox on it pushes at the desk too. Copy, the once-per-run ledger (`notified.json`) and the tap-through are in [schedules](schedules.md#notifications);
 the click is `<DASHBOARD_PUBLIC_URL>/?view=schedules&run=<id>`, and without a public URL the push carries no link.
 
+## The usage events: `usage-limit` and `usage-reset`
+
+Two more members, `usage-limit` and `usage-reset`, push when the account's **5-hour** window reaches 100% (*5-hour limit reached*) and when a window that was
+pushed as reached is over (*5-hour limit reset*). The weekly window has no alert. Like `schedule-failed` they are not session events: no hook, no session
+id, no `maybeSend`. The usage recorder hands every fetch to `onUsageReading` (`lib/usage-alerts.ts`), and `sendUsageEvent` (`lib/notify.ts`) delivers
+through the same master switch, per-event checkbox, desk/phone routing and transport, **exempt from `requireAfk`, `requireRemoteAnswer` and
+`requireAutoMode`**.
+
+- **Two gates before the checkbox.** The detector only runs while `SHOW_USAGE` is on and **Record usage history** is on: it reads the recorder's
+  once-a-minute fetch, so without recording there is nothing to judge (and nothing calls Anthropic while no browser is open). Settings disables both rows and
+  says which gate is shut; `/api/settings` carries `usageAvailable` (`SHOW_USAGE`) beside `notifyAvailable` for that.
+- **Copy.** *Reached*: `Resets at 14:30.` the same day, `Resets Tue at 09:10.` on another, `No reset time reported.` without one, in the server's local
+  time; with extra usage on (`hasExtraUsageEnabled` in `~/.claude.json`) it adds *Extra usage is on: you are now billed.* *Reset*: *Usage is available
+  again.*, or *Back on plan usage: extra-usage billing stops.* with extra usage on.
+- **One push per window, machine-wide.** A window is identified by its `resetsAt` (120 s of jitter allowed, `sameWindow`), and the claim lives in
+  `~/.claude/dashboard/usage-alerts.json` — under the home directory, not the checkout, so a prod and a dev dashboard recording side by side find each
+  other's claim and a restart does not re-push. It is written (tmp + rename) before the push goes out, and only once a window has been hit. Two processes
+  reading the file in the same second can still both send: there is no lock.
+- **Recorded, not pushed.** A hit seen while the checkbox (or the master switch, or the topic) is off is still recorded, with `pushed: false`. Turning the
+  checkbox on mid-window then sends neither *reached* nor, later, *reset*: a reset only ever follows a reached that actually went out.
+- **Stale resets are retired silently.** A reset first noticed more than 60 minutes after it happened (server down, recording off) is marked done without a
+  push (`RESET_STALE_MS`). A hit with no `resetsAt` measures that hour from the last reading that still saw 100%.
+- **Account switch.** The ledger keeps only the current account's window; switching accounts drops the other one, so coming back never fires an old reset.
+- A failed fetch is no reading, never 0%: it neither resets nor hits anything.
+
 ## Tapping the notification
 
 ntfy's `Click` header carries `<DASHBOARD_PUBLIC_URL>/?session=<id>`.
@@ -275,6 +300,8 @@ all: the panel it lands you in is the composer the hold is waiting on.
 
 The `schedule-failed` push carries `/?view=schedules&run=<id>` instead and lands on Schedules › Runs with that run unfolded (see
 [view-persistence](view-persistence.md)).
+
+The usage pushes carry `/?view=usage` and land on the Usage section.
 
 The parameter is stripped because session ids churn: a bookmarked or refreshed deep link
 would otherwise reopen a drawer for a session that no longer exists. Same reasoning that
