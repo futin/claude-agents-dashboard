@@ -141,6 +141,19 @@ export function run(): number {
     assert.strictEqual(a.perTurn.avgCombined, 1060);
   })) p++; else f++;
 
+  if (test('api-request-blob replays count no tool call and no correction', () => {
+    // Claude Code 2.1.302 replays each API request's turns as `type: "api-request-blob"` records — same role and content, no uuid, no timestamp.
+    const file = fixture([
+      humanRec('no, that is wrong', '2026-07-01T10:00:00Z'),
+      toolUseRec([tu('b1', 'Bash')], '2026-07-01T10:00:01Z', { output_tokens: 10 }, 'msg_a'),
+      { type: 'api-request-blob', sessionId: 's', hash: 'h1', message: { role: 'user', content: 'no, that is wrong' } },
+      { type: 'api-request-blob', sessionId: 's', hash: 'h2', message: { role: 'assistant', content: [tu('b1', 'Bash')] } }
+    ]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.byTool.find(t => t.tool === 'Bash')!.count, 1);
+    assert.strictEqual(a.errorSignals.userCorrections, 1);
+  })) p++; else f++;
+
   if (test('parallel tool_use in separate records split that turn\'s output once', () => {
     const u = { output_tokens: 100 };
     const file = fixture([

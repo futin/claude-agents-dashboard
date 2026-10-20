@@ -200,6 +200,19 @@ export function run(): number {
     assert.strictEqual(tr.readTranscript('/no/such.jsonl'), null);
   })) p++; else f++;
 
+  if (test('api-request-blob replays never decide turn state or activity', () => {
+    const blob = { type: 'api-request-blob', sessionId: 's', hash: 'h', message: { role: 'assistant', content: [
+      { type: 'tool_use', name: 'Read', input: { file_path: '/old.ts' } }
+    ] } };
+    const s = tr.readTranscript(fixture([
+      { type: 'assistant', message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/a/b.js' } }] } },
+      { type: 'assistant', message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] } },
+      blob
+    ]))!;
+    assert.strictEqual(s.turnComplete, true);
+    assert.strictEqual(s.activity!.tool, 'Edit');
+  })) p++; else f++;
+
   if (test('turnComplete/waitingOnQuestion (question + plan) from newest message record', () => {
     const done = tr.readTranscript(fixture([
       { message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] } }

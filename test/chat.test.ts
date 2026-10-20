@@ -122,6 +122,18 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  if (test('api-request-blob replays dropped, real records beside them kept', () => {
+    // Claude Code 2.1.302 replays each API request's turns as `type: "api-request-blob"` records — same role and content, no uuid, no timestamp.
+    const blobUser = { type: 'api-request-blob', sessionId: 's', hash: 'h1', message: { role: 'user', content: 'did you get double message?' } };
+    const blobAsst = { type: 'api-request-blob', sessionId: 's', hash: 'h2', message: { role: 'assistant', content: [
+      { type: 'text', text: 'earlier reply' }, { type: 'tool_use', name: 'Bash', input: { command: 'ls' } }
+    ] } };
+    assert.strictEqual(parseChatRecord(blobUser), null);
+    assert.strictEqual(parseChatRecord(blobAsst), null);
+    const file = writeJsonl([userRec('u1', 'did you get double message?'), blobUser, blobAsst, asstRec('a1', [{ type: 'text', text: 'No.' }])]);
+    assert.deepStrictEqual(readChatTail(file)!.messages.map(m => m.uuid), ['u1', 'a1']);
+  })) p++; else f++;
+
   if (test('system-reminder spans stripped; reminder-only record dropped', () => {
     const m = parseChatRecord(userRec('u1', 'real ask\n<system-reminder>\nnoise\n</system-reminder>'))!;
     assert.strictEqual(m.text, 'real ask');

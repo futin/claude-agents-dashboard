@@ -57,6 +57,15 @@ export const WAIT_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
  */
 const LOCAL_PLUMBING = /^<(command-(name|message|args)|local-command-[a-z]+|bash-(input|stdout|stderr))>/;
 
+/**
+ * False for a record that carries a `message` but is not a turn of the conversation. Claude Code 2.1.302 writes `type: "api-request-blob"` records that
+ * replay each API request's turns — the same role and content as the real `user`/`assistant` records, with no uuid or timestamp — so a reader keyed on
+ * `message.role` alone sees every turn twice. Fixtures and old transcripts without a `type` still count.
+ */
+export function isConversationRecord(rec: any): boolean {
+  return typeof rec?.type !== 'string' || rec.type === 'user' || rec.type === 'assistant';
+}
+
 /** Text of a message record's content, whether stored as a string or as blocks. */
 function contentText(content: unknown): string {
   if (typeof content === 'string') return content;
@@ -421,6 +430,8 @@ export function readTranscript(
         model = (rec.message && typeof rec.message.model === 'string') ? rec.message.model : model;
       }
     }
+
+    if (!isConversationRecord(rec)) continue;
 
     if (!activity) {
       const content = rec.message && rec.message.content;
