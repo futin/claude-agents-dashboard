@@ -31,6 +31,8 @@ export const OWNED_KEYS = [
   'management.projectsLayout',
   // Management › CodeGraph's layout: live, like the two above.
   'management.codegraphLayout',
+  // The What's new unseen dot: ui-kit's useWhatsNew writes it raw under LAST_SEEN_KEY (lib/releases.ts), and reseeds it without a dot once cleared.
+  'dashboard.releases.lastSeen',
   // The pre-rename keys: nothing writes them now (D13, no migration), but Reset still sweeps what an older build left behind.
   'management.scope', 'management.type', 'management.collapsed'
 ];

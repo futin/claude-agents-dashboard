@@ -84,6 +84,8 @@ const SUBAGENT_TOKENS_RE = /<subagent_tokens>\s*(\d+)\s*<\/subagent_tokens>/;
 const TOOL_USES_RE = /<tool_uses>\s*(\d+)\s*<\/tool_uses>/;
 const DURATION_MS_RE = /<duration_ms>\s*(\d+)\s*<\/duration_ms>/;
 
+// Untyped records (fixtures, older transcripts) still count.
+function isConversationRecord(rec) { return typeof rec.type !== 'string' || rec.type === 'user' || rec.type === 'assistant'; }
 function finiteOrNull(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null; }
 function intFromMatch(text, re) { const m = text.match(re); return m ? parseInt(m[1], 10) : null; }
 
@@ -358,6 +360,9 @@ export function analyzeSession(filePath, id) {
       continue;
     }
 
+    // Claude Code 2.1.302 replays each API request's turns as `type: "api-request-blob"` records with the same role and content. Mirrors
+    // server/lib/transcript.ts `isConversationRecord`; it sits below the boundary handling because a boundary is a `type: "system"` record.
+    if (!isConversationRecord(rec)) continue;
     const msg = rec.message;
     if (!msg) continue;
     const content = msg.content;

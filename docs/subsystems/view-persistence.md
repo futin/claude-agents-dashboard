@@ -74,7 +74,7 @@ override it (see `dashboard.section` below).
   coerced on a narrow window — see [settings](settings.md));
   `management.syncRuns` (the Git Sync runs this device launched, keyed by repo — see [git-stats](git-stats.md); live state, so Reset leaves it);
   `dashboard.releases.lastSeen` (the newest release this browser has seen, a raw version string, not JSON, that ui-kit's `useWhatsNew` reads and writes
-  under `LAST_SEEN_KEY` from `lib/releases.ts` rather than through `usePersistedState` — see [releases](releases.md); not in `OWNED_KEYS`, so Reset leaves it too).
+  under `LAST_SEEN_KEY` from `lib/releases.ts` rather than through `usePersistedState` — see [releases](releases.md); in `OWNED_KEYS`, so Reset clears it, and the next load reseeds the newest without a dot).
 - **Client-only, zero deps** — no backend, and nothing here is shareable/bookmarkable by
   design. The URL params in the app are the opposite of persistence: `?session=<id>`, the
   deep link a tapped push notification opens (`lib/deepLink.ts`, put in ntfy's `Click` header
@@ -142,12 +142,12 @@ override it (see `dashboard.section` below).
   `selectedId` / `expanded`) stay ephemeral — session IDs churn, so restored expansions and
   drawers would mostly be stale.
 - **Clearing them all** — Settings → Local › Reset this browser removes every key listed above
-  (`OWNED_KEYS` in `hooks/useSettings.tsx`) **except `dashboard.answerToken`**, `management.syncRuns` and `dashboard.releases.lastSeen`, and restores the
+  (`OWNED_KEYS` in `hooks/useSettings.tsx`) **except `dashboard.answerToken`** and `management.syncRuns`, and restores the
   defaults. The token is kept on purpose: it is a credential
   rather than view state, and Reset is not a sign-out, so clearing it would silently disarm every route behind the write gate for a browser that needs the token (see [remote-access](remote-access.md#who-may-write)). It
   touches nothing on the server and nothing in `~/.claude`. Add a view-state key here and it belongs in that list too; the test in
-  `test/client-settings.test.ts` fails if it is missing — but it finds keys by scanning for `usePersistedState('<key>'` calls, so a key written
-  through `localStorage` directly (as `dashboard.releases.lastSeen` is) escapes it.
+  `test/client-settings.test.ts` fails if it is missing. It finds keys by scanning for `usePersistedState('<key>'` calls, and also the first argument of every
+  `localStorage.setItem(` and every `storageKey:` handed to a ui-kit hook, a literal or a `const` it resolves — which is how it sees `dashboard.releases.lastSeen`.
 
 <!-- docs-sync:
   sources:
