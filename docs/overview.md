@@ -283,7 +283,7 @@ client/src/
                   drawer behind the rail's version chip, plus the back gesture), Chevron (the one disclosure mark),
                   AsideBoard (clock, origin, counts, remote-answer switch, New session),
                   Toolbar (view switcher + filter/sort popovers; Popover is the shared
-                  dismiss primitive), sessions/ (atoms, Expanded, EmptyState, AsideStrip
+                  dismiss primitive), sessions/ (atoms, Expanded, SessionStopControl, EmptyState, AsideStrip
                   — the phone's one-bar aside — and the five views: Board, List, Split,
                   Tiles, Triage), SessionDetail (the subagent timeline),
                   ChatDrawer, TasksCard (the sidecar's checklist card and its phone fold), QuestionPanel, PlanPanel,
@@ -408,7 +408,7 @@ that area:
 - [remote-plan](subsystems/remote-plan.md) — sending an `ExitPlanMode` plan back for revision (reject-only, by upstream design)
 - [remote-message](subsystems/remote-message.md) — replying into a finished, away-from-keyboard turn (the third session write path)
 - [dictation](subsystems/dictation.md) — the reply composer's mic: local whisper transcription, never auto-sent
-- [spawn](subsystems/spawn.md) — starting a new headless session from the dashboard (the fourth session write path, and the first one it initiates), and stopping one from its row
+- [spawn](subsystems/spawn.md) — starting a new headless session from the dashboard (the fourth session write path, and the first one it initiates), and stopping one from its row or its chat drawer
 - [session-surfaces](subsystems/session-surfaces.md) — where a session lives, and where you can continue it (also where `Session.surface` is specified)
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [configs](subsystems/configs.md) — read-only config browser

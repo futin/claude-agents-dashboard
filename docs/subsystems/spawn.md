@@ -355,7 +355,8 @@ single source of truth, the same division that keeps `pending.ts`/`plans.ts`/
 
 **A session this dashboard spawned can be stopped from its row, at any point in its life** —
 not just during the ~3s pre-adoption window the original endpoint reached. Expand the row and
-the control is under the panel: `Stop session`, then `Really stop?`.
+the control is under the panel: `Stop session`, then `Really stop?`. The chat drawer's sidecar carries the same control
+(`sessions/SessionStopControl.tsx`, see [chat](chat.md)).
 
 ### The lifecycle: `launching → running → gone`
 
@@ -551,6 +552,7 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 | `POST /api/spawn/:id/stop` | `serveSpawnStop` — SIGTERM + delete for a `launching` entry; delegates to `stopSession` |
 | `POST /api/sessions/:id/stop` | `serveSessionStop` — the row button's route; graceful by default, `{force:true}` for SIGKILL |
 | `client/src/lib/stopControl.ts` | the pure decision function behind the Stop control: render or not, the label, and which POST it sends |
+| `client/src/components/sessions/SessionStopControl.tsx` | the Stop control itself, rendered by the expanded row and the chat drawer's sidecar |
 | `client/src/hooks/useStopSession.ts` | POSTs the stop, same bearer-token pattern as `useSpawn` |
 | `serveSessions` wiring | calls `adoptLaunched(ids)` then `listLaunching()` before every `/api/sessions` response, so `launching` rides the poll the client already makes |
 | `serveHealth` wiring | publishes `spawnAvailable` (`probeSpawn`) and `spawnMaxPermission` (`config.spawnMaxPermission`) |
@@ -735,6 +737,7 @@ new reason:
     - client/src/components/ChatDrawer.tsx
     - client/src/components/SessionsView.tsx
     - client/src/components/sessions/atoms.tsx
+    - client/src/components/sessions/SessionStopControl.tsx
     - client/src/hooks/useSpawn.ts
     - client/src/hooks/useStopSession.ts
     - client/src/lib/resume.ts

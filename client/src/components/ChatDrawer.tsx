@@ -8,6 +8,7 @@ import PlanPanel from './PlanPanel';
 import MessagePanel from './MessagePanel';
 import ResumePanel from './ResumePanel';
 import { TasksCard } from './TasksCard';
+import { SessionStopControl } from './sessions/SessionStopControl';
 import { useBackClose } from '../hooks/useBackClose';
 import { useSessionChat } from '../hooks/useSessionChat';
 import { usePendingQuestion } from '../hooks/usePendingQuestion';
@@ -236,6 +237,10 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                 <div className={`fill${ctxWarn ? ' warn' : ''}`} style={{ width: `${Math.min(ctxPct, 100)}%` }} />
               </div>
             </div>
+
+            {/* In the sidecar, not the head: on a phone the thumb goes to ✕, and a stop beside it gets hit by accident even behind the confirm step.
+                Renders nothing for a session this dashboard did not spawn (no `stopState`). */}
+            <SessionStopControl sessionId={session.id} stopState={session.stopState} showBadge />
 
             <TasksCard tasks={session.tasks} plan={session.taskPlan} />
 

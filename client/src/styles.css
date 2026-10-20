@@ -1614,6 +1614,8 @@ code,kbd,samp,pre{font-family:inherit}
 .chat-side .kv{background:var(--strip)}
 /* …which puts the gauge's well back on paper, where --steel is right again. */
 .chat-side .kv .track{background:var(--steel)}
+/* The row's stop control spaces itself with a bottom margin; in the sidecar the column's gap does that. */
+.chat-side .stop-ctl{margin-bottom:0}
 .chat .metric{font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
 /* the same 70% threshold the row uses — one context reading, two places */
 .chat .metric.warn{color:var(--amber-text)}
