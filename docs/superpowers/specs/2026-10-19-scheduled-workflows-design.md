@@ -344,6 +344,9 @@ the first time (an id set in memory plus a `~/.claude/schedules/notified.json` s
 > Amended 2026-10-20 in implementation: a run whose `end` is `stopped` (Stop, or a SIGTERM from outside) pushes no `schedule-failed`; it is marked seen. On the first start, with
 > `notified.json` absent, every run older than 24 h is seeded as notified and not pushed. `notified.json` is capped at 2000 ids.
 
+> Amended 2026-10-20 in the final review: only a run whose end (lost or refused: whose start) falls within the last 7 days can push, and `notified.json`
+> keeps each id with that time and drops it once it passes those 7 days. The 2000-id cap stays as a backstop that never lets a dropped id push again.
+
 ## Security
 
 - Job files are code. The folder is the user's own private git repo and the wrapper runs as the user; nothing in the dashboard elevates. The write routes

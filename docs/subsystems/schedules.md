@@ -24,7 +24,7 @@ a change.
 | `launchd/` | the plists' stdout and stderr files (mac) | reconcile creates it, launchd writes the files in it |
 | `pins.json` | `[{dirName, name, path}]` in pin order, what `foreach:` resolves against | the owner, on start and when pins change |
 | `owner.json` | `{pid, bootId, cwd, port, at}`, the owner claim | the owner |
-| `notified.json` | run ids already pushed, capped at 2000 | the owner |
+| `notified.json` | `{seen: {<run id>: <ms>}, floor?}`, the runs already pushed, pruned at 7 days | the owner |
 | `cron.env` | the baked environment, WSL only (0600) | reconcile |
 
 `SCHEDULES_STATE_ROOT` moves the whole state root; it is a verification seam, see [Test seams](#test-seams).
@@ -219,8 +219,12 @@ run once, tracked in memory and in `notified.json`:
 
 Success never pushes, and neither does a run that ended `stopped` (Stop, or SIGTERM from outside): it is marked seen and nothing is sent. A lost push is not
 followed by a second one if the run later ends. On the first start, with `notified.json` absent, `seedScheduleNotify` marks every run older than 24 h as
-notified without pushing, so installing the feature does not replay history; the file is capped at 2000 ids. The click URL is
-`<publicUrl>/?view=schedules&run=<id>`.
+notified without pushing, so installing the feature does not replay history. The click URL is `<publicUrl>/?view=schedules&run=<id>`.
+
+The fold has no window (rotation renames log files, never deletes them), so the dedupe is bounded by age, not by count. Only a run whose end, or for a lost
+or refused run whose start, falls within `PUSH_HORIZON_MS` (7 days) can push. Each id in `notified.json` carries that time and is pruned once it passes the
+same 7 days, so the ledger always covers every run the fold can offer. The 2000-id cap is a backstop: past it the oldest ids go and `floor` rises to the
+newest dropped time, and nothing at or before `floor` pushes. The first shape, a plain `{ids: [...]}` list, is read as ids stamped with the load time.
 
 ## Launching on demand
 
