@@ -80,8 +80,9 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
   not a third kind either. `lib/git-quick.ts` launches `git fetch`, `git merge --ff-only` and `git push`
   for the Sync menu's Pull and Push, which make their own network calls — a git launch, not a third kind. `lib/codegraph.ts` launches the `codegraph` CLI with `CODEGRAPH_NO_UPDATE_CHECK=1` and `CODEGRAPH_NO_DOWNLOAD=1` set, which switches off its
   update check and its bundle download — a local launch like `git`, not a third kind. `lib/schedule-reconcile.ts` launches `launchctl`, `crontab` and `pgrep`
-  to install scheduled jobs, and `lib/schedule-store.ts` launches `ps` and `sysctl` to judge lock and owner holders — local launches, not a third kind.
-  `test/outbound.test.ts` pins the list.
+  to install scheduled jobs, `lib/schedule-store.ts` launches `ps` and `sysctl` to judge lock and owner holders, `lib/open-folder.ts` launches `open` (and `open -R` for
+  the Schedules menu's Reveal), and `lib/schedule-run.ts` spawns the plugin's `run-schedule.mjs` wrapper through `spawn.ts`'s `spawnProcess` for Run now — local
+  launches, not a third kind. `test/outbound.test.ts` pins the list.
   Two npm packages are allowed, by name, each with zero runtime deps of its own and pinned to a git tag: `lookout-widgets`, the Lookout contract producer
   behind `/api/hub/widgets`, and `release-kit`, whose reader is the one reader of the tag-message contract its release workflow writes (spec
   `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` D7) and, as `createReleasesReader`, backs `/api/releases`; it uses Node built-ins only and launches `git`, so it is no

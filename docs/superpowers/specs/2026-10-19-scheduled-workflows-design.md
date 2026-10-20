@@ -156,6 +156,12 @@ weekday; use one`.
   every value is single-quoted with `'` written as `'\''` (WSL's `PATH` carries `Program Files (x86)`), and `%` is written `\%` because cron turns a
   bare one into a newline — a test renders a PATH with both and runs the line through `sh -n`. The
   shell block runs under that env through `bash -e <file>`, not a login shell: no rc side effects, no `$SHELL` dependence.
+  > Amended 2026-10-20 in implementation: on WSL the environment is not inline on the crontab line. Every key (the seven above) is written to `<state>/cron.env`, mode 0600, one
+  > `export K='v'` per key, through a temp file and a rename, and the line is `<cron> . '<state>/cron.env' && exec '<node>' '<wrapper>' '<job>'`. A line
+  > over 990 bytes is refused: the state is `failed`, with `crontab line too long`. A control character (`\n`, `\r`, `\0` or any other C0 character but tab) in
+  > a baked value is refused as `bad value in <KEY>`. A change in the env file's content counts as an `update`. A claude job on a machine with no
+  > `CLAUDE_BIN`, and a line too long, reconcile as `pending` entries; the states `cron-down` and `no-claude` exist beside the ones listed, and a plist
+  > that is on disk but not loaded is an `install` with why `not loaded`. `GET /api/schedules` also carries `owner`.
 - Runs on: server start; `fs.watch` on the schedules folder (debounced 500 ms — a `sync.sh pull` lands several files); after every save, toggle or delete
   from the UI; the **Reconcile** button; and a change to `~/.claude/plugins/installed_plugins.json`, because `pnpm plugin:sync` reinstalls the plugin
   into a new versioned directory and the baked wrapper path moves with it. `scripts/sync-plugin.ts` also POSTs `/api/schedules/reconcile` when a server
@@ -197,6 +203,7 @@ the prompt on stdin. `bypassPermissions` is refused here too, whatever the file 
 environment exactly as `spawn.ts` `clampPermission` does; absent `permission-mode` means the baked `SYNC_PERMISSION_MODE`. The CLI path comes from
 `CLAUDE_BIN` in the same environment; a machine with it unset cannot run claude jobs — reconcile reports `claude cli not configured` and installs no
 claude job there, and the wrapper, if reached anyway, ends the step `failed` with that `why`.
+> Amended 2026-10-20 in implementation: with `CLAUDE_BIN` unset the wrapper ends the run with `end.error` `claude cli not configured`, not a failed step, as the run-log table says.
 
 The child gets `CLAUDE_DASHBOARD_SCHEDULE=<job>` in its env and `--disallowed-tools AskUserQuestion`. The marker exists for the user-global hooks: the Stop
 hook (`scripts/stop-notify-hook.sh`) exits at once on it, like `CLAUDE_DASHBOARD_REFRESH`, so a step is never held for `answerSecs` and never pushes
@@ -217,6 +224,8 @@ the Sessions page does not badge schedule runs in this version.
 | `end` | `run`, `at`, `ms`, `ok`, `failed`, `skipped` (counts), `stopped` (boolean: SIGTERM ended it), `error` (string, only when the run failed before its first step: `no pins snapshot`, `claude cli not configured`, `ambiguous pin <name>`) |
 | `refused` | `job`, `at`, `trigger`, `why` (`running`, `file gone`, `invalid: <line>`, `disabled`, `not this machine`), `heldBy` (pid, `running` only) |
 
+> Amended 2026-10-20 in implementation: `invalid: <line>` is `invalid: <line>: <message>`, and a refusal's id is `refused-<machine>-<job>-<epoch ms>`.
+
 The server folds the file into runs: a `start` with no `end` whose pid is dead (or alive but not running `run-schedule <job>`, checked by command
 line) is **lost**; the age rule — older than its job's `timeout` × steps + 5 min — applies only when the pid cannot be checked (another machine's
 file, no `ps`), never to a run whose lock is held by a live wrapper, so a laptop that slept mid-run shows `running` until the wrapper ends it. Lost is derived at read time, never written; a slept laptop that wakes and
@@ -234,6 +243,10 @@ and the markers `spawn.ts` strips). It answers `202 { run }` with the run id rea
 is held, `404` for an unknown job. `POST /api/schedules/:name/stop` sends SIGTERM to the pid in the lock file; `204`, or `409 not-running`. A paused job
 can be run on demand — that is how a new job is tried before the toggle installs it.
 
+> Amended 2026-10-20 in implementation: an empty body, or a body with no `only` key, is a whole run; a malformed body is `400 bad body`. An `only` that is `[]`, has more than 200
+> entries, or has an element that is not a string, is empty, starts with `-` or contains a control character is `400 bad-only`, and nothing spawns. The other
+> answers are `409 invalid`, `not-this-machine`, `no-plugin` and `not-owner`, and `500 spawn-failed`; `run` is `null` when the log had nothing within 2 s.
+
 ## HTTP surface
 
 | route | does |
@@ -250,6 +263,11 @@ can be run on demand — that is how a new job is tried before the toggle instal
 | `GET /api/sessions/:id/row` | one `Session` row for any id `findTranscript` resolves, no lookback, built by the row builder extracted from `scanSessions` with the liveness set passed as `null` (fail open, as `skipProcScan` does) and the wait sets empty; it never applies the scan's `hasMessages` / `commandOnly` skips, so a run the scan would hide still opens; `404` only when no transcript exists |
 | `POST /api/schedules/validate` | `{ text }` → `{ errors[], summary }`, what the drawer calls on each keystroke (debounced); read-only, outside the write gate |
 | `POST /api/schedules/reveal` | opens the schedules folder in Finder (`openFolder`, darwin only, `501` elsewhere); the existing open-folder route accepts pin paths only |
+
+> Amended 2026-10-20 in implementation: `PUT`, `POST` and `PATCH` answer `200 {job, reconcile}` and `DELETE` answers `200 {reconcile}`. `PATCH` on a file that does not parse is `422`.
+> `/validate` also accepts `name?`; `/reveal` accepts `{name?}`, opens that file with `open -R` and is behind the write gate (`404 no schedules folder` or
+> `no such job`, `500 open failed`). `/runs` answers `400 bad outcome`, and a `days` outside 7, 30 and 90 reads as 30. `/api/sessions/:id/row` answers
+> `400 bad id`.
 
 Write routes sit behind the same write-trust guard every other write route has (`docs/subsystems/remote-access.md`). The schedules folder's path and the
 wrapper's are never taken from a request.
@@ -322,6 +340,9 @@ run's push is titled `<job> · lost`, body `started <time>, no end record · mac
 click URL is `config.publicUrl` + `/?view=schedules&run=<id>`, and `deepLink.ts` `readViewParam` learns `schedules` beside `git`, with `run` opening
 that run's fold. Sent by the server when it folds the log and sees the record for
 the first time (an id set in memory plus a `~/.claude/schedules/notified.json` so a restart does not resend). Shell-only failures push too; success never.
+
+> Amended 2026-10-20 in implementation: a run whose `end` is `stopped` (Stop, or a SIGTERM from outside) pushes no `schedule-failed`; it is marked seen. On the first start, with
+> `notified.json` absent, every run older than 24 h is seeded as notified and not pushed. `notified.json` is capped at 2000 ids.
 
 ## Security
 
