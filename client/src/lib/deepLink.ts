@@ -1,5 +1,5 @@
 /**
- * deepLink.ts — the `?session=<id>`, `?view=git|schedules` and `&run=<id>` entry points.
+ * deepLink.ts — the `?session=<id>`, `?view=git|schedules|usage` and `&run=<id>` entry points.
  *
  * A push notification's whole value is landing you on the thing that needs a
  * decision, not on the dashboard's front page. `server/lib/notify.ts` puts this
@@ -15,7 +15,10 @@
  *
  * `?view=schedules&run=<id>` is a failed scheduled run's push (`server/lib/notify.ts`): Schedules › Runs with that run's fold open. `run` is read in the
  * same pass as the other two, so the strip that follows cannot lose it before the Schedules page asks.
+ *
+ * `?view=usage` is a usage-limit push (`server/lib/notify.ts` `usageClickUrl`): it lands on the Usage section, with no sub-view to set.
  */
+import type { Section } from './sections';
 
 /** A session id is a UUID; anything else is junk and is ignored. Pure — tested. */
 export function readSessionParam(search: string): string | null {
@@ -29,16 +32,21 @@ export function readSessionParam(search: string): string | null {
 }
 
 /** The sub-views a link may name. */
-export type DeepLinkView = 'git' | 'schedules';
+export type DeepLinkView = 'git' | 'schedules' | 'usage';
 
 /** The one sub-view a link may name; anything else is ignored. Pure — tested. */
 export function readViewParam(search: string): DeepLinkView | null {
   try {
     const view = new URLSearchParams(search).get('view');
-    return view === 'git' || view === 'schedules' ? view : null;
+    return view === 'git' || view === 'schedules' || view === 'usage' ? view : null;
   } catch {
     return null; // malformed query string
   }
+}
+
+/** The section a linked view lands on. Pure — tested. */
+export function sectionForView(view: DeepLinkView): Section {
+  return view === 'git' ? 'management' : view;
 }
 
 /** A run id is the wrapper's uuid or a refusal's `refused-<machine>-<job>-<epoch>`; it only ever reaches a lookup in the polled list, so the shape check keeps junk out of the key. Pure — tested. */
@@ -56,7 +64,7 @@ type Where = { location: Pick<Location, 'search' | 'pathname'>; history: Pick<Hi
 export interface DeepLink {
   /** The id this page was opened with, or null. */
   session(): string | null;
-  /** The sub-view this page was opened with (`?view=git`, `?view=schedules`), or null. */
+  /** The sub-view this page was opened with (`?view=git`, `?view=schedules`, `?view=usage`), or null. */
   view(): DeepLinkView | null;
   /** The scheduled run this page was opened with (`&run=<id>`), or null. */
   run(): string | null;
@@ -114,7 +122,7 @@ export function deepLinkSession(): string | null {
   return page().session();
 }
 
-/** The sub-view this page was opened with (`?view=git`, `?view=schedules`), or null. Memoised with {@link deepLinkSession}. */
+/** The sub-view this page was opened with (`?view=git`, `?view=schedules`, `?view=usage`), or null. Memoised with {@link deepLinkSession}. */
 export function deepLinkView(): DeepLinkView | null {
   return page().view();
 }
@@ -124,7 +132,7 @@ export function deepLinkRun(): string | null {
   return page().run();
 }
 
-/** {@link DeepLink.takeTab} for this page: `AppShell` applies it to the `managementTab` or `schedulesTab` setting once. */
+/** {@link DeepLink.takeTab} for this page: `AppShell` applies it to the `managementTab` or `schedulesTab` setting once; `usage` has no tab to set. */
 export function takeDeepLinkTab(): DeepLinkView | null {
   return page().takeTab();
 }

@@ -5,7 +5,7 @@ import { HeaderAccount } from './components/HeaderAccount';
 import { ReleasesDrawer } from './components/ReleasesDrawer';
 import { SideRail } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
-import { deepLinkRun, deepLinkSession, deepLinkView, takeDeepLinkTab } from './lib/deepLink';
+import { deepLinkRun, deepLinkSession, deepLinkView, sectionForView, takeDeepLinkTab } from './lib/deepLink';
 import { LAST_SEEN_KEY } from './lib/releases';
 import { isSection, wrapClass, type Section } from './lib/sections';
 import { useAccount } from './hooks/useAccount';
@@ -43,14 +43,14 @@ function AppShell() {
   // navigation is normal and the last section is still remembered for next time.
   // A `?session=` deep link — a tapped push notification — beats both: it exists
   // only to put you on that session's chat. `?view=git` — Lookout's Git pending
-  // tile — does the same for Management › Git, and `?view=schedules` — a failed run's push — for Schedules.
+  // tile — does the same for Management › Git, `?view=schedules` — a failed run's push — for Schedules, and `?view=usage` — a usage-limit push — for Usage.
   // `isSection` filters a value left over from a release that had a section
   // this one doesn't (the removed Guides tab), which would otherwise render
   // the final `else` branch — Settings — instead of the sessions list.
   const [section, setSection] = useState<Section>(() => {
     if (deepLinkSession()) return 'sessions';
     const view = deepLinkView();
-    if (view) return view === 'schedules' ? 'schedules' : 'management';
+    if (view) return sectionForView(view);
     const want = settings.landing === 'last' ? stored : settings.landing;
     return isSection(want) ? want : 'sessions';
   });

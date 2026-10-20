@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { createDeepLink, readRunParam, readSessionParam, readViewParam } from '../client/src/lib/deepLink.js';
+import { createDeepLink, readRunParam, readSessionParam, readViewParam, sectionForView } from '../client/src/lib/deepLink.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -43,6 +43,16 @@ export function run(): number {
   if (test('reads view=git, alone or beside a session', () => {
     assert.strictEqual(readViewParam('?view=git'), 'git');
     assert.strictEqual(readViewParam('?session=abc12345&view=git'), 'git');
+  })) p++; else f++;
+
+  if (test('reads view=usage — a usage-limit push', () => {
+    assert.strictEqual(readViewParam('?view=usage'), 'usage');
+  })) p++; else f++;
+
+  if (test('each view lands on its section', () => {
+    assert.strictEqual(sectionForView('git'), 'management');
+    assert.strictEqual(sectionForView('schedules'), 'schedules');
+    assert.strictEqual(sectionForView('usage'), 'usage');
   })) p++; else f++;
 
   if (test('any other view, or none, yields null', () => {
