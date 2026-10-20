@@ -3,9 +3,19 @@
  * one window per account, stamps jittered the way the real endpoint jitters them.
  */
 import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
+import type { UsageLimits } from '../shared/types.js';
+import { clearAccountCache } from '../server/lib/account.js';
+import type { Config } from '../server/lib/config.js';
+import { resetEnvBaseline } from '../server/lib/config.js';
+import { resetNotify, setLabelResolver, setSender } from '../server/lib/notify.js';
+import type { NotifyPayload } from '../server/lib/notify.js';
+import { resetSettings, setSettings } from '../server/lib/settings.js';
 import {
-  RESET_STALE_MS, decideUsageAlert, usageAlertCopy
+  RESET_STALE_MS, armUsageAlerts, decideUsageAlert, onUsageReading, resetUsageAlertsMemory, setUsageAlertsFile, setUsageAlertsHome, usageAlertCopy
 } from '../server/lib/usage-alerts.js';
 import type { UsageAlertKind, UsageAlertLedger, UsageReading } from '../server/lib/usage-alerts.js';
 
@@ -62,6 +72,59 @@ function deepFreeze<T>(o: T): T {
   }
   return o;
 }
+
+function conf(over: Partial<Config> = {}): Config {
+  return { showUsage: true, ntfyTopic: 'test-topic', ntfyServer: 'https://ntfy.example', publicUrl: 'https://dash.example', ...over } as Config;
+}
+
+const limits = (utilization: number, resetsAt: string | null = S): UsageLimits =>
+  ({ fiveHour: { utilization, resetsAt }, sevenDay: { utilization: 10, resetsAt: null } }) as UsageLimits;
+
+function writeProfile(home: string, account: Record<string, unknown>): void {
+  fs.writeFileSync(path.join(home, '.claude.json'), JSON.stringify({ oauthAccount: { displayName: 'A', ...account } }));
+  clearAccountCache();
+}
+
+interface Shell { sent: NotifyPayload[]; dir: string; home: string; file: string }
+
+/**
+ * The I/O shell with every outside thing pointed into a tmpdir: settings (cwd-relative), the account profile (a fixture home), the ledger file, and the
+ * ntfy transport (a recorder). Armed, recording on, both checkboxes ticked; a case changes what it is about.
+ */
+function shell(name: string, fn: (s: Shell) => void): boolean {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-usage-alerts-'));
+  const prev = process.cwd();
+  const home = path.join(dir, 'home');
+  const file = path.join(dir, 'state', 'usage-alerts.json');
+  const sent: NotifyPayload[] = [];
+  try {
+    process.chdir(dir);
+    fs.mkdirSync(home);
+    resetSettings();
+    resetNotify();
+    resetEnvBaseline();
+    setSender(payload => { sent.push(payload); });
+    setLabelResolver(() => 'demo-project');
+    writeProfile(home, { emailAddress: ACC, hasExtraUsageEnabled: false });
+    setUsageAlertsHome(home);
+    setUsageAlertsFile(file);
+    resetUsageAlertsMemory();
+    setSettings({ recordUsageHistory: true, notify: { enabled: true, events: { 'usage-limit': true, 'usage-reset': true } } });
+    armUsageAlerts(conf());
+    return test(name, () => fn({ sent, dir, home, file }));
+  } finally {
+    process.chdir(prev);
+    armUsageAlerts(null);
+    setUsageAlertsFile(null);
+    setUsageAlertsHome(null);
+    resetUsageAlertsMemory();
+    clearAccountCache();
+    resetNotify();
+    resetSettings();
+  }
+}
+
+const T = S_MS - 4 * HOUR;
 
 export function run(): number {
   let p = 0, f = 0;
@@ -230,6 +293,115 @@ export function run(): number {
     assert.deepStrictEqual(usageAlertCopy('reset', { resetsAt: null, extraUsage: false, now }),
       { title: '5-hour limit reset', body: 'Usage is available again.' });
     assert.strictEqual(usageAlertCopy('reset', { resetsAt: today, extraUsage: true, now }).body, 'Back on plan usage: extra-usage billing stops.');
+  })) p++; else f++;
+
+  if (shell('shell: unarmed sends nothing', ({ sent }) => {
+    armUsageAlerts(null);
+    onUsageReading(limits(100), T);
+    assert.strictEqual(sent.length, 0);
+  })) p++; else f++;
+
+  if (shell('shell: recording off sends nothing', ({ sent }) => {
+    setSettings({ recordUsageHistory: false });
+    onUsageReading(limits(100), T);
+    assert.strictEqual(sent.length, 0);
+  })) p++; else f++;
+
+  if (shell('shell: showUsage off sends nothing', ({ sent }) => {
+    armUsageAlerts(conf({ showUsage: false }));
+    onUsageReading(limits(100), T);
+    assert.strictEqual(sent.length, 0);
+  })) p++; else f++;
+
+  if (shell('shell: no account email sends nothing', ({ sent, home }) => {
+    writeProfile(home, { emailAddress: '' });
+    onUsageReading(limits(100), T);
+    assert.strictEqual(sent.length, 0);
+  })) p++; else f++;
+
+  if (shell('shell: readings below 100 never create the ledger file', ({ sent, file }) => {
+    onUsageReading(limits(40), T);
+    onUsageReading(null, T + MIN);
+    assert.strictEqual(sent.length, 0);
+    assert.strictEqual(fs.existsSync(file), false);
+  })) p++; else f++;
+
+  if (shell('shell: hit sends one reached push to the phone with ?view=usage', ({ sent, file }) => {
+    onUsageReading(limits(100), T);
+    onUsageReading(limits(100), T + MIN);
+    assert.strictEqual(sent.length, 1);
+    assert.strictEqual(sent[0].title, '5-hour limit reached');
+    assert.strictEqual(sent[0].tags, 'no_entry');
+    assert.strictEqual(sent[0].topic, 'test-topic');
+    assert.ok(sent[0].click.endsWith('/?view=usage'), sent[0].click);
+    assert.match(sent[0].body, /^Resets (\w{3} )?at \d\d:\d\d\.$/);
+    assert.ok(fs.existsSync(file), 'the claim is on disk');
+  })) p++; else f++;
+
+  if (shell('shell: extra usage on adds the billing line', ({ sent, home }) => {
+    writeProfile(home, { emailAddress: ACC, hasExtraUsageEnabled: true });
+    onUsageReading(limits(100), T);
+    onUsageReading(limits(10), S_MS + MIN);
+    assert.ok(sent[0].body.endsWith(' Extra usage is on: you are now billed.'), sent[0].body);
+    assert.strictEqual(sent[1].body, 'Back on plan usage: extra-usage billing stops.');
+  })) p++; else f++;
+
+  if (shell('shell: reset follows a pushed hit', ({ sent }) => {
+    onUsageReading(limits(100), T);
+    onUsageReading(limits(10), S_MS + MIN);
+    assert.strictEqual(sent.length, 2);
+    assert.deepStrictEqual({ title: sent[1].title, body: sent[1].body, tags: sent[1].tags },
+      { title: '5-hour limit reset', body: 'Usage is available again.', tags: 'arrows_counterclockwise' });
+  })) p++; else f++;
+
+  if (shell('shell: restart at 100% sends nothing', ({ sent }) => {
+    onUsageReading(limits(100), T);
+    resetUsageAlertsMemory();
+    armUsageAlerts(conf());
+    onUsageReading(limits(100), T + MIN);
+    assert.strictEqual(sent.length, 1);
+  })) p++; else f++;
+
+  if (shell('shell: with the ledger file gone, a restart at 100% pushes again (the file is what stops it)', ({ sent, file }) => {
+    onUsageReading(limits(100), T);
+    fs.rmSync(file);
+    resetUsageAlertsMemory();
+    onUsageReading(limits(100), T + MIN);
+    assert.strictEqual(sent.length, 2);
+  })) p++; else f++;
+
+  if (shell('shell: a null fetch changes nothing', ({ sent }) => {
+    onUsageReading(limits(100), T);
+    onUsageReading(null, T + MIN);
+    onUsageReading(limits(100), T + 2 * MIN);
+    assert.strictEqual(sent.length, 1);
+  })) p++; else f++;
+
+  if (shell('shell: a write failure still sends, and memory stops the repeat', ({ sent, dir }) => {
+    const blocker = path.join(dir, 'blocker');
+    fs.writeFileSync(blocker, 'not a directory');
+    setUsageAlertsFile(path.join(blocker, 'usage-alerts.json'));
+    assert.doesNotThrow(() => onUsageReading(limits(100), T));
+    onUsageReading(limits(100), T + MIN);
+    assert.strictEqual(sent.length, 1);
+  })) p++; else f++;
+
+  if (shell('shell: checkbox off at the hit, on later — nothing at the hit, nothing at the drop', ({ sent }) => {
+    setSettings({ notify: { events: { 'usage-limit': false } } });
+    onUsageReading(limits(100), T);
+    setSettings({ notify: { events: { 'usage-limit': true } } });
+    onUsageReading(limits(100), T + MIN);
+    onUsageReading(limits(10), S_MS + MIN);
+    assert.strictEqual(sent.length, 0);
+  })) p++; else f++;
+
+  if (shell('shell: no NTFY_TOPIC at the hit records it unpushed', ({ sent }) => {
+    armUsageAlerts(conf({ ntfyTopic: '' }));
+    onUsageReading(limits(100), T);
+    armUsageAlerts(conf());
+    onUsageReading(limits(100), T + MIN);
+    onUsageReading(limits(10), S_MS + MIN);
+    assert.strictEqual(sent.length, 0);
   })) p++; else f++;
 
   console.log(`  ${p} passed, ${f} failed`);

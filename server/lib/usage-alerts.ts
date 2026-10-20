@@ -1,8 +1,18 @@
 /**
  * The 5-hour usage-limit alerts: *limit reached* when the window hits 100%, *limit reset* once a window that was pushed as reached is over.
  *
- * This file holds the pure decision and the push copy. It reads nothing and sends nothing; see `docs/subsystems/push-notify.md`.
+ * `decideUsageAlert` and `usageAlertCopy` are pure. `onUsageReading` is the shell the usage recorder calls: it re-reads the machine-wide ledger, decides,
+ * writes the claim and only then sends. See `docs/subsystems/push-notify.md`.
  */
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import type { UsageLimits } from '../../shared/types.js';
+import { readAccountProfile } from './account.js';
+import type { Config } from './config.js';
+import { sendUsageEvent, usageCanSend } from './notify.js';
+import { getSettings } from './settings.js';
 import { sameWindow } from './usage-history.js';
 
 /** One usage fetch, reduced to what the detector judges. */
@@ -112,4 +122,106 @@ export function usageAlertCopy(
     title: '5-hour limit reset',
     body: o.extraUsage ? 'Back on plan usage: extra-usage billing stops.' : 'Usage is available again.'
   };
+}
+
+/* -------------------------------------------------- the I/O shell */
+
+let armed: Config | null = null;
+let fileOverride: string | null = null;
+let homeOverride: string | null = null;
+/** The last ledger this process decided on: the base when the file cannot be read, so a failed write still stops a repeat. */
+let memory: UsageAlertLedger | null = null;
+
+/** Called once from `server/index.ts` with the startup config, beside `startUsageRecording`; `null` disarms. */
+export function armUsageAlerts(config: Config | null): void {
+  armed = config;
+}
+
+/** Test seam: the ledger file. */
+export function setUsageAlertsFile(file: string | null): void {
+  fileOverride = file;
+}
+
+/** Test seam: the home `readAccountProfile` reads `.claude.json` from. */
+export function setUsageAlertsHome(dir: string | null): void {
+  homeOverride = dir;
+}
+
+/** Test seam: forget the in-memory ledger, as a restart (or a second process) would. */
+export function resetUsageAlertsMemory(): void {
+  memory = null;
+}
+
+/**
+ * Machine-wide, not per checkout: a prod and a dev dashboard recording side by side must find each other's claim. Fixed under the home dir, deliberately
+ * not under `SCHEDULES_STATE_ROOT`.
+ */
+function ledgerFile(): string {
+  return fileOverride ?? path.join(os.homedir(), '.claude', 'dashboard', 'usage-alerts.json');
+}
+
+function readLedger(): UsageAlertLedger {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(ledgerFile(), 'utf8');
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { windows: {} };
+    return memory ?? { windows: {} };
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<UsageAlertLedger> | null;
+    if (parsed && typeof parsed.windows === 'object' && parsed.windows !== null) return { windows: parsed.windows };
+  } catch {
+    /* corrupt: fall through */
+  }
+  return memory ?? { windows: {} };
+}
+
+/** tmp + rename, so a reader never sees half a ledger. Returns false on failure; the caller sends anyway. */
+function writeLedger(ledger: UsageAlertLedger): boolean {
+  const file = ledgerFile();
+  const tmp = `${file}.${process.pid}.tmp`;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(tmp, JSON.stringify(ledger) + '\n', 'utf8');
+    fs.renameSync(tmp, file);
+    return true;
+  } catch {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* nothing to clean */ }
+    return false;
+  }
+}
+
+/**
+ * One usage fetch. A no-op unless armed, `SHOW_USAGE` is on and Record usage history is on; `limits === null` is a failed fetch, which is no reading.
+ * Never throws: it runs inside the recorder's tick.
+ */
+export function onUsageReading(limits: UsageLimits | null, now: number = Date.now()): void {
+  try {
+    const config = armed;
+    if (!config || !config.showUsage || !getSettings().recordUsageHistory) return;
+    const profile = readAccountProfile(homeOverride ?? undefined);
+    if (!profile || profile.email === '') return;
+
+    const reading: UsageReading = {
+      t: now,
+      account: profile.email,
+      utilization: limits ? limits.fiveHour.utilization : null,
+      resetsAt: limits ? limits.fiveHour.resetsAt : null,
+      ok: limits !== null
+    };
+    const canSend = { reached: usageCanSend('reached', config), reset: usageCanSend('reset', config) };
+    const before = readLedger();
+    const { ledger, push } = decideUsageAlert(before, reading, canSend);
+    memory = ledger;
+    // Claim before send; a failed write keeps the claim in memory and still sends. Unchanged (no hit on record) → no write, so the file appears
+    // only once a window has been hit.
+    if (JSON.stringify(ledger) !== JSON.stringify(before)) writeLedger(ledger);
+    if (!push) return;
+
+    const copy = usageAlertCopy(push, { resetsAt: reading.resetsAt, extraUsage: profile.extraUsage, now });
+    sendUsageEvent({ kind: push === 'reached' ? 'usage-limit' : 'usage-reset', ...copy }, config);
+  } catch {
+    /* an alert must never break the usage fetch */
+  }
 }

@@ -25,6 +25,7 @@ import type { UsageLimits, RateLimit, UsageStatus } from '../../shared/types.js'
 import { recordAndPace, setForecastProfile } from './usage-pace.js';
 import { deriveProfile, profileSnapshot, recordTick } from './usage-history.js';
 import { recordLedgerTick } from './usage-ledger.js';
+import { onUsageReading } from './usage-alerts.js';
 import { getSettings } from './settings.js';
 import { autoRenew } from './token-refresh.js';
 
@@ -351,6 +352,8 @@ function refreshNow(force = false): Promise<void> {
               ...(week ? { week } : {})
             });
           }
+          // After the recorder, outside its `if`: a failed fetch (`limits === null`) is still a reading the detector must see as "no reading".
+          onUsageReading(limits);
           // Beside `recordTick`, not inside it: the ledger measures what this
           // machine *spent* over the same minute the sample prices, and the
           // rate fitter joins the two by time. It records even when `limits`
