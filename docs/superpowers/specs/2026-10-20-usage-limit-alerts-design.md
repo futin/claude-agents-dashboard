@@ -67,6 +67,15 @@ The detector runs in exactly one place: the `recordUsageHistory` branch of `refr
 passes there with the recording gate already applied, whoever triggered it. Not in the recorder's tick: that only fires a fire-and-forget `refresh()` and
 never sees the result. **(doc-review 1)**
 
+`usage.ts` has no `Config` today and `refreshNow`'s callers pass none. The detector's config (`showUsage`, the ntfy fields) is armed once through a setter
+called from `server/index.ts` beside `startUsageRecording`; never a second `loadConfig()`. Unarmed (as in tests that do not arm it) means no alerts.
+**(doc-review 2)**
+
+**A hit seen while the push is off is recorded, not pushed.** The detector records every hit it sees whenever its own two gates hold, whatever the master
+switch, the event checkbox or `NTFY_TOPIC` say; only the send is gated by those. So turning the checkbox on mid-window does not push the hit already seen, and
+a window whose hit was not pushed gets no *limit reset* either — the same "marked seen when declined" rule as `notified.json`. **(doc-review 2, author's
+call)**
+
 ### Detecting *limit reached*
 
 A **reading** is a fetch with `status === 'ok'` **and** `fiveHour.utilization !== null` — the same test the recorder applies before `recordTick`
@@ -82,7 +91,15 @@ reading whose `resetsAt` is null (an unscoped window) is still a hit, stored wit
 
 The alerted window is over when a reading shows **utilization below 100** and **either** its `resetsAt` is not `sameWindow` as the alerted stamp **or** the
 alerted stamp has passed. A changed stamp alone is never a reset — `sameWindow(null, scoped)` is false by design, so an unscoped hit followed by a scoped
-reading still at 100% would otherwise reset falsely; the drop below 100 is required, the stamp is corroboration. Observed, not scheduled: the push says what
+reading still at 100% would otherwise reset falsely; the drop below 100 is required, the stamp is corroboration. For a **null** alerted stamp neither
+corroboration exists (`sameWindow(null, null)` is true and a null stamp never passes), so there the drop below 100 alone is the reset — the same drop rule
+`classifyInterval` uses. **(doc-review 2)**
+
+**The ledger holds one window per account.** A ≥ 100 reading on a window that is not `sameWindow` as the recorded one, while that one's reset is still
+pending, is a new hit: it replaces the record, and the earlier window's pending reset is dropped without a push (the user is limited again, so "usage is
+available" would be false). **(doc-review 2, author's call)**
+
+Observed, not scheduled: the push says what
 a reading saw, never what a clock predicted, because a scheduled push would claim a reset the dashboard never confirmed. **(author's call)**
 If the server was down across the reset, the first reading after it starts sends the reset push,
 provided the hit is still on record and the reset is recent — the builder picks the staleness cut-off (a reset hours old is not worth a push).
@@ -98,7 +115,8 @@ does not); it must never produce a *limit reset* without a recorded hit. A publi
 cwd-relative `.dashboard-settings.json` — and both read the same account. A per-checkout file would push every hit and reset twice. So the ledger lives
 machine-wide under `~/.claude/` (beside `scheduleStateRoot`'s `~/.claude/schedules`; exact path the builder's), and a dashboard **claims** a push by recording
 it in the ledger *before* sending: re-read, check, write, then send. Two servers racing within the same second may still both send; that is accepted — the
-60 s sample cadence makes it rare, and a lock would cost more than one duplicate. **(author's call, from the builder check)**
+60 s sample cadence makes it rare, and a lock would cost more than one duplicate. **(author's call, from the builder check)** A failed ledger write keeps the
+claim in process memory and the push is still sent, as `notified.json`'s `persist` does: the cost is at most one repeat after a restart. **(doc-review 2)**
 
 **A window belongs to an account.** The key is the signed-in account (`readAccountProfile().email`, `server/lib/account.ts`) plus the window stamp. When the
 profile is `null` or its email is `''`, no alert is evaluated at all — no key, no push. A reading under a different account than the alerted hit never counts
@@ -114,7 +132,8 @@ No transcript content, as for every push (`docs/subsystems/push-notify.md` §Wha
 | limit reached | `5-hour limit reached` | `Resets at 14:30.` — plus ` Extra usage is on: you are now billed.` when `extraUsage` |
 | limit reset | `5-hour limit reset` | `Usage is available again.` — or, when `extraUsage` is on at reset time, `Back on plan usage: extra-usage billing stops.` |
 
-Time in the server's local zone, `HH:MM`; when the reset is not today, prefixed with the short weekday (`Resets Tue 09:10.`). An unscoped hit (null stamp) has
+Time in the server's local zone, `HH:MM`; when the reset is not today, prefixed with the short weekday (`Resets Tue at 09:10.`). An unscoped hit (null stamp)
+has
 no time to give: its body is `No reset time reported.`, with the same extra-usage suffix. Wording and ntfy tags are the builder's to polish; the content above
 is the contract. **(author's call)**
 
@@ -136,23 +155,27 @@ Two rows in the event list in `SettingsView.tsx`, after *Scheduled job failed*, 
 
 A row's control is disabled when `pushUnconfigured || !recordUsageHistory || !showUsage`. While disabled for recording (and push is configured), the hint is
 replaced by `Turn on Record usage history under Usage forecast to use this.`; disabled for `showUsage`, by `Usage is hidden (SHOW_USAGE=false) on this
-server.` A plain text pointer, not a link: `SettingsRow` has no link affordance and the recording switch sits in another group. If the client cannot see
-`showUsage` today, the builder exposes it through the existing settings or health payload. **(user: "checkboxes grey out with a note saying why"; copy from
+server.` When both hold, the `showUsage` note wins (it is the outer gate); when only `pushUnconfigured` holds, the row keeps its normal hint, as the existing
+rows do. A plain text pointer, not a link: `SettingsRow` has no link affordance and the recording switch sits in another group. The client cannot see
+`showUsage` today — no field in `shared/types.ts` carries it — so the builder adds one to the existing settings or health payload.
+**(user: "checkboxes grey out with a note saying why"; copy from
 doc-review 1, author's call)**
 
 ## Docs to update in the same change
 
 - `docs/subsystems/push-notify.md` — a section for the two usage events beside *The fifth event: `schedule-failed`*.
 - `docs/workflows/push-notify-setup.md` — the *Which events need which hook* table: these two need no hook, they need Record usage history.
-- `docs/subsystems/` usage doc that owns the recorder, if it lists the recorder's consumers.
+- `docs/subsystems/usage-limits.md` — the recorder's doc: the recorder now also feeds the alert detector.
 
 ## Left to the builder
 
 - The state file's name and shape.
 - The staleness cut-off for a reset seen late (server was down).
 - Event key names (`usage-limit` / `usage-reset` or similar) and ntfy tags.
-- Test shape: pure detector tests over sequences of readings (hit, repeat hit, restart mid-window, reset by new `resetsAt`, reset by time, 99% never alerts,
-  failed reads in between, extra usage body), plus a Settings disabled-state check.
+- Test shape: pure detector tests over sequences of readings (hit, repeat hit, jittered stamps within 120 s, restart mid-window, reset by new `resetsAt`, reset
+  by time, unscoped hit then unscoped drop, new-window hit with a reset pending, 99% never alerts, failed and null-utilization reads in between, hit seen
+  while the event is off, account switch deletes the pending record, ledger write failure, extra usage bodies), plus a Settings disabled-state check and the
+  `?view=usage` deep-link case. A reading older than the ledger's last-seen time is ignored (an abandoned fetch cycle can land late).
 
 ## Verification the user should expect
 
