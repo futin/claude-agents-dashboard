@@ -790,11 +790,15 @@ export async function run(): Promise<number> {
 
   check(await testAsync('a near-miss path is not the rates endpoint', async () => {
     await withServer(ENV, async h => {
-      // Unmatched paths fall through to the SPA shell, so the tell is the body,
+      // Unmatched paths fall through to the static handler, so the tell is the body,
       // not the status: `/api/usage/ratesx` must never answer a rates payload.
+      // That handler answers the SPA shell when client/dist is built and its 404 hint when not.
       const reply = await h.req('/api/usage/ratesx');
       assert.equal(reply.json, null, 'the near miss must not answer JSON');
-      assert.ok(reply.raw.startsWith('<!DOCTYPE html>'), 'it falls through to the static handler');
+      const builtShell = reply.status === 200 && reply.raw.startsWith('<!DOCTYPE html>');
+      const buildHint = reply.status === 404 && reply.raw.startsWith('Not found. Run `pnpm build`');
+      assert.ok(builtShell || buildHint,
+        `it falls through to the static handler: status ${reply.status}, body ${JSON.stringify(reply.raw.slice(0, 80))}`);
     });
   }));
 
