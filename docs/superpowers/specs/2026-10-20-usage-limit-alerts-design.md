@@ -42,14 +42,17 @@ Two pushes close that gap: **limit reached** when the 5-hour window hits 100%, a
 
 ## Constraints
 
-- **Usage is read only while something asks for it.** `server/lib/usage.ts` fetches on demand (60 s cache), and the one thing that asks with no page open is the
-  usage recorder in `lib/usage-history.ts` (`startUsageRecording`, one refresh per `SAMPLE_INTERVAL_MS` = 60 s), which runs only while **Record usage
-  history** is on (`recordUsageHistory`, default off; on on this machine as of 2026-10-20). The user chose: **alerts require recording on**. With recording
-  off, both checkboxes are disabled with a note saying why, and no alert is evaluated or sent even if a page happens to be polling. **(user)** No new timer.
+- **Usage is read only while something asks for it.** `server/lib/usage.ts` fetches on demand (60 s cache). With no dashboard page open, the steady asker is
+  the usage recorder in `lib/usage-history.ts` (`startUsageRecording`, one refresh per `SAMPLE_INTERVAL_MS` = 60 s), which ticks only while **Record usage
+  history** is on (`recordUsageHistory`, default off; on on this machine as of 2026-10-20) — and is started at all only when `SHOW_USAGE` is on
+  (`config.showUsage`, `server/index.ts`). Other readers exist (Lookout's hub widget poll calls `getCachedUsageState` via `lib/hub-widgets.ts`), but none is
+  guaranteed. The user chose: **alerts require recording on**. With recording off — or `SHOW_USAGE` off — both rows are disabled with a note saying why,
+  and no alert is evaluated or sent even if something else triggers a read. **(user; the `showUsage` gate from doc-review 1)** No new timer.
 - The server stays at zero new runtime deps and makes no new kind of outbound call: the publish is the existing ntfy call in `lib/notify.ts`
   (`test/outbound.test.ts`).
-- `shared/types.ts` first, then server, then client (repo rule). `NotifyEvent` gains two members; every `Record<NotifyEvent, …>` (`TAGS`, `NOTIFY_EVENTS`, the
-  Settings event list, defaults) must cover them.
+- `shared/types.ts` first, then server, then client (repo rule). `NotifyEvent` gains two members; everything keyed by it must cover them — the
+  `Record<NotifyEvent, …>` maps `TAGS` and `PHRASE` in `lib/notify.ts`, the `NOTIFY_EVENTS` list and defaults in `lib/settings.ts`, the Settings
+  event list — and the prose that counts them (`NotifyEvent`'s "four session events" comment, push-notify.md's "fifth member").
 - Defaults off, like every event: the feature is opt-in.
 
 ## How it behaves
@@ -57,27 +60,39 @@ Two pushes close that gap: **limit reached** when the 5-hour window hits 100%, a
 ### Gating
 
 Mirror `sendScheduleEvent`: master switch on, the event's own checkbox on, `NTFY_TOPIC` set — and **exempt from `requireAfk`, `requireRemoteAnswer` and
-`requireAutoMode`**, which gate interactive sessions, not an account limit. Plus one gate of its own: `recordUsageHistory` on. **(user, via "both places" and
-"need recording on")**
+`requireAutoMode`**, which gate interactive sessions, not an account limit. Plus two gates of its own: `config.showUsage` and `recordUsageHistory` both on.
+**(user, via "both places" and "need recording on")**
+
+The detector runs in exactly one place: the `recordUsageHistory` branch of `refreshNow` in `server/lib/usage.ts`, beside `recordTick`. Every successful fetch
+passes there with the recording gate already applied, whoever triggered it. Not in the recorder's tick: that only fires a fire-and-forget `refresh()` and
+never sees the result. **(doc-review 1)**
 
 ### Detecting *limit reached*
 
-On each successful usage read (`status === 'ok'`), look at `fiveHour.utilization`. A reading of **≥ 100** for a window not yet alerted is a hit. A window is
-identified by its `resetsAt` — the same identity `UsageHistoryWindow` already uses ("never an assumed 5-hour length"). A hit on a reading whose `resetsAt` is
-null is still a hit; identity then falls back to the builder's choice (see *Left to the builder*). **(author's call)**
+A **reading** is a fetch with `status === 'ok'` **and** `fiveHour.utilization !== null` — the same test the recorder applies before `recordTick`
+(`server/lib/usage.ts`, the `recordUsageHistory` branch of `refreshNow`). Anything else — a failed fetch, an expired token, an `ok` body with no 5-hour
+utilization — is "no reading": it neither hits nor resets anything. `null < 100` must never count as a drop.
+
+A reading of **≥ 100** for a window not yet alerted is a hit. A window is identified with `sameWindow()` (`server/lib/usage-history.ts`), **never string
+equality**: the endpoint recomputes `resetsAt` on every fetch with sub-second jitter, and `sameWindow` gives two stamps 120 s of slack — the same rule that
+groups `UsageHistoryWindow`. The ledger stores the first-seen stamp of the alerted window and compares later readings to it with `sameWindow`. A hit on a
+reading whose `resetsAt` is null (an unscoped window) is still a hit, stored with a null stamp. **(author's call; identity rule from doc-review 1)**
 
 ### Detecting *limit reset*
 
-The alerted window is over when a successful reading shows **either** a `resetsAt` different from the alerted window's **or** utilization below 100 after the
-alerted `resetsAt` has passed. Observed, not scheduled: the push says what a reading saw, never what a clock predicted, because a scheduled push would claim
-a reset the dashboard never confirmed. **(author's call)** If the server was down across the reset, the first reading after it starts sends the reset push,
+The alerted window is over when a reading shows **utilization below 100** and **either** its `resetsAt` is not `sameWindow` as the alerted stamp **or** the
+alerted stamp has passed. A changed stamp alone is never a reset — `sameWindow(null, scoped)` is false by design, so an unscoped hit followed by a scoped
+reading still at 100% would otherwise reset falsely; the drop below 100 is required, the stamp is corroboration. Observed, not scheduled: the push says what
+a reading saw, never what a clock predicted, because a scheduled push would claim a reset the dashboard never confirmed. **(author's call)**
+If the server was down across the reset, the first reading after it starts sends the reset push,
 provided the hit is still on record and the reset is recent — the builder picks the staleness cut-off (a reset hours old is not worth a push).
 
 ### Once per window, across restarts
 
 The state "which window was alerted, and was its reset sent" persists to a small file, written the way `schedule-notify.ts` writes `notified.json` (tmp file,
-then `renameSync`). Losing the file costs at most one repeated *limit reached*; it must never produce a *limit reset* without a recorded hit.
-**(author's call)**
+then `renameSync`). Losing the file costs at most one repeated *limit reached* and the pending *limit reset* of that window (a restart keeps both; a lost file
+does not); it must never produce a *limit reset* without a recorded hit. A publish that fails after the claim is not retried, as for every existing event:
+`deliver` is fire-and-forget. **(author's call; M2/M7 from doc-review 1)**
 
 **One ledger per machine, not per checkout.** Two dashboards can run with recording on at once — prod on 4173 and a worktree dev server, each with its own
 cwd-relative `.dashboard-settings.json` — and both read the same account. A per-checkout file would push every hit and reset twice. So the ledger lives
@@ -85,9 +100,10 @@ machine-wide under `~/.claude/` (beside `scheduleStateRoot`'s `~/.claude/schedul
 it in the ledger *before* sending: re-read, check, write, then send. Two servers racing within the same second may still both send; that is accepted — the
 60 s sample cadence makes it rare, and a lock would cost more than one duplicate. **(author's call, from the builder check)**
 
-**A window belongs to an account.** The key is the signed-in account (`readAccountProfile().email`, `server/lib/account.ts`) plus `resetsAt`. A reading under a
-different account than the alerted hit never counts as that hit's reset: an account switch drops the pending reset silently, and the new account's own hits
-alert normally. **(author's call, from the builder check)**
+**A window belongs to an account.** The key is the signed-in account (`readAccountProfile().email`, `server/lib/account.ts`) plus the window stamp. When the
+profile is `null` or its email is `''`, no alert is evaluated at all — no key, no push. A reading under a different account than the alerted hit never counts
+as that hit's reset: an account switch **deletes** the pending record without a push, so returning to the first account later cannot fire a stale reset; the
+new account's own hits alert normally. **(author's call, from the builder check; empty-profile and delete rules from doc-review 1)**
 
 ### What the push says
 
@@ -98,20 +114,31 @@ No transcript content, as for every push (`docs/subsystems/push-notify.md` §Wha
 | limit reached | `5-hour limit reached` | `Resets at 14:30.` — plus ` Extra usage is on: you are now billed.` when `extraUsage` |
 | limit reset | `5-hour limit reset` | `Usage is available again.` — or, when `extraUsage` is on at reset time, `Back on plan usage: extra-usage billing stops.` |
 
-Time in the server's local zone, `HH:MM`, with the day added when the reset is not today. Wording and ntfy tags are the builder's to polish; the content above
+Time in the server's local zone, `HH:MM`; when the reset is not today, prefixed with the short weekday (`Resets Tue 09:10.`). An unscoped hit (null stamp) has
+no time to give: its body is `No reset time reported.`, with the same extra-usage suffix. Wording and ntfy tags are the builder's to polish; the content above
 is the contract. **(author's call)**
 
 ### Tap-through
 
-- Phone: `<DASHBOARD_PUBLIC_URL>/?view=usage`. `client/src/lib/deepLink.ts` gains `usage` as a `DeepLinkView`, opening the Usage rail section. Without a
-  public URL the push carries no link, as for every event.
+- Phone: `<DASHBOARD_PUBLIC_URL>/?view=usage`. `client/src/lib/deepLink.ts` gains `usage` in both `DeepLinkView` and `readViewParam`'s whitelist, and
+  `App.tsx`'s initial-section mapping (today `view === 'schedules' ? 'schedules' : 'management'`) gains `usage → 'usage'` — without that second change the
+  link lands on Management. `test/deep-link.test.ts` gains the `?view=usage` case. Without a public URL the push carries no link, as for every event.
 - Desk: unchanged — `deskClickUrl` (`/api/dismiss`), like every desk push.
 
 ### Settings
 
-Two rows in the event list in `SettingsView.tsx`, e.g. *Usage limit reached* / *Usage limit reset*, hints stating they ignore the three conditions below and
-need **Record usage history**. With recording off the two rows are disabled and say so, linking or pointing to the recording switch. **(user: "checkboxes grey
-out with a note saying why")**
+Two rows in the event list in `SettingsView.tsx`, after *Scheduled job failed*, verbatim:
+
+| Name | Hint |
+| --- | --- |
+| `Usage limit reached` | `Your 5-hour usage window hit 100%. Ignores the three conditions below. Needs Record usage history (Usage forecast).` |
+| `Usage limit reset` | `The 5-hour window you hit has reset. Ignores the three conditions below. Needs Record usage history (Usage forecast).` |
+
+A row's control is disabled when `pushUnconfigured || !recordUsageHistory || !showUsage`. While disabled for recording (and push is configured), the hint is
+replaced by `Turn on Record usage history under Usage forecast to use this.`; disabled for `showUsage`, by `Usage is hidden (SHOW_USAGE=false) on this
+server.` A plain text pointer, not a link: `SettingsRow` has no link affordance and the recording switch sits in another group. If the client cannot see
+`showUsage` today, the builder exposes it through the existing settings or health payload. **(user: "checkboxes grey out with a note saying why"; copy from
+doc-review 1, author's call)**
 
 ## Docs to update in the same change
 
@@ -121,9 +148,7 @@ out with a note saying why")**
 
 ## Left to the builder
 
-- Where the detector hooks in: after each successful fetch in `usage.ts`, or inside the recorder's tick. Either is fine as long as every successful read is
-  seen once and the recording gate holds.
-- The state file's name, shape and the identity rule for a `resetsAt`-less window.
+- The state file's name and shape.
 - The staleness cut-off for a reset seen late (server was down).
 - Event key names (`usage-limit` / `usage-reset` or similar) and ntfy tags.
 - Test shape: pure detector tests over sequences of readings (hit, repeat hit, restart mid-window, reset by new `resetsAt`, reset by time, 99% never alerts,
