@@ -693,9 +693,22 @@ export function run(): number {
     assert.strictEqual(analyzeSession(ctxWithBoundary({ sidechain: true }))!.perTurn.neverCompacted, true);
   })) p++; else f++;
 
+  // Claude Code 2.1.302 replays each request's turns as `api-request-blob` records: same role and content, no uuid, no timestamp. The assistant replay
+  // here carries usage and no message.id, so a reader that keys on role alone counts it as a turn of its own as well as a second correction.
+  const blobWorld = () => fixture([
+    humanRec('no, that is wrong', '2026-07-01T10:00:00Z'),
+    toolUseRec([tu('b1', 'Bash')], '2026-07-01T10:00:01Z', { input_tokens: 100, output_tokens: 10 }, 'msg_a'),
+    resultRec('b1', '2026-07-01T10:00:02Z', { content: 'ok' }),
+    boundaryRec('2026-07-01T10:00:30Z'), summaryRec('2026-07-01T10:00:31Z'),
+    usageRec({ cache_read_input_tokens: 2_000 }, '2026-07-01T10:01:00Z'),
+    { type: 'api-request-blob', sessionId: 's', hash: 'h1', message: { role: 'user', content: 'no, that is wrong' } },
+    { type: 'api-request-blob', sessionId: 's', hash: 'h2', message: { role: 'assistant', content: [tu('b1', 'Bash')], usage: { input_tokens: 100, output_tokens: 10 } } },
+    { type: 'api-request-blob', sessionId: 's', hash: 'h3', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'b1', content: 'ok' }] } }
+  ]);
+
   if (test('plugin kaizen.mjs agrees with analyzeSession on a compacted, replayed session', () => {
     const kaizen = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../plugin/skills/kaizen/kaizen.mjs');
-    for (const file of [replayWorld(okBash), replayWorld(errBash), ctxWithBoundary(), ctxWithBoundary({ sidechain: true })]) {
+    for (const file of [replayWorld(okBash), replayWorld(errBash), ctxWithBoundary(), ctxWithBoundary({ sidechain: true }), blobWorld()]) {
       const r = spawnSync(process.execPath, [kaizen, file], { encoding: 'utf8' });
       assert.strictEqual(r.status, 0, r.stderr);
       const k = JSON.parse(r.stdout);
