@@ -4,8 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  atDesk, AUTO_MODES, maybeSend, resetNotify, resolveLabel, scheduleClickUrl, sendScheduleEvent, sendTest,
-  setIdleSource, setLabelResolver, setSender, shouldNotify
+  atDesk, AUTO_MODES, maybeSend, resetNotify, resolveLabel, scheduleClickUrl, sendScheduleEvent, sendTest, sendUsageEvent,
+  setIdleSource, setLabelResolver, setSender, shouldNotify, usageCanSend, usageClickUrl
 } from '../server/lib/notify.js';
 import { DEFAULT_NOTIFY, NOTIFY_EVENTS, resetSettings, setSettings } from '../server/lib/settings.js';
 import { resetState } from '../server/lib/remoteState.js';
@@ -455,7 +455,7 @@ export async function run(): Promise<number> {
     }))) p++; else f++;
 
   if (test('schedule-failed is the fifth event, and only it passes a policy that selects only it', () => {
-    assert.strictEqual(NOTIFY_EVENTS.length, 5);
+    assert.strictEqual(NOTIFY_EVENTS[4], 'schedule-failed');
     const pol = policy({ events: { ...DEFAULT_NOTIFY.events, 'schedule-failed': true } });
     assert.strictEqual(shouldNotify('schedule-failed', pol, ctx()), true);
     assert.strictEqual(shouldNotify('question', pol, ctx()), false);
@@ -502,6 +502,44 @@ export async function run(): Promise<number> {
     assert.strictEqual(sent[1].click, '');
     assert.strictEqual(scheduleClickUrl(conf(), 'refused-mac-a b-1'), 'https://dash.example/?view=schedules&run=refused-mac-a%20b-1');
   }))) p++; else f++;
+
+  const USAGE = { kind: 'usage-limit' as const, title: '5-hour limit reached', body: 'Resets at 14:30.' };
+
+  if (await testAsync('sendUsageEvent is exempt from requireAfk, requireRemoteAnswer and requireAutoMode', () => inTmpCwd(sent => {
+    setSettings({
+      idleSecs: 60,
+      notify: { enabled: true, events: { 'usage-limit': true }, requireAfk: true, requireRemoteAnswer: true, requireAutoMode: true }
+    });
+    setIdleSource(() => 1);
+    assert.strictEqual(sendUsageEvent(USAGE, conf({ remoteAnswer: false })), true);
+    assert.deepStrictEqual(
+      { title: sent[0].title, body: sent[0].body, topic: sent[0].topic, tags: sent[0].tags, click: sent[0].click },
+      { title: '5-hour limit reached', body: 'Resets at 14:30.', topic: 'test-topic', tags: 'no_entry', click: 'https://dash.example/?view=usage' }
+    );
+  }))) p++; else f++;
+
+  if (await testAsync('sendUsageEvent: unticked, master off or no NTFY_TOPIC sends nothing', () => inTmpCwd(sent => {
+    setSettings({ notify: { enabled: true, events: { 'usage-limit': true } } });
+    assert.strictEqual(sendUsageEvent({ ...USAGE, kind: 'usage-reset' }, conf()), false);
+    assert.strictEqual(sendUsageEvent(USAGE, conf({ ntfyTopic: '' })), false);
+    setSettings({ notify: { enabled: false } });
+    assert.strictEqual(sendUsageEvent(USAGE, conf()), false);
+    assert.strictEqual(sent.length, 0);
+  }))) p++; else f++;
+
+  if (await testAsync('usageCanSend answers the same gate without sending', () => inTmpCwd(sent => {
+    setSettings({ notify: { enabled: true, events: { 'usage-limit': true }, requireAfk: true } });
+    setIdleSource(() => 1);
+    assert.strictEqual(usageCanSend('reached', conf()), true);
+    assert.strictEqual(usageCanSend('reset', conf()), false);
+    assert.strictEqual(usageCanSend('reached', conf({ ntfyTopic: '' })), false);
+    assert.strictEqual(sent.length, 0);
+  }))) p++; else f++;
+
+  if (test('usageClickUrl is publicUrl + /?view=usage, and empty without a publicUrl', () => {
+    assert.strictEqual(usageClickUrl(conf()), 'https://dash.example/?view=usage');
+    assert.strictEqual(usageClickUrl(conf({ publicUrl: '' } as Partial<Config>)), '');
+  })) p++; else f++;
 
   if (await testAsync('sendScheduleEvent honours desk routing like a session push', () => inTmpCwd(sent => {
     setSettings({ idleSecs: 60, notify: { enabled: true, events: { 'schedule-failed': true } } });

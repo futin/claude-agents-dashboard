@@ -56,6 +56,7 @@ import { startSchedules, stopSchedules } from './lib/schedule-boot.js';
 import { createDashboardHub } from './lib/hub-widgets.js';
 import { startGitFetchTimer } from './lib/git-fetch.js';
 import { crossSiteWrite, hostAllowed } from './lib/request-guard.js';
+import { armUsageAlerts } from './lib/usage-alerts.js';
 import { startUsageRecording } from './lib/usage-history.js';
 import { refreshUsageNow, setUsageAutoRefresh } from './lib/usage.js';
 
@@ -523,7 +524,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     // /api/sessions poll only fires while a browser is open, which would make
     // the recorded history describe when the dashboard was watched rather than
     // when work happened. See docs/subsystems/usage-limits.md.
-    if (config.showUsage) startUsageRecording(refreshUsageNow);
+    if (config.showUsage) {
+      startUsageRecording(refreshUsageNow);
+      // The 5-hour limit alerts ride the recorder's ticks; arming hands them this config so they never call `loadConfig()` again.
+      armUsageAlerts(config);
+    }
 
     // The git-fetch timer idles unless the Git view is open and an interval is set (both re-read each tick), so it starts unconditionally.
     startGitFetchTimer(config);

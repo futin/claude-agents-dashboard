@@ -94,7 +94,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `POST /api/remote-answer` | flip the remote-answer toggle (gate-only write) |
 | `GET /api/dismiss` | where a tapped desk push lands — a page that closes the tab it opened in; carries no deep link |
 | `GET /api/health` | liveness + remote-answer state + connection origin and this caller's `writeAccess` + the two hook numbers (idle threshold, answer window) |
-| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, tailnet write trust, plus `notifyAvailable` (never the ntfy topic itself); the POST is a gate-only write |
+| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, tailnet write trust, plus `notifyAvailable` and `usageAvailable` (never the ntfy topic itself); the POST is a gate-only write |
 | `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; the POST is a gate-only write (see [configs](subsystems/configs.md)) |
 | `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); gate-only write, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
 | `POST /api/open-folder` | open a pinned project's folder with macOS `open` (gate-only write); path must be a listed pin's, 501 off macOS (see [git-stats](subsystems/git-stats.md)) |
@@ -219,6 +219,8 @@ server/
                   plus `joinWeeklyIntervals` (tick-to-tick pairing over the
                   weekly window), `WEEKLY_FLOORS`, `EXTERNAL_WEIGHTED_MAX_WEEKLY`
                   and the exported `poolRate`
+  lib/usage-alerts.ts  5-hour limit reached/reset pushes: pure detector + copy, and the shell the recorder calls (ledger
+                  `~/.claude/dashboard/usage-alerts.json`)
   lib/usage-boost.ts  off-peak usage-limit boost detector over those intervals: weekday
                   off-peak vs same-day peak, weekend vs pooled weekday peak (pure)
   lib/token-refresh.ts  makes the CLI renew an expired OAuth token (auth status,

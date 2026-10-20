@@ -56,13 +56,17 @@ const ANSWER_ENV = 'CLAUDE_DASHBOARD_ANSWER_TIMEOUT';
 /** Every switch off. Pushes are opt-in — nothing leaves the machine unasked. */
 export const DEFAULT_NOTIFY: NotifyPolicy = {
   enabled: false,
-  events: { question: false, stop: false, permission: false, plan: false, 'schedule-failed': false },
+  events: {
+    question: false, stop: false, permission: false, plan: false, 'schedule-failed': false, 'usage-limit': false, 'usage-reset': false
+  },
   requireRemoteAnswer: false,
   requireAfk: false,
   requireAutoMode: false
 };
 
-export const NOTIFY_EVENTS: readonly NotifyEvent[] = ['question', 'stop', 'permission', 'plan', 'schedule-failed'];
+export const NOTIFY_EVENTS: readonly NotifyEvent[] = [
+  'question', 'stop', 'permission', 'plan', 'schedule-failed', 'usage-limit', 'usage-reset'
+];
 
 /** Off by default — recording makes the server poll Anthropic unattended. */
 export const DEFAULT_RECORD_USAGE_HISTORY = false;
@@ -247,10 +251,11 @@ export function getSettings(homeDir?: string): ServerSettings {
     persisted,
     idleOverride: detectIdleOverride(homeDir),
     answerOverride: detectAnswerOverride(homeDir),
-    // Both overwritten by the API layer (`settingsBody` in api.ts, for GET and
-    // POST alike), which is where Config — and therefore NTFY_TOPIC and the .env
-    // baseline — is available. This module never reads config.
+    // All three overwritten by the API layer (`settingsBody` in api.ts, for GET and
+    // POST alike), which is where Config — and therefore NTFY_TOPIC, SHOW_USAGE and
+    // the .env baseline — is available. This module never reads config.
     notifyAvailable: false,
+    usageAvailable: false,
     staleEnvKeys: []
   };
 }

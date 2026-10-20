@@ -90,7 +90,7 @@ tap-through to prove — tapping it only dismisses.
 ## Which events need which hook
 
 An event you enable in Settings still needs something to tell the dashboard it happened.
-Three of the four ride on hooks documented elsewhere — enabling the checkbox without the
+Three of the four session events ride on hooks documented elsewhere — enabling the checkbox without the
 hook installed produces silence, not an error.
 
 | Event | Needs | Installed per |
@@ -99,6 +99,8 @@ hook installed produces silence, not an error.
 | *A plan is waiting* | `plan-remote-hook.sh` | [remote-plan](../subsystems/remote-plan.md#install) |
 | *A permission dialog opened* | `permission-notify-hook.sh` | [permission-notify](../subsystems/permission-notify.md#install-manual-user-consented) |
 | *A task finished* | `stop-notify-hook.sh` | step 5 above |
+| *5-hour limit reached* | no hook — `SHOW_USAGE` and **Record usage history** on | [push-notify](../subsystems/push-notify.md#the-usage-events-usage-limit-and-usage-reset) |
+| *5-hour limit reset* | no hook — same as above | [push-notify](../subsystems/push-notify.md#the-usage-events-usage-limit-and-usage-reset) |
 
 ⚠️ **The question and plan events carry their own away-check**, independent of the
 *Only when I'm away* switch. Both hooks run an idle check before the POST that would reach

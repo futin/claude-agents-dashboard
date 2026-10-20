@@ -39,6 +39,7 @@ import { getSettings } from './settings.js';
 import { staleEnvKeys } from './config.js';
 import type { Config } from './config.js';
 import type { NotifyEvent, NotifyPolicy, ScheduleRun } from '../../shared/types.js';
+import type { UsageAlertKind } from './usage-alerts.js';
 
 /**
  * Permission modes that count as "running unattended".
@@ -135,7 +136,9 @@ const PHRASE: Record<NotifyEvent, string> = {
   plan: 'plan waiting for review',
   permission: 'permission dialog open',
   stop: 'task finished',
-  'schedule-failed': 'scheduled job failed'
+  'schedule-failed': 'scheduled job failed',
+  'usage-limit': '5-hour limit reached',
+  'usage-reset': '5-hour limit reset'
 };
 
 const TAGS: Record<NotifyEvent, string> = {
@@ -143,7 +146,9 @@ const TAGS: Record<NotifyEvent, string> = {
   plan: 'clipboard',
   permission: 'lock',
   stop: 'white_check_mark',
-  'schedule-failed': 'warning'
+  'schedule-failed': 'warning',
+  'usage-limit': 'no_entry',
+  'usage-reset': 'arrows_counterclockwise'
 };
 
 let sender: Sender | null = null;
@@ -257,6 +262,12 @@ export function clickUrl(config: Config, sessionId: string): string {
 export function scheduleClickUrl(config: Config, runId: string): string {
   if (!config.publicUrl) return '';
   return `${config.publicUrl}/?view=schedules&run=${encodeURIComponent(runId)}`;
+}
+
+/** A usage alert's phone tap-through: the Usage view. `''` without a public URL. */
+export function usageClickUrl(config: Config): string {
+  if (!config.publicUrl) return '';
+  return `${config.publicUrl}/?view=usage`;
 }
 
 /**
@@ -426,6 +437,44 @@ export function sendScheduleEvent(event: { run: ScheduleRun; title: string; body
 
     const route = routeTo(config, scheduleClickUrl(config, event.run.id), settings.idleSecs, idle);
     const result = deliver({ title: event.title, body: event.body, tags: TAGS['schedule-failed'], click: route.click, topic: route.topic }, config);
+    void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const USAGE_EVENT: Record<UsageAlertKind, 'usage-limit' | 'usage-reset'> = { reached: 'usage-limit', reset: 'usage-reset' };
+
+/** The usage alerts' gate: topic, master switch and the event's checkbox — the session-only `require*` clauses do not apply, as for schedules. */
+function usageOpen(event: 'usage-limit' | 'usage-reset', config: Config): { idleSecs: number; idle: () => number | null } | null {
+  if (!config.ntfyTopic) return null;
+  const settings = getSettings();
+  const open = { ...settings.notify, requireRemoteAnswer: false, requireAfk: false, requireAutoMode: false };
+  const idle = (): number | null => (idleSource ?? readIdleSecs)();
+  if (!shouldNotify(event, open, { remoteAnswer: false, thresholdSecs: settings.idleSecs, readIdle: idle })) return null;
+  return { idleSecs: settings.idleSecs, idle };
+}
+
+/** Would a usage alert of this kind go out now? The detector records the answer, so a hit seen with the checkbox off never earns a reset. */
+export function usageCanSend(kind: UsageAlertKind, config: Config): boolean {
+  try {
+    return usageOpen(USAGE_EVENT[kind], config) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The usage sibling of {@link sendScheduleEvent}: same gate and desk/phone routing, the phone tapping through to the Usage view. Returns whether a push was
+ * handed to the transport, and never throws.
+ */
+export function sendUsageEvent(event: { kind: 'usage-limit' | 'usage-reset'; title: string; body: string }, config: Config): boolean {
+  try {
+    const gate = usageOpen(event.kind, config);
+    if (!gate) return false;
+    const route = routeTo(config, usageClickUrl(config), gate.idleSecs, gate.idle);
+    const result = deliver({ title: event.title, body: event.body, tags: TAGS[event.kind], click: route.click, topic: route.topic }, config);
     void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
     return true;
   } catch {
