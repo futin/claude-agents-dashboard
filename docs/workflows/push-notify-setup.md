@@ -230,6 +230,28 @@ reliable signal is the `presented` column in the Notification Center database
 (`~/Library/Group Containers/group.com.apple.usernoted/db2/db`): a notification that displayed
 has `presented=1`, one that was recorded and swallowed has `presented=0`.
 
+## Alternative: Lookout instead of ntfy.sh
+
+[Lookout](https://github.com/futin/lookout), the tailnet PWA hub (checked out beside this repo as `../lookout`), accepts the ntfy publish format and forwards
+it as native Web Push, so pushes reach the phone and the Mac without ntfy.sh or its app. Lookout's side of the setup is its
+[setup.md §5 "Push notifications (optional)"](https://github.com/futin/lookout/blob/main/docs/setup.md#5-push-notifications-optional); this page does not
+repeat it.
+
+On the dashboard's side, switching is three `.env` lines, the topics copied from Lookout → Settings → Notifications → *Receiver address*:
+
+```bash
+NTFY_SERVER=https://<lookout host>:8443/api/ntfy/<machine id>/claude-dashboard
+NTFY_TOPIC=<Lookout's Away topic>
+NTFY_TOPIC_DESK=<Lookout's Desk topic>
+```
+
+Then **restart the server**, as for any `.env` edit. `DASHBOARD_PUBLIC_URL` stays as it is: Lookout keeps only its path, so the tap opens the same session
+inside Lookout. Reverting the three lines returns to ntfy.sh. Treat Lookout's topics as the same kind of secret as an ntfy.sh topic.
+
+⚠️ **Each topic rings only the devices turned on for it in Lookout.** The desk topic reaches devices set to **Desk** (a browser on the Mac), the away topic
+devices set to **Away** (the phone). With only the phone turned on, every push routed to the desk reaches nobody: the dashboard reports it sent, and Lookout's
+*Recent* list shows it with `delivered 0`. Turn on a Desk device too, or leave `NTFY_TOPIC_DESK` out so every push routes to the phone.
+
 ## Failure modes
 
 Read the Test push result first; it distinguishes most of these.
