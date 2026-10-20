@@ -233,8 +233,9 @@ Adding one means: copy a `[data-theme=…]` block, set `color-scheme`, add the i
 `client/src/lib/settings.ts`, and add its three preview colors to `SWATCHES` in `SettingsView`.
 Nothing else.
 
-Four tokens exist purely so the light theme works: `--on-accent` (ink on a filled accent —
-the amber Send button), `--scrim` (drawer backdrop), and `--shadow` / `--shadow2` (a lift that
+Five tokens exist purely so the light theme works: `--on-accent` (ink on a filled accent —
+the amber Send button), `--on-amber` (ink on the `--amber-solid` fill of Schedules' New job: `--on-accent` on the dark boards, the ink in daylight, where
+white on that amber is 3.5:1 — `test/daylight-contrast.test.ts` holds it to 4.5:1), `--scrim` (drawer backdrop), and `--shadow` / `--shadow2` (a lift that
 reads as depth on black reads as dirt on paper). **No color or shadow may be hardcoded below the
 token block** — that is the invariant the whole theme system rests on.
 
