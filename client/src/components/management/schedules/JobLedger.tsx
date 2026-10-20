@@ -28,7 +28,7 @@ export default function JobLedger({ rows, ctl }: { rows: ScheduleJobRow[]; ctl: 
     <>
       <div className="sch-card">
         <div className="sch-ledger sch-head" aria-hidden="true">
-          <span /><span>Job</span><span>Runner</span><span>Last run</span><span>Next</span><span>On</span><span />
+          <span /><span>Job</span><span>Runner</span><span>Last run</span><span>Next</span><span>{ctl.owner ? 'On' : ''}</span><span />
         </div>
         {rows.map(row => (
           <Row
@@ -45,7 +45,7 @@ export default function JobLedger({ rows, ctl }: { rows: ScheduleJobRow[]; ctl: 
       <div className="sch-legend sch-hide">
         <span className="sch-dot ok" />last run ok <span className="sch-dot warn" />some failed <span className="sch-dot bad" />failed
         <span className="sch-dot live" />running <span className="sch-dot off" />paused
-        <span className="git-chip dim">shell</span>no tokens <span className="git-chip sch-run">claude</span>claude -p
+        <span className="git-chip dim">shell</span>no tokens <span className="git-chip sch-runner">claude</span>claude -p
       </div>
     </>
   );
@@ -63,16 +63,18 @@ function Row({ row, ctl, folded, onFold, menu, setMenu }: {
   const runnable = ctl.owner && row.onThisMachine && job !== null;
   const busy = ctl.busy === `run:${row.name}`;
   const actRef = useRef<HTMLSpanElement>(null);
+  const closeRef = useRef(setMenu);
+  closeRef.current = setMenu;
 
   // A tap outside the row's controls closes its menu or popover; Escape does too.
   useEffect(() => {
     if (!menu) return;
-    const onDown = (e: PointerEvent) => { if (!actRef.current?.contains(e.target as Node)) setMenu(null); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null); };
+    const onDown = (e: PointerEvent) => { if (!actRef.current?.contains(e.target as Node)) closeRef.current(null); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current(null); };
     document.addEventListener('pointerdown', onDown);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey); };
-  }, [menu, setMenu]);
+  }, [menu]);
 
   const cron = job ? parseCron(job.cron) : null;
   const when = cron?.ok ? describeCron(cron.cron) : job?.cron ?? row.errors[0]?.message ?? 'invalid file';
@@ -118,7 +120,7 @@ function Row({ row, ctl, folded, onFold, menu, setMenu }: {
         <div className="sch-cell sch-hide">
           {clock === null ? <span className="sch-muted">{day}</span> : <><span>{day}</span><span className="sch-muted">{clock}</span></>}
         </div>
-        <span className="sch-hide">{toggle}</span>
+        <span className="sch-hide" onClick={e => e.stopPropagation()}>{toggle}</span>
         <span className="sch-act" ref={actRef} onClick={e => e.stopPropagation()}>
           <span className="sch-hide">{runBtn}</span>
           <span className="sch-phone">{toggle}</span>

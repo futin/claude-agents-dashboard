@@ -54,15 +54,18 @@ export default function SchedulesView() {
 
   const { send, setNote } = write;
   const enc = encodeURIComponent;
-  const openSession = useCallback((id: string) => {
-    void fetch(`/api/sessions/${enc(id)}/row`)
-      .then(async res => {
-        if (res.status === 404) { setNote({ text: 'That session’s transcript is gone from disk.', tone: 'warn' }); return; }
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        setChat(await res.json() as Session);
-      })
-      .catch(() => setNote({ text: 'Could not open the session.', tone: 'warn' }));
-  }, [setNote]);
+  // The failure is shown beside the link that was clicked, not in the page note: a Runs row far down the list would put that note off screen.
+  const openSession = useCallback(async (id: string): Promise<string | null> => {
+    try {
+      const res = await fetch(`/api/sessions/${enc(id)}/row`);
+      if (res.status === 404) return 'session transcript not found';
+      if (!res.ok) return 'could not open the session';
+      setChat(await res.json() as Session);
+      return null;
+    } catch {
+      return 'could not open the session';
+    }
+  }, []);
 
   const ctl: ScheduleCtl = {
     now: new Date(),
@@ -74,7 +77,7 @@ export default function SchedulesView() {
     days,
     phone,
     pins: pins?.pinned ?? [],
-    runNow: (name, only) => { void send('Run now', `run:${name}`, 'POST', `/api/schedules/${enc(name)}/run`, only && only.length > 0 ? { only } : {}); },
+    runNow: (name, only) => { void send('Run now', `run:${name}`, 'POST', `/api/schedules/${enc(name)}/run`, only !== undefined ? { only } : {}); },
     stop: name => { void send('Stop', `run:${name}`, 'POST', `/api/schedules/${enc(name)}/stop`); },
     toggle: (name, enabled) => { void send(enabled ? 'Resume' : 'Pause', `toggle:${name}`, 'PATCH', `/api/schedules/${enc(name)}`, { enabled }); },
     openSession,
@@ -136,7 +139,7 @@ export default function SchedulesView() {
                 </button>
               ))}
             </div>
-            <div className="seg sch-sm sch-hide" role="group" aria-label="Runner">
+            <div className="seg sch-sm" role="group" aria-label="Runner">
               {([['', 'Any'], ['claude', 'claude'], ['shell', 'shell']] as const).map(([v, label]) => (
                 <button key={v} type="button" aria-pressed={filters.runner === v} className={filters.runner === v ? 'on' : ''} onClick={() => setFilters(f => ({ ...f, runner: v }))}>
                   {label}
@@ -149,10 +152,10 @@ export default function SchedulesView() {
             </select>
           </>
         )}
-        {page === 'jobs' && chip && <span className={`${chipClass(chip.tone)} sch-hide`}>{chip.text}</span>}
+        {page === 'jobs' && chip && <span className={chipClass(chip.tone)}>{chip.text}</span>}
         {page === 'jobs' && owner && (
           <span className="sch-tools">
-            <button type="button" className="sch-btn sch-hide" disabled={ctl.locked || write.busy === 'reconcile'}
+            <button type="button" className="sch-btn" disabled={ctl.locked || write.busy === 'reconcile'}
               onClick={() => { void send('Reconcile', 'reconcile', 'POST', '/api/schedules/reconcile', { apply: true }); }}>
               Reconcile
             </button>
@@ -162,7 +165,6 @@ export default function SchedulesView() {
           </span>
         )}
       </div>
-      {page === 'jobs' && chip && phone && <div><span className={chipClass(chip.tone)}>{chip.text}</span></div>}
       {lockNote && <div className="git-sync-note">{lockNote}</div>}
       {write.note && write.note.text !== lockNote && (
         <div className={write.note.tone === 'warn' ? 'git-sync-note' : 'git-quick-note'} role="status">{write.note.text}</div>

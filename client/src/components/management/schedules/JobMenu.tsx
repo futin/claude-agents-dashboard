@@ -24,7 +24,7 @@ export default function JobMenu({ row, ctl, onClose, onRunOne }: { row: Schedule
         <button type="button" role="menuitem" disabled={ctl.locked || busy} onClick={onRunOne}>Run now on one repo…</button>
       )}
       {ctl.owner && job && (
-        <button type="button" role="menuitem" disabled={ctl.locked} onClick={pick(() => ctl.toggle(row.name, !job.enabled))}>{job.enabled ? 'Pause' : 'Resume'}</button>
+        <button type="button" role="menuitem" disabled={ctl.locked || ctl.busy === `toggle:${row.name}`} onClick={pick(() => ctl.toggle(row.name, !job.enabled))}>{job.enabled ? 'Pause' : 'Resume'}</button>
       )}
       {ctl.owner && mac && <button type="button" role="menuitem" disabled={ctl.locked} onClick={pick(() => ctl.reveal(row.name))}>Reveal in Finder</button>}
       {mac && <button type="button" role="menuitem" onClick={pick(() => ctl.copyLabel(row.name))}>Copy launchd label</button>}

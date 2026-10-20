@@ -7,6 +7,7 @@ import {
 } from '../../../lib/schedules';
 import Chevron from '../../Chevron';
 import type { ScheduleCtl } from './ctl';
+import SessionLink from './SessionLink';
 
 /**
  * The Runs page (spec §UI, screen 3): every run of the window, newest first, grouped by day. A fan-out run is one row with its steps folded; a run with a
@@ -42,7 +43,7 @@ export default function RunsList({ query, rows, ctl, focusRun }: { query: Schedu
               const auto = run.id === focusRun || (isFanOut(run) && run.failed > 0);
               const open = flip[run.id] ?? auto;
               return (
-                <RunRow key={run.id} run={run} row={byName.get(run.job) ?? null} ctl={ctl} open={open} manual={flip[run.id] === true}
+                <RunRow key={run.id} run={run} row={byName.get(run.job) ?? null} ctl={ctl} open={open} manual={flip[run.id] === true || (run.id === focusRun && flip[run.id] === undefined)}
                   onFlip={() => setFlip(f => ({ ...f, [run.id]: !open }))} focusRef={run.id === focusRun ? focusRef : undefined} />
               );
             })}
@@ -72,7 +73,8 @@ function RunRow({ run, row, ctl, open, manual, onFlip, focusRef }: {
 
   return (
     <>
-      <div className={`sch-runrow${open && fan ? ' sch-folded' : ''}`} ref={focusRef}>
+      <div className={`sch-runrow${open && fan ? ' sch-folded' : ''}${fan && run.steps.length > 0 ? ' sch-foldable' : ''}`} ref={focusRef}
+        onClick={fan && run.steps.length > 0 ? onFlip : undefined}>
         <span className={`sch-dot ${dotTone(pill, true)}`} />
         <span className="sch-hide">{runClock(run)}</span>
         <span className="sch-cell">
@@ -91,11 +93,12 @@ function RunRow({ run, row, ctl, open, manual, onFlip, focusRef }: {
         <span className="sch-hide sch-muted">{trigger}</span>
         <span className="sch-links">
           {fan && run.steps.length > 0 && (
-            <button type="button" className="git-link" aria-expanded={open} onClick={onFlip}>
+            <button type="button" className="git-link" aria-expanded={open} aria-label={`${open ? 'Fold' : 'Unfold'} the steps of ${run.job}`}
+              onClick={e => { e.stopPropagation(); onFlip(); }}>
               <span className="sch-hide">fold </span><Chevron dir={open ? 'up' : 'down'} />
             </button>
           )}
-          {only?.sessionId && <button type="button" className="git-link" onClick={() => ctl.openSession(only.sessionId!)}>session →</button>}
+          {only?.sessionId && <SessionLink id={only.sessionId} ctl={ctl} />}
         </span>
       </div>
       {open && fan && shown.map(step => <StepRow key={step.index} step={step} run={run} row={row} ctl={ctl} />)}
@@ -127,7 +130,7 @@ function StepRow({ step, run, row, ctl }: { step: ScheduleStep; run: ScheduleRun
       <span className="sch-hide" />
       <span className="sch-links">
         {again && <button type="button" className="git-link" disabled={ctl.locked || ctl.busy === `run:${run.job}`} onClick={() => ctl.runNow(run.job, [step.repo!])}>run again</button>}
-        {step.sessionId && <button type="button" className="git-link" onClick={() => ctl.openSession(step.sessionId!)}>session →</button>}
+        {step.sessionId && <SessionLink id={step.sessionId} ctl={ctl} />}
       </span>
     </div>
   );

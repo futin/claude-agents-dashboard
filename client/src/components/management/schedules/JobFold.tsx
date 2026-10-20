@@ -4,6 +4,7 @@ import type { ScheduleJobRow, ScheduleRun, ScheduleStep } from '../../../../../s
 import { useScheduleRuns } from '../../../hooks/useScheduleRuns';
 import { chipClass, formatStat, medianMs, runKicker, splitSteps, stepErrLine, stepPill, successRate } from '../../../lib/schedules';
 import type { ScheduleCtl } from './ctl';
+import SessionLink from './SessionLink';
 
 const RUNS_SHOWN = 3;
 const OK_LINES = 4;
@@ -86,7 +87,7 @@ function StepLine({ step, run, row, ctl }: { step: ScheduleStep; run: ScheduleRu
         {again && (
           <button type="button" className="git-link" disabled={ctl.locked || ctl.busy === `run:${run.job}`} onClick={() => ctl.runNow(run.job, [step.repo!])}>run again</button>
         )}
-        {step.sessionId && <button type="button" className="git-link" onClick={() => ctl.openSession(step.sessionId!)}>session →</button>}
+        {step.sessionId && <SessionLink id={step.sessionId} ctl={ctl} />}
       </span>
     </div>
   );

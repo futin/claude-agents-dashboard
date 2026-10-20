@@ -5,8 +5,9 @@
 import assert from 'node:assert';
 
 import {
-  costDelta, createPollSeq, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, launchdLabel, medianMs, nameProblem, readForeach,
-  reconcileChip, rowText, runClock, dotTone, topFailure, jobPins, pinOutcome, stepErrLine, runKicker, runPill, runsQueryString, setRepos, splitNext, splitSteps, stepPill, successRate, topTokenShare, withLate, writeFailureText
+  chipClass, costDelta, createPollSeq, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, launchdLabel, medianMs, nameProblem,
+  readForeach, reconcileChip, rowText, runClock, dotTone, topFailure, jobPins, pinOutcome, stepErrLine, runKicker, runPill, runsQueryString, setRepos,
+  splitNext, splitSteps, stepPill, successRate, topTokenShare, withLate, writeFailureText
 } from '../client/src/lib/schedules.js';
 import { READ_ONLY_TEXT } from '../client/src/lib/writeRefusal.js';
 import { parseJob } from '../shared/schedule-file.js';
@@ -387,6 +388,12 @@ export function run(): number {
     assert.deepStrictEqual(reconcileChip({ owner: 'owner', reconcile: rep('in-sync'), jobs: [mkRow(), mkRow({ installed: false })] }), { text: '1 installed · in sync', tone: 'green' });
     assert.deepStrictEqual(reconcileChip({ owner: 'owner', reconcile: rep('drift', 2), jobs: [] }), { text: 'drift · 2 to apply', tone: 'amber' });
     assert.deepStrictEqual(reconcileChip({ owner: 'owner', reconcile: rep('failed'), jobs: [] }), { text: 'reconcile failed', tone: 'red' });
+  });
+
+  t('chipClass: the running tone never takes `.sch-run`, the fold row grid it once collided with', () => {
+    assert.strictEqual(chipClass('run'), 'git-chip sch-runner');
+    assert.strictEqual(chipClass('red'), 'git-chip sch-red');
+    assert.strictEqual(chipClass('green'), 'git-chip green');
   });
 
   t('dotTone: running wins over paused, paused wins over the last outcome, mustard reads lost', () => {

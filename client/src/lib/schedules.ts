@@ -541,6 +541,6 @@ export function stepErrLine(step: ScheduleStep): string | null {
 /** A pill as its chip's classes: the Git tab's four `.git-chip` tones, plus the red and running ones Schedules adds. */
 export function chipClass(tone: PillTone): string {
   if (tone === 'red') return 'git-chip sch-red';
-  if (tone === 'run') return 'git-chip sch-run';
+  if (tone === 'run') return 'git-chip sch-runner';
   return `git-chip ${tone}`;
 }

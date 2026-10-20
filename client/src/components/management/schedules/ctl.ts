@@ -21,7 +21,8 @@ export interface ScheduleCtl {
   runNow(name: string, only?: string[]): void;
   stop(name: string): void;
   toggle(name: string, enabled: boolean): void;
-  openSession(id: string): void;
+  /** Opens the session's ChatDrawer; resolves to a one-line failure (transcript gone, fetch failed) for the link to show in place, null on success. */
+  openSession(id: string): Promise<string | null>;
   edit(name: string, confirmDelete?: boolean): void;
   reveal(name: string): void;
   copyLabel(name: string): void;

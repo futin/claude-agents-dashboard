@@ -3229,8 +3229,10 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .cg-foot{display:flex;gap:6px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--hairline)}
 
 /* ── Management › Schedules (spec §UI, the Ledger mock). Phone first: `.sch-hide` is what only the wide grid has room for and `.sch-phone` is the stacked
-   stand-in for it; the two swap at lg (1024), where the 7-column ledger first fits beside the 240 rail. Both are scoped under `.sch-view` so they outrank
-   the component rules below (`.git-chip`, `.seg`) without a `!important`. Red and cyan have no tint token, so their fills are mixed here as the
+   stand-in for it; the two swap at lg (1024), where the 7-column ledger first fits beside the 240 rail. At 1024 each kind of `.sch-hide` element gets its author
+   display back by name: `revert` would drop `.sch-cell`'s flex to the UA block, and a `max-width` hide would break the min-width-only ladder
+   (test/breakpoints.test.ts). A new `.sch-hide` on an element whose own rule sets a display needs its pair added to that list. Both are scoped under
+   `.sch-view` so they outrank the component rules below (`.git-chip`, `.seg`) without a `!important`. Red and cyan have no tint token, so their fills are mixed here as the
    codegraph chip does. ── */
 .mgmt-title.sch-title{flex-direction:row;align-items:center;flex-wrap:wrap}
 .sch-view code{overflow-wrap:anywhere}
@@ -3238,7 +3240,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .seg.sch-sm>button{font-size:12px;padding:5px 10px}
 .sch-select{font-family:var(--font);font-size:12px;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;padding:4px 10px;min-width:0;max-width:100%}
 .git-chip.sch-red{color:var(--red);border-color:transparent;background:color-mix(in srgb,var(--red) 12%,transparent)}
-.git-chip.sch-run{color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+.git-chip.sch-runner{color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
 .git-chip.sch-mach{font-size:11px;padding:0 7px}
 .git-chip.sch-here{color:var(--ink);border-color:var(--ink3)}
 .sch-btn{font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;padding:6px 14px;cursor:pointer;white-space:nowrap}
@@ -3315,6 +3317,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .sch-runrow.sch-head{display:none;border-top:0;color:var(--ink3);font-size:12px}
 .sch-day+.sch-runrow{border-top:0}
 .sch-runrow.sch-folded{background:var(--strip-hi)}
+.sch-runrow.sch-foldable{cursor:pointer}
 .sch-step{padding-left:14px}
 .sch-runrow .chev{width:10px;height:10px;vertical-align:middle}
 
@@ -3372,16 +3375,16 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
   .sch-drawer{width:640px;max-width:100%;height:auto;max-height:100%;padding:20px;border:1px solid var(--hairline2);border-radius:16px;box-shadow:0 16px 40px var(--shadow2)}
 }
 @media (min-width:1024px){
-  .sch-view .sch-hide{display:revert}
+  .sch-view .sch-hide{display:inline}
+  .sch-view div.sch-hide{display:block}
   .sch-view .git-chip.sch-hide{display:inline-block}
-  .sch-view .seg.sch-hide{display:inline-flex}
-  .sch-view .sch-bars.sch-hide,.sch-view .sch-legend.sch-hide{display:flex}
+  .sch-view .sch-cell.sch-hide,.sch-view .sch-bars.sch-hide,.sch-view .sch-legend.sch-hide{display:flex}
   .sch-view .sch-phone{display:none}
-  .sch-ledger{grid-template-columns:20px minmax(120px,1.4fr) 64px 140px 96px 40px auto;gap:10px 12px;padding:14px 20px}
+  .sch-ledger{grid-template-columns:20px minmax(120px,1.4fr) 64px 140px 96px 40px 112px;gap:10px 12px;padding:14px 20px}
   .sch-ledger.sch-head{display:grid;padding:12px 20px}
   .sch-runs{padding:12px 20px 14px 52px}
-  .sch-run{grid-template-columns:minmax(120px,1fr) 60px 96px 56px 56px auto;gap:8px 12px}
+  .sch-run{grid-template-columns:minmax(120px,1fr) 60px 96px 56px 56px 136px;gap:8px 12px}
   .sch-day{padding:10px 20px 4px}
-  .sch-runrow{grid-template-columns:20px 56px minmax(120px,1.2fr) 120px 64px 56px 64px auto;gap:8px 12px;padding:11px 20px}
+  .sch-runrow{grid-template-columns:20px 56px minmax(120px,1.2fr) 120px 64px 56px 64px 136px;gap:8px 12px;padding:11px 20px}
   .sch-runrow.sch-head{display:grid}
 }
