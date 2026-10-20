@@ -44,6 +44,7 @@ import fs from 'node:fs';
 
 import { readAgents } from './agents.js';
 import { addTotals, emptyTotals, readSubagentUsage } from './subagent-usage.js';
+import { isConversationRecord } from './transcript.js';
 import type {
   AgentJob, ErrorSignals, SessionAnalysis, SubagentTotals, ToolStat
 } from '../../shared/types.js';
@@ -166,6 +167,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
     // The summary quotes the user's earlier messages, so it must not reach the correction heuristic below.
     if (rec.isCompactSummary === true) continue;
 
+    if (!isConversationRecord(rec)) continue;
     const msg = rec.message;
     if (!msg) continue;
     const content = msg.content;

@@ -26,7 +26,7 @@
 import fs from 'node:fs';
 
 import { unwrapRemoteMessage } from './remote-message-prose.js';
-import { describeTool } from './transcript.js';
+import { describeTool, isConversationRecord } from './transcript.js';
 import type { ChatMessage, ChatToolCall, SessionChat } from '../../shared/types.js';
 
 /** Messages per page (tail and each older page). */
@@ -103,7 +103,8 @@ function toolBody(b: any): string | null {
  * Pure — the unit-tested core.
  *
  * Dropped: records with no user/assistant `message.role` (`last-prompt`,
- * `custom-title`, `queue-operation`, `attachment`, `system`), sidechain records
+ * `custom-title`, `queue-operation`, `attachment`, `system`), `api-request-blob`
+ * replays of turns already recorded (`isConversationRecord`), sidechain records
  * (subagent traffic — SessionDetail already summarizes it), meta records, and
  * anything left empty after filtering (a user record holding only tool_results,
  * an assistant record holding only thinking).
@@ -111,6 +112,7 @@ function toolBody(b: any): string | null {
 export function parseChatRecord(rec: any, caps: ChatCaps = DEFAULT_CAPS): ChatMessage | null {
   if (!rec || typeof rec !== 'object') return null;
   if (rec.isSidechain === true) return null;
+  if (!isConversationRecord(rec)) return null;
 
   const m = rec.message;
   if (!m || typeof m !== 'object') return null;
