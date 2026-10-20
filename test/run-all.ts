@@ -156,6 +156,7 @@ import { run as runScheduleReconcile } from './schedule-reconcile.test.js';
 import { run as runScheduleRun } from './schedule-run.test.js';
 import { run as runScheduleBoot } from './schedule-boot.test.js';
 import { run as runApiSchedules } from './api-schedules.test.js';
+import { run as runSchedulesView } from './schedules-view.test.js';
 import { run as runSyncPlugin } from './sync-plugin.test.js';
 
 let failed = 0;
@@ -315,6 +316,7 @@ failed += await runScheduleReconcile();
 failed += await runScheduleRun();
 failed += await runScheduleBoot();
 failed += await runApiSchedules();
+failed += runSchedulesView();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

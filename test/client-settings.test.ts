@@ -115,6 +115,20 @@ export function run(): number {
     assert.strictEqual(clampSettings({ managementTab: 'git' }).managementTab, 'git');
   })) p++; else f++;
 
+  if (test('schedules is a Management sub-view and round-trips through clampSettings', () => {
+    assert.strictEqual(clampSettings({ managementTab: 'schedules' }).managementTab, 'schedules');
+    assert.strictEqual(clampSettings(clampSettings({ managementTab: 'schedules' })).managementTab, 'schedules');
+  })) p++; else f++;
+
+  if (test('the Schedules window defaults to 30 and accepts only 7, 30 and 90', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.scheduleWindow, 30);
+    assert.strictEqual(clampSettings({}).scheduleWindow, 30);
+    for (const w of [7, 30, 90]) assert.strictEqual(clampSettings({ scheduleWindow: w }).scheduleWindow, w);
+    for (const bad of [14, 0, -7, 7.5, '7', '90', null, undefined, NaN, {}]) {
+      assert.strictEqual(clampSettings({ scheduleWindow: bad }).scheduleWindow, 30, `${String(bad)} reads as the default`);
+    }
+  })) p++; else f++;
+
   // The shape the sessions list opens in. It used to live in the persisted
   // `dashboard.view`, which made the toolbar's choice sticky forever; it is a
   // setting now, with a `last` sentinel that opts back into the switcher's own
@@ -393,3 +407,5 @@ export function run(): number {
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }
+
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(run() > 0 ? 1 : 0);
