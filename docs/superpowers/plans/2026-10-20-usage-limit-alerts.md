@@ -58,6 +58,7 @@ Write the bodies yourself, and disagree with the plan where the code proves it w
 - Modify: `server/lib/settings.ts:59,65` (`DEFAULT_NOTIFY.events`, `NOTIFY_EVENTS`)
 - Modify: `server/lib/notify.ts:133-147` (`PHRASE`, `TAGS`)
 - Modify: `server/api.ts:621-629` (`settingsBody`)
+- Modify: `test/visual/fixtures/settings.ts:4-20` (its settings literal gains `usageAvailable`)
 - Test: `test/settings.test.ts`, `test/api-settings.test.ts`
 
 **Interfaces:**
@@ -100,6 +101,8 @@ Write the bodies yourself, and disagree with the plan where the code proves it w
     Global Constraints copy, times in the process's local zone.
 
 **Rules `decideUsageAlert` implements** (from the spec; each is a test below):
+Order: not-a-reading, then account switch, then the late-reading guard, then the hit/reset rules. Every judged reading of the record's account sets
+`lastSeenT = reading.t`, whether or not it changes anything else.
 - Not a reading (`!ok`, `utilization === null`, `account === ''`) → ledger unchanged, no push.
 - `reading.t < record.lastSeenT` → ignored (late reading from an abandoned fetch cycle).
 - Account switch: any record keyed by an account other than `reading.account` is deleted (its pending reset dropped, never sent), then the reading is
@@ -112,29 +115,32 @@ Write the bodies yourself, and disagree with the plan where the code proves it w
 - `utilization < 100` with a record whose hit was not pushed → the record is retired (`resetSent = true`) once the reset condition holds, no push.
 - A reset needs the drop below 100: a changed stamp at 100 is a new hit, never a reset.
 
-- [ ] **Step 1: Write the failing tests** (one `test()` each, readings at `t` minutes apart, account `a@x`, stamp `S = '2026-10-20T15:00:00.123Z'`):
+- [ ] **Step 1: Write the failing tests** (one `test()` each, account `a@x`, stamp `S = '2026-10-20T15:00:00.123Z'`; unless a case gives `t`, the hit is
+  at `t = S − 4 h` and each later reading one minute after the one before — so every follow-up stays before `S` and well inside `RESET_STALE_MS`):
   - `99% never alerts` — 99 then 99.9 → no push, ledger empty.
   - `first 100 pushes reached` — 100 → `'reached'`; record `stamp === S`, `pushed`.
   - `jitter keeps one window` — 100 at `S`, then 100 at `S` + 400 ms, then 100 at `S` − 850 ms → only the first pushes.
-  - `reset by new window` — hit at `S`; then 60 at `S` + 5 h → `'reset'`; then 70 at `S` + 5 h → nothing.
-  - `reset by time` — hit at `S`; then 40 at stamp `S` (same window) with `t` after `S` → `'reset'`.
-  - `drop before the stamp is not a reset` — hit at `S`; 95 at `S` with `t` before `S` → nothing (utilization should not fall inside a window; treat as noise).
+  - `reset by new window` — hit at `S`; then 60 at stamp `S` + 5 h, `t = S + 1 min` → `'reset'`; then 70 at `S` + 5 h, `t = S + 2 min` → nothing.
+  - `reset by time` — hit at `S`; then 40 at stamp `S` (same window), `t = S + 1 min` → `'reset'`.
+  - `drop before the stamp is not a reset` — hit at `S`; 95 at `S`, `t = S − 1 min` → nothing (utilization should not fall inside a
+    window; treat as noise).
   - `changed stamp at 100 is a new hit, not a reset` — hit at `S`; 100 at `S` + 5 h → `'reached'`, never `'reset'`; old pending reset gone.
   - `unscoped hit then unscoped drop resets` — 100 at null; 30 at null → `'reset'`.
   - `unscoped hit then scoped 100 is a new hit` — 100 at null; 100 at `S` → `'reached'`.
   - `no-reading in between changes nothing` — hit; `{ok:false}`; `{utilization:null}`; `{account:''}`; then 100 again → only the first pushes.
   - `hit seen while off is recorded, not pushed` — 100 with `canSend.reached = false` → no push, record `pushed: false`; 100 again with `canSend` all true →
-    nothing; 20 after `S` → nothing.
+    nothing; 20 at `S`, `t = S + 1 min` → nothing.
   - `reset push needs the reset checkbox` — hit pushed; drop with `canSend.reset = false` → no push, `resetSent: true`.
   - `account switch deletes the pending record` — hit as `a@x`; 10 as `b@x` → no push, no `a@x` record; 10 as `a@x` later → nothing.
-  - `stale reset is retired silently` — hit at `S`; drop at `S` + 61 min (same stamp) → no push, `resetSent: true`.
+  - `stale reset is retired silently` — hit at `S`; drop at stamp `S`, `t = S + 61 min` → no push, `resetSent: true`.
   - `late reading is ignored` — hit at `t = 10`; reading 20 at `t = 5` → nothing.
-  - `copy` — `usageAlertCopy('reached', { resetsAt: <today 14:30 local>, extraUsage: false })` → body `Resets at 14:30.`; another day → `Resets <Ddd> at HH:MM.`;
-    null → `No reset time reported.`; `extraUsage: true` appends ` Extra usage is on: you are now billed.`; `'reset'` bodies both ways; titles exact.
+  - `copy` — fixed `now` = local 2026-10-20 10:00 (`new Date(2026, 9, 20, 10).getTime()`); `usageAlertCopy('reached', { resetsAt: <local 2026-10-20
+    14:30 as ISO>, extraUsage: false, now })` → body `Resets at 14:30.`; local 2026-10-21 09:10 → `Resets Wed at 09:10.`; null → `No reset time reported.`;
+    `extraUsage: true` appends ` Extra usage is on: you are now billed.`; `'reset'` bodies both ways; titles exact.
 - [ ] **Step 2: Run `usage-alerts` — expect FAIL** (module missing).
 - [ ] **Step 3: Implement** `server/lib/usage-alerts.ts` (pure part only; no `fs`, no notify import).
-- [ ] **Step 4: Run `usage-alerts` — expect PASS.** Mutation-prove the guard: temporarily make a reset fire without `pushed` and confirm `hit seen while off`
-  fails; revert.
+- [ ] **Step 4: Run `usage-alerts` — expect PASS.** Mutation-prove both guards: (a) let a reset fire without `pushed` → `hit seen while off` fails; (b) let a
+  reset fire with no record → `99% never alerts` fails; revert each.
 - [ ] **Step 5: Commit** `feat(usage): pure detector for 5-hour limit alerts`.
 
 ### Task 3: Ledger I/O, send path and wiring
@@ -152,11 +158,15 @@ Write the bodies yourself, and disagree with the plan where the code proves it w
   - `notify.ts`: `usageClickUrl(config: Config): string` → `${publicUrl}/?view=usage`, `''` without a public URL.
     `sendUsageEvent(event: { kind: 'usage-limit' | 'usage-reset'; title: string; body: string }, config: Config): boolean` — mirrors `sendScheduleEvent`:
     needs `config.ntfyTopic`, master switch and the event's checkbox (`shouldNotify` with the three `require*` zeroed), routes with `routeTo` and
-    `usageClickUrl`, fire-and-forget, never throws, returns whether a push was handed to the transport. Also export `usageCanSend(kind): boolean` (same gate
+    `usageClickUrl`, fire-and-forget, never throws, returns whether a push was handed to the transport. Also export
+    `usageCanSend(kind: UsageAlertKind): boolean` (same gate
     without sending) so the detector can record `pushed` truthfully.
   - `usage-alerts.ts`: `armUsageAlerts(config: Config | null): void` (null disarms; tests use it), `setUsageAlertsFile(file: string | null): void` (test
     seam; default `~/.claude/dashboard/usage-alerts.json`, fixed under the home dir, deliberately not under `SCHEDULES_STATE_ROOT`),
-    `onUsageReading(limits: UsageLimits | null, status: UsageStatus, now?: number): void` — never throws.
+    `resetUsageAlertsMemory(): void` (test seam: drops the in-memory ledger, simulating a restart), `setUsageAlertsHome(dir: string | null): void` (test
+    seam passed to `readAccountProfile(homeDir)`; tests call `clearAccountCache()` between cases),
+    `onUsageReading(limits: UsageLimits | null, now?: number): void` — never throws. `ok` is `limits !== null` (no `status` is in scope at the call
+    site; `refreshNow` derives it later, `usage.ts:379`).
 
 **`onUsageReading` behaviour:** returns at once unless armed and `config.showUsage` and `getSettings().recordUsageHistory`. Reads the profile (null or empty
 email → return). Re-reads the ledger file (missing or corrupt → empty ledger), calls `decideUsageAlert` with `canSend` from `usageCanSend`, writes the new
@@ -164,18 +174,21 @@ ledger (tmp + `renameSync`, `mkdirSync` recursive), then — only after the writ
 ledger in process memory (used as the base when the file cannot be read) and still sends.
 
 - [ ] **Step 1: Write the failing tests** (tmpdir ledger via `setUsageAlertsFile`, `setSender` capturing payloads, `setSettings` for recording/notify,
-  `armUsageAlerts` with a config literal; `readAccountProfile` pointed at a fixture home or stubbed through a seam you add):
+  `armUsageAlerts` with a config literal; a fixture home via `setUsageAlertsHome`):
   - `unarmed sends nothing` / `recording off sends nothing` / `showUsage off sends nothing`.
   - `hit sends one reached push to the phone with ?view=usage` — payload title `5-hour limit reached`, `click` ends `/?view=usage`, `tags` `no_entry`.
-  - `restart at 100% sends nothing` — after a hit, re-arm (fresh module state, same file) and feed 100 again → no payload.
-  - `second process finds the claim` — two in-memory states sharing one file: the second sees the claim → one payload total.
+  - `restart at 100% sends nothing` — after a hit, `resetUsageAlertsMemory()`, re-arm, feed 100 again → no payload. Mirror: same, but delete the ledger
+    file before the re-feed → a second payload (proves the file, not memory, stopped the repeat).
+  - `second process finds the claim` — after a hit, `resetUsageAlertsMemory()` (the other process's view), feed 100 → one payload total.
+  - `null fetch changes nothing` — after a hit, `onUsageReading(null)`, then 100 again → no further payload.
   - `write failure still sends` — ledger path inside a read-only dir → payload sent, no throw.
   - `checkbox off at hit, on later` — no payload at the hit, none at the drop.
   - `notify.test.ts`: `usageClickUrl` with and without a public URL; `sendUsageEvent` ignores `requireAfk`/`requireRemoteAnswer`/`requireAutoMode`; returns
     `false` with no topic.
 - [ ] **Step 2: Run `usage-alerts` and `notify` — expect FAIL.**
-- [ ] **Step 3: Implement.** In `usage.ts`, call `onUsageReading(limits, status)` inside the existing `recordUsageHistory` branch, inside its `try`, after
-  `recordTick` — it must not disturb the recorder on failure. In `index.ts`, `armUsageAlerts(config)` beside `startUsageRecording` under the same
+- [ ] **Step 3: Implement.** In `usage.ts`, call `onUsageReading(limits)` inside the existing `recordUsageHistory` branch, inside its `try`, after the
+  inner `if (limits && …utilization != null)` block that holds `recordTick` (not inside it) — it must not disturb the recorder on failure.
+  In `index.ts`, `armUsageAlerts(config)` beside `startUsageRecording` under the same
   `config.showUsage` condition. Never a second `loadConfig()`.
 - [ ] **Step 4: Run `usage-alerts`, `notify`, `usage`, `outbound`, `server-deps` — expect PASS; `pnpm typecheck` clean.**
 - [ ] **Step 5: Commit** `feat(usage): send 5-hour limit alerts through the ntfy path`.
@@ -183,9 +196,9 @@ ledger in process memory (used as the base when the file cannot be read) and sti
 ### Task 4: Client — Settings rows and `?view=usage`
 
 **Files:**
-- Modify: `client/src/lib/deepLink.ts:31-42` (+ the prose at `:2`, `:13-17`, `:59` that lists the views)
+- Modify: `client/src/lib/deepLink.ts:31-42` (+ the prose at `:2`, `:13-17`, `:59`, `:117`, `:127` that lists the views)
 - Modify: `client/src/App.tsx:50-56` (initial-section mapping, + the comment at `:45-46`)
-- Modify: `client/src/components/settings/SettingsView.tsx:39-46, 220-230`
+- Modify: `client/src/components/settings/SettingsView.tsx:39-46, 220-230` (incl. the "five push events" comment at `:39`)
 - Create: a pure helper in `client/src/lib/notifyRows.ts` (or beside an existing settings helper if one fits)
 - Test: `test/deep-link.test.ts`; Create `test/notify-rows.test.ts`, registered in `test/run-all.ts`
 
@@ -197,8 +210,9 @@ ledger in process memory (used as the base when the file cannot be read) and sti
 - [ ] **Step 1: Write the failing tests**
   - `deep-link.test.ts`: `reads view=usage` → `'usage'`.
   - `notify-rows.test.ts`: non-usage keys → `{ disabled: !notifyAvailable, note: null }`; usage key with recording off → disabled, recording note;
-    `usageAvailable: false` → disabled, `SHOW_USAGE` note; both off → the `SHOW_USAGE` note wins; only push unconfigured → disabled, `note: null`; all on →
-    enabled, `note: null`.
+    `usageAvailable: false` → disabled, `SHOW_USAGE` note; both off → the `SHOW_USAGE` note wins; only push unconfigured → disabled, `note: null`; push
+    unconfigured and recording off → disabled, `note: null` (the recording note shows only with push configured); push unconfigured and `usageAvailable:
+    false` → disabled, `SHOW_USAGE` note; all on → enabled, `note: null`. Precedence: `SHOW_USAGE` note > recording note (push configured only) > none.
 - [ ] **Step 2: Run `deep-link` and `notify-rows` — expect FAIL.**
 - [ ] **Step 3: Implement.** `App.tsx`: `view === 'usage'` → section `'usage'`. Two rows after *Scheduled job failed* with the Global Constraints copy; a
   row's `hint` is `note ?? row.hint`, `disabled` from the helper.
@@ -212,7 +226,8 @@ ledger in process memory (used as the base when the file cannot be read) and sti
 - Modify: `docs/subsystems/push-notify.md` (new section after *The fifth event: `schedule-failed`*; update "fifth member" counting prose)
 - Modify: `docs/workflows/push-notify-setup.md` (*Which events need which hook* table: two rows, needs **Record usage history**, no hook)
 - Modify: `docs/subsystems/usage-limits.md` (the recorder now also feeds the alert detector; ledger path)
-- Modify: `docs/overview.md` only if it lists `server/lib/*` files one per line (add `usage-alerts.ts`)
+- Modify: `docs/overview.md` — add `usage-alerts.ts` to the `server/lib/*` list (`:207-239`) and `usageAvailable` beside `notifyAvailable` in the
+  `/api/settings` row (`:97`)
 
 - [ ] **Step 1:** Write the sections — behaviour in user terms, the ledger path, the "recorded not pushed" rule, the staleness cut-off, the two gates.
 - [ ] **Step 2:** Run `docs-links` — expect PASS.
