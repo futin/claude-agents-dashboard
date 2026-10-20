@@ -16,14 +16,37 @@ import { EFFORTS, MODELS } from '../client/src/lib/spawnOptions.js';
 
 const CLIENT_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'client', 'src');
 
-/** Every `usePersistedState` key the client actually writes, read off the source. */
-function persistedKeys(dir: string, found = new Set<string>()): Set<string> {
+/** Every `.ts`/`.tsx` file under `dir`, with its source. */
+function sources(dir: string, found: [string, string][] = []): [string, string][] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, e.name);
-    if (e.isDirectory()) { persistedKeys(path, found); continue; }
-    if (!/\.tsx?$/.test(e.name)) continue;
-    const src = readFileSync(path, 'utf8');
+    if (e.isDirectory()) { sources(path, found); continue; }
+    if (/\.tsx?$/.test(e.name)) found.push([path, readFileSync(path, 'utf8')]);
+  }
+  return found;
+}
+
+/**
+ * Every localStorage key the client actually writes, read off the source: each `usePersistedState('<key>'`, plus each key written around it — the
+ * first argument of a raw `localStorage.setItem(`, and the `storageKey:` handed to a ui-kit hook such as `useWhatsNew`, which writes that key itself.
+ * Those two take a literal or a constant; a constant resolves against a `const <IDENT> = '<key>'` in the same file, else an `export const` in any.
+ * One that resolves nowhere is skipped: that is `usePersistedState.ts`'s own `setItem(key, …)`, the generic writer, not a key.
+ */
+function persistedKeys(dir: string): Set<string> {
+  const files = sources(dir);
+  const CONST = /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*'([^']+)'/g;
+  const exported = new Map<string, string>();
+  for (const [, src] of files) {
+    for (const m of src.matchAll(/\bexport\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*'([^']+)'/g)) exported.set(m[1], m[2]);
+  }
+  const found = new Set<string>();
+  for (const [, src] of files) {
     for (const m of src.matchAll(/usePersistedState\s*(?:<[^>]*>)?\s*\(\s*'([^']+)'/g)) found.add(m[1]);
+    const local = new Map([...src.matchAll(CONST)].map(m => [m[1], m[2]] as [string, string]));
+    for (const m of src.matchAll(/(?:localStorage\.setItem\s*\(|\bstorageKey\s*:)\s*(?:'([^']+)'|([A-Za-z_$][\w$]*))/g)) {
+      const key = m[1] ?? local.get(m[2]) ?? exported.get(m[2]);
+      if (key) found.add(key);
+    }
   }
   return found;
 }
@@ -401,7 +424,7 @@ export function run(): number {
     // component fails this test instead of quietly surviving Reset — which is
     // how `dashboard.layout` and then `management.type` each got missed.
     const keys = persistedKeys(CLIENT_SRC);
-    assert.ok(keys.has('dashboard.layout') && keys.has('configs.type'), 'the scan found the keys');
+    assert.ok(keys.has('dashboard.layout') && keys.has('configs.type') && keys.has('dashboard.releases.lastSeen'), 'the scan found the keys');
     // The settings blob is reset by writing the defaults, not by removal; the
     // answer token is a credential and Reset is not a sign-out. The Git Sync runs are live state, not a
     // preference: forgetting one would let a second sync start on a repo still syncing, and an ended run prunes itself.
