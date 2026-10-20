@@ -386,6 +386,21 @@ export function run(): number {
     assert.strictEqual(sent.length, 1);
   })) p++; else f++;
 
+  if (shell('shell: an unwritable ledger dir (no file ever lands) still stops the repeat', ({ sent, dir }) => {
+    const ro = path.join(dir, 'ro');
+    fs.mkdirSync(ro);
+    fs.chmodSync(ro, 0o555);
+    try {
+      setUsageAlertsFile(path.join(ro, 'sub', 'usage-alerts.json'));
+      onUsageReading(limits(100), T);
+      onUsageReading(limits(100), T + MIN);
+      onUsageReading(limits(100), T + 2 * MIN);
+      assert.strictEqual(sent.length, 1);
+    } finally {
+      fs.chmodSync(ro, 0o755);
+    }
+  })) p++; else f++;
+
   if (shell('shell: checkbox off at the hit, on later — nothing at the hit, nothing at the drop', ({ sent }) => {
     setSettings({ notify: { events: { 'usage-limit': false } } });
     onUsageReading(limits(100), T);

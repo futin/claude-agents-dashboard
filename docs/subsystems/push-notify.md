@@ -281,7 +281,9 @@ through the same master switch, per-event checkbox, desk/phone routing and trans
 - **One push per window, machine-wide.** A window is identified by its `resetsAt` (120 s of jitter allowed, `sameWindow`), and the claim lives in
   `~/.claude/dashboard/usage-alerts.json` — under the home directory, not the checkout, so a prod and a dev dashboard recording side by side find each
   other's claim and a restart does not re-push. It is written (tmp + rename) before the push goes out, and only once a window has been hit. Two processes
-  reading the file in the same second can still both send: there is no lock.
+  reading the file in the same second can still both send: there is no lock. The flip side: a second recording dashboard with no topic (a worktree's
+  dev server without `.env`) records the hit unpushed and so blocks the other one's push for that window. Record usage history on one dashboard only. If
+  the write fails (unwritable directory, full disk) the process keeps the claim in memory, so it still pushes once per window until it restarts.
 - **Recorded, not pushed.** A hit seen while the checkbox (or the master switch, or the topic) is off is still recorded, with `pushed: false`. Turning the
   checkbox on mid-window then sends neither *reached* nor, later, *reset*: a reset only ever follows a reached that actually went out.
 - **Stale resets are retired silently.** A reset first noticed more than 60 minutes after it happened (server down, recording off) is marked done without a

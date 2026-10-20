@@ -131,6 +131,8 @@ let fileOverride: string | null = null;
 let homeOverride: string | null = null;
 /** The last ledger this process decided on: the base when the file cannot be read, so a failed write still stops a repeat. */
 let memory: UsageAlertLedger | null = null;
+/** The last write failed: a missing file then means "never landed", not "deleted by hand", so memory stays the base. */
+let writeFailed = false;
 
 /** Called once from `server/index.ts` with the startup config, beside `startUsageRecording`; `null` disarms. */
 export function armUsageAlerts(config: Config | null): void {
@@ -150,6 +152,7 @@ export function setUsageAlertsHome(dir: string | null): void {
 /** Test seam: forget the in-memory ledger, as a restart (or a second process) would. */
 export function resetUsageAlertsMemory(): void {
   memory = null;
+  writeFailed = false;
 }
 
 /**
@@ -165,7 +168,7 @@ function readLedger(): UsageAlertLedger {
   try {
     raw = fs.readFileSync(ledgerFile(), 'utf8');
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { windows: {} };
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT' && !writeFailed) return { windows: {} };
     return memory ?? { windows: {} };
   }
   try {
@@ -216,7 +219,7 @@ export function onUsageReading(limits: UsageLimits | null, now: number = Date.no
     memory = ledger;
     // Claim before send; a failed write keeps the claim in memory and still sends. Unchanged (no hit on record) → no write, so the file appears
     // only once a window has been hit.
-    if (JSON.stringify(ledger) !== JSON.stringify(before)) writeLedger(ledger);
+    if (JSON.stringify(ledger) !== JSON.stringify(before)) writeFailed = !writeLedger(ledger);
     if (!push) return;
 
     const copy = usageAlertCopy(push, { resetsAt: reading.resetsAt, extraUsage: profile.extraUsage, now });
