@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert';
 
-import { foreachLine, formatStat, groupRunsByDay, readForeach, rowText, runsQueryString } from '../client/src/lib/schedules.js';
+import { createPollSeq, foreachLine, formatStat, groupRunsByDay, readForeach, rowText, runsQueryString } from '../client/src/lib/schedules.js';
 import type { ScheduleJob, ScheduleJobRow, ScheduleRun, ScheduleStep } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -192,6 +192,39 @@ export function run(): number {
     assert.deepStrictEqual(readForeach('foreach: pinned\nno frontmatter'), { mode: 'cwd', picks: [] });
     assert.deepStrictEqual(readForeach(''), { mode: 'cwd', picks: [] });
     assert.deepStrictEqual(readForeach('---\nforeach: garbage\n---\nx'), { mode: 'cwd', picks: [] }, 'neither pinned nor a list: the validator reports it, the helper stays out');
+  });
+
+  t('createPollSeq: a tick is skipped while a fetch is out, and goes again once the newest has settled', () => {
+    const q = createPollSeq();
+    const a = q.next(false);
+    assert.strictEqual(a, 1);
+    assert.strictEqual(q.next(false), null, 'a timed tick does not pile on a slow fold');
+    assert.strictEqual(q.settle(a as number), true);
+    assert.strictEqual(q.next(false), 2);
+  });
+
+  t('createPollSeq: refresh supersedes a fetch in flight, and the older answer arriving late is not applied', () => {
+    const q = createPollSeq();
+    const slow = q.next(false) as number;
+    const fast = q.next(true) as number;
+    assert.strictEqual(fast, slow + 1, 'a forced poll goes even while one is out');
+    assert.strictEqual(q.settle(fast), true, 'the newer answer lands first');
+    assert.strictEqual(q.settle(slow), false, 'the older fold resolving after it is stale');
+    assert.strictEqual(q.next(false), fast + 1, 'and the gate is open');
+  });
+
+  t('createPollSeq: a superseded answer arriving first does not open the gate or get applied', () => {
+    const q = createPollSeq();
+    const slow = q.next(false) as number;
+    const fast = q.next(true) as number;
+    assert.strictEqual(q.settle(slow), false);
+    assert.strictEqual(q.next(false), null, 'the newest fetch is still out');
+    assert.strictEqual(q.settle(fast), true);
+  });
+
+  t('formatStat: just under a million tokens promotes to M instead of reading 1000k', () => {
+    assert.strictEqual(formatStat(999_500, 'tokens'), '1M');
+    assert.strictEqual(formatStat(999_400, 'tokens'), '999k');
   });
 
   t('runsQueryString: days always, filters only when set', () => {

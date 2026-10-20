@@ -28,6 +28,29 @@ export function runsQueryString(q: ScheduleRunsQuery): string {
   return `?${params.toString()}`;
 }
 
+/**
+ * The poll hooks' ordering rule, apart from React. A timed or visibility tick (`next(false)`) is skipped while a fetch is out, so a slow 90-day fold is not
+ * piled on; `refresh()` (`next(true)`) always goes, because its caller just changed something the fetch in flight may predate. Each fetch carries the number
+ * `next` gave it, and `settle` says whether its answer is still the newest issued: only then may the hook apply it, so an older fold resolving late can never
+ * overwrite a newer one. A superseded fetch settles as stale and leaves the in-flight flag to the newest.
+ */
+export function createPollSeq(): { next(force: boolean): number | null; settle(seq: number): boolean } {
+  let issued = 0;
+  let inFlight = false;
+  return {
+    next(force) {
+      if (inFlight && !force) return null;
+      inFlight = true;
+      return ++issued;
+    },
+    settle(seq) {
+      if (seq !== issued) return false;
+      inFlight = false;
+      return true;
+    }
+  };
+}
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -161,7 +184,7 @@ export function formatStat(n: number, kind: 'usd' | 'tokens' | 'ms' | 'pct'): st
   if (kind === 'usd') return `$${n.toFixed(2)}`;
   if (kind === 'pct') return `${Math.round(n * 100)}%`;
   if (kind === 'tokens') {
-    if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M`;
+    if (n >= 999_500) return `${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M`;
     if (n >= 1e5) return `${Math.round(n / 1e3)}k`;
     if (n >= 1e3) return `${(n / 1e3).toFixed(1).replace(/\.0$/, '')}k`;
     return String(Math.round(n));
