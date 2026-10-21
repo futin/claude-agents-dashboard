@@ -897,6 +897,11 @@ export interface ChatToolCall {
    */
   body?: string;
   bodyTruncated?: boolean;
+  /**
+   * The Desktop app's recommended next-step reply, on a `mcp__ccd_turn__wrap_up` line only: its first button's `message` (or `label` when the label is
+   * the whole message). Absent when that first button is an app action — the composer offers it on Tab (`client/src/lib/composer.ts`).
+   */
+  suggestion?: string;
 }
 
 /** One conversational turn in the chat tail. Noise records are dropped upstream. */

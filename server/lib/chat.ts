@@ -70,6 +70,23 @@ const SYSTEM_REMINDER_RE = /<system-reminder>[\s\S]*?<\/system-reminder>/g;
 /** A page, minus the `id` the API handler owns. */
 export type ChatPage = Omit<SessionChat, 'id'>;
 
+/** The Desktop app's end-of-turn tool; its `actions` are the next-step buttons. */
+const WRAP_UP_TOOL = 'mcp__ccd_turn__wrap_up';
+/** A button's text is ≤300 chars by the tool's own schema; this only bounds a malformed one. */
+const SUGGESTION_CAP = 1000;
+
+/**
+ * The reply a wrap_up recommends: `actions[0]`, the primary button, and only when it is a reply. An app action (`action: 'commit'` …) has no text to
+ * send, and falling through to the next button would offer the alternative — typically "Not now" — as the recommendation.
+ */
+function wrapUpSuggestion(b: any): string | null {
+  if (b.name !== WRAP_UP_TOOL) return null;
+  const first = b.input && Array.isArray(b.input.actions) ? b.input.actions[0] : null;
+  if (!first || typeof first !== 'object' || first.action) return null;
+  const text = typeof first.message === 'string' && first.message.trim() ? first.message : first.label;
+  return typeof text === 'string' && text.trim() ? text.trim().slice(0, SUGGESTION_CAP) : null;
+}
+
 /**
  * Markdown body for the two tools whose input IS conversational content —
  * ExitPlanMode (the proposed plan) and AskUserQuestion (the questions asked).
@@ -142,6 +159,8 @@ export function parseChatRecord(rec: any, caps: ChatCaps = DEFAULT_CAPS): ChatMe
           tool.body = body.slice(0, caps.toolBody);
           if (body.length > caps.toolBody) tool.bodyTruncated = true;
         }
+        const suggestion = wrapUpSuggestion(b);
+        if (suggestion) tool.suggestion = suggestion;
         tools.push(tool);
       }
       // thinking + tool_result blocks are intentionally dropped

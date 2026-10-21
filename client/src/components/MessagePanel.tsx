@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
+import { SuggestionChip, composerKeyDown } from './ComposerSuggestion';
 import MicButton from './MicButton';
 import { MinimisedPanel, PanelHead } from './PanelChrome';
 import { appendTranscript } from '../lib/dictation';
@@ -22,9 +23,14 @@ function secsLeft(expiresAt: string): number {
  * a bug. The window carries no content: the turn's final message is already the
  * last message in the transcript above.
  */
-export default function MessagePanel({ state }: { state: PendingMessageState }) {
+export default function MessagePanel({ state, suggestion }: {
+  state: PendingMessageState;
+  /** The finished turn's recommended reply (`latestSuggestion`), offered on Tab. */
+  suggestion: string | null;
+}) {
   const { pending, phase, needsToken, readOnly, send, dismiss, setToken } = state;
   const [text, setText] = useState('');
+  const boxRef = useRef<HTMLTextAreaElement>(null);
   const [tokenDraft, setTokenDraft] = useState('');
   const [left, setLeft] = useState(0);
   const [minimised, setMinimised] = useState(false);
@@ -79,6 +85,10 @@ export default function MessagePanel({ state }: { state: PendingMessageState }) 
   }
 
   const busy = phase === 'submitting';
+  const accept = (s: string) => {
+    setText(s);
+    boxRef.current?.focus();
+  };
 
   return (
     <div className="qpanel msg">
@@ -106,14 +116,20 @@ export default function MessagePanel({ state }: { state: PendingMessageState }) 
       )}
 
       <textarea
+        ref={boxRef}
         className="qp-feedback"
         maxLength={4000}
         rows={3}
-        placeholder="Follow-up for this session (sent to the model verbatim)"
+        placeholder={suggestion ?? 'Follow-up for this session (sent to the model verbatim)'}
         value={text}
         disabled={busy}
         onChange={e => setText(e.target.value)}
+        onKeyDown={composerKeyDown({
+          text, suggestion, canSend: !busy && !!text.trim(), onSend: () => void send(text), onAccept: accept
+        })}
       />
+
+      {suggestion && !text && <SuggestionChip suggestion={suggestion} disabled={busy} onAccept={accept} />}
 
       <div className="qp-actions">
         <MicButton disabled={busy} onText={t => setText(cur => appendTranscript(cur, t))} />

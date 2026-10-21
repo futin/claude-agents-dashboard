@@ -258,6 +258,17 @@ control since nothing outside that terminal can answer it.
   invalid and unreachable — a click on an anchor is let through). Expanded, the box takes
   **no `max-height` of its own**: the panel grows with it under the float rule, and the
   pinned layer — not the plan — is what scrolls at the cap.
+- **The two composers (`MessagePanel`, `ResumePanel`) take the Desktop app's keys** (`client/src/lib/composer.ts`, wired by `ComposerSuggestion.tsx`).
+  Enter sends, under the same guard the send button has. Shift+Enter (and Alt+Enter) breaks the line. An IME mid-composition swallows nothing.
+  On a coarse pointer (`(pointer: coarse)`, the test styles.css already makes) Enter stays a newline: a phone keyboard has no Shift, so the send
+  button is the only way to send there.
+- **Tab takes the session's own suggestion, never a guessed one.** `parseChatRecord` sets `suggestion` on a `mcp__ccd_turn__wrap_up` tool line. The
+  value is the first button's `message`, or its `label` when the button has no message. The first button only: when it is an app action
+  (`commit`, `create_pr` …) there is no suggestion. The next button is the alternative, typically "Not now", and offering it would invert the
+  recommendation. `latestSuggestion` walks the **unfiltered** page from the end and stops at the first user message, so an answered turn's suggestion
+  goes stale. Only Desktop sessions call wrap_up, so a CLI session never shows one.
+  The empty box shows the suggestion as its placeholder, and a dashed `.qp-suggest` chip under it is the tap target for phones (its `Tab` hint hides
+  on a coarse pointer). Tab with text in the box, or Shift+Tab, moves focus as usual.
 
 ## Invariants
 
@@ -296,6 +307,8 @@ control since nothing outside that terminal can answer it.
     - client/src/lib/backClose.ts
     - client/src/lib/chatFilter.ts
     - client/src/lib/heldBody.ts
+    - client/src/lib/composer.ts
+    - client/src/components/ComposerSuggestion.tsx
     - client/src/lib/markdown.ts
   kind: subsystem
   verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
