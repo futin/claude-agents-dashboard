@@ -396,6 +396,20 @@ dropped packet all look identical. So `POST /api/notify/test` fires one push **r
 policy** and returns what actually happened, including whether taps will open anything. The
 Settings button surfaces that string verbatim.
 
+### Two silences that are not failures
+
+**The session called `PushNotification`.** That is Claude Code's own tool, and it is not wired to this dashboard. It shows a desktop banner and sends a phone
+push only through Claude's Remote Control. This dashboard exists for setups where Remote Control is unavailable (some company plans disallow it), so there
+the tool answers `Mobile push not sent (Remote Control inactive)` and nothing reaches ntfy. The path that does reach the phone is a session **ending its
+turn**: the Stop hook fires the `stop` event and the push deep-links to that session. Rule 5 of the remote-decision banner (`scripts/remote-decision-hook.sh`)
+tells the model exactly that. The banner only appears in auto-ish permission modes, so in any other mode a model can still reach for the tool.
+
+**The turn ended right after a reply you sent from the dashboard.** Only a turn's *first* stop pushes. A follow-up typed in the reply drawer comes back in
+as a blocked stop, so the stop that ends the following turn carries `stopHookActive` and `serveMessageWait` skips the push (see
+[why the server sends](#why-the-server-sends-not-the-hooks)). You are already in the drawer, so nothing is lost. But "I replied, walked away and got no
+ping" is this rule working, not a broken topic. The next push comes at the next first stop, for example a turn started by a finished background task or
+by you typing at the terminal.
+
 ### The failure a 2xx cannot see: a `.env` edited after startup
 
 `loadConfig` runs once, at startup. Change `NTFY_TOPIC_DESK`, keep the process, and every
