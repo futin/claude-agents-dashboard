@@ -9,7 +9,7 @@ import {
   clampAnswerSecs, clampIdleSecs, clampPinned, detectAnswerOverride, detectIdleOverride,
   getGitFetchSecs, getPinnedProjects, getSettings, parseGitFetchSecs, resetSettings, setPinned, setPinOrder, setSettings
 } from '../server/lib/settings.js';
-import { scanOverrides } from '../server/api.js';
+import { projectParams, scanOverrides } from '../server/api.js';
 import type { Config } from '../server/lib/config.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -208,6 +208,13 @@ export function run(): number {
   })) p++; else f++;
 
   console.log('\n=== scanOverrides (api.ts) ===\n');
+
+  if (test('projectParams: repeated project params become one set; none, or only empty ones, is no filter', () => {
+    assert.deepStrictEqual(projectParams(new URLSearchParams('limit=5&project=a&project=b%20c&project=a')), new Set(['a', 'b c']));
+    assert.strictEqual(projectParams(new URLSearchParams('limit=5')), null);
+    assert.strictEqual(projectParams(new URLSearchParams('project=')), null);
+    assert.strictEqual(projectParams(undefined), null);
+  })) p++; else f++;
 
   if (test('no params leaves the configured values alone', () => {
     assert.deepStrictEqual(scanOverrides(cfg(), undefined), cfg());

@@ -7,7 +7,6 @@ import {
   SORT_LABEL,
   STATUS_LABEL,
   clearFilters,
-  distinctProjects,
   filterCount,
   layoutsFor,
   type Layout,
@@ -31,8 +30,9 @@ type Open = 'filter' | 'sort' | null;
  * Nothing here does anything but change which rows you see, in what order, and
  * in what shape. What is true of the whole board lives in the aside cards.
  */
-export function Toolbar({ sessions, view, onChange, layout, onLayout, narrow }: {
-  sessions: Session[];
+export function Toolbar({ projects, view, onChange, layout, onLayout, narrow }: {
+  /** The picker's projects: `availableProjects`, lookback-wide, not just the loaded rows'. */
+  projects: string[];
   view: View;
   onChange: (v: View) => void;
   /** Which shape is drawing the list. Owned by `SessionsView`, not by `view` —
@@ -109,7 +109,7 @@ export function Toolbar({ sessions, view, onChange, layout, onLayout, narrow }: 
             <div className="pop-k">Project</div>
             <div className="picks">
               <button type="button" className={`pick${view.projects.length ? '' : ' on'}`} onClick={() => set({ projects: [] })}>All projects</button>
-              {distinctProjects(sessions).map(p => (
+              {projects.map(p => (
                 <button key={p} type="button" className={`pick${view.projects.includes(p) ? ' on' : ''}`} onClick={() => set({ projects: toggleIn(view.projects, p) })}>{p}</button>
               ))}
             </div>

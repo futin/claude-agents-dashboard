@@ -343,6 +343,12 @@ export function run(): number {
     );
   })) p++; else f++;
 
+  if (test('scanQuery appends one encoded project param per picked project, after the knobs', () => {
+    assert.strictEqual(scanQuery(DEFAULT_SETTINGS, undefined, []), '?limit=5&lookback=48&active=5');
+    assert.strictEqual(scanQuery(DEFAULT_SETTINGS, undefined, ['a', 'b c&d']), '?limit=5&lookback=48&active=5&project=a&project=b%20c%26d');
+    assert.deepStrictEqual(new URLSearchParams(scanQuery(DEFAULT_SETTINGS, undefined, ['b c&d'])).getAll('project'), ['b c&d']);
+  })) p++; else f++;
+
   if (test('full chat text is off by default and coerces to a boolean', () => {
     assert.strictEqual(DEFAULT_SETTINGS.chatFullText, false, 'today\'s behaviour stays the default');
     assert.strictEqual(clampSettings({ chatFullText: true }).chatFullText, true);

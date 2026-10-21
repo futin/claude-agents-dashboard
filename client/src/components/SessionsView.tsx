@@ -16,7 +16,7 @@ import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
 import { useSessions } from '../hooks/useSessions';
 import { useSettings } from '../hooks/useSettings';
 import { useWebNotify } from '../hooks/useWebNotify';
-import { applyView, clearFilters, describeEmpty, drawableLayout, pruneProjects, DEFAULT_LAYOUT, DEFAULT_VIEW, type Layout, type View } from '../lib/filterSort';
+import { applyView, availableProjects, clearFilters, describeEmpty, drawableLayout, pruneProjects, DEFAULT_LAYOUT, DEFAULT_VIEW, type Layout, type View } from '../lib/filterSort';
 import { resolveLayout } from '../lib/settings';
 
 /** Own chunk — the drawer only loads the first time a chat is opened. */
@@ -47,11 +47,13 @@ export function SessionsView({ onLink }: {
    */
   onLink?: (link: { connected: boolean; working: boolean }) => void;
 } = {}) {
-  const { data, connected } = useSessions();
-  const working = data?.sessions.some(s => s.status === 'working') ?? false;
-  useEffect(() => { onLink?.({ connected, working }); }, [connected, working, onLink]);
   const { settings } = useSettings();
   const [view, setView] = usePersistedState<View>('dashboard.view', DEFAULT_VIEW);
+  // The project facet is filtered by the server, before its row limit, so a project with no session among the newest N still fills the list;
+  // `applyView` re-applies it harmlessly, and covers the one poll still in flight from before the pick.
+  const { data, connected } = useSessions({ projects: view.projects });
+  const working = data?.sessions.some(s => s.status === 'working') ?? false;
+  useEffect(() => { onLink?.({ connected, working }); }, [connected, working, onLink]);
   // The shape gets its own key rather than riding in `view`: it is not a
   // filter. The switcher always writes it, and `defaultLayout` decides whether
   // a load reads it back (`last`) or pins a shape and ignores it. Writing it
@@ -97,7 +99,7 @@ export function SessionsView({ onLink }: {
   // go stale this way.
   useEffect(() => {
     if (!data) return;
-    const pruned = pruneProjects(view.projects, data.sessions);
+    const pruned = pruneProjects(view.projects, availableProjects(data));
     if (pruned !== view.projects) setView({ ...view, projects: pruned });
   }, [data, view, setView]);
 
@@ -156,7 +158,7 @@ export function SessionsView({ onLink }: {
       )}
       <div className="s-main">
         <Toolbar
-          sessions={data ? data.sessions : []}
+          projects={data ? availableProjects(data) : []}
           view={view}
           onChange={setView}
           layout={drawn}

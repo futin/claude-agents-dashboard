@@ -477,6 +477,13 @@ loop breaks at `maxSessions`. Without that, a dropped transcript cost a display 
 loop still breaks at the cap, so the common case parses exactly as many transcripts as before.
 Archived ids are dropped before the sort, so a deleted session doesn't eat a pool slot either.
 
+**Project filter before the cap.** `?project=` (repeatable; `projectParams` in `api.ts` → `ScanOptions.projects`) narrows the pool *before* the slice, so a
+project with no session among the newest `maxSessions` overall still fills its rows; without it the toolbar's Project facet could only hide rows the
+payload already had. The pre-filter cannot afford `readTranscript`'s 256 KB tail on every transcript in the lookback (226 at 7 days, 2026-10-21), so it
+names each one's project from `launchCwd` — the 16 KB head read, cached per file in `originCache` alongside `resolveOriginCwd`. A transcript whose head
+holds no cwd yet stays a candidate, and every parsed row is checked against the set again, so the cheap name only decides what gets parsed, never what is
+shown. The same pass builds `SessionsResponse.projects` — every project in the lookback, plus the rows' own — which is what the picker offers.
+
 **One row per session id, not per file.** An id does not name a file: records are filed under
 the project dir derived from the cwd at write time, so a session that `cd`s into a git worktree
 keeps its id and starts a *second* `.jsonl` in a second project dir. `scan.ts` `newestPerId`
@@ -527,13 +534,13 @@ start timestamp still gets a row, just no bar.
 
 ## Filter + sort toolbar
 
-Client-side controls above the list. The filter and sort halves write the one persisted
+Controls above the list. All client-side but the Project facet, which also rides the poll as `?project=` (see *Project filter before the cap*). The filter and sort halves write the one persisted
 `View` (`dashboard.view` — see [view-persistence](view-persistence.md)); the switcher does
 not, and is the one control here that survives nothing:
 
 - **View switcher** — Board · List · Split · Tiles · Triage. Owned by `SessionsView` as
   ephemeral state (`layout` / `onLayout` props), seeded from the `defaultLayout` setting.
-- **Filter popover** — *Project* (pills; "All projects" clears), *Status* (multi-pick
+- **Filter popover** — *Project* (pills from `availableProjects`, the server's lookback-wide `projects`; "All projects" clears), *Status* (multi-pick
   pills with the status dot; none picked = all), *Active in the last* (the
   `ACTIVITY_WINDOWS` pill switch), and **Clear all**, disabled when nothing is set.
   `filterCount` counts a facet once however many values it holds, and is the badge on

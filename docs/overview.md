@@ -72,7 +72,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 
 | Route | Purpose |
 |---|---|
-| `GET /api/sessions` | the poll snapshot: sessions + totals + usage bars (`?limit=&lookback=&active=` override the scan) |
+| `GET /api/sessions` | the poll snapshot: sessions + totals + usage bars (`?limit=&lookback=&active=` override the scan, repeatable `?project=` filters it before the limit) + every project in the lookback |
 | `GET /api/sessions/:id` | one session's subagent timeline |
 | `GET /api/sessions/:id/chat` | paged chat history (byte-offset cursors) |
 | `GET /api/sessions/:id/question` | pending remote question, if any |

@@ -300,9 +300,13 @@ export function resolveLayout(defaultLayout: DefaultLayout, stored: unknown): La
   return isLayout(stored) ? stored : DEFAULT_LAYOUT;
 }
 
-/** The scan knobs as the query string `GET /api/sessions` takes. `limit` replaces only the row count (Management's Git Sync poll asks for all). */
-export function scanQuery(s: Settings, limit?: number): string {
-  return `?limit=${limit ?? s.maxSessions}&lookback=${s.lookbackHours}&active=${s.activeWindowMin}`;
+/**
+ * The scan knobs as the query string `GET /api/sessions` takes. `limit` replaces only the row count (Management's Git Sync poll asks for all);
+ * `projects` adds one `project=` per name, so the server fills the row limit from those projects alone.
+ */
+export function scanQuery(s: Settings, limit?: number, projects: readonly string[] = []): string {
+  const project = projects.map(p => `&project=${encodeURIComponent(p)}`).join('');
+  return `?limit=${limit ?? s.maxSessions}&lookback=${s.lookbackHours}&active=${s.activeWindowMin}${project}`;
 }
 
 /**

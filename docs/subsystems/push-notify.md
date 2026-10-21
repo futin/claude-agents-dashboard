@@ -83,7 +83,8 @@ Written down rather than fixed — each one is a real limit of riding the existi
 is the channel that has none of them:
 
 1. **The poll's window.** Only the top `maxSessions` sessions by recency are in the payload at
-   all (default 5). A sixth parked session announces nothing.
+   all (default 5). A sixth parked session announces nothing. A Sessions project filter narrows it further: the poll then carries only the picked
+   projects (`?project=`), so another project's session announces nothing until the filter is cleared.
 2. **Section-bound.** `SessionsView` owns the poll and unmounts on a section switch, so nothing
    fires while you sit on Claude Configs, Analytics, Usage or Settings. Chosen over lifting the poll
    to the shell, which would poll every 3s on every section and turn a contained feature into a

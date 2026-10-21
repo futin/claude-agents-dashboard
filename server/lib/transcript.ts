@@ -260,6 +260,23 @@ function resolveOriginCwd(
   return cwd;
 }
 
+/**
+ * The launch cwd from the head window alone, without the 256 KB tail read `readTranscript` pays — what the scan's project filter and project list run
+ * over every transcript in the lookback. Shares `originCache` with `resolveOriginCwd`: both answer "first cwd in the head window", so an entry either
+ * writes is right for the other. A null is not cached: a fresh transcript may not have written its first cwd record yet, and remembering that would hide
+ * the session from its project for good. `size` is the file size the caller already has from its listing.
+ */
+export function launchCwd(filePath: string, size: number): string | null {
+  const prev = originCache.get(filePath);
+  if (prev && size >= prev.size && prev.cwd !== null) return prev.cwd;
+  const head = readHead(filePath, HEAD_BYTES);
+  if (!head) return null;
+  originHeadReads++;
+  const cwd = firstCwd(head.text.split('\n'), 0);
+  if (cwd !== null) originCache.set(filePath, { cwd, size: head.size });
+  return cwd;
+}
+
 /** Sum the context-contributing token fields from a record's usage block. */
 export function usageTokens(record: any): number {
   const u = record && record.message && record.message.usage;

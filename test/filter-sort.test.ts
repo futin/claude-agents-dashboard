@@ -12,6 +12,7 @@ import {
   isLayout,
   layoutsFor,
   pruneProjects,
+  availableProjects,
   DEFAULT_LAYOUT,
   DEFAULT_VIEW,
   LAYOUTS,
@@ -164,19 +165,19 @@ export function run(): number {
   })) p++; else f++;
 
   if (test('pruneProjects: a name absent from the payload resets to all projects', () => {
-    const out = pruneProjects(['gone'], [sess({ project: 'a' }), sess({ project: 'b' })]);
+    const out = pruneProjects(['gone'], ['a', 'b']);
     assert.deepStrictEqual(out, []);
   })) p++; else f++;
 
   if (test('pruneProjects: drops only the absent names, keeps the present ones', () => {
-    const out = pruneProjects(['a', 'gone'], [sess({ project: 'a' }), sess({ project: 'b' })]);
+    const out = pruneProjects(['a', 'gone'], ['a', 'b']);
     assert.deepStrictEqual(out, ['a']);
   })) p++; else f++;
 
   if (test('pruneProjects: nothing to prune returns the same array reference', () => {
     const selected = ['a', 'b'];
     assert.strictEqual(
-      pruneProjects(selected, [sess({ project: 'a' }), sess({ project: 'b' })]),
+      pruneProjects(selected, ['a', 'b']),
       selected
     );
   })) p++; else f++;
@@ -188,15 +189,28 @@ export function run(): number {
 
   if (test('pruneProjects: an empty selection is left alone', () => {
     const selected: string[] = [];
-    assert.strictEqual(pruneProjects(selected, [sess({ project: 'a' })]), selected);
+    assert.strictEqual(pruneProjects(selected, ['a']), selected);
   })) p++; else f++;
 
   if (test('pruneProjects result unhides the rows applyView was dropping', () => {
     const list = [sess({ project: 'a' }), sess({ project: 'b' })];
     const stale = view({ projects: ['gone'] });
     assert.strictEqual(applyView(list, stale, NOW).length, 0);
-    const healed = view({ projects: pruneProjects(stale.projects, list) });
+    const healed = view({ projects: pruneProjects(stale.projects, availableProjects({ sessions: list })) });
     assert.strictEqual(applyView(list, healed, NOW).length, 2);
+  })) p++; else f++;
+
+  if (test('availableProjects: the server list wins over the rows, which a ?project= filter narrowed', () => {
+    assert.deepStrictEqual(availableProjects({ sessions: [sess({ project: 'a' })], projects: ['a', 'b', 'c'] }), ['a', 'b', 'c']);
+  })) p++; else f++;
+
+  if (test('availableProjects: no server list (error snapshot) falls back to the rows', () => {
+    assert.deepStrictEqual(availableProjects({ sessions: [sess({ project: 'b' }), sess({ project: 'a' }), sess({ project: 'b' })] }), ['a', 'b']);
+  })) p++; else f++;
+
+  if (test('pruneProjects: a project absent from the rows but in the server list survives', () => {
+    const selected = ['b'];
+    assert.strictEqual(pruneProjects(selected, availableProjects({ sessions: [sess({ project: 'a' })], projects: ['a', 'b'] })), selected);
   })) p++; else f++;
 
   const TWO_HOURS = 2 * 60 * 60_000;
