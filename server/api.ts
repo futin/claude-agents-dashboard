@@ -144,7 +144,7 @@ function sweepTerminalDecisions(): void {
 }
 
 /** One scan of the session rows with every RAM-store injection applied — what `/api/sessions` serves before launches and usage are attached. */
-export function scanSnapshot(config: Config): SessionsResponse {
+export function scanSnapshot(config: Config, projects?: ReadonlySet<string> | null): SessionsResponse {
   // Before the scan, not after: a wait the terminal already decided must not
   // colour this tick's row blue either.
   sweepTerminalDecisions();
@@ -170,15 +170,22 @@ export function scanSnapshot(config: Config): SessionsResponse {
     // stopStates is the same injection again, and the only one that is not a
     // hint about a wait: it says which rows this server can actually signal,
     // so the Stop control is offered only where it would work.
-    stopStates: stopStates()
+    stopStates: stopStates(),
+    projects
   });
+}
+
+/** The Sessions toolbar's project filter, as repeated `?project=` params; empty values dropped. null = no filter. */
+export function projectParams(params?: URLSearchParams): Set<string> | null {
+  const names = (params?.getAll('project') ?? []).filter(Boolean);
+  return names.length ? new Set(names) : null;
 }
 
 export function serveSessions(baseConfig: Config, res: ServerResponse, params?: URLSearchParams): void {
   const config = scanOverrides(baseConfig, params);
   let data: SessionsResponse;
   try {
-    data = scanSnapshot(config);
+    data = scanSnapshot(config, projectParams(params));
   } catch (e) {
     console.error('[dashboard] scan failed:', (e as Error).message);
     data = {

@@ -5,12 +5,12 @@
 
 import assert from 'node:assert';
 
-import { testAsync, withServer } from './api-harness.js';
+import { testAsync, userRecord, withServer } from './api-harness.js';
 import { scanSnapshot } from '../server/api.js';
 import type { SessionsResponse } from '../shared/types.js';
 
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
-const KEYS = ['activeWindowMin', 'generatedAt', 'launching', 'maxSessions', 'runningClaudeProcs', 'sessions', 'totals'];
+const KEYS = ['activeWindowMin', 'generatedAt', 'launching', 'maxSessions', 'projects', 'runningClaudeProcs', 'sessions', 'totals'];
 
 export async function run(): Promise<number> {
   console.log('\n=== scanSnapshot (api.ts) ===\n');
@@ -35,6 +35,18 @@ export async function run(): Promise<number> {
       const ids = scanSnapshot(h.cfg).sessions.map(s => s.id);
       assert.equal(ids.length, 2);
       assert.deepStrictEqual(ids, served.sessions.map(s => s.id));
+    });
+  }));
+
+  check(await testAsync('GET /api/sessions?project= serves only that project, and still lists every project', async () => {
+    await withServer(ENV, async h => {
+      h.plant('p-a', [userRecord('a-u1', 'hello', '/x/alpha')]);
+      h.plant('p-b', [userRecord('b-u1', 'hello', '/x/beta')]);
+      const all = (await h.req('/api/sessions')).json as unknown as SessionsResponse;
+      assert.deepStrictEqual(all.sessions.map(s => s.project).sort(), ['alpha', 'beta']);
+      const one = (await h.req('/api/sessions?project=beta')).json as unknown as SessionsResponse;
+      assert.deepStrictEqual(one.sessions.map(s => s.id), ['p-b']);
+      assert.deepStrictEqual(one.projects, ['alpha', 'beta']);
     });
   }));
 

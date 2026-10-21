@@ -342,7 +342,7 @@ Worth knowing from this page's side:
 | `POST /api/pins/order` | `{order: string[]}` — gate-only write; the whole pin list in its new order, 409 unless it is an exact permutation of the stored pins (no membership check: a permutation cannot add a dir); answers with the fresh `GET /api/pins` payload |
 | `POST /api/notify/test` | fire one push regardless of policy and report the outcome |
 | `GET /api/health` | now also carries `idleSecs` and `answerSecs`, for the hooks |
-| `GET /api/sessions?limit=&lookback=&active=` | per-request scan overrides |
+| `GET /api/sessions?limit=&lookback=&active=&project=` | per-request scan overrides; `project` (repeatable) is the Sessions toolbar's project facet, applied before `limit` |
 
 `scanOverrides` (in `server/api.ts`) clamps to `limit ≤ 50`, `lookback ≤ 168`, `active ≤ 120`.
 The `limit` cap is the one that matters: unclamped, one typo'd query string would make the

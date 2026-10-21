@@ -191,6 +191,74 @@ export function run(): number {
     assert.strictEqual(out.maxSessions, 2);
   })) p++; else f++;
 
+  // Two newest in `busy`, the oldest in `quiet`: a cap of 2 leaves `quiet` out of the unfiltered rows, which is the bug the filter exists for.
+  function projectRoot(now: number): string {
+    return makeRoot([
+      { dirName: '-a-busy', id: 'b1', mtimeMs: now - 60 * 1000, records: [metaRec('/a/busy', 'main'), usageRec(1000)] },
+      { dirName: '-a-busy', id: 'b2', mtimeMs: now - 2 * 60 * 1000, records: [metaRec('/a/busy', 'main'), usageRec(1000)] },
+      { dirName: '-a-quiet', id: 'q1', mtimeMs: now - 60 * 60 * 1000, records: [metaRec('/a/quiet', 'main'), usageRec(1000)] },
+      // No cwd anywhere: the head read cannot name it, so the parsed row (dirName fallback) has to.
+      { dirName: '-x-nocwd', id: 'n1', mtimeMs: now - 2 * 60 * 60 * 1000, records: [usageRec(1000)] }
+    ]);
+  }
+  const projCfg = { maxSessions: 2, activeWindowMin: 5, lookbackHours: 24 };
+
+  if (test('scanSessions project filter is applied before the cap, not after', () => {
+    const now = 1_700_000_000_000;
+    const root = projectRoot(now);
+    const all = scan.scanSessions(projCfg, { root, now, skipProcScan: true });
+    assert.deepStrictEqual(all.sessions.map(s => s.id), ['b1', 'b2'], 'precondition: quiet is past the cap unfiltered');
+    const quiet = scan.scanSessions(projCfg, { root, now, skipProcScan: true, projects: new Set(['quiet']) });
+    assert.deepStrictEqual(quiet.sessions.map(s => s.id), ['q1']);
+    const both = scan.scanSessions(projCfg, { root, now, skipProcScan: true, projects: new Set(['quiet', 'nocwd']) });
+    assert.deepStrictEqual(both.sessions.map(s => s.id), ['q1', 'n1']);
+  })) p++; else f++;
+
+  if (test('scanSessions project filter: an empty set filters nothing', () => {
+    const now = 1_700_000_000_000;
+    const out = scan.scanSessions(projCfg, { root: projectRoot(now), now, skipProcScan: true, projects: new Set() });
+    assert.deepStrictEqual(out.sessions.map(s => s.id), ['b1', 'b2']);
+  })) p++; else f++;
+
+  if (test('scanSessions project filter: a head with no cwd is settled by the parsed row, both ways', () => {
+    const now = 1_700_000_000_000;
+    const root = projectRoot(now);
+    const busy = scan.scanSessions({ ...projCfg, maxSessions: 5 }, { root, now, skipProcScan: true, projects: new Set(['busy']) });
+    assert.deepStrictEqual(busy.sessions.map(s => s.id), ['b1', 'b2'], 'the unknown-head candidate is parsed, then dropped as nocwd');
+    const nocwd = scan.scanSessions({ ...projCfg, maxSessions: 5 }, { root, now, skipProcScan: true, projects: new Set(['nocwd']) });
+    assert.deepStrictEqual(nocwd.sessions.map(s => s.id), ['n1']);
+  })) p++; else f++;
+
+  if (test('scanSessions projects lists every project in the lookback, filtered or not, past the cap', () => {
+    const now = 1_700_000_000_000;
+    const root = projectRoot(now);
+    // nocwd is named only by its parsed row, so it is listed only while it is a row: the head read has nothing to offer.
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true }).projects, ['busy', 'quiet']);
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true, projects: new Set(['quiet']) }).projects, ['busy', 'quiet']);
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true, projects: new Set(['nocwd']) }).projects, ['busy', 'nocwd', 'quiet']);
+  })) p++; else f++;
+
+  if (test('scanSessions projects: a transcript that writes its first cwd later is listed once it has', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([{ dirName: '-a-late', id: 'l1', mtimeMs: now - 60 * 1000, records: [{ type: 'queue-operation' }] }]);
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true }).projects, []);
+    const file = path.join(root, '-a-late', 'l1.jsonl');
+    fs.appendFileSync(file, '\n' + JSON.stringify(metaRec('/a/late', 'main')));
+    const t = (now - 30 * 1000) / 1000;
+    fs.utimesSync(file, t, t);
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true }).projects, ['late'], 'a null head was not cached');
+  })) p++; else f++;
+
+  if (test('scanSessions projects leaves out the token-refresh cwd', () => {
+    const now = 1_700_000_000_000;
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-home-'));
+    const root = makeRoot([
+      { dirName: '-refresh', id: 'r1', mtimeMs: now - 60 * 1000, records: [metaRec(refreshCwd(home), 'main'), usageRec(1000)] },
+      { dirName: '-a-real', id: 'x1', mtimeMs: now - 2 * 60 * 1000, records: [metaRec('/a/real', 'main'), usageRec(1000)] }
+    ]);
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, homeDir: home, skipProcScan: true }).projects, ['real']);
+  })) p++; else f++;
+
   if (test('sessionFromRef builds the same row scanSessions lists for the same transcript', () => {
     const now = 1_700_000_000_000;
     const root = makeRoot([

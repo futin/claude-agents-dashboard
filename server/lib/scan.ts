@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-import { readTranscript } from './transcript.js';
+import { launchCwd, readTranscript } from './transcript.js';
 import { readAgentsCached } from './agents-cache.js';
 import { SUBAGENT_DIR } from './subagent-usage.js';
 import { refreshCwd } from './token-refresh.js';
@@ -78,6 +78,11 @@ interface ScanOptions {
    * stopped — see {@link Session.stopState}.
    */
   stopStates?: ReadonlyMap<string, StopState> | null;
+  /**
+   * Keep only sessions whose `project` is one of these names, chosen *before* the `maxSessions` cap — so a project with no session among the newest N
+   * overall still fills its rows. Omitted/null/empty ⇒ every project. `GET /api/sessions?project=…` passes it.
+   */
+  projects?: ReadonlySet<string> | null;
 }
 
 /** Default transcripts root. */
@@ -545,7 +550,7 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
   // The dashboard's own token-renewal turns run in a dedicated cwd; their
   // transcripts are plumbing, not a session to display.
   if (skips && projectPath && normCwd(projectPath) === normCwd(refreshCwd(opts.homeDir))) return null;
-  const project = projectPath ? (projectPath.split('/').filter(Boolean).pop() || projectPath) : decodeProjectName(ref.dirName);
+  const project = projectPath ? projectNameOf(projectPath) : decodeProjectName(ref.dirName);
   // Recency tracks real agent activity, not file touches: selecting a session
   // in Claude Code appends timestamp-less mode/last-prompt/custom-title records
   // that bump the file mtime without any turn happening. Use the newest
@@ -634,6 +639,11 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
   };
 }
 
+/** A `Session.project` from its launch cwd: the folder's basename. */
+function projectNameOf(cwd: string): string {
+  return cwd.split('/').filter(Boolean).pop() || cwd;
+}
+
 /** Build the ranked session snapshot. */
 export function scanSessions(config: Partial<Config>, options: ScanOptions = {}): SessionsResponse {
   const cfg = config || {};
@@ -658,11 +668,24 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   // (see `newestPerId`) would otherwise spend two pool slots on itself and be
   // pushed as two `Session`s with the same id — one row per half, parsed from
   // different halves, so reading `working` and `idle` at once.
-  const candidates = newestPerId(
+  const inLookback = newestPerId(
     listTranscripts(root)
       .filter(t => !archived || !archived.has(t.id))
       .filter(t => now - t.mtimeMs <= lookbackMs))
-    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  // Project of every transcript in the lookback from the cached head read alone (`launchCwd`), never the tail parse: this runs over all of them each
+  // poll, ~226 at a 7-day lookback (2026-10-21). null = the head holds no cwd yet, so the project is unknown until the row is parsed. The dashboard's own
+  // token-renewal cwd is plumbing that `sessionFromRef` drops, so it is no project to offer.
+  const refresh = normCwd(refreshCwd(options.homeDir));
+  const projectOf = new Map<TranscriptRef, string | null>();
+  for (const t of inLookback) {
+    const cwd = launchCwd(t.file, t.size);
+    projectOf.set(t, cwd && normCwd(cwd) !== refresh ? projectNameOf(cwd) : null);
+  }
+  const wanted = options.projects && options.projects.size ? options.projects : null;
+  // An unknown project stays a candidate: the parsed row settles it below.
+  const candidates = (wanted ? inLookback.filter(t => { const p = projectOf.get(t); return p == null || wanted.has(p); }) : inLookback)
     .slice(0, maxSessions * 2);
 
   // Set of cwds with a live `claude` process. null = probe skipped/unavailable
@@ -688,8 +711,11 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   for (const c of candidates) {
     if (sessions.length >= maxSessions) break;   // the pool over-fetches; this is the cap
     const row = sessionFromRef(c, rowOptions);
-    if (row) sessions.push(row);
+    if (row && (!wanted || wanted.has(row.project))) sessions.push(row);
   }
+
+  const projects = new Set<string>(sessions.map(s => s.project));
+  for (const p of projectOf.values()) if (p) projects.add(p);
 
   return {
     generatedAt: new Date(now).toISOString(),
@@ -700,6 +726,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       shown: sessions.length,
       active: sessions.filter(s => s.status === 'working').length
     },
-    sessions
+    sessions,
+    projects: Array.from(projects).sort((a, b) => a.localeCompare(b))
   };
 }
