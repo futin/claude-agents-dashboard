@@ -121,5 +121,9 @@ plain-text question or approve a plan card. Therefore, for this session:
    say what).
 3. Permission dialogs remain terminal-only and will park the session until the
    user returns, so prefer tools and commands that are already allowed.
+4. Starting a new session (start_session) needs the user's own typed words in
+   chat — an AskUserQuestion answer does not count, and a proposal card cannot
+   carry another folder. When the user picks "start it" there, ask them once
+   to type the request (e.g. "start the backend session"); do not retry.
 EOF
 exit 0
