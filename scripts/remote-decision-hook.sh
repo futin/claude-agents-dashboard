@@ -39,6 +39,12 @@
 # outcome for a session with a human behind it and an acceptable one for a
 # session without.
 #
+# Rule 5 exists because the model's own reach-the-user tool points at the wrong channel. PushNotification shows a desktop banner and, only when Claude's
+# Remote Control is connected, sends a phone push. This dashboard exists for setups where Remote Control is not available (some company plans disallow it),
+# so that tool answers "Mobile push not sent (Remote Control inactive)" and the user hears nothing. Ending the turn is the path that works: the Stop hook
+# (stop-notify-hook.sh) opens the reply window and the server pushes "finished — reply window open" with a deep link to the session. Observed 2026-10-21:
+# a session asked to test the deep link called PushNotification three times before anyone traced the silence here.
+#
 # Install:
 #   ln -s "$PWD/scripts/remote-decision-hook.sh" ~/.claude/hooks/remote-decision.sh
 # then APPEND to the UserPromptSubmit hooks array in ~/.claude/settings.json:
@@ -125,5 +131,9 @@ plain-text question or approve a plan card. Therefore, for this session:
    chat — an AskUserQuestion answer does not count, and a proposal card cannot
    carry another folder. When the user picks "start it" there, ask them once
    to type the request (e.g. "start the backend session"); do not retry.
+5. To get the user's attention while they are away, end your turn: the Stop hook
+   pushes to their phone and the tap opens this session. Do not use the
+   PushNotification tool — it rides on Claude's Remote Control, which this
+   dashboard replaces, so it never reaches the phone.
 EOF
 exit 0
