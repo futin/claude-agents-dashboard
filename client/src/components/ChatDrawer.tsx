@@ -20,6 +20,7 @@ import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../
 import { fmtTok } from '../lib/format';
 import { resumeEligible } from '../lib/resume';
 import { heldBodyUuid } from '../lib/heldBody';
+import { latestSuggestion } from '../lib/composer';
 import { formatInterval } from '../lib/settings';
 import { surfacePill } from '../lib/surface';
 import type { ChatMessage, Session } from '../../../shared/types';
@@ -125,6 +126,8 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const shown = useMemo(() => filterMessages(messages, mode), [messages, mode]);
   const heldAsk = useMemo(() => heldBodyUuid(messages, 'AskUserQuestion', !!question.pending), [messages, question.pending]);
   const heldPlan = useMemo(() => heldBodyUuid(messages, 'ExitPlanMode', !!plan.pending), [messages, plan.pending]);
+  // Off the unfiltered page: the text filter must not hide the turn the suggestion belongs to.
+  const suggestion = useMemo(() => latestSuggestion(messages), [messages]);
   const surfaceInfo = surfacePill(session.surface);
   // same 70% threshold the row uses — one context reading, two places.
   const ctxPct = session.contextPct || 0;
@@ -326,14 +329,14 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                 {/* And for a turn-end reply window. One-entry-per-session per store and
                     a session parks on one thing at a time, so at most one of the three
                     panels renders. */}
-                <MessagePanel state={message} />
+                <MessagePanel state={message} suggestion={suggestion} />
 
                 {/* The opposite case: a dashboard session whose turn is OVER — window
                     expired, released, or capped out. Sends `resume` through the spawn
                     path; the same transcript (same id) continues, so this drawer
                     live-tails the answer. Can render under MessagePanel's "gone" note,
                     which is the natural hand-off. */}
-                {canResume && <ResumePanel session={session} />}
+                {canResume && <ResumePanel session={session} suggestion={suggestion} />}
               </div>
             </div>
 

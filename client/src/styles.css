@@ -1811,6 +1811,13 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .qp-send:disabled{cursor:default;background:var(--hairline2);color:var(--ink3)}
 .qp-term{height:36px;padding:0 14px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
 .qp-term:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
+/* the wrap_up suggestion under an empty composer: Tab takes it, a tap does too (composer.ts). The key hint is no use without a keyboard. */
+.qp-suggest{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;max-width:100%;min-height:32px;padding:4px 12px;font-family:var(--font);font-size:13px;color:var(--ink2);text-align:left;background:none;border:1px dashed var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
+.qp-suggest:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
+.qp-suggest:disabled{cursor:default;opacity:.6}
+.qp-suggest kbd{flex:none;font-family:var(--font);font-size:11px;color:var(--ink3);padding:1px 6px;border:1px solid var(--hairline2);border-radius:6px}
+.qp-suggest-text{min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+@media (pointer:coarse){.qp-suggest kbd{display:none}}
 /* dictation mic — a fixed square in the actions row. Deliberately excluded from
    the phone's flex:1 rule below, so it never stretches to a third of the row. */
 .qp-mic{width:36px;height:36px;flex:none;display:grid;place-items:center;font-family:var(--font);font-size:13px;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s,background .15s}
@@ -2100,6 +2107,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .chat-foot .seg>button{flex:1;min-height:32px;text-align:center}
 /* thumb-sized: the option rows are already full-width, the actions are not */
 .qp-send,.qp-term{flex:1;min-height:44px}
+.qp-suggest{min-height:44px}
 .qp-mic{width:44px;height:44px}
 /* the launch modal goes full-screen with the chat one, for the same reason:
    620px with margins does not fit a phone, and the scrim it loses was never
@@ -2170,6 +2178,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
   .chat-foot .seg{width:auto}
   .chat-foot .seg>button{flex:0 1 auto;min-height:auto;text-align:center}
   .qp-send,.qp-term{flex:0 1 auto;min-height:auto}
+  .qp-suggest{min-height:32px}
   .qp-mic{width:36px;height:36px}
   .spawn-back{padding:40px 24px}
   .spawn{width:620px;max-width:100%;height:auto;max-height:min(820px,100%);border-radius:24px;box-shadow:0 24px 64px var(--shadow2)}
